@@ -25,7 +25,6 @@ CREDENTIAL_SERVICE_MAP: dict[str, list[str]] = {
     "basic_auth": ["traefik"],
     "apps.services.security.authelia": ["authelia"],
     "apps.services.observability.grafana": ["grafana"],
-    "apps.services.data.minio": ["minio"],
     "apps.services.security.crowdsec": ["crowdsec"],
 }
 
@@ -367,7 +366,7 @@ class CredentialsManager:
         # not this change's to fix: one answer becomes BOTH the Authelia login
         # and `basic_auth.user`, a Traefik machine credential. That coupling is
         # what turned a rotation into a rename on 2026-08-23 (#1352). It is now
-        # harmless for Grafana and MinIO — neither reads basic_auth any more —
+        # harmless for Grafana, which no longer reads basic_auth,
         # but the prompt should be split, tracked with #1355.
         cm = ConfigurationManager(env, self.project_root)
         merged_config = cm.get_merged_config()
@@ -541,12 +540,6 @@ class CredentialsManager:
             # Grafana secrets
             "apps.services.observability.grafana.admin_user": common_username,
             "apps.services.observability.grafana.admin_password": common_password,
-            # MinIO secrets. No `root_user` here: the root account's NAME
-            # resolves from `apps.auth.identities.superadmin` in
-            # `provision-bee.yml`, so seeding it from `common_username` would
-            # make an identity something this command is entitled to rename —
-            # ADR-062 D3, and the shape that took prod SSO down on 2026-08-23.
-            "apps.services.data.minio.root_password": common_password,
             # Gitea secrets
             "apps.services.core.gitea.oidc_client_secret": gitea_oidc_client_secret,
             # CrowdSec secrets
@@ -708,9 +701,6 @@ class CredentialsManager:
         print(f'    credentials: "{secrets_dict["basic_auth.credentials"]}"')
         print("apps:")
         print("    services:")
-        print("        data:")
-        print("            minio:")
-        print(f'                root_password: "{secrets_dict["apps.services.data.minio.root_password"]}"')
         print("        observability:")
         print("            grafana:")
         admin_user = secrets_dict["apps.services.observability.grafana.admin_user"]

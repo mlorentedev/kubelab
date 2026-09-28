@@ -124,10 +124,10 @@
       "id": "beelink",
       "name": "Beelink Forge & CI Runner",
       "tier": "homelab",
-      "role": "Git forge, CI runner and object store",
-      "roleEs": "Forge Git, runner de CI y almacén de objetos",
-      "summary": "Hosts the Gitea forge, the MinIO object store, the GitHub Actions runner and the Buildx builders. All Docker; no Kubernetes.",
-      "summaryEs": "Aloja el forge Gitea, el almacén de objetos MinIO, el runner de GitHub Actions y los builders de Buildx. Todo en Docker, sin Kubernetes.",
+      "role": "Git forge and CI runner",
+      "roleEs": "Forge Git y runner de CI",
+      "summary": "Hosts the Gitea forge, the GitHub Actions runner and the Buildx builders. All Docker; no Kubernetes.",
+      "summaryEs": "Aloja el forge Gitea, el runner de GitHub Actions y los builders de Buildx. Todo en Docker, sin Kubernetes.",
       "environment": "Infrastructure",
       "provider": "On-Premises Homelab",
       "arch": "x86_64",
@@ -138,7 +138,7 @@
       "location": "Homelab (USA)",
       "status": "healthy",
       "runtime": "docker",
-      "runtimeRole": "Docker host: Gitea, MinIO, CI runner, Buildx builders"
+      "runtimeRole": "Docker host: Gitea, CI runner, Buildx builders"
     },
     {
       "id": "rpi4",
@@ -423,24 +423,6 @@
       "status": "operational"
     },
     {
-      "slug": "minio",
-      "name": "MinIO S3 Object Store",
-      "category": "Storage & Data",
-      "categoryEs": "Almacenamiento y Datos",
-      "description": "High-performance S3-compatible distributed object storage for backups and AI models.",
-      "descriptionEs": "Almacenamiento de objetos distribuido compatible con S3 para backups y modelos de IA.",
-      "node": "vps",
-      "env": "prod",
-      "tech": [
-        "MinIO",
-        "Go",
-        "S3 API",
-        "K3s"
-      ],
-      "isPublic": false,
-      "status": "operational"
-    },
-    {
       "slug": "coredns",
       "name": "CoreDNS & Pi-hole Split Gateway",
       "category": "Core Gateway",
@@ -468,7 +450,7 @@
       "categoryEs": "Topología y Red",
       "description": "Hybrid cloud and on-premises bare-metal node architecture interconnected via encrypted Tailscale WireGuard mesh.",
       "descriptionEs": "Arquitectura híbrida cloud y bare-metal on-premise interconectada por malla WireGuard cifrada.",
-      "mermaid": "flowchart TB\n    subgraph internet[\"Public Internet & Ingress\"]\n        CF[\"Cloudflare DNS<br/>proxied: api.kubelab.live · direct: mlorente.dev\"]\n    end\n    subgraph alwayson[\"Always-on Cloud Infrastructure\"]\n        VPS[\"Hetzner Cloud VPS · ARM64 Neoverse-N1, 7.5GB<br/>Prod K3s: Traefik, API (Go), Web (Astro),<br/>Grafana, Loki, Authelia, CrowdSec, MinIO<br/>+ Headscale Mesh Coordinator\"]\n        GCP[\"gcp1 · GCP e2-small<br/>Argo CD GitOps Hub (ADR-063)\"]\n        AWS[\"aws1 · AWS t4g.small<br/>Standby, powered down\"]\n        RPI3[\"RPi3 · Uptime Kuma<br/>Independent external monitor\"]\n    end\n    subgraph homelab[\"On-Demand Homelab\"]\n        RPI4[\"RPi4 Gateway<br/>Pi-hole + CoreDNS (Split DNS)\"]\n        ACE1[\"ace1 · Intel N95, 11.5GB<br/>Staging K3s, single node\"]\n        ACE2[\"ace2 · Intel N95, 11.5GB<br/>Dev node: agent workspaces\"]\n        BEE[\"Beelink · Intel N95, 7.5GB<br/>Gitea forge, CI runner, MinIO\"]\n        JET[\"Jetson Nano · 3.9GB<br/>Pollex Edge AI (Qwen 2.5 1.5B, CPU)\"]\n    end\n    CF --> VPS\n    GCP -- \"Argo CD Sync · WireGuard\" --> VPS\n    GCP -- \"Argo CD Sync · WireGuard\" --> ACE1\n    VPS -. \"Headscale Mesh\" .- RPI4\n    RPI4 --- ACE1\n    RPI4 --- ACE2\n    RPI4 --- BEE\n    RPI4 --- JET\n    VPS -. Mesh .- RPI3\n    VPS -. Mesh .- GCP\n    AWS -.-> GCP"
+      "mermaid": "flowchart TB\n    subgraph internet[\"Public Internet & Ingress\"]\n        CF[\"Cloudflare DNS<br/>proxied: api.kubelab.live · direct: mlorente.dev\"]\n    end\n    subgraph alwayson[\"Always-on Cloud Infrastructure\"]\n        VPS[\"Hetzner Cloud VPS · ARM64 Neoverse-N1, 7.5GB<br/>Prod K3s: Traefik, API (Go), Web (Astro),<br/>Grafana, Loki, Authelia, CrowdSec<br/>+ Headscale Mesh Coordinator\"]\n        GCP[\"gcp1 · GCP e2-small<br/>Argo CD GitOps Hub (ADR-063)\"]\n        AWS[\"aws1 · AWS t4g.small<br/>Standby, powered down\"]\n        RPI3[\"RPi3 · Uptime Kuma<br/>Independent external monitor\"]\n    end\n    subgraph homelab[\"On-Demand Homelab\"]\n        RPI4[\"RPi4 Gateway<br/>Pi-hole + CoreDNS (Split DNS)\"]\n        ACE1[\"ace1 · Intel N95, 11.5GB<br/>Staging K3s, single node\"]\n        ACE2[\"ace2 · Intel N95, 11.5GB<br/>Dev node: agent workspaces\"]\n        BEE[\"Beelink · Intel N95, 7.5GB<br/>Gitea forge, CI runner\"]\n        JET[\"Jetson Nano · 3.9GB<br/>Pollex Edge AI (Qwen 2.5 1.5B, CPU)\"]\n    end\n    CF --> VPS\n    GCP -- \"Argo CD Sync · WireGuard\" --> VPS\n    GCP -- \"Argo CD Sync · WireGuard\" --> ACE1\n    VPS -. \"Headscale Mesh\" .- RPI4\n    RPI4 --- ACE1\n    RPI4 --- ACE2\n    RPI4 --- BEE\n    RPI4 --- JET\n    VPS -. Mesh .- RPI3\n    VPS -. Mesh .- GCP\n    AWS -.-> GCP"
     },
     {
       "id": "gitops",
@@ -488,7 +470,7 @@
       "categoryEs": "Seguridad y Gateway",
       "description": "Layered security at the edge: Traefik terminates TLS and applies token-bucket rate limiting, CrowdSec blocks by behaviour, and Authelia enforces 2FA forward auth on the internal services. Cloudflare fronts api.kubelab.live only.",
       "descriptionEs": "Seguridad en capas en el edge: Traefik termina TLS y aplica rate limiting por token bucket, CrowdSec bloquea por comportamiento y Authelia exige 2FA en los servicios internos. Cloudflare solo hace de proxy en api.kubelab.live.",
-      "mermaid": "flowchart TD\n    Client([\"Client / Browser\"]):::client -->|HTTPS 443| CF[\"Cloudflare DNS<br/>proxied for api.kubelab.live only\"]\n    CF -->|Forward| Traefik[\"Traefik L7 Ingress Router<br/>Rate Limiting & Secure Headers\"]\n    Traefik --> CrowdSec{\"CrowdSec IPS Bouncer<br/>Behavioral Threat Analysis\"}\n    CrowdSec -->|Malicious IP| Block[\"403 Forbidden / Drop\"]\n    CrowdSec -->|Clean Traffic| Auth{\"Route Inspection\"}\n    Auth -->|Public Route| PublicApps[\"Public Services<br/>mlorente.dev · API · Pollex\"]\n    Auth -->|Private / Admin| Authelia[\"Authelia Forward-Auth<br/>2FA / Duo / TOTP Session\"]\n    Authelia -->|Authenticated| InternalApps[\"Internal Platform<br/>Grafana · ArgoCD · Gitea · MinIO\"]\n    InternalApps --> WireGuard[\"Tailscale WireGuard Mesh<br/>Direct Pod Encapsulation\"]"
+      "mermaid": "flowchart TD\n    Client([\"Client / Browser\"]):::client -->|HTTPS 443| CF[\"Cloudflare DNS<br/>proxied for api.kubelab.live only\"]\n    CF -->|Forward| Traefik[\"Traefik L7 Ingress Router<br/>Rate Limiting & Secure Headers\"]\n    Traefik --> CrowdSec{\"CrowdSec IPS Bouncer<br/>Behavioral Threat Analysis\"}\n    CrowdSec -->|Malicious IP| Block[\"403 Forbidden / Drop\"]\n    CrowdSec -->|Clean Traffic| Auth{\"Route Inspection\"}\n    Auth -->|Public Route| PublicApps[\"Public Services<br/>mlorente.dev · API · Pollex\"]\n    Auth -->|Private / Admin| Authelia[\"Authelia Forward-Auth<br/>2FA / Duo / TOTP Session\"]\n    Authelia -->|Authenticated| InternalApps[\"Internal Platform<br/>Grafana · ArgoCD · Gitea\"]\n    InternalApps --> WireGuard[\"Tailscale WireGuard Mesh<br/>Direct Pod Encapsulation\"]"
     },
     {
       "id": "ai-mcp",

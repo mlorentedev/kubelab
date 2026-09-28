@@ -147,15 +147,14 @@ NODE_CATALOG_DEFAULTS: dict[str, dict[str, Any]] = {
     "beelink": {
         "name": "Beelink Forge & CI Runner",
         "tier": "homelab",
-        "role": "Git forge, CI runner and object store",
-        "roleEs": "Forge Git, runner de CI y almacén de objetos",
+        "role": "Git forge and CI runner",
+        "roleEs": "Forge Git y runner de CI",
         "summary": (
-            "Hosts the Gitea forge, the MinIO object store, the GitHub Actions runner and the"
-            " Buildx builders. All Docker; no Kubernetes."
+            "Hosts the Gitea forge, the GitHub Actions runner and the Buildx builders. All Docker; no Kubernetes."
         ),
         "summaryEs": (
-            "Aloja el forge Gitea, el almacén de objetos MinIO, el runner de GitHub Actions y los"
-            " builders de Buildx. Todo en Docker, sin Kubernetes."
+            "Aloja el forge Gitea, el runner de GitHub Actions y los builders de Buildx."
+            " Todo en Docker, sin Kubernetes."
         ),
         "environment": "Infrastructure",
         "provider": "On-Premises Homelab",
@@ -167,7 +166,7 @@ NODE_CATALOG_DEFAULTS: dict[str, dict[str, Any]] = {
         "location": "Homelab (USA)",
         "status": "healthy",
         "runtime": "docker",
-        "runtimeRole": "Docker host: Gitea, MinIO, CI runner, Buildx builders",
+        "runtimeRole": "Docker host: Gitea, CI runner, Buildx builders",
     },
     "rpi4": {
         "name": "Raspberry Pi 4 Gateway",
@@ -399,19 +398,6 @@ SERVICE_CATALOG_DEFAULTS: list[dict[str, Any]] = [
         "status": "operational",
     },
     {
-        "slug": "minio",
-        "name": "MinIO S3 Object Store",
-        "category": "Storage & Data",
-        "categoryEs": "Almacenamiento y Datos",
-        "description": ("High-performance S3-compatible distributed object storage for backups and AI models."),
-        "descriptionEs": ("Almacenamiento de objetos distribuido compatible con S3 para backups y modelos de IA."),
-        "node": "vps",
-        "env": "prod",
-        "tech": ["MinIO", "Go", "S3 API", "K3s"],
-        "isPublic": False,
-        "status": "operational",
-    },
-    {
         "slug": "coredns",
         "name": "CoreDNS & Pi-hole Split Gateway",
         "category": "Core Gateway",
@@ -453,7 +439,7 @@ ARCHITECTURE_DIAGRAMS: list[dict[str, Any]] = [
             '    subgraph alwayson["Always-on Cloud Infrastructure"]\n'
             '        VPS["Hetzner Cloud VPS · ARM64 Neoverse-N1, 7.5GB<br/>'
             "Prod K3s: Traefik, API (Go), Web (Astro),<br/>"
-            'Grafana, Loki, Authelia, CrowdSec, MinIO<br/>+ Headscale Mesh Coordinator"]\n'
+            'Grafana, Loki, Authelia, CrowdSec<br/>+ Headscale Mesh Coordinator"]\n'
             '        GCP["gcp1 · GCP e2-small<br/>Argo CD GitOps Hub (ADR-063)"]\n'
             '        AWS["aws1 · AWS t4g.small<br/>Standby, powered down"]\n'
             '        RPI3["RPi3 · Uptime Kuma<br/>Independent external monitor"]\n'
@@ -462,7 +448,7 @@ ARCHITECTURE_DIAGRAMS: list[dict[str, Any]] = [
             '        RPI4["RPi4 Gateway<br/>Pi-hole + CoreDNS (Split DNS)"]\n'
             '        ACE1["ace1 · Intel N95, 11.5GB<br/>Staging K3s, single node"]\n'
             '        ACE2["ace2 · Intel N95, 11.5GB<br/>Dev node: agent workspaces"]\n'
-            '        BEE["Beelink · Intel N95, 7.5GB<br/>Gitea forge, CI runner, MinIO"]\n'
+            '        BEE["Beelink · Intel N95, 7.5GB<br/>Gitea forge, CI runner"]\n'
             '        JET["Jetson Nano · 3.9GB<br/>Pollex Edge AI (Qwen 2.5 1.5B, CPU)"]\n'
             "    end\n"
             "    CF --> VPS\n"
@@ -530,7 +516,7 @@ ARCHITECTURE_DIAGRAMS: list[dict[str, Any]] = [
             '    CrowdSec -->|Clean Traffic| Auth{"Route Inspection"}\n'
             '    Auth -->|Public Route| PublicApps["Public Services<br/>mlorente.dev · API · Pollex"]\n'
             '    Auth -->|Private / Admin| Authelia["Authelia Forward-Auth<br/>2FA / Duo / TOTP Session"]\n'
-            '    Authelia -->|Authenticated| InternalApps["Internal Platform<br/>Grafana · ArgoCD · Gitea · MinIO"]\n'
+            '    Authelia -->|Authenticated| InternalApps["Internal Platform<br/>Grafana · ArgoCD · Gitea"]\n'
             '    InternalApps --> WireGuard["Tailscale WireGuard Mesh<br/>Direct Pod Encapsulation"]'
         ),
     },

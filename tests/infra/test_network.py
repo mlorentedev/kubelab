@@ -165,8 +165,8 @@ class TestExternalServiceBackends:
             #                         service outage. Fail.
             #
             # Conflating them is not hypothetical: on 2026-08-14 the Beelink
-            # rebooted, Docker lost the bind to the Tailscale address, and both
-            # gitea and minio stayed down. An earlier version of this test called
+            # rebooted, Docker lost the bind to the Tailscale address, and gitea
+            # stayed down with its neighbours. An earlier version of this test called
             # that "powered off" and skipped straight past the real incident.
             try:
                 with socket.create_connection((target_ip, int(port)), timeout=5):

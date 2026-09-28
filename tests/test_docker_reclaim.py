@@ -45,12 +45,13 @@ from toolkit.features.docker_reclaim import (
 #
 # Read the dates, not the names. Two of these builders are from September; the
 # other four are from May and June. Every one of them reported "Up 3 hours".
+# One line, for a container OPS-023 has since retired, is dropped; its shape
+# (a bind mount only, so no volume) is the one `gitea` still covers.
 BEELINK_INSPECT = """\
 /buildx_buildkit_builder-dae64fc0-165f-47c6-a953-46c7f026aa2d0|2026-09-05T02:07:38.785358367Z|true|buildx_buildkit_builder-dae64fc0-165f-47c6-a953-46c7f026aa2d0_state,
 /act-runner|2026-09-04T23:37:22.424794246Z|true|act_runner_data,,,
 /gitea|2026-09-04T23:37:22.353382899Z|true|,,
 /github-runner|2026-09-04T23:37:22.348874074Z|true|github_runner_data,github_runner_toolcache,,
-/minio|2026-09-04T23:37:22.348343338Z|true|,
 /glances|2026-09-04T23:37:22.33899812Z|true|,,,
 /buildx_buildkit_builder-dda5575f-66d5-482c-bb42-38ce53a2b3bf0|2026-09-04T06:14:58.243615907Z|true|buildx_buildkit_builder-dda5575f-66d5-482c-bb42-38ce53a2b3bf0_state,
 /buildx_buildkit_builder-3785131b-493f-41d1-947b-f3e6aba71d830|2026-06-26T06:26:18.088036214Z|true|buildx_buildkit_builder-3785131b-493f-41d1-947b-f3e6aba71d830_state,
@@ -153,9 +154,6 @@ def test_bind_mounts_contribute_no_volume_names(containers: list[Container]) -> 
     gitea = next(c for c in containers if c.name == "gitea")
     assert gitea.volumes == ()
 
-    minio = next(c for c in containers if c.name == "minio")
-    assert minio.volumes == ()
-
 
 def test_nanosecond_timestamps_parse(containers: list[Container]) -> None:
     oldest = min(containers, key=lambda c: c.created)
@@ -198,7 +196,7 @@ def test_the_young_builder_is_kept_with_a_reason(plan: ReclaimPlan) -> None:
 
 def test_only_builder_containers_are_candidates(plan: ReclaimPlan) -> None:
     assert all(c.name.startswith(BUILDER_PREFIX) for c in plan.containers)
-    for survivor in ("gitea", "minio", "act-runner", "github-runner", "glances"):
+    for survivor in ("gitea", "act-runner", "github-runner", "glances"):
         assert survivor not in {c.name for c in plan.containers}
         assert survivor not in {c.name for c, _ in plan.kept_containers}
 
