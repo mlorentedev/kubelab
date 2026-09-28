@@ -7,10 +7,10 @@ Why these tests exist, and what they deliberately do NOT cover:
 
 ``roles/backup`` enumerates every Docker volume and subtracts an exclude list.
 Measuring the fleet for #449 showed why that model cannot work: on the Beelink,
-Gitea is a **bind mount** (``/opt/gitea/data``) and so is MinIO, while
-``docker volume ls`` returns only buildx caches and the runner toolcache. Pointed
-at that node, an exclude-list backup archives rebuildable junk, misses both
-services entirely, and reports success. #1092's AC3 inverts the model to an
+Gitea is a **bind mount** (``/opt/gitea/data``), as was the object store
+OPS-023 later retired, while ``docker volume ls`` returns only buildx caches and
+the runner toolcache. Pointed at that node, an exclude-list backup archives
+rebuildable junk, misses both services entirely, and reports success. #1092's AC3 inverts the model to an
 allow-list, and this file encodes the declaration side of it.
 
 **What lives here today** is only the topology axis the allow-list will derive

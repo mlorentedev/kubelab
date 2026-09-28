@@ -69,7 +69,7 @@ class TestPlatformManifestGeneration:
 
         # 4. Platform services (14 canonical services)
         services: list[dict[str, Any]] = manifest["services"]
-        assert len(services) == 14
+        assert len(services) == 13
         service_slugs = {s["slug"] for s in services}
         expected_slugs = {
             "pollex",
@@ -84,7 +84,6 @@ class TestPlatformManifestGeneration:
             "grafana",
             "loki",
             "uptime-kuma",
-            "minio",
             "coredns",
         }
         assert service_slugs == expected_slugs

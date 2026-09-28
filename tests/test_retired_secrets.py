@@ -3,12 +3,14 @@
 `apply-secrets` creates Secrets outside git, so Argo CD never tracks them and
 never prunes them. Removing a `SecretMapping` therefore stops the Secret from
 being updated, and leaves the last value it held in etcd for good: the shape
-TOOL-025 records for Middlewares. OPS-023 hit it with `minio-secrets`, which
-held the MinIO root password after MinIO was gone.
+TOOL-025 records for Middlewares. OPS-023 hit it with the Secret that held
+its object store's root password after the store itself was gone.
 
 `RETIRED_SECRETS` is the declaration of what used to exist. Every apply
 deletes those names with `--ignore-not-found`, so it is idempotent and needs no
-one to remember a one-off command per environment.
+one to remember a one-off command per environment. Its resting state is empty:
+an entry leaves once no cluster can still hold the Secret, so the mechanism is
+tested against a synthetic entry rather than whatever happens to be retiring.
 """
 
 from __future__ import annotations
@@ -32,16 +34,21 @@ class _Recorder:
         return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
 
 
+RETIRING = (("kubelab", "old-secrets"), ("monitoring", "older-secrets"))
+
+
 @pytest.fixture(autouse=True)
 def _kubeconfig(monkeypatch):
     monkeypatch.setattr(k8s_secrets, "_get_kubeconfig", lambda env: f"/kube/{env}")
 
 
-def test_minio_secrets_is_declared_retired() -> None:
-    assert ("kubelab", "minio-secrets") in k8s_secrets.RETIRED_SECRETS
+@pytest.fixture(autouse=True)
+def _retiring(monkeypatch):
+    monkeypatch.setattr(k8s_secrets, "RETIRED_SECRETS", RETIRING)
 
 
-def test_a_retired_secret_is_never_also_rendered() -> None:
+def test_a_retired_secret_is_never_also_rendered(monkeypatch) -> None:
+    monkeypatch.undo()
     rendered = {(m.namespace, m.name) for m in k8s_secrets.SECRET_DEFINITIONS}
     both = rendered & set(k8s_secrets.RETIRED_SECRETS)
     assert not both, f"{both} would be applied and deleted in the same run"
@@ -77,7 +84,7 @@ def test_a_missing_kubectl_fails_the_apply_instead_of_crashing() -> None:
 
 @pytest.mark.parametrize(
     ("stdout", "said"),
-    [('secret "minio-secrets" deleted', "deleted"), ("", "already absent")],
+    [('secret "old-secrets" deleted', "deleted"), ("", "already absent")],
 )
 def test_the_run_says_whether_it_deleted_or_found_nothing(mocker, stdout: str, said: str) -> None:
     """Otherwise the run that removed a value reads the same as a no-op."""

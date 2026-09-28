@@ -51,7 +51,6 @@ _COMMON = yaml.safe_load((_REPO_ROOT / "infra" / "config" / "values" / "common.y
 _ACKNOWLEDGED_UNBACKED: dict[str, str] = {
     # Ratified Tier 3 (#452) — rebuildable in full, so a backup would be dead weight.
     "gravity.db": "Pi-hole blocklist, regenerated in full by `pihole -g`",
-    "minio-data": "the backup destination itself; backing it up is circular",
     "loki-data": "log storage, ratified Tier 3",
     # Build and runtime caches. Rebuildable by definition, and large.
     "buildx_buildkit": "buildx builder state, a cache",

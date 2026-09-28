@@ -56,14 +56,16 @@ created: "2026-09-22"
 
 ### PR 3: the local dev stack, docs, and the guard going green
 
-- [ ] [AC2] Remove PR 2's MinIO teardown from `beelink_services` (and `beelink_minio_dir`, and the three `minio_*` vars in `provision-bee.yml` that only it reads), **only after** AC2's `changed=0` run is in `verification.md`. Leave the Ollama cleanup as it is.
-- [ ] [AC1] SSOT and generated artifacts, moved here from PR 1 (2026-09-24):
+> Split in two on 2026-09-28 (see `verification.md`): **3a** is the code, SSOT, SOPS, Ansible and dev stack; **3b** is the docs and the guard going green, and carries `Closes #972`.
+
+- [x] [AC2] (✓ 2026-09-28, PR 3a) Remove PR 2's MinIO teardown from `beelink_services` (and `beelink_minio_dir`, and the three `minio_*` vars in `provision-bee.yml` that only it reads), **only after** AC2's `changed=0` run is in `verification.md`. Leave the Ollama cleanup as it is.
+- [x] [AC1] (✓ 2026-09-28, PR 3a) SSOT and generated artifacts, moved here from PR 1 (2026-09-24):
   - remove `apps.services.data.minio.*` from `common` and `dev.yaml`;
   - remove MinIO from `platform_manifest.py` and regenerate `platform.json`;
   - remove it from `sync_k8s_images.py`'s key list and `renovate.json`;
   - retire `apps.services.data.minio.root_password` and delete the `root_user` baseline line (AC4).
 
-- [ ] [AC5] Delete `infra/stacks/services/data/minio/` and remove its entries from the stack README and the Makefile dev targets (cert hosts, `services up` lists, login hint).
+- [x] [AC5] (✓ 2026-09-28, PR 3a) Delete `infra/stacks/services/data/minio/` and remove its entries from the stack README and the Makefile dev targets (cert hosts, `services up` lists, login hint).
 - [ ] [AC5] Docs that describe current state (inventory category 8): delete `docs/runbooks/pvc-backup-restore.md`, and rewrite the rest to drop MinIO. Include `docs/runbooks/runbook-disaster-recovery.md`, which predates restic. Historical ADRs get a retirement note, not a rewrite: ADR-061 D4 records the decision, and ADR-023, 024 and 028 point to it. Update CLAUDE.md and README.
 - [ ] [AC5] The guard from PR 1 turns green. Mutation proof: re-adding one live reference turns it red.
 

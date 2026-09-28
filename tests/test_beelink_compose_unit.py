@@ -1,7 +1,8 @@
 """The Beelink's compose stack must come back REACHABLE, not merely running.
 
-ANSIBLE-053. Measured 2026-08-23: gitea and minio ran `healthy` for over an hour
-attached to no network and publishing nothing. Their only traffic was their own
+ANSIBLE-053. Measured 2026-08-23: gitea and the object store OPS-023 later
+retired ran `healthy` for over an hour attached to no network and publishing
+nothing. Their only traffic was their own
 healthcheck from `[::1]`. `github-runner` — the one service in the stack that
 declares no `ports:` — was unaffected.
 
