@@ -41,7 +41,7 @@ Order: the static class guards first, since they need no fixture. Then the node 
 
 ## Deploy and verify
 
-- [ ] Tell `kubelab-backup-health-wt-0e` (owner of #1859), then `make import-n8n ENV=staging` from this branch, then `make n8n-probe ENV=staging`
+- [x] Tell `kubelab-backup-health-wt-0e` (owner of #1859), then `make import-n8n ENV=staging` from this branch, then `make n8n-probe ENV=staging` ✓ 2026-09-27
 - [ ] PR as draft, triage, then ready. The operator merges
 - [ ] Prod: `make import-n8n ENV=prod`, then `make n8n-probe ENV=prod`
 - [ ] #1692 and #1659 closed with evidence, or left open with what remains
