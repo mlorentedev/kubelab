@@ -116,6 +116,18 @@ created. In prod it posts one "Task Created" and one "Forge Sync" notice to the
 operator channel. Run `make import-n8n ENV=<env>` first when testing a branch:
 `make deploy-k8s` re-imports master's workflows (#1859).
 
+### No SSO button on the login page
+
+If Vikunja's login page shows no "Log in with" button, its OpenID provider list
+is empty (`GET /api/v1/info` → `auth.openid_connect.providers: []`). Vikunja
+resolves the issuer once, at start. When the pod starts during a DNS gap (in
+staging, in-cluster resolution of staging names depends on the RPi4), it
+disables SSO and never retries (OPS-032, #1783). Restart it once DNS resolves:
+
+```bash
+make restart-service SVC=vikunja ENV=staging
+```
+
 ### Direct Health Check
 ```bash
 curl -s -f https://tasks.kubelab.live/api/v1/info | jq .
@@ -235,6 +247,10 @@ If no App exists yet:
   title or branch contains an existing Vikunja task key (e.g. `AREA-NNN`) and
   confirm the delivery answers `{"status": "linked"}` and the task gains a
   PR-URL comment; merging it answers `{"status": "done"}` and marks it done.
+- A forge's **Test Delivery / Test Push** button sends a synthetic `push`,
+  which never takes the issue or PR path: it proves the URL and the secret
+  only. To re-run an issue event, close and reopen the issue (`reopened` is a
+  create trigger); to re-run a PR event, use *Redeliver* on that PR's delivery.
 - **Slack**: run `/task create smoke test #kubelab P3` and confirm the task
   appears in Vikunja's `kubelab` namespace and `#dev-activity` receives the
   notification.
