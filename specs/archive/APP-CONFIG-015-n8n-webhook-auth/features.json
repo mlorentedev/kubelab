@@ -23,14 +23,14 @@
   {
     "id": "APP-CONFIG-015-n8n-webhook-auth-f4",
     "behavior": "AC4: a signed forge opened event creates its Vikunja task (staging, then prod)",
-    "verification": "make n8n-probe ENV=<staging|prod> (signed forge probe); prod also re-delivers teledyne/openkm-brain#2",
+    "verification": "make n8n-probe ENV=staging",
     "state": "pending",
     "evidence": ""
   },
   {
     "id": "APP-CONFIG-015-n8n-webhook-auth-f5",
     "behavior": "AC5: an unsigned POST to each public webhook stops at its gate with no Vikunja write or Apprise call",
-    "verification": "make n8n-probe ENV=<staging|prod> (unsigned forge, wrong-secret forge, unsigned Slack, unauthenticated agent-dispatcher)",
+    "verification": "make n8n-probe ENV=staging",
     "state": "pending",
     "evidence": ""
   }
