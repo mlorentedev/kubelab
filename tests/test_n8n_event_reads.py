@@ -7,12 +7,14 @@ processing. An expression such as `$json.taskKey` there does not fail. It
 evaluates to `undefined`, the request goes out with `undefined` in its URL or
 body, and the workflow reports success.
 
-The pattern shipped five times, in three workflows, and was found one instance
+The pattern was written five times, in three workflows, and found one instance
 at a time:
 
-- `Respond Task Created` answered 201 without the task id (#1864);
-- `Append PR URL Comment` commented on `/tasks/undefined` (#1871);
-- the `#dev-activity` notices and both `Respond 200` bodies announced nothing.
+- `Respond Task Created` answered 201 without the task id (#1864, measured);
+- `Append PR URL Comment` would have commented on `/tasks/undefined` (#1871);
+  it never ran, because the extractor before it never matched;
+- the `#dev-activity` notice and both `Respond 200` bodies read fields their
+  input does not carry.
 
 So this checks the class. An event field is any key that a Code node in the same
 workflow returns. The key set is read from the code, not listed here, so a new

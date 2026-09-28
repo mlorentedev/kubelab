@@ -19,10 +19,12 @@ Vikunja task through `multi-forge-sync`, and every unit test was green.
    response: Vikunja's task, Apprise's acknowledgement, Slack's answer. An
    expression such as `$json.taskKey` does not fail there. It evaluates to
    `undefined`, the request goes out with `undefined` in its URL or body, and
-   the execution reports success. `Append PR URL Comment` posted to
-   `/tasks/undefined/comments`. The same shape had already shipped in
-   `Respond Task Created` (#1864), in both `Respond 200` bodies and in the
-   `#dev-activity` notices, and each had been found one instance at a time.
+   the execution reports success. `Append PR URL Comment` would have posted
+   to `/tasks/undefined/comments`; it never ran only because the search before
+   it never matched. The same shape was measured in `Respond Task Created`
+   (#1864, a 201 without the task id) and was also written into both
+   `Respond 200` bodies and the `#dev-activity` notice. Each had been found one
+   instance at a time.
    The search result had the matching trap: an HTTP node that receives a JSON
    array emits **one item per element**, so a Code node reading `$json` as
    "the results" saw only the first task, and `results[0]` of a substring

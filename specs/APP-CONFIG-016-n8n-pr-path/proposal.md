@@ -40,6 +40,7 @@ Mechanically:
    - the create path's two searches continue on error, and their code nodes already branch on `error`;
    - the PR path's search halts on error (point 1);
    - the writes fail loudly, so the forge records a failed delivery.
+   - the notice after the writes halts on error too, as `Notify Task Created` already does on the create path. The task write has landed by then, so the forge shows a failed delivery for a change that happened, and a manual redelivery would add a second comment. That is chosen over a notice that fails silently: the forge's delivery log is the only cheap observer (#1659).
 
    The create path's two searches change behaviour too: until now a 401 halted the run, and now it reaches the `searchFailed` branch its tests describe.
 

@@ -395,13 +395,13 @@ def test_the_pr_event_is_a_merge_the_workflow_itself_would_mark_done() -> None:
     two ever disagree, the probe would pass by sending an event that writes nothing."""
     from tests.n8n_code_node import node_js, run_code_node, webhook_item
 
-    event = build_pr_merge_event("PROBE-1700000000")
+    event = build_pr_merge_event("PROBE-MERGE-1700000000")
     raw = json.dumps(event, indent=2).encode()
     headers = {k.lower(): v for k, v in forge_headers(raw, _SECRET, event="pull_request").items()}
     (parsed,) = run_code_node(
         node_js(FORGE, "Parse Forge Event"), [webhook_item(raw, headers, event)], {"FORGE_WEBHOOK_SECRET": _SECRET}
     )
-    assert parsed["taskKey"] == "PROBE-1700000000"
+    assert parsed["taskKey"] == "PROBE-MERGE-1700000000", "the probe's hyphenated AREA must survive the key regex"
     assert parsed["prWriteKind"] == "done"
     assert parsed["isTrackedPrEvent"] is True
     assert parsed["isCreateCandidate"] is False
