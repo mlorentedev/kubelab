@@ -443,7 +443,7 @@ def test_a_merge_that_did_not_land_whole_fails_and_still_cleans_up(
 def test_a_failed_pr_delivery_fails_and_still_deletes_its_task(capsys: pytest.CaptureFixture[str]) -> None:
     cluster = _Cluster(pr_status=500)
     assert _run(cluster) is False
-    assert "HTTP 500" in capsys.readouterr().out
+    assert "HTTP 500" in " ".join(capsys.readouterr().out.split())
     assert list(cluster.tasks) == cluster.deleted
 
 
