@@ -16,6 +16,10 @@ class ApplicationNotFoundError(Exception):
     """Raised when the Argo CD Application does not exist in the target namespace."""
 
 
+class RevisionHeldError(Exception):
+    """Raised when another branch holds the Application and the caller did not force (#1083)."""
+
+
 class HubUnreachableError(Exception):
     """Raised when a drift check cannot reach the hub — never treat this as "clean" (#1016)."""
 
@@ -47,11 +51,18 @@ def set_revision(
     rev: str,
     kubeconfig: str,
     namespace: str = "argocd",
+    force: bool = False,
+    release: str = "master",
 ) -> SetRevisionResult:
     """Patch the Application's spec.source.targetRevision to ``rev``.
 
     Returns a snapshot of the revision before/after and the post-patch sync status.
     Raises ApplicationNotFoundError if the Application does not exist.
+
+    Refuses (RevisionHeldError) to replace a branch other than ``release`` with a
+    different branch unless ``force``: that branch is another lane's live preview,
+    and on 2026-09-25 the old value was only printed after the patch (#1083).
+    Pointing back at ``release`` is never refused, because that is the patch-back.
     """
     get_argv = _kubectl(kubeconfig, namespace, "get", "application", app, "-o", "json")
     try:
@@ -62,6 +73,11 @@ def set_revision(
         raise
 
     old_revision = before["spec"]["source"]["targetRevision"]
+    if not force and rev != release and old_revision not in (release, rev):
+        raise RevisionHeldError(
+            f"'{app}' is on '{old_revision}', not '{release}': another lane may be previewing it. "
+            f"Ask that lane first; FORCE=1 replaces it anyway."
+        )
 
     payload = json.dumps({"spec": {"source": {"targetRevision": rev}}})
     patch_argv = _kubectl(

@@ -1,9 +1,10 @@
 # Argo CD, releases and image promotion
 
-29 lessons, newest first. Back to [all categories](../_index.md).
+30 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 475 | [Repointing a shared preview slot without reading it first clobbers another lane](lesson-475-repointing-a-shared-preview-slot-without-reading-it-clobbers-another-lane.md) | 2026-09-25 |
 | 451 | [One long-lived staging offer instead of a pull request per push](lesson-451-one-long-lived-staging-offer-instead-of-a-pr-per-push.md) | 2026-09-05 |
 | 417 | [An IaC module that was never applied is read as a control, and the header saying otherwise does not stop it](lesson-417-an-unapplied-iac-module-is-read-as-a-control.md) | 2026-09-02 |
 | 414 | [An import that outlives its API response turns a verification count into a reading of the clock](lesson-414-an-import-that-outlives-its-api-response.md) | 2026-09-02 |

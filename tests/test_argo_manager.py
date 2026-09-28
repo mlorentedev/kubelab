@@ -84,7 +84,7 @@ class TestSetRevisionHappyPath:
     def test_uses_provided_kubeconfig_and_namespace(self) -> None:
         before = json.dumps(
             {
-                "spec": {"source": {"targetRevision": "x"}},
+                "spec": {"source": {"targetRevision": "master"}},
                 "status": {"sync": {"status": "Synced"}},
             }
         )
@@ -255,3 +255,53 @@ class TestArgoCheckDriftCLI:
             result = runner.invoke(app, ["argo", "check-drift"])
         assert result.exit_code == 2, "hub-unreachable must be distinguishable from both clean(0) and drift(1)"
         assert "cannot check" in result.stdout.lower()
+
+
+def _app_on(revision: str) -> str:
+    return json.dumps({"spec": {"source": {"targetRevision": revision}}, "status": {"sync": {"status": "Synced"}}})
+
+
+class TestSetRevisionRefusesAnApplicationAnotherLaneHolds:
+    """#1083: repointing staging while another branch holds it clobbers that lane's preview.
+
+    Measured 2026-09-25: staging was on `fix/grafana-oauth-single-door`, OPS-023
+    repointed it at its own branch, and the old value was printed only after the
+    patch. Argo CD rolled Grafana to the wrong config within seconds.
+    """
+
+    def test_a_feature_branch_does_not_replace_another_feature_branch(self) -> None:
+        from toolkit.features.argo_manager import RevisionHeldError
+
+        with patch("toolkit.features.argo_manager.subprocess.run", _mock_kubectl(_app_on("fix/other-lane"))) as run:
+            with pytest.raises(RevisionHeldError, match="fix/other-lane"):
+                set_revision(app="kubelab-staging", rev="feat/mine", kubeconfig="/tmp/kc")
+
+        # Refused before the patch: only the read ran.
+        assert run.call_count == 1
+
+    def test_force_replaces_it(self) -> None:
+        with patch(
+            "toolkit.features.argo_manager.subprocess.run",
+            _mock_kubectl(_app_on("fix/other-lane"), _app_on("feat/mine")),
+        ) as run:
+            result = set_revision(app="kubelab-staging", rev="feat/mine", kubeconfig="/tmp/kc", force=True)
+
+        assert result.old_revision == "fix/other-lane"
+        assert run.call_count == 2
+
+    @pytest.mark.parametrize(
+        ("current", "requested"),
+        [
+            ("master", "feat/mine"),  # taking an idle staging
+            ("feat/mine", "feat/mine"),  # re-running your own
+            ("feat/mine", "master"),  # patch-back: master is the release
+        ],
+    )
+    def test_the_unheld_cases_need_no_force(self, current: str, requested: str) -> None:
+        with patch(
+            "toolkit.features.argo_manager.subprocess.run",
+            _mock_kubectl(_app_on(current), _app_on(requested)),
+        ) as run:
+            set_revision(app="kubelab-staging", rev=requested, kubeconfig="/tmp/kc")
+
+        assert run.call_count == 2

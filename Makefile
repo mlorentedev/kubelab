@@ -769,12 +769,13 @@ restart-argocd:
 	@echo "✓ Argo CD restarted (cache flushed)"
 
 # Patch an Argo CD Application's spec.source.targetRevision (preview-per-PR + patch-back).
-# Usage: make argo-set-revision APP=kubelab-staging REV=master
+# Usage: make argo-set-revision APP=kubelab-staging REV=master [FORCE=1]
+# Refuses to replace a branch another lane holds; FORCE=1 overrides (#1083).
 .PHONY: argo-set-revision
 argo-set-revision:
 	@test -n "$(APP)" || (echo "Usage: make argo-set-revision APP=kubelab-staging REV=master" && exit 1)
 	@test -n "$(REV)" || (echo "Usage: make argo-set-revision APP=kubelab-staging REV=master" && exit 1)
-	@$(TOOLKIT) infra argo set-revision --app $(APP) --rev $(REV)
+	@$(TOOLKIT) infra argo set-revision --app $(APP) --rev $(REV) $(if $(FORCE),--force,)
 
 # Trigger Argo CD sync for an Application
 # Usage: make sync-app APP=kubelab-staging
