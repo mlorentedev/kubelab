@@ -21,6 +21,7 @@ from toolkit.features.n8n_probe import (
     FORGE_SECRET_KEY,
     ExecutionSummary,
     build_issue_event,
+    build_pr_merge_event,
     forge_headers,
     http_request_nodes,
     judge_gate_stop,
@@ -169,14 +170,29 @@ class _Cluster:
         delete_status: int = 204,
         open_gates: bool = False,
         omit_task_id: bool = False,
+        pr_status: int = 200,
+        pr_marks_done: bool = True,
+        pr_erases_description: bool = False,
+        pr_comments: bool = True,
+        pr_answer: str = "done",
+        gate_answer: str | None = "ignored",
     ) -> None:
         self.executions: dict[str, list[dict[str, Any]]] = {}
         self.tasks: dict[int, str] = {}
+        self.done: dict[int, bool] = {}
+        self.descriptions: dict[int, str] = {}
+        self.comments: dict[int, list[str]] = {}
         self.deleted: list[int] = []
         self.signed_creates = signed_creates
         self.delete_status = delete_status
         self.open_gates = open_gates  # the #1712 defect: every gate routes to TRUE
         self.omit_task_id = omit_task_id  # the Respond Task Created defect: 201 without taskId
+        self.pr_status = pr_status  # what the PR delivery answers; non-2xx is a halted run
+        self.pr_marks_done = pr_marks_done
+        self.pr_erases_description = pr_erases_description  # the #1871 write: `{done: true}` alone
+        self.pr_comments = pr_comments
+        self.pr_answer = pr_answer
+        self.gate_answer = gate_answer  # the `status` a gate stop answers; None is the pre-#1659 body
         self.posts: list[tuple[str, bytes, dict[str, str]]] = []
         self.workflow_ids = {name: load_workflow(name)["id"] for name in (FORGE, SLACK, AGENT)}
 
@@ -189,9 +205,15 @@ class _Cluster:
         self.posts.append((url, body, headers))
         if url.endswith("/webhook/multi-forge-sync"):
             expected = hmac.new(_SECRET.encode(), body, hashlib.sha256).hexdigest()
+            event = json.loads(body)
+            if headers.get("X-Gitea-Signature") == expected and "pull_request" in event:
+                return self._pull_request(event)
             if headers.get("X-Gitea-Signature") == expected and self.signed_creates:
                 task_id = 100 + len(self.tasks)
-                self.tasks[task_id] = json.loads(body)["issue"]["title"]
+                self.tasks[task_id] = event["issue"]["title"]
+                self.done[task_id] = False
+                self.descriptions[task_id] = f"<p>{event['issue']['html_url']}</p>"
+                self.comments[task_id] = []
                 self._run(FORGE, {"Has Task Key & Valid Sig?": [1, 0], "Create Task from Issue": [1]})
                 body_out = {"status": "ok", "created": True}
                 if not self.omit_task_id:
@@ -201,7 +223,8 @@ class _Cluster:
                 self._run(FORGE, {"Has Task Key & Valid Sig?": [1, 0], "Find Task for Issue": [0]})
             else:
                 self._run(FORGE, {"Has Task Key & Valid Sig?": [0, 1], "Respond 200": [1]})
-            return 200, json.dumps({"status": "ok"})
+            answer = {} if self.gate_answer is None else {"status": self.gate_answer}
+            return 200, json.dumps(answer)
         if url.endswith("/webhook/slack-task-capture"):
             if self.open_gates:
                 self._run(SLACK, {"Is Slack Valid?": [1, 0], "Lookup Vikunja Projects": [1]})
@@ -211,6 +234,32 @@ class _Cluster:
         if url.endswith("/webhook/agent-dispatcher"):
             return 403, "Authorization data is wrong!"
         return 404, ""
+
+    def _pull_request(self, event: dict[str, Any]) -> tuple[int, str]:
+        key = event["pull_request"]["title"].split(":", 1)[0]
+        task_id = next(i for i, title in self.tasks.items() if title.startswith(key + ":"))
+        if self.pr_status != 200:
+            self.executions.setdefault(self.workflow_ids[FORGE], []).append(
+                {"id": 999, "status": "error", "outputs": {"Find Vikunja Task by Key": []}}
+            )
+            return self.pr_status, json.dumps({"message": "Error in workflow"})
+        if self.pr_marks_done:
+            self.done[task_id] = True
+        if self.pr_erases_description:
+            self.descriptions[task_id] = ""
+        if self.pr_comments:
+            self.comments[task_id].append(f"Linked PR: {event['pull_request']['html_url']} (merged)")
+        self._run(
+            FORGE,
+            {
+                "Has Task Key & Valid Sig?": [1, 0],
+                "Is Tracked PR Event?": [1, 0],
+                "Update Vikunja Task State": [1],
+                "Append PR URL Comment": [1],
+                "Respond PR Synced": [1],
+            },
+        )
+        return 200, json.dumps({"status": self.pr_answer, "taskKey": key, "taskId": task_id})
 
     def exec_node(self, script: str) -> str:
         request = json.loads(script.split("const REQUEST = ", 1)[1].split(";\n", 1)[0])
@@ -222,8 +271,15 @@ class _Cluster:
             rows = self.executions.get(request["workflowId"], [])
             return json.dumps([r for r in rows if r["id"] > request["after"]])
         if op == "get_task":
-            title = self.tasks.get(request["taskId"])
-            return json.dumps({"status": 200 if title else 404, "title": title})
+            task_id = request["taskId"]
+            title = self.tasks.get(task_id)
+            if title is None:
+                return json.dumps({"status": 404, "title": None, "done": None, "descriptionSha256": None})
+            digest = hashlib.sha256(self.descriptions[task_id].encode()).hexdigest()
+            return json.dumps({"status": 200, "title": title, "done": self.done[task_id], "descriptionSha256": digest})
+        if op == "count_comments":
+            found = [c for c in self.comments.get(request["taskId"], []) if request["contains"] in c]
+            return json.dumps({"status": 200, "count": len(found)})
         if op == "delete_task":
             self.deleted.append(request["taskId"])
             return json.dumps({"status": self.delete_status})
@@ -248,7 +304,8 @@ def _run(cluster: _Cluster, cm: MagicMock | None = None) -> bool:
 def test_every_probe_passes_against_a_fixed_cluster() -> None:
     cluster = _Cluster()
     assert _run(cluster) is True
-    assert list(cluster.tasks) == cluster.deleted, "the created probe task must be deleted"
+    assert len(cluster.tasks) == 2, "the issue probe and the PR probe each create one task"
+    assert list(cluster.tasks) == cluster.deleted, "every created probe task must be deleted"
     urls = [u for u, _, _ in cluster.posts]
     assert f"https://{_DOMAIN}/webhook/multi-forge-sync" in urls
     assert f"https://{_DOMAIN}/webhook/slack-task-capture" in urls
@@ -328,3 +385,70 @@ def test_the_in_pod_script_redacts_credentials_from_error_messages() -> None:
     for leaked in ("abc.def-123", "xyz9", "k1"):
         assert leaked not in out
     assert "HTTP 401" in out
+
+
+# ── The pull-request path (APP-CONFIG-016 AC6, #1871) ────────────────────────
+
+
+def test_the_pr_event_is_a_merge_the_workflow_itself_would_mark_done() -> None:
+    """Built by the probe, read by the workflow's own `Parse Forge Event`: if the
+    two ever disagree, the probe would pass by sending an event that writes nothing."""
+    from tests.n8n_code_node import node_js, run_code_node, webhook_item
+
+    event = build_pr_merge_event("PROBE-1700000000")
+    raw = json.dumps(event, indent=2).encode()
+    headers = {k.lower(): v for k, v in forge_headers(raw, _SECRET, event="pull_request").items()}
+    (parsed,) = run_code_node(
+        node_js(FORGE, "Parse Forge Event"), [webhook_item(raw, headers, event)], {"FORGE_WEBHOOK_SECRET": _SECRET}
+    )
+    assert parsed["taskKey"] == "PROBE-1700000000"
+    assert parsed["prWriteKind"] == "done"
+    assert parsed["isTrackedPrEvent"] is True
+    assert parsed["isCreateCandidate"] is False
+    assert headers["x-gitea-event"] == "pull_request"
+
+
+def _pr_posts(cluster: _Cluster) -> list[dict[str, Any]]:
+    return [json.loads(b) for u, b, _ in cluster.posts if b"pull_request" in b and u.endswith("multi-forge-sync")]
+
+
+def test_the_merge_probe_sends_one_signed_merge_for_the_task_it_created() -> None:
+    cluster = _Cluster()
+    assert _run(cluster) is True
+    (merge,) = _pr_posts(cluster)
+    assert merge["action"] == "closed" and merge["pull_request"]["merged"] is True
+    key = merge["pull_request"]["title"].split(":", 1)[0]
+    assert any(title.startswith(key + ":") for title in cluster.tasks.values())
+
+
+@pytest.mark.parametrize(
+    ("defect", "named"),
+    [
+        pytest.param({"pr_marks_done": False}, "done", id="done-still-false"),
+        pytest.param({"pr_erases_description": True}, "description", id="description-erased"),
+        pytest.param({"pr_comments": False}, "comment", id="no-comment"),
+        pytest.param({"pr_answer": "ignored"}, "ignored", id="answer-not-done"),
+    ],
+)
+def test_a_merge_that_did_not_land_whole_fails_and_still_cleans_up(
+    defect: dict[str, Any], named: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    cluster = _Cluster(**defect)
+    assert _run(cluster) is False
+    out = " ".join(capsys.readouterr().out.split())
+    assert "merged PR" in out and named in out
+    assert list(cluster.tasks) == cluster.deleted
+
+
+def test_a_failed_pr_delivery_fails_and_still_deletes_its_task(capsys: pytest.CaptureFixture[str]) -> None:
+    cluster = _Cluster(pr_status=500)
+    assert _run(cluster) is False
+    assert "HTTP 500" in capsys.readouterr().out
+    assert list(cluster.tasks) == cluster.deleted
+
+
+def test_a_gate_stop_must_name_its_status(capsys: pytest.CaptureFixture[str]) -> None:
+    """#1659 AC1: the forge's delivery log is the only cheap observer of a stop."""
+    cluster = _Cluster(gate_answer=None)
+    assert _run(cluster) is False
+    assert "ignored" in capsys.readouterr().out
