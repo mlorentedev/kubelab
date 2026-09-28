@@ -64,9 +64,23 @@ make sync-vikunja ENV=prod
 Both GitHub and Gitea trigger webhooks into n8n when PRs are created, updated, or merged.
 
 ### Lifecycle Conventions
-1. Branch name or PR title carries the task/spec key (e.g. `feat/idp-035-vikunja-task-platform` or `feat: IDP-035 add sync`).
-2. **PR Opened / Synchronized**: n8n moves the corresponding Vikunja task to `In Review` and comments with the PR URL.
-3. **PR Merged**: n8n moves the task to `Done` (terminal state; monotonic and ignores stale out-of-order events).
+
+A signed `pull_request` event whose title or branch carries a task key (e.g.
+`feat/idp-035-vikunja-task-platform` or `feat: IDP-035 add sync`) reaches the task
+with exactly that key: `TOOL-035` never matches `TOOL-0350`. Writes only move
+forward (ADR-066 D4, APP-CONFIG-016):
+
+| Event | Vikunja write | Answer in the forge's delivery log |
+|---|---|---|
+| PR opened / reopened | one comment linking the PR | 200 `{"status": "linked"}` |
+| PR merged | `done: true` (Vikunja moves it to the Done bucket) and a comment | 200 `{"status": "done"}` |
+| push, sync, edit, PR or review comment, unmerged close | none | 200 `{"status": "ignored"}` |
+| no task with that key | none | 200 `{"status": "no-task"}` |
+| Vikunja search or write failed | whatever landed before the failure | non-2xx (the run halts; the error is in n8n's execution) |
+
+No event un-does a task, and an opened PR does not move a task to `In Review`
+(#1687). The write sends the whole task with only `done` changed, because
+Vikunja's `POST /tasks/{id}` clears every field the body omits.
 
 ---
 
@@ -88,6 +102,19 @@ To delegate a task to an autonomous coding agent (Orca ADE / CLI agent in an iso
 kubectl -n kubelab get pods -l app.kubernetes.io/name=vikunja
 kubectl -n kubelab logs -l app.kubernetes.io/name=vikunja --tail=50
 ```
+
+### Probe the webhooks end to end
+
+```bash
+make n8n-probe ENV=staging   # then ENV=prod
+```
+
+It creates a task through a signed issue event, sends a signed merge for a second
+task and reads back `done`, the description and the PR comment, checks that
+unsigned forge and Slack events stop at their gates, and deletes every task it
+created. In prod it posts one "Task Created" and one "Forge Sync" notice to the
+operator channel. Run `make import-n8n ENV=<env>` first when testing a branch:
+`make deploy-k8s` re-imports master's workflows (#1859).
 
 ### Direct Health Check
 ```bash
@@ -204,10 +231,10 @@ If no App exists yet:
 
 ### 6.5 Verify end-to-end
 
-- **GitHub**: open (or push to) a branch/PR whose title or branch name
-  contains an existing Vikunja task key (e.g. `AREA-NNN`) and confirm the
-  task moves to `In Review` / `Done` in Vikunja, with a PR-URL comment
-  appended.
+- **Forge**: `make n8n-probe ENV=<env>` (section 5). By hand: open a PR whose
+  title or branch contains an existing Vikunja task key (e.g. `AREA-NNN`) and
+  confirm the delivery answers `{"status": "linked"}` and the task gains a
+  PR-URL comment; merging it answers `{"status": "done"}` and marks it done.
 - **Slack**: run `/task create smoke test #kubelab P3` and confirm the task
   appears in Vikunja's `kubelab` namespace and `#dev-activity` receives the
   notification.
