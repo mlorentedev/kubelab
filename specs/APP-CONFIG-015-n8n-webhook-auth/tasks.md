@@ -45,13 +45,13 @@ Order: the gate guard first, because it is static and needs no fixture. Then the
 
 ## Closing
 
-- [ ] Every acceptance criterion from `proposal.md` is covered by at least one test
-- [ ] Every acceptance criterion has a matching entry in `features.json` (see below) with a non-vacuous verification command
-- [ ] Type checks pass
-- [ ] Lint passes
-- [ ] No unrelated changes in the diff (no scope creep)
-- [ ] `verification.md` filled in
-- [ ] PR opened referencing this spec folder
+- [x] Every acceptance criterion from `proposal.md` is covered by at least one test: AC1-3 by unit tests, AC4-5 by `tests/test_n8n_probe.py` plus the live `make n8n-probe` ✓ 2026-09-27
+- [x] Every acceptance criterion has a matching entry in `features.json` (see below) with a non-vacuous verification command ✓ 2026-09-27
+- [x] Type checks pass (`mypy toolkit/features/n8n_probe.py`) ✓ 2026-09-27
+- [x] Lint passes (`make lint`) ✓ 2026-09-27
+- [x] No unrelated changes in the diff (no scope creep): #1855, #1864, #1873 ✓ 2026-09-27
+- [x] `verification.md` filled in ✓ 2026-09-27
+- [x] PR opened referencing this spec folder: #1855, #1864, #1873 ✓ 2026-09-27
 
 ## Machine-readable features
 
