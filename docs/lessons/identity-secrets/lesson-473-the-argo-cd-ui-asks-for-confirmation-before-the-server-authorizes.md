@@ -17,8 +17,12 @@ check (AC5) needed `operator` to be refused a delete of an application.
 **Problem**: Signed in as `operator`, *Delete* on an application opened the
 confirmation dialog, name field and all, exactly as it does for `manu`. The
 UI does not ask the server whether the caller may delete before it asks the
-caller whether they mean it. The refusal only comes back after the dialog is
-confirmed, so the one way to see it in the browser is to confirm a delete in
+caller whether they mean it: in v3.4.1, `deleteApplication`
+(`ui/src/app/applications/components/utils.tsx:85`) opens
+`apis.popup.prompt` (:111) and calls `services.applications.delete` only in
+its `submit` handler (:164), with no `canI` in between. The UI does call
+`canI` elsewhere (logs, exec), so its absence here is not an oversight in the
+reading. The refusal only comes back after the dialog is confirmed, so the one way to see it in the browser is to confirm a delete in
 prod and trust the policy to stop it. If the policy were wrong, the evidence
 would be a deleted application.
 
