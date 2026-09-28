@@ -4,9 +4,10 @@ Pure SSOT assertions: NO SSH, no live node, no restic. Runs under ``make test``.
 
 ``roles/backup`` enumerated every Docker volume and subtracted an exclude list.
 Measuring the fleet for #449 showed why that cannot work: on the Beelink, Gitea
-is a **bind mount** and so is MinIO, while ``docker volume ls`` returns only
-buildx caches and the runner toolcache. Pointed at that node, the old model
-archives rebuildable junk, misses both services, and reports success. #1092's
+is a **bind mount**, as was the object store OPS-023 later retired, while
+``docker volume ls`` returns only buildx caches and the runner toolcache.
+Pointed at that node, the old model archives rebuildable junk, misses both
+services, and reports success. #1092's
 AC3 inverts it to an allow-list; this file guards the declaration side.
 
 The schema's rule is *declare the name we control, resolve the path at run time*,
@@ -183,9 +184,9 @@ class TestPvcSources:
 
     Authelia and n8n are Kubernetes PVCs, but `local-path` puts them on the
     VPS's own disk, so the node-path pipeline reaches them and no in-cluster job
-    is needed. That is what retires the prod `pvc-backup` CronJob, which copied
-    them to MinIO INSIDE the same cluster — a backup that burns with the thing
-    it protects — and downloaded `mc` unpinned from the internet on every run.
+    is needed. That is what retired the prod `pvc-backup` CronJob, which copied
+    them to a bucket INSIDE the same cluster — a backup that burns with the
+    thing it protects — and downloaded its client unpinned on every run.
     """
 
     # Derived from the module's existing root constant rather than a second
@@ -262,11 +263,10 @@ class TestPvcSources:
         Left as a test so re-adding one is deliberate rather than incidental:
         postgres was measured EMPTY (0 tables) and joins the day something
         writes to it — with `pg_dump`, a different mechanism; grafana's
-        dashboards belong in git; crowdsec's decisions regenerate; minio is the
-        destination being retired, so backing it up would be circular.
+        dashboards belong in git; crowdsec's decisions regenerate.
         """
         declared = set(sources["vps"])
-        for name in ("postgres", "grafana", "crowdsec", "minio", "loki"):
+        for name in ("postgres", "grafana", "crowdsec", "loki"):
             assert name not in declared, (
                 f"{name} was added to the VPS backup sources. That may be right — "
                 f"postgres in particular joins the moment it stops being empty — "

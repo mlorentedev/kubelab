@@ -1,0 +1,53 @@
+---
+id: lesson-480-a-wip-commit-a-hook-refused-turns-the-safe-restore-back-into-the-destructive-one
+type: lesson
+status: active
+created: "2026-09-27"
+owner: manu
+category: process-method
+tags: [kubelab, process-method, git, mutation-testing, pre-commit]
+---
+
+# A WIP commit that a hook refused turns the safe restore back into the destructive one
+
+**Context**: APP-CONFIG-016 (#1871). The n8n probe had just gone green, and a
+mutation was needed to show that its description check could fail. The
+procedure from lesson-365 was followed: commit, mutate, `git checkout HEAD --`.
+
+**Problem**: the commit never happened. `ruff format` reformatted a file, and
+pre-commit refuses a commit whose hooks modified files. The command's output
+had been discarded (`>/dev/null 2>&1`), so the refusal went unseen. HEAD was
+still the previous *red* commit, and `git checkout HEAD -- toolkit/features/n8n_probe.py`
+restored the file to its state before the implementation. The whole probe was
+gone, and the tell was lesson-365's own: a file that `grep` said held
+`signed_pr_merge_closes_its_task` a minute earlier now held nothing.
+
+Lesson-365 calls the restore "safe by construction". The construction has a
+precondition that nothing checked: **the commit landed**. A refused commit
+leaves the command's text unchanged and removes the only thing that made it
+safe.
+
+**Solution**: the implementation was rebuilt from the edit scripts still in
+the transcript, and this time they were written to a file first. The loop now
+proves the precondition before mutating, and stops if it fails:
+
+```bash
+git add -A && git commit -q -m "wip: <what is being proven>" \
+  && test -z "$(git status --porcelain)" \
+  || { echo "WIP commit did not land; not mutating"; exit 1; }
+# mutate, observe red, then:
+git checkout HEAD -- <file>
+```
+
+Two habits make the failure visible instead of silent:
+
+- never discard a commit's output, since a hook refusal is only reported there;
+- check `git log -1` or a clean tree after the commit, not the exit status of a
+  pipeline whose last command was a `grep`.
+
+**Rule**: a "safe by construction" step is only as safe as the check that its
+construction actually happened. When a procedure's safety rests on an earlier
+command succeeding, chain it with `&&` and verify its effect (HEAD moved, tree
+clean). Never assume it succeeded because it usually does.
+
+**Tags**: `#git` `#pre-commit` `#mutation-testing` `#lesson-365` `#issue-1871`

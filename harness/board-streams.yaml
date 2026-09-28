@@ -111,7 +111,7 @@ overrides:
   959: Provisioning & Fleet     # OPS-016 ufw DNAT rules after live-restore
   964: Networking & Edge        # OPS-019 vpn_extra_records never resolved
   968: Observability            # OPS-021 Uptime Kuma reached by two names
-  972: Platform Services        # OPS-023 MinIO deployed twice
+  972: Platform Services        # OPS-023 retire the object store
   1083: CI & Delivery           # OPS-023 staging Argo CD auto-sync vs worktree deploys
   1150: CI & Delivery           # OPS-025 stale ApplicationSet controller pods on the hub
   1355: Security & Identity     # OPS-026 rotation never reached non-K8s consumers

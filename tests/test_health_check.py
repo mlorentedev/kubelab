@@ -49,8 +49,8 @@ class TestHealthCheckResult:
 
     def test_unhealthy_result(self) -> None:
         r = HealthCheckResult(
-            service="minio",
-            url="https://minio.kubelab.live/minio/health/live",
+            service="gitea",
+            url="https://gitea.kubelab.live/api/healthz",
             status_code=403,
             healthy=False,
             reason="HTTP 403",
@@ -79,11 +79,11 @@ class TestExtractServiceConfigs:
                     },
                 },
                 "services": {
-                    "data": {
-                        "minio": {
-                            "name": "minio",
-                            "domain": "minio.kubelab.live",
-                            "health_path": "/minio/health/live",
+                    "core": {
+                        "gitea": {
+                            "name": "gitea",
+                            "domain": "gitea.kubelab.live",
+                            "health_path": "/api/healthz",
                             "enable_auth": False,
                         },
                     },
@@ -131,7 +131,7 @@ class TestExtractServiceConfigs:
         checker = HealthChecker.__new__(HealthChecker)
         configs = checker._extract_service_configs(self._make_config())
         names = [c.name for c in configs]
-        assert "minio" in names
+        assert "gitea" in names
         assert "grafana" in names
         assert "authelia" in names
 
@@ -152,14 +152,14 @@ class TestExtractServiceConfigs:
         configs = checker._extract_service_configs(self._make_config())
         by_name = {c.name: c for c in configs}
         assert by_name["api"].category == "platform"
-        assert by_name["minio"].category == "services/data"
+        assert by_name["gitea"].category == "services/core"
         assert by_name["traefik"].category == "edge"
 
-    def test_minio_uses_correct_health_path(self) -> None:
+    def test_gitea_uses_its_declared_health_path(self) -> None:
         checker = HealthChecker.__new__(HealthChecker)
         configs = checker._extract_service_configs(self._make_config())
-        minio = next(c for c in configs if c.name == "minio")
-        assert minio.health_path == "/minio/health/live"
+        gitea = next(c for c in configs if c.name == "gitea")
+        assert gitea.health_path == "/api/healthz"
 
     def test_empty_config_returns_empty(self) -> None:
         checker = HealthChecker.__new__(HealthChecker)
@@ -213,8 +213,8 @@ class TestResultInterpretation:
 
     def test_403_is_unhealthy(self) -> None:
         r = HealthCheckResult(
-            service="minio",
-            url="https://minio.kubelab.live/",
+            service="gitea",
+            url="https://gitea.kubelab.live/",
             status_code=403,
             healthy=False,
             reason="HTTP 403",

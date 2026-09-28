@@ -199,25 +199,6 @@ class TraefikGenerator(BaseGenerator):
             # Get app_name (defaults to component name if not specified)
             app_name = self._find_var(env_vars, component, "NAME") or component
 
-            # --- Special Case: MinIO Console ---
-            if component == "minio":
-                console_domain = self._find_var(env_vars, component, "CONSOLE_DOMAIN")
-                console_port = self._find_var(env_vars, component, "DEFAULT_PORT_CONSOLE")
-
-                if console_domain and console_port:
-                    apps.append(
-                        {
-                            "name": f"{app_name}-console",
-                            "host": console_domain,
-                            "port": console_port,
-                            "backend_host": app_name,  # Same container
-                            "enable_auth": False,  # Let MinIO handle OIDC
-                            "enable_compress": True,
-                            "health_path": "/",
-                            "auth_level": "bypass",
-                        }
-                    )
-
             # Determine host and port using hierarchical search
             host = ""
             port = ""
@@ -239,10 +220,6 @@ class TraefikGenerator(BaseGenerator):
 
             # --- Determine Port ---
             port = self._find_var(env_vars, component, "DEFAULT_PORT") or ""
-
-            # Special case for minio (has both API and console ports)
-            if not port and component == "minio":
-                port = self._find_var(env_vars, component, "DEFAULT_PORT_API") or ""
 
             # Special case for traefik
             if not port and component == "traefik":

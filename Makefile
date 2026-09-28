@@ -187,7 +187,7 @@ DEV_DOMAINS := mlorente.test \
 	traefik.kubelab.test api.kubelab.test blog.kubelab.test \
 	auth.kubelab.test grafana.kubelab.test loki.kubelab.test \
 	gitea.kubelab.test n8n.kubelab.test \
-	status.kubelab.test minio.kubelab.test console.minio.kubelab.test \
+	status.kubelab.test \
 	crowdsec.kubelab.test errors.kubelab.test
 
 .PHONY: setup-local-dns
@@ -364,7 +364,7 @@ build-dev:
 .PHONY: up-dev
 up-dev:
 	@$(TOOLKIT) services up \
-		api errors gitea n8n uptime loki grafana authelia crowdsec minio github-runner traefik \
+		api errors gitea n8n uptime loki grafana authelia crowdsec github-runner traefik \
 		--env dev
 	@echo "✓ Development environment is up"
 
@@ -372,7 +372,7 @@ up-dev:
 down-dev:
 	@echo "--- Bringing down ALL development services and removing volumes ---"
 	@$(TOOLKIT) services down \
-		api errors gitea n8n uptime loki grafana authelia crowdsec minio github-runner traefik \
+		api errors gitea n8n uptime loki grafana authelia crowdsec github-runner traefik \
 		--env dev -v || true
 	@echo "✓ All development services are down and volumes removed"
 
@@ -404,13 +404,12 @@ dev-full-reset: dev-full-clean credentials-generate
 dev-full-reset-resume:
 	@$(TOOLKIT) config generate --env dev # Regenerate config with updated secrets
 	@echo "--- Starting all services ---"
-	@$(TOOLKIT) services up crowdsec authelia traefik gitea n8n uptime loki grafana api errors minio github-runner --env dev
+	@$(TOOLKIT) services up crowdsec authelia traefik gitea n8n uptime loki grafana api errors github-runner --env dev
 	@echo "✓ Development environment fully reset and services are up."
 	@echo ""
 	@echo "--- Post-start manual steps ---"
 	@echo "  Gitea     : docker exec --user git gitea gitea admin user create --admin --username admin --password <pass> --email <email> --must-change-password=false"
 	@echo "  n8n       : create owner account at https://n8n.kubelab.test"
-	@echo "  MinIO     : login at https://console.minio.kubelab.test with root creds from SOPS"
 	@echo "============================================================"
 
 .PHONY: restart-dev
