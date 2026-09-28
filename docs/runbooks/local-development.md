@@ -32,7 +32,7 @@ make setup-local-dns
 # 3. Install local TLS certificates
 make setup-certs
 
-# 4. Generate credentials (Authelia, Grafana, MinIO, etc.)
+# 4. Generate credentials (Authelia, Grafana, basic_auth, etc.)
 make credentials-generate
 
 # 5. Generate all configuration files
@@ -59,12 +59,10 @@ After `make setup-local-dns`, these domains resolve to `127.0.0.1`.
 | `gitea.kubelab.test` | Gitea (Git server) | Gitea own |
 | `n8n.kubelab.test` | n8n (workflow automation) | n8n own |
 | `status.kubelab.test` | Uptime Kuma | — |
-| `minio.kubelab.test` | MinIO S3 API | MinIO root creds |
-| `console.minio.kubelab.test` | MinIO web console | MinIO root creds |
 | `loki.kubelab.test` | Loki logs | Authelia |
 | `crowdsec.kubelab.test` | CrowdSec (internal) | — |
 
-> **Note:** `console.minio.kubelab.test` requires an explicit SAN in the TLS cert (wildcards only cover one subdomain level). Run `make regen-certs` if you see a cert error.
+> **Note:** a two-level name such as `a.b.kubelab.test` needs an explicit SAN in the TLS cert (wildcards only cover one subdomain level). `make regen-certs` adds one for every configured `*_DOMAIN`.
 
 ## First-Run Service Setup
 
@@ -78,15 +76,12 @@ On first start, the `GITEA_ADMIN_*` env vars only work if no DB exists yet. If t
 
 ```bash
 docker exec --user git gitea gitea admin user create \
-  --admin --username admin --password 645610515 \
+  --admin --username admin --password '<apps.services.core.gitea.admin_password, dev SOPS>' \
   --email mlorentedev@gmail.com --must-change-password=false
 ```
 
 ### n8n
 Visit `https://n8n.kubelab.test` → create owner account on first login. The encryption key is set via `APPS_SERVICES_CORE_N8N_ENCRYPTION_KEY` — do not change it after creating credentials.
-
-### MinIO
-Visit `https://console.minio.kubelab.test` → login with root credentials from SOPS (`apps.services.data.minio.root_user` / `root_password`).
 
 ## Daily Usage
 
@@ -95,7 +90,7 @@ Visit `https://console.minio.kubelab.test` → login with root credentials from 
 ```bash
 make up-dev
 # Starts: blog, api, web, nginx, portainer, gitea, n8n, uptime, loki,
-#         grafana, authelia, crowdsec, minio, github-runner, traefik
+#         grafana, authelia, crowdsec, github-runner, traefik
 ```
 
 ### Start individual services

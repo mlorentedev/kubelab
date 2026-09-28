@@ -146,19 +146,9 @@ routes:
 
 **Pattern B — Native OIDC/OAuth2 integration (SSO)**
 
-Configure the service as an OIDC client against Authelia. Single login via Authelia, no service-level login. Supported by minio, grafana.
+Configure the service as an OIDC client against Authelia. Single login via Authelia, no service-level login. Used by Grafana, Gitea, Argo CD and Vikunja.
 
-```yaml
-# Authelia: add OIDC client definition for minio
-identity_providers:
-  oidc:
-    clients:
-      - id: minio
-        secret: $MINIO_OIDC_SECRET
-        authorization_policy: one_factor
-        redirect_uris:
-          - https://minio.staging.kubelab.live/oauth_callback
-```
+Declare the client once in `apps.services.security.authelia.oidc_clients` (`common.yaml`) and render it with `toolkit sync oidc --env <staging|prod>` (`make sync-oidc-hashes`). Never add a `clients:` block to `configuration.yml` or hand-edit the generated `oidc-clients.yml`: `tests/test_oidc_clients.py` compares them with the SSOT (SSOT-017, ADR-040 §1).
 
 ### Decision Matrix
 
@@ -167,7 +157,6 @@ identity_providers:
 | portainer | Bypass Authelia | Docker Compose only; own mandatory auth |
 | gitea | Bypass Authelia | Own auth; OAuth2 from Authelia in staging/prod |
 | n8n | Bypass Authelia | Own user management; no OIDC support |
-| minio | OIDC via Authelia | Native OIDC support; SSO preferred |
 | grafana | OIDC via Authelia | Native OIDC support; SSO preferred |
 | api/web/blog | Authelia ForwardAuth | No own auth; public apps need protection |
 

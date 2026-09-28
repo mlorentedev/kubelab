@@ -12,6 +12,8 @@ created: "2026-03-28"
 
 Accepted (2026-03-28). Refines ADR-023 (Hub-and-Spoke), ADR-027 (Intelligence Layer).
 
+> **MinIO retired** (OPS-023, #972, 2026-09): the Beelink's object store, listed below among the on-demand services, no longer runs anywhere. See [ADR-061](adr-061-stateful-service-placement.md) D4.
+
 ## Amendment — 2026-08-12 (state placement is a second axis this ADR does not carry)
 
 This ADR decides **where compute lives** — the always-on / on-demand split and its "would I need this at 3 AM?" test. It says nothing about **state**, and that omission let nine stateful PVCs end up duplicated across staging and prod as a side effect of a packaging choice rather than a decision.

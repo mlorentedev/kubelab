@@ -115,7 +115,7 @@ github-secrets-manager.sh --from-mapping --select DOCKERHUB_TOKEN
 gh secret list
 ```
 
-See [sops-and-secrets](sops-and-secrets.md) for KubeLab-specific secrets (Authelia, Grafana, MinIO, etc.).
+See [sops-and-secrets](sops-and-secrets.md) for KubeLab-specific secrets (Authelia, Grafana, Gitea, etc.).
 
 ## Common operations
 

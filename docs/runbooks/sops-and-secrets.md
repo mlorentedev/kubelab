@@ -234,7 +234,7 @@ KubeLab uses three authentication mechanisms. In dev they share the same passwor
 |-----------|-------------|----------|-----------|
 | **Authelia SSO** | Identity provider. Traefik forwards unauthenticated requests to Authelia login. | grafana, portainer, traefik dashboard, n8n, and any service behind `authelia` middleware | `users_admin_password_hash` (argon2id) in `users_database.yml` |
 | **Basic Auth** (htpasswd) | HTTP Basic Auth via Traefik middleware. Fallback for services without native auth. | Endpoints not covered by Authelia or requiring a second factor | `basic_auth.credentials` (bcrypt htpasswd) in SOPS |
-| **Per-service admin passwords** | Internal admin accounts for each service's own UI/API. | grafana admin, minio root, n8n, gitea admin | Per-service keys in SOPS (e.g., `apps.services.observability.grafana.admin_password`) |
+| **Per-service admin passwords** | Internal admin accounts for each service's own UI/API. | grafana admin, uptime kuma admin, n8n, gitea admin | Per-service keys in SOPS (e.g., `apps.services.observability.grafana.admin_password`) |
 
 ### Secrets file structure (SOPS)
 
@@ -252,16 +252,12 @@ apps:
         oidc_hmac_secret: <token>
         session_secret: <token>
         storage_encryption_key: <token>
-        oidc_client_secret: <token>              # For OIDC clients (Grafana, MinIO)
+        oidc_client_secret: <token>              # For OIDC clients (Grafana, Gitea, ...)
         oidc_client_secret_hash: <argon2id>
         oidc_client_secret_grafana: <token>
         oidc_client_secret_grafana_hash: <argon2id>
       crowdsec:
         bouncer_api_key: <token>
-    data:
-      minio:
-        root_user: admin
-        root_password: <plaintext>
     observability:
       grafana:
         admin_user: admin
@@ -275,7 +271,6 @@ toolkit credentials show                                    # All secrets (dev)
 toolkit credentials show -e staging                         # All secrets (staging)
 toolkit credentials show basic_auth                         # Basic Auth block
 toolkit credentials show apps.services.security.authelia    # Authelia block
-toolkit credentials show apps.services.data.minio           # MinIO block
 ```
 
 ### Dev vs staging/prod

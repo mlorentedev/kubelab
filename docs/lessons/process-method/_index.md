@@ -1,10 +1,11 @@
 # How the work is run: specs, reviews, knowledge
 
-71 lessons, newest first. Back to [all categories](../_index.md).
+72 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
 | 480 | [A WIP commit that a hook refused turns the safe restore back into the destructive one](lesson-480-a-wip-commit-a-hook-refused-turns-the-safe-restore-back-into-the-destructive-one.md) | 2026-09-27 |
+| 476 | [A new step inside a function that tests mock piecemeal runs for real in every test written before it](lesson-476-a-new-step-inside-a-piecemeal-mocked-function-runs-for-real-in-every-old-test.md) | 2026-09-24 |
 | 452 | [A partial view of a corpus answers exactly like the whole corpus](lesson-452-a-partial-view-of-a-corpus-answers-like-the-whole-corpus.md) | 2026-09-06 |
 | 453 | [An absence is only as strong as the search that produced it](lesson-453-an-absence-is-only-as-strong-as-the-search-that-produced-it.md) | 2026-09-07 |
 | 440 | [Running the real code against a mocked boundary tests the code and certifies the mock](lesson-440-a-mock-of-an-unmeasured-boundary-certifies-the-belief.md) | 2026-09-05 |

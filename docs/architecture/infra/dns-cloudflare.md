@@ -1,11 +1,15 @@
 ---
 id: "kubelab-infra-dns-cloudflare"
 type: architecture
-status: active
+status: historical
 tags: [infrastructure, kubelab]
 created: "2026-02-07"
 owner: manu
 ---
+
+> **Historical snapshot.** A Cloudflare zone export for `mlorente.dev` taken on 2025-08-30, kept
+> for the record. DNS is Terraform-managed now: `infra/terraform/dns/` (`services.json` for
+> `kubelab.live`, `records_mlorente.tf` for `mlorente.dev`). Read the zone from there, not from here.
 
 ;;  
 ;; Domain:     mlorente.dev.  

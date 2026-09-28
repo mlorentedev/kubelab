@@ -10,7 +10,7 @@ created: "2026-03-28"
 # Runbook: Deploy a New Service to K3s Staging
 
 > Step-by-step guide for adding a new service to the KubeLab K3s staging cluster.
-> Created during the Gitea/N8N/MinIO deployment in Feb 2026.
+> Created during the Gitea and n8n deployments in Feb 2026.
 
 ## Prerequisites
 
@@ -20,7 +20,7 @@ created: "2026-03-28"
 - [ ] Authelia running and healthy on the cluster
 - [ ] Traefik running with CrowdSec bouncer middleware available
 - [ ] Decide auth tier for the service (see ADR-016):
-  - **OIDC** (Tier 1): Service has native OIDC support (e.g., MinIO, Gitea)
+  - **OIDC** (Tier 1): Service has native OIDC support (e.g., Gitea, Grafana)
   - **Forward Auth** (Tier 2): No OIDC support, use Authelia middleware (e.g., N8N, Grafana)
   - **Bypass** (Tier 3): Public endpoint, no auth needed (e.g., API, blog)
 

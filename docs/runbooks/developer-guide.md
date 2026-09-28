@@ -28,7 +28,6 @@ docker compose -f compose.base.yml -f compose.dev.yml up -d
 | **core** | Essential platform | gitea, portainer, n8n, vaultwarden, vikunja |
 | **observability** | Monitoring/logging | grafana, loki, uptime, prometheus |
 | **security** | Auth/protection | authelia, crowdsec |
-| **data** | Storage | minio |
 | **automation** | CI/workflows | github-runner |
 | **ai** | ML/AI agents | openclaw, picoclaw, pollex |
 | **misc** | Productivity | calcom, immich |

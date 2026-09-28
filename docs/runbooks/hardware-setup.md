@@ -104,7 +104,7 @@ RAM: 12GB | Storage: SSD
 > by AI-007 on 2026-08-09. `beelink_services` still strips it idempotently to
 > guard a re-imaged node. The steps are kept because they document how this
 > machine was built, not what it runs. Beelink is now the platform node
-> (GH Runner + MinIO + Glances) per ADR-028.
+> (Gitea + CI runners + Glances) per ADR-028.
 
 ```
 Hostname: kubelab-bee

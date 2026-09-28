@@ -146,7 +146,6 @@ true of `configuration.yml`, which does need one.
 | `...authelia.oidc_client_secret_hash` | argon2_hash | `$argon2id$...` | authelia |
 | `...authelia.oidc_client_secret_grafana` | oidc_client_secret | Base64 URL-safe | authelia, grafana |
 | `...authelia.oidc_client_secret_grafana_hash` | argon2_hash | `$argon2id$...` | authelia |
-| `...authelia.oidc_client_secret_minio_hash` | argon2_hash | `$argon2id$...` | authelia |
 
 **OIDC client secret pattern** (applies to ALL OIDC clients):
 1. **Plaintext** stored at service SOPS path → injected as env var to the service
@@ -211,24 +210,7 @@ toolkit secrets edit --env <env>       # Manually set admin_password
 **How to change**: `toolkit secrets init --env <env>`.
 **What breaks**: **DANGEROUS** — existing saved credentials/workflows with encrypted data become unreadable.
 
-### 9. MinIO
-
-| Key | Kind | Format | Services |
-|-----|------|--------|----------|
-| `apps.services.data.minio.root_user` | password | Plain text | minio |
-| `apps.services.data.minio.root_password` | password | Plain text | minio |
-| `apps.services.data.minio.oidc_client_secret` | oidc_client_secret | Base64 URL-safe | minio, authelia |
-
-**How to change**:
-```bash
-toolkit credentials generate --env <env>   # Sets root_user/password + OIDC secret
-toolkit secrets hash --env <env>           # Regenerates Argon2 hash for Authelia
-```
-**What breaks**:
-- Restart minio, re-login with new credentials
-- OIDC secret must match the hash in Authelia config
-
-### 10. Infrastructure (common.enc.yaml)
+### 9. Infrastructure (common.enc.yaml)
 
 These live in `common.enc.yaml` and are shared across ALL environments:
 
@@ -259,7 +241,6 @@ The bridge between SOPS and Kubernetes. Defined in `toolkit/features/k8s_secrets
 | `crowdsec-bouncer` | api-key | `apps.services.security.crowdsec.bouncer_api_key` |
 | `gitea-secrets` | SECRET_KEY | `apps.services.core.gitea.secret_key` |
 | `n8n-secrets` | N8N_ENCRYPTION_KEY | `apps.services.core.n8n.encryption_key` |
-| `minio-secrets` | MINIO_ROOT_USER, MINIO_ROOT_PASSWORD, MINIO_IDENTITY_OPENID_CLIENT_SECRET | `apps.services.data.minio.*` |
 | `api-secrets` | EMAIL_PASS, EMAIL_USER, EMAIL_FROM, BEEHIIV_*, ZOHO_* | `apps.platform.api.*` |
 
 ## Environment Parity Checklist

@@ -13,7 +13,7 @@ owner: manu
 
 Two systems manage secrets for KubeLab:
 
-1. **SOPS + age** — KubeLab service credentials (Authelia, Grafana, MinIO, etc.) → see [sops-and-secrets](sops-and-secrets.md)
+1. **SOPS + age** — KubeLab service credentials (Authelia, Grafana, Gitea, etc.) → see [sops-and-secrets](sops-and-secrets.md)
 2. **Dotfiles** — API tokens and external credentials (DockerHub, GitHub, Cloudflare, etc.) → `~/Projects/dotfiles/`
 3. **Dotfiles (file secrets)** — Kubeconfig deployed via `@KUBECONFIG=kubelab.kubeconfig>~/.kube/kubelab.config` in env-mapping.conf. Decrypted automatically at shell startup, env var `KUBECONFIG` points to the deployed file.
 

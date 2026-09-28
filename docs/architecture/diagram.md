@@ -62,7 +62,6 @@ flowchart TB
         end
         subgraph DataLayer["Data"]
             PG[(PostgreSQL)]:::data
-            MinIO[(MinIO S3)]:::data
         end
     end
 
@@ -137,7 +136,7 @@ flowchart TB
 | Blue | Custom Apps | Web (Astro), API (Go), Blog (Jekyll) |
 | Purple | Observability | Grafana, Loki, Prometheus, Node Exporter, cAdvisor, Uptime Kuma |
 | Green | Core Services | Portainer, Vikunja, n8n, Knowledge Base, Gitea |
-| Teal | Data | PostgreSQL, MinIO |
+| Teal | Data | PostgreSQL |
 | Yellow | AI / Agents | OpenClaw, PicoClaw, Pollex (llama.cpp) |
 
 ## Key Data Flows
@@ -175,9 +174,9 @@ flowchart TB
 | Observability | 5 | Grafana, Loki, Prometheus, Node Exporter, cAdvisor |
 | Monitoring | 1 | Uptime Kuma (external, on RPi 3) |
 | Core Services | 5 | Portainer, Vikunja, n8n, Knowledge Base, Gitea |
-| Data | 2 | PostgreSQL, MinIO |
+| Data | 1 | PostgreSQL |
 | AI / Agents | 3 | OpenClaw, PicoClaw, Pollex (llama.cpp) |
-| **Total** | **25 services across 5 active nodes + 1 spare** |
+| **Total** | **24 services across 5 active nodes + 1 spare** |
 
 ## Related
 

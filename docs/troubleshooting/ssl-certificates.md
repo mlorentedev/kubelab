@@ -78,17 +78,17 @@ make regen-certs
 
 ---
 
-## Dev: `console.minio.kubelab.test` cert error (multi-level subdomain)
+## Dev: `a.b.kubelab.test` cert error (multi-level subdomain)
 
 ### Root Cause
 
-`*.kubelab.test` only covers **one subdomain level**. `console.minio.kubelab.test` has two levels (`console` + `minio`) — the wildcard does not match it. Same root cause as the `mlorente.test` bug, but this time it's a second-level subdomain within the same base domain.
+`*.kubelab.test` only covers **one subdomain level**. `a.b.kubelab.test` has two levels (`a` + `b`) — the wildcard does not match it. Same root cause as the `mlorente.test` bug, but this time it's a second-level subdomain within the same base domain.
 
 ### Diagnostic
 
 ```bash
 openssl x509 -in infra/config/certs/dev/cert.pem -noout -ext subjectAltName
-# Missing: console.minio.kubelab.test → browser shows cert error
+# Missing: a.b.kubelab.test → browser shows cert error
 ```
 
 ### Solution
@@ -96,13 +96,13 @@ openssl x509 -in infra/config/certs/dev/cert.pem -noout -ext subjectAltName
 `_get_default_domains()` now auto-detects any configured `*_DOMAIN` env var that has more than one subdomain level relative to `BASE_DOMAIN` and adds it as an explicit SAN. Fixed 2026-02-25.
 
 ```bash
-make regen-certs   # picks up console.minio.kubelab.test automatically
+make regen-certs   # picks up any two-level *_DOMAIN automatically
 ```
 
 ### Prevention
 
-Any service with a multi-level subdomain (e.g. `console.minio.*`, `admin.gitea.*`) must either:
-- Use a single-level subdomain instead (`minio-console.kubelab.test`)
+Any service with a multi-level subdomain (e.g. `admin.gitea.*`) must either:
+- Use a single-level subdomain instead (`gitea-admin.kubelab.test`)
 - Or rely on `_get_default_domains()` scanning `*_DOMAIN` env vars — which it now does automatically
 
 ---
