@@ -1,0 +1,9 @@
+[
+  {
+    "id": "APP-CONFIG-016-n8n-pr-path-f1",
+    "behavior": "Outcome 1",
+    "verification": "echo 'not implemented' && exit 1",
+    "state": "pending",
+    "evidence": ""
+  }
+]
