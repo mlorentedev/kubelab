@@ -181,9 +181,8 @@ def test_a_keyless_issue_creates_nothing() -> None:
 
 
 def test_a_pull_request_event_is_not_an_issue_event() -> None:
-    """The whole point of branching early: an issue event must never reach
-    `Update Vikunja Task State`, which writes `{done: false}` and would undo a
-    task somebody finished."""
+    """The whole point of branching early: an issue event must never reach the
+    pull-request path, and a pull request must never create a task."""
     body = {
         "action": "opened",
         "pull_request": {
@@ -208,14 +207,12 @@ def test_a_pull_request_comment_is_not_an_issue_event() -> None:
     assert parse_event(body)["isIssueEvent"] is False
 
 
-def test_the_pull_request_chain_still_ends_where_it_did() -> None:
+def test_the_issue_fork_hands_everything_else_to_the_pull_request_path() -> None:
+    """The first gate goes to the issue/PR fork. Its FALSE branch is the PR path,
+    whose own graph `tests/test_n8n_pr_path.py` pins (APP-CONFIG-016)."""
     conns = workflow()["connections"]
-    assert conns["Found Matched Task in Vikunja?"]["main"][0][0]["node"] == "Update Vikunja Task State"
-    assert conns["Update Vikunja Task State"]["main"][0][0]["node"] == "Append PR URL Comment"
-    # The split is the only re-point: the first gate now goes to the issue/PR
-    # fork, whose FALSE branch is the search the chain always started with.
     assert conns["Has Task Key & Valid Sig?"]["main"][0][0]["node"] == "Is Issue Event?"
-    assert conns["Is Issue Event?"]["main"][1][0]["node"] == "Find Vikunja Task by Key"
+    assert conns["Is Issue Event?"]["main"][1][0]["node"] == "Is Tracked PR Event?"
 
 
 # ── Idempotence (AC2) ─────────────────────────────────────────────────────────

@@ -215,7 +215,7 @@ def test_no_results_is_no_task() -> None:
     for items in (EMPTY_ITEM, wrapped_array([]), wrapped_data([])):
         out = extract(items)
         assert out["hasMatchedTask"] is False
-        assert out["searchFailed"] is False
+        assert out["updateBody"] is None
 
 
 def test_a_failed_search_fails_the_run_rather_than_reading_as_no_task() -> None:
