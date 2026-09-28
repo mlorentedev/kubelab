@@ -73,7 +73,6 @@ help:
 	@echo "  make validate-sync      Check for drift in generated files (ADR-027)"
 	@echo "  make apply-secrets ENV=x [DRY_RUN=1]  Apply SOPS secrets to K8s cluster"
 	@echo "  make deploy-k8s ENV=x   Deploy K8s workloads (secrets + sync + manifests)"
-	@echo "  make configure-oidc ENV=x  Configure OIDC providers (Gitea) via API"
 	@echo "  make flush-sessions ENV=x  Flush Authelia sessions (Redis FLUSHDB)"
 	@echo ""
 	@echo "Hub (Argo CD):"
@@ -1549,13 +1548,6 @@ provision-postgres-tenant: ## Idempotently provision PostgreSQL tenant role and 
 .PHONY: validate-sync
 validate-sync:
 	@$(TOOLKIT) sync all --check --env $(or $(filter staging prod,$(ENV)),staging)
-
-.PHONY: configure-oidc
-configure-oidc:
-	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make configure-oidc ENV=staging|prod" && exit 1)
-	@echo "=== Configuring OIDC providers for $(ENV) ==="
-	@$(POETRY) run python toolkit/scripts/configure_oidc.py --env $(ENV)
-	@echo "✓ OIDC providers configured for $(ENV)"
 
 .PHONY: apply-secrets
 apply-secrets: ## Apply SOPS secrets to K8s (DRY_RUN=1: which Secrets would change and what would restart)
