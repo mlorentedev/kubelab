@@ -21,36 +21,23 @@ created: "2026-09-27"
 
 Order: the static class guards first, since they need no fixture. Then the node behaviour on real item shapes. Then the graph. The probe comes last, because it can only pass against a deployed workflow.
 
-- [ ] [P] [AC4] Guard `tests/test_n8n_http_error_handling.py`: no `httpRequest` node in any workflow carries `parameters.options.continueOnFail`. `slack-task-capture` is `xfail(strict=True, reason=#1877)`. Red on `multi-forge-sync` (5 nodes)
-- [ ] [P] [AC3] Guard `tests/test_n8n_event_reads.py`: no node whose direct predecessor is an `httpRequest` node references `$json.<event field>`. The event fields are read from `Parse Forge Event`'s return keys, not listed by hand. `slack-task-capture` is `xfail(strict=True, reason=#1877)`. Red on `Append PR URL Comment`, `Notify #dev-activity` and `Respond 200`
-- [ ] Mutation: commit, restore one original expression in each guard's scope, and see red. Then `git checkout HEAD --`
-- [ ] [AC1] Tests for `Extract Matched Task ID` on every item shape (split, wrapped, `{data}`, empty, error) with 0, 1 and 2 results, including `TOOL-0350` against `TOOL-035`. Red against the current node
-- [ ] [AC1] Implement it with `$input.all()` and the exact-key rule, sharing the wording of `Extract Issue Task Match`. It emits `matchedTask`, `taskId`, `searchFailed`, and `writeKind` (`none` | `comment` | `done`)
-- [ ] [AC2] Tests: `Parse Forge Event` plus the extractor classify each row of the proposal's table from real payloads (Gitea `pull_request` opened/reopened/synchronize/closed with and without `merged`, push, `issue_comment`). Red first
-- [ ] [AC2] Implement the classification; the gate after the extractor routes on `writeKind`
-- [ ] [AC5] Test: the Update body built from a matched task keeps `title` and `description`, and changes only `done`. Red first, then implement
-- [ ] [AC3] [AC4] Graph: the searches get node-level `onError: continueRegularOutput`, and `Find Vikunja Task by Key` gets `alwaysOutputData`. The writes lose the dead option. Each post-request node reads `$('Extract Matched Task ID')`. The success path ends at a new `Respond PR Synced`, and `search-failed` ends at a 502 node. Both guards turn green
-- [ ] Update `test_the_pull_request_chain_still_ends_where_it_did` and `test_a_failed_search_is_not_an_empty_search` to the new graph. The latter now describes behaviour that exists
-- [ ] `test_n8n_code_node_runtime_render.py` and the v2 filter-shape guard still pass
-- [ ] `make test` and `make lint` green
+- [x] [P] [AC4] Guard `tests/test_n8n_http_error_handling.py`: no `httpRequest` node in any workflow carries `parameters.options.continueOnFail`. `slack-task-capture` is `xfail(strict=True, reason=#1877)`. Red on `multi-forge-sync` (5 nodes) ✓ 2026-09-27
+- [x] [P] [AC3] Guard `tests/test_n8n_event_reads.py`: no node whose direct predecessor is an `httpRequest` node references `$json.<event field>`. The event fields are every key a Code node returns, read from the code. `slack-task-capture` is `xfail(strict=True, reason=#1877)`. Red on `Append PR URL Comment`, `Notify #dev-activity`, `Respond 200`, and agent-dispatcher's `Respond 200` (fixed in scope) ✓ 2026-09-27
+- [x] Mutation: committed, restored `$json.taskId` in `Append PR URL Comment` and an `options.continueOnFail`, each guard went red, then `git checkout HEAD --` ✓ 2026-09-27
+- [x] [AC1] Tests for `Extract Matched Task ID` on every item shape (split, wrapped, `{data}`, empty, error) with 0, 1 and 2 results, including `TOOL-0350` against `TOOL-035`. Red against the current node ✓ 2026-09-27
+- [x] [AC1] Implement it with `$input.all()` and the exact-key rule. It emits `taskId`, `hasMatchedTask`, `updateBody` and `comment`, and throws on an error item (the proposal's amendment replaces `searchFailed` and the 502 node) ✓ 2026-09-27
+- [x] [AC2] Tests: `Parse Forge Event` classifies each row of the proposal's table from real payloads (Gitea `pull_request` opened/reopened/synchronized/edited/closed with and without `merged`, GitHub `synchronize`, push, `issue_comment`, a review comment). Red first ✓ 2026-09-27
+- [x] [AC2] Implement the classification in `Parse Forge Event` (`prWriteKind`, `isTrackedPrEvent`); `Is Tracked PR Event?` gates the search and `Is PR Merged?` routes to the state write ✓ 2026-09-27
+- [x] [AC5] Test: the Update body built from a matched task equals the task with only `done` changed. Red first, then implement ✓ 2026-09-27
+- [x] [AC3] [AC4] Graph: the create-path searches get node-level `onError: continueRegularOutput`; `Find Vikunja Task by Key` gets `alwaysOutputData` and no `onError`. The writes lose the dead option. Each post-request node reads `$('Extract Matched Task ID')`. The success path ends at a new `Respond PR Synced`. Both guards turn green ✓ 2026-09-27
+- [x] `test_the_pull_request_chain_still_ends_where_it_did` replaced by `test_the_issue_fork_hands_everything_else_to_the_pull_request_path`; `test_a_failed_search_is_not_an_empty_search` now describes behaviour that exists ✓ 2026-09-27
+- [x] `test_n8n_code_node_runtime_render.py` and the v2 filter-shape guard still pass ✓ 2026-09-27
+- [x] `make test-fast`, `make lint` and `make type` green (after rebasing on #1875, which fixed the lesson counters) ✓ 2026-09-27
 
 ## Probe
 
-- [ ] [AC6] Unit tests in `tests/test_n8n_probe.py` for `signed_pr_merge_closes_its_task`:
-  - the happy path;
-  - `done` still false;
-  - the description erased;
-  - no comment;
-  - cleanup when the PR step fails.
-
-  Red first.
-- [ ] [AC6] Implement it:
-  1. create the task through the signed issue event;
-  2. send a signed `pull_request` `closed` + `merged` event with the same key;
-  3. read back `done`, whether the description is intact, and the comment count via `get_task` with `expand[]=comments`;
-  4. delete the task.
-
-  The unsigned probes assert the 200 body names `status`.
+- [x] [AC6] Unit tests in `tests/test_n8n_probe.py` for `signed_pr_merge_closes_its_task`: the happy path, `done` still false, the description erased, no comment, an answer other than `done`, and cleanup when the PR delivery fails. The probe's own merge event is run through the workflow's `Parse Forge Event`. Red first ✓ 2026-09-27
+- [x] [AC6] Implement it: create the task through the signed issue event (key `PROBE-MERGE-<epoch>`, its own AREA), send a signed `pull_request` `closed` + `merged` event with the same key, read back `done`, a digest of the description and the comments naming the PR (`GET /tasks/{id}/comments`), then delete the task in `finally`. The unsigned forge probes assert `status: ignored`. Mutation: dropping the description check turns its test red ✓ 2026-09-27
 
 ## Deploy and verify
 
