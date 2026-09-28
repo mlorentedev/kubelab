@@ -208,10 +208,10 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
 # removed: it stops being updated and keeps its last value in etcd. Every apply
 # deletes these, idempotently. A name leaves this list only once no cluster can
 # still hold it.
-RETIRED_SECRETS: tuple[tuple[str, str], ...] = (
-    # OPS-023: held the MinIO root password and OIDC client secret.
-    ("kubelab", "minio-secrets"),
-)
+#
+# Empty is its resting state. OPS-023's entry left once staging and prod both
+# read NotFound (2026-09-26) and nothing rendered the Secret any more.
+RETIRED_SECRETS: tuple[tuple[str, str], ...] = ()
 
 
 def _definitions_for_env(env: str, definitions: list[SecretMapping]) -> list[SecretMapping]:

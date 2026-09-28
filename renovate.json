@@ -95,8 +95,7 @@
     "cloudflare/cloudflared",
     "fbonalair/traefik-crowdsec-bouncer",
     "grafana/grafana-oss",
-    "myoung34/github-runner",
-    "quay.io/minio/minio"
+    "myoung34/github-runner"
   ],
   "dependencyDashboard": true,
   "dependencyDashboardTitle": "Renovate: service image updates"

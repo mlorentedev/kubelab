@@ -298,11 +298,6 @@
         # argument for the grant living next to its rationale in common.yaml.
         gitea_admin_scopes: "{{ gitea_config.apps.services.core.gitea.token_scopes.admin }}"
         gitea_admin_token: "{{ gitea_secrets.apps.services.core.gitea.admin_token | default('') }}"
-        # Read only by the OPS-023 teardown in beelink_services, and removed with
-        # it and the `apps.services.data.minio` SSOT block in the spec's last PR.
-        minio_image: "{{ config.apps.services.data.minio.image }}"
-        minio_api_port: "{{ config.apps.services.data.minio.default_port_api }}"
-        minio_console_port: "{{ config.apps.services.data.minio.default_port_console }}"
         # GitHub Actions Runner
         runner_image: "{{ config.apps.services.automation.github_runner.image }}"
         runner_repo_url: "{{ config.apps.services.automation.github_runner.repo_url }}"

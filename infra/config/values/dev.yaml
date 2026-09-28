@@ -80,10 +80,6 @@ apps:
       n8n:
         domain: n8n.kubelab.test
         encryption_key: "dev-n8n-encryption-key-32chars!!"
-    data:
-      minio:
-        domain: minio.kubelab.test
-        console_domain: console.minio.kubelab.test
     observability:
       grafana:
         domain: grafana.kubelab.test
