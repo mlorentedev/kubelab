@@ -30,13 +30,20 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - AC4/AC5 are probed by a codified `make n8n-probe`, not ad-hoc requests (operator, 2026-09-26). It judges n8n's execution record, not the HTTP status: Slack acknowledges before its gate, so its status says nothing.
 - A signed Slack probe is not included: AC4 is the forge path, and a signed Slack command would POST to a `response_url` the probe cannot own. AC2's unit tests cover the Slack signature.
 
+## Review dispositions
+
+Pooled adversarial review (`nan/mimo-v2.5`, 2026-09-27, `review.md`): **PASS**, two Minor findings.
+
+- **Minor, secrets: the in-pod `redact` regex misses `api_key=value`.** Declined; the claim is refuted by execution. The alternation has no word boundary, so `key` matches inside `api_key`. `api_key=abc123`, `apiKey: abc`, `API_KEY="x"` and `x-api-key: zzz` all come out as `[REDACTED]`. `api_key=` is now in `test_the_in_pod_script_redacts_credentials_from_error_messages`, so the claim stays refuted.
+- **Minor, scope: the reviewed range includes 13 unrelated commits.** No action. The base predates the spec's three PRs, and the reviewer says as much.
+
 ## Promotion candidates
 
 Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.
 
-- [x] Lesson for the repo's `docs/lessons/`? yes, already written as lesson-467 (Webhook v2 raw bytes arrive in `binary.data`; an IF v2 node with v1 conditions is always TRUE). The `$json`-is-the-predecessor defect is held by the test that found it, not a lesson
-- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no. The fixes restore the declared design and do not change it
-- [x] New pattern candidate for `00_meta/patterns/`? no. Judging a webhook by the execution record rather than its HTTP status is n8n-specific so far
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/ci-automation/lesson-467-an-n8n-v2-if-node-with-v1-parameters-always-passes.md (Webhook v2 raw bytes arrive in `binary.data`; an IF v2 node with v1 conditions is always TRUE). The `$json`-after-an-HTTP-node defect recurred in the PR path and in `agent-dispatcher`, so APP-CONFIG-016 (#1871) guards it as a class and records its own lesson
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: the fixes restore the declared design (ADR-066 D4) and do not change it
+- [x] New pattern candidate for `00_meta/patterns/`? no: judging a webhook by the execution record rather than its HTTP status is n8n-specific so far
 
 ## Archive checklist
 
