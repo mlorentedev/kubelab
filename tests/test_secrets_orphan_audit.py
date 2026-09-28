@@ -5,8 +5,8 @@ a value. Nothing asked the reverse — whether a value has an entry — so a sec
 whose catalog entry was removed, or that was never registered, stayed in the
 vault permanently and invisibly.
 
-That is not hypothetical. #1451 removed `apps.services.data.minio.root_user`
-from the catalog because a root account's *name* is configuration, not a
+That is not hypothetical. #1451 removed an object store's `root_user` (the
+store OPS-023 later retired) from the catalog because a root account's *name* is configuration, not a
 credential; the encrypted value stayed behind, is read by nothing, and
 `make secrets-audit` reported a clean 35/35 the whole time. And it is not inert:
 `credentials generate` rewrites whatever it seeds, so an orphan is a value
@@ -52,18 +52,22 @@ def _merge(*trees: dict) -> dict:
     return out
 
 
+#: Synthetic, the shape of the #1451 case: an entry removed, its value kept.
+ORPHAN = "apps.services.retired.store.root_user"
+
+
 class TestOrphanDetection:
     def test_a_key_with_no_catalog_entry_is_reported(self) -> None:
         """The #1451 case: the entry was removed, the value stayed."""
-        vault = _nest("apps.services.data.minio.root_user", "irrelevant")
-        assert orphan_key_paths(vault) == ["apps.services.data.minio.root_user"]
+        vault = _nest(ORPHAN, "irrelevant")
+        assert orphan_key_paths(vault) == [ORPHAN]
 
     def test_a_key_the_catalog_owns_is_not_reported(self) -> None:
         assert orphan_key_paths(_nest(OWNED, "irrelevant")) == []
 
     def test_owned_and_orphaned_keys_coexist(self) -> None:
-        vault = _merge(_nest(OWNED, "x"), _nest("apps.services.data.minio.root_user", "y"))
-        assert orphan_key_paths(vault) == ["apps.services.data.minio.root_user"]
+        vault = _merge(_nest(OWNED, "x"), _nest(ORPHAN, "y"))
+        assert orphan_key_paths(vault) == [ORPHAN]
 
     def test_sops_metadata_is_never_an_orphan(self) -> None:
         """SOPS writes this into every file; nobody declares it, and it is not a secret."""
@@ -110,10 +114,10 @@ class TestItCannotLeakValues:
         careful about it.
         """
         secret = "s3cr3t-value-that-must-never-be-printed"
-        vault = _merge(_nest("apps.services.data.minio.root_user", secret), _nest(OWNED, secret))
+        vault = _merge(_nest(ORPHAN, secret), _nest(OWNED, secret))
         rendered = " ".join(orphan_key_paths(vault))
         assert secret not in rendered
-        assert rendered == "apps.services.data.minio.root_user"
+        assert rendered == ORPHAN
 
     def test_the_return_type_carries_no_values_at_all(self) -> None:
         """Belt and braces: a list of str, and every element is a key path."""

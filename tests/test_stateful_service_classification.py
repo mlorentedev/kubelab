@@ -26,7 +26,7 @@ on-demand, so like its precedent this needs nothing running to be meaningful.
 Ground truth is the manifests, not a hand-kept list: a service that gains a PVC
 is classified or this test fails. The reverse direction — a classification with
 no PVC — is deliberately NOT an error, because PRs 3 and 4 of this spec retire
-gitea's and minio's staging twins while their classification stays meaningful.
+gitea's staging twin while its classification stays meaningful.
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 COMMON_VALUES = REPO_ROOT / "infra/config/values/common.yaml"
 
 #: Both roots, not `base` alone. No overlay ships a PVC today, so this is a
-#: superset — but PRs 3/4 move gitea's and minio's resources into
+#: superset — but PRs 3/4 move gitea's resources into
 #: `overlays/prod/`, and scanning base alone would let them drop out of this
 #: gate's field of view at exactly the moment their placement starts to matter.
 MANIFEST_ROOTS = ("infra/k8s/base", "infra/k8s/overlays")

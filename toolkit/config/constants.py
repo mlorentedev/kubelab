@@ -53,9 +53,6 @@ class Components:
     # Core infrastructure services (apps.services.core.*)
     SERVICES_CORE: Sequence[str] = ("n8n", "gitea", "vaultwarden", "headscale")
 
-    # Data services (apps.services.data.*)
-    SERVICES_DATA: Sequence[str] = ("minio",)
-
     # Observability services (apps.services.observability.*)
     SERVICES_OBSERVABILITY: Sequence[str] = ("grafana", "loki", "uptime_kuma")
 
@@ -85,7 +82,6 @@ class Components:
         """All third-party services combined."""
         return (
             *self.SERVICES_CORE,
-            *self.SERVICES_DATA,
             *self.SERVICES_OBSERVABILITY,
             *self.SERVICES_SECURITY,
             *self.SERVICES_AUTOMATION,

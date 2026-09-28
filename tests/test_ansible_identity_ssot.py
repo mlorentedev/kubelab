@@ -3,19 +3,19 @@
 
 `tests/test_admin_identity_ssot.py` already guards this for services whose
 admin identity is plumbed through generated **K8s Secrets**. It cannot guard
-the Beelink, because nothing about the Beelink goes through K8s: Gitea and
-MinIO run there from Docker Compose, rendered by `roles/beelink_services` from
-variables set in this playbook. Two delivery paths, one decision — and only one
-of them was covered, which is how `minio_root_user` kept resolving from SOPS
-for two days after the sibling leg shipped.
+the Beelink, because nothing about the Beelink goes through K8s: Gitea runs
+there from Docker Compose, rendered by `roles/beelink_services` from variables
+set in this playbook. Two delivery paths, one decision — and only one of them
+was covered, which is how the root user of the object store OPS-023 later
+retired kept resolving from SOPS for two days after the sibling leg shipped.
 
 **Why resolving an identity from a secret store is the defect.** A secret is a
 thing `credentials generate` is entitled to rewrite. On 2026-08-23 it did:
 `basic_auth.user` was rotated, Gitea's admin username was aliased to it, and
 the rotation silently renamed the only admin of a live service, took prod SSO
 down, and broke the repair path in the same run (#1352, lessons 378/379).
-MinIO's root user was seeded from that same `common_username` and survived only
-because its value happened to equal the declared superadmin — equal by
+That object store's root user was seeded from the same `common_username` and
+survived only because its value happened to equal the declared superadmin — equal by
 coincidence, not by resolution, which is a defect that looks exactly like
 working code right up until the next rotation.
 
@@ -68,8 +68,8 @@ def test_the_playbook_declares_identity_variables_at_all() -> None:
     empty result makes the whole file vacuously green — the failure mode
     lesson-380 describes, and worth one line to close.
     """
-    # Named rather than counted: a count floor broke when OPS-023 retired
-    # `minio_root_user`, which says nothing about whether the match still works.
+    # Named rather than counted: a count floor broke when OPS-023 retired the
+    # object store's root user, which says nothing about whether the match still works.
     assert {"gitea_admin_user", "gitea_bot_user"} <= set(_identity_vars())
 
 
