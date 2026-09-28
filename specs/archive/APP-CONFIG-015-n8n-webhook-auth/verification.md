@@ -47,7 +47,7 @@ Before archiving, flag what (if anything) should be promoted to the vault. If al
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/APP-CONFIG-015-n8n-webhook-auth/` -> `specs/archive/APP-CONFIG-015-n8n-webhook-auth/`
-- [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] `proposal.md` frontmatter set to `status: archived` ✓ 2026-09-27
+- [x] Folder moved: `specs/APP-CONFIG-015-n8n-webhook-auth/` -> `specs/archive/APP-CONFIG-015-n8n-webhook-auth/` ✓ 2026-09-27
+- [x] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018): the archive PR carries `Closes #1712` ✓ 2026-09-27
+- [x] Promotions above executed (if any): lesson-467 already on master ✓ 2026-09-27
