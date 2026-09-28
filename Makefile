@@ -212,11 +212,16 @@ setup-local-dns:
 # reinstalled because the repo already has `core.hooksPath = main/.git/hooks`
 # (one-time set during `make setup`), which all worktrees share automatically.
 # Idempotent: re-running in an already-bootstrapped worktree is ~1s no-op.
+# `poetry.lock` is gitignored, so a long-lived checkout keeps the lock of the
+# day it was first installed. Once pyproject.toml moves on (a new dependency),
+# `poetry install` refuses the stale lock and the checkout cannot import what
+# master now needs. Relock only when stale; CI resolves fresh the same way.
 # Discovered as TOOL-010 after Wave 1 DT-010 PR hit `make sync-homepage`
 # failures in a fresh worktree (no .venv -> toolkit package not importable).
 .PHONY: worktree-init
 worktree-init:
 	@echo "=== Bootstrapping worktree: $$(pwd) ==="
+	@$(POETRY) check --lock >/dev/null 2>&1 || $(POETRY) lock --no-interaction
 	@$(POETRY) install --no-interaction
 	@hookspath=$$(git config --get core.hooksPath 2>/dev/null || echo ""); \
 	if [ -n "$$hookspath" ] && [ -x "$$hookspath/pre-commit" ]; then \
