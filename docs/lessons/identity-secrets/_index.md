@@ -1,9 +1,10 @@
 # Identity, auth and secret material
 
-68 lessons, newest first. Back to [all categories](../_index.md).
+69 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 473 | [The Argo CD UI asks for confirmation before the server authorizes, so the modal is not a permission](lesson-473-the-argo-cd-ui-asks-for-confirmation-before-the-server-authorizes.md) | 2026-09-26 |
 | 471 | [A UserInfo cache does not bound a demotion: the token lifespan does](lesson-471-a-userinfo-cache-does-not-bound-a-demotion-the-token-lifespan-does.md) | 2026-09-26 |
 | 463 | [Grafana logs every opaque OAuth access token it cannot parse, so each SSO login wrote a live bearer token to Loki](lesson-463-grafana-logs-every-opaque-oauth-access-token-it-cannot-parse.md) | 2026-09-26 |
 | 461 | [Grafana re-runs the role path on an empty groups list, so a null guard on `groups` alone still answers from the ID token](lesson-461-grafana-re-runs-the-role-path-on-an-empty-groups-list.md) | 2026-09-24 |
