@@ -21,9 +21,6 @@ class TestCredentialServiceMap:
     def test_grafana_maps_to_grafana(self) -> None:
         assert "grafana" in CREDENTIAL_SERVICE_MAP["apps.services.observability.grafana"]
 
-    def test_minio_maps_to_minio(self) -> None:
-        assert "minio" in CREDENTIAL_SERVICE_MAP["apps.services.data.minio"]
-
     def test_crowdsec_maps_to_crowdsec(self) -> None:
         assert "crowdsec" in CREDENTIAL_SERVICE_MAP["apps.services.security.crowdsec"]
 
@@ -58,10 +55,10 @@ class TestAffectedServiceResolution:
             [
                 "basic_auth.user",
                 "apps.services.security.authelia.session_secret",
-                "apps.services.data.minio.root_password",
+                "apps.services.observability.grafana.admin_password",
             ]
         )
-        assert affected == {"traefik", "authelia", "minio"}
+        assert affected == {"traefik", "authelia", "grafana"}
 
     def test_full_generate_output(self) -> None:
         """All keys from setup_authelia_secrets should map to services."""
@@ -80,16 +77,12 @@ class TestAffectedServiceResolution:
             "apps.services.observability.grafana.admin_password",
             "apps.services.security.authelia.oidc_client_secret_grafana",
             "apps.services.security.authelia.oidc_client_secret_grafana_hash",
-            "apps.services.data.minio.root_password",
-            "apps.services.data.minio.oidc_client_secret",
-            "apps.services.security.authelia.oidc_client_secret_minio_hash",
             "apps.services.security.crowdsec.bouncer_api_key",
         ]
         affected = self._resolve_affected(all_keys)
         assert "traefik" in affected
         assert "authelia" in affected
         assert "grafana" in affected
-        assert "minio" in affected
         assert "crowdsec" in affected
 
     def test_unknown_key_no_services(self) -> None:

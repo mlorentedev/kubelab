@@ -62,7 +62,7 @@ def _get_default_domains(env: str) -> list[str]:
         domains.append(web_domain)
 
     # Include any configured domains that have more than one subdomain level
-    # (wildcards like *.kubelab.test only cover one level, not console.minio.kubelab.test)
+    # (wildcards like *.kubelab.test only cover one level, not a.b.kubelab.test)
     for key, value in env_vars.items():
         if not key.endswith("_DOMAIN") or not value:
             continue
@@ -181,18 +181,6 @@ def generate_certs(
         )
         logger.success(MESSAGES.SUCCESS_CREATED.format(f"Certificate: {cert_file}"))
         logger.success(MESSAGES.SUCCESS_CREATED.format(f"Key: {key_file}"))
-
-        # Copy local CA root for services that need to trust it (like MinIO)
-        ca_root_result = subprocess.run(["mkcert", "-CAROOT"], capture_output=True, text=True, check=True)
-        ca_root_path = Path(ca_root_result.stdout.strip())
-        root_ca_file = ca_root_path / "rootCA.pem"
-        dest_ca_file = certs_path / "rootCA.pem"
-
-        if root_ca_file.exists():
-            shutil.copy2(root_ca_file, dest_ca_file)
-            logger.success(MESSAGES.SUCCESS_CREATED.format(f"Root CA: {dest_ca_file}"))
-        else:
-            logger.warning(f"Root CA not found at {root_ca_file}, skipping copy.")
 
         logger.info("")
         logger.info("Next steps:")

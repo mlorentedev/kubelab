@@ -18,7 +18,7 @@ shape AC6 names, so the mapping is asserted here rather than discovered by a pip
 that never starts.
 
 **3. Resource limits, per ADR-030.** The Beelink is an 8 GB on-demand node also running
-Gitea, MinIO and the GitHub runner. An unbounded CI container is the one workload here
+Gitea and the GitHub runner. An unbounded CI container is the one workload here
 that can evict the forge it builds for.
 
 These read the rendered template, not the role's prose. The file explains its own
@@ -99,15 +99,6 @@ def _template_vars(runner: dict) -> dict:
         gitea_oidc_discovery_url="https://auth.kubelab.live/.well-known/openid-configuration",
         gitea_cpu_limit=gitea["resources"]["cpu_limit"],
         gitea_memory_limit=gitea["resources"]["memory_limit"],
-        beelink_minio_data_dir="/opt/minio/data",
-        minio_image="minio/minio",
-        minio_api_port=9000,
-        minio_console_port=9001,
-        minio_root_user="x",
-        minio_root_password="x",
-        minio_data_dir="/opt/minio/data",
-        minio_cpu_limit="1",
-        minio_memory_limit="1G",
         runner_image="myoung34/github-runner",
         runner_repo_url="https://github.com/mlorentedev/kubelab",
         runner_access_token="x",
@@ -184,9 +175,11 @@ def test_the_runner_advertises_the_github_hosted_label() -> None:
 #: and inventing one to satisfy a test would be worse than a documented constant.
 BEELINK_TOTAL_MB = 7716
 
-#: What must remain for the OS, page cache, and the ~450 MB the service stack uses
-#: at rest (gitea 131M, minio 135M, glances 108M, github-runner 61M -- measured, not
-#: their declared ceilings, which reserve nothing).
+#: What must remain for the OS, page cache, and the ~450 MB the service stack used
+#: at rest on 2026-09-03 (gitea 131M, glances 108M, github-runner 61M, plus 135M for
+#: the object store OPS-023 has since retired -- measured, not their declared
+#: ceilings, which reserve nothing). Not lowered on the retirement: the margin is
+#: cheap and nobody has re-measured.
 RESERVED_MB = 1800
 
 
@@ -352,7 +345,7 @@ def test_the_registration_token_is_injected_not_literal() -> None:
 def test_the_runner_is_resource_bounded() -> None:
     """ADR-030: CI on this node must not be able to evict the forge it builds for.
 
-    The Beelink is 8 GB and on-demand, and it also runs Gitea, MinIO and the GitHub
+    The Beelink is 8 GB and on-demand, and it also runs Gitea and the GitHub
     runner. An unbounded build container is the one workload here that can take the
     others down.
     """

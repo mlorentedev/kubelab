@@ -1,6 +1,6 @@
 """Reclaim the Docker residue a full disk leaves no other way to remove.
 
-The Beelink runs two CI runners, Gitea, and MinIO on one Docker daemon. On
+The Beelink runs two CI runners and Gitea on one Docker daemon. On
 2026-09-05 its root filesystem reached 100% with 0 bytes free, which stopped
 Gitea's SQLite from writing: the forge went down for writes -- no pushes, no
 pull requests, no issues -- and act_runner spun on `pick task: database or disk
@@ -32,8 +32,8 @@ that survived a reboot are the most certainly abandoned. This module compares
 THE SAFETY PROPERTY IS DERIVED, NOT DECLARED. A volume is removed only when
 every container attached to it is also being removed. That holds without anyone
 maintaining a list of what to spare, which matters because the obvious list is
-wrong in both directions: Gitea and MinIO keep their data in BIND MOUNTS under
-/opt, so no volume operation can reach them at all, while `act-toolcache` and
+wrong in both directions: Gitea keeps its data in a BIND MOUNT under /opt, so
+no volume operation can reach it at all, while `act-toolcache` and
 `github_runner_toolcache` are volumes that must survive and would not appear on
 a list written from memory. `docker volume prune` is never used here for the
 same reason -- its blast radius is whatever happens not to be running at that

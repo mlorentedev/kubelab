@@ -107,6 +107,11 @@ class _Get:
 
 
 class TestRetiredSecretsPreview:
+    @pytest.fixture(autouse=True)
+    def _retiring(self, monkeypatch) -> None:
+        # RETIRED_SECRETS rests empty; a preview over nothing proves nothing.
+        monkeypatch.setattr(k8s_secrets, "RETIRED_SECRETS", (("kubelab", "old-secrets"),))
+
     @pytest.mark.parametrize("present", [True, False])
     def test_the_preview_reads_and_never_deletes(self, mocker, present: bool) -> None:
         log = mocker.patch.object(k8s_secrets, "logger")

@@ -380,7 +380,7 @@ networking:
       tailscale_ip: "100.64.0.3"
       lan_ip: "172.16.1.3"
       lan_interface: "enp1s0"
-      ansible_groups: ["platform_nodes", "docker_hosts"]  # ADR-028: MinIO + GH Runner + Glances
+      ansible_groups: ["platform_nodes", "docker_hosts"]  # ADR-028: Gitea + CI runners + Glances
       dashboard:
         display_name: "Beelink"
         order: 7
@@ -1459,8 +1459,9 @@ apps:
         #
         # Measured on the Beelink 2026-09-03: 4 cores, 7716 MB total, 6605 MB
         # available, and the whole service stack consuming ~440 MB at rest (gitea
-        # 131M, minio 135M, glances 108M, github-runner 61M against a 6G ceiling it
-        # does not use, because ADR-030's amendment left it idle). The 10 GB of
+        # 131M, glances 108M, github-runner 61M against a 6G ceiling it does not
+        # use, because ADR-030's amendment left it idle, and 135M for an object
+        # store OPS-023 has since retired, so today's figure is lower). The 10 GB of
         # declared limits on this node are CEILINGS and reserve nothing.
         #
         # Budget: 6.6G available - ~450M services - ~1G for OS and page cache leaves
@@ -1548,32 +1549,6 @@ apps:
         image: pragent/pr-agent:0.45.0-gitea_app
         domain: pr-agent.kubelab.live
         default_port: 3000
-
-    # Data services (storage, databases)
-    data:
-      minio:
-        name: minio
-        # ADR028-004: singleton (no git promotion path for object state). Location is a
-        # RECORDED deferral, not an omission — MinIO's destination is out of this
-        # spec's scope and tracked on #972; deciding it here would set the offsite
-        # tier by accident (ADR-049 D3).
-        state_promotion: singleton
-        location: undecided
-        location_deferred_to: "#972"
-        image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
-        # No public domain: OPS-023 removed the K8s instance and its DNS
-        # records. The Beelink and dev instances left are reached by port,
-        # and the whole block goes when they do.
-        enable_auth: false
-        auth_level: bypass
-        default_port_api: 9000
-        resources:
-          cpu_limit: "0.5"
-          memory_limit: 512M
-          cpu_reservation: "0.1"
-          memory_reservation: 128M
-        default_port_console: 9001
-        health_path: /minio/health/live
 
     # Observability (monitoring, logging, alerting)
     observability:
@@ -1948,10 +1923,9 @@ backup:
     # runbook. Sitting here also matches the SOPS paths (`backup.r2.*`,
     # `backup.restic_password`) and the allow-list under `backup.sources`.
     #
-    # NOT a consumer of the in-cluster MinIO. ADR-061:96 records that
-    # `overlays/prod/backup.yaml` targeting `minio:9000` is what currently coerces
-    # MinIO to always-on; this pipeline must not add a second such dependency
-    # (BACKUP-044 AC8).
+    # Nothing in the cluster is a destination: this pipeline writes off-site only
+    # (BACKUP-044 AC8, ADR-061 D4), which is what let OPS-023 retire the
+    # in-cluster object store without touching it.
     #
     # These are NOT secrets — the account id appears in every R2 URL and the
     # bucket name is not a credential. The S3 credentials live in SOPS at
@@ -2057,11 +2031,11 @@ backup:
       # needed. Verified 2026-08-22: all three prod claims are bound to
       # `kubelab-vps`.
       #
-      # This is what retires the prod `pvc-backup` CronJob and the in-cluster
-      # MinIO it writes to (#972). That CronJob copied Authelia and n8n to
-      # MinIO INSIDE the same cluster — a backup that burns with the thing it
-      # protects — and downloaded `mc` unpinned from the internet on every run,
-      # inside the backup path.
+      # This is what retired the prod `pvc-backup` CronJob and the in-cluster
+      # object store it wrote to (OPS-023, #972). That CronJob copied Authelia
+      # and n8n to a bucket INSIDE the same cluster — a backup that burns with
+      # the thing it protects — and downloaded its client unpinned from the
+      # internet on every run, inside the backup path.
       n8n:
         # `namespace` + `claim`, the shape tests/test_backup_sources.py declared
         # for this type before it had a consumer. A bare claim name is ambiguous
@@ -2089,8 +2063,6 @@ backup:
       #               If any are hand-made and unversioned, THAT is the defect.
       #   crowdsec  — 77 MB of decisions that regenerate themselves.
       #   loki      — logs, Tier 3, ratified as not needing backup.
-      #   minio     — the backup destination being retired; backing it up would
-      #               be circular.
       headscale:
         # The most valuable single source in the fleet. Besides the database it
         # holds `noise_private.key` and `derp_server_private.key` — losing those

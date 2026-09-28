@@ -835,22 +835,6 @@ SECRET_CATALOG: list[SecretSpec] = [
         envs=("prod",),
     ),
     # =========================================================================
-    # MinIO
-    # =========================================================================
-    # No `root_user` entry: MinIO's root account NAME is configuration, not a
-    # credential. It resolves from `apps.auth.identities.superadmin` in
-    # `provision-bee.yml`, the Beelink Compose stack and the only instance left
-    # after OPS-023 removed the cluster's. Registering a name here made it a thing `credentials
-    # generate` rewrites (ADR-062 D3, AUTH-004 AC1). A value for the old key may
-    # still sit in the `.enc.yaml` files; nothing reads it.
-    SecretSpec(
-        key_path="apps.services.data.minio.root_password",
-        description="MinIO root (admin) password",
-        kind=SecretKind.PASSWORD,
-        services=("minio",),
-        rotate_note="Restart minio. Re-login with new credentials.",
-    ),
-    # =========================================================================
     # Argo CD (hub management plane — common.enc.yaml)  [TOOL-023 / audit D64]
     # =========================================================================
     # Four of these are read by `make deploy-argocd` (Makefile ~413-416) straight

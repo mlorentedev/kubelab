@@ -112,9 +112,8 @@ def test_the_unversionable_images_are_the_ignored_ones() -> None:
     """The ignore list is a statement about tag SHAPE, not preference.
 
     Each of these cannot be compared by a version scheme: two carry `latest`,
-    one carries no tag at all, one is a distro codename that rolls in place,
-    and MinIO uses `RELEASE.2025-09-07T16-13-09Z`, which is a timestamp rather
-    than a version. Renovate would either guess wrong or do nothing.
+    one carries no tag at all, and one is a distro codename that rolls in
+    place. Renovate would either guess wrong or do nothing.
 
     Pinned so that giving one of them a real tag forces a decision here instead
     of leaving it ignored out of habit.
@@ -124,7 +123,7 @@ def test_the_unversionable_images_are_the_ignored_ones() -> None:
     for name in ignored:
         image = by_name[name]
         tag = image.split(":")[-1] if ":" in image.split("/")[-1] else ""
-        unversionable = tag in ("", "latest") or tag.startswith("RELEASE") or not any(ch.isdigit() for ch in tag)
+        unversionable = tag in ("", "latest") or not any(ch.isdigit() for ch in tag)
         assert unversionable, (
             f"{image} is ignored but carries a comparable tag ({tag!r}). If it can be "
             f"versioned it should be tracked; leaving it here makes the ignore list "

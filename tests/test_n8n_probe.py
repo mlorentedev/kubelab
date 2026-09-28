@@ -318,13 +318,13 @@ def test_the_in_pod_script_redacts_credentials_from_error_messages() -> None:
     from toolkit.features.n8n_probe import pod_script
 
     line = next(ln for ln in pod_script({"op": "noop"}).splitlines() if ln.startswith("const redact"))
-    message = 'Find Task: HTTP 401 Authorization: Bearer abc.def-123 token=xyz9 {"key":"k1"}'
+    message = 'Find Task: HTTP 401 Authorization: Bearer abc.def-123 token=xyz9 {"key":"k1"} api_key=u7x'
     out = subprocess.run(
         ["node", "-e", f"{line}\nprocess.stdout.write(redact({message!r}))"],
         capture_output=True,
         text=True,
         check=True,
     ).stdout
-    for leaked in ("abc.def-123", "xyz9", "k1"):
+    for leaked in ("abc.def-123", "xyz9", "k1", "u7x"):
         assert leaked not in out
     assert "HTTP 401" in out
