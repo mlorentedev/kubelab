@@ -32,7 +32,7 @@
     "behavior": "AC5: no live file references MinIO",
     "verification": "poetry run pytest -q --no-cov --runxfail -k no_live_minio_reference",
     "state": "pending",
-    "evidence": "2026-09-29 on master d7882172 (after #1890): poetry run pytest -q --no-cov --runxfail -k no_live_minio_reference -> 13 passed, xfail marker removed. Red baseline 2026-09-24: 93 live files. Mutation proof in verification.md AC5."
+    "evidence": "2026-09-28 on master d7882172 (after #1890): poetry run pytest -q --no-cov --runxfail -k no_live_minio_reference -> 13 passed, xfail marker removed. Red baseline 2026-09-24: 93 live files. Mutation proof in verification.md AC5."
   },
   {
     "id": "OPS-023-retire-minio-f6",
