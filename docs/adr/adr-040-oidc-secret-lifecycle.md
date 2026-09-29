@@ -7,6 +7,14 @@ created: "2026-05-29"
 
 # ADR-040 — OIDC client-secret lifecycle: generate the provider side, verify the consumer side
 
+## Amendment — 2026-09-27 (Gitea's propagation moved; DRIFT-001 no longer runs)
+
+**Gitea's propagation step is `gitea-bootstrap.sh`, not `configure-oidc`.** [ADR-061](adr-061-stateful-service-placement.md) moved Gitea off K3s to Docker Compose on Beelink. Since then `infra/ansible/roles/beelink_services/files/gitea-bootstrap.sh` runs `gitea admin auth update-oauth` over `docker exec`, driven by `make provision NODE=bee ENV=<env> TAGS=gitea`. `make configure-oidc` and `toolkit/scripts/configure_oidc.py` still ran `kubectl exec` against a Gitea pod that no longer existed, so they failed before doing anything. They were removed in DEBT-003 (#355). Wherever §2a, §3 step 3 and the Invariant name `configure-oidc` as Gitea's step, read `gitea-bootstrap.sh`.
+
+**Gitea is no longer verified.** The DRIFT-001 token round trip (§2a) lived inside that script, and it stopped executing when ADR-061 landed, not when the script was deleted. The bootstrap does not repeat it. Gitea therefore joins the consumers in §2b and §2c that are unverified until OIDC-E2E-001 (#477) exists. The Invariant applies: a rotation that touches Gitea must report it as a gap, not as green.
+
+**The classifier is worth more than the script was.** It sends a `client_credentials` request with the SOPS plaintext and reads RFC 6749 §5.2's `invalid_client` as a mismatch. That checks the plaintext against the digest Authelia holds, for **any** client, not only Gitea. The 2026-09-22 amendment below made this check matter more: the digest is read from SOPS rather than derived from the plaintext, so nothing else proves the two agree. The code can be recovered with `git show df9ef6f501747e202a3a90b7ee5dbfc69f282d7a:toolkit/scripts/configure_oidc.py` (`classify_token_response`, `verify_token_endpoint`). Its home is OIDC-SYNC-002's verification step (#474).
+
 ## Amendment — 2026-09-22 (§1 built by SSOT-017, reading stored digests)
 
 **§1's target state exists.** `apps.services.security.authelia.oidc_clients` in `common.yaml` is the only declaration of an OIDC client. `toolkit/features/oidc_clients.py` resolves it per environment and renders `oidc-clients.yml` beside each Authelia `configuration.yml`. It is the one writer of the client list, and it feeds the K8s configs and the Compose dev config alike. `sync_oidc_hashes` is gone, as §1 intended.
