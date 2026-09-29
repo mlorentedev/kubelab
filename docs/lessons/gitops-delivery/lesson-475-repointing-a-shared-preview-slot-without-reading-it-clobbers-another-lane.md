@@ -38,7 +38,10 @@ pins the refused case, the forced case and the three unheld cases. A mutation
 that disables the check turns the suite red. A read-then-patch guard still
 races: two lanes that read `master` in the same second both pass it. So the
 patch carries the read's `metadata.resourceVersion`, and Kubernetes turns the
-second one into a 409, which the command reports as held
+second one into a 409. A 409 alone does not name a lane, because Argo CD's
+controller bumps the version with every status write. So the command reads
+again and lets the guard decide: a status write is retried once, and a real
+repoint is refused with its holder's name
 (`TestSetRevisionPatchesOnlyTheRevisionItRead`). The Make target forces only on
 `FORCE=1`: `$(if $(FORCE),...)` tests emptiness, so `FORCE=0` used to force.
 

@@ -334,20 +334,54 @@ class TestSetRevisionPatchesOnlyTheRevisionItRead:
         assert payload["metadata"]["resourceVersion"] == "4711"
         assert payload["spec"]["source"]["targetRevision"] == "feat/mine"
 
-    def test_a_conflict_is_refused_as_held_not_raised_raw(self) -> None:
+    @staticmethod
+    def _conflict() -> Exception:
         import subprocess
 
-        from toolkit.features.argo_manager import RevisionHeldError
-
-        conflict = subprocess.CalledProcessError(
+        return subprocess.CalledProcessError(
             1,
             ["kubectl"],
             stderr='Error from server (Conflict): Operation cannot be fulfilled on applications.argoproj.io '
             '"kubelab-staging": the object has been modified; please apply your changes to the latest version',
         )
-        read = MagicMock(stdout=self._app("master", "4711"), stderr="", returncode=0)
-        with patch("toolkit.features.argo_manager.subprocess.run", MagicMock(side_effect=[read, conflict])):
-            with pytest.raises(RevisionHeldError, match="changed"):
+
+    def _read(self, revision: str, resource_version: str) -> MagicMock:
+        return MagicMock(stdout=self._app(revision, resource_version), stderr="", returncode=0)
+
+    def test_a_lane_that_repointed_it_in_between_is_named_as_the_holder(self) -> None:
+        from toolkit.features.argo_manager import RevisionHeldError
+
+        steps = [self._read("master", "4711"), self._conflict(), self._read("fix/other-lane", "4712")]
+        with patch("toolkit.features.argo_manager.subprocess.run", MagicMock(side_effect=steps)) as run:
+            with pytest.raises(RevisionHeldError, match="fix/other-lane"):
+                set_revision(app="kubelab-staging", rev="feat/mine", kubeconfig="/tmp/kc")
+
+        # Re-read, refused by the guard: no second patch.
+        assert run.call_count == 3
+
+    def test_a_status_write_in_between_is_not_blamed_on_a_lane(self) -> None:
+        """Argo CD's controller writes `status` on every refresh, which bumps the
+        resourceVersion without touching targetRevision (pr-agent on #1893)."""
+        steps = [
+            self._read("master", "4711"),
+            self._conflict(),
+            self._read("master", "4712"),
+            self._read("feat/mine", "4713"),
+        ]
+        with patch("toolkit.features.argo_manager.subprocess.run", MagicMock(side_effect=steps)) as run:
+            result = set_revision(app="kubelab-staging", rev="feat/mine", kubeconfig="/tmp/kc")
+
+        assert result.old_revision == "master"
+        assert result.new_revision == "feat/mine"
+        retry = run.call_args_list[3].args[0]
+        assert json.loads(retry[retry.index("-p") + 1])["metadata"]["resourceVersion"] == "4712"
+
+    def test_it_gives_up_after_one_retry(self) -> None:
+        import subprocess
+
+        steps = [self._read("master", "4711"), self._conflict(), self._read("master", "4712"), self._conflict()]
+        with patch("toolkit.features.argo_manager.subprocess.run", MagicMock(side_effect=steps)):
+            with pytest.raises(subprocess.CalledProcessError):
                 set_revision(app="kubelab-staging", rev="feat/mine", kubeconfig="/tmp/kc")
 
 
