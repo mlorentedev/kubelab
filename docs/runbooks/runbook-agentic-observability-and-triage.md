@@ -33,11 +33,14 @@ poetry run toolkit obs logs --query '{container="traefik"} |~ "50[0-9]"' --since
 poetry run toolkit obs alerts
 ```
 
-### C. Reading and Replying to Slack (`toolkit obs slack`)
-```bash
-# Verify channel connection
-poetry run toolkit obs slack --channel alerts
+### C. Posting to Slack (`toolkit obs slack`)
 
+> **There is no read path yet, and two outputs are not evidence** (#1829). Without `--post`, the
+> command prints "connected" without contacting Slack. With no `SLACK_BOT_TOKEN`, `--post` prints
+> "posted" and sends nothing. Until #1829 lands, read Slack yourself, and confirm a post by
+> seeing it in the channel.
+
+```bash
 # Post a triage response into an incident thread
 poetry run toolkit obs slack --channel alerts --thread 1724395000.123456 --post "Root cause identified: OOMKilled"
 ```

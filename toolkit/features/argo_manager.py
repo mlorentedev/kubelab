@@ -16,6 +16,10 @@ class ApplicationNotFoundError(Exception):
     """Raised when the Argo CD Application does not exist in the target namespace."""
 
 
+class RevisionHeldError(Exception):
+    """Raised when another branch holds the Application and the caller did not force (#1083)."""
+
+
 class HubUnreachableError(Exception):
     """Raised when a drift check cannot reach the hub — never treat this as "clean" (#1016)."""
 
@@ -42,29 +46,30 @@ def _run_json(argv: list[str]) -> dict[str, Any]:
     return json.loads(proc.stdout)
 
 
-def set_revision(
-    app: str,
-    rev: str,
-    kubeconfig: str,
-    namespace: str = "argocd",
-) -> SetRevisionResult:
-    """Patch the Application's spec.source.targetRevision to ``rev``.
+# One retry absorbs a status write between the read and the patch; a second
+# conflict in a row is contention worth surfacing.
+_PATCH_ATTEMPTS = 2
 
-    Returns a snapshot of the revision before/after and the post-patch sync status.
-    Raises ApplicationNotFoundError if the Application does not exist.
-    """
+
+def _read_application(app: str, kubeconfig: str, namespace: str) -> dict[str, Any]:
     get_argv = _kubectl(kubeconfig, namespace, "get", "application", app, "-o", "json")
     try:
-        before = _run_json(get_argv)
+        return _run_json(get_argv)
     except subprocess.CalledProcessError as exc:
         if "not found" in (exc.stderr or "").lower():
             raise ApplicationNotFoundError(f"Application '{app}' not found in namespace {namespace}") from exc
         raise
 
-    old_revision = before["spec"]["source"]["targetRevision"]
 
-    payload = json.dumps({"spec": {"source": {"targetRevision": rev}}})
-    patch_argv = _kubectl(
+def _patch_argv(app: str, rev: str, before: dict[str, Any], kubeconfig: str, namespace: str) -> list[str]:
+    # The read's resourceVersion is a precondition: a lane that repointed the
+    # Application after our read turns this patch into a 409 instead of being
+    # silently replaced by it.
+    patch_body: dict[str, Any] = {"spec": {"source": {"targetRevision": rev}}}
+    resource_version = before.get("metadata", {}).get("resourceVersion")
+    if resource_version:
+        patch_body["metadata"] = {"resourceVersion": resource_version}
+    return _kubectl(
         kubeconfig,
         namespace,
         "patch",
@@ -73,11 +78,49 @@ def set_revision(
         "--type",
         "merge",
         "-p",
-        payload,
+        json.dumps(patch_body),
         "-o",
         "json",
     )
-    after = _run_json(patch_argv)
+
+
+def set_revision(
+    app: str,
+    rev: str,
+    kubeconfig: str,
+    namespace: str = "argocd",
+    force: bool = False,
+    release: str = "master",
+) -> SetRevisionResult:
+    """Patch the Application's spec.source.targetRevision to ``rev``.
+
+    Returns a snapshot of the revision before/after and the post-patch sync status.
+    Raises ApplicationNotFoundError if the Application does not exist.
+
+    Refuses (RevisionHeldError) to replace a branch other than ``release`` with a
+    different branch unless ``force``: that branch is another lane's live preview,
+    and on 2026-09-25 the old value was only printed after the patch (#1083).
+    Pointing back at ``release`` is never refused, because that is the patch-back.
+    Known limit: that holds whoever runs it, since the command cannot tell the
+    holder's patch-back from another lane's; ``old_revision`` names what it replaced.
+    """
+    for attempt in range(_PATCH_ATTEMPTS):
+        before = _read_application(app, kubeconfig, namespace)
+        old_revision = before["spec"]["source"]["targetRevision"]
+        if not force and rev != release and old_revision not in (release, rev):
+            raise RevisionHeldError(
+                f"'{app}' is on '{old_revision}', not '{release}': another lane may be previewing it. "
+                f"Ask that lane first; --force (FORCE=1 via make) replaces it anyway."
+            )
+        try:
+            after = _run_json(_patch_argv(app, rev, before, kubeconfig, namespace))
+            break
+        except subprocess.CalledProcessError as exc:
+            # A 409 means the object moved since the read, not that a lane took
+            # it: Argo CD's controller bumps the resourceVersion with every status
+            # write. So read again and let the guard decide who, if anyone, holds it.
+            if "conflict" not in (exc.stderr or "").lower() or attempt == _PATCH_ATTEMPTS - 1:
+                raise
 
     return SetRevisionResult(
         old_revision=old_revision,
