@@ -13,6 +13,7 @@ promotion owns their tags.
 
 from __future__ import annotations
 
+import os
 import pathlib
 import re
 import shutil
@@ -42,9 +43,14 @@ def _tag(ref: str) -> str:
     return last.split(":", 1)[1] if ":" in last else ""
 
 
-@pytest.mark.skipif(shutil.which("kubectl") is None, reason="needs kubectl kustomize")
 @pytest.mark.parametrize("overlay", ["staging", "prod"])
 def test_third_party_images_are_pinned(overlay: str) -> None:
+    if shutil.which("kubectl") is None:
+        # In CI a missing kubectl is a failure: a runner-image change would
+        # otherwise turn this guard into a quiet skip that still reports green.
+        if os.environ.get("CI"):
+            pytest.fail("kubectl not on PATH in CI: third-party image pins went unchecked")
+        pytest.skip("kubectl not on PATH: cannot render the overlays (a skip is CANNOT CHECK, not OK)")
     images = _rendered_images(overlay)
     third_party = {ref for ref in images if not ref.startswith(OURS)}
     assert len(third_party) > 5, f"the scan found only {sorted(third_party)}; the render or the regex drifted"
