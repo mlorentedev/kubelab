@@ -28,6 +28,12 @@ created: "2026-09-26"
 - Argo CD's demotion bound is documented as the real 1h access-token lifespan, not shortened (#1872, lesson-471).
 - Staging correction, 2026-09-29. Authelia in staging still served `operator` the pre-AUTH-011 groups `admins,users`, because the `authelia-users` Secret is delivered only by `make apply-secrets` and had not been re-applied. `auth-review APPLY=1` reported `BOUNDED`, but a revoke cannot fix a stale IdP. Fixed with `make apply-secrets ENV=staging` (`authelia-users configured`, Authelia restarted) and a fresh login. The detection gap is #1911 (AUTH-014). The missing automatic delivery is ADR-038's deferred decision, with this incident added as evidence to #1613.
 
+- Review follow-ups (nan/deepseek-v4-flash, PASS at `6790a7fe`):
+  - M3: `proposal.md` "Risks / open questions" is historical. Both deploy-time risks it names were resolved by the deploy and are documented in `docs/runbooks/identity-tier-change.md`. The proposal is left unedited because the verdict freezes it.
+  - Q1: AC5's reproducible half is the offline matrix. `test_argo_cd_rbac_lets_users_operate_and_never_administer` runs Argo CD's own evaluator over the shipped policy in CI. The live half is the operator's browser checks and `make auth-review ENV=prod`. #1876 (AUTH-012) moves the evaluator into `auth-review`, so the live half stops being testimony.
+  - M1: the lifespan guard now also asserts the pinned Authelia minor (4.39). The 1h is that version's default, so an upgrade fails the test until the default is re-measured (proven red with the pin set to 4.40.0).
+  - M2: `argocd_group_bound()`'s docstring now says what it reads live (the UserInfo branch) and what is declared (the bound).
+
 ## Promotion candidates
 
 - [x] Lesson: yes. lesson-473: the Argo CD UI asks for confirmation before the server authorizes, so RBAC is tested offline.
