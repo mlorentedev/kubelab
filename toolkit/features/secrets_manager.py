@@ -60,6 +60,12 @@ class SecretSpec:
     services: tuple[str, ...] = ()  # Which services consume this
     derived_from: str = ""  # For hashes: key_path of the plaintext source
     format_hint: str = ""  # Expected format (e.g. "argon2id hash", "PEM RSA key")
+    # A regex the whole value must match, checked by `audit` (#1699). For a value
+    # another system mints, its shape is the one fact SOPS can check offline: a
+    # generated string where a minted token belongs is present, the right length,
+    # and powerless. A floor, not proof: consequence checks (e.g. `make n8n-probe`)
+    # show the value works. Empty means "any non-empty value".
+    value_pattern: str = ""
     rotate_note: str = ""  # What breaks or needs restarting on rotation
     envs: tuple[str, ...] = ("dev", "staging", "prod")  # Which envs need this
     # Declares that this secret is DELIVERED to Google Secret Manager for the GCP
@@ -108,6 +114,9 @@ class SecretSpec:
 
 # -- Authelia base path shortcut --
 _AUTH = "apps.services.security.authelia"
+# Vikunja runs in staging and prod only: there is no dev stack, and oidc_clients
+# registers `vikunja-oidc` in those two (tests/test_secret_catalog_oidc_envs.py).
+_VIKUNJA_ENVS = ("staging", "prod")
 
 # -- Forge Actions secrets (TOOL-062) --
 _FORGE_RESUME = "apps.services.core.gitea.actions_secrets.personal.resume"
@@ -344,7 +353,7 @@ SECRET_CATALOG: list[SecretSpec] = [
         # `staging` while the source no longer resolves there would walk straight
         # into #1057: `secrets hash --env staging` treats a missing source as a
         # cue to MINT a new client secret rather than to stop.
-        envs=("dev", "prod"),
+        envs=("prod",),
     ),
     SecretSpec(
         key_path=f"{_AUTH}.oidc_client_secret_vikunja",
@@ -352,6 +361,7 @@ SECRET_CATALOG: list[SecretSpec] = [
         kind=SecretKind.OIDC_CLIENT_SECRET,
         services=("authelia", "vikunja"),
         rotate_note="Must also regenerate the vikunja hash.",
+        envs=_VIKUNJA_ENVS,
     ),
     SecretSpec(
         key_path=f"{_AUTH}.oidc_client_secret_vikunja_hash",
@@ -361,6 +371,7 @@ SECRET_CATALOG: list[SecretSpec] = [
         derived_from=f"{_AUTH}.oidc_client_secret_vikunja",
         format_hint="$argon2id$v=19$...",
         rotate_note="Auto-derived from oidc_client_secret_vikunja.",
+        envs=_VIKUNJA_ENVS,
     ),
     # =========================================================================
     # Grafana
@@ -539,7 +550,7 @@ SECRET_CATALOG: list[SecretSpec] = [
         kind=SecretKind.OIDC_CLIENT_SECRET,
         services=("gitea", "authelia"),
         rotate_note="Must also regenerate authelia.oidc_client_secret_gitea_hash.",
-        envs=("dev", "prod"),
+        envs=("prod",),
     ),
     SecretSpec(
         key_path="apps.services.core.gitea.bot_token",
@@ -732,6 +743,7 @@ SECRET_CATALOG: list[SecretSpec] = [
         kind=SecretKind.RANDOM_TOKEN,
         services=("vikunja", "postgres"),
         rotate_note="Update role password in postgres, restart vikunja",
+        envs=_VIKUNJA_ENVS,
     ),
     SecretSpec(
         key_path="apps.services.core.vikunja.jwt_secret",
@@ -739,6 +751,7 @@ SECRET_CATALOG: list[SecretSpec] = [
         kind=SecretKind.RANDOM_TOKEN,
         services=("vikunja",),
         rotate_note="Invalidates active JWT sessions. Users must re-login.",
+        envs=_VIKUNJA_ENVS,
     ),
     SecretSpec(
         key_path="apps.services.core.vikunja.oidc_client_secret",
@@ -746,6 +759,7 @@ SECRET_CATALOG: list[SecretSpec] = [
         kind=SecretKind.OIDC_CLIENT_SECRET,
         services=("vikunja", "authelia"),
         rotate_note="Regenerate secret in Authelia and update vikunja deployment.",
+        envs=_VIKUNJA_ENVS,
     ),
     SecretSpec(
         key_path="apps.services.core.vikunja.r2_access_key",
@@ -753,6 +767,7 @@ SECRET_CATALOG: list[SecretSpec] = [
         kind=SecretKind.PASSWORD,
         services=("vikunja",),
         rotate_note="Update R2 bucket token in Cloudflare, reapply secrets.",
+        envs=_VIKUNJA_ENVS,
     ),
     SecretSpec(
         key_path="apps.services.core.vikunja.r2_secret_key",
@@ -760,6 +775,7 @@ SECRET_CATALOG: list[SecretSpec] = [
         kind=SecretKind.PASSWORD,
         services=("vikunja",),
         rotate_note="Update R2 bucket token in Cloudflare, reapply secrets.",
+        envs=_VIKUNJA_ENVS,
     ),
     # =========================================================================
     # N8N
@@ -779,6 +795,10 @@ SECRET_CATALOG: list[SecretSpec] = [
         expiry=Expiry.NEVER,
         services=("n8n", "vikunja"),
         rotate_note="Update API token in Vikunja and redeploy n8n.",
+        # Vikunja mints `tk_` + 40 hex (measured in staging and prod, 2026-09-27).
+        value_pattern=r"tk_[0-9a-f]{40}",
+        # Dev runs no Vikunja, and no dev workload reads this value.
+        envs=("staging", "prod"),
     ),
     SecretSpec(
         key_path="apps.services.automation.n8n.forge_webhook_secret",
@@ -1528,6 +1548,8 @@ class AuditResult:
     present: list[str] = field(default_factory=list)
     missing: list[str] = field(default_factory=list)
     unexpected: list[str] = field(default_factory=list)
+    # Present, but not the shape its catalog entry declares (`value_pattern`).
+    malformed: list[str] = field(default_factory=list)
 
 
 class RotationRefused(Exception):
@@ -1646,7 +1668,10 @@ class SecretsManager:
             # A placeholder sentinel (REPLACE_WITH_SOPS_VALUE/CHANGE_ME) is syntactically
             # present but not configured — treat as missing (TOOL-019 / C6).
             if value is not None and str(value).strip() and not is_placeholder(value):
-                result.present.append(spec.key_path)
+                if spec.value_pattern and not re.fullmatch(spec.value_pattern, str(value)):
+                    result.malformed.append(spec.key_path)
+                else:
+                    result.present.append(spec.key_path)
             else:
                 result.missing.append(spec.key_path)
 
