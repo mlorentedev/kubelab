@@ -118,7 +118,7 @@ Three properties make it a gate rather than decoration:
 - The staging twins of `gitea` and `minio` leave `base/`. The platform tier becomes singleton for those two services.
 - **Their intended test path is an ephemeral restore from a prod backup, declared here as doctrine and not as present capability.** Verified restore is open work; until it lands, the honest statement is that these services have no staging validation path, not that they have a restore-based one.
 - Gitea leaves Kustomize and Argo CD's reconciliation when it moves to Docker Compose on Beelink. This is deliberate and has two precedents in this repo — Headscale outside K3s (ADR-015) and the Argo CD hub outside both clusters — for the same reason: a platform component cannot be reconciled by the GitOps system that depends on reaching it. Gitea hosting the repos Argo CD would otherwise fetch from is exactly that trap, avoided by keeping Argo CD on GitHub.
-- Retiring Gitea's PVC requires editing `overlays/prod/backup.yaml` in the **same change**, or the backup CronJob renders and applies cleanly while mounting a claim that no longer exists. That file is prod-only, so staging e2e never exercises it.
+- Retiring Gitea's PVC requires editing `overlays/prod/backup.yaml` in the **same change**, or the backup CronJob renders and applies cleanly while mounting a claim that no longer exists. That file is prod-only, so staging e2e never exercises it. *Resolved 2026-09-26: OPS-023 deleted `overlays/prod/backup.yaml` and the `pvc-backup` CronJob, so no Kubernetes object mounts a stateful claim for backup any more; node backups go to R2.*
 - The `dual` rows are unchanged in deployment. This ADR records why they are duplicated; it does not move them.
 
 ## Alternatives considered

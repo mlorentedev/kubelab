@@ -1,0 +1,44 @@
+[
+  {
+    "id": "OPS-023-retire-minio-f1",
+    "behavior": "AC1: no MinIO workload/Service/IngressRoute/PVC/CronJob in staging or prod",
+    "verification": "set -o pipefail; for e in staging prod; do out=$(kubectl --kubeconfig ~/.kube/kubelab-$e-config -n kubelab get deploy,sts,svc,pvc,cronjob,ingressroute -o name) || exit 1; if printf '%s\\n' \"$out\" | grep -i -E 'minio|pvc-backup'; then exit 1; fi; done",
+    "state": "pending",
+    "evidence": "2026-09-25 staging and 2026-09-26 prod, verification.md AC1: after the prune both clusters list no MinIO or pvc-backup object (deploy, sts, pvc, cronjob, svc, cm, ingressroute, endpointslice, pv); Argo CD kubelab-prod operationState Succeeded at 6abdea1b with minio-data, minio and pvc-backup Pruned; minio-secrets NotFound after apply-secrets."
+  },
+  {
+    "id": "OPS-023-retire-minio-f2",
+    "behavior": "AC2: no MinIO container or data dir on the Beelink; re-provision changed=0",
+    "verification": "ssh bee 'names=$(docker ps -a --format {{.Names}}) || exit 1; ! printf \"%s\\n\" \"$names\" | grep -qx minio && test ! -e /opt/minio'",
+    "state": "pending",
+    "evidence": "2026-09-26 Beelink, PR 2 58d72b65: make provision NODE=bee ENV=prod run 2 rc=0 ok=132 changed=0 failed=0; after: no minio container or image, /opt/minio absent, no ufw 9000/9001 rule. 2026-09-28 PR 3a: provision CHECK=1 with the teardown removed, rc=0, changed=2 (both outside beelink_services)."
+  },
+  {
+    "id": "OPS-023-retire-minio-f3",
+    "behavior": "AC3: client_id=minio is invalid_client in both envs",
+    "verification": "for h in auth.staging.kubelab.live auth.kubelab.live; do curl -s -o /dev/null -w '%{redirect_url}' \"https://$h/api/oidc/authorization?client_id=minio&response_type=code&scope=openid&state=probe12345678&redirect_uri=https://x/cb\" | grep -q invalid_client || exit 1; done",
+    "state": "pending",
+    "evidence": "2026-09-25/26: GET /api/oidc/authorization?client_id=minio -> error=invalid_client on auth.staging.kubelab.live and auth.kubelab.live; control client_id=grafana -> invalid_request. minio absent from both generated oidc-clients.yml."
+  },
+  {
+    "id": "OPS-023-retire-minio-f4",
+    "behavior": "AC4: MinIO SOPS keys retired, secrets-audit green",
+    "verification": "make secrets-audit",
+    "state": "pending",
+    "evidence": "2026-09-28 PR 3a (#1880, 30a90cf6): apps.services.data unset in dev, staging and prod; make secrets-audit rc=0, dev 39/44, staging 57/57, prod 81/85, no MinIO key among the orphans; the missing keys are unrelated and pre-existing."
+  },
+  {
+    "id": "OPS-023-retire-minio-f5",
+    "behavior": "AC5: no live file references MinIO",
+    "verification": "poetry run pytest -q --no-cov --runxfail -k no_live_minio_reference",
+    "state": "pending",
+    "evidence": "2026-09-29 on master d7882172 (after #1890): poetry run pytest -q --no-cov --runxfail -k no_live_minio_reference -> 13 passed, xfail marker removed. Red baseline 2026-09-24: 93 live files. Mutation proof in verification.md AC5."
+  },
+  {
+    "id": "OPS-023-retire-minio-f6",
+    "behavior": "AC6: every node still covered in R2 after removal",
+    "verification": "make backup-coverage",
+    "state": "pending",
+    "evidence": "2026-09-26 make backup-coverage ENV=prod after the prune: beelink 0.3h, rpi3 2.3h, rpi4 0.4h, vps 0.3h; every node covered in R2."
+  }
+]

@@ -45,8 +45,9 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 ## Test status
 
 - Test suite: `make test` on 2026-09-24 -> `2645 passed, 15 skipped, 155 deselected, 1 xfailed` (the xfail is the AC5 guard).
-- Manual smoke test: what was exercised, what was observed
-- No regressions in existing test suite: yes / no (if no, document)
+- 2026-09-28, master `d7882172` after #1890: the AC5 guard `13 passed` with no xfail; the lesson index, spec gate and argo suites 189 passed.
+- Manual smoke test: the live before/after reads above (both clusters, the Beelink, Authelia, DNS, Uptime Kuma, R2 coverage).
+- No regressions in existing test suite: yes. CI green on #1880 and #1890 (#1890 merged unreviewed, disclosed on the PR: PR-Agent published no review in five attempts, TOOL-087 #1909).
 
 ## Inventory (2026-09-23, read-only)
 
@@ -89,17 +90,29 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 - **Found by 3b's sweep, ticketed:** `local-development.md` carried the real dev Gitea admin password, published since 2026-05-29. Checked by consequence (it matches dev SOPS; staging and prod do not). The literal is removed here, and the rotation is #1884 (SEC-023).
 - **`docs/runbooks/pvc-backup-restore.md` was deleted in PR 1, not PR 3.** `test_runbook_targets_exist` fails on a runbook that names a removed `make` target.
 
+## Review dispositions
+
+Independent review, `review.md` (nan/mimo-v2.5, 2026-09-28, PASS WITH GAPS, minors only):
+
+- **F1, VPNACL-001 still lists the MinIO grant as resolved:** applied. `specs/VPNACL-001-fleet-segmentation/proposal.md` gains a dated note: the target is gone and PR 2 removed the `accept`.
+- **F2, AC5's exemption is broader than the proposal's wording** (the whole `specs/` tree and `docs/audits/`, not only archived specs): declined, recorded here. An active spec is where a retirement is planned, so it has to name what it retires, OPS-023's own folder included; `docs/audits/` holds dated snapshots. Both are documented in the guard's docstring. The contract is not edited under this verdict.
+- **F3, ADR-061's Consequences still points at `overlays/prod/backup.yaml`:** applied, with a dated resolution note beside the bullet.
+- **F4, the Argo CD values comment names `pvc-backup` CronJobs:** applied to the comment, not to the config. The review's premise that nothing renders a CronJob is wrong: `r2-backup-watcher`, `quota-watcher` and `disk-watcher` are CronJobs, so the health customization is still needed. The comment now names them.
+- **F5, three functions in `k8s_secrets.py` at CC 16-21:** ticketed, DEBT-018 #1914. Partly pre-existing, partly grown across lanes; it is not in this spec's scope.
+- **F6, #1890 merged without a review decision:** already disclosed on the PR and above; tracked by TOOL-087 #1909.
+- **Unverified now:** staging and the Beelink were powered off during the review, so AC1-staging, AC2-live and AC3-staging rest on the timestamped captures above. Prod, the render, AC4, AC5 and AC6 were re-run fresh by the reviewer.
+
 ## Promotion candidates
 
 Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.
 
-- [x] Lesson for the repo's `docs/lessons/`? Yes: a substring guard fails on another language's words (`dominio`). A word boundary is wrong for identifiers; use a letter lookbehind.
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/ci-automation/lesson-477-a-substring-guard-matches-another-languages-words.md (a substring guard fails on another language's words; a word boundary is wrong for identifiers, so use a letter lookbehind). PR 3a also produced docs/lessons/process-method/lesson-476-a-new-step-inside-a-piecemeal-mocked-function-runs-for-real-in-every-old-test.md.
 - [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? No. ADR-061 D4 recorded the deferral, and its resolution note records the outcome.
 - [x] New pattern candidate for `00_meta/patterns/`? No. Exempting a file through its own frontmatter is specific to this repo's docs lifecycle.
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/OPS-023-retire-minio/` -> `specs/archive/OPS-023-retire-minio/`
-- [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] (✓ 2026-09-28) `proposal.md` frontmatter set to `status: archived`
+- [x] (✓ 2026-09-28) Folder moved: `specs/OPS-023-retire-minio/` -> `specs/archive/OPS-023-retire-minio/`
+- [x] (✓ 2026-09-28) Bitácora board ticket for this spec (#972) closed by the archive PR (ADR-018)
+- [x] (✓ 2026-09-28) Promotions above executed: lessons 476 and 477, merged in #1880 and #1890

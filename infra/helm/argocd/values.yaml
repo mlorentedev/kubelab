@@ -182,7 +182,7 @@ configs:
     # Auto-managed EndpointSlices aren't in Git, so prune won't touch them
     # (Argo CD only prunes resources with its tracking label).
     resource.exclusions: ""
-    # CronJob completed pods are Healthy, not Degraded (pvc-backup CronJobs)
+    # CronJob completed pods are Healthy, not Degraded (the r2-backup, quota and disk watchers)
     resource.customizations.health.batch_CronJob: |
       hs = {}
       hs.status = "Healthy"
