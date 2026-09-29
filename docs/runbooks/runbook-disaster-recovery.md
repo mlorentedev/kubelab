@@ -2,16 +2,9 @@
 id: runbook-disaster-recovery
 type: runbook
 status: active
-created: "2026-03-15"
-owner: manu
----
-
----
-id: runbook-disaster-recovery
-type: runbook
-status: active
 tags: [dr, backup, terraform, ansible]
 created: "2026-03-15"
+owner: manu
 ---
 
 # Disaster Recovery Runbook — VPS Full Rebuild
@@ -25,7 +18,7 @@ created: "2026-03-15"
 - SOPS key (`age` key in `~/.config/sops/age/keys.txt`)
 - SSH key pair (`~/.ssh/id_ed25519`)
 - Tailscale running on workstation
-- Recent backup on old VPS or offsite storage
+- Access to the R2 restic repositories (credentials in SOPS `backup.r2.*`, escrow in Bitwarden) — see [offsite-backup-restore](offsite-backup-restore.md)
 
 ## Step 1: Create new VPS (Terraform)
 
@@ -87,14 +80,9 @@ This installs: packages, SSH hardening, Docker, Tailscale, Headscale, Traefik ro
 
 ## Step 5: Restore backups
 
-If backups are on the old VPS (not accessible):
-- Restore from Hetzner snapshot, or
-- Copy backup archives from offsite storage to new VPS `/opt/backups/`
+Node data is backed up by `node_backup` (restic to Cloudflare R2, one repository per node; sources in `backup.sources`, `common.yaml`). There is no restore playbook: restore with restic, following [offsite-backup-restore](offsite-backup-restore.md) — "Restoring — normal case" when SOPS and the repo are available, "Restoring — the disaster case" when they are not. Restore into a scratch directory first, then move the data into place.
 
-If backups are accessible:
-```bash
-toolkit infra ansible run -p restore -e prod -e backup_id=YYYYMMDD_HHMMSS
-```
+Once the node is back, redeploy the pipeline so backups resume: `make backup ENV=prod`.
 
 Critical data to restore:
 - `/opt/headscale/` — Headscale SQLite DB (node registrations)
@@ -154,4 +142,4 @@ kubectl --kubeconfig ~/.kube/kubelab-config get pods -n kubelab
 - **ACME certificates**: Without `acme.json`, Traefik re-requests certs from Let's Encrypt (rate-limited to 5/week per domain)
 - **Tailscale on VPS**: Must use `--login-server=https://vpn.kubelab.live` with the PUBLIC IP (not Tailscale IP)
 - **DNS propagation**: Cloudflare TTL is 300s — plan for 5-10 min delay
-- **Backups**: Run `make backup ENV=prod` regularly. Current retention: 3 backups on VPS
+- **Backups**: scheduled by `node_backup` timers, not run by hand. `make backup-node NODE=vps ENV=prod` takes one now; `make backup-coverage` shows which nodes R2 covers; `r2-backup-watcher` alerts when a repository stops receiving.

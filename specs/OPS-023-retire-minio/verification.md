@@ -9,7 +9,7 @@ created: "2026-09-22"
 
 Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
 
-- [ ] AC1 (K8s half, in the repo): `f798464b`. `kubectl kustomize` 2026-09-24: staging 96 objects, prod 99, with **0** MinIO and **0** `pvc-backup` references in either. Live before/after is pending staging validation and the prod prune.
+- [x] AC1 (K8s half, in the repo): `f798464b`. `kubectl kustomize` 2026-09-24: staging 96 objects, prod 99, with **0** MinIO and **0** `pvc-backup` references in either. Live before and after, per environment, are below. The SSOT half is PR 3a, under AC4 and the decisions.
   - Staging, partial (2026-09-25). Before, at 02:30:54Z: `deployment/minio`, `service/minio`, `pvc/minio-data`, `ingressroute/minio-api`, `ingressroute/minio-console` and `configmap/minio-config`; no `minio-secrets` Secret exists in staging. With `targetRevision` on this branch, Argo CD pruned the Deployment and the PVC within about 60 s. The run was cut short: staging belonged to #1825's lane, so the revision was restored and the other branch recreated MinIO (see #1825 and #1083). The full before/after run waits until staging is free.
   - **Staging, full run (2026-09-25).** At 02:40:01Z, before: `deployment/minio`, `service/minio`, `pvc/minio-data`, `ingressroute/minio-api`, `ingressroute/minio-console` and `configmap/minio-config`. `targetRevision` was set to this branch with the other lane's agreement. At 02:42:10Z, after: `Synced`/`Healthy` at `f01abfc0`, zero MinIO or `pvc-backup` objects, and no PV bound to `minio-data` (reclaim `Delete`, as R3 predicted). `make apply-secrets ENV=staging` reported `retired secret kubelab/minio-secrets absent`, and a second run changed nothing.
   - AC3, staging: `GET /api/oidc/authorization?client_id=minio` → `error=invalid_client`. Control `client_id=grafana` → `error=invalid_request` (known client, bogus redirect).
@@ -35,9 +35,11 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
     - Live afterwards: `headscale` `healthy` (started 01:22:06Z); `headscale policy get` → `{ "action": "accept", "src": ["tag:hermes"], "dst": ["vps:443"] }`; no `ollama` in `config.yaml`. `tailscale ping` from the workstation answered from beelink, rpi3 and rpi4.
   - Uptime Kuma: the Beelink monitor's description dropped MinIO. `make monitoring-apply` from the branch: `0 create, 1 edit, 0 delete`; re-run `0/0/0`.
 - [x] AC3: `minio` is absent from both generated `oidc-clients.yml` (`make sync-oidc-hashes ENV=staging|prod`), and `client_id=minio` → `invalid_client` in staging and prod (AC1 lines above).
-- [ ] AC4 (OIDC half): `oidc_client_secret` and `oidc_client_secret_minio_hash` unset in dev, staging and prod. `make secrets-audit` exits 0 with no new orphan. `root_password` and `root_user` are PR 3.
+- [x] AC4 (OIDC half): `oidc_client_secret` and `oidc_client_secret_minio_hash` unset in dev, staging and prod. `make secrets-audit` exits 0 with no new orphan. `root_password` and `root_user` are PR 3.
   - **PR 3a (2026-09-28):** `toolkit secrets unset apps.services.data --env <env>` in dev, staging and prod. The subtree held only `minio.root_user` and `minio.root_password`, so the whole `data` key went. Same change: the `SECRET_CATALOG` entry, the `credentials generate` mint and its printout, `CREDENTIAL_SERVICE_MAP`, and the `root_user` line of `orphan-secrets-baseline.yaml` (the `uptime_kuma.admin_user` entry that compared itself to it now carries the reason itself). `make secrets-audit`, rc=0: dev 39/44, staging 57/57, prod 81/85, and no MinIO key among the orphans in any env. The missing keys are unrelated and pre-existing (the resume Drive secrets in prod, Vikunja and Gitea OIDC in dev).
-- [ ] AC5: red on 2026-09-24. `pytest --runxfail tests/test_no_live_minio_references.py` fails with **93** live files, and lands as `xfail(strict=True)` (`6a6dbefb`).
+- [x] AC5: red on 2026-09-24. `pytest --runxfail tests/test_no_live_minio_references.py` fails with **93** live files, and lands as `xfail(strict=True)` (`6a6dbefb`).
+  - PR 3a left 22 live files, all of them docs. PR 3b, on 2026-09-28, rewrites 20 of them and marks two as `status: historical` with a banner, because each is a snapshot rather than a description of the present: `dash-001-homepage-cockpit.md`, the design record of a feature delivered on 2026-03-26, and `infra/dns-cloudflare.md`, a 2025-08-30 zone export. ADR-023, 028 and 061 D4 get a retirement note, not a rewrite. The `xfail` marker is removed, and `tests/test_no_live_minio_references.py` reports `13 passed`.
+  - Mutation proof: with a WIP commit first, one appended `MinIO` line in `docs/runbooks/cicd.md` turns it red (`assert not ['docs/runbooks/cicd.md']`, `1 failed, 12 passed`). `git checkout HEAD --` puts it back to `13 passed`.
 - [x] AC6: `make backup-coverage ENV=prod`, 2026-09-26, after the prune: `beelink` covered, newest 00:03Z (0.3h); `rpi3` 22:02Z (2.3h); `rpi4` 23:59Z (0.4h); `vps` 00:02Z (0.3h). Every node covered, so nothing that ships to R2 depended on MinIO.
 
 ## Test status
@@ -77,15 +79,23 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 - **`RETIRED_SECRETS` goes empty in 3a, by the same rule as the Beelink teardown.** Both envs read `minio-secrets` `NotFound` on 2026-09-26 and nothing renders it any more, so its entry leaves. The mechanism stays: its tests (`test_retired_secrets.py`, the preview tests in `test_apply_secrets_preview.py`) now patch in a synthetic entry, because an empty list makes every assertion over it vacuous. `test_secrets_orphan_audit.py` moved to a synthetic key too, as PR 1's task asked.
 - **The K8s render did not move.** `kubectl kustomize` of both overlays at `origin/master` and on 3a: identical byte for byte, so removing the SSOT block rolls nothing in either cluster.
 - **Found by the sweep:** the dev `mkcert` step copied the local CA root into the certs directory only for MinIO's container to trust; with MinIO gone that copy had no reader, so it went too. `SERVICES_DATA` went with its last member, and `generator_traefik.py`'s two MinIO special cases with it.
+- **The guard exempts a file by its own frontmatter, not by a path list** (PR 3b). The four statuses are `historical`, `stale`, `superseded` and `absorbed`. A path list would have to be maintained by hand. A status is how the docs already mark a snapshot, and a file cannot claim it without saying so in a place a reviewer reads. A status written outside the frontmatter exempts nothing, and a test pins that.
+- **The pattern is `(?<![a-z])minio`, not a substring and not `\bminio`** (PR 3b). The substring version matched the Spanish `dominio` in two docs. `\b` would miss `beelink_minio_dir`, because `_` is a word character. The lookbehind catches both, and parametrized cases pin each one.
+- **Found by 3b's sweep, fixed here:**
+  - `runbook-disaster-recovery.md` had two frontmatter blocks, and its restore step called an `ansible` `restore` playbook that does not exist. It now points to the restic restore in `offsite-backup-restore.md`.
+  - The `backup.yml` usage comment named a `make backup-pvc-node` that was never wired.
+  - CLAUDE.md's "PVC backup" gotcha still described the retired CronJob.
+  - CLAUDE.md's `credentials generate` count (24 prod secrets and 2 hub secrets) was stale. Running the generator with its I/O mocked counts 19 keys to `prod.enc.yaml` and 4 to `common.enc.yaml`. The `secrets rotate` docstring now says "the Argo CD hub keys".
+- **Found by 3b's sweep, ticketed:** `local-development.md` carried the real dev Gitea admin password, published since 2026-05-29. Checked by consequence (it matches dev SOPS; staging and prod do not). The literal is removed here, and the rotation is #1884 (SEC-023).
 - **`docs/runbooks/pvc-backup-restore.md` was deleted in PR 1, not PR 3.** `test_runbook_targets_exist` fails on a runbook that names a removed `make` target.
 
 ## Promotion candidates
 
 Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.
 
-- [ ] Lesson for the repo's `docs/lessons/`? <yes / no - one line of what>
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? <yes / no - one line of what>
-- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes / no - one line>
+- [x] Lesson for the repo's `docs/lessons/`? Yes: a substring guard fails on another language's words (`dominio`). A word boundary is wrong for identifiers; use a letter lookbehind.
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? No. ADR-061 D4 recorded the deferral, and its resolution note records the outcome.
+- [x] New pattern candidate for `00_meta/patterns/`? No. Exempting a file through its own frontmatter is specific to this repo's docs lifecycle.
 
 ## Archive checklist
 

@@ -585,8 +585,8 @@ def rotate_secret(
     """Rotate ONE credential, and stop before the cluster.
 
     Until this existed the only way to change a single credential was
-    `credentials generate`, which rewrites every generated prod secret and 2 hub
-    secrets in one shot -- so rotating an exposed Argo CD password also rotated
+    `credentials generate`, which rewrites every generated prod secret and the
+    Argo CD hub keys in one shot -- so rotating an exposed Argo CD password also rotated
     Grafana, Uptime Kuma and every OIDC client secret.
 
     IT DOES NOT APPLY TO THE CLUSTER, ON PURPOSE. Prod runs `selfHeal: true`.

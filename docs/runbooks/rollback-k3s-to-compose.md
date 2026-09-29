@@ -28,7 +28,7 @@ owner: manu
 
 - **Headscale must NEVER be stopped** — all VPN nodes depend on it
 - **ACME rate limit**: Let's Encrypt allows 5 certs per domain set per 168h. Don't delete `acme.json`
-- **Data loss risk**: K3s PVCs (authelia, gitea, grafana, minio, n8n, loki) are on local storage. Back up before uninstalling K3s
+- **Data loss risk**: K3s PVCs (authelia, gitea, grafana, n8n, loki) are on local storage. Back up before uninstalling K3s
 - **Downtime**: Expect 5-15 minutes total
 
 ## Procedure
@@ -134,7 +134,7 @@ Once the root cause is fixed:
 | Traefik | K3s bundled (80/443) | Docker Compose (80/443) |
 | API, Web | K3s Deployment | Docker container |
 | Authelia | K3s Deployment | Docker container |
-| Gitea, n8n, MinIO | K3s Deployment | Docker container |
+| Gitea, n8n | K3s Deployment | Docker container |
 | Grafana, Loki | K3s Deployment | Docker container |
 | CrowdSec | K3s Deployment | Not available (security gap) |
 | Headscale | Docker Compose always | Docker Compose always |

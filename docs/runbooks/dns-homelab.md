@@ -164,8 +164,6 @@ staging.kubelab.live {
         100.64.0.4 status.staging.kubelab.live
         100.64.0.4 gitea.staging.kubelab.live
         100.64.0.4 n8n.staging.kubelab.live
-        100.64.0.4 minio.staging.kubelab.live
-        100.64.0.4 console.minio.staging.kubelab.live
         100.64.0.4 loki.staging.kubelab.live
         100.64.0.4 portainer.staging.kubelab.live
         fallthrough
@@ -194,8 +192,6 @@ kubelab.live {
         100.64.0.2 loki.kubelab.live
         100.64.0.2 gitea.kubelab.live
         100.64.0.2 n8n.kubelab.live
-        100.64.0.2 minio.kubelab.live
-        100.64.0.2 console.minio.kubelab.live
         # Headscale MUST use public IP — bootstrap dependency (nodes need VPN to reach Tailscale IPs)
         # networking.vps.public_ip (common.yaml)
         162.55.57.175 vpn.kubelab.live
@@ -445,5 +441,5 @@ Currently a standalone playbook — no toolkit wrapper needed. If more homelab-w
 2026-02-21: Full chain verified. CoreDNS on port 5353, Pi-hole forwarding via compose bind mount, Headscale split DNS for `kubelab.live`.
 2026-03-03: Narrowed split DNS from `kubelab.live` → `staging.kubelab.live`. Prod domains now resolve via public Cloudflare DNS regardless of RPi4 state. Verified `status.kubelab.live` resolves via 1.1.1.1 from VPN clients.
 2026-02-22: DNS resilience playbook applied to all 7 nodes. `/etc/hosts` entries verified.
-2026-03-01: Corefile updated with gitea/n8n/minio/loki staging entries. Prod zone uses explicit hosts (removed template wildcard — it overrode hosts entries). Deployed to RPi4 via `make deploy TARGET=dns ENV=staging`. All bare-metal IPs verified correct.
+2026-03-01: Corefile updated with gitea/n8n/loki staging entries (and an object-store pair OPS-023 later removed). Prod zone uses explicit hosts (removed template wildcard — it overrode hosts entries). Deployed to RPi4 via `make deploy TARGET=dns ENV=staging`. All bare-metal IPs verified correct.
 2026-03-01: Fixed Tailscale bootstrap circular dependency. `vpn.kubelab.live` now resolves to public IP `162.55.57.175` in Corefile. RPi4 has permanent `/etc/hosts` fallback + `tailscale-watchdog.timer` (5-min auto-reconnect). Uptime Kuma proxied through K3s Traefik as external service.

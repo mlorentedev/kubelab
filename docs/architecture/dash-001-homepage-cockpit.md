@@ -1,7 +1,7 @@
 ---
 id: dash-001-homepage-cockpit
 type: task-spec
-status: active
+status: historical
 created: "2026-03-23"
 owner: manu
 ---
@@ -9,7 +9,10 @@ owner: manu
 
 # DASH-001: Developer Cockpit (Homepage Dashboard)
 
-> **Status:** In Progress (staging deployed, UI tuning + prod pending)
+> **Historical design record.** DASH-001 was delivered on 2026-03-26. The service tables,
+> node names (`aws1`) and the tiles below describe the platform as it was then, not now:
+> the live dashboard is `infra/k8s/base/services/homepage-config/`, rendered by `make sync-homepage`.
+> Kept for the design rationale; do not use it as an inventory.
 > **Priority:** Medium — after Phase 3 core (ARGO-004, ARGO-010), before Phase 4
 > **Estimated effort:** 2 sessions (Session 1: Phases 0-2, Session 2: Phases 3-5)
 > **Created:** 2026-03-23

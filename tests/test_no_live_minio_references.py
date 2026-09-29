@@ -7,8 +7,15 @@ is only as good as the day it ran, so this test makes the sweep permanent.
 
 "Live" means a file that describes the system as it is. Historical records are
 exempt because rewriting them would falsify history: ADRs, lessons, audits,
-the changelog and specs (whose own lifecycle archives them). This file is
-exempt because it has to name what it forbids.
+the changelog and specs (whose own lifecycle archives them), and any document
+whose frontmatter already declares it is not current (`status: historical`,
+`stale`, `superseded` or `absorbed`, the repo's own lifecycle vocabulary). This
+file is exempt because it has to name what it forbids.
+
+The match is `minio` not preceded by a letter. A bare substring match also hit
+the Spanish word `dominio` in two files that never mentioned MinIO; a `\b` on
+both sides would have missed `beelink_minio_dir` and `minio_image`, because `_`
+is a word character.
 
 The removal lands in three PRs, and each must merge green, so the guard is
 `xfail(strict=True)` until the last one. `strict` is what keeps it honest: the
@@ -35,7 +42,15 @@ EXEMPT_PREFIXES = (
     "tests/test_no_live_minio_references.py",
 )
 
-PATTERN = re.compile(r"minio", re.IGNORECASE)
+PATTERN = re.compile(r"(?<![a-z])minio", re.IGNORECASE)
+
+NOT_CURRENT = {"historical", "stale", "superseded", "absorbed"}
+FRONTMATTER_STATUS = re.compile(r"\A---\n(?:.*\n)*?status:\s*(\S+)\s*\n(?:.*\n)*?---\n")
+
+
+def declares_itself_not_current(text: str) -> bool:
+    match = FRONTMATTER_STATUS.match(text)
+    return bool(match) and match.group(1).strip("\"'") in NOT_CURRENT
 
 
 def live_minio_references() -> list[str]:
@@ -56,7 +71,7 @@ def live_minio_references() -> list[str]:
             text = path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
             continue
-        if PATTERN.search(text):
+        if PATTERN.search(text) and not declares_itself_not_current(text):
             offenders.append(rel)
     return offenders
 
@@ -70,7 +85,33 @@ def test_the_scan_sees_the_repository() -> None:
     assert len(tracked) > 500
 
 
-@pytest.mark.xfail(strict=True, reason="OPS-023: turns green in PR 3, which removes this marker")
+@pytest.mark.parametrize(
+    ("text", "hit"),
+    [
+        ("image: quay.io/minio/minio", True),
+        ("beelink_minio_dir: /opt/x", True),
+        ("MinIO S3", True),
+        ("# Mapea el dominio al gateway", False),
+        ("dominios staging", False),
+    ],
+)
+def test_the_pattern_matches_the_name_and_not_a_word_containing_it(text: str, hit: bool) -> None:
+    assert bool(PATTERN.search(text)) is hit
+
+
+@pytest.mark.parametrize(
+    ("status", "exempt"),
+    [("historical", True), ("stale", True), ("superseded", True), ("absorbed", True), ("active", False)],
+)
+def test_only_a_document_that_declares_itself_not_current_is_exempt(status: str, exempt: bool) -> None:
+    text = f"---\nid: x\ntype: runbook\nstatus: {status}\n---\n\nMinIO\n"
+    assert declares_itself_not_current(text) is exempt
+
+
+def test_a_status_outside_the_frontmatter_exempts_nothing() -> None:
+    assert not declares_itself_not_current("# Title\n\nstatus: historical\n\nMinIO\n")
+
+
 def test_no_live_file_references_minio() -> None:
     offenders = live_minio_references()
     assert not offenders, f"{len(offenders)} live file(s) still reference MinIO:\n" + "\n".join(offenders)

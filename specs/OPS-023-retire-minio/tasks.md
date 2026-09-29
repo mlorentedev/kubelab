@@ -66,12 +66,12 @@ created: "2026-09-22"
   - retire `apps.services.data.minio.root_password` and delete the `root_user` baseline line (AC4).
 
 - [x] [AC5] (✓ 2026-09-28, PR 3a) Delete `infra/stacks/services/data/minio/` and remove its entries from the stack README and the Makefile dev targets (cert hosts, `services up` lists, login hint).
-- [ ] [AC5] Docs that describe current state (inventory category 8): delete `docs/runbooks/pvc-backup-restore.md`, and rewrite the rest to drop MinIO. Include `docs/runbooks/runbook-disaster-recovery.md`, which predates restic. Historical ADRs get a retirement note, not a rewrite: ADR-061 D4 records the decision, and ADR-023, 024 and 028 point to it. Update CLAUDE.md and README.
-- [ ] [AC5] The guard from PR 1 turns green. Mutation proof: re-adding one live reference turns it red.
+- [x] [AC5] (✓ 2026-09-28, PR 3b) Docs that describe current state (inventory category 8): delete `docs/runbooks/pvc-backup-restore.md`, and rewrite the rest to drop MinIO. Include `docs/runbooks/runbook-disaster-recovery.md`, which predates restic. Historical ADRs get a retirement note, not a rewrite: ADR-061 D4 records the decision, and ADR-023, 024 and 028 point to it. Update CLAUDE.md and README.
+- [x] [AC5] (✓ 2026-09-28, PR 3b) The guard from PR 1 turns green. Mutation proof: re-adding one live reference turns it red.
 
 ## Closing
 
-- [ ] #972 closed by PR 3 (`Closes #972`); #1784 is already closed as a duplicate.
+- [ ] #972 closed by PR 3b (`Closes #972`); #1784 is already closed as a duplicate.
 - [ ] `verification.md` holds, for each environment and the Beelink, the before and after state, the Terraform plan, the `changed=0` run and the `backup-coverage` output.
 - [ ] Independent adversarial review (`review.md`) before `/spec archive`.
 

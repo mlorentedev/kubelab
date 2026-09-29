@@ -2,8 +2,8 @@
 # =============================================================================
 # Node-path backup — run one now (BACKUP-044)
 #
-# The PVC class has had a manual trigger since ADR-024 (`make backup-pvc`).
-# The node-path class had none: `make backup` DEPLOYS the pipeline, and the
+# ADR-024's in-cluster PVC CronJob had a manual trigger (`make backup-pvc`,
+# retired with it by OPS-023). The node-path class had none: `make backup` DEPLOYS the pipeline, and the
 # only way to make a backup happen was to wait for a timer. So an operator
 # about to do something risky could not take a snapshot first, and the runbook
 # had no answer for "back this up now".

@@ -31,8 +31,8 @@ Personal Internal Developer Platform (IDP) — a hybrid-cloud infrastructure pow
           ├────────────┤  ├────────────┤    │ aws1: Argo CD   │
           │ Pi-hole    │  │ K3s single │    │       hub       │
           │ CoreDNS    │  │ node: api, │    │ ace2: dev node  │
-          │ DHCP       │  │ web, auth- │    │ Beelink: GH     │
-          │            │  │ elia, graf-│    │  Runner + MinIO │
+          │ DHCP       │  │ web, auth- │    │ Beelink: Gitea, │
+          │            │  │ elia, graf-│    │  CI runners     │
           │ Split DNS: │  │ ana, loki, │    │ RPi3: Uptime    │
           │ *.staging  │  │ postgres,  │    │       Kuma      │
           │ .kubelab   │  │ gitea, n8n,│    │ Jetson: Pollex  │
@@ -68,7 +68,7 @@ Personal Internal Developer Platform (IDP) — a hybrid-cloud infrastructure pow
 | DNS | Cloudflare (prod) + CoreDNS (staging) |
 | VPN | Headscale + Tailscale clients |
 | Secrets | SOPS (age encryption) |
-| Data | PostgreSQL (shared), Redis, MinIO |
+| Data | PostgreSQL (shared), Redis |
 | GitOps | Argo CD (hub on AWS, spokes staging/prod) |
 | CI/CD | GitHub Actions, multi-arch Docker builds |
 | IaC | Terraform, Ansible, Python toolkit |
@@ -83,7 +83,7 @@ Personal Internal Developer Platform (IDP) — a hybrid-cloud infrastructure pow
 
 ### Self-hosted services
 
-Grafana, Loki, Vector, Authelia, CrowdSec, Gitea, MinIO, n8n, Redis, PostgreSQL, Apprise, Homepage. Argo CD runs on the AWS hub. Pi-hole and Uptime Kuma are external, reached through K3s EndpointSlices.
+Grafana, Loki, Vector, Authelia, CrowdSec, Gitea, n8n, Redis, PostgreSQL, Apprise, Homepage. Argo CD runs on the AWS hub. Pi-hole and Uptime Kuma are external, reached through K3s EndpointSlices.
 
 ## Project Structure
 
@@ -174,7 +174,7 @@ Hetzner VPS (ARM)      — Production: K3s + Headscale (Docker Compose)
 AWS t4g.small (aws1)   — Argo CD hub (management plane)
 Acemagic-1 (ace1)      — K3s staging (all-in-one)
 Acemagic-2 (ace2)      — Self-hosted developer node / CDE
-Beelink (bare metal)   — Platform node: GH Runner + MinIO
+Beelink (bare metal)   — Platform node: Gitea forge + CI runners
 RPi 4 (8GB)            — Network gateway: Pi-hole, CoreDNS, DHCP
 RPi 3 (1GB)            — External monitoring (Uptime Kuma)
 Jetson Nano (4GB)      — Pollex (llama.cpp, GPU inference)

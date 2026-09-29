@@ -112,13 +112,13 @@ dig +short newservice.kubelab.live @1.1.1.1
 
 5. **Don't forget:** If the service needs K8s IngressRoutes, those are separate (in `infra/k8s/`). DNS only creates the Cloudflare record pointing to the VPS.
 
-### Add a subdomain with dots (e.g., `console.minio`)
+### Add a subdomain with dots (e.g., `console.svc`)
 
 Same as above. Use the full subdomain as `name`:
 ```json
-{"name": "console.minio", "zone": "kubelab", "proxied": false, "environments": ["prod"]}
+{"name": "console.svc", "zone": "kubelab", "proxied": false, "environments": ["prod"]}
 ```
-This creates `console.minio.kubelab.live`.
+This creates `console.svc.kubelab.live`.
 
 ### Change VPS IP address (migration)
 
@@ -372,7 +372,7 @@ separately owns the root/CAA records for both zones (not services.json-driven).
 
 ### Service records — snapshot as of 2026-08-12, verify against `services.json`
 
-**kubelab.live** (12 entries in `services.json`, all zone=kubelab): `api` (proxied), `status`, `auth`, `vpn`, `grafana`, `gitea`, `n8n`, `minio`, `console.minio`, `traefik`, `argo`, `pihole` (`target: ace1` — resolves to a Tailscale IP, not `var.vps_ip`; OPS-022).
+**kubelab.live** (13 entries in `services.json`, all zone=kubelab, counted 2026-09-28): `api` (proxied), `status`, `auth`, `vpn`, `grafana`, `gitea`, `n8n`, `pr-agent`, `traefik`, `argo`, `pihole` (`target: ace1` — resolves to a Tailscale IP, not `var.vps_ip`; OPS-022), `home`, `tasks`.
 
 **mlorente.dev**: zero entries in `services.json` today — only the fixed root + CAA records above exist for this zone. (The `mlorente_svc` `for_each` is empty until a service targets this zone again.)
 

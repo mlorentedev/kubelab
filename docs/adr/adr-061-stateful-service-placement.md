@@ -99,6 +99,8 @@ Recording that coerced state as `always-on` would encode an accident as a decisi
 
 **Condition for deciding it:** once the real offsite path exists, MinIO loses its only load-bearing role, and the question stops being "where does it live" and becomes "does anything still consume it?" — at which point the answer may well be retirement rather than relocation. Deciding sooner would set the offsite tier by accident.
 
+**Resolved: retired (OPS-023, [#972](https://github.com/mlorentedev/kubelab/issues/972), 2026-09).** The condition was met. R2 via `node_backup` (BACKUP-044) became the real offsite path, and the one consumer, the prod `pvc-backup` CronJob, had failed silently every night since 2026-08-25. So the answer was retirement, not relocation. The K8s workload, the Beelink container, the SSOT block, the SOPS keys and the dev stack are gone, and `tests/test_no_live_minio_references.py` keeps them gone. The classification above stays as the record of why it was deferred.
+
 ### D5 — The classification is enforced, not merely documented
 
 The table above is prose and prose rots. The enforceable copy lives in `common.yaml`, beside each service's existing configuration, and a static test fails when a stateful service discovered in the manifests carries no classification.

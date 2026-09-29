@@ -75,7 +75,6 @@ decision.
 | `fbonalair/traefik-crowdsec-bouncer:latest` | same |
 | `grafana/grafana-oss` | **no tag at all** |
 | `myoung34/github-runner:ubuntu-noble` | distro codename, rolls in place |
-| `quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z` | timestamp, not a version |
 
 Give any of them a real tag and the guard forces the decision rather than
 leaving it ignored out of habit.

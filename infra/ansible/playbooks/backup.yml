@@ -6,10 +6,8 @@
 # task list, which deletes that role in this same change.
 #
 # Usage:
-#   make backup-pvc-node ENV=prod      (placeholder — wired once Part 4 lands
-#                                        a scheduled trigger; today this runs
-#                                        the untimed units directly)
-#   toolkit infra ansible run -p backup
+#   make backup ENV=prod               (deploy the pipeline and its timers)
+#   make backup-node NODE=<node>       (run one backup now: backup-node.yml)
 #
 # TWO plays, split on availability class rather than on function. They are
 # otherwise identical — the vars, pre_tasks and roles below are shared by YAML

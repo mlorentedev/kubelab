@@ -304,5 +304,5 @@ Two things that would break this, in order of likelihood:
   the reasoning behind each decision
 - **#1090** — the backup epic: sequencing and dispositions
 - **#452** — the ratified tiers (Tier 1 RPO < 6h)
-- **ADR-049 D3** — storage doctrine; **ADR-061:96** — why in-cluster MinIO was
-  never an offsite copy
+- **ADR-049 D3** — storage doctrine; **ADR-061:96** — why the retired in-cluster object
+  store was never an offsite copy

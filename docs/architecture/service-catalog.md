@@ -56,7 +56,7 @@ owner: manu
 
 | Service | Node | Purpose | Health Check |
 | --- | --- | --- | --- |
-| MinIO | Acemagic / VPS | S3-compatible object storage | `/minio/health/live` |
+| PostgreSQL | K3s (ace1 staging, VPS prod) | Shared relational database (ADR-051) | `pg_isready` (readiness probe) |
 
 ## Not Yet Deployed
 
@@ -86,8 +86,6 @@ owner: manu
 | Portainer | `portainer.kubelab.test` | `portainer.staging.kubelab.live` | — |
 | Gitea | `gitea.kubelab.test` | `gitea.staging.kubelab.live` | `gitea.kubelab.live` |
 | n8n | `n8n.kubelab.test` | `n8n.staging.kubelab.live` | `n8n.kubelab.live` |
-| MinIO | `minio.kubelab.test` | `minio.staging.kubelab.live` | `minio.kubelab.live` |
-| MinIO Console | `console.minio.kubelab.test` | `console.minio.staging.kubelab.live` | `console.minio.kubelab.live` |
 | Uptime Kuma | `status.kubelab.test` | `status.staging.kubelab.live` | `status.kubelab.live` |
 | CrowdSec | `crowdsec.kubelab.test` | internal only (ClusterIP, no IngressRoute) | internal only (ClusterIP, no IngressRoute) |
 | Headscale | — | — | `vpn.kubelab.live` |
