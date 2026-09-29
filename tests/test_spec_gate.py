@@ -443,7 +443,7 @@ def test_a_quoted_waiver_is_not_a_declared_waiver() -> None:
     assert spec_gate.declared_exception("Spec-archive-exception: genuinely not this PR") == ("genuinely not this PR")
 
 
-def test_pr_1155_shape_passes() -> None:
+def test_pr_1155_shape_is_caught() -> None:
     """The shape that surfaced CI-GATE-013: a document *about* closing keywords.
 
     #1155 documents that GitHub parses closing keywords out of prose, so its body
