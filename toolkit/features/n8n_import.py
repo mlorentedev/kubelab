@@ -392,8 +392,11 @@ def _exec(env: str, spec: N8nImportSpec, what: str, argv: list[str], stdin: str 
     """
     kc = _kubeconfig_for(env)
     for attempt in (1, 2):
-        pod = _live_pod(env, spec)
-        if pod is None:
+        pods = _list_pods(env, spec)
+        pod = _live_pod(pods)
+        if pods is None:
+            logger.error(f"  {what}: cannot tell whether n8n has a Ready pod — the pod list is unreadable")
+        elif pod is None:
             logger.error(f"  {what}: no Ready n8n pod matches '{spec.pod_selector}' in {spec.namespace}")
         else:
             stdin_flag = ["-i"] if stdin is not None else []
@@ -407,9 +410,8 @@ def _exec(env: str, spec: N8nImportSpec, what: str, argv: list[str], stdin: str 
     return False
 
 
-def _live_pod(env: str, spec: N8nImportSpec) -> str | None:
-    """Name of a pod of `spec` that is Running, Ready and not being deleted."""
-    pods = _list_pods(env, spec)
+def _live_pod(pods: list[dict[str, Any]] | None) -> str | None:
+    """Name of a pod in `pods` that is Running, Ready and not being deleted."""
     return next((p["metadata"]["name"] for p in pods or [] if _is_live(p)), None)
 
 
