@@ -112,7 +112,7 @@ Before archiving, flag what (if anything) should be promoted to the vault. If al
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/OPS-023-retire-minio/` -> `specs/archive/OPS-023-retire-minio/`
-- [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] (✓ 2026-09-29) `proposal.md` frontmatter set to `status: archived`
+- [x] (✓ 2026-09-29) Folder moved: `specs/OPS-023-retire-minio/` -> `specs/archive/OPS-023-retire-minio/`
+- [x] (✓ 2026-09-29) Bitácora board ticket for this spec (#972) closed by the archive PR (ADR-018)
+- [x] (✓ 2026-09-29) Promotions above executed: lessons 476 and 477, merged in #1880 and #1890
