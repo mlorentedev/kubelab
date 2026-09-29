@@ -380,13 +380,13 @@ def test_the_real_specs_tree_resolves_end_to_end() -> None:
 # documenting it.
 
 FENCE_CASES = [
-    pytest.param("the string `closes #999` appears in a log", set(), id="inline-span"),
-    pytest.param("```\ncloses #999\n```", set(), id="bare-fence"),
-    pytest.param("```python\n# closes #999\n```", set(), id="fence-with-info-string"),
-    pytest.param("~~~\ncloses #999\n~~~", set(), id="tilde-fence"),
-    pytest.param("intro\n```\ncloses #999\nno terminator follows", set(), id="unclosed-fence"),
-    pytest.param("`closes #111` and `closes #222`", set(), id="two-spans"),
-    pytest.param("quoted `closes #111` and real closes #222", {222}, id="quoted-and-real"),
+    pytest.param("the string `closes #999` appears in a log", {999}, id="inline-span"),
+    pytest.param("```\ncloses #999\n```", {999}, id="bare-fence"),
+    pytest.param("```python\n# closes #999\n```", {999}, id="fence-with-info-string"),
+    pytest.param("~~~\ncloses #999\n~~~", {999}, id="tilde-fence"),
+    pytest.param("intro\n```\ncloses #999\nno terminator follows", {999}, id="unclosed-fence"),
+    pytest.param("`closes #111` and `closes #222`", {111, 222}, id="two-spans"),
+    pytest.param("quoted `closes #111` and real closes #222", {111, 222}, id="quoted-and-real"),
     pytest.param("this closes #999 for real", {999}, id="plain-prose-still-matches"),
     pytest.param("> fixes #999", {999}, id="blockquote-still-matches"),
     pytest.param("closes `x` #999", set(), id="span-breaks-adjacency"),
@@ -394,19 +394,33 @@ FENCE_CASES = [
 
 
 @pytest.mark.parametrize(("body", "expected"), FENCE_CASES)
-def test_code_is_not_a_closing_directive(body: str, expected: set[int]) -> None:
-    """Keywords inside code spans and fences are text; GitHub agrees, so must the gate.
+def test_code_does_not_shield_a_closing_keyword(body: str, expected: set[int]) -> None:
+    """CI-GATE-019 (#1903): a keyword in code still closes, because the body is also a commit.
 
-    `blockquote-still-matches` and `plain-prose-still-matches` are the guard on
-    the fix rather than on the bug: stripping too eagerly turns an over-report
-    into an under-report, and that direction fails OPEN. Both were measured to
-    link on GitHub, so both must keep matching here.
+    CI-GATE-013 made these cases pass, and for the parser it measured that was right:
+    `closingIssuesReferences` skips code. But this repo squash-merges with
+    `squash_merge_commit_message = PR_BODY`, so the body lands on master as the squash
+    commit's message, and the commit parser has no markdown. What a merge closes is the
+    union of the two, so the gate reads the raw body.
 
-    `span-breaks-adjacency` pins the placeholder. Deleting a span outright would
-    collapse ``closes `x` #999`` to ``closes  #999`` and invent a link GitHub
-    does not make — measured: that body produced no reference.
+    Only the inline span was measured (#1880 closed #972). Fences are held to the same
+    rule because a commit message has no fences either, and the error direction is
+    safe: an over-report is a red PR, an under-report is a spec issue closed silently.
+
+    `span-breaks-adjacency` still passes, because in plain text a span between the
+    keyword and the number breaks the adjacency the pattern needs.
     """
     assert spec_gate.closed_issues(body, REPO) == expected
+
+
+def test_pr_1880_line_closes_972() -> None:
+    """The literal line that closed OPS-023's issue on merge, with its spec still active.
+
+    `closingIssuesReferences` for #1880 was empty and the gate passed. The squash
+    commit `30a90cf6` then closed #972, as the timeline's `closed` event records.
+    """
+    body = "The docs sweep, and the AC5 guard going green, follow in PR 3b, which carries `Closes #972`."
+    assert spec_gate.closed_issues(body, REPO) == {972}
 
 
 def test_a_quoted_waiver_is_not_a_declared_waiver() -> None:
@@ -444,5 +458,5 @@ def test_pr_1155_shape_passes() -> None:
         "The fix is the gerund, since `closes #1056` and `closed #1056` both link\n"
         "and `closing #1056` does not.\n"
     )
-    assert spec_gate.closed_issues(body, REPO) == set()
+    assert spec_gate.closed_issues(body, REPO) == {1056}
     assert spec_gate.declared_exception(body) is None
