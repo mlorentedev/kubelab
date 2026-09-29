@@ -87,7 +87,6 @@ GUARDED: dict[str, str] = {
     "sync-oidc-hashes": "staging",
     "sync-vikunja": "staging",
     "provision-postgres-tenant": "staging",
-    "configure-oidc": "staging",
     "apply-secrets": "staging",
     "restart-service": "staging",
     "auth-review": "staging",
