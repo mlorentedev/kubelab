@@ -324,7 +324,13 @@ class TestSetRevisionPatchesOnlyTheRevisionItRead:
     """The guard reads, then patches: without a precondition, two lanes that both
     read `master` in the same second both pass, and the second silently replaces
     the first. The read's resourceVersion makes the second patch a 409 instead
-    (pr-agent on #1893)."""
+    (pr-agent on #1893).
+
+    The 409 is measured, not assumed: 2026-09-29, k3s v1.34.4 in a throwaway
+    container, an `applications.argoproj.io` CRD. A merge patch carrying the read's
+    resourceVersion applied; a second one carrying the same, now stale, version was
+    refused with the stderr `_conflict()` reproduces, and the value did not change;
+    without the version the same patch overwrote silently."""
 
     def _app(self, revision: str, resource_version: str) -> str:
         return json.dumps(
@@ -354,8 +360,9 @@ class TestSetRevisionPatchesOnlyTheRevisionItRead:
         return subprocess.CalledProcessError(
             1,
             ["kubectl"],
-            stderr='Error from server (Conflict): Operation cannot be fulfilled on applications.argoproj.io '
-            '"kubelab-staging": the object has been modified; please apply your changes to the latest version',
+            stderr="Error from server (Conflict): Operation cannot be fulfilled on applications.argoproj.io "
+            '"kubelab-staging": the object has been modified; please apply your changes to the latest version '
+            "and try again",
         )
 
     def _read(self, revision: str, resource_version: str) -> MagicMock:
