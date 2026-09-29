@@ -14,6 +14,7 @@ from toolkit.features import command
 from toolkit.features.argo_manager import (
     ApplicationNotFoundError,
     HubUnreachableError,
+    RevisionHeldError,
 )
 from toolkit.features.argo_manager import (
     check_drift as argo_check_drift_feature,
@@ -296,6 +297,9 @@ def argo_set_revision(
         ),
     ] = str(output_path("hub")),
     namespace: Annotated[str, typer.Option("--namespace", "-n")] = "argocd",
+    force: Annotated[
+        bool, typer.Option("--force", help="Replace a branch another lane holds (default: refuse)")
+    ] = False,
 ) -> None:
     """Patch an Argo CD Application's spec.source.targetRevision.
 
@@ -309,8 +313,9 @@ def argo_set_revision(
             rev=revision,
             kubeconfig=kubeconfig,
             namespace=namespace,
+            force=force,
         )
-    except ApplicationNotFoundError as exc:
+    except (ApplicationNotFoundError, RevisionHeldError) as exc:
         logger.error(str(exc))
         raise typer.Exit(1) from exc
 
