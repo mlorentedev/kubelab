@@ -109,7 +109,6 @@
   "ignoreDeps": [
     "cloudflare/cloudflared",
     "fbonalair/traefik-crowdsec-bouncer",
-    "grafana/grafana-oss",
     "myoung34/github-runner"
   ],
   "dependencyDashboard": true,
