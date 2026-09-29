@@ -43,6 +43,9 @@ _AUTH_SCHEME = "Bearer"
 
 _NAMESPACE = "kubelab"
 _DEPLOYMENT = "deploy/n8n"
+# Mirrors `spec.selector.matchLabels` of the Deployment in
+# `infra/k8s/base/services/n8n.yaml` (asserted by tests/test_n8n_import_restart.py).
+_POD_SELECTOR = "app.kubernetes.io/name=n8n"
 
 
 @dataclass(frozen=True)
@@ -70,7 +73,12 @@ class N8nImportSpec:
     """K8s namespace hosting the n8n deployment."""
 
     deployment: str = _DEPLOYMENT
-    """`kubectl exec` target (e.g. `deploy/n8n`)."""
+    """The Deployment restarted once the run has imported everything (e.g. `deploy/n8n`)."""
+
+    pod_selector: str = _POD_SELECTOR
+    """Label selector for the Deployment's pods. Every exec targets one of them by
+    name, never `deployment`, because kubectl may resolve a Deployment to a pod
+    that is not Ready (#1863)."""
 
 
 # ── Registry ──────────────────────────────────────────────────────────────────
@@ -257,9 +265,20 @@ def import_n8n_workflow(env: str, project_root: Path, dry_run: bool = False) -> 
 
     cm = ConfigurationManager(env, project_root)
 
-    all_ok = True
-    for spec in applicable:
-        all_ok = _process_spec(spec, env, project_root, cm, dry_run) and all_ok
+    landed = [spec for spec in applicable if _process_spec(spec, env, project_root, cm, dry_run)]
+    all_ok = len(landed) == len(applicable)
+
+    # Restart ONCE, after every workflow is in. The CLI writes to SQLite, but the
+    # running process caches workflows + the webhook registry in memory (same class
+    # of gotcha as Gitea OIDC, CLAUDE.md): without a restart no imported webhook is
+    # registered. A restart per workflow bounced the pod four times per run, under
+    # the next workflow's exec (#1863). The workflows that did land still need
+    # their restart when another one failed, so a partial run restarts too.
+    if landed and not dry_run:
+        for spec in {(s.namespace, s.deployment): s for s in landed}.values():
+            if not _restart_n8n(env, spec):
+                logger.error(f"  {spec.deployment} restart failed — workflows imported but not live")
+                all_ok = False
 
     if all_ok:
         logger.success(f"Imported {len(applicable)} workflow(s) for {env}")
@@ -342,15 +361,8 @@ def _process_spec(
         logger.error(f"  Publish failed for workflow id={workflow_id}")
         return False
 
-    # 4. Restart n8n. The CLI writes to SQLite, but the running process caches
-    #    workflows + the webhook registry in memory (same class of gotcha as
-    #    Gitea OIDC, CLAUDE.md). Without a restart the /webhook/notify trigger is
-    #    never registered and the route stays dead — n8n itself warns about this.
-    if not _restart_n8n(env, spec):
-        logger.error("  n8n restart failed — workflow imported but not live")
-        return False
-
-    logger.success(f"  Imported + published + restarted '{spec.workflow_path.name}' (workflow id={workflow_id})")
+    # The restart that makes it live runs once per run, in `import_n8n_workflow`.
+    logger.success(f"  Imported + published '{spec.workflow_path.name}' (workflow id={workflow_id})")
     return True
 
 
@@ -361,38 +373,97 @@ def _exec_stdin_import(env: str, spec: N8nImportSpec, subcommand: str, prefix: s
     so it never lands on argv. `sh -c` writes it to /dev/shm, imports, shreds.
     """
     script = _IMPORT_SCRIPT.format(prefix=prefix, subcommand=subcommand)
-    cmd = [
-        "kubectl",
-        "exec",
-        "-i",
-        "-n",
-        spec.namespace,
-        spec.deployment,
-        "--kubeconfig",
-        _kubeconfig_for(env),
-        "--",
-        "sh",
-        "-c",
-        script,
-    ]
-    return _run_with_retry(cmd, env, spec, stdin=payload)
+    return _exec(env, spec, subcommand, ["sh", "-c", script], stdin=payload)
 
 
 def _exec_publish(env: str, spec: N8nImportSpec, workflow_id: str) -> bool:
+    return _exec(env, spec, "publish:workflow", ["n8n", "publish:workflow", f"--id={workflow_id}"])
+
+
+def _exec(env: str, spec: N8nImportSpec, what: str, argv: list[str], stdin: str | None = None) -> bool:
+    """Run `argv` in a live n8n pod, named, retrying once on a freshly resolved one.
+
+    A liveness-probe restart (see #1009 — n8n gets CPU-throttled under its 1-core
+    limit, `/healthz` times out, kubelet kills the container) SIGKILLs any exec
+    session in flight, surfaced as exit 137. That is a transient condition, not a
+    real import failure — retrying immediately would race the same restart, so
+    wait for the deployment to report Ready again, then resolve the pod again.
+    Every failure names the pod it ran against (#1863 AC3).
+    """
+    kc = _kubeconfig_for(env)
+    for attempt in (1, 2):
+        pods = _list_pods(env, spec)
+        pod = _live_pod(pods)
+        if pods is None:
+            logger.error(f"  {what}: cannot tell whether n8n has a Ready pod — the pod list is unreadable")
+        elif pod is None:
+            logger.error(f"  {what}: no Ready n8n pod matches '{spec.pod_selector}' in {spec.namespace}")
+        else:
+            stdin_flag = ["-i"] if stdin is not None else []
+            cmd = ["kubectl", "exec", *stdin_flag, "-n", spec.namespace, f"pod/{pod}", "--kubeconfig", kc, "--", *argv]
+            if _run(cmd, stdin=stdin, label=f"{what} in pod/{pod}"):
+                return True
+            logger.error(f"  pod/{pod} now: {_pod_record(env, spec, pod)}")
+        if attempt == 1:
+            logger.info(f"  Waiting for {spec.deployment} to be ready before retrying {what}...")
+            _wait_rollout_ready(env, spec)
+    return False
+
+
+def _live_pod(pods: list[dict[str, Any]] | None) -> str | None:
+    """Name of a pod in `pods` that is Running, Ready and not being deleted."""
+    return next((p["metadata"]["name"] for p in pods or [] if _is_live(p)), None)
+
+
+def _pod_record(env: str, spec: N8nImportSpec, name: str) -> str:
+    """What the pod says about itself after a failed exec.
+
+    A container killed mid-exec (OOM, liveness) and a real import error both
+    surface as a failed `kubectl exec`; only the pod's restart count and last
+    termination tell them apart. Read right after the failure, kubelet may not
+    have recorded the death yet: `restarts=0` with no termination means "too
+    early to tell", not "the container survived".
+    """
+    pod = next((p for p in _list_pods(env, spec) or [] if p["metadata"]["name"] == name), None)
+    if pod is None:
+        return "gone"
+    parts = ["deleting"] if pod["metadata"].get("deletionTimestamp") else []
+    for status in pod.get("status", {}).get("containerStatuses", []):
+        last = status.get("lastState", {}).get("terminated") or {}
+        died = f" last={last.get('reason')}/{last.get('exitCode')} at={last.get('finishedAt')}" if last else ""
+        parts.append(f"{status.get('name')} restarts={status.get('restartCount', 0)}{died}")
+    return ", ".join(parts) or "no container status"
+
+
+def _list_pods(env: str, spec: N8nImportSpec) -> list[dict[str, Any]] | None:
     cmd = [
         "kubectl",
-        "exec",
+        "get",
+        "pods",
         "-n",
         spec.namespace,
-        spec.deployment,
+        "-l",
+        spec.pod_selector,
         "--kubeconfig",
         _kubeconfig_for(env),
-        "--",
-        "n8n",
-        "publish:workflow",
-        f"--id={workflow_id}",
+        "-o",
+        "json",
     ]
-    return _run_with_retry(cmd, env, spec)
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        pods: list[dict[str, Any]] = json.loads(result.stdout).get("items", [])
+    except (subprocess.CalledProcessError, json.JSONDecodeError) as exc:
+        logger.error(f"  Listing n8n pods failed: {(getattr(exc, 'stderr', None) or str(exc)).strip()}")
+        return None
+    return pods
+
+
+def _is_live(pod: dict[str, Any]) -> bool:
+    if pod.get("metadata", {}).get("deletionTimestamp"):
+        return False
+    status = pod.get("status", {})
+    ready = any(c.get("type") == "Ready" and c.get("status") == "True" for c in status.get("conditions", []))
+    return status.get("phase") == "Running" and ready
 
 
 def _restart_n8n(env: str, spec: N8nImportSpec) -> bool:
@@ -420,7 +491,7 @@ def _restart_n8n(env: str, spec: N8nImportSpec) -> bool:
     return _run(status)
 
 
-def _run(cmd: list[str], stdin: str | None = None) -> bool:
+def _run(cmd: list[str], stdin: str | None = None, label: str | None = None) -> bool:
     """Run a kubectl command; return True on success, log stderr on failure."""
     try:
         result = subprocess.run(cmd, input=stdin, capture_output=True, text=True, check=True)
@@ -428,24 +499,8 @@ def _run(cmd: list[str], stdin: str | None = None) -> bool:
             logger.info(f"  {result.stdout.strip()}")
         return True
     except subprocess.CalledProcessError as exc:
-        logger.error(f"  {' '.join(cmd[:6])} … failed: {(exc.stderr or str(exc)).strip()}")
+        logger.error(f"  {label or ' '.join(cmd[:6])} … failed: {(exc.stderr or str(exc)).strip()}")
         return False
-
-
-def _run_with_retry(cmd: list[str], env: str, spec: N8nImportSpec, stdin: str | None = None) -> bool:
-    """Run a `kubectl exec` command, retrying once if the pod restarts mid-exec.
-
-    A liveness-probe restart (see #1009 — n8n gets CPU-throttled under its 1-core
-    limit, `/healthz` times out, kubelet kills the container) SIGKILLs any exec
-    session in flight, surfaced as exit 137. That is a transient condition, not a
-    real import failure — retrying immediately would race the same restart, so
-    wait for the deployment to report Ready again first.
-    """
-    if _run(cmd, stdin=stdin):
-        return True
-    logger.info(f"  {spec.deployment} exec failed — waiting for it to be ready before retrying...")
-    _wait_rollout_ready(env, spec)
-    return _run(cmd, stdin=stdin)
 
 
 def _wait_rollout_ready(env: str, spec: N8nImportSpec, timeout: str = "60s") -> bool:
