@@ -79,7 +79,14 @@ def set_revision(
             f"Ask that lane first; --force (FORCE=1 via make) replaces it anyway."
         )
 
-    payload = json.dumps({"spec": {"source": {"targetRevision": rev}}})
+    # The read's resourceVersion is a precondition: a lane that repointed the
+    # Application after our read turns this patch into a 409 instead of being
+    # silently replaced by it.
+    patch_body: dict[str, Any] = {"spec": {"source": {"targetRevision": rev}}}
+    resource_version = before.get("metadata", {}).get("resourceVersion")
+    if resource_version:
+        patch_body["metadata"] = {"resourceVersion": resource_version}
+    payload = json.dumps(patch_body)
     patch_argv = _kubectl(
         kubeconfig,
         namespace,
@@ -93,7 +100,15 @@ def set_revision(
         "-o",
         "json",
     )
-    after = _run_json(patch_argv)
+    try:
+        after = _run_json(patch_argv)
+    except subprocess.CalledProcessError as exc:
+        if "conflict" in (exc.stderr or "").lower():
+            raise RevisionHeldError(
+                f"'{app}' changed between the read and the patch: another lane repointed it. "
+                f"Re-run to see who holds it."
+            ) from exc
+        raise
 
     return SetRevisionResult(
         old_revision=old_revision,

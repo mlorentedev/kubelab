@@ -305,3 +305,64 @@ class TestSetRevisionRefusesAnApplicationAnotherLaneHolds:
             set_revision(app="kubelab-staging", rev=requested, kubeconfig="/tmp/kc")
 
         assert run.call_count == 2
+
+
+class TestSetRevisionPatchesOnlyTheRevisionItRead:
+    """The guard reads, then patches: without a precondition, two lanes that both
+    read `master` in the same second both pass, and the second silently replaces
+    the first. The read's resourceVersion makes the second patch a 409 instead
+    (pr-agent on #1893)."""
+
+    def _app(self, revision: str, resource_version: str) -> str:
+        return json.dumps(
+            {
+                "metadata": {"resourceVersion": resource_version},
+                "spec": {"source": {"targetRevision": revision}},
+                "status": {"sync": {"status": "Synced"}},
+            }
+        )
+
+    def test_the_patch_carries_the_resource_version_it_read(self) -> None:
+        with patch(
+            "toolkit.features.argo_manager.subprocess.run",
+            _mock_kubectl(self._app("master", "4711"), self._app("feat/mine", "4712")),
+        ) as run:
+            set_revision(app="kubelab-staging", rev="feat/mine", kubeconfig="/tmp/kc")
+
+        patch_argv = run.call_args_list[1].args[0]
+        payload = json.loads(patch_argv[patch_argv.index("-p") + 1])
+        assert payload["metadata"]["resourceVersion"] == "4711"
+        assert payload["spec"]["source"]["targetRevision"] == "feat/mine"
+
+    def test_a_conflict_is_refused_as_held_not_raised_raw(self) -> None:
+        import subprocess
+
+        from toolkit.features.argo_manager import RevisionHeldError
+
+        conflict = subprocess.CalledProcessError(
+            1,
+            ["kubectl"],
+            stderr='Error from server (Conflict): Operation cannot be fulfilled on applications.argoproj.io '
+            '"kubelab-staging": the object has been modified; please apply your changes to the latest version',
+        )
+        read = MagicMock(stdout=self._app("master", "4711"), stderr="", returncode=0)
+        with patch("toolkit.features.argo_manager.subprocess.run", MagicMock(side_effect=[read, conflict])):
+            with pytest.raises(RevisionHeldError, match="changed"):
+                set_revision(app="kubelab-staging", rev="feat/mine", kubeconfig="/tmp/kc")
+
+
+@pytest.mark.parametrize(("force", "expected"), [("", False), ("0", False), ("1", True)])
+def test_only_force_1_forces(force: str, expected: bool) -> None:
+    """`$(if $(FORCE),...)` tests emptiness, so FORCE=0 used to force (pr-agent on #1893)."""
+    import pathlib
+    import subprocess
+
+    repo = pathlib.Path(__file__).resolve().parent.parent
+    out = subprocess.run(
+        ["make", "-n", "-C", str(repo), "argo-set-revision", "APP=kubelab-staging", "REV=feat/mine", f"FORCE={force}"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    line = next(ln for ln in out.splitlines() if "--app" in ln)
+    assert ("--force" in line) is expected, line

@@ -35,7 +35,12 @@ holder and exits non-zero. `FORCE=1` (`--force`) overrides it. Pointing back at
 `master` is never refused, because that is the patch-back after a merge.
 `tests/test_argo_manager.py::TestSetRevisionRefusesAnApplicationAnotherLaneHolds`
 pins the refused case, the forced case and the three unheld cases. A mutation
-that disables the check turns the suite red.
+that disables the check turns the suite red. A read-then-patch guard still
+races: two lanes that read `master` in the same second both pass it. So the
+patch carries the read's `metadata.resourceVersion`, and Kubernetes turns the
+second one into a 409, which the command reports as held
+(`TestSetRevisionPatchesOnlyTheRevisionItRead`). The Make target forces only on
+`FORCE=1`: `$(if $(FORCE),...)` tests emptiness, so `FORCE=0` used to force.
 
 **Rule**: Before writing to a slot other sessions also write to, read it, and
 refuse on a value you did not expect. Printing the old value after overwriting
