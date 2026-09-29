@@ -39,6 +39,10 @@ from pathlib import Path
 #:   2026-08-19  `auto-closed #N`   agrees      (probe on kubelab#1159; `-` IS a boundary)
 #:   2026-08-19  `closes \`x\` #N`   GitHub does NOT link across a span
 #:   2026-08-19  `> fixes #N`       GitHub DOES link inside a blockquote
+#:   2026-09-28  code span, squashed  the squash COMMIT closed it (kubelab#1880 ->
+#:               #972, `30a90cf6`) although `closingIssuesReferences` was empty.
+#:               This repo squashes with PR_BODY, so the body is also a commit
+#:               message, and that parser has no markdown (CI-GATE-019, #1903).
 #: Anything not listed above is untested, not equivalent.
 _CLOSING_KEYWORDS = (
     "close",
@@ -85,21 +89,19 @@ _FENCE_RE = re.compile(
 #: reading a directive out of it.
 _SPAN_RE = re.compile(r"(?P<t>`+)[\s\S]*?(?P=t)")
 
-#: Replaces stripped code rather than deleting it. Deleting would join the text
-#: on either side: ``closes `x` #999`` would collapse to ``closes  #999`` and the
-#: gate would invent a link GitHub does not make — measured, that body produces
-#: no reference at all. NUL cannot appear in a keyword, a number or whitespace,
-#: so it breaks every adjacency the patterns below require.
+#: Replaces stripped code rather than deleting it, so the text on either side
+#: never joins into a line nobody wrote. NUL cannot appear in the waiver syntax,
+#: so it breaks every adjacency `_EXCEPTION_RE` requires.
 _CODE_PLACEHOLDER = "\x00"
 
 
 def _strip_code(body: str) -> str:
     """The body with fenced blocks and inline spans replaced by a placeholder.
 
-    Applied before *every* pattern in this module, not just the closing one.
-    Both directives this gate reads — a closing keyword and the waiver line —
-    are ordinary text that a document *about the gate* has to quote, and the
-    gate's own failure hint prints the waiver line for the reader to copy.
+    Applied to the waiver line only. The gate's own failure hint prints that line
+    for the reader to copy, and only the gate reads it, so a quoted waiver must
+    not count as a declared one. Closing keywords are NOT stripped: the squash
+    commit carries the body as plain text, where code shields nothing (#1903).
     """
     return _SPAN_RE.sub(_CODE_PLACEHOLDER, _FENCE_RE.sub(_CODE_PLACEHOLDER, body or ""))
 
@@ -134,9 +136,14 @@ def closed_issues(pr_body: str, repo: str) -> set[int]:
     Cross-repo references are ignored: a spec in this repo cannot be closed by
     an issue in another, and several specs here legitimately track
     `mlorentedev/knowledge#NNN`.
+
+    The body is scanned raw, code included. `closingIssuesReferences` skips code
+    spans and fences, but this repo squash-merges with the PR body as the commit
+    message, and GitHub's commit parser reads plain text. A merge closes what
+    either parser finds (CI-GATE-019, #1903).
     """
     found: set[int] = set()
-    for m in _CLOSES_RE.finditer(_strip_code(pr_body)):
+    for m in _CLOSES_RE.finditer(pr_body or ""):
         if m.group("url_num"):
             if m.group("url_repo") == repo:
                 found.add(int(m.group("url_num")))
