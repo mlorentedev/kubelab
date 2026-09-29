@@ -83,3 +83,52 @@ def run_code_node(js: str, items: list[dict[str, Any]], env: dict[str, str] | No
     """
     proc = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True)
     return json.loads(proc.stdout.strip())
+
+
+def run_items_node(js: str, items: list[Any], prior: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Execute one code node against a list of n8n INPUT ITEMS.
+
+    `items` is what the upstream node emitted, one entry per item -- not a single
+    `$json`. That distinction is the point: n8n passes data between nodes as an
+    array of items, and an HTTP node handed a JSON array emits one item PER
+    ELEMENT. A helper that mocked `$json` as the whole array would encode a
+    belief about n8n's item model and then certify it (lesson 413) -- the node
+    would pass every test and, in production, read the first task as if it were
+    the list.
+    """
+    script = f"""
+    const ITEMS = {json.dumps(items)};
+    const $input = {{ all: () => ITEMS.map(j => ({{ json: j }})) }};
+    const $json = ITEMS[0];
+    const PRIOR = {json.dumps(prior or {})};
+    const $ = (name) => ({{ first: () => ({{ json: PRIOR[name] }}) }});
+    const $env = {{}};
+    const result = (() => {{
+        {js}
+    }})();
+    console.log(JSON.stringify(result[0].json));
+    """
+    proc = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True)
+    return json.loads(proc.stdout.strip())
+
+
+#: The shapes an HTTP node's output can take, as separate item lists. Every code
+#: node is exercised against ALL of them, because which one arrives is a property
+#: of n8n and the response body, not something the workflow chooses.
+def split_items(records: list[dict[str, Any]]) -> list[Any]:
+    """One item per array element -- what an HTTP node emits for a JSON array."""
+    return list(records)
+
+
+def wrapped_array(records: list[dict[str, Any]]) -> list[Any]:
+    """A single item whose json IS the array."""
+    return [records]
+
+
+def wrapped_data(records: list[dict[str, Any]]) -> list[Any]:
+    """A single item shaped `{data: [...]}`, the paginated form."""
+    return [{"data": records}]
+
+
+EMPTY_ITEM: list[Any] = [{}]  # what `alwaysOutputData` emits when there is no data
+ERROR_ITEM: list[Any] = [{"error": "401 unauthorized"}]  # what `continueOnFail` emits
