@@ -19,7 +19,7 @@ owner: manu
 |------|----------|---------|--------------|
 | **LAN direct** (`ssh <node>-lan`) | On the home network | homelab nodes via `rpi4-lan` jump | none |
 | **Bastion** (`ssh <node>-ext`) | **Anywhere — the default for SSH** | the whole mesh, one jump via the VPS | none |
-| **ts-bridge** | RDP / web UI / a single service by mesh IP | one target per bridge instance | the `ts-bridge` binary |
+| **ts-bridge** | RDP, web UI, or an allow-listed browser origin | static target or SOCKS5 routes | the `ts-bridge` binary |
 
 For SSH the **bastion** wins: one jump, all nodes, no daemon. `ts-bridge` is for
 non-SSH protocols where a jump host doesn't help (RDP to a desktop, a web UI on a
@@ -86,13 +86,32 @@ Equivalent one-off without the alias: `ssh -J vps-pub rpi4`.
 > are the non-admin equivalent. (The shared `ssh/config` keeps the primaries
 > jump-free so `msi` still routes directly.)
 
-## Path 3 — ts-bridge (RDP / web UI / single service)
+## Path 3 — ts-bridge (RDP / web UI / browser)
 
 `ts-bridge` (own project) runs a **userspace** Tailscale node (`tsnet`, no admin, no
-TUN) and forwards **one local port → one mesh target**. Use it when a jump host
-doesn't help — e.g. RDP to a desktop, or a web UI you want at `127.0.0.1:<port>`.
+TUN). Static mode forwards **one local port → one mesh target**; SOCKS5 mode
+allows explicitly declared destinations and can launch an isolated browser
+profile. Use it when a jump host does not help — e.g. RDP to a desktop or an
+HTTPS service whose private route must preserve the original TLS hostname.
 
-### 3.1 Install (as an external user would)
+### 3.1 Choose the control plane
+
+Tailscale SaaS and KubeLab Headscale are separate tailnets. One `ts-bridge`
+process joins exactly one control plane and needs a key issued by that same
+control plane:
+
+| Destination network | Control URL | Credential | Reach |
+|---------------------|-------------|------------|-------|
+| Tailscale SaaS | default; omit `control_url` | Tailscale SaaS auth key | Devices and services allowed by the SaaS tailnet ACL |
+| KubeLab Headscale | `https://vpn.kubelab.live` | Headscale pre-auth key | Devices and services allowed by the KubeLab ACL |
+
+A Headscale key is not issued per destination. It registers the ephemeral
+`ts-bridge` node; that node may then reach any mesh destination permitted by the
+Headscale ACL. Static mode exposes one selected destination, while SOCKS5 mode
+can expose multiple explicit routes. Keep separate processes and state
+directories when both tailnets are needed concurrently.
+
+### 3.2 Install (as an external user would)
 
 Download the release artifact, verify the checksum, extract. No build toolchain
 needed.
@@ -107,7 +126,7 @@ Expand-Archive "$dest\ts-bridge-*-windows-amd64.zip" "$dest\bin" -Force
 & "$dest\bin\ts-bridge-windows-amd64\ts-bridge.exe" version
 ```
 
-### 3.2 Mint a Headscale pre-auth key
+### 3.3 Mint a Headscale pre-auth key
 
 Personal devices live under the **`kubelab`** Headscale user (ID **2**) — same as
 `msi` and all infra nodes. (`manu`/ID 1 only holds a stale `localhost`; don't use it.)
@@ -121,7 +140,7 @@ ssh vps-pub 'docker exec headscale headscale preauthkeys create \
   without it the node persists as an offline entry forever.
 - `--reusable` + `8760h` (1 year): one key serves restarts and survives travel.
 
-### 3.3 Configure `.env`
+### 3.4 Configure `.env`
 
 In the binary's directory:
 
@@ -132,7 +151,7 @@ TS_CONTROL_URL=https://vpn.kubelab.live   # REQUIRED — without it the key hits
 TS_LOCAL_ADDR=127.0.0.1:33389         # pin the local port (auto-mode randomizes it in 33389-34388)
 ```
 
-### 3.4 Connect and use
+### 3.5 Connect and use
 
 ```bash
 ./ts-bridge.exe connect               # foreground; prints the Local: bind address
@@ -141,6 +160,69 @@ ssh -p 33389 -o StrictHostKeyChecking=accept-new manu@127.0.0.1 'hostname'
 ```
 
 `Ctrl-C` stops the bridge; the ephemeral node auto-removes from Headscale.
+
+### 3.6 Open the private Gitea forge in an isolated browser
+
+This is the KubeLab-specific descriptor. Its values come from the repository
+SSOT:
+
+| Setting | Value | Source |
+|---------|-------|--------|
+| Control plane | `https://vpn.kubelab.live` | `infra/config/values/common.yaml` |
+| Browser origin | `gitea.kubelab.live:443` | `apps.services.core.gitea.domain` |
+| Mesh target | `kubelab-vps:443` | `networking.vps.hostname`; prod Traefik HTTPS |
+
+Prerequisite: use a `ts-bridge` build whose help lists the `browser` command.
+Do not reuse or inspect an Apps `.env` file for this flow.
+
+Create a one-use, short-lived Headscale key and write it directly to a local
+file. The key must never be printed, pasted into chat, or passed as a command
+argument:
+
+```powershell
+$configDir = Join-Path $env:USERPROFILE ".ts-bridge"
+$keyFile = Join-Path $configDir "authkey"
+New-Item -ItemType Directory -Force $configDir | Out-Null
+
+ssh vps-pub 'docker exec headscale headscale preauthkeys create --user 2 --ephemeral --expiration 1h' |
+  Set-Content -LiteralPath $keyFile -Encoding ascii -NoNewline
+
+if ((Get-Item -LiteralPath $keyFile).Length -eq 0) {
+  throw "Headscale did not write an auth key"
+}
+icacls $keyFile /inheritance:r /grant:r "${env:USERNAME}:(R)" | Out-Null
+```
+
+Create the non-secret browser route file:
+
+```powershell
+$configFile = Join-Path $configDir "gitea-browser.yml"
+@'
+version: 1
+control_url: https://vpn.kubelab.live
+socks5_addr: 127.0.0.1:1080
+socks5_routes:
+  "gitea.kubelab.live:443": "kubelab-vps:443"
+'@ | Set-Content -LiteralPath $configFile -Encoding ascii
+```
+
+Launch the isolated Edge profile:
+
+```powershell
+& "$env:USERPROFILE\Apps\ts-bridge\ts-bridge.exe" browser `
+  --config $configFile `
+  --auth-key-file $keyFile `
+  --url https://gitea.kubelab.live/
+```
+
+Verify that the Gitea login page loads, the ordinary Edge profile remains
+unchanged, and Windows hosts, DNS, and system proxy settings were not modified.
+Record only the URL and pass/fail result; never record the key or forge content.
+After the smoke, stop `ts-bridge` and remove the one-use key file:
+
+```powershell
+Remove-Item -LiteralPath $keyFile
+```
 
 ## Gotchas
 
@@ -154,7 +236,8 @@ ssh -p 33389 -o StrictHostKeyChecking=accept-new manu@127.0.0.1 'hostname'
   unreachable". Load an agent first, or read the `-v` output.
 - **ts-bridge is a per-target proxy, not a route.** It cannot give you `ssh rpi4`
   (mesh IP) the way native Tailscale does — that needs a TUN device. Use the bastion
-  for whole-fleet SSH; use ts-bridge for one service at a time.
+  for whole-fleet SSH; use static ts-bridge mode for one service or SOCKS5 mode
+  for an explicit destination allow-list.
 - **`TS_CONTROL_URL` is what selects Headscale.** The `hskey-`/`tskey-` prefix does
   not route; an `hskey` sent without `TS_CONTROL_URL=https://vpn.kubelab.live` hits
   Tailscale SaaS and fails with `invalid key`.
@@ -184,7 +267,7 @@ TOOL-015 (ADR-052) codifies `kubectl` access from a non-admin box into two toolk
 ### Prerequisites
 
 - Git Bash shell with the ssh-agent loaded (see [Passphrase ergonomics](#passphrase-ergonomics) above — **this is mandatory**; running from PowerShell without the Windows SSH Agent service will fail silently with "Connection closed" rather than a passphrase prompt).
-- `ts-bridge` installed at `~/Apps/ts-bridge/ts-bridge.exe` with a valid `.env` (see [Path 3](#path-3--ts-bridge-rdp--web-ui--single-service) §3.1–§3.3 for install + key; the `.env` only needs `TS_AUTHKEY` and `TS_CONTROL_URL` for the toolkit-managed tunnel — `TS_TARGET` and `TS_LOCAL_ADDR` are ignored when the toolkit spawns the bridge).
+- `ts-bridge` installed at `~/Apps/ts-bridge/ts-bridge.exe` with a valid `.env` (see [Path 3](#path-3--ts-bridge-rdp--web-ui--browser) §3.2–§3.4 for install + key; the `.env` only needs `TS_AUTHKEY` and `TS_CONTROL_URL` for the toolkit-managed tunnel — `TS_TARGET` and `TS_LOCAL_ADDR` are ignored when the toolkit spawns the bridge).
 - `KUBECONFIG` not set (or set to `~/.kube/kubelab-staging-config`) — the toolkit writes there.
 
 ### Step 1 — Fetch the kubeconfig
@@ -246,7 +329,7 @@ make disconnect ENV=staging
 - **Run from Git Bash, not PowerShell.** PowerShell's `ssh` uses the Windows SSH Agent Service (Disabled on non-admin). Without an agent, the passphrase prompt is swallowed by `subprocess.run(capture_output=True)` and the connection closes silently, triggering the tunnel fallback, which also closes silently — the root cause (missing agent) is invisible. See the 2026-06-22 lesson in `docs/lessons.md`.
 - **`make fetch-kubeconfig` and `make connect` are independent.** Fetch writes the kubeconfig; connect starts the apiserver tunnel. Both are needed, in order. Fetch can be re-run at any time (idempotent overwrite); connect is a no-op if the tunnel is already up.
 - **The ts-bridge `.env` only needs two keys for toolkit-managed tunnels.** The toolkit ignores `TS_TARGET` / `TS_LOCAL_ADDR` (it sets those itself). Only `TS_AUTHKEY` and `TS_CONTROL_URL` are read from the `.env` in the binary's directory.
-- **If `make connect` shows "ts-bridge exited early"**, check `~/Apps/ts-bridge/.env` — a stale or expired `TS_AUTHKEY` causes an immediate exit. Re-mint a key (§3.2) and update the `.env`.
+- **If `make connect` shows "ts-bridge exited early"**, check `~/Apps/ts-bridge/.env` — a stale or expired `TS_AUTHKEY` causes an immediate exit. Re-mint a key (§3.3) and update the `.env`.
 
 ## Verify
 
