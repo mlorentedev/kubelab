@@ -109,7 +109,9 @@ A Headscale key is not issued per destination. It registers the ephemeral
 `ts-bridge` node; that node may then reach any mesh destination permitted by the
 Headscale ACL. Static mode exposes one selected destination, while SOCKS5 mode
 can expose multiple explicit routes. Keep separate processes and state
-directories when both tailnets are needed concurrently.
+directories when both tailnets are needed concurrently. Until profile-scoped
+credential references land in `ts-bridge` ([CFG-003][cfg-003]), keep a distinct
+auth-key file per control plane; never overwrite a shared `authkey` file.
 
 ### 3.2 Install (as an external user would)
 
@@ -181,7 +183,7 @@ argument:
 
 ```powershell
 $configDir = Join-Path $env:USERPROFILE ".ts-bridge"
-$keyFile = Join-Path $configDir "authkey"
+$keyFile = Join-Path $configDir "authkey-headscale-kubelab"
 New-Item -ItemType Directory -Force $configDir | Out-Null
 
 ssh vps-pub 'docker exec headscale headscale preauthkeys create --user 2 --ephemeral --expiration 1h' |
@@ -358,3 +360,5 @@ kubectl --kubeconfig ~/.kube/kubelab-staging-config get ns
 - [ADR-052](../adr/adr-052-cluster-access-transport.md) — cluster access transport doctrine (TOOL-014/015)
 - ts-bridge repo: `mlorentedev/ts-bridge` (README, `docs/adr/adr-005-headscale-compat.md`)
 - `docs/lessons.md` §2026-06-22 — ssh-agent mandatory for toolkit SSH on non-admin Windows
+
+[cfg-003]: https://github.com/mlorentedev/ts-bridge/issues/368
