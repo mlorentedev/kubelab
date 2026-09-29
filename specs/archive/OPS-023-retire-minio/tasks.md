@@ -71,9 +71,9 @@ created: "2026-09-22"
 
 ## Closing
 
-- [x] (✓ 2026-09-29) #972 is closed by this spec's archive PR, not by PR 3b: the spec archive gate refuses a close while the spec is active, so 3b says `Refs #972` (as BACKUP-055 / #1867 did). #1784 is already closed as a duplicate.
-- [x] (✓ 2026-09-29) `verification.md` holds, for each environment and the Beelink, the before and after state, the Terraform plan, the `changed=0` run and the `backup-coverage` output.
-- [x] (✓ 2026-09-29) Independent adversarial review (`review.md`, nan/mimo-v2.5, PASS WITH GAPS) before `/spec archive`.
+- [x] (✓ 2026-09-28) #972 is closed by this spec's archive PR, not by PR 3b: the spec archive gate refuses a close while the spec is active, so 3b says `Refs #972` (as BACKUP-055 / #1867 did). #1784 is already closed as a duplicate.
+- [x] (✓ 2026-09-28) `verification.md` holds, for each environment and the Beelink, the before and after state, the Terraform plan, the `changed=0` run and the `backup-coverage` output.
+- [x] (✓ 2026-09-28) Independent adversarial review (`review.md`, nan/mimo-v2.5, PASS WITH GAPS) before `/spec archive`.
 
 ## Machine-readable features
 

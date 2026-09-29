@@ -2,7 +2,7 @@
   {
     "id": "OPS-023-retire-minio-f1",
     "behavior": "AC1: no MinIO workload/Service/IngressRoute/PVC/CronJob in staging or prod",
-    "verification": "set -o pipefail; for e in staging prod; do out=$(kubectl --kubeconfig ~/.kube/kubelab-$e-config -n kubelab get deploy,svc,pvc,cronjob,ingressroute -o name) || exit 1; if printf '%s\\n' \"$out\" | grep -i -E 'minio|pvc-backup'; then exit 1; fi; done",
+    "verification": "set -o pipefail; for e in staging prod; do out=$(kubectl --kubeconfig ~/.kube/kubelab-$e-config -n kubelab get deploy,sts,svc,pvc,cronjob,ingressroute -o name) || exit 1; if printf '%s\\n' \"$out\" | grep -i -E 'minio|pvc-backup'; then exit 1; fi; done",
     "state": "pending",
     "evidence": "2026-09-25 staging and 2026-09-26 prod, verification.md AC1: after the prune both clusters list no MinIO or pvc-backup object (deploy, sts, pvc, cronjob, svc, cm, ingressroute, endpointslice, pv); Argo CD kubelab-prod operationState Succeeded at 6abdea1b with minio-data, minio and pvc-backup Pruned; minio-secrets NotFound after apply-secrets."
   },

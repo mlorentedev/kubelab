@@ -45,7 +45,7 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 ## Test status
 
 - Test suite: `make test` on 2026-09-24 -> `2645 passed, 15 skipped, 155 deselected, 1 xfailed` (the xfail is the AC5 guard).
-- 2026-09-29, master `d7882172` after #1890: the AC5 guard `13 passed` with no xfail; the lesson index, spec gate and argo suites 189 passed.
+- 2026-09-28, master `d7882172` after #1890: the AC5 guard `13 passed` with no xfail; the lesson index, spec gate and argo suites 189 passed.
 - Manual smoke test: the live before/after reads above (both clusters, the Beelink, Authelia, DNS, Uptime Kuma, R2 coverage).
 - No regressions in existing test suite: yes. CI green on #1880 and #1890 (#1890 merged unreviewed, disclosed on the PR: PR-Agent published no review in five attempts, TOOL-087 #1909).
 
@@ -92,7 +92,7 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 
 ## Review dispositions
 
-Independent review, `review.md` (nan/mimo-v2.5, 2026-09-29, PASS WITH GAPS, minors only):
+Independent review, `review.md` (nan/mimo-v2.5, 2026-09-28, PASS WITH GAPS, minors only):
 
 - **F1, VPNACL-001 still lists the MinIO grant as resolved:** applied. `specs/VPNACL-001-fleet-segmentation/proposal.md` gains a dated note: the target is gone and PR 2 removed the `accept`.
 - **F2, AC5's exemption is broader than the proposal's wording** (the whole `specs/` tree and `docs/audits/`, not only archived specs): declined, recorded here. An active spec is where a retirement is planned, so it has to name what it retires, OPS-023's own folder included; `docs/audits/` holds dated snapshots. Both are documented in the guard's docstring. The contract is not edited under this verdict.
@@ -112,7 +112,7 @@ Before archiving, flag what (if anything) should be promoted to the vault. If al
 
 ## Archive checklist
 
-- [x] (✓ 2026-09-29) `proposal.md` frontmatter set to `status: archived`
-- [x] (✓ 2026-09-29) Folder moved: `specs/OPS-023-retire-minio/` -> `specs/archive/OPS-023-retire-minio/`
-- [x] (✓ 2026-09-29) Bitácora board ticket for this spec (#972) closed by the archive PR (ADR-018)
-- [x] (✓ 2026-09-29) Promotions above executed: lessons 476 and 477, merged in #1880 and #1890
+- [x] (✓ 2026-09-28) `proposal.md` frontmatter set to `status: archived`
+- [x] (✓ 2026-09-28) Folder moved: `specs/OPS-023-retire-minio/` -> `specs/archive/OPS-023-retire-minio/`
+- [x] (✓ 2026-09-28) Bitácora board ticket for this spec (#972) closed by the archive PR (ADR-018)
+- [x] (✓ 2026-09-28) Promotions above executed: lessons 476 and 477, merged in #1880 and #1890
