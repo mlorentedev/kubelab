@@ -372,11 +372,12 @@ def test_the_real_specs_tree_resolves_end_to_end() -> None:
 # the squash commit carries it to master as plain text. Code still shields the
 # waiver line, which only this gate reads.
 #
-# Every expectation below about GitHub's own behaviour was measured, not
-# reasoned: a temporary PR body on kubelab#1159, read back through
-# `closingIssuesReferences`, restored immediately, targeting already-closed
-# issues so a merge in the window would have been a no-op. The three results are
-# recorded as dated rows beside `_CLOSES_RE` in the module.
+# Two parsers, measured differently. The PR-link results were measured on a
+# temporary PR body on kubelab#1159, read back through `closingIssuesReferences`
+# and restored immediately. The commit-parser result for an inline span was
+# measured on #1880's squash, which closed #972. The fence cases are held to the
+# span rule by reasoning, not measurement: a commit message has no fences, and
+# over-reporting fails safe. The dated rows beside `_CLOSES_RE` say which is which.
 #
 # The reason this matters is narrower than "the gate should be correct". The
 # gate's own failure hint prints the waiver line to copy, so the documents most
