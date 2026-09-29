@@ -36,10 +36,9 @@ created: "2026-09-26"
 
 ## Promotion candidates
 
-- [x] Lesson: yes: docs/lessons/identity-secrets/lesson-473-the-argo-cd-ui-asks-for-confirmation-before-the-server-authorizes.md
-- [x] Runbook: yes: docs/runbooks/identity-tier-change.md
-- [x] ADR: no: ADR-062 D2 was amended in place by #1870, not a new decision
-- [x] Pattern: no: specific to this repo's identity model
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/identity-secrets/lesson-473-the-argo-cd-ui-asks-for-confirmation-before-the-server-authorizes.md (the Argo CD UI asks for confirmation before the server authorizes, so RBAC is tested offline). The procedure is promoted as a runbook: docs/runbooks/identity-tier-change.md
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: ADR-062 D2 was amended in place by #1870, not a new decision
+- [x] New pattern candidate for `00_meta/patterns/`? no: specific to this repo's identity model
 
 ## Archive checklist
 
