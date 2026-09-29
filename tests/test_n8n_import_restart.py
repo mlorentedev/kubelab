@@ -137,3 +137,22 @@ def test_a_failed_exec_reports_why_the_container_last_died(capsys: pytest.Captur
     out = " ".join(capsys.readouterr().out.split())
     assert "restarts=1" in out
     assert "OOMKilled" in out
+
+
+def test_an_unreadable_pod_list_is_not_reported_as_no_ready_pod(capsys: pytest.CaptureFixture[str]) -> None:
+    """An unreachable API server (homelab off, a stale kubeconfig, RBAC) is a
+    different fault from an n8n with no Ready pod, and must not read like one."""
+
+    class _Unreachable(_Kubectl):
+        def __call__(self, cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+            if cmd[1:3] == ["get", "pods"]:
+                self.calls.append(cmd)
+                raise subprocess.CalledProcessError(1, cmd, stderr="Unable to connect to the server")
+            return super().__call__(cmd, **kwargs)
+
+    kubectl = _Unreachable([])
+    assert _import(kubectl) is False
+    assert kubectl.of("exec") == []
+    out = " ".join(capsys.readouterr().out.split())
+    assert "Unable to connect to the server" in out
+    assert "no Ready n8n pod" not in out
