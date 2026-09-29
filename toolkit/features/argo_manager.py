@@ -76,7 +76,7 @@ def set_revision(
     if not force and rev != release and old_revision not in (release, rev):
         raise RevisionHeldError(
             f"'{app}' is on '{old_revision}', not '{release}': another lane may be previewing it. "
-            f"Ask that lane first; FORCE=1 replaces it anyway."
+            f"Ask that lane first; --force (FORCE=1 via make) replaces it anyway."
         )
 
     payload = json.dumps({"spec": {"source": {"targetRevision": rev}}})
