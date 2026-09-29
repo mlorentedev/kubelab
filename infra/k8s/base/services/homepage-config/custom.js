@@ -309,7 +309,7 @@ var KUBELAB_SERVICES_STAGING = [
     "auth": "Authelia",
     "category": "Observability",
     "node": "ace1",
-    "version": "latest",
+    "version": "13.0.2",
     "notes": "Dashboards"
   },
   {
@@ -451,7 +451,7 @@ var KUBELAB_SERVICES_PROD = [
     "auth": "Authelia",
     "category": "Observability",
     "node": "VPS",
-    "version": "latest",
+    "version": "13.0.2",
     "notes": "Dashboards"
   },
   {
@@ -1018,7 +1018,7 @@ var KUBELAB_SERVICES_SHARED = [
     var main = document.querySelector("main") || document.querySelector("#page_container") || document.body;
     var footer = document.createElement("div");
     footer.id = "kubelab-footer";
-    footer.textContent = "KubeLab IDP · config 55ae7538";
+    footer.textContent = "KubeLab IDP · config d64e1ebc";
     main.appendChild(footer);
   }
   setTimeout(addFooter, 2000);

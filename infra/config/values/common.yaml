@@ -1562,7 +1562,10 @@ apps:
         auth_level: one_factor
         default_port: 3000
         health_path: /api/health
-        image: grafana/grafana-oss
+        # Pinned: the identity model depends on this version's behaviour (lessons
+        # 457, 461, 463: role path re-run on empty groups, opaque-token logging).
+        # A bump re-runs `make auth-review` and test_oauth_tokens_not_logged.
+        image: grafana/grafana-oss:13.0.2
         # Permite que Authelia registre usuarios en Grafana si no existen
         oauth_allow_sign_up: true
         # Must equal the grafana client_id in authelia.oidc_clients (SSOT-017).

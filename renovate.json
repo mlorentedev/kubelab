@@ -89,12 +89,26 @@
       "prBodyNotes": [
         "**Locks you out if it goes wrong.** Verify a current backup of `authelia-data` first; the session/WebAuthn store is in it."
       ]
+    },
+    {
+      "description": "Grafana. The platform's tier enforcement and token hygiene depend on this version's OAuth behaviour: the role path re-run on an empty groups list, UserInfo as the groups source, and the opaque-token warning that leaked to Loki.",
+      "matchPackageNames": [
+        "grafana/grafana-oss"
+      ],
+      "groupName": null,
+      "labels": [
+        "dependencies",
+        "renovate",
+        "needs-care"
+      ],
+      "prBodyNotes": [
+        "**Re-verify the identity model.** Deploy to staging, sign in as a `users` member, then run `make auth-review ENV=staging` and `poetry run pytest tests/test_oauth_tokens_not_logged.py`; read lessons 457, 461 and 463 before merging."
+      ]
     }
   ],
   "ignoreDeps": [
     "cloudflare/cloudflared",
     "fbonalair/traefik-crowdsec-bouncer",
-    "grafana/grafana-oss",
     "myoung34/github-runner"
   ],
   "dependencyDashboard": true,

@@ -200,6 +200,8 @@ images:
     newTag: 2.12.3
   - name: caronc/apprise
     newTag: 1.5.0
+  - name: grafana/grafana-oss
+    newTag: 13.0.2
   - name: grafana/loki
     newTag: 3.6.4
   - name: timberio/vector
