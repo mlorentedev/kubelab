@@ -11,22 +11,37 @@ of them.
 
 The digest is found by `digest_key`, the plaintext by the digest's
 `derived_from`, so the rule holds for a client whose plaintext lives with its
-consumer (Gitea) as well as for one whose plaintext lives with Authelia.
+consumer (Gitea) as well as for one whose plaintext lives with Authelia. A
+client can also keep a second copy of its secret on the consumer side (Vikunja
+reads `apps.services.core.vikunja.oidc_client_secret`): every OIDC client
+secret the consumer service is listed on is held to the same envs.
 """
 
 from __future__ import annotations
 
+import pathlib
+
 import pytest
+import yaml
 
 from toolkit.features.oidc_clients import declared_clients, digest_key, load_values
-from toolkit.features.secrets_manager import SECRET_CATALOG
+from toolkit.features.secrets_manager import SECRET_CATALOG, SecretKind
 
+REPO = pathlib.Path(__file__).resolve().parent.parent
 _BY_PATH = {spec.key_path: spec for spec in SECRET_CATALOG}
 _CLIENTS = declared_clients(load_values("staging"))
 
 
-def test_the_ssot_declares_clients_at_all() -> None:
-    assert len(_CLIENTS) >= 3, f"found {[c.get('client_id') for c in _CLIENTS]}; the lookup drifted"
+def test_the_sample_is_every_client_in_the_file() -> None:
+    """The parametrized set is measured against common.yaml itself, not a floor.
+
+    A loader change that drops a client would otherwise shrink the guard and
+    still report green over fewer clients than the docstring promises.
+    """
+    raw = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
+    in_file = {c["client_id"] for c in raw["apps"]["services"]["security"]["authelia"]["oidc_clients"]}
+    assert in_file, "common.yaml declares no OIDC clients; the path moved"
+    assert {c["client_id"] for c in _CLIENTS} == in_file
 
 
 @pytest.mark.parametrize("client", _CLIENTS, ids=lambda c: c["client_id"])
@@ -37,8 +52,15 @@ def test_digest_and_plaintext_are_audited_where_the_client_is_registered(client:
     plaintext = _BY_PATH.get(digest.derived_from)
     assert plaintext is not None, f"{digest.derived_from} is not in SECRET_CATALOG"
 
+    consumer = client["client_id"].removesuffix("-oidc")
+    copies = [
+        spec
+        for spec in SECRET_CATALOG
+        if spec.kind is SecretKind.OIDC_CLIENT_SECRET and consumer in spec.services and spec is not plaintext
+    ]
+
     declared = set(client["envs"])
-    for spec in (digest, plaintext):
+    for spec in (digest, plaintext, *copies):
         assert set(spec.envs) == declared, (
             f"{spec.key_path} is audited in {sorted(spec.envs)}, but oidc_clients registers "
             f"{client['client_id']} in {sorted(declared)}. Set envs= to match the SSOT."
