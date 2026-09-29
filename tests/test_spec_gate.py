@@ -364,8 +364,13 @@ def test_the_real_specs_tree_resolves_end_to_end() -> None:
 
 
 # ---------------------------------------------------------------------------
-# CI-GATE-013 (#1157): the body is Markdown, and code in it is not a directive
+# CI-GATE-013 (#1157), reversed for closing keywords by CI-GATE-019 (#1903)
 # ---------------------------------------------------------------------------
+#
+# CI-GATE-013 stripped code before reading closing keywords, to agree with
+# `closingIssuesReferences`. That parser is not the only one a PR body meets:
+# the squash commit carries it to master as plain text. Code still shields the
+# waiver line, which only this gate reads.
 #
 # Every expectation below about GitHub's own behaviour was measured, not
 # reasoned: a temporary PR body on kubelab#1159, read back through
@@ -441,8 +446,10 @@ def test_pr_1155_shape_passes() -> None:
     """The shape that surfaced CI-GATE-013: a document *about* closing keywords.
 
     #1155 documents that GitHub parses closing keywords out of prose, so its body
-    necessarily quotes one. GitHub linked nothing; the gate failed the PR. Both
-    parsers read the same body and disagreed, and the gate was the wrong one.
+    necessarily quotes one. GitHub linked nothing and the gate failed the PR; at
+    the time the gate was judged wrong. #1903 showed it was right: squashed, this
+    body is a commit message, and `closed #1056` in it closes #1056. A document
+    about closing keywords has to use the gerund even inside code.
 
     This is the shape rather than that PR's literal text — its body has since
     been reworded around the bug, so quoting it today would reproduce the
