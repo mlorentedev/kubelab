@@ -45,8 +45,9 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 ## Test status
 
 - Test suite: `make test` on 2026-09-24 -> `2645 passed, 15 skipped, 155 deselected, 1 xfailed` (the xfail is the AC5 guard).
-- Manual smoke test: what was exercised, what was observed
-- No regressions in existing test suite: yes / no (if no, document)
+- 2026-09-29, master `d7882172` after #1890: the AC5 guard `13 passed` with no xfail; the lesson index, spec gate and argo suites 189 passed.
+- Manual smoke test: the live before/after reads above (both clusters, the Beelink, Authelia, DNS, Uptime Kuma, R2 coverage).
+- No regressions in existing test suite: yes. CI green on #1880 and #1890 (#1890 merged unreviewed, disclosed on the PR: PR-Agent published no review in five attempts, TOOL-087 #1909).
 
 ## Inventory (2026-09-23, read-only)
 
@@ -93,7 +94,7 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 
 Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.
 
-- [x] Lesson for the repo's `docs/lessons/`? Yes: a substring guard fails on another language's words (`dominio`). A word boundary is wrong for identifiers; use a letter lookbehind.
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/ci-automation/lesson-477-a-substring-guard-matches-another-languages-words.md (a substring guard fails on another language's words; a word boundary is wrong for identifiers, so use a letter lookbehind). PR 3a also produced docs/lessons/process-method/lesson-476-a-new-step-inside-a-piecemeal-mocked-function-runs-for-real-in-every-old-test.md.
 - [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? No. ADR-061 D4 recorded the deferral, and its resolution note records the outcome.
 - [x] New pattern candidate for `00_meta/patterns/`? No. Exempting a file through its own frontmatter is specific to this repo's docs lifecycle.
 
