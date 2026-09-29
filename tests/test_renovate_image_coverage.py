@@ -132,17 +132,19 @@ def test_the_unversionable_images_are_the_ignored_ones() -> None:
 
 
 def test_the_dangerous_images_have_a_rule_of_their_own() -> None:
-    """Three cannot be treated as one more bump, each for a different reason.
+    """Four cannot be treated as one more bump, each for a different reason.
 
     headscale — its clients are the Tailscale daemons on 8 nodes, pinned
     separately and not tracked here, and it is the bootstrap dependency for the
     mesh used to reach the host that would fix it.
     postgres  — a major is a dump and restore, not an upgrade.
     authelia  — it guards everything behind ForwardAuth, Argo CD included.
+    grafana   — the tier it grants is computed by its OAuth code, whose
+                version-specific behaviour lessons 457, 461 and 463 record.
     """
     rules = _config()["packageRules"]
     covered = {name for rule in rules for name in rule.get("matchPackageNames", [])}
-    for image in ("headscale/headscale", "postgres", "authelia/authelia"):
+    for image in ("headscale/headscale", "postgres", "authelia/authelia", "grafana/grafana-oss"):
         assert image in covered, (
             f"{image} has no rule of its own, so it would be grouped into the weekly "
             f"minor+patch PR and merged with everything else"

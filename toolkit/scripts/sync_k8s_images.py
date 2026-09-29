@@ -33,6 +33,7 @@ IMAGE_SOURCES = [
     # straight from this same SSOT, so the value is still single-sourced.
     "apps.services.automation.n8n.image",
     "apps.services.automation.apprise.image",
+    "apps.services.observability.grafana.image",
     "apps.services.observability.loki.image",
     "apps.services.observability.loki.vector_image",
     "apps.services.observability.homepage.image",
