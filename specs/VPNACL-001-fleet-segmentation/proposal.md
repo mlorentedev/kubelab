@@ -35,6 +35,7 @@ After this PR:
 ## Risks / open questions
 
 - **[RESOLVED 2026-05-31 — operator decision]** `dst` matrix for `tag:hermes` = **"node-like, controlled"**. `hermes` (src) may reach only the shared service surface — Gitea (`vps:443`), Ollama (`ace2:11434`), MinIO (`beelink:9000`) — and is reachable **only by admin on `:22`** (`dst: tag:hermes:22`, via `acls` since kubelab uses sshd). **Explicitly excluded** (no rule grants them): the Headscale control plane (`vps:8080`), the K3s API (`vps:6443`, `ace1:6443`), and outbound SSH to peer nodes. Exact host:ports are pinned from the `networking` SSOT when authoring `policy.hujson` (VPN-ACL-002); the service set is adjustable once hermes's concrete workload is known.
+  - *Note 2026-09-26 (OPS-023): the MinIO target (`beelink:9000`) no longer exists. OPS-023 PR 2 removed its `accept` from the live policy, so `tag:hermes` keeps only `vps:443`. Ollama (`ace2:11434`) was retired earlier by AI-007.*
 - Single **production** control plane, no staging (ADR-015): a wrong deny-by-default could sever the live mesh. Mitigated by permissive-first (baseline cannot break flows by construction) + external probe + auto-revert (reload is reversible in seconds). Note: on v0.28 `policy check` is **syntax-only**; the `tests` block is v0.29.0.
 - **[RESOLVED 2026-05-31 — verified read-only on the live v0.28.0 VPS]**
   - `headscale version` = `v0.28.0`; `headscale policy {check,get,set}` present → syntax gate viable.

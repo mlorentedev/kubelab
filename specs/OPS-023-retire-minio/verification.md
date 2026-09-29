@@ -90,6 +90,18 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 - **Found by 3b's sweep, ticketed:** `local-development.md` carried the real dev Gitea admin password, published since 2026-05-29. Checked by consequence (it matches dev SOPS; staging and prod do not). The literal is removed here, and the rotation is #1884 (SEC-023).
 - **`docs/runbooks/pvc-backup-restore.md` was deleted in PR 1, not PR 3.** `test_runbook_targets_exist` fails on a runbook that names a removed `make` target.
 
+## Review dispositions
+
+Independent review, `review.md` (nan/mimo-v2.5, 2026-09-29, PASS WITH GAPS, minors only):
+
+- **F1, VPNACL-001 still lists the MinIO grant as resolved:** applied. `specs/VPNACL-001-fleet-segmentation/proposal.md` gains a dated note: the target is gone and PR 2 removed the `accept`.
+- **F2, AC5's exemption is broader than the proposal's wording** (the whole `specs/` tree and `docs/audits/`, not only archived specs): declined, recorded here. An active spec is where a retirement is planned, so it has to name what it retires, OPS-023's own folder included; `docs/audits/` holds dated snapshots. Both are documented in the guard's docstring. The contract is not edited under this verdict.
+- **F3, ADR-061's Consequences still points at `overlays/prod/backup.yaml`:** applied, with a dated resolution note beside the bullet.
+- **F4, the Argo CD values comment names `pvc-backup` CronJobs:** applied to the comment, not to the config. The review's premise that nothing renders a CronJob is wrong: `r2-backup-watcher`, `quota-watcher` and `disk-watcher` are CronJobs, so the health customization is still needed. The comment now names them.
+- **F5, three functions in `k8s_secrets.py` at CC 16-21:** ticketed, DEBT-018 #1914. Partly pre-existing, partly grown across lanes; it is not in this spec's scope.
+- **F6, #1890 merged without a review decision:** already disclosed on the PR and above; tracked by TOOL-087 #1909.
+- **Unverified now:** staging and the Beelink were powered off during the review, so AC1-staging, AC2-live and AC3-staging rest on the timestamped captures above. Prod, the render, AC4, AC5 and AC6 were re-run fresh by the reviewer.
+
 ## Promotion candidates
 
 Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.
