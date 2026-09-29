@@ -303,6 +303,12 @@ def audit(
 
     accepted = baselined_orphans()
     new_orphans = sorted({k for r in results for k in r.unexpected} - set(accepted))
+    # A malformed value fails too: it is the credential that exists, passes a
+    # presence check, and authenticates nothing (#1699, lesson-413).
+    malformed = sorted({f"{r.env}: {k}" for r in results for k in r.malformed})
+    if malformed:
+        logger.error(f"{len(malformed)} secret(s) present with the wrong shape: " + ", ".join(malformed))
+        logger.info("Replace each with a value minted by its issuer: toolkit secrets set <key> --env <env>")
     if new_orphans:
         logger.error(f"{len(new_orphans)} orphaned secret(s) not accounted for in the baseline:")
         for key in new_orphans:
@@ -313,6 +319,7 @@ def audit(
         logger.info("  - delete it from the vault:  toolkit secrets unset <key> --env <env>, or")
         logger.info(f"  - accept it deliberately by adding it with a reason to {ORPHAN_BASELINE_PATH.name}")
         logger.info("    (which also requires raising ORPHAN_BASELINE_MAX — the list may only shrink)")
+    if new_orphans or malformed:
         raise typer.Exit(1)
 
 
@@ -410,7 +417,7 @@ def _print_audit_result(result: AuditResult) -> None:
     """Pretty-print an audit result."""
     from toolkit.features.secrets_manager import _CATALOG_BY_KEY
 
-    total = len(result.present) + len(result.missing)
+    total = len(result.present) + len(result.missing) + len(result.malformed)
     pct = (len(result.present) / total * 100) if total > 0 else 0
 
     logger.subsection(f"{result.env.upper()} — {len(result.present)}/{total} ({pct:.0f}%)")
@@ -423,6 +430,14 @@ def _print_audit_result(result: AuditResult) -> None:
             kind = f" [{spec.kind.value}]" if spec else ""
             logger.info(f"  {key}{kind}{desc}")
 
+    if result.malformed:
+        # Key paths and the declared shape only, never the value (#1699).
+        logger.error(f"Malformed ({len(result.malformed)}) — present, but not the shape its catalog entry declares:")
+        for key in sorted(result.malformed):
+            spec = _CATALOG_BY_KEY.get(key)
+            shape = f" — expected {spec.value_pattern}" if spec else ""
+            logger.info(f"  {key}{shape}")
+
     if result.unexpected:
         # The reverse direction (#833). Key paths only, never values: this walks
         # a decrypted vault, and the transcript is a durable artifact nothing
@@ -433,9 +448,9 @@ def _print_audit_result(result: AuditResult) -> None:
         for key in result.unexpected:
             logger.info(f"  {key}")
 
-    if result.present and not result.missing and not result.unexpected:
+    if result.present and not result.missing and not result.unexpected and not result.malformed:
         logger.success("All secrets present")
-    elif result.present and not result.missing:
+    elif result.present and not result.missing and not result.malformed:
         logger.success("All catalogued secrets present")
 
 

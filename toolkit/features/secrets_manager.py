@@ -60,6 +60,12 @@ class SecretSpec:
     services: tuple[str, ...] = ()  # Which services consume this
     derived_from: str = ""  # For hashes: key_path of the plaintext source
     format_hint: str = ""  # Expected format (e.g. "argon2id hash", "PEM RSA key")
+    # A regex the whole value must match, checked by `audit` (#1699). For a value
+    # another system mints, its shape is the one fact SOPS can check offline: a
+    # generated string where a minted token belongs is present, the right length,
+    # and powerless. A floor, not proof: consequence checks (e.g. `make n8n-probe`)
+    # show the value works. Empty means "any non-empty value".
+    value_pattern: str = ""
     rotate_note: str = ""  # What breaks or needs restarting on rotation
     envs: tuple[str, ...] = ("dev", "staging", "prod")  # Which envs need this
     # Declares that this secret is DELIVERED to Google Secret Manager for the GCP
@@ -789,6 +795,10 @@ SECRET_CATALOG: list[SecretSpec] = [
         expiry=Expiry.NEVER,
         services=("n8n", "vikunja"),
         rotate_note="Update API token in Vikunja and redeploy n8n.",
+        # Vikunja mints `tk_` + 40 hex (measured in staging and prod, 2026-09-27).
+        value_pattern=r"tk_[0-9a-f]{40}",
+        # Dev runs no Vikunja, and no dev workload reads this value.
+        envs=("staging", "prod"),
     ),
     SecretSpec(
         key_path="apps.services.automation.n8n.forge_webhook_secret",
@@ -1538,6 +1548,8 @@ class AuditResult:
     present: list[str] = field(default_factory=list)
     missing: list[str] = field(default_factory=list)
     unexpected: list[str] = field(default_factory=list)
+    # Present, but not the shape its catalog entry declares (`value_pattern`).
+    malformed: list[str] = field(default_factory=list)
 
 
 class RotationRefused(Exception):
@@ -1656,7 +1668,10 @@ class SecretsManager:
             # A placeholder sentinel (REPLACE_WITH_SOPS_VALUE/CHANGE_ME) is syntactically
             # present but not configured — treat as missing (TOOL-019 / C6).
             if value is not None and str(value).strip() and not is_placeholder(value):
-                result.present.append(spec.key_path)
+                if spec.value_pattern and not re.fullmatch(spec.value_pattern, str(value)):
+                    result.malformed.append(spec.key_path)
+                else:
+                    result.present.append(spec.key_path)
             else:
                 result.missing.append(spec.key_path)
 
