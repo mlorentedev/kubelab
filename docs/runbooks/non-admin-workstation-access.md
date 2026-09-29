@@ -178,26 +178,36 @@ SSOT:
 Prerequisite: use a `ts-bridge` build whose help lists the `browser` command.
 Do not reuse or inspect an Apps `.env` file for this flow.
 
-Create a one-use, short-lived Headscale key and write it directly to a local
-file. The key must never be printed, pasted into chat, or passed as a command
-argument:
+Create a one-use, short-lived Headscale key from Git Bash, where the userspace
+`ssh-agent` can unlock the workstation's passphrase-protected SSH key. Redirect
+the key directly to a local file; it must never be printed, pasted into chat, or
+passed as a command argument:
+
+```bash
+key_file="$HOME/.ts-bridge/authkey-headscale-kubelab"
+mkdir -p "$(dirname "$key_file")"
+rm -f "$key_file"
+
+if ! ssh vps-pub \
+  'docker exec headscale headscale preauthkeys create --user 3 --ephemeral --expiration 1h' \
+  >"$key_file"; then
+  rm -f "$key_file"
+  echo "Headscale key generation failed" >&2
+  exit 1
+fi
+
+if [ ! -s "$key_file" ]; then
+  rm -f "$key_file"
+  echo "Headscale did not write an auth key" >&2
+  exit 1
+fi
+```
+
+Then restrict the file from PowerShell:
 
 ```powershell
 $configDir = Join-Path $env:USERPROFILE ".ts-bridge"
 $keyFile = Join-Path $configDir "authkey-headscale-kubelab"
-$ErrorActionPreference = "Stop"
-New-Item -ItemType Directory -Force $configDir | Out-Null
-Remove-Item -LiteralPath $keyFile -Force -ErrorAction SilentlyContinue
-
-ssh vps-pub 'docker exec headscale headscale preauthkeys create --user 3 --ephemeral --expiration 1h' |
-  Set-Content -LiteralPath $keyFile -Encoding ascii -NoNewline
-
-if ($LASTEXITCODE -ne 0 -or
-    -not (Test-Path -LiteralPath $keyFile) -or
-    (Get-Item -LiteralPath $keyFile).Length -eq 0) {
-  Remove-Item -LiteralPath $keyFile -Force -ErrorAction SilentlyContinue
-  throw "Headscale did not write an auth key"
-}
 icacls $keyFile /inheritance:r /grant:r "${env:USERNAME}:(R)" | Out-Null
 ```
 
