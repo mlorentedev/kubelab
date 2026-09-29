@@ -264,8 +264,21 @@ The bridge between SOPS and Kubernetes. Defined in `toolkit/features/k8s_secrets
 
 ## Environment Parity Checklist
 
-Run `toolkit secrets audit` to verify. All environments should have the same secrets
-(except `users_testuser_password_hash` which is dev/staging only).
+Run `toolkit secrets audit` to verify. Each environment must hold every secret whose
+catalog entry lists it in `envs`; that is the parity rule, not "the same secrets
+everywhere" (for example, the Vikunja API token is staging and prod only).
+
+The audit fails, after printing everything, on two things beyond a missing key:
+
+- **Orphaned**: a value in a vault that no `SECRET_CATALOG` entry owns, and that is
+  not in `infra/config/orphan-secrets-baseline.yaml`.
+- **Malformed**: a value that is present but does not match its entry's
+  `value_pattern` (#1699). This is the credential that passes a presence check and
+  authenticates nothing: a generated string where an issuer-minted token belongs.
+  Replace it with a value minted by its issuer (`toolkit secrets set <key> --env
+  <env>`). Only the key and the expected shape are printed, never the value.
+  A matching shape is a floor, not proof: check by consequence (e.g. `make
+  n8n-probe` exercises the Vikunja token).
 
 ## Related
 

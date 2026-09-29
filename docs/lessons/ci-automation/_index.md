@@ -1,9 +1,10 @@
 # CI workflows, gates and the GitHub surface
 
-34 lessons, newest first. Back to [all categories](../_index.md).
+35 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 483 | [A squash merge turns the PR body into plain text, where code shields no closing keyword](lesson-483-a-squash-merge-turns-the-pr-body-into-plain-text-where-code-shields-no-closing-keyword.md) | 2026-09-28 |
 | 467 | [An n8n IF node at `typeVersion: 2` with v1-shaped conditions always passes, and `rawBody` never reaches `$json`](lesson-467-an-n8n-v2-if-node-with-v1-parameters-always-passes.md) | 2026-09-25 |
 | 462 | [A Gitea hook subscribed to `pull_request` also delivers PR comments, and the narrow name is `pull_request_only`](lesson-462-a-gitea-pull-request-hook-also-delivers-comments.md) | 2026-09-24 |
 | 446 | [A Dependabot pull request reads an empty secret store, so a reviewer that needs a credential must say it cannot run — not fail](lesson-446-a-dependabot-pull-request-reads-an-empty-secret-store-so-a-reviewer-that-needs-one-must-say-it-cannot-run.md) | 2026-08-24 |
