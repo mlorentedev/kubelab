@@ -306,6 +306,19 @@ class TestSetRevisionRefusesAnApplicationAnotherLaneHolds:
 
         assert run.call_count == 2
 
+    def test_known_limit_a_patch_back_is_not_guarded_whoever_holds_it(self) -> None:
+        """Pinned on purpose, not an oversight (pr-agent on #1893). The command
+        cannot tell the holder's own patch-back from anyone else's, and requiring
+        FORCE for every patch-back would make FORCE routine. It reports the value
+        it replaced instead."""
+        with patch(
+            "toolkit.features.argo_manager.subprocess.run",
+            _mock_kubectl(_app_on("fix/other-lane"), _app_on("master")),
+        ):
+            result = set_revision(app="kubelab-staging", rev="master", kubeconfig="/tmp/kc")
+
+        assert result.old_revision == "fix/other-lane"
+
 
 class TestSetRevisionPatchesOnlyTheRevisionItRead:
     """The guard reads, then patches: without a precondition, two lanes that both
@@ -380,9 +393,12 @@ class TestSetRevisionPatchesOnlyTheRevisionItRead:
         import subprocess
 
         steps = [self._read("master", "4711"), self._conflict(), self._read("master", "4712"), self._conflict()]
-        with patch("toolkit.features.argo_manager.subprocess.run", MagicMock(side_effect=steps)):
+        with patch("toolkit.features.argo_manager.subprocess.run", MagicMock(side_effect=steps)) as run:
             with pytest.raises(subprocess.CalledProcessError):
                 set_revision(app="kubelab-staging", rev="feat/mine", kubeconfig="/tmp/kc")
+
+        # Read, conflict, read, conflict: without the retry it stops at 2.
+        assert run.call_count == 4
 
 
 @pytest.mark.parametrize(("force", "expected"), [("", False), ("0", False), ("1", True)])

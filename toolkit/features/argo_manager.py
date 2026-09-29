@@ -101,6 +101,8 @@ def set_revision(
     different branch unless ``force``: that branch is another lane's live preview,
     and on 2026-09-25 the old value was only printed after the patch (#1083).
     Pointing back at ``release`` is never refused, because that is the patch-back.
+    Known limit: that holds whoever runs it, since the command cannot tell the
+    holder's patch-back from another lane's; ``old_revision`` names what it replaced.
     """
     for attempt in range(_PATCH_ATTEMPTS):
         before = _read_application(app, kubeconfig, namespace)
