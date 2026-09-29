@@ -44,6 +44,23 @@ def test_the_sample_is_every_client_in_the_file() -> None:
     assert {c["client_id"] for c in _CLIENTS} == in_file
 
 
+def test_no_env_overlay_declares_clients() -> None:
+    """The sample reads common.yaml, so a client declared in an overlay would escape it.
+
+    Overlays replace lists when they deep-merge, so a client added in
+    `prod.yaml` would be parametrized nowhere and its catalog envs would drift
+    unchecked. `envs` on each client is how one env differs from another.
+    """
+    for values in sorted((REPO / "infra/config/values").glob("*.yaml")):
+        if values.name == "common.yaml":
+            continue
+        overlay = yaml.safe_load(values.read_text(encoding="utf-8")) or {}
+        authelia = overlay.get("apps", {}).get("services", {}).get("security", {}).get("authelia", {})
+        assert "oidc_clients" not in authelia, (
+            f"{values.name} declares oidc_clients; declare them once in common.yaml with envs="
+        )
+
+
 @pytest.mark.parametrize("client", _CLIENTS, ids=lambda c: c["client_id"])
 def test_digest_and_plaintext_are_audited_where_the_client_is_registered(client: dict) -> None:
     digest = _BY_PATH.get(digest_key(client["client_id"]))
