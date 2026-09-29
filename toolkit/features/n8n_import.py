@@ -400,6 +400,7 @@ def _exec(env: str, spec: N8nImportSpec, what: str, argv: list[str], stdin: str 
             cmd = ["kubectl", "exec", *stdin_flag, "-n", spec.namespace, f"pod/{pod}", "--kubeconfig", kc, "--", *argv]
             if _run(cmd, stdin=stdin, label=f"{what} in pod/{pod}"):
                 return True
+            logger.error(f"  pod/{pod} now: {_pod_record(env, spec, pod)}")
         if attempt == 1:
             logger.info(f"  Waiting for {spec.deployment} to be ready before retrying {what}...")
             _wait_rollout_ready(env, spec)
@@ -408,6 +409,29 @@ def _exec(env: str, spec: N8nImportSpec, what: str, argv: list[str], stdin: str 
 
 def _live_pod(env: str, spec: N8nImportSpec) -> str | None:
     """Name of a pod of `spec` that is Running, Ready and not being deleted."""
+    pods = _list_pods(env, spec)
+    return next((p["metadata"]["name"] for p in pods or [] if _is_live(p)), None)
+
+
+def _pod_record(env: str, spec: N8nImportSpec, name: str) -> str:
+    """What the pod says about itself after a failed exec.
+
+    A container killed mid-exec (OOM, liveness) and a real import error both
+    surface as a failed `kubectl exec`; only the pod's restart count and last
+    termination tell them apart.
+    """
+    pod = next((p for p in _list_pods(env, spec) or [] if p["metadata"]["name"] == name), None)
+    if pod is None:
+        return "gone"
+    parts = ["deleting"] if pod["metadata"].get("deletionTimestamp") else []
+    for status in pod.get("status", {}).get("containerStatuses", []):
+        last = status.get("lastState", {}).get("terminated") or {}
+        died = f" last={last.get('reason')}/{last.get('exitCode')} at={last.get('finishedAt')}" if last else ""
+        parts.append(f"{status.get('name')} restarts={status.get('restartCount', 0)}{died}")
+    return ", ".join(parts) or "no container status"
+
+
+def _list_pods(env: str, spec: N8nImportSpec) -> list[dict[str, Any]] | None:
     cmd = [
         "kubectl",
         "get",
@@ -423,11 +447,11 @@ def _live_pod(env: str, spec: N8nImportSpec) -> str | None:
     ]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        pods = json.loads(result.stdout).get("items", [])
+        pods: list[dict[str, Any]] = json.loads(result.stdout).get("items", [])
     except (subprocess.CalledProcessError, json.JSONDecodeError) as exc:
         logger.error(f"  Listing n8n pods failed: {(getattr(exc, 'stderr', None) or str(exc)).strip()}")
         return None
-    return next((p["metadata"]["name"] for p in pods if _is_live(p)), None)
+    return pods
 
 
 def _is_live(pod: dict[str, Any]) -> bool:
