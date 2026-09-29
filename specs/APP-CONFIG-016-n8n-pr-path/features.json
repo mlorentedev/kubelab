@@ -1,0 +1,44 @@
+[
+  {
+    "id": "APP-CONFIG-016-n8n-pr-path-f1",
+    "behavior": "AC1: Extract Matched Task ID resolves the exact-key task on every n8n item shape, never a substring match, and fails on a failed search",
+    "verification": "poetry run pytest --no-cov -q tests/test_n8n_pr_path.py -k 'exact_task or longer_key or no_results or failed_search or emits_an_item'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "APP-CONFIG-016-n8n-pr-path-f2",
+    "behavior": "AC2: only opened/reopened (comment) and a merged close (done) write; every other event, unsigned or keyless, writes nothing",
+    "verification": "poetry run pytest --no-cov -q tests/test_n8n_pr_path.py -k 'forward_moving or unsigned_merge or keyless_merge or routes_only or state_write'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "APP-CONFIG-016-n8n-pr-path-f3",
+    "behavior": "AC3: no node fed by an HTTP Request node reads an event field from $json, in any workflow (slack-task-capture xfail strict, #1877)",
+    "verification": "poetry run pytest --no-cov -q tests/test_n8n_event_reads.py",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "APP-CONFIG-016-n8n-pr-path-f4",
+    "behavior": "AC4: no httpRequest node carries parameters.options.continueOnFail, in any workflow (slack-task-capture xfail strict, #1877)",
+    "verification": "poetry run pytest --no-cov -q tests/test_n8n_http_error_handling.py",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "APP-CONFIG-016-n8n-pr-path-f5",
+    "behavior": "AC5: the write body is the searched task with only done changed, and the writes read the event from the extractor",
+    "verification": "poetry run pytest --no-cov -q tests/test_n8n_pr_path.py -k 'update_body or writes_read or write_failure or names_the_pull_request or names_its_status'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "APP-CONFIG-016-n8n-pr-path-f6",
+    "behavior": "AC6: make n8n-probe sends a signed merge for a task it created and reads back done, an intact description and one PR comment; unsigned forge probes assert status ignored",
+    "verification": "make n8n-probe ENV=staging",
+    "state": "pending",
+    "evidence": ""
+  }
+]
