@@ -27,18 +27,18 @@ created: "2026-09-26"
 - [x] [P] [AC3] Failing test: `declared_tiers` is three-valued and each app maps it ✓ 2026-09-26
 - [x] [AC3] `access_review.py`: `declared_tiers`, per-app tier maps, docstring ✓ 2026-09-26
 - [x] [AC4] Amend ADR-062 D2 ✓ 2026-09-26
-- [ ] `make test`, then PR
-- [ ] [AC2] [AC3] Staging: Grafana Editor for `operator` after `make auth-review ENV=staging APPLY=1`
-- [ ] [AC5] Prod after merge: `make deploy-argocd` (operator go-ahead: restarts Authelia), `make auth-review ENV=prod APPLY=1`, browser check of both halves
+- [x] `make test`, then PR (#1870) ✓ 2026-09-26
+- [x] [AC2] [AC3] Staging: Grafana Editor for `operator` after `make auth-review ENV=staging APPLY=1` (needed `make apply-secrets ENV=staging` first, #1911) ✓ 2026-09-29
+- [x] [AC5] Prod after merge: `make deploy-argocd` (operator go-ahead: restarts Authelia), `make auth-review ENV=prod APPLY=1`, browser check of both halves ✓ 2026-09-29
 
 ## Closing
 
-- [ ] Every acceptance criterion from `proposal.md` is covered by at least one test
-- [ ] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command
-- [ ] Lint passes
-- [ ] No unrelated changes in the diff
-- [ ] `verification.md` filled in
-- [ ] PR opened referencing this spec folder
+- [x] Every acceptance criterion from `proposal.md` is covered by at least one test ✓ 2026-09-29
+- [x] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command ✓ 2026-09-29
+- [x] Lint passes ✓ 2026-09-29
+- [x] No unrelated changes in the diff ✓ 2026-09-29
+- [x] `verification.md` filled in ✓ 2026-09-29
+- [x] PR opened referencing this spec folder ✓ 2026-09-29
 
 ## Machine-readable features
 

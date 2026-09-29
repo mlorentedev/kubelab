@@ -276,7 +276,11 @@ ARGOCD_TOKEN_LIFESPAN = "1h"
 
 
 def argocd_group_bound(read_cm: Callable[[], str]) -> str:
-    """How long a changed group can go unseen by Argo CD, read from the LIVE hub.
+    """How long a changed group can go unseen by Argo CD.
+
+    Whether groups come from UserInfo at all is read from the LIVE hub. The bound
+    itself is the declared ARGOCD_TOKEN_LIFESPAN, which a test holds to the repo's
+    Authelia config and pinned version, not something read from the running IdP.
 
     With `enableUserInfoGroups`, Argo CD reads the groups from Authelia's UserInfo,
     which fixes them at token issue: a change is seen within ARGOCD_TOKEN_LIFESPAN,

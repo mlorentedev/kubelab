@@ -355,6 +355,12 @@ def test_the_argo_cd_bound_is_the_token_lifespan_authelia_actually_issues() -> N
     clients = COMMON["apps"]["services"]["security"]["authelia"]["oidc_clients"]
     argocd = next(c for c in clients if c["client_id"] == "argocd")
     assert "lifespan" not in argocd, "the argocd client names a lifespan: update ARGOCD_TOKEN_LIFESPAN"
+    # The 1h is Authelia 4.39's default, so it only holds for the image we pin: an
+    # upgrade to another minor must re-measure the default before this passes again.
+    image = COMMON["apps"]["services"]["security"]["authelia"]["image"]
+    assert image.split(":", 1)[1].startswith("4.39."), (
+        f"Authelia is pinned to {image}: re-measure its default token lifespan, then update ARGOCD_TOKEN_LIFESPAN"
+    )
     assert ARGOCD_TOKEN_LIFESPAN == "1h", "Authelia 4.39's default access and ID token lifespan"
 
 
