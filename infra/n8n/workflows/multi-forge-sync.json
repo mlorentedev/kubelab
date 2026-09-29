@@ -31,7 +31,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Extract event info, validate the HMAC SHA-256 signature (fail-closed), and parse the task key.\n//\n// The signature is checked over the exact bytes the forge sent. Behind a Webhook v2\n// with `rawBody: true`, n8n 2.12.3 delivers them in the `data` binary property and\n// never as `$json.rawBody` (#1712, lesson-467); `getBinaryDataBuffer` reads them in\n// either binary storage mode. No bytes means nothing to verify, so nothing is\n// trusted: re-serialising the parsed body is deliberately not a fallback, because\n// it never reproduces what a forge signed, and it would verify bytes nobody sent.\nconst crypto = require('crypto');\nlet raw = null;\ntry {\n  raw = await this.helpers.getBinaryDataBuffer(0, 'data');\n} catch (e) {\n  raw = null;\n}\nconst body = (typeof $json.body === 'object' && $json.body !== null) ? $json.body : {};\n\nconst headers = $json.headers || {};\nconst action = body.action || 'push';\nconst pr = body.pull_request || {};\nconst issue = body.issue || {};\nconst repo = body.repository || {};\nconst isMerged = Boolean(pr.merged);\n\n// An `issues` event carries `issue` and no `pull_request`. Gitea also sends an\n// `issue` object for pull-request comment events, where `issue.pull_request` is\n// populated -- excluded here, or a PR comment would be treated as a new issue.\nconst isIssueEvent = Boolean(body.issue && !body.pull_request && !issue.pull_request);\n\nconst title = pr.title || issue.title || body.head_commit?.message || '';\nconst branch = pr.head?.ref || body.ref || '';\nconst prUrl = pr.html_url || '';\nconst issueUrl = issue.html_url || '';\nconst issueNumber = issue.number || body.number || null;\nconst repoOwner = repo.owner?.login || repo.owner?.username || (repo.full_name || '').split('/')[0] || '';\nconst repoName = repo.name || '';\n\n// Match task key pattern (e.g. IDP-035, GITOPS-003, APP-CONFIG-008).\n//\n// The AREA may itself be hyphenated -- `APP-CONFIG`, `CI-GATE`, `SEC-VIKUNJA`\n// are live on this board. A single `[A-Z]{2,10}-(\\d+)` truncates those to\n// `CONFIG-008` / `GATE-018` / `VIKUNJA-001`, because `\\b` lets the match restart\n// after the first hyphen. Measured 2026-09-05 over 300 real issue titles: 25 of\n// the 256 that matched were truncated, spanning five whole AREAs.\n//\n// The truncation could not surface as a failed lookup, which is why it survived:\n// `?s=` is a SUBSTRING search, so `?s=CONFIG-008` still finds a task titled\n// `APP-CONFIG-008: ...`. It surfaces only as a collision between two AREAs\n// sharing a final segment -- and by then two tickets share one key.\n//\n// Repeating the segment keeps the whole AREA. Verified over the same 300 titles:\n// the set of titles that match is IDENTICAL (256), so no event starts or stops\n// being processed; 25 of them merely carry their full key now.\nconst match = (title + ' ' + branch).toUpperCase().match(/\\b([A-Z]{2,10}(?:-[A-Z]{2,10})*)-(\\d+)\\b/);\nconst taskKey = match ? match[0] : null;\nconst taskId = match ? parseInt(match[2], 10) : null;\n\n// HMAC validation: strictly fail-closed. Gitea sends bare hex, GitHub `sha256=<hex>`.\nconst isGitHub = Boolean(headers['x-hub-signature-256']);\nconst isGitea = Boolean(headers['x-gitea-signature']);\nconst sig = String(headers['x-hub-signature-256'] || headers['x-gitea-signature'] || '').replace(/^sha256=/, '');\nconst secret = (isGitHub && $env.GITHUB_WEBHOOK_SECRET) || (isGitea && $env.GITEA_WEBHOOK_SECRET) || $env.FORGE_WEBHOOK_SECRET || '';\nlet isValidSig = false;\n\nif (secret && sig && raw && raw.length > 0) {\n  const expected = crypto.createHmac('sha256', secret).update(raw).digest();\n  // Invalid hex decodes short, so the length check rejects it before the compare.\n  const given = Buffer.from(sig, 'hex');\n  isValidSig = given.length === expected.length && crypto.timingSafeEqual(given, expected);\n}\n\nlet targetBucket = 'In Progress';\nlet isDone = false;\nif (action === 'closed' && isMerged) {\n  targetBucket = 'Done';\n  isDone = true;\n} else if (['opened', 'synchronize', 'reopened'].includes(action)) {\n  targetBucket = 'In Review';\n  isDone = false;\n}\n\n// The create-path's trigger floor. It mirrors `add-to-project.yml`, the workflow\n// being retired, which fires on `opened` and `reopened` and nothing else -- so\n// the invariant ported here is exactly the one that existed, not a wider one.\n// `closed` and `edited` deliberately fall through to a 200 without creating:\n// creating a task from a closing issue would resurrect work, not track it.\nconst CREATE_ACTIONS = ['opened', 'reopened'];\nconst isCreateCandidate = Boolean(taskKey && isValidSig && isIssueEvent && CREATE_ACTIONS.includes(action));\n\nreturn [{\n  json: {\n    taskKey: taskKey,\n    taskId: taskId,\n    action: action,\n    isMerged: isMerged,\n    isDone: isDone,\n    targetBucket: targetBucket,\n    prUrl: prUrl,\n    title: title,\n    issueUrl: issueUrl,\n    issueNumber: issueNumber,\n    repoOwner: repoOwner,\n    repoName: repoName,\n    isIssueEvent: isIssueEvent,\n    isCreateCandidate: isCreateCandidate,\n    hasTask: Boolean(taskKey && isValidSig),\n    isValidSig: isValidSig\n  }\n}];"
+        "jsCode": "// Extract event info, validate the HMAC SHA-256 signature (fail-closed), and parse the task key.\n//\n// The signature is checked over the exact bytes the forge sent. Behind a Webhook v2\n// with `rawBody: true`, n8n 2.12.3 delivers them in the `data` binary property and\n// never as `$json.rawBody` (#1712, lesson-467); `getBinaryDataBuffer` reads them in\n// either binary storage mode. No bytes means nothing to verify, so nothing is\n// trusted: re-serialising the parsed body is deliberately not a fallback, because\n// it never reproduces what a forge signed, and it would verify bytes nobody sent.\nconst crypto = require('crypto');\nlet raw = null;\ntry {\n  raw = await this.helpers.getBinaryDataBuffer(0, 'data');\n} catch (e) {\n  raw = null;\n}\nconst body = (typeof $json.body === 'object' && $json.body !== null) ? $json.body : {};\n\nconst headers = $json.headers || {};\nconst action = body.action || 'push';\nconst pr = body.pull_request || {};\nconst issue = body.issue || {};\nconst repo = body.repository || {};\nconst isMerged = Boolean(pr.merged);\n\n// An `issues` event carries `issue` and no `pull_request`. Gitea also sends an\n// `issue` object for pull-request comment events, where `issue.pull_request` is\n// populated -- excluded here, or a PR comment would be treated as a new issue.\nconst isIssueEvent = Boolean(body.issue && !body.pull_request && !issue.pull_request);\n\nconst title = pr.title || issue.title || body.head_commit?.message || '';\nconst branch = pr.head?.ref || body.ref || '';\nconst prUrl = pr.html_url || '';\nconst issueUrl = issue.html_url || '';\nconst issueNumber = issue.number || body.number || null;\nconst repoOwner = repo.owner?.login || repo.owner?.username || (repo.full_name || '').split('/')[0] || '';\nconst repoName = repo.name || '';\n\n// Match task key pattern (e.g. IDP-035, GITOPS-003, APP-CONFIG-008).\n//\n// The AREA may itself be hyphenated -- `APP-CONFIG`, `CI-GATE`, `SEC-VIKUNJA`\n// are live on this board. A single `[A-Z]{2,10}-(\\d+)` truncates those to\n// `CONFIG-008` / `GATE-018` / `VIKUNJA-001`, because `\\b` lets the match restart\n// after the first hyphen. Measured 2026-09-05 over 300 real issue titles: 25 of\n// the 256 that matched were truncated, spanning five whole AREAs.\n//\n// The truncation could not surface as a failed lookup, which is why it survived:\n// `?s=` is a SUBSTRING search, so `?s=CONFIG-008` still finds a task titled\n// `APP-CONFIG-008: ...`. It surfaces only as a collision between two AREAs\n// sharing a final segment -- and by then two tickets share one key.\n//\n// Repeating the segment keeps the whole AREA. Verified over the same 300 titles:\n// the set of titles that match is IDENTICAL (256), so no event starts or stops\n// being processed; 25 of them merely carry their full key now.\nconst match = (title + ' ' + branch).toUpperCase().match(/\\b([A-Z]{2,10}(?:-[A-Z]{2,10})*)-(\\d+)\\b/);\nconst taskKey = match ? match[0] : null;\nconst taskId = match ? parseInt(match[2], 10) : null;\n\n// HMAC validation: strictly fail-closed. Gitea sends bare hex, GitHub `sha256=<hex>`.\nconst isGitHub = Boolean(headers['x-hub-signature-256']);\nconst isGitea = Boolean(headers['x-gitea-signature']);\nconst sig = String(headers['x-hub-signature-256'] || headers['x-gitea-signature'] || '').replace(/^sha256=/, '');\nconst secret = (isGitHub && $env.GITHUB_WEBHOOK_SECRET) || (isGitea && $env.GITEA_WEBHOOK_SECRET) || $env.FORGE_WEBHOOK_SECRET || '';\nlet isValidSig = false;\n\nif (secret && sig && raw && raw.length > 0) {\n  const expected = crypto.createHmac('sha256', secret).update(raw).digest();\n  // Invalid hex decodes short, so the length check rejects it before the compare.\n  const given = Buffer.from(sig, 'hex');\n  isValidSig = given.length === expected.length && crypto.timingSafeEqual(given, expected);\n}\n\nlet targetBucket = 'In Progress';\nlet isDone = false;\nif (action === 'closed' && isMerged) {\n  targetBucket = 'Done';\n  isDone = true;\n} else if (['opened', 'synchronize', 'reopened'].includes(action)) {\n  targetBucket = 'In Review';\n  isDone = false;\n}\n\n// The create-path's trigger floor. It mirrors `add-to-project.yml`, the workflow\n// being retired, which fires on `opened` and `reopened` and nothing else -- so\n// the invariant ported here is exactly the one that existed, not a wider one.\n// `closed` and `edited` deliberately fall through to a 200 without creating:\n// creating a task from a closing issue would resurrect work, not track it.\nconst CREATE_ACTIONS = ['opened', 'reopened'];\nconst isCreateCandidate = Boolean(taskKey && isValidSig && isIssueEvent && CREATE_ACTIONS.includes(action));\n\n// What a pull-request event may write, forward only (ADR-066 D4; the operator's\n// rule of 2026-09-27, APP-CONFIG-016). Opening or reopening a PR links it with\n// one comment. A merge marks the task done. Nothing else writes: a push, a\n// review or PR comment, a sync, an edit or an unmerged close would each have\n// added a comment and set `done: false`, un-doing finished work. A comment\n// event carries `pull_request` too on GitHub, so it is excluded by `comment`.\nconst isPullRequestEvent = Boolean(body.pull_request) && !body.comment && !body.review;\nlet prWriteKind = 'none';\nif (isPullRequestEvent && ['opened', 'reopened'].includes(action)) {\n  prWriteKind = 'comment';\n} else if (isPullRequestEvent && action === 'closed' && isMerged) {\n  prWriteKind = 'done';\n}\nconst isTrackedPrEvent = Boolean(taskKey && isValidSig && prWriteKind !== 'none');\n\nreturn [{\n  json: {\n    taskKey: taskKey,\n    taskId: taskId,\n    action: action,\n    isMerged: isMerged,\n    isDone: isDone,\n    targetBucket: targetBucket,\n    prUrl: prUrl,\n    title: title,\n    issueUrl: issueUrl,\n    issueNumber: issueNumber,\n    repoOwner: repoOwner,\n    repoName: repoName,\n    isIssueEvent: isIssueEvent,\n    isCreateCandidate: isCreateCandidate,\n    prWriteKind: prWriteKind,\n    isTrackedPrEvent: isTrackedPrEvent,\n    hasTask: Boolean(taskKey && isValidSig),\n    isValidSig: isValidSig\n  }\n}];"
       },
       "id": "b2000000-0000-4000-8000-000000000002",
       "name": "Parse Forge Event",
@@ -88,9 +88,7 @@
             }
           ]
         },
-        "options": {
-          "continueOnFail": true
-        }
+        "options": {}
       },
       "id": "b2000000-0000-4000-8000-000000000008",
       "name": "Find Vikunja Task by Key",
@@ -99,11 +97,12 @@
       "position": [
         240,
         -100
-      ]
+      ],
+      "alwaysOutputData": true
     },
     {
       "parameters": {
-        "jsCode": "// Resolve matched task ID from search results; do not guess random IDs\nconst searchResults = Array.isArray($json) ? $json : ($json.data || []);\nconst event = $('Parse Forge Event').first().json;\nlet resolvedTaskId = null;\n\nif (searchResults.length > 0 && searchResults[0].id) {\n  resolvedTaskId = searchResults[0].id;\n}\n\nreturn [{\n  json: {\n    ...event,\n    taskId: resolvedTaskId,\n    hasMatchedTask: Boolean(resolvedTaskId)\n  }\n}];"
+        "jsCode": "// Find the task this pull request names -- by an EXACT key match -- and build\n// what the writes after it send.\n//\n// READ THE ITEMS, NOT `$json`. An HTTP node handed a JSON array emits ONE ITEM\n// PER ELEMENT, so `$json` here is the first task, not the list. This node read\n// `$json` as the list until APP-CONFIG-016 (#1871): with a match it saw one\n// object and concluded \"no results\", and with no match the search emitted no\n// item at all, so no pull request ever reached its task. `$input.all()` covers\n// every shape: split items, one item wrapping an array or `{data: [...]}`, and\n// the empty item `alwaysOutputData` emits.\nconst event = $('Parse Forge Event').first().json;\nconst items = $input.all().map(i => i.json);\n\n// A failed search is not an empty one. The search node has no `onError`, so a\n// 401 or a timeout halts the run before this node; an error item reaching here\n// means someone added one, and answering \"no task\" for it would be a lie.\nconst failed = items.find(i => i && i.error);\nif (failed) {\n  throw new Error('Vikunja task search failed: ' + JSON.stringify(failed.error).slice(0, 200));\n}\n\nlet results;\nif (items.length === 1 && Array.isArray(items[0])) {\n  results = items[0];\n} else if (items.length === 1 && items[0] && Array.isArray(items[0].data)) {\n  results = items[0].data;\n} else {\n  results = items.filter(i => i && i.id);\n}\n\n// `?s=` is a SUBSTRING search, so `TOOL-035` also finds `TOOL-0350: ...`, and\n// taking `results[0]` would mark the wrong task done (#1692). The rule is\n// `Extract Issue Task Match`'s: the title starts with the key, and the next\n// character is not a digit.\nconst key = (event.taskKey || '').toUpperCase();\nconst task = results.find(t => {\n  const title = (t.title || '').toUpperCase();\n  return key && title.startsWith(key) && !/[0-9]/.test(title.charAt(key.length));\n}) || null;\n\n// Vikunja 1.0's `POST /tasks/{id}` is a FULL update: `Task.updateSingleTask`\n// clears description, priority, dates and colour when the body omits them, and\n// rejects an empty title. So the write sends the task as searched, with only\n// `done` changed. The field-scoped `POST /tasks/bulk` would need a token\n// permission (`tasks.update_bulk`) neither environment's token carries.\nconst merged = event.prWriteKind === 'done';\nreturn [{\n  json: {\n    ...event,\n    taskId: task ? task.id : null,\n    hasMatchedTask: Boolean(task),\n    updateBody: task ? Object.assign({}, task, { done: true }) : null,\n    comment: 'Linked PR: ' + event.prUrl + ' (' + (merged ? 'merged' : event.action) + ')',\n  }\n}];"
       },
       "id": "b2000000-0000-4000-8000-000000000009",
       "name": "Extract Matched Task ID",
@@ -150,7 +149,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=http://vikunja:3456/api/v1/tasks/{{ $json.taskId }}",
+        "url": "=http://vikunja:3456/api/v1/tasks/{{ $('Extract Matched Task ID').first().json.taskId }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -162,10 +161,8 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ done: $json.isDone }) }}",
-        "options": {
-          "continueOnFail": true
-        }
+        "jsonBody": "={{ JSON.stringify($('Extract Matched Task ID').first().json.updateBody) }}",
+        "options": {}
       },
       "id": "b2000000-0000-4000-8000-000000000004",
       "name": "Update Vikunja Task State",
@@ -179,7 +176,7 @@
     {
       "parameters": {
         "method": "PUT",
-        "url": "=http://vikunja:3456/api/v1/tasks/{{ $json.taskId }}/comments",
+        "url": "=http://vikunja:3456/api/v1/tasks/{{ $('Extract Matched Task ID').first().json.taskId }}/comments",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -191,10 +188,8 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ comment: '🔗 Linked PR: ' + $json.prUrl + ' (' + $json.action + ')' }) }}",
-        "options": {
-          "continueOnFail": true
-        }
+        "jsonBody": "={{ JSON.stringify({ comment: $('Extract Matched Task ID').first().json.comment }) }}",
+        "options": {}
       },
       "id": "b2000000-0000-4000-8000-000000000005",
       "name": "Append PR URL Comment",
@@ -211,7 +206,7 @@
         "url": "http://apprise:8000/notify/kubelab",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ tag: 'deploy', title: '📋 Forge Sync: ' + $json.taskKey + ' -> ' + $json.targetBucket, body: 'PR: ' + $json.prUrl + ' (' + $json.action + ')', type: 'info' }) }}",
+        "jsonBody": "={{ JSON.stringify({ tag: 'deploy', title: 'Forge Sync: ' + $('Extract Matched Task ID').first().json.taskKey + ($('Extract Matched Task ID').first().json.prWriteKind === 'done' ? ' done' : ' linked'), body: 'PR: ' + $('Extract Matched Task ID').first().json.prUrl + ' (' + $('Extract Matched Task ID').first().json.action + ')', type: 'info' }) }}",
         "options": {}
       },
       "id": "b2000000-0000-4000-8000-000000000006",
@@ -226,7 +221,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ status: 'ok', taskKey: $json.taskKey, targetBucket: $json.targetBucket }) }}",
+        "responseBody": "={{ JSON.stringify({ status: $json.hasMatchedTask === false ? 'no-task' : 'ignored', taskKey: $json.taskKey }) }}",
         "options": {
           "responseCode": 200
         }
@@ -293,9 +288,7 @@
             }
           ]
         },
-        "options": {
-          "continueOnFail": true
-        }
+        "options": {}
       },
       "id": "n-find-task-for-issue",
       "name": "Find Task for Issue",
@@ -305,7 +298,8 @@
         540,
         220
       ],
-      "alwaysOutputData": true
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -353,9 +347,7 @@
             }
           ]
         },
-        "options": {
-          "continueOnFail": true
-        }
+        "options": {}
       },
       "id": "n-resolve-vikunja-project",
       "name": "Resolve Vikunja Project",
@@ -365,7 +357,8 @@
         1140,
         320
       ],
-      "alwaysOutputData": true
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -495,6 +488,89 @@
         1740,
         420
       ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "b1231ec4-f023-5089-bd60-a8479f298acf",
+              "leftValue": "={{ $json.isTrackedPrEvent }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "n-is-tracked-pr-event",
+      "name": "Is Tracked PR Event?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        140,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "b25c06d5-84c4-5cf8-967b-7c5f09312e69",
+              "leftValue": "={{ $json.prWriteKind === 'done' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "n-is-pr-merged",
+      "name": "Is PR Merged?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        840,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: $('Extract Matched Task ID').first().json.prWriteKind === 'done' ? 'done' : 'linked', taskKey: $('Extract Matched Task ID').first().json.taskKey, taskId: $('Extract Matched Task ID').first().json.taskId }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "n-respond-pr-synced",
+      "name": "Respond PR Synced",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1640,
+        -260
+      ]
     }
   ],
   "connections": {
@@ -564,7 +640,7 @@
       "main": [
         [
           {
-            "node": "Update Vikunja Task State",
+            "node": "Is PR Merged?",
             "type": "main",
             "index": 0
           }
@@ -604,7 +680,7 @@
       "main": [
         [
           {
-            "node": "Respond 200",
+            "node": "Respond PR Synced",
             "type": "main",
             "index": 0
           }
@@ -622,7 +698,7 @@
         ],
         [
           {
-            "node": "Find Vikunja Task by Key",
+            "node": "Is Tracked PR Event?",
             "type": "main",
             "index": 0
           }
@@ -743,6 +819,42 @@
         [
           {
             "node": "Respond Task Created",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Tracked PR Event?": {
+      "main": [
+        [
+          {
+            "node": "Find Vikunja Task by Key",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 200",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is PR Merged?": {
+      "main": [
+        [
+          {
+            "node": "Update Vikunja Task State",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Append PR URL Comment",
             "type": "main",
             "index": 0
           }

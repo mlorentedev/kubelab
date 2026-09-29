@@ -88,7 +88,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ status: 'dispatched', featureId: $json.featureId, branchName: $json.branchName }) }}",
+        "responseBody": "={{ JSON.stringify({ status: $('Extract Agent Payload').first().json.isDelegable ? 'dispatched' : 'not-delegable', featureId: $('Extract Agent Payload').first().json.featureId, branchName: $('Extract Agent Payload').first().json.branchName }) }}",
         "options": {
           "responseCode": 200
         }

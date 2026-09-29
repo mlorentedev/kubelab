@@ -13,10 +13,16 @@ Probes, in order:
    deleted. The key is `PROBE-<epoch>`, so a rerun never collides with a task an
    earlier failed cleanup left behind. In prod this also posts one "Task Created"
    message to the operator channel.
-2. **Unsigned forge event**, and **forge event under a wrong secret** (AC5).
-3. **Unsigned Slack command** (AC5). Slack is acknowledged before the gate, so
+2. **Signed forge merge** (APP-CONFIG-016 AC6, #1871): a task is created as in
+   probe 1, then a signed `pull_request` `closed` + `merged` event with the same
+   key must answer 200 `done`, and Vikunja must show the task done, its
+   description unchanged and one comment naming the PR. The task is deleted
+   whatever happened. In prod this also posts one "Forge Sync" notice.
+3. **Unsigned forge event**, and **forge event under a wrong secret** (AC5). Each
+   must answer 200 with `status: ignored` (#1659).
+4. **Unsigned Slack command** (AC5). Slack is acknowledged before the gate, so
    the HTTP status says nothing here and only the execution does.
-4. **Unauthenticated agent-dispatcher call** (AC5): n8n's Header Auth must refuse
+5. **Unauthenticated agent-dispatcher call** (AC5): n8n's Header Auth must refuse
    it with 403 before any execution exists.
 
 "Stops at its gate" is judged from the execution, with two checks. The gate sent
@@ -63,6 +69,7 @@ _AGENT = "agent-dispatcher.json"
 _FORGE_GATE = "Has Task Key & Valid Sig?"
 _SLACK_GATE = "Is Slack Valid?"
 _CREATE_NODE = "Create Task from Issue"
+_PR_WRITE_NODES = ("Update Vikunja Task State", "Append PR URL Comment")
 
 _NAMESPACE = "kubelab"
 _DEPLOYMENT = "deploy/n8n"
@@ -125,9 +132,29 @@ def build_issue_event(task_key: str) -> dict[str, Any]:
     }
 
 
-def forge_headers(raw: bytes, secret: str | None) -> dict[str, str]:
+def build_pr_merge_event(task_key: str) -> dict[str, Any]:
+    """A Gitea `pull_request` `closed` + `merged` payload: the one PR event that marks a task done."""
+    return {
+        "action": "closed",
+        "number": 0,
+        "pull_request": {
+            "number": 0,
+            "title": f"{task_key}: n8n webhook probe",
+            "html_url": f"https://forge.invalid/kubelab/n8n-probe/pulls/{task_key}",
+            "merged": True,
+            "head": {"ref": "probe/n8n-webhook"},
+        },
+        "repository": {
+            "name": "n8n-probe",
+            "full_name": "kubelab/n8n-probe",
+            "owner": {"login": "kubelab"},
+        },
+    }
+
+
+def forge_headers(raw: bytes, secret: str | None, *, event: str = "issues") -> dict[str, str]:
     """Gitea's delivery headers; signed over `raw` exactly when `secret` is given."""
-    headers = {"Content-Type": "application/json", "X-Gitea-Event": "issues"}
+    headers = {"Content-Type": "application/json", "X-Gitea-Event": event}
     if secret is not None:
         headers["X-Gitea-Signature"] = hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
     return headers
@@ -220,14 +247,35 @@ function summarise(data) {
   return { outputs, error };
 }
 
-async function vikunja(method, taskId) {
-  const res = await fetch('http://vikunja:3456/api/v1/tasks/' + Number(taskId), {
-    method,
-    headers: { Authorization: 'Bearer ' + (process.env.VIKUNJA_API_TOKEN || '') },
-  });
-  if (method === 'DELETE' || !res.ok) return { status: res.status, title: null };
+const TASKS = 'http://vikunja:3456/api/v1/tasks/';
+const AUTH = { Authorization: 'Bearer ' + (process.env.VIKUNJA_API_TOKEN || '') };
+
+// The description leaves the pod only as a digest: the probe compares it before
+// and after a write, and has no use for what it says.
+async function getTask(taskId) {
+  const res = await fetch(TASKS + Number(taskId), { headers: AUTH });
+  if (!res.ok) return { status: res.status, title: null, done: null, descriptionSha256: null };
   const task = await res.json();
-  return { status: res.status, title: task.title == null ? null : String(task.title) };
+  const digest = require('crypto').createHash('sha256').update(String(task.description ?? '')).digest('hex');
+  return {
+    status: res.status,
+    title: task.title == null ? null : String(task.title),
+    done: Boolean(task.done),
+    descriptionSha256: digest,
+  };
+}
+
+async function deleteTask(taskId) {
+  return { status: (await fetch(TASKS + Number(taskId), { method: 'DELETE', headers: AUTH })).status };
+}
+
+async function countComments(taskId, contains) {
+  const res = await fetch(TASKS + Number(taskId) + '/comments', { headers: AUTH });
+  if (!res.ok) return { status: res.status, count: 0 };
+  const comments = await res.json();
+  const count = (Array.isArray(comments) ? comments : [])
+    .filter((c) => String(c.comment || '').includes(contains)).length;
+  return { status: res.status, count };
 }
 
 async function findTasks(key) {
@@ -244,8 +292,9 @@ async function findTasks(key) {
 
 async function main() {
   if (REQUEST.op === 'find_tasks') return out(await findTasks(REQUEST.key));
-  if (REQUEST.op === 'get_task') return out(await vikunja('GET', REQUEST.taskId));
-  if (REQUEST.op === 'delete_task') return out({ status: (await vikunja('DELETE', REQUEST.taskId)).status });
+  if (REQUEST.op === 'get_task') return out(await getTask(REQUEST.taskId));
+  if (REQUEST.op === 'delete_task') return out(await deleteTask(REQUEST.taskId));
+  if (REQUEST.op === 'count_comments') return out(await countComments(REQUEST.taskId, REQUEST.contains));
   const sqlite3 = require('sqlite3');
   const db = new sqlite3.Database(DB, sqlite3.OPEN_READONLY);
   const all = (sql, params) => new Promise((ok, ko) => db.all(sql, params, (e, rows) => (e ? ko(e) : ok(rows))));
@@ -314,6 +363,7 @@ def run_n8n_probe(
     )
     checks: list[tuple[str, Callable[[], bool]]] = [
         ("signed forge", lambda: probe.signed_forge_creates_a_task(secret)),
+        ("signed forge merge", lambda: probe.signed_pr_merge_closes_its_task(secret)),
         ("unsigned forge", lambda: probe.forge_stops_at_its_gate("unsigned forge event", None)),
         (
             "wrong-secret forge",
@@ -378,39 +428,120 @@ class _Probe:
 
     def signed_forge_creates_a_task(self, secret: str) -> bool:
         label = "signed forge opened issue (AC4)"
-        workflow = self._workflow(_FORGE)
         task_key = f"PROBE-{int(self.clock())}"
+        task_id, before, errors = self._create_task(label, secret, task_key)
+        if task_id is None:
+            return self._verdict(label, errors)
+        try:
+            errors += self._confirm_created(label, before, task_id, task_key)[1]
+        finally:
+            errors += self._delete(task_id)
+        return self._verdict(label, errors)
+
+    def signed_pr_merge_closes_its_task(self, secret: str) -> bool:
+        """A merged PR marks its task done, keeps the task's content, and says so in a comment.
+
+        The description is compared by digest because Vikunja's `POST /tasks/{id}`
+        is a full update: a write that sent `{done: true}` alone would pass a
+        check of `done` and still erase the task (#1871).
+        """
+        label = "signed forge merged PR (APP-CONFIG-016 AC6)"
+        # Its own AREA, so its key never equals the issue probe's in the same second.
+        task_key = f"PROBE-MERGE-{int(self.clock())}"
+        task_id, before, errors = self._create_task(label, secret, task_key)
+        if task_id is None:
+            return self._verdict(label, errors)
+        try:
+            created, errors = self._confirm_created(label, before, task_id, task_key)
+            if created is not None:
+                errors += self._merge_lands(label, secret, task_key, task_id, created)
+        finally:
+            errors += self._delete(task_id)
+        return self._verdict(label, errors)
+
+    def _create_task(self, label: str, secret: str, task_key: str) -> tuple[int | None, int, list[str]]:
+        """POST a signed `opened` issue. Returns (task id, execution floor, errors).
+
+        A task id is returned as soon as the 201 names one, so the caller's
+        `finally` owns its deletion before anything else can fail.
+        """
+        workflow = self._workflow(_FORGE)
         raw = json.dumps(build_issue_event(task_key), indent=2).encode()
         before = self._max_id(workflow["id"])
         sent = self._send(label, webhook_path(workflow), raw, forge_headers(raw, secret))
         if sent is None:
-            return False
+            return None, before, ["no response to the signed issue event"]
         status, text = sent
         if status != 201:
-            return self._verdict(label, self._why_not_created(workflow["id"], before, status, text))
+            return None, before, self._why_not_created(workflow["id"], before, status, text)
         task_id = _task_id(text)
         if task_id is None:
             missing = [f"HTTP 201 without a taskId in the response: {text[:200]}"]
-            return self._verdict(label, missing + self._sweep(label, task_key))
+            return None, before, missing + self._sweep(label, task_key)
+        return task_id, before, []
+
+    def _confirm_created(
+        self, label: str, before: int, task_id: int, task_key: str
+    ) -> tuple[dict[str, Any] | None, list[str]]:
+        """The create execution ran its create node, and Vikunja holds the task. Returns (task, errors)."""
         errors: list[str] = []
-        try:
-            summary, error = self._await_one(workflow["id"], before)
-            if error or summary is None:
-                errors.append(error or "no execution")
-            elif summary.status != "success" or _CREATE_NODE not in summary.outputs:
-                errors.append(f"execution {summary.id} ({summary.status}) did not run {_CREATE_NODE!r}")
-            task = self._pod({"op": "get_task", "taskId": task_id})
-            if task["status"] != 200 or not str(task["title"] or "").startswith(task_key):
-                errors.append(
-                    f"task {task_id} read back from Vikunja as HTTP {task['status']}, title {task['title']!r}"
-                )
-            else:
-                logger.info(f"  {label}: task {task_id} {task['title']!r} read back from Vikunja")
-        finally:
-            deleted = self._pod({"op": "delete_task", "taskId": task_id})["status"]
-        if not 200 <= int(deleted) < 300:
-            errors.append(f"cleanup failed (HTTP {deleted}): delete task {task_id} in Vikunja by hand")
-        return self._verdict(label, errors)
+        summary, error = self._await_one(self._workflow(_FORGE)["id"], before)
+        if error or summary is None:
+            errors.append(error or "no execution")
+        elif summary.status != "success" or _CREATE_NODE not in summary.outputs:
+            errors.append(f"execution {summary.id} ({summary.status}) did not run {_CREATE_NODE!r}")
+        task = self._pod({"op": "get_task", "taskId": task_id})
+        if task["status"] != 200 or not str(task["title"] or "").startswith(task_key):
+            errors.append(f"task {task_id} read back from Vikunja as HTTP {task['status']}, title {task['title']!r}")
+            return None, errors
+        logger.info(f"  {label}: task {task_id} {task['title']!r} read back from Vikunja")
+        return task, errors
+
+    def _merge_lands(self, label: str, secret: str, task_key: str, task_id: int, created: dict[str, Any]) -> list[str]:
+        """Send the signed merge for `task_key`; why the task does not show it, or nothing."""
+        workflow = self._workflow(_FORGE)
+        event = build_pr_merge_event(task_key)
+        raw = json.dumps(event, indent=2).encode()
+        before = self._max_id(workflow["id"])
+        sent = self._send(label, webhook_path(workflow), raw, forge_headers(raw, secret, event="pull_request"))
+        if sent is None:
+            return ["no response to the signed merged PR event"]
+        status, text = sent
+        summary, error = self._await_one(workflow["id"], before)
+        answer = _json_object(text)
+        errors: list[str] = []
+        if status != 200 or answer.get("status") != "done" or answer.get("taskId") != task_id:
+            errors.append(f"merged PR answered HTTP {status}, expected 200 done for task {task_id}: {text[:200]}")
+        if error or summary is None:
+            errors.append(error or "no execution")
+        else:
+            if summary.status != "success":
+                detail = f": {summary.error}" if summary.error else ""
+                errors.append(f"merged PR execution {summary.id} ended {summary.status}{detail}")
+            skipped = [n for n in _PR_WRITE_NODES if n not in summary.outputs]
+            if skipped:
+                errors.append(f"merged PR execution {summary.id} never ran {', '.join(skipped)}")
+        task = self._pod({"op": "get_task", "taskId": task_id})
+        if task["done"] is not True:
+            errors.append(f"merged PR left task {task_id} with done={task['done']}")
+        if task["descriptionSha256"] != created["descriptionSha256"]:
+            errors.append(f"merged PR changed task {task_id}'s description: the write is not a whole-task update")
+        pr_url = event["pull_request"]["html_url"]
+        comments = self._pod({"op": "count_comments", "taskId": task_id, "contains": pr_url})
+        if comments["status"] != 200 or comments["count"] != 1:
+            errors.append(
+                f"merged PR left {comments['count']} comment(s) naming it on task {task_id} "
+                f"(HTTP {comments['status']}), expected 1"
+            )
+        if not errors:
+            logger.info(f"  {label}: task {task_id} done, description intact, PR comment present")
+        return errors
+
+    def _delete(self, task_id: int) -> list[str]:
+        deleted = self._pod({"op": "delete_task", "taskId": task_id})["status"]
+        if 200 <= int(deleted) < 300:
+            return []
+        return [f"cleanup failed (HTTP {deleted}): delete task {task_id} in Vikunja by hand"]
 
     def _sweep(self, label: str, task_key: str) -> list[str]:
         """Delete what a 201 created when the response did not say which task it was.
@@ -423,11 +554,10 @@ class _Probe:
             return [f"cleanup search failed (HTTP {found['status']}): delete tasks titled {task_key!r} by hand"]
         errors: list[str] = []
         for task_id in found["ids"]:
-            deleted = self._pod({"op": "delete_task", "taskId": task_id})["status"]
-            if 200 <= int(deleted) < 300:
+            failed = self._delete(task_id)
+            if not failed:
                 logger.info(f"  {label}: deleted task {task_id}, found by its key")
-            else:
-                errors.append(f"cleanup failed (HTTP {deleted}): delete task {task_id} in Vikunja by hand")
+            errors += failed
         return errors
 
     def _why_not_created(self, workflow_id: str, before: int, status: int, text: str) -> list[str]:
@@ -455,7 +585,7 @@ class _Probe:
         label = f"{label} (AC5)"
         workflow = self._workflow(_FORGE)
         raw = json.dumps(build_issue_event(f"PROBE-{int(self.clock())}"), indent=2).encode()
-        return self._stops_at_gate(label, workflow, _FORGE_GATE, raw, forge_headers(raw, secret))
+        return self._stops_at_gate(label, workflow, _FORGE_GATE, raw, forge_headers(raw, secret), answer="ignored")
 
     def unsigned_slack_stops_at_its_gate(self) -> bool:
         workflow = self._workflow(_SLACK)
@@ -472,15 +602,24 @@ class _Probe:
         return self._stops_at_gate("unsigned Slack command (AC5)", workflow, _SLACK_GATE, body, headers)
 
     def _stops_at_gate(
-        self, label: str, workflow: dict[str, Any], gate: str, body: bytes, headers: dict[str, str]
+        self,
+        label: str,
+        workflow: dict[str, Any],
+        gate: str,
+        body: bytes,
+        headers: dict[str, str],
+        answer: str | None = None,
     ) -> bool:
+        """`answer`, when given, is the `status` the 200 body must carry (#1659)."""
         before = self._max_id(workflow["id"])
         sent = self._send(label, webhook_path(workflow), body, headers)
         if sent is None:
             return False
-        status, _ = sent
+        status, text = sent
         if status != 200:
             return self._verdict(label, [f"HTTP {status}, expected 200"])
+        if answer is not None and _json_object(text).get("status") != answer:
+            return self._verdict(label, [f"HTTP 200 without status {answer!r} in the body: {text[:200]}"])
         summary, error = self._await_one(workflow["id"], before)
         if error or summary is None:
             return self._verdict(label, [error or "no execution"])
@@ -512,6 +651,15 @@ def _guarded(name: str, check: Callable[[], bool]) -> bool:
     except RuntimeError as exc:
         logger.error(f"  {name}: {exc}")
         return False
+
+
+def _json_object(text: str) -> dict[str, Any]:
+    """A response body as a JSON object; anything else reads as empty."""
+    try:
+        value = json.loads(text)
+    except ValueError:
+        return {}
+    return value if isinstance(value, dict) else {}
 
 
 def _task_id(text: str) -> int | None:

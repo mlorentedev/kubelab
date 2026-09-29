@@ -196,9 +196,9 @@ if ! ssh vps-pub \
   exit 1
 fi
 
-if [ ! -s "$key_file" ]; then
+if ! grep -Eq '^hskey-[[:alnum:]_-]+$' "$key_file"; then
   rm -f "$key_file"
-  echo "Headscale did not write an auth key" >&2
+  echo "Headscale returned an invalid auth-key payload" >&2
   exit 1
 fi
 ```
@@ -227,6 +227,7 @@ socks5_routes:
 Launch the isolated Edge profile:
 
 ```powershell
+# `--auth-key-file` has higher precedence than TS_AUTHKEY loaded from `.env`.
 & "$env:USERPROFILE\Apps\ts-bridge\ts-bridge.exe" browser `
   --config $configFile `
   --auth-key-file $keyFile `
