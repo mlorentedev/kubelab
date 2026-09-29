@@ -117,3 +117,19 @@ def test_the_pod_selector_mirrors_the_deployment() -> None:
     labels = deployment["spec"]["selector"]["matchLabels"]
     expected = ",".join(f"{k}={v}" for k, v in labels.items())
     assert {spec.pod_selector for spec in N8N_IMPORT_CATALOG} == {expected}
+
+
+def test_a_failed_exec_reports_why_the_container_last_died(capsys: pytest.CaptureFixture[str]) -> None:
+    """A Ready pod whose container died mid-exec reads exactly like an import
+    error unless the pod's own record is read back. Measured on staging
+    (2026-09-28): the chosen pod was Ready, the exec was terminated, and the
+    retry then found no Ready pod at all."""
+    pod = _pod(READY)
+    pod["status"]["containerStatuses"] = [
+        {"name": "n8n", "restartCount": 1, "lastState": {"terminated": {"reason": "OOMKilled", "exitCode": 137}}}
+    ]
+    kubectl = _Kubectl([pod], fail="multi-forge-sync")
+    assert _import(kubectl) is False
+    out = " ".join(capsys.readouterr().out.split())
+    assert "restarts=1" in out
+    assert "OOMKilled" in out
