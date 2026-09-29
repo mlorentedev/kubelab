@@ -364,14 +364,20 @@ def test_the_real_specs_tree_resolves_end_to_end() -> None:
 
 
 # ---------------------------------------------------------------------------
-# CI-GATE-013 (#1157): the body is Markdown, and code in it is not a directive
+# CI-GATE-013 (#1157), reversed for closing keywords by CI-GATE-019 (#1903)
 # ---------------------------------------------------------------------------
 #
-# Every expectation below about GitHub's own behaviour was measured, not
-# reasoned: a temporary PR body on kubelab#1159, read back through
-# `closingIssuesReferences`, restored immediately, targeting already-closed
-# issues so a merge in the window would have been a no-op. The three results are
-# recorded as dated rows beside `_CLOSES_RE` in the module.
+# CI-GATE-013 stripped code before reading closing keywords, to agree with
+# `closingIssuesReferences`. That parser is not the only one a PR body meets:
+# the squash commit carries it to master as plain text. Code still shields the
+# waiver line, which only this gate reads.
+#
+# Two parsers, measured differently. The PR-link results were measured on a
+# temporary PR body on kubelab#1159, read back through `closingIssuesReferences`
+# and restored immediately. The commit-parser result for an inline span was
+# measured on #1880's squash, which closed #972. The fence cases are held to the
+# span rule by reasoning, not measurement: a commit message has no fences, and
+# over-reporting fails safe. The dated rows beside `_CLOSES_RE` say which is which.
 #
 # The reason this matters is narrower than "the gate should be correct". The
 # gate's own failure hint prints the waiver line to copy, so the documents most
@@ -380,13 +386,13 @@ def test_the_real_specs_tree_resolves_end_to_end() -> None:
 # documenting it.
 
 FENCE_CASES = [
-    pytest.param("the string `closes #999` appears in a log", set(), id="inline-span"),
-    pytest.param("```\ncloses #999\n```", set(), id="bare-fence"),
-    pytest.param("```python\n# closes #999\n```", set(), id="fence-with-info-string"),
-    pytest.param("~~~\ncloses #999\n~~~", set(), id="tilde-fence"),
-    pytest.param("intro\n```\ncloses #999\nno terminator follows", set(), id="unclosed-fence"),
-    pytest.param("`closes #111` and `closes #222`", set(), id="two-spans"),
-    pytest.param("quoted `closes #111` and real closes #222", {222}, id="quoted-and-real"),
+    pytest.param("the string `closes #999` appears in a log", {999}, id="inline-span"),
+    pytest.param("```\ncloses #999\n```", {999}, id="bare-fence"),
+    pytest.param("```python\n# closes #999\n```", {999}, id="fence-with-info-string"),
+    pytest.param("~~~\ncloses #999\n~~~", {999}, id="tilde-fence"),
+    pytest.param("intro\n```\ncloses #999\nno terminator follows", {999}, id="unclosed-fence"),
+    pytest.param("`closes #111` and `closes #222`", {111, 222}, id="two-spans"),
+    pytest.param("quoted `closes #111` and real closes #222", {111, 222}, id="quoted-and-real"),
     pytest.param("this closes #999 for real", {999}, id="plain-prose-still-matches"),
     pytest.param("> fixes #999", {999}, id="blockquote-still-matches"),
     pytest.param("closes `x` #999", set(), id="span-breaks-adjacency"),
@@ -394,19 +400,33 @@ FENCE_CASES = [
 
 
 @pytest.mark.parametrize(("body", "expected"), FENCE_CASES)
-def test_code_is_not_a_closing_directive(body: str, expected: set[int]) -> None:
-    """Keywords inside code spans and fences are text; GitHub agrees, so must the gate.
+def test_code_does_not_shield_a_closing_keyword(body: str, expected: set[int]) -> None:
+    """CI-GATE-019 (#1903): a keyword in code still closes, because the body is also a commit.
 
-    `blockquote-still-matches` and `plain-prose-still-matches` are the guard on
-    the fix rather than on the bug: stripping too eagerly turns an over-report
-    into an under-report, and that direction fails OPEN. Both were measured to
-    link on GitHub, so both must keep matching here.
+    CI-GATE-013 made these cases pass, and for the parser it measured that was right:
+    `closingIssuesReferences` skips code. But this repo squash-merges with
+    `squash_merge_commit_message = PR_BODY`, so the body lands on master as the squash
+    commit's message, and the commit parser has no markdown. What a merge closes is the
+    union of the two, so the gate reads the raw body.
 
-    `span-breaks-adjacency` pins the placeholder. Deleting a span outright would
-    collapse ``closes `x` #999`` to ``closes  #999`` and invent a link GitHub
-    does not make — measured: that body produced no reference.
+    Only the inline span was measured (#1880 closed #972). Fences are held to the same
+    rule because a commit message has no fences either, and the error direction is
+    safe: an over-report is a red PR, an under-report is a spec issue closed silently.
+
+    `span-breaks-adjacency` still passes, because in plain text a span between the
+    keyword and the number breaks the adjacency the pattern needs.
     """
     assert spec_gate.closed_issues(body, REPO) == expected
+
+
+def test_pr_1880_line_closes_972() -> None:
+    """The literal line that closed OPS-023's issue on merge, with its spec still active.
+
+    `closingIssuesReferences` for #1880 was empty and the gate passed. The squash
+    commit `30a90cf6` then closed #972, as the timeline's `closed` event records.
+    """
+    body = "The docs sweep, and the AC5 guard going green, follow in PR 3b, which carries `Closes #972`."
+    assert spec_gate.closed_issues(body, REPO) == {972}
 
 
 def test_a_quoted_waiver_is_not_a_declared_waiver() -> None:
@@ -423,12 +443,14 @@ def test_a_quoted_waiver_is_not_a_declared_waiver() -> None:
     assert spec_gate.declared_exception("Spec-archive-exception: genuinely not this PR") == ("genuinely not this PR")
 
 
-def test_pr_1155_shape_passes() -> None:
+def test_pr_1155_shape_is_caught() -> None:
     """The shape that surfaced CI-GATE-013: a document *about* closing keywords.
 
     #1155 documents that GitHub parses closing keywords out of prose, so its body
-    necessarily quotes one. GitHub linked nothing; the gate failed the PR. Both
-    parsers read the same body and disagreed, and the gate was the wrong one.
+    necessarily quotes one. GitHub linked nothing and the gate failed the PR; at
+    the time the gate was judged wrong. #1903 showed it was right: squashed, this
+    body is a commit message, and `closed #1056` in it closes #1056. A document
+    about closing keywords has to use the gerund even inside code.
 
     This is the shape rather than that PR's literal text — its body has since
     been reworded around the bug, so quoting it today would reproduce the
@@ -444,5 +466,5 @@ def test_pr_1155_shape_passes() -> None:
         "The fix is the gerund, since `closes #1056` and `closed #1056` both link\n"
         "and `closing #1056` does not.\n"
     )
-    assert spec_gate.closed_issues(body, REPO) == set()
+    assert spec_gate.closed_issues(body, REPO) == {1056}
     assert spec_gate.declared_exception(body) is None
