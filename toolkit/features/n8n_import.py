@@ -271,9 +271,9 @@ def import_n8n_workflow(env: str, project_root: Path, dry_run: bool = False) -> 
     # Restart ONCE, after every workflow is in. The CLI writes to SQLite, but the
     # running process caches workflows + the webhook registry in memory (same class
     # of gotcha as Gitea OIDC, CLAUDE.md): without a restart no imported webhook is
-    # registered. A restart per workflow bounced the pod under the next workflow's
-    # exec and failed it (#1863). The workflows that did land still need their
-    # restart when another one failed, so a partial run restarts too.
+    # registered. A restart per workflow bounced the pod four times per run, under
+    # the next workflow's exec (#1863). The workflows that did land still need
+    # their restart when another one failed, so a partial run restarts too.
     if landed and not dry_run:
         for spec in {(s.namespace, s.deployment): s for s in landed}.values():
             if not _restart_n8n(env, spec):
@@ -418,7 +418,9 @@ def _pod_record(env: str, spec: N8nImportSpec, name: str) -> str:
 
     A container killed mid-exec (OOM, liveness) and a real import error both
     surface as a failed `kubectl exec`; only the pod's restart count and last
-    termination tell them apart.
+    termination tell them apart. Read right after the failure, kubelet may not
+    have recorded the death yet: `restarts=0` with no termination means "too
+    early to tell", not "the container survived".
     """
     pod = next((p for p in _list_pods(env, spec) or [] if p["metadata"]["name"] == name), None)
     if pod is None:

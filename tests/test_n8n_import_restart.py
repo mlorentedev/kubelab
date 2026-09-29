@@ -1,16 +1,20 @@
 """TOOL-086 (#1863): one import run, one restart, and every exec lands on a live pod.
 
 `import-n8n` restarted n8n after EACH workflow, so a four-workflow run bounced the
-pod four times, and the next `kubectl exec deploy/n8n` could land on the pod
-being terminated. Measured 2026-09-27: `multi-forge-sync.json` failed with
-`command terminated` right after `notify-router.json`'s restart, and a rerun
-minutes later passed.
+pod four times. #1863 measured `multi-forge-sync.json` failing with `command
+terminated` right after `notify-router.json`'s restart, and hypothesised that
+the exec landed on the terminating pod.
 
 The fix has two halves, and each is tested here against a fake `kubectl`:
 
 - the workflows are all imported and published first, then n8n restarts once;
 - every exec targets a named pod that is Running, Ready and not being deleted,
-  so the race cannot happen and a failure names the pod it ran against.
+  and a failure names that pod and what the pod says about itself afterwards.
+
+The hypothesis was not the whole cause. With both halves in place, one failure
+recurred on a pod that was Ready when chosen (#1892): the container itself died
+mid-import. The pod's restart count and last termination are what tell that
+apart from an import error, so a failed exec reports them (#1902).
 """
 
 from __future__ import annotations
