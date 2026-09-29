@@ -130,12 +130,13 @@ Expand-Archive "$dest\ts-bridge-*-windows-amd64.zip" "$dest\bin" -Force
 
 ### 3.3 Mint a Headscale pre-auth key
 
-Personal devices live under the **`kubelab`** Headscale user (ID **2**) — same as
-`msi` and all infra nodes. (`manu`/ID 1 only holds a stale `localhost`; don't use it.)
+Corporate Windows bridge identities live under the **`work`** Headscale user
+(ID **3**). Infrastructure and personal mesh nodes use `kubelab` (ID 2);
+`manu` (ID 1) only holds a stale `localhost`.
 
 ```bash
 ssh vps-pub 'docker exec headscale headscale preauthkeys create \
-  --user 2 --reusable --ephemeral --expiration 8760h'
+  --user 3 --reusable --ephemeral --expiration 8760h'
 ```
 
 - `--ephemeral` is **required** — Headscale (not the client) controls ephemerality;
@@ -170,7 +171,7 @@ SSOT:
 
 | Setting | Value | Source |
 |---------|-------|--------|
-| Control plane | `https://vpn.kubelab.live` | `infra/config/values/common.yaml` |
+| Control plane | `https://vpn.kubelab.live` | `apps.services.core.headscale.domain` |
 | Browser origin | `gitea.kubelab.live:443` | `apps.services.core.gitea.domain` |
 | Mesh target | `kubelab-vps:443` | `networking.vps.hostname`; prod Traefik HTTPS |
 
@@ -184,12 +185,17 @@ argument:
 ```powershell
 $configDir = Join-Path $env:USERPROFILE ".ts-bridge"
 $keyFile = Join-Path $configDir "authkey-headscale-kubelab"
+$ErrorActionPreference = "Stop"
 New-Item -ItemType Directory -Force $configDir | Out-Null
+Remove-Item -LiteralPath $keyFile -Force -ErrorAction SilentlyContinue
 
-ssh vps-pub 'docker exec headscale headscale preauthkeys create --user 2 --ephemeral --expiration 1h' |
+ssh vps-pub 'docker exec headscale headscale preauthkeys create --user 3 --ephemeral --expiration 1h' |
   Set-Content -LiteralPath $keyFile -Encoding ascii -NoNewline
 
-if ((Get-Item -LiteralPath $keyFile).Length -eq 0) {
+if ($LASTEXITCODE -ne 0 -or
+    -not (Test-Path -LiteralPath $keyFile) -or
+    (Get-Item -LiteralPath $keyFile).Length -eq 0) {
+  Remove-Item -LiteralPath $keyFile -Force -ErrorAction SilentlyContinue
   throw "Headscale did not write an auth key"
 }
 icacls $keyFile /inheritance:r /grant:r "${env:USERNAME}:(R)" | Out-Null
@@ -243,8 +249,10 @@ Remove-Item -LiteralPath $keyFile
 - **`TS_CONTROL_URL` is what selects Headscale.** The `hskey-`/`tskey-` prefix does
   not route; an `hskey` sent without `TS_CONTROL_URL=https://vpn.kubelab.live` hits
   Tailscale SaaS and fails with `invalid key`.
-- **Headscale user for a personal device = `kubelab` (2)**, matching `msi` and infra —
-  not `manu` (1). Keeps inventory and (future VPNACL-001) ACLs coherent.
+- **Headscale user for this corporate Windows bridge = `work` (3).**
+  `kubelab` (2) owns personal and infrastructure nodes; `manu` (1) only holds a
+  stale `localhost`. This split is declared beside the Headscale service in
+  `infra/config/values/common.yaml`.
 - **ts-bridge auto-mode randomizes the local port** (`TS_PORT_RANGE` 33389-34388) and
   the node name, to allow multiple concurrent bridges. Pin with `TS_LOCAL_ADDR` (hard
   port) or `TS_INSTANCE_NAME` (deterministic port) for a stable SSH alias.
