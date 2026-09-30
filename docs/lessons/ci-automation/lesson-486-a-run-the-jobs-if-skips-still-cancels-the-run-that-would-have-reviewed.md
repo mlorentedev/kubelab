@@ -21,7 +21,7 @@ tags: [kubelab, ci-automation, github-actions, concurrency, pr-agent]
 
 Both runs share one concurrency group, so the later one cancelled the earlier one. GitHub resolves concurrency when a run is queued, before any job `if:` is evaluated. The run that lost had the payload that would have reviewed. The run that won had a draft payload, so its `review` job was skipped. A skipped run does no work, yet it still displaced the run that would have.
 
-**Solution**: recovery was a manual rerun of the cancelled run. The fix is #1948 (TOOL-091, #1944): the draft flag is part of the workflow-level group key, so a run the job skips lands in a group of its own:
+**Solution**: recovery was a manual rerun of the cancelled run. The fix is #1948 (TOOL-091, #1944): the skip conditions that can change between two runs of one PR are part of the workflow-level group key, so a run the job skips lands in a group of its own:
 
 ```yaml
 group: >-
@@ -29,11 +29,11 @@ group: >-
   github.workflow,
   github.event.pull_request.number || github.event.issue.number,
   github.event_name,
-  github.event.pull_request.draft && '-draft' || '') }}
+  (github.event.pull_request.draft || github.actor == 'dependabot[bot]') && '-skipped' || '') }}
 cancel-in-progress: true
 ```
 
-The first design made `cancel-in-progress` conditional on the same predicate as the job. It was dropped because it covers only half the failure: GitHub keeps at most one *pending* run per group, and a new pending run evicts the one waiting whatever `cancel-in-progress` says. A draft run in the same group could still evict a pending review. A separate group cannot. The draft flag is the only skip condition that changes during a PR's life; the others (Dependabot, forks, branch prefixes) are fixed per PR, so every run of such a PR skips alike and none can displace a reviewing run.
+The first design made `cancel-in-progress` conditional on the same predicate as the job. It was dropped because it covers only half the failure: GitHub keeps at most one *pending* run per group, and a new pending run evicts the one waiting whatever `cancel-in-progress` says. A draft run in the same group could still evict a pending review. A separate group cannot. Two skip conditions can change between runs of one PR. One is draft state. The other is the actor: the job skips on `github.actor`, the account that triggered the run, not the PR's author, so a human's push to a Dependabot PR is reviewed and the bot's rebase after it is not. The first version of #1948 keyed only the draft flag, and PR-Agent's review of it found the actor case. Forks and branch prefixes are fixed per PR, so every run of such a PR skips alike. The test evaluates the job's `if:` and the group key over every combination of the two conditions and fails if a skipped run and a reviewing one share a group. The earlier test only checked that the group mentioned the draft flag, which a key that mentions a condition without separating its states would also pass.
 
 **Rule**:
 
