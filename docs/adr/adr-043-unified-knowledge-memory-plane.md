@@ -17,7 +17,7 @@ depends_on: [adr-028-operational-topology, adr-029-intelligence-layer, adr-042-r
 
 ## Amendment — 2026-09-30 (agent access surface)
 
-**Amended by [ADR-067](adr-067-product-contract-and-agent-access.md).** The "thin MCP tool" for coding agents is served behind the Go API gateway ([ADR-067](adr-067-product-contract-and-agent-access.md) D6), read-only and scoped per product. Option B (a network-served hive MCP) stays deferred on its own trigger.
+**Amended by [ADR-067](adr-067-product-contract-and-agent-access.md).** The "thin MCP tool" for coding agents is served by `toolkit-mcp`, a read-only MCP server behind Traefik that validates its own tokens and is scoped per product ([ADR-067](adr-067-product-contract-and-agent-access.md) D6). Option B (a network-served hive MCP) stays deferred on its own trigger.
 
 ## Context
 

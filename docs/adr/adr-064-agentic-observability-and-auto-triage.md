@@ -20,7 +20,7 @@ Accepted — 2026-08-23. Establishes the standard for human and AI-agent observa
 
 ## Amendment — 2026-09-30 (agent access surface)
 
-**Amended by [ADR-067](adr-067-product-contract-and-agent-access.md).** The MCP exposure this ADR describes is realised by [ADR-067](adr-067-product-contract-and-agent-access.md) D6. It is read-only, it is served by a Python FastMCP server behind the Go API gateway, and it covers product-scoped reads (deploy status, promote dry-run, contract validation, logs and alerts), not only `toolkit obs`.
+**Amended by [ADR-067](adr-067-product-contract-and-agent-access.md).** The MCP exposure this ADR describes is realised by [ADR-067](adr-067-product-contract-and-agent-access.md) D6. It is read-only, it is served by a Python FastMCP server behind Traefik that validates its own tokens, and it covers product-scoped reads (deploy status, promote dry-run, contract validation, logs and alerts), not only `toolkit obs`.
 
 ## Context
 

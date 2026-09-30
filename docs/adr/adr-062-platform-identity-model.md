@@ -28,7 +28,7 @@ Supersedes the single-identity decision recorded on #1013 earlier the same day �
 
 ## Amendment — 2026-09-30 (agent access surface)
 
-**Amended by [ADR-067](adr-067-product-contract-and-agent-access.md).** The machine class gains one pre-registered Authelia client per agent, scoped to one product, for the agent gateway ([ADR-067](adr-067-product-contract-and-agent-access.md) D6). CI agents use `client_credentials`, and interactive agents use authorization code with PKCE.
+**Amended by [ADR-067](adr-067-product-contract-and-agent-access.md).** The machine class gains one pre-registered Authelia client per agent, scoped to one product, for the MCP server ([ADR-067](adr-067-product-contract-and-agent-access.md) D6). CI agents use `client_credentials`, and interactive agents use authorization code with PKCE.
 
 ## Amendment — 2026-09-24 (D1: what "login prohibited" means, and two machine exceptions)
 
