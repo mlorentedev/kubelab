@@ -182,7 +182,7 @@ This PR adds an "Amended by ADR-067" note to each:
 - **Standalone MCP (E):** the gateway hop costs more than it gives. Measure that as p95 latency, or as incidents the gateway caused.
 - **Self-registering MCP clients:** Authelia ships DCR or CIMD.
 
-## Implementation (the epic derived from this ADR)
+## Implementation (epic #1931)
 
 1. **Contract and receiver:** the schema, the registry, the generic receiver and #1815. Migrate `web` first, then onboard garsync.
 2. **Tenancy:** namespace, Application and AppProject per product, generated spoke write roles, NetworkPolicy (#378), a SOPS recipient per product (#889), then the migration of `api` and `web`.
@@ -191,5 +191,5 @@ This PR adds an "Amended by ADR-067" note to each:
 
 ## References
 
-- kubelab#1924 (research), #1815, #400, #889, #378, #1742, #522–#530, #406, #1322
+- kubelab#1931 (the epic), kubelab#1924 (research), #1815, #400, #889, #378, #1742, #522–#530, #406, #1322
 - MCP authorization spec 2025-11-25; Authelia OIDC standards table; Authelia issues #12970 and #13113
