@@ -1,42 +1,43 @@
 ---
-tags: [spec, verification, templates]
+tags: [spec, verification]
 created: "2026-09-30"
 ---
 
 # Verification - BACKUP-063
 
-## Evidence
+## AC1: rotation
 
-Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
+`poetry run pytest tests/test_node_backup_ship_script.py --no-cov -q`: 25 passed. Each test was run red first, on `6031a42d`, before the implementation:
 
-- [ ] Criterion 1 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 2 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 3 -> commit `<hash>` / test `<name>`
+- `test_the_weekly_check_reads_a_group_of_pack_data` asserts `check --read-data-subset 1/4` and the journal line.
+- `test_the_read_data_rotation_reads_every_group_once_per_cycle`: 4 consecutive weeks read `1/4..4/4`, each exactly once.
+- `test_the_read_data_rotation_is_continuous_across_a_year_boundary` covers the weeks around 2027-01-01, which falls in ISO week 53 of 2026. Under ISO weeks, `mod 4` gives the steps `[1, 0]`, so a group repeats. Under epoch weeks the steps are `[1, 1]`.
 
-## Test status
+## AC2: measured in prod, 2026-09-30
 
-- Test suite: `<command> -> <output / coverage %>`
-- Manual smoke test: what was exercised, what was observed
-- No regressions in existing test suite: yes / no (if no, document)
+Method: from this branch, `make backup ENV=prod`, then `make backup-node NODE=all ENV=prod INTEGRITY=1`. That starts `node-backup-ship-check.service`, the real weekly unit, with its cgroup, timeout and `OnFailure`. Duration is `ExecMainExitTimestamp - ExecMainStartTimestamp` and covers the whole unit: capture, backup, `forget --prune` and check. Memory is systemd's `memory peak`, which is reported only where a memory limit applies.
 
-## Decisions made during implementation
+Baseline on `rpi3`, with the plain `check` from master: 11.0s CPU, **76.2M** peak.
 
-Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
+With `t = 1` (`--read-data-subset 1/1`, which reads every pack):
 
--
--
+| Node | Packs read | Unit duration | CPU | Memory peak |
+|---|---|---|---|---|
+| beelink | 17 / 17 | 18s | 6.4s | (no MemoryMax) |
+| rpi3 | 15 / 15 | 38s | 33.0s | **78.5M** / 83.4M (two runs), cap 128M |
+| rpi4 | 15 / 15 | 24s | 17.6s | (no MemoryMax) |
+| kubelab-vps | 6 / 6 | 21s | 3.7s | (no MemoryMax) |
 
-## Promotion candidates
+All four finished with `Result=success`, `ExecMainStatus=0` and `no errors were found`.
 
-Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.
+**Decision: `t = 1`.** It is the smallest `t`, and it fits every node with at least 15x headroom on time. The RPi3 peak rose by 2-7M over the plain check, so reading packs does not scale memory with repository size. Time does: the RPi3 read 15 packs in about 15s, so the 600s budget covers about 400 packs before `t` has to rise. The default's comment records this ceiling.
 
-- [ ] Lesson for the repo's `docs/lessons/`? <yes: path / no: reason>
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? <yes: path / no: reason>
-- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes: path / no: reason>
+**Cost:** 53 packs a week across the fleet, which is 53 class B operations against a free tier of 10M a month.
 
-## Archive checklist
+## AC3: a read failure pages
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/BACKUP-063/` -> `specs/archive/BACKUP-063/`
-- [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+`test_a_failed_check_fails_the_run`: the fake `check` exits 1, the script exits non-zero, and `ship complete` is never printed. The unit fails, and `OnFailure=kubelab-notify@%n` pages. That paging path is unchanged and has been measured since BACKUP-044 Part 5.
+
+## Still to do after merge
+
+- [ ] Redeploy from master (`make backup ENV=prod`); expect `changed=0` after the first run.

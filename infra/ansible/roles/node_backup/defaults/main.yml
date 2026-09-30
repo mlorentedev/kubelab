@@ -236,7 +236,13 @@ node_backup_check: false
 # 52/53 -> 1, which would skip or repeat a group once a year. t is the smallest
 # value that fits the unit's timeout and the RPi3's MemoryMax on every node,
 # measured with `make backup-node INTEGRITY=1` (specs/BACKUP-063 verification.md).
-node_backup_check_read_data_groups: 4
+#
+# t = 1, a full read every week, measured 2026-09-30 on all four nodes:
+# 6-17 packs each, whole weekly unit 18-38s of its 600s, RPi3 peak 78-83M of
+# 128M (a plain check peaked at 76M). Memory barely moves with t because packs
+# are streamed; time grows with the pack count, at ~1 pack/s on the RPi3. So
+# raise t when a repository nears ~400 packs, not when memory moves.
+node_backup_check_read_data_groups: 1
 
 # RPi3 memory ceiling (Part 0 / R-B: measured floor 16-24M against restic's
 # baseline footprint, before any real repository existed -- read as >5x

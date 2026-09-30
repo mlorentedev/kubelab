@@ -74,6 +74,7 @@
       ansible.builtin.command:
         cmd: systemctl show {{ backup_unit }}
              --property=Result --property=ExecMainStatus
+             --property=ExecMainStartTimestamp --property=ExecMainExitTimestamp
       register: backup_result
       changed_when: false
 
