@@ -17,7 +17,7 @@ tags: [kubelab, storage-backup, restic, r2, backup-058]
 **Solution** (BACKUP-058, #1921): gate `init` on restic's exit code and pin identity by the repository id.
 
 - Measured against R2 with restic 0.19.1 on 2026-09-30: a missing repository returns **10**, a wrong password **12**, and an *invalid credential never returns at all*, even with `--stuck-request-timeout 45s` (#1939). `init` now runs only on exit 10, and every other code exits with that code.
-- The restic repository id (`restic cat config --json` → `id`) is new on each `init` and never changes otherwise. After a whole ship, each node writes it to `/var/lib/node-backup/r2.repository-id`. From then on, exit 10 fails loudly instead of initialising, and a different id fails before `backup` writes anything.
+- The restic repository id (`restic cat config --json` → `id`) is new on each `init` and never changes otherwise. As soon as its first `backup` succeeds, each node writes it to `/var/lib/node-backup/r2.repository-id`: from then the repository holds a restore point, even if retention fails afterwards. From then on, exit 10 fails loudly instead of initialising, and a different id fails before `backup` writes anything.
 - `make backup-repo-reinit NODE=<node> DEST=r2 ENV=<env>` is the only way to start over. It journals the recorded id, then removes the marker.
 
 **Rule**: a create-on-miss fallback in front of stored history must answer *why it missed*, not only *whether*. Read the tool's exit code, measure which failures produce which code against the real backend, and allow creation for exactly one of them. Then pin the identity of what you created: a same-named replacement answers every "does it exist" check with yes.

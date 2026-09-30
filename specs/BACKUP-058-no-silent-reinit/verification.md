@@ -35,7 +35,7 @@ This hand-built Job was a one-off: the only way to measure restic's exit codes a
 
 ### AC2-AC4: the ship script (PR1, #1938)
 
-`tests/test_node_backup_ship_script.py` renders `node-backup-ship.sh.j2` with every path under `tmp_path` and runs it under bash against a fake restic that logs each subcommand. The six cases, all green:
+`tests/test_node_backup_ship_script.py` renders `node-backup-ship.sh.j2` with every path under `tmp_path` and runs it under bash against a fake restic that logs each subcommand. The eight cases, all green:
 
 | Case | `snapshots` rc | marker before | Asserted |
 |---|---|---|---|
@@ -45,6 +45,8 @@ This hand-built Job was a one-off: the only way to measure restic's exit codes a
 | transient | 1 | none | no `init`, no `backup`, non-zero, no marker |
 | gone after prior ships | 10 | present | no `init`, no `backup`, non-zero, stderr names `r2`, the id and `make backup-repo-reinit` |
 | replaced | 0, other id | present | no `init`, no `backup`, non-zero, stderr names both ids and the override |
+| retention fails on a first ship | 10, then `forget` 1 | none | non-zero, marker = the new id, and a following exit 10 is refused (review on #1938) |
+| no temp file left | 0 | none | only the marker remains in the directory (`mktemp`, review on #1938) |
 
 `tests/test_node_backup_role.py::test_init_is_gated_on_restic_exit_code_10_only` asserts on the rendered template: `init` appears only inside the `10)` branch.
 

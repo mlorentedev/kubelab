@@ -75,7 +75,7 @@ RESTIC="{{ node_backup_restic_install_path }} --repo $REPO --stuck-request-timeo
 #
 # The node's memory of "I have shipped here" is MARKER, holding the restic
 # repository id (new for every `init`, fixed otherwise). The ROLE never writes
-# it; this script does, after a whole ship. `make backup-repo-reinit` is the
+# it; this script does, once a snapshot is written. `make backup-repo-reinit` is the
 # only sanctioned way to remove it.
 MARKER="{{ node_backup_r2_repository_id_file }}"
 DESTINATION="r2"
@@ -144,6 +144,19 @@ fi
 
 $RESTIC backup "$STAGING" --tag "{{ inventory_hostname }}"
 
+# Recorded as soon as `backup` succeeds: from that moment the repository holds a
+# restore point, so it is a history this node must never silently replace, even
+# if `forget` or `check` below then fails the run. Never before `backup`, so a
+# repository that holds nothing is never pinned. Atomic (write, then rename) so
+# a torn write is never read back as an id, and through `mktemp` because the
+# frequent and weekly units can reach this line at the same time.
+if [ -z "$RECORDED" ]; then
+    MARKER_TMP="$(mktemp "$MARKER.XXXXXX")"
+    printf '%s\n' "$REPOSITORY_ID" > "$MARKER_TMP"
+    mv -f "$MARKER_TMP" "$MARKER"
+    echo "recorded $DESTINATION repository $REPOSITORY_ID in $MARKER"
+fi
+
 # Retention approved by the operator 2026-08-16 (tasks.md "Approved operating
 # parameters"): ~a year of restore points, baked in rather than passed at
 # call time so a scheduled run always carries the ratified policy.
@@ -151,15 +164,6 @@ $RESTIC forget {{ node_backup_retention_flags }} --prune
 
 if [ "$RUN_CHECK" -eq 1 ]; then
     $RESTIC check
-fi
-
-# Recorded only after a whole ship, and atomically (write, then rename), so a
-# run that dies halfway never leaves a marker naming a repository that holds
-# nothing, and a torn write is never read back as an id.
-if [ -z "$RECORDED" ]; then
-    printf '%s\n' "$REPOSITORY_ID" > "$MARKER.tmp"
-    mv -f "$MARKER.tmp" "$MARKER"
-    echo "recorded $DESTINATION repository $REPOSITORY_ID in $MARKER"
 fi
 
 echo "ship complete: $REPO"

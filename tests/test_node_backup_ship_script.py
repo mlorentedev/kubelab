@@ -37,6 +37,7 @@ NEW_ID = "b" * 64
 # Stands in for restic. State lives in $FAKE_DIR:
 #   snapshots.rc  exit code of `snapshots` (default 0)
 #   id            the repository id `cat config` reports
+#   forget.rc     exit code of `forget` (default 0)
 # `init` sets a new id and makes `snapshots` succeed, as a real init would.
 # Every subcommand is appended to `calls`, which is what the tests assert on.
 FAKE_RESTIC = r"""#!/bin/bash
@@ -56,6 +57,8 @@ case "$1" in
   init)
     echo "$NEW_ID" > "$FAKE_DIR/id"
     echo 0 > "$FAKE_DIR/snapshots.rc" ;;
+  forget)
+    exit "$(cat "$FAKE_DIR/forget.rc" 2>/dev/null || echo 0)" ;;
   cat)
     printf '{\n  "version": 2,\n  "id": "%s",\n  "chunker_polynomial": "3dea92648f6e83"\n}\n' "$(cat "$FAKE_DIR/id")" ;;
 esac
@@ -107,8 +110,9 @@ def node(tmp_path: Path):
         )
     )
 
-    def run(*, snapshots_rc: int, repo_id: str = EXISTING_ID, recorded: str | None = None):
+    def run(*, snapshots_rc: int, repo_id: str = EXISTING_ID, recorded: str | None = None, forget_rc: int = 0):
         (fake_dir / "snapshots.rc").write_text(f"{snapshots_rc}\n")
+        (fake_dir / "forget.rc").write_text(f"{forget_rc}\n")
         (fake_dir / "id").write_text(f"{repo_id}\n")
         if recorded is not None:
             marker.write_text(f"{recorded}\n")
@@ -175,3 +179,29 @@ def test_a_replaced_repository_fails_before_writing_a_snapshot(node) -> None:
     assert _marker_value(marker) == EXISTING_ID
     assert EXISTING_ID in proc.stderr and NEW_ID in proc.stderr
     assert "make backup-repo-reinit" in proc.stderr
+
+
+def test_the_repository_is_recorded_once_a_snapshot_exists_even_if_retention_fails(node) -> None:
+    """The history exists from the first successful `backup`, not from the end of the run.
+
+    Recording only after `forget` and `check` left a window: a first ship whose
+    retention failed held a snapshot with no marker, so a deletion before the
+    next whole run would have been re-initialised silently. The run still
+    fails, because a failed retention is a failed ship.
+    """
+    proc, verbs, marker = node(snapshots_rc=10, forget_rc=1)
+    assert proc.returncode != 0
+    assert "backup" in verbs
+    assert _marker_value(marker) == NEW_ID
+    # And the protection holds from there: the repository vanishing is refused.
+    proc, verbs, marker = node(snapshots_rc=10)
+    assert proc.returncode != 0
+    assert verbs.count("init") == 1, "the second run must not initialise"
+
+
+def test_no_temporary_marker_is_left_behind(node) -> None:
+    # Concurrent ships (the frequent and weekly units) must not share one
+    # predictable temp path, and a whole run leaves only the marker.
+    proc, _, marker = node(snapshots_rc=0)
+    assert proc.returncode == 0, proc.stderr
+    assert [p.name for p in marker.parent.iterdir()] == [marker.name]
