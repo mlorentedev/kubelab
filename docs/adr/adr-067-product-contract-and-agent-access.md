@@ -1,7 +1,7 @@
 ---
 id: "adr-067"
 type: adr
-status: proposed
+status: accepted
 owner: manu
 date: "2026-09-30"
 issue: "kubelab#1924"
@@ -14,7 +14,7 @@ created: "2026-09-30"
 
 ## Status
 
-Proposed, 2026-09-30. It is the output of an architecture session on kubelab#1924. It amends [ADR-053](adr-053-platform-product-repos.md) §2 and §5, [ADR-064](adr-064-agentic-observability-and-auto-triage.md) (its MCP clause), [ADR-048](adr-048-platform-consumer-repo-boundary.md) (the `kubelab-cli` publish), and [ADR-043](adr-043-unified-knowledge-memory-plane.md) (where its thin MCP tool is served). It does not activate the gateway role that [ADR-029](adr-029-intelligence-layer.md) gives the Go API. [ADR-042](adr-042-reference-architecture.md) D4 was re-examined and stands: single-tenant per client.
+Accepted, 2026-09-30, after the operator's review. It is the output of an architecture session on kubelab#1924. It amends [ADR-053](adr-053-platform-product-repos.md) §2 and §5, [ADR-064](adr-064-agentic-observability-and-auto-triage.md) (its MCP clause), [ADR-048](adr-048-platform-consumer-repo-boundary.md) (the `kubelab-cli` publish), and [ADR-043](adr-043-unified-knowledge-memory-plane.md) (where its thin MCP tool is served). It does not activate the gateway role that [ADR-029](adr-029-intelligence-layer.md) gives the Go API. [ADR-042](adr-042-reference-architecture.md) D4 was re-examined and stands: single-tenant per client.
 
 ## Context
 
