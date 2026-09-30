@@ -1,0 +1,99 @@
+---
+# =============================================================================
+# Allow one node to start a new backup history (BACKUP-058)
+#
+# A node records the restic repository it has shipped to, per destination, in
+# `node_backup_<dest>_repository_id_file`. From then on its ship refuses to
+# re-initialise that repository if it disappears, and refuses a repository
+# whose id changed, because either would replace the node's whole restore
+# history without anyone deciding to. This playbook is that decision: it
+# removes the record, so the next ship may initialise a new repository.
+#
+# Usage:
+#   make backup-repo-reinit NODE=rpi3 DEST=r2 ENV=prod
+#
+# Then, once the next ship has run, declare the new id in
+# `backup.r2.repository_ids` (common.yaml) in a PR. Until that PR lands, the
+# R2 watcher reports the node unhealthy, on purpose: accepting a new history
+# is a reviewed change.
+#
+# Deliberately NOT like backup-node.yml / backup-schedule.yml:
+#   - no `ignore_unreachable`: an override that silently did not happen is
+#     worse than one that failed, because the operator moves on believing it did;
+#   - one host only, asserted here as well as in the Makefile, because
+#     `-l` takes patterns and `NODE=vps,rpi3` would otherwise pass;
+#   - `DEST` is looked up in a declared map and never used as a path.
+#
+# Runbook: docs/runbooks/offsite-backup-restore.md, "Repository missing or
+# replaced".
+# =============================================================================
+
+- name: Allow one node to initialise a new backup repository
+  hosts: all
+  become: true
+  gather_facts: false
+  # The marker paths come from the role that writes and reads them, so the two
+  # can never disagree about where the record lives.
+  vars_files:
+    - ../roles/node_backup/defaults/main.yml
+
+  vars:
+    reinit_destinations:
+      r2: "{{ node_backup_r2_repository_id_file }}"
+    reinit_dest: "{{ dest | default('') }}"
+
+  tasks:
+    - name: Refuse more than one node
+      run_once: true
+      ansible.builtin.assert:
+        that:
+          - ansible_play_hosts_all | length == 1
+        fail_msg: >-
+          backup-repo-reinit acts on exactly one node, and this run matched
+          {{ ansible_play_hosts_all | length }}: {{ ansible_play_hosts_all | join(', ') }}.
+
+    - name: Refuse an unknown destination
+      ansible.builtin.assert:
+        that:
+          - reinit_dest in reinit_destinations
+        fail_msg: >-
+          DEST={{ reinit_dest }} is not a backup destination. Known:
+          {{ reinit_destinations.keys() | list | join(', ') }}.
+
+    - name: Read the recorded repository
+      ansible.builtin.stat:
+        path: "{{ reinit_destinations[reinit_dest] }}"
+      register: reinit_marker
+
+    - name: Read the recorded repository id
+      when: reinit_marker.stat.exists
+      # check_mode: false so a dry run still shows what would be dropped.
+      check_mode: false
+      ansible.builtin.slurp:
+        src: "{{ reinit_destinations[reinit_dest] }}"
+      register: reinit_recorded
+
+    - name: Report what is about to be dropped
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }}/{{ reinit_dest }}:
+          {{ ('recorded repository ' ~ (reinit_recorded.content | b64decode | trim) ~ ' will be forgotten; the next ship may initialise a new repository')
+             if reinit_marker.stat.exists
+             else 'no repository is recorded; nothing to remove' }}
+
+    - name: Record the override in the node's journal
+      # The marker is the only on-node evidence of which history existed, so its
+      # removal writes that id somewhere that outlives the file.
+      when: reinit_marker.stat.exists
+      ansible.builtin.command:
+        argv:
+          - logger
+          - --tag
+          - node-backup
+          - "backup-repo-reinit: forgot {{ reinit_dest }} repository {{ reinit_recorded.content | b64decode | trim }}; the next ship may initialise a new one"
+      changed_when: true
+
+    - name: Remove the record
+      ansible.builtin.file:
+        path: "{{ reinit_destinations[reinit_dest] }}"
+        state: absent
