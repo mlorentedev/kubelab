@@ -4,34 +4,34 @@
     "behavior": "A users database whose groups or users differ from the rendered declaration is an authelia drift naming make apply-secrets; an equal one is ok",
     "verification": "poetry run pytest -q tests/test_access_review.py -k idp_groups",
     "state": "pending",
-    "evidence": ""
+    "evidence": "4 passed 2026-09-29; live negative in staging reported authelia drift"
   },
   {
     "id": "AUTH-014-idp-groups-drift-f2",
     "behavior": "A user whose live groups lag is neither edited nor revoked under APPLY and reads drift",
-    "verification": "poetry run pytest -q tests/test_access_review.py -k stale",
+    "verification": "poetry run pytest -q tests/test_access_review.py -k \"stale or review_env_checks\"",
     "state": "pending",
-    "evidence": ""
+    "evidence": "3 passed 2026-09-29 (+ wiring test)"
   },
   {
     "id": "AUTH-014-idp-groups-drift-f3",
     "behavior": "No password hash from either users database reaches a finding or the log",
     "verification": "poetry run pytest -q tests/test_access_review.py -k hash",
     "state": "pending",
-    "evidence": ""
+    "evidence": "1 passed 2026-09-29; M2 mutation fails it"
   },
   {
     "id": "AUTH-014-idp-groups-drift-f4",
     "behavior": "An unreadable users Secret is an authelia failed finding",
     "verification": "poetry run pytest -q tests/test_access_review.py -k unreadable_users",
     "state": "pending",
-    "evidence": ""
+    "evidence": "1 passed 2026-09-29"
   },
   {
     "id": "AUTH-014-idp-groups-drift-f5",
     "behavior": "Live auth-review in prod and staging reads authelia ok and exits 0",
     "verification": "make auth-review ENV=prod",
     "state": "pending",
-    "evidence": ""
+    "evidence": "2026-09-29 prod and staging: authelia OK x3, rc=0"
   }
 ]

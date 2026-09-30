@@ -19,14 +19,14 @@ created: "2026-09-29"
 
 ## Implementation
 
-- [ ] [AC1] [AC3] Failing tests: `idp_groups_drift` compares the rendered and the live users database by groups only (differ, missing, extra, equal), and no hash reaches a finding
-- [ ] [AC1] [AC3] Implement `idp_groups_drift` (pure) and the live reader (`kubectl` on the env's spoke, decoded in-process)
-- [ ] [AC2] Failing tests: `reconcile` with a stale user edits and revokes nothing for them, reports `drift` naming the command; a stale break-glass user still reads `refused`
-- [ ] [AC2] Implement the `stale` exclusions in `reconcile`
-- [ ] [AC4] [AC3] Failing test: `review_env` runs the IdP check first, passes `stale` on, turns an unreadable Secret into `authelia failed`, and logs no hash
-- [ ] [AC4] Wire it into `review_env`
+- [x] [AC1] [AC3] Failing tests: `idp_groups_drift` compares the rendered and the live users database by groups only (differ, missing, extra, equal), and no hash reaches a finding
+- [x] [AC1] [AC3] Implement `idp_groups_drift` (pure) and the live reader (`kubectl` on the env's spoke, decoded in-process)
+- [x] [AC2] Failing tests: `reconcile` with a stale user edits and revokes nothing for them, reports `drift` naming the command; a stale break-glass user still reads `refused`
+- [x] [AC2] Implement the `stale` exclusions in `reconcile`
+- [x] [AC4] [AC3] Failing test: `review_env` runs the IdP check first, passes `stale` on, turns an unreadable Secret into `authelia failed`, and logs no hash
+- [x] [AC4] Wire it into `review_env`
 - [x] Docs: module docstring, runbook `identity-tier-change.md` (the "cannot see it yet" line)
-- [ ] [AC5] Live: `make auth-review ENV=staging` and `ENV=prod`, rc=0, `authelia ... ok`
+- [x] [AC5] Live: `make auth-review ENV=staging` and `ENV=prod`, rc=0, `authelia ... ok`
 
 ## Closing
 

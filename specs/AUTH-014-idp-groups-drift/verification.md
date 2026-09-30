@@ -7,24 +7,24 @@ created: "2026-09-29"
 
 ## Evidence
 
-Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
-
-- [ ] Criterion 1 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 2 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 3 -> commit `<hash>` / test `<name>`
+- [x] AC1 (drift or ok per user) -> `668d4915`, `test_idp_groups_drift_when_the_live_users_database_lags` (other groups, declared user missing, live user undeclared) and `test_idp_groups_that_match_are_ok_whatever_their_order`. Live negative, 2026-09-29: with `operator` declared `admins,users` in a local-only edit (restored, not committed), `make auth-review ENV=staging` gave `authelia operator declared=admins,users live=users DRIFT ... make apply-secrets ENV=staging` and exited non-zero.
+- [x] AC2 (a lagging user is not corrected) -> `test_a_stale_user_is_neither_edited_nor_revoked_and_reads_drift`, `test_a_stale_user_does_not_hold_back_the_others`, `test_a_stale_break_glass_user_still_reads_refused`, and `test_review_env_checks_the_idp_first_and_passes_the_lagging_users_on` (the ordering). The same live run gave `grafana operator declared=Admin live=Editor DRIFT Authelia still serves the old groups ...`, not `BOUNDED`.
+- [x] AC3 (no hash leaks) -> `757eaa1b`, `test_no_password_hash_reaches_a_finding_even_from_a_malformed_database` plus the `_no_hash_in` check in every AUTH-014 test, with a distinct fake hash per side, and the wiring test asserts no log line holds one.
+- [x] AC4 (unreadable Secret) -> `test_an_unreadable_users_secret_is_a_failure_not_a_pass`; `failed` exits 1 (`test_the_command_exits_1_on_every_finding_a_human_must_act_on`).
+- [x] AC5 (live) -> 2026-09-29, `make auth-review ENV=staging` and `ENV=prod`: `authelia manu/operator/testuser ... OK` in both, rc=0.
 
 ## Test status
 
-- Test suite: `<command> -> <output / coverage %>`
-- Manual smoke test: what was exercised, what was observed
-- No regressions in existing test suite: yes / no (if no, document)
+- `.venv/bin/pytest -q tests/test_access_review.py`: 49 passed. `mypy` and `ruff` clean.
+- Mutation checks, each on a committed tree and restored with `git checkout HEAD`: ignoring `stale` in `reconcile` fails 2 tests; passing `stale` as empty from `review_env` fails 1; passing the PyYAML error text through fails 1.
+- Full suite (`make test`): 3017 passed, 15 skipped, 2 xfailed.
 
 ## Decisions made during implementation
 
-Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
-
--
--
+- The comparison is against the users database the declaration RENDERS (`k8s_secrets._build_users_database`), not the raw `users:` list. A user with no password hash in an env is absent from both, so it is never a false drift that `apply-secrets` could not clear.
+- A live user the declaration lacks is `drift`, not `undeclared`: `apply-secrets` renders the Secret whole and removes it, while `undeclared` means "never touched" in this module.
+- For a lagging user, the review corrects that user in no app, not only Grafana: Gitea's admin flag is also re-derived from the groups at the next login. Chosen by the operator on 2026-09-29.
+- The first leak test put its marker at the end of the fake hash, and PyYAML quotes only about 30 characters around the error, so a mutation that leaked the error text survived. The marker now sits where the quote lands.
 
 ## Promotion candidates
 
