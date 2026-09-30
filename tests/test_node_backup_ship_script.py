@@ -397,7 +397,7 @@ def test_the_read_data_rotation_is_continuous_across_a_year_boundary(node) -> No
         n = int(_check_call(node.calls).split()[-1].split("/")[0])
         (before if offset < 0 else after).append(n)
     sequence = before + after
-    assert [(b - a) % READ_DATA_GROUPS for a, b in zip(sequence, sequence[1:])] == [1, 1]
+    assert [(b - a) % READ_DATA_GROUPS for a, b in zip(sequence, sequence[1:], strict=False)] == [1, 1]
 
 
 def test_the_frequent_ship_does_not_check(node) -> None:

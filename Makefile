@@ -1070,10 +1070,11 @@ deploy:
 # path, so it also posts the AC9 coverage heartbeat.
 .PHONY: backup-node
 backup-node:
-	@test -n "$(NODE)" || (echo "Usage: make backup-node NODE=<a backup.sources node>|all [ENV=prod] [CHECK=1]" && exit 1)
+	@test -n "$(NODE)" || (echo "Usage: make backup-node NODE=<a backup.sources node>|all [ENV=prod] [INTEGRITY=1] [CHECK=1]" && exit 1)
 	$(eval _ENV := $(or $(filter staging prod,$(ENV)),prod))
 	$(eval _CHECK := $(if $(CHECK),--check,))
-	$(TOOLKIT) infra ansible run -p backup-node -e $(_ENV) -l $(NODE) $(_CHECK)
+	$(eval _INTEGRITY := $(if $(INTEGRITY),--extra-vars "integrity=true",))
+	$(TOOLKIT) infra ansible run -p backup-node -e $(_ENV) -l $(NODE) $(_CHECK) $(_INTEGRITY)
 
 # Let ONE node start a new backup history (BACKUP-058). A node refuses to
 # re-initialise a repository it has shipped to, so a deleted or replaced
