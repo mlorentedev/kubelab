@@ -30,7 +30,7 @@ cancel-in-progress: ${{ github.event_name != 'pull_request' || github.event.pull
 **Rule**:
 
 - **The predicate that decides whether a run does work must also decide whether it may cancel.** A `cancel-in-progress: true` next to a job-level `if:` gives a run that will skip the power to cancel a run that will not.
-- **The standing order to push to a draft and then mark it ready produces this sequence every time.** Until #1944 lands, a PR that went draft to ready and shows cancelled plus skipped was not reviewed. Rerun the cancelled run.
+- **The standing order to push to a draft and then mark it ready can produce this sequence whenever the two runs are created in the wrong order**, which GitHub does not control for. Until #1944 lands, a PR that went from draft to ready and shows cancelled plus skipped was not reviewed. Rerun the cancelled run.
 - **This refines lesson-353 and does not contradict it.** That lesson holds that `cancel-in-progress` is right for a reviewer, because a newer run has strictly newer information. A skipped run has none, so it must not count as newer.
 
 **Tags**: `#github-actions` `#concurrency` `#pr-agent` `#draft` `#pr-1942` `#issue-1944` `#tool-091`
