@@ -255,38 +255,44 @@ def reconcile(
     if protected:
         declared = {protected: ADMIN, **declared}
     accounts = {a.user: a for a in tiers.read(base_url, auth)}
-    findings = [
-        Finding(
-            f.service, f.user, f.declared, f.live, "refused", "the break-glass account is never edited by the review"
-        )
-        if f.status == "drift" and f.user == protected
-        else f
-        for f in review(service, declared, list(accounts.values()), tiers)
-    ]
-    findings = [
-        Finding(f.service, f.user, f.declared, f.live, f.status, stale_detail)
-        if f.status == "drift" and f.user in stale
-        else f
-        for f in findings
-    ]
+    findings = _hold_back(review(service, declared, list(accounts.values()), tiers), protected, stale, stale_detail)
     editable = [f for f in findings if f.status == "drift" and f.user not in stale and f.declared is not None]
     if not apply or not editable:
         return findings
     accepted = {f.user: tiers.set_tier(base_url, auth, accounts[f.user], f.declared) for f in editable}
     # A 200 says the request was accepted, not that the tier changed: read it back.
     after = {a.user: a.tier for a in tiers.read(base_url, auth)}
-    result = []
+    settles = getattr(tiers, "settles_on_next_login", False)
+    return [
+        f
+        if f.status != "drift" or f.user in stale
+        else _read_back(service, f, after, bool(settles and accepted.get(f.user)))
+        for f in findings
+    ]
+
+
+def _hold_back(findings: list[Finding], protected: str, stale: frozenset[str], stale_detail: str) -> list[Finding]:
+    """Mark the drifts the review must not correct: the break-glass account, and
+    every user whose groups the IdP has not caught up with."""
+    held = []
     for f in findings:
-        if f.status != "drift" or f.user in stale:
-            result.append(f)
-        elif after.get(f.user) == f.declared:
-            result.append(Finding(service, f.user, f.declared, after[f.user], "fixed", f"was {f.live}"))
-        elif getattr(tiers, "settles_on_next_login", False) and accepted.get(f.user):
-            detail = "sessions revoked; the next request signs in again and takes the tier from `groups`"
-            result.append(Finding(service, f.user, f.declared, after.get(f.user, "?"), "bounded", detail))
-        else:
-            result.append(Finding(service, f.user, f.declared, after.get(f.user, "?"), "failed", f"was {f.live}"))
-    return result
+        if f.status == "drift" and f.user == protected:
+            detail = "the break-glass account is never edited by the review"
+            f = Finding(f.service, f.user, f.declared, f.live, "refused", detail)
+        elif f.status == "drift" and f.user in stale:
+            f = Finding(f.service, f.user, f.declared, f.live, f.status, stale_detail)
+        held.append(f)
+    return held
+
+
+def _read_back(service: str, f: Finding, after: Mapping[str, str], bounded: bool) -> Finding:
+    """What one corrected drift became, judged by the tier read back, never by the write's answer."""
+    if after.get(f.user) == f.declared:
+        return Finding(service, f.user, f.declared, after[f.user], "fixed", f"was {f.live}")
+    if bounded:
+        detail = "sessions revoked; the next request signs in again and takes the tier from `groups`"
+        return Finding(service, f.user, f.declared, after.get(f.user, "?"), "bounded", detail)
+    return Finding(service, f.user, f.declared, after.get(f.user, "?"), "failed", f"was {f.live}")
 
 
 # --------------------------------------------------------------------------- the IdP's live groups
@@ -455,14 +461,9 @@ def _live_argocd_oidc_config() -> str:
 
 def review_env(env: str, project_root: Path, apply: bool, log: Callable[[str], None]) -> list[Finding]:
     """Review every app that holds a tier in ENV, over its break-glass path."""
-    from toolkit.features import break_glass as bg
     from toolkit.features.oidc_clients import load_values
-    from toolkit.features.secrets_manager import SecretsManager
 
     values = load_values(env, project_root)
-    declared = declared_tiers(values)
-    decls = bg.declarations(values)
-    manager = SecretsManager(project_root)
     # First, so a user whose groups lag is never "corrected" in an app below.
     findings, stale = idp_groups_drift(
         _rendered_users_database(env, project_root), lambda: _live_users_database(env), env
@@ -472,6 +473,27 @@ def review_env(env: str, project_root: Path, apply: bool, log: Callable[[str], N
     if apply and any(f.status == "failed" for f in findings):
         log("  apply skipped: the groups Authelia serves could not be read, so no correction is made")
         apply = False
+    findings += _review_apps(env, project_root, values, apply, stale, log)
+    findings += _argocd_findings(env, values)
+    return findings
+
+
+def _review_apps(
+    env: str,
+    project_root: Path,
+    values: dict[str, Any],
+    apply: bool,
+    stale: frozenset[str],
+    log: Callable[[str], None],
+) -> list[Finding]:
+    """Reconcile every app that has a break-glass secret in ENV, each over its own private path."""
+    from toolkit.features import break_glass as bg
+    from toolkit.features.secrets_manager import SecretsManager
+
+    declared = declared_tiers(values)
+    decls = bg.declarations(values)
+    manager = SecretsManager(project_root)
+    findings: list[Finding] = []
     for service, make in TIERS.items():
         decl = decls.get(service) or {}
         if "secret" not in decl:
@@ -491,13 +513,17 @@ def review_env(env: str, project_root: Path, apply: bool, log: Callable[[str], N
                 )
             except ReviewError as exc:
                 findings.append(Finding(service, "*", None, "unreadable", "failed", str(exc)))
-    clients = values["apps"]["services"]["security"]["authelia"].get("oidc_clients") or []
-    if any(c.get("client_id") == "argocd" and env in (c.get("envs") or []) for c in clients):
-        try:
-            bound = argocd_group_bound(_live_argocd_oidc_config)
-        except ReviewError as exc:
-            findings.append(Finding("argocd", "*", None, "unreadable", "failed", str(exc)))
-        else:
-            status = "bounded" if bound.startswith("groups from UserInfo") else "failed"
-            findings.append(Finding("argocd", "*", None, "groups claim", status, f"no user database; {bound}"))
     return findings
+
+
+def _argocd_findings(env: str, values: dict[str, Any]) -> list[Finding]:
+    """Argo CD keeps no user database: what it can be held to is where it reads `groups` from."""
+    clients = values["apps"]["services"]["security"]["authelia"].get("oidc_clients") or []
+    if not any(c.get("client_id") == "argocd" and env in (c.get("envs") or []) for c in clients):
+        return []
+    try:
+        bound = argocd_group_bound(_live_argocd_oidc_config)
+    except ReviewError as exc:
+        return [Finding("argocd", "*", None, "unreadable", "failed", str(exc))]
+    status = "bounded" if bound.startswith("groups from UserInfo") else "failed"
+    return [Finding("argocd", "*", None, "groups claim", status, f"no user database; {bound}")]
