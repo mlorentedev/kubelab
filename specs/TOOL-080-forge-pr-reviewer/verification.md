@@ -214,6 +214,8 @@ Digest `sha256:750c6cf8532b7aa81ef55a71cce0d8c24485cd18cbdcca21d3885788ce2b69f4`
   - With this closed, `gitea-reconcile --apply` creates the PR-Agent hook on every declared repository, signed with this secret. Until PR 4 flips it, `active: false` keeps Gitea from delivering anything to it.
   - Read-only plan against prod from this branch, 2026-09-26: `make gitea-reconcile ENV=prod` lists `+ hook` for `personal/resume`, `teledyne/fae-brain` and `teledyne/openkm-brain`, all `-> https://pr-agent.kubelab.live/api/v1/gitea_webhooks`, and no change to any n8n hook. So the list form reads the live n8n hooks exactly as the singular block did.
 
+- 2026-09-30, Manu: **`repo_context_files` stays `["AGENTS.md"]` on the forge**, which closes the disagreement recorded under PR 4's test status. On the forge repos, `CLAUDE.md` is a thin overlay that delegates to `AGENTS.md` and adds agent-tooling notes. Reading it would add tokens to every review and no review rules. The GitHub side's `.pr_agent.toml` is unchanged; the two forges differ on purpose.
+
 ## Promotion candidates
 
 - [ ] Lesson: <yes / no>
