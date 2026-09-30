@@ -113,10 +113,13 @@ A line from one run is one verdict: the Job never retries. To re-check now inste
 of waiting for the next run:
 
 ```bash
-kubectl create job -n kubelab --from=cronjob/r2-backup-watcher r2-backup-watcher-manual
-kubectl logs -n kubelab job/r2-backup-watcher-manual
-kubectl delete job -n kubelab r2-backup-watcher-manual
+make watcher-run NAME=r2-backup-watcher ENV=prod
 ```
+
+It prints the Job's log, deletes the Job, and exits non-zero when the probe
+reports an unhealthy node. Do not use `kubectl create job --from=cronjob/...`:
+that Job is owned by the CronJob, whose controller can prune a failed one,
+log included, before you read it.
 
 ### Rotating the read-only token
 

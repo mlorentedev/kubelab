@@ -10,6 +10,16 @@ from typing import Annotated, Generator, Optional
 import typer
 
 from toolkit.core.logging import logger
+from toolkit.features.cronjob_run import (
+    CronJobRunTeardownError,
+    create_job,
+    delete_job,
+    get_job,
+    job_logs,
+    manual_job_name,
+    run_cronjob,
+)
+from toolkit.features.cronjob_run import get_cronjob as read_cronjob
 from toolkit.features.k8s_kubeconfig import output_path as kubeconfig_path
 from toolkit.features.observability import (
     AlertsUnavailableError,
@@ -438,3 +448,52 @@ def drill_pvc_unbound_cmd(
         f"The alert instance resolves on its own in about {RESOLVE_LATENCY_MIN}m — "
         "measured, not derived from the rule's interval."
     )
+
+
+@app.command("watcher-run")
+def watcher_run_cmd(
+    name: Annotated[str, typer.Option("--name", "-n", help="CronJob to run once, e.g. r2-backup-watcher.")],
+    env: Annotated[str, typer.Option("--env", "-e", help="Cluster to run it in (staging|prod).")],
+) -> None:
+    """Run a CronJob once now, print its log, and delete the Job.
+
+    The Job is built from the CronJob's jobTemplate WITHOUT an ownerReference,
+    so the CronJob controller never prunes it before its log is read, and it is
+    deleted in a `finally`. Exit 0 when the Job succeeded, 1 when it failed or
+    did not finish, 2 when the Job could not be deleted. See
+    `toolkit/features/cronjob_run.py` (TOOL-084).
+    """
+    import datetime as _dt
+
+    if env not in ("staging", "prod"):
+        typer.echo(f"✗ --env must be staging or prod, got '{env}'", err=True)
+        raise typer.Exit(1)
+    kubeconfig = str(kubeconfig_path(env))
+    job_name = manual_job_name(name, _dt.datetime.now(_dt.timezone.utc).strftime("%Y%m%dt%H%M%S"))
+
+    try:
+        result = run_cronjob(
+            job_name=job_name,
+            get_cronjob=lambda: read_cronjob(kubeconfig, name),
+            create=lambda job: create_job(kubeconfig, job),
+            get_job=lambda: get_job(kubeconfig, job_name),
+            logs=lambda: job_logs(kubeconfig, job_name),
+            delete=lambda: delete_job(kubeconfig, job_name),
+            log=typer.echo,
+        )
+    except LookupError as exc:
+        typer.echo(f"✗ {exc}", err=True)
+        raise typer.Exit(1) from exc
+    except CronJobRunTeardownError as exc:
+        typer.echo(f"✗ {exc}", err=True)
+        raise typer.Exit(2) from exc
+
+    typer.echo(result.log.rstrip("\n"))
+    if result.outcome == "succeeded":
+        typer.echo(f"✓ {name} ({env}): the Job succeeded in {result.waited_s:.0f}s")
+        return
+    if result.outcome == "failed":
+        typer.echo(f"✗ {name} ({env}): the Job failed; its log is above", err=True)
+    else:
+        typer.echo(f"✗ {name} ({env}): the Job did not finish within its deadline; the log above is partial", err=True)
+    raise typer.Exit(1)
