@@ -156,7 +156,7 @@ Publishing to PyPI (ADR-048's `kubelab-cli`) and the generic *instance* configur
 
 **Negative**
 
-- A tailnet-only route means an agent outside the tailnet cannot read anything. That is intended; public exposure is a reopen trigger, not a default.
+- Every agent outside the tailnet needs a way to join it: an ephemeral key for CI, and nothing yet for a hosted agent that cannot run a Tailscale client. Public exposure stays a reopen trigger, not a default.
 - Token validation is code in the server, so it needs its own tests: no token, expired, wrong audience and wrong issuer are each refused.
 - A second Argo CD source per environment (D4) is one more thing to keep in sync, and it depends on Gitea, which is on-demand. That is acceptable, because staging is on-demand too.
 - Pre-registered clients mean each agent is onboarded by hand until Authelia ships DCR or CIMD.
