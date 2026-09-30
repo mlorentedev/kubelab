@@ -59,7 +59,10 @@ that never received the work, and removed three files' uncommitted changes. The
 next commit then landed only the tests. The work came back from the blobs `git
 add` had written (`git fsck --unreachable`, matched by content), which is the
 only reason this is an addendum and not a loss. The whole experiment,
-restore included, belongs inside the guarded group:
-`test -z "$(git status --porcelain)" && { mutate; test; restore; }`.
+restore included, belongs inside the guarded group, and the group has to return
+the test's status rather than the restore's, or a restore that succeeds hides
+what the test said:
+`test -z "$(git status --porcelain)" && { mutate && test; rc=$?; restore || rc=1; exit $rc; }`
+(run it in a subshell, `( ... )`, so the `exit` ends only the experiment).
 
 **Tags**: `#git` `#pre-commit` `#mutation-testing` `#lesson-365` `#issue-1871` `#issue-1941`
