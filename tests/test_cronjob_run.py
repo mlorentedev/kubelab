@@ -15,6 +15,7 @@ These tests pin what the target promises:
 
 from __future__ import annotations
 
+import copy
 import subprocess
 
 import pytest
@@ -42,7 +43,13 @@ CRONJOB = {
         "schedule": "0 */6 * * *",
         "failedJobsHistoryLimit": 3,
         "jobTemplate": {
-            "metadata": {"labels": {"app.kubernetes.io/name": "r2-backup-watcher"}},
+            "metadata": {
+                "labels": {"app.kubernetes.io/name": "r2-backup-watcher"},
+                "annotations": {
+                    "argocd.argoproj.io/tracking-id": "kubelab-prod:batch/CronJob:kubelab/r2-backup-watcher",
+                    "kubelab.live/probe": "r2",
+                },
+            },
             "spec": {
                 "backoffLimit": 0,
                 "activeDeadlineSeconds": 600,
@@ -66,8 +73,27 @@ def test_the_job_carries_the_template_and_no_owner_reference() -> None:
 
 
 def test_the_job_does_not_inherit_the_cronjobs_argo_tracking() -> None:
-    job = job_from_cronjob(CRONJOB, "x")
-    assert "argocd.argoproj.io/tracking-id" not in job["metadata"].get("annotations", {})
+    """The template's own annotations are copied, except Argo CD's tracking.
+
+    The fixture carries the tracking id on the jobTemplate too, the only place
+    the builder reads: a Job carrying it would be claimed by the Application
+    and pruned as drift.
+    """
+    annotations = job_from_cronjob(CRONJOB, "x")["metadata"]["annotations"]
+    assert "argocd.argoproj.io/tracking-id" not in annotations
+    assert annotations["kubelab.live/probe"] == "r2"
+
+
+def test_the_job_does_not_inherit_a_ttl() -> None:
+    """A TTL would let the Job controller delete the Job before its log is read.
+
+    Only `run_cronjob` removes the manual Job, after reading its log.
+    """
+    cronjob = copy.deepcopy(CRONJOB)
+    cronjob["spec"]["jobTemplate"]["spec"]["ttlSecondsAfterFinished"] = 0
+    job = job_from_cronjob(cronjob, "x")
+    assert "ttlSecondsAfterFinished" not in job["spec"]
+    assert cronjob["spec"]["jobTemplate"]["spec"]["ttlSecondsAfterFinished"] == 0
 
 
 def test_building_the_job_does_not_mutate_the_cronjob() -> None:
@@ -211,6 +237,37 @@ def test_a_failed_teardown_is_raised_not_logged() -> None:
     # The reason travels in the message itself, not only in the chained cause
     # a CLI prints nowhere.
     assert "apiserver unreachable" in str(caught.value)
+
+
+def test_a_failed_create_is_reported_as_itself() -> None:
+    """A Job that was never created is not deleted, and not reported as left behind.
+
+    Before, the `finally` deleted unconditionally, so a refused create followed
+    by a failed delete surfaced as "could not be deleted and is still in the
+    cluster" for a Job that never existed. And a create refused with
+    AlreadyExists names a Job this call does not own.
+    """
+    cluster = FakeCluster([], delete_fails=True)
+
+    def refuse(_job: dict) -> None:
+        cluster.calls.append("create")
+        raise KubectlError('Error from server (AlreadyExists): jobs.batch "w-manual-1" already exists')
+
+    with pytest.raises(KubectlError, match="AlreadyExists"):
+        run_cronjob(
+            job_name="w-manual-1",
+            get_cronjob=cluster.get_cronjob,
+            create=refuse,
+            get_job=cluster.get_job,
+            logs=cluster.logs,
+            delete=cluster.delete,
+            timeout_s=100,
+            poll_s=10,
+            sleep=lambda _: None,
+            now=lambda: 0.0,
+            log=lambda _: None,
+        )
+    assert "delete" not in cluster.calls
 
 
 def test_nothing_is_created_when_the_cronjob_cannot_be_read() -> None:
