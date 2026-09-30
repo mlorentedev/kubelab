@@ -924,3 +924,19 @@ def test_init_is_gated_on_restic_exit_code_10_only():
     assert len(init_lines) == 1, "exactly one `restic init` call"
     arm = next(i for i in range(init_lines[0], -1, -1) if re.match(r"\s*\d+\)", code[i]))
     assert code[arm].strip() == "10)", f"`init` must sit in the `10)` arm, found under {code[arm].strip()!r}"
+
+
+def test_the_capture_keeps_the_staging_dir_private_after_it_recreates_it():
+    """The role creates the staging dir 0700; the capture `rm -rf`s and recreates it.
+
+    Under root's default umask 022 the recreated dir was 0755 and the staged
+    database copies 0644, readable by any local user until the next deploy put
+    the mode back. Found by `make backup ENV=prod` reporting `changed` on
+    "Ensure staging directory exists" after a scheduled capture (BACKUP-058
+    deploy, 2026-09-30). The umask lives in the script, not the unit, because
+    the shutdown unit runs the script from ExecStop too.
+    """
+    script = _render("node-backup-capture.sh.j2", node_backup_location="on-demand")
+    lines = [line.strip() for line in script.splitlines()]
+    assert "umask 077" in lines, "the capture recreates the staging dir with the default umask"
+    assert lines.index("umask 077") < lines.index('rm -rf "$STAGING"')
