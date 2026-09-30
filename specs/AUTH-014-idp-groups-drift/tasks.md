@@ -30,13 +30,13 @@ created: "2026-09-29"
 
 ## Closing
 
-- [ ] Every acceptance criterion from `proposal.md` is covered by at least one test
-- [ ] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command
-- [ ] Type checks pass
-- [ ] Lint passes
-- [ ] No unrelated changes in the diff (no scope creep)
-- [ ] `verification.md` filled in
-- [ ] PR opened referencing this spec folder
+- [x] Every acceptance criterion from `proposal.md` is covered by at least one test ✓ 2026-09-30
+- [x] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command ✓ 2026-09-30
+- [x] Type checks pass ✓ 2026-09-30
+- [x] Lint passes ✓ 2026-09-30
+- [x] No unrelated changes in the diff (no scope creep) ✓ 2026-09-30
+- [x] `verification.md` filled in ✓ 2026-09-30
+- [x] PR opened referencing this spec folder ✓ 2026-09-30
 
 ## Machine-readable features
 

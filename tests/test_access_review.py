@@ -126,7 +126,8 @@ def _grafana_role(expr: str, source: dict[str, Any]) -> str:
     """Grafana 13.0.2's `searchRole` for one source: the path on the source's JSON, and
     if that finds nothing, the path again on `{"groups": []}`, a list the caller
     hardcodes as empty (`extractRoleAndAdminOptional(data.rawJSON, []string{})`)."""
-    for doc in (source, {"groups": []}):
+    empty: dict[str, Any] = {"groups": []}
+    for doc in (source, empty):
         try:
             found = jmespath.search(expr, doc)
         except jmespath.exceptions.JMESPathError:
