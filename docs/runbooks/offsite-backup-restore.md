@@ -342,6 +342,25 @@ Measured, 2026-08-16:
 Class A per operation: `backup` 110, `check` 80, `snapshots` 60. The projection
 assumes backup every 4h on always-on nodes and `check` weekly.
 
+Measured again 2026-09-30, as stored bytes rather than source: **187 MB** across
+the four repositories (beelink 61, rpi3 53, rpi4 66, vps 7 MB), from `restic
+stats --mode raw-data` (BACKUP-057).
+
+The R2 watcher now reports that figure on every run: `raw_bytes` on each
+`r2_backup_node` line, and the sum on the `r2_backup_health` line. The Grafana
+rule `backup057-r2-backup-size` pages when the sum passes 80% of
+`backup.r2.free_tier_bytes` (`common.yaml`), **or when no size arrived for a
+day**. A `null` size means that node's `stats` failed, and the fleet sum is
+`null` whenever any node's is, so an unmeasured fleet is never read as a small
+one. When it fires:
+
+1. Read the watcher's lines (`toolkit obs logs --env prod -q
+   '{container="r2-backup-watcher"}' --since 24h`). A `null` comes with a
+   `size unknown:` line naming the reason, and `stats took Ns` says how close
+   the call ran to `STATS_TIMEOUT`.
+2. If the size is real, find the node that grew and check its retention ran
+   (the first item below) before raising anything.
+
 Two things that would break this, in order of likelihood:
 
 1. **Retention not running.** Without `forget --prune`, storage grows without

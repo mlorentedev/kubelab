@@ -97,7 +97,7 @@ groups:
             stop, and the bucket lock (BACKUP-057) keeps data for its retention window
             whatever `forget` decides. Read the watcher's `r2_backup_node` lines: each
             carries its node's `raw_bytes`, and `null` means that node's `stats` failed.
-          runbook_url: https://github.com/mlorentedev/kubelab/blob/master/docs/runbooks/offsite-backup-restore.md#r2-backup-alert
+          runbook_url: https://github.com/mlorentedev/kubelab/blob/master/docs/runbooks/offsite-backup-restore.md#cost-and-quota
         data:
           - refId: A
             relativeTimeRange:
