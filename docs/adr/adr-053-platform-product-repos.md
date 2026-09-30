@@ -1,7 +1,7 @@
 ---
 id: "adr-053"
 type: adr
-status: proposed
+status: accepted
 owner: manu
 date: "2026-06-23"
 issue: "kubelab#744"   # repo#NNN — issue-gate (per ADR-018)
@@ -13,7 +13,11 @@ created: "2026-06-23"
 
 ## Status
 
-Proposed 2026-06-23. **Extends [[adr-048-platform-consumer-repo-boundary|ADR-048]]** (which separated only the `web` frontend). Consumes [[adr-046-gitops-delivery-promotion-strategy|ADR-046]] (CI-driven promotion; Argo CD Image Updater descoped, #692) and [[adr-029-intelligence-layer|ADR-029]] (Go API as the platform gateway). Reaffirms [[adr-037-environment-promotion-strategy|ADR-037]] (conditional selfHeal per env).
+Proposed 2026-06-23; accepted 2026-09-30 with the amendment below. **Extends [[adr-048-platform-consumer-repo-boundary|ADR-048]]** (which separated only the `web` frontend). Consumes [[adr-046-gitops-delivery-promotion-strategy|ADR-046]] (CI-driven promotion; Argo CD Image Updater descoped, #692) and [[adr-029-intelligence-layer|ADR-029]] (Go API as the platform gateway). Reaffirms [[adr-037-environment-promotion-strategy|ADR-037]] (conditional selfHeal per env).
+
+## Amendment — 2026-09-30 (agent access surface)
+
+**Amended by [ADR-067](adr-067-product-contract-and-agent-access.md).** §2: the per-product receiver becomes one generic receiver that maps the event type to an app through a registry, and validates the product's `kubelab.yaml` contract. §5: the rule of three is met (web, garsync and client staging), so the contract is built now; the scaffold template still waits for its own trigger. This ADR moves from `proposed` to `accepted` with these amendments, because every later ADR already treats it as operative.
 
 ## Context
 
@@ -37,7 +41,7 @@ ADR-048 drew the platform-vs-consumer line and extracted only the `web` frontend
    - **K8s manifests** (overlays, domains, env) → **centralized in kubelab** (`infra/k8s`).
    - **Reusable bases** (Kustomize "a landing" base, middlewares, the golden path) → kubelab.
    - **Go API** stays in kubelab as the platform gateway, serving every product's landing (ADR-029/048).
-   - **Argo CD (AWS hub)** runs app-of-apps and promotes staging→prod (the existing flow).
+   - **Argo CD (the hub, `gcp1` since ADR-063)** runs app-of-apps and promotes staging→prod (the existing flow).
 
 2. **Image promotion is push, event-driven — never polling.**
    - Each product's CI publishes an immutable `sha-<short>` image, then fires a **`repository_dispatch`** to kubelab, whose workflow runs `toolkit deployment promote` (ADR-046).

@@ -15,6 +15,10 @@ depends_on: [adr-026-idp-evolution]
 > **Supersedes:** kubelab-gateway (absorbed), kubelab-memory (simplified)
 > **Related:** ADR-026 (IDP Evolution), ADR-022 (OpenClaw), ADR-023 (Hub-and-Spoke GitOps)
 
+## Amendment — 2026-09-30 (agent access surface)
+
+**Amended by [ADR-067](adr-067-product-contract-and-agent-access.md).** The Go API's gateway role starts with the agent surface: it fronts `/mcp`, validates Authelia-issued JWT access tokens, and forwards to an internal `toolkit-mcp` Service. `/v1/*` mounts on the same door when it is built. The rest of this ADR stands.
+
 ## Amendment — 2026-08-09 (local inference deferred until a GPU node exists)
 
 **AI-007 (#905) retired Ollama from ace2 on 2026-08-09.** This ADR's local-inference tier no longer has an implementation, and `/v1/llm` stays decided-but-unbuilt. The interim path is a hosted API; local inference returns when a GPU node exists, at which point this amendment should be revisited rather than the original decision rewritten.

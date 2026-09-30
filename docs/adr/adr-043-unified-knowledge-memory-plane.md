@@ -15,6 +15,10 @@ depends_on: [adr-028-operational-topology, adr-029-intelligence-layer, adr-042-r
 > **Related:** ADR-029 (intelligence layer: pgvector RAG), ADR-028 (always-on vs on-demand), ADR-042 (reference architecture; Open WebUI as operator console)
 > **Research:** vault `10_projects/kubelab/40-research/research-memory-ssot.md` (2026-06-11) — option space, trade-off matrix, sources. Ticket: AI-006 (#595).
 
+## Amendment — 2026-09-30 (agent access surface)
+
+**Amended by [ADR-067](adr-067-product-contract-and-agent-access.md).** The "thin MCP tool" for coding agents is served behind the Go API gateway ([ADR-067](adr-067-product-contract-and-agent-access.md) D6), read-only and scoped per product. Option B (a network-served hive MCP) stays deferred on its own trigger.
+
 ## Context
 
 Every agent surface in the ecosystem — coding agents (Claude Code/OpenCode/pi), the planned Open WebUI operator console (AI-003), the remote Hermes ops agent, and a future public chat widget — should share the SAME source of truth for knowledge and memory. Today each surface has a private slice: the Obsidian vault (git + hive MCP) for curated knowledge, claude-mem SQLite per machine for session observations, Hermes `/persist` on the NaN server, and Open WebUI would add its own RAG store by default.
