@@ -10,12 +10,12 @@ created: "2026-09-29"
 - [x] AC1 (drift or ok per user) -> `668d4915`, `test_idp_groups_drift_when_the_live_users_database_lags` (other groups, declared user missing, live user undeclared) and `test_idp_groups_that_match_are_ok_whatever_their_order`. Live negative, 2026-09-29: with `operator` declared `admins,users` in a local-only edit (restored, not committed), `make auth-review ENV=staging` gave `authelia operator declared=admins,users live=users DRIFT ... make apply-secrets ENV=staging` and exited non-zero.
 - [x] AC2 (a lagging user is not corrected) -> `test_a_stale_user_is_neither_edited_nor_revoked_and_reads_drift`, `test_a_stale_user_does_not_hold_back_the_others`, `test_a_stale_break_glass_user_still_reads_refused`, and `test_review_env_checks_the_idp_first_and_passes_the_lagging_users_on` (the ordering). The same live run gave `grafana operator declared=Admin live=Editor DRIFT Authelia still serves the old groups ...`, not `BOUNDED`.
 - [x] AC3 (no hash leaks) -> `757eaa1b`, `test_no_password_hash_reaches_a_finding_even_from_a_malformed_database` plus the `_no_hash_in` check in every AUTH-014 test, with a distinct fake hash per side, and the wiring test asserts no log line holds one.
-- [x] AC4 (unreadable Secret) -> `test_an_unreadable_users_secret_is_a_failure_not_a_pass`; `failed` exits 1 (`test_the_command_exits_1_on_every_finding_a_human_must_act_on`).
+- [x] AC4 (unreadable Secret) -> `test_an_unreadable_users_secret_is_a_failure_not_a_pass`; `failed` exits 1 (`test_the_command_exits_1_on_every_finding_a_human_must_act_on`). After the first pooled review (FAIL, 2026-09-29): a Secret that is not base64 or not UTF-8, a hung API server (30 s timeout) and a user entry of the wrong shape are all `failed` rather than a crash (`test_a_live_secret_that_cannot_be_decoded_is_a_review_error`, `test_a_malformed_user_entry_is_a_failure_not_a_crash`). With the IdP unread, `APPLY=1` corrects nothing (`test_review_env_corrects_nothing_when_the_idp_cannot_be_read`, from PR-Agent's review).
 - [x] AC5 (live) -> 2026-09-29, `make auth-review ENV=staging` and `ENV=prod`: `authelia manu/operator/testuser ... OK` in both, rc=0.
 
 ## Test status
 
-- `.venv/bin/pytest -q tests/test_access_review.py`: 49 passed. `mypy` and `ruff` clean.
+- `.venv/bin/pytest -q tests/test_access_review.py`: 55 passed. `mypy` and `ruff` clean.
 - Mutation checks, each on a committed tree and restored with `git checkout HEAD`: ignoring `stale` in `reconcile` fails 2 tests; passing `stale` as empty from `review_env` fails 1; passing the PyYAML error text through fails 1.
 - Full suite (`make test`): 3017 passed, 15 skipped, 2 xfailed.
 

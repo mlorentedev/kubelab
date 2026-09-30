@@ -54,6 +54,11 @@ OPERATOR_GROUP = "users"
 #: The declared tiers. Each app says what each one is called there (`tier_map`).
 ADMIN, OPERATOR, VIEWER = "admin", "operator", "viewer"
 
+#: How long a live `kubectl` read may take before the review reports it `failed`.
+#: Staging is on-demand, and a spoke that is half up can accept a connection and
+#: never answer, which without a bound would hang the review instead of failing it.
+KUBECTL_TIMEOUT_S = 30
+
 
 @dataclass(frozen=True)
 class Account:
@@ -304,7 +309,14 @@ def _groups_by_user(text: str, side: str) -> dict[str, tuple[str, ...]]:
     users = doc.get("users") if isinstance(doc, dict) else None
     if not isinstance(users, dict):
         raise ReviewError(f"the {side} users database has no `users` map")
-    return {str(u): tuple(sorted({str(g) for g in (v or {}).get("groups") or []})) for u, v in users.items()}
+    groups = {}
+    for user, entry in users.items():
+        listed = (entry or {}).get("groups") if isinstance(entry, dict | None) else None
+        # A string would be read letter by letter, so anything but a list is malformed.
+        if not isinstance(entry, dict | None) or not isinstance(listed, list | None):
+            raise ReviewError(f"the {side} users database has a malformed entry for `{user}`")
+        groups[str(user)] = tuple(sorted({str(g) for g in listed or []}))
+    return groups
 
 
 def idp_groups_drift(rendered: str, read_live: Callable[[], str], env: str) -> tuple[list[Finding], frozenset[str]]:
@@ -346,26 +358,35 @@ def _live_users_database(env: str) -> str:
 
     from toolkit.features.k8s_kubeconfig import output_path
 
-    result = subprocess.run(
-        [
-            "kubectl",
-            "--kubeconfig",
-            str(output_path(env)),
-            "-n",
-            "kubelab",
-            "get",
-            "secret",
-            "authelia-users",
-            "-o",
-            r"jsonpath={.data.users_database\.yml}",
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        result = subprocess.run(
+            [
+                "kubectl",
+                "--kubeconfig",
+                str(output_path(env)),
+                "-n",
+                "kubelab",
+                "get",
+                "secret",
+                "authelia-users",
+                "-o",
+                r"jsonpath={.data.users_database\.yml}",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=KUBECTL_TIMEOUT_S,
+        )
+    except subprocess.TimeoutExpired:
+        raise ReviewError(f"the {env} authelia-users Secret is unreadable: no answer in {KUBECTL_TIMEOUT_S}s") from None
     if result.returncode != 0 or not result.stdout:
         raise ReviewError(f"the {env} authelia-users Secret is unreadable: {result.stderr.strip() or 'empty'}")
-    return base64.b64decode(result.stdout).decode()
+    try:
+        return base64.b64decode(result.stdout, validate=True).decode()
+    except ValueError:
+        # binascii.Error and UnicodeDecodeError are both ValueErrors; the value itself
+        # holds password hashes, so the message names the Secret, never its content.
+        raise ReviewError(f"the {env} authelia-users Secret does not decode to text") from None
 
 
 #: How long a demotion can go unseen by Argo CD (#1861). A UserInfo refetch reuses
@@ -406,23 +427,27 @@ def _live_argocd_oidc_config() -> str:
 
     from toolkit.features.k8s_kubeconfig import output_path
 
-    result = subprocess.run(
-        [
-            "kubectl",
-            "--kubeconfig",
-            str(output_path("hub")),
-            "-n",
-            "argocd",
-            "get",
-            "configmap",
-            "argocd-cm",
-            "-o",
-            r"jsonpath={.data.oidc\.config}",
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        result = subprocess.run(
+            [
+                "kubectl",
+                "--kubeconfig",
+                str(output_path("hub")),
+                "-n",
+                "argocd",
+                "get",
+                "configmap",
+                "argocd-cm",
+                "-o",
+                r"jsonpath={.data.oidc\.config}",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=KUBECTL_TIMEOUT_S,
+        )
+    except subprocess.TimeoutExpired:
+        raise ReviewError(f"the hub's argocd-cm is unreadable: no answer in {KUBECTL_TIMEOUT_S}s") from None
     if result.returncode != 0:
         raise ReviewError(f"the hub's argocd-cm is unreadable: {result.stderr.strip()}")
     return result.stdout
@@ -442,6 +467,11 @@ def review_env(env: str, project_root: Path, apply: bool, log: Callable[[str], N
     findings, stale = idp_groups_drift(
         _rendered_users_database(env, project_root), lambda: _live_users_database(env), env
     )
+    # With the IdP unread, no user is known not to lag, so a correction could be the
+    # non-converging revoke this check exists to prevent: review the apps, fix nothing.
+    if apply and any(f.status == "failed" for f in findings):
+        log("  apply skipped: the groups Authelia serves could not be read, so no correction is made")
+        apply = False
     for service, make in TIERS.items():
         decl = decls.get(service) or {}
         if "secret" not in decl:

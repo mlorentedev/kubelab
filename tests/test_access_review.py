@@ -446,6 +446,52 @@ def test_an_unreadable_users_secret_is_a_failure_not_a_pass() -> None:
     assert (finding.service, finding.status) == ("authelia", "failed") and "unreadable" in finding.detail
 
 
+@pytest.mark.parametrize(
+    "entry",
+    [
+        pytest.param(f'"{LIVE_HASH}"', id="user-is-a-string"),
+        pytest.param('{groups: "users"}', id="groups-is-a-string"),
+    ],
+)
+def test_a_malformed_user_entry_is_a_failure_not_a_crash(entry: str) -> None:
+    """Valid YAML with the wrong shape must still end in a `failed` finding, never an
+    exception that aborts the review, and never a string read as a list of letters."""
+    live = f"users:\n  manu: {{groups: [admins, users]}}\n  operator: {entry}\n"
+    findings, stale = idp_groups_drift(_users_db(RENDERED_GROUPS, RENDERED_HASH), lambda: live, "prod")
+    assert stale == frozenset()
+    assert [(f.service, f.status) for f in findings] == [("authelia", "failed")]
+    _no_hash_in(findings)
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        pytest.param(subprocess.CompletedProcess([], 0, "not base64 at all!", ""), id="not-base64"),
+        pytest.param(subprocess.CompletedProcess([], 0, "//79", ""), id="not-utf8"),
+        pytest.param(subprocess.TimeoutExpired(["kubectl"], 30), id="api-server-hangs"),
+    ],
+)
+def test_a_live_secret_that_cannot_be_decoded_is_a_review_error(
+    monkeypatch: pytest.MonkeyPatch, outcome: subprocess.CompletedProcess[str] | subprocess.TimeoutExpired
+) -> None:
+    """The live read is the one step that talks to a cluster, so every way it can go
+    wrong has to become a ReviewError, which `idp_groups_drift` turns into `failed`."""
+    from toolkit.features import access_review
+
+    calls: list[dict[str, Any]] = []
+
+    def run(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        calls.append(kwargs)
+        if isinstance(outcome, subprocess.TimeoutExpired):
+            raise outcome
+        return outcome
+
+    monkeypatch.setattr(subprocess, "run", run)
+    with pytest.raises(ReviewError, match="authelia-users"):
+        access_review._live_users_database("prod")
+    assert calls and calls[0].get("timeout"), "a hung API server must not block the review"
+
+
 def test_a_stale_user_is_neither_edited_nor_revoked_and_reads_drift() -> None:
     """A revoke is undone at the next login, which writes the role from the stale
     groups: `bounded` would promise a convergence that cannot happen (#1911)."""
@@ -478,18 +524,17 @@ def test_a_stale_break_glass_user_still_reads_refused() -> None:
     assert finding.status == "refused" and app.edits == []
 
 
-def test_review_env_checks_the_idp_first_and_passes_the_lagging_users_on(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The order is the fix: a user whose groups lag must be known before any app is
-    reconciled, or the app would be revoked and report `bounded` (#1911)."""
+def _wire_review_env(monkeypatch: pytest.MonkeyPatch, read_live: Any) -> list[tuple[str, bool, frozenset[str], str]]:
+    """Stub everything `review_env` reaches except the IdP comparison, and record
+    each `reconcile` call as (service, apply, stale, detail)."""
     from contextlib import contextmanager
 
     from toolkit.features import access_review, break_glass, oidc_clients, secrets_manager
 
-    live = {"manu": ["admins", "users"], "operator": ["admins", "users"]}
     monkeypatch.setattr(
         access_review, "_rendered_users_database", lambda env, root: _users_db(RENDERED_GROUPS, RENDERED_HASH)
     )
-    monkeypatch.setattr(access_review, "_live_users_database", lambda env: _users_db(live, LIVE_HASH))
+    monkeypatch.setattr(access_review, "_live_users_database", read_live)
     monkeypatch.setattr(oidc_clients, "load_values", lambda env, root: COMMON)
     monkeypatch.setattr(break_glass, "declarations", lambda values: {"grafana": {"secret": "s"}})
     monkeypatch.setattr(break_glass, "resolve", lambda env, service, root: (None, None, None))
@@ -502,25 +547,53 @@ def test_review_env_checks_the_idp_first_and_passes_the_lagging_users_on(monkeyp
 
     monkeypatch.setattr(break_glass, "private_url", url)
     monkeypatch.setattr(secrets_manager.SecretsManager, "show_secret", lambda self, f, k: "pw")
-    calls: list[tuple[str, frozenset[str], str]] = []
+    calls: list[tuple[str, bool, frozenset[str], str]] = []
 
     def fake_reconcile(service: str, *args: Any) -> list[Any]:
-        calls.append((service, args[6], args[7]))
+        calls.append((service, args[4], args[6], args[7]))
         return []
 
     monkeypatch.setattr(access_review, "reconcile", fake_reconcile)
     monkeypatch.setattr(access_review, "TIERS", {"grafana": GrafanaTiers})
     monkeypatch.setattr(access_review, "_live_argocd_oidc_config", lambda: "enableUserInfoGroups: true")
+    return calls
+
+
+def test_review_env_checks_the_idp_first_and_passes_the_lagging_users_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The order is the fix: a user whose groups lag must be known before any app is
+    reconciled, or the app would be revoked and report `bounded` (#1911)."""
+    from toolkit.features import access_review
+
+    live = {"manu": ["admins", "users"], "operator": ["admins", "users"]}
+    calls = _wire_review_env(monkeypatch, lambda env: _users_db(live, LIVE_HASH))
     logged: list[str] = []
     findings = access_review.review_env("staging", REPO, apply=True, log=logged.append)
 
     assert findings[0].service == "authelia", "the IdP is judged before any app"
     assert [(f.user, f.status) for f in findings if f.status != "ok"] == [("operator", "drift")]
-    [(service, stale, detail)] = calls
-    assert service == "grafana" and stale == frozenset({"operator"})
+    [(service, apply, stale, detail)] = calls
+    assert service == "grafana" and apply and stale == frozenset({"operator"})
     assert "make apply-secrets ENV=staging" in detail
     _no_hash_in(findings)
     assert not any("must-not-leak" in line for line in logged)
+
+
+def test_review_env_corrects_nothing_when_the_idp_cannot_be_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With the IdP's groups unknown, no user can be shown not to lag, so APPLY=1 must
+    not revoke or edit anything: that would be the non-converging `bounded` again."""
+    from toolkit.features import access_review
+
+    def unreachable(env: str) -> str:
+        raise ReviewError("the staging authelia-users Secret is unreadable: connection refused")
+
+    calls = _wire_review_env(monkeypatch, unreachable)
+    logged: list[str] = []
+    findings = access_review.review_env("staging", REPO, apply=True, log=logged.append)
+
+    assert (findings[0].service, findings[0].status) == ("authelia", "failed")
+    [(service, apply, _stale, _detail)] = calls
+    assert service == "grafana" and not apply, "the app is still reviewed, but never corrected"
+    assert any("no correction" in line for line in logged)
 
 
 @pytest.mark.parametrize(
