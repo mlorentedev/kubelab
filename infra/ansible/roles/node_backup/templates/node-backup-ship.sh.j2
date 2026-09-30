@@ -50,20 +50,14 @@ export AWS_SECRET_ACCESS_KEY="$(cat {{ node_backup_r2_secret_key_file }})"
 
 REPO="{{ node_backup_r2_repository }}"
 # `--stuck-request-timeout` bounds how long restic waits on a request that is
-# going nowhere before retrying it. Measured 2026-08-22 by injecting two real
-# failures on beelink -- a blackholed endpoint and an invalid credential: with
-# restic's 5m default, BOTH surfaced identically as systemd `Result=timeout`
-# after ~180s, with NOT ONE restic error line in the journal. The operator got
-# "node-backup-ship.service failed" and a log tail that ended mid-run.
+# going nowhere before retrying it. Measured 2026-08-22 on beelink: with
+# restic's 5m default, a blackholed endpoint surfaced as systemd
+# `Result=timeout` with NOT ONE restic error line in the journal. 45s is well
+# above any healthy request to R2 (a full cycle on this fleet is 2-12s end to
+# end) and well under the unit's ceiling.
 #
-# The unit's own TimeoutStartSec=600 never applied, because restic was still
-# inside its first request's retry budget when systemd gave up. Shortening the
-# request timeout is what lets restic reach its own error path and SAY what
-# went wrong while the unit is still alive to log it.
-#
-# 45s is well above any healthy request to R2 (a full cycle on this fleet is
-# 2-12s end to end) and well under the unit's ceiling, so a genuinely slow link
-# still succeeds and a broken one reports rather than hangs.
+# It does NOT end a run whose requests are refused, and a bad credential is
+# refused: see the probe below (#1939).
 RESTIC="{{ node_backup_restic_install_path }} --repo $REPO --stuck-request-timeout {{ node_backup_stuck_request_timeout }}"
 
 # --- which repository, and may we create one (BACKUP-058) ------------------
@@ -105,21 +99,35 @@ fi
 # FIRST thing to touch R2, so it is where a bad credential or an unreachable
 # endpoint is discovered -- and discarding its stderr threw away the only
 # explanation the run would ever produce. stdout still goes to /dev/null (a
-# snapshot list is not evidence of anything here); stderr reaches the journal,
-# where the notifier reads it.
+# snapshot list is not evidence of anything here); stderr is replayed to the
+# journal whatever happens, where the notifier reads it.
+#
+# The probe carries its own bound because restic never gives up on a refused
+# request in time. R2 answers a bad credential with 401 `Unauthorized` (400
+# `InvalidArgument` for a malformed key), restic 0.19.1's S3 backend treats
+# only `AccessDenied` and `InvalidRange` as permanent, and it retries anything
+# else for 15 minutes -- past the unit's 600s, so systemd used to kill it with
+# a journal full of retries and no verdict (measured 2026-09-30, #1939). Each
+# retry line names R2's reason, so on timeout the last one IS the verdict.
 #
 # The exit code is taken inside the `if`, because `set -e` would abort on a
 # bare failing command before `$?` could be read.
-if $RESTIC snapshots -q >/dev/null; then
+PROBE_ERR="$(mktemp)"
+trap 'rm -f "$PROBE_ERR"' EXIT
+if timeout -k 10 {{ node_backup_probe_timeout }} $RESTIC snapshots -q >/dev/null 2>"$PROBE_ERR"; then
     SNAPSHOTS_RC=0
 else
     SNAPSHOTS_RC=$?
 fi
+cat "$PROBE_ERR" >&2
+PROBE_REFUSAL="$(sed -n 's/^.* returned error, retrying after [^:]*: //p' "$PROBE_ERR" | tail -n 1)"
+rm -f "$PROBE_ERR"
 
 # 10 is restic's "repository does not exist" (restic >= 0.17). Measured against
 # R2 with this fleet's restic 0.19.1 on 2026-09-30: a missing repository
 # returns 10, a wrong password 12, and an invalid credential never returns at
-# all (#1939) -- so no credential or network failure can reach `init`.
+# all, so it ends as `timeout`'s 124 (137 if it needed the kill) -- no
+# credential or network failure can reach `init`.
 case "$SNAPSHOTS_RC" in
     0) ;;
     10)
@@ -133,6 +141,18 @@ case "$SNAPSHOTS_RC" in
         fi
         echo "node-backup-ship: no $DESTINATION repository yet and none recorded -- first ship, initialising"
         $RESTIC init ;;
+    124|137)
+        if [ -n "$PROBE_REFUSAL" ]; then
+            echo "node-backup-ship: restic was still retrying $DESTINATION after {{ node_backup_probe_timeout }}s, last error: $PROBE_REFUSAL" >&2
+            case "$PROBE_REFUSAL" in
+                *Unauthorized*|*AccessDenied*|*InvalidAccessKeyId*|*SignatureDoesNotMatch*|*"Credential access key"*)
+                    echo "  That is R2 rejecting this node's credential (backup.r2.access_key_id / secret_access_key)." >&2
+                    echo "  restic retries it for 15 minutes rather than failing, hence this bound (#1939)." >&2 ;;
+            esac
+        else
+            echo "node-backup-ship: no answer from $DESTINATION within {{ node_backup_probe_timeout }}s and no error from restic -- endpoint unreachable or stalled" >&2
+        fi
+        exit "$SNAPSHOTS_RC" ;;
     *)
         echo "node-backup-ship: $DESTINATION repository not readable (restic exit $SNAPSHOTS_RC, see its error above) -- not initialising" >&2
         exit "$SNAPSHOTS_RC" ;;

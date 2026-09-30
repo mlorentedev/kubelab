@@ -35,7 +35,11 @@ EXISTING_ID = "a" * 64
 NEW_ID = "b" * 64
 
 # Stands in for restic. State lives in $FAKE_DIR:
-#   snapshots.rc  exit code of `snapshots` (default 0)
+#   snapshots.rc  exit code of `snapshots` (default 0), or a behaviour:
+#                 `refuse` retries a rejected request forever, printing restic's
+#                 retry line each time (R2's answer to a bad credential, #1939);
+#                 `silent` hangs and prints nothing (an unreachable endpoint);
+#                 `unavailable` retries a 503 forever (R2 down, not the credential)
 #   id            the repository id `cat config` reports
 #   forget.rc     exit code of `forget` (default 0)
 # `init` sets a new id and makes `snapshots` succeed, as a real init would.
@@ -51,6 +55,19 @@ echo "$*" >> "$FAKE_DIR/calls"
 case "$1" in
   snapshots)
     rc="$(cat "$FAKE_DIR/snapshots.rc" 2>/dev/null || echo 0)"
+    if [ "$rc" = refuse ]; then
+      while :; do
+        echo "Stat(<config/>) returned error, retrying after 875.524205ms: Stat: Unauthorized" >&2
+        sleep 0.2
+      done
+    fi
+    if [ "$rc" = unavailable ]; then
+      while :; do
+        echo "Stat(<config/>) returned error, retrying after 1.2s: Stat: 503 Service Unavailable" >&2
+        sleep 0.2
+      done
+    fi
+    [ "$rc" = silent ] && exec sleep 60
     [ "$rc" = 10 ] && echo "Fatal: repository does not exist: unable to open config file" >&2
     [ "$rc" = 1 ] && echo "Fatal: unable to open repository: connection reset" >&2
     exit "$rc" ;;
@@ -107,10 +124,12 @@ def node(tmp_path: Path):
             node_backup_heartbeat_token_file=str(tmp_path / "no-heartbeat-token"),
             node_backup_repository_id_dir=str(state),
             node_backup_r2_repository_id_file=str(marker),
+            # Seconds, not the role's 120: the refusal tests wait it out.
+            node_backup_probe_timeout=2,
         )
     )
 
-    def run(*, snapshots_rc: int, repo_id: str = EXISTING_ID, recorded: str | None = None, forget_rc: int = 0):
+    def run(*, snapshots_rc: int | str, repo_id: str = EXISTING_ID, recorded: str | None = None, forget_rc: int = 0):
         (fake_dir / "snapshots.rc").write_text(f"{snapshots_rc}\n")
         (fake_dir / "forget.rc").write_text(f"{forget_rc}\n")
         (fake_dir / "id").write_text(f"{repo_id}\n")
@@ -248,3 +267,64 @@ def test_a_marker_that_is_a_dangling_symlink_is_refused_with_the_override(node, 
     assert "backup" not in verbs
     assert str(marker) in proc.stderr
     assert "make backup-repo-reinit" in proc.stderr
+
+
+def test_a_rejected_credential_is_named_within_the_probe_timeout(node) -> None:
+    """R2 answers a bad credential with 401 `Unauthorized`, and restic retries it.
+
+    restic 0.19.1's S3 backend treats only `AccessDenied` and `InvalidRange` as
+    permanent, and its retry budget is 15 minutes, longer than the unit's 600 s.
+    `--stuck-request-timeout` does not apply: these requests fail, they do not
+    stall. So the probe carries its own bound and names the last refusal
+    (measured 2026-09-30, #1939).
+    """
+    proc, verbs, marker = node(snapshots_rc="refuse")
+    assert proc.returncode != 0
+    assert "init" not in verbs and "backup" not in verbs
+    assert _marker_value(marker) is None
+    # restic's own lines still reach the journal, and the verdict names them.
+    assert "returned error, retrying" in proc.stderr
+    verdict = [line for line in proc.stderr.splitlines() if line.startswith("node-backup-ship:")]
+    assert verdict and "Stat: Unauthorized" in verdict[-1], proc.stderr
+    assert "credential" in proc.stderr
+
+
+def test_an_endpoint_that_never_answers_is_reported_as_such(node) -> None:
+    proc, verbs, marker = node(snapshots_rc="silent")
+    assert proc.returncode != 0
+    assert "init" not in verbs and "backup" not in verbs
+    assert "no answer from r2" in proc.stderr.lower(), proc.stderr
+    assert "credential" not in proc.stderr
+
+
+def test_a_retried_outage_is_reported_as_the_error_it_is_not_as_a_refusal(node) -> None:
+    """A 503 is retried just like a 401, so the probe times out on both.
+
+    Only the last retry line tells them apart. The verdict must quote it without
+    calling it a refusal, and must not point at the credential.
+    """
+    proc, verbs, _ = node(snapshots_rc="unavailable")
+    assert proc.returncode != 0
+    assert "init" not in verbs and "backup" not in verbs
+    verdict = [line for line in proc.stderr.splitlines() if line.startswith("node-backup-ship:")]
+    assert verdict and "503 Service Unavailable" in verdict[-1], proc.stderr
+    assert "refused" not in verdict[-1], verdict[-1]
+    assert "credential" not in proc.stderr
+
+
+def test_the_probe_timeout_sits_between_one_stuck_request_and_the_unit() -> None:
+    """Above one stuck request, so a slow link still answers. Below the unit, so the verdict is logged.
+
+    The probe also leaves the unit room for the backup itself.
+    """
+    import re
+
+    import yaml
+
+    role = Path(__file__).resolve().parents[1] / "infra" / "ansible" / "roles" / "node_backup"
+    defaults = yaml.safe_load((role / "defaults" / "main.yml").read_text())
+    stuck = int(str(defaults["node_backup_stuck_request_timeout"]).rstrip("s"))
+    probe = int(defaults["node_backup_probe_timeout"])
+    unit = re.search(r"^TimeoutStartSec=(\d+)$", (role / "templates" / "node-backup-ship.service.j2").read_text(), re.M)
+    assert unit, "the ship unit declares no TimeoutStartSec"
+    assert stuck < probe <= int(unit.group(1)) // 4

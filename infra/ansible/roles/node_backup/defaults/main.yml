@@ -149,14 +149,24 @@ node_backup_boot_check_flag: /run/node-backup-boot-check.done
 
 # How long restic waits on a request that is going nowhere before retrying it.
 # Its own default is 5m, which exceeds this unit's useful lifetime: measured
-# 2026-08-22, an invalid credential and an unreachable endpoint BOTH produced
-# systemd `Result=timeout` at ~180s with no restic error in the journal at all.
-# Every failure looked the same and none said why.
+# 2026-08-22, an unreachable endpoint produced systemd `Result=timeout` with no
+# restic error in the journal. 45s is far above a healthy request (full cycles
+# on this fleet run 2-12s) and far below TimeoutStartSec.
 #
-# 45s is far above a healthy request (full cycles on this fleet run 2-12s) and
-# far below TimeoutStartSec, so restic reaches its own error path and reports
-# while the unit is still alive to log it.
+# It bounds a request that STALLS, not one that FAILS. A rejected credential is
+# the second kind: R2 answers 401 `Unauthorized` (400 `InvalidArgument` for a
+# malformed key) at once, restic 0.19.1's S3 backend treats only `AccessDenied`
+# and `InvalidRange` as permanent, and its retry budget is 15 minutes. So this
+# flag alone never ends that run (measured 2026-09-30, #1939); the probe
+# timeout below does.
 node_backup_stuck_request_timeout: "45s"
+
+# Seconds the ship script's first R2 call (`restic snapshots`) may take before
+# it is stopped and its last refusal reported. Above one stuck request (45s),
+# so a slow but working link still answers; at most a quarter of the unit's
+# TimeoutStartSec=600, so the verdict is logged while the unit is alive and
+# the backup still has its time.
+node_backup_probe_timeout: 120
 
 # How long the CAPTURE unit gets before systemd kills it. Separate from ship's
 # 600s because capture never talks to R2 -- it is a local copy, and on this
