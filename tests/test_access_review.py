@@ -35,7 +35,9 @@ from toolkit.features.access_review import (
     Account,
     GiteaTiers,
     GrafanaTiers,
+    ReviewError,
     declared_tiers,
+    idp_groups_drift,
     reconcile,
     review,
 )
@@ -362,6 +364,162 @@ def test_the_argo_cd_bound_is_the_token_lifespan_authelia_actually_issues() -> N
         f"Authelia is pinned to {image}: re-measure its default token lifespan, then update ARGOCD_TOKEN_LIFESPAN"
     )
     assert ARGOCD_TOKEN_LIFESPAN == "1h", "Authelia 4.39's default access and ID token lifespan"
+
+
+# --------------------------------------------------------------------------- the IdP's live groups (AUTH-014)
+
+#: Two distinct fake hashes, one per side, so a leak from either is caught.
+RENDERED_HASH = "$argon2id$v=19$m=65536,t=3,p=4$rendered-hash-must-not-leak"
+LIVE_HASH = "$argon2id$v=19$m=65536,t=3,p=4$live-hash-must-not-leak"
+RENDERED_GROUPS = {"manu": ["admins", "users"], "operator": ["users"]}
+
+
+def _users_db(groups: dict[str, list[str]], password: str) -> str:
+    users = {
+        u: {"disabled": False, "displayname": u, "password": password, "email": f"{u}@example.com", "groups": g}
+        for u, g in groups.items()
+    }
+    return yaml.safe_dump({"users": users})
+
+
+def _no_hash_in(findings: list[Any]) -> None:
+    text = repr(findings)
+    assert "must-not-leak" not in text, "a password hash reached a finding"
+
+
+@pytest.mark.parametrize(
+    ("live", "lagging"),
+    [
+        # Measured 2026-09-29 in staging: operator declared ['users'], served ['admins', 'users'].
+        ({"manu": ["admins", "users"], "operator": ["admins", "users"]}, {"operator"}),
+        ({"manu": ["admins", "users"]}, {"operator"}),
+        ({**RENDERED_GROUPS, "ghost": ["admins"]}, {"ghost"}),
+    ],
+    ids=["other-groups", "declared-user-missing", "live-user-undeclared"],
+)
+def test_idp_groups_drift_when_the_live_users_database_lags(live: dict[str, list[str]], lagging: set[str]) -> None:
+    """A merge that changes `groups` reaches Authelia only through `make apply-secrets`,
+    and Argo CD reports Synced either way (#1911). Every difference is one that
+    command removes, since it renders the Secret whole, so every one is `drift`."""
+    findings, stale = idp_groups_drift(
+        _users_db(RENDERED_GROUPS, RENDERED_HASH), lambda: _users_db(live, LIVE_HASH), "staging"
+    )
+    assert stale == lagging
+    drifts = [f for f in findings if f.status == "drift"]
+    assert {f.user for f in drifts} == lagging
+    assert all(f.service == "authelia" and "make apply-secrets ENV=staging" in f.detail for f in drifts)
+    _no_hash_in(findings)
+
+
+def test_idp_groups_that_match_are_ok_whatever_their_order() -> None:
+    live = {"manu": ["users", "admins"], "operator": ["users"]}
+    findings, stale = idp_groups_drift(
+        _users_db(RENDERED_GROUPS, RENDERED_HASH), lambda: _users_db(live, LIVE_HASH), "prod"
+    )
+    assert stale == frozenset()
+    assert {(f.service, f.user, f.status) for f in findings} == {
+        ("authelia", "manu", "ok"),
+        ("authelia", "operator", "ok"),
+    }
+
+
+def test_no_password_hash_reaches_a_finding_even_from_a_malformed_database() -> None:
+    """PyYAML quotes the offending line in its error, and here that line can hold a hash."""
+    broken = _users_db(RENDERED_GROUPS, LIVE_HASH) + f"  : [unclosed {LIVE_HASH}\n"
+    findings, stale = idp_groups_drift(_users_db(RENDERED_GROUPS, RENDERED_HASH), lambda: broken, "prod")
+    assert stale == frozenset()
+    assert [(f.service, f.status) for f in findings] == [("authelia", "failed")]
+    _no_hash_in(findings)
+
+
+def test_an_unreadable_users_secret_is_a_failure_not_a_pass() -> None:
+    """Staging is on-demand, so the spoke can be off. That is `failed`, which exits 1,
+    never an empty comparison that reads as `ok`."""
+
+    def unreachable() -> str:
+        raise ReviewError("the staging authelia-users Secret is unreadable: connection refused")
+
+    findings, stale = idp_groups_drift(_users_db(RENDERED_GROUPS, RENDERED_HASH), unreachable, "staging")
+    assert stale == frozenset()
+    [finding] = findings
+    assert (finding.service, finding.status) == ("authelia", "failed") and "unreadable" in finding.detail
+
+
+def test_a_stale_user_is_neither_edited_nor_revoked_and_reads_drift() -> None:
+    """A revoke is undone at the next login, which writes the role from the stale
+    groups: `bounded` would promise a convergence that cannot happen (#1911)."""
+    app = FakeApp(GrafanaTiers, [Account("operator", "Admin", {"user_id": 7})], accept=False)
+    hint = "the IdP still serves the old groups: run `make apply-secrets ENV=staging`"
+    [finding] = reconcile(
+        "grafana", DECLARED, app, "u", "a", apply=True, stale=frozenset({"operator"}), stale_detail=hint
+    )
+    assert app.edits == [], "a stale user must not be revoked"
+    assert finding.status == "drift" and finding.detail == hint
+
+
+def test_a_stale_user_does_not_hold_back_the_others() -> None:
+    app = FakeApp(GiteaTiers, [Account("operator", "admin"), Account("hefesto", "admin")])
+    findings = {
+        f.user: f
+        for f in reconcile(
+            "gitea", DECLARED, app, "u", "a", apply=True, stale=frozenset({"operator"}), stale_detail="x"
+        )
+    }
+    assert app.edits == [("hefesto", "user")]
+    assert findings["hefesto"].status == "fixed" and findings["operator"].status == "drift"
+
+
+def test_a_stale_break_glass_user_still_reads_refused() -> None:
+    app = FakeApp(GiteaTiers, [Account("manu", "admin")])
+    [finding] = reconcile(
+        "gitea", {"manu": VIEWER}, app, "u", "a", True, "manu", stale=frozenset({"manu"}), stale_detail="x"
+    )
+    assert finding.status == "refused" and app.edits == []
+
+
+def test_review_env_checks_the_idp_first_and_passes_the_lagging_users_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The order is the fix: a user whose groups lag must be known before any app is
+    reconciled, or the app would be revoked and report `bounded` (#1911)."""
+    from contextlib import contextmanager
+
+    from toolkit.features import access_review, break_glass, oidc_clients, secrets_manager
+
+    live = {"manu": ["admins", "users"], "operator": ["admins", "users"]}
+    monkeypatch.setattr(
+        access_review, "_rendered_users_database", lambda env, root: _users_db(RENDERED_GROUPS, RENDERED_HASH)
+    )
+    monkeypatch.setattr(access_review, "_live_users_database", lambda env: _users_db(live, LIVE_HASH))
+    monkeypatch.setattr(oidc_clients, "load_values", lambda env, root: COMMON)
+    monkeypatch.setattr(break_glass, "declarations", lambda values: {"grafana": {"secret": "s"}})
+    monkeypatch.setattr(break_glass, "resolve", lambda env, service, root: (None, None, None))
+    monkeypatch.setattr(break_glass, "secret_file", lambda *a: "f")
+    monkeypatch.setattr(break_glass, "account_login", lambda decl, values: "breakglass")
+
+    @contextmanager
+    def url(env: str, plan: Any) -> Any:
+        yield "http://grafana"
+
+    monkeypatch.setattr(break_glass, "private_url", url)
+    monkeypatch.setattr(secrets_manager.SecretsManager, "show_secret", lambda self, f, k: "pw")
+    calls: list[tuple[str, frozenset[str], str]] = []
+
+    def fake_reconcile(service: str, *args: Any) -> list[Any]:
+        calls.append((service, args[6], args[7]))
+        return []
+
+    monkeypatch.setattr(access_review, "reconcile", fake_reconcile)
+    monkeypatch.setattr(access_review, "TIERS", {"grafana": GrafanaTiers})
+    monkeypatch.setattr(access_review, "_live_argocd_oidc_config", lambda: "enableUserInfoGroups: true")
+    logged: list[str] = []
+    findings = access_review.review_env("staging", REPO, apply=True, log=logged.append)
+
+    assert findings[0].service == "authelia", "the IdP is judged before any app"
+    assert [(f.user, f.status) for f in findings if f.status != "ok"] == [("operator", "drift")]
+    [(service, stale, detail)] = calls
+    assert service == "grafana" and stale == frozenset({"operator"})
+    assert "make apply-secrets ENV=staging" in detail
+    _no_hash_in(findings)
+    assert not any("must-not-leak" in line for line in logged)
 
 
 @pytest.mark.parametrize(

@@ -24,6 +24,14 @@ issued, so a changed group reaches Argo CD only when that token expires and the
 session signs in again (ARGOCD_TOKEN_LIFESPAN), not when its UserInfo cache
 expires. It is reported, from the live hub config, rather than reconciled.
 
+Every app takes the tier from the groups Authelia serves, and Authelia serves the
+groups in its users database, a Secret that only `make apply-secrets` delivers: a
+merge that changes `groups` shows Synced in Argo CD while Authelia keeps the old
+ones (#1911). So the review first compares that live database with the declaration,
+and for a user whose groups lag it corrects nothing in any app: an edit or a revoke
+would be undone at the next login, from the stale groups. It reports `drift` and
+names the command instead, never a `bounded` that cannot converge.
+
 Accounts that exist in an app but belong to no declared identity are reported and
 never touched: removing an account is a decision, not a reconciliation.
 """
@@ -222,6 +230,8 @@ def reconcile(
     auth: str,
     apply: bool,
     protected: str = "",
+    stale: frozenset[str] = frozenset(),
+    stale_detail: str = "",
 ) -> list[Finding]:
     """Review one app and, with APPLY, correct every drift and read it back.
 
@@ -232,6 +242,10 @@ def reconcile(
     declaration says nothing of it; being the break-glass account is what puts it
     in the admin tier. An identity keeps its declared tier, so dropping it from
     `admins` still surfaces as `refused` instead of being re-declared here.
+
+    STALE are the users whose groups the live users database has not caught up
+    with (`idp_groups_drift`). Their drift is reported with STALE_DETAIL and never
+    corrected: the app would write the old tier back at their next login.
     """
     if protected:
         declared = {protected: ADMIN, **declared}
@@ -244,18 +258,21 @@ def reconcile(
         else f
         for f in review(service, declared, list(accounts.values()), tiers)
     ]
-    if not apply or not any(f.status == "drift" for f in findings):
-        return findings
-    accepted = {
-        f.user: tiers.set_tier(base_url, auth, accounts[f.user], f.declared)
+    findings = [
+        Finding(f.service, f.user, f.declared, f.live, f.status, stale_detail)
+        if f.status == "drift" and f.user in stale
+        else f
         for f in findings
-        if f.status == "drift" and f.declared is not None
-    }
+    ]
+    editable = [f for f in findings if f.status == "drift" and f.user not in stale and f.declared is not None]
+    if not apply or not editable:
+        return findings
+    accepted = {f.user: tiers.set_tier(base_url, auth, accounts[f.user], f.declared) for f in editable}
     # A 200 says the request was accepted, not that the tier changed: read it back.
     after = {a.user: a.tier for a in tiers.read(base_url, auth)}
     result = []
     for f in findings:
-        if f.status != "drift":
+        if f.status != "drift" or f.user in stale:
             result.append(f)
         elif after.get(f.user) == f.declared:
             result.append(Finding(service, f.user, f.declared, after[f.user], "fixed", f"was {f.live}"))
@@ -265,6 +282,90 @@ def reconcile(
         else:
             result.append(Finding(service, f.user, f.declared, after.get(f.user, "?"), "failed", f"was {f.live}"))
     return result
+
+
+# --------------------------------------------------------------------------- the IdP's live groups
+
+
+def apply_secrets_hint(env: str) -> str:
+    return f"Authelia still serves the old groups: run `make apply-secrets ENV={env}`, then the review again"
+
+
+def _groups_by_user(text: str, side: str) -> dict[str, tuple[str, ...]]:
+    """Username -> its sorted groups, and nothing else: the database also holds each
+    password hash, which must never reach a finding. A YAML error is not passed on,
+    because PyYAML quotes the offending line, and that line can be a hash."""
+    import yaml
+
+    try:
+        doc = yaml.safe_load(text or "")
+    except yaml.YAMLError:
+        raise ReviewError(f"the {side} users database is not valid YAML") from None
+    users = doc.get("users") if isinstance(doc, dict) else None
+    if not isinstance(users, dict):
+        raise ReviewError(f"the {side} users database has no `users` map")
+    return {str(u): tuple(sorted({str(g) for g in (v or {}).get("groups") or []})) for u, v in users.items()}
+
+
+def idp_groups_drift(rendered: str, read_live: Callable[[], str], env: str) -> tuple[list[Finding], frozenset[str]]:
+    """Compare the users database Authelia runs with the one the declaration renders.
+
+    Returns one `authelia` finding per user and the users whose groups lag. Any
+    difference is `drift`, a live user the declaration lacks included: `make
+    apply-secrets` renders the Secret whole, so it removes that user too, which is
+    why this is not `undeclared` (a status that means "never touched" here). The
+    rendered side comes from the same builder as the Secret, so a user with no
+    password hash in ENV is absent from both and never a false drift.
+    """
+    try:
+        want = _groups_by_user(rendered, "rendered")
+        have = _groups_by_user(read_live(), f"live {env}")
+    except ReviewError as exc:
+        return [Finding("authelia", "*", None, "unreadable", "failed", str(exc))], frozenset()
+    hint = f"the live users database lags the declaration: run `make apply-secrets ENV={env}`"
+    findings = []
+    for user in sorted(want.keys() | have.keys()):
+        declared = ",".join(want[user]) or "-" if user in want else "(absent)"
+        live = ",".join(have[user]) or "-" if user in have else "(absent)"
+        same = user in want and user in have and want[user] == have[user]
+        findings.append(Finding("authelia", user, declared, live, "ok" if same else "drift", "" if same else hint))
+    return findings, frozenset(f.user for f in findings if f.status == "drift")
+
+
+def _rendered_users_database(env: str, project_root: Path) -> str:
+    from toolkit.features.configuration import ConfigurationManager
+    from toolkit.features.k8s_secrets import _build_users_database
+
+    return _build_users_database(ConfigurationManager(env, project_root))
+
+
+def _live_users_database(env: str) -> str:
+    """The users database the env's Authelia runs, decoded in-process and never printed."""
+    import base64
+    import subprocess
+
+    from toolkit.features.k8s_kubeconfig import output_path
+
+    result = subprocess.run(
+        [
+            "kubectl",
+            "--kubeconfig",
+            str(output_path(env)),
+            "-n",
+            "kubelab",
+            "get",
+            "secret",
+            "authelia-users",
+            "-o",
+            r"jsonpath={.data.users_database\.yml}",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0 or not result.stdout:
+        raise ReviewError(f"the {env} authelia-users Secret is unreadable: {result.stderr.strip() or 'empty'}")
+    return base64.b64decode(result.stdout).decode()
 
 
 #: How long a demotion can go unseen by Argo CD (#1861). A UserInfo refetch reuses
@@ -337,7 +438,10 @@ def review_env(env: str, project_root: Path, apply: bool, log: Callable[[str], N
     declared = declared_tiers(values)
     decls = bg.declarations(values)
     manager = SecretsManager(project_root)
-    findings: list[Finding] = []
+    # First, so a user whose groups lag is never "corrected" in an app below.
+    findings, stale = idp_groups_drift(
+        _rendered_users_database(env, project_root), lambda: _live_users_database(env), env
+    )
     for service, make in TIERS.items():
         decl = decls.get(service) or {}
         if "secret" not in decl:
@@ -352,7 +456,9 @@ def review_env(env: str, project_root: Path, apply: bool, log: Callable[[str], N
         auth = f"{protected}:{manager.show_secret(file_env, decl['secret'])}"
         with bg.private_url(env, plan) as base_url:
             try:
-                findings += reconcile(service, declared, make(), base_url, auth, apply, protected)
+                findings += reconcile(
+                    service, declared, make(), base_url, auth, apply, protected, stale, apply_secrets_hint(env)
+                )
             except ReviewError as exc:
                 findings.append(Finding(service, "*", None, "unreadable", "failed", str(exc)))
     clients = values["apps"]["services"]["security"]["authelia"].get("oidc_clients") or []
