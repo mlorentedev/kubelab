@@ -15,6 +15,10 @@ created: "2026-06-17"
 
 Accepted 2026-06-17. **Supersedes [[adr-017-domain-strategy|ADR-017]]** (Two-Site Domain Strategy) and the 2026-03-14 web-architecture decision note.
 
+## Amendment — 2026-09-30 (agent access surface)
+
+**Amended by [ADR-067](adr-067-product-contract-and-agent-access.md).** The `kubelab-cli` publish (PUB-001) moves to the instance-contract work of ADR-042's replicable blueprint. What is in scope now is narrower: the toolkit is consumable at a pinned git tag by a private tenant repository ([ADR-067](adr-067-product-contract-and-agent-access.md) D8), not published.
+
 ## Context
 
 KubeLab is a personal Internal Developer Platform (IDP). The repository currently mixes two concerns that have different lifecycles and ownership semantics:

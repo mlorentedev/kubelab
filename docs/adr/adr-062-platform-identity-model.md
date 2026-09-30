@@ -26,6 +26,10 @@ Complements [ADR-016](adr-016-oidc-centralized-auth.md), which decides *how* aut
 
 Supersedes the single-identity decision recorded on #1013 earlier the same day — see [D0](#d0--what-this-reverses-and-why).
 
+## Amendment — 2026-09-30 (agent access surface)
+
+**Amended by [ADR-067](adr-067-product-contract-and-agent-access.md).** The machine class gains one pre-registered Authelia client per agent, scoped to one product, for the MCP server ([ADR-067](adr-067-product-contract-and-agent-access.md) D6). CI agents use `client_credentials`, and interactive agents use authorization code with PKCE.
+
 ## Amendment — 2026-09-24 (D1: what "login prohibited" means, and two machine exceptions)
 
 D1 gives the machine class "scoped token only; login prohibited". This amendment changes three things about that row. Decided by the operator: AUTH-007's content on 2026-09-22 ([#1781](https://github.com/mlorentedev/kubelab/issues/1781)), and TOOL-080's reviewer and the one-amendment scope on 2026-09-24.
