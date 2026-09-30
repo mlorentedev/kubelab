@@ -60,10 +60,10 @@ created: "2026-09-23"
 
 > Split out of PR 4 (Manu, 2026-09-27): every PR 4 merge is functional on its own — the hook stays `active: false` until this lands. Wording kept as originally written.
 
-- [ ] Live: `make apply-secrets ENV=prod`, Argo sync, flip the hook to `active: true`, reconcile.
-- [ ] [AC1] [AC2] Write `tests/infra/test_pr_agent_review_live.py`, marked like the other `tests/infra/*_live.py` tests. Given the PR number recorded in `verification.md`, it asserts exactly one reviewer-authored `PR Reviewer Guide` comment on that PR, and that its `updated_at` is later than the latest push.
-- [ ] [AC1] [AC2] [AC4] By effect: open a test PR on `personal/resume`, push once, and record the comment id, its author, and that the title and body are unchanged.
-- [ ] [AC3] By effect: an unsigned POST and a wrongly signed POST are both refused.
+- [x] Live: `make apply-secrets ENV=prod`, Argo sync, flip the hook to `active: true`, reconcile. Manu, after #1868 (2026-09-26). The hooks were read back active on 2026-09-30.
+- [x] [AC1] [AC2] Write `tests/infra/test_pr_agent_review_live.py`, marked like the other `tests/infra/*_live.py` tests. Given the PR number recorded in `verification.md`, it asserts exactly one reviewer-authored `PR Reviewer Guide` comment on that PR, and that its `updated_at` is later than the latest push.
+- [x] [AC1] [AC2] [AC4] By effect: open a test PR on `personal/resume`, push once, and record the comment id, its author, and that the title and body are unchanged.
+- [x] [AC3] By effect: an unsigned POST and a wrongly signed POST are both refused.
 - [ ] Measure a burst (at least 3 PRs at once). Decide whether to pin gunicorn `workers`.
 
 ## PR 5 — the silence detector

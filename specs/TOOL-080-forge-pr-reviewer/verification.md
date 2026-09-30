@@ -7,10 +7,10 @@ created: "2026-09-23"
 
 ## Evidence
 
-- [ ] AC1: comment id, author and timestamp on a real `personal/resume` PR
-- [ ] AC2: the same comment id after a push, with `updated_at` later than the push
-- [ ] AC3: HTTP status for an unsigned and a wrongly signed POST; test `<name>`
-- [ ] AC4: title and body byte-identical before and after; test `<name>`
+- [x] AC1: comment 558 by `mentor` on personal/resume PR 280, 18 s after the PR opened (Live smoke test, below); `tests/infra/test_pr_agent_review_live.py::test_the_reviewer_left_exactly_one_review`
+- [x] AC2: comment 558 edited 12 s after the push, still the only review (below); `test_pr_agent_review_live.py::test_the_review_was_updated_after_the_latest_push`
+- [x] AC3: 400 unsigned, 401 wrongly signed, live on 2026-09-30 (below); test `tests/test_pr_agent_secrets.py::test_all_three_keys_are_required_not_optional`
+- [x] AC4: SHA-256 of title and body identical before the review and after the push-triggered edit (below); test `tests/test_pr_agent_config_render.py::test_every_required_key_has_its_exact_value`
 - [x] AC5: measured scope requirement (below); test `test_gitea_token_scopes.py::test_the_reviewer_grant_is_exactly_the_measured_requirement`; `mentor owns: (none)` on prod (Live provision, below)
 - [x] AC6: tests `tests/test_pr_agent_secrets.py` (catalog entry, mapping, fail-closed apply, env scoping); `nan_api_key` still absent from prod (below, Live reconcile)
 - [x] AC7: reconcile apply output, then a second run with no changes (below, Live reconcile — the PR-Agent hook)
@@ -130,6 +130,44 @@ Run from master `3f46c450` on a branch, so that the recorded token lands through
   `apps.services.automation.pr_agent.nan_api_key` under `Missing (5)`
   (79/84 present). The pod stays in `CreateContainerConfigError` until it is
   copied in and `apply-secrets` runs — both out of scope for this build.
+
+## Live smoke test (2026-09-30 UTC, prod)
+
+Hooks 6, 7 and 8 were turned on by Manu's reconcile after #1868 merged (2026-09-26). This run reads them back: `GET /repos/personal/resume/hooks` shows hook 6 `active=true`, events `[pull_request, pull_request_sync]`, pointing at `https://pr-agent.kubelab.live/api/v1/gitea_webhooks`.
+
+### The first attempt, PR 279, got no review
+
+- personal/resume PR 279 was opened on 2026-09-26 and no `mentor` comment ever arrived. The pod logged `NameResolutionError` for `gitea.kubelab.live`.
+- Root cause: the CoreDNS hairpin rewrite answered under `traefik.kube-system.svc.cluster.local`. glibc (the Debian-based image) drops such an answer; musl accepts it. Fixed by #1874 (`answer auto`, lesson-472), applied with `toolkit infra k8s bootstrap --env prod`.
+- Every other signal was green at the time: the pod was running, the hook was active, and the signature probes answered. Nothing reported the silence. That is the case AC8's watcher exists for.
+- Manu merged PR 279 on 2026-09-27 without a review.
+
+### PR 280, reviewed and re-reviewed
+
+[personal/resume PR 280](https://gitea.kubelab.live/personal/resume/pulls/280) is a real fix (resume issue 225) with two commits pushed separately. Times are the forge's, from the PR and its timeline:
+
+| Event | Time (UTC) | Record |
+|---|---|---|
+| PR opened, head `889434e` | 00:25:58 | `created_at`; `pull_push` 557 at 00:25:59 |
+| Review posted | 00:26:16 | comment 558, author `mentor`, `## PR Reviewer Guide` |
+| Second push, head `709ddf4` | 00:26:47 | `pull_push` 559 |
+| Review edited | 00:26:59 | comment 558 `updated_at`; still the only `mentor` comment |
+
+- **AC1:** 18 s from open to review. The review is a real one: effort 1/5, "PR contains tests", no security concerns, no major issues.
+- **AC2:** the push edited comment 558 12 s later. No second comment was added, so `FINAL_UPDATE_MESSAGE=false` holds as well.
+- **AC4:** SHA-256 of `title + "\n" + body` was `6093ae48…9136e5` before the review. It was the same after the edit.
+- The live test's assertions were checked against both PRs' comments and timelines, read with the authoring client. On 279, both fail ("found 0", then "no review to compare"). On 280, both pass. The committed test reads with the reviewer token, because the admin token has no `read:issue`.
+
+### AC3, on the live endpoint
+
+```
+$ curl -X POST -H 'X-Gitea-Event: pull_request' -d '{"action":"opened"}' https://pr-agent.kubelab.live/api/v1/gitea_webhooks
+{"detail":"Missing signature header"}  -> 400
+$ curl ... -H 'X-Gitea-Signature: 000…0' ...
+{"detail":"Invalid signature"}  -> 401
+```
+
+Run at 2026-09-30T00:34:08Z. Neither request produced a comment anywhere, because both carried no PR.
 
 ## Image runtime (2026-09-27, local Docker, `pragent/pr-agent:0.45.0-gitea_app`)
 
