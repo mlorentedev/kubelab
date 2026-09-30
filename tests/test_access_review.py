@@ -424,8 +424,9 @@ def test_idp_groups_that_match_are_ok_whatever_their_order() -> None:
 
 
 def test_no_password_hash_reaches_a_finding_even_from_a_malformed_database() -> None:
-    """PyYAML quotes the offending line in its error, and here that line can hold a hash."""
-    broken = _users_db(RENDERED_GROUPS, LIVE_HASH) + f"  : [unclosed {LIVE_HASH}\n"
+    """PyYAML quotes about 30 characters around the error, so where the error is an
+    unclosed hash, the start of that hash is in the message."""
+    broken = f'users:\n  operator:\n    password: "must-not-leak{LIVE_HASH}\n'
     findings, stale = idp_groups_drift(_users_db(RENDERED_GROUPS, RENDERED_HASH), lambda: broken, "prod")
     assert stale == frozenset()
     assert [(f.service, f.status) for f in findings] == [("authelia", "failed")]
