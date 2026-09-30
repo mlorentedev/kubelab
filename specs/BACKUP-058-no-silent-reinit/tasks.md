@@ -69,12 +69,12 @@ created: "2026-09-29"
 
 ### PR2: the watcher pins each repository's identity
 
-- [ ] [P] [AC5] Runbook: add the two watcher reasons to the alert table in `docs/runbooks/offsite-backup-restore.md`, linking "Repository missing or replaced".
-- [ ] [P] [AC5] Extend `FAKE_RESTIC` in `tests/test_r2_backup_watcher_probe.py`: handle `cat config`, with the ID coming from a `<repo>.id` fixture. The targets fixtures gain the ID column. Add two parametrized breakages: an ID mismatch (`reason: repository id changed`) and the `-` token (`reason: repository id not declared`). Both must produce node `healthy:0` and fleet `healthy:0`, and the node line must carry `repository_id`. Expected: FAIL.
-- [ ] [AC5] Change `infra/k8s/base/services/r2-backup-watcher/probe.sh`: read the third column, call `restic_read cat config --json`, compare, and print `repository_id`. Re-run. Expected: PASS, and the existing cases still pass.
-- [ ] [AC5] Write a failing test in `tests/test_r2_watcher_targets.py`: `render_watcher_targets` emits `<node> <url> <id|-> <sources>...` from `backup.r2.repository_ids`. Then change `toolkit/features/backup_destination.py` (the generator and `_WATCHER_TARGETS_HEADER`). Expected: PASS.
-- [ ] [AC6] Declare the four IDs from task 1 in `common.yaml` under `backup.r2.repository_ids`, with a comment on what the IDs are and how they change (`backup-repo-reinit` + PR). Run `make sync-r2-watcher-targets` and commit the regenerated `targets.txt`. `tests/test_r2_watcher_targets.py` must be green against the committed file.
-- [ ] `make test` and `make lint` green. Open PR2 as a draft (`Refs #1921`), then mark it ready.
+- [x] [P] [AC5] Runbook: add the two watcher reasons to the alert table in `docs/runbooks/offsite-backup-restore.md`, linking "Repository missing or replaced".
+- [x] [P] [AC5] Extend `FAKE_RESTIC` in `tests/test_r2_backup_watcher_probe.py`: handle `cat config`, with the ID coming from a `<repo>.id` fixture. The targets fixtures gain the ID column. Add two parametrized breakages: an ID mismatch (`reason: repository id changed`) and the `-` token (`reason: repository id not declared`). Both must produce node `healthy:0` and fleet `healthy:0`, and the node line must carry `repository_id`. Expected: FAIL.
+- [x] [AC5] Change `infra/k8s/base/services/r2-backup-watcher/probe.sh`: read the third column, call `restic_read cat config --json`, compare, and print `repository_id`. Re-run. Expected: PASS, and the existing cases still pass.
+- [x] [AC5] Write a failing test in `tests/test_r2_watcher_targets.py`: `render_watcher_targets` emits `<node> <url> <id|-> <sources>...` from `backup.r2.repository_ids`. Then change `toolkit/features/backup_destination.py` (the generator and `_WATCHER_TARGETS_HEADER`). Expected: PASS.
+- [x] [AC6] Declare the four IDs from task 1 in `common.yaml` under `backup.r2.repository_ids`, with a comment on what the IDs are and how they change (`backup-repo-reinit` + PR). Run `make sync-r2-watcher-targets` and commit the regenerated `targets.txt`. `tests/test_r2_watcher_targets.py` must be green against the committed file.
+- [x] `make test` and `make lint` green. Open PR2 as a draft (`Refs #1921`), then mark it ready.
 
 ### Deploy and verify (after both merge)
 
