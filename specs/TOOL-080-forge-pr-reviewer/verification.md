@@ -157,6 +157,7 @@ Hooks 6, 7 and 8 were turned on by Manu's reconcile after #1868 merged (2026-09-
 - **AC2:** the push edited comment 558 12 s later. No second comment was added, so `FINAL_UPDATE_MESSAGE=false` holds as well.
 - **AC4:** SHA-256 of `title + "\n" + body` was `6093ae48…9136e5` before the review. It was the same after the edit.
 - The live test's assertions were checked against both PRs' comments and timelines, read with the authoring client. On 279, both fail ("found 0", then "no review to compare"). On 280, both pass. The committed test reads with the reviewer token, because the admin token has no `read:issue`.
+- **First run of the committed test** (Manu, 2026-09-30, from this branch): `poetry run pytest -m infra tests/infra/test_pr_agent_review_live.py -v` → `test_the_reviewer_left_exactly_one_review PASSED`, `test_the_review_was_updated_after_the_latest_push PASSED`, `2 passed in 7.17s`. The fixture's SOPS lookup of `reviewer_token` and its reads through `GiteaClient._paginate` work against prod.
 
 ### AC3, on the live endpoint
 
@@ -212,6 +213,8 @@ Digest `sha256:750c6cf8532b7aa81ef55a71cce0d8c24485cd18cbdcca21d3885788ce2b69f4`
   - No dotfiles registry entry: that registry tracks secrets with an EXTERNAL counterpart (Bitwarden, a provider) to copy from, per `NAN_API_KEY`'s entry there. This value has none — it is generated and owned entirely by this repository — so there is nothing to register.
   - With this closed, `gitea-reconcile --apply` creates the PR-Agent hook on every declared repository, signed with this secret. Until PR 4 flips it, `active: false` keeps Gitea from delivering anything to it.
   - Read-only plan against prod from this branch, 2026-09-26: `make gitea-reconcile ENV=prod` lists `+ hook` for `personal/resume`, `teledyne/fae-brain` and `teledyne/openkm-brain`, all `-> https://pr-agent.kubelab.live/api/v1/gitea_webhooks`, and no change to any n8n hook. So the list form reads the live n8n hooks exactly as the singular block did.
+
+- 2026-09-30, Manu: **`repo_context_files` stays `["AGENTS.md"]` on the forge**, which closes the disagreement recorded under PR 4's test status. On the forge repos, `CLAUDE.md` is a thin overlay that delegates to `AGENTS.md` and adds agent-tooling notes. Reading it would add tokens to every review and no review rules. The GitHub side's `.pr_agent.toml` is unchanged; the two forges differ on purpose.
 
 ## Promotion candidates
 
