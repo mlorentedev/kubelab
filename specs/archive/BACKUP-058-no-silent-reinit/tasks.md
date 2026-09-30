@@ -80,7 +80,7 @@ created: "2026-09-29"
 
 - [x] [AC6] Deploy the role: `make backup ENV=prod`. Re-run it: `changed=0`.
 - [x] [AC6] `make backup-node NODE=vps ENV=prod` and `NODE=rpi3`. Then read each marker through a toolkit/Ansible path and check it equals the declared ID.
-- [ ] [AC6] After the next watcher run, `toolkit obs logs` shows four `r2_backup_node` lines with `healthy:1` and a `repository_id` matching each declaration, and `obs015-r2-backup-health` is Normal.
+- [x] [AC6] After the next watcher run, `toolkit obs logs` shows four `r2_backup_node` lines with `healthy:1` and a `repository_id` matching each declaration, and `obs015-r2-backup-health` is Normal.
 - [x] [AC6] `beelink` and `rpi4`: record their markers in `verification.md` at their next power-on.
 
 ## Closing

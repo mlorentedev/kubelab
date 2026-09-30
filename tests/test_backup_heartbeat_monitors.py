@@ -178,6 +178,7 @@ def _heartbeat_block() -> str:
         "ansible_managed": "Ansible managed",
         "inventory_hostname": "rpi3",
         "node_backup_heartbeat_domain": "status.kubelab.live",
+        "node_backup_env": "prod",
         "node_backup_r2_repository": "s3:x",
     }
     rendered = jinja2.Environment(undefined=jinja2.StrictUndefined).from_string(SHIP.read_text()).render(**ctx)

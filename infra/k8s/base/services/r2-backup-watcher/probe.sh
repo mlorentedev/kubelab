@@ -120,6 +120,8 @@ while read -r node repo declared_id services || [ -n "$node" ]; do
     # replacement is still a replacement.
     if [ "$readable" -eq 1 ]; then
         if config="$(restic_read cat config --json)"; then
+            # Same extraction as the node's node-backup-ship.sh (role
+            # node_backup): the two must agree on which field is the id.
             repository_id="$(printf '%s\n' "$config" | sed -n 's/^.*"id": *"\([0-9a-f]*\)".*$/\1/p' | head -n 1)"
             if [ -z "$repository_id" ]; then
                 reason="${reason:+$reason, }repository id unreadable"

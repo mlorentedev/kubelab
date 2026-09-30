@@ -10,6 +10,10 @@
 # common.yaml takes effect on the next `make deploy` / `make apply-secrets`
 # cycle, not by editing this file.
 set -euo pipefail
+# Private, like the 0700 the role gives the staging dir: this script recreates
+# that dir and fills it with database copies, and root's default umask (022)
+# would leave both readable by any local user.
+umask 077
 
 # --- read back the previous shutdown's receipt -----------------------------
 # A receipt nobody reads is a file, not a control. This runs at BOOT (the
