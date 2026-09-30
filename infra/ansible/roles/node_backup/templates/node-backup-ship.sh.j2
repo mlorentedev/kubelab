@@ -85,10 +85,12 @@ REINIT="make backup-repo-reinit NODE={{ inventory_hostname }} DEST=$DESTINATION 
 # for a deleted repository -- the silent re-init this guard exists to stop.
 # Nothing here writes a blank marker (the write below is atomic), so one comes
 # from outside (a `touch`, a restore that truncates): refuse, never guess.
-# `-L` as well, because `-e` is false for a symlink whose target is gone.
+# `-L` as well, because `-e` is false for a symlink whose target is gone. An
+# unreadable marker reads as empty, so it gets the message below rather than
+# a bare `set -e` abort that names neither the marker nor the way out.
 RECORDED=""
 if [ -e "$MARKER" ] || [ -L "$MARKER" ]; then
-    RECORDED="$(tr -d '[:space:]' < "$MARKER")"
+    RECORDED="$(tr -d '[:space:]' < "$MARKER" 2>/dev/null)" || RECORDED=""
     case "$RECORDED" in
         ''|*[!0-9a-f]*)
             echo "node-backup-ship: $MARKER exists but holds no repository id ('$RECORDED')." >&2

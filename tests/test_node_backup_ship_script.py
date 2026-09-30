@@ -232,3 +232,19 @@ def test_the_override_printed_on_a_refusal_runs_as_pasted(node) -> None:
     proc, _, _ = node(snapshots_rc=10, recorded=EXISTING_ID)
     assert "make backup-repo-reinit NODE=beelink DEST=r2 ENV=prod" in proc.stderr
     assert "<env>" not in proc.stderr
+
+
+def test_a_marker_that_is_a_dangling_symlink_is_refused_with_the_override(node, tmp_path) -> None:
+    """`-e` is false for a symlink whose target is gone, so it is checked with `-L`.
+
+    Read as absent, it would reopen `init`. Read with a bare `tr <`, it would
+    abort on `set -e` with no word about the marker or the way out.
+    """
+    marker = tmp_path / "state" / "r2.repository-id"
+    marker.symlink_to(tmp_path / "gone")
+    proc, verbs, _ = node(snapshots_rc=10)
+    assert proc.returncode != 0
+    assert "init" not in verbs
+    assert "backup" not in verbs
+    assert str(marker) in proc.stderr
+    assert "make backup-repo-reinit" in proc.stderr
