@@ -201,7 +201,10 @@ The target writes the forgotten id to the node's journal (`logger` tag
 `node-backup`) before it removes the file, so the old history stays traceable
 after the marker is gone. It acts on exactly one node, refuses `NODE=all`, a
 host pattern that matches more than one node, and an unknown `DEST`, and fails
-on an unreachable node rather than skipping it.
+on an unreachable node rather than skipping it. If it fails partway (the id is
+journaled but the node dropped before the file was removed), run it again: it
+reads the same marker, journals it again and removes it. Never delete the file
+by hand; the journal line is the only record that outlives it.
 
 **4. Declare the new id** in `backup.r2.repository_ids` in `common.yaml` through
 a PR. Until that lands, the R2 watcher reports the node unhealthy on purpose:

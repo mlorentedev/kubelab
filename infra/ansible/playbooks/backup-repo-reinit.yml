@@ -32,6 +32,9 @@
   hosts: all
   become: true
   gather_facts: false
+  # Stated, not inherited: the default is false, but the guarantee is that an
+  # override on an unreachable node FAILS, so it is written where a test reads it.
+  ignore_unreachable: false
   # The marker paths come from the role that writes and reads them, so the two
   # can never disagree about where the record lives.
   vars_files:

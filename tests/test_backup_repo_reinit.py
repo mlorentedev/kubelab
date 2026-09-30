@@ -50,6 +50,15 @@ def _index(predicate) -> int:
     return next(i for i, t in enumerate(_tasks()) if predicate(t))
 
 
+def _assert_on(needle: str):
+    """Match an assert by its `that:` conditions, never by its serialised task.
+
+    A `fail_msg` can name another assert's variable, so a search over the whole
+    task could locate the wrong one and let an ordering swap pass.
+    """
+    return lambda t: any(needle in cond for cond in (t.get("ansible.builtin.assert") or {}).get("that", []))
+
+
 def test_the_marker_path_comes_from_the_role_defaults() -> None:
     play = _play()
     assert "../roles/node_backup/defaults/main.yml" in play.get("vars_files", [])
@@ -62,18 +71,20 @@ def test_the_marker_path_comes_from_the_role_defaults() -> None:
 
 
 def test_an_unreachable_node_fails_instead_of_being_skipped() -> None:
-    assert not _play().get("ignore_unreachable", False)
+    # Explicit `false`, not an absent key: absence would pass for a play whose
+    # behaviour is decided somewhere this test cannot see.
+    assert _play().get("ignore_unreachable") is False
 
 
 def test_the_destination_is_validated_against_a_declared_list() -> None:
-    i = _index(lambda t: "ansible.builtin.assert" in t and "reinit_destinations" in str(t))
+    i = _index(_assert_on("reinit_destinations"))
     assert "r2" in _play()["vars"]["reinit_destinations"]
     remove = _index(lambda t: t.get("ansible.builtin.file", {}).get("state") == "absent")
     assert i < remove
 
 
 def test_exactly_one_host_may_match() -> None:
-    i = _index(lambda t: "ansible.builtin.assert" in t and "ansible_play_hosts_all" in str(t))
+    i = _index(_assert_on("ansible_play_hosts_all"))
     remove = _index(lambda t: t.get("ansible.builtin.file", {}).get("state") == "absent")
     assert i < remove
 
