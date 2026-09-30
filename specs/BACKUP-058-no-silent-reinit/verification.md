@@ -143,26 +143,56 @@ Prod watcher, after #1942 merged (`9c26f522`) and Argo CD synced (2026-09-30, on
 - [x] AC6 -> role deployed, all four markers hold the declared id, and the prod watcher reports four healthy nodes
 - [x] AC7 -> the override and the runbook (PR1); the watcher reason strings in the runbook's alert table (PR2)
 
+### Review fixes on prod (2026-09-30)
+
+The review's fixes live in the Ansible role, which Argo CD does not reconcile, so they were deployed from the branch before merge:
+
+| Step | Command | Result |
+|---|---|---|
+| Deploy | `make backup ENV=prod` | rc 0; `changed=2` per node (ship script, and the staging-dir mode a capture had reset) |
+| Idempotence | `make backup ENV=prod` | rc 0; `changed=0` on all four nodes |
+| umask fix deploy | `make backup ENV=prod` | rc 0; `changed=1` per node (capture script) |
+| A real capture, then idempotence | `make backup-node NODE=rpi3 ENV=prod`, then `make backup ENV=prod` | rc 0, then `changed=0` on all four: the capture no longer loosens the staging dir |
+
+The watcher's `probe.sh` changed only by a comment. Its ConfigMap reaches prod through Argo CD on merge.
+
 ## Test status
 
-- Test suite: `<command> -> <output / coverage %>`
-- Manual smoke test: what was exercised, what was observed
-- No regressions in existing test suite: yes / no (if no, document)
+- Test suite: `make test` -> rc 0, 3053 passed, 16 skipped, 2 xfailed (after the last review fix, `b68715ff`); `make lint` -> rc 0
+- Focused: `poetry run pytest tests/test_node_backup_ship_script.py tests/test_node_backup_role.py tests/test_backup_heartbeat_monitors.py tests/test_backup_repo_reinit.py tests/test_r2_backup_watcher_probe.py tests/test_r2_watcher_targets.py --no-cov -q` -> all passed
+- Manual smoke test: the four prod deploys above, and the AC6 prod watcher run
+- No regressions in existing test suite: yes
 
 ## Decisions made during implementation
 
 Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
 
--
--
+- The marker is recorded right after `backup` succeeds, not at the end of the run: a first ship whose retention failed would otherwise hold a snapshot with no marker, and a deletion before the next full run would re-initialise silently.
+- The watcher reads the id with the read-only token and `--no-lock --no-cache`, so pinning it adds one read per node and no lock contention with the ships.
+- `make backup-node NODE=all` exits 2 because `hosts: all` reaches nodes without the role. That is outside this spec and filed as #1943 (BACKUP-062).
+- The manual watcher run used for AC6 exposed that `kubectl create job --from` Jobs are pruned by the CronJob controller. The replacement, `make watcher-run`, is TOOL-084 (#1858, PR #1945).
+
+## Review findings disposition
+
+Independent review: `review.md` (PASS WITH GAPS, `nan/deepseek-v4-flash`, reviewed `4660c854`).
+
+| Finding | Disposition |
+|---|---|
+| Major: an empty marker is read as absent, so `init` runs for a deleted repository | **Applied.** The ship script now treats any marker that exists (or is a dangling symlink) as "shipped here" and refuses one that holds no 64-hex id. Pinned by `test_a_marker_that_exists_without_an_id_is_refused_not_treated_as_absent` (empty, blank, garbage, each with `snapshots` exit 0 and 10); all six were red before the change. A dangling symlink or unreadable marker takes the same refusal instead of a bare `set -e` abort (`test_a_marker_that_is_a_dangling_symlink_is_refused_with_the_override`, red first). `make backup-repo-reinit` already handles a blank marker (it reads, journals and removes whatever is there), so the refusal has a way out. Deployed to prod, see "Review fixes on prod" below. |
+| Minor: the refusal prints `ENV=<env>` | **Applied.** The playbook passes `node_backup_env: "{{ deploy_env }}"` and the script prints `ENV=prod`. Pinned by `test_the_override_printed_on_a_refusal_runs_as_pasted`. |
+| Found while deploying the fixes: the capture recreated the staging dir 0755 with 0644 database copies | **Applied.** `umask 077` in the capture script (`test_the_capture_keeps_the_staging_dir_private_after_it_recreates_it`). Outside this spec's criteria, fixed in the same role because it was measured in this deploy. |
+| Minor: AC1 measured exit 10 on the read path, not the node's write path | **Declined, with a reason.** The direction of error is safe: any exit other than 10 fails without `init`. Worst case, a genuinely new node cannot initialise and says so. Confirm at the next new node. |
+| Minor: AC6 evidence is cluster-bound | **Declined, with a reason.** `make backup-coverage ENV=prod` and `make watcher-run NAME=r2-backup-watcher ENV=prod` re-run it on demand, and the watcher fails closed on a mismatch every 6h. |
+| Minor: the id-extraction `sed` is duplicated in the ship script and `probe.sh` | **Applied** as a cross-reference comment on both sides. A shared fixture would couple an Ansible template test to a ConfigMap script for one regex, which costs more than it protects. |
+| Minor: promotion and test-status lines unfilled | **Applied** below and above. |
 
 ## Promotion candidates
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.
 
-- [ ] Lesson for the repo's `docs/lessons/`? <yes: path / no: reason>
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? <yes: path / no: reason>
-- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes: path / no: reason>
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/storage-backup/lesson-485-init-if-it-does-not-open-turns-a-deleted-backup-into-a-healthy-empty-one.md
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: this is a control on an existing placement, not a placement decision; the ADR-049 amendment that epic #1923 assigns to its Storage Box child can cite it
+- [x] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. no: "init if it does not open" is restic-specific here and has not recurred outside kubelab
 
 ## Archive checklist
 
