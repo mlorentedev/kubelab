@@ -126,19 +126,33 @@ def test_one_run_is_one_verdict(rendered: dict) -> None:
     assert rendered["pod"]["restartPolicy"] == "Never"
 
 
+def _restic_calls_per_node() -> int:
+    """The timed restic calls the probe makes per node, counted from its source.
+
+    Hardcoding the count is how this test kept passing after BACKUP-058 added a
+    third call and the worst case outgrew the deadline (review, 2026-09-30).
+    """
+    source = PROBE.read_text()
+    return len(re.findall(r"\$\(restic_read ", source))
+
+
 def test_lives_long_enough_to_report(rendered: dict) -> None:
     """R4 in the pod: a deadline kill must still let the probe print its line.
 
     Kubelet signals PID 1 only, and `sh` runs its trap only once its foreground
-    child returns, which can take one full `RESTIC_TIMEOUT`. So the deadline has
-    to outlast the worst-case probe (two timed-out calls per node), and the grace
-    period has to outlast one call; otherwise SIGKILL lands first and the Job
-    ends silent, which the rule reads as noData only after 24h.
+    child returns, which can take one full timeout. So the deadline has to
+    outlast the worst-case probe (every call timing out on every node), and the
+    grace period has to outlast the longest single call; otherwise SIGKILL
+    lands first and the Job ends silent, which the rule reads as noData only
+    after 24h.
     """
     timeout = int(_probe_default("RESTIC_TIMEOUT"))
-    worst_case = _target_nodes() * 2 * timeout
+    stats_timeout = int(_probe_default("STATS_TIMEOUT"))
+    calls = _restic_calls_per_node()
+    assert calls >= 3, f"counted {calls} restic_read calls in probe.sh; the pattern is stale"
+    worst_case = _target_nodes() * (calls * timeout + stats_timeout)
     assert rendered["job"]["activeDeadlineSeconds"] > worst_case
-    assert rendered["pod"]["terminationGracePeriodSeconds"] > timeout
+    assert rendered["pod"]["terminationGracePeriodSeconds"] > max(timeout, stats_timeout)
 
 
 def test_needs_no_cluster_api(rendered: dict) -> None:
