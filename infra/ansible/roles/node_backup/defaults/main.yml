@@ -165,7 +165,7 @@ node_backup_stuck_request_timeout: "45s"
 # it is stopped and its last refusal reported. Above one stuck request (45s),
 # so a slow but working link still answers; at most a quarter of the unit's
 # TimeoutStartSec=600, so the verdict is logged while the unit is alive and
-# the backup still has its time. A healthy probe takes 1-3s.
+# the backup still has its time.
 node_backup_probe_timeout: 120
 
 # How long the CAPTURE unit gets before systemd kills it. Separate from ship's
