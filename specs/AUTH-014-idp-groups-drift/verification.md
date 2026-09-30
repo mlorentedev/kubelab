@@ -18,6 +18,7 @@ created: "2026-09-29"
 - `.venv/bin/pytest -q tests/test_access_review.py`: 55 passed. `mypy` and `ruff` clean.
 - Mutation checks, each on a committed tree and restored with `git checkout HEAD`: ignoring `stale` in `reconcile` fails 2 tests; passing `stale` as empty from `review_env` fails 1; passing the PyYAML error text through fails 1.
 - Full suite (`make test`): 3017 passed, 15 skipped, 2 xfailed.
+- Second pooled review (agy/gemini-3.1-pro-high on `115d7668`): PASS WITH GAPS. Its one gap, `reconcile` at complexity 23 and `review_env` at 17, was raised by this change (from 18 and 14). Fixed in this archive PR by extracting `_hold_back`, `_read_back`, `_review_apps` and `_argocd_findings`: no function in the module is above 15, and the 55 tests pass unchanged. #1918 merged before the review finished, so the fix lands here.
 
 ## Decisions made during implementation
 
@@ -30,9 +31,9 @@ created: "2026-09-29"
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.
 
-- [ ] Lesson for the repo's `docs/lessons/`? <yes: path / no: reason>
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? <yes: path / no: reason>
-- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes: path / no: reason>
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/identity-secrets/lesson-484-a-reconciler-downstream-of-a-stale-source-reports-a-bound-that-cannot-converge.md
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: a check inside an existing command, with no new contract; how the IdP and the apps it feeds are reconciled belongs to ADR-038, which #1613 revisits
+- [x] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. no: seen in one project only; lesson-484 carries it until a second one shows it
 
 ## Archive checklist
 
