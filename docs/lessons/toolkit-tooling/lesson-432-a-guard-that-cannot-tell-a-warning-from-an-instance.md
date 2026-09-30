@@ -69,3 +69,5 @@ that is exactly right about the population it was aimed at, and includes a
 member that must be exempt for the population to remain describable.
 
 **Tags**: `#make` `#guards` `#documentation` `#issue-1644` `#pr-1647`
+
+**Addendum, 2026-09-30**: the same root cause appears as `ENV ?= dev` defeating `test -n "$(ENV)"`. The presence check can never fire, so test against an allow-list (`test "$(ENV)" = staging -o "$(ENV)" = prod`), as `make backup-repo-reinit` does since #1938.

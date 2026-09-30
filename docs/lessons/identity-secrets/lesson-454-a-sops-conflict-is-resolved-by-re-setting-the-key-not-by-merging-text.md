@@ -43,3 +43,12 @@ secret step: check first, because a failed extraction still leaves a file that
 rebases cleanly.
 
 **Tags**: `#sops` `#git-rebase` `#pr-1797` `#auth-004`
+
+## Addendum, 2026-09-28: a clean merge is not safe either
+
+Two PRs that both changed the same `*.enc.yaml` merged with no conflict marker and CI
+green, and the result had an invalid SOPS MAC (`sops` exit 51). Each side had
+re-computed the MAC over its own values, so git had nothing to flag and the file
+was still wrong. Prod SOPS was unreadable on master until #1900 re-set the key
+(`toolkit secrets set --stdin`). The guard is tracked in #1901 (SEC-024). Verify any
+SOPS diff by consequence, meaning the file decrypts, and never by a clean merge.
