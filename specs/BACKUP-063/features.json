@@ -1,0 +1,23 @@
+[
+  {
+    "id": "BACKUP-063-f1",
+    "behavior": "The weekly check reads pack group n/t with n from epoch weeks, covering every group once per t weeks across a year boundary (AC1)",
+    "verification": "poetry run pytest tests/test_node_backup_ship_script.py --no-cov -q -k read_data",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-063-f2",
+    "behavior": "A failing check exits the ship script non-zero, so OnFailure pages (AC3)",
+    "verification": "poetry run pytest tests/test_node_backup_ship_script.py --no-cov -q -k failed_check",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-063-f3",
+    "behavior": "The weekly unit with the chosen t completes within its timeout and memory cap on every node (AC2)",
+    "verification": "make backup-node NODE=all ENV=prod INTEGRITY=1",
+    "state": "pending",
+    "evidence": ""
+  }
+]

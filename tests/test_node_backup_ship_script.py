@@ -42,6 +42,7 @@ NEW_ID = "b" * 64
 #                 `unavailable` retries a 503 forever (R2 down, not the credential)
 #   id            the repository id `cat config` reports
 #   forget.rc     exit code of `forget` (default 0)
+#   check.rc      exit code of `check` (default 0)
 # `init` sets a new id and makes `snapshots` succeed, as a real init would.
 # Every subcommand is appended to `calls`, which is what the tests assert on.
 FAKE_RESTIC = r"""#!/bin/bash
@@ -76,11 +77,24 @@ case "$1" in
     echo 0 > "$FAKE_DIR/snapshots.rc" ;;
   forget)
     exit "$(cat "$FAKE_DIR/forget.rc" 2>/dev/null || echo 0)" ;;
+  check)
+    exit "$(cat "$FAKE_DIR/check.rc" 2>/dev/null || echo 0)" ;;
   cat)
     printf '{\n  "version": 2,\n  "id": "%s",\n  "chunker_polynomial": "3dea92648f6e83"\n}\n' "$(cat "$FAKE_DIR/id")" ;;
 esac
 exit 0
 """
+
+
+# Stands in for `date` when a test fixes the clock: `+%s` answers $FAKE_NOW, and
+# anything else goes to the real date, so the script's other timestamps work.
+FAKE_DATE = r"""#!/bin/bash
+if [ "$*" = "+%s" ] && [ -n "${FAKE_NOW:-}" ]; then echo "$FAKE_NOW"; exit 0; fi
+exec /bin/date "$@"
+"""
+
+WEEK = 604800
+READ_DATA_GROUPS = 4
 
 
 @pytest.fixture
@@ -91,6 +105,10 @@ def node(tmp_path: Path):
     restic = tmp_path / "restic"
     restic.write_text(FAKE_RESTIC)
     restic.chmod(0o755)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "date").write_text(FAKE_DATE)
+    (bin_dir / "date").chmod(0o755)
 
     staging = tmp_path / "staging"
     staging.mkdir()
@@ -126,18 +144,37 @@ def node(tmp_path: Path):
             node_backup_r2_repository_id_file=str(marker),
             # Seconds, not the role's 120: the refusal tests wait it out.
             node_backup_probe_timeout=2,
+            node_backup_check_read_data_groups=READ_DATA_GROUPS,
         )
     )
 
-    def run(*, snapshots_rc: int | str, repo_id: str = EXISTING_ID, recorded: str | None = None, forget_rc: int = 0):
+    def run(
+        *,
+        snapshots_rc: int | str,
+        repo_id: str = EXISTING_ID,
+        recorded: str | None = None,
+        forget_rc: int = 0,
+        check: bool = False,
+        check_rc: int = 0,
+        now: int | None = None,
+    ):
         (fake_dir / "snapshots.rc").write_text(f"{snapshots_rc}\n")
         (fake_dir / "forget.rc").write_text(f"{forget_rc}\n")
+        (fake_dir / "check.rc").write_text(f"{check_rc}\n")
         (fake_dir / "id").write_text(f"{repo_id}\n")
+        calls_file = fake_dir / "calls"
+        earlier = len(calls_file.read_text().splitlines()) if calls_file.exists() else 0
         if recorded is not None:
             marker.write_text(f"{recorded}\n")
-        env = {"PATH": os.environ["PATH"], "FAKE_DIR": str(fake_dir), "NEW_ID": NEW_ID}
-        proc = subprocess.run(["bash", str(script)], env=env, capture_output=True, text=True, timeout=30)
+        env = {"PATH": f"{bin_dir}:{os.environ['PATH']}", "FAKE_DIR": str(fake_dir), "NEW_ID": NEW_ID}
+        if now is not None:
+            env["FAKE_NOW"] = str(now)
+        argv = ["bash", str(script)] + (["--check"] if check else [])
+        proc = subprocess.run(argv, env=env, capture_output=True, text=True, timeout=30)
         calls = (fake_dir / "calls").read_text().splitlines() if (fake_dir / "calls").exists() else []
+        # `verbs` accumulates across runs (a test may assert on a sequence);
+        # `run.calls` holds this run's calls only.
+        run.calls = calls[earlier:]
         verbs = [c.split()[0] for c in calls]
         return proc, verbs, marker
 
@@ -328,3 +365,50 @@ def test_the_probe_timeout_sits_between_one_stuck_request_and_the_unit() -> None
     unit = re.search(r"^TimeoutStartSec=(\d+)$", (role / "templates" / "node-backup-ship.service.j2").read_text(), re.M)
     assert unit, "the ship unit declares no TimeoutStartSec"
     assert stuck < probe <= int(unit.group(1)) // 4
+
+
+def _check_call(calls: list[str]) -> str:
+    [call] = [c for c in calls if c.split()[0] == "check"]
+    return call
+
+
+def test_the_weekly_check_reads_a_group_of_pack_data(node) -> None:
+    proc, verbs, _ = node(snapshots_rc=0, recorded=EXISTING_ID, check=True, now=0)
+    assert proc.returncode == 0, proc.stderr
+    assert _check_call(node.calls) == f"check --read-data-subset 1/{READ_DATA_GROUPS}"
+    assert f"reading pack group 1/{READ_DATA_GROUPS}" in proc.stdout
+
+
+def test_the_read_data_rotation_reads_every_group_once_per_cycle(node) -> None:
+    """Every pack is read within t weeks: t consecutive weeks read each group exactly once."""
+    groups = []
+    for week in range(READ_DATA_GROUPS):
+        node(snapshots_rc=0, recorded=EXISTING_ID, check=True, now=week * WEEK + 3600)
+        groups.append(_check_call(node.calls).split()[-1])
+    assert sorted(groups) == [f"{n}/{READ_DATA_GROUPS}" for n in range(1, READ_DATA_GROUPS + 1)]
+
+
+def test_the_read_data_rotation_is_continuous_across_a_year_boundary(node) -> None:
+    """ISO weeks wrap 52/53 -> 1 and would skip or repeat a group there; epoch weeks do not."""
+    new_year_2027 = 1798761600  # 2027-01-01T00:00:00Z, which falls in ISO week 53 of 2026
+    before, after = [], []
+    for offset in (-WEEK, 0, WEEK):
+        node(snapshots_rc=0, recorded=EXISTING_ID, check=True, now=new_year_2027 + offset)
+        n = int(_check_call(node.calls).split()[-1].split("/")[0])
+        (before if offset < 0 else after).append(n)
+    sequence = before + after
+    assert [(b - a) % READ_DATA_GROUPS for a, b in zip(sequence, sequence[1:])] == [1, 1]
+
+
+def test_the_frequent_ship_does_not_check(node) -> None:
+    proc, verbs, _ = node(snapshots_rc=0, recorded=EXISTING_ID, check=False, now=0)
+    assert proc.returncode == 0, proc.stderr
+    assert "check" not in verbs
+
+
+def test_a_failed_check_fails_the_run(node) -> None:
+    """A pack that cannot be read back must fail the unit, which is what pages (OnFailure)."""
+    proc, verbs, _ = node(snapshots_rc=0, recorded=EXISTING_ID, check=True, check_rc=1, now=0)
+    assert proc.returncode != 0
+    assert "check" in verbs
+    assert "ship complete" not in proc.stdout
