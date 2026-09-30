@@ -96,7 +96,7 @@ toolkit obs logs --env prod -q '{namespace="kubelab"} |= "r2_backup_"' --since 2
 |---|---|---|
 | `unreadable: ... AccessDenied` / `403` | The read-only token was revoked or expired | Rotate it (below) |
 | `unreadable: ... wrong password` | `backup.restic_password` in the cluster Secret differs from the repository's | `make apply-secrets ENV=<env>`; if it persists, see [Rotation](#rotation--the-ordering-matters) |
-| `unreadable: ... does not exist` | The node's repository is missing | `make backup-coverage ENV=prod`, then the node's ship logs |
+| `unreadable: ... does not exist` | The node's repository is missing | [Repository missing or replaced](#repository-missing-or-replaced) |
 | `no snapshots` | The repository exists and is empty | The node has never shipped: `make backup-node NODE=<node> ENV=prod` |
 | `missing sources` (`missing:[...]`) | The newest snapshot lacks a declared service | The capture on that node skipped it; read `node-backup-capture.service` there |
 | `no capture sentinel` | A snapshot shipped without the capture finishing | The ship guard regressed; treat the snapshot as incomplete |
@@ -151,6 +151,61 @@ else, so a leak from the cluster cannot delete or rewrite a backup.
 
 In the dashboard's own terms, this is the account token scope
 "Workers R2 Storage Bucket Item Read" on `kubelab-backups`.
+
+## Repository missing or replaced
+
+A node never re-creates a repository it has shipped to (BACKUP-058). The first
+time a ship completes, the node records the restic repository id in
+`/var/lib/node-backup/r2.repository-id`. That id is new for every `restic init`
+and never changes otherwise. From then on, `node-backup-ship.service` **fails**
+with one of these messages instead of healing:
+
+- `the r2 repository this node has shipped to (<id>) no longer exists`: the
+  repository is gone. restic answered exit 10.
+- `the r2 repository was replaced: this node has shipped to <old>, the
+  repository there now is <new>`: something else is at the node's path.
+
+The failure is the point. Before this change, both cases came back as a fresh
+repository with one snapshot, the watcher called it healthy, and every earlier
+restore point was lost without a page (lesson-485).
+
+**1. Find out what happened before touching anything.** A missing repository
+means something with write access to `kubelab-backups` deleted objects:
+
+```bash
+make backup-coverage ENV=prod    # which nodes are affected, and each one's newest snapshot
+```
+
+The message itself arrives through `OnFailure=kubelab-notify@`, which quotes the
+unit's journal tail. Node journals do not reach Loki, so the notification and the
+node's own journal (`node-backup-ship.service`) are the record.
+
+Check the R2 bucket's lifecycle rules and recent API tokens in the Cloudflare
+dashboard. If a replaced repository appears, find out who initialised it and
+whether it holds anything you need, and read it before anything writes to it.
+
+**2. If the history is recoverable, restore it; do not reinit.** Point the
+node back at the original repository (a mistaken `backup.r2` path, or objects
+you can restore from elsewhere). The next ship matches the recorded id and
+carries on.
+
+**3. If starting over is the decision,** remove the record on that one node:
+
+```bash
+make backup-repo-reinit NODE=rpi3 DEST=r2 ENV=prod CHECK=1   # shows the id it would forget
+make backup-repo-reinit NODE=rpi3 DEST=r2 ENV=prod
+make backup-node NODE=rpi3 ENV=prod                          # initialises and records a new id
+```
+
+The target writes the forgotten id to the node's journal (`logger` tag
+`node-backup`) before it removes the file, so the old history stays traceable
+after the marker is gone. It acts on exactly one node, refuses `NODE=all`, a
+host pattern that matches more than one node, and an unknown `DEST`, and fails
+on an unreachable node rather than skipping it.
+
+**4. Declare the new id** in `backup.r2.repository_ids` in `common.yaml` through
+a PR. Until that lands, the R2 watcher reports the node unhealthy on purpose:
+accepting a new history is a reviewed change, not a side effect of a ship.
 
 ## Backing up on demand
 
