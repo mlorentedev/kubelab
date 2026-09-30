@@ -921,3 +921,22 @@ def test_a_comment_only_triggers_the_reviewer_when_it_is_a_slash_command() -> No
     assert (
         'contains(fromJSON(\'["OWNER","MEMBER","COLLABORATOR"]\'), github.event.comment.author_association)'
     ) in condition, "the issue_comment path is not restricted to repository members"
+
+
+def test_a_run_the_job_skips_cannot_cancel_one_that_reviews() -> None:
+    """The job's `if:` and the workflow's concurrency must agree on drafts (#1944).
+
+    The per-PR group cancels in progress, and a run joins it before the job's
+    `if:` is read. So a run carrying a draft payload, which the job skips,
+    cancelled the `ready_for_review` run in the same group: measured on #1942,
+    `cancelled` plus `skipped`, and no review. Draft state is the one skip
+    condition that changes during a PR's life (actor, fork and branch prefix do
+    not), so it is the one the group key must carry: a draft run then lands in
+    a group of its own and can neither cancel nor displace a run that reviews.
+    """
+    job_if = " ".join(str(_load(REVIEWER)["jobs"]["review"]["if"]).split())
+    group = str(_load(REVIEWER)["concurrency"]["group"])
+    assert "github.event.pull_request.draft == false" in job_if, "the job no longer skips drafts; revisit this test"
+    assert "github.event.pull_request.draft" in group, (
+        "the job skips drafts but the concurrency group does not separate them, so a skipped run can cancel a review"
+    )
