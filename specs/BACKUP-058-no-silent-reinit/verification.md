@@ -113,8 +113,29 @@ Live, 2026-09-30, staging: the branch was deployed with `make deploy-k8s ENV=sta
 
 Every id matches its declaration, and `cat config` works under the read-only token in the pod as it did in the AC1 Job. The Job was deleted afterwards.
 
+### AC6: prod deploy and markers (PR1 on prod, 2026-09-30)
+
+The node role from #1938 (`84d37387`), deployed from master:
+
+| Step | Result |
+|---|---|
+| `make backup ENV=prod` | rc 0 |
+| same, re-run | rc 0, `changed=0` on beelink, kubelab-vps, rpi3, rpi4 |
+| `make backup-node NODE=all ENV=prod` | `ship complete` + coverage heartbeat on all four backup nodes; rc 2 from the four nodes without the role, filed as #1943 (BACKUP-062) |
+
+All four nodes were up, so `beelink` and `rpi4` got their markers in the same run instead of at a later power-on. Each marker read through the override's dry run (`make backup-repo-reinit NODE=<n> DEST=r2 ENV=prod CHECK=1`, which slurps the file and removes nothing under `--check`):
+
+| Node | Recorded id | Declared in `backup.r2.repository_ids` |
+|---|---|---|
+| beelink | `69e70ca8...133fa` | match |
+| kubelab-vps | `2e9148a2...878409` | match |
+| rpi3 | `5ccc440d...e6641d` | match |
+| rpi4 | `a35c05eb...cf9177` | match |
+
+Pending: the prod watcher lines after #1942 merges and Argo CD syncs.
+
 - [x] AC5 -> the probe and targets tests, the mutations above, and the live run
-- [ ] AC6 -> pending (deploy)
+- [ ] AC6 -> role deployed and all four markers hold the declared id; prod watcher pending #1942
 - [x] AC7 -> the override and the runbook (PR1); the watcher reason strings in the runbook's alert table (PR2)
 
 ## Test status
