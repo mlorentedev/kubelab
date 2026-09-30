@@ -15,13 +15,13 @@ created: "2026-09-29"
 
 - [x] Worktree `~/Projects/kubelab-backup-058-wt`, branch `fix/backup-058-no-silent-reinit` from `origin/master` (`acad52e5`), `make worktree-init` done
 - [x] `proposal.md` complete; names, key and PR split approved by the operator (2026-09-29)
-- [ ] R1 and R2 resolved by task 1 (blocks everything below it)
+- [x] R1 and R2 resolved by task 1 (2026-09-30, `verification.md`)
 
 ## Implementation
 
 ### Measurement (blocks both PRs)
 
-- [ ] [AC1] **Measure restic 0.19.1 exit codes on R2 with the read-only credential.** Follow the throwaway-Job procedure in `specs/archive/BACKUP-055-r2-watcher-probe/verification.md` (AC3): `kubectl create job --from=cronjob/r2-backup-watcher` in staging, with the command patched per run. Never edit the shared Secret or the bucket. Runs:
+- [x] [AC1] **Measure restic 0.19.1 exit codes on R2 with the read-only credential.** Follow the throwaway-Job procedure in `specs/archive/BACKUP-055-r2-watcher-probe/verification.md` (AC3): `kubectl create job --from=cronjob/r2-backup-watcher` in staging, with the command patched per run. Never edit the shared Secret or the bucket. Runs:
   1. `restic -r <prefix>/backup-058-does-not-exist --no-lock --no-cache snapshots -q`. Expected: `rc=10`.
   2. The same against a real repository with `RESTIC_PASSWORD` overridden to a wrong value. Expected: `rc=12`.
   3. The same with `AWS_ACCESS_KEY_ID` overridden to an invalid one. Expected: `rc=1` (any code other than 10 is acceptable; record it).

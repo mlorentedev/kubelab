@@ -54,17 +54,17 @@ Rollout: nodes have no marker today. The first ship after deploy finds the exist
 
 ## Risks / open questions
 
-- **R1 (blocks code): exit 10 on R2 is unmeasured.**
+- **R1 (resolved 2026-09-30: R2 returns 10; see `verification.md`): exit 10 on R2 was unmeasured.**
   - Measured locally on 2026-09-29 (restic 0.18.1, local backend): missing repository → 10, wrong password → 12. The fleet runs 0.19.1 against R2 over S3, where a missing `config` object could surface as a generic 1 (403, NoSuchBucket) instead.
   - Task 1 measures it with a throwaway Job from `cronjob/r2-backup-watcher` (the BACKUP-055 AC3 pattern), pointed at a prefix that does not exist, using the read-only credential. It records the exit codes for a missing repository, a wrong password and a bad credential in `verification.md`.
   - If R2 does not return 10, the design must change before any code is written.
-- **R2: `restic cat config` under the watcher's read-only token.** It must work with `--no-lock --no-cache`. Measured in the same Job.
+- **R2 (resolved 2026-09-30): `restic cat config` under the watcher's read-only token.** It works with `--no-lock --no-cache`. An invalid credential does not return 10 either: it hangs, which is filed as #1939, not this spec.
 - **R3: the node and its marker can be lost together.** A reinstalled node with its repository gone looks like a first ship and initialises. That is accepted on the node side, because a fresh node must be able to start. The watcher's pinned ID is the control for it, and it sits outside the node's failure domain on purpose.
 - **R4: a new node pages until its ID is declared.** This is fail-closed by decision (operator, 2026-09-29). Onboarding a node is rare, and the page is the reminder to declare the ID.
 
 ## Acceptance criteria
 
-- [ ] AC1: the exit codes restic 0.19.1 returns on R2 for a missing repository, a wrong password and a bad credential, and `cat config` working read-only, are measured and recorded in `verification.md` before the ship script changes.
+- [x] AC1: the exit codes restic 0.19.1 returns on R2 for a missing repository, a wrong password and a bad credential, and `cat config` working read-only, are measured and recorded in `verification.md` before the ship script changes.
 - [ ] AC2: the ship script runs `init` only when `restic snapshots` exits 10 and the destination has no marker. After the first successful ship it writes the repository ID to `/var/lib/node-backup/r2.repository-id`.
 - [ ] AC3: with a marker present, a missing repository (exit 10) or a repository whose ID differs from the marker makes the ship exit non-zero without `init`, with a message naming the destination, the expected ID and `make backup-repo-reinit`. Any other `snapshots` failure also exits non-zero without `init`.
 - [ ] AC4: tests execute the rendered ship script against a fake restic and cover: first run (init + marker), a transient error (no init, non-zero), the repository gone after prior runs (no init, non-zero), a replaced repository (no init, non-zero), and adoption of an existing repository (no init, marker written).
