@@ -25,7 +25,7 @@ created: "2026-09-29"
 - [ ] [AC2] Implement the `stale` exclusions in `reconcile`
 - [ ] [AC4] [AC3] Failing test: `review_env` runs the IdP check first, passes `stale` on, turns an unreadable Secret into `authelia failed`, and logs no hash
 - [ ] [AC4] Wire it into `review_env`
-- [ ] Docs: module docstring, runbook `identity-tier-change.md` (the "cannot see it yet" line)
+- [x] Docs: module docstring, runbook `identity-tier-change.md` (the "cannot see it yet" line)
 - [ ] [AC5] Live: `make auth-review ENV=staging` and `ENV=prod`, rc=0, `authelia ... ok`
 
 ## Closing

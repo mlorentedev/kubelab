@@ -1,9 +1,10 @@
 # Identity, auth and secret material
 
-69 lessons, newest first. Back to [all categories](../_index.md).
+70 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 484 | [A reconciler downstream of a stale source reports a bound that cannot converge](lesson-484-a-reconciler-downstream-of-a-stale-source-reports-a-bound-that-cannot-converge.md) | 2026-09-29 |
 | 473 | [The Argo CD UI asks for confirmation before the server authorizes, so the modal is not a permission](lesson-473-the-argo-cd-ui-asks-for-confirmation-before-the-server-authorizes.md) | 2026-09-26 |
 | 471 | [A UserInfo cache does not bound a demotion: the token lifespan does](lesson-471-a-userinfo-cache-does-not-bound-a-demotion-the-token-lifespan-does.md) | 2026-09-26 |
 | 463 | [Grafana logs every opaque OAuth access token it cannot parse, so each SSO login wrote a live bearer token to Loki](lesson-463-grafana-logs-every-opaque-oauth-access-token-it-cannot-parse.md) | 2026-09-26 |

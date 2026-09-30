@@ -29,10 +29,11 @@ What each group *grants* lives in each app: Argo CD's `policy.csv` in
    ```
 
    This restarts Authelia too. Authelia never reloads the users file on its own
-   (lesson-455). Skipping this step for one env is silent: Argo CD reports
-   Synced/Healthy, and Authelia keeps sending the old `groups`. If Grafana
-   still shows the old role after a fresh login in that env, this step is
-   what was missed: `auth-review` cannot see it yet (#1911).
+   (lesson-455). Skipping this step for one env is silent to Argo CD, which
+   reports Synced/Healthy while Authelia keeps sending the old `groups`. The
+   next step catches it: `auth-review` compares the live users database with
+   the declaration first, reports an `authelia` `drift` naming this command,
+   and corrects nothing in any app for a user whose groups lag (#1911).
 3. Correct what each app already stored:
 
    ```bash
