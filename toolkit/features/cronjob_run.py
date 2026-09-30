@@ -10,7 +10,7 @@ hand-typed commands from a runbook: `kubectl create job --from=cronjob/...`,
 CronJob, so the CronJob controller adopts the Job and counts it against
 `failedJobsHistoryLimit`: a failed manual run can be pruned, pod and log
 included, before anyone has read it (seen on staging during BACKUP-055,
-2026-09-27). The Job built here copies the CronJob's `jobTemplate` and carries
+2026-09-27, lesson-470). The Job built here copies the CronJob's `jobTemplate` and carries
 NO ownerReference, so the controller never sees it and only this code removes it.
 
 As in `pvc_drill`, the removal is a `finally` in the same call that reads the
@@ -41,6 +41,15 @@ DEFAULT_POLL_S = 5
 #: CD's tracking id in particular must not be copied: a Job carrying it would be
 #: claimed by the Application and pruned as drift.
 _CRONJOB_ONLY_ANNOTATIONS = ("argocd.argoproj.io/", "kubectl.kubernetes.io/last-applied-configuration")
+
+
+class KubectlError(RuntimeError):
+    """kubectl failed. The message carries kubectl's own stderr.
+
+    A bare CalledProcessError names the argv and the exit code only, so
+    Forbidden, an expired kubeconfig and an unreachable API server would all
+    read the same.
+    """
 
 
 class CronJobRunTeardownError(Exception):
@@ -152,7 +161,7 @@ def run_cronjob(
             log(f"{job_name}: deleted")
         except Exception as exc:  # noqa: BLE001 -- re-raised as CronJobRunTeardownError
             raise CronJobRunTeardownError(
-                f"Job {job_name} could not be deleted and is still in the cluster. "
+                f"Job {job_name} could not be deleted and is still in the cluster ({exc}). "
                 f"Remove it before it is mistaken for a scheduled run: kubectl delete job {job_name} -n {NAMESPACE}"
             ) from exc
 
@@ -164,6 +173,14 @@ def _kubectl(kubeconfig: str, *args: str) -> list[str]:
     return ["kubectl", "--kubeconfig", kubeconfig, "-n", NAMESPACE, *args]
 
 
+def _run_kubectl(kubeconfig: str, *args: str, stdin: str | None = None) -> str:
+    """Run kubectl and return its stdout, or raise KubectlError with its stderr."""
+    proc = subprocess.run(_kubectl(kubeconfig, *args), input=stdin, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise KubectlError(f"kubectl {' '.join(args[:2])} failed (exit {proc.returncode}): {proc.stderr.strip()}")
+    return proc.stdout
+
+
 def get_cronjob(kubeconfig: str, name: str) -> dict[str, Any]:
     proc = subprocess.run(_kubectl(kubeconfig, "get", "cronjob", name, "-o", "json"), capture_output=True, text=True)
     if proc.returncode != 0:
@@ -172,16 +189,11 @@ def get_cronjob(kubeconfig: str, name: str) -> dict[str, Any]:
 
 
 def create_job(kubeconfig: str, job: dict[str, Any]) -> None:
-    subprocess.run(
-        _kubectl(kubeconfig, "create", "-f", "-"), input=json.dumps(job), capture_output=True, text=True, check=True
-    )
+    _run_kubectl(kubeconfig, "create", "-f", "-", stdin=json.dumps(job))
 
 
 def get_job(kubeconfig: str, name: str) -> dict[str, Any]:
-    proc = subprocess.run(
-        _kubectl(kubeconfig, "get", "job", name, "-o", "json"), capture_output=True, text=True, check=True
-    )
-    return json.loads(proc.stdout)
+    return json.loads(_run_kubectl(kubeconfig, "get", "job", name, "-o", "json"))
 
 
 def job_logs(kubeconfig: str, name: str) -> str:
@@ -196,9 +208,4 @@ def job_logs(kubeconfig: str, name: str) -> str:
 def delete_job(kubeconfig: str, name: str) -> None:
     # Background propagation removes the pod with the Job; --ignore-not-found
     # makes the finally safe when creation never happened.
-    subprocess.run(
-        _kubectl(kubeconfig, "delete", "job", name, "--ignore-not-found", "--wait=false", "--cascade=background"),
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+    _run_kubectl(kubeconfig, "delete", "job", name, "--ignore-not-found", "--wait=false", "--cascade=background")

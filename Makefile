@@ -1737,7 +1737,8 @@ alerts:
 # watchers (`r2-backup-watcher`, ...) the log IS the verdict, so this is how to
 # re-check without waiting for the schedule. No default ENV: an allow-list, not
 # a presence check, because `ENV ?= dev` would satisfy `test -n` (lesson-432).
-# Exit status follows the Job: 0 succeeded, 1 failed or unfinished.
+# Non-zero when the Job failed, did not finish, or was left behind; the
+# message says which (make itself exits 2 for any of them).
 .PHONY: watcher-run
 watcher-run:
 	@test -n "$(NAME)" || (echo "Usage: make watcher-run NAME=r2-backup-watcher ENV=staging|prod" && exit 1)

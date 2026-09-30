@@ -15,10 +15,14 @@ These tests pin what the target promises:
 
 from __future__ import annotations
 
+import subprocess
+
 import pytest
 
+from toolkit.features import cronjob_run
 from toolkit.features.cronjob_run import (
     CronJobRunTeardownError,
+    KubectlError,
     job_from_cronjob,
     job_outcome,
     manual_job_name,
@@ -202,8 +206,11 @@ def test_an_interrupted_wait_still_deletes_the_job() -> None:
 
 def test_a_failed_teardown_is_raised_not_logged() -> None:
     cluster = FakeCluster(["succeeded"], delete_fails=True)
-    with pytest.raises(CronJobRunTeardownError, match="w-manual-1"):
+    with pytest.raises(CronJobRunTeardownError, match="w-manual-1") as caught:
         _run(cluster)
+    # The reason travels in the message itself, not only in the chained cause
+    # a CLI prints nowhere.
+    assert "apiserver unreachable" in str(caught.value)
 
 
 def test_nothing_is_created_when_the_cronjob_cannot_be_read() -> None:
@@ -227,3 +234,27 @@ def test_nothing_is_created_when_the_cronjob_cannot_be_read() -> None:
             log=lambda _: None,
         )
     assert cluster.calls == []
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda: cronjob_run.create_job("kc", {"kind": "Job"}),
+        lambda: cronjob_run.get_job("kc", "w-manual-1"),
+        lambda: cronjob_run.delete_job("kc", "w-manual-1"),
+    ],
+    ids=["create", "get", "delete"],
+)
+def test_a_kubectl_failure_carries_kubectls_own_reason(monkeypatch, call) -> None:
+    """A CalledProcessError names the argv and the exit code, never the reason.
+
+    Forbidden, an expired kubeconfig or an unreachable API server all read the
+    same without stderr, which is the one thing the operator needs.
+    """
+
+    def refuse(argv, **_kwargs):
+        return subprocess.CompletedProcess(argv, 1, stdout="", stderr='Error from server (Forbidden): jobs.batch is forbidden')
+
+    monkeypatch.setattr(cronjob_run.subprocess, "run", refuse)
+    with pytest.raises(KubectlError, match="jobs.batch is forbidden"):
+        call()

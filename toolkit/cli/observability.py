@@ -12,6 +12,7 @@ import typer
 from toolkit.core.logging import logger
 from toolkit.features.cronjob_run import (
     CronJobRunTeardownError,
+    KubectlError,
     create_job,
     delete_job,
     get_job,
@@ -459,9 +460,11 @@ def watcher_run_cmd(
 
     The Job is built from the CronJob's jobTemplate WITHOUT an ownerReference,
     so the CronJob controller never prunes it before its log is read, and it is
-    deleted in a `finally`. Exit 0 when the Job succeeded, 1 when it failed or
-    did not finish, 2 when the Job could not be deleted. See
-    `toolkit/features/cronjob_run.py` (TOOL-084).
+    deleted in a `finally`. Exit 0 when the Job succeeded, 1 when it failed,
+    did not finish or kubectl refused a step, 2 when the Job could not be
+    deleted. Those codes reach a direct caller only: `make` exits 2 on any
+    failing recipe, so through `make watcher-run` the message tells them apart.
+    See `toolkit/features/cronjob_run.py` (TOOL-084).
     """
     import datetime as _dt
 
@@ -481,7 +484,7 @@ def watcher_run_cmd(
             delete=lambda: delete_job(kubeconfig, job_name),
             log=typer.echo,
         )
-    except LookupError as exc:
+    except (LookupError, KubectlError) as exc:
         typer.echo(f"✗ {exc}", err=True)
         raise typer.Exit(1) from exc
     except CronJobRunTeardownError as exc:
