@@ -36,7 +36,11 @@ concurrency:
   # created 90 s apart and in the opposite order to their events: `cancelled`,
   # `skipped`, no review. The actor is the other such condition: a human's push
   # to a Dependabot PR is reviewed, and the bot's rebase after it is skipped.
-  # Fork and branch prefix are fixed for a PR's life. A run the job skips now
+  # Fork and branch prefix are fixed for a PR's life. Comments are the third
+  # (#1950): every comment starts a run, and only a member's slash command is
+  # reviewed, so the `## Review triage` comment every PR receives, or any
+  # stranger's comment on a public PR, used to cancel a `/review` in flight. The
+  # comment conditions here are the job's own, verbatim. A run the job skips now
   # lands in a group of its own and can neither cancel nor displace a run that
   # reviews. `tests/test_pr_agent_workflow.py` evaluates both expressions to
   # hold them in agreement.
@@ -45,7 +49,13 @@ concurrency:
     github.workflow,
     github.event.pull_request.number || github.event.issue.number,
     github.event_name,
-    (github.event.pull_request.draft || github.actor == 'dependabot[bot]') && '-skipped' || '') }}
+    (github.event.pull_request.draft
+      || github.actor == 'dependabot[bot]'
+      || (github.event_name == 'issue_comment'
+          && !(startsWith(github.event.comment.body, '/')
+               && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
+                           github.event.comment.author_association))))
+    && '-skipped' || '') }}
   cancel-in-progress: true
 
 permissions:

@@ -29,11 +29,19 @@ group: >-
   github.workflow,
   github.event.pull_request.number || github.event.issue.number,
   github.event_name,
-  (github.event.pull_request.draft || github.actor == 'dependabot[bot]') && '-skipped' || '') }}
+  (github.event.pull_request.draft
+    || github.actor == 'dependabot[bot]'
+    || (github.event_name == 'issue_comment'
+        && !(startsWith(github.event.comment.body, '/')
+             && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
+                         github.event.comment.author_association))))
+  && '-skipped' || '') }}
 cancel-in-progress: true
 ```
 
-The first design made `cancel-in-progress` conditional on the same predicate as the job. It was dropped because it covers only half the failure: GitHub keeps at most one *pending* run per group, and a new pending run evicts the one waiting whatever `cancel-in-progress` says. A draft run in the same group could still evict a pending review. A separate group cannot. Two skip conditions can change between runs of one PR. One is draft state. The other is the actor: the job skips on `github.actor`, the account that triggered the run, not the PR's author, so a human's push to a Dependabot PR is reviewed and the bot's rebase after it is not. The first version of #1948 keyed only the draft flag, and PR-Agent's review of it found the actor case. Forks and branch prefixes are fixed per PR, so every run of such a PR skips alike. The test evaluates the job's `if:` and the group key over every combination of the two conditions and fails if a skipped run and a reviewing one share a group. The earlier test only checked that the group mentioned the draft flag, which a key that mentions a condition without separating its states would also pass.
+The `issue_comment` clause came later, in #1950 (TOOL-092). Every comment on a PR starts a run, and the job reviews only a member's slash command. So the `## Review triage` comment that every PR receives, or any stranger's comment on a public PR, joined `PR-Agent-<pr>-issue_comment` and cancelled a `/review` in flight. The clause repeats the job's own comment conditions verbatim.
+
+The first design made `cancel-in-progress` conditional on the same predicate as the job. It was dropped because it covers only half the failure: GitHub keeps at most one *pending* run per group, and a new pending run evicts the one waiting whatever `cancel-in-progress` says. A draft run in the same group could still evict a pending review. A separate group cannot. Two skip conditions can change between runs of one PR. One is draft state. The other is the actor: the job skips on `github.actor`, the account that triggered the run, not the PR's author, so a human's push to a Dependabot PR is reviewed and the bot's rebase after it is not. The first version of #1948 keyed only the draft flag, and PR-Agent's review of it found the actor case. Forks and branch prefixes are fixed per PR, so every run of such a PR skips alike. The test evaluates the job's `if:` and the group key over every combination of the two conditions, and over comment runs (slash command or not, member or not), and fails if a skipped run and a reviewing one share a group. The earlier test only checked that the group mentioned the draft flag, which a key that mentions a condition without separating its states would also pass.
 
 **Rule**:
 
@@ -41,4 +49,4 @@ The first design made `cancel-in-progress` conditional on the same predicate as 
 - **The standing order to push to a draft and then mark it ready can produce this sequence whenever the two runs are created in the wrong order**, which GitHub does not control for. Before #1948, a PR that went from draft to ready and shows cancelled plus skipped was not reviewed: rerun the cancelled run.
 - **This refines lesson-353 and does not contradict it.** That lesson holds that `cancel-in-progress` is right for a reviewer, because a newer run has strictly newer information. A skipped run has none, so it must not count as newer.
 
-**Tags**: `#github-actions` `#concurrency` `#pr-agent` `#draft` `#pr-1942` `#issue-1944` `#tool-091`
+**Tags**: `#github-actions` `#concurrency` `#pr-agent` `#draft` `#pr-1942` `#issue-1944` `#tool-091` `#tool-092`

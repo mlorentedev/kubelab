@@ -923,11 +923,38 @@ def test_a_comment_only_triggers_the_reviewer_when_it_is_a_slash_command() -> No
     ) in condition, "the issue_comment path is not restricted to repository members"
 
 
+class _Null:
+    """Actions' null: falsy, formats as '', and a property of null is null.
+
+    `github.event.pull_request.number` on an `issue_comment` run is null in
+    Actions, not an error, and the group key relies on that to fall through to
+    `github.event.issue.number`.
+    """
+
+    def __bool__(self) -> bool:
+        return False
+
+    def __getattr__(self, name: str) -> "_Null":
+        return self
+
+    def __str__(self) -> str:
+        return ""
+
+    def __eq__(self, other: object) -> bool:
+        return other is None or isinstance(other, _Null)
+
+    def __hash__(self) -> int:
+        return 0
+
+
+_NULL = _Null()
+
+
 class _Ctx(dict):
     """A GitHub expression context: attribute access, and absent keys are null."""
 
     def __getattr__(self, name: str) -> object:
-        return self.get(name)
+        return self.get(name, _NULL)
 
 
 def _ctx(value: object) -> object:
@@ -966,6 +993,20 @@ def _pull_request_run(*, draft: bool, actor: str) -> dict:
     }
 
 
+def _comment_run(*, body: str, association: str) -> dict:
+    """One `issue_comment` run on the same PR. The comment's body and author vary per comment."""
+    return {
+        "workflow": "PR-Agent",
+        "event_name": "issue_comment",
+        "actor": "someone",
+        "head_ref": "",
+        "event": {
+            "issue": {"number": 7, "pull_request": {"url": "https://api.github.com/repos/o/r/pulls/7"}},
+            "comment": {"body": body, "author_association": association},
+        },
+    }
+
+
 def test_a_run_the_job_skips_cannot_cancel_one_that_reviews() -> None:
     """No run the job skips may share a concurrency group with a run it reviews (#1944).
 
@@ -976,6 +1017,9 @@ def test_a_run_the_job_skips_cannot_cancel_one_that_reviews() -> None:
     change between two runs of one PR has the same shape: draft state, and the
     actor, since a human's push to a Dependabot PR is reviewed and the bot's
     rebase after it is not. Fork and branch prefix are fixed for a PR's life.
+    Comment runs have it too (#1950): every comment starts a run, and only a
+    member's slash command is reviewed, so a triage comment or a stranger's
+    comment would cancel a `/review` in flight.
 
     Both expressions are evaluated rather than searched for a token, so a group
     key that mentions a condition without separating its two states fails here.
@@ -987,6 +1031,10 @@ def test_a_run_the_job_skips_cannot_cancel_one_that_reviews() -> None:
         _pull_request_run(draft=draft, actor=actor)
         for draft in (False, True)
         for actor in ("a-maintainer", "dependabot[bot]")
+    ] + [
+        _comment_run(body=body, association=association)
+        for body in ("/review", "## Review triage")
+        for association in ("MEMBER", "NONE")
     ]
     reviewed = {_evaluate(group, run) for run in runs if _evaluate(job_if, run)}
     skipped = {_evaluate(group, run) for run in runs if not _evaluate(job_if, run)}
