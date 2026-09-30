@@ -942,31 +942,21 @@ provision:
 	# the host. Without it the only way to set one is a raw ansible-playbook
 	# invocation, which is exactly what these targets exist to prevent.
 	$(eval _EXTRA := $(if $(EXTRA),--extra-vars "$(EXTRA)",))
-	# The generate below is joined to the run with `&&`, not `;`: a failed
-	# generate must not let the playbook proceed against whatever inventory is
-	# left on disk. It also makes _exit capture generate's failure, because $$?
-	# of `a && b` is a's status when a fails. The restore line stays `;` — it
-	# has to run either way. See TOOL-036.
-	#
-	# BOTH branches generate first, and the else branch used to not. Two things
-	# were wrong with that. The inventory is gitignored, so in a fresh worktree
-	# the run simply failed — telling the operator to go run `toolkit infra
-	# ansible generate` by hand, which is the raw-command habit these targets
-	# exist to remove. Worse when the file DID exist: it could have been
-	# generated days earlier from a different `common.yaml`, so a normal
-	# provision would silently target stale inventory while the bootstrap path
-	# next to it was always current. Generating is idempotent and takes under a
-	# second, so there is no reason for the cheap path to be the incorrect one.
+	# `ansible run` generates the inventory it runs against (TOOL-090), in the
+	# mode it is given: BOOTSTRAP (LAN IPs) and TRANSPORT reach the generator
+	# through run's own flags, and a failed generation stops the playbook. The
+	# restore line after a bootstrap/bastion run is a generate on its own: it
+	# puts the mesh inventory back on disk for anything that reads the file
+	# without running (a raw ansible-playbook, or `run --skip-generate`). It runs
+	# either way, so it is `;`, and $$_exit carries the run's status past it.
 	@if [ -n "$(BOOTSTRAP)" ] || [ -n "$(TRANSPORT)" ]; then \
-		echo "=== Generating inventory ($(if $(BOOTSTRAP),LAN IPs,mesh)$(if $(TRANSPORT), via $(TRANSPORT),)) ==="; \
-		$(TOOLKIT) infra ansible generate --env $(_ENV) $(_BOOT) $(_TRANSPORT) && \
-		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_K) $(_TAGS) $(_CHECK) $(_EXTRA); \
+		echo "=== Inventory for this run: $(if $(BOOTSTRAP),LAN IPs,mesh)$(if $(TRANSPORT), via $(TRANSPORT),) ==="; \
+		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_BOOT) $(_TRANSPORT) $(_K) $(_TAGS) $(_CHECK) $(_EXTRA); \
 		_exit=$$?; \
 		echo "=== Restoring: inventory with mesh Tailscale IPs ==="; \
 		$(TOOLKIT) infra ansible generate --env $(_ENV); \
 		exit $$_exit; \
 	else \
-		$(TOOLKIT) infra ansible generate --env $(_ENV) >/dev/null && \
 		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_K) $(_TAGS) $(_CHECK) $(_EXTRA); \
 	fi
 
@@ -1079,9 +1069,6 @@ backup-node:
 	@test -n "$(NODE)" || (echo "Usage: make backup-node NODE=<a backup.sources node>|all [ENV=prod] [CHECK=1]" && exit 1)
 	$(eval _ENV := $(or $(filter staging prod,$(ENV)),prod))
 	$(eval _CHECK := $(if $(CHECK),--check,))
-	@# Generate first (TOOL-036): the playbook targets the generated node_backup group, and
-	@# a stale inventory without it matches no host and exits 0 (BACKUP-062).
-	$(TOOLKIT) infra ansible generate --env $(_ENV) >/dev/null && \
 	$(TOOLKIT) infra ansible run -p backup-node -e $(_ENV) -l $(NODE) $(_CHECK)
 
 # Let ONE node start a new backup history (BACKUP-058). A node refuses to
@@ -1098,9 +1085,6 @@ backup-repo-reinit:
 	@test "$(ENV)" = staging -o "$(ENV)" = prod || (echo "backup-repo-reinit needs ENV=staging or ENV=prod, got '$(ENV)'" && exit 1)
 	@test "$(NODE)" != "all" || (echo "backup-repo-reinit takes exactly one node, never NODE=all" && exit 1)
 	$(eval _CHECK := $(if $(CHECK),--check,))
-	@# Generate first, joined with &&, as `provision` does (TOOL-036): the inventory is gitignored,
-	@# and an override must never act on a stale or missing one.
-	$(TOOLKIT) infra ansible generate --env $(ENV) >/dev/null && \
 	$(TOOLKIT) infra ansible run -p backup-repo-reinit -e $(ENV) -l $(NODE) --extra-vars dest=$(DEST) $(_CHECK)
 
 # Report, disarm, or re-arm the backup timers on a node — WITHOUT redeploying
@@ -1117,7 +1101,6 @@ backup-schedule:
 	$(eval _ENV := $(or $(filter staging prod,$(ENV)),prod))
 	$(eval _CHECK := $(if $(CHECK),--check,))
 	$(eval _STATE := $(if $(STATE),--extra-vars state=$(STATE),))
-	$(TOOLKIT) infra ansible generate --env $(_ENV) >/dev/null && \
 	$(TOOLKIT) infra ansible run -p backup-schedule -e $(_ENV) -l $(NODE) $(_STATE) $(_CHECK)
 
 # CHECK=1 is a dry run. It is accepted HERE, and on every other target that
@@ -1129,8 +1112,7 @@ backup-schedule:
 backup:
 	$(eval _CHECK := $(if $(CHECK),--check,))
 	$(eval _ENV := $(or $(filter staging prod,$(ENV)),prod))
-	@$(TOOLKIT) infra ansible generate --env $(_ENV) >/dev/null && \
-	$(TOOLKIT) infra ansible run -p backup -e $(_ENV) $(_CHECK)
+	@$(TOOLKIT) infra ansible run -p backup -e $(_ENV) $(_CHECK)
 
 # Bitácora board — the Stream field is derived from harness/board-streams.yaml (GOV-002)
 # Usage: make board-streams          (dry-run)
@@ -1413,7 +1395,6 @@ gcp1-destroy: tf-gcp-destroy
 wait-node-ready:
 	@test -n "$(NODE)" || (echo "Usage: make wait-node-ready NODE=aws1|gcp1|ace1|ace2|beelink|vps|rpi3|rpi4 [ENV=staging|prod|hub]" && exit 1)
 	$(eval _ENV := $(or $(filter staging prod hub,$(ENV)),staging))
-	@$(TOOLKIT) infra ansible generate --env $(_ENV) >/dev/null
 	@$(TOOLKIT) infra ansible run -p wait-node-ready -e $(_ENV) -l $(NODE)
 
 # Terraform DNS (Cloudflare) — SOPS-injected token

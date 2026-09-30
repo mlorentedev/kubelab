@@ -1371,8 +1371,24 @@ def ansible_run(
     extra_vars: Annotated[
         str | None, typer.Option("--extra-vars", help="Extra variables (key=value key2=value2)")
     ] = None,
+    bootstrap: Annotated[
+        bool, typer.Option("--bootstrap", help="Generate the inventory with LAN IPs (first provisioning)")
+    ] = False,
+    transport: Annotated[
+        str, typer.Option("--transport", help="SSH transport for the generated inventory: mesh | bastion")
+    ] = "mesh",
+    skip_generate: Annotated[
+        bool, typer.Option("--skip-generate", help="Use the inventory on disk as it is (no regeneration)")
+    ] = False,
 ) -> None:
-    """Run an Ansible playbook against the generated inventory.
+    """Run an Ansible playbook against an inventory generated for this run.
+
+    The inventory is regenerated first unless --skip-generate (TOOL-090, #1941).
+    It is gitignored, so on disk it is either missing (a fresh worktree) or
+    generated from an older common.yaml. A missing one fails loudly; a stale
+    one does not, because a play whose pattern no longer matches is a warning
+    and exit 0 (lesson-356). Generating was a per-target Makefile convention,
+    and seven targets had not followed it. A failed generation stops the run.
 
     Loads SSOT config via include_vars at playbook level (ADR-020 Rev2).
     Inventory is generated from common.yaml networking.* section.
@@ -1383,13 +1399,22 @@ def ansible_run(
     inventory = ansible_dir / "generated" / env / "hosts.yml"
     playbook_path = ansible_dir / "playbooks" / f"{playbook}.yml"
 
-    if not inventory.exists():
-        logger.error(f"Inventory not found: {inventory}")
-        logger.info(f"Run 'toolkit infra ansible generate --env {env}' first")
-        raise typer.Exit(1) from None
-
     if not playbook_path.exists():
         logger.error(f"Playbook not found: {playbook_path}")
+        raise typer.Exit(1) from None
+
+    if not skip_generate:
+        from toolkit.features.generator_ansible import ansible_generator
+
+        # Mode validation (transport, bootstrap+bastion) lives in the generator.
+        generated = ansible_generator.generate(env, bootstrap=bootstrap, transport=transport)
+        if not generated.get("success"):
+            logger.error(f"Inventory generation failed, playbook not run: {generated.get('error')}")
+            raise typer.Exit(1) from None
+
+    if not inventory.exists():
+        logger.error(f"Inventory not found: {inventory}")
+        logger.info("Drop --skip-generate, or run 'toolkit infra ansible generate' first")
         raise typer.Exit(1) from None
 
     cmd = f"ansible-playbook {playbook_path} -i {inventory} -e deploy_env={env}"
