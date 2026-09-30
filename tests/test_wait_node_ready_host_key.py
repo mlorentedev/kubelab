@@ -189,22 +189,20 @@ def test_wait_node_ready_generates_the_inventory_it_needs() -> None:
     """It reads a generated inventory and nothing was generating one.
 
     `gcp1-replace` and `aws1-replace` both call `wait-node-ready` FIRST and
-    `provision` second. Only `provision` regenerates, so on a fresh worktree the
+    `provision` second. Only `provision` regenerated, so on a fresh worktree the
     recreate chain died at its first step:
 
         [ERROR] Inventory not found: infra/ansible/generated/hub/hosts.yml
         [INFO] Run 'toolkit infra ansible generate --env {env}' first
 
-    Measured during a real preemption test. Fixed in `wait-node-ready` rather
-    than in the two callers, because the requirement belongs to the step that
-    has it -- otherwise the next caller inherits the same gap.
+    Measured during a real preemption test. Since TOOL-090 `ansible run`
+    generates the inventory itself, so the requirement holds as long as this
+    target goes through `run` and does not opt out with `--skip-generate`.
     """
     makefile = (Path(__file__).resolve().parent.parent / "Makefile").read_text()
     recipe = re.search(r"^wait-node-ready:[^\n]*\n((?:\t.*\n)+)", makefile, re.M)
     assert recipe, "wait-node-ready has no recipe"
     body = recipe.group(1)
 
-    generate = body.find("ansible generate")
-    run = body.find("ansible run -p wait-node-ready")
-    assert generate != -1, "wait-node-ready never generates the inventory it reads"
-    assert generate < run, "the inventory is generated after the playbook has already run"
+    assert "ansible run -p wait-node-ready" in body, "wait-node-ready no longer runs through `ansible run`"
+    assert "--skip-generate" not in body, "wait-node-ready opts out of generating the inventory it reads"
