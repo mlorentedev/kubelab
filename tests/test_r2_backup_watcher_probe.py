@@ -39,6 +39,7 @@ PREFIX = "s3:https://example.r2.cloudflarestorage.com/kubelab-backups"
 #   <repo>.hang   sleep far past any timeout
 #   <repo>.snaps  what `snapshots --json` prints (default: one snapshot)
 #   <repo>.ls     what `ls latest <dir>` prints
+#   <repo>.id     the repository id `cat config --json` reports (BACKUP-058)
 # Any call without --no-lock is refused the way the read-only token refuses it
 # (PutObject AccessDenied on the lock) and logged as `locked <repo>`.
 FAKE_RESTIC = r"""#!/bin/sh
@@ -47,7 +48,7 @@ repo=""; cmd=""
 while [ $# -gt 0 ]; do
   case "$1" in
     -r) repo="$2"; shift ;;
-    snapshots|ls) [ -z "$cmd" ] && cmd="$1" ;;
+    snapshots|ls|cat) [ -z "$cmd" ] && cmd="$1" ;;
   esac
   shift
 done
@@ -66,8 +67,14 @@ case "$cmd" in
     if [ -f "$FAKE_DIR/$name.snaps" ]; then cat "$FAKE_DIR/$name.snaps"
     else echo '[{"time":"2026-09-26T00:00:00Z","id":"abc","short_id":"abc12345"}]'; fi ;;
   ls) cat "$FAKE_DIR/$name.ls" ;;
+  cat) printf '{"version":2,"id":"%s","chunker_polynomial":"3dea92648f6e83"}\n' "$(cat "$FAKE_DIR/$name.id")" ;;
 esac
 """
+
+
+# Repository ids as `restic cat config` reports them: new for every `init`,
+# fixed otherwise. The targets file declares the id each node must still have.
+IDS = {"rpi3": "1" * 64, "kubelab-vps": "2" * 64}
 
 
 def _listing(*services: str, sentinel: bool = True) -> str:
@@ -96,9 +103,11 @@ def fleet(tmp_path: pathlib.Path, request):
     targets = tmp_path / "targets.txt"
     targets.write_text(
         "# header comment\n"
-        f"rpi3 {PREFIX}/rpi3 uptime_kuma\n"
-        f"vps {PREFIX}/kubelab-vps authelia n8n\n"
+        f"rpi3 {PREFIX}/rpi3 {IDS['rpi3']} uptime_kuma\n"
+        f"vps {PREFIX}/kubelab-vps {IDS['kubelab-vps']} authelia n8n\n"
     )
+    for name, repository_id in IDS.items():
+        (fake / f"{name}.id").write_text(f"{repository_id}\n")
     (fake / "rpi3.ls").write_text(_listing("uptime_kuma"))
     (fake / "kubelab-vps.ls").write_text(_listing("authelia", "n8n"))
     env = {
@@ -138,6 +147,8 @@ def test_a_healthy_fleet_reports_every_node_and_a_healthy_fleet(fleet) -> None:
     assert {n["node"] for n in nodes} == {"rpi3", "vps"}
     for n in nodes:
         assert n == {**n, "readable": 1, "snapshots": 1, "missing": [], "sentinel": 1, "healthy": 1}
+    assert _node(nodes, "rpi3")["repository_id"] == IDS["rpi3"]
+    assert _node(nodes, "vps")["repository_id"] == IDS["kubelab-vps"]
     assert summary["healthy"] == 1
     assert summary["nodes"] == 2 and summary["unhealthy"] == 0
 
@@ -176,6 +187,10 @@ def test_the_probe_never_takes_a_lock(fleet) -> None:
         ("missing sentinel", "sentinel", 0),
         ("restic crashes", "healthy", 0),
         ("restic hangs", "healthy", 0),
+        # BACKUP-058: a repository deleted and re-created, or swapped for another,
+        # opens and holds snapshots like the real one. Only its id tells them apart.
+        ("repository replaced", "reason", "repository id changed"),
+        ("repository id not declared", "reason", "repository id not declared"),
     ],
 )
 def test_each_breakage_fails_its_node_and_the_fleet(fleet, breakage, field, value) -> None:
@@ -195,6 +210,11 @@ def test_each_breakage_fails_its_node_and_the_fleet(fleet, breakage, field, valu
         (fake / f"{vps}.crash").write_text("")
     elif breakage == "restic hangs":
         (fake / f"{vps}.hang").write_text("")
+    elif breakage == "repository replaced":
+        (fake / f"{vps}.id").write_text("3" * 64 + "\n")
+    elif breakage == "repository id not declared":
+        targets = pathlib.Path(env["WATCHER_TARGETS"])
+        targets.write_text(targets.read_text().replace(IDS[vps], "-"))
 
     started = time.monotonic()
     rc, nodes, (summary,) = _run(env)
@@ -203,6 +223,9 @@ def test_each_breakage_fails_its_node_and_the_fleet(fleet, breakage, field, valu
     assert rc != 0
     assert _node(nodes, "vps")[field] == value
     assert _node(nodes, "vps")["healthy"] == 0
+    if breakage == "repository replaced":
+        # The line names the id R2 holds now, so the operator can compare it.
+        assert _node(nodes, "vps")["repository_id"] == "3" * 64
     assert _node(nodes, "rpi3")["healthy"] == 1, "one broken node must not fail its neighbours"
     assert summary["healthy"] == 0 and summary["unhealthy"] == 1
 

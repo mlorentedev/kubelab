@@ -9,7 +9,13 @@
 #   missing   every declared source is a directory in the newest snapshot;
 #   sentinel  the snapshot holds the capture's success sentinel, which the node
 #             writes last and refuses to ship without -- checked here from the
-#             destination, so a regression of that guard is visible.
+#             destination, so a regression of that guard is visible;
+#   identity  the repository id (`restic cat config`) equals the one declared in
+#             `backup.r2.repository_ids` (BACKUP-058). A deleted repository that
+#             was re-created, or swapped for another, opens and holds snapshots
+#             like the real one; its id is the only thing that differs. A node
+#             with no declared id is unhealthy too: accepting a new history is a
+#             reviewed change, never a default.
 # It does NOT judge age: each node's Uptime Kuma push monitor owns that.
 #
 # Output is JSON lines for Vector -> Loki -> Grafana: one `r2_backup_node` per
@@ -77,7 +83,7 @@ reason_from_stderr() {
 
 # `|| [ -n "$node" ]`: `read` fails on a last line with no newline, and that
 # node would silently drop out of a fleet reported healthy.
-while read -r node repo services || [ -n "$node" ]; do
+while read -r node repo declared_id services || [ -n "$node" ]; do
     case "$node" in '' | \#*) continue ;; esac
     nodes=$((nodes + 1))
     readable=0
@@ -85,6 +91,7 @@ while read -r node repo services || [ -n "$node" ]; do
     sentinel=0
     missing=""
     reason=""
+    repository_id=""
 
     if out="$(restic_read snapshots --json --latest 1)"; then
         readable=1
@@ -109,6 +116,23 @@ while read -r node repo services || [ -n "$node" ]; do
         fi
     fi
 
+    # Checked whenever the repository opens, snapshots or not: an empty
+    # replacement is still a replacement.
+    if [ "$readable" -eq 1 ]; then
+        if config="$(restic_read cat config --json)"; then
+            repository_id="$(printf '%s\n' "$config" | sed -n 's/^.*"id": *"\([0-9a-f]*\)".*$/\1/p' | head -n 1)"
+            if [ -z "$repository_id" ]; then
+                reason="${reason:+$reason, }repository id unreadable"
+            elif [ "$declared_id" = "-" ]; then
+                reason="${reason:+$reason, }repository id not declared"
+            elif [ "$repository_id" != "$declared_id" ]; then
+                reason="${reason:+$reason, }repository id changed"
+            fi
+        else
+            reason="${reason:+$reason, }config unreadable: $(reason_from_stderr)"
+        fi
+    fi
+
     missing_json=""
     for service in $missing; do
         missing_json="${missing_json:+$missing_json,}\"$service\""
@@ -121,8 +145,8 @@ while read -r node repo services || [ -n "$node" ]; do
         unhealthy=$((unhealthy + 1))
     fi
 
-    printf '{"metric":"r2_backup_node","namespace":"kubelab","node":"%s","readable":%d,"snapshots":%d,"missing":[%s],"sentinel":%d,"healthy":%d,"reason":"%s"}\n' \
-        "$node" "$readable" "$snapshots" "$missing_json" "$sentinel" "$healthy" "$reason"
+    printf '{"metric":"r2_backup_node","namespace":"kubelab","node":"%s","readable":%d,"snapshots":%d,"missing":[%s],"sentinel":%d,"repository_id":"%s","healthy":%d,"reason":"%s"}\n' \
+        "$node" "$readable" "$snapshots" "$missing_json" "$sentinel" "$repository_id" "$healthy" "$reason"
 done <"$TARGETS"
 
 rm -f "$errfile"

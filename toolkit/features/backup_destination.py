@@ -369,12 +369,12 @@ WATCHER_TARGETS_PATH = "infra/k8s/base/services/r2-backup-watcher/targets.txt"
 
 _WATCHER_TARGETS_HEADER = (
     "# Generated from backup.sources in common.yaml by `make sync-r2-watcher-targets`. Do not edit.\n"
-    "# One line per node: <node> <restic repository URL> <declared source>...\n"
+    "# One line per node: <node> <restic repository URL> <repository id, or -> <declared source>...\n"
 )
 
 
 def render_watcher_targets(config: dict[str, Any]) -> str:
-    """What the watcher must find in R2: per node, its repository and declared sources.
+    """What the watcher must find in R2: per node, its repository, its id and declared sources.
 
     Plain whitespace-separated lines, because the reader is `sh` in a restic
     image that has no YAML or JSON parser.
@@ -383,9 +383,21 @@ def render_watcher_targets(config: dict[str, Any]) -> str:
     sources = backup.get("sources", {}) or {}
     # The full URL, not the bare name, so the R2 endpoint reaches the cluster
     # from the SSOT rather than as a second copy typed into the manifest.
-    prefix = str((backup.get("r2", {}) or {}).get("repo_prefix", "")).rstrip("/")
+    r2 = backup.get("r2", {}) or {}
+    prefix = str(r2.get("repo_prefix", "")).rstrip("/")
+    # BACKUP-058: the id pins which history the node's repository must be. `-`
+    # keeps the column fixed for a node with none declared, which the probe
+    # reports unhealthy rather than trusting whatever repository answers.
+    repository_ids = r2.get("repository_ids", {}) or {}
     lines = [
-        " ".join([node, f"{prefix}/{_repository_name_in(config, node)}", *sorted(sources[node] or {})])
+        " ".join(
+            [
+                node,
+                f"{prefix}/{_repository_name_in(config, node)}",
+                str(repository_ids.get(node) or "-"),
+                *sorted(sources[node] or {}),
+            ]
+        )
         for node in sorted(sources)
     ]
     return _WATCHER_TARGETS_HEADER + "\n".join(lines) + "\n"

@@ -101,6 +101,9 @@ toolkit obs logs --env prod -q '{namespace="kubelab"} |= "r2_backup_"' --since 2
 | `missing sources` (`missing:[...]`) | The newest snapshot lacks a declared service | The capture on that node skipped it; read `node-backup-capture.service` there |
 | `no capture sentinel` | A snapshot shipped without the capture finishing | The ship guard regressed; treat the snapshot as incomplete |
 | `listing failed: ...` | The snapshot opened but its listing did not | Usually transient; the next run is in 6h |
+| `repository id changed` | The repository at the node's path is not the history declared in `backup.r2.repository_ids`: it was deleted and re-created, or replaced. `repository_id` on the line is the id R2 holds now | [Repository missing or replaced](#repository-missing-or-replaced) |
+| `repository id not declared` | The node has no entry in `backup.r2.repository_ids` | A new node, or one after `backup-repo-reinit`: declare the `repository_id` from this line in a PR, after checking it is the history you mean to accept |
+| `config unreadable: ...` / `repository id unreadable` | `restic cat config` failed after `snapshots` succeeded | Usually transient; if it persists, read the repository with the node's credentials |
 
 A fleet line with `"error":"terminated by signal"` or `"probe stopped before
 checking every node"` means the Job hit its deadline. The per-node lines printed
@@ -207,8 +210,10 @@ reads the same marker, journals it again and removes it. Never delete the file
 by hand; the journal line is the only record that outlives it.
 
 **4. Declare the new id** in `backup.r2.repository_ids` in `common.yaml` through
-a PR. Until that lands, the R2 watcher reports the node unhealthy on purpose:
-accepting a new history is a reviewed change, not a side effect of a ship.
+a PR, then `make sync-r2-watcher-targets`. Take the id from the watcher's
+`r2_backup_node` line (`repository_id`) or from the node's marker. Until that
+lands, the watcher reports the node `repository id changed` on purpose: accepting
+a new history is a reviewed change, not a side effect of a ship.
 
 ## Backing up on demand
 
