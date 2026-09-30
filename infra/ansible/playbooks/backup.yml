@@ -104,6 +104,9 @@
         # otherwise render an empty credential file, the ship script would skip
         # the heartbeat, and the monitor would page 6h later about a backup that
         # ran perfectly. StrictUndefined fails the apply instead, naming the key.
+        # The env the ship script names in its refusals, so the override it
+        # prints (`make backup-repo-reinit ... ENV=`) runs as pasted.
+        node_backup_env: "{{ deploy_env }}"
         node_backup_heartbeat_domain: "{{ config.apps.services.observability.uptime_kuma.domain }}"
         node_backup_heartbeat_token: >-
           {{ secrets.apps.services.observability.uptime_kuma.push_tokens[

@@ -79,9 +79,25 @@ RESTIC="{{ node_backup_restic_install_path }} --repo $REPO --stuck-request-timeo
 # only sanctioned way to remove it.
 MARKER="{{ node_backup_r2_repository_id_file }}"
 DESTINATION="r2"
-REINIT="make backup-repo-reinit NODE={{ inventory_hostname }} DEST=$DESTINATION ENV=<env>"
+REINIT="make backup-repo-reinit NODE={{ inventory_hostname }} DEST=$DESTINATION ENV={{ node_backup_env }}"
+# A marker that EXISTS says "this node has shipped here", whatever it holds.
+# Reading an empty or corrupt one as absent would make `init` reachable again
+# for a deleted repository -- the silent re-init this guard exists to stop.
+# Nothing here writes a blank marker (the write below is atomic), so one comes
+# from outside (a `touch`, a restore that truncates): refuse, never guess.
+# `-L` as well, because `-e` is false for a symlink whose target is gone.
 RECORDED=""
-[ -f "$MARKER" ] && RECORDED="$(tr -d '[:space:]' < "$MARKER")"
+if [ -e "$MARKER" ] || [ -L "$MARKER" ]; then
+    RECORDED="$(tr -d '[:space:]' < "$MARKER")"
+    case "$RECORDED" in
+        ''|*[!0-9a-f]*)
+            echo "node-backup-ship: $MARKER exists but holds no repository id ('$RECORDED')." >&2
+            echo "  Its presence means this node has shipped to $DESTINATION, so it cannot be read as a first" >&2
+            echo "  ship. Find out what rewrote it. If forgetting the recorded repository is the decision, run:" >&2
+            echo "    $REINIT" >&2
+            exit 1 ;;
+    esac
+fi
 
 # stderr is KEPT, and that is the fix rather than a detail. This probe is the
 # FIRST thing to touch R2, so it is where a bad credential or an unreachable
@@ -127,6 +143,8 @@ if ! CONFIG="$($RESTIC cat config --json)"; then
     echo "node-backup-ship: 'restic cat config' failed on the $DESTINATION repository (see its error above)" >&2
     exit 1
 fi
+# Same extraction as the watcher's probe.sh (r2-backup-watcher): the two must
+# agree on which field is the id, so change them together.
 REPOSITORY_ID="$(printf '%s\n' "$CONFIG" | sed -n 's/^.*"id": *"\([0-9a-f]*\)".*$/\1/p')"
 case "$REPOSITORY_ID" in
     ''|*[!0-9a-f]*)

@@ -205,3 +205,30 @@ def test_no_temporary_marker_is_left_behind(node) -> None:
     proc, _, marker = node(snapshots_rc=0)
     assert proc.returncode == 0, proc.stderr
     assert [p.name for p in marker.parent.iterdir()] == [marker.name]
+
+
+@pytest.mark.parametrize("snapshots_rc", [0, 10])
+@pytest.mark.parametrize("recorded", ["", "   ", "not-a-repository-id"], ids=["empty", "blank", "garbage"])
+def test_a_marker_that_exists_without_an_id_is_refused_not_treated_as_absent(node, recorded, snapshots_rc) -> None:
+    """A present marker means "this node has shipped here", whatever it holds.
+
+    Reading it as absent when it is empty made `init` reachable again: with the
+    repository gone (exit 10), a truncated marker re-initialised it silently,
+    which is the defect this spec removes. No committed path writes a blank
+    marker (the write is atomic), so the ways in are external: a `touch`, a
+    restore tool that truncates. Found by the spec's adversarial review.
+    """
+    proc, verbs, marker = node(snapshots_rc=snapshots_rc, recorded=recorded)
+    assert proc.returncode != 0
+    assert "init" not in verbs
+    assert "backup" not in verbs
+    assert _marker_value(marker) == recorded.strip()
+    assert str(marker) in proc.stderr
+    assert "make backup-repo-reinit" in proc.stderr
+
+
+def test_the_override_printed_on_a_refusal_runs_as_pasted(node) -> None:
+    """The refusal names the env the pipeline was deployed for, never a placeholder."""
+    proc, _, _ = node(snapshots_rc=10, recorded=EXISTING_ID)
+    assert "make backup-repo-reinit NODE=beelink DEST=r2 ENV=prod" in proc.stderr
+    assert "<env>" not in proc.stderr

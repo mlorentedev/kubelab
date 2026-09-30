@@ -89,6 +89,8 @@ def _render(template: str, **overrides: object) -> str:
         # nobody, and surfacing 6h later as a coverage monitor blaming the backup
         # (#1221). Restated here for the same reason as the two values above it.
         node_backup_heartbeat_domain="status.kubelab.live",
+        # Supplied by the playbook from `deploy_env`, like the domain above.
+        node_backup_env="prod",
         # ADR-028 class, supplied by the playbook from `networking.*.location`
         # like the three above it. The capture script branches on it to read
         # back the shutdown receipt, which only exists on on-demand nodes —
