@@ -15,9 +15,16 @@ created: "2026-09-29"
 
 ## Test status
 
-- `.venv/bin/pytest -q tests/test_access_review.py`: 55 passed. `mypy` and `ruff` clean.
+- `.venv/bin/pytest -q tests/test_access_review.py`: 55 passed. `mypy` and `ruff` clean on the module and on the test file (the test file's one `var-annotated` error, from AUTH-011, was fixed after the third review).
 - Mutation checks, each on a committed tree and restored with `git checkout HEAD`: ignoring `stale` in `reconcile` fails 2 tests; passing `stale` as empty from `review_env` fails 1; passing the PyYAML error text through fails 1.
 - Full suite (`make test`): 3017 passed, 15 skipped, 2 xfailed.
+- Second pooled review (agy/gemini-3.1-pro-high on `115d7668`): PASS WITH GAPS. Its one gap, `reconcile` at complexity 23 and `review_env` at 17, was raised by this change (from 18 and 14). Fixed in this archive PR by extracting `_hold_back`, `_read_back`, `_review_apps` and `_argocd_findings`: no function in the module is above 15, and the 55 tests pass unchanged. #1918 merged before the review finished, so the fix lands here.
+
+## Third review dispositions (agy/gemini-3.1-pro-high on `f2b3b6db`, PASS WITH GAPS)
+
+- `mypy` error at `tests/test_access_review.py:129`: applied. The empty source is now annotated, and `mypy` is clean on both files.
+- Unchecked `## Closing` boxes in `tasks.md`: every item holds (ACs covered by named tests, `features.json` complete, mypy and ruff clean, no scope creep, this file filled in, #1918 opened). The boxes stay as reviewed, because `tasks.md` is a contract file whose digest the archive gate checks against the review.
+- A password hash used as a username would be echoed in `user`: declined. That entry would be a malformed users database written by hand, and `apply-secrets` renders usernames from `common.yaml`. The reviewer marked it SPECULATIVE and non-gating.
 
 ## Decisions made during implementation
 
@@ -30,9 +37,9 @@ created: "2026-09-29"
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.
 
-- [ ] Lesson for the repo's `docs/lessons/`? <yes: path / no: reason>
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? <yes: path / no: reason>
-- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes: path / no: reason>
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/identity-secrets/lesson-484-a-reconciler-downstream-of-a-stale-source-reports-a-bound-that-cannot-converge.md
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: a check inside an existing command, with no new contract; how the IdP and the apps it feeds are reconciled belongs to ADR-038, which #1613 revisits
+- [x] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. no: seen in one project only; lesson-484 carries it until a second one shows it
 
 ## Archive checklist
 
