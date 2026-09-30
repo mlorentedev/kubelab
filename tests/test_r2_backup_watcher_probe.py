@@ -42,6 +42,8 @@ PREFIX = "s3:https://example.r2.cloudflarestorage.com/kubelab-backups"
 #   <repo>.snaps  what `snapshots --json` prints (default: one snapshot)
 #   <repo>.ls     what `ls latest <dir>` prints
 #   <repo>.id     the repository id `cat config --json` reports (BACKUP-058)
+#   <repo>.size   the `total_size` `stats --mode raw-data --json` reports
+#   <repo>.nostats `stats` alone fails, the rest of the repository reads fine
 # Any call without --no-lock is refused the way the read-only token refuses it
 # (PutObject AccessDenied on the lock) and logged as `locked <repo>`.
 FAKE_RESTIC = r"""#!/bin/sh
@@ -50,7 +52,7 @@ repo=""; cmd=""
 while [ $# -gt 0 ]; do
   case "$1" in
     -r) repo="$2"; shift ;;
-    snapshots|ls|cat) [ -z "$cmd" ] && cmd="$1" ;;
+    snapshots|ls|cat|stats) [ -z "$cmd" ] && cmd="$1" ;;
   esac
   shift
 done
@@ -76,6 +78,11 @@ case "$cmd" in
     else echo '[{"time":"2026-09-26T00:00:00Z","id":"abc","short_id":"abc12345"}]'; fi ;;
   ls) cat "$FAKE_DIR/$name.ls" ;;
   cat) printf '{"version":2,"id":"%s","chunker_polynomial":"3dea92648f6e83"}\n' "$(cat "$FAKE_DIR/$name.id")" ;;
+  stats)
+    [ -f "$FAKE_DIR/$name.nostats" ] && { echo "Load(<index/0a1b>) failed: timeout" >&2; exit 1; }
+    case " $ORIG_ARGS " in *" --mode raw-data "*) ;; *) echo "wrong stats mode: $ORIG_ARGS" >&2; exit 2 ;; esac
+    printf '{"total_size":%s,"total_uncompressed_size":%s,"compression_ratio":1.9,"total_blob_count":42,"snapshots_count":3}\n' \
+      "$(cat "$FAKE_DIR/$name.size")" "$(( $(cat "$FAKE_DIR/$name.size") * 2 ))" ;;
 esac
 """
 
@@ -83,6 +90,9 @@ esac
 # Repository ids as `restic cat config` reports them: new for every `init`,
 # fixed otherwise. The targets file declares the id each node must still have.
 IDS = {"rpi3": "1" * 64, "kubelab-vps": "2" * 64}
+# What `stats --mode raw-data` reports as `total_size`: the stored, compressed
+# bytes of every blob the snapshots reference (BACKUP-057 Q3).
+SIZES = {"rpi3": 123_456_789, "kubelab-vps": 2_345_678_901}
 
 
 def _listing(*services: str, sentinel: bool = True) -> str:
@@ -116,6 +126,7 @@ def fleet(tmp_path: pathlib.Path, request):
     )
     for name, repository_id in IDS.items():
         (fake / f"{name}.id").write_text(f"{repository_id}\n")
+        (fake / f"{name}.size").write_text(f"{SIZES[name]}\n")
     (fake / "rpi3.ls").write_text(_listing("uptime_kuma"))
     (fake / "kubelab-vps.ls").write_text(_listing("authelia", "n8n"))
     env = {
@@ -303,3 +314,59 @@ def test_a_rejected_credential_is_named_in_the_nodes_reason(fleet) -> None:
     assert rc != 0 and vps["healthy"] == 0 and vps["readable"] == 0
     assert "Unauthorized" in vps["reason"], vps["reason"]
     assert _node(nodes, "rpi3")["healthy"] == 1
+
+
+def test_each_node_and_the_fleet_report_their_raw_size(fleet) -> None:
+    """The size decides whether a retention window fits the free tier (BACKUP-057 Q3).
+
+    It is measured on every run, not once: the bucket lock keeps data R days
+    past what `forget` would have removed, so the number the decision rests
+    on has to keep being checked after the decision.
+    """
+    _, _, env = fleet
+    rc, nodes, (summary,) = _run(env)
+    assert rc == 0
+    assert _node(nodes, "rpi3")["raw_bytes"] == SIZES["rpi3"]
+    assert _node(nodes, "vps")["raw_bytes"] == SIZES["kubelab-vps"]
+    assert summary["raw_bytes"] == sum(SIZES.values())
+
+
+def test_an_unknown_size_is_null_and_never_fails_a_healthy_node(fleet) -> None:
+    """`stats` failing says nothing about whether the backup is restorable.
+
+    So the node stays healthy, and its size is `null` rather than 0: a zero
+    would read as "fits" to the size rule and to the retention gate. One
+    unknown node makes the fleet sum unknown too, for the same reason.
+    """
+    fake, _, env = fleet
+    (fake / "kubelab-vps.nostats").write_text("")
+    rc, nodes, (summary,) = _run(env)
+    vps = _node(nodes, "vps")
+    assert rc == 0 and vps["healthy"] == 1 and summary["healthy"] == 1
+    assert vps["raw_bytes"] is None
+    assert _node(nodes, "rpi3")["raw_bytes"] == SIZES["rpi3"]
+    assert summary["raw_bytes"] is None
+
+
+def test_an_unreadable_node_has_no_size(fleet) -> None:
+    fake, _, env = fleet
+    (fake / "kubelab-vps.fail").write_text("Fatal: wrong password or no key found\n")
+    _, nodes, (summary,) = _run(env)
+    assert _node(nodes, "vps")["raw_bytes"] is None
+    assert summary["raw_bytes"] is None
+
+
+def test_a_probe_that_stops_early_reports_no_fleet_size(fleet) -> None:
+    """A partial sum would understate the fleet, which is the one error the size rule must not make."""
+    fake, _, env = fleet
+    (fake / "kubelab-vps.hang").write_text("")
+    # The shell runs its TERM trap once the foreground restic returns, which
+    # RESTIC_TIMEOUT bounds: the same order a pod's activeDeadlineSeconds sees.
+    env = {**env, "RESTIC_TIMEOUT": "4"}
+    proc = subprocess.Popen([*env["PROBE_SHELL"].split(), str(PROBE)], env=env, stdout=subprocess.PIPE, text=True)
+    time.sleep(1)
+    proc.terminate()
+    out, _ = proc.communicate(timeout=20)
+    (summary,) = [json.loads(line) for line in out.splitlines() if '"r2_backup_health"' in line]
+    assert summary["healthy"] == 0
+    assert summary["raw_bytes"] is None
