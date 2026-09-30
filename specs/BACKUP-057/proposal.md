@@ -58,15 +58,11 @@ The operator's decision on #1920 (2026-09-30) fixes the shape: one bucket per no
 
 ## Risks / open questions
 
-Q1 to Q3 **block** `tasks.md`; the operator answers them.
+Q1 to Q3 were answered by the operator on 2026-09-30 (#1920, comment "Operator answers to BACKUP-057 Q1-Q3").
 
-- **Q1 (blocks): where the tokens are minted.**
-  - (a) `cloudflare_api_token` resources in the R2 root. This is IaC end to end, but the four secrets land in `terraform.tfstate`. The state is local and gitignored (`infra/terraform/.gitignore:4`), so it is plaintext at rest on the operator workstation, and it has to be copied into SOPS anyway.
-  - (b) A toolkit command that mints each token through the Cloudflare API and writes the S3 pair straight into SOPS, with no state file, the same pattern as `credentials generate`.
-
-  [AGENT-DRAFT — review before archive] Recommend (b): a secret's SSOT is SOPS, and a second plaintext copy in tfstate is exactly what #1920 is about.
-- **Q2 (blocks): `kubelab-backups` after migration.** Import it into the R2 root with a lock and let it age out, or leave it unmanaged and delete it once every new bucket holds more than one `--keep-monthly` window. It holds the only copy of pre-migration history until `restic copy` has run for every node.
-- **Q3 (blocks): the value of R.** A longer R protects more history from a compromised node, but keeps every daily snapshot for R+1 days, which costs storage. The free tier is 10 GB-month, and overage is billed with no hard stop (`common.yaml` R2 comment). [AGENT-DRAFT — review before archive] Proposed: R = 30 days. That is under a month of dailies at today's volume and covers the weekly integrity check four times over.
+- **Q1, resolved: a toolkit command mints the tokens.** It creates each token through the Cloudflare API and writes the S3 pair straight into SOPS, with no state file, following the same pattern as `credentials generate`. The rejected option was `cloudflare_api_token` in the R2 root: that would leave four plaintext secrets in `terraform.tfstate` (local and gitignored, `infra/terraform/.gitignore:4`), a second copy of each secret. The command uses the Cloudflare admin token, which is also the only credential that can change or remove a lock rule. The runbook names where it is held (the operator workstation) and states that no node ever receives it.
+- **Q2, resolved: `kubelab-backups` stays unmanaged, and its deletion is gated on evidence, not on a date.** It is deleted once AC4 is verified on all four nodes **and** every new bucket has passed one weekly `check`. Until `restic copy` has finished for a node, the old bucket holds that node's only copy, and nothing locks it. The migration therefore runs as one task from start to finish, not spread across sessions.
+- **Q3, resolved: R = 30 days, `--keep-within 31d`.** R is fixed in code only after measurement. The first task measures the current size of the four repositories and records it against the free tier (10 GB-month; overage is billed, with no hard stop, per the `common.yaml` R2 comment). If the projected total with 31 days of dailies exceeds the free tier, R comes back to the operator before the lock is applied. The AC2 test pins `keep-within > R` as a relation.
 - **Q4 (resolved in PR 1, not blocking): measure before prod.** The Age condition cannot be fast-forwarded, so a scratch bucket cannot age a snapshot past R. The scratch test proves the other half:
   - with the lock in place, a full ship (`backup`, `forget --keep-within`, `prune`) succeeds;
   - a direct delete of a young object under `data/` is refused;
