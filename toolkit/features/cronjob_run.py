@@ -85,6 +85,10 @@ def job_from_cronjob(cronjob: dict[str, Any], name: str) -> dict[str, Any]:
     # Kubernetes' own marker for a Job started by hand from a CronJob; the same
     # one `kubectl create job --from` writes.
     annotations["cronjob.kubernetes.io/instantiate"] = "manual"
+    # A TTL would let the Job controller delete the Job, log included, before
+    # `run_cronjob` reads it. Only `run_cronjob` removes this Job.
+    spec = template["spec"]
+    spec.pop("ttlSecondsAfterFinished", None)
     return {
         "apiVersion": "batch/v1",
         "kind": "Job",
@@ -94,7 +98,7 @@ def job_from_cronjob(cronjob: dict[str, Any], name: str) -> dict[str, Any]:
             "labels": dict(metadata.get("labels") or {}),
             "annotations": annotations,
         },
-        "spec": template["spec"],
+        "spec": spec,
     }
 
 
@@ -145,8 +149,10 @@ def run_cronjob(
 
     started = now()
     outcome: str | None = None
+    created = False
     try:
         create(job)
+        created = True
         log(f"{job_name}: created; waiting up to {budget / 60:.0f}m")
         while True:
             outcome = job_outcome(get_job())
@@ -156,14 +162,21 @@ def run_cronjob(
         output = logs()
         return CronJobRunResult(outcome=outcome or "timeout", log=output, waited_s=now() - started)
     finally:
-        try:
-            delete()
-            log(f"{job_name}: deleted")
-        except Exception as exc:  # noqa: BLE001 -- re-raised as CronJobRunTeardownError
-            raise CronJobRunTeardownError(
-                f"Job {job_name} could not be deleted and is still in the cluster ({exc}). "
-                f"Remove it before it is mistaken for a scheduled run: kubectl delete job {job_name} -n {NAMESPACE}"
-            ) from exc
+        # Only a Job this call created is deleted. A refused create leaves
+        # nothing behind to report, and AlreadyExists names someone else's Job.
+        if created:
+            _teardown(job_name, delete, log)
+
+
+def _teardown(job_name: str, delete: Callable[[], None], log: Callable[[str], None]) -> None:
+    try:
+        delete()
+        log(f"{job_name}: deleted")
+    except Exception as exc:  # noqa: BLE001 -- re-raised as CronJobRunTeardownError
+        raise CronJobRunTeardownError(
+            f"Job {job_name} could not be deleted and is still in the cluster ({exc}). "
+            f"Remove it before it is mistaken for a scheduled run: kubectl delete job {job_name} -n {NAMESPACE}"
+        ) from exc
 
 
 # --- kubectl adapters --------------------------------------------------------
