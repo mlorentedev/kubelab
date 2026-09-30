@@ -921,3 +921,74 @@ def test_a_comment_only_triggers_the_reviewer_when_it_is_a_slash_command() -> No
     assert (
         'contains(fromJSON(\'["OWNER","MEMBER","COLLABORATOR"]\'), github.event.comment.author_association)'
     ) in condition, "the issue_comment path is not restricted to repository members"
+
+
+class _Ctx(dict):
+    """A GitHub expression context: attribute access, and absent keys are null."""
+
+    def __getattr__(self, name: str) -> object:
+        return self.get(name)
+
+
+def _ctx(value: object) -> object:
+    return _Ctx({k: _ctx(v) for k, v in value.items()}) if isinstance(value, dict) else value
+
+
+def _evaluate(expression: str, github: dict) -> object:
+    """Evaluate a GitHub Actions expression over `github`, the way Actions does.
+
+    The subset this workflow uses maps onto Python with the same value
+    semantics: `&&` and `||` return an operand, not a boolean, and '', 0, null
+    and false are the falsy values in both languages.
+    """
+    python = expression.strip().removeprefix("${{").removesuffix("}}")
+    python = python.replace("&&", " and ").replace("||", " or ")
+    python = re.sub(r"!(?!=)", " not ", python)
+    python = re.sub(r"\bfalse\b", "False", re.sub(r"\btrue\b", "True", python))
+    names = {
+        "github": _ctx(github),
+        "format": lambda template, *args: re.sub(r"\{(\d+)\}", lambda m: str(args[int(m.group(1))]), template),
+        "startsWith": lambda text, prefix: str(text or "").lower().startswith(prefix.lower()),
+        "contains": lambda haystack, needle: needle in (haystack or ""),
+        "fromJSON": json.loads,
+    }
+    return eval(" ".join(python.split()), {"__builtins__": {}}, names)  # noqa: S307 -- repository's own workflow
+
+
+def _pull_request_run(*, draft: bool, actor: str) -> dict:
+    """One `pull_request` run on one PR. Only what can change between its runs varies."""
+    return {
+        "workflow": "PR-Agent",
+        "event_name": "pull_request",
+        "actor": actor,
+        "head_ref": "fix/something",
+        "event": {"pull_request": {"number": 7, "draft": draft, "head": {"repo": {"fork": False}}}},
+    }
+
+
+def test_a_run_the_job_skips_cannot_cancel_one_that_reviews() -> None:
+    """No run the job skips may share a concurrency group with a run it reviews (#1944).
+
+    The per-PR group cancels in progress, and a run joins it before the job's
+    `if:` is read. So a run carrying a draft payload, which the job skips,
+    cancelled the `ready_for_review` run in the same group: measured on #1942,
+    `cancelled` plus `skipped`, and no review. Any skip condition that can
+    change between two runs of one PR has the same shape: draft state, and the
+    actor, since a human's push to a Dependabot PR is reviewed and the bot's
+    rebase after it is not. Fork and branch prefix are fixed for a PR's life.
+
+    Both expressions are evaluated rather than searched for a token, so a group
+    key that mentions a condition without separating its two states fails here.
+    """
+    workflow = _load(REVIEWER)
+    job_if = str(workflow["jobs"]["review"]["if"])
+    group = str(workflow["concurrency"]["group"])
+    runs = [
+        _pull_request_run(draft=draft, actor=actor)
+        for draft in (False, True)
+        for actor in ("a-maintainer", "dependabot[bot]")
+    ]
+    reviewed = {_evaluate(group, run) for run in runs if _evaluate(job_if, run)}
+    skipped = {_evaluate(group, run) for run in runs if not _evaluate(job_if, run)}
+    assert reviewed and skipped, "every run reviews, or none does: the fixture no longer exercises the job's if:"
+    assert not reviewed & skipped, f"a skipped run shares a group with a reviewing one: {sorted(reviewed & skipped)}"

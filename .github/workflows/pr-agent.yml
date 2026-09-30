@@ -28,7 +28,24 @@ concurrency:
   # spends its first ~20s building, and a reviewer's auto-summary comment lands
   # reliably inside that window. Measured upstream on two PRs: both cancelled
   # mid-build, both workflows green, zero reviews produced.
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number }}-${{ github.event_name }}
+  #
+  # The skip conditions that can change between two runs of one PR are part of
+  # the key for the same reason (#1944). A run joins this group BEFORE the job's
+  # `if:` is read, so a run carrying a draft payload, which the job skips, used
+  # to cancel the `ready_for_review` run beside it. On #1942 the two runs were
+  # created 90 s apart and in the opposite order to their events: `cancelled`,
+  # `skipped`, no review. The actor is the other such condition: a human's push
+  # to a Dependabot PR is reviewed, and the bot's rebase after it is skipped.
+  # Fork and branch prefix are fixed for a PR's life. A run the job skips now
+  # lands in a group of its own and can neither cancel nor displace a run that
+  # reviews. `tests/test_pr_agent_workflow.py` evaluates both expressions to
+  # hold them in agreement.
+  group: >-
+    ${{ format('{0}-{1}-{2}{3}',
+    github.workflow,
+    github.event.pull_request.number || github.event.issue.number,
+    github.event_name,
+    (github.event.pull_request.draft || github.actor == 'dependabot[bot]') && '-skipped' || '') }}
   cancel-in-progress: true
 
 permissions:
