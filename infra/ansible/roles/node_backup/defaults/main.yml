@@ -59,6 +59,29 @@ node_backup_r2_secret_key_file: /opt/node-backup-r2-secret-key
 # missing wiring fails loudly (StrictUndefined at apply time) instead of
 # writing an empty credential file that looks provisioned and is not.
 
+# Which repository this node has shipped to, per destination (BACKUP-058).
+# One file per destination, holding the restic repository id (`restic cat
+# config`), which is new for every `restic init` and never changes otherwise.
+#
+# It is the node's memory that a history EXISTS. Without it, a repository that
+# has been deleted is indistinguishable from one that was never created, and
+# the ship script used to answer both with `restic init`: a deleted history
+# came back as a fresh one-snapshot repository and every earlier restore point
+# was gone with nothing paging. With it, the ship initialises only on a first
+# ship and refuses a missing or replaced repository.
+#
+# /var/lib because this is persistent service state (FHS): not the staging
+# dir, which capture `rm -rf`s every run, and not tmpfs. The ROLE creates only
+# the directory; the file is written by the ship script at run time, so
+# re-running the role can never create, overwrite or remove it. The one
+# sanctioned way to remove it is `make backup-repo-reinit`, which logs the id
+# it drops.
+#
+# Per destination rather than per node, so the Storage Box leg (#471) gets its
+# own `storagebox.repository-id` and its first ship is a first ship.
+node_backup_repository_id_dir: /var/lib/node-backup
+node_backup_r2_repository_id_file: "{{ node_backup_repository_id_dir }}/r2.repository-id"
+
 # Installed script and unit paths/names — shared between tasks/main.yml
 # (which writes them) and the .service.j2 templates (which reference them),
 # so the two can never drift apart silently.

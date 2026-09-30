@@ -902,3 +902,23 @@ def test_both_timers_move_together() -> None:
     assert "node-backup-ship-check.timer" in timers, (
         "the integrity-check timer is not managed alongside the ship timer, so a disarm leaves half a schedule running"
     )
+
+
+# --- BACKUP-058: `init` is reachable from exactly one exit code -------------
+
+
+def test_init_is_gated_on_restic_exit_code_10_only():
+    """`restic init` sits inside the `10)` arm of the snapshots exit-code case.
+
+    Exit 10 is restic's "repository does not exist", measured on R2 with the
+    fleet's restic 0.19.1 (specs/BACKUP-058-no-silent-reinit, 2026-09-30).
+    Any other placement of `init` is the defect this spec fixed: a deleted
+    history re-initialised silently. The behaviour itself is exercised in
+    tests/test_node_backup_ship_script.py; this pins the shape it relies on.
+    """
+    script = _render("node-backup-ship.sh.j2")
+    code = [line for line in script.splitlines() if not line.lstrip().startswith("#")]
+    init_lines = [i for i, line in enumerate(code) if re.search(r"\$RESTIC init\b", line)]
+    assert len(init_lines) == 1, "exactly one `restic init` call"
+    arm = next(i for i in range(init_lines[0], -1, -1) if re.match(r"\s*\d+\)", code[i]))
+    assert code[arm].strip() == "10)", f"`init` must sit in the `10)` arm, found under {code[arm].strip()!r}"
