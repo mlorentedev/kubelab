@@ -2,7 +2,7 @@
   {
     "id": "BACKUP-057-f1",
     "behavior": "The watcher reports each repository's raw size and the fleet sum, and a Grafana rule fires above 80% of the declared free tier (AC2 prerequisite, Q3)",
-    "verification": "poetry run pytest tests/test_r2_backup_watcher_probe.py tests/test_r2_backup_rules.py --no-cov -q -k \"raw_bytes or size\"",
+    "verification": "poetry run pytest \"tests/test_r2_backup_watcher_probe.py::test_a_node_line_reports_its_raw_size\" tests/test_r2_backup_rules.py --no-cov -q",
     "state": "pending",
     "evidence": ""
   },
@@ -22,8 +22,8 @@
   },
   {
     "id": "BACKUP-057-f4",
-    "behavior": "No two nodes render the same bucket, key pair or restic password in backup.yml, the ship script, backup_destination or the watcher targets (AC1)",
-    "verification": "poetry run pytest tests/test_node_backup_role.py tests/test_backup_destination.py tests/test_r2_watcher_targets.py --no-cov -q -k \"per_node or shared\"",
+    "behavior": "No two nodes render the same bucket, key pair or restic password in backup.yml, backup_destination, the watcher targets or the watcher Secret (AC1)",
+    "verification": "poetry run pytest tests/test_backup_per_node_isolation.py --no-cov -q",
     "state": "pending",
     "evidence": ""
   },

@@ -19,7 +19,7 @@ created: "2026-09-30"
 
 The size decides whether R = 30 fits the free tier. It is measured by the watcher rather than by a one-off command, so the number keeps being checked after the lock multiplies retained data.
 
-- [ ] [P] [AC2] Failing test in `tests/test_r2_backup_watcher_probe.py`: the `r2_backup_node` line carries `"raw_bytes":<int>` from `restic stats --mode raw-data --no-lock --json`, and the fleet line carries its sum. The fake restic returns a fixed `total_size`. Expected: FAIL, the field is missing.
+- [ ] [P] [AC2] Failing test `test_a_node_line_reports_its_raw_size` in `tests/test_r2_backup_watcher_probe.py`: the `r2_backup_node` line carries `"raw_bytes":<int>` from `restic stats --mode raw-data --no-lock --json`, and the fleet line carries its sum. The fake restic returns a fixed `total_size`. Expected: FAIL, the field is missing.
 - [ ] [AC2] `infra/k8s/base/services/r2-backup-watcher/probe.sh`: run `stats` after `snapshots`, under the same `RESTIC_TIMEOUT`, and emit both fields. A `stats` failure is logged and marks the size unknown (`null`); it never marks a healthy node unhealthy. Expected: PASS.
 - [ ] [AC2] Failing test, `tests/test_r2_backup_rules.py`: a Grafana rule `r2-backup-size` fires when the fleet sum exceeds `backup.r2.free_tier_bytes × 0.8`. The threshold is read from `common.yaml`, never hardcoded. Then add the rule to `grafana-alerting/r2-backup-rules.yaml` and the key to `common.yaml`.
 - [ ] Deploy to staging, then `make watcher-run ENV=prod`. Record the four sizes and the projection for `--keep-within 31d` in `verification.md`. **Gate:** if the projection exceeds the free tier, stop and return R to the operator.
@@ -44,9 +44,9 @@ The size decides whether R = 30 fits the free tier. It is measured by the watche
 - [ ] Verify by consequence that the SOPS Cloudflare token can manage R2 buckets and locks: `make tf-r2-plan` with `nodes = {}` and `scratch = true` returns rc 0. If it is refused, a separate admin token is minted by the operator and added to `SECRET_CATALOG`; record which one it was.
 - [ ] [AC3] Scratch measurement, recorded in `verification.md`:
   1. Apply the scratch bucket with R = 1 day, which also confirms the API accepts a short retention.
-  2. Point a throwaway restic repository at it and run `backup`, `forget --keep-within 2d --prune` and `check`. All must return rc 0.
-  3. A direct delete of a `data/` object younger than R, made with an Object Read & Write token, must be refused.
-  4. `rm` of a `locks/` object must succeed.
+  2. Point a throwaway restic repository at it and take two `backup`s, then run `check`. Both must return rc 0. Each `backup` deletes its own file under `locks/`, so this is the measurement that `locks/` is outside the rule. The no-deletion half of the ship proves nothing here: every snapshot is younger than `--keep-within`, so `forget` selects nothing and `prune` issues no DELETE.
+  3. **The half that can fail.** `forget <first snapshot id> --prune` makes a young pack unreferenced, so `prune` must try to delete it. The DELETE must be refused, and restic must exit non-zero. Record its exact error, because that is what a ship would page with if retention and R ever disagreed. Then `restic repair index` and `check` must still pass.
+  4. A direct delete of a `data/` object younger than R, made with an Object Read & Write token, must be refused.
   5. Destroy the scratch bucket with `-target` after removing its lock rule, and record the steps that took.
 
 ## PR 3 — per-node credentials, minted into SOPS (Q1)
@@ -54,7 +54,7 @@ The size decides whether R = 30 fits the free tier. It is measured by the watche
 - [ ] [P] [AC1] Failing test, `tests/test_backup_node_credentials.py`:
   - `SECRET_CATALOG` declares `backup.r2.nodes.<node>.{access_key_id,secret_access_key}` and `backup.nodes.<node>.restic_password` for every `backup.sources` key;
   - two nodes never share a SOPS path;
-  - the watcher has one read-only pair.
+  - the watcher has one read-only pair, and reads each node's restic password from that node's own key rather than from a copy.
 
   Expected: FAIL.
 - [ ] [AC1] `toolkit backup mint-node-tokens --env prod [--node <n>]`:
@@ -68,13 +68,13 @@ The size decides whether R = 30 fits the free tier. It is measured by the watche
 
 ## PR 4 — every consumer becomes per node, then the migration (Q2)
 
-- [ ] [AC1] Failing test: rendering `backup.yml` for each node yields a bucket, key pair and restic password that no other node gets. Covers `test_node_backup_role` and `test_backup_destination`; `test_r2_watcher_targets` gains the bucket column. Expected: FAIL.
+- [ ] [AC1] Failing tests in a new `tests/test_backup_per_node_isolation.py`, one per consumer: `backup.yml`, `backup_destination.repo_url`, `render_watcher_targets` and the watcher Secret. Each consumer must give every node a bucket, key pair and restic password that no other node gets. They live in their own file so that one run covers them all, with no `-k` filter. Expected: FAIL.
 - [ ] [AC1] Change the consumers:
   - `backup.yml` (both plays) and `backup-repo-reinit.yml`: per-node vars;
   - the `node_backup` role defaults and ship script: the repository URL is `s3:<endpoint>/kubelab-backup-<node>`;
   - `backup_destination.repo_url` / `verify_*`: per-node bucket;
   - `render_watcher_targets`: per-node bucket;
-  - `k8s_secrets`: the watcher's read-only pair.
+  - `k8s_secrets`: `r2-backup-watcher-secrets` carries the read-only pair plus one restic password per node, keyed by node. The watcher opens every repository (`snapshots`, `stats`), so it needs every password. A test fails if a node in `backup.sources` has no password entry.
 
   Expected: PASS, `make test` green.
 - [ ] [AC4] `make backup-migrate NODE=<node> ENV=prod` (toolkit plus an Ansible run, no ad-hoc restic). It runs these steps and stops at the first failure:

@@ -37,7 +37,7 @@ The operator's decision on #1920 (2026-09-30) fixes the shape: one bucket per no
    - The `node_backup` role and its ship script, which build the repository URL.
    - `backup.yml`, which passes the credential and the password per node, and `backup-repo-reinit.yml`.
    - `backup_destination.py`: `repo_url`, `verify_destination`, and `verify_restic`'s scratch repository.
-   - The watcher: `render_watcher_targets` gains a bucket per line, and `r2-backup-watcher-secrets` gains one read-only token scoped to all node buckets.
+   - The watcher: `render_watcher_targets` gains a bucket per line. `r2-backup-watcher-secrets` gains one read-only token scoped to all node buckets, plus every node's restic password, since the watcher opens each repository. So the watcher secret can **read** every history, and it can delete none. The runbook states this.
    - `SECRET_CATALOG` and the `secrets-audit` expectations.
    - `offsite-backup-restore.md` and `runbook-disaster-recovery.md`.
    - The tests that pin the single-bucket shape (`test_backup_destination`, `test_r2_watcher_targets`, `test_k8s_secrets_r2_watcher`, `test_node_backup_role`, `test_node_backup_ship_script`).
@@ -64,9 +64,11 @@ Q1 to Q3 were answered by the operator on 2026-09-30 (#1920, comment "Operator a
 - **Q2, resolved: `kubelab-backups` stays unmanaged, and its deletion is gated on evidence, not on a date.** It is deleted once AC4 is verified on all four nodes **and** every new bucket has passed one weekly `check`. Until `restic copy` has finished for a node, the old bucket holds that node's only copy, and nothing locks it. The migration therefore runs as one task from start to finish, not spread across sessions.
 - **Q3, resolved: R = 30 days, `--keep-within 31d`.** R is fixed in code only after measurement. The first task measures the current size of the four repositories and records it against the free tier (10 GB-month; overage is billed, with no hard stop, per the `common.yaml` R2 comment). If the projected total with 31 days of dailies exceeds the free tier, R comes back to the operator before the lock is applied. The AC2 test pins `keep-within > R` as a relation.
 - **Q4 (resolved by the scratch measurement in `tasks.md` PR 2, not blocking): measure before prod.** The Age condition cannot be fast-forwarded, so a scratch bucket cannot age a snapshot past R. The scratch test proves the other half:
-  - with the lock in place, a full ship (`backup`, `forget --keep-within`, `prune`) succeeds;
-  - a direct delete of a young object under `data/` is refused;
-  - restic run against that refusal fails the ship, which pages.
+  - with the lock in place, `backup` succeeds, which proves that `locks/` is outside the rule;
+  - a `prune` forced to delete a young pack (`forget <id> --prune`) is refused, and restic exits non-zero, so a ship that hit the lock would page;
+  - a direct delete of a young object under `data/` is refused.
+
+  A scheduled ship succeeding **with** the lock is proved only in prod, over time, because `--keep-within` keeps every young pack referenced.
 
   R2 documents no minimum or maximum retention for a lock rule. The scratch test uses R = 1 day to confirm that the API accepts a short value.
 - **Q5: removing a lock rule.** Cloudflare documents removing rules only as a whole ("Remove all lock rules before emptying a bucket"). A Terraform change that removes or shortens a rule is therefore an admin action, and it has to be visible in `tf-r2-plan` output, never applied as a side effect. The root sets `prevent_destroy` on the lock resources.
