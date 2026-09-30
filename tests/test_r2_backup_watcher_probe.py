@@ -37,6 +37,8 @@ PREFIX = "s3:https://example.r2.cloudflarestorage.com/kubelab-backups"
 #   <repo>.fail   exit 1 with that file's text on stderr (no repo, bad password)
 #   <repo>.crash  exit 137, as if OOM-killed
 #   <repo>.hang   sleep far past any timeout
+#   <repo>.refuse retry a rejected request forever, printing restic's retry
+#                 line each time (R2's answer to a bad credential, #1939)
 #   <repo>.snaps  what `snapshots --json` prints (default: one snapshot)
 #   <repo>.ls     what `ls latest <dir>` prints
 #   <repo>.id     the repository id `cat config --json` reports (BACKUP-058)
@@ -62,6 +64,12 @@ esac
 [ -f "$FAKE_DIR/$name.fail" ] && { cat "$FAKE_DIR/$name.fail" >&2; exit 1; }
 [ -f "$FAKE_DIR/$name.crash" ] && exit 137
 [ -f "$FAKE_DIR/$name.hang" ] && exec sleep 30
+if [ -f "$FAKE_DIR/$name.refuse" ]; then
+  while :; do
+    echo "Stat(<config/>) returned error, retrying after 875.524205ms: Stat: Unauthorized" >&2
+    sleep 0.2
+  done
+fi
 case "$cmd" in
   snapshots)
     if [ -f "$FAKE_DIR/$name.snaps" ]; then cat "$FAKE_DIR/$name.snaps"
@@ -278,3 +286,20 @@ def test_an_empty_target_list_is_not_a_healthy_fleet(fleet) -> None:
     targets.write_text("# only a header\n")
     rc, _, (summary,) = _run(env)
     assert rc != 0 and summary["healthy"] == 0
+
+
+def test_a_rejected_credential_is_named_in_the_nodes_reason(fleet) -> None:
+    """restic retries R2's 401 for 15 minutes; RESTIC_TIMEOUT ends it, and the reason names the 401.
+
+    The first stderr line is restic's first retry, which carries R2's own
+    answer. So `unreadable:` is not empty for a bad credential (#1939).
+    """
+    fake, _, env = fleet
+    (fake / "kubelab-vps.refuse").write_text("")
+    started = time.monotonic()
+    rc, nodes, (summary,) = _run(env)
+    assert time.monotonic() - started < 20, "a refused credential must be cut off by RESTIC_TIMEOUT"
+    vps = _node(nodes, "vps")
+    assert rc != 0 and vps["healthy"] == 0 and vps["readable"] == 0
+    assert "Unauthorized" in vps["reason"], vps["reason"]
+    assert _node(nodes, "rpi3")["healthy"] == 1

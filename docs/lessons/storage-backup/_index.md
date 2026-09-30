@@ -1,9 +1,10 @@
 # Backups, volumes and persistence
 
-11 lessons, newest first. Back to [all categories](../_index.md).
+12 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 488 | [restic's `--stuck-request-timeout` bounds a stalled request, not a refused one, and R2's credential refusals are retried for 15 minutes](lesson-488-stuck-request-timeout-bounds-a-stalled-request-not-a-refused-one.md) | 2026-09-30 |
 | 485 | ["Initialise it if it does not open" turns a deleted backup repository into a healthy, empty one](lesson-485-init-if-it-does-not-open-turns-a-deleted-backup-into-a-healthy-empty-one.md) | 2026-09-30 |
 | 465 | [A read-only object-store token cannot run restic's read commands unless they skip the lock](lesson-465-a-read-only-restic-token-needs-no-lock-even-to-read.md) | 2026-09-26 |
 | 427 | [A default nobody chose is not a decision, and four backups were relying on one](lesson-427-the-property-everything-relied-on-was-never-declared.md) | 2026-09-04 |
