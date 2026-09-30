@@ -15,6 +15,22 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - [ ] Criterion 4 -> commit `<hash>` / test `<name>`
 - [ ] Criterion 5 -> commit `<hash>` / test `<name>`
 
+## PR 1 gate: size against the free tier (Q3)
+
+Measured 2026-09-30 23:41Z by `make watcher-run NAME=r2-backup-watcher ENV=staging`, with staging's Argo CD app pointed at `feat/backup-057-watcher-size`. The staging watcher reads the same four R2 repositories as prod (one `targets.txt` in the base), so these are the prod repositories' sizes. The prod run follows the merge.
+
+| Node | `raw_bytes` | `stats` took |
+|---|---:|---:|
+| beelink | 61,190,162 | 143 s |
+| rpi3 | 52,615,356 | 7 s |
+| rpi4 | 65,879,867 | 9 s |
+| vps | 7,128,999 | 9 s |
+| **fleet** | **186,814,384** | Job 193 s |
+
+Projection for `--keep-within 31d`, as an upper bound that assumes no deduplication at all (every daily snapshot new data): 32 × 186.8 MB = 5.98 GB for the new buckets. Add the old copy, which `kubelab-backups` keeps until Q2 deletes it: 0.19 GB. That makes 6.17 GB, under the 8 GB alert (80%) and the 10 GB free tier. **Gate: passes.** Four numeric sizes, and the bound fits with both copies stored. R = 30 stands.
+
+The first run returned `null` for the Beelink: `stats --mode raw-data` walks every tree, and its Gitea tree outran the 60 s `RESTIC_TIMEOUT` ("signal terminated received", Loki). That is the tolerated failure working as designed; the fleet sum was `null` and the gate would have stopped. `stats` now has its own `STATS_TIMEOUT` (600 s, about 4× the measurement), and the deadline and grace period are derived from the probe's calls.
+
 ## Test status
 
 - Test suite: `<command> -> <output / coverage %>`
@@ -25,8 +41,8 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 
 Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
 
--
--
+- `raw-data` was kept over summing blob lengths from the index files, which would be bounded by index size rather than tree size. At 143 s the Beelink fits a dedicated timeout, and the spec's method needed no amendment. Revisit if `stats took` passes half of `STATS_TIMEOUT`: the probe logs the figure on every run.
+- The Job deadline assumed 2 restic calls per node; the probe has made 3 since BACKUP-058, so the worst case (720 s) already exceeded the 600 s deadline while the test passed. The test now counts the calls in `probe.sh`.
 
 ## Promotion candidates
 
