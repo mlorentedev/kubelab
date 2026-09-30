@@ -411,6 +411,27 @@ class TestALessonThatHeadHasAndTheTreeDoesNotIsRefused:
         (lessons / "alpha" / "lesson-440-a-mock.md").write_text("---\nid: x\n---\nbody\n", encoding="utf-8")
         assert lessons_index.removed_lessons(lessons) == []
 
+    def test_a_retitle_is_not_a_removal(self, tmp_path: pathlib.Path) -> None:
+        """The same door for the other half of a lesson's name.
+
+        A retitle keeps the number, which is the citation, and changes the
+        slug. Correcting a lesson whose title turned out false is how it is
+        done (lesson-487, 2026-09-30), and it must not need a flag.
+        """
+        lessons = _repo_with_lessons(tmp_path, {"alpha": ["lesson-487-a-false-title.md"]})
+        (lessons / "alpha" / "lesson-487-a-false-title.md").unlink()
+        (lessons / "alpha" / "lesson-487-a-true-title.md").write_text("---\nid: x\n---\nbody\n", encoding="utf-8")
+        assert lessons_index.removed_lessons(lessons) == []
+
+    def test_an_untouched_file_sharing_the_number_does_not_excuse_a_deletion(self, tmp_path: pathlib.Path) -> None:
+        """As with the slug, the excuse is a file ARRIVING with the number."""
+        lessons = _repo_with_lessons(
+            tmp_path,
+            {"alpha": ["lesson-1-a-mock.md"], "beta": ["lesson-1-other.md"]},
+        )
+        (lessons / "alpha" / "lesson-1-a-mock.md").unlink()
+        assert lessons_index.removed_lessons(lessons) == ["alpha/lesson-1-a-mock.md"]
+
     def test_an_untouched_file_sharing_the_slug_does_not_excuse_a_deletion(self, tmp_path: pathlib.Path) -> None:
         """The `not in committed` half of the door.
 
