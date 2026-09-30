@@ -11,9 +11,11 @@ The inventory generator now derives `node_backup` from those keys, and
 - the groups equal what the SSOT says, read from common.yaml, never restated here;
 - a misdeclaration fails generation instead of thinning a group, because a play
   whose pattern matches nothing is a warning and exit 0;
-- no backup playbook names a host or targets `all`;
-- every make target that runs a backup playbook regenerates the inventory first,
-  so a stale one without the group cannot turn the run into a silent no-op.
+- no backup playbook names a host or targets `all`.
+
+A stale inventory without the group would turn a run into a silent no-op; that
+is closed for every playbook by `ansible run` generating its own inventory
+(TOOL-090, tests/test_ansible_run_generates_inventory.py).
 """
 
 from __future__ import annotations
@@ -30,7 +32,6 @@ from toolkit.features.generator_ansible import BACKUP_GROUP, LOCATION_GROUPS, An
 _ROOT = Path(__file__).resolve().parents[1]
 _COMMON = _ROOT / "infra" / "config" / "values" / "common.yaml"
 _PLAYBOOKS = _ROOT / "infra" / "ansible" / "playbooks"
-_MAKEFILE = _ROOT / "Makefile"
 
 _DERIVED = {BACKUP_GROUP, *LOCATION_GROUPS.values()}
 
@@ -129,20 +130,3 @@ class TestPlaybooksNameNoHost:
             terms = {t.lstrip("&!") for t in re.split(r"[:,]", pattern) if t}
             assert terms <= _DERIVED, f"{playbook.name}: '{pattern}' names {sorted(terms - _DERIVED)}"
             assert BACKUP_GROUP in terms, f"{playbook.name}: '{pattern}' is not narrowed to {BACKUP_GROUP}"
-
-
-def _recipe(target: str) -> str:
-    text = _MAKEFILE.read_text()
-    match = re.search(rf"^{re.escape(target)}:.*\n((?:\t.*\n)+)", text, re.MULTILINE)
-    assert match, f"Makefile target {target} not found"
-    return match.group(1)
-
-
-@pytest.mark.parametrize("target", ["backup", "backup-node", "backup-schedule", "backup-repo-reinit"])
-def test_every_backup_target_regenerates_the_inventory_before_it_runs(target: str) -> None:
-    recipe = _recipe(target)
-    generate = recipe.find("infra ansible generate")
-    run = recipe.find("infra ansible run")
-    assert run != -1, target
-    assert generate != -1 and generate < run, f"{target} runs a playbook without regenerating the inventory"
-    assert "&& \\" in recipe[generate:run], f"{target}: a failed generate must stop the run"
