@@ -157,6 +157,7 @@ Hooks 6, 7 and 8 were turned on by Manu's reconcile after #1868 merged (2026-09-
 - **AC2:** the push edited comment 558 12 s later. No second comment was added, so `FINAL_UPDATE_MESSAGE=false` holds as well.
 - **AC4:** SHA-256 of `title + "\n" + body` was `6093ae48…9136e5` before the review. It was the same after the edit.
 - The live test's assertions were checked against both PRs' comments and timelines, read with the authoring client. On 279, both fail ("found 0", then "no review to compare"). On 280, both pass. The committed test reads with the reviewer token, because the admin token has no `read:issue`.
+- **First run of the committed test** (Manu, 2026-09-30, from this branch): `poetry run pytest -m infra tests/infra/test_pr_agent_review_live.py -v` → `test_the_reviewer_left_exactly_one_review PASSED`, `test_the_review_was_updated_after_the_latest_push PASSED`, `2 passed in 7.17s`. The fixture's SOPS lookup of `reviewer_token` and its reads through `GiteaClient._paginate` work against prod.
 
 ### AC3, on the live endpoint
 
