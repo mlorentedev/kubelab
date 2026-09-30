@@ -16,7 +16,10 @@
 # split, so it is spelled out on each play rather than templated.
 
 - name: Deploy node-path backup to the always-on nodes (BACKUP-044 Part 3)
-  hosts: kubelab-vps,rpi3
+  # node_backup (the keys of backup.sources) intersected with the ADR-028 class
+  # declared as `location` in common.yaml. Both groups are generated
+  # (BACKUP-062), so a fifth backup node needs no edit here.
+  hosts: node_backup:&always_on
   become: true
   gather_facts: true
   # NO ignore_unreachable here, deliberately. These two are always-on
@@ -135,7 +138,7 @@
         node_backup_shutdown_after: "{{ 'kubelab-compose.service' if node_short_name == 'beelink' else 'docker.service' }}"
 
 - name: Deploy node-path backup to the on-demand nodes (BACKUP-044 Part 3)
-  hosts: beelink,rpi4
+  hosts: node_backup:&on_demand
   become: true
   gather_facts: true
   # Beelink and RPi4 are on-demand homelab nodes (ADR-028) and are routinely

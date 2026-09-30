@@ -30,7 +30,9 @@
 # =============================================================================
 
 - name: Node-path backup schedule
-  hosts: all
+  # node_backup is generated from the keys of backup.sources (BACKUP-062): the
+  # SSOT for which nodes run the backup, so this play never names one.
+  hosts: node_backup
   become: true
   gather_facts: false
   # An on-demand node that is powered off is the expected state, not a fault

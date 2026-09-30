@@ -19,6 +19,13 @@ from toolkit.features.generator_base import BaseGenerator
 # rejected value is rejected identically at both layers (#1135).
 VALID_TRANSPORTS = ("mesh", "bastion")
 
+#: ADR-028 availability class (`location` in common.yaml) -> inventory group.
+#: Underscores, because Ansible warns on a hyphen in a group name.
+LOCATION_GROUPS = {"always-on": "always_on", "on-demand": "on_demand"}
+
+#: The hosts that run the node-path backup: the keys of `backup.sources`.
+BACKUP_GROUP = "node_backup"
+
 
 class AnsibleGenerator(BaseGenerator):
     """Generates Ansible inventory from common.yaml (SSOT).
@@ -60,12 +67,15 @@ class AnsibleGenerator(BaseGenerator):
             config_manager = ConfigurationManager(env, self.project_root)
             config = config_manager.get_merged_config()
             networking = config.get("networking", {})
+            backup_sources = (config.get("backup") or {}).get("sources") or {}
 
             generated_files = []
 
             # Generate inventory
             inventory_path = output_dir / "hosts.yml"
-            self._generate_inventory(networking, inventory_path, bootstrap=bootstrap, transport=transport)
+            self._generate_inventory(
+                networking, inventory_path, bootstrap=bootstrap, transport=transport, backup_sources=backup_sources
+            )
             generated_files.append(str(inventory_path))
 
             logger.success(f"Generated {len(generated_files)} Ansible files for {env}")
@@ -118,12 +128,21 @@ class AnsibleGenerator(BaseGenerator):
         return f'{strict} -o ProxyCommand="{proxy}"'
 
     def _build_inventory(
-        self, networking: dict[str, Any], bootstrap: bool = False, transport: str = "mesh"
+        self,
+        networking: dict[str, Any],
+        bootstrap: bool = False,
+        transport: str = "mesh",
+        backup_sources: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Build the Ansible inventory dict from networking config (pure — no IO).
 
         See `generate()` for `bootstrap` / `transport` semantics. `transport="bastion"`
         fails closed here (before any inventory is emitted) if no public jump exists.
+
+        Besides each host's declared `ansible_groups`, two group families are
+        DERIVED, so no playbook has to restate them (BACKUP-062, #1943):
+        - `always_on` / `on_demand`, from each host's `location` (ADR-028);
+        - `node_backup`, the hosts named by the keys of `backup.sources`.
         """
         # Validate here, not only in the CLI: this is where `transport` stops being
         # a string and becomes a branch. Any value that is not "bastion" used to fall
@@ -157,6 +176,8 @@ class AnsibleGenerator(BaseGenerator):
         if vps:
             all_nodes.append(
                 {
+                    "key": "vps",
+                    "location": vps.get("location"),
                     "hostname": vps.get("hostname", "kubelab-vps"),
                     "ansible_host": vps.get("public_ip") or vps.get("tailscale_ip"),
                     "ansible_user": self._resolve_ssh_user(vps, networking, "cloud"),
@@ -177,6 +198,8 @@ class AnsibleGenerator(BaseGenerator):
         if aws and not aws.get("retired") and (aws.get("tailscale_dns") or aws.get("tailscale_ip")):
             all_nodes.append(
                 {
+                    "key": "aws",
+                    "location": aws.get("location"),
                     "hostname": aws.get("hostname", "aws1"),
                     "ansible_host": aws.get("tailscale_dns") or aws["tailscale_ip"],
                     "ansible_user": self._resolve_ssh_user(aws, networking, "cloud"),
@@ -200,6 +223,8 @@ class AnsibleGenerator(BaseGenerator):
         if gcp and not gcp.get("retired") and (gcp.get("tailscale_dns") or gcp.get("tailscale_ip")):
             all_nodes.append(
                 {
+                    "key": "gcp",
+                    "location": gcp.get("location"),
                     "hostname": gcp.get("hostname", "gcp1"),
                     "ansible_host": gcp.get("tailscale_dns") or gcp["tailscale_ip"],
                     "ansible_user": self._resolve_ssh_user(gcp, networking, "cloud"),
@@ -214,6 +239,8 @@ class AnsibleGenerator(BaseGenerator):
             else:
                 host_ip = node.get("tailscale_ip")
             entry: dict[str, Any] = {
+                "key": _node_key,
+                "location": node.get("location"),
                 "hostname": node.get("hostname", _node_key),
                 "ansible_host": host_ip,
                 "ansible_user": self._resolve_ssh_user(node, networking, "homelab"),
@@ -249,6 +276,9 @@ class AnsibleGenerator(BaseGenerator):
             for group in node.get("groups", []):
                 groups[group].append(hostname)
 
+        for group, hostnames in self._derived_groups(all_nodes, backup_sources or {}).items():
+            groups[group].extend(h for h in hostnames if h not in groups[group])
+
         # Build inventory structure
         inventory: dict[str, Any] = {
             "all": {
@@ -269,11 +299,58 @@ class AnsibleGenerator(BaseGenerator):
 
         return inventory
 
+    @staticmethod
+    def _derived_groups(all_nodes: list[dict[str, Any]], backup_sources: dict[str, Any]) -> dict[str, list[str]]:
+        """Groups computed from the SSOT rather than declared per host (BACKUP-062).
+
+        A group a playbook targets can match nothing, and Ansible answers that
+        with a warning and exit 0: `backup.yml` once ran against zero hosts and
+        reported success. So both families fail generation instead of thinning:
+        a `backup.sources` key naming no emitted host, a backup host with no
+        availability class, and an unknown `location` value all raise.
+        """
+        derived: dict[str, list[str]] = defaultdict(list)
+        by_key = {node["key"]: node for node in all_nodes}
+
+        for node in all_nodes:
+            location = node.get("location")
+            if location is None:
+                continue
+            if location not in LOCATION_GROUPS:
+                raise ValueError(
+                    f"networking.{node['key']}.location is {location!r}; "
+                    f"expected one of: {', '.join(sorted(LOCATION_GROUPS))} (ADR-028)"
+                )
+            derived[LOCATION_GROUPS[location]].append(node["hostname"])
+
+        for key in sorted(backup_sources):
+            source = by_key.get(key)
+            if source is None:
+                raise ValueError(
+                    f"backup.sources.{key} names no inventory host: no non-retired networking.{key} "
+                    f"(or networking.nodes.{key}) is declared, so its backup would never run"
+                )
+            if source.get("location") not in LOCATION_GROUPS:
+                raise ValueError(
+                    f"backup.sources.{key}: networking.{key} declares no location, so backup.yml "
+                    "cannot tell whether an unreachable host is a fault (always-on) or expected (on-demand)"
+                )
+            derived[BACKUP_GROUP].append(source["hostname"])
+
+        return dict(derived)
+
     def _generate_inventory(
-        self, networking: dict[str, Any], output_path: Path, bootstrap: bool = False, transport: str = "mesh"
+        self,
+        networking: dict[str, Any],
+        output_path: Path,
+        bootstrap: bool = False,
+        transport: str = "mesh",
+        backup_sources: dict[str, Any] | None = None,
     ) -> None:
         """Build the inventory (see `_build_inventory`) and write it as YAML."""
-        inventory = self._build_inventory(networking, bootstrap=bootstrap, transport=transport)
+        inventory = self._build_inventory(
+            networking, bootstrap=bootstrap, transport=transport, backup_sources=backup_sources
+        )
 
         children = inventory["all"]["children"]
         host_names = {host for group in children.values() for host in group["hosts"]}
