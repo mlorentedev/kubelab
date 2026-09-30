@@ -166,8 +166,14 @@ def test_no_make_recipe_generates_the_inventory_for_a_run() -> None:
     assert not offenders, f"recipes still generate the inventory for their run: {offenders}"
 
 
-def test_the_recipe_parser_sees_the_runs() -> None:
-    """Guards the guard: a parser that found no recipe would pass the test above."""
-    recipes = _recipes()
-    assert "infra ansible run" in recipes["provision"]
-    assert "infra ansible run" in recipes["backup-node"]
+def test_the_recipe_parser_sees_every_run() -> None:
+    """Guards the guard: a recipe the parser drops is a recipe the test above never checks.
+
+    Counted against the raw file rather than a list of target names, so a new
+    target, or one the parser splits or skips, cannot fall outside the check.
+    """
+    lines = (_ROOT / "Makefile").read_text().splitlines()
+    in_file = sum(1 for line in lines if line.startswith("\t") and "infra ansible run" in line)
+    parsed = sum(recipe.count("infra ansible run") for recipe in _recipes().values())
+    assert in_file > 0, "no recipe runs a playbook: the Makefile moved or the pattern is stale"
+    assert parsed == in_file, f"the parser saw {parsed} of the {in_file} recipe lines that run a playbook"
