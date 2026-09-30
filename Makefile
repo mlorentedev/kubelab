@@ -1733,6 +1733,18 @@ alerts:
 	$(eval _ENV := $(if $(filter staging prod hub,$(ENV)),$(ENV),prod))
 	@$(TOOLKIT) obs alerts --env $(_ENV)
 
+# Run a CronJob once now, print its log and delete the Job (TOOL-084). For the
+# watchers (`r2-backup-watcher`, ...) the log IS the verdict, so this is how to
+# re-check without waiting for the schedule. No default ENV: an allow-list, not
+# a presence check, because `ENV ?= dev` would satisfy `test -n` (lesson-432).
+# Non-zero when the Job failed, did not finish, or was left behind; the
+# message says which (make itself exits 2 for any of them).
+.PHONY: watcher-run
+watcher-run:
+	@test -n "$(NAME)" || (echo "Usage: make watcher-run NAME=r2-backup-watcher ENV=staging|prod" && exit 1)
+	@test "$(ENV)" = staging -o "$(ENV)" = prod || (echo "watcher-run needs ENV=staging or ENV=prod, got '$(ENV)'" && exit 1)
+	@$(TOOLKIT) obs watcher-run --name $(NAME) --env $(ENV)
+
 # Prove `obs015-pvc-unbound-failure` still fires, without leaving the claim
 # behind afterwards (#1583). The teardown lives in the command's own `finally`,
 # so there is no `drill-...-down` target here on purpose: a second target is a
