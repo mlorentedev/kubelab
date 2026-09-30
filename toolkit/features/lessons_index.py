@@ -226,12 +226,15 @@ def _committed_lesson_files(root: pathlib.Path) -> set[str]:
 
 
 def removed_lessons(root: pathlib.Path) -> list[str]:
-    """Lessons committed at HEAD that no longer exist on disk, excluding renumbers.
+    """Lessons committed at HEAD that no longer exist on disk, excluding renames.
 
     A renumber is a delete plus an add, and it is a legitimate, frequent
     operation -- it is how a duplicate number gets resolved. It is told apart by
     the SLUG reappearing on a file that HEAD does not have, so the door opens on
-    evidence in the tree rather than on a flag someone remembers to pass.
+    evidence in the tree rather than on a flag someone remembers to pass. A
+    retitle is the same move on the other half of the name: the NUMBER
+    reappears with a new slug. A duplicate number that this lets through is
+    still refused, by `number_collisions`.
 
     The `not in committed` half is load-bearing and is not belt-and-braces. If
     the door merely asked "does this slug exist somewhere on disk", then any
@@ -241,17 +244,19 @@ def removed_lessons(root: pathlib.Path) -> list[str]:
     """
     committed = _committed_lesson_files(root)
     on_disk = {relative_posix(p, root) for p in all_lesson_files(root)}
-    arrived_slugs = {
-        m.group("slug")
+    arrived = [
+        m
         for p in all_lesson_files(root)
         if relative_posix(p, root) not in committed and (m := LESSON_NAME.match(p.name))
-    }
+    ]
+    arrived_slugs = {m.group("slug") for m in arrived}
+    arrived_numbers = {int(m.group("number")) for m in arrived}
 
     gone = []
     for rel in sorted(committed - on_disk):
         m = LESSON_NAME.match(pathlib.PurePosixPath(rel).name)
-        if m and m.group("slug") in arrived_slugs:
-            continue  # renumbered, not removed
+        if m and (m.group("slug") in arrived_slugs or int(m.group("number")) in arrived_numbers):
+            continue  # renumbered or retitled, not removed
         gone.append(rel)
     return gone
 

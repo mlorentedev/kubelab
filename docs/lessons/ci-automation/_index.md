@@ -4,7 +4,7 @@
 
 | # | Lesson | Date |
 |---|---|---|
-| 487 | [A reviewer that goes silent is neither a review nor a failure](lesson-487-a-reviewer-that-goes-silent-is-neither-a-review-nor-a-failure.md) | 2026-09-30 |
+| 487 | [A failed review names its cause per model; read it before filing it under a known one](lesson-487-a-failed-review-names-its-cause-per-model.md) | 2026-09-30 |
 | 486 | [A run the job's `if:` skips still cancels the run that would have reviewed](lesson-486-a-run-the-jobs-if-skips-still-cancels-the-run-that-would-have-reviewed.md) | 2026-09-30 |
 | 483 | [A squash merge turns the PR body into plain text, where code shields no closing keyword](lesson-483-a-squash-merge-turns-the-pr-body-into-plain-text-where-code-shields-no-closing-keyword.md) | 2026-09-28 |
 | 477 | [A substring guard matches another language's words, and a word boundary misses identifiers](lesson-477-a-substring-guard-matches-another-languages-words.md) | 2026-09-28 |
