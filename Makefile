@@ -948,14 +948,18 @@ provision:
 	# restore line after a bootstrap/bastion run is a generate on its own: it
 	# puts the mesh inventory back on disk for anything that reads the file
 	# without running (a raw ansible-playbook, or `run --skip-generate`). It runs
-	# either way, so it is `;`, and $$_exit carries the run's status past it.
+	# either way, so it is `;`. The exit is the run's status when the run failed,
+	# else the restore's: a failed restore leaves the bootstrap inventory on disk,
+	# and a success would hide that.
 	@if [ -n "$(BOOTSTRAP)" ] || [ -n "$(TRANSPORT)" ]; then \
 		echo "=== Inventory for this run: $(if $(BOOTSTRAP),LAN IPs,mesh)$(if $(TRANSPORT), via $(TRANSPORT),) ==="; \
 		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_BOOT) $(_TRANSPORT) $(_K) $(_TAGS) $(_CHECK) $(_EXTRA); \
 		_exit=$$?; \
 		echo "=== Restoring: inventory with mesh Tailscale IPs ==="; \
 		$(TOOLKIT) infra ansible generate --env $(_ENV); \
-		exit $$_exit; \
+		_restore=$$?; \
+		[ $$_exit -ne 0 ] && exit $$_exit; \
+		exit $$_restore; \
 	else \
 		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_K) $(_TAGS) $(_CHECK) $(_EXTRA); \
 	fi

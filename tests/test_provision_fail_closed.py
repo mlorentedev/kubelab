@@ -73,7 +73,7 @@ def _extract_provision_branch() -> str:
 
 
 def _run_branch(
-    tmp_path: pathlib.Path, *, run_fails: bool, branch: str = "bootstrap"
+    tmp_path: pathlib.Path, *, run_fails: bool, branch: str = "bootstrap", restore_fails: bool = False
 ) -> subprocess.CompletedProcess[str]:
     """Execute one of the target's two branches with stubbed toolkit commands.
 
@@ -82,28 +82,32 @@ def _run_branch(
     """
     shell = _extract_provision_branch()
 
-    # The three toolkit invocations, in the order they appear in the recipe: run
-    # and restore inside the BOOTSTRAP/TRANSPORT branch, then the `else` run. Each
-    # becomes a stub that records that it happened. Every one is stubbed,
-    # including the branch not under test, so a mis-forced branch shows up as an
-    # unexpected call rather than as a real command escaping into the test.
+    # Each toolkit invocation becomes a stub that records that it happened. Stubs
+    # are chosen by the command they replace, never by position: the restore is
+    # the recipe's only `generate`, and the two `run`s are the branch's then the
+    # `else`'s. Every one is stubbed, including the branch not under test, so a
+    # mis-forced branch shows up as an unexpected call rather than as a real
+    # command escaping into the test.
     marker = tmp_path / "calls.log"
     run_rc = 1 if run_fails else 0
-    stubs = [
-        f"sh -c 'echo run >> \"{marker}\"; exit {run_rc}'",
-        f"sh -c 'echo restore >> \"{marker}\"; exit 0'",
-        f"sh -c 'echo else_run >> \"{marker}\"; exit {run_rc}'",
-    ]
+    restore_rc = 1 if restore_fails else 0
+    run_stubs = iter(
+        [
+            f"sh -c 'echo run >> \"{marker}\"; exit {run_rc}'",
+            f"sh -c 'echo else_run >> \"{marker}\"; exit {run_rc}'",
+        ]
+    )
+    restore_stub = f"sh -c 'echo restore >> \"{marker}\"; exit {restore_rc}'"
+
+    def stub(match: re.Match[str]) -> str:
+        replacement = restore_stub if match.group(1) == "generate" else next(run_stubs)
+        return f"{replacement} {match.group(2)}" if match.group(2) else replacement
+
     # The trailing `&&` / `;` is part of the control flow under test, so the
     # substitution must preserve it.
-    for stub in stubs:
-        shell = re.sub(
-            r"^\s*infra ansible (?:generate|run).*?(&&|;)?$",
-            lambda m, s=stub: f"{s} {m.group(1)}" if m.group(1) else s,
-            shell,
-            count=1,
-            flags=re.M,
-        )
+    shell, count = re.subn(r"^\s*infra ansible (generate|run).*?(&&|;)?$", stub, shell, flags=re.M)
+    assert count == 3, f"expected a run, a restore and an else run in the recipe, found {count} toolkit calls"
+    assert shell.count(restore_stub) == 1, "the restore is no longer the recipe's only generate"
 
     # BOOTSTRAP/TRANSPORT are empty after expansion-stripping, so force the branch.
     condition = "if true; then" if branch == "bootstrap" else "if false; then"
@@ -170,3 +174,10 @@ def test_exit_propagation_still_present(marker: str) -> None:
     assert marker in _extract_provision_branch(), (
         f"{marker!r} is gone from the provision branch — the target no longer propagates the failure past the restore"
     )
+
+
+def test_a_failed_restore_after_a_successful_run_exits_non_zero(tmp_path: pathlib.Path) -> None:
+    """A failed restore leaves the bootstrap inventory on disk; exiting 0 would hide it."""
+    result = _run_branch(tmp_path, run_fails=False, restore_fails=True)
+    assert _calls(tmp_path) == ["run", "restore"]
+    assert result.returncode != 0, "a failed restore exited 0 after a successful run"

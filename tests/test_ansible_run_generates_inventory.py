@@ -81,9 +81,7 @@ def test_the_mode_reaches_the_generator(ansible_dir: Path, calls: list) -> None:
     assert calls[0] == ("generate", ("prod", True, "mesh"))
 
 
-def test_a_failed_generation_stops_the_run(
-    ansible_dir: Path, calls: list, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_a_failed_generation_stops_the_run(ansible_dir: Path, calls: list, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         generator_ansible.ansible_generator,
         "generate",
