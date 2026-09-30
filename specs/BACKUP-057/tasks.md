@@ -13,7 +13,7 @@ created: "2026-09-30"
 
 - [x] Branch `feat/backup-057-per-node-r2`, worktree `~/Projects/kubelab-backup-057-wt`
 - [x] `proposal.md` complete. Q1-Q3 answered by the operator (#1920, 2026-09-30); bucket name `kubelab-backup-<node>`, repository at the bucket root, approved the same day
-- [ ] `/spec check BACKUP-057` returns PASS before PR 1's first code commit
+- [x] `/spec check BACKUP-057`: PASS-WITH-GAPS (2026-09-30). AC1–AC5 are each covered by `[AC<n>]`-tagged tasks. The two untagged tasks are deliberate: the PR 1 measurement gate (Q3) and the scratch measurement's cleanup
 
 ## PR 1 — measure first, and keep measuring (Q3)
 
@@ -37,7 +37,7 @@ The size decides whether R = 30 fits the free tier. It is measured by the watche
   - `required_providers cloudflare ~> 5.8`;
   - `cloudflare_r2_bucket` and `cloudflare_r2_bucket_lock`, each with `for_each` over the rendered nodes;
   - `lifecycle { prevent_destroy = true }` on both;
-  - an extra `scratch` entry, driven only by a variable, for the measurement below.
+  - a separate scratch bucket and lock pair, `count`-gated by a variable and **outside** the `for_each`, with no `prevent_destroy`. It cannot be conditional on a variable, so a scratch entry inside the node map could never be destroyed.
 
   `terraform validate` passes.
 - [ ] [AC2] `make tf-r2-plan` / `make tf-r2-apply` in the `tf-vps-firewall-*` shape. The Cloudflare token goes in `TF_VAR_*` in the child process's environment, never as an argument.
