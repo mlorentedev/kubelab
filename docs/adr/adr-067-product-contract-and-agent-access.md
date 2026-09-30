@@ -86,7 +86,7 @@ kubelab publishes the contract's JSON Schema. A **registry** of admitted product
 
 ### D3. One generic receiver
 
-One workflow replaces the per-product receivers. It maps the event type to an app through the registry (C3), fetches that product's contract at the dispatched tag, validates it against the schema, renders the derived configuration, and opens the promotion PR. The payload carries only the tag. A contract change and an image change take the same path.
+One workflow replaces the per-product receivers. It maps the event type to an app through the registry (C3), rejects any dispatched tag that is not an immutable `sha-*` tag (the guard `web-image-receiver.yml` already applies), fetches that product's contract at the dispatched tag, validates it against the schema, renders the derived configuration, and opens the promotion PR. The payload carries only the tag. A contract change and an image change take the same path.
 
 ### D4. A private product's whole path runs in the private forge
 
