@@ -310,7 +310,9 @@ def test_a_kubectl_failure_carries_kubectls_own_reason(monkeypatch, call) -> Non
     """
 
     def refuse(argv, **_kwargs):
-        return subprocess.CompletedProcess(argv, 1, stdout="", stderr='Error from server (Forbidden): jobs.batch is forbidden')
+        return subprocess.CompletedProcess(
+            argv, 1, stdout="", stderr="Error from server (Forbidden): jobs.batch is forbidden"
+        )
 
     monkeypatch.setattr(cronjob_run.subprocess, "run", refuse)
     with pytest.raises(KubectlError, match="jobs.batch is forbidden"):
