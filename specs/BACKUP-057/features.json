@@ -1,8 +1,50 @@
 [
   {
     "id": "BACKUP-057-f1",
-    "behavior": "Outcome 1",
-    "verification": "echo 'not implemented' && exit 1",
+    "behavior": "The watcher reports each repository's raw size and the fleet sum, and a Grafana rule fires above 80% of the declared free tier (AC2 prerequisite, Q3)",
+    "verification": "poetry run pytest tests/test_r2_backup_watcher_probe.py tests/test_r2_backup_rules.py --no-cov -q -k \"raw_bytes or size\"",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-057-f2",
+    "behavior": "The rendered R2 tfvars give one bucket per backup.sources node, lock data/ snapshots/ keys/ config and never locks/ or index/, and keep R below the --keep-within days (AC2)",
+    "verification": "poetry run pytest tests/test_r2_terraform.py --no-cov -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-057-f3",
+    "behavior": "SECRET_CATALOG declares a distinct R2 key pair and restic password per node plus one read-only watcher pair, and the mint command writes them without printing them (AC1)",
+    "verification": "poetry run pytest tests/test_backup_node_credentials.py --no-cov -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-057-f4",
+    "behavior": "No two nodes render the same bucket, key pair or restic password in backup.yml, the ship script, backup_destination or the watcher targets (AC1)",
+    "verification": "poetry run pytest tests/test_node_backup_role.py tests/test_backup_destination.py tests/test_r2_watcher_targets.py --no-cov -q -k \"per_node or shared\"",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-057-f5",
+    "behavior": "The migration copies, compares snapshot count and oldest time, reinitialises the marker with its journal line, ships and re-pins, stopping at the first mismatch (AC4)",
+    "verification": "poetry run pytest tests/test_backup_migrate.py --no-cov -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-057-f6",
+    "behavior": "In prod, under the lock, every node ships and the watcher reports healthy:4; a young data/ delete and a cross-node list are refused (AC1, AC3)",
+    "verification": "make backup-node NODE=all ENV=prod && make watcher-run ENV=prod",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-057-f7",
+    "behavior": "The offsite restore runbook states the measured isolation and lock, and what the lock does not cover (AC5)",
+    "verification": "grep -q 'kubelab-backup-' docs/runbooks/offsite-backup-restore.md && grep -qi 'admin token' docs/runbooks/offsite-backup-restore.md",
     "state": "pending",
     "evidence": ""
   }
