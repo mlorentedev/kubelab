@@ -31,11 +31,11 @@ created: "2026-09-29"
 
 ### PR1: the node refuses to re-initialise
 
-- [ ] [AC4] Create `tests/test_node_backup_ship_script.py` (execution tests; `test_node_backup_role.py` stays render-only as its docstring promises). Harness:
+- [x] [AC4] Create `tests/test_node_backup_ship_script.py` (execution tests; `test_node_backup_role.py` stays render-only as its docstring promises). Harness:
   - Render `node-backup-ship.sh.j2` with every path under `tmp_path`: `node_backup_restic_install_path` pointing at a fake restic, the three credential files as dummy files, the staging dir and sentinel present, the heartbeat token file absent (which skips that block), and `node_backup_repository_id_dir` set to `tmp_path/state`.
   - Run the rendered script with `bash`.
   - The fake restic skips `--repo X --stuck-request-timeout Y` and appends each subcommand to a call log. It returns the `snapshots` exit code from a fixture file, answers `cat config --json` with `{"id":"<fixture id>"}`, and exits 0 for `init`, `backup` and `forget`.
-- [ ] [AC4] Write the five failing cases. Each asserts on the call log (whether `init` appears) and on the marker file:
+- [x] [AC4] Write the five failing cases. Each asserts on the call log (whether `init` appears) and on the marker file:
   - first run (rc 10, no marker): `init` once, script exit 0, marker holds the new ID;
   - adoption (rc 0, no marker): no `init`, exit 0, marker holds the existing ID;
   - transient error (rc 1): no `init`, non-zero exit;
@@ -43,32 +43,33 @@ created: "2026-09-29"
   - replaced repository (rc 0, marker ID differs from `cat config`): no `init`, no `backup`, non-zero exit.
 
   Run `poetry run pytest tests/test_node_backup_ship_script.py --no-cov -q`. Expected: FAIL (the current script calls `init` on rc 1 and writes no marker).
-- [ ] [AC2] [AC3] Add the role defaults `node_backup_repository_id_dir: /var/lib/node-backup` and `node_backup_r2_repository_id_file: "{{ node_backup_repository_id_dir }}/r2.repository-id"` to `infra/ansible/roles/node_backup/defaults/main.yml`, and a `state: directory` task (root, `0700`) to `tasks/main.yml`. The role creates the directory and never the file.
-- [ ] [AC2] [AC3] Rewrite `node-backup-ship.sh.j2:69-81`:
+- [x] [AC2] [AC3] Add the role defaults `node_backup_repository_id_dir: /var/lib/node-backup` and `node_backup_r2_repository_id_file: "{{ node_backup_repository_id_dir }}/r2.repository-id"` to `infra/ansible/roles/node_backup/defaults/main.yml`, and a `state: directory` task (root, `0700`) to `tasks/main.yml`. The role creates the directory and never the file.
+- [x] [AC2] [AC3] Rewrite `node-backup-ship.sh.j2:69-81`:
   - capture the `snapshots` rc inside the `if`'s `else`, not after it, because of `set -e`;
   - branch on 10, with the measured date in the comment;
   - compare `cat config` against the marker on every run;
   - write the marker only after `backup` and `forget` succeed.
 
   Re-run the new test file. Expected: 5 passed.
-- [ ] [AC2] Add a render assertion to `tests/test_node_backup_role.py`: the template branches on the literal exit code `10` and never runs `init` outside that branch. This is `features.json` f1's verification.
-- [ ] [AC7] Write a failing static test, `tests/test_backup_repo_reinit.py`. The playbook `infra/ansible/playbooks/backup-repo-reinit.yml` must:
+- [x] [AC2] Add a render assertion to `tests/test_node_backup_role.py`: the template branches on the literal exit code `10` and never runs `init` outside that branch. This is `features.json` f1's verification.
+- [x] [AC7] Write a failing static test, `tests/test_backup_repo_reinit.py`. The playbook `infra/ansible/playbooks/backup-repo-reinit.yml` must:
   - use the same `node_backup_repository_id_dir` variable as the template (the `test_credential_file_paths_are_the_same_variable_on_both_sides` pattern);
   - have no `ignore_unreachable`;
   - `assert` that `dest` is in a declared list (`[r2]`);
   - read and `debug`-log the marker before `file: state=absent`.
 
   The Makefile target must refuse an empty `NODE`, `NODE=all` and an empty `DEST`. Expected: FAIL (the files do not exist).
-- [ ] [AC7] Write `infra/ansible/playbooks/backup-repo-reinit.yml` and the `backup-repo-reinit` Makefile target, which calls `$(TOOLKIT) infra ansible run -p backup-repo-reinit -e $(_ENV) -l $(NODE) --extra-vars dest=$(DEST)` next to `backup-node`. Re-run. Expected: PASS.
-- [ ] [AC7] Runbook: add a section "Repository missing or replaced" to `docs/runbooks/offsite-backup-restore.md`. It covers the node's message, the watcher's reason strings (`repository id changed`, `repository id not declared`), the override `make backup-repo-reinit`, then the PR that updates `backup.r2.repository_ids`.
-- [ ] Knowledge:
-  - Lesson: `docs/lessons/<category>/lesson-NNN-restic-exit-codes-on-r2.md`, the measured codes the design rests on. Register it in `_index.md`, taking the next free number at write time.
+- [x] [AC7] Write `infra/ansible/playbooks/backup-repo-reinit.yml` and the `backup-repo-reinit` Makefile target, which generates the inventory and then calls `$(TOOLKIT) infra ansible run -p backup-repo-reinit -e $(ENV) -l $(NODE) --extra-vars dest=$(DEST)` next to `backup-node`. Re-run. Expected: PASS. Dry-run verified 2026-09-30 against rpi3 (rc 0), and refused for `DEST=bogus`, `NODE=vps,rpi3`, `NODE=all`, a missing `DEST` and `ENV=dev`. The seven other targets that run a playbook without generating the inventory are #1941 (TOOL-090).
+- [x] [AC7] Runbook: add a section "Repository missing or replaced" to `docs/runbooks/offsite-backup-restore.md`. It covers the node's message, the override `make backup-repo-reinit`, then the PR that updates `backup.r2.repository_ids`. The watcher's reason strings (`repository id changed`, `repository id not declared`) join the alert table in PR2, with the code that emits them.
+- [x] Knowledge:
+  - Lesson: `docs/lessons/storage-backup/lesson-485-init-if-it-does-not-open-turns-a-deleted-backup-into-a-healthy-empty-one.md`, the measured codes the design rests on, registered in `_index.md`.
   - CLAUDE.md: one sentence in the PVC-backup gotcha naming the marker and `backup-repo-reinit`.
   - ADR: `none`, because this is a control, not a placement decision. #471's ADR-049 amendment can cite it.
-- [ ] `make test` and `make lint` green. Open PR1 as a draft (`Refs #1921`, `## Knowledge` section), then mark it ready.
+- [x] `make test` and `make lint` green. Open PR1 as a draft (`Refs #1921`, `## Knowledge` section), then mark it ready.
 
 ### PR2: the watcher pins each repository's identity
 
+- [ ] [P] [AC5] Runbook: add the two watcher reasons to the alert table in `docs/runbooks/offsite-backup-restore.md`, linking "Repository missing or replaced".
 - [ ] [P] [AC5] Extend `FAKE_RESTIC` in `tests/test_r2_backup_watcher_probe.py`: handle `cat config`, with the ID coming from a `<repo>.id` fixture. The targets fixtures gain the ID column. Add two parametrized breakages: an ID mismatch (`reason: repository id changed`) and the `-` token (`reason: repository id not declared`). Both must produce node `healthy:0` and fleet `healthy:0`, and the node line must carry `repository_id`. Expected: FAIL.
 - [ ] [AC5] Change `infra/k8s/base/services/r2-backup-watcher/probe.sh`: read the third column, call `restic_read cat config --json`, compare, and print `repository_id`. Re-run. Expected: PASS, and the existing cases still pass.
 - [ ] [AC5] Write a failing test in `tests/test_r2_watcher_targets.py`: `render_watcher_targets` emits `<node> <url> <id|-> <sources>...` from `backup.r2.repository_ids`. Then change `toolkit/features/backup_destination.py` (the generator and `_WATCHER_TARGETS_HEADER`). Expected: PASS.
