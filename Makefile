@@ -1085,6 +1085,25 @@ backup-node:
 		$(TOOLKIT) infra ansible run -p backup-node -e $(_ENV) -l $(NODE) $(_CHECK); \
 	fi
 
+# Let ONE node start a new backup history (BACKUP-058). A node refuses to
+# re-initialise a repository it has shipped to, so a deleted or replaced
+# repository pages instead of healing silently. This is the deliberate way
+# past that refusal: it journals the recorded repository id on the node and
+# removes the record, and the next ship may initialise. Then declare the new id
+# in backup.r2.repository_ids in a PR. ENV is required, never defaulted.
+# Runbook: docs/runbooks/offsite-backup-restore.md.
+.PHONY: backup-repo-reinit
+backup-repo-reinit:
+	@test -n "$(NODE)" -a -n "$(DEST)" || (echo "Usage: make backup-repo-reinit NODE=<node> DEST=r2 ENV=staging|prod [CHECK=1]" && exit 1)
+	@# ENV defaults to `dev` in this Makefile, so a presence check would pass it; name the two real envs.
+	@test "$(ENV)" = staging -o "$(ENV)" = prod || (echo "backup-repo-reinit needs ENV=staging or ENV=prod, got '$(ENV)'" && exit 1)
+	@test "$(NODE)" != "all" || (echo "backup-repo-reinit takes exactly one node, never NODE=all" && exit 1)
+	$(eval _CHECK := $(if $(CHECK),--check,))
+	@# Generate first, joined with &&, as `provision` does (TOOL-036): the inventory is gitignored,
+	@# and an override must never act on a stale or missing one.
+	$(TOOLKIT) infra ansible generate --env $(ENV) >/dev/null && \
+	$(TOOLKIT) infra ansible run -p backup-repo-reinit -e $(ENV) -l $(NODE) --extra-vars dest=$(DEST) $(_CHECK)
+
 # Report, disarm, or re-arm the backup timers on a node — WITHOUT redeploying
 # the pipeline to do it. `make backup-node` runs one backup and leaves the
 # schedule alone, which is the gap that made AC9's teardown a hand `systemctl`

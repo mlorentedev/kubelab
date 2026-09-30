@@ -66,21 +66,96 @@ REPO="{{ node_backup_r2_repository }}"
 # still succeeds and a broken one reports rather than hangs.
 RESTIC="{{ node_backup_restic_install_path }} --repo $REPO --stuck-request-timeout {{ node_backup_stuck_request_timeout }}"
 
-# Idempotent bootstrap: `restic init` fails loudly on an already-initialized
-# repository, so probe first rather than treating that failure as success.
+# --- which repository, and may we create one (BACKUP-058) ------------------
+# This used to run `restic init` whenever `snapshots` failed, for ANY reason.
+# A deleted repository therefore came back as a fresh one holding one
+# snapshot, the watcher called it healthy, and every earlier restore point was
+# gone with nothing paging. `init` is now reachable from exactly one state: a
+# repository that does not exist, on a node that has never shipped to it.
 #
+# The node's memory of "I have shipped here" is MARKER, holding the restic
+# repository id (new for every `init`, fixed otherwise). The ROLE never writes
+# it; this script does, once a snapshot is written. `make backup-repo-reinit` is the
+# only sanctioned way to remove it.
+MARKER="{{ node_backup_r2_repository_id_file }}"
+DESTINATION="r2"
+REINIT="make backup-repo-reinit NODE={{ inventory_hostname }} DEST=$DESTINATION ENV=<env>"
+RECORDED=""
+[ -f "$MARKER" ] && RECORDED="$(tr -d '[:space:]' < "$MARKER")"
+
 # stderr is KEPT, and that is the fix rather than a detail. This probe is the
 # FIRST thing to touch R2, so it is where a bad credential or an unreachable
 # endpoint is discovered -- and discarding its stderr threw away the only
 # explanation the run would ever produce. stdout still goes to /dev/null (a
 # snapshot list is not evidence of anything here); stderr reaches the journal,
 # where the notifier reads it.
-if ! $RESTIC snapshots -q >/dev/null; then
-    echo "node-backup-ship: repository not readable (see the restic error above) -- attempting init" >&2
-    $RESTIC init
+#
+# The exit code is taken inside the `if`, because `set -e` would abort on a
+# bare failing command before `$?` could be read.
+if $RESTIC snapshots -q >/dev/null; then
+    SNAPSHOTS_RC=0
+else
+    SNAPSHOTS_RC=$?
+fi
+
+# 10 is restic's "repository does not exist" (restic >= 0.17). Measured against
+# R2 with this fleet's restic 0.19.1 on 2026-09-30: a missing repository
+# returns 10, a wrong password 12, and an invalid credential never returns at
+# all (#1939) -- so no credential or network failure can reach `init`.
+case "$SNAPSHOTS_RC" in
+    0) ;;
+    10)
+        if [ -n "$RECORDED" ]; then
+            echo "node-backup-ship: the $DESTINATION repository this node has shipped to ($RECORDED) no longer exists." >&2
+            echo "  Refusing to initialise a new one: that would replace the whole restore history with a single" >&2
+            echo "  snapshot, silently. Find out what deleted it first. If starting over is the decision, run:" >&2
+            echo "    $REINIT" >&2
+            echo "  then declare the new repository id in backup.r2.repository_ids (common.yaml) in a PR." >&2
+            exit 1
+        fi
+        echo "node-backup-ship: no $DESTINATION repository yet and none recorded -- first ship, initialising"
+        $RESTIC init ;;
+    *)
+        echo "node-backup-ship: $DESTINATION repository not readable (restic exit $SNAPSHOTS_RC, see its error above) -- not initialising" >&2
+        exit "$SNAPSHOTS_RC" ;;
+esac
+
+# Compared on EVERY ship, not only the first: a replaced repository answers
+# `snapshots` with 0, so this comparison is the only thing that sees it. One
+# small read per run; do not optimise it away.
+if ! CONFIG="$($RESTIC cat config --json)"; then
+    echo "node-backup-ship: 'restic cat config' failed on the $DESTINATION repository (see its error above)" >&2
+    exit 1
+fi
+REPOSITORY_ID="$(printf '%s\n' "$CONFIG" | sed -n 's/^.*"id": *"\([0-9a-f]*\)".*$/\1/p')"
+case "$REPOSITORY_ID" in
+    ''|*[!0-9a-f]*)
+        echo "node-backup-ship: could not read the $DESTINATION repository id from 'restic cat config'" >&2
+        exit 1 ;;
+esac
+if [ -n "$RECORDED" ] && [ "$RECORDED" != "$REPOSITORY_ID" ]; then
+    echo "node-backup-ship: the $DESTINATION repository was replaced: this node has shipped to $RECORDED," >&2
+    echo "  the repository there now is $REPOSITORY_ID. Refusing to write into a history that is not this" >&2
+    echo "  node's. If accepting the new repository is the decision, run:" >&2
+    echo "    $REINIT" >&2
+    echo "  then declare the new repository id in backup.r2.repository_ids (common.yaml) in a PR." >&2
+    exit 1
 fi
 
 $RESTIC backup "$STAGING" --tag "{{ inventory_hostname }}"
+
+# Recorded as soon as `backup` succeeds: from that moment the repository holds a
+# restore point, so it is a history this node must never silently replace, even
+# if `forget` or `check` below then fails the run. Never before `backup`, so a
+# repository that holds nothing is never pinned. Atomic (write, then rename) so
+# a torn write is never read back as an id, and through `mktemp` because the
+# frequent and weekly units can reach this line at the same time.
+if [ -z "$RECORDED" ]; then
+    MARKER_TMP="$(mktemp "$MARKER.XXXXXX")"
+    printf '%s\n' "$REPOSITORY_ID" > "$MARKER_TMP"
+    mv -f "$MARKER_TMP" "$MARKER"
+    echo "recorded $DESTINATION repository $REPOSITORY_ID in $MARKER"
+fi
 
 # Retention approved by the operator 2026-08-16 (tasks.md "Approved operating
 # parameters"): ~a year of restore points, baked in rather than passed at

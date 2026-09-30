@@ -82,6 +82,16 @@
     state: directory
     mode: "0700"
 
+- name: Ensure the repository-id directory exists (BACKUP-058). The directory
+    only; the ship script writes the marker inside it, so a role re-run never
+    touches which repository this node has shipped to.
+  file:
+    path: "{{ node_backup_repository_id_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
 # --- Credentials: root-only files, never a rendered literal in the scripts
 # themselves (ANSIBLE-038 pattern). Values arrive already decrypted in
 # `config.*` via the playbook's standard SOPS step — this role never reads
