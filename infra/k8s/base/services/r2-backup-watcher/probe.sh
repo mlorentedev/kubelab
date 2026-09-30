@@ -38,6 +38,7 @@ TARGETS="${WATCHER_TARGETS:-/etc/r2-backup-watcher/targets.txt}"
 STAGING="${STAGING_DIR:-/opt/node-backup/staging}"
 SENTINEL_NAME="${SENTINEL:-.capture-complete}"
 TIMEOUT="${RESTIC_TIMEOUT:-60}"
+STATS_TIMEOUT="${STATS_TIMEOUT:-600}"
 
 nodes=0
 unhealthy=0
@@ -88,6 +89,12 @@ errfile="$(mktemp)" || fail "cannot create a temp file"
 # one), never the cache (nothing to keep between Jobs), always a timeout.
 restic_read() {
     timeout "$TIMEOUT" restic -r "$repo" --no-lock --no-cache "$@" 2>"$errfile"
+}
+
+# `stats --mode raw-data` walks every tree of every snapshot, so it needs a
+# budget of its own: the Beelink's Gitea tree outran RESTIC_TIMEOUT (2026-09-30).
+restic_stats() {
+    timeout "$STATS_TIMEOUT" restic -r "$repo" --no-lock --no-cache stats --mode raw-data --json 2>"$errfile"
 }
 
 # First stderr line, stripped of what would break the JSON string.
@@ -153,13 +160,15 @@ while read -r node repo declared_id services || [ -n "$node" ]; do
     # After every health check, so a slow `stats` cannot starve them of the
     # timeout. Its failure is logged, not judged.
     if [ "$readable" -eq 1 ]; then
-        if stats="$(restic_read stats --mode raw-data --json)"; then
+        started="$(date +%s)"
+        if stats="$(restic_stats)"; then
             size="$(printf '%s\n' "$stats" | sed -n 's/^.*"total_size": *\([0-9][0-9]*\).*$/\1/p' | head -n 1)"
         fi
         if [ -z "$size" ] || [ "$size" = null ]; then
             size=null
             echo "r2-backup-watcher: $node: size unknown: $(reason_from_stderr)" >&2
         fi
+        echo "r2-backup-watcher: $node: stats took $(($(date +%s) - started))s" >&2
     fi
     if [ "$size" = null ]; then
         unsized=$((unsized + 1))

@@ -62,7 +62,7 @@ spec:
       # Floor, derived from the probe: nodes x 2 restic calls x RESTIC_TIMEOUT
       # (4 x 2 x 60 = 480s). The real run takes ~16s; the deadline is sized for
       # the worst case the probe allows, not for the typical one.
-      activeDeadlineSeconds: 600
+      activeDeadlineSeconds: 3600
       template:
         metadata:
           labels:
