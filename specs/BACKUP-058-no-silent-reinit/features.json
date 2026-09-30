@@ -1,0 +1,37 @@
+[
+  {
+    "id": "BACKUP-058-no-silent-reinit-f1",
+    "behavior": "The ship script branches on restic's measured exit code 10 and never runs init outside that branch (AC1, AC2)",
+    "verification": "poetry run pytest tests/test_node_backup_role.py --no-cov -q -k exit_code_10",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-058-no-silent-reinit-f2",
+    "behavior": "Executed against a fake restic: first run inits and writes the marker, adoption writes it without init, transient error / repository gone / replaced repository exit non-zero without init (AC2, AC3, AC4)",
+    "verification": "poetry run pytest tests/test_node_backup_ship_script.py --no-cov -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-058-no-silent-reinit-f3",
+    "behavior": "The watcher marks a node and the fleet unhealthy on a changed or undeclared repository id and prints the id it read (AC5)",
+    "verification": "poetry run pytest tests/test_r2_backup_watcher_probe.py tests/test_r2_watcher_targets.py --no-cov -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-058-no-silent-reinit-f4",
+    "behavior": "Every node in backup.sources has a declared repository id, and the committed targets.txt matches the generator (AC6)",
+    "verification": "poetry run pytest tests/test_r2_watcher_targets.py --no-cov -q -k declared",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-058-no-silent-reinit-f5",
+    "behavior": "backup-repo-reinit logs the marker before removing it, validates DEST, refuses NODE=all and does not ignore an unreachable node (AC7)",
+    "verification": "poetry run pytest tests/test_backup_repo_reinit.py --no-cov -q",
+    "state": "pending",
+    "evidence": ""
+  }
+]
