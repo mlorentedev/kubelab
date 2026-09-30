@@ -18,7 +18,7 @@ The contract, per destination marker `<dir>/r2.repository-id`:
 - any other exit code (a transient or credential error): fail, never init.
 
 Exit 10 is restic's "repository does not exist", measured against R2 with the
-fleet's restic 0.19.1 on 2026-09-30 (specs/BACKUP-058-no-silent-reinit).
+fleet's restic 0.19.1 on 2026-09-30 (specs/archive/BACKUP-058-no-silent-reinit).
 """
 
 from __future__ import annotations

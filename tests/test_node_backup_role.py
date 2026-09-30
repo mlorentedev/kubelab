@@ -913,7 +913,7 @@ def test_init_is_gated_on_restic_exit_code_10_only():
     """`restic init` sits inside the `10)` arm of the snapshots exit-code case.
 
     Exit 10 is restic's "repository does not exist", measured on R2 with the
-    fleet's restic 0.19.1 (specs/BACKUP-058-no-silent-reinit, 2026-09-30).
+    fleet's restic 0.19.1 (specs/archive/BACKUP-058-no-silent-reinit, 2026-09-30).
     Any other placement of `init` is the defect this spec fixed: a deleted
     history re-initialised silently. The behaviour itself is exercised in
     tests/test_node_backup_ship_script.py; this pins the shape it relies on.
