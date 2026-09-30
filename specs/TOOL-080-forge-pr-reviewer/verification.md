@@ -9,8 +9,8 @@ created: "2026-09-23"
 
 - [x] AC1: comment 558 by `mentor` on personal/resume PR 280, 18 s after the PR opened (Live smoke test, below); `tests/infra/test_pr_agent_review_live.py::test_the_reviewer_left_exactly_one_review`
 - [x] AC2: comment 558 edited 12 s after the push, still the only review (below); `test_pr_agent_review_live.py::test_the_review_was_updated_after_the_latest_push`
-- [x] AC3: 400 unsigned, 401 wrongly signed, live on 2026-09-30 (below); test `tests/test_pr_agent_secrets.py::test_all_three_keys_are_required_not_optional`
-- [x] AC4: SHA-256 of title and body identical before the review and after the push-triggered edit (below); test `tests/test_pr_agent_config_render.py::test_every_required_key_has_its_exact_value`
+- [x] AC3: by effect, 400 unsigned and 401 wrongly signed, live on 2026-09-30 (below). AC3's committed half is "the Secret key is required": `tests/test_pr_agent_secrets.py::test_all_three_keys_are_required_not_optional`
+- [x] AC4: by effect, the SHA-256 of title and body was identical before the review and after the push-triggered edit (below). AC4's committed half is `PR_COMMANDS` and `PUSH_COMMANDS` exactly `["/review"]` in the rendered ConfigMap: `tests/test_pr_agent_config_render.py::test_every_required_key_has_its_exact_value`
 - [x] AC5: measured scope requirement (below); test `test_gitea_token_scopes.py::test_the_reviewer_grant_is_exactly_the_measured_requirement`; `mentor owns: (none)` on prod (Live provision, below)
 - [x] AC6: tests `tests/test_pr_agent_secrets.py` (catalog entry, mapping, fail-closed apply, env scoping); `nan_api_key` still absent from prod (below, Live reconcile)
 - [x] AC7: reconcile apply output, then a second run with no changes (below, Live reconcile — the PR-Agent hook)

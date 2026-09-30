@@ -15,6 +15,11 @@ So this file asks the forge, not the cluster, about one recorded pull request:
   PR's `pull_push` timeline events, never from the head commit's date, which is
   author-controlled (the same rule tasks.md sets for the AC8 watcher).
 
+This is a record, not a monitor. It re-reads one finished pull request, so it stays
+green if the reviewer is later scaled to zero or its hook deleted. It goes red only if
+that record changes: the review is deleted, or a later push leaves it stale. A
+reviewer that stops answering NEW pull requests is AC8's watcher's job (PR 5).
+
 It reads with the reviewer's own token. The admin token has no `read:issue`, and the
 reviewer's grant (`write:issue,read:repository`) covers both reads, so widening the
 admin grant for a test would be the wrong trade.
