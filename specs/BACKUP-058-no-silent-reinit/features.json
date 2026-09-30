@@ -23,7 +23,7 @@
   {
     "id": "BACKUP-058-no-silent-reinit-f4",
     "behavior": "Every node in backup.sources has a declared repository id, and the committed targets.txt matches the generator (AC6)",
-    "verification": "poetry run pytest tests/test_r2_watcher_targets.py --no-cov -q -k declared",
+    "verification": "poetry run pytest tests/test_r2_watcher_targets.py --no-cov -q -k \"declared or committed\"",
     "state": "pending",
     "evidence": ""
   },

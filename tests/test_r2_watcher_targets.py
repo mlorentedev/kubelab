@@ -29,8 +29,8 @@ def _rows(text: str) -> dict[str, list[str]]:
     rows = {}
     for line in text.splitlines():
         if line.strip() and not line.startswith("#"):
-            node, repository, *services = line.split()
-            rows[node] = [repository, *services]
+            node, repository, repository_id, *services = line.split()
+            rows[node] = [repository, repository_id, *services]
     return rows
 
 
@@ -47,7 +47,7 @@ def test_every_declared_node_and_source_is_a_target() -> None:
     sources = COMMON["backup"]["sources"]
     assert set(rows) == set(sources)
     for node, declared in sources.items():
-        assert sorted(rows[node][1:]) == sorted(declared), node
+        assert sorted(rows[node][2:]) == sorted(declared), node
 
 
 def test_the_vps_targets_its_real_repository() -> None:
@@ -83,3 +83,28 @@ def test_the_watcher_reads_with_the_restic_that_writes() -> None:
     assert "backup.watcher.image" in IMAGE_SOURCES
     kustomization = yaml.safe_load((REPO / "infra/k8s/base/kustomization.yaml").read_text())
     assert {"name": name, "newTag": tag} in kustomization["images"]
+
+
+def test_every_node_carries_its_declared_repository_id() -> None:
+    """BACKUP-058 AC5/AC6: the id column comes from `backup.r2.repository_ids`.
+
+    A restic repository id is 64 hex characters, new for every `init` and fixed
+    otherwise, so a declared id pins one history. Every node in `backup.sources`
+    must have one: the probe treats an undeclared node as unhealthy.
+    """
+    rows = _rows(render_watcher_targets(COMMON))
+    declared = COMMON["backup"]["r2"]["repository_ids"]
+    assert set(declared) == set(COMMON["backup"]["sources"])
+    for node, row in rows.items():
+        assert row[1] == declared[node], node
+        assert len(row[1]) == 64 and all(c in "0123456789abcdef" for c in row[1]), node
+
+
+def test_an_undeclared_node_renders_the_dash_token() -> None:
+    # The probe reads a fixed column, so a missing id must still occupy it:
+    # otherwise the first source would be read as the id and the rest shift.
+    mutated = yaml.safe_load(yaml.safe_dump(COMMON))
+    del mutated["backup"]["r2"]["repository_ids"]["rpi3"]
+    rows = _rows(render_watcher_targets(mutated))
+    assert rows["rpi3"][1] == "-"
+    assert rows["rpi3"][2:] == sorted(COMMON["backup"]["sources"]["rpi3"])

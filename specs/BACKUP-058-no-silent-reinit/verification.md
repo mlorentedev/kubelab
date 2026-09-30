@@ -86,9 +86,57 @@ Dry run against prod, 2026-09-30, `CHECK=1`:
 
 An unreachable node is covered statically (no `ignore_unreachable`), not by a live run. The runbook section is in PR1. The watcher's reason strings join it in PR2.
 
-- [ ] AC5 -> pending (PR2)
-- [ ] AC6 -> pending (deploy)
-- [ ] AC7 -> partial: the override and runbook are done; the watcher reason strings arrive in PR2
+### AC5: the watcher pins the id (PR2)
+
+`tests/test_r2_backup_watcher_probe.py`, under `sh` and `busybox sh`: `repository replaced` (`cat config` reports another id) and `repository id not declared` (`-` in the targets) each make the node `healthy:0` with that `reason`, the fleet `healthy:0`, and leave the neighbour healthy. The healthy fleet prints each node's `repository_id`. The fake restic parses every argument the way `restic_read` emits them (`-r <repo> --no-lock --no-cache cat config --json`), and `test_the_probe_never_takes_a_lock` still passes with the new call.
+
+`tests/test_r2_watcher_targets.py`: every node in `backup.sources` has a 64-hex id in `backup.r2.repository_ids`, the render carries it as the third column, an undeclared node renders `-` with its sources unshifted, and the committed `targets.txt` matches the SSOT.
+
+Mutation test, 2026-09-30, from a committed clean tree:
+
+| Mutation of `probe.sh` | Red tests |
+|---|---|
+| no comparison with the declared id | 2 |
+| `-` accepted as declared | 2 |
+| identity check skipped | 6 |
+| `repository_id` not printed | 4 |
+
+Live, 2026-09-30, staging: the branch was deployed with `make deploy-k8s ENV=staging` (ADR-037 flow), then one Job was run from `cronjob/r2-backup-watcher` (the runbook's manual re-check), with the read-only token and the `r2-backup-watcher-probe-6t7m555bt7` ConfigMap:
+
+```
+{"metric":"r2_backup_node",...,"node":"beelink",...,"repository_id":"69e70ca8...133fa","healthy":1,"reason":""}
+{"metric":"r2_backup_node",...,"node":"rpi3",...,"repository_id":"5ccc440d...e6641d","healthy":1,"reason":""}
+{"metric":"r2_backup_node",...,"node":"rpi4",...,"repository_id":"a35c05eb...cf9177","healthy":1,"reason":""}
+{"metric":"r2_backup_node",...,"node":"vps",...,"repository_id":"2e9148a2...878409","healthy":1,"reason":""}
+{"metric":"r2_backup_health","namespace":"kubelab","nodes":4,"unhealthy":0,"healthy":1,"error":""}
+```
+
+Every id matches its declaration, and `cat config` works under the read-only token in the pod as it did in the AC1 Job. The Job was deleted afterwards.
+
+### AC6: prod deploy and markers (PR1 on prod, 2026-09-30)
+
+The node role from #1938 (`84d37387`), deployed from master:
+
+| Step | Result |
+|---|---|
+| `make backup ENV=prod` | rc 0 |
+| same, re-run | rc 0, `changed=0` on beelink, kubelab-vps, rpi3, rpi4 |
+| `make backup-node NODE=all ENV=prod` | `ship complete` + coverage heartbeat on all four backup nodes; rc 2 from the four nodes without the role, filed as #1943 (BACKUP-062) |
+
+All four nodes were up, so `beelink` and `rpi4` got their markers in the same run instead of at a later power-on. Each marker read through the override's dry run (`make backup-repo-reinit NODE=<n> DEST=r2 ENV=prod CHECK=1`, which slurps the file and removes nothing under `--check`):
+
+| Node | Recorded id | Declared in `backup.r2.repository_ids` |
+|---|---|---|
+| beelink | `69e70ca8...133fa` | match |
+| kubelab-vps | `2e9148a2...878409` | match |
+| rpi3 | `5ccc440d...e6641d` | match |
+| rpi4 | `a35c05eb...cf9177` | match |
+
+Pending: the prod watcher lines after #1942 merges and Argo CD syncs.
+
+- [x] AC5 -> the probe and targets tests, the mutations above, and the live run
+- [ ] AC6 -> role deployed and all four markers hold the declared id; prod watcher pending #1942
+- [x] AC7 -> the override and the runbook (PR1); the watcher reason strings in the runbook's alert table (PR2)
 
 ## Test status
 

@@ -1959,6 +1959,23 @@ backup:
     # restic is the in-cluster reader below (`backup.watcher.image`), which must
     # carry this same version (tests/test_r2_watcher_targets.py).
     restic_version: "0.19.1"  # tag is v0.19.1; release asset names drop the "v"
+    # The restic repository id each node's history lives in, per `backup.sources`
+    # key (BACKUP-058). `restic cat config` reports it; it is new for every
+    # `restic init` and never changes otherwise, so it pins one history. Not a
+    # secret. The R2 watcher compares it on every run: a repository that was
+    # deleted and re-created, or replaced by another, opens and holds snapshots
+    # like the real one, and only this id differs. A node with no entry here is
+    # reported unhealthy on purpose.
+    #
+    # Changing an entry means accepting a new history, which is a reviewed
+    # decision: `make backup-repo-reinit NODE=<node> DEST=r2 ENV=<env>`, one ship,
+    # then this line in a PR (runbook: offsite-backup-restore.md, "Repository
+    # missing or replaced"). Values read 2026-09-30 (specs/BACKUP-058-*).
+    repository_ids:
+      beelink: 69e70ca8307994ac6076171f9dd7ce7b6681de24ad7c941b5be76b29a51133fa
+      rpi3: 5ccc440d50e7b601cad0d292d366a32347a63998eca91fb78d910c4081e6641d
+      rpi4: a35c05eb848b35e6e8073d6d9df4feb16c8617caa46edb6ade46fe2c34cf9177
+      vps: 2e9148a2db7f0881caba395c2d8f1308d9ef71f48cc8c1acfb950d40c9878409
   # The in-cluster R2 watcher (BACKUP-055): reads every node's repository with a
   # read-only token and reports readable / non-empty / complete / whole-capture.
   # Its tag must equal `r2.restic_version` so the reader is never newer than the
