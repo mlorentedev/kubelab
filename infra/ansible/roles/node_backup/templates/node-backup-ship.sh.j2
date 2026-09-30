@@ -113,6 +113,7 @@ fi
 # The exit code is taken inside the `if`, because `set -e` would abort on a
 # bare failing command before `$?` could be read.
 PROBE_ERR="$(mktemp)"
+trap 'rm -f "$PROBE_ERR"' EXIT
 if timeout -k 10 {{ node_backup_probe_timeout }} $RESTIC snapshots -q >/dev/null 2>"$PROBE_ERR"; then
     SNAPSHOTS_RC=0
 else
