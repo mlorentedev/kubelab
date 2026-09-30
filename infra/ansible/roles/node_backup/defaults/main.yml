@@ -228,6 +228,16 @@ node_backup_retention_flags: "--keep-daily 7 --keep-weekly 4 --keep-monthly 6"
 # true for the weekly one (tasks/main.yml overrides it per-render).
 node_backup_check: false
 
+# Pack data read back by the weekly check (BACKUP-063). A bare `restic check`
+# verifies structure and never downloads a pack, so a corrupted pack in R2 would
+# surface only in the restore that needs it. The weekly unit reads group n of t
+# (`check --read-data-subset n/t`), so every pack is read at least once every t
+# weeks. n counts weeks since the Unix epoch, not the ISO week: ISO weeks wrap
+# 52/53 -> 1, which would skip or repeat a group once a year. t is the smallest
+# value that fits the unit's timeout and the RPi3's MemoryMax on every node,
+# measured with `make backup-node INTEGRITY=1` (specs/BACKUP-063 verification.md).
+node_backup_check_read_data_groups: 4
+
 # RPi3 memory ceiling (Part 0 / R-B: measured floor 16-24M against restic's
 # baseline footprint, before any real repository existed -- read as >5x
 # headroom at the time). MemorySwapMax=0 is deliberate, not decoration -- the
