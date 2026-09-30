@@ -27,6 +27,8 @@ from pathlib import Path
 import yaml
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
+from toolkit.features.generator_ansible import AnsibleGenerator
+
 REPO = Path(__file__).resolve().parent.parent
 ROLE = REPO / "infra/ansible/roles/node_backup"
 TEMPLATES = ROLE / "templates"
@@ -379,18 +381,18 @@ def test_always_on_nodes_do_not_ignore_unreachable():
     """VPS and RPi3 are always-on (ADR-028). An unreachable one is a real
     fault, and a run that reports success having installed nothing on them is
     this pipeline's own failure mode arriving via the deploy path."""
-    always_on = [p for p in _plays() if "kubelab-vps" in p["hosts"]]
-    assert len(always_on) == 1
-    assert always_on[0].get("ignore_unreachable") is not True
-    assert "rpi3" in always_on[0]["hosts"]
+    plays = [p for p in _plays() if _resolve(p["hosts"]) & _backup_hosts_by_location("always-on")]
+    assert len(plays) == 1
+    assert plays[0].get("ignore_unreachable") is not True
+    assert _resolve(plays[0]["hosts"]) == _backup_hosts_by_location("always-on")
 
 
 def test_on_demand_nodes_ignore_unreachable():
     """Beelink and RPi4 are powered off routinely; dark is the expected state."""
-    on_demand = [p for p in _plays() if "beelink" in p["hosts"]]
-    assert len(on_demand) == 1
-    assert on_demand[0]["ignore_unreachable"] is True
-    assert "rpi4" in on_demand[0]["hosts"]
+    plays = [p for p in _plays() if _resolve(p["hosts"]) & _backup_hosts_by_location("on-demand")]
+    assert len(plays) == 1
+    assert plays[0]["ignore_unreachable"] is True
+    assert _resolve(plays[0]["hosts"]) == _backup_hosts_by_location("on-demand")
 
 
 # --- the trigger model (Part 4) ----------------------------------------------
@@ -497,68 +499,70 @@ def test_both_plays_share_one_role_invocation():
     assert plays[0]["pre_tasks"] == plays[1]["pre_tasks"]
 
 
-def _inventory_hostnames() -> set[str]:
-    """The names the generated inventory will actually carry.
+def _common() -> dict:
+    return yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
 
-    Mirrors `generator_ansible.py`: each node's inventory name is
-    `networking.nodes.<key>.hostname`, defaulting to the key, and the VPS
-    defaults to `kubelab-vps`. It is a MIRROR, so the test below also asserts
-    the generator still derives names that way — a silent change there would
-    otherwise leave this passing against a rule nobody follows any more.
+
+def _generated_inventory() -> dict:
+    """The inventory the playbooks run against, built by the generator itself.
+
+    Not a mirror of its naming rule: lesson-356's first coverage test compared
+    the patterns to a transformation of themselves and could only pass. Since
+    BACKUP-062 the plays target derived groups, so the only faithful answer to
+    "which hosts does this play reach" is the generator's own output.
     """
-    common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
-    net = common["networking"]
-    names = {key: node.get("hostname", key) for key, node in net.get("nodes", {}).items()}
-    if "vps" in net:
-        names["vps"] = net["vps"].get("hostname", "kubelab-vps")
-    return set(names.values())
+    common = _common()
+    return AnsibleGenerator()._build_inventory(common["networking"], backup_sources=common["backup"]["sources"])
 
 
-def test_the_mirror_of_the_generator_is_still_accurate():
-    source = (REPO / "toolkit/features/generator_ansible.py").read_text()
-    assert 'node.get("hostname", _node_key)' in source
-    assert 'vps.get("hostname", "kubelab-vps")' in source
+def _resolve(pattern: str) -> set[str]:
+    """Ansible's host-pattern semantics for the forms used here: `a:b` / `a,b`
+    union, `a:&b` intersection, `a:!b` exclusion, each term a group or host."""
+    children = _generated_inventory()["all"]["children"]
+    every = {h for group in children.values() for h in group["hosts"]}
+
+    def term(name: str) -> set[str]:
+        if name == "all":
+            return every
+        if name in children:
+            return set(children[name]["hosts"])
+        return {name} & every
+
+    hosts: set[str] = set()
+    for raw in (t for t in re.split(r"[:,]", pattern) if t):
+        if raw.startswith("&"):
+            hosts &= term(raw[1:])
+        elif raw.startswith("!"):
+            hosts -= term(raw[1:])
+        else:
+            hosts |= term(raw)
+    return hosts
 
 
-def test_every_play_targets_hosts_that_exist_in_the_inventory():
-    """The defect this replaces a test for, rather than the test it replaces.
+def _backup_hosts_by_location(location: str) -> set[str]:
+    """Backup-source hostnames of one ADR-028 class, read from common.yaml."""
+    net = _common()["networking"]
+    out = set()
+    for key in _common()["backup"]["sources"]:
+        node = net["vps"] if key == "vps" else net["nodes"][key]
+        if node["location"] == location:
+            out.add(node.get("hostname", key))
+    return out
 
-    The previous version stripped `kubelab-` from the play patterns and
-    compared the result to `backup.sources`. That compares the file to its own
-    derivation and can only pass: `kubelab-beelink` stripped to `beelink`,
-    which is declared, so it went green while `beelink` was the name the
-    inventory actually used and the pattern matched NOTHING. Three of four
-    nodes were silently skipped and the run reported success.
 
-    So this asserts against the inventory's namespace instead — the artifact
-    Ansible resolves against — not against a transformation of the patterns.
-    """
-    inventory = _inventory_hostnames()
+def test_every_play_reaches_at_least_one_host():
+    """A pattern that matches nothing is a WARNING and exit 0 (lesson-356), so
+    an empty resolution is the failure this pipeline must never report green."""
     for play in _plays():
-        for pattern in play["hosts"].split(","):
-            assert pattern in inventory, (
-                f"play {play['name']!r} targets {pattern!r}, which is not an "
-                f"inventory hostname. Known: {sorted(inventory)}"
-            )
+        assert _resolve(play["hosts"]), f"play {play['name']!r} ({play['hosts']!r}) matches no host"
 
 
-def test_every_node_with_declared_sources_is_covered_by_a_play():
-    """The split must not drop a node that has state to back up.
-
-    Now goes the other way round from the patterns: `backup.sources` keys are
-    short node names, and the play patterns are inventory hostnames, so this
-    maps sources -> hostname through the generator's own rule rather than
-    guessing a string transformation.
-    """
-    common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
-    net = common["networking"]
-    declared = set(common.get("backup", {}).get("sources", {}))
-    targeted = {p for play in _plays() for p in play["hosts"].split(",")}
-    for short in declared:
-        node = net.get("nodes", {}).get(short) or (net.get("vps") if short == "vps" else None)
-        assert node is not None, f"backup.sources declares {short!r}, absent from networking.*"
-        hostname = node.get("hostname", "kubelab-vps" if short == "vps" else short)
-        assert hostname in targeted, f"{short!r} declares backup sources but no play targets {hostname!r}"
+def test_the_plays_together_reach_exactly_the_nodes_with_declared_sources():
+    """No backup node dropped, and no other node reached (the #1943 defect:
+    `hosts: all` ran the ship unit on ace1, ace2, gcp1 and jetson)."""
+    reached = set().union(*(_resolve(p["hosts"]) for p in _plays()))
+    assert reached == _backup_hosts_by_location("always-on") | _backup_hosts_by_location("on-demand")
+    assert reached, "backup.sources declares no node"
 
 
 # --- the install step's own prerequisites -----------------------------------

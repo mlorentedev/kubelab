@@ -29,7 +29,9 @@
 # =============================================================================
 
 - name: Allow one node to initialise a new backup repository
-  hosts: all
+  # node_backup is generated from the keys of backup.sources (BACKUP-062): the
+  # SSOT for which nodes run the backup, so this play never names one.
+  hosts: node_backup
   become: true
   gather_facts: false
   # Stated, not inherited: the default is false, but the guarantee is that an

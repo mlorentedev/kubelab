@@ -74,4 +74,17 @@ transformation of the value under test. A test that derives the expected value
 from the actual value passes by construction, and reports coverage it does not
 have.
 
-**Tags**: `#ansible` `#backup` `#silent-failure` `#pr-1179` `#pr-1186`
+**Addendum (2026-09-30, BACKUP-062, #1943)**: correcting the literal patterns
+fixed the names, not the restatement. `backup.yml` still listed the backup nodes
+by hand, and `backup-node.yml` / `backup-schedule.yml` targeted `hosts: all`, so
+`make backup-node NODE=all ENV=prod` exited 2 on every run: it reached the four
+nodes without the role. The inventory generator now derives `node_backup` from
+the keys of `backup.sources` and `always_on` / `on_demand` from each host's
+`location`, and every backup play targets those groups. Deriving the group moves
+the empty-match risk rather than removing it: a stale `hosts.yml` generated
+before the group existed matches nothing and exits 0. So the backup make targets
+regenerate the inventory before they run, generation fails on a misdeclared
+source instead of thinning the group, and the coverage tests resolve each play
+against the generator's own output rather than a mirror of its naming rule.
+
+**Tags**: `#ansible` `#backup` `#silent-failure` `#pr-1179` `#pr-1186` `#issue-1943`

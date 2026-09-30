@@ -1076,14 +1076,13 @@ deploy:
 # path, so it also posts the AC9 coverage heartbeat.
 .PHONY: backup-node
 backup-node:
-	@test -n "$(NODE)" || (echo "Usage: make backup-node NODE=vps|rpi3|beelink|rpi4|all [ENV=prod] [CHECK=1]" && exit 1)
+	@test -n "$(NODE)" || (echo "Usage: make backup-node NODE=<a backup.sources node>|all [ENV=prod] [CHECK=1]" && exit 1)
 	$(eval _ENV := $(or $(filter staging prod,$(ENV)),prod))
 	$(eval _CHECK := $(if $(CHECK),--check,))
-	@if [ "$(NODE)" = "all" ]; then \
-		$(TOOLKIT) infra ansible run -p backup-node -e $(_ENV) $(_CHECK); \
-	else \
-		$(TOOLKIT) infra ansible run -p backup-node -e $(_ENV) -l $(NODE) $(_CHECK); \
-	fi
+	@# Generate first (TOOL-036): the playbook targets the generated node_backup group, and
+	@# a stale inventory without it matches no host and exits 0 (BACKUP-062).
+	$(TOOLKIT) infra ansible generate --env $(_ENV) >/dev/null && \
+	$(TOOLKIT) infra ansible run -p backup-node -e $(_ENV) -l $(NODE) $(_CHECK)
 
 # Let ONE node start a new backup history (BACKUP-058). A node refuses to
 # re-initialise a repository it has shipped to, so a deleted or replaced
@@ -1114,15 +1113,12 @@ backup-repo-reinit:
 # look at the schedule must not change it.
 .PHONY: backup-schedule
 backup-schedule:
-	@test -n "$(NODE)" || (echo "Usage: make backup-schedule NODE=vps|rpi3|beelink|rpi4|all [ENV=prod] [STATE=started|stopped] [CHECK=1]" && exit 1)
+	@test -n "$(NODE)" || (echo "Usage: make backup-schedule NODE=<a backup.sources node>|all [ENV=prod] [STATE=started|stopped] [CHECK=1]" && exit 1)
 	$(eval _ENV := $(or $(filter staging prod,$(ENV)),prod))
 	$(eval _CHECK := $(if $(CHECK),--check,))
 	$(eval _STATE := $(if $(STATE),--extra-vars state=$(STATE),))
-	@if [ "$(NODE)" = "all" ]; then \
-		$(TOOLKIT) infra ansible run -p backup-schedule -e $(_ENV) $(_STATE) $(_CHECK); \
-	else \
-		$(TOOLKIT) infra ansible run -p backup-schedule -e $(_ENV) -l $(NODE) $(_STATE) $(_CHECK); \
-	fi
+	$(TOOLKIT) infra ansible generate --env $(_ENV) >/dev/null && \
+	$(TOOLKIT) infra ansible run -p backup-schedule -e $(_ENV) -l $(NODE) $(_STATE) $(_CHECK)
 
 # CHECK=1 is a dry run. It is accepted HERE, and on every other target that
 # changes a node, because `make provision` accepted it and these did not:
@@ -1132,7 +1128,9 @@ backup-schedule:
 .PHONY: backup
 backup:
 	$(eval _CHECK := $(if $(CHECK),--check,))
-	@$(TOOLKIT) infra ansible run -p backup -e $(or $(filter staging prod,$(ENV)),prod) $(_CHECK)
+	$(eval _ENV := $(or $(filter staging prod,$(ENV)),prod))
+	@$(TOOLKIT) infra ansible generate --env $(_ENV) >/dev/null && \
+	$(TOOLKIT) infra ansible run -p backup -e $(_ENV) $(_CHECK)
 
 # Bitácora board — the Stream field is derived from harness/board-streams.yaml (GOV-002)
 # Usage: make board-streams          (dry-run)
