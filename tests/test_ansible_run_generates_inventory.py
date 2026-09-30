@@ -16,6 +16,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+import yaml
 import typer
 
 from toolkit.cli import infra
@@ -149,19 +150,59 @@ def _recipes() -> dict[str, str]:
     return recipes
 
 
+_BRANCH = re.compile(r"(?:else|then|elif|fi)\b")
+
+
+def _generates_for_a_run(recipe: str) -> bool:
+    """True when a generate is the inventory step of a following run: the old form.
+
+    Per command, not per recipe: a recipe is split into shell commands, and a
+    generate followed by a run with no branch keyword between them is the old
+    convention. `provision`'s restore generate is followed by `else`, so the
+    run after it belongs to the other branch.
+    """
+    joined = recipe.replace("\\\n", " ")
+    pending = False
+    for command in re.split(r";|&&|\|\||\n", joined):
+        command = command.strip().lstrip("@").strip()
+        if _BRANCH.match(command):
+            pending = False
+            command = _BRANCH.sub("", command, count=1).strip()
+        if "infra ansible generate" in command:
+            pending = True
+        elif "infra ansible run" in command:
+            if pending:
+                return True
+            pending = False
+    return False
+
+
 def test_no_make_recipe_generates_the_inventory_for_a_run() -> None:
     """The convention this replaces must not come back one target at a time.
 
-    A generate BEFORE a recipe's run is the old form. One after it is allowed:
+    A generate BEFORE a run is the old form. One after it is allowed:
     `provision` restores the mesh inventory on disk after a bootstrap run.
     """
-    offenders = []
-    for target, recipe in _recipes().items():
-        run = recipe.find("infra ansible run")
-        generate = recipe.find("infra ansible generate")
-        if run != -1 and generate != -1 and generate < run:
-            offenders.append(target)
+    offenders = [target for target, recipe in _recipes().items() if _generates_for_a_run(recipe)]
     assert not offenders, f"recipes still generate the inventory for their run: {offenders}"
+
+
+def test_the_guard_sees_the_old_form_inside_a_recipe_that_restores() -> None:
+    """Review of #1951: a per-recipe first-occurrence check exempted `provision` whole.
+
+    Its bootstrap run comes before its restore generate, so re-adding the old
+    `generate && run` to its else branch passed. Checked against the real
+    recipe with exactly that edit.
+    """
+    provision = _recipes()["provision"]
+    assert not _generates_for_a_run(provision)
+    regressed = provision.replace(
+        "\telse \\\n",
+        "\telse \\\n\t\t$(TOOLKIT) infra ansible generate --env $(_ENV) >/dev/null && \\\n",
+        1,
+    )
+    assert regressed != provision, "the provision recipe changed shape; update this mutation"
+    assert _generates_for_a_run(regressed)
 
 
 def test_the_recipe_parser_sees_every_run() -> None:
@@ -175,3 +216,37 @@ def test_the_recipe_parser_sees_every_run() -> None:
     parsed = sum(recipe.count("infra ansible run") for recipe in _recipes().values())
     assert in_file > 0, "no recipe runs a playbook: the Makefile moved or the pattern is stale"
     assert parsed == in_file, f"the parser saw {parsed} of the {in_file} recipe lines that run a playbook"
+
+
+# What the inventory generator reads from the merged config. Plaintext is enough
+# only while no SOPS file declares a key under these (review of #1951): a node
+# override or a backup source added to an `*.enc.yaml` would be invisible to the
+# generator, and `make backup-node NODE=all` would target a thinner group and
+# exit 0 (lesson-356).
+_GENERATOR_READS = ("networking", "backup.sources")
+
+
+def test_the_generator_reads_only_the_subtrees_listed_here() -> None:
+    source = (_ROOT / "toolkit" / "features" / "generator_ansible.py").read_text()
+    top_level = set(re.findall(r"\bconfig\.get\(\"([a-z_]+)\"", source))
+    assert top_level == {path.split(".")[0] for path in _GENERATOR_READS}, (
+        f"the generator reads {sorted(top_level)} from the config; list each subtree in "
+        "_GENERATOR_READS so the SOPS check below covers it"
+    )
+
+
+@pytest.mark.parametrize("path", sorted((_ROOT / "infra" / "config" / "secrets").glob("*.enc.yaml")), ids=lambda p: p.name)
+def test_no_sops_file_declares_what_the_inventory_is_built_from(path: Path) -> None:
+    """Key names are plaintext in a SOPS file, so this needs no decryption key."""
+    doc = yaml.safe_load(path.read_text()) or {}
+    declared = []
+    for dotted in _GENERATOR_READS:
+        node = doc
+        for part in dotted.split("."):
+            node = node.get(part) if isinstance(node, dict) else None
+        if node is not None:
+            declared.append(dotted)
+    assert not declared, (
+        f"{path.name} declares {declared}. The inventory is generated from plaintext values "
+        "only, so these keys would never reach it. Keep them in common.yaml / <env>.yaml."
+    )
