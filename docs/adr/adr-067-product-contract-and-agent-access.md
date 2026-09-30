@@ -196,7 +196,8 @@ Two ADRs are left unamended, and the reason is recorded here so the silence is n
 1. **Contract and receiver:** the schema, the registry, the generic receiver and #1815. Migrate `web` first, then onboard garsync.
 2. **Tenancy:** namespace, Application and AppProject per product, generated spoke write roles, NetworkPolicy (#378), a SOPS recipient per product (#889), then the migration of `api` and `web`.
 3. **Private path:** the consumable toolkit (D8) and the tenant repository on Gitea with its runner, receiver and Argo source.
-4. **Agent access and MCP:** verify the pod-to-tailnet reach, bump Authelia, register the agent clients, add the tailnet-only route without ForwardAuth, have the server validate its own JWTs, build the read tools with per-product scoping, and redact JWTs.
+4. **Agent access and MCP:** verify the pod-to-tailnet reach, bump Authelia, register the agent clients, add the tailnet-only route without ForwardAuth, have the server validate its own JWTs, build the read tools with per-product scoping, redact JWTs, and audit every call in Loki (#1934).
+5. **Supply chain:** sign every platform image, attach an SBOM, and verify the signature before promotion (#1935). A product admitted by its contract then runs only images the platform can attribute to a build.
 
 ## References
 
