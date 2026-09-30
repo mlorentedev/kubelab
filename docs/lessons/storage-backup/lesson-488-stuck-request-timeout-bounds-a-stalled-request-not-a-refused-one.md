@@ -22,7 +22,7 @@ AWS_ACCESS_KEY_ID=invalid              -> R2: HTTP 400 <Code>InvalidArgument</Co
   Stat: Credential access key has length 7, should be 32   (same retry loop)
 ```
 
-The cause is in restic v0.19.1's source. `internal/backend/s3/s3.go` `IsPermanentError` treats only a missing object, `InvalidRange` and `AccessDenied` as permanent. AWS answers a bad key with 403 `InvalidAccessKeyId`/`AccessDenied`, but R2 answers `Unauthorized` or `InvalidArgument`, so restic retries it. `internal/global/global.go` gives the retry backend `15*time.Minute`, which is longer than the unit lives. `--stuck-request-timeout` never applies: it restarts a request that makes no progress, and these requests fail at once.
+The cause is in restic v0.19.1's source. `internal/backend/s3/s3.go` `IsPermanentError` treats only a missing object, `InvalidRange` and `AccessDenied` as permanent. None of the codes a bad key produces is on that list: AWS answers 403 `InvalidAccessKeyId` (`AccessDenied` is its answer to a valid key without the permission), and R2 answers `Unauthorized` or `InvalidArgument`. restic retries all three. `internal/global/global.go` gives the retry backend `15*time.Minute`, which is longer than the unit lives. `--stuck-request-timeout` never applies: it restarts a request that makes no progress, and these requests fail at once.
 
 The run therefore does not end silently; each retry line names R2's reason. It ends as systemd's `Result=timeout`, and no line in the journal says the credential is the problem.
 
