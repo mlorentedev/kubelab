@@ -37,14 +37,14 @@
   {
     "id": "BACKUP-057-f6",
     "behavior": "In prod, under the lock, every node ships and the watcher reports healthy:4; a young data/ delete and a cross-node list are refused (AC1, AC3)",
-    "verification": "make backup-node NODE=all ENV=prod && make watcher-run ENV=prod",
+    "verification": "make backup-isolation-probe ENV=prod && make backup-node NODE=all ENV=prod && make watcher-run ENV=prod",
     "state": "pending",
     "evidence": ""
   },
   {
     "id": "BACKUP-057-f7",
     "behavior": "The offsite restore runbook states the measured isolation and lock, and what the lock does not cover (AC5)",
-    "verification": "grep -q 'kubelab-backup-' docs/runbooks/offsite-backup-restore.md && grep -qi 'admin token' docs/runbooks/offsite-backup-restore.md",
+    "verification": "poetry run pytest tests/test_offsite_runbook_claims.py --no-cov -q",
     "state": "pending",
     "evidence": ""
   }

@@ -22,7 +22,7 @@ The size decides whether R = 30 fits the free tier. It is measured by the watche
 - [ ] [P] [AC2] Failing test `test_a_node_line_reports_its_raw_size` in `tests/test_r2_backup_watcher_probe.py`: the `r2_backup_node` line carries `"raw_bytes":<int>` from `restic stats --mode raw-data --no-lock --json`, and the fleet line carries its sum. The fake restic returns a fixed `total_size`. Expected: FAIL, the field is missing.
 - [ ] [AC2] `infra/k8s/base/services/r2-backup-watcher/probe.sh`: run `stats` after `snapshots`, under the same `RESTIC_TIMEOUT`, and emit both fields. A `stats` failure is logged and marks the size unknown (`null`); it never marks a healthy node unhealthy. Expected: PASS.
 - [ ] [AC2] Failing test, `tests/test_r2_backup_rules.py`: a Grafana rule `r2-backup-size` fires when the fleet sum exceeds `backup.r2.free_tier_bytes × 0.8`. The threshold is read from `common.yaml`, never hardcoded. Then add the rule to `grafana-alerting/r2-backup-rules.yaml` and the key to `common.yaml`.
-- [ ] Deploy to staging, then `make watcher-run ENV=prod`. Record the four sizes and the projection for `--keep-within 31d` in `verification.md`. **Gate:** if the projection exceeds the free tier, stop and return R to the operator.
+- [ ] Deploy to staging, then `make watcher-run ENV=prod`. Record the four sizes and the projection for `--keep-within 31d` in `verification.md`. **Gate:** it passes only with four numeric sizes and a projection that fits the free tier. A `null` size (a `stats` failure, which the probe tolerates) stops the gate exactly as an overflow does, and R goes back to the operator.
 
 ## PR 2 — the R2 Terraform root, applied to a scratch bucket only
 
@@ -87,11 +87,8 @@ The size decides whether R = 30 fits the free tier. It is measured by the watche
 
   Tests mock restic and assert the order and the stop on mismatch.
 - [ ] [AC4] Migrate all four nodes in **one sitting**: until a node's copy finishes, `kubelab-backups` holds its only copy, unlocked. Record per-node counts and times in `verification.md`.
-- [ ] [AC1] [AC3] Measured in prod:
-  - with node A's credential, list and delete in node B's bucket are refused;
-  - `make backup-node NODE=all ENV=prod` rc 0;
-  - `make watcher-run ENV=prod` reports `healthy:4`;
-  - one direct delete of a young `data/` object in one prod bucket is refused.
+- [ ] [AC1] [AC3] `toolkit backup isolation-probe --env prod` / `make backup-isolation-probe ENV=prod`. For every ordered pair of nodes, node A's credential must be refused on list and delete in node B's bucket. A direct delete of the youngest `data/` object in each bucket, with that node's own credential, must be refused. It exits non-zero if any request is **accepted**. Unit tests mock the S3 client and assert that an accepted request fails the probe. This is what makes the check able to fail: today's shared bucket passes every other check.
+- [ ] [AC1] [AC3] Measured in prod: `make backup-isolation-probe ENV=prod` rc 0, `make backup-node NODE=all ENV=prod` rc 0, and `make watcher-run ENV=prod` reports `healthy:4`.
 
 ## PR 5 — close out
 
@@ -101,6 +98,13 @@ The size decides whether R = 30 fits the free tier. It is measured by the watche
   - what it does not cover: the admin token (where it is held; no node has it) and data older than R.
 
   They also give the recovery procedure for a node whose index was deleted (`restic repair index`).
+- [ ] [AC5] `tests/test_offsite_runbook_claims.py`:
+  - the runbook names every node bucket derived from `backup.sources`;
+  - it names the four locked prefixes and R read from `common.yaml`;
+  - it names both uncovered cases, the admin token and data older than R;
+  - it no longer claims a single shared bucket.
+
+  The test fails on today's runbook.
 - [ ] After AC4 has been verified on all four nodes **and** one weekly `check` has passed on every new bucket: delete `kubelab-backups` and its token, and remove `backup.r2.bucket` / `backup.r2.access_key_id` from `common.yaml` and SOPS. This is its own PR if the weekly check lands after PR 5.
 
 ## Closing
