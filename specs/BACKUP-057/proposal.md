@@ -23,7 +23,8 @@ The operator's decision on #1920 (2026-09-30) fixes the shape: one bucket per no
 1. **Isolation: one bucket and one credential per node.**
    - Each node in `backup.sources` gets its own bucket, named `kubelab-backup-<node>` with the repository at the bucket root (operator, 2026-09-30), so `backup.r2.bucket` becomes derived per node rather than declared once.
    - Each node gets its own Object Read & Write token, scoped to its own bucket only. Long-lived R2 tokens scope to a bucket and never to a prefix, which is why isolation needs a bucket each.
-   - Each node gets its own restic password, so a leaked password opens one repository.
+   - Each node gets its own restic password, so a password leaked **from a node** opens one repository.
+   - This isolates the nodes from each other, not the credential store. The minted pairs and passwords live in SOPS (`prod.enc.yaml`), and `.sops.yaml` makes the CI age key a recipient of every `*.enc.yaml`. Whoever holds that key reads all four histories in one decrypt. They still delete none of the locked data, because the lock does not depend on who holds a token. The read half closes with #1852 (SEC-022, remove the CI recipient; no workflow reads it), not here. Until then the runbook names it (AC5).
    - The node keeps running `forget --prune`. A restic writer must hold DeleteObject anyway, since `backup` removes its own lock file under `locks/`, so a separate prune credential held only by the operator would protect nothing. **This amends #1920 AC1**: the protection against a compromised node is the lock in item 2, not a delete-less credential.
 2. **Immutability: a lock rule per bucket that no node token can change.**
    - A `cloudflare_r2_bucket_lock` per bucket, with `Age` rules of retention **R** on `data/`, `snapshots/`, `keys/` and `config`.
@@ -80,7 +81,7 @@ Q1 to Q3 were answered by the operator on 2026-09-30 (#1920, comment "Operator a
 - [ ] **AC2**: Every node bucket has a lock rule declared in `infra/terraform/r2/`, on `data/`, `snapshots/`, `keys/` and `config`, never on `locks/` or `index/`. `make tf-r2-plan` shows no diff after apply. A test fails if a rule covers `locks/` or `index/`, or if R ≥ the `--keep-within` value in the retention flags.
 - [ ] **AC3**: Under the lock, the scheduled ship and the weekly `check` succeed on every node: `make backup-node NODE=all ENV=prod` returns rc 0, and the watcher reports `healthy:4`. A direct delete of a young `data/` object with a node's credential is refused, which is measured on the scratch bucket and then on one prod bucket.
 - [ ] **AC4**: Every node's history before the migration survives it. Snapshot count and oldest snapshot time in the new bucket are ≥ those in `kubelab-backups/<node>` at copy time. The watcher's `repository_ids` are re-pinned, and no refusal from BACKUP-058 was overridden without its journal line.
-- [ ] **AC5**: `offsite-backup-restore.md` states the isolation and immutability that were measured, and what the lock does not cover (an admin token, and data older than R).
+- [ ] **AC5**: `offsite-backup-restore.md` states the isolation and immutability that were measured, and what they do not cover: an admin token, data older than R, and, until #1852 lands, any holder of a SOPS recipient key, who can read every node's history.
 
 ## References
 

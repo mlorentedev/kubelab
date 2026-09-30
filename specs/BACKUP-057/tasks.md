@@ -19,10 +19,15 @@ created: "2026-09-30"
 
 The size decides whether R = 30 fits the free tier. It is measured by the watcher rather than by a one-off command, so the number keeps being checked after the lock multiplies retained data.
 
-- [ ] [P] [AC2] Failing test `test_a_node_line_reports_its_raw_size` in `tests/test_r2_backup_watcher_probe.py`: the `r2_backup_node` line carries `"raw_bytes":<int>` from `restic stats --mode raw-data --no-lock --json`, and the fleet line carries its sum. The fake restic returns a fixed `total_size`. Expected: FAIL, the field is missing.
-- [ ] [AC2] `infra/k8s/base/services/r2-backup-watcher/probe.sh`: run `stats` after `snapshots`, under the same `RESTIC_TIMEOUT`, and emit both fields. A `stats` failure is logged and marks the size unknown (`null`); it never marks a healthy node unhealthy. Expected: PASS.
-- [ ] [AC2] Failing test, `tests/test_r2_backup_rules.py`: a Grafana rule `r2-backup-size` fires when the fleet sum exceeds `backup.r2.free_tier_bytes × 0.8`. The threshold is read from `common.yaml`, never hardcoded. Then add the rule to `grafana-alerting/r2-backup-rules.yaml` and the key to `common.yaml`.
-- [ ] Deploy to staging, then `make watcher-run ENV=prod`. Record the four sizes and the projection for `--keep-within 31d` in `verification.md`. **Gate:** it passes only with four numeric sizes and a projection that fits the free tier. A `null` size (a `stats` failure, which the probe tolerates) stops the gate exactly as an overflow does, and R goes back to the operator.
+- [ ] [P] [AC2] Failing tests in `tests/test_r2_backup_watcher_probe.py`:
+  - each `r2_backup_node` line carries `"raw_bytes":<int>` from `restic stats --mode raw-data --no-lock --json`, and the fleet line carries their sum;
+  - a node whose `stats` fails, or that is unreadable, reports `null`, and so does the fleet sum. A partial sum would read as a smaller fleet, which is the one error the size rule must not make;
+  - a probe stopped mid-run reports no fleet size.
+
+  The fake restic refuses any `stats` mode other than `raw-data`, so the flag is pinned. The field name and JSON shape of the real image are proven by the staging run below, not by the fake. Expected: FAIL, the field is missing.
+- [ ] [AC2] `infra/k8s/base/services/r2-backup-watcher/probe.sh`: run `stats` after every health check, under its own `STATS_TIMEOUT`, because `raw-data` walks every tree and the Beelink's outran the 60 s `RESTIC_TIMEOUT` in staging (2026-09-30). Size the timeout, and `activeDeadlineSeconds`, from that measurement. A `stats` failure is logged and marks the size `null`; it never marks a healthy node unhealthy. Expected: PASS.
+- [ ] [AC2] Failing test, `tests/test_r2_backup_alerting_rules.py`: a Grafana rule `r2-backup-size` fires when the fleet sum exceeds `backup.r2.free_tier_bytes × 0.8`, and pages on no data, which a day of `null` sums is. The threshold is compared with `common.yaml`, never trusted from the rule file. Then add the rule to `grafana-alerting/r2-backup-rules.yaml` and the key to `common.yaml`.
+- [ ] Deploy to staging, then `make watcher-run ENV=prod`. Record the four sizes and the projection for `--keep-within 31d` in `verification.md`. **Gate:** it passes only with four numeric sizes and a projection that fits the free tier **with both copies stored**. From the first migration in PR 4 until `kubelab-backups` is deleted (at least R + 7 days, Q2), the account holds the old copy, which the watcher no longer sums, and the new one. So the gate compares today's total plus the projected new total against the free tier. A `null` size stops the gate exactly as an overflow does, and R goes back to the operator.
 
 ## PR 2 — the R2 Terraform root, applied to a scratch bucket only
 
@@ -95,13 +100,13 @@ The size decides whether R = 30 fits the free tier. It is measured by the watche
 - [ ] [AC5] `offsite-backup-restore.md` and `runbook-disaster-recovery.md` state what was measured:
   - per-node isolation;
   - the lock on four prefixes;
-  - what it does not cover: the admin token (where it is held; no node has it) and data older than R.
+  - what it does not cover: the admin token (where it is held; no node has it), data older than R, and a SOPS recipient key (every node's history is readable with it until #1852).
 
   They also give the recovery procedure for a node whose index was deleted (`restic repair index`).
 - [ ] [AC5] `tests/test_offsite_runbook_claims.py`:
   - the runbook names every node bucket derived from `backup.sources`;
   - it names the four locked prefixes and R read from `common.yaml`;
-  - it names both uncovered cases, the admin token and data older than R;
+  - it names the three uncovered cases: the admin token, data older than R, and a SOPS recipient key (the last only while `.sops.yaml` lists more than the operator's key);
   - it no longer claims a single shared bucket.
 
   The test fails on today's runbook.
