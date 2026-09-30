@@ -132,10 +132,15 @@ All four nodes were up, so `beelink` and `rpi4` got their markers in the same ru
 | rpi3 | `5ccc440d...e6641d` | match |
 | rpi4 | `a35c05eb...cf9177` | match |
 
-Pending: the prod watcher lines after #1942 merges and Argo CD syncs.
+Prod watcher, after #1942 merged (`9c26f522`) and Argo CD synced (2026-09-30, one run started from the CronJob at 07:32Z instead of waiting for the 12:00Z schedule; see the follow-up below):
+
+- `toolkit obs logs -e prod` over Loki: four `r2_backup_node` lines, each `healthy:1` with an empty reason and the declared `repository_id`, and `r2_backup_health` `{"nodes":4,"unhealthy":0,"healthy":1}`.
+- `make backup-coverage ENV=prod`: all four nodes covered, newest snapshots 06:23Z-07:26Z.
+- `make alerts`: no firing or pending alerts, so `obs015-r2-backup-health` is Normal.
+
 
 - [x] AC5 -> the probe and targets tests, the mutations above, and the live run
-- [ ] AC6 -> role deployed and all four markers hold the declared id; prod watcher pending #1942
+- [x] AC6 -> role deployed, all four markers hold the declared id, and the prod watcher reports four healthy nodes
 - [x] AC7 -> the override and the runbook (PR1); the watcher reason strings in the runbook's alert table (PR2)
 
 ## Test status
