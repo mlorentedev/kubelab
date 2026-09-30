@@ -38,7 +38,8 @@ NEW_ID = "b" * 64
 #   snapshots.rc  exit code of `snapshots` (default 0), or a behaviour:
 #                 `refuse` retries a rejected request forever, printing restic's
 #                 retry line each time (R2's answer to a bad credential, #1939);
-#                 `silent` hangs and prints nothing (an unreachable endpoint)
+#                 `silent` hangs and prints nothing (an unreachable endpoint);
+#                 `unavailable` retries a 503 forever (R2 down, not the credential)
 #   id            the repository id `cat config` reports
 #   forget.rc     exit code of `forget` (default 0)
 # `init` sets a new id and makes `snapshots` succeed, as a real init would.
@@ -57,6 +58,12 @@ case "$1" in
     if [ "$rc" = refuse ]; then
       while :; do
         echo "Stat(<config/>) returned error, retrying after 875.524205ms: Stat: Unauthorized" >&2
+        sleep 0.2
+      done
+    fi
+    if [ "$rc" = unavailable ]; then
+      while :; do
+        echo "Stat(<config/>) returned error, retrying after 1.2s: Stat: 503 Service Unavailable" >&2
         sleep 0.2
       done
     fi
@@ -287,6 +294,21 @@ def test_an_endpoint_that_never_answers_is_reported_as_such(node) -> None:
     assert proc.returncode != 0
     assert "init" not in verbs and "backup" not in verbs
     assert "no answer from r2" in proc.stderr.lower(), proc.stderr
+    assert "credential" not in proc.stderr
+
+
+def test_a_retried_outage_is_reported_as_the_error_it_is_not_as_a_refusal(node) -> None:
+    """A 503 is retried just like a 401, so the probe times out on both.
+
+    Only the last retry line tells them apart. The verdict must quote it without
+    calling it a refusal, and must not point at the credential.
+    """
+    proc, verbs, _ = node(snapshots_rc="unavailable")
+    assert proc.returncode != 0
+    assert "init" not in verbs and "backup" not in verbs
+    verdict = [line for line in proc.stderr.splitlines() if line.startswith("node-backup-ship:")]
+    assert verdict and "503 Service Unavailable" in verdict[-1], proc.stderr
+    assert "refused" not in verdict[-1], verdict[-1]
     assert "credential" not in proc.stderr
 
 
