@@ -1,6 +1,6 @@
 # How the work is run: specs, reviews, knowledge
 
-72 lessons, newest first. Back to [all categories](../_index.md).
+73 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
@@ -76,3 +76,4 @@
 | 428 | [A sample is not the population — state the frame next to the verdict](lesson-428-a-sample-is-not-the-population-say-which-frame-you-measured.md) | 2026-09-04 |
 | 433 | [A branch that only improves a message is invisible to a test that asserts only failure](lesson-433-a-branch-that-only-improves-a-message-is-invisible-to-a-test-that-asserts-only-failure.md) | 2026-09-05 |
 | 430 | [Fetching is what arms the `--force-with-lease` trap](lesson-430-fetching-is-what-arms-the-force-with-lease-trap.md) | 2026-09-04 |
+| 492 | [Read what the agent runtime ships before designing its jail, and apply "always-on" to callees, not callers](lesson-492-read-what-the-runtime-ships-before-designing-the-jail.md) | 2026-09-30 |

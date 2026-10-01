@@ -15,6 +15,14 @@ depends_on: [adr-028-operational-topology, adr-029-intelligence-layer, adr-042-r
 > **Related:** ADR-029 (intelligence layer: pgvector RAG), ADR-028 (always-on vs on-demand), ADR-042 (reference architecture; Open WebUI as operator console)
 > **Research:** vault `10_projects/kubelab/40-research/research-memory-ssot.md` (2026-06-11) — option space, trade-off matrix, sources. Ticket: AI-006 (#595).
 
+## Amendment — 2026-09-30 (Open WebUI placement and Hermes vault authority)
+
+**Amended by [ADR-068](adr-068-ace2-operator-agent-tooling.md).** Three rows of "Resolved design questions" change:
+
+- **Open WebUI placement:** Open WebUI runs on ace2 in the operator's agent stack, not on staging K3s.
+- **Index multiplicity:** its native RAG is enabled only for ad-hoc uploads and Google Drive documents, using NaN embeddings and rerank. The vault is never indexed by Open WebUI. Vault knowledge still has one index, `/v1/knowledge/search`, once it is built.
+- **Hermes write authority:** "read-only outside its own zone" (`80_agents/hermes-kubelab/`), enforced by a pre-commit hook. Multi-writer git stays closed.
+
 ## Amendment — 2026-09-30 (agent access surface)
 
 **Amended by [ADR-067](adr-067-product-contract-and-agent-access.md).** The "thin MCP tool" for coding agents is served by `toolkit-mcp`, a read-only MCP server behind Traefik that validates its own tokens and is scoped per product ([ADR-067](adr-067-product-contract-and-agent-access.md) D6). Option B (a network-served hive MCP) stays deferred on its own trigger.
