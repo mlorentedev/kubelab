@@ -52,6 +52,12 @@ def test_vikunja_starts_only_after_its_idp_answers(overlay: str) -> None:
     waits = [c for c in pod.get("initContainers", []) if c["name"] == "wait-for-idp"]
     assert waits, "no init container waits for the IdP's discovery document"
     script = " ".join(waits[0]["command"])
+    # Parsed, not just read: a `>-` turned into `|` keeps every substring below
+    # and leaves `| grep` at the start of a line, which sh rejects.
+    command = waits[0]["command"]
+    assert command[:2] == ["sh", "-c"], command
+    parsed = subprocess.run(["sh", "-n", "-c", command[2]], capture_output=True, text=True)
+    assert parsed.returncode == 0, parsed.stderr
     assert f"${{{AUTHURL}}}/.well-known/openid-configuration" in script
     # Authelia answers 200 on any path, so only the document's content proves
     # discovery works.
@@ -79,7 +85,8 @@ def _generator_env_files() -> list[Path]:
     for kust in (REPO / "infra/k8s").rglob("kustomization.yaml"):
         doc = yaml.safe_load(kust.read_text()) or {}
         for gen in doc.get("configMapGenerator", []):
-            files += [kust.parent / f for f in gen.get("envs", [])]
+            # `env:` (singular) is still accepted by kustomize.
+            files += [kust.parent / f for f in [*gen.get("envs", []), *([gen["env"]] if gen.get("env") else [])]]
     return files
 
 
@@ -89,7 +96,8 @@ def test_generator_env_values_carry_no_literal_quotes() -> None:
     `NAME="KubeLab IDP"` put the quotes on Vikunja's login button.
     """
     files = _generator_env_files()
-    assert files, "found no configMapGenerator env files: the walk is wrong"
+    # Pinned to the file the bug shipped in, so a walk that misses it fails here.
+    assert REPO / "infra/k8s/base/services/vikunja-config/vikunja.env" in files, "the walk misses vikunja.env"
     quoted = []
     for path in files:
         for n, line in enumerate(path.read_text().splitlines(), 1):
