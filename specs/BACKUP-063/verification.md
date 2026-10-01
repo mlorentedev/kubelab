@@ -42,3 +42,4 @@ All four finished with `Result=success`, `ExecMainStatus=0` and `no errors were 
 ## Still to do after merge
 
 - [x] Redeploy from master (`make backup ENV=prod`); expect `changed=0` after the first run. ✓ 2026-10-01 15:3xZ, master `5cf69877`: two consecutive runs, `changed=0 failed=0` on `beelink`, `kubelab-vps`, `rpi3` and `rpi4` both times. The first run was already `changed=0` because prod had been running this branch's templates since before #1956 merged.
+- [x] Full suite on master `5cf69877`: `make test` → `3227 passed, 16 skipped, 2 xfailed` (2026-10-01).
