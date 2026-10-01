@@ -44,7 +44,7 @@ Every image is pinned in `common.yaml`, and every credential is a `SECRET_CATALO
 ## Out of scope
 
 - Indexing the vault in Open WebUI. The vault reaches chat only through the read-only MCP tool until #299, #395 and #396 build `/v1/knowledge/search` (ADR-043, ADR-068 D5).
-- A public route. There is no IngressRoute, Cloudflare record or `dev.kubelab.live` path for Open WebUI (ADR-068 D5).
+- A public route, a Cloudflare record or TLS for Open WebUI. There is no IngressRoute and no `dev.kubelab.live` path (ADR-068 D5); R8 records why it is plain HTTP over the tailnet.
 - A second Hermes on NaN (ADR-068 O4 trigger), and any always-on agent.
 - Tokens beyond the four of ADR-068 D3 (vault GitHub token, inference key, Slack bot token, Drive read-only OAuth). A Gitea, Grafana or `toolkit-mcp` token is a later change, made when a job needs it.
 - Fixing the `dev_node` role's convergence. That is #1300, a prerequisite tracked on its own ticket (task 0).
@@ -67,6 +67,10 @@ Items marked **BLOCKING** must be resolved before the PR that depends on them is
 - **R6, coordination: BACKUP-057 (#1920) changes the backup layout to one R2 bucket per node.** If it lands first, ace2 needs its own bucket and token. Its spec derives them from `backup.sources`, so ace2 follows the declaration. If this lands first, ace2 is migrated with the other nodes. PR 6 checks which state master is in before it starts.
 - **R7: the `tag:hermes` destinations.** Today's grant is `vps:443`, written for a NaN pod reaching Gitea and Ollama. PR 3 runs the jobs with the existing rule and records each refused destination. The rule changes only for a destination a job needs, and each addition names the job. Internet destinations (NaN, GitHub, Slack, Google) go out through Docker's normal egress, not through the tailnet, so they need no ACL row.
 
+- **R8, decided here: Open WebUI is served over plain HTTP on the tailnet, at ace2's MagicDNS name.** The transport is WireGuard, so the traffic is encrypted end to end between tailnet nodes. Authelia accepts an `http` redirect URI for any host (its client docs allow `http` or `https`, with no loopback rule). The redirect URI is `http://<ace2 MagicDNS name>:<port>/oauth/oidc/callback`, so it does not change when the address does.
+  - The alternative is TLS on ace2: the `pihole.kubelab.live` pattern (OPS-022), a DNS-only Cloudflare record to a Tailscale address. It was rejected for this node. That pattern terminates TLS in staging Traefik on ace1, which is O2's dependency. Terminating on ace2 instead needs a DNS-01 Cloudflare token on the node that hosts the agent: a credential that can edit the zone, on the box with the largest attack surface.
+  - Reopen when a browser feature Open WebUI needs requires a secure context (microphone input, clipboard), or when the chat leaves the tailnet.
+
 ## Acceptance criteria
 
 - [ ] **AC1. The node converges.** Two consecutive `make provision NODE=ace2 ENV=staging` runs: the second reports `changed=0` for every task of the new role, shown with the per-task result lines.
@@ -81,7 +85,7 @@ Items marked **BLOCKING** must be resolved before the PR that depends on them is
   - Live: a command that needs approval and gets no answer is denied after 300 s. The Hermes log line is the evidence.
 - [ ] **AC4. Open WebUI is reachable on the tailnet only, behind prod Authelia.**
   - `ss -tlnp` on ace2 shows its port bound to the Tailscale address only.
-  - From the workstation over the tailnet, the login page redirects to `auth.kubelab.live`.
+  - From the workstation over the tailnet, `http://<ace2 MagicDNS name>:<port>` redirects to `auth.kubelab.live`, and the callback returns to the same name.
   - After login, both backends list models.
   - `tests/test_oidc_clients.py` passes with the new client.
 - [ ] **AC5. The agent's network identity is its own.**
