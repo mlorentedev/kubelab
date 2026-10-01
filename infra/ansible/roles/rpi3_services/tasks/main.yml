@@ -41,6 +41,15 @@
   become: true
   tags: [boot]
 
+# Read before the template: under --check the template only predicts the file,
+# so whether systemd can see the unit is a question about the disk, not about
+# the template's `changed`, which is also true when an existing unit is updated.
+- name: Check whether the Compose stack unit is already installed
+  stat:
+    path: /etc/systemd/system/kubelab-rpi3.service
+  register: _rpi3_unit_file
+  tags: [boot]
+
 - name: Install the Compose stack systemd unit
   template:
     src: kubelab-rpi3.service.j2
@@ -49,19 +58,19 @@
     group: root
     mode: "0644"
   become: true
-  register: _rpi3_unit
   tags: [boot]
 
-# Under --check a NEW unit is only predicted, so systemd has nothing to enable
-# and the dry run fails here (#1983). Skipped only in that case: on a real run,
-# and on a dry run where the unit already exists, the task runs as before.
+# Under --check a unit not yet on disk is only predicted, so systemd has nothing
+# to enable and the dry run fails here (#1983). Skipped only in that case: on a
+# real run, and on a dry run where the unit file exists (even if the template
+# would update it), the task runs as before and still reports a disabled unit.
 - name: Enable the Compose stack unit at boot
   systemd:
     name: kubelab-rpi3.service
     enabled: true
     daemon_reload: true
   become: true
-  when: not (ansible_check_mode and _rpi3_unit is changed)
+  when: not (ansible_check_mode and not _rpi3_unit_file.stat.exists)
   tags: [boot]
 
 - name: Pull service images
