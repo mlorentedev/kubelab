@@ -108,6 +108,7 @@ class _Fake:
         logs: str = "",
         export_rc: int = 0,
         run_rc: int = 0,
+        serve_rc: int = 0,
         rm_fails: bool = False,
     ) -> None:
         self.service = service
@@ -130,6 +131,7 @@ class _Fake:
         self.logs = logs
         self.export_rc = export_rc
         self.run_rc = run_rc
+        self.serve_rc = serve_rc
         self.rm_fails = rm_fails
         self.calls: list[list[str]] = []
         self.workdir: Optional[Path] = None
@@ -193,6 +195,10 @@ class _Fake:
         if argv[:2] == ["docker", "exec"]:
             if "encryption" in argv:
                 return 0, self.encryption, ""
+            if "-d" in argv:
+                return self.serve_rc, "", "OCI runtime exec failed" if self.serve_rc else ""
+            if "pidof" in argv:
+                return (0, "7\n", "") if self.running else (1, "", "")
             if "wget" in argv:
                 if not self.healthy:
                     return 1, "", "wget: can't connect to remote host (127.0.0.1): Connection refused"
@@ -425,6 +431,14 @@ def test_authelia_checks_the_key_before_starting_the_server(drill, tmp_path) -> 
     assert serve > 0 and execs[serve][-2:] == ["--config", "/run/drill/config.yml"]
 
 
+def test_an_authelia_server_that_could_not_be_started_fails_without_waiting(drill, capsys, tmp_path) -> None:
+    fake = _fake(tmp_path, "authelia", serve_rc=1)
+    assert drill(fake) is False
+    assert "the server did not start: OCI runtime exec failed" in _out(capsys)
+    assert not any("wget" in c for c in fake.calls)
+    assert _torn_down(fake)
+
+
 @pytest.mark.parametrize("service", ["authelia", "n8n"])
 def test_a_server_that_never_answers_healthy_fails(drill, capsys, tmp_path, service) -> None:
     fake = _fake(tmp_path, service, healthy=False)
@@ -440,9 +454,10 @@ def test_an_answer_that_is_not_healthy_is_not_a_pass(drill, capsys, tmp_path, se
     assert "did not answer healthy" in _out(capsys)
 
 
-def test_an_n8n_that_exited_is_not_waited_on(drill, tmp_path) -> None:
-    """A container that stopped will never answer; the drill says so at once, not after two minutes."""
-    fake = _fake(tmp_path, "n8n", healthy=False, running=False)
+@pytest.mark.parametrize("service", ["authelia", "n8n"])
+def test_a_server_that_exited_is_not_waited_on(drill, tmp_path, service) -> None:
+    """A server that stopped will never answer; the drill says so at once, not after two minutes."""
+    fake = _fake(tmp_path, service, healthy=False, running=False)
     assert drill(fake) is False
     assert sum(1 for c in fake.calls if c[:2] == ["docker", "exec"] and "wget" in c) == 1
 

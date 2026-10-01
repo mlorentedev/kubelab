@@ -292,7 +292,7 @@ def _prove_authelia(box: _Scratch) -> bool:
         return False
     logger.success("drill: authelia: the SOPS storage key opens the restored database")
 
-    box.run(
+    rc, _, err = box.run(
         [
             "docker",
             "exec",
@@ -307,8 +307,17 @@ def _prove_authelia(box: _Scratch) -> bool:
             f"{SECRETS}/config.yml",
         ]
     )
-    if not box.wait_healthy("http://127.0.0.1:9091/api/health", '"OK"', gone=lambda: False):
-        logger.error(f"FAIL authelia: the server did not answer healthy within {READY_TIMEOUT}s")
+    if rc != 0:
+        logger.error(f"FAIL authelia: the server did not start: {err.strip()[:160]}")
+        return False
+
+    # The server is a second process in a container that stays up on `sleep`, so
+    # the container's state says nothing about it. The image has busybox pidof.
+    def gone() -> bool:
+        return box.run(["docker", "exec", box.name, "pidof", "authelia"])[0] != 0
+
+    if not box.wait_healthy("http://127.0.0.1:9091/api/health", '"OK"', gone=gone):
+        logger.error(f"FAIL authelia: the server exited or did not answer healthy within {READY_TIMEOUT}s")
         return False
     logger.success("drill: authelia: the server starts on the restore and answers healthy")
     return True
