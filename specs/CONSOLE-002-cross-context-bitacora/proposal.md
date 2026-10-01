@@ -44,7 +44,8 @@ Concrete, observable outputs after this module (slice, not the whole console):
 4. **A queryable cross-context bitácora**: list/show items across contexts with board state (status,
    priority, dates, context, AI-rank field), via the Go API (per ADR-029).
 5. **Per-context default-deny LLM routing** modeled from day 1 (D5/C1): a Context with no explicit
-   provider policy resolves to local-only (Ollama); cloud requires an explicit per-context grant.
+   provider policy resolves to no provider (explicit deny, ADR-050 D5 amendment 2026-10-01); cloud
+   requires an explicit per-context grant.
 
 ## Out of scope
 
@@ -101,7 +102,7 @@ Codebase audit (2026-06-20) corrected four assumptions the original draft made:
   across modules — see `tasks.md` PR roadmap.
 - **✅ RESOLVED (2026-06-20) — Isolation enforcement (C1/D5): single service-layer gate + `context_id`
   from day 1.** `resolveContextPolicy(contextID) → {allowedProviders, visibility, owner}` is the ONLY
-  path to cloud egress; **default-deny** when a Context has no policy (local-only Ollama). Every
+  path to cloud egress; **default-deny** when a Context has no policy (no provider; ADR-050 D5 amendment 2026-10-01). Every
   item/event carries `context_id` NOT NULL (C6). Home: new `internal/board/policy.go` (NOT
   `middleware.go` — see prerequisites; no identity middleware exists to extend).
 - _The remaining items are implementation-time questions, not `tasks.md` blockers:_
@@ -124,9 +125,9 @@ Codebase audit (2026-06-20) corrected four assumptions the original draft made:
 - [ ] The GitHub adapter ingests a repo's open issues as forge-backed board items (forge→board) **and**
   writes status/label back to one issue (board→forge), each verified against a real or fixture repo —
   with the write confirmed by re-reading, not by exit code.
-- [ ] A Context with **no** explicit provider policy resolves to local-only (Ollama) on a routing
-  decision; adding a cloud-provider grant flips that resolution — both provable by test (default-deny
-  is enforced, not documented).
+- [ ] A Context with **no** explicit provider policy resolves to no provider on a routing decision
+  (the request is refused); adding a cloud-provider grant flips that resolution — both provable by
+  test (default-deny is enforced, not documented).
 
 > Completeness candidates to fold in or reject during implementation: adapter re-sync idempotency test;
 > offline-resilience test (git canonical usable with Postgres down, C3); cost/secret guard on
