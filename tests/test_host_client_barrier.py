@@ -31,7 +31,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
         ["/usr/local/bin/kubectl", "get", "ns"],
         ["kubectl.exe", "get", "ns"],
         ["helm", "upgrade", "--install", "argocd", "argo/argo-cd"],
-        ["ssh", "deployer@162.55.57.175", "true"],
+        ["ssh", "deployer@vps", "true"],
         ["scp", "a", "host:b"],
         ["rsync", "-a", "a", "host:b"],
         ["ansible-playbook", "site.yml"],
@@ -46,6 +46,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
         ["sudo", "-u", "deployer", "kubectl", "get", "pods"],
         ["timeout", "-s", "KILL", "5", "ssh", "host", "true"],
         ["sh", "-c", "kubectl get pods | head -1"],
+        ["bash", "-ec", "kubectl delete secret x"],
+        ["bash", "-lc", "ssh host true"],
+        ["sh", "-e", "-c", "kubectl get pods"],
+        ["bash", "-o", "pipefail", "-c", "kubectl get pods | wc -l"],
         "kubectl get pods",
         "set -e; ssh host true",
     ],
@@ -63,6 +67,8 @@ def test_a_cluster_or_host_client_is_denied(args) -> None:
         ["helm", "template", "argocd", "argo/argo-cd"],
         ["helm", "lint", "chart"],
         ["sh", "-c", "kubectl kustomize infra/k8s/overlays/staging"],
+        ["bash", "-ec", "echo ok"],
+        ["bash", "scripts/kubectl-free.sh"],
         ["git", "rev-parse", "HEAD"],
         ["sops", "-d", "secrets/staging.enc.yaml"],
         ["docker", "run", "--rm", "timberio/vector"],
@@ -191,3 +197,18 @@ def test_the_e2e_and_infra_suites_are_exempt_by_directory(relative, allowed) -> 
 
     item = SimpleNamespace(path=_TESTS_DIR / relative, get_closest_marker=lambda name: None)
     assert _host_clients_allowed(item) is allowed
+
+
+def test_a_nested_in_process_run_leaves_the_outer_test_guarded() -> None:
+    from tests import conftest
+
+    before = conftest._current_item
+    outer, inner = object(), object()
+    outer_run = conftest.pytest_runtest_protocol(outer)
+    next(outer_run)
+    inner_run = conftest.pytest_runtest_protocol(inner)
+    next(inner_run)
+    inner_run.close()
+    assert conftest._current_item is outer
+    outer_run.close()
+    assert conftest._current_item is before

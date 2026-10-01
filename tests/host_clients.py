@@ -120,6 +120,19 @@ def _judge(name: str, rest: Sequence[str]) -> str | None:
     return f"{name} {sub}" if sub else name
 
 
+def _shell_script(tokens: Sequence[str], i: int) -> int | None:
+    """Index of the script a shell at I runs with `-c`, in any flag cluster (`-ec`, `-lc`)."""
+    j, runs_script = i + 1, False
+    while j < len(tokens) and tokens[j][:1] in ("-", "+") and tokens[j] not in SEPARATORS:
+        flag = tokens[j]
+        if flag in ("-o", "+o", "-O", "+O"):
+            j += 2
+            continue
+        runs_script = runs_script or (flag.startswith("-") and not flag.startswith("--") and "c" in flag[1:])
+        j += 1
+    return j if runs_script and j < len(tokens) else None
+
+
 def _scan(tokens: Sequence[str]) -> str | None:
     at_command = True
     i = 0
@@ -145,13 +158,12 @@ def _scan(tokens: Sequence[str]) -> str | None:
                 i += 2 if tokens[i] in valued else 1
             continue
         at_command = False
-        if name in SHELLS and "-c" in tokens[i + 1 : i + 3]:
-            c = tokens.index("-c", i + 1)
-            if c + 1 < len(tokens):
-                found = _scan(_shell_tokens(tokens[c + 1]))
-                if found:
-                    return found
-            i = c + 2
+        script = _shell_script(tokens, i) if name in SHELLS else None
+        if script is not None:
+            found = _scan(_shell_tokens(tokens[script]))
+            if found:
+                return found
+            i = script + 1
             continue
         if name in DENIED:
             found = _judge(name, tokens[i + 1 :])

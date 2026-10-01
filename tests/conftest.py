@@ -111,11 +111,13 @@ _REFUSALS = pytest.StashKey[list[str]]()
 def pytest_runtest_protocol(item: pytest.Item) -> Generator[None, None, None]:
     """Track the running test, setup and teardown included, for the barrier."""
     global _current_item
-    _current_item = item
+    # Restored rather than cleared: an in-process nested pytest (pytester, or
+    # pytest.main) must not leave the outer test unguarded when it returns.
+    previous, _current_item = _current_item, item
     try:
         yield
     finally:
-        _current_item = None
+        _current_item = previous
 
 
 def pytest_runtest_setup(item: pytest.Item) -> None:
