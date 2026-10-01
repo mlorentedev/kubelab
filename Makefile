@@ -1671,6 +1671,13 @@ backup-drill-postgres:
 backup-drill-headscale:
 	@$(TOOLKIT) backup drill-headscale --env $(or $(filter staging prod,$(ENV)),prod)
 
+# Restore the newest Authelia and n8n captures from R2 into scratch containers on
+# this machine, with no network, and check the SOPS keys open them (BACKUP-068).
+# Needs docker, ssh to the VPS and the env's SOPS keys; prints ids and counts only.
+.PHONY: backup-drill-apps
+backup-drill-apps:
+	@$(TOOLKIT) backup drill-apps --env $(or $(filter staging prod,$(ENV)),prod)
+
 # Restore the newest Gitea capture from R2 into a scratch server on this machine,
 # with no network, and check it brings the forge back (BACKUP-040). Needs docker,
 # git and the env's Gitea admin token; prints names and counts, never content.

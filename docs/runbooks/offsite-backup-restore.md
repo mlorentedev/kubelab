@@ -330,7 +330,7 @@ empty server.
 server: it carries `CREATE DATABASE` for every database and fails on each one
 that exists. Restore the whole dump into a scratch container, take that one
 database out with `pg_dump -Fc <db>`, and `pg_restore --clean --if-exists -d <db>`
-it into live with its app scaled to zero. Build the scratch container the way the
+it into live with its app scaled to zero (on prod that step needs #1998: Argo CD self-heals the replicas back). Build the scratch container the way the
 drill does (`docker run -d -e POSTGRES_HOST_AUTH_METHOD=trust <live image>`, no
 published port) and remove it with `docker rm -f -v`. Without `-v` the restored
 database stays on this machine in an anonymous volume, because the image
@@ -436,6 +436,77 @@ Nodes reconnect on their own within a few minutes. A node registered after the
 snapshot is unknown to the restored server and registers again with a pre-auth key.
 Keep `/root/headscale-data.broken-*` until every node you need is back online, then
 delete it and `/tmp/headscale-restore`: both hold the private keys.
+
+### Authelia and n8n
+
+Both are PVCs on the VPS (`local-path`), captured as single files with `sqlite3
+.backup`: Authelia's `db.sqlite3` and n8n's `database.sqlite`, plus the rest of n8n's
+data directory, including its `config`. Both keep encrypted data: Authelia's storage
+under `apps.services.security.authelia.storage_encryption_key`, n8n's credentials under
+`apps.services.automation.n8n.encryption_key`. An intact file that key cannot open is
+not a backup. **Prove the snapshot before you use it:**
+
+```bash
+make backup-drill-apps ENV=prod
+```
+
+For each service it reads live first, from the database file on the VPS with `sudo -n
+sqlite3 -readonly` over SSH, never through the app's CLI in its pod: every `n8n` command
+starts a second n8n under the pod's memory limit (OPS-033), and answers nothing at the
+pod's log level (lesson-500). It restores the newest snapshot into a private temp
+directory on this machine, and passes only if:
+
+- `PRAGMA integrity_check` answers `ok`;
+- every durable row live had when the snapshot was taken is in the restore, by id:
+  Authelia's opaque identifiers (the `sub` each OIDC client knows a user by, which
+  must also come back unchanged), preferences, TOTP and WebAuthn registrations; n8n's
+  workflows and credentials. Rows created since or deleted since are reported, not
+  failed. Sessions, tokens and logs are not compared;
+- the image the live Deployment runs opens the restore with the SOPS key, with
+  `--network none`, as you. For Authelia, `storage encryption check` prints SUCCESS
+  (it exits 0 on FAILURE too, so the drill reads the text) and the server answers
+  `/api/health`. For n8n, the server starts (a key that is not the data's aborts it
+  with "Mismatching encryption keys", which the drill names) and `export:credentials
+  --all --decrypted` writes to `/dev/null` and exits 0.
+
+The key reaches the container only as a `0600` file named by its `*_FILE` variable. The
+drill prints table names, row ids and counts, never a row, and removes each container
+and its directory on every exit path, then confirms that both are gone. The restored
+n8n activates its workflows on start; with no network a schedule can run only against
+the scratch database. Measured 2026-10-01 on snapshot `a59acffe`: Authelia 4 opaque
+identifiers, schema 23 on both sides, 3 s to a healthy server; n8n 4 workflows and
+2 credentials, 18 s. With a random key in place of each SOPS key, both fail and say why.
+
+**Restoring it for real** (the claim's data is lost or corrupt). Use the snapshot the
+drill just passed, on the VPS, with the restic environment from "Restoring — normal
+case" loaded. The app must not run while its files are replaced. **Taking it offline is
+the step without a safe path today:** Argo CD prod self-heals `replicas: 1` back within
+seconds, so `kubectl scale --replicas=0` does not hold. #1998 is the fix; until it lands,
+take the app offline under the operator's decision, the same as any break-glass action.
+
+```bash
+SVC=n8n                                   # or authelia
+DB=database.sqlite                        # authelia: db.sqlite3
+OWNER=1000:1000                           # authelia: 0:0 (as live; check with stat)
+# The claim's directory on the VPS: resolved, never typed (local-path embeds the claim's UID).
+P=$(kubectl --kubeconfig ~/.kube/kubelab-prod-config get pv -o \
+  jsonpath='{range .items[?(@.spec.claimRef.namespace=="kubelab")]}{.spec.claimRef.name}{"\t"}{.spec.local.path}{"\n"}{end}' \
+  | awk -F'\t' -v c="$SVC-data" '$1==c{print $2}')
+sudo -E restic -r "$REPO" restore <snapshot-id> \
+  --include "/opt/node-backup/staging/$SVC" --target "/tmp/$SVC-restore"
+sqlite3 "/tmp/$SVC-restore/opt/node-backup/staging/$SVC/$DB" 'PRAGMA integrity_check;'
+# With the app offline (see above):
+sudo cp -a "$P" "/root/$SVC-data.broken-$(date +%F)"
+# Empty it completely: a -wal left from the broken database would be replayed
+# onto the restored one when the app opens it.
+sudo find "$P" -mindepth 1 -delete
+sudo cp -a "/tmp/$SVC-restore/opt/node-backup/staging/$SVC/." "$P"/
+sudo chown -R "$OWNER" "$P"/*
+```
+
+Bring the app back, then check it from outside: `make test-e2e ENV=prod` and a login.
+Keep `/root/<svc>-data.broken-*` until the app is confirmed whole, then delete it and
+`/tmp/<svc>-restore`: both hold encrypted secrets, and n8n's `config` holds its key.
 
 ## Restoring — the disaster case
 

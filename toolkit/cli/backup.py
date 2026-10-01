@@ -173,6 +173,25 @@ def drill_headscale_cmd(
         raise typer.Exit(code=1)
 
 
+@app.command("drill-apps")
+def drill_apps_cmd(
+    env: Annotated[str, typer.Option("--env", "-e", help="Environment whose merged config is used")] = "prod",
+    project_root: Annotated[Optional[Path], typer.Option("--project-root", help="Repo root")] = None,
+) -> None:
+    """Restore the newest Authelia and n8n captures from R2 and check the SOPS keys open them.
+
+    Passes when each database is intact, every durable row live had at snapshot
+    time is in it, and the image live runs opens it with the SOPS key and no
+    network. Reads live from the files on the node, never through the apps'
+    CLIs. Prints table names, ids and counts only, and removes the containers
+    and the restores on every exit path.
+    """
+    from toolkit.features.app_drill import drill_apps
+
+    if not drill_apps(env=env, project_root=project_root):
+        raise typer.Exit(code=1)
+
+
 @app.command("health-check")
 def health_check_cmd(
     env: Annotated[str, typer.Option("--env", "-e", help="Environment whose merged config is used")] = "prod",

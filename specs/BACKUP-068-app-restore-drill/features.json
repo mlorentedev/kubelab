@@ -1,0 +1,23 @@
+[
+  {
+    "id": "BACKUP-068-app-restore-drill-f1",
+    "behavior": "AC1/AC2/AC4: the newest VPS snapshot restores Authelia and n8n completely, and the image live runs opens each with the SOPS key and no network",
+    "verification": "make backup-drill-apps ENV=prod (names the snapshot, the rows per table, the schema version and the RTO)",
+    "state": "passing",
+    "evidence": "2026-10-01 prod: snapshot a59acffe; authelia 4 opaque identifiers, schema 23/23, healthy, RTO 3s; n8n 4 workflows, 2 credentials decrypt, RTO 18s; rc=0"
+  },
+  {
+    "id": "BACKUP-068-app-restore-drill-f2",
+    "behavior": "AC4: a key that is not the data's fails, and says why, for both services",
+    "verification": "drill_apps(env='prod') with get_secret_by_path returning a random key for both key paths (transcript in verification.md)",
+    "state": "passing",
+    "evidence": "2026-10-01 prod: 'FAIL authelia: the SOPS storage key does not open the restored database', 'FAIL n8n: the SOPS key is not the key this data was encrypted with', RESULT False, no container left"
+  },
+  {
+    "id": "BACKUP-068-app-restore-drill-f3",
+    "behavior": "AC1/AC2/AC3: every guard (rows, identities, encryption text, health, decryption, CANNOT CHECK, key handling, network, teardown)",
+    "verification": "poetry run pytest -q -p no:cacheprovider --no-cov tests/test_app_drill.py",
+    "state": "passing",
+    "evidence": "39 passed; 17 of 17 mutations killed (verification.md)"
+  }
+]
