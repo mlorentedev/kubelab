@@ -74,6 +74,7 @@ The size decides whether R = 30 fits the free tier. It is measured by the watche
   - also mints the watcher's Object Read token, scoped to the node buckets and to nothing else. Verify by consequence that it lists every node bucket and is refused on `kubelab-backups`. If one token cannot be scoped to several named buckets, the mint stops and says so: the fallback (one read token per node, or an account-wide one) changes proposal item 4 and goes back to the operator.
 
   Unit tests mock the API and SOPS I/O, following `TestCredentialsGenerateWritesHubKeysToCommon`.
+- [ ] [AC3] Failing test in `tests/test_backup_per_node_isolation.py`, against the mocked Cloudflare API: the token `toolkit backup mint-node-tokens` requests for each node names exactly one bucket, `kubelab-backup-<node>`, and the watcher's read token names exactly the node buckets. A policy that spans several buckets, or the whole account, fails it. Distinct key pairs alone cannot catch that, so this is the test that makes ticket AC3 fail in CI rather than only at runtime. Expected: FAIL.
 - [ ] [AC1] `make backup-mint-node-tokens ENV=prod`. Run it and record `make secrets-audit ENV=prod` rc 0 in `verification.md`. Nothing reads the new keys yet.
 
 ## PR 4 — every consumer becomes per node, then the migration (Q2)

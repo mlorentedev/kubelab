@@ -56,7 +56,7 @@ The operator's decision on #1920 (2026-09-30) fixes the shape: one bucket per no
 - Temporary, locally signed R2 credentials (prefix and action scoping). They would need a renewer outside the node every 7 days at most, against the fleet's "no new services" rule.
 - Bumping the DNS root's `cloudflare` provider to v5.
 - Any change to `backup.sources`, to what each node backs up, or to the schedule.
-- Deleting or importing `kubelab-backups` (see Risks Q2). It stays read-only in place until the retention window of the new buckets covers what it holds.
+- Deleting or importing `kubelab-backups` (see Risks Q2). It stays in place until the close-out task deletes it: after AC4 is verified on all four nodes and one weekly `check` has passed on every new bucket. That task is the only deletion gate.
 - The Storage Box leg (#471). Its credential model is a separate decision.
 
 ## Risks / open questions
