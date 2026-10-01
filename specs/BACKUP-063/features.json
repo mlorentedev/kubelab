@@ -2,9 +2,9 @@
   {
     "id": "BACKUP-063-f1",
     "behavior": "The weekly check reads pack group n/t with n from epoch weeks, covering every group once per t weeks across a year boundary (AC1)",
-    "verification": "poetry run pytest tests/test_node_backup_ship_script.py --no-cov -q -k read_data",
+    "verification": "poetry run pytest tests/test_node_backup_ship_script.py --no-cov -q",
     "state": "passing",
-    "evidence": "2026-09-30: 25 passed; rotation and year-boundary tests red on 6031a42d before f54299df"
+    "evidence": "2026-09-30: 26 passed (whole file, after 23d308d0 added the shipped-default render); rotation and year-boundary tests red on 6031a42d before f54299df"
   },
   {
     "id": "BACKUP-063-f2",

@@ -7,11 +7,12 @@ created: "2026-09-30"
 
 ## AC1: rotation
 
-`poetry run pytest tests/test_node_backup_ship_script.py --no-cov -q`: 25 passed. Each test was run red first, on `6031a42d`, before the implementation:
+`poetry run pytest tests/test_node_backup_ship_script.py --no-cov -q`: 26 passed (25 before review). Each test was run red first, on `6031a42d`, before the implementation:
 
 - `test_the_weekly_check_reads_a_group_of_pack_data` asserts `check --read-data-subset 1/4` and the journal line.
 - `test_the_read_data_rotation_reads_every_group_once_per_cycle`: 4 consecutive weeks read `1/4..4/4`, each exactly once.
 - `test_the_read_data_rotation_is_continuous_across_a_year_boundary` covers the weeks around 2027-01-01, which falls in ISO week 53 of 2026. Under ISO weeks, `mod 4` gives the steps `[1, 0]`, so a group repeats. Under epoch weeks the steps are `[1, 1]`.
+- `test_the_shipped_group_count_renders_a_check_that_runs` (`23d308d0`, from review): the only render that omits the fixture's group count, so it reads the committed default. Mutation: a default of `0` turns it red while the other 25 stay green.
 
 ## AC2: measured in prod, 2026-09-30
 
