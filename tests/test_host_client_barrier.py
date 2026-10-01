@@ -212,3 +212,43 @@ def test_a_nested_in_process_run_leaves_the_outer_test_guarded() -> None:
     assert conftest._current_item is outer
     outer_run.close()
     assert conftest._current_item is before
+
+
+def test_a_refusal_swallowed_in_a_fixture_teardown_still_fails_the_run(tmp_path) -> None:
+    body = """
+    import subprocess
+    import pytest
+
+    @pytest.fixture
+    def leaky():
+        yield
+        try:
+            subprocess.run(["kubectl", "delete", "secret", "x"])
+        except BaseException:
+            pass
+
+    def test_uses_it(leaky):
+        pass
+    """
+    proc = _child_pytest(tmp_path, body)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "caught by the code under test" in proc.stdout
+
+
+def test_an_uncaught_refusal_is_reported_once_not_again_at_teardown(tmp_path) -> None:
+    proc = _child_pytest(tmp_path, PROBE + "\n    def test_unmocked():\n        _spawn()\n")
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "1 failed" in proc.stdout
+    assert "error" not in proc.stdout.splitlines()[-1], proc.stdout
+
+
+def test_os_system_is_held_to_the_same_rule(tmp_path) -> None:
+    body = """
+    import os
+
+    def test_shells_out():
+        os.system("kubectl get pods")
+    """
+    proc = _child_pytest(tmp_path, body)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "kubectl get" in proc.stdout

@@ -6,10 +6,14 @@ import shutil
 import subprocess
 from collections.abc import Generator
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
 from tests.host_clients import denied
+
+if TYPE_CHECKING:
+    from _typeshed import StrOrBytesPath
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -76,32 +80,50 @@ def _host_clients_allowed(item: pytest.Item) -> bool:
     return relative.parts[0] in HOST_CLIENT_EXEMPT_DIRS
 
 
+def _check_spawn(args: Any, shell: bool) -> None:
+    """Refuse a spawn that reaches a cluster or host, or record it in report mode."""
+    item = _current_item
+    if item is None or _host_clients_allowed(item):
+        return
+    client = denied(args, shell=shell)
+    if not client:
+        return
+    report = os.environ.get("KUBELAB_HOST_CLIENT_REPORT")
+    if report:
+        with open(report, "a", encoding="utf-8") as fh:
+            fh.write(f"{item.nodeid}\t{client}\n")
+        return
+    message = (
+        f"unit test spawned `{client}`, which reaches a real cluster or host. "
+        "Mock it, or mark the test "
+        '@pytest.mark.allow_host_clients(reason="...") if it must (#1886).'
+    )
+    item.stash.setdefault(_REFUSALS, []).append(message)
+    raise HostClientRefused(message)
+
+
 def _install_host_client_barrier() -> None:
+    """Guard both process routes that run a command line: `Popen` and `os.system`.
+
+    `os.exec*` and `os.posix_spawn` take an already-resolved executable and
+    are not guarded; nothing in the toolkit or the tests uses them (#2007).
+    """
     original_init = subprocess.Popen.__init__
     if getattr(original_init, "_host_client_barrier", False):
         return
+    original_system = os.system
 
     def guarded_init(self, args, *pargs, **kwargs):  # noqa: ANN001, ANN202
-        item = _current_item
-        if item is not None and not _host_clients_allowed(item):
-            client = denied(args, shell=bool(kwargs.get("shell")))
-            if client:
-                report = os.environ.get("KUBELAB_HOST_CLIENT_REPORT")
-                if report:
-                    with open(report, "a", encoding="utf-8") as fh:
-                        fh.write(f"{item.nodeid}\t{client}\n")
-                else:
-                    message = (
-                        f"unit test spawned `{client}`, which reaches a real cluster or host. "
-                        "Mock it, or mark the test "
-                        '@pytest.mark.allow_host_clients(reason="...") if it must (#1886).'
-                    )
-                    item.stash.setdefault(_REFUSALS, []).append(message)
-                    raise HostClientRefused(message)
+        _check_spawn(args, shell=bool(kwargs.get("shell")))
         original_init(self, args, *pargs, **kwargs)
+
+    def guarded_system(command: "StrOrBytesPath") -> int:
+        _check_spawn(os.fsdecode(command), shell=True)
+        return original_system(command)
 
     guarded_init._host_client_barrier = True  # type: ignore[attr-defined]
     subprocess.Popen.__init__ = guarded_init  # type: ignore[method-assign]
+    os.system = guarded_system
 
 
 _REFUSALS = pytest.StashKey[list[str]]()
@@ -135,10 +157,15 @@ def pytest_runtest_makereport(item: pytest.Item) -> Generator[None, None, None]:
     outcome = yield
     report = outcome.get_result()
     refusals = item.stash.get(_REFUSALS, [])
-    if refusals and report.passed and report.when != "teardown":
+    if not refusals:
+        return
+    # Consumed by the phase that recorded them, teardown included (#2007): a
+    # phase that already failed has reported its refusal, so a later phase
+    # must not report it again.
+    if report.passed:
         report.outcome = "failed"
         report.longrepr = "\n".join(refusals) + "\n(the refusal was caught by the code under test)"
-        refusals.clear()
+    refusals.clear()
 
 
 @functools.lru_cache(maxsize=1)
