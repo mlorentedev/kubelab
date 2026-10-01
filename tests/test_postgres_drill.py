@@ -57,13 +57,22 @@ class _Fake:
     """Plays restic, docker and kubectl. Every call is recorded."""
 
     def __init__(
-        self, *, trailer: bool = True, load_rc: int = 0, run_rc: int = 0, live_tables: bool = True, dump_rc: int = 0
+        self,
+        *,
+        trailer: bool = True,
+        load_rc: int = 0,
+        run_rc: int = 0,
+        live_tables: bool = True,
+        dump_rc: int = 0,
+        rm_fails: bool = False,
     ) -> None:
         self.trailer = trailer
         self.load_rc = load_rc
         self.run_rc = run_rc
         self.live_tables = live_tables
         self.dump_rc = dump_rc
+        self.rm_fails = rm_fails
+        self.exists = False  # the scratch container and its anonymous volume, as docker sees them
         self.calls: list[list[str]] = []
         self.dump_path: Path | None = None
 
@@ -86,7 +95,19 @@ class _Fake:
             return 0, "", ""
         if "get" in argv and "deploy" in argv:
             return 0, "postgres:16-alpine", ""
+        if argv[:3] == ["docker", "container", "inspect"]:
+            if not self.exists:
+                return 1, "", f"Error: No such container: {argv[-1]}"
+            return 0, ("pgvol " if "-f" in argv else "[{}]"), ""
+        if argv[:3] == ["docker", "volume", "inspect"]:
+            return (0, "[{}]", "") if self.exists else (1, "", f"Error: get {argv[-1]}: no such volume")
+        if argv[:2] == ["docker", "rm"]:
+            if self.rm_fails:
+                return 1, "", "Error response from daemon: removal of container is already in progress"
+            self.exists = False
+            return 0, argv[-1], ""
         if argv[:2] == ["docker", "run"]:
+            self.exists = True  # created even when it then fails to start
             return self.run_rc, "cid", "port is already allocated" if self.run_rc else ""
         if "pg_isready" in joined:
             return 0, "", ""
@@ -139,7 +160,8 @@ def test_a_good_dump_passes_names_the_snapshot_and_cleans_up(drill, tmp_path: Pa
 
 def _removes_container_and_volume(fake: _Fake) -> bool:
     """`-v` is what deletes the restored data: the image keeps it in an anonymous volume."""
-    return any(c[:2] == ["docker", "rm"] and "-f" in c and "-v" in c for c in fake.calls)
+    removed = any(c[:2] == ["docker", "rm"] and "-f" in c and "-v" in c for c in fake.calls)
+    return removed and not fake.exists
 
 
 def test_teardown_removes_the_data_volume_with_the_container(drill) -> None:
@@ -154,6 +176,16 @@ def test_a_container_that_fails_to_start_is_still_removed_with_its_volume(drill,
     assert drill(fake) is False
     assert "did not start" in capsys.readouterr().out
     assert _removes_container_and_volume(fake)
+
+
+def test_a_complete_restore_that_leaves_its_data_behind_fails(drill, capsys) -> None:
+    """`docker rm` failing must not pass silently: the volume holds the restored dump."""
+    fake = _Fake(rm_fails=True)
+    assert drill(fake) is False
+    out = capsys.readouterr().out
+    assert "restores completely" in out  # the restore itself was fine
+    assert "still on this machine" in out and "volume pgvol" in out
+    assert not fake.dump_path.parent.exists()  # the file goes even when the container does not
 
 
 def test_live_with_no_tables_is_cannot_check_not_a_pass(drill, capsys) -> None:

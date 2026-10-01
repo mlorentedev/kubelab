@@ -53,6 +53,9 @@ order by 1;
 """
 
 Run = Callable[..., "tuple[int, str, str]"]
+
+#: The names of the volumes a container mounts, space-separated.
+_VOLUMES_FORMAT = '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}} {{end}}{{end}}'
 Counts = dict[str, dict[str, int]]
 
 
@@ -159,122 +162,179 @@ def run_drill(
 
     workdir = Path(tempfile.mkdtemp(prefix="pgdrill-"))
     name = f"pgdrill-{secrets.token_hex(4)}"
+    ok = False
     try:
-        dump = workdir / "pg_dumpall.sql"
-        rc, _, err = run(
-            ["restic", "-r", repo, "dump", snapshot["short_id"], dump_path],
-            env=restic_env,
-            stdout_path=str(dump),
-            stderr_to_file=False,
+        ok = _load_and_check(
+            run=run,
+            repo=repo,
+            restic_env=restic_env,
+            snapshot=snapshot["short_id"],
+            dump_path=dump_path,
+            workdir=workdir,
+            name=name,
+            namespace=namespace,
+            deployment=deployment,
+            container=container,
+            kubeconfig=kubeconfig,
+            sleep=sleep,
         )
-        if rc != 0 or not dump.exists():
-            logger.error(
-                f"drill: restic could not read {dump_path} from snapshot {snapshot['short_id']}: {err.strip()[:160]}"
-            )
-            return False
-        if not _has_trailer(dump):
-            logger.error("drill: the dump has no completion trailer: this backup would not restore whole")
-            return False
-        logger.success(f"drill: {dump_path} carries its completion trailer ({dump.stat().st_size} bytes)")
-
-        kubectl = ["kubectl", "--kubeconfig", str(kubeconfig), "-n", namespace]
-        jsonpath = f'{{.spec.template.spec.containers[?(@.name=="{container}")].image}}'
-        rc, image, err = run([*kubectl, "get", "deploy", deployment, "-o", f"jsonpath={jsonpath}"])
-        if rc != 0 or not image.strip():
-            logger.error(f"drill: cannot read the image live runs: {err.strip()[:160]}")
-            return False
-        image = image.strip()
-
-        # No published port and trust auth: the container is reachable only
-        # through `docker exec` on this machine, for the drill's lifetime.
-        rc, _, err = run(["docker", "run", "-d", "--name", name, "-e", "POSTGRES_HOST_AUTH_METHOD=trust", image])
-        if rc != 0:
-            logger.error(f"drill: the scratch container did not start: {err.strip()[:160]}")
-            return False
-        # Over TCP on purpose: the image's init server listens on the socket only,
-        # so a socket check can pass before the real server is up.
-        for _ in range(60):
-            if run(["docker", "exec", name, "pg_isready", "-h", "127.0.0.1", "-U", "postgres", "-q"])[0] == 0:
-                break
-            sleep(1)
-        else:
-            logger.error("drill: the scratch server never became ready")
-            return False
-
-        run(["docker", "cp", str(dump), f"{name}:/tmp/pg_dumpall.sql"])
-        log = workdir / "psql.log"
-        run(
-            [
-                "docker",
-                "exec",
-                name,
-                "psql",
-                "-U",
-                "postgres",
-                "-d",
-                "postgres",
-                "-v",
-                "ON_ERROR_STOP=0",
-                "-q",
-                "-f",
-                "/tmp/pg_dumpall.sql",
-            ],
-            stdout_path=str(log),
-        )
-        errors = [line for line in log.read_text(errors="replace").splitlines() if "ERROR:" in line]
-        failed = [line for line in errors if not ("role " in line and "already exists" in line)]
-        if failed:
-            # Counted, never printed: a failed statement's text can carry row data.
-            logger.error(f"drill: {len(failed)} statement(s) did not load (text withheld: it can carry row data)")
-            return False
-
-        live = _counts(
-            run,
-            [
-                "kubectl",
-                "--kubeconfig",
-                str(kubeconfig),
-                "exec",
-                "-i",
-                "-n",
-                namespace,
-                f"deploy/{deployment}",
-                "-c",
-                container,
-                "--",
-                "sh",
-                "-c",
-                'psql -U "$POSTGRES_USER" -At -F "|" -f - -d "$1"',
-                "sh",
-            ],
-        )
-        restored = _counts(
-            run, ["docker", "exec", "-i", name, "psql", "-U", "postgres", "-At", "-F", "|", "-f", "-", "-d"]
-        )
-        if live is None or restored is None:
-            logger.error("drill: CANNOT CHECK — counting failed on " + ("live" if live is None else "the restore"))
-            return False
-        if not any(live.values()):
-            # Every check below is "for each table live has", so an empty answer
-            # would pass with nothing compared (lesson-416).
-            logger.error("drill: CANNOT CHECK — live reported no tables at all")
-            return False
-
-        ok, lines = compare(live, restored)
-        for line in lines:
-            (logger.error if line.startswith("FAIL") else logger.info)(line)
-        if ok:
-            logger.success(
-                f"drill: snapshot {snapshot['short_id']} restores completely ({sum(map(len, live.values()))} tables)"
-            )
-        return ok
     finally:
-        # `-v` is the data: the image declares VOLUME /var/lib/postgresql/data,
-        # so without it the restored database outlives the container in an
-        # anonymous volume. Unconditional: `docker run -d` can create the
-        # container and still fail, and removing a name that is absent is harmless.
-        run(["docker", "rm", "-f", "-v", name])
-        shutil.rmtree(workdir, ignore_errors=True)
+        # Unconditional: `docker run -d` can create the container and still fail.
+        try:
+            clean = remove_scratch_container(run, name)
+        finally:
+            shutil.rmtree(workdir, ignore_errors=True)
+    # A restore that passed but left the restored data behind is not a pass.
+    return ok and clean
+
+
+def remove_scratch_container(run: Run, name: str) -> bool:
+    """Remove a drill's container with its volumes, then confirm both are gone.
+
+    `-v` is the data: an image that declares a VOLUME (postgres, gitea) keeps the
+    restored database in an anonymous volume that outlives a plain `docker rm`
+    (lesson-498). The exit code of `docker rm` cannot tell a removal that failed
+    from one that had nothing to remove, since both are non-zero, so the answer
+    is read back: the container must be unknown to docker, and so must each
+    volume it mounted.
+    """
+    rc, out, _ = run(["docker", "container", "inspect", "-f", _VOLUMES_FORMAT, name])
+    volumes = out.split() if rc == 0 else []
+    run(["docker", "rm", "-f", "-v", name])
+    left = []
+    rc, _, err = run(["docker", "container", "inspect", name])
+    if rc == 0 or "no such container" not in err.lower():
+        left.append(f"container {name}")
+    for volume in volumes:
+        rc, _, err = run(["docker", "volume", "inspect", volume])
+        if rc == 0 or "no such volume" not in err.lower():
+            left.append(f"volume {volume}")
+    if left:
+        logger.error(
+            f"drill: restored data is still on this machine ({', '.join(left)}): "
+            f"remove it now with `docker rm -f -v {name}` and `docker volume rm` on each volume"
+        )
+    return not left
+
+
+def _load_and_check(
+    *,
+    run: Run,
+    repo: str,
+    restic_env: dict[str, str],
+    snapshot: str,
+    dump_path: str,
+    workdir: Path,
+    name: str,
+    namespace: str,
+    deployment: str,
+    container: str,
+    kubeconfig: Path,
+    sleep: Callable[[float], None],
+) -> bool:
+    """Everything between reading the snapshot and the teardown. True only on a complete restore."""
+    dump = workdir / "pg_dumpall.sql"
+    rc, _, err = run(
+        ["restic", "-r", repo, "dump", snapshot, dump_path],
+        env=restic_env,
+        stdout_path=str(dump),
+        stderr_to_file=False,
+    )
+    if rc != 0 or not dump.exists():
+        logger.error(f"drill: restic could not read {dump_path} from snapshot {snapshot}: {err.strip()[:160]}")
+        return False
+    if not _has_trailer(dump):
+        logger.error("drill: the dump has no completion trailer: this backup would not restore whole")
+        return False
+    logger.success(f"drill: {dump_path} carries its completion trailer ({dump.stat().st_size} bytes)")
+
+    kubectl = ["kubectl", "--kubeconfig", str(kubeconfig), "-n", namespace]
+    jsonpath = f'{{.spec.template.spec.containers[?(@.name=="{container}")].image}}'
+    rc, image, err = run([*kubectl, "get", "deploy", deployment, "-o", f"jsonpath={jsonpath}"])
+    if rc != 0 or not image.strip():
+        logger.error(f"drill: cannot read the image live runs: {err.strip()[:160]}")
+        return False
+    image = image.strip()
+
+    # No published port and trust auth: the container is reachable only
+    # through `docker exec` on this machine, for the drill's lifetime.
+    rc, _, err = run(["docker", "run", "-d", "--name", name, "-e", "POSTGRES_HOST_AUTH_METHOD=trust", image])
+    if rc != 0:
+        logger.error(f"drill: the scratch container did not start: {err.strip()[:160]}")
+        return False
+    # Over TCP on purpose: the image's init server listens on the socket only,
+    # so a socket check can pass before the real server is up.
+    for _ in range(60):
+        if run(["docker", "exec", name, "pg_isready", "-h", "127.0.0.1", "-U", "postgres", "-q"])[0] == 0:
+            break
+        sleep(1)
+    else:
+        logger.error("drill: the scratch server never became ready")
+        return False
+
+    run(["docker", "cp", str(dump), f"{name}:/tmp/pg_dumpall.sql"])
+    log = workdir / "psql.log"
+    run(
+        [
+            "docker",
+            "exec",
+            name,
+            "psql",
+            "-U",
+            "postgres",
+            "-d",
+            "postgres",
+            "-v",
+            "ON_ERROR_STOP=0",
+            "-q",
+            "-f",
+            "/tmp/pg_dumpall.sql",
+        ],
+        stdout_path=str(log),
+    )
+    errors = [line for line in log.read_text(errors="replace").splitlines() if "ERROR:" in line]
+    failed = [line for line in errors if not ("role " in line and "already exists" in line)]
+    if failed:
+        # Counted, never printed: a failed statement's text can carry row data.
+        logger.error(f"drill: {len(failed)} statement(s) did not load (text withheld: it can carry row data)")
+        return False
+
+    live = _counts(
+        run,
+        [
+            "kubectl",
+            "--kubeconfig",
+            str(kubeconfig),
+            "exec",
+            "-i",
+            "-n",
+            namespace,
+            f"deploy/{deployment}",
+            "-c",
+            container,
+            "--",
+            "sh",
+            "-c",
+            'psql -U "$POSTGRES_USER" -At -F "|" -f - -d "$1"',
+            "sh",
+        ],
+    )
+    restored = _counts(run, ["docker", "exec", "-i", name, "psql", "-U", "postgres", "-At", "-F", "|", "-f", "-", "-d"])
+    if live is None or restored is None:
+        logger.error("drill: CANNOT CHECK — counting failed on " + ("live" if live is None else "the restore"))
+        return False
+    if not any(live.values()):
+        # Every check below is "for each table live has", so an empty answer
+        # would pass with nothing compared (lesson-416).
+        logger.error("drill: CANNOT CHECK — live reported no tables at all")
+        return False
+
+    ok, lines = compare(live, restored)
+    for line in lines:
+        (logger.error if line.startswith("FAIL") else logger.info)(line)
+    if ok:
+        logger.success(f"drill: snapshot {snapshot} restores completely ({sum(map(len, live.values()))} tables)")
+    return ok
 
 
 def _staging_dir(project_root: Path) -> str:
