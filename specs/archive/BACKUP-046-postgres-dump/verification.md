@@ -92,5 +92,5 @@ Rerun at 09:20Z on the same snapshot: `restores completely (34 tables)`, rc 0, a
 ## Promotion candidates
 
 - [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/storage-backup/lesson-495-a-backup-exclusion-with-a-trigger-is-a-promise-nobody-keeps.md
-- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: the tier-2 ruling and logical-dump method apply ADR-049/BACKUP doctrine and decide nothing new
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: the tier-2 ruling and the logical-dump method apply the existing backup tiers in `common.yaml` and decide nothing architectural
 - [x] New pattern candidate for `00_meta/patterns/`? no: one project, one engine
