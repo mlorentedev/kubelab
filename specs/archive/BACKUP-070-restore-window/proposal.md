@@ -1,7 +1,7 @@
 ---
 id: "BACKUP-070-restore-window"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-10-01"
 issue: "mlorentedev/kubelab#1998"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
@@ -29,6 +29,7 @@ The restore runbook tells the operator to take a prod app's data offline before 
 
 - A committed `ignoreDifferences` on replicas. The operator ruled it out: it would silence drift on every reconcile, not only during a restore.
 - Pausing a single resource inside the Application. Argo CD has no per-resource auto-sync switch, so the window pauses the whole env's Application: a merge to master does not deploy to that env while a window is open. The holder annotation and `make check-apps` drift make that visible.
+- Pausing the whole hub with `make hub-pause` (`toolkit/features/hub_pause.py`). Considered and rejected: it stops the application-controller for every Application on the hub, prod's included, where a window pauses only the env being restored.
 - Automating the restore itself (`pg_restore`, file copy). The window only makes the existing manual steps safe.
 
 ## Risks / open questions

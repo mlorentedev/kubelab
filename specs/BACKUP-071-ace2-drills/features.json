@@ -1,0 +1,37 @@
+[
+  {
+    "id": "BACKUP-071-ace2-drills-f1",
+    "behavior": "AC1: node_backup and dev_node share one restic install; provisioning ace2 twice ends changed=0 with no SOPS age key on the node",
+    "verification": "poetry run pytest -q -p no:cacheprovider --no-cov tests/test_restic_install_shared.py && ssh ace2 test ! -e .config/sops/age/keys.txt",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-071-ace2-drills-f2",
+    "behavior": "AC2: the Gitea and Headscale drills pass on ace2 from a pushed commit",
+    "verification": "make backup-drill-gitea HOST=ace2 ENV=prod && make backup-drill-headscale HOST=ace2 ENV=prod",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-071-ace2-drills-f3",
+    "behavior": "AC2/AC3: secrets travel on stdin, never argv or disk; the remote never reads SOPS; a dirty or unpushed tree is refused; Headscale live reads stay on the workstation",
+    "verification": "poetry run pytest -q -p no:cacheprovider --no-cov tests/test_drill_remote.py tests/test_headscale_drill.py",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-071-ace2-drills-f5",
+    "behavior": "AC4: BACKUP-040 and BACKUP-067 verification.md record their ace2 run",
+    "verification": "for s in BACKUP-040 BACKUP-067; do cat specs/$s-*/verification.md specs/archive/$s-*/verification.md 2>/dev/null | grep -q 'HOST=ace2' || exit 1; done",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-071-ace2-drills-f4",
+    "behavior": "AC5: the runbook explains running a drill on ace2",
+    "verification": "grep -q 'HOST=ace2' docs/runbooks/offsite-backup-restore.md",
+    "state": "pending",
+    "evidence": ""
+  }
+]

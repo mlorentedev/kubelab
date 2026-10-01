@@ -278,7 +278,7 @@ def test_no_stale_exemptions() -> None:
 
 @pytest.mark.parametrize("env", ENVIRONMENTS)
 def test_resolver_agrees_with_kustomize(env: str) -> None:
-    """Cross-check, skipped where kubectl is absent (CI runners).
+    """Cross-check, skipped where kubectl is absent (never in CI, which installs it: #2003).
 
     This does not gate the invariant — the tests above do that from files, and
     they run everywhere. What this pins is the *resolver's* claim to model

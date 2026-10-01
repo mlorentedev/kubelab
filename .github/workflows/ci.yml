@@ -84,12 +84,38 @@ jobs:
       # any colour-enabled terminal — worth normalising at the assertion, which
       # is a change to test_sync.py and therefore a different PR.
       TERM: dumb
+      # kubectl renders the overlays for the 18 render tests, through the
+      # kustomize it embeds, so the version is the cluster's: `k3s.version` in
+      # common.yaml minus its `+k3s1` suffix. tests/test_ci_kubectl_gate.py fails
+      # when the two disagree. The checksum is committed rather than fetched next
+      # to the binary, which would only prove the download was not truncated.
+      KUBECTL_VERSION: v1.34.4
+      KUBECTL_SHA256: d50c359d95e0841eaad08ddc27c7be37cba8fdccfba5c8e2ded65e121ff112db
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
         with:
           python-version: '3.12'
+
+      # Gate, do not report (#2003, reversing #955's "report, do not gate"). The
+      # render tests skip without kubectl, and in this required job a skip under
+      # a green check is the vacuous-green class of lesson-416: the check says
+      # the renders passed when none ran. So the job installs its own pinned
+      # kubectl instead of trusting the runner image, fails here if that did not
+      # work, and tests/conftest.py fails any test that still skips naming kubectl.
+      - name: Install kubectl
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/kubectl" \
+            "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          echo "${KUBECTL_SHA256}  $RUNNER_TEMP/kubectl" | sha256sum --check --strict
+          install -D -m 0755 "$RUNNER_TEMP/kubectl" "$RUNNER_TEMP/bin/kubectl"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: kubectl is present
+        run: |
+          test "$(command -v kubectl)" = "$RUNNER_TEMP/bin/kubectl"
+          kubectl version --client | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Install Poetry
         run: pipx install poetry
@@ -148,21 +174,6 @@ jobs:
 
       - name: Ansible
         run: make lint-ansible
-
-      # Report, do not gate. `kubectl kustomize` renders the overlays for the
-      # OBS-007 tier assertions; if the runner image ever drops kubectl those
-      # tests skip with CANNOT CHECK rather than passing vacuously, and this step
-      # is how that becomes visible instead of silent.
-      - name: Record whether kubectl was available
-        if: always()
-        run: |
-          if command -v kubectl >/dev/null; then
-            kubectl version --client -o yaml | head -3 >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "::warning::kubectl absent — rendered-manifest tests skipped"
-            echo "kubectl absent: rendered-manifest tests were CANNOT CHECK, not verified." \
-              >> "$GITHUB_STEP_SUMMARY"
-          fi
 
   detect-changes:
     name: Detect Changes

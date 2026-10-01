@@ -3,18 +3,21 @@ tags: [spec, verification, templates]
 created: "2026-10-01"
 ---
 
-# Verification - BACKUP-070-restore-window
+# Verification - BACKUP-071-ace2-drills
+
+## Baseline on ace2 (2026-10-01, before any change)
+
+`ssh ace2` (non-interactive): user `manu` is in `docker`; `docker`, `make`, `git` and `/usr/bin/python3` are present; `restic` and `poetry` are missing; no `~/.config/sops/age`; no `~/.local/share/kubelab-drill`. mise pins python 3.12.13 for interactive shells only, so a non-interactive ssh session sees the system python.
 
 ## Evidence
 
 Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
 
-- [ ] AC1 -> commit `<hash>` / test `<name>`
-- [ ] AC2 -> commit `<hash>` / test `<name>`
-- [ ] AC3 -> commit `<hash>` / test `<name>`
-- [ ] AC4 -> commit `<hash>` / test `<name>`
-- [ ] AC5 -> commit `<hash>` / test `<name>`
-- [ ] AC6 -> commit `<hash>` / test `<name>`
+- [ ] AC1 -> commit `<hash>` / test `<name>` / run
+- [ ] AC2 -> commit `<hash>` / test `<name>` / run
+- [ ] AC3 -> commit `<hash>` / test `<name>` / run
+- [ ] AC4 -> commit `<hash>` / test `<name>` / run
+- [ ] AC5 -> commit `<hash>` / test `<name>` / run
 
 ## Test status
 
@@ -40,6 +43,6 @@ Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`.
 ## Archive checklist
 
 - [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/BACKUP-070-restore-window/` -> `specs/archive/BACKUP-070-restore-window/`
+- [ ] Folder moved: `specs/BACKUP-071-ace2-drills/` -> `specs/archive/BACKUP-071-ace2-drills/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
 - [ ] Promotions above executed (if any)

@@ -145,6 +145,8 @@ ENV_TARGETS: dict[str, tuple[str, str]] = {
     "backup-drill-gitea": ("--env", "prod"),
     "backup-drill-headscale": ("--env", "prod"),
     "backup-drill-apps": ("--env", "prod"),
+    # Added with the target (BACKUP-070): the window exists for prod restores.
+    "restore-window": ("--env", "prod"),
     # Already correct before #1644. Included as a regression net: "correct and
     # untested" is exactly the state the eight above were in.
     "maintain": ("-e", "staging"),
