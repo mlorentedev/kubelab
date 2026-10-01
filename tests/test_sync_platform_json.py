@@ -539,3 +539,17 @@ apps: {}
         missing_cfg = tmp_path / "does_not_exist.yaml"
         rc = platform_manifest.sync(output_path=target_file, check=False, config_path=missing_cfg)
         assert rc == 1
+
+
+class TestCommittedManifestIsCurrent:
+    def test_the_committed_manifest_matches_its_ssot(self) -> None:
+        """The committed platform.json is what common.yaml generates today.
+
+        Only the Windows job of the Config Drift Gate ran this comparison, and
+        that job is not required, so two merges that changed common.yaml left
+        master's manifest stale on 2026-10-01 with every required check green.
+        Asserting it here puts it in the suite branch protection requires.
+        """
+        assert platform_manifest.sync(check=True) == 0, (
+            "infra/config/platform.json is stale: run `make sync-platform-json` and commit it"
+        )
