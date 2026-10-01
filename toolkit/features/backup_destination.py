@@ -414,13 +414,88 @@ def write_watcher_targets(project_root: Path, config: dict[str, Any]) -> bool:
     return True
 
 
+def cluster_node(config: dict[str, Any]) -> Optional[str]:
+    """The node in `k3s_servers` for this env's merged config, or None if not exactly one.
+
+    The key matches `backup.sources`: `networking.vps` is `vps`, `networking.nodes.ace1` is `ace1`.
+    """
+    networking = config.get("networking", {}) or {}
+    candidates = {key: value for key, value in networking.items() if key != "nodes"}
+    candidates.update(networking.get("nodes", {}) or {})
+    found = [
+        name
+        for name, node in candidates.items()
+        if isinstance(node, dict) and "k3s_servers" in (node.get("ansible_groups") or [])
+    ]
+    return found[0] if len(found) == 1 else None
+
+
+def _claims_in(entries: Optional[dict[str, Any]]) -> set[tuple[str, str]]:
+    return {
+        (e["pvc"]["namespace"], e["pvc"]["claim"])
+        for e in (entries or {}).values()
+        if isinstance(e, dict) and isinstance(e.get("pvc"), dict)
+    }
+
+
+def unruled_claims(backup: dict[str, Any], node: str, live: set[tuple[str, str]]) -> list[tuple[str, str]]:
+    """Live claims that are neither a backup source nor an exclusion on `node`."""
+    ruled = _claims_in((backup.get("sources") or {}).get(node)) | _claims_in((backup.get("excluded") or {}).get(node))
+    return sorted(live - ruled)
+
+
+def check_claim_rulings(config: dict[str, Any], kubeconfig: Path, run: RunFn) -> bool:
+    """BACKUP-046 AC4: every claim the cluster holds has a ruling in `backup`.
+
+    The static guard reads the rendered overlay. This reads the cluster, which also
+    holds claims nothing in the overlay declares (`kube-system/traefik`, from K3s's
+    own chart). Every way of not looking is CANNOT CHECK and returns False.
+    """
+    import json
+
+    backup = config.get("backup", {}) or {}
+    node = cluster_node(config)
+    if node is None:
+        logger.error("claims: CANNOT CHECK — no single node is in k3s_servers for this env")
+        return False
+    if node not in ((backup.get("sources") or {}) | (backup.get("excluded") or {})):
+        logger.warning(f"claims: cluster node '{node}' declares no backups in this env; rulings not checked")
+        return True
+    if not kubeconfig.is_file():
+        logger.error(f"claims: CANNOT CHECK — no kubeconfig at {kubeconfig} (make kubeconfig ENV=<env>)")
+        return False
+
+    rc, out, err = run(["kubectl", "--kubeconfig", str(kubeconfig), "get", "pvc", "--all-namespaces", "-o", "json"], {})
+    try:
+        items = json.loads(out or "{}").get("items", []) if rc == 0 else []
+    except json.JSONDecodeError:
+        items = []
+    if not items:
+        # A cluster with state always holds claims, so zero means the read failed.
+        reason = err.strip()[:160] if rc != 0 else "the cluster returned no claims"
+        logger.error(f"claims: CANNOT CHECK — {reason}")
+        return False
+
+    live = {(i["metadata"]["namespace"], i["metadata"]["name"]) for i in items}
+    missing = unruled_claims(backup, node, live)
+    for namespace, claim in missing:
+        logger.error(
+            f"claims: {namespace}/{claim} has no ruling — declare it in backup.sources.{node} "
+            f"or in backup.excluded.{node} with a reason and tier: 3"
+        )
+    if not missing:
+        logger.success(f"claims: all {len(live)} live claims on '{node}' have a backup ruling")
+    return not missing
+
+
 def coverage(
     env: str = "prod",
     project_root: Optional[Path] = None,
     cm: Optional[ConfigurationManager] = None,
     run: Optional[RunFn] = None,
+    kubeconfig: Optional[Path] = None,
 ) -> bool:
-    """Report the newest snapshot per declared node, read from R2.
+    """Report the newest snapshot per declared node, read from R2, then the claim rulings.
 
     Answers "does every node that should have a backup actually have one, and
     how old is it" — the question AC1 asks, from where AC1 requires it be asked.
@@ -507,4 +582,8 @@ def coverage(
             f"({hours:.1f}h ago), {len(newest.get('paths') or [])} path(s)"
         )
 
-    return ok
+    if kubeconfig is None:
+        from toolkit.features.k8s_kubeconfig import output_path
+
+        kubeconfig = output_path(env)
+    return check_claim_rulings(cm.get_merged_config(), kubeconfig, run) and ok
