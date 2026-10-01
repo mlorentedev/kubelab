@@ -330,7 +330,9 @@ empty server.
 server: it carries `CREATE DATABASE` for every database and fails on each one
 that exists. Restore the whole dump into a scratch container, take that one
 database out with `pg_dump -Fc <db>`, and `pg_restore --clean --if-exists -d <db>`
-it into live with its app scaled to zero (on prod that step needs #1998: Argo CD self-heals the replicas back). Build the scratch container the way the
+it into live while that app is stopped by a restore window: open it with
+`make restore-window APP=<app> ENV=prod` before `pg_restore` and close it with
+`END=1` after (see "Taking an app offline for a restore" below). Build the scratch container the way the
 drill does (`docker run -d -e POSTGRES_HOST_AUTH_METHOD=trust <live image>`, no
 published port) and remove it with `docker rm -f -v`. Without `-v` the restored
 database stays on this machine in an anonymous volume, because the image
@@ -479,10 +481,9 @@ identifiers, schema 23 on both sides, 3 s to a healthy server; n8n 4 workflows a
 
 **Restoring it for real** (the claim's data is lost or corrupt). Use the snapshot the
 drill just passed, on the VPS, with the restic environment from "Restoring — normal
-case" loaded. The app must not run while its files are replaced. **Taking it offline is
-the step without a safe path today:** Argo CD prod self-heals `replicas: 1` back within
-seconds, so `kubectl scale --replicas=0` does not hold. #1998 is the fix; until it lands,
-take the app offline under the operator's decision, the same as any break-glass action.
+case" loaded. The app must not run while its files are replaced, so open a restore
+window first and close it once the files are in place (see "Taking an app offline for a
+restore" below).
 
 ```bash
 SVC=n8n                                   # or authelia
@@ -495,7 +496,7 @@ P=$(kubectl --kubeconfig ~/.kube/kubelab-prod-config get pv -o \
 sudo -E restic -r "$REPO" restore <snapshot-id> \
   --include "/opt/node-backup/staging/$SVC" --target "/tmp/$SVC-restore"
 sqlite3 "/tmp/$SVC-restore/opt/node-backup/staging/$SVC/$DB" 'PRAGMA integrity_check;'
-# With the app offline (see above):
+# On the workstation first: make restore-window APP=$SVC ENV=prod
 sudo cp -a "$P" "/root/$SVC-data.broken-$(date +%F)"
 # Empty it completely: a -wal left from the broken database would be replayed
 # onto the restored one when the app opens it.
@@ -504,9 +505,38 @@ sudo cp -a "/tmp/$SVC-restore/opt/node-backup/staging/$SVC/." "$P"/
 sudo chown -R "$OWNER" "$P"/*
 ```
 
-Bring the app back, then check it from outside: `make test-e2e ENV=prod` and a login.
+Bring the app back by closing the window from the workstation,
+`make restore-window APP=$SVC ENV=prod END=1`, then check it from outside:
+`make test-e2e ENV=prod` and a login.
 Keep `/root/<svc>-data.broken-*` until the app is confirmed whole, then delete it and
 `/tmp/<svc>-restore`: both hold encrypted secrets, and n8n's `config` holds its key.
+
+### Taking an app offline for a restore
+
+A prod Deployment cannot be stopped with `kubectl scale --replicas=0`: Argo CD runs
+`selfHeal: true` there and scales it back within seconds, onto data that is half
+replaced. On staging the scale holds only until master moves (lesson-330). A restore
+window pauses the env's auto-sync for the length of the restore (BACKUP-070):
+
+```bash
+make restore-window APP=n8n ENV=prod          # open: pause, scale to zero, wait for the pods
+# ... replace the data ...
+make restore-window APP=n8n ENV=prod END=1    # close: git's sync policy, one sync, wait
+```
+
+- **Open** sets `automated.enabled: false` on `kubelab-<env>`, writes a holder
+  annotation (`kubelab.live/restore-window`: the app, who, since when), scales the
+  Deployment to zero and returns only once no pod runs or mounts its claims. It prints
+  the sync policy it replaced.
+- **While it is open, that env receives no merges**: Argo CD has no per-resource
+  switch, so the whole Application is paused. A second open is refused and names the
+  holder, and `make deploy-apps` refuses too, because re-applying git would end the
+  pause in the middle of the restore. Close the window as soon as the data is in place.
+- **Close** restores the sync policy declared in `infra/k8s/argocd/applications/`
+  (never a copy taken at open), removes the annotation, triggers one sync, and exits 0
+  only once the Application is Synced/Healthy and the app's replicas are ready. If it
+  times out, the window is already closed: read what it saw, then `make check-apps`.
+  Closing with no window open says so and exits 0, so it is safe to run twice.
 
 ## Restoring — the disaster case
 
