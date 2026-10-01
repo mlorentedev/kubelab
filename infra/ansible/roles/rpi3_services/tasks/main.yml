@@ -49,14 +49,19 @@
     group: root
     mode: "0644"
   become: true
+  register: _rpi3_unit
   tags: [boot]
 
+# Under --check a NEW unit is only predicted, so systemd has nothing to enable
+# and the dry run fails here (#1983). Skipped only in that case: on a real run,
+# and on a dry run where the unit already exists, the task runs as before.
 - name: Enable the Compose stack unit at boot
   systemd:
     name: kubelab-rpi3.service
     enabled: true
     daemon_reload: true
   become: true
+  when: not (ansible_check_mode and _rpi3_unit is changed)
   tags: [boot]
 
 - name: Pull service images
