@@ -22,7 +22,7 @@
   },
   {
     "id": "BACKUP-057-f4",
-    "behavior": "No two nodes render the same bucket, key pair or restic password in backup.yml, backup_destination or the watcher targets; the watcher Secret, the declared exception, carries one Object Read pair distinct from every node's pair plus each node's restic password taken from that node's own SOPS key (AC1); each minted token's requested policy names exactly one bucket, and the watcher's names exactly the node buckets (AC3)",
+    "behavior": "No two nodes render the same bucket, key pair or restic password in backup.yml, backup_destination or the watcher targets; the watcher Secret, the declared exception, carries one Object Read pair distinct from every node's pair plus each node's restic password taken from that node's own SOPS key (AC1); each node token's requested policy names exactly one bucket, and the watcher's read token names exactly the node buckets (AC3)",
     "verification": "poetry run pytest tests/test_backup_per_node_isolation.py --no-cov -q",
     "state": "pending",
     "evidence": ""
@@ -36,7 +36,7 @@
   },
   {
     "id": "BACKUP-057-f5",
-    "behavior": "The migration copies, compares snapshot count and oldest time, reinitialises the marker with its journal line, ships and re-pins, stopping at the first mismatch (AC4)",
+    "behavior": "The migration copies, matches every source snapshot to exactly one copy by its original ID, reinitialises the marker with its journal line, ships and re-pins, stopping at the first mismatch (AC4)",
     "verification": "poetry run pytest tests/test_backup_migrate.py --no-cov -q",
     "state": "pending",
     "evidence": ""

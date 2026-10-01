@@ -91,14 +91,14 @@ The size decides whether R = 30 fits the free tier. It is measured by the watche
 - [ ] [AC3] The ship reports `backup` and `prune` separately (Q6). Failing test first, in `tests/test_node_backup_ship_script.py`: with a fake restic whose `forget --prune` exits non-zero after a successful `backup`, the ship exits 0, emits a distinct prune-failure line, and the signal that line feeds raises its own alert. With a failing `backup`, the ship still exits non-zero. Then change `node-backup-ship.sh.j2`.
 - [ ] [AC4] `make backup-migrate NODE=<node> ENV=prod` (toolkit plus an Ansible run, no ad-hoc restic). It runs these steps and stops at the first failure:
   1. `restic copy --from-repo` from `kubelab-backups/<node>` into the new bucket, from the operator workstation.
-  2. Compare the snapshot count and the oldest snapshot time with the source.
+  2. Compare the snapshot sets from `restic snapshots --json`: every source snapshot's `original` (else its ID) is the `original` of exactly one snapshot in the new bucket. A missing or duplicated one stops the migration.
   3. `backup-repo-reinit` journals the new id.
   4. Deploy the node's new credential.
   5. Ship once.
   6. Re-pin `backup.r2.repository_ids`.
 
-  Tests mock restic and assert the order and the stop on mismatch.
-- [ ] [AC4] Migrate all four nodes in **one sitting**: until a node's copy finishes, `kubelab-backups` holds its only copy, unlocked. Record per-node counts and times in `verification.md`.
+  Tests mock restic and assert the order, and the stop when one source snapshot is missing even though the count and the oldest time match.
+- [ ] [AC4] Migrate all four nodes in **one sitting**: until a node's copy finishes, `kubelab-backups` holds its only copy, unlocked. Record per node the number of source snapshots and of matched copies in `verification.md`.
 - [ ] [AC1] [AC3] `toolkit backup isolation-probe --env prod` / `make backup-isolation-probe ENV=prod`. For every ordered pair of nodes, node A's credential must be refused on list and delete in node B's bucket. A direct delete of the youngest `data/` object in each bucket, with that node's own credential, must be refused. It exits non-zero if any request is **accepted**, and also if any bucket has no object under `data/`: an empty prefix has nothing to refuse a delete of, so it would report immutability it never measured. It therefore runs after each node's first ship to its bucket, never before. Unit tests mock the S3 client and assert that an accepted request fails the probe. This is what makes the check able to fail: today's shared bucket passes every other check.
 - [ ] [AC1] [AC3] Measured in prod, in this order: `make backup-node NODE=all ENV=prod` rc 0, then `make backup-isolation-probe ENV=prod` rc 0, and `make watcher-run ENV=prod` reports `healthy:4`. Then, seven days after the last node migrates, `make alerts` and the Grafana alert history show the prune-failure alert never fired in that window, which is the half of AC3 that rc 0 cannot show (Q6). Record both in `verification.md`.
 
