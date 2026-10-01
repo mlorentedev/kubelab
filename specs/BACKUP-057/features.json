@@ -43,14 +43,14 @@
   },
   {
     "id": "BACKUP-057-f9",
-    "behavior": "On the scratch bucket under a 1-day lock: --max-repack-size 0 takes the dry-run repack list from at least one pack to none; forgetting a snapshot younger than R is refused at the snapshot's DELETE; a prune of unreferenced packs younger than R is refused at the pack's DELETE; and the same forget is accepted once everything is older than R (AC2, AC3)",
-    "verification": "Manual, tasks.md PR 2 scratch measurement steps 2b, 3, 3b and 5 after make tf-r2-apply SCRATCH=1; each step's command, exit status and restic output recorded in verification.md",
+    "behavior": "On the scratch bucket under a 1-day lock: two backups and check succeed with locks/ outside the rule; --max-repack-size 0 takes the dry-run repack list from at least one pack to none; forgetting a snapshot younger than R is refused by R2 at the snapshot's DELETE; a prune of unreferenced packs younger than R is refused at the pack's DELETE; a direct young data/ delete is refused; and the same forget is accepted once everything is older than R (AC2, AC3)",
+    "verification": "Manual, tasks.md PR 2 scratch measurement steps 2, 2b, 3, 3b, 4 and 5 after make tf-r2-apply SCRATCH=1; each step's command, exit status and restic output recorded in verification.md",
     "state": "pending",
     "evidence": ""
   },
   {
     "id": "BACKUP-057-f6",
-    "behavior": "In prod, under the lock, every node ships and the watcher reports healthy:4; a young data/ delete and a cross-node list are refused (AC1, AC3)",
+    "behavior": "In prod, under the lock, every node ships and the watcher reports healthy:4; a young data/ delete and a cross-node list are refused ; the prune-failure alert stays silent for the seven days after the last migration (AC1, AC3)",
     "verification": "make backup-node NODE=all ENV=prod && make backup-isolation-probe ENV=prod && make watcher-run ENV=prod",
     "state": "pending",
     "evidence": ""
