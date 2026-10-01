@@ -1061,8 +1061,10 @@ def test_a_failed_call_is_not_replayed_before_the_next_model_runs() -> None:
     fallback: the handler's `MODEL_RETRIES = 2` (timeouts included while
     `retry_same_model_on_timeout` is true) times the completion client's default
     retries. Run 36800846902, one of #1909's 720 s failures: mimo-v2.5 answered
-    401 at once, then deepseek took 2 x 3 x 120 s. Both layers off, each model in
-    the chain gets one attempt.
+    401 at once, then deepseek took 2 x 3 x 120 s. With both settings off a
+    timed-out call goes straight to the next model. A non-timeout `APIError` is
+    still replayed once: `_should_retry_same_model` has no setting for it, and
+    the step limit asserted below is what bounds that case.
 
     Asserted in BOTH files: PR-Agent reads `.pr_agent.toml` from the default
     branch, the workflow from the PR head, so only the env value reaches the PR
@@ -1106,13 +1108,21 @@ def test_a_review_can_report_more_findings_than_the_upstream_default() -> None:
 
 
 def test_every_model_in_the_chain_gets_its_whole_timeout_inside_the_job() -> None:
-    """With no replay of a failed call, the worst case is one `ai_timeout` per
-    model in the chain, and all of it must end before `timeout-minutes` kills the
-    job: a cancelled job publishes nothing and names nothing. The timeout itself
-    must exceed what a streamed review takes: 275-300 s for #1962's 30k-token
-    diff on mimo-v2.6-flash (a direct call, and a local run of the pinned
-    PR-Agent). Upstream's 120 s timed out on both models in run 36803951714.
-    The 60 s is setup and publish, measured at about 45 s on #1962's runs.
+    """Two bounds, because the pinned handler gives a model two shapes of worst case.
+
+    A timed-out call is not replayed, so the healthy chain costs one `ai_timeout`
+    per model and must fit inside the PR-Agent step's own limit. The timeout
+    itself must exceed what a streamed review takes: 275-300 s for #1962's
+    30k-token diff on mimo-v2.6-flash. Upstream's 120 s timed out on both models
+    in run 36803951714.
+
+    A non-timeout `APIError` (a 5xx, a dropped stream) is replayed once on the
+    same model: `MODEL_RETRIES = 2` at litellm_ai_handler.py:141 in the pinned
+    v0.46.0, with no setting. That costs up to 2 x 2 x `ai_timeout`, more than the
+    job's 15 min. The step limit cuts it, and must leave the job time for the
+    step after it to name the failure: a cancelled job publishes nothing and
+    names nothing, which is #1909, and its AC2 asks for a named failure in under
+    15 min. The 60 s is setup and that step, measured at about 45 s on #1962.
     """
     timeout = int(_toml()["config"]["ai_timeout"])
     assert str(_review_env()["CONFIG__AI_TIMEOUT"]) == str(timeout)
@@ -1121,4 +1131,8 @@ def test_every_model_in_the_chain_gets_its_whole_timeout_inside_the_job() -> Non
     assert json.loads(_review_env()["CONFIG__FALLBACK_MODELS"]) == _toml()["config"]["fallback_models"]
     chain = 1 + len(_fallback_model_names())
     assert timeout > 300
-    assert chain * timeout + 60 < int(_review_job()["timeout-minutes"]) * 60
+    step = next(s for s in _review_job()["steps"] if "pr-agent@" in str(s.get("uses", "")))
+    assert "timeout-minutes" in step, "the PR-Agent step has no limit of its own; a replayed APIError outlives the job"
+    step_seconds = int(step["timeout-minutes"]) * 60
+    assert chain * timeout <= step_seconds
+    assert step_seconds + 60 < int(_review_job()["timeout-minutes"]) * 60

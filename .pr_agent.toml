@@ -59,9 +59,12 @@ model = "openai/mimo-v2.6-flash"
 #   Run 36800846902 (#1909's 720 s): mimo-v2.5 answered 401 at once, and
 #   deepseek then took 2 x 3 x 120 s before "Failed to review PR".
 #
-# Hence: stream (the [litellm] block below), one attempt per model, and an
-# attempt long enough to finish. `tests/test_pr_agent_workflow.py` holds
-# chain x ai_timeout + setup under the job's `timeout-minutes`.
+# Hence: stream (the [litellm] block below), no replay of a timed-out call,
+# and an attempt long enough to finish. A non-timeout error (a 5xx, a dropped
+# stream) is still replayed once on the same model: MODEL_RETRIES is a
+# constant with no setting. So the PR-Agent step carries its own
+# `timeout-minutes`, which cuts that worst case and leaves the next step time
+# to name the failure. `tests/test_pr_agent_workflow.py` holds both bounds.
 retry_same_model_on_timeout = false
 num_retries = 0
 ai_timeout = 360

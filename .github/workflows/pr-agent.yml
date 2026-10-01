@@ -381,6 +381,12 @@ jobs:
           fi
       - name: PR-Agent
         if: steps.reviewable.outputs.any == 'true'
+        # Its own limit, under the job's 15. The healthy chain is one ai_timeout
+        # per model (2 x 360 s); a non-timeout APIError is replayed once on the
+        # same model with no setting to stop it, up to 2 x 2 x 360 s. Cutting the
+        # step here, not the job, leaves "Fail if no review was published" time
+        # to name the failure. tests/test_pr_agent_workflow.py holds both bounds.
+        timeout-minutes: 13
         # Pinned by COMMIT SHA, not by tag, and this deliberately exceeds the
         # upstream it ports from. A tag is mutable: whoever can move `v0.42.0`
         # can change what runs in a job that holds `NAN_API_KEY` on a public
