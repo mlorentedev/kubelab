@@ -67,6 +67,7 @@ class FakeKube:
         self.autosync_on_resume = False
         self.operation_polls = 0  # application reads an in-flight sync survives
         self.scaled_during_operation = False
+        self.deployment_gone = False  # the spoke answers NotFound for the Deployment
 
     # --- argv router -------------------------------------------------------
     def __call__(self, argv: list[str]) -> tuple[int, str, str]:
@@ -80,6 +81,8 @@ class FakeKube:
             self.replicas = int(next(a for a in argv if a.startswith("--replicas=")).split("=", 1)[1])
             return 0, "scaled", ""
         if kind == "deployment":
+            if self.deployment_gone:
+                return 1, "", 'Error from server (NotFound): deployments.apps "n8n" not found'
             return 0, json.dumps(self._deployment()), ""
         if kind == "pods":
             return 0, json.dumps({"items": self._pods()}), ""
@@ -441,6 +444,15 @@ class TestClose:
         assert ANNOTATION not in kube.app["metadata"]["annotations"]
         assert kube.app["spec"]["syncPolicy"] == declared_sync_policy(APPLICATIONS, "staging")
         assert not [c for c in kube.calls if "deployment" in c and c[-3:-2] in (["?"], ["None"], [""])]
+
+    def test_a_deployment_the_wait_cannot_read_says_the_window_is_closed(self) -> None:
+        kube = FakeKube()
+        _open(kube)
+        kube.deployment_gone = True
+        with pytest.raises(WindowError, match="(?i)window is closed and the sync requested.*not found"):
+            _close(kube)
+        assert ANNOTATION not in kube.app["metadata"]["annotations"]
+        assert kube.app["spec"]["syncPolicy"] == declared_sync_policy(APPLICATIONS, "staging")
 
     def test_closing_with_no_window_open_is_a_no_op(self) -> None:
         kube = FakeKube()

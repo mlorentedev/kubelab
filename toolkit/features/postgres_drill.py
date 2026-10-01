@@ -256,9 +256,12 @@ def _load_and_check(
         return False
     image = image.strip()
 
-    # No published port and trust auth: the container is reachable only
-    # through `docker exec` on this machine, for the drill's lifetime.
-    rc, _, err = run(["docker", "run", "-d", "--name", name, "-e", "POSTGRES_HOST_AUTH_METHOD=trust", image])
+    # Trust auth is safe only because nothing can connect: no network at all
+    # (loopback still serves the checks below), so the restored rows and role
+    # hashes are reachable only through `docker exec`, for the drill's lifetime.
+    rc, _, err = run(
+        ["docker", "run", "-d", "--name", name, "--network", "none", "-e", "POSTGRES_HOST_AUTH_METHOD=trust", image]
+    )
     if rc != 0:
         logger.error(f"drill: the scratch container did not start: {err.strip()[:160]}")
         return False

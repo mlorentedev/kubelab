@@ -41,4 +41,12 @@ All four finished with `Result=success`, `ExecMainStatus=0` and `no errors were 
 
 ## Still to do after merge
 
-- [ ] Redeploy from master (`make backup ENV=prod`); expect `changed=0` after the first run.
+- [x] Redeploy from master (`make backup ENV=prod`); expect `changed=0` after the first run. ✓ 2026-10-01 15:3xZ, master `5cf69877`: two consecutive runs, `changed=0 failed=0` on `beelink`, `kubelab-vps`, `rpi3` and `rpi4` both times. The first run was already `changed=0` because prod had been running this branch's templates since before #1956 merged.
+- [x] Full suite on master `5cf69877`: `make test` → `3227 passed, 16 skipped, 2 xfailed` (2026-10-01).
+- [x] Independent review: `dotf spec review BACKUP-063` → **PASS** (`agy/gemini-3.1-pro-high`, reviewed `1b910c1e`, no findings). `review.md` in this folder. ✓ 2026-10-01
+
+## Promotion candidates
+
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/storage-backup/lesson-489-a-rotation-keyed-on-the-iso-week-breaks-once-a-year.md (the rotation keys on epoch weeks, because an ISO-week key skips or repeats a subset once a year)
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: `t = 1` is a tuning value, recorded with its measurement in the `node_backup` default's comment
+- [x] New pattern candidate for `00_meta/patterns/`? no: the read-back rotation is specific to restic's `--read-data-subset`

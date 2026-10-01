@@ -218,6 +218,15 @@ def test_the_restore_uses_the_image_live_runs(drill) -> None:
     assert run[-1] == "postgres:16-alpine"
 
 
+def test_the_trust_auth_server_has_no_network(drill) -> None:
+    """Trust auth on a bridge would hand restored prod rows to any container on the host."""
+    fake = _Fake()
+    drill(fake)
+    run = next(c for c in fake.calls if c[:2] == ["docker", "run"])
+    assert "POSTGRES_HOST_AUTH_METHOD=trust" in run
+    assert run[run.index("--network") + 1] == "none"
+
+
 def test_a_dump_without_its_trailer_fails_before_any_container_starts(drill, capsys) -> None:
     fake = _Fake(trailer=False)
     assert drill(fake) is False

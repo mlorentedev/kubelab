@@ -11,7 +11,7 @@ created: "2026-10-01"
 
 - [x] Branch `feat/backup-046-postgres-dump` from master, worktree `~/Projects/kubelab-backup-046-wt`
 - [x] Emergency copy taken and restore-checked (2026-10-01 06:51Z, see `verification.md`)
-- [ ] Q1 answered by the operator: keep `crowdsec-db` at its ratified tier 2 (the default applied here) or downgrade it. Q2 is #1981.
+- [x] Q1 answered by the operator: keep `crowdsec-db` at its ratified tier 2 (the default applied here) or downgrade it. Q2 is #1981. ✓ 2026-10-01 (kept at tier 2, recorded on #1111)
 
 ## PR 1 — Postgres reaches R2, and the static guard
 
@@ -39,4 +39,4 @@ created: "2026-10-01"
 - [x] File the Vikunja attachments child of #1923 (Q2) and link it here: #1981. ✓ 2026-10-01
 - [x] Delete the emergency copy in `~/backups/kubelab-emergency/` once AC1 and AC5 pass. ✓ 2026-10-01
 - [x] `features.json` verifications non-vacuous; `verification.md` filled. ✓ 2026-10-01
-- [ ] Independent adversarial review, then archive and close #1111's Postgres half.
+- [x] Independent adversarial review, then archive and close #1111's Postgres half.
