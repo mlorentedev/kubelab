@@ -94,6 +94,7 @@ Inventoried 2026-10-01 against every surface an existing node-hosted service is 
 - [ ] Every acceptance criterion has a `features.json` entry with a non-vacuous verification command
 - [ ] `make test` and `make lint` pass
 - [ ] AC8 measured with the stack idle: `free -m` on ace2
+- [ ] [AC11] Power-cycle drill once PR 4 lands (the vault clone and both databases exist): reboot ace2 with the stack running, then record unit state, `git fsck` on the clone and `PRAGMA integrity_check` on both databases under `### Power-cycle drill` in `verification.md`
 - [ ] `verification.md` filled in, including R4's refinement of ADR-068 D1
 - [ ] ADR-068 amended at archive if R3 or R4 changed what it says
 - [ ] Runbook `docs/runbooks/hermes-kubelab.md`: start, stop, approve, rotate a token, restore from R2

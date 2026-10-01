@@ -106,6 +106,7 @@ Items marked **BLOCKING** must be resolved before the PR that depends on them is
 - [ ] **AC10. Credentials come from SOPS and stay out of reach.**
   - Every token the stack uses is a `SECRET_CATALOG` entry and passes `make secrets-audit ENV=staging`.
   - None is readable by the dev user. The rendered env files are mode `0600`, owned by the consuming user.
+- [ ] **AC11. A power cycle recovers cleanly.** From #1933's definition of done, which ADR-068 does not drop. After `sudo reboot` of ace2 with the stack running, both units come back without intervention, the vault clone has no `index.lock` and passes `git fsck`, and both SQLite databases pass `PRAGMA integrity_check`. The commands and their output are the evidence in `verification.md`.
 
 ## References
 
