@@ -17,6 +17,7 @@
   command: k3s --version
   register: k3s_installed_version
   changed_when: false
+  check_mode: false
   failed_when: false
   when: k3s_binary.stat.exists
 

@@ -132,6 +132,7 @@
   delay: 3
   until: _docker_ready.rc == 0
   changed_when: false
+  check_mode: false
 
 # --- Post-start (daemon is running) ---
 - name: Reset SSH connection for group changes
@@ -149,11 +150,13 @@
   command: docker --version
   register: docker_version
   changed_when: false
+  check_mode: false
 
 - name: Verify Docker Compose installation
   command: docker compose version
   register: docker_compose_version
   changed_when: false
+  check_mode: false
 
 - name: Display Docker versions
   debug:

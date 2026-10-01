@@ -279,6 +279,7 @@
   command: grep -q '^/var/log/syslog$' /etc/logrotate.d/rsyslog
   register: _rsyslog_has_syslog_block
   changed_when: false
+  check_mode: false
   failed_when: false
   when:
     - _rsyslog_logrotate.stat.exists

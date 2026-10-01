@@ -35,6 +35,7 @@
   command: df -h /
   register: _disk_before
   changed_when: false
+  check_mode: false
   when: maintenance_run_cleanup | bool
 
 - name: Show disk before
@@ -63,6 +64,7 @@
   command: apt-mark showhold
   register: _holds_before
   changed_when: false
+  check_mode: false
   failed_when: false
   when: maintenance_run_cleanup | bool and maintenance_security_updates | bool
         and ansible_facts.pkg_mgr == 'apt'
@@ -263,6 +265,7 @@
   command: snap get system refresh.retain
   register: _snap_retain_check
   changed_when: false
+  check_mode: false
   ignore_errors: true
   when: maintenance_run_cleanup | bool
 
@@ -328,6 +331,7 @@
   command: docker ps --filter "name=buildx_buildkit_builder-" --format "{% raw %}{{.Names}} ({{.Status}}){% endraw %}"
   register: _orphan_buildx
   changed_when: false
+  check_mode: false
   ignore_errors: true
   when: maintenance_run_cleanup | bool and 'docker_hosts' in group_names
 
@@ -381,6 +385,7 @@
   command: df -h /
   register: _disk_after
   changed_when: false
+  check_mode: false
   when: maintenance_run_cleanup | bool
 
 - name: Show cleanup summary

@@ -106,6 +106,7 @@
       delay: 5
       until: hs_probe.rc == 0
       changed_when: false
+      check_mode: false
   rescue:
     - name: Look for a previous policy to revert to
       stat:
