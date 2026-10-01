@@ -42,5 +42,7 @@ The heading is the lesson's claim, stated as a finding rather than a topic —
 **Protocol**: write the lesson in the session that produced it. A correction
 noticed and not written down is the one that recurs.
 
-After adding a file, add its row to the category's `_index.md` and bump the
-count in [`_index.md`](_index.md).
+After adding a file, add its row anywhere in the category's `_index.md`. The
+`lessons-index-counts` pre-commit hook (`toolkit tools lessons-index --fix`)
+derives every counter from the files and orders the rows newest first: by date,
+then by number within a date. Neither is placed by hand (#1649, #1912).

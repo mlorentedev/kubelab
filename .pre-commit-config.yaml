@@ -143,7 +143,7 @@ repos:
       # red `Tests`. Closing the route needs something neither stage can be --
       # tracked as #1678, whose AC4 is exactly that gap.
       - id: lessons-index-counts
-        name: Derive lesson index counters from the files
+        name: Derive lesson index counters and row order from the files
         entry: poetry run -- toolkit tools lessons-index --fix
         language: system
         files: '^docs/lessons/.*\.md$'

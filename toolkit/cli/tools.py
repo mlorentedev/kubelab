@@ -354,14 +354,15 @@ def lessons_index(
     ] = Path("docs/lessons"),
     fix: Annotated[
         bool,
-        typer.Option("--fix/--check", help="Rewrite the counters, or only report what disagrees"),
+        typer.Option("--fix/--check", help="Rewrite the counters and row order, or only report what disagrees"),
     ] = False,
     allow_removal: Annotated[
         bool,
         typer.Option("--allow-removal", help="A lesson committed at HEAD is meant to be gone from the tree"),
     ] = False,
 ) -> None:
-    """Derive the lesson index counters from the files on disk.
+    """Derive the lesson index counters from the files on disk, and order each
+    category's rows newest first (by date, then by number within a date, #1912).
 
     The counters are shared mutable state that every lesson PR writes, and git
     merges the line as text without raising a conflict — so a branch that was
@@ -402,17 +403,17 @@ def lessons_index(
     fixes = index.reconcile(root, apply=fix)
 
     if not fixes:
-        logger.success(f"{root}: counters already match the files")
+        logger.success(f"{root}: counters and row order already match the files")
         return
 
     for f in fixes:
         logger.info(str(f))
 
     if fix:
-        logger.success(f"{root}: rewrote {len(fixes)} counter(s) from the files")
+        logger.success(f"{root}: rewrote {len(fixes)} line(s) (counters or row order) from the files")
         raise typer.Exit(1)  # pre-commit convention: a hook that modified files fails
 
-    logger.error(f"{root}: {len(fixes)} counter(s) disagree with the files — run with --fix")
+    logger.error(f"{root}: {len(fixes)} line(s) (counters or row order) disagree with the files — run with --fix")
     raise typer.Exit(1)
 
 
