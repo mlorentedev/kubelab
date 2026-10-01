@@ -1,9 +1,10 @@
 # Backups, volumes and persistence
 
-16 lessons, newest first. Back to [all categories](../_index.md).
+17 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 499 | [Gitea answers an empty list with `null`: one empty repository made the restore drill unable to check anything](lesson-499-gitea-answers-an-empty-list-with-null.md) | 2026-10-01 |
 | 498 | [`docker rm` without `-v` keeps the restored database: the image declares the volume](lesson-498-docker-rm-without-v-keeps-the-restored-database.md) | 2026-10-01 |
 | 495 | [A backup exclusion with a trigger is a promise nobody keeps; only a tier is a ruling](lesson-495-a-backup-exclusion-with-a-trigger-is-a-promise-nobody-keeps.md) | 2026-10-01 |
 | 490 | [Sizing a restic repository costs its file count, not its bytes](lesson-490-sizing-a-restic-repository-costs-its-file-count-not-its-bytes.md) | 2026-09-30 |
