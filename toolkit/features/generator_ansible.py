@@ -65,7 +65,11 @@ class AnsibleGenerator(BaseGenerator):
 
         try:
             config_manager = ConfigurationManager(env, self.project_root)
-            config = config_manager.get_merged_config()
+            # Plaintext values only (common.yaml + <env>.yaml), no SOPS: nothing in
+            # the inventory is secret (measured identical against the decrypted
+            # merge for staging and prod, TOOL-090), and every `ansible run` now
+            # generates, so it must not need the age key or pay for two decrypts.
+            config = config_manager.get_plaintext_values()
             networking = config.get("networking", {})
             backup_sources = (config.get("backup") or {}).get("sources") or {}
 

@@ -50,4 +50,19 @@ construction actually happened. When a procedure's safety rests on an earlier
 command succeeding, chain it with `&&` and verify its effect (HEAD moved, tree
 clean). Never assume it succeeded because it usually does.
 
-**Tags**: `#git` `#pre-commit` `#mutation-testing` `#lesson-365` `#issue-1871`
+**Addendum (2026-09-30, TOOL-090, #1941)**: it recurred with the rule followed
+half-way. The guard *was* chained with `&&` (`commit && test -z "$(git status
+--porcelain)" && checkout <base> -- f && pytest`), so when mypy refused the
+commit the mutation did not run. But the restore that closed the experiment
+came after a `;`: `...; git checkout HEAD -- f`. It ran anyway, onto a HEAD
+that never received the work, and removed three files' uncommitted changes. The
+next commit then landed only the tests. The work came back from the blobs `git
+add` had written (`git fsck --unreachable`, matched by content), which is the
+only reason this is an addendum and not a loss. The whole experiment,
+restore included, belongs inside the guarded group, and the group has to return
+the test's status rather than the restore's, or a restore that succeeds hides
+what the test said:
+`test -z "$(git status --porcelain)" && { mutate && test; rc=$?; restore || rc=1; exit $rc; }`
+(run it in a subshell, `( ... )`, so the `exit` ends only the experiment).
+
+**Tags**: `#git` `#pre-commit` `#mutation-testing` `#lesson-365` `#issue-1871` `#issue-1941`
