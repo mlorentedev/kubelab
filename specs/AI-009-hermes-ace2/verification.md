@@ -29,6 +29,13 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - **AC8**: Glances container API, 3 min after start, idle: cgroup usage 1489 MiB, of which 591 MiB is reclaimable page cache, so a working set of 897 MiB against the 1536 MiB limit. Node available memory 10073 of 11739 MiB. Open WebUI loads its local embedding model at start; PR 5's `RAG_EMBEDDING_ENGINE=openai` should lower this, and AC8 is re-measured then.
 - **Teardown**: provision again without the placeholder: the container is taken down and `compose-webui.yml` and `webui.env` are removed (`changed=3`); next pass `changed=0`; port 3080 has no listener.
 
+### PR 2 (`feat/ai009-agent-user`), staging ace2, 2026-10-01
+
+- **AC1**: `make provision NODE=ace2 ENV=staging TAGS=agent_stack` first pass `changed=6` (packages, user, home mode, subuid and subgid, linger, setup tool). The next three passes `changed=0`, and `CHECK=1` `changed=0 failed=0`.
+- **AC2, daemon half of R3**: the role's asserts pass on every run. `docker info` through `unix:///run/user/<uid>/docker.sock` reports `name=rootless`. A `busybox` container started with `--memory 64m --cpus 0.5` reads back `67108864` from `memory.max` and `50000 100000` from `cpu.max`, so the user's cgroup has the memory and cpu controllers with no `user@.service` drop-in. The Hermes half of R3 is still open, and PR 3's first live step settles it.
+- **AC2, isolation**: as `hermes-kubelab`, `test -r` fails on the dev user's `~/.config/gh/hosts.yml`, `~/.ssh` and `~/.kube`, and on `/var/run/docker.sock`. The dev user's home is mode `750`. `sudo -l -U hermes-kubelab` reads "is not allowed to run sudo".
+- **Subordinate ids**: `hermes-kubelab:524288:65536` in both files, next to `manu:100000:65536`. The first pass's overlap assert looped over nothing (a folded YAML scalar kept `'\n'` literal, lesson-494). It now runs against `manu`'s line, after a positive control that requires the agent's own line.
+
 ## Decisions made during implementation
 
 Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.

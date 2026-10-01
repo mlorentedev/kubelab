@@ -51,10 +51,10 @@ Inventoried 2026-10-01 against every surface an existing node-hosted service is 
 
 ### PR 2 — the agent user and its rootless daemon
 
-- [ ] [AC2] Measure the daemon half of R3 through the role, never by hand: provision ace2, then assert tasks in the role read the result (`docker info` through the user's socket reports `rootless`, one container runs through it). Each read is `changed_when: false` and `check_mode: false`, the rule `tests/test_dev_node_npm_converges.py` enforces for dev_node. The Hermes half (its `terminal.backend: docker` over that socket) needs the image and config, so it is PR 3's first live step, and R3 is not measured until then. If the daemon half fails, switch the tasks below to Podman's rootless socket.
-- [ ] [P] [AC2] Test: the user is created with no `sudo` group membership and no sudoers drop-in; the dev user's home is mode `0750` or stricter; the gateway's `DOCKER_HOST` renders to the user's rootless socket and never to `/var/run/docker.sock`. Expected: FAIL.
-- [ ] [AC2] Tasks: user `hermes-kubelab` (system UID, no login shell beyond what rootless Docker needs), `loginctl enable-linger`, `dockerd-rootless-setuptool.sh install` gated on the socket's absence (`creates:`), subuid/subgid ranges, the user's systemd `docker.service` enabled.
-- [ ] [AC2] [AC1] Live: `sudo -l -U hermes-kubelab`, the three `Permission denied` reads, `docker info` → `rootless`; second provision `changed=0`.
+- [x] [AC2] Measure the daemon half of R3 through the role, never by hand: provision ace2, then assert tasks in the role read the result (`docker info` through the user's socket reports `rootless`, one container runs through it). Each read is `changed_when: false` and `check_mode: false`, the rule `tests/test_dev_node_npm_converges.py` enforces for dev_node. The Hermes half (its `terminal.backend: docker` over that socket) needs the image and config, so it is PR 3's first live step, and R3 is not measured until then. If the daemon half fails, switch the tasks below to Podman's rootless socket.
+- [x] [P] [AC2] Test: the user is created with no `sudo` group membership and no sudoers drop-in; the dev user's home is mode `0750` or stricter; the gateway's `DOCKER_HOST` renders to the user's rootless socket and never to `/var/run/docker.sock`. Expected: FAIL.
+- [x] [AC2] Tasks: user `hermes-kubelab` (system UID, no login shell beyond what rootless Docker needs), `loginctl enable-linger`, `dockerd-rootless-setuptool.sh install` gated on the socket's absence (`creates:`), subuid/subgid ranges, the user's systemd `docker.service` enabled.
+- [x] [AC2] [AC1] Live: `sudo -l -U hermes-kubelab`, the three `Permission denied` reads, `docker info` → `rootless`; second provision `changed=0`.
 
 ### PR 3 — hermes-kubelab (needs R1 and the Slack half of R2)
 
