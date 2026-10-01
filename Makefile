@@ -1663,6 +1663,14 @@ backup-coverage:
 backup-drill-postgres:
 	@$(TOOLKIT) backup drill-postgres --env $(or $(filter staging prod,$(ENV)),prod)
 
+# Restore the newest Headscale capture from R2 into a scratch container with no
+# network and check the database, the server keys and every node against live
+# (BACKUP-067). Needs docker, SSH to the VPS and `sudo -n` there to hash the
+# live keys; prints names and ids, never a key.
+.PHONY: backup-drill-headscale
+backup-drill-headscale:
+	@$(TOOLKIT) backup drill-headscale --env $(or $(filter staging prod,$(ENV)),prod)
+
 # Restore the newest Gitea capture from R2 into a scratch server on this machine,
 # with no network, and check it brings the forge back (BACKUP-040). Needs docker,
 # git and the env's Gitea admin token; prints names and counts, never content.
