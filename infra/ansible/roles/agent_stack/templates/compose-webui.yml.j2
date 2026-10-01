@@ -1,0 +1,32 @@
+# {{ ansible_managed }}
+# Open WebUI on ace2 (ADR-068 D5, spec AI-009-hermes-ace2).
+#
+# On the SYSTEM Docker daemon, not the agent's rootless one (spec R4): an agent
+# that could `docker exec` into this container could read every chat, the OIDC
+# client secret and the inference key.
+services:
+  open-webui:
+    image: {{ agent_stack_webui.image }}
+    container_name: open-webui
+    restart: unless-stopped
+    # Bound to the Tailscale address only. A bare `<port>:8080` would listen on
+    # every interface, and ufw cannot restrict a Docker-published port (the
+    # rpi3_services rule). Reached at {{ agent_stack_webui.scheme }}://{{ agent_stack_webui.host }}:{{ agent_stack_webui.default_port }}.
+    ports:
+      - "{{ agent_stack_tailscale_ip }}:{{ agent_stack_webui.default_port }}:{{ agent_stack_webui.container_port }}"
+    env_file:
+      - {{ agent_stack_dir }}/webui.env
+    volumes:
+      - open-webui-data:/app/backend/data
+    mem_limit: {{ agent_stack_webui.memory_limit }}
+    cpus: {{ agent_stack_webui.cpu_limit }}
+    # MagicDNS first, so the container resolves ace2's own tailnet name and the
+    # prod Authelia issuer the same way the host does (the rpi3_services rule:
+    # Docker does not inherit the host's 100.100.100.100).
+    dns:
+      - 100.100.100.100
+      - 1.1.1.1
+
+volumes:
+  open-webui-data:
+    name: open-webui-data

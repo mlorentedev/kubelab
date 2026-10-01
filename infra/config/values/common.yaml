@@ -1883,10 +1883,30 @@ apps:
         default_port: 80
         health_path: /admin/
 
-    # AI / ML services — empty since AI-007 retired Ollama from ace2.
-    # The category is kept because ADR-029 still plans local inference once a
-    # GPU node exists; until then the interim path is a hosted API.
-    ai: {}
+    # AI / ML services. Ollama left ace2 with AI-007; ADR-029 still plans local
+    # inference once a GPU node exists, and until then inference is a hosted API
+    # (NaN, ADR-042 C11b). What runs here now is the operator's agent tooling on
+    # ace2 (ADR-068, spec AI-009-hermes-ace2), deployed by the `agent_stack` role.
+    ai:
+      open_webui:
+        # ADR028-004. Chat history and accounts live only here, with no
+        # promotion path, so a second instance would fork them. On-demand
+        # because ace2 is (ADR-068 D1): while ace2 is off, the chat does not answer.
+        state_promotion: singleton
+        location: on-demand
+        image: ghcr.io/open-webui/open-webui:v0.11.4
+        # Plain HTTP on the tailnet, at ace2's MagicDNS name (spec R8): the
+        # transport is WireGuard, and TLS here would need a Cloudflare DNS-01
+        # token on the node that hosts an agent. No route, record or Traefik.
+        # MagicDNS names a node by its Headscale given-name, which for ace2 is
+        # `networking.nodes.ace2.hostname` (resolved 2026-10-01 → 100.64.0.5).
+        host: ace2.kubelab.internal
+        scheme: http
+        default_port: 3080
+        container_port: 8080
+        # ADR-068 D1: at most 1.5 GB per service, so the dev node keeps 4 GB free.
+        memory_limit: 1536m
+        cpu_limit: "2.0"
 
 # =============================================================================
 # Backup sources — the SSOT allow-list (BACKUP-044, #1092 AC3)

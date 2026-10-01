@@ -1,0 +1,19 @@
+---
+# agent_stack: the operator's agent tooling on ace2 (ADR-068, spec
+# AI-009-hermes-ace2). Values come from `apps.services.ai.*` in common.yaml via
+# provision-ace2.yml; these defaults only name the layout on the node.
+agent_stack_dir: /opt/agent-stack
+agent_stack_webui_project: agent-stack-webui
+
+# Inputs set by the playbook (no defaults on purpose, so a missing SSOT key
+# fails the play instead of rendering an empty value):
+#   agent_stack_tailscale_ip, agent_stack_webui (the apps.services.ai.open_webui
+#   map), agent_stack_webui_oidc_client_id, agent_stack_oidc_issuer.
+
+# Delivered from prod SOPS by the playbook. Empty means "not configured": the
+# role renders nothing that needs it and does not start Open WebUI, because
+# without OIDC its first visitor would create the admin account, and the
+# tailnet includes the `work@` bridge identities (ADR-041 rule 1).
+agent_stack_webui_oidc_client_secret: ""
+agent_stack_nan_api_key: ""
+agent_stack_nan_api_base_url: https://api.nan.builders/v1
