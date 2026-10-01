@@ -61,3 +61,11 @@ All of these land **outside the contract set**, so none of them invalidates this
 - **spec** — leave `features.json` f4 as it is (the contract set is closed); write the disposition of its weak gate into `verification.md`, or open a follow-up ticket to tighten it the way f1/f5 were tightened. Finding 5.
 - **Question** — confirm and record that the `sops`-absence half of the AC1 guarantee is intentionally gate-only, not provision-enforced.
 - **Evidence** — re-run the full `make test` at `ef241218` and record the summary line in `verification.md`; the figure there is from `b2e3e44d`, before the round-1 code fixes.
+
+### Post-review state (added after the verdict was written)
+
+While this review ran, a parallel session committed `1cb1538d` ("the gitea drill on a host writes no injected value to disk either") on top of the reviewed commit. It touches `tests/test_drill_remote.py`, `toolkit/features/drill_remote.py` and `toolkit/features/gitea_drill.py`, and appears to apply findings 1–3 above (a Gitea sentinel-on-disk test, the `preflight` refusal naming stale `origin/*` refs, and the narrowed `except KeyError`).
+
+- This verdict is for `ef241218`, the commit examined; `1cb1538d` is **not re-verified** here, and findings 1–3 should be re-judged against it (UNVERIFIED).
+- The **contract set is untouched** by `1cb1538d` (`proposal.md`, `tasks.md`, `features.json` unchanged), so the `review-request.json` contract digests still match and `dotf spec archive`'s staleness check is satisfied.
+- The changes in `1cb1538d` are implementation/tests only; the remaining findings (4, 5, and the AC1 question) are unaffected.

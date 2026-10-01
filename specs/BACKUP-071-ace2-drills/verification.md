@@ -48,6 +48,7 @@ Implementation branch `feat/backup-071-ace2-drills`. Commits: `d89a5b83` (IaC), 
 
 - Round 1 fixes: `tests/test_drill_remote.py tests/test_headscale_drill.py tests/test_gitea_drill.py tests/test_restic_install_shared.py tests/test_node_backup_role.py`: 140 passed.
 - `make test` on `b2e3e44d`: `3435 passed, 16 skipped, 154 deselected, 2 xfailed`, rc=0.
+- `make test` on `1cb1538d` (round-2 code, before the archive): `3481 passed, 16 skipped, 154 deselected, 2 xfailed`, rc=0.
 - Mutations, each committed first and restored with `git checkout HEAD --`. Each one turns the suite red:
   - M1, a setup step reads stdin: 1 failure;
   - M2, a malformed payload is echoed: 3 failures;
@@ -58,6 +59,9 @@ Implementation branch `feat/backup-071-ace2-drills`. Commits: `d89a5b83` (IaC), 
   - M6: an `unarchive` of a restic asset;
   - M7: a `shell` that pipes `curl` into `/usr/local/bin/restic`;
   - M8: the `networking` read moved back outside the guard.
+- Round 2 mutations, same discipline. Each turns the new Gitea test red with 1 failure:
+  - M9: the drill writes `restic_env` into its workdir. The root wipe erases it before `rmtree` runs, so only the wipe-time scan catches it;
+  - M9b: `run_from_inputs` stops passing `run=_default_run`, so the real `restic` runs and the drill fails.
 - No regressions. Without `HOST`, the local drills keep today's behaviour, and `tests/test_headscale_drill.py` (40) is green.
 
 ## Decisions made during implementation
@@ -79,6 +83,19 @@ Implementation branch `feat/backup-071-ace2-drills`. Commits: `d89a5b83` (IaC), 
 | 4 | Minor: a config with no `networking` is a `KeyError` traceback | **Applied.** The read moved inside the existing guard, and the message names `networking.nodes.<host>`. `test_a_host_the_config_cannot_place_is_cannot_check` covers both no-networking and an undeclared host |
 | 5 | Question: a stale `origin/*` refuses a pushed commit | **Applied (runbook).** The section says the check reads local remote-tracking refs, and to `git fetch origin` and rerun. Network I/O in preflight was not added: it would run before the refusal it exists to make cheap |
 | 6 | Minor, SPECULATIVE: formatting-only lines in `dev_node/tasks/main.yml` | **Declined.** Produced by the pre-commit formatter on a file this change edits. Harmless, and reverting them would fail the hook |
+
+## Adversarial review dispositions (round 2, PASS-WITH-GAPS)
+
+`dotf spec review` (nan/deepseek-v4-flash) at `ef241218`: PASS-WITH-GAPS, no REAL Major. The contract set (proposal, tasks, `features.json`) is closed under this verdict, so every change below is in code, tests or this file.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Major, THEORETICAL: the no-secret-on-disk half of AC3 is tested for Headscale only | **Applied.** `test_a_real_gitea_restore_on_the_host_writes_no_injected_value_to_disk` runs `drill-gitea --inputs-stdin` with sentinel restic credentials and token against the Gitea fake. It reads every file the drill wrote at the root-run wipe **and** at `rmtree`: the wipe empties the tree first, so a scan at `rmtree` alone would see nothing. For the patch to reach the drill, `run_from_inputs` now passes `run=_default_run` explicitly, as Headscale's does; a default bound at definition time ignores a later monkeypatch. Mutations M9 and M9b below turn it red |
+| 2 | Minor, REAL: `preflight` diagnoses a stale `origin/*` as unpushed | **Applied.** The refusal reads "no origin/* branch here contains `<sha>`; push it, or `git fetch origin` if these refs are stale". The `unpushed` case asserts the fetch hint |
+| 3 | Minor, THEORETICAL: one `except KeyError` covers the config read and `ssh_target` | **Applied.** Two guards: a config with no `networking` says "the `<env>` config declares no networking block", and an undeclared node says `networking.nodes.<host>`. The parametrized test asserts each message for its own case |
+| 4 | Minor, SPECULATIVE: exit 97/255 could be the drill's own status | **Declined.** `drill-<x> --inputs-stdin` exits only 0 or 1 (`typer.Exit(code=1)`, and an uncaught exception is 1), so neither value is reachable from the drill. Only ssh produces 255 and only the setup lines produce 97 |
+| 5 | Minor, REAL: the f4 gate (`grep -q 'HOST=ace2'`) cannot see the section's explanation | **Accepted, no ticket.** `features.json` gates run once, at archive time; neither CI nor `spec-gate.yml` re-runs an archived spec's gates. AC5's evidence is the runbook section itself, read in this PR's diff. Tightening a gate that never runs again would protect nothing |
+| Q | `sops` absence is gate-only, not asserted by provisioning | **Accepted.** The load-bearing half is the age key, which `drill_runtime.yml` asserts on every provision: without a key, `sops` decrypts nothing. ace2 is a developer node (ADR-058), and a role may install `sops` there for other work. f1 measured the non-interactive PATH the drill uses on 2026-10-01 |
 
 ## Spec review dispositions (#2017)
 
