@@ -1,7 +1,7 @@
 ---
 id: "adr-063-hub-cloud-provider-migration"
 type: adr
-status: proposed
+status: accepted
 created: "2026-08-20"
 tags: [architecture, cost, gitops, multi-cloud, topology, argocd]
 related:
@@ -17,7 +17,7 @@ owner: manu
 
 ## Status
 
-Proposed — 2026-08-20. Tracks [#1181](https://github.com/mlorentedev/kubelab/issues/1181) (GCP-001).
+Accepted — 2026-08-25, when GCP-001 ([#1181](https://github.com/mlorentedev/kubelab/issues/1181)) closed. Proposed 2026-08-20. The decision was operative from 2026-08-23: `gcp1` serves as the hub, and `aws1` was destroyed under GCP-001 AC6. The frontmatter still said `proposed` until #1968.
 
 **Supersedes [ADR-023](adr-023-hub-spoke-multicloud-gitops.md) §3.1 only.** The
 hub-and-spoke topology, the Autonomous Spoke pattern, the stateless-hub property
