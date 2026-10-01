@@ -58,6 +58,12 @@ owner: manu
 | --- | --- | --- | --- |
 | PostgreSQL | K3s (ace1 staging, VPS prod) | Shared relational database (ADR-051) | `pg_isready` (readiness probe) |
 
+## AI / Agent tooling (ADR-068)
+
+| Service | Node | Purpose | Health Check |
+| --- | --- | --- | --- |
+| Open WebUI | ace2 (on-demand, tailnet only) | Chat over NaN models, OIDC against prod Authelia. `http://ace2.kubelab.internal:3080`, role `agent_stack` | `/health` |
+
 ## Not Yet Deployed
 
 | Service | Planned Node | Purpose | When |

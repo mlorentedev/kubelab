@@ -57,12 +57,13 @@ future-static-sites      → Each static site in its own repo
 
 > **Updated 2026-08-09**: bare-metal MiniPCs (no Proxmox since ADR-023 Phase 1);
 > ace2 is the developer node since ADR-058 D1. Local inference retired (AI-007).
+> **2026-10-01**: ace2 also hosts the operator's agent tooling (ADR-068). MinIO was retired (OPS-023).
 
 ```
 VPS Hetzner: Production (Docker Compose -> K3s)
 Acemagic-1:  K3s staging (all-in-one, bare metal)
-Acemagic-2:  Developer node / CDE (bare metal)
-Beelink:     Platform node (GH Runner + MinIO, bare metal)
+Acemagic-2:  Developer node / CDE + operator agent tooling (Open WebUI, ADR-068)
+Beelink:     Platform node (Gitea forge + CI runners + Glances, bare metal)
 RPi 4:       Gateway / VPN / DNS
 RPi 3:       Monitoring (Uptime Kuma)
 Jetson Nano: AI Workloads (Pollex)
