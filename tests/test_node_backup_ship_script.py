@@ -29,7 +29,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.test_node_backup_role import _render
+from tests.test_node_backup_role import _defaults, _render
 
 EXISTING_ID = "a" * 64
 NEW_ID = "b" * 64
@@ -98,8 +98,14 @@ READ_DATA_GROUPS = 4
 
 
 @pytest.fixture
-def node(tmp_path: Path):
-    """A rendered ship script wired entirely into tmp_path, and a runner for it."""
+def node(tmp_path: Path, request: pytest.FixtureRequest):
+    """A rendered ship script wired entirely into tmp_path, and a runner for it.
+
+    Parametrize it indirectly with `None` to render the role's own
+    `node_backup_check_read_data_groups` instead of the fixture's.
+    """
+    groups = getattr(request, "param", READ_DATA_GROUPS)
+    group_override = {} if groups is None else {"node_backup_check_read_data_groups": groups}
     fake_dir = tmp_path / "fake"
     fake_dir.mkdir()
     restic = tmp_path / "restic"
@@ -144,7 +150,7 @@ def node(tmp_path: Path):
             node_backup_r2_repository_id_file=str(marker),
             # Seconds, not the role's 120: the refusal tests wait it out.
             node_backup_probe_timeout=2,
-            node_backup_check_read_data_groups=READ_DATA_GROUPS,
+            **group_override,
         )
     )
 
@@ -377,6 +383,18 @@ def test_the_weekly_check_reads_a_group_of_pack_data(node) -> None:
     assert proc.returncode == 0, proc.stderr
     assert _check_call(node.calls) == f"check --read-data-subset 1/{READ_DATA_GROUPS}"
     assert f"reading pack group 1/{READ_DATA_GROUPS}" in proc.stdout
+
+
+@pytest.mark.parametrize("node", [None], indirect=True)
+def test_the_shipped_group_count_renders_a_check_that_runs(node) -> None:
+    """Every other test overrides the group count, so only this one renders the
+    committed default. A default of 0 would make the script's modulo abort the
+    weekly unit on every node while the rest of the suite stayed green."""
+    groups = int(_defaults()["node_backup_check_read_data_groups"])
+    assert groups >= 1
+    proc, _, _ = node(snapshots_rc=0, recorded=EXISTING_ID, check=True, now=0)
+    assert proc.returncode == 0, proc.stderr
+    assert _check_call(node.calls) == f"check --read-data-subset 1/{groups}"
 
 
 def test_the_read_data_rotation_reads_every_group_once_per_cycle(node) -> None:
