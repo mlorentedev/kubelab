@@ -3,8 +3,13 @@
 import functools
 import os
 import shutil
+import subprocess
+from collections.abc import Generator
+from pathlib import Path
 
 import pytest
+
+from tests.host_clients import denied
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -26,9 +31,112 @@ def pytest_configure(config: pytest.Config) -> None:
     runs. Even an autouse session fixture is too late; `pytest_configure` runs
     before collection, which is the only window that works.
     """
-    del config  # the hook's signature, not something this needs
     for var in ("FORCE_COLOR", "CLICOLOR_FORCE"):
         os.environ.pop(var, None)
+    del config  # the hook's signature, not something this needs
+    _install_host_client_barrier()
+
+
+# --- Host-client barrier (#1886) -------------------------------------------------
+#
+# A unit test that reaches `kubectl` without mocking it does not fail where the
+# binary is missing: it skips, or the toolkit swallows the FileNotFoundError. So
+# it passes in CI and deletes a Secret on staging from a workstation with a
+# kubeconfig (#1886: `apply_secrets` grew a `delete_retired_secrets` step, and
+# the old tests that mocked its neighbours one by one ran it for real).
+#
+# Every subprocess goes through `Popen.__init__`, so that is where the barrier
+# sits. It raises a BaseException because the toolkit catches `OSError` and
+# `Exception` around its subprocess calls, and a refusal it could swallow would
+# be a refusal nobody sees; the hit is also recorded on the item and the report
+# forced red, in case something catches BaseException after all.
+#
+# Outside a test (collection, e.g. `sops_can_decrypt`) nothing is refused.
+# Set KUBELAB_HOST_CLIENT_REPORT=<file> to record hits instead of refusing them.
+
+HOST_CLIENT_EXEMPT_MARKERS = ("integration", "e2e", "infra")
+HOST_CLIENT_EXEMPT_DIRS = ("e2e", "infra")
+_TESTS_DIR = Path(__file__).resolve().parent
+_current_item: pytest.Item | None = None
+
+
+class HostClientRefused(BaseException):
+    """A unit test spawned a client that reaches a cluster or a host."""
+
+
+def _host_clients_allowed(item: pytest.Item) -> bool:
+    if any(item.get_closest_marker(m) for m in HOST_CLIENT_EXEMPT_MARKERS):
+        return True
+    if item.get_closest_marker("allow_host_clients"):
+        return True  # its reason is checked in pytest_runtest_setup
+    try:
+        relative = Path(item.path).resolve().relative_to(_TESTS_DIR)
+    except ValueError:
+        return False
+    return relative.parts[0] in HOST_CLIENT_EXEMPT_DIRS
+
+
+def _install_host_client_barrier() -> None:
+    original_init = subprocess.Popen.__init__
+    if getattr(original_init, "_host_client_barrier", False):
+        return
+
+    def guarded_init(self, args, *pargs, **kwargs):  # noqa: ANN001, ANN202
+        item = _current_item
+        if item is not None and not _host_clients_allowed(item):
+            client = denied(args, shell=bool(kwargs.get("shell")))
+            if client:
+                report = os.environ.get("KUBELAB_HOST_CLIENT_REPORT")
+                if report:
+                    with open(report, "a", encoding="utf-8") as fh:
+                        fh.write(f"{item.nodeid}\t{client}\n")
+                else:
+                    message = (
+                        f"unit test spawned `{client}`, which reaches a real cluster or host. "
+                        "Mock it, or mark the test "
+                        '@pytest.mark.allow_host_clients(reason="...") if it must (#1886).'
+                    )
+                    item.stash.setdefault(_REFUSALS, []).append(message)
+                    raise HostClientRefused(message)
+        original_init(self, args, *pargs, **kwargs)
+
+    guarded_init._host_client_barrier = True  # type: ignore[attr-defined]
+    subprocess.Popen.__init__ = guarded_init  # type: ignore[method-assign]
+
+
+_REFUSALS = pytest.StashKey[list[str]]()
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_protocol(item: pytest.Item) -> Generator[None, None, None]:
+    """Track the running test, setup and teardown included, for the barrier."""
+    global _current_item
+    _current_item = item
+    try:
+        yield
+    finally:
+        _current_item = None
+
+
+def pytest_runtest_setup(item: pytest.Item) -> None:
+    marker = item.get_closest_marker("allow_host_clients")
+    if marker is not None and not str(marker.kwargs.get("reason", "")).strip():
+        pytest.fail(
+            '@pytest.mark.allow_host_clients needs reason="..." naming what the test reaches and why',
+            pytrace=False,
+        )
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item: pytest.Item) -> Generator[None, None, None]:
+    """Fail a test whose refusal was caught before it could fail it."""
+    outcome = yield
+    report = outcome.get_result()
+    refusals = item.stash.get(_REFUSALS, [])
+    if refusals and report.passed and report.when != "teardown":
+        report.outcome = "failed"
+        report.longrepr = "\n".join(refusals) + "\n(the refusal was caught by the code under test)"
+        refusals.clear()
 
 
 @functools.lru_cache(maxsize=1)

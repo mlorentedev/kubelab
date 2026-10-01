@@ -161,6 +161,9 @@ def _run(
 
 
 @pytest.mark.parametrize("target,tfvars", sorted(RENDERING_TARGETS.items()))
+@pytest.mark.allow_host_clients(
+    reason="runs the tf-* recipes with a stub `terraform` first on PATH; the barrier cannot tell it from the real one"
+)
 class TestTheRenderedFileNeverOutlivesTheRun:
     def test_removed_even_when_terraform_fails(self, target: str, tfvars: str, tmp_path: pathlib.Path) -> None:
         """The regression itself: make aborts the recipe, the `rm` never runs."""
