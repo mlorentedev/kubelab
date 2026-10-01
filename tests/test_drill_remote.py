@@ -207,7 +207,12 @@ def test_inputs_that_cannot_be_resolved_send_nothing(monkeypatch) -> None:
 
 @pytest.fixture
 def no_config(monkeypatch):
-    """The host has no SOPS key: building a ConfigurationManager there is a defect."""
+    """The drill path builds no ConfigurationManager on the host, which has no SOPS key.
+
+    Patched after import, so this covers the drill, not the process: importing the
+    toolkit still builds one for `dev` (#2021, TOOL-097). On ace2 that finds no
+    sops binary and no key, and decrypts nothing.
+    """
 
     def refuse(self, *a, **kw):
         raise AssertionError("the remote entrypoint built a ConfigurationManager")
