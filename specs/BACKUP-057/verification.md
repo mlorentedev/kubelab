@@ -12,6 +12,8 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - [ ] Criterion 1 -> commit `<hash>` / test `<name>`
 - [ ] Criterion 2 -> commit `<hash>` / test `<name>`
 - [ ] Criterion 3 -> commit `<hash>` / test `<name>`
+- [ ] Criterion 4 -> commit `<hash>` / test `<name>`
+- [ ] Criterion 5 -> commit `<hash>` / test `<name>`
 
 ## Test status
 
