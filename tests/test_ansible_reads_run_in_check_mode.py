@@ -76,7 +76,7 @@ def _reads() -> list[tuple[str, dict]]:
 
 
 def test_the_guard_finds_reads() -> None:
-    """A guard that matches nothing passes on any tree (lesson-497)."""
+    """A guard that matches nothing passes on any tree."""
     roles = {_role(path) for path, _ in _reads()}
     assert len(roles) >= 5, f"only {sorted(roles)} hold reads; the matcher is broken"
 
