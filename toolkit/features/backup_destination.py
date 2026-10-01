@@ -414,6 +414,18 @@ def write_watcher_targets(project_root: Path, config: dict[str, Any]) -> bool:
     return True
 
 
+def restic_context(cm: ConfigurationManager) -> tuple[DestinationConfig, dict[str, str]]:
+    """The destination and the env restic needs to read it. Values are never logged."""
+    dest = load_destination(cm)
+    credentials = load_credentials(cm)
+    password = cm.get_secret_by_path(_RESTIC_PASSWORD_SECRET)
+    if not password:
+        raise DestinationError(
+            f"Missing SOPS value at '{_RESTIC_PASSWORD_SECRET}' — generate it with `make backup-generate-password`."
+        )
+    return dest, {**credentials, "RESTIC_PASSWORD": str(password).strip()}
+
+
 def cluster_node(config: dict[str, Any]) -> Optional[str]:
     """The node in `k3s_servers` for this env's merged config, or None if not exactly one.
 
@@ -513,17 +525,9 @@ def coverage(
     run = run or _default_run
 
     try:
-        dest = load_destination(cm)
-        credentials = load_credentials(cm)
+        dest, renv = restic_context(cm)
     except DestinationError as exc:
         logger.error(str(exc))
-        return False
-
-    password = cm.get_secret_by_path(_RESTIC_PASSWORD_SECRET)
-    if not password:
-        logger.error(
-            f"Missing SOPS value at '{_RESTIC_PASSWORD_SECRET}' — generate it with `make backup-generate-password`."
-        )
         return False
 
     declared = sorted((cm.get_merged_config().get("backup", {}) or {}).get("sources", {}) or {})
@@ -531,7 +535,6 @@ def coverage(
         logger.error("No nodes declared in backup.sources — nothing to report on.")
         return False
 
-    renv = {**credentials, "RESTIC_PASSWORD": str(password).strip()}
     rc, _, err = run(["restic", "version"], {})
     if rc != 0:
         logger.error(f"restic is required and was not runnable: {err.strip()}")

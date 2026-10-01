@@ -42,7 +42,7 @@ Inventory, measured 2026-10-01 (`kubectl kustomize infra/k8s/overlays/prod` and 
 2. **Exclusions are a ratified tier, never a deferral.** `backup.excluded.vps` gains one entry per excluded claim, each with `pvc: {namespace, claim}`, a `reason`, and `tier: 3`. A test refuses any exclusion whose tier is not 3: data that is not rebuildable is backed up, and "not yet" is not a ruling. The Beelink volume exclusions gain `tier: 3` under the same rule.
 3. **Static guard.** A test renders `infra/k8s/overlays/prod` and fails if any `PersistentVolumeClaim` has no ruling: neither in `backup.sources.vps` nor in `backup.excluded.vps`. It fails on today's master, which lists five claims without one.
 4. **Live guard.** `make backup-coverage ENV=prod` also lists every PVC on the prod cluster, in all namespaces, and reports any claim with no ruling. This catches what the manifests do not render, such as `kube-system/traefik`, which Ansible creates.
-5. **Restore drill.** `make backup-drill-postgres ENV=prod` restores the newest `postgres/pg_dumpall.sql` from the VPS repository in R2 into a throwaway `postgres:16-alpine` on the workstation, loads it, and compares per-table row counts for the `vikunja` database against live. It prints counts, never row contents, and removes the container and the restored file on exit. Scheduling it is #1211 (BACKUP-051), not this spec.
+5. **Restore drill.** `make backup-drill-postgres ENV=prod` restores the newest `postgres/pg_dumpall.sql` from the VPS repository in R2 into a throwaway `postgres:16-alpine` on the workstation, loads it, and checks that it restored completely: every database and table live holds exists in the restore, and no table that has rows live came back empty. Per-table counts are printed beside live as information, never as a pass condition, because the snapshot is up to four hours older than live and the board keeps being written. It prints counts, never row contents, and removes the container and the restored file on every exit path. It uses the image the live Deployment runs, so the restore exercises the same major version. Scheduling it is #1211 (BACKUP-051), not this spec.
 
 ## Out of scope
 
@@ -64,7 +64,7 @@ Inventory, measured 2026-10-01 (`kubectl kustomize infra/k8s/overlays/prod` and 
 - [ ] AC2: A capture whose `pg_dumpall` fails, or whose output lacks the trailer, exits non-zero and leaves no sentinel. Pinned by a test that runs the rendered script against a fake `kubectl`.
 - [ ] AC3: The static guard fails on master's `common.yaml` and passes after this spec, and any exclusion without `reason` or with a tier other than 3 fails it.
 - [ ] AC4: `make backup-coverage ENV=prod` names every live PVC with no ruling, and reports none after this spec.
-- [ ] AC5: `make backup-drill-postgres ENV=prod` restores the dump from R2 into a scratch database, and its per-table row counts for `vikunja` equal live. The transcript is in `verification.md`.
+- [ ] AC5: `make backup-drill-postgres ENV=prod` restores the newest dump from R2 into a scratch database and passes: the trailer is present, every live database and table exists in the restore, and no table with rows live is empty in it. It also names the snapshot it read, which is AC1's evidence. The transcript is in `verification.md`.
 - [ ] AC6: `docs/runbooks/offsite-backup-restore.md` documents the Postgres restore, and the procedure for adding a stateful service to the fleet. A lesson records why the exclusion lapsed.
 
 ## References
