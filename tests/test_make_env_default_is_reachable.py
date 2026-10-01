@@ -144,6 +144,7 @@ ENV_TARGETS: dict[str, tuple[str, str]] = {
     "backup-drill-postgres": ("--env", "prod"),
     "backup-drill-gitea": ("--env", "prod"),
     "backup-drill-headscale": ("--env", "prod"),
+    "backup-drill-apps": ("--env", "prod"),
     # Already correct before #1644. Included as a regression net: "correct and
     # untested" is exactly the state the eight above were in.
     "maintain": ("-e", "staging"),

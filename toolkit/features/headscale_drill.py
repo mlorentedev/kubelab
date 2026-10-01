@@ -87,7 +87,7 @@ def parse_entries(payload: str, key: Optional[str]) -> Entries:
     return entries
 
 
-def _snapshot_time(text: str) -> float:
+def snapshot_time(text: str) -> float:
     """restic's RFC 3339 time, with nanoseconds Python will not parse, as epoch seconds."""
     match = re.fullmatch(r"(.+?:\d\d)(?:\.\d+)?(Z|[+-]\d\d:\d\d)", text)
     if not match:
@@ -127,14 +127,14 @@ def compare(
     return ok, lines
 
 
-def _ssh(run: Run, target: str, command: str) -> tuple[int, str, str]:
+def ssh(run: Run, target: str, command: str) -> tuple[int, str, str]:
     return run(["ssh", "-o", "ConnectTimeout=10", "-o", "BatchMode=yes", target, command])
 
 
 def _live_key_hashes(run: Run, target: str, volume: str) -> Optional[dict[str, str]]:
     """SHA-256 of each live key file, by file name. None when either cannot be read."""
     files = " ".join(f'"$m/{name}"' for name in KEYS)
-    rc, out, _ = _ssh(
+    rc, out, _ = ssh(
         run, target, f"m=$(docker volume inspect -f '{{{{.Mountpoint}}}}' {volume}) && sudo -n sha256sum {files}"
     )
     hashes = {Path(path).name: digest for digest, _, path in (line.partition("  ") for line in out.splitlines())}
@@ -143,7 +143,7 @@ def _live_key_hashes(run: Run, target: str, volume: str) -> Optional[dict[str, s
     return hashes
 
 
-def _intact(database: Path) -> bool:
+def sqlite_intact(database: Path) -> bool:
     """`PRAGMA integrity_check`, read-only, before anything opens the file for writing."""
     try:
         con = sqlite3.connect(f"file:{database}?mode=ro&immutable=1", uri=True)
@@ -217,7 +217,7 @@ def run_drill(
     # Live first: every check below is "for each thing live has" (lesson-416).
     reads = {}
     for kind in ("nodes", "users"):
-        rc, out, err = _ssh(run, ssh_target, f"docker exec {LIVE_CONTAINER} headscale {kind} list -o json")
+        rc, out, err = ssh(run, ssh_target, f"docker exec {LIVE_CONTAINER} headscale {kind} list -o json")
         try:
             reads[kind] = parse_entries(out, "machine_key" if kind == "nodes" else None) if rc == 0 else {}
         except (ValueError, KeyError):
@@ -247,7 +247,7 @@ def run_drill(
             repo=repo,
             restic_env=restic_env,
             snapshot=snapshot["short_id"],
-            taken=_snapshot_time(snapshot["time"]),
+            taken=snapshot_time(snapshot["time"]),
             source=f"{staging_dir}/{SERVICE}",
             workdir=workdir,
             name=name,
@@ -305,7 +305,7 @@ def _restore_and_check(
     if missing:
         logger.error(f"FAIL the capture lacks {', '.join(missing)}")
         return False
-    if not _intact(data / DATABASE):
+    if not sqlite_intact(data / DATABASE):
         logger.error(f"FAIL {DATABASE}: PRAGMA integrity_check did not answer ok")
         return False
     logger.success(f"drill: {DATABASE} integrity_check ok")
