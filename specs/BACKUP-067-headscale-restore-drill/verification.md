@@ -30,6 +30,8 @@ rc=0
 
 Afterwards: `docker ps -a --filter name=hsdrill` empty, no `hsdrill-*` directory under the temp dir.
 
+Re-run after the review round (drill config without MagicDNS or a v6 prefix): snapshot `a59acffe` taken 2026-10-01T16:00:09Z, `integrity_check ok`, both keys match, 12 nodes and 4 users, RTO 3 s, rc=0, nothing left behind.
+
 ### Mutation check
 
 Each guard was broken in turn on a committed tree, the suite run, and the file restored with `git checkout HEAD --`.
@@ -52,10 +54,12 @@ Each guard was broken in turn on a committed tree, the suite run, and the file r
 | teardown result ignored (container) | 1 failed |
 | teardown result ignored (directory) | 1 failed |
 | container removal skipped | 10 failed |
+| failed restored user list accepted (review round) | 1 failed |
+| unreadable restored list not caught (review round) | 3 failed |
 
 ## Test status
 
-- `poetry run pytest -q -p no:cacheprovider --no-cov tests/test_headscale_drill.py` → 25 passed.
+- `poetry run pytest -q -p no:cacheprovider --no-cov tests/test_headscale_drill.py` → 30 passed (25 at first push, 5 added in the review round).
 - `make test` on `613e331a`: 3274 passed, 1 failed (`test_the_table_covers_every_site`: the new target was missing from `ENV_TARGETS`), fixed in `c173e41c`; that file then 75 passed.
 
 ## Decisions made during implementation

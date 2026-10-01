@@ -11,7 +11,7 @@
     "behavior": "AC1/AC2/AC3: a missing file, a corrupt database, a key mismatch, a missing node or user, or a changed machine key fails and is named; live unreadable or empty, and no snapshot, are CANNOT CHECK",
     "verification": "poetry run pytest -q -p no:cacheprovider --no-cov tests/test_headscale_drill.py",
     "state": "passing",
-    "evidence": "25 passed; every guard mutation-killed (verification.md)"
+    "evidence": "30 passed; every guard mutation-killed (verification.md)"
   },
   {
     "id": "BACKUP-067-headscale-restore-drill-f3",
