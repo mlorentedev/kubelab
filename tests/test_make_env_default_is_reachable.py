@@ -140,6 +140,8 @@ ENV_TARGETS: dict[str, tuple[str, str]] = {
     "backup-verify-destination": ("--env", "prod"),
     "backup-verify-restic": ("--env", "prod"),
     "backup-coverage": ("--env", "prod"),
+    # Added with the target (BACKUP-046): it reads prod data, so prod is the default.
+    "backup-drill-postgres": ("--env", "prod"),
     # Already correct before #1644. Included as a regression net: "correct and
     # untested" is exactly the state the eight above were in.
     "maintain": ("-e", "staging"),
