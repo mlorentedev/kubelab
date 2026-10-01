@@ -33,6 +33,7 @@
   shell: docker ps --filter "name=traefik" --format "{% raw %}{{.Names}}{% endraw %}"
   register: traefik_running
   changed_when: false
+  check_mode: false
 
 - name: Stop existing Traefik container
   shell: cd /opt/traefik && docker compose down
@@ -67,7 +68,7 @@
     url: "https://{{ domain }}/dashboard/"
     method: GET
     status_code: 200
-    validate_certs: no
+    validate_certs: false
   register: traefik_dashboard
   retries: 5
   delay: 10

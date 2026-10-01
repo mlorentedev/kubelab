@@ -16,6 +16,7 @@
   command: k3s --version
   register: k3s_installed_version
   changed_when: false
+  check_mode: false
   failed_when: false
   when: k3s_binary.stat.exists
 
@@ -67,8 +68,10 @@
   register: k3s_ready
   retries: "{{ k3s_readiness_retries }}"
   delay: "{{ k3s_readiness_delay }}"
-  until: k3s_ready.rc == 0
+  until: (k3s_ready.rc == 0) or ansible_check_mode
   changed_when: false
+  check_mode: false
+  ignore_errors: "{{ ansible_check_mode }}"
 
 # --- Bootstrap secrets (K3s auto-applies manifests in this dir) ---
 - name: Template Cloudflare API token Secret

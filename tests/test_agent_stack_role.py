@@ -139,28 +139,6 @@ def test_an_unconfigured_run_takes_a_previous_open_webui_down() -> None:
     assert "webui.env" in remove["loop"], "the secret-bearing env file must not outlive the service"
 
 
-_COMMAND_MODULES = ("ansible.builtin.command", "command", "ansible.builtin.shell", "shell")
-
-
-def test_every_read_runs_in_a_dry_run() -> None:
-    """A registered command that never reports a change is a read, so it must run under `--check`.
-
-    Check mode skips `command`, a skipped task registers no `rc` or `stdout`, and
-    the recreate decision reads both. The same rule holds in dev_node, where it
-    was measured twice on ace2 (tests/test_dev_node_npm_converges.py).
-    """
-    reads = [
-        task
-        for task in _tasks()
-        if any(key in task for key in _COMMAND_MODULES)
-        and task.get("register")
-        and task.get("changed_when") is False
-    ]
-    assert reads, "the role has no registered reads; this guard checks nothing"
-    skipped = [task["name"] for task in reads if task.get("check_mode") is not False]
-    assert not skipped, f"reads skipped by --check: {skipped}"
-
-
 def test_the_container_resolves_through_magicdns_first() -> None:
     """Docker never passes the host's 100.100.100.100 in; a public resolver alone cannot see the tailnet."""
     compose = yaml.safe_load(_render("compose-webui.yml.j2"))

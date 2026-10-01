@@ -51,8 +51,10 @@
   register: coredns_test
   retries: 6
   delay: 5
-  until: coredns_test.rc == 0
+  until: (coredns_test.rc == 0) or ansible_check_mode
   changed_when: false
+  check_mode: false
+  ignore_errors: "{{ ansible_check_mode }}"
 
 - name: Wait for Pi-hole
   uri:

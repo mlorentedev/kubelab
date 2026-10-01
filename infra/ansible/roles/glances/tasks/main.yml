@@ -36,6 +36,7 @@
   command: docker inspect glances --format '{% raw %}{{index .Config.Labels "com.docker.compose.project"}}{% endraw %}'
   register: _orphan_project
   changed_when: false
+  check_mode: false
   failed_when: false
 
 - name: Force-remove orphan container (not managed by this role's compose)
@@ -112,6 +113,7 @@
     --format '{% raw %}{{len .HostConfig.PortBindings}}:{{len .NetworkSettings.Ports}}{% endraw %}'
   register: _glances_ports
   changed_when: false
+  check_mode: false
   failed_when: false
 
 - name: Detect a requested port binding that was never established
@@ -135,6 +137,7 @@
   command: docker inspect glances --format '{% raw %}{{.HostConfig.Memory}}{% endraw %}'
   register: _glances_applied_memory
   changed_when: false
+  check_mode: false
   failed_when: false
 
 - name: Detect drift between the declared and the applied memory limit

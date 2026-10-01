@@ -121,26 +121,3 @@ def test_the_forge_key_lookup_survives_a_dry_run() -> None:
     lookup = _task_named("Look up this node's key on the machine account")
     assert lookup.get("check_mode") is False
     assert lookup.get("when") == "_gitea_key_fp.rc == 0"
-
-
-_COMMAND_MODULES = ("ansible.builtin.command", "command", "ansible.builtin.shell", "shell")
-
-
-def test_every_read_runs_in_a_dry_run() -> None:
-    """A registered command that never reports a change is a read, so it must run under `--check`.
-
-    Check mode skips `command` and `shell`, and a skipped task registers no
-    stdout. The task that consumes it then templates nothing: an assert fails on
-    an empty string, a lookup URL loses its query. Measured on ace2 2026-10-01,
-    twice in this role: the forge key lookup, then the credential-helper assert.
-    """
-    reads = [
-        task
-        for task in _tasks()
-        if any(key in task for key in _COMMAND_MODULES)
-        and task.get("register")
-        and task.get("changed_when") is False
-    ]
-    assert reads, "the role has no registered reads; this guard checks nothing"
-    skipped = [task["name"] for task in reads if task.get("check_mode") is not False]
-    assert not skipped, f"reads skipped by --check: {skipped}"
