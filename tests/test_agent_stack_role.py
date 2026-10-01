@@ -125,3 +125,13 @@ def test_the_role_runs_on_ace2_after_dev_node() -> None:
     roles = [r["role"].rsplit("/", 1)[-1] for r in plays[1]["roles"]]
     assert "agent_stack" in roles
     assert roles.index("agent_stack") > roles.index("dev_node")
+
+
+def test_an_unconfigured_run_takes_a_previous_open_webui_down() -> None:
+    """Removing the secret from SOPS must stop Open WebUI, not leave it serving."""
+    [stop] = [t for t in _tasks() if t.get("name") == "Stop Open WebUI when it is not configured"]
+    assert stop["when"] == "agent_stack_webui_oidc_client_secret | length == 0"
+    commands = [t["ansible.builtin.command"] for t in stop["block"] if "ansible.builtin.command" in t]
+    assert any(c.rstrip().endswith(" down") for c in commands)
+    [remove] = [t for t in stop["block"] if "ansible.builtin.file" in t]
+    assert "webui.env" in remove["loop"], "the secret-bearing env file must not outlive the service"

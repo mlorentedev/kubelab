@@ -53,6 +53,39 @@
   when: agent_stack_webui_oidc_client_secret | length == 0
   tags: [agent_stack]
 
+# The same invariant on a node that WAS configured: a secret removed from SOPS
+# must take Open WebUI down, not leave the last container serving.
+- name: Stop Open WebUI when it is not configured
+  when: agent_stack_webui_oidc_client_secret | length == 0
+  tags: [agent_stack]
+  block:
+    - name: Look for a previously deployed Compose project
+      ansible.builtin.stat:
+        path: "{{ agent_stack_dir }}/compose-webui.yml"
+      register: _agent_stack_prior
+
+    - name: Take the previous Open WebUI down
+      ansible.builtin.command: >-
+        docker compose -p {{ agent_stack_webui_project }}
+        -f {{ agent_stack_dir }}/compose-webui.yml down
+      when: _agent_stack_prior.stat.exists
+      register: _agent_stack_down
+      changed_when: "'Removed' in _agent_stack_down.stderr or 'Stopped' in _agent_stack_down.stderr"
+
+    - name: Disable the Open WebUI unit
+      ansible.builtin.systemd:
+        name: agent-stack-webui.service
+        enabled: false
+      when: _agent_stack_prior.stat.exists and not ansible_check_mode
+
+    # Removing the file is what makes the next unconfigured run a no-op, and it
+    # takes the secret-bearing env file with it. The data volume stays.
+    - name: Remove the rendered Open WebUI files
+      ansible.builtin.file:
+        path: "{{ agent_stack_dir }}/{{ item }}"
+        state: absent
+      loop: [compose-webui.yml, webui.env]
+
 - name: Deploy Open WebUI
   when: agent_stack_webui_oidc_client_secret | length > 0
   tags: [agent_stack]
