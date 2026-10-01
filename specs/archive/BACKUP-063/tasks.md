@@ -29,7 +29,7 @@ created: "2026-09-30"
 
   Record the duration, `memory peak` and pack count per node in `verification.md`. If the RPi3 exceeds its cap, add `node_backup_check_connections` for that node only and measure again.
 - [x] [AC2] Fix `t` to the smallest value that fits every node: `t = 1` (2026-09-30, `verification.md`).
-- [ ] Redeploy from master after merge (`changed=0` on re-run).
+- [x] Redeploy from master after merge (`changed=0` on re-run). ✓ 2026-10-01
 
 ## Closing
 
