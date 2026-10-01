@@ -109,4 +109,4 @@ Pooled adversarial review (`nan/deepseek-v4-flash`, 2026-10-01, `review.md`): **
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
+- [x] `proposal.md` frontmatter set to `status: archived` ✓ 2026-10-01
