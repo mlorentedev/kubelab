@@ -161,12 +161,17 @@ while read -r node repo declared_id services || [ -n "$node" ]; do
     # timeout. Its failure is logged, not judged.
     if [ "$readable" -eq 1 ]; then
         started="$(date +%s)"
+        # A `stats` that exits 0 leaves nothing on stderr, so a missing
+        # `total_size` names itself rather than logging an empty reason.
         if stats="$(restic_stats)"; then
             size="$(printf '%s\n' "$stats" | sed -n 's/^.*"total_size": *\([0-9][0-9]*\).*$/\1/p' | head -n 1)"
+            why="stats returned no total_size"
+        else
+            why="$(reason_from_stderr)"
         fi
         if [ -z "$size" ] || [ "$size" = null ]; then
             size=null
-            echo "r2-backup-watcher: $node: size unknown: $(reason_from_stderr)" >&2
+            echo "r2-backup-watcher: $node: size unknown: $why" >&2
         fi
         echo "r2-backup-watcher: $node: stats took $(($(date +%s) - started))s" >&2
     fi
