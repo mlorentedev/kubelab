@@ -24,27 +24,3 @@
   roles:
     - role: ../roles/coredns
       tags: [dns, coredns]
-      vars:
-        # RPi4 serves DNS for ALL envs — use common.yaml base (not env override)
-        base_domain: "{{ common.global.base_domain }}"
-        staging_domain: "staging.{{ common.global.base_domain }}"
-        staging_zones: "{{ common.networking.staging_zones }}"
-        vps_public_ip: "{{ common.networking.vps.public_ip }}"
-        restart_policy: "{{ common.global.restart_policy }}"
-        # Where CoreDNS binds its health port. The LAN address deliberately, not
-        # `node_ips.rpi4`: Docker restores containers on boot before tailscaled
-        # has assigned the Tailscale address, and a failed bind drops the whole
-        # container's port publication. See the comment in docker-compose.yml.j2.
-        coredns_health_bind_ip: "{{ common.networking.nodes.rpi4.lan_ip }}"
-        node_ips:
-          vps: "{{ common.networking.vps.tailscale_ip }}"
-          ace1: "{{ common.networking.nodes.ace1.tailscale_ip }}"
-          ace2: "{{ common.networking.nodes.ace2.tailscale_ip }}"
-          rpi3: "{{ common.networking.nodes.rpi3.tailscale_ip }}"
-          rpi4: "{{ common.networking.nodes.rpi4.tailscale_ip }}"
-          beelink: "{{ common.networking.nodes.beelink.tailscale_ip }}"
-          jetson: "{{ common.networking.nodes.jetson.tailscale_ip }}"
-        service_domains:
-          vpn: "{{ common.apps.services.core.headscale.domain }}"
-          status: "{{ common.apps.services.observability.uptime_kuma.domain }}"
-          jetson: "jetson.{{ common.global.base_domain }}"
