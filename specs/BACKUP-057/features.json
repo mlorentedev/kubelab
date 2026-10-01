@@ -22,7 +22,7 @@
   },
   {
     "id": "BACKUP-057-f4",
-    "behavior": "No two nodes render the same bucket, key pair or restic password in backup.yml, backup_destination, the watcher targets or the watcher Secret (AC1)",
+    "behavior": "No two nodes render the same bucket, key pair or restic password in backup.yml, backup_destination or the watcher targets; the watcher Secret, the declared exception, carries one Object Read pair distinct from every node's pair plus each node's restic password taken from that node's own SOPS key (AC1)",
     "verification": "poetry run pytest tests/test_backup_per_node_isolation.py --no-cov -q",
     "state": "pending",
     "evidence": ""
@@ -43,8 +43,8 @@
   },
   {
     "id": "BACKUP-057-f9",
-    "behavior": "On the scratch bucket under a 1-day lock, --max-repack-size 0 takes the dry-run repack list from at least one pack to none, a prune of packs younger than R is refused, and the same prune is accepted once they are older than R (AC2, AC3)",
-    "verification": "Manual, tasks.md PR 2 scratch measurement steps 2b, 3 and 5 after make tf-r2-apply SCRATCH=1; each step's command, exit status and restic output recorded in verification.md",
+    "behavior": "On the scratch bucket under a 1-day lock: --max-repack-size 0 takes the dry-run repack list from at least one pack to none; forgetting a snapshot younger than R is refused at the snapshot's DELETE; a prune of unreferenced packs younger than R is refused at the pack's DELETE; and the same forget is accepted once everything is older than R (AC2, AC3)",
+    "verification": "Manual, tasks.md PR 2 scratch measurement steps 2b, 3, 3b and 5 after make tf-r2-apply SCRATCH=1; each step's command, exit status and restic output recorded in verification.md",
     "state": "pending",
     "evidence": ""
   },
