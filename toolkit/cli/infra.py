@@ -402,6 +402,35 @@ def argo_check_drift(
     raise typer.Exit(1)
 
 
+@argo_app.command("check-window")
+def argo_check_window(
+    kubeconfig: Annotated[
+        str,
+        typer.Option("--kubeconfig", help="Hub kubeconfig path (env: KUBECONFIG_HUB)", envvar="KUBECONFIG_HUB"),
+    ] = str(output_path("hub")),
+) -> None:
+    """Refuse while any Application holds a restore window (BACKUP-070).
+
+    `make deploy-apps` re-applies the git manifests, which would silently end a
+    window's pause in the middle of a restore. Exit 0 = no window, 1 = a window
+    is held (named), 2 = the hub could not be read.
+    """
+    from toolkit.features.restore_window import WindowError, held_windows
+
+    try:
+        held = held_windows(kubeconfig)
+    except WindowError as exc:
+        logger.error(f"CANNOT CHECK: {exc}")
+        raise typer.Exit(2) from exc
+    if not held:
+        logger.success("No restore window is open.")
+        return
+    for name, description in held:
+        logger.error(f"{name} holds a restore window: {description}")
+    logger.error("Close it first: make restore-window APP=<app> ENV=<env> END=1")
+    raise typer.Exit(1)
+
+
 @argo_app.command("unregister-spoke")
 def argo_unregister_spoke(
     env: Annotated[str, typer.Option("--env", "-e", help="Spoke environment to detach")],

@@ -84,6 +84,7 @@ help:
 	@echo "  make register-spoke ENV=x      Register spoke cluster in Argo CD hub"
 	@echo "  make unregister-spoke ENV=x    Remove spoke from Argo CD hub"
 	@echo "  make argo-set-revision APP=x REV=y  Patch Application targetRevision (preview/patch-back)"
+	@echo "  make restore-window APP=x ENV=y [END=1]  Pause auto-sync and stop one app for a data restore"
 	@echo "  make check-spokes              Verify registered spokes are reachable"
 	@echo "  make hub-pause HUB=<kubecfg>   Stop one hub reconciling (reversible; keeps its state)"
 	@echo "  make hub-resume HUB=<kubecfg>  Resume a paused hub — the rollback for hub-pause"
@@ -737,6 +738,9 @@ recover-argocd:
 .PHONY: deploy-apps
 deploy-apps:
 	@echo "=== Deploying Argo CD Applications ==="
+	@# A restore window pauses auto-sync on one Application; re-applying git here
+	@# would end that pause in the middle of a restore (BACKUP-070).
+	@$(TOOLKIT) infra argo check-window --kubeconfig $(HUB_KUBECONFIG)
 	@kubectl apply -f infra/k8s/argocd/applications/ --kubeconfig $(HUB_KUBECONFIG)
 	@echo "--- Verifying the live objects now match git (#1016) ---"
 	@$(TOOLKIT) infra argo check-drift --kubeconfig $(HUB_KUBECONFIG)
@@ -1684,6 +1688,16 @@ backup-drill-apps:
 .PHONY: backup-drill-gitea
 backup-drill-gitea:
 	@$(TOOLKIT) backup drill-gitea --env $(or $(filter staging prod,$(ENV)),prod)
+
+# Stop one app and pause its env's Argo CD auto-sync, so its data can be
+# replaced without Argo CD bringing it back (BACKUP-070). END=1 restores the
+# sync policy declared in git, syncs, and waits for the app. While a window is
+# open that env receives no merges, and `make deploy-apps` refuses.
+# Usage: make restore-window APP=n8n ENV=prod [END=1]
+.PHONY: restore-window
+restore-window:
+	@test -n "$(APP)" || (echo "Usage: make restore-window APP=<deployment> ENV=staging|prod [END=1]" && exit 1)
+	@$(TOOLKIT) backup restore-window --app $(APP) --env $(or $(filter staging prod,$(ENV)),prod) $(if $(filter 1,$(END)),--end,)
 
 # Generate the restic repository password into SOPS. The value is never printed;
 # read it once with `make secrets-show KEY=backup.restic_password

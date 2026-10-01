@@ -192,6 +192,65 @@ def drill_apps_cmd(
         raise typer.Exit(code=1)
 
 
+@app.command("restore-window")
+def restore_window_cmd(
+    deployment: Annotated[str, typer.Option("--app", help="Deployment whose data is being restored, e.g. n8n")],
+    env: Annotated[str, typer.Option("--env", "-e", help="staging or prod")] = "prod",
+    end: Annotated[bool, typer.Option("--end", help="Close the window (restore git's sync policy and sync)")] = False,
+    project_root: Annotated[Optional[Path], typer.Option("--project-root", help="Repo root")] = None,
+) -> None:
+    """Pause an env's Argo CD auto-sync and stop one app, so its data can be replaced (BACKUP-070).
+
+    Opening sets `automated.enabled: false` on `kubelab-<env>`, records who holds
+    the window, scales the Deployment to zero and waits until no pod mounts its
+    claims. While it is open, that env receives no merges. `--end` restores the
+    sync policy declared in git, triggers a sync, and waits for Synced/Healthy
+    and the app's replicas. Closing with no window open says so and exits 0.
+    """
+    import getpass
+    import socket
+
+    from toolkit.features.k8s_kubeconfig import output_path
+    from toolkit.features.restore_window import WindowError, close_window, open_window
+
+    if env not in ("staging", "prod"):
+        logger.error(f"--env must be staging or prod, not '{env}'")
+        raise typer.Exit(code=1)
+    root = Path(project_root or Path.cwd())
+    hub, spoke = str(output_path("hub")), str(output_path(env))
+    try:
+        if end:
+            logger.section(f"restore window — closing on kubelab-{env}")
+            replaced = close_window(
+                env=env,
+                applications_dir=root / "infra/k8s/argocd/applications",
+                hub_kubeconfig=hub,
+                spoke_kubeconfig=spoke,
+            )
+            if replaced is None:
+                logger.info(f"no window open on kubelab-{env}; nothing to close")
+                return
+            logger.info(f"replaced sync policy: {replaced}")
+            logger.success(f"window closed: kubelab-{env} syncs from git again and the app is back")
+            return
+        logger.section(f"restore window — opening on kubelab-{env} for {deployment}")
+        replaced = open_window(
+            env=env,
+            deployment=deployment,
+            hub_kubeconfig=hub,
+            spoke_kubeconfig=spoke,
+            holder=f"{getpass.getuser()}@{socket.gethostname()}",
+        )
+    except WindowError as exc:
+        logger.error(str(exc))
+        raise typer.Exit(code=1) from exc
+    logger.info(f"replaced sync policy: {replaced}")
+    logger.success(
+        f"window open: {deployment} is at zero and kubelab-{env} will not sync. "
+        f"Close it with `make restore-window APP={deployment} ENV={env} END=1`."
+    )
+
+
 @app.command("health-check")
 def health_check_cmd(
     env: Annotated[str, typer.Option("--env", "-e", help="Environment whose merged config is used")] = "prod",
