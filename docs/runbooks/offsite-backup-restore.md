@@ -508,6 +508,39 @@ Bring the app back, then check it from outside: `make test-e2e ENV=prod` and a l
 Keep `/root/<svc>-data.broken-*` until the app is confirmed whole, then delete it and
 `/tmp/<svc>-restore`: both hold encrypted secrets, and n8n's `config` holds its key.
 
+### Running a drill on ace2
+
+The Gitea and Headscale drills can run on ace2 instead of this machine
+(BACKUP-071). The evidence then says the backup restores on a host other than
+the one the operator works from:
+
+```bash
+git push                                       # the run refuses an unpushed commit
+make backup-drill-gitea HOST=ace2 ENV=prod
+make backup-drill-headscale HOST=ace2 ENV=prod
+```
+
+- **The commit, not master.** ace2 keeps its own checkout at
+  `~/.local/share/kubelab-drill` (provisioned by `dev_node`, `make provision
+  NODE=ace2 ENV=prod TAGS=drill`). Each run fetches it, detaches it at this tree's
+  `HEAD` and runs `make worktree-init`. A dirty tree, untracked files included, or
+  a commit no `origin/*` branch contains refuses with CANNOT CHECK before anything
+  is sent. A branch can prove itself on ace2 before it merges.
+- **What travels.** This machine opens SOPS and builds one JSON payload: the
+  restic repository and environment (R2 keys, restic password), the image, the
+  staging directory, and the Gitea admin token for the Gitea drill. It goes on the
+  ssh session's stdin, so it is never in argv (`ps`), in an environment
+  assignment, or in a file on ace2. ace2 reads it into memory and never prints it,
+  and a malformed payload is reported by its error class only.
+- **What does not travel.** ace2 has no SOPS age key and never builds the
+  config. Headscale's live reads (node and user lists, hashes of the live key
+  files) need ssh and `sudo -n` on the VPS, so this machine does them and sends
+  the result. ace2 gets no VPS credential and no forwarded agent.
+- **Reading a failure.** `could not reach` is ssh (exit 255), `the drill checkout
+  could not be prepared` is the fetch, the checkout or `make worktree-init` on
+  ace2 (the lines above it say which), and anything else is the drill's own
+  verdict, printed by the drill as it would print it locally.
+
 ## Restoring — the disaster case
 
 **This is the scenario the escrow exists for.** The laptop and the USB stick are
