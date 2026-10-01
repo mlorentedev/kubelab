@@ -31,7 +31,7 @@ The size decides whether R = 30 fits the free tier. It is measured by the watche
 
 ## PR 2 — the R2 Terraform root, applied to a scratch bucket only
 
-- [ ] [P] [AC2] Failing test, `tests/test_r2_terraform.py`, run against `toolkit infra terraform r2-tfvars` output:
+- [ ] [P] [AC2] Failing test, `tests/test_r2_terraform.py`, run against `toolkit infra terraform r2-tfvars` output. The lock prefixes are declared once, in the renderer, and reach the HCL only as the `locked_prefixes` variable. The test also asserts `main.tf` carries no prefix literal, so the rendered list is the one the lock applies:
   - one bucket per `backup.sources` key, named `kubelab-backup-<node>`;
   - lock prefixes are exactly `data/`, `snapshots/`, `keys/` and `config`, never `locks/` or `index/`;
   - R in days is less than the `--keep-within` days in `node_backup_retention_flags`.
@@ -92,8 +92,8 @@ The size decides whether R = 30 fits the free tier. It is measured by the watche
 
   Tests mock restic and assert the order and the stop on mismatch.
 - [ ] [AC4] Migrate all four nodes in **one sitting**: until a node's copy finishes, `kubelab-backups` holds its only copy, unlocked. Record per-node counts and times in `verification.md`.
-- [ ] [AC1] [AC3] `toolkit backup isolation-probe --env prod` / `make backup-isolation-probe ENV=prod`. For every ordered pair of nodes, node A's credential must be refused on list and delete in node B's bucket. A direct delete of the youngest `data/` object in each bucket, with that node's own credential, must be refused. It exits non-zero if any request is **accepted**. Unit tests mock the S3 client and assert that an accepted request fails the probe. This is what makes the check able to fail: today's shared bucket passes every other check.
-- [ ] [AC1] [AC3] Measured in prod: `make backup-isolation-probe ENV=prod` rc 0, `make backup-node NODE=all ENV=prod` rc 0, and `make watcher-run ENV=prod` reports `healthy:4`.
+- [ ] [AC1] [AC3] `toolkit backup isolation-probe --env prod` / `make backup-isolation-probe ENV=prod`. For every ordered pair of nodes, node A's credential must be refused on list and delete in node B's bucket. A direct delete of the youngest `data/` object in each bucket, with that node's own credential, must be refused. It exits non-zero if any request is **accepted**, and also if any bucket has no object under `data/`: an empty prefix has nothing to refuse a delete of, so it would report immutability it never measured. It therefore runs after each node's first ship to its bucket, never before. Unit tests mock the S3 client and assert that an accepted request fails the probe. This is what makes the check able to fail: today's shared bucket passes every other check.
+- [ ] [AC1] [AC3] Measured in prod, in this order: `make backup-node NODE=all ENV=prod` rc 0, then `make backup-isolation-probe ENV=prod` rc 0, and `make watcher-run ENV=prod` reports `healthy:4`.
 
 ## PR 5 — close out
 

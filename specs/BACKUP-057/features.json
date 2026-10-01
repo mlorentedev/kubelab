@@ -37,7 +37,7 @@
   {
     "id": "BACKUP-057-f6",
     "behavior": "In prod, under the lock, every node ships and the watcher reports healthy:4; a young data/ delete and a cross-node list are refused (AC1, AC3)",
-    "verification": "make backup-isolation-probe ENV=prod && make backup-node NODE=all ENV=prod && make watcher-run ENV=prod",
+    "verification": "make backup-node NODE=all ENV=prod && make backup-isolation-probe ENV=prod && make watcher-run ENV=prod",
     "state": "pending",
     "evidence": ""
   },
