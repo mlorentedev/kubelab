@@ -19,3 +19,10 @@ agent_stack_webui_project: agent-stack-webui
 agent_stack_webui_oidc_client_secret: ""
 agent_stack_nan_api_key: ""
 agent_stack_nan_api_base_url: https://api.nan.builders/v1
+
+# The container's resolvers, the rpi3_services form of `docker_dns_servers`:
+# MagicDNS first, so the container resolves ace2's tailnet name and the prod
+# Authelia issuer the way the host does, because Docker never passes the host's
+# 100.100.100.100 into a container. The public entry is only for a Tailscale
+# outage.
+agent_stack_docker_dns_servers: ["100.100.100.100", "1.1.1.1"]

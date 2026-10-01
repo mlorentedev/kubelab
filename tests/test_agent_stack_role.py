@@ -159,3 +159,11 @@ def test_every_read_runs_in_a_dry_run() -> None:
     assert reads, "the role has no registered reads; this guard checks nothing"
     skipped = [task["name"] for task in reads if task.get("check_mode") is not False]
     assert not skipped, f"reads skipped by --check: {skipped}"
+
+
+def test_the_container_resolves_through_magicdns_first() -> None:
+    """Docker never passes the host's 100.100.100.100 in; a public resolver alone cannot see the tailnet."""
+    compose = yaml.safe_load(_render("compose-webui.yml.j2"))
+    dns = compose["services"]["open-webui"]["dns"]
+    assert dns == _context()["agent_stack_docker_dns_servers"]
+    assert dns[0] == "100.100.100.100", dns

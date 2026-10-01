@@ -20,12 +20,11 @@ services:
       - open-webui-data:/app/backend/data
     mem_limit: {{ agent_stack_webui.memory_limit }}
     cpus: {{ agent_stack_webui.cpu_limit }}
-    # MagicDNS first, so the container resolves ace2's own tailnet name and the
-    # prod Authelia issuer the same way the host does (the rpi3_services rule:
-    # Docker does not inherit the host's 100.100.100.100).
+    # agent_stack_docker_dns_servers: MagicDNS first (see the role defaults).
     dns:
-      - 100.100.100.100
-      - 1.1.1.1
+{% for server in agent_stack_docker_dns_servers %}
+      - {{ server }}
+{% endfor %}
 
 volumes:
   open-webui-data:
