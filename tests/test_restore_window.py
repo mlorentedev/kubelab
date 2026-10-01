@@ -64,6 +64,7 @@ class FakeKube:
         self.patches: list[dict[str, Any]] = []
         self.conflicts_left = 0
         self.synced = False
+        self.autosync_on_resume = False
 
     # --- argv router -------------------------------------------------------
     def __call__(self, argv: list[str]) -> tuple[int, str, str]:
@@ -100,8 +101,14 @@ class FakeKube:
             if self.sync_restores:
                 self.replicas = self.declared_replicas
             return 0, json.dumps(self.app), ""
+        paused = self.app["spec"]["syncPolicy"].get("automated", {}).get("enabled") is False
         self.app = merge_patch(self.app, {k: v for k, v in body.items()})
         self._bump()
+        resumed = paused and "enabled" not in self.app["spec"]["syncPolicy"].get("automated", {})
+        if resumed and self.autosync_on_resume:
+            # Argo CD starts its own sync the moment auto-sync is back and git has moved.
+            self.app["operation"] = {"initiatedBy": {"automated": True}, "sync": {"revision": "abc"}}
+            self.replicas = self.declared_replicas
         return 0, json.dumps(self.app), ""
 
     def _bump(self) -> None:
@@ -344,6 +351,23 @@ class TestClose:
         assert len(syncs) == 1
         assert syncs[0]["operation"]["sync"]["revision"] == "feat/preview"
         assert kube.replicas == 1
+
+    def test_a_sync_argo_cd_already_started_is_not_overwritten(self) -> None:
+        kube = FakeKube()
+        kube.autosync_on_resume = True
+        _open(kube)
+        _close(kube)
+        assert [p for p in kube.patches if "operation" in p] == []
+        assert kube.app["operation"]["initiatedBy"] == {"automated": True}
+        assert kube.replicas == 1
+
+    def test_a_running_operation_is_not_overwritten_either(self) -> None:
+        kube = FakeKube()
+        _open(kube)
+        kube.app["status"]["operationState"] = {"phase": "Running"}
+        kube.replicas = 1
+        _close(kube)
+        assert [p for p in kube.patches if "operation" in p] == []
 
     def test_a_sync_that_never_restores_the_replicas_fails_with_what_it_saw(self) -> None:
         kube = FakeKube(sync_restores=False)

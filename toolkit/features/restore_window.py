@@ -247,18 +247,26 @@ def close_window(
         return None
     deployment = str(held.get("deployment"))
 
-    revision = before["spec"]["source"]["targetRevision"]
-    operation = {"operation": {"initiatedBy": {"username": "restore-window"}, "sync": {"revision": revision}}}
-    rc, _, err = run(
-        _kubectl(
-            hub_kubeconfig, HUB_NAMESPACE, "patch", "application", name, "--type", "merge", "-p", json.dumps(operation)
-        )
-    )
-    if rc != 0:
+    # Re-enabling auto-sync can start a sync by itself (it does whenever git
+    # moved since the last one, measured on staging 2026-10-01). Writing
+    # `operation` over one already running would replace it, so the sync is
+    # sent only when none is pending or running, under the read's
+    # resourceVersion. Otherwise Argo CD is already syncing; the wait below
+    # judges the outcome either way.
+    def build_sync(app: dict[str, Any]) -> Optional[dict[str, Any]]:
+        running = ((app.get("status") or {}).get("operationState") or {}).get("phase") == "Running"
+        if app.get("operation") or running:
+            return None
+        revision = app["spec"]["source"]["targetRevision"]
+        return {"operation": {"initiatedBy": {"username": "restore-window"}, "sync": {"revision": revision}}}
+
+    try:
+        _patch_application(run, hub_kubeconfig, name, build_sync)
+    except WindowError as exc:
         raise WindowError(
-            f"the window is closed, but triggering the sync failed: {err.strip()[:200]}. "
+            f"the window is closed, but triggering the sync failed: {exc}. "
             f"Run `make sync-app APP={name}` and check {deployment} comes back."
-        )
+        ) from exc
 
     started = clock()
     while True:
