@@ -8,7 +8,7 @@
   },
   {
     "id": "BACKUP-057-f2",
-    "behavior": "The rendered R2 tfvars give one bucket per backup.sources node, lock data/ snapshots/ keys/ config and never locks/ or index/, and keep R below the --keep-within days (AC2)",
+    "behavior": "The rendered R2 tfvars give one bucket per backup.sources node, lock data/ snapshots/ keys/ config and never locks/ or index/, keep R below the --keep-within days, and the retention flags forbid repacking with --max-repack-size 0 (AC2)",
     "verification": "poetry run pytest tests/test_r2_terraform.py --no-cov -q",
     "state": "pending",
     "evidence": ""
@@ -24,6 +24,13 @@
     "id": "BACKUP-057-f4",
     "behavior": "No two nodes render the same bucket, key pair or restic password in backup.yml, backup_destination, the watcher targets or the watcher Secret (AC1)",
     "verification": "poetry run pytest tests/test_backup_per_node_isolation.py --no-cov -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-057-f8",
+    "behavior": "A prune refused after a successful backup does not fail the ship; it is reported on its own signal, and a failed backup still fails it (AC3, Q6)",
+    "verification": "poetry run pytest tests/test_node_backup_ship_script.py --no-cov -q",
     "state": "pending",
     "evidence": ""
   },

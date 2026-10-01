@@ -29,15 +29,16 @@ The size decides whether R = 30 fits the free tier. It is measured by the watche
 - [ ] [AC2] Failing test, `tests/test_r2_backup_alerting_rules.py`: a Grafana rule `r2-backup-size` fires when the fleet sum exceeds `backup.r2.free_tier_bytes × 0.8`, and pages on no data, which a day of `null` sums is. The threshold is compared with `common.yaml`, never trusted from the rule file. Then add the rule to `grafana-alerting/r2-backup-rules.yaml` and the key to `common.yaml`.
 - [ ] Deploy to staging, then `make watcher-run ENV=prod`. Record the four sizes and the projection for `--keep-within 31d` in `verification.md`. **Gate:** it passes only with four numeric sizes and a projection that fits the free tier **with both copies stored**. From the first migration in PR 4 until `kubelab-backups` is deleted (at least R + 7 days, Q2), the account holds the old copy, which the watcher no longer sums, and the new one. So the gate compares today's total plus the projected new total against the free tier. A `null` size stops the gate exactly as an overflow does, and R goes back to the operator. The running alert cannot see that old copy, since the watcher no longer sums it, so the gate also checks that the alert's headroom (the free tier minus its 80% threshold) is larger than the old copy as measured: the old copy is frozen at migration, so that one number bounds the alert's blind spot for the whole overlap.
 
-## PR 2 — the R2 Terraform root, applied to a scratch bucket only
+## PR 2 — the R2 Terraform root, measured on a scratch bucket, then applied to the node buckets
 
 - [ ] [P] [AC2] Failing test, `tests/test_r2_terraform.py`, run against `toolkit infra terraform r2-tfvars` output. The lock prefixes are declared once, in the renderer, and reach the HCL only as the `locked_prefixes` variable. The test also asserts `main.tf` carries no prefix literal, so the rendered list is the one the lock applies:
   - one bucket per `backup.sources` key, named `kubelab-backup-<node>`;
   - lock prefixes are exactly `data/`, `snapshots/`, `keys/` and `config`, never `locks/` or `index/`;
   - R in days is less than the `--keep-within` days in `node_backup_retention_flags`.
+  - `node_backup_retention_flags` carries `--max-repack-size 0`, so `prune` never rewrites a pack and resets its age (proposal *What* §2).
 
   Expected: FAIL, the command does not exist.
-- [ ] [AC2] `toolkit infra terraform r2-tfvars` in `toolkit/cli/infra.py`, a plaintext renderer mirroring `vps-firewall-tfvars`. `backup.r2.lock_retention_days: 30` goes into `common.yaml`, and `--keep-within 31d` into `node_backup_retention_flags`. Expected: PASS.
+- [ ] [AC2] `toolkit infra terraform r2-tfvars` in `toolkit/cli/infra.py`, a plaintext renderer mirroring `vps-firewall-tfvars`. `backup.r2.lock_retention_days: 30` goes into `common.yaml`, and `--keep-within 31d --max-repack-size 0` into `node_backup_retention_flags`. Expected: PASS.
 - [ ] [AC2] `infra/terraform/r2/`:
   - `required_providers cloudflare ~> 5.8`;
   - `cloudflare_r2_bucket` and `cloudflare_r2_bucket_lock`, each with `for_each` over the rendered nodes;
@@ -46,14 +47,15 @@ The size decides whether R = 30 fits the free tier. It is measured by the watche
 
   `terraform validate` passes.
 - [ ] [AC2] `make tf-r2-plan` / `make tf-r2-apply` in the `tf-vps-firewall-*` shape. The Cloudflare token goes in `TF_VAR_*` in the child process's environment, never as an argument.
-- [ ] Verify by consequence that the SOPS Cloudflare token can manage R2 buckets and locks: `make tf-r2-plan` with `nodes = {}` and `scratch = true` returns rc 0. If it is refused, a separate admin token is minted by the operator and added to `SECRET_CATALOG`; record which one it was. Either way, the token that manages the locks is in a file every SOPS recipient decrypts, so record in `verification.md` that #1852 gates the archive (proposal item 1).
+- [ ] Verify by consequence that the SOPS Cloudflare token can manage R2 buckets and locks: `make tf-r2-apply SCRATCH=1` returns rc 0 and creates the scratch bucket with its lock. A plan cannot prove it: planning a resource that does not exist yet makes no R2 call, so a refused token still plans clean (found while building PR 2). This is step 1 of the measurement below. If it is refused, a separate admin token is minted by the operator and added to `SECRET_CATALOG`; record which one it was. Either way, the token that manages the locks is in a file every SOPS recipient decrypts, so record in `verification.md` that #1852 gates the archive (proposal item 1).
 - [ ] [AC3] Scratch measurement, recorded in `verification.md`:
   1. Apply the scratch bucket with R = 1 day, which also confirms the API accepts a short retention.
-  2. Point a throwaway restic repository at it and take two `backup`s, then run `check`. Both must return rc 0. Each `backup` deletes its own file under `locks/`, so this is the measurement that `locks/` is outside the rule. The no-deletion half of the ship proves nothing here: every snapshot is younger than `--keep-within`, so `forget` selects nothing and `prune` issues no DELETE.
-  3. **The half that can fail.** `forget <first snapshot id> --prune` makes a young pack unreferenced, so `prune` must try to delete it. The DELETE must be refused, and restic must exit non-zero. Record its exact error, because that is what a ship would page with if retention and R ever disagreed. Then `restic repair index` and `check` must still pass.
-  3b. Interrupt a `backup` mid-run (kill restic after it has written packs, before the snapshot), then run `prune`. The packs are unreferenced and younger than R, so the delete should be refused. Record whether it is and restic's exact error: that is the input to Q6, which PR 4 decides.
+  2. Point a throwaway restic repository at it and take two `backup`s of different data, so the first snapshot has packs the second does not use, then run `check`. Both must return rc 0. Each `backup` deletes its own file under `locks/`, so this is the measurement that `locks/` is outside the rule. The no-deletion half of the ship proves nothing here: every snapshot is younger than `--keep-within`, so `forget` selects nothing and `prune` issues no DELETE.
+  3. **The half that can fail.** `forget <first snapshot id> --prune --max-repack-size 0` makes the first snapshot's packs wholly unused, so `prune` must try to delete them, with the flags the ship uses. The DELETE must be refused, and restic must exit non-zero. Record its exact error, because that is what a ship would page with if retention and R ever disagreed. Then `restic repair index` and `check` must still pass.
+  3b. Interrupt a `backup` mid-run (kill restic after it has written packs, before the snapshot), then run `prune`. The packs are unreferenced and younger than R, so the delete should be refused. Record whether it is, and restic's exact error: Q6 has decided how the ship reports it, and this is the string the runbook quotes.
   4. A direct delete of a `data/` object younger than R, made with an Object Read & Write token, must be refused.
   5. Destroy the scratch bucket with `-target` after removing its lock rule, and record the steps that took.
+- [ ] [AC2] Once the scratch measurement passes: `make tf-r2-apply` creates the four node buckets and their lock rules, empty. Nothing reads them until PR 4. A second `make tf-r2-plan` shows no diff, which is AC2's evidence. PR 3 depends on this, since a token scoped to a bucket needs the bucket to exist.
 
 ## PR 3 — per-node credentials, minted into SOPS (Q1)
 
@@ -74,7 +76,7 @@ The size decides whether R = 30 fits the free tier. It is measured by the watche
 
 ## PR 4 — every consumer becomes per node, then the migration (Q2)
 
-- [ ] [AC1] Failing tests in a new `tests/test_backup_per_node_isolation.py`, one per consumer: `backup.yml`, `backup_destination.repo_url`, `render_watcher_targets` and the watcher Secret. Each consumer must give every node a bucket, key pair and restic password that no other node gets. They live in their own file so that one run covers them all, with no `-k` filter. Expected: FAIL.
+- [ ] [AC1] Failing tests in a new `tests/test_backup_per_node_isolation.py`, one per consumer: `backup.yml`, `backup_destination.repo_url`, `render_watcher_targets` and the watcher Secret. Each consumer must give every node a bucket, key pair and restic password that no other node gets. They live in their own file so that one run covers them all, with no `-k` filter. The watcher is the one declared exception, by design (proposal *What* §4): its single pair spans every node bucket. For it the test asserts the opposite of the rule: the pair is distinct from every node's pair, the mint command declares it Object Read only, and each restic password it carries comes from that node's own SOPS key, never from a copy. Expected: FAIL.
 - [ ] [AC1] Change the consumers:
   - `backup.yml` (both plays) and `backup-repo-reinit.yml`: per-node vars;
   - the `node_backup` role defaults and ship script: the repository URL is `s3:<endpoint>/kubelab-backup-<node>`;
@@ -83,6 +85,7 @@ The size decides whether R = 30 fits the free tier. It is measured by the watche
   - `k8s_secrets`: `r2-backup-watcher-secrets` carries the read-only pair plus one restic password per node, keyed by node. The watcher opens every repository (`snapshots`, `stats`), so it needs every password. A test fails if a node in `backup.sources` has no password entry.
 
   Expected: PASS, `make test` green.
+- [ ] [AC3] The ship reports `backup` and `prune` separately (Q6). Failing test first, in `tests/test_node_backup_ship_script.py`: with a fake restic whose `forget --prune` exits non-zero after a successful `backup`, the ship exits 0, emits a distinct prune-failure line, and the signal that line feeds raises its own alert. With a failing `backup`, the ship still exits non-zero. Then change `node-backup-ship.sh.j2`.
 - [ ] [AC4] `make backup-migrate NODE=<node> ENV=prod` (toolkit plus an Ansible run, no ad-hoc restic). It runs these steps and stops at the first failure:
   1. `restic copy --from-repo` from `kubelab-backups/<node>` into the new bucket, from the operator workstation.
   2. Compare the snapshot count and the oldest snapshot time with the source.
