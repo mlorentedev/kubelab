@@ -60,11 +60,11 @@ Inventory, measured 2026-10-01 (`kubectl kustomize infra/k8s/overlays/prod` and 
 
 ## Acceptance criteria
 
-- [ ] AC1: On prod, `make backup-node NODE=vps ENV=prod` ships a snapshot that contains `postgres/pg_dumpall.sql`, ending with the completion trailer, and no file from the claim's data directory.
+- [x] AC1: On prod, `make backup-node NODE=vps ENV=prod` ships a snapshot that contains `postgres/pg_dumpall.sql`, ending with the completion trailer, and no file from the claim's data directory.
 - [ ] AC2: A capture whose `pg_dumpall` fails, or whose output lacks the trailer, exits non-zero and leaves no sentinel. Pinned by a test that runs the rendered script against a fake `kubectl`.
 - [ ] AC3: The static guard fails on master's `common.yaml` and passes after this spec, and any exclusion without `reason` or with a tier other than 3 fails it.
 - [ ] AC4: `make backup-coverage ENV=prod` names every live PVC with no ruling, and reports none after this spec.
-- [ ] AC5: `make backup-drill-postgres ENV=prod` restores the newest dump from R2 into a scratch database and passes: the trailer is present, every live database and table exists in the restore, and no table with rows live is empty in it. It also names the snapshot it read, which is AC1's evidence. The transcript is in `verification.md`.
+- [x] AC5: `make backup-drill-postgres ENV=prod` restores the newest dump from R2 into a scratch database and passes: the trailer is present, every live database and table exists in the restore, and no table with rows live is empty in it. It also names the snapshot it read, which is AC1's evidence. The transcript is in `verification.md`.
 - [ ] AC6: `docs/runbooks/offsite-backup-restore.md` documents the Postgres restore, and the procedure for adding a stateful service to the fleet. A lesson records why the exclusion lapsed.
 
 ## References
