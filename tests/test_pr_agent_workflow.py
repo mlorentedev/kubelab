@@ -1057,19 +1057,26 @@ def _toml() -> dict:
 
 
 def test_a_hung_model_is_not_retried_before_the_fallback_runs() -> None:
-    """A model that hangs past `ai_timeout` hangs again. PR-Agent's default
-    retries the SAME model on timeout, three attempts each, so two models cost
-    2 x 3 x 120 s = 720 s before "Failed to review PR". Measured on five runs on
-    2026-09-30 and 2026-10-01 (#1909): 720 s +/- 9 s from `PR diff` to the publish
-    check, every one publishing nothing. With no same-model retry the same failure
-    costs 240 s, so the shared inference slot cycles three times faster.
+    """A model that hangs past `ai_timeout` hangs again, and PR-Agent 0.46.0
+    replays it at two layers before the fallback is consulted: the handler's own
+    retry (`MODEL_RETRIES = 2`, timeouts included while `retry_same_model_on_timeout`
+    is true) times the completion client's default retries, which upstream's
+    configuration.toml says "multiply the handler's own retry attempts". At
+    `ai_timeout = 120` that is 2 x 3 x 120 s = 720 s on the PRIMARY alone, the
+    figure every failed run of #1909 took. Run 36800846902 logs one "Generating
+    prediction with openai/mimo-v2.5" and nothing else for 728 s: the fallback
+    never ran. Both layers off, a hang costs one timeout per model.
 
     Asserted in BOTH files: PR-Agent reads `.pr_agent.toml` from the default
     branch, the workflow from the PR head, so only the env value reaches the PR
     that changes it, and the toml value is what every later PR inherits.
     """
-    assert _toml()["config"].get("retry_same_model_on_timeout") is False
-    assert str(_review_env().get("CONFIG__RETRY_SAME_MODEL_ON_TIMEOUT")).lower() == "false"
+    config = _toml()["config"]
+    env = _review_env()
+    assert config.get("retry_same_model_on_timeout") is False
+    assert str(env.get("CONFIG__RETRY_SAME_MODEL_ON_TIMEOUT")).lower() == "false"
+    assert config.get("num_retries") == 0
+    assert str(env.get("CONFIG__NUM_RETRIES")) == "0"
 
 
 def test_a_review_can_report_more_findings_than_the_upstream_default() -> None:

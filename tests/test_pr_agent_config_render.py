@@ -41,6 +41,7 @@ REQUIRED_VALUES = {
     "OPENAI__API_BASE": "https://api.nan.builders/v1",
     "CONFIG__MODEL": "openai/mimo-v2.6-flash",
     "CONFIG__RETRY_SAME_MODEL_ON_TIMEOUT": "false",
+    "CONFIG__NUM_RETRIES": "0",
     "PR_REVIEWER__NUM_MAX_FINDINGS": "5",
     "CONFIG__FALLBACK_MODELS": '["openai/deepseek-v4-flash"]',
     "CONFIG__CUSTOM_MODEL_MAX_TOKENS": "200000",

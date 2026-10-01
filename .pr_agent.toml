@@ -21,10 +21,10 @@
 # set as OPENAI__API_BASE in the workflow. Nothing here talks to OpenAI.
 #
 # mimo-v2.6-flash leads, deepseek-v4-flash follows. mimo-v2.6-flash replaced
-# mimo-v2.5 on 2026-10-01: NaN retired the older model, which answers 401 "This
-# API key does not have access to the requested model", so every review rode the
-# fallback alone. Admitted to harness/reviewer-pool.json on the same bar, see its
-# entry. What follows was measured on mimo-v2.5 and is carried over, not re-run.
+# mimo-v2.5 on 2026-10-01, when NaN retired the older model. Review-sized calls
+# to it hung until the timeout (run 36800846902, 01:39Z), and minutes later a
+# minimal call answered 401 "This API key does not have access to the requested
+# model". Admitted to harness/reviewer-pool.json on the same bar, see its entry. What follows was measured on mimo-v2.5 and is carried over, not re-run.
 #
 # mimo leads, deepseek follows, and the order was the other way
 # round until #1205 measured why it could not work. deepseek returns a 200 with
@@ -43,11 +43,15 @@
 # an answer is the property being selected for.
 model = "openai/mimo-v2.6-flash"
 
-# A model that hangs past `ai_timeout` (120 s) hangs again, and upstream retries
-# the SAME model on timeout before moving on: 2 models x 3 attempts x 120 s =
-# 720 s of silence before "Failed to review PR", measured on every failed run of
-# #1909. Off, a hung primary costs one timeout and the fallback runs next.
+# A model that hangs past `ai_timeout` (120 s) hangs again, and upstream replays
+# it at two layers before the fallback is consulted: the handler's retry
+# (MODEL_RETRIES = 2, timeouts included while the first setting is true) times the
+# completion client's default retries, which "multiply" it (upstream's own
+# comment). 2 x 3 x 120 s = 720 s on the PRIMARY alone, the figure every failed
+# run of #1909 took; run 36800846902 never logs a fallback attempt. Both off, a
+# hung model costs one timeout and the next one in the chain runs.
 retry_same_model_on_timeout = false
+num_retries = 0
 
 # ONE fallback, and it is not the cheap kind this line used to forbid.
 #
