@@ -2,36 +2,36 @@
   {
     "id": "BACKUP-071-ace2-drills-f1",
     "behavior": "AC1: node_backup and dev_node share one restic install; provisioning ace2 twice ends changed=0 with no SOPS age key on the node",
-    "verification": "poetry run pytest -q -p no:cacheprovider --no-cov tests/test_restic_install_shared.py && ssh ace2 test ! -e .config/sops/age/keys.txt",
-    "state": "pending",
-    "evidence": ""
+    "verification": "poetry run pytest -q -p no:cacheprovider --no-cov tests/test_restic_install_shared.py && out=$(make provision NODE=ace2 ENV=prod 2>&1) && printf '%s' \"$out\" | grep -Eq '^ace2 +: ok=[0-9]+ +changed=0 +unreachable=0 +failed=0' && ssh ace2 'test ! -e .config/sops/age/keys.txt'",
+    "state": "passing",
+    "evidence": "2026-10-01: make provision NODE=ace2 ENV=prod second run 'ace2 : ok=162 changed=0 unreachable=0 failed=0 skipped=71'; ssh ace2 test ! -e .config/sops/age/keys.txt exit 0; restic 0.19.1; tests/test_restic_install_shared.py 4 passed"
   },
   {
     "id": "BACKUP-071-ace2-drills-f2",
     "behavior": "AC2: the Gitea and Headscale drills pass on ace2 from a pushed commit",
     "verification": "make backup-drill-gitea HOST=ace2 ENV=prod && make backup-drill-headscale HOST=ace2 ENV=prod",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "Headscale at 66a5fcc6: snapshot 024a9582, 12 nodes, 4 users, rc=0. Gitea at 86f6d16a: snapshot 0b556cbb, 5 repositories, fsck ok, rc=0. Transcripts in BACKUP-067/BACKUP-040 verification.md"
   },
   {
     "id": "BACKUP-071-ace2-drills-f3",
     "behavior": "AC2/AC3: secrets travel on stdin, never argv or disk; the remote never reads SOPS; a dirty or unpushed tree is refused; Headscale live reads stay on the workstation",
     "verification": "poetry run pytest -q -p no:cacheprovider --no-cov tests/test_drill_remote.py tests/test_headscale_drill.py",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "tests/test_drill_remote.py 26 passed, tests/test_headscale_drill.py 40 passed; mutations M1-M4 red (1, 3, 2, 1 failures); make test 3435 passed on b2e3e44d"
   },
   {
     "id": "BACKUP-071-ace2-drills-f5",
     "behavior": "AC4: BACKUP-040 and BACKUP-067 verification.md record their ace2 run",
-    "verification": "for s in BACKUP-040 BACKUP-067; do cat specs/$s-*/verification.md specs/archive/$s-*/verification.md 2>/dev/null | grep -q 'HOST=ace2' || exit 1; done",
-    "state": "pending",
-    "evidence": ""
+    "verification": "for s in BACKUP-040 BACKUP-067; do f=$(ls specs/$s-*/verification.md specs/archive/$s-*/verification.md 2>/dev/null | head -1); [ -n \"$f\" ] && grep -q 'HOST=ace2' \"$f\" && grep -Eq 'drill: running (gitea|headscale) on [^ ]+ at [0-9a-f]{12}' \"$f\" && grep -Eq 'drill: snapshot [0-9a-f]{8} ' \"$f\" && grep -qx 'rc=0' \"$f\" || exit 1; done",
+    "state": "passing",
+    "evidence": "9c9f763a: BACKUP-040 'AC1, AC2: the prod drill on ace2' and BACKUP-067 'Prod run, 2026-10-01, on ace2 (BACKUP-071)' carry host, commit, snapshot and rc=0"
   },
   {
     "id": "BACKUP-071-ace2-drills-f4",
     "behavior": "AC5: the runbook explains running a drill on ace2",
     "verification": "grep -q 'HOST=ace2' docs/runbooks/offsite-backup-restore.md",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "26cf64c3: section 'Running a drill on ace2' in docs/runbooks/offsite-backup-restore.md"
   }
 ]

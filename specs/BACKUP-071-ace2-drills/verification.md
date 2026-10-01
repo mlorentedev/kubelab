@@ -11,34 +11,68 @@ created: "2026-10-01"
 
 ## Evidence
 
-Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
+Implementation branch `feat/backup-071-ace2-drills`. Commits: `d89a5b83` (IaC), `1c3fce7a` (Headscale live split), `58dadd0b` (remote run and CLI), `66a5fcc6` (`HOST=` in Make), `26cf64c3` (runbook), `86f6d16a` (fixture scope), `9c9f763a` (BACKUP-040/067 runs), `b2e3e44d` (lesson-502).
 
-- [ ] AC1 -> commit `<hash>` / test `<name>` / run
-- [ ] AC2 -> commit `<hash>` / test `<name>` / run
-- [ ] AC3 -> commit `<hash>` / test `<name>` / run
-- [ ] AC4 -> commit `<hash>` / test `<name>` / run
-- [ ] AC5 -> commit `<hash>` / test `<name>` / run
+- [x] **AC1.** `make provision NODE=ace2 ENV=prod`, second run on 2026-10-01: `ace2 : ok=162 changed=0 unreachable=0 failed=0 skipped=71`. Re-read over a non-interactive ssh on 2026-10-01:
+  - `test ! -e ~/.config/sops/age/keys.txt` exits 0;
+  - `restic 0.19.1` (the `backup.r2.restic_version` pin);
+  - `poetry` at `/usr/local/bin/poetry`, the `dev_node_local_bin_wrapped` wrapper;
+  - the dev user is in `docker`;
+  - the drill checkout at `~/.local/share/kubelab-drill` is clean.
+
+  f1's tightened gate ran green on 2026-10-01 after the merge with master (rc=0): the second provision recap matched `changed=0`, then the key probe ran. The move did not disturb the backup nodes: `make backup ENV=prod CHECK=1` on the branch reports `changed=0` on beelink, kubelab-vps, rpi3 and rpi4, through the same restic tasks (version check, download, install).
+
+  The shared install is `infra/ansible/roles/node_backup/tasks/restic.yml`. `tests/test_restic_install_shared.py` fails if either role grows its own download, or if `dev_node` stops passing the pinned version.
+- [x] **AC2.** Both drills ran on ace2 from pushed commits:
+  - Headscale at `66a5fcc6`: snapshot `024a9582`, 12 nodes, 4 users, RTO 8s, rc=0.
+  - Gitea at `86f6d16a`: snapshot `0b556cbb`, 5 repositories, fsck ok, 22s, rc=0. Nothing was left on ace2 (`ls /tmp | grep -c drill` = 0).
+
+  The output carries names, ids and counts only. Refusals happen before any ssh and before inputs resolve:
+  - a dirty tree (untracked files included), or a commit origin lacks: `test_a_tree_origin_cannot_reproduce_refuses_before_any_ssh` (parametrized), which also asserts the inputs are never resolved;
+  - inputs that cannot be resolved send nothing: `test_inputs_that_cannot_be_resolved_send_nothing`.
+
+  Headscale's live reads stay on the workstation: `read_live` runs there, and `run_drill(live=...)` opens no ssh (`test_run_drill_compares_against_the_given_state_and_opens_no_connection`).
+- [x] **AC3.** `tests/test_drill_remote.py` (26 tests) uses sentinel secrets (`sentinel-restic-9f3a`, `sentinel-r2-id-51c0`, `sentinel-r2-secret-7d2e`, `sentinel-gitea-token-c48b`):
+  - none of them appears in the ssh argv;
+  - the payload travels on stdin;
+  - every setup step reads `/dev/null`, so only the drill sees the payload;
+  - the entrypoint runs with `ConfigurationManager` patched to raise;
+  - no file under the work directory holds a sentinel at teardown (`rmtree` is wrapped to inspect before it removes);
+  - a malformed payload fails naming only the exception class.
+
+  Scope limit: the entrypoint test proves the drill path builds no `ConfigurationManager`. It cannot prove the toolkit import does none, because `toolkit/config/settings.py` builds one at import time (#2021, lesson-502). On ace2 that import found no `sops` binary and no key, so nothing was decrypted there.
+- [x] **AC4.** `specs/BACKUP-040-gitea-restore-drill/verification.md` ("AC1, AC2: the prod drill on ace2") and `specs/BACKUP-067-headscale-restore-drill/verification.md` ("Prod run, 2026-10-01, on ace2 (BACKUP-071)") record host, commit, snapshot and result (`9c9f763a`).
+- [x] **AC5.** `docs/runbooks/offsite-backup-restore.md`, section "Running a drill on ace2" (`26cf64c3`). It covers `HOST=ace2`, push first, and what travels to ace2 (stdin payload) and what does not (SOPS, the VPS credential, a forwarded agent).
 
 ## Test status
 
-- Test suite: `<command> -> <output / coverage %>`
-- Manual smoke test: what was exercised, what was observed
-- No regressions in existing test suite: yes / no (if no, document)
+- `make test` on `b2e3e44d`: `3435 passed, 16 skipped, 154 deselected, 2 xfailed`, rc=0.
+- Mutations, each committed first and restored with `git checkout HEAD --`. Each one turns the suite red:
+  - M1, a setup step reads stdin: 1 failure;
+  - M2, a malformed payload is echoed: 3 failures;
+  - M3, a dirty tree is accepted: 2 failures;
+  - M4, ssh failure is not classed: 1 failure.
+- No regressions. Without `HOST`, the local drills keep today's behaviour, and `tests/test_headscale_drill.py` (40) is green.
 
 ## Decisions made during implementation
 
-Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
+- **Headscale live reads stay on the workstation.** `read_live` runs before the payload is built, so ace2 never holds a VPS ssh credential or a forwarded agent. The live state crosses as data (`LiveState.to_payload`).
+- **ace2 runs the commit this tree is at, not master.** That is why a dirty or unpushed tree refuses: otherwise the evidence would vouch for code the host never ran.
+- **Exit classes.** 255 is ssh, 97 is setup and anything else is the drill's own verdict. Each failure is labelled CANNOT CHECK or "did not pass" accordingly.
+- **No traceback locals.** `pretty_exceptions_show_locals=False` on the Typer app, because a traceback rendering locals would print the payload.
 
--
--
+## Spec review dispositions (#2017)
+
+PR-Agent on the spec PR found two `features.json` gates that could not fail. Both are fixed here:
+
+- **f1** never ran provisioning, and its key probe passed on the baseline. It now runs `make provision NODE=ace2 ENV=prod`, requires the recap `ace2 : ... changed=0 ... failed=0`, and only then probes for the key.
+- **f5** matched any mention of `HOST=ace2`. It now requires, in each verification file, the drill's `running <x> on <target> at <12-hex>` line, a `snapshot <8-hex>` line and `rc=0`. A file holding only a pending mention fails it (checked, rc=1).
 
 ## Promotion candidates
 
-Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.
-
-- [ ] Lesson for the repo's `docs/lessons/`? <yes: path / no: reason>
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? <yes: path / no: reason>
-- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes: path / no: reason>
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/toolkit-tooling/lesson-502-a-patch-applied-after-import-cannot-see-what-the-import-did.md
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: the operator's decision (no age key on ace2, secrets per run) is recorded in the spec and issue #2011; it changes no standing architecture.
+- [x] New pattern candidate for `00_meta/patterns/`? no: one project, one occurrence.
 
 ## Archive checklist
 
