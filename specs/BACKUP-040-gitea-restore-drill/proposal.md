@@ -47,11 +47,11 @@ The drill also records how long the restore takes (download, fsck, time until th
 
 ## Acceptance criteria
 
-- [ ] AC1: `make backup-drill-gitea ENV=prod` restores the newest Beelink snapshot from R2, runs `git fsck --full` on every restored repository, and names any that fail.
-- [ ] AC2: The pinned Gitea image starts on the restored data with no network. Its API lists every repository that live lists. Every repository with branches live has refs in the restore, and every restored branch head is a commit live knows. The drill fails and names the repository otherwise.
-- [ ] AC3: The drill fails as CANNOT CHECK, never passes, when live cannot be read or lists no repositories, and when no snapshot is readable.
-- [ ] AC4: On every exit path the container, its volumes and the temp directory are gone. Tests pin it, and the transcript in `verification.md` shows it measured.
-- [ ] AC5: `docs/runbooks/offsite-backup-restore.md` documents the Gitea drill, and how to restore Gitea for real from the same snapshot. `verification.md` records the drill's transcript and measured RTO.
+- [x] AC1: `make backup-drill-gitea ENV=prod` restores the newest Beelink snapshot from R2, runs `git fsck --full` on every restored repository, and names any that fail.
+- [x] AC2: The pinned Gitea image starts on the restored data with no network. Its API lists every repository that live lists. Every repository with branches live has refs in the restore, and every restored branch head is a commit live knows. The drill fails and names the repository otherwise.
+- [x] AC3: The drill fails as CANNOT CHECK, never passes, when live cannot be read or lists no repositories, and when no snapshot is readable.
+- [x] AC4: On every exit path the container, its volumes and the temp directory are gone. Tests pin it, and the transcript in `verification.md` shows it measured.
+- [x] AC5: `docs/runbooks/offsite-backup-restore.md` documents the Gitea drill, and how to restore Gitea for real from the same snapshot. `verification.md` records the drill's transcript and measured RTO.
 
 ## References
 
