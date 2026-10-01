@@ -56,7 +56,7 @@ Each guard was broken in turn on a committed tree, the suite run, and the file r
 ## Test status
 
 - `poetry run pytest -q -p no:cacheprovider --no-cov tests/test_headscale_drill.py` → 25 passed.
-- `make test` on `5b092e38`: 3274 passed, 1 failed (`test_the_table_covers_every_site`: the new target was missing from `ENV_TARGETS`), fixed in `bf893de1`; that file then 75 passed.
+- `make test` on `613e331a`: 3274 passed, 1 failed (`test_the_table_covers_every_site`: the new target was missing from `ENV_TARGETS`), fixed in `c173e41c`; that file then 75 passed.
 
 ## Decisions made during implementation
 
