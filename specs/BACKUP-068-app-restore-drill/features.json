@@ -1,0 +1,9 @@
+[
+  {
+    "id": "BACKUP-068-app-restore-drill-f1",
+    "behavior": "Outcome 1",
+    "verification": "echo 'not implemented' && exit 1",
+    "state": "pending",
+    "evidence": ""
+  }
+]
