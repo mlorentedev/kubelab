@@ -119,3 +119,45 @@ def test_the_emitter_runs_often_enough_to_keep_its_own_dead_man_quiet() -> None:
         f"holds {samples:g} sample(s). One late run empties it and the dead-man fires on a "
         f"healthy fleet -- and a fresh environment inherits the alert until the first tick."
     )
+
+
+SIZE_RULE_UID = "backup057-r2-backup-size"
+COMMON = REPO_ROOT / "infra" / "config" / "values" / "common.yaml"
+
+
+def _size_rule() -> dict:
+    data = yaml.safe_load((SERVICES_DIR / "grafana-alerting" / "r2-backup-rules.yaml").read_text())
+    rules = [r for g in data["groups"] for r in g["rules"]]
+    matches = [r for r in rules if r["uid"] == SIZE_RULE_UID]
+    assert len(matches) == 1, f"expected one {SIZE_RULE_UID} rule, found {[r['uid'] for r in rules]}"
+    return matches[0]
+
+
+def test_the_size_rule_fires_at_eighty_percent_of_the_free_tier_declared_in_common() -> None:
+    """BACKUP-057 Q3: the lock keeps data R days past `forget`, and R2 bills overage without a stop.
+
+    The rule mirrors `backup.r2.free_tier_bytes`; this reads the SSOT, so the
+    two cannot drift apart without this going red.
+    """
+    free_tier = yaml.safe_load(COMMON.read_text())["backup"]["r2"]["free_tier_bytes"]
+    assert isinstance(free_tier, int) and free_tier > 0
+
+    rule = _size_rule()
+    loki = next(d for d in rule["data"] if d.get("datasourceUid") == "loki")["model"]["expr"]
+    assert "metric=`r2_backup_health`" in loki, "the fleet line carries the sum; a node line would page on one node"
+    assert "unwrap raw_bytes" in loki
+
+    threshold = next(d for d in rule["data"] if d["refId"] == rule["condition"])["model"]
+    (condition,) = threshold["conditions"]
+    assert condition["evaluator"]["type"] == "gt"
+    assert condition["evaluator"]["params"] == [free_tier * 8 // 10]
+
+
+def test_an_unknown_size_alerts_rather_than_reading_as_fits() -> None:
+    """A `null` size is dropped by `unwrap`, so a day of unknown sizes is no data.
+
+    No data must page: an unmeasured fleet is exactly when an overflow would go unseen.
+    """
+    rule = _size_rule()
+    assert rule["noDataState"] == "Alerting"
+    assert rule["execErrState"] == "Alerting"

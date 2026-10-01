@@ -1941,6 +1941,12 @@ backup:
     # blocked — there is no hard stop, and the pricing page promises no
     # notification, so configure one in Cloudflare Notifications.
     account_id: "76967f5ede1ce50efce34d90b7e94958"
+    # The free tier's storage, in bytes (BACKUP-057 Q3). The pricing page says
+    # "10 GB-month / month", billed as the average of each day's PEAK, and does
+    # not say whether a GB is 10^9 or 2^30 bytes, so this takes the smaller.
+    # The `r2-backup-size` Grafana rule mirrors 80% of it
+    # (tests/test_r2_backup_alerting_rules.py compares the two).
+    free_tier_bytes: 10000000000
     bucket: kubelab-backups
     endpoint: "https://76967f5ede1ce50efce34d90b7e94958.r2.cloudflarestorage.com"
     # restic addresses R2 through its S3 backend; this is the repository prefix,

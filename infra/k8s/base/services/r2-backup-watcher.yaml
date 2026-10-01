@@ -59,10 +59,12 @@ spec:
       # the rule's `last_over_time` keeps only the last, so a flaky pass could
       # overwrite a real failure. The next run is at most 6h away.
       backoffLimit: 0
-      # Floor, derived from the probe: nodes x 2 restic calls x RESTIC_TIMEOUT
-      # (4 x 2 x 60 = 480s). The real run takes ~16s; the deadline is sized for
-      # the worst case the probe allows, not for the typical one.
-      activeDeadlineSeconds: 600
+      # Floor, derived from the probe: nodes x (3 restic calls x RESTIC_TIMEOUT
+      # + STATS_TIMEOUT) = 4 x (3 x 60 + 600) = 3120s. The real run takes ~3 min,
+      # most of it the Beelink's `stats` (143s in staging, 2026-09-30); the
+      # deadline is sized for the worst case the probe allows, not the typical
+      # one. tests/test_r2_backup_watcher_manifest.py counts the calls.
+      activeDeadlineSeconds: 3600
       template:
         metadata:
           labels:
@@ -72,10 +74,11 @@ spec:
           restartPolicy: Never
           serviceAccountName: r2-backup-watcher
           automountServiceAccountToken: false
-          # Longer than one RESTIC_TIMEOUT. Kubelet signals PID 1 only, and `sh`
-          # runs its trap once the running restic call returns. With the default
-          # 30s, a deadline kill would SIGKILL the probe before its fleet line.
-          terminationGracePeriodSeconds: 90
+          # Longer than the longest single call, STATS_TIMEOUT. Kubelet signals
+          # PID 1 only, and `sh` runs its trap once the running restic call
+          # returns. With less, a deadline kill during `stats` would SIGKILL the
+          # probe before its fleet line.
+          terminationGracePeriodSeconds: 660
           securityContext:
             runAsNonRoot: true
             runAsUser: 65534

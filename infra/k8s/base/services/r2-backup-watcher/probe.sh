@@ -18,6 +18,14 @@
 #             reviewed change, never a default.
 # It does NOT judge age: each node's Uptime Kuma push monitor owns that.
 #
+# It also reports each repository's size (BACKUP-057 Q3), `restic stats --mode
+# raw-data`: the stored, compressed bytes of every blob the snapshots reference.
+# That is what the bucket lock multiplies, and what the free tier is billed on,
+# less index and snapshot files and packs not yet pruned. A size is never a
+# health check: `stats` failing leaves the node healthy and its size `null`,
+# never 0, which would read as "fits". The fleet sum is `null` unless every
+# node was sized, because a partial sum understates the fleet.
+#
 # Output is JSON lines for Vector -> Loki -> Grafana: one `r2_backup_node` per
 # node for the operator, then exactly one `r2_backup_health` for the rule. The
 # fleet line is healthy only if every node is; a per-node `healthy` under the
@@ -30,9 +38,12 @@ TARGETS="${WATCHER_TARGETS:-/etc/r2-backup-watcher/targets.txt}"
 STAGING="${STAGING_DIR:-/opt/node-backup/staging}"
 SENTINEL_NAME="${SENTINEL:-.capture-complete}"
 TIMEOUT="${RESTIC_TIMEOUT:-60}"
+STATS_TIMEOUT="${STATS_TIMEOUT:-600}"
 
 nodes=0
 unhealthy=0
+fleet_bytes=0
+unsized=0
 completed=0
 error=""
 finished=0
@@ -50,8 +61,12 @@ finish() {
     if [ -z "$error" ] && [ "$unhealthy" -eq 0 ]; then
         healthy=1
     fi
-    printf '{"metric":"r2_backup_health","namespace":"kubelab","nodes":%d,"unhealthy":%d,"healthy":%d,"error":"%s"}\n' \
-        "$nodes" "$unhealthy" "$healthy" "$error"
+    fleet_size=null
+    if [ "$completed" -eq 1 ] && [ "$nodes" -gt 0 ] && [ "$unsized" -eq 0 ]; then
+        fleet_size="$fleet_bytes"
+    fi
+    printf '{"metric":"r2_backup_health","namespace":"kubelab","nodes":%d,"unhealthy":%d,"healthy":%d,"raw_bytes":%s,"error":"%s"}\n' \
+        "$nodes" "$unhealthy" "$healthy" "$fleet_size" "$error"
 }
 
 trap 'error="${error:-terminated by signal}"; finish; exit 1' INT TERM HUP
@@ -76,6 +91,12 @@ restic_read() {
     timeout "$TIMEOUT" restic -r "$repo" --no-lock --no-cache "$@" 2>"$errfile"
 }
 
+# `stats --mode raw-data` walks every tree of every snapshot, so it needs a
+# budget of its own: the Beelink's Gitea tree outran RESTIC_TIMEOUT (2026-09-30).
+restic_stats() {
+    timeout "$STATS_TIMEOUT" restic -r "$repo" --no-lock --no-cache stats --mode raw-data --json 2>"$errfile"
+}
+
 # First stderr line, stripped of what would break the JSON string.
 reason_from_stderr() {
     head -n 1 "$errfile" | tr -d '"\\' | cut -c1-160
@@ -92,6 +113,7 @@ while read -r node repo declared_id services || [ -n "$node" ]; do
     missing=""
     reason=""
     repository_id=""
+    size=null
 
     if out="$(restic_read snapshots --json --latest 1)"; then
         readable=1
@@ -135,6 +157,25 @@ while read -r node repo declared_id services || [ -n "$node" ]; do
         fi
     fi
 
+    # After every health check, so a slow `stats` cannot starve them of the
+    # timeout. Its failure is logged, not judged.
+    if [ "$readable" -eq 1 ]; then
+        started="$(date +%s)"
+        if stats="$(restic_stats)"; then
+            size="$(printf '%s\n' "$stats" | sed -n 's/^.*"total_size": *\([0-9][0-9]*\).*$/\1/p' | head -n 1)"
+        fi
+        if [ -z "$size" ] || [ "$size" = null ]; then
+            size=null
+            echo "r2-backup-watcher: $node: size unknown: $(reason_from_stderr)" >&2
+        fi
+        echo "r2-backup-watcher: $node: stats took $(($(date +%s) - started))s" >&2
+    fi
+    if [ "$size" = null ]; then
+        unsized=$((unsized + 1))
+    else
+        fleet_bytes=$((fleet_bytes + size))
+    fi
+
     missing_json=""
     for service in $missing; do
         missing_json="${missing_json:+$missing_json,}\"$service\""
@@ -147,8 +188,8 @@ while read -r node repo declared_id services || [ -n "$node" ]; do
         unhealthy=$((unhealthy + 1))
     fi
 
-    printf '{"metric":"r2_backup_node","namespace":"kubelab","node":"%s","readable":%d,"snapshots":%d,"missing":[%s],"sentinel":%d,"repository_id":"%s","healthy":%d,"reason":"%s"}\n' \
-        "$node" "$readable" "$snapshots" "$missing_json" "$sentinel" "$repository_id" "$healthy" "$reason"
+    printf '{"metric":"r2_backup_node","namespace":"kubelab","node":"%s","readable":%d,"snapshots":%d,"missing":[%s],"sentinel":%d,"repository_id":"%s","raw_bytes":%s,"healthy":%d,"reason":"%s"}\n' \
+        "$node" "$readable" "$snapshots" "$missing_json" "$sentinel" "$repository_id" "$size" "$healthy" "$reason"
 done <"$TARGETS"
 
 rm -f "$errfile"
