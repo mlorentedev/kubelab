@@ -39,4 +39,4 @@ created: "2026-10-01"
 - [x] File the Vikunja attachments child of #1923 (Q2) and link it here: #1981. ✓ 2026-10-01
 - [x] Delete the emergency copy in `~/backups/kubelab-emergency/` once AC1 and AC5 pass. ✓ 2026-10-01
 - [x] `features.json` verifications non-vacuous; `verification.md` filled. ✓ 2026-10-01
-- [ ] Independent adversarial review, then archive and close #1111's Postgres half.
+- [x] Independent adversarial review, then archive and close #1111's Postgres half.
