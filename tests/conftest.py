@@ -151,11 +151,31 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
         )
 
 
+def _fail_kubectl_skip_in_ci(report: pytest.TestReport) -> None:
+    """Turn a skip that names kubectl into a failure when running in CI (#2003).
+
+    The render tests skip without kubectl, which is right on a workstation and
+    wrong in the required Tests job: there a missing binary would leave every
+    render assertion CANNOT CHECK under a green check. CI installs a pinned
+    kubectl, so a skip that names it means that install did not reach the tests.
+    One hook instead of a CI branch in each of the 18 render tests;
+    `test_k8s_third_party_images_pinned.py` carried that branch alone.
+    """
+    if not (report.skipped and os.environ.get("CI")) or hasattr(report, "wasxfail"):
+        return
+    longrepr = report.longrepr
+    reason = longrepr[2] if isinstance(longrepr, tuple) else str(longrepr)
+    if "kubectl" in reason.lower():
+        report.outcome = "failed"
+        report.longrepr = f"{reason}\n(in CI a kubectl skip is a failure: the render went unchecked, #2003)"
+
+
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(item: pytest.Item) -> Generator[None, None, None]:
-    """Fail a test whose refusal was caught before it could fail it."""
+    """Fail a test whose refusal was caught before it could fail it, and a kubectl skip in CI."""
     outcome = yield
     report = outcome.get_result()
+    _fail_kubectl_skip_in_ci(report)
     refusals = item.stash.get(_REFUSALS, [])
     if not refusals:
         return
