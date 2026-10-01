@@ -510,8 +510,8 @@
         group: root
         mode: "0644"
         content: |
-          # Managed by Ansible (dev_node role). A literal, not ansible_managed:
-          # ansible-core 2.19 defines that variable only inside `template`.
+          # Managed by Ansible (dev_node role). A literal header on purpose:
+          # ansible-core 2.19 defines the managed-header variable only in `template`.
           # ANSIBLE-037. System-wide because the developer user's own ssh config
           # has a different owner; the IdentityFile below is readable only by
           # that user, so this grants nothing to anyone else on the node.
