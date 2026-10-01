@@ -369,3 +369,42 @@ def test_declared_sync_policy_reads_the_manifest_deploy_apps_applies() -> None:
         docs = [d for d in yaml.safe_load_all((APPLICATIONS / f"{env}.yaml").read_text()) if d]
         app = next(d for d in docs if d.get("kind") == "Application")
         assert declared_sync_policy(APPLICATIONS, env) == app["spec"]["syncPolicy"]
+
+
+# --- AC5: deploy-apps refuses while a window is held ---------------------------
+
+
+class TestCheckWindow:
+    def _invoke(self, held: Any) -> Any:
+        from unittest.mock import patch
+
+        from typer.testing import CliRunner
+
+        from toolkit.cli.infra import app
+
+        with patch("toolkit.features.restore_window.held_windows", side_effect=held):
+            return CliRunner().invoke(app, ["argo", "check-window", "--kubeconfig", HUB])
+
+    def test_no_window_exits_0(self) -> None:
+        assert self._invoke(lambda *a, **k: []).exit_code == 0
+
+    def test_a_held_window_exits_1_and_names_it(self) -> None:
+        result = self._invoke(lambda *a, **k: [("kubelab-prod", "deployment 'n8n', held by a@b since t")])
+        assert result.exit_code == 1
+        assert "kubelab-prod" in result.output and "a@b" in result.output
+
+    def test_an_unreadable_hub_is_cannot_check_not_clear(self) -> None:
+        def unreachable(*a: Any, **k: Any) -> Any:
+            raise WindowError("`get applications -o` failed: connection refused")
+
+        result = self._invoke(unreachable)
+        assert result.exit_code == 2 and "CANNOT CHECK" in result.output
+
+
+def test_deploy_apps_checks_the_window_before_it_applies() -> None:
+    makefile = (REPO_ROOT / "Makefile").read_text()
+    recipe = makefile.split("\ndeploy-apps:\n", 1)[1].split("\n\n", 1)[0]
+    lines = [line.strip() for line in recipe.splitlines() if not line.strip().startswith("@#")]
+    check = next(i for i, line in enumerate(lines) if "infra argo check-window" in line)
+    apply = next(i for i, line in enumerate(lines) if "kubectl apply" in line)
+    assert check < apply
