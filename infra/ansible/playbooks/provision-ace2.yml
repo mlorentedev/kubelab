@@ -244,6 +244,27 @@
         # `gitea_identity_env` above for why that distinction is load-bearing.
         dev_node_gitea_bot_token: "{{ gitea_secrets.apps.services.core.gitea.bot_token | default('') }}"
 
+    # The operator's agent tooling (ADR-068, spec AI-009-hermes-ace2). This PR
+    # carries Open WebUI only. Its identity provider is PROD Authelia, the same
+    # fact `gitea_identity_env` encodes for the forge: ace2 is staging, the IdP
+    # every operator session goes through is not. So the issuer and the client
+    # secret come from `gitea_config`/`gitea_secrets`, which are the prod tree
+    # and vault, whatever their name says.
+    - role: ../roles/agent_stack
+      tags: [agent_stack]
+      vars:
+        tailscale_ip: "{{ config.networking.nodes.ace2.tailscale_ip }}"
+        agent_stack_webui: "{{ config.apps.services.ai.open_webui }}"
+        agent_stack_webui_oidc_client_id: open-webui-oidc
+        agent_stack_oidc_issuer: "https://{{ gitea_config.apps.services.security.authelia.domain }}"
+        # Empty until the operator mints it; the role then starts nothing
+        # rather than an Open WebUI whose first visitor becomes its admin.
+        agent_stack_webui_oidc_client_secret: >-
+          {{ gitea_secrets.apps.services.security.authelia.oidc_client_secret_open_webui | default('') }}
+        # Which NaN key Open WebUI uses is the spec's R1, still open. Empty
+        # means Open WebUI starts with no model backend.
+        agent_stack_nan_api_key: "{{ secrets.apps.services.ai.open_webui.nan_api_key | default('') }}"
+
     # The fleet's failure-notification path, and the fleet webhook secret it
     # reads. Ordered BEFORE node_maintenance deliberately: that role's unit
     # declares `OnFailure=kubelab-notify@%n.service`, and this one installs the

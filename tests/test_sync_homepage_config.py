@@ -46,6 +46,25 @@ class TestBuildServiceTables:
         assert n8n_entries
         assert all(s["version"] == "2.12.3" for s in n8n_entries)
 
+    def test_open_webui_row_is_derived_from_its_ssot_block(self) -> None:
+        # AI-009: tailnet-only, no route, so the URL is the declared scheme, host
+        # and port, never a literal like Pollex's row.
+        webui = {"image": "ghcr.io/open-webui/open-webui:v0.11.4", "host": "ace2.example.internal",
+                 "scheme": "http", "default_port": 3080}
+        config = {"global": {"base_domain": "kubelab.live"}, "apps": {"services": {"ai": {"open_webui": webui}},
+                  "platform": {}}}
+        _staging, _prod, shared = sync_homepage_config.build_service_tables(config)
+        row = next(s for s in shared if s["name"] == "Open WebUI")
+        assert row["url"] == "http://ace2.example.internal:3080"
+        assert row["health"] == "http://ace2.example.internal:3080/health"
+        assert row["version"] == "0.11.4"
+        assert row["category"] == "AI"
+
+    def test_no_open_webui_row_without_its_ssot_block(self) -> None:
+        config = {"global": {"base_domain": "kubelab.live"}, "apps": {"services": {}, "platform": {}}}
+        _staging, _prod, shared = sync_homepage_config.build_service_tables(config)
+        assert not any(s["name"] == "Open WebUI" for s in shared)
+
     def test_pihole_url_matches_the_apex_ssot_not_the_retired_staging_name(self) -> None:
         # Adversarial review of OPS-022 (#969): the rename moved pihole off
         # base/ and onto pihole.kubelab.live, but this generator hardcoded

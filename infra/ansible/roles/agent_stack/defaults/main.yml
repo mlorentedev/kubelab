@@ -1,0 +1,28 @@
+---
+# agent_stack: the operator's agent tooling on ace2 (ADR-068, spec
+# AI-009-hermes-ace2). Values come from `apps.services.ai.*` in common.yaml via
+# provision-ace2.yml; these defaults only name the layout on the node.
+agent_stack_dir: /opt/agent-stack
+agent_stack_webui_project: agent-stack-webui
+
+# Inputs set by the playbook (no defaults on purpose, so a missing SSOT key
+# fails the play instead of rendering an empty value):
+#   tailscale_ip (the fleet name, so the boot-race guard in
+#   tests/test_tailscale_bound_ports_survive_boot.py sees the bind),
+#   agent_stack_webui (the apps.services.ai.open_webui
+#   map), agent_stack_webui_oidc_client_id, agent_stack_oidc_issuer.
+
+# Delivered from prod SOPS by the playbook. Empty means "not configured": the
+# role renders nothing that needs it and does not start Open WebUI, because
+# without OIDC its first visitor would create the admin account, and the
+# tailnet includes the `work@` bridge identities (ADR-041 rule 1).
+agent_stack_webui_oidc_client_secret: ""
+agent_stack_nan_api_key: ""
+agent_stack_nan_api_base_url: https://api.nan.builders/v1
+
+# The container's resolvers, the rpi3_services form of `docker_dns_servers`:
+# MagicDNS first, so the container resolves ace2's tailnet name and the prod
+# Authelia issuer the way the host does, because Docker never passes the host's
+# 100.100.100.100 into a container. The public entry is only for a Tailscale
+# outage.
+agent_stack_docker_dns_servers: ["100.100.100.100", "1.1.1.1"]

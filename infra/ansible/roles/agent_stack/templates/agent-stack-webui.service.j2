@@ -1,0 +1,23 @@
+# {{ ansible_managed }}
+# Brings Open WebUI up once ace2's Tailscale address exists. The compose file
+# binds to that address, and at boot Docker races tailscaled: losing the race
+# leaves the container running with no published port (rpi3_services unit).
+[Unit]
+Description=KubeLab agent stack: Open WebUI (ADR-068)
+Documentation=https://github.com/mlorentedev/kubelab
+Requires=docker.service
+After=docker.service tailscaled.service network-online.target
+Wants=network-online.target tailscaled.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+TimeoutStartSec=180
+ExecStartPre={{ agent_stack_dir }}/wait-for-tailscale-addr.sh {{ tailscale_ip }}
+# --force-recreate: a container left unbound by a lost boot race has an
+# unchanged spec hash, so a plain `up -d` would leave it alone (glances unit).
+ExecStart=/usr/bin/docker compose -p {{ agent_stack_webui_project }} -f {{ agent_stack_dir }}/compose-webui.yml up -d --force-recreate
+ExecStop=/usr/bin/docker compose -p {{ agent_stack_webui_project }} -f {{ agent_stack_dir }}/compose-webui.yml stop
+
+[Install]
+WantedBy=multi-user.target

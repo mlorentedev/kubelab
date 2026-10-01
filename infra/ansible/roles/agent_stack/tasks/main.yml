@@ -1,0 +1,192 @@
+---
+# =============================================================================
+# agent_stack: the operator's agent tooling on ace2 (ADR-068, spec
+# AI-009-hermes-ace2). This PR carries Open WebUI with NaN models only; the
+# agent itself, its rootless daemon and the MCP bridge follow in later PRs.
+# =============================================================================
+
+- name: Create the agent stack directory
+  ansible.builtin.file:
+    path: "{{ agent_stack_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  tags: [agent_stack]
+
+# Open WebUI signs its sessions with this key. Generated ON the node, once, the
+# way dev_node mints its forge keypair: a random value nothing else needs to know
+# has no reason to sit in SOPS, and keeping it out means one less secret the
+# operator must mint before the node can be provisioned. Left unset, the image
+# writes its own key inside the container's filesystem, not the data volume,
+# so every recreate would log every user out.
+- name: Generate the Open WebUI session key once
+  ansible.builtin.shell:
+    cmd: umask 077 && openssl rand -hex 32 > {{ agent_stack_dir }}/webui-secret-key
+    creates: "{{ agent_stack_dir }}/webui-secret-key"
+  tags: [agent_stack]
+
+- name: Read the Open WebUI session key
+  ansible.builtin.slurp:
+    src: "{{ agent_stack_dir }}/webui-secret-key"
+  register: _agent_stack_key_file
+  no_log: true
+  tags: [agent_stack]
+
+- name: Hold the session key for the env template
+  ansible.builtin.set_fact:
+    _agent_stack_webui_secret_key: "{{ _agent_stack_key_file.content | b64decode | trim }}"
+  no_log: true
+  tags: [agent_stack]
+
+# Without OIDC, Open WebUI's first visitor creates the admin account, and the
+# tailnet includes the `work@` bridge identities, which the policy allows to
+# reach every node (ADR-041 rule 1). So "not configured" means not started, never
+# "started with a login form".
+- name: Report that Open WebUI is not configured
+  ansible.builtin.debug:
+    msg: >-
+      Open WebUI is NOT started: no OIDC client secret was delivered
+      (apps.services.security.authelia.oidc_client_secret_open_webui in prod
+      SOPS). Mint it with `toolkit secrets set`, run `make sync-oidc-hashes`,
+      merge, then provision again.
+  when: agent_stack_webui_oidc_client_secret | length == 0
+  tags: [agent_stack]
+
+# The same invariant on a node that WAS configured: a secret removed from SOPS
+# must take Open WebUI down, not leave the last container serving.
+- name: Stop Open WebUI when it is not configured
+  when: agent_stack_webui_oidc_client_secret | length == 0
+  tags: [agent_stack]
+  block:
+    - name: Look for a previously deployed Compose project
+      ansible.builtin.stat:
+        path: "{{ agent_stack_dir }}/compose-webui.yml"
+      register: _agent_stack_prior
+
+    - name: Take the previous Open WebUI down
+      ansible.builtin.command: >-
+        docker compose -p {{ agent_stack_webui_project }}
+        -f {{ agent_stack_dir }}/compose-webui.yml down
+      when: _agent_stack_prior.stat.exists
+      register: _agent_stack_down
+      changed_when: "'Removed' in _agent_stack_down.stderr or 'Stopped' in _agent_stack_down.stderr"
+
+    - name: Disable the Open WebUI unit
+      ansible.builtin.systemd:
+        name: agent-stack-webui.service
+        enabled: false
+      when: _agent_stack_prior.stat.exists and not ansible_check_mode
+
+    # Removing the file is what makes the next unconfigured run a no-op, and it
+    # takes the secret-bearing env file with it. The data volume stays.
+    - name: Remove the rendered Open WebUI files
+      ansible.builtin.file:
+        path: "{{ agent_stack_dir }}/{{ item }}"
+        state: absent
+      loop: [compose-webui.yml, webui.env]
+
+- name: Deploy Open WebUI
+  when: agent_stack_webui_oidc_client_secret | length > 0
+  tags: [agent_stack]
+  block:
+    # Registered, not notified: the recreate has to happen before the drift
+    # checks below read the container, not at the end of the play.
+    - name: Render the Open WebUI env file
+      ansible.builtin.template:
+        src: webui.env.j2
+        dest: "{{ agent_stack_dir }}/webui.env"
+        owner: root
+        group: root
+        mode: "0600"
+      register: _agent_stack_env
+      no_log: true
+
+    - name: Render the Open WebUI Compose project
+      ansible.builtin.template:
+        src: compose-webui.yml.j2
+        dest: "{{ agent_stack_dir }}/compose-webui.yml"
+        owner: root
+        group: root
+        mode: "0644"
+      register: _agent_stack_compose
+
+    - name: Pull the Open WebUI image
+      ansible.builtin.command: >-
+        docker compose -p {{ agent_stack_webui_project }}
+        -f {{ agent_stack_dir }}/compose-webui.yml pull
+      register: _agent_stack_pull
+      changed_when: "'Pull complete' in _agent_stack_pull.stderr or 'Downloaded' in _agent_stack_pull.stderr"
+
+    # Same two checks as the glances role, for the same reasons: a port binding
+    # and a memory limit are fixed at create time, and `up -d` with an unchanged
+    # spec will not notice either one missing.
+    - name: Read the port bindings requested vs the ones in effect
+      ansible.builtin.command: >-
+        docker inspect open-webui
+        --format '{% raw %}{{len .HostConfig.PortBindings}}:{{len .NetworkSettings.Ports}}{% endraw %}'
+      register: _agent_stack_ports
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Read the memory limit in force
+      ansible.builtin.command: docker inspect open-webui --format '{% raw %}{{.HostConfig.Memory}}{% endraw %}'
+      register: _agent_stack_memory
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Decide whether the container must be recreated
+      ansible.builtin.set_fact:
+        _agent_stack_recreate: >-
+          {{ _agent_stack_env.changed
+             or (_agent_stack_ports.rc == 0
+                 and (_agent_stack_ports.stdout | trim).split(':')[0] | int > 0
+                 and (_agent_stack_ports.stdout | trim).split(':')[1] | int == 0)
+             or (_agent_stack_memory.rc == 0
+                 and (_agent_stack_memory.stdout | trim | int)
+                     != (agent_stack_webui.memory_limit | human_to_bytes)) }}
+
+    # An env_file change is invisible to Compose's spec hash, hence the explicit
+    # recreate when the env file changed.
+    - name: Start Open WebUI
+      ansible.builtin.command: >-
+        docker compose -p {{ agent_stack_webui_project }}
+        -f {{ agent_stack_dir }}/compose-webui.yml up -d
+        {{ '--force-recreate' if _agent_stack_recreate | bool else '' }}
+      register: _agent_stack_up
+      changed_when: "'Started' in _agent_stack_up.stderr or 'Created' in _agent_stack_up.stderr"
+
+    - name: Verify Open WebUI answers on the Tailscale address
+      ansible.builtin.uri:
+        url: "http://{{ tailscale_ip }}:{{ agent_stack_webui.default_port }}/health"
+        status_code: 200
+        timeout: 10
+      register: _agent_stack_health
+      until: _agent_stack_health.status == 200
+      retries: 30
+      delay: 5
+
+    - name: Install the Tailscale address wait helper
+      ansible.builtin.copy:
+        src: wait-for-tailscale-addr.sh
+        dest: "{{ agent_stack_dir }}/wait-for-tailscale-addr.sh"
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install the Open WebUI unit
+      ansible.builtin.template:
+        src: agent-stack-webui.service.j2
+        dest: /etc/systemd/system/agent-stack-webui.service
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Enable the Open WebUI unit at boot
+      ansible.builtin.systemd:
+        name: agent-stack-webui.service
+        enabled: true
+        daemon_reload: true
+      when: not ansible_check_mode
