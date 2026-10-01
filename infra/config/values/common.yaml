@@ -1983,8 +1983,9 @@ backup:
     # (BACKUP-057, operator 2026-09-30; fits the free tier with both copies,
     # specs/BACKUP-057/verification.md). Rendered into infra/terraform/r2/ by
     # `toolkit infra terraform r2-tfvars`. Must stay below the --keep-within
-    # days in node_backup_retention_flags, or every nightly prune hits a locked
-    # pack; tests/test_r2_terraform.py enforces it.
+    # days in node_backup_retention_flags, and those flags must forbid repacking
+    # (--max-repack-size 0), or prune deletes a pack younger than R and the lock
+    # refuses it; tests/test_r2_terraform.py enforces both.
     lock_retention_days: 30
     bucket: kubelab-backups
     endpoint: "https://76967f5ede1ce50efce34d90b7e94958.r2.cloudflarestorage.com"

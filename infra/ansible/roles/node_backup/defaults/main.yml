@@ -220,12 +220,20 @@ node_backup_heartbeat_token_file: /opt/node-backup-heartbeat-token
 # dedup makes the history nearly free. Frozen here rather than re-derived at
 # call time, so a script invocation always carries the ratified policy.
 #
-# --keep-within (BACKUP-057): nothing younger than it is ever forgotten, so
-# `prune` never needs to delete an object the bucket lock still holds. It must
-# stay above backup.r2.lock_retention_days (R + 1d); tests/test_r2_terraform.py
+# --keep-within (BACKUP-057): no snapshot younger than it is ever forgotten. It
+# must stay above backup.r2.lock_retention_days (R + 1d); tests/test_r2_terraform.py
 # enforces it. It keeps every daily snapshot for the window, which the R2 size
 # gate in specs/BACKUP-057/verification.md already counted.
-node_backup_retention_flags: "--keep-within 31d --keep-daily 7 --keep-weekly 4 --keep-monthly 6"
+#
+# --max-repack-size 0 (BACKUP-057): `prune` never rewrites a pack. The lock ages
+# objects, not snapshots, and a repacked pack is new while the snapshots it serves
+# are old, so its later delete would be refused. With no repacking a pack is
+# deleted only once wholly unused, and it predates every snapshot that used it,
+# so it is older than --keep-within and therefore than R. `--max-unused
+# unlimited` is not enough: restic 0.19.1 still repacks tree and small packs.
+# Cost: dead blobs in a partly used pack stay until the whole pack is unused,
+# which the R2 size alert bounds.
+node_backup_retention_flags: "--keep-within 31d --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --max-repack-size 0"
 
 # `restic check` runs weekly, not per invocation (16x headroom on repository
 # growth, per the same approved-parameters table). The ship script supports

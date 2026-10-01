@@ -120,6 +120,18 @@ class TestTheLockCoversTheRepositoryButNotItsLocksOrIndex:
         assert m, f"node_backup_retention_flags has no --keep-within <N>d: {flags!r}"
         assert r_days < int(m.group(1))
 
+    def test_prune_never_repacks_so_a_deleted_pack_is_older_than_r(self) -> None:
+        """The lock's `Age` is the object's age; `--keep-within` bounds a snapshot's.
+        They are linked only if no pack is ever rewritten: a repacked pack is minutes
+        old while the snapshots it serves are not, and its later delete is refused.
+        In restic 0.19.1 `--max-unused unlimited` still repacks tree and small packs;
+        only `--max-repack-size 0` keeps every candidate (`decidePackAction`)."""
+        flags = yaml.safe_load(ROLE_DEFAULTS.read_text(encoding="utf-8"))["node_backup_retention_flags"]
+        assert re.search(r"--max-repack-size\s+0\b", flags), (
+            f"node_backup_retention_flags lets prune repack: {flags!r}. A repacked pack is "
+            "younger than R, so the lock refuses its delete and the ship's prune fails."
+        )
+
 
 class TestTheRootMatchesWhatIsRendered:
     def _variables(self) -> set[str]:
