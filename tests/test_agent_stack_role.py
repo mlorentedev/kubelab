@@ -47,10 +47,12 @@ def _render(name: str) -> str:
 
 
 def _tasks() -> list[dict]:
+    """Every task in every file of the role, including those nested in a block."""
     flat: list[dict] = []
-    for task in yaml.safe_load((ROLE / "tasks/main.yml").read_text()):
-        flat.append(task)
-        flat.extend(task.get("block") or [])
+    for path in sorted((ROLE / "tasks").glob("*.yml")):
+        for task in yaml.safe_load(path.read_text()) or []:
+            flat.append(task)
+            flat.extend(task.get("block") or [])
     return flat
 
 
@@ -135,3 +137,25 @@ def test_an_unconfigured_run_takes_a_previous_open_webui_down() -> None:
     assert any(c.rstrip().endswith(" down") for c in commands)
     [remove] = [t for t in stop["block"] if "ansible.builtin.file" in t]
     assert "webui.env" in remove["loop"], "the secret-bearing env file must not outlive the service"
+
+
+_COMMAND_MODULES = ("ansible.builtin.command", "command", "ansible.builtin.shell", "shell")
+
+
+def test_every_read_runs_in_a_dry_run() -> None:
+    """A registered command that never reports a change is a read, so it must run under `--check`.
+
+    Check mode skips `command`, a skipped task registers no `rc` or `stdout`, and
+    the recreate decision reads both. The same rule holds in dev_node, where it
+    was measured twice on ace2 (tests/test_dev_node_npm_converges.py).
+    """
+    reads = [
+        task
+        for task in _tasks()
+        if any(key in task for key in _COMMAND_MODULES)
+        and task.get("register")
+        and task.get("changed_when") is False
+    ]
+    assert reads, "the role has no registered reads; this guard checks nothing"
+    skipped = [task["name"] for task in reads if task.get("check_mode") is not False]
+    assert not skipped, f"reads skipped by --check: {skipped}"
