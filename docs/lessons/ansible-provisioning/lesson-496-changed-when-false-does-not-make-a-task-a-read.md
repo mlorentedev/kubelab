@@ -18,4 +18,6 @@ tags: [kubelab, ansible-provisioning, check-mode, idempotence, ansible-059]
 
 **Rule**: before adding `check_mode: false`, read the command, not the `changed_when`. A task that reports no change may still write, when its effect is undone later in the run, or when it is a smoke test. A guard that infers "read" from syntax needs a declared, reviewed list of the writes that share that syntax.
 
+**Corollary (waits)**: a read that polls a service the run itself starts (`until:` on `docker info`, a container's health) is side-effect-free and still not safe to run unguarded under `--check`, because check mode starts nothing: on a node that was never provisioned it exhausts its retries and fails the dry run. Waits take `until: (<cond>) or ansible_check_mode` and `ignore_errors: "{{ ansible_check_mode }}"`, so a dry run makes one attempt and moves on; the guard's fourth test enforces it. Found by review on #1986, not measured on a fresh node.
+
 **Tags**: `#check-mode` `#idempotence` `#ansible-059` `#issue-1978`
