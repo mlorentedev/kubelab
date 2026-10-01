@@ -337,7 +337,7 @@ def _load_and_check(
     return ok
 
 
-def _staging_dir(project_root: Path) -> str:
+def staging_dir(project_root: Path) -> str:
     """Where `node_backup` stages captures; the snapshot stores absolute paths under it."""
     import yaml
 
@@ -378,7 +378,7 @@ def drill_postgres(env: str = "prod", project_root: Optional[Path] = None) -> bo
             run_drill(
                 repo=repo_url(dest, repository_name(cm, node)),
                 restic_env=restic_env,
-                dump_path=f"{_staging_dir(root)}/{service}/pg_dumpall.sql",
+                dump_path=f"{staging_dir(root)}/{service}/pg_dumpall.sql",
                 source=spec,
                 kubeconfig=output_path(env),
             )

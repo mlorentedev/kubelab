@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 from toolkit.core.logging import logger
+from toolkit.features.postgres_drill import remove_scratch_container
 
 Run = Callable[..., "tuple[int, str, str]"]
 
@@ -261,12 +262,15 @@ def run_drill(
             clock=clock,
         )
     finally:
-        # `-v`: lesson-498. Unconditional: removing an absent name is harmless.
-        run(["docker", "rm", "-f", "-v", name])
-        clean = _wipe(run, image, workdir)
-        if not clean:
-            logger.error(f"drill: could not remove {workdir}; it holds a full copy of the forge, delete it now")
-    return ok and clean
+        # Unconditional: `docker run -d` can create the container and still fail.
+        try:
+            removed = remove_scratch_container(run, name)
+        finally:
+            wiped = _wipe(run, image, workdir)
+            if not wiped:
+                logger.error(f"drill: could not remove {workdir}; it holds a full copy of the forge, delete it now")
+    # A restore that passed but left the forge's copy behind is not a pass.
+    return ok and removed and wiped
 
 
 def _restore_and_check(
@@ -379,7 +383,7 @@ def drill_gitea(env: str = "prod", project_root: Optional[Path] = None) -> bool:
     from toolkit.features.backup_destination import DestinationError, repo_url, repository_name, restic_context
     from toolkit.features.configuration import ConfigurationManager
     from toolkit.features.gitea_client import GiteaClient
-    from toolkit.features.postgres_drill import _staging_dir
+    from toolkit.features.postgres_drill import staging_dir
 
     cm = ConfigurationManager(env, project_root)
     root = Path(project_root or cm.project_root)
@@ -406,7 +410,7 @@ def drill_gitea(env: str = "prod", project_root: Optional[Path] = None) -> bool:
     return run_drill(
         repo=repo_url(dest, repository_name(cm, nodes[0])),
         restic_env=restic_env,
-        staging_dir=_staging_dir(root),
+        staging_dir=staging_dir(root),
         image=str(gitea["image"]),
         admin_user=str(merged["apps"]["auth"]["identities"]["superadmin"]),
         live=live,

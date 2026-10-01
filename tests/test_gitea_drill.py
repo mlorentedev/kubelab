@@ -101,6 +101,7 @@ class _Fake:
         self.heads = heads or {"manu/ImageSensorTool": {"main": "a1"}, "personal/resume": {"main": "b1"}}
         self.calls: list[list[str]] = []
         self.workdir: Optional[Path] = None
+        self.exists = False  # the scratch container, as docker sees it
 
     def __call__(self, argv: list[str], *, env=None):
         self.calls.append(argv)
@@ -117,7 +118,14 @@ class _Fake:
             return 0, "", ""
         if argv[:1] == ["git"]:
             return (1 if self.fsck_bad and self.fsck_bad in argv[2] else 0), "", ""
+        if argv[:3] == ["docker", "container", "inspect"]:
+            # A bind mount, not a volume: `-f` lists no volume names.
+            return (0, "", "") if self.exists else (1, "", f"Error: No such container: {argv[-1]}")
+        if argv[:2] == ["docker", "rm"]:
+            self.exists = False
+            return 0, argv[-1], ""
         if argv[:2] == ["docker", "run"] and "-d" in argv:
+            self.exists = True  # created even when it then fails to start
             return self.run_rc, "cid", "Conflict. The container name is already in use" if self.run_rc else ""
         if "healthz" in " ".join(argv):
             return (0 if self.ready else 1), "", ""
@@ -163,7 +171,7 @@ def drill(tmp_path: Path, monkeypatch):
 
 def _torn_down(fake: _Fake) -> bool:
     removed = any(c[:2] == ["docker", "rm"] and "-f" in c and "-v" in c for c in fake.calls)
-    return removed and (fake.workdir is None or not fake.workdir.exists())
+    return removed and not fake.exists and (fake.workdir is None or not fake.workdir.exists())
 
 
 def test_a_good_restore_passes_names_the_snapshot_and_cleans_up(drill, capsys) -> None:
@@ -222,10 +230,10 @@ def test_live_that_cannot_be_read_or_lists_nothing_is_cannot_check(drill, capsys
 
 def test_the_drill_restores_the_path_the_capture_stages() -> None:
     """The snapshot stores absolute paths, so the drill's must be the capture's."""
-    from toolkit.features.postgres_drill import _staging_dir
+    from toolkit.features.postgres_drill import staging_dir
 
     repo = Path(__file__).resolve().parents[1]
-    assert _staging_dir(repo) == STAGING
+    assert staging_dir(repo) == STAGING
 
 
 def test_a_repository_empty_live_and_restored_passes(drill) -> None:

@@ -238,9 +238,9 @@ def test_a_statement_that_did_not_load_fails_and_is_counted_not_printed(drill, c
 
 def test_the_drill_reads_the_path_the_capture_stages() -> None:
     """The snapshot stores absolute paths, so the drill's path must be the capture's."""
-    from toolkit.features.postgres_drill import _staging_dir
+    from toolkit.features.postgres_drill import staging_dir
 
     repo = Path(__file__).resolve().parents[1]
     template = (repo / "infra/ansible/roles/node_backup/templates/node-backup-capture.sh.j2").read_text()
     assert 'mv "$PG_PARTIAL_{{ service }}" "$STAGING/{{ service }}/pg_dumpall.sql"' in template
-    assert _staging_dir(repo) == "/opt/node-backup/staging"
+    assert staging_dir(repo) == "/opt/node-backup/staging"
