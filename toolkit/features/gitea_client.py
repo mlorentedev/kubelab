@@ -93,6 +93,10 @@ SCOPE_BY_METHOD: dict[str, frozenset[str]] = {
     # `read:repository` and nothing more -- and `write:repository`, a standing DELETE
     # capability, stays ungranted. The write goes through basic auth instead.
     "list_hooks": frozenset({"read:repository"}),
+    # The restore drill's reads (BACKUP-040): branch heads and "does live know this
+    # commit". Repository content, so `read:repository`, which the token already has.
+    "list_branches": frozenset({"read:repository"}),
+    "commit_exists": frozenset({"read:repository"}),
     # Writes.
     "create_org": frozenset({"write:organization"}),
     "create_repo": frozenset({"write:organization"}),
@@ -133,6 +137,10 @@ ADMIN_METHODS: tuple[str, ...] = (
     # happens to be covered by a sibling" is a coincidence, not a rule. It is exactly
     # how #1564's token came to authenticate and not work.
     "list_hooks",
+    # The restore drill compares a restored forge against live with this token
+    # (BACKUP-040), so its reads enter the derivation like every other.
+    "list_branches",
+    "commit_exists",
 )
 
 
@@ -573,6 +581,20 @@ class GiteaClient:
         `edit_repo`, and the reason the plan reads the forge with `admin`.
         """
         return self._request("GET", f"/repos/{owner}/{name}/hooks") or []
+
+    def list_branches(self, owner: str, name: str) -> list[dict[str, Any]]:
+        """Every branch of a repository, each with its head commit, walked to the last page."""
+        return list(self._paginate(f"/repos/{owner}/{name}/branches"))
+
+    def commit_exists(self, owner: str, name: str, sha: str) -> bool:
+        """Whether the repository holds commit `sha`. Absence is an answer; any other failure raises."""
+        try:
+            self._request("GET", f"/repos/{owner}/{name}/git/commits/{sha}")
+        except GiteaError as exc:
+            if exc.status_code in (404, 422):
+                return False
+            raise
+        return True
 
 
 class GiteaBasicAuthClient(GiteaClient):
