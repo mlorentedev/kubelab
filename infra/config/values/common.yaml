@@ -1989,17 +1989,24 @@ backup:
   # `restic_version` is bumped with it, which is the coordination it forces.
   watcher:
     image: restic/restic:0.19.1
-  # Every named Docker volume on a covered node is either backed up above or
-  # excluded HERE, with its reason. Enforced by tests/test_backup_volume_coverage.py
-  # over the compose template, so a volume added in a future change fails a test
-  # instead of being silently uncovered.
+  # Every named Docker volume on a covered node, and every prod PVC, is either
+  # backed up below or excluded HERE, with its reason and `tier: 3`. Enforced by
+  # tests/test_backup_volume_coverage.py over the compose template and by
+  # tests/test_backup_pvc_coverage.py over the rendered prod overlay, so state
+  # added in a future change fails a test instead of being silently uncovered.
+  #
+  # Only tier 3 may be excluded: "none, rebuilt from git or from upstream"
+  # (#1923, decision 1). There is no field for "not yet". Postgres was excluded
+  # on 2026-08-22 as "measured empty ... joins this list the day something
+  # writes to it"; Vikunja wrote to it five days later and it stayed unbacked
+  # until 2026-10-01 (BACKUP-046, #1111). A deferral with a trigger nobody
+  # watches is a promise, and this block holds rulings.
   #
   # This is deliberately NOT the same thing as BACKUP-044 AC6, and does not close
   # it: AC6 asks what exists ON DISK on a live node and is absent from the
   # declaration, which needs the node. This asks the narrower, static question --
   # what does the compose template create that nobody has ruled on. A comment
-  # would have done neither; `postgres` is excluded ten lines below on a rationale
-  # that expired when Vikunja shipped, and no test noticed.
+  # would have done neither.
   excluded:
     beelink:
       act_runner_data:
@@ -2010,6 +2017,7 @@ backup:
           cache that survives a node rebuild is a liability rather than an asset,
           since it would carry state from a machine that no longer exists. Nothing
           here is canonical.
+        tier: 3
       # Keyed by the name the DAEMON holds (`docker volume ls`), not by the compose
       # key -- `runner_data:` in the template declares `name: github_runner_data`,
       # and the daemon's name is the one a restore would have to address. The guard
@@ -2019,11 +2027,51 @@ backup:
         reason: >-
           The GitHub runner's work directory. Ephemeral by declaration -- the
           container runs with EPHEMERAL=1, so it is discarded between jobs anyway.
+        tier: 3
       github_runner_toolcache:
         reason: >-
           Downloaded toolchains (`/opt/hostedtoolcache`). Rebuildable by
           construction: every entry is re-fetched from its upstream on demand, and
           restoring a stale copy would pin versions a fresh run would not choose.
+        tier: 3
+    vps:
+      grafana:
+        pvc:
+          namespace: kubelab
+          claim: grafana-data
+        reason: >-
+          Dashboards, datasources and alert rules are provisioned from git
+          (`grafana-dashboards`, `grafana-alerting`); users are created by SSO at
+          login and take their role from Authelia's groups. A hand-made dashboard
+          that exists only here is the defect to fix, not a reason to back this up.
+        tier: 3
+      loki:
+        pvc:
+          namespace: kubelab
+          claim: loki-data
+        reason: >-
+          Log storage. Ratified tier 3 (#452, #1923 decision 1): history is lost on
+          a rebuild, and nothing reads it as a record.
+        tier: 3
+      crowdsec_config:
+        pvc:
+          namespace: kubelab
+          claim: crowdsec-config
+        reason: >-
+          Hub collections and parsers, which the image downloads again on start.
+          Ratified tier 3 (#452). Not `crowdsec-db`, which is tier 2 and a source.
+        tier: 3
+      traefik_acme:
+        # Not rendered by the overlay: Ansible creates it through the
+        # HelmChartConfig (`persistence.enabled`). Ruled here so the live guard
+        # in `make backup-coverage` finds it ruled.
+        pvc:
+          namespace: kube-system
+          claim: traefik
+        reason: >-
+          `acme.json`, the certificates Let's Encrypt issues again on demand.
+          Ratified tier 3 (#1923 decision 1).
+        tier: 3
 
   sources:
     beelink:
@@ -2079,26 +2127,39 @@ backup:
           namespace: kubelab
           claim: authelia-data
         sqlite: db.sqlite3
-      # NOT here, deliberately, each for a different reason:
-      #   postgres  — measured empty (0 tables, 7.5 MB base) on 2026-08-22. It
-      #               has no consumer yet, so there is nothing to lose. It joins
-      #               this list the day something writes to it, and `pg_dump`
-      #               is a different capture mechanism than `sqlite3 .backup`.
-      #   grafana   — 49 MB of dashboards that belong in git (the
-      #               `grafana-dashboards` ConfigMap pattern already exists).
-      #               If any are hand-made and unversioned, THAT is the defect.
-      #   crowdsec  — 77 MB of decisions that regenerate themselves.
-      #   loki      — logs, Tier 3, ratified as not needing backup.
+      postgres:
+        # Every Vikunja user, project and task. A logical dump, never a file
+        # copy: a running Postgres's data directory is not consistent on disk,
+        # the same reason SQLite sources use `.backup`. `pvc` names the claim
+        # this protects (the coverage guards read it); `pg_dumpall` replaces the
+        # directory copy, which the capture skips for this source.
+        pvc:
+          namespace: kubelab
+          claim: postgres-data
+        pg_dumpall:
+          deployment: postgres
+          container: postgres
+      crowdsec_db:
+        # Ratified tier 2 (#452, restated in #1111): local alert history and the
+        # ban decisions. CAPI re-sends the community blocklist after a rebuild,
+        # but this instance's own detections would be gone. Downgrading it to
+        # tier 3 is an operator decision (BACKUP-046 Q1), not a default.
+        #
+        # The directory also holds ~74 MB of GeoLite2 databases from the hub,
+        # unchanged since 2026-03-21 (measured 2026-10-01). They are copied with
+        # the rest rather than excluded: restic stores them once, and a restore
+        # that works without a hub download is worth that.
+        pvc:
+          namespace: kubelab
+          claim: crowdsec-db
+        sqlite: crowdsec.db
       headscale:
         # The most valuable single source in the fleet. Besides the database it
         # holds `noise_private.key` and `derp_server_private.key` — losing those
         # is not losing data, it is losing the VPN control plane's identity.
         volume: headscale_headscale_data
         sqlite: db.sqlite
-      # STILL DEFERRED on this node: postgres (`kubelab/postgres-data`), for the
-      # reason given in the "NOT here" block above — measured empty, no consumer
-      # yet, and `pg_dump` is a different capture mechanism. The PVC consumer
-      # class is BACKUP-046 (#1111).
+      # Every other prod claim is ruled in `backup.excluded.vps` above.
       #
       # authelia is NO LONGER deferred and must not be read as such: it is
       # declared above with the `pvc` source type (#1236) and was restored from

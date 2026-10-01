@@ -944,3 +944,13 @@ def test_the_capture_keeps_the_staging_dir_private_after_it_recreates_it():
     lines = [line.strip() for line in script.splitlines()]
     assert "umask 077" in lines, "the capture recreates the staging dir with the default umask"
     assert lines.index("umask 077") < lines.index('rm -rf "$STAGING"')
+
+
+def test_the_restic_version_probe_runs_in_check_mode() -> None:
+    """A `command` is skipped under --check, so the probe's stdout is empty and the
+    download that keys on it reports `changed` on every node: `make backup CHECK=1`
+    then claims every node needs restic. The probe only reads, so it runs anyway.
+    """
+    tasks = yaml.safe_load((ROLE / "tasks/main.yml").read_text())
+    probe = next(t for t in tasks if t.get("register") == "node_backup_restic_installed")
+    assert probe.get("check_mode") is False

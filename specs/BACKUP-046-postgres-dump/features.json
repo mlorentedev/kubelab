@@ -1,0 +1,37 @@
+[
+  {
+    "id": "BACKUP-046-postgres-dump-f1",
+    "behavior": "AC2: the capture stages a complete pg_dumpall and refuses a failed or truncated one",
+    "verification": "poetry run pytest -q -p no:cacheprovider --no-cov tests/test_node_backup_capture_postgres.py tests/test_backup_sources.py",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-046-postgres-dump-f2",
+    "behavior": "AC3: every prod PVC has a ruling, and every exclusion is tier 3 with a reason",
+    "verification": "poetry run pytest -q -p no:cacheprovider --no-cov tests/test_backup_pvc_coverage.py tests/test_backup_volume_coverage.py",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-046-postgres-dump-f3",
+    "behavior": "AC1: the VPS snapshot in R2 contains postgres/pg_dumpall.sql with the completion trailer",
+    "verification": "manual, after PR 1 deploys: make backup-node NODE=vps ENV=prod, then list the newest snapshot's postgres/ from R2",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-046-postgres-dump-f4",
+    "behavior": "AC4: make backup-coverage names every live PVC with no ruling",
+    "verification": "make backup-coverage ENV=prod",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-046-postgres-dump-f5",
+    "behavior": "AC5: the dump restores from R2 into a scratch database with row counts equal to live",
+    "verification": "make backup-drill-postgres ENV=prod",
+    "state": "pending",
+    "evidence": ""
+  }
+]

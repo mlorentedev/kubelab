@@ -29,6 +29,8 @@
   register: node_backup_restic_installed
   failed_when: false
   changed_when: false
+  # A read: under --check a skipped probe makes the download report `changed`.
+  check_mode: false
 
 - name: Resolve the restic release URL prefix (one place, so the asset URL
     and its checksum URL cannot drift onto different releases)

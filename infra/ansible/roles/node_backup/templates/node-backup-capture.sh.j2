@@ -65,6 +65,33 @@ mkdir -p "$STAGING"
 {% for service, src in node_backup_sources.items() %}
 # --- {{ service }} {{ '(bind mount)' if src.path is defined else ('(PVC: ' ~ src.pvc.namespace ~ '/' ~ src.pvc.claim ~ ', local-path on this node)' if src.pvc is defined else '(Docker volume: ' ~ src.volume ~ ')') }} ---
 mkdir -p "$STAGING/{{ service }}"
+{% if src.pg_dumpall is defined %}
+# A logical dump, run inside the workload that owns the claim (BACKUP-046).
+# The claim's data directory is NOT copied: a running Postgres's files are not
+# consistent on disk, the same reason SQLite sources use `.backup`. The user
+# comes from the container's own environment, so the dump always runs as the
+# user the database was initialised with, and over the local socket, which
+# needs no password (measured on prod's postgres:16-alpine, 2026-10-01).
+#
+# Written to a partial file and renamed only once its trailer is present:
+# pg_dumpall ends every complete dump with "-- PostgreSQL database cluster dump
+# complete", and an exec cut mid-stream leaves a file that loads partially and
+# looks like data. A missing trailer fails the capture, so no sentinel is
+# written and ship refuses the run, which pages through OnFailure.
+PG_PARTIAL_{{ service }}="$STAGING/{{ service }}/pg_dumpall.sql.partial"
+if ! KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl exec -n {{ src.pvc.namespace }} \
+        deploy/{{ src.pg_dumpall.deployment }} -c {{ src.pg_dumpall.container }} -- \
+        sh -c 'pg_dumpall -U "$POSTGRES_USER"' > "$PG_PARTIAL_{{ service }}"; then
+    echo "node-backup-capture: {{ service }} ({{ src.pvc.namespace }}/{{ src.pvc.claim }}): pg_dumpall failed -- refusing to ship a backup that silently omits it" >&2
+    exit 1
+fi
+if ! tail -n 5 "$PG_PARTIAL_{{ service }}" | grep -qxF -- '-- PostgreSQL database cluster dump complete'; then
+    echo "node-backup-capture: {{ service }} ({{ src.pvc.namespace }}/{{ src.pvc.claim }}): pg_dumpall output is not complete (no completion trailer) -- refusing to ship it" >&2
+    rm -f "$PG_PARTIAL_{{ service }}"
+    exit 1
+fi
+mv "$PG_PARTIAL_{{ service }}" "$STAGING/{{ service }}/pg_dumpall.sql"
+{% else %}
 {% if src.path is defined %}
 SRC_DIR_{{ service }}="{{ src.path }}"
 {% elif src.pvc is defined %}
@@ -157,6 +184,7 @@ capture_sqlite_{{ service }}
     ! -path "./{{ src.sqlite }}-wal" \
     ! -path "./{{ src.sqlite }}-shm" \
     -exec cp -a --parents -t "$STAGING/{{ service }}" {} + )
+{% endif %}
 {% endfor %}
 
 # Success sentinel, written LAST and reached only if every source above

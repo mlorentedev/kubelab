@@ -109,6 +109,10 @@ def test_every_declared_sqlite_source_is_accounted_for() -> None:
         "rpi4/pihole",  # WAL by the application's default
         "vps/headscale",  # WAL by the application's default
         "vps/n8n",  # WAL by the application's default
+        "vps/crowdsec_db",  # `delete`, measured 2026-10-01 from the file header
+        #                     (bytes 18-19 = 1,1; the image ships no sqlite3).
+        #                     CrowdSec's `db_config.use_wal` is unset, so it runs
+        #                     on the capture's timeout+retry like authelia. #1984.
     }
     # n8n and authelia are Kubernetes PVCs, declared under `vps` because that is
     # the host whose backup unit captures them — the key is the node, not the
