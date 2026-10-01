@@ -88,7 +88,7 @@ Run 4 on staging, on `e9e80bfd`, 2026-10-01 22:41Z:
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/BACKUP-070-restore-window/` -> `specs/archive/BACKUP-070-restore-window/`
-- [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/BACKUP-070-restore-window/` -> `specs/archive/BACKUP-070-restore-window/`
+- [x] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018): #1998 closes with #2018
+- [x] Promotions above executed (if any): lesson-501 is in this PR

@@ -1,7 +1,7 @@
 ---
 id: "BACKUP-070-restore-window"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-10-01"
 issue: "mlorentedev/kubelab#1998"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
