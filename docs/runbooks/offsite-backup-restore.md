@@ -366,6 +366,8 @@ restic environment from "Restoring — normal case" loaded:
 
 ```bash
 # As root, so restic gives back the owners it recorded (1000:1000, Gitea's `git` user).
+# If sudoers does not keep the environment for -E, run these lines in `sudo -s`
+# and load the restic environment there.
 sudo -E restic -r "$REPO" restore <snapshot-id> \
   --include /opt/node-backup/staging/gitea --target /tmp/gitea-restore
 sudo docker compose -f /opt/kubelab/compose.yml stop gitea

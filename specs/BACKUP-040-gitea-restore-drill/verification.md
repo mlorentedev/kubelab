@@ -49,7 +49,7 @@ Live unreachable and live listing nothing are both CANNOT CHECK before any resto
 
 Every run test asserts `_torn_down`: `docker rm -f -v` was called, docker no longer knows the container, and the directory is gone. That holds on a corrupt repository, a failed start, a server that never answers and a forged head. The teardown is `remove_scratch_container` from the Postgres drill: it reads back from docker and does not trust the exit code (#1988, lesson-498). The directory is wiped from a root container first, because Gitea runs as root at first start and writes into the bind mount.
 
-On prod, after both runs: 49 docker volumes before and after, no `giteadrill-*` container, no `giteadrill-*` directory.
+On prod, after both runs: 49 docker volumes before and after, no `giteadrill-*` container, no `giteadrill-*` directory. The volume count alone could not show a leftover anonymous volume, so the image was checked directly: `docker image inspect -f '{{json .Config.Volumes}}' gitea/gitea:1.25.5` answers `{"/data":{}}`, which the bind mount covers. The scratch server therefore creates no anonymous volume, and the Gitea fake lists none.
 
 ### AC5: runbook
 
