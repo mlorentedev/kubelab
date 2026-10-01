@@ -31,7 +31,7 @@ Inventory, measured 2026-10-01 (`kubectl kustomize infra/k8s/overlays/prod` and 
 | `kubelab/postgres-data` | prose exclusion, lapsed | **backed up (`pvc` + `pg_dumpall`)** |
 | `kubelab/grafana-data` | prose exclusion | excluded, tier 3 (operator, 2026-09-29) |
 | `kubelab/loki-data` | prose exclusion | excluded, tier 3 (operator, 2026-09-29) |
-| `kubelab/crowdsec-db` | prose exclusion | source (`sqlite: crowdsec.db`), ratified tier 2 in #452; see Q1 |
+| `kubelab/crowdsec-db` | prose exclusion | source (`sqlite: crowdsec.db`), ratified tier 2 in #452, kept by the operator 2026-10-01 (Q1) |
 | `kubelab/crowdsec-config` | none | excluded, see Q1 |
 | `kube-system/traefik` (ACME) | none, and absent from the manifests | excluded, tier 3 (operator, 2026-09-29: "ACME … rebuilt") |
 
@@ -53,7 +53,7 @@ Inventory, measured 2026-10-01 (`kubectl kustomize infra/k8s/overlays/prod` and 
 
 ## Risks / open questions
 
-- **Q1 (operator): keep `crowdsec-db` at tier 2, or downgrade it?** #452 (restated in #1111's 2026-08-16 inventory) ratified `crowdsec-db` as tier 2 and `crowdsec-config` as tier 3; the epic's 2026-09-29 table does not list either. The first draft of this spec proposed tier 3 for both and encoded that as an exclusion, which made an unanswered question read as a ruling (PR-Agent on #1979). This spec now applies the ratified ruling: `crowdsec-db` is a source, `crowdsec-config` stays excluded. Downgrading `crowdsec-db` is the operator's call; it would lose this instance's own alert history, while CAPI re-sends the community blocklist.
+- **Q1 (operator, answered 2026-10-01: keep tier 2): keep `crowdsec-db` at tier 2, or downgrade it?** #452 (restated in #1111's 2026-08-16 inventory) ratified `crowdsec-db` as tier 2 and `crowdsec-config` as tier 3; the epic's 2026-09-29 table does not list either. The first draft of this spec proposed tier 3 for both and encoded that as an exclusion, which made an unanswered question read as a ruling (PR-Agent on #1979). This spec now applies the ratified ruling: `crowdsec-db` is a source, `crowdsec-config` stays excluded. Downgrading `crowdsec-db` is the operator's call; it would lose this instance's own alert history, while CAPI re-sends the community blocklist.
 - **Q2: Vikunja attachments.** Filed as #1981, a child of #1923 next to BACKUP-057, covering the attachment bucket with the same lock or a second copy.
 - **Risk: `kubectl exec` against a Deployment** picks one pod. With `strategy: Recreate` and one replica there is one, and during a rollout the exec fails, which fails the capture loudly and pages through `node_notify`. The next 4h run retries. Measured from the workstation on 2026-10-01: the exec reaches the container and `pg_dumpall` authenticates over the local socket with no password.
 - **Risk: a dump is larger than its data.** 74 KB today. The R2 size alert from BACKUP-057 PR 1 bounds the repository.
