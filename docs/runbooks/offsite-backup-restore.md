@@ -513,9 +513,9 @@ Keep `/root/<svc>-data.broken-*` until the app is confirmed whole, then delete i
 
 ### Taking an app offline for a restore
 
-A prod Deployment cannot be stopped with `kubectl scale --replicas=0`: Argo CD runs
-`selfHeal: true` there and scales it back within seconds, onto data that is half
-replaced. On staging the scale holds only until master moves (lesson-330). A restore
+A prod Deployment cannot be stopped by scaling it by hand: Argo CD runs `selfHeal: true`
+there and puts the replicas back within seconds, onto data that is half replaced. On
+staging a hand scale holds only until master moves (lesson-330). A restore
 window pauses the env's auto-sync for the length of the restore (BACKUP-070):
 
 ```bash
