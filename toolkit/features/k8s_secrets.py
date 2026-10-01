@@ -460,7 +460,9 @@ def _normalize_slack_url(url: str, channel: str | None = None) -> str:
 
 
 # Apprise tag -> (SOPS webhook keys in precedence order, channel key, default channel).
-# A route with no webhook of its own falls back to the `page` one.
+# A route with no webhook of its own falls back to the `_FALLBACK_TAG` one,
+# chosen by tag so reordering the table cannot change it.
+_FALLBACK_TAG = "page"
 _SLACK_ROUTES: tuple[tuple[str, tuple[str, ...], str, str], ...] = (
     ("page", ("webhook_alerts", "webhook_page", "webhook_url"), "channel_alerts", "alerts"),
     ("vault", ("webhook_vault",), "channel_vault", "vault-health"),
@@ -476,10 +478,11 @@ def _first_set(values: dict[str, Any], keys: tuple[str, ...]) -> str | None:
 
 def _slack_routes(slack: dict[str, Any]) -> list[dict[str, dict[str, str]]]:
     """One Apprise URL per `_SLACK_ROUTES` tag that resolves to a webhook (NOTIFY-002)."""
-    page = _first_set(slack, _SLACK_ROUTES[0][1])
+    fallback_keys = next(keys for tag, keys, _, _ in _SLACK_ROUTES if tag == _FALLBACK_TAG)
+    fallback = _first_set(slack, fallback_keys)
     urls = []
     for tag, keys, channel_key, default_channel in _SLACK_ROUTES:
-        webhook = _first_set(slack, keys) or page
+        webhook = _first_set(slack, keys) or fallback
         if webhook:
             urls.append({_normalize_slack_url(webhook, slack.get(channel_key, default_channel)): {"tag": tag}})
     return urls
