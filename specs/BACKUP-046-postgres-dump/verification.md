@@ -48,8 +48,30 @@ The role was deployed from `feat/backup-046-postgres-dump` before #1979 merged, 
 [SUCCESS] drill: snapshot 00b263a5 restores completely (34 tables)
 ```
 
-All 34 tables match live, empty ones included. Afterwards `docker ps -a --filter name=pgdrill` is empty and no `pgdrill-*` temp dir remains.
+All 34 tables match live, empty ones included.
 
-### Coverage (AC4, AC6)
+**The first version of this check was wrong.** It read `docker ps -a --filter name=pgdrill` and called the teardown clean. The adversarial review found what that misses: the `postgres` image declares `VOLUME /var/lib/postgresql/data`, and `docker rm -f` without `-v` leaves that anonymous volume behind. Each run had left a full restored copy of prod, role password hashes included, in a dangling volume. Two were found on the workstation (from the emergency restore at 00:54Z and this drill at 02:55Z), identified by `PG_VERSION` in the volume, and removed. The teardown is now `docker rm -f -v`, run unconditionally in the `finally`. Four tests pin it, and each guard was mutated back and went red (`39daab08`).
+
+Rerun at 09:20Z on the same snapshot: `restores completely (34 tables)`, rc 0, and no volume was created. Afterwards, the only dangling volumes holding a `PG_VERSION` are `auth_database` and `authentik_database`, named volumes from an unrelated stack dated 2025-12.
+
+### AC2: a failed or truncated dump fails the capture (2026-10-01)
+
+`tests/test_node_backup_capture_postgres.py` runs the rendered capture script against a fake `kubectl`. `test_a_truncated_dump_fails_the_capture_and_names_the_source` and `test_a_failed_exec_fails_the_capture_and_names_the_source` both exit non-zero, name the source, and leave no sentinel and no `.sql` behind.
+
+### AC3: the static guard (2026-10-01)
+
+`test_every_prod_claim_has_a_backup_ruling` was red on master with five unruled claims and is green after #1979. `test_every_exclusion_is_tier_3_with_a_reason`, mutated against the committed `common.yaml`:
+
+- `beelink.act_runner_data` with `tier: 2`: `beelink.act_runner_data: tier 2, only tier 3 may be excluded`, 1 failed.
+- the same entry with `reason:` renamed: `beelink.act_runner_data: no reason`, 1 failed.
+
+### AC4: every live claim has a ruling (2026-10-01)
 
 `make backup-coverage ENV=prod` at 08:45Z: all four nodes covered (vps newest 08:40Z), and "all 8 live claims on 'vps' have a backup ruling".
+
+`tests/test_backup_live_claims.py` pins the other outcomes: an unruled claim fails and is named (`kube-system/traefik`); a missing kubeconfig, an unreadable cluster and an empty answer are each CANNOT CHECK.
+
+### AC6: runbook and lesson
+
+- `docs/runbooks/offsite-backup-restore.md`: "Postgres" under restoring (drill, whole-cluster loss, one damaged database) and "Adding a stateful service".
+- `docs/lessons/storage-backup/lesson-495-a-backup-exclusion-with-a-trigger-is-a-promise-nobody-keeps.md` (merged in #1979).

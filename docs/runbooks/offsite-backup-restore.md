@@ -304,8 +304,8 @@ It restores the newest dump into a throwaway container on this machine, running
 the image live runs. It passes only if the dump ends with pg_dumpall's
 completion trailer, every live database and table exists in the restore, and no
 table with rows live came back empty. It prints names and counts, never rows
-(the dump also holds role password hashes), and removes the container and the
-file on every exit path. Counts lower than live are expected: the snapshot is up
+(the dump also holds role password hashes), and removes the container, its data
+volume and the file on every exit path. Counts lower than live are expected: the snapshot is up
 to four hours old.
 
 **Whole cluster lost** (the claim is gone, the Deployment starts on an empty
@@ -328,8 +328,11 @@ empty server.
 server: it carries `CREATE DATABASE` for every database and fails on each one
 that exists. Restore the whole dump into a scratch container, take that one
 database out with `pg_dump -Fc <db>`, and `pg_restore --clean --if-exists -d <db>`
-it into live with its app scaled to zero. The scratch container is the same one
-the drill builds, kept until you are done.
+it into live with its app scaled to zero. Build the scratch container the way the
+drill does (`docker run -d -e POSTGRES_HOST_AUTH_METHOD=trust <live image>`, no
+published port) and remove it with `docker rm -f -v`. Without `-v` the restored
+database stays on this machine in an anonymous volume, because the image
+declares one for its data directory.
 
 ## Restoring — the disaster case
 
