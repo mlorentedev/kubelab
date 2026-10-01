@@ -49,11 +49,11 @@ The image comes from the live Deployment, never from values, so the drill tests 
 
 ## Acceptance criteria
 
-- [ ] AC1: Authelia passes only when every durable live row present at snapshot time is restored (opaque identifiers unchanged), the encryption check prints SUCCESS, and the server answers healthy; rc 0 with FAILURE text is FAIL (tested).
-- [ ] AC2: n8n passes only when the server starts on the restored data with the SOPS key, every workflow and credential present live at snapshot time is restored, and the credentials decrypt; a key mismatch is FAIL, a live read that fails or returns nothing is CANNOT CHECK (tested).
-- [ ] AC3: no key on argv or in `-e VALUE`; the containers have no network; the container and the directory are removed on every exit path and a leftover makes the drill fail (tested).
-- [ ] AC4: `make backup-drill-apps ENV=prod` passes against the newest R2 snapshot, and fails when given a wrong n8n key (prod transcript in `verification.md`).
-- [ ] AC5: the runbook names the drill and the real restore procedure for both services.
+- [x] AC1: Authelia passes only when every durable live row present at snapshot time is restored (opaque identifiers unchanged), the encryption check prints SUCCESS, and the server answers healthy; rc 0 with FAILURE text is FAIL (tested).
+- [x] AC2: n8n passes only when the server starts on the restored data with the SOPS key, every workflow and credential present live at snapshot time is restored, and the credentials decrypt; a key mismatch is FAIL, a live read that fails or returns nothing is CANNOT CHECK (tested).
+- [x] AC3: no key on argv or in `-e VALUE`; the containers have no network; the container and the directory are removed on every exit path and a leftover makes the drill fail (tested).
+- [x] AC4: `make backup-drill-apps ENV=prod` passes against the newest R2 snapshot, and fails when given a wrong n8n key (prod transcript in `verification.md`).
+- [x] AC5: the runbook names the drill and the real restore procedure for both services.
 
 ## References
 
