@@ -26,6 +26,9 @@ from toolkit.features.headscale_drill import read_live
 
 REPO = Path(__file__).resolve().parents[1]
 SHA = "0123456789abcdef0123456789abcdef01234567"
+#: Addresses come from the SSOT, never a literal (CLAUDE.md, networking.*).
+NET = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())["networking"]
+TARGET = f"{NET['ssh_users']['homelab']}@{NET['nodes']['ace2']['tailscale_ip']}"
 
 #: Distinctive values standing in for every secret the workstation injects.
 SENTINELS = {
@@ -56,7 +59,7 @@ def _headscale_inputs() -> dict:
         "restic_env": dict(SENTINELS),
         "staging_dir": STAGING,
         "image": IMAGE,
-        "cidr": "100.64.0.0/10",
+        "cidr": NET["tailscale_cidr"],
         "live": live.to_payload(),
     }
 
@@ -83,9 +86,9 @@ def _all_secrets() -> list[str]:
 @pytest.mark.parametrize("drill, inputs", [("gitea", _gitea_inputs), ("headscale", _headscale_inputs)])
 def test_no_injected_value_reaches_the_ssh_argv_and_the_payload_goes_on_stdin(drill, inputs) -> None:
     stream = _Stream()
-    assert drill_remote.run_remote(drill, inputs(), target="manu@100.64.0.5", sha=SHA, stream=stream)
+    assert drill_remote.run_remote(drill, inputs(), target=TARGET, sha=SHA, stream=stream)
     [(argv, stdin)] = stream.calls
-    assert argv[0] == "ssh" and "manu@100.64.0.5" in argv
+    assert argv[0] == "ssh" and TARGET in argv
     joined = " ".join(argv)
     assert not [s for s in _all_secrets() if s in joined], "a secret in argv is visible in `ps` on both ends"
     assert f"drill-{drill} --inputs-stdin" in joined
@@ -122,7 +125,7 @@ def test_only_a_full_commit_id_reaches_the_remote_shell(sha) -> None:
     ids=["pass", "drill-failed", "unreachable", "setup-failed"],
 )
 def test_each_exit_class_is_reported_as_itself(capsys, rc, expected, named) -> None:
-    ok = drill_remote.run_remote("gitea", _gitea_inputs(), target="manu@ace2", sha=SHA, stream=_Stream(rc))
+    ok = drill_remote.run_remote("gitea", _gitea_inputs(), target=TARGET, sha=SHA, stream=_Stream(rc))
     assert ok is expected
     out = " ".join(capsys.readouterr().out.split())
     if named:
@@ -136,13 +139,9 @@ def test_the_checkout_path_is_the_one_dev_node_provisions() -> None:
 
 
 def test_the_host_resolves_to_its_tailnet_address_and_homelab_user() -> None:
-    common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
-    net = common["networking"]
-    assert (
-        drill_remote.ssh_target(net, "ace2") == f"{net['ssh_users']['homelab']}@{net['nodes']['ace2']['tailscale_ip']}"
-    )
+    assert drill_remote.ssh_target(NET, "ace2") == TARGET
     with pytest.raises(KeyError):
-        drill_remote.ssh_target(net, "no-such-node")
+        drill_remote.ssh_target(NET, "no-such-node")
 
 
 # --- Preflight: the run vouches for a commit origin has --------------------
@@ -197,8 +196,12 @@ def test_a_clean_pushed_tree_sends_its_head(monkeypatch) -> None:
 
 @pytest.mark.parametrize(
     "values, named",
-    [({}, "declares no networking block"), ({"networking": {"nodes": {}}}, "networking.nodes.ace2")],
-    ids=["no-networking", "undeclared-host"],
+    [
+        ({}, "declares no networking block"),
+        ({"networking": {"nodes": {}}}, "networking.nodes.ace2 is not declared"),
+        ({"networking": {"nodes": NET["nodes"]}}, "networking.ssh_users.homelab not declared"),
+    ],
+    ids=["no-networking", "undeclared-host", "no-ssh-user"],
 )
 def test_a_host_the_config_cannot_place_is_cannot_check(monkeypatch, capsys, values, named) -> None:
     from toolkit.features import configuration

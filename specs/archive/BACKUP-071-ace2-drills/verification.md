@@ -97,6 +97,13 @@ Implementation branch `feat/backup-071-ace2-drills`. Commits: `d89a5b83` (IaC), 
 | 5 | Minor, REAL: the f4 gate (`grep -q 'HOST=ace2'`) cannot see the section's explanation | **Accepted, no ticket.** `features.json` gates run once, at archive time; neither CI nor `spec-gate.yml` re-runs an archived spec's gates. AC5's evidence is the runbook section itself, read in this PR's diff. Tightening a gate that never runs again would protect nothing |
 | Q | `sops` absence is gate-only, not asserted by provisioning | **Accepted.** The load-bearing half is the age key, which `drill_runtime.yml` asserts on every provision: without a key, `sops` decrypts nothing. ace2 is a developer node (ADR-058), and a role may install `sops` there for other work. f1 measured the non-interactive PATH the drill uses on 2026-10-01 |
 
+## PR review dispositions (#2024)
+
+PR-Agent on the implementation PR, one fix iteration:
+
+- **A `KeyError` from `resolve_ssh_user` read as an undeclared node.** Applied: the node's presence is checked explicitly, and any other `KeyError` prints `resolve_ssh_user`'s own message (`networking.ssh_users.homelab not declared`). The parametrized test now has a third case, `no-ssh-user`.
+- **Tailnet addresses as literals in tests.** Applied: `test_drill_remote.py` and `test_headscale_drill.py` read the target and `tailscale_cidr` from `common.yaml`. The one in `test_headscale_drill.py` predates this change and is fixed with it.
+
 ## Spec review dispositions (#2017)
 
 PR-Agent on the spec PR found two `features.json` gates that could not fail. Both are fixed here:

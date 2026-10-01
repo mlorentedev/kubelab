@@ -156,10 +156,13 @@ def drill_on_host(
     except KeyError:
         logger.error(f"drill: CANNOT CHECK — the {env} config declares no networking block")
         return False
+    if host not in (net.get("nodes") or {}):
+        logger.error(f"drill: CANNOT CHECK — networking.nodes.{host} is not declared")
+        return False
     try:
         target = ssh_target(net, host)
-    except KeyError:
-        logger.error(f"drill: CANNOT CHECK — networking.nodes.{host} is not declared")
+    except KeyError as exc:  # resolve_ssh_user names what is missing
+        logger.error(f"drill: CANNOT CHECK — {exc.args[0] if exc.args else exc}")
         return False
     inputs = module_for(drill).resolve_inputs(env, root)
     if inputs is None:

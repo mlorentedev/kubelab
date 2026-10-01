@@ -18,11 +18,16 @@ from pathlib import Path
 from typing import Optional
 
 import pytest
+import yaml
 
 from toolkit.features.headscale_drill import LiveState, compare, parse_entries, read_live, run_drill
 
 STAGING = "/opt/node-backup/staging"
 IMAGE = "headscale/headscale:v0.28.0"
+#: From the SSOT, never a literal (CLAUDE.md, networking.*).
+CIDR = yaml.safe_load((Path(__file__).resolve().parents[1] / "infra/config/values/common.yaml").read_text())[
+    "networking"
+]["tailscale_cidr"]
 TAKEN = "2026-10-01T12:04:45.886043275Z"
 BEFORE = 1_790_000_000  # 2026-09-21, before the snapshot
 AFTER = 1_790_000_000 + 30 * 86400  # after it
@@ -235,7 +240,7 @@ def drill(tmp_path: Path, monkeypatch):
             restic_env={"RESTIC_PASSWORD": "x"},
             staging_dir=STAGING,
             image=IMAGE,
-            cidr="100.64.0.0/10",
+            cidr=CIDR,
             live=live,
             run=fake,
             sleep=lambda s: None,
@@ -463,7 +468,7 @@ def test_run_drill_compares_against_the_given_state_and_opens_no_connection(tmp_
         restic_env={"RESTIC_PASSWORD": "x"},
         staging_dir=STAGING,
         image=IMAGE,
-        cidr="100.64.0.0/10",
+        cidr=CIDR,
         live=live,
         run=fake,
         sleep=lambda s: None,
