@@ -1666,10 +1666,11 @@ backup-drill-postgres:
 # Restore the newest Headscale capture from R2 into a scratch container with no
 # network and check the database, the server keys and every node against live
 # (BACKUP-067). Needs docker, SSH to the VPS and `sudo -n` there to hash the
-# live keys; prints names and ids, never a key.
+# live keys; prints names and ids, never a key. HOST=ace2 runs the restore there,
+# from this tree's pushed commit; the live reads stay here (BACKUP-071).
 .PHONY: backup-drill-headscale
 backup-drill-headscale:
-	@$(TOOLKIT) backup drill-headscale --env $(or $(filter staging prod,$(ENV)),prod)
+	@$(TOOLKIT) backup drill-headscale --env $(or $(filter staging prod,$(ENV)),prod)$(if $(HOST), --host $(HOST))
 
 # Restore the newest Authelia and n8n captures from R2 into scratch containers on
 # this machine, with no network, and check the SOPS keys open them (BACKUP-068).
@@ -1681,9 +1682,10 @@ backup-drill-apps:
 # Restore the newest Gitea capture from R2 into a scratch server on this machine,
 # with no network, and check it brings the forge back (BACKUP-040). Needs docker,
 # git and the env's Gitea admin token; prints names and counts, never content.
+# HOST=ace2 runs it there, from this tree's pushed commit (BACKUP-071).
 .PHONY: backup-drill-gitea
 backup-drill-gitea:
-	@$(TOOLKIT) backup drill-gitea --env $(or $(filter staging prod,$(ENV)),prod)
+	@$(TOOLKIT) backup drill-gitea --env $(or $(filter staging prod,$(ENV)),prod)$(if $(HOST), --host $(HOST))
 
 # Generate the restic repository password into SOPS. The value is never printed;
 # read it once with `make secrets-show KEY=backup.restic_password
