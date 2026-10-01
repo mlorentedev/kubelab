@@ -336,6 +336,52 @@ published port) and remove it with `docker rm -f -v`. Without `-v` the restored
 database stays on this machine in an anonymous volume, because the image
 declares one for its data directory.
 
+### Gitea
+
+The Beelink capture stages Gitea's whole `/data` at `/opt/node-backup/staging/gitea`
+in the Beelink repository: the bare repositories, `gitea.db` (copied with
+`sqlite3 .backup`), `app.ini` and the SSH host keys. **Prove the snapshot before
+you use it:**
+
+```bash
+make backup-drill-gitea ENV=prod
+```
+
+It restores the newest snapshot into a private temp directory on this machine and
+runs `git fsck --full` on every repository. Then it starts the Gitea image pinned
+in `common.yaml` on the restored data with `--network none`, so the restored server
+cannot reach live services, mirrors or webhooks. It mints a read-only token inside
+that container and lists every repository and branch through the API. It passes
+only if every repository live lists is restored on disk and in the database, none
+that has branches live came back with none, and every restored branch head is a
+commit live knows. A branch count different from live is expected: the snapshot
+can be hours old. It prints names and counts only (the restore holds `app.ini`
+secrets and password hashes), and on every exit path removes the container and
+the directory, then confirms with docker that they are gone. Measured 2026-10-01:
+5 repositories, 17 s from the start of the restore to a complete check.
+
+**Restoring it for real** (the Beelink lost `/opt/gitea/data`, or it is corrupt).
+Use the snapshot the drill just passed, and run this on the Beelink with the
+restic environment from "Restoring — normal case" loaded:
+
+```bash
+# As root, so restic gives back the owners it recorded (1000:1000, Gitea's `git` user).
+# If sudoers does not keep the environment for -E, run these lines in `sudo -s`
+# and load the restic environment there.
+sudo -E restic -r "$REPO" restore <snapshot-id> \
+  --include /opt/node-backup/staging/gitea --target /tmp/gitea-restore
+sudo docker compose -f /opt/kubelab/compose.yml stop gitea
+sudo mv /opt/gitea/data "/opt/gitea/data.broken-$(date +%F)"
+sudo mv /tmp/gitea-restore/opt/node-backup/staging/gitea /opt/gitea/data
+stat -c '%u:%g %n' /opt/gitea/data /opt/gitea/data/gitea/gitea.db   # expect 1000:1000
+sudo docker compose -f /opt/kubelab/compose.yml start gitea
+```
+
+Then check it the way the drill does, against the live server: every repository
+listed, and `git fsck` clean on a fresh clone of the one you care most about.
+Keep `data.broken-*` until you have. Pushes made after the snapshot are lost on
+the server; anyone who still has them in a clone pushes them again.
+
 ## Restoring — the disaster case
 
 **This is the scenario the escrow exists for.** The laptop and the USB stick are

@@ -137,6 +137,24 @@ def drill_postgres_cmd(
         raise typer.Exit(code=1)
 
 
+@app.command("drill-gitea")
+def drill_gitea_cmd(
+    env: Annotated[str, typer.Option("--env", "-e", help="Environment whose merged config is used")] = "prod",
+    project_root: Annotated[Optional[Path], typer.Option("--project-root", help="Repo root")] = None,
+) -> None:
+    """Restore the newest Gitea capture from R2 into a scratch server and check it brings the forge back.
+
+    Passes when every restored repository passes `git fsck --full`, the pinned
+    image starts on the restored data with no network, and every repository live
+    lists is restored with branch heads live knows. Prints names and counts only,
+    and removes the container, its volumes and the data on every exit path.
+    """
+    from toolkit.features.gitea_drill import drill_gitea
+
+    if not drill_gitea(env=env, project_root=project_root):
+        raise typer.Exit(code=1)
+
+
 @app.command("health-check")
 def health_check_cmd(
     env: Annotated[str, typer.Option("--env", "-e", help="Environment whose merged config is used")] = "prod",

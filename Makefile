@@ -1663,6 +1663,13 @@ backup-coverage:
 backup-drill-postgres:
 	@$(TOOLKIT) backup drill-postgres --env $(or $(filter staging prod,$(ENV)),prod)
 
+# Restore the newest Gitea capture from R2 into a scratch server on this machine,
+# with no network, and check it brings the forge back (BACKUP-040). Needs docker,
+# git and the env's Gitea admin token; prints names and counts, never content.
+.PHONY: backup-drill-gitea
+backup-drill-gitea:
+	@$(TOOLKIT) backup drill-gitea --env $(or $(filter staging prod,$(ENV)),prod)
+
 # Generate the restic repository password into SOPS. The value is never printed;
 # read it once with `make secrets-show KEY=backup.restic_password
 # SECRETS_ENV=common` to place the offsite escrow copy. Refuses to overwrite an

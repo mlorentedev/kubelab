@@ -1,0 +1,23 @@
+[
+  {
+    "id": "BACKUP-040-gitea-restore-drill-f1",
+    "behavior": "AC1/AC2: the newest Beelink snapshot restores, every repository passes git fsck --full, the pinned image serves it with no network, and the restore is complete against live",
+    "verification": "make backup-drill-gitea ENV=prod (names the snapshot, the repository count and the time to a complete check)",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-040-gitea-restore-drill-f2",
+    "behavior": "AC2/AC3: a repository missing, emptied or carrying a head live does not know fails and is named; live unreadable or empty is CANNOT CHECK",
+    "verification": "poetry run pytest -q -p no:cacheprovider --no-cov tests/test_gitea_drill.py tests/test_gitea_client_pagination.py",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-040-gitea-restore-drill-f3",
+    "behavior": "AC4: the container, its volumes and the restored directory are gone on every exit path, read back from docker",
+    "verification": "poetry run pytest -q -p no:cacheprovider --no-cov tests/test_gitea_drill.py tests/test_postgres_drill.py -k 'torn_down or cleans_up or removed or leaves_its_data or left_behind'",
+    "state": "pending",
+    "evidence": ""
+  }
+]
