@@ -112,7 +112,7 @@ PR-Agent on the spec PR found two `features.json` gates that could not fail. Bot
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/BACKUP-071-ace2-drills/` -> `specs/archive/BACKUP-071-ace2-drills/`
-- [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] `proposal.md` frontmatter set to `status: archived` ✓ 2026-10-01
+- [x] Folder moved: `specs/BACKUP-071-ace2-drills/` -> `specs/archive/BACKUP-071-ace2-drills/` ✓ 2026-10-01
+- [x] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018) ✓ 2026-10-01 (`Closes #2011` in the archive PR)
+- [x] Promotions above executed (if any) ✓ 2026-10-01 (lesson-502 is in this change)

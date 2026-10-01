@@ -46,4 +46,4 @@ created: "2026-10-01"
 - [x] Every acceptance criterion is covered by a test or a recorded run, and has a `features.json` entry with an executable, fail-closed verification
 - [x] `make test` green; ruff and mypy clean on touched files
 - [x] `verification.md` filled in
-- [ ] Independent adversarial review (`dotf spec review`), then archive and close #2011
+- [x] Independent adversarial review (`dotf spec review`), then archive and close #2011 ✓ 2026-10-01 (round 1 FAIL at `bd3bec16`, round 2 PASS-WITH-GAPS at `ef241218`; dispositions in `verification.md`)
