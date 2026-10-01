@@ -31,22 +31,22 @@ The size decides whether R = 30 fits the free tier. It is measured by the watche
 
 ## PR 2 — the R2 Terraform root, measured on a scratch bucket, then applied to the node buckets
 
-- [ ] [P] [AC2] Failing test, `tests/test_r2_terraform.py`, run against `toolkit infra terraform r2-tfvars` output. The lock prefixes are declared once, in the renderer, and reach the HCL only as the `locked_prefixes` variable. The test also asserts `main.tf` carries no prefix literal, so the rendered list is the one the lock applies:
+- [x] [P] [AC2] Failing test, `tests/test_r2_terraform.py`, run against `toolkit infra terraform r2-tfvars` output. The lock prefixes are declared once, in the renderer, and reach the HCL only as the `locked_prefixes` variable. The test also asserts `main.tf` carries no prefix literal, so the rendered list is the one the lock applies:
   - one bucket per `backup.sources` key, named `kubelab-backup-<node>`;
   - lock prefixes are exactly `data/`, `snapshots/`, `keys/` and `config`, never `locks/` or `index/`;
   - R in days is less than the `--keep-within` days in `node_backup_retention_flags`.
   - `node_backup_retention_flags` carries `--max-repack-size 0`, so `prune` never rewrites a pack and resets its age (proposal *What* §2).
 
   Expected: FAIL, the command does not exist.
-- [ ] [AC2] `toolkit infra terraform r2-tfvars` in `toolkit/cli/infra.py`, a plaintext renderer mirroring `vps-firewall-tfvars`. `backup.r2.lock_retention_days: 30` goes into `common.yaml`, and `--keep-within 31d --max-repack-size 0` into `node_backup_retention_flags`. Expected: PASS.
-- [ ] [AC2] `infra/terraform/r2/`:
+- [x] [AC2] `toolkit infra terraform r2-tfvars` in `toolkit/cli/infra.py`, a plaintext renderer mirroring `vps-firewall-tfvars`. `backup.r2.lock_retention_days: 30` goes into `common.yaml`, and `--keep-within 31d --max-repack-size 0` into `node_backup_retention_flags`. Expected: PASS.
+- [x] [AC2] `infra/terraform/r2/`:
   - `required_providers cloudflare ~> 5.8`;
   - `cloudflare_r2_bucket` and `cloudflare_r2_bucket_lock`, each with `for_each` over the rendered nodes;
   - `lifecycle { prevent_destroy = true }` on both;
   - a separate scratch bucket and lock pair, `count`-gated by a variable and **outside** the `for_each`, with no `prevent_destroy`. It cannot be conditional on a variable, so a scratch entry inside the node map could never be destroyed.
 
   `terraform validate` passes.
-- [ ] [AC2] `make tf-r2-plan` / `make tf-r2-apply` in the `tf-vps-firewall-*` shape. The Cloudflare token goes in `TF_VAR_*` in the child process's environment, never as an argument.
+- [x] [AC2] `make tf-r2-plan` / `make tf-r2-apply` in the `tf-vps-firewall-*` shape. The Cloudflare token goes in `TF_VAR_*` in the child process's environment, never as an argument.
 - [ ] Verify by consequence that the SOPS Cloudflare token can manage R2 buckets and locks: `make tf-r2-apply SCRATCH=1` returns rc 0 and creates the scratch bucket with its lock. A plan cannot prove it: planning a resource that does not exist yet makes no R2 call, so a refused token still plans clean (found while building PR 2). This is step 1 of the measurement below. If it is refused, a separate admin token is minted by the operator and added to `SECRET_CATALOG`; record which one it was. Either way, the token that manages the locks is in a file every SOPS recipient decrypts, so record in `verification.md` that #1852 gates the archive (proposal item 1).
 - [ ] [AC3] Scratch measurement, recorded in `verification.md`:
   1. Apply the scratch bucket with R = 1 day, which also confirms the API accepts a short retention.
