@@ -10,7 +10,9 @@ agent_stack_webui_project: agent-stack-webui
 #   tailscale_ip (the fleet name, so the boot-race guard in
 #   tests/test_tailscale_bound_ports_survive_boot.py sees the bind),
 #   agent_stack_webui (the apps.services.ai.open_webui
-#   map), agent_stack_webui_oidc_client_id, agent_stack_oidc_issuer.
+#   map), agent_stack_webui_oidc_client_id, agent_stack_oidc_issuer,
+#   agent_stack_agent_user, agent_stack_agent_probe_image, and
+#   agent_stack_protected_paths (what the agent must fail to read).
 
 # Delivered from prod SOPS by the playbook. Empty means "not configured": the
 # role renders nothing that needs it and does not start Open WebUI, because
@@ -26,3 +28,31 @@ agent_stack_nan_api_base_url: https://api.nan.builders/v1
 # 100.100.100.100 into a container. The public entry is only for a Tailscale
 # outage.
 agent_stack_docker_dns_servers: ["100.100.100.100", "1.1.1.1"]
+
+# The agent's user (ADR-068 D2). A system user, so useradd allocates it no
+# subordinate ids of its own: the role declares them, and asserts at every run
+# that no other user's range overlaps. The start sits well above useradd's
+# automatic allocations (100000, then one 65536 block per login user).
+agent_stack_agent_home: "/var/lib/{{ agent_stack_agent_user }}"
+agent_stack_agent_subid_start: 524288
+agent_stack_agent_subid_count: 65536
+
+# The daemon the agent drives: the user's own, inside its namespace. Never the
+# system socket, which is root on the host. tests/test_agent_user_role.py fails
+# if anything in this role can render that one.
+agent_stack_agent_docker_host: "unix:///run/user/{{ _agent_stack_agent_uid }}/docker.sock"
+
+# Declared rather than left to docker-ce's Recommends: the setup tool ships in
+# docker-ce-rootless-extras, newuidmap/newgidmap in uidmap, and the user's
+# systemd manager needs a dbus session to take `systemctl --user` calls. acl
+# is Ansible's: becoming an unprivileged user without pipelining hands it the
+# module files through setfacl.
+agent_stack_rootless_packages:
+  - acl
+  - docker-ce-rootless-extras
+  - uidmap
+  - dbus-user-session
+  - slirp4netns
+
+agent_stack_agent_probe_memory: 64m
+agent_stack_agent_probe_cpus: "0.5"
