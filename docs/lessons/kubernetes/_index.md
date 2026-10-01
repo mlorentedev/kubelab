@@ -1,9 +1,10 @@
 # Cluster, workloads and manifests
 
-55 lessons, newest first. Back to [all categories](../_index.md).
+56 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 494 | [An app that discovers its IdP once must start after it, and only the discovery document proves the IdP is up](lesson-494-an-app-that-discovers-its-idp-once-must-start-after-it.md) | 2026-09-30 |
 | 482 | [A failed `kubectl exec` into a Ready pod is explained by the pod's record, not by the command's error](lesson-482-a-failed-exec-into-a-ready-pod-is-read-from-the-pod-not-the-command.md) | 2026-09-28 |
 | 470 | [A Job created from a CronJob is pruned by that CronJob's history limit, pod and log included](lesson-470-a-job-created-from-a-cronjob-is-pruned-by-its-history-limit.md) | 2026-09-27 |
 | 455 | [A file watch keyed on the file's name never fires on a Secret volume, so "no restart needed" was never true](lesson-455-a-watch-on-a-file-name-never-fires-on-a-secret-volume.md) | 2026-09-24 |
