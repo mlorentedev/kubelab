@@ -355,6 +355,8 @@
       # Exits non-zero when not logged in — that is a state to read, not a failure.
       failed_when: false
       changed_when: false
+      # A read: --check would skip it and hand the next task an empty stdout.
+      check_mode: false
       no_log: true
       when: dev_node_github_token | length > 0
       tags: [dev_node, gh, identity]
@@ -405,6 +407,8 @@
       # Exits 1 when no key matches — an unconfigured helper, not an error.
       failed_when: false
       changed_when: false
+      # A read: --check would skip it and hand the next task an empty stdout.
+      check_mode: false
       when: dev_node_github_token | length > 0
       tags: [dev_node, gh, identity]
 
