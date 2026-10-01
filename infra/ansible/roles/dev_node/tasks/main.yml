@@ -148,14 +148,28 @@
       tags: [dev_node, mise]
 
     # --- Agent CLI tooling (Claude Code, etc.) ---
+    # `state: present`, not a shelled `npm install -g` (#1300). npm prints
+    # `changed N packages` for a package already installed at the same version,
+    # so a changed_when parsing its output matched every pass. The module lists
+    # the global tree and installs only what is missing.
+    #
+    # Not pinned: Claude Code updates itself in place, so a pinned version would
+    # be moved forward by the updater and back by the next provision, reporting
+    # changed every time. Ansible owns that the tool exists; the updater owns its
+    # version. tests/test_dev_node_npm_converges.py.
     - name: Install global agent CLI tools via mise node npm
-      ansible.builtin.command:
-        cmd: "{{ dev_node_home }}/.local/bin/mise exec -- npm install -g {{ item }}"
+      community.general.npm:
+        name: "{{ item }}"
+        global: true
+        state: present
+        executable: "{{ _dev_node_mise_node_bin }}/npm"
       environment:
-        PATH: "{{ dev_node_home }}/.local/bin:/usr/local/bin:/usr/bin:/bin:{{ ansible_env.PATH | default('') }}"
+        # mise's bin/npm is a script that execs `node`, so the pinned node must
+        # be on PATH, not only npm's own path.
+        PATH: "{{ _dev_node_mise_node_bin }}:/usr/local/bin:/usr/bin:/bin"
+      vars:
+        _dev_node_mise_node_bin: "{{ dev_node_home }}/.local/share/mise/installs/node/{{ dev_node_toolchains.node }}/bin"
       loop: "{{ dev_node_global_agent_npm_packages }}"
-      register: _npm_global_install
-      changed_when: "'added' in _npm_global_install.stdout or 'changed' in _npm_global_install.stdout"
       tags: [dev_node, mise, agents]
 
 
@@ -341,6 +355,8 @@
       # Exits non-zero when not logged in — that is a state to read, not a failure.
       failed_when: false
       changed_when: false
+      # A read: --check would skip it and hand the next task an empty stdout.
+      check_mode: false
       no_log: true
       when: dev_node_github_token | length > 0
       tags: [dev_node, gh, identity]
@@ -391,6 +407,8 @@
       # Exits 1 when no key matches — an unconfigured helper, not an error.
       failed_when: false
       changed_when: false
+      # A read: --check would skip it and hand the next task an empty stdout.
+      check_mode: false
       when: dev_node_github_token | length > 0
       tags: [dev_node, gh, identity]
 
@@ -441,8 +459,8 @@
     # `creates:`-guarded rather than `force: false` on openssh_keypair, because
     # the community collection is not a dependency of this role and adding one
     # for a single call is a heavier change than the call is worth.
-    # The comment carries the RESOLVED identity, which is the only place
-    # `dev_node_gitea_user` is consumed: Gitea's OpenSSH always authenticates the
+    # The comment carries the RESOLVED identity. Besides the key lookup below, it
+    # is where `dev_node_gitea_user` is consumed: Gitea's OpenSSH always authenticates the
     # transport as `git@` and resolves the owning account from the key itself, so
     # the identity can never appear in the SSH user field. Putting it in the
     # comment is what makes `ssh-keygen -lf` on the node and the key's title in
@@ -496,7 +514,8 @@
         group: root
         mode: "0644"
         content: |
-          # {{ ansible_managed }}
+          # Managed by Ansible (dev_node role). A literal header on purpose:
+          # ansible-core 2.19 defines the managed-header variable only in `template`.
           # ANSIBLE-037. System-wide because the developer user's own ssh config
           # has a different owner; the IdentityFile below is readable only by
           # that user, so this grants nothing to anyone else on the node.
@@ -514,11 +533,35 @@
         src: "{{ dev_node_gitea_key_path }}.pub"
       register: _gitea_pubkey
 
+    - name: Fingerprint the public half, to look it up on the forge
+      ansible.builtin.command:
+        cmd: "ssh-keygen -l -E sha256 -f {{ dev_node_gitea_key_path }}.pub"
+      changed_when: false
+      register: _gitea_key_fp
+      # Read-only, so it runs in a dry run too: a `command` skipped by `--check`
+      # leaves no stdout for the lookup below to template (lessons 392/397). On a
+      # fresh node in check mode the key does not exist yet, so a failure is only
+      # fatal in a real run.
+      check_mode: false
+      failed_when: _gitea_key_fp.rc != 0 and not ansible_check_mode
+
     # Registration runs on the CONTROLLER: the bot token is the credential that
     # can add a key to the account, and it has no business being on the node.
-    - name: List the keys already on the machine account
+    #
+    # Looked up by fingerprint, which is a hash of the key material, so the
+    # forge answers "is this key registered" itself (#1300). The role used to
+    # list every key and compare material with a Jinja regex_replace whose
+    # replacement '\2' Jinja reads as the control character chr(2), so no key
+    # ever matched. Measured on ace2 2026-10-01: the first pass POSTed the key
+    # (201, reported ok), and every pass after it POSTed again into a 422.
+    # Filtering also keeps the answer off the first page of a paginated list.
+    # Asked of the named account, not of `/user/keys`: Gitea 1.25 restricts a
+    # fingerprint query to an owner only when the path names one, so
+    # `/user/keys?fingerprint=` would also answer with the same key held by
+    # another account, and the play would report a key it never registered here.
+    - name: Look up this node's key on the machine account
       ansible.builtin.uri:
-        url: "{{ dev_node_gitea_api_url }}/user/keys"
+        url: "{{ dev_node_gitea_api_url }}/users/{{ dev_node_gitea_user }}/keys?fingerprint={{ _gitea_key_fp.stdout.split(' ')[1] | urlencode }}"
         headers:
           Authorization: "token {{ dev_node_gitea_bot_token }}"
         return_content: true
@@ -527,6 +570,9 @@
       changed_when: false
       no_log: true
       register: _gitea_keys
+      # A GET, so it is as safe in a dry run as the fingerprint above.
+      check_mode: false
+      when: _gitea_key_fp.rc == 0
 
     - name: Register this node's public key on the machine account
       ansible.builtin.uri:
@@ -543,16 +589,19 @@
       delegate_to: localhost
       become: false
       no_log: true
-      # Idempotence is by KEY MATERIAL, not by title. A title match with
-      # different material would leave the node holding a key the forge does not
-      # know, and the play would still report changed=0 — green, and broken.
-      # `trim` before splitting, deliberately: ssh-keygen writes a trailing
-      # newline, and a key generated without a comment would put it inside the
-      # material field. The comparison would then never match an already-
-      # registered key, and every provision would POST a duplicate — the play
-      # reporting `changed` forever and the account accumulating one key per run,
-      # which is the opposite of what AC1's `changed=0` asserts.
-      when: >-
-        (((_gitea_pubkey.content | b64decode) | trim).split(' ')[1] | default('', true))
-        not in (_gitea_keys.json | default([]) | map(attribute='key')
-                | map('regex_replace', '^(\S+)\s+(\S+).*$', '\2') | list)
+      register: _gitea_key_post
+      # The POST creates a key, so it reports changed. uri says ok by default,
+      # which hid the first registration on ace2.
+      changed_when: _gitea_key_post.status == 201
+      # Idempotence is by KEY MATERIAL, through its fingerprint, not by title.
+      # A title match with different material would leave the node holding a
+      # key the forge does not know, and the play would still report changed=0.
+      # The forge filters by fingerprint (FindPublicKeyOptions in Gitea's
+      # routers/api/v1/user/key.go); matching it again here keeps a forge that
+      # ignored the filter from passing node A's key off as node B's.
+      when:
+        - _gitea_key_fp.rc == 0
+        - >-
+          _gitea_keys.json | default([])
+          | selectattr('fingerprint', 'equalto', _gitea_key_fp.stdout.split(' ')[1])
+          | list | length == 0

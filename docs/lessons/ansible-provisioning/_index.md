@@ -1,9 +1,10 @@
 # Ansible roles and node provisioning
 
-50 lessons, newest first. Back to [all categories](../_index.md).
+51 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 493 | [Three convergence bugs in one role each looked like a different symptom, and the recap showed none of them](lesson-493-a-role-that-fails-after-its-first-success-hides-behind-the-recap.md) | 2026-10-01 |
 | 466 | [A "back up the current file" task before a template reports `changed` on the run after every change](lesson-466-a-backup-copy-before-a-template-reports-changed-on-the-next-run.md) | 2026-09-26 |
 | 397 | [Check mode skips `command:`, so every condition reading its register fails the dry run](lesson-397-check-mode-skips-command-so-every-condition-reading-its-register-fails-the-dry-run.md) | 2026-08-26 |
 | 392 | [`--check` skips `command:`, so a guard reading its rc does not gate](lesson-392-check-mode-skips-command-so-a-guard-reading-its-rc-does-not-gate.md) | 2026-08-24 |
