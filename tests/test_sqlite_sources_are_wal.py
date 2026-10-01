@@ -31,10 +31,14 @@ mode that lives inside a database file on a node.
 
 from __future__ import annotations
 
+import shutil
+import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 from jinja2 import ChainableUndefined
+
 from tests.ansible_jinja import ansible_env
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -61,6 +65,34 @@ def test_gitea_declares_wal() -> None:
         "act_runner writes to it every second during a job; in rollback-journal "
         "mode the commit's EXCLUSIVE lock refuses the reader and the capture "
         "aborts. Measured failing 2026-09-04 06:23:58."
+    )
+
+
+@pytest.mark.parametrize("overlay", ["staging", "prod"])
+def test_crowdsec_declares_wal(overlay: str) -> None:
+    """Read from the rendered overlay: an overlay patch that replaced the env list would drop it.
+
+    The image's `docker_start.sh` turns `USE_WAL=true` into `db_config.use_wal:
+    true` on every start (crowdsecurity/crowdsec:v1.7.6, line 335), and SQLite
+    makes the mode persistent in the file the first time CrowdSec opens it.
+    """
+    if shutil.which("kubectl") is None:
+        pytest.skip("kubectl not on PATH: cannot render the overlay (a skip is CANNOT CHECK, not OK)")
+    result = subprocess.run(
+        ["kubectl", "kustomize", str(REPO_ROOT / "infra/k8s/overlays" / overlay)], capture_output=True, text=True
+    )
+    assert result.returncode == 0, result.stderr
+    deployments = [
+        d
+        for d in yaml.safe_load_all(result.stdout)
+        if d and d.get("kind") == "Deployment" and d["metadata"]["name"] == "crowdsec"
+    ]
+    assert len(deployments) == 1, f"expected one crowdsec Deployment in {overlay}, found {len(deployments)}"
+    (container,) = [c for c in deployments[0]["spec"]["template"]["spec"]["containers"] if c["name"] == "crowdsec"]
+    env = {e["name"]: e.get("value") for e in container.get("env") or []}
+    assert env.get("USE_WAL") == "true", (
+        f"crowdsec in {overlay} does not declare WAL. node-backup captures its database "
+        f"hourly, and in rollback-journal mode CrowdSec's commits lock the reader out (#1984)."
     )
 
 
@@ -109,10 +141,9 @@ def test_every_declared_sqlite_source_is_accounted_for() -> None:
         "rpi4/pihole",  # WAL by the application's default
         "vps/headscale",  # WAL by the application's default
         "vps/n8n",  # WAL by the application's default
-        "vps/crowdsec_db",  # `delete`, measured 2026-10-01 from the file header
-        #                     (bytes 18-19 = 1,1; the image ships no sqlite3).
-        #                     CrowdSec's `db_config.use_wal` is unset, so it runs
-        #                     on the capture's timeout+retry like authelia. #1984.
+        "vps/crowdsec_db",  # was `delete` (measured 2026-10-01 from the file
+        #                     header, bytes 18-19 = 1,1; the image ships no
+        #                     sqlite3); now declares WAL (test_crowdsec_declares_wal).
     }
     # n8n and authelia are Kubernetes PVCs, declared under `vps` because that is
     # the host whose backup unit captures them — the key is the node, not the
