@@ -26,6 +26,8 @@ This ADR decides **where compute lives** — the always-on / on-demand split and
 
 This ADR assigns ace2 the role of on-demand LLM compute running Ollama. **AI-007 (#905) retired Ollama entirely on 2026-08-09**; ace2 is now the self-hosted developer node / CDE per ADR-058 D1, and hosts no services.
 
+> **Amended 2026-09-30 by [ADR-068](adr-068-ace2-operator-agent-tooling.md).** ace2 now also hosts the operator's agent tooling (Hermes, Open WebUI, an MCP bridge) as one Compose stack. It stays on-demand: nothing always-on depends on that stack, and "hosts no services" now reads as "hosts nothing an always-on component depends on".
+
 The rationale ADR-058 gave for the retirement — "ace2's 12 GB are effectively idle" — had already expired when its own PR-1 made ace2 the dev node. The reason recorded here is the one that was actually true at the time of removal: `ollama.kubelab.live` was a **public** endpoint (Cloudflare record, prod API key, Traefik middleware) whose backend was a node powered off most of the time, and the sweep confirmed **zero runtime consumers** — nothing in `apps/` or `edge/` ever called it — against roughly 36 documents describing it as live.
 
 **Amended, not superseded**: the always-on / on-demand split this ADR establishes is unchanged, and ace2 stays in the on-demand tier. Only its workload changes. Local inference is deferred rather than replaced — see the matching amendment in ADR-029.

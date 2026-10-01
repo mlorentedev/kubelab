@@ -1,6 +1,6 @@
 # Lessons
 
-490 lessons, one file each. Newest: 2026-10-01. Open a category for its list.
+491 lessons, one file each. Newest: 2026-10-01. Open a category for its list.
 
 | Category | # | Scope |
 |---|---|---|
@@ -8,7 +8,7 @@
 | [kubernetes](kubernetes/_index.md) | 55 | Cluster, workloads, manifests |
 | [networking-dns](networking-dns/_index.md) | 47 | DNS, VPN mesh, host networking |
 | [ansible-provisioning](ansible-provisioning/_index.md) | 50 | Roles, playbooks, IaC, node setup |
-| [process-method](process-method/_index.md) | 72 | Specs, reviews, how work is run |
+| [process-method](process-method/_index.md) | 73 | Specs, reviews, how work is run |
 | [edge-tls](edge-tls/_index.md) | 27 | Traefik, TLS, the request path |
 | [toolkit-tooling](toolkit-tooling/_index.md) | 39 | Toolkit CLI, Make, Python, tests |
 | [gitops-delivery](gitops-delivery/_index.md) | 31 | Argo CD, releases, promotion |

@@ -1,9 +1,10 @@
 # How the work is run: specs, reviews, knowledge
 
-72 lessons, newest first. Back to [all categories](../_index.md).
+73 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 492 | [Read what the agent runtime ships before designing its jail, and apply "always-on" to callees, not callers](lesson-492-read-what-the-runtime-ships-before-designing-the-jail.md) | 2026-09-30 |
 | 480 | [A WIP commit that a hook refused turns the safe restore back into the destructive one](lesson-480-a-wip-commit-a-hook-refused-turns-the-safe-restore-back-into-the-destructive-one.md) | 2026-09-27 |
 | 476 | [A new step inside a function that tests mock piecemeal runs for real in every test written before it](lesson-476-a-new-step-inside-a-piecemeal-mocked-function-runs-for-real-in-every-old-test.md) | 2026-09-24 |
 | 452 | [A partial view of a corpus answers exactly like the whole corpus](lesson-452-a-partial-view-of-a-corpus-answers-like-the-whole-corpus.md) | 2026-09-06 |
