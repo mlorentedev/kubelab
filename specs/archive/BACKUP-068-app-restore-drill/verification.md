@@ -77,8 +77,8 @@ Each guard was broken in turn on a committed tree, `tests/test_app_drill.py` run
 
 ## Test status
 
-- `poetry run pytest -q -p no:cacheprovider --no-cov tests/test_app_drill.py` → 39 passed.
-- `make test` on `33e2859f`: 3325 passed, 16 skipped, 2 xfailed, rc 0.
+- `poetry run pytest -q -p no:cacheprovider --no-cov tests/test_app_drill.py` → 41 passed on `416ab991` (master, 2026-10-01). It read 39 when first recorded, before the squash added two tests.
+- `make test` on `416ab991`: 3399 passed, 16 skipped, 154 deselected, 2 xfailed, rc 0.
 
 ## Decisions made during implementation
 
@@ -90,12 +90,22 @@ Each guard was broken in turn on a committed tree, `tests/test_app_drill.py` run
 - **What prod measured, and what only the tests did.** With a wrong n8n key, prod failed at start-up ("Mismatching encryption keys", because the capture carries `config`). The decrypt step after it, `export:credentials --decrypted` exiting non-zero on data the key cannot open, is covered by `test_n8n_fails_when_a_credential_does_not_decrypt` and was not observed on real data: in a real capture the start-up guard always fires first.
 - **One throwaway Authelia user**: the file backend refuses an empty user list (measured: `users: non zero value required`). Its argon2 hash is generated at drill time from a random password and never written to the repo.
 
+## Review dispositions
+
+Pooled adversarial review (`nan/deepseek-v4-flash`, 2026-10-01, `review.md`): **PASS-WITH-GAPS** on `416ab991`. It found no code defect: the guards are real, and the secrets discipline holds. There are five Minor findings.
+
+- **Promotion lines the archive pre-flight cannot parse** (REAL). Applied: every line now asks a question and answers `yes: <path>` or `no: <reason>`.
+- **Test evidence not reproducible as recorded** (REAL). Applied: `test_app_drill.py` re-run on `416ab991` → 41 passed. The `make test` line pinned to the pre-squash `33e2859f` is replaced by a run on `416ab991`.
+- **A lost trailing row with no timestamp reads as newer than the snapshot** (THEORETICAL). Ticketed, #2015 item 1. The fix touches `compare()` and the spec's contract, which would stale this review.
+- **Two parses raise instead of CANNOT CHECK** (THEORETICAL). Ticketed, #2015 item 2.
+- **`run_drill` and `_prove_authelia` over the complexity bar** (REAL, shared by all four drills). Ticketed, #2015 item 3, as one extraction for the drill family rather than a BACKUP-068-only refactor.
+
 ## Promotion candidates
 
-- [x] Lesson: `docs/lessons/storage-backup/lesson-500-n8n-cli-answers-nothing-at-log-level-warn.md`.
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/storage-backup/lesson-500-n8n-cli-answers-nothing-at-log-level-warn.md
 - [x] ADR-worthy decision? no: the drill pattern of BACKUP-046/040/067 applied to two more sources.
 - [x] New pattern candidate for `00_meta/patterns/`? no: single project.
-- [x] Debt found: #1998 (no safe way to take a prod app offline for a restore under `selfHeal`), #1997 (BACKUP-067 review follow-ups).
+- [x] Debt found, ticketed rather than promoted? no: it is on the board, not promoted. #1998 (no safe way to take a prod app offline for a restore under `selfHeal`, spec in #2013), #1997 (BACKUP-067 review follow-ups), #2015 (this spec's review follow-ups)
 
 ## Archive checklist
 
