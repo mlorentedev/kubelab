@@ -20,11 +20,11 @@ owner: manu
 
 Accepted — 2026-06-29
 
-> **Amended 2026-09-30 by [ADR-068](adr-068-ace2-operator-agent-tooling.md).**
+> **Amended 2026-09-30 by [ADR-068](adr-068-ace2-operator-agent-tooling.md)** (D1 amended; D5 and D3 re-read, not changed).
 >
 > - **D1:** ace2 also hosts the operator's agent tooling (`hermes-kubelab`, Open WebUI, an MCP bridge) alongside the dev environment.
 > - **D5:** stands, re-read. ace2 stays on-demand, and that stack is operator-attended: its chat is unavailable while ace2 is off, and its jobs catch up once at power-on. It is not the unattended 24/7 agent D5 sends to the always-on tier.
-> - **D3:** met for Hermes with its native docker terminal backend and its fail-closed manual approvals, under its own rootless user that cannot read any staging credential D3 allows on ace2.
+> - **D3:** met for Hermes with its native docker terminal backend and its fail-closed manual approvals, under its own rootless user that cannot read any staging credential D3 allows on ace2, provided the rootless socket measures as working (ADR-068 D2).
 
 Repurposes **ace2** (Acemagic-2, 12GB x86) from Ollama LLM compute to a centralized development node. Amends [ADR-028](adr-028-operational-topology.md) (node classification) and [ADR-029](adr-029-intelligence-layer.md) (local inference placement). Tracks [#809](https://github.com/mlorentedev/kubelab/issues/809).
 

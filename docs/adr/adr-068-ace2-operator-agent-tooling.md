@@ -16,7 +16,7 @@ created: "2026-09-30"
 
 Accepted, 2026-09-30. The operator chose this option during an architecture session on kubelab#1933, which is the same precedent as ADR-067. It amends:
 
-- [ADR-058](adr-058-ace2-dev-node.md) D1 and D5;
+- [ADR-058](adr-058-ace2-dev-node.md) D1, and re-reads D5 (which stands) and D3 (which D2 below meets for Hermes, pending the rootless measurement);
 - the 2026-08-09 amendment of [ADR-028](adr-028-operational-topology.md);
 - [ADR-043](adr-043-unified-knowledge-memory-plane.md): where Open WebUI runs, its RAG policy, and Hermes's vault authority.
 
