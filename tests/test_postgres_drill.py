@@ -65,6 +65,7 @@ class _Fake:
         live_tables: bool = True,
         dump_rc: int = 0,
         rm_fails: bool = False,
+        volume: str = "pgvol",
     ) -> None:
         self.trailer = trailer
         self.load_rc = load_rc
@@ -72,6 +73,7 @@ class _Fake:
         self.live_tables = live_tables
         self.dump_rc = dump_rc
         self.rm_fails = rm_fails
+        self.volume = volume
         self.exists = False  # the scratch container and its anonymous volume, as docker sees them
         self.calls: list[list[str]] = []
         self.dump_path: Path | None = None
@@ -98,7 +100,7 @@ class _Fake:
         if argv[:3] == ["docker", "container", "inspect"]:
             if not self.exists:
                 return 1, "", f"Error: No such container: {argv[-1]}"
-            return 0, ("pgvol " if "-f" in argv else "[{}]"), ""
+            return 0, (f"{self.volume} " if "-f" in argv else "[{}]"), ""
         if argv[:3] == ["docker", "volume", "inspect"]:
             return (0, "[{}]", "") if self.exists else (1, "", f"Error: get {argv[-1]}: no such volume")
         if argv[:2] == ["docker", "rm"]:
@@ -182,10 +184,18 @@ def test_a_complete_restore_that_leaves_its_data_behind_fails(drill, capsys) -> 
     """`docker rm` failing must not pass silently: the volume holds the restored dump."""
     fake = _Fake(rm_fails=True)
     assert drill(fake) is False
-    out = capsys.readouterr().out
+    out = " ".join(capsys.readouterr().out.split())  # the logger wraps long lines
     assert "restores completely" in out  # the restore itself was fine
     assert "still on this machine" in out and "volume pgvol" in out
     assert not fake.dump_path.parent.exists()  # the file goes even when the container does not
+
+
+def test_a_container_left_behind_fails_even_without_a_volume(drill, capsys) -> None:
+    """Each leftover is read back on its own; a container with no volume still holds the load's files."""
+    fake = _Fake(rm_fails=True, volume="")
+    assert drill(fake) is False
+    out = " ".join(capsys.readouterr().out.split())  # the logger wraps long lines
+    assert "container pgdrill-" in out
 
 
 def test_live_with_no_tables_is_cannot_check_not_a_pass(drill, capsys) -> None:
