@@ -35,23 +35,38 @@ def test_expected_failure():
 
 
 def _child_pytest(tmp_path: Path, *, ci: bool) -> subprocess.CompletedProcess:
-    """Run PROBE under this repository's conftest, with or without CI set."""
+    """Run PROBE under this repository's conftest, with or without CI set.
+
+    The probe lives in `tmp_path`, never in the tracked `tests/` tree: a run killed
+    between write and unlink would otherwise leave a file the next run collects.
+    Outside `tests/` the conftest is not discovered, so it is loaded as a plugin.
+    """
     env = {k: v for k, v in os.environ.items() if k != "CI"}
     if ci:
         env["CI"] = "true"
-    target = REPO_ROOT / "tests" / f"test_zz_kubectl_gate_probe_{tmp_path.name}.py"
+    target = tmp_path / "test_kubectl_gate_probe.py"
     target.write_text(textwrap.dedent(PROBE))
-    try:
-        return subprocess.run(
-            [sys.executable, "-m", "pytest", "-q", "-rA", "-p", "no:cacheprovider", "--no-cov", str(target)],
-            cwd=REPO_ROOT,
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
-    finally:
-        target.unlink()
+    return subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-q",
+            "-rA",
+            "-p",
+            "no:cacheprovider",
+            "-p",
+            "tests.conftest",
+            "--no-cov",
+            f"--rootdir={tmp_path}",
+            str(target),
+        ],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
 
 
 def test_a_kubectl_skip_fails_in_ci(tmp_path: Path) -> None:
