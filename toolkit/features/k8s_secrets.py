@@ -298,12 +298,7 @@ def apply_secrets(env: str, project_root: Path, dry_run: bool = False) -> bool:
     applicable = _definitions_for_env(env, SECRET_DEFINITIONS)
 
     # 2. Pre-deploy guard (TOOL-019 / C6): never push a placeholder value to a cluster.
-    placeholder_hits = sorted(
-        f"{mapping.name}.{k8s_key}"
-        for mapping in applicable
-        for k8s_key, env_var in mapping.keys.items()
-        if is_placeholder(env_vars.get(env_var))
-    )
+    placeholder_hits = _placeholder_hits(applicable, env_vars)
     if placeholder_hits:
         logger.error(
             "Refusing to apply — placeholder value(s) still in the vault: "
@@ -326,10 +321,7 @@ def apply_secrets(env: str, project_root: Path, dry_run: bool = False) -> bool:
     # operator debugs Grafana rather than the config that broke it. A guard that
     # already exists two lines up for placeholders belongs here for the same
     # reason — refuse to hand the cluster something that cannot start.
-    _IDENTITY_BACKED = {"grafana-admin": "admin-user"}
-    missing_identity = sorted(
-        f"{secret}.{key}" for secret, key in _IDENTITY_BACKED.items() if not dynamic_literals.get(secret, {}).get(key)
-    )
+    missing_identity = _missing_identity(dynamic_literals)
     if missing_identity:
         logger.error(
             "Refusing to apply — these keys resolve from the identity SSOT and it is not "
@@ -340,15 +332,7 @@ def apply_secrets(env: str, project_root: Path, dry_run: bool = False) -> bool:
         return False
 
     # 4. Apply each secret
-    all_ok = True
-    changed: set[tuple[str, str]] = set()
-    for mapping in applicable:
-        extra = dynamic_literals.get(mapping.name, {})
-        ok = _apply_single_secret(
-            mapping, env_vars, extra, dry_run, env=env, namespace=mapping.namespace, changed=changed
-        )
-        if not ok:
-            all_ok = False
+    all_ok, changed = _apply_mappings(applicable, env_vars, dynamic_literals, dry_run, env)
 
     # 4b. Remove what used to be rendered here; Argo CD never will.
     all_ok = delete_retired_secrets(env, dry_run) and all_ok
@@ -359,12 +343,53 @@ def apply_secrets(env: str, project_root: Path, dry_run: bool = False) -> bool:
     if changed:
         all_ok = restart_consumers(changed, kubectl=lambda ns: _kubectl_base(env, ns), dry_run=dry_run) and all_ok
 
+    _log_outcome(all_ok, dry_run)
+    return all_ok
+
+
+def _placeholder_hits(applicable: list[SecretMapping], env_vars: dict[str, str]) -> list[str]:
+    return sorted(
+        f"{mapping.name}.{k8s_key}"
+        for mapping in applicable
+        for k8s_key, env_var in mapping.keys.items()
+        if is_placeholder(env_vars.get(env_var))
+    )
+
+
+# Secret keys that resolve from the identity SSOT, checked before anything is applied.
+_IDENTITY_BACKED = {"grafana-admin": "admin-user"}
+
+
+def _missing_identity(dynamic_literals: dict[str, dict[str, str]]) -> list[str]:
+    return sorted(
+        f"{secret}.{key}" for secret, key in _IDENTITY_BACKED.items() if not dynamic_literals.get(secret, {}).get(key)
+    )
+
+
+def _apply_mappings(
+    applicable: list[SecretMapping],
+    env_vars: dict[str, str],
+    dynamic_literals: dict[str, dict[str, str]],
+    dry_run: bool,
+    env: str,
+) -> tuple[bool, set[tuple[str, str]]]:
+    """Apply every mapping, even past a failure. Returns (all ok, the Secrets kubectl changed)."""
+    all_ok = True
+    changed: set[tuple[str, str]] = set()
+    for mapping in applicable:
+        extra = dynamic_literals.get(mapping.name, {})
+        ok = _apply_single_secret(
+            mapping, env_vars, extra, dry_run, env=env, namespace=mapping.namespace, changed=changed
+        )
+        all_ok = ok and all_ok
+    return all_ok, changed
+
+
+def _log_outcome(all_ok: bool, dry_run: bool) -> None:
     if all_ok:
         logger.success("Preview complete; nothing was applied" if dry_run else "All K8s secrets applied successfully")
     else:
         logger.error("Some secrets could not be previewed" if dry_run else "Some secrets failed to apply")
-
-    return all_ok
 
 
 def _resolve_grafana_admin(cm: ConfigurationManager) -> str:
@@ -434,6 +459,46 @@ def _normalize_slack_url(url: str, channel: str | None = None) -> str:
     return base
 
 
+# Apprise tag -> (SOPS webhook keys in precedence order, channel key, default channel).
+# A route with no webhook of its own falls back to the `_FALLBACK_TAG` one,
+# chosen by tag so reordering the table cannot change it.
+_FALLBACK_TAG = "page"
+_SLACK_ROUTES: tuple[tuple[str, tuple[str, ...], str, str], ...] = (
+    ("page", ("webhook_alerts", "webhook_page", "webhook_url"), "channel_alerts", "alerts"),
+    ("vault", ("webhook_vault",), "channel_vault", "vault-health"),
+    ("deploy", ("webhook_deployments", "webhook_deploy"), "channel_deployments", "deployments"),
+    ("log", ("webhook_log",), "channel_log", "ops-log"),
+    ("agent", ("webhook_agent", "webhook_agent_fleet"), "channel_agent", "agent-fleet"),
+)
+
+
+def _first_set(values: dict[str, Any], keys: tuple[str, ...]) -> str | None:
+    return next((values[k] for k in keys if values.get(k)), None)
+
+
+def _slack_routes(slack: dict[str, Any]) -> list[dict[str, dict[str, str]]]:
+    """One Apprise URL per `_SLACK_ROUTES` tag that resolves to a webhook (NOTIFY-002)."""
+    fallback_keys = next(keys for tag, keys, _, _ in _SLACK_ROUTES if tag == _FALLBACK_TAG)
+    fallback = _first_set(slack, fallback_keys)
+    urls = []
+    for tag, keys, channel_key, default_channel in _SLACK_ROUTES:
+        webhook = _first_set(slack, keys) or fallback
+        if webhook:
+            urls.append({_normalize_slack_url(webhook, slack.get(channel_key, default_channel)): {"tag": tag}})
+    return urls
+
+
+def _telegram_routes(telegram: dict[str, Any]) -> list[dict[str, dict[str, str]]]:
+    bot_token = telegram.get("bot_token", "")
+    chat_page = telegram.get("chat_page", "")
+    if not (bot_token and chat_page):
+        return []
+    urls = [{f"tgram://{bot_token}/{chat_page}": {"tag": "page"}}]
+    if chat_log := telegram.get("chat_log", ""):
+        urls.append({f"tgram://{bot_token}/{chat_log}": {"tag": "log"}})
+    return urls
+
+
 def _build_apprise_config(cm: ConfigurationManager) -> str:
     """Build the Apprise routing table (tag → Slack / Telegram URLs) from SOPS values.
 
@@ -451,46 +516,10 @@ def _build_apprise_config(cm: ConfigurationManager) -> str:
     slack = apprise_cfg.get("slack", {})
     telegram = apprise_cfg.get("telegram", {})
 
-    urls: list[dict[str, dict[str, str]]] = []
-
-    # 1. Slack routing (NOTIFY-002 preferred)
-    if slack:
-        webhook_alerts = slack.get("webhook_alerts") or slack.get("webhook_page") or slack.get("webhook_url")
-        webhook_vault = slack.get("webhook_vault") or webhook_alerts
-        webhook_log = slack.get("webhook_log") or webhook_alerts
-        webhook_deploy = slack.get("webhook_deployments") or slack.get("webhook_deploy") or webhook_alerts
-        webhook_agent = slack.get("webhook_agent") or slack.get("webhook_agent_fleet") or webhook_alerts
-
-        if webhook_alerts:
-            urls.append({_normalize_slack_url(webhook_alerts, slack.get("channel_alerts", "alerts")): {"tag": "page"}})
-        if webhook_vault:
-            urls.append(
-                {_normalize_slack_url(webhook_vault, slack.get("channel_vault", "vault-health")): {"tag": "vault"}}
-            )
-        if webhook_deploy:
-            urls.append(
-                {
-                    _normalize_slack_url(webhook_deploy, slack.get("channel_deployments", "deployments")): {
-                        "tag": "deploy"
-                    }
-                }
-            )
-        if webhook_log:
-            urls.append({_normalize_slack_url(webhook_log, slack.get("channel_log", "ops-log")): {"tag": "log"}})
-        if webhook_agent:
-            urls.append(
-                {_normalize_slack_url(webhook_agent, slack.get("channel_agent", "agent-fleet")): {"tag": "agent"}}
-            )
-
-    # 2. Telegram fallback during transition
+    urls = _slack_routes(slack) if slack else []
+    # Telegram is the fallback during the transition, used only when Slack routes nothing.
     if telegram and not urls:
-        bot_token = telegram.get("bot_token", "")
-        chat_page = telegram.get("chat_page", "")
-        chat_log = telegram.get("chat_log", "")
-        if bot_token and chat_page:
-            urls.append({f"tgram://{bot_token}/{chat_page}": {"tag": "page"}})
-            if chat_log:
-                urls.append({f"tgram://{bot_token}/{chat_log}": {"tag": "log"}})
+        urls = _telegram_routes(telegram)
 
     if not urls:
         logger.warning("Apprise Slack/Telegram configuration missing — skipping routing config")
@@ -569,6 +598,43 @@ def _apply_verdict(stdout: str) -> str:
     return words[1] if len(words) > 1 else ""
 
 
+def _secret_data(
+    mapping: SecretMapping, env_vars: dict[str, str], extra_literals: dict[str, str]
+) -> tuple[dict[str, str], list[str]]:
+    """The desired key set from env vars + pre-rendered literals, and the required keys with no value."""
+    data: dict[str, str] = {}
+    missing: list[str] = []
+
+    for k8s_key, env_var in mapping.keys.items():
+        value = env_vars.get(env_var)
+        if not value:
+            missing.append(f"{k8s_key} (from {env_var})")
+            continue
+        data[k8s_key] = value
+
+    for k8s_key, env_var in mapping.optional_keys.items():
+        if value := env_vars.get(env_var):
+            data[k8s_key] = value
+
+    data.update(extra_literals)
+    return data, missing
+
+
+def _report_apply(name: str, keys: list[str], result: subprocess.CompletedProcess[str], dry_run: bool) -> str:
+    """Log what kubectl said about one Secret, and return its verdict."""
+    verdict = _apply_verdict(result.stdout)
+    if dry_run:
+        logger.info(f"  [DRY-RUN] {name}: {verdict or result.stdout.strip()} (keys: {keys})")
+    else:
+        logger.success(f"  {result.stdout.strip()}")
+    if _LAST_APPLIED in (result.stderr or ""):
+        logger.warning(
+            f"  {name} has no {_LAST_APPLIED} annotation: kubectl reports it `configured` "
+            "whether or not a value differs, and a real run restarts its consumers either way"
+        )
+    return verdict
+
+
 def _apply_single_secret(
     mapping: SecretMapping,
     env_vars: dict[str, str],
@@ -586,24 +652,7 @@ def _apply_single_secret(
     ns_label = f" ({namespace})" if namespace != "kubelab" else ""
     logger.info(f"Processing secret: {mapping.name}{ns_label}")
 
-    # Collect the desired key set from env vars + pre-rendered literals.
-    data: dict[str, str] = {}
-    missing: list[str] = []
-
-    for k8s_key, env_var in mapping.keys.items():
-        value = env_vars.get(env_var)
-        if not value:
-            missing.append(f"{k8s_key} (from {env_var})")
-            continue
-        data[k8s_key] = value
-
-    for k8s_key, env_var in mapping.optional_keys.items():
-        value = env_vars.get(env_var)
-        if value:
-            data[k8s_key] = value
-
-    for k8s_key, value in extra_literals.items():
-        data[k8s_key] = value
+    data, missing = _secret_data(mapping, env_vars, extra_literals)
 
     # Fail closed (TOOL-018 / audit C2): a Secret is applied via `kubectl apply -f -`,
     # which REPLACES the whole Secret. Applying a subset would shrink the live Secret
@@ -630,16 +679,7 @@ def _apply_single_secret(
             text=True,
             check=True,
         )
-        verdict = _apply_verdict(apply_result.stdout)
-        if dry_run:
-            logger.info(f"  [DRY-RUN] {mapping.name}: {verdict or apply_result.stdout.strip()} (keys: {list(data)})")
-        else:
-            logger.success(f"  {apply_result.stdout.strip()}")
-        if _LAST_APPLIED in (apply_result.stderr or ""):
-            logger.warning(
-                f"  {mapping.name} has no {_LAST_APPLIED} annotation: kubectl reports it `configured` "
-                "whether or not a value differs, and a real run restarts its consumers either way"
-            )
+        verdict = _report_apply(mapping.name, list(data), apply_result, dry_run)
         if changed is not None and verdict in ("configured", "created"):
             changed.add((namespace, mapping.name))
         return True

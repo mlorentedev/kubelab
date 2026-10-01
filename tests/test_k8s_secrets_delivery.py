@@ -119,3 +119,24 @@ class TestYamlBuildersEscape:
         assert parsed["version"] == 1
         tags = [next(iter(u.values()))["tag"] for u in parsed["urls"]]
         assert tags == ["page", "log"]
+
+
+class TestSlackFallback:
+    """A Slack route with no webhook of its own falls back to the `page` one (NOTIFY-002)."""
+
+    def test_the_fallback_is_chosen_by_tag_not_by_position(self, monkeypatch) -> None:  # noqa: ANN001
+        monkeypatch.setattr(ks, "_SLACK_ROUTES", tuple(reversed(ks._SLACK_ROUTES)))
+        merged = {
+            "apps": {
+                "services": {
+                    "automation": {
+                        "apprise": {"slack": {"webhook_alerts": "https://hooks.slack.com/services/T1/B1/K1"}}
+                    }
+                }
+            }
+        }
+        parsed = yaml.safe_load(_build_apprise_config(_cm(merged)))
+
+        routed = {next(iter(u.values()))["tag"]: next(iter(u)) for u in parsed["urls"]}
+        assert set(routed) == {"page", "vault", "deploy", "log", "agent"}
+        assert all(url.startswith("slack://T1/B1/K1/") for url in routed.values()), routed
