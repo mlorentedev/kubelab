@@ -87,6 +87,7 @@ Each guard was broken in turn on a committed tree, `tests/test_app_drill.py` run
 - **Newer rows without a timestamp** are recognised by an `AUTOINCREMENT` id above the restore's highest. An empty restore never excuses a missing row.
 - **The image comes from the live Deployment**, as in the Postgres drill, so the drill tests the image that would have to open the data.
 - **Authelia's key is checked by the CLI before the server starts** (container idles on `sleep`, then `docker exec -d authelia`), so a wrong key reads as "the key does not open it", not as "the server did not start".
+- **What prod measured, and what only the tests did.** With a wrong n8n key, prod failed at start-up ("Mismatching encryption keys", because the capture carries `config`). The decrypt step after it, `export:credentials --decrypted` exiting non-zero on data the key cannot open, is covered by `test_n8n_fails_when_a_credential_does_not_decrypt` and was not observed on real data: in a real capture the start-up guard always fires first.
 - **One throwaway Authelia user**: the file backend refuses an empty user list (measured: `users: non zero value required`). Its argon2 hash is generated at drill time from a random password and never written to the repo.
 
 ## Promotion candidates
