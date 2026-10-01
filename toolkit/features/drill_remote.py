@@ -3,7 +3,8 @@
 The workstation holds the SOPS keys, so it resolves everything the drill takes,
 live reads included, into one JSON payload. The host gets that payload on the
 ssh session's stdin and runs `toolkit backup drill-<x> --inputs-stdin`, which
-calls the same `run_from_inputs` a local run calls and never reads config.
+calls the same `run_from_inputs` a local run calls. That path reads no config; the
+import-time `dev` load is #2021's, and ace2 has no sops and no key to serve it.
 
 What travels where:
 
@@ -56,7 +57,8 @@ def _stream(argv: list[str], *, stdin: str) -> int:
     return subprocess.run(argv, input=stdin, text=True, check=False).returncode
 
 
-def _module(drill: str) -> Any:
+def module_for(drill: str) -> Any:
+    """The module that resolves and runs `drill`, locally or on a host."""
     import importlib
 
     return importlib.import_module(DRILLS[drill])
@@ -146,13 +148,13 @@ def drill_on_host(
     sha = preflight(git, root)
     if sha is None:
         return False
-    net = ConfigurationManager(env, root).get_plaintext_values()["networking"]
     try:
+        net = ConfigurationManager(env, root).get_plaintext_values()["networking"]
         target = ssh_target(net, host)
     except KeyError:
-        logger.error(f"drill: CANNOT CHECK — {host} is not a node in networking.nodes")
+        logger.error(f"drill: CANNOT CHECK — networking.nodes.{host} is not declared")
         return False
-    inputs = _module(drill).resolve_inputs(env, root)
+    inputs = module_for(drill).resolve_inputs(env, root)
     if inputs is None:
         return False
     return run_remote(drill, inputs, target=target, sha=sha, stream=stream)
@@ -171,7 +173,7 @@ def run_from_stdin(drill: str, text: str) -> bool:
         logger.error(f"drill: CANNOT CHECK — the inputs payload is unusable ({type(exc).__name__})")
         return False
     try:
-        return bool(_module(drill).run_from_inputs(inputs))
+        return bool(module_for(drill).run_from_inputs(inputs))
     except Exception as exc:  # noqa: BLE001 - a traceback would render the payload's values
         logger.error(f"drill: CANNOT CHECK — the drill could not run on these inputs ({type(exc).__name__})")
         return False

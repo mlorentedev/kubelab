@@ -29,7 +29,7 @@ created: "2026-10-01"
 
 ### Remote run (AC2, AC3)
 
-- [x] [P] [AC3] Test `tests/test_drill_remote.py`: the builder for a remote run produces an ssh argv with none of the injected values, and the payload on stdin; with a fake runner, the remote entrypoint (`--inputs-stdin`) calls `run_drill` with the payload's values and never imports or builds `ConfigurationManager` (patched to raise). Expected: FAIL.
+- [x] [P] [AC3] Test `tests/test_drill_remote.py`: the builder for a remote run produces an ssh argv with none of the injected values, and the payload on stdin; with a fake runner, the remote entrypoint (`--inputs-stdin`) calls `run_drill` with the payload's values and its drill path never builds `ConfigurationManager` (patched to raise; the import-time load is #2021). Expected: FAIL.
 - [x] [AC3] Test: after a fake remote run, no file under the work directory contains an injected value; a malformed payload exits non-zero and stderr contains none of its values. Expected: FAIL.
 - [x] [AC2] Test: a dirty tree, and a HEAD that `git branch -r --contains` does not find on `origin`, each refuse with CANNOT CHECK naming the reason, before any ssh. Expected: FAIL.
 - [x] [AC2] [AC3] Implement `toolkit/features/drill_remote.py`: resolve the host from `networking.nodes.<host>` and `networking.ssh_users.homelab`; preflight the tree; over ssh, fetch and detach the checkout at HEAD, `make worktree-init`, then run `toolkit backup drill-<x> --inputs-stdin` with the payload on stdin. An init failure is CANNOT CHECK.

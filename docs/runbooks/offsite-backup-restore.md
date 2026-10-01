@@ -555,7 +555,8 @@ make backup-drill-headscale HOST=ace2 ENV=prod
   NODE=ace2 ENV=prod TAGS=drill`). Each run fetches it, detaches it at this tree's
   `HEAD` and runs `make worktree-init`. A dirty tree, untracked files included, or
   a commit no `origin/*` branch contains refuses with CANNOT CHECK before anything
-  is sent. A branch can prove itself on ace2 before it merges.
+  is sent. That check reads this clone's remote-tracking refs, not the forge: if
+  `origin/*` is stale, a pushed commit is refused too. `git fetch origin` and rerun. A branch can prove itself on ace2 before it merges.
 - **What travels.** This machine opens SOPS and builds one JSON payload: the
   restic repository and environment (R2 keys, restic password), the image, the
   staging directory, and the Gitea admin token for the Gitea drill. It goes on the

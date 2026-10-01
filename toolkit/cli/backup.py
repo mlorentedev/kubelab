@@ -154,7 +154,7 @@ def _drill(drill: str, *, env: str, project_root: Optional[Path], host: Optional
         return drill_remote.run_from_stdin(drill, sys.stdin.read())
     if host:
         return drill_remote.drill_on_host(drill, env=env, host=host, project_root=project_root)
-    module = drill_remote._module(drill)
+    module = drill_remote.module_for(drill)
     return bool(getattr(module, f"drill_{drill}")(env=env, project_root=project_root))
 
 

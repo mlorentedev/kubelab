@@ -46,6 +46,7 @@ Implementation branch `feat/backup-071-ace2-drills`. Commits: `d89a5b83` (IaC), 
 
 ## Test status
 
+- Round 1 fixes: `tests/test_drill_remote.py tests/test_headscale_drill.py tests/test_gitea_drill.py tests/test_restic_install_shared.py tests/test_node_backup_role.py`: 140 passed.
 - `make test` on `b2e3e44d`: `3435 passed, 16 skipped, 154 deselected, 2 xfailed`, rc=0.
 - Mutations, each committed first and restored with `git checkout HEAD --`. Each one turns the suite red:
   - M1, a setup step reads stdin: 1 failure;
@@ -60,6 +61,19 @@ Implementation branch `feat/backup-071-ace2-drills`. Commits: `d89a5b83` (IaC), 
 - **ace2 runs the commit this tree is at, not master.** That is why a dirty or unpushed tree refuses: otherwise the evidence would vouch for code the host never ran.
 - **Exit classes.** 255 is ssh, 97 is setup and anything else is the drill's own verdict. Each failure is labelled CANNOT CHECK or "did not pass" accordingly.
 - **No traceback locals.** `pretty_exceptions_show_locals=False` on the Typer app, because a traceback rendering locals would print the payload.
+
+## Adversarial review dispositions (round 1, FAIL)
+
+`dotf spec review` (nan/deepseek-v4-flash) at `bd3bec16`: FAIL on two REAL Majors. Each is applied below, and a re-review follows.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Major: AC3 and proposal §2 claim the remote process builds no `ConfigurationManager`; importing the toolkit builds one for `dev` (`settings.py:419`) | **Contract reworded, gate added.** Making the global lazy is #2021's work: 27 modules import `settings` at module level, `k8s_connect` (which `ssh_target` uses), `main` and `logging` among them, so it is a toolkit-wide change, not a drill change. AC3 and §2 now claim what the test proves (the drill path builds none). The guarantee that ace2 decrypts nothing now rests on a gate, not an observation: f1 asserts no age key **and** no `sops` on the non-interactive PATH (`! command -v sops`, rc=1 on 2026-10-01) |
+| 2 | Major: the AC1 gate only sees `get_url` | **Applied.** `_acquires_restic` checks acquisition modules: `apt`/`package`/`dnf`/`yum`/`snap`/`pip` names; `get_url` url; `unarchive`/`copy` src, or a dest that is the binary; `shell`/`command`/`raw` text naming restic with a fetch or unpack tool. It matches by module, so `import_tasks: restic.yml`, `restic version` and the password file do not count. The reviewer's two mutations (an `apt: name=restic` and an `unarchive` of a restic asset in `drill_runtime.yml`) each turn it red |
+| 3 | Minor: the CLI calls the private `drill_remote._module` | **Applied.** Renamed `module_for`, the reviewer's name, public with a docstring |
+| 4 | Minor: a config with no `networking` is a `KeyError` traceback | **Applied.** The read moved inside the existing guard, and the message names `networking.nodes.<host>`. `test_a_host_the_config_cannot_place_is_cannot_check` covers both no-networking and an undeclared host |
+| 5 | Question: a stale `origin/*` refuses a pushed commit | **Applied (runbook).** The section says the check reads local remote-tracking refs, and to `git fetch origin` and rerun. Network I/O in preflight was not added: it would run before the refusal it exists to make cheap |
+| 6 | Minor, SPECULATIVE: formatting-only lines in `dev_node/tasks/main.yml` | **Declined.** Produced by the pre-commit formatter on a file this change edits. Harmless, and reverting them would fail the hook |
 
 ## Spec review dispositions (#2017)
 

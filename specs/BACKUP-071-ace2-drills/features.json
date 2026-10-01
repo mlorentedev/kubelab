@@ -1,10 +1,10 @@
 [
   {
     "id": "BACKUP-071-ace2-drills-f1",
-    "behavior": "AC1: node_backup and dev_node share one restic install; provisioning ace2 twice ends changed=0 with no SOPS age key on the node",
-    "verification": "poetry run pytest -q -p no:cacheprovider --no-cov tests/test_restic_install_shared.py && out=$(make provision NODE=ace2 ENV=prod 2>&1) && printf '%s' \"$out\" | grep -Eq '^ace2 +: ok=[0-9]+ +changed=0 +unreachable=0 +failed=0' && ssh ace2 'test ! -e .config/sops/age/keys.txt'",
+    "behavior": "AC1: node_backup and dev_node share one restic install; provisioning ace2 twice ends changed=0, and the node has no SOPS age key and no sops on the non-interactive PATH, so the import-time config load (#2021) can decrypt nothing there",
+    "verification": "poetry run pytest -q -p no:cacheprovider --no-cov tests/test_restic_install_shared.py && out=$(make provision NODE=ace2 ENV=prod 2>&1) && printf '%s' \"$out\" | grep -Eq '^ace2 +: ok=[0-9]+ +changed=0 +unreachable=0 +failed=0' && ssh ace2 'test ! -e .config/sops/age/keys.txt && ! command -v sops'",
     "state": "passing",
-    "evidence": "2026-10-01: make provision NODE=ace2 ENV=prod second run 'ace2 : ok=162 changed=0 unreachable=0 failed=0 skipped=71'; ssh ace2 test ! -e .config/sops/age/keys.txt exit 0; restic 0.19.1; tests/test_restic_install_shared.py 4 passed"
+    "evidence": "2026-10-01: make provision NODE=ace2 ENV=prod second run 'ace2 : ok=162 changed=0 unreachable=0 failed=0 skipped=71'; ssh ace2 test ! -e .config/sops/age/keys.txt exit 0; restic 0.19.1; tests/test_restic_install_shared.py 4 passed; ssh ace2 'command -v sops' rc=1 (2026-10-01)"
   },
   {
     "id": "BACKUP-071-ace2-drills-f2",
@@ -15,7 +15,7 @@
   },
   {
     "id": "BACKUP-071-ace2-drills-f3",
-    "behavior": "AC2/AC3: secrets travel on stdin, never argv or disk; the remote never reads SOPS; a dirty or unpushed tree is refused; Headscale live reads stay on the workstation",
+    "behavior": "AC2/AC3: secrets travel on stdin, never argv or disk; the remote drill path builds no ConfigurationManager; a dirty or unpushed tree is refused; Headscale live reads stay on the workstation",
     "verification": "poetry run pytest -q -p no:cacheprovider --no-cov tests/test_drill_remote.py tests/test_headscale_drill.py",
     "state": "passing",
     "evidence": "tests/test_drill_remote.py 26 passed, tests/test_headscale_drill.py 40 passed; mutations M1-M4 red (1, 3, 2, 1 failures); make test 3435 passed on b2e3e44d"

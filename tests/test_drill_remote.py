@@ -193,6 +193,21 @@ def test_a_clean_pushed_tree_sends_its_head(monkeypatch) -> None:
     assert SHA in " ".join(argv)
 
 
+@pytest.mark.parametrize("values", [{}, {"networking": {"nodes": {}}}], ids=["no-networking", "undeclared-host"])
+def test_a_host_the_config_cannot_place_is_cannot_check(monkeypatch, capsys, values) -> None:
+    from toolkit.features import configuration
+
+    stream = _Stream()
+    monkeypatch.setattr(configuration.ConfigurationManager, "get_plaintext_values", lambda self: values)
+    monkeypatch.setattr(gitea_drill, "resolve_inputs", lambda env, root: _gitea_inputs())
+    assert not drill_remote.drill_on_host(
+        "gitea", env="prod", host="ace2", project_root=REPO, git=_git(), stream=stream
+    )
+    out = " ".join(capsys.readouterr().out.split())
+    assert "CANNOT CHECK" in out and "networking.nodes.ace2" in out
+    assert not stream.calls
+
+
 def test_inputs_that_cannot_be_resolved_send_nothing(monkeypatch) -> None:
     stream = _Stream()
     monkeypatch.setattr(headscale_drill, "resolve_inputs", lambda env, root: None)
