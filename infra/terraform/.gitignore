@@ -1,27 +1,27 @@
- Terraform state
+# Terraform state
 .terraform/
 /.terraform/
 *.tfstate
 *.tfstate.*
 crash.log
-crash..log
+crash.*.log
 
- Variable files
+# Variable files
 terraform.tfvars
 terraform.tfvars.json
-.auto.tfvars
-.auto.tfvars.json
+*.auto.tfvars
+*.auto.tfvars.json
 
- Override files
+# Override files
 override.tf
 override.tf.json
-_override.tf
-_override.tf.json
+*_override.tf
+*_override.tf.json
 
- Plan outputs
+# Plan outputs
 *.plan
 *.tfplan
 
- OS and editor files
+# OS and editor files
 .DS_Store
 Thumbs.db
