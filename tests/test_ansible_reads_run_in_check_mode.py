@@ -94,3 +94,23 @@ def test_every_declared_write_still_exists_and_stays_skipped() -> None:
     for key in WRITES_THAT_REPORT_NO_CHANGE:
         assert key in candidates, f"{key} is declared a write but no such read-shaped task exists"
         assert candidates[key].get("check_mode") is not False, f"{key} is a write and must not run under --check"
+
+
+def test_every_wait_lets_a_fresh_node_dry_run() -> None:
+    """A wait polls a service the run itself starts, which `--check` never starts.
+
+    On a node that was never provisioned the wait would exhaust its retries and
+    fail the dry run for a reason unrelated to what it predicts. Under `--check`
+    it makes one attempt and tolerates the answer; outside `--check` nothing
+    changes.
+    """
+    lax = [
+        f"{path}: {task.get('name', '<unnamed>')}"
+        for path, task in _reads()
+        if "until" in task
+        and not ("ansible_check_mode" in str(task["until"]) and "ansible_check_mode" in str(task.get("ignore_errors")))
+    ]
+    assert not lax, (
+        "waits that fail a fresh node's dry run (add `or ansible_check_mode` to `until` and "
+        '`ignore_errors: "{{ ansible_check_mode }}"`):\n  ' + "\n  ".join(lax)
+    )
