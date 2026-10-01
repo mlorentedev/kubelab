@@ -8,7 +8,7 @@ created: "2026-10-01"
 ## Evidence
 
 - [x] AC1 -> `test_a_capture_missing_a_file_fails_names_it_and_never_starts_a_server` (3 cases), `test_a_corrupt_database_fails_and_never_starts_a_server`, `test_a_key_that_differs_from_live_fails` (noise, DERP); prod run below.
-- [x] AC2 -> `test_the_restored_server_has_no_network_runs_as_the_caller_and_the_pinned_image`, `test_a_node_live_had_at_snapshot_time_must_come_back_unchanged` (missing, machine key), `test_a_node_reregistered_under_the_same_name_is_matched_by_id_not_name`, `test_a_missing_user_fails_and_a_newer_one_is_reported`, `test_a_node_missing_from_the_restore_fails_and_is_named`.
+- [x] AC2 -> `test_the_restored_server_has_no_network_runs_as_the_caller_and_the_image_it_is_given`, `test_a_node_live_had_at_snapshot_time_must_come_back_unchanged` (missing, machine key), `test_a_node_reregistered_under_the_same_name_is_matched_by_id_not_name`, `test_a_missing_user_fails_and_a_newer_one_is_reported`, `test_a_node_missing_from_the_restore_fails_and_is_named`.
 - [x] AC3 -> `test_live_that_cannot_be_read_is_cannot_check` (unreachable, empty, hashes unreadable), `test_no_readable_snapshot_is_cannot_check`.
 - [x] AC4 -> `_torn_down` asserted on every failing path; `test_a_complete_restore_that_leaves_its_container_behind_fails`, `test_a_complete_restore_that_leaves_the_keys_on_disk_fails`; prod run left nothing.
 - [x] AC5 -> `docs/runbooks/offsite-backup-restore.md` "### Headscale" (drill and real restore); prod transcript below.
