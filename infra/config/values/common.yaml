@@ -2053,23 +2053,13 @@ backup:
           Log storage. Ratified tier 3 (#452, #1923 decision 1): history is lost on
           a rebuild, and nothing reads it as a record.
         tier: 3
-      crowdsec_db:
-        pvc:
-          namespace: kubelab
-          claim: crowdsec-db
-        reason: >-
-          Ban decisions, each with a TTL, plus the bouncer's registration, which the
-          deployment's `postStart` hook recreates on every start. A rebuild starts
-          with no bans and relearns them from traffic. Proposed tier 3 in BACKUP-046
-          (Q1), pending the operator.
-        tier: 3
       crowdsec_config:
         pvc:
           namespace: kubelab
           claim: crowdsec-config
         reason: >-
           Hub collections and parsers, which the image downloads again on start.
-          Proposed tier 3 in BACKUP-046 (Q1), pending the operator.
+          Ratified tier 3 (#452). Not `crowdsec-db`, which is tier 2 and a source.
         tier: 3
       traefik_acme:
         # Not rendered by the overlay: Ansible creates it through the
@@ -2149,6 +2139,20 @@ backup:
         pg_dumpall:
           deployment: postgres
           container: postgres
+      crowdsec_db:
+        # Ratified tier 2 (#452, restated in #1111): local alert history and the
+        # ban decisions. CAPI re-sends the community blocklist after a rebuild,
+        # but this instance's own detections would be gone. Downgrading it to
+        # tier 3 is an operator decision (BACKUP-046 Q1), not a default.
+        #
+        # The directory also holds ~74 MB of GeoLite2 databases from the hub,
+        # unchanged since 2026-03-21 (measured 2026-10-01). They are copied with
+        # the rest rather than excluded: restic stores them once, and a restore
+        # that works without a hub download is worth that.
+        pvc:
+          namespace: kubelab
+          claim: crowdsec-db
+        sqlite: crowdsec.db
       headscale:
         # The most valuable single source in the fleet. Besides the database it
         # holds `noise_private.key` and `derp_server_private.key` — losing those

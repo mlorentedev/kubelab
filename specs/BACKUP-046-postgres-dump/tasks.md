@@ -11,7 +11,7 @@ created: "2026-10-01"
 
 - [x] Branch `feat/backup-046-postgres-dump` from master, worktree `~/Projects/kubelab-backup-046-wt`
 - [x] Emergency copy taken and restore-checked (2026-10-01 06:51Z, see `verification.md`)
-- [ ] Q1 and Q2 answered by the operator (the drafts below proceed on the proposals)
+- [ ] Q1 answered by the operator: keep `crowdsec-db` at its ratified tier 2 (the default applied here) or downgrade it. Q2 is #1981.
 
 ## PR 1 — Postgres reaches R2, and the static guard
 
