@@ -1116,6 +1116,9 @@ def test_every_model_in_the_chain_gets_its_whole_timeout_inside_the_job() -> Non
     """
     timeout = int(_toml()["config"]["ai_timeout"])
     assert str(_review_env()["CONFIG__AI_TIMEOUT"]) == str(timeout)
+    # The chain the job runs is the env's, which overrides the toml; count it
+    # from the toml only after proving the two agree.
+    assert json.loads(_review_env()["CONFIG__FALLBACK_MODELS"]) == _toml()["config"]["fallback_models"]
     chain = 1 + len(_fallback_model_names())
     assert timeout > 300
     assert chain * timeout + 60 < int(_review_job()["timeout-minutes"]) * 60
