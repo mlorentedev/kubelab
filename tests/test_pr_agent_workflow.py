@@ -1123,6 +1123,12 @@ def test_every_model_in_the_chain_gets_its_whole_timeout_inside_the_job() -> Non
     step after it to name the failure: a cancelled job publishes nothing and
     names nothing, which is #1909, and its AC2 asks for a named failure in under
     15 min. The 60 s is setup and that step, measured at about 45 s on #1962.
+
+    Inside the step, PR-Agent works 11-13 s before its first request (config,
+    diff, prompt; runs 36806561401, 36807143031, 36807944435), so the chain gets
+    the step minus a 60 s slack. With streaming, `ai_timeout` is the HTTP
+    client's per-read timeout, not a total: run 36807143031's answer arrived
+    360 s after its request. The step limit is the only total bound.
     """
     timeout = int(_toml()["config"]["ai_timeout"])
     assert str(_review_env()["CONFIG__AI_TIMEOUT"]) == str(timeout)
@@ -1134,5 +1140,16 @@ def test_every_model_in_the_chain_gets_its_whole_timeout_inside_the_job() -> Non
     step = next(s for s in _review_job()["steps"] if "pr-agent@" in str(s.get("uses", "")))
     assert "timeout-minutes" in step, "the PR-Agent step has no limit of its own; a replayed APIError outlives the job"
     step_seconds = int(step["timeout-minutes"]) * 60
-    assert chain * timeout <= step_seconds
+    assert chain * timeout + 60 <= step_seconds
     assert step_seconds + 60 < int(_review_job()["timeout-minutes"]) * 60
+    # Time left after the cut names nothing unless the naming step runs after a
+    # failed step; the default `success()` would skip it.
+    naming = next(s for s in _review_job()["steps"] if s.get("name") == "Fail if no review was published")
+    assert "always()" in str(naming.get("if", ""))
+
+
+def test_the_workflow_reviews_with_the_toml_model() -> None:
+    """The env reaches the PR under test, the toml every later default-branch
+    read. Two models in two files is how mimo-v2.5's retirement produced a 401
+    on one path and not the other (#1909)."""
+    assert _review_env()["CONFIG__MODEL"] == _toml()["config"]["model"]
