@@ -1,0 +1,72 @@
+[
+  {
+    "id": "AI-009-hermes-ace2-f1",
+    "behavior": "Second consecutive ace2 provision reports changed=0 for every agent_stack task (AC1)",
+    "verification": "make provision NODE=ace2 ENV=staging TAGS=agent_stack 2>&1 | grep -E 'ace2 +: ok=[0-9]+ +changed=0 '",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-009-hermes-ace2-f2",
+    "behavior": "hermes-kubelab has no sudo, cannot read the dev user's credentials, and drives a rootless socket (AC2)",
+    "verification": "poetry run pytest --no-cov -q tests/test_agent_stack_role.py -k rootless_or_sudo",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-009-hermes-ace2-f3",
+    "behavior": "Rendered Hermes config fails closed and no input renders approvals.mode off (AC3)",
+    "verification": "poetry run pytest --no-cov -q tests/test_hermes_config.py",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-009-hermes-ace2-f4",
+    "behavior": "Open WebUI is bound to the Tailscale address only and has a valid OIDC client (AC4)",
+    "verification": "poetry run pytest --no-cov -q tests/test_agent_stack_role.py -k tailscale_bind tests/test_oidc_clients.py",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-009-hermes-ace2-f5",
+    "behavior": "tag:hermes is granted nothing on ace2 and no :22, :6443 or vps:8080 (AC5)",
+    "verification": "poetry run pytest --no-cov -q tests/test_agent_stack_role.py -k hermes_policy",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-009-hermes-ace2-f6",
+    "behavior": "The pre-commit hook accepts the agent's zone and refuses any other path (AC6)",
+    "verification": "poetry run pytest --no-cov -q tests/test_hermes_vault_hook.py",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-009-hermes-ace2-f7",
+    "behavior": "ace2's backup snapshot lists the Hermes state and the Open WebUI database (AC7)",
+    "verification": "poetry run pytest --no-cov -q tests/test_node_backup_role.py -k ace2",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-009-hermes-ace2-f8",
+    "behavior": "Every agent_stack service has a memory limit of at most 1.5 GB (AC8)",
+    "verification": "poetry run pytest --no-cov -q tests/test_agent_stack_role.py -k memory_limit",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-009-hermes-ace2-f9",
+    "behavior": "Open WebUI embeds and reranks through NaN and the bridge mounts the vault read-only (AC9)",
+    "verification": "poetry run pytest --no-cov -q tests/test_agent_stack_role.py -k rag_or_bridge",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-009-hermes-ace2-f10",
+    "behavior": "Every stack credential is a SECRET_CATALOG entry and rendered env files are 0600 (AC10)",
+    "verification": "poetry run pytest --no-cov -q tests/test_agent_stack_role.py -k env_mode",
+    "state": "pending",
+    "evidence": ""
+  }
+]
