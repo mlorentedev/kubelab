@@ -868,8 +868,8 @@ def _fallback_model_names() -> set[str]:
 
     The prefix differs between the two files by design and comparing full ids
     would make this guard either vacuous or permanently red: the toml says
-    `openai/mimo-v2.5` because LiteLLM reaches NaN over the OpenAI-compatible
-    transport, while the pool says `nan/mimo-v2.5` because that is the provider
+    `openai/mimo-v2.6-flash` because LiteLLM reaches NaN over the OpenAI-compatible
+    transport, while the pool says `nan/mimo-v2.6-flash` because that is the provider
     a reviewer records. Same model, two namespaces.
     """
     raw = re.search(r"^fallback_models\s*=\s*\[(.*?)\]", PR_AGENT_CONFIG.read_text(), re.M | re.S)
@@ -1040,3 +1040,44 @@ def test_a_run_the_job_skips_cannot_cancel_one_that_reviews() -> None:
     skipped = {_evaluate(group, run) for run in runs if not _evaluate(job_if, run)}
     assert reviewed and skipped, "every run reviews, or none does: the fixture no longer exercises the job's if:"
     assert not reviewed & skipped, f"a skipped run shares a group with a reviewing one: {sorted(reviewed & skipped)}"
+
+
+# --- the reviewer's time and findings budget, held in two files -------------
+
+
+def _review_env() -> dict:
+    step = next(s for s in _review_job()["steps"] if "pr-agent@" in str(s.get("uses", "")))
+    return step.get("env", {})
+
+
+def _toml() -> dict:
+    import tomllib
+
+    return tomllib.loads(PR_AGENT_CONFIG.read_text(encoding="utf-8"))
+
+
+def test_a_hung_model_is_not_retried_before_the_fallback_runs() -> None:
+    """A model that hangs past `ai_timeout` hangs again. PR-Agent's default
+    retries the SAME model on timeout, three attempts each, so two models cost
+    2 x 3 x 120 s = 720 s before "Failed to review PR". Measured on five runs on
+    2026-09-30 and 2026-10-01 (#1909): 720 s +/- 9 s from `PR diff` to the publish
+    check, every one publishing nothing. With no same-model retry the same failure
+    costs 240 s, so the shared inference slot cycles three times faster.
+
+    Asserted in BOTH files: PR-Agent reads `.pr_agent.toml` from the default
+    branch, the workflow from the PR head, so only the env value reaches the PR
+    that changes it, and the toml value is what every later PR inherits.
+    """
+    assert _toml()["config"].get("retry_same_model_on_timeout") is False
+    assert str(_review_env().get("CONFIG__RETRY_SAME_MODEL_ON_TIMEOUT")).lower() == "false"
+
+
+def test_a_review_can_report_more_findings_than_the_upstream_default() -> None:
+    """PR-Agent 0.46.0 marks a review `complete` only when it reports FEWER
+    findings than `num_max_findings` (`allow_resolution` in `pr_reviewer.py`):
+    at the cap, there may be more it did not say. At the default of 3, any review
+    with three findings is partial by construction, and the merge rule requires a
+    complete one. #1955 hit it on two heads in a row with three real findings each.
+    """
+    assert int(_toml()["pr_reviewer"]["num_max_findings"]) > 3
+    assert int(_review_env()["PR_REVIEWER__NUM_MAX_FINDINGS"]) == int(_toml()["pr_reviewer"]["num_max_findings"])

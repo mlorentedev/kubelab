@@ -400,7 +400,9 @@ jobs:
           # PR-Agent loads .pr_agent.toml from the default branch, so the PR that changes
           # the model there reviews with the old one until merge; the workflow file is
           # read from the PR head, so the model travels here too. Keep the two in step.
-          CONFIG__MODEL: openai/mimo-v2.5
+          CONFIG__MODEL: openai/mimo-v2.6-flash
+          CONFIG__RETRY_SAME_MODEL_ON_TIMEOUT: "false"
+          PR_REVIEWER__NUM_MAX_FINDINGS: "5"
           CONFIG__FALLBACK_MODELS: '["openai/deepseek-v4-flash"]'
           CONFIG__CUSTOM_MODEL_MAX_TOKENS: "200000"
           CONFIG__PUBLISH_OUTPUT_PROGRESS: false

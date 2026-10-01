@@ -20,7 +20,13 @@
 # `openai/` selects LiteLLM's OpenAI-compatible transport; the endpoint is NaN's,
 # set as OPENAI__API_BASE in the workflow. Nothing here talks to OpenAI.
 #
-# mimo-v2.5 leads, deepseek-v4-flash follows, and the order was the other way
+# mimo-v2.6-flash leads, deepseek-v4-flash follows. mimo-v2.6-flash replaced
+# mimo-v2.5 on 2026-10-01: NaN retired the older model, which answers 401 "This
+# API key does not have access to the requested model", so every review rode the
+# fallback alone. Admitted to harness/reviewer-pool.json on the same bar, see its
+# entry. What follows was measured on mimo-v2.5 and is carried over, not re-run.
+#
+# mimo leads, deepseek follows, and the order was the other way
 # round until #1205 measured why it could not work. deepseek returns a 200 with
 # an empty body — it spends its OUTPUT budget on the reasoning chain and never
 # writes the answer — which raises no exception, so LiteLLM never consults the
@@ -35,7 +41,13 @@
 # is not a quality ranking — none exists, and harness/reviewer-pool.json says so
 # in its own entry. For a reviewer whose current failure is silence, delivering
 # an answer is the property being selected for.
-model = "openai/mimo-v2.5"
+model = "openai/mimo-v2.6-flash"
+
+# A model that hangs past `ai_timeout` (120 s) hangs again, and upstream retries
+# the SAME model on timeout before moving on: 2 models x 3 attempts x 120 s =
+# 720 s of silence before "Failed to review PR", measured on every failed run of
+# #1909. Off, a hung primary costs one timeout and the fallback runs next.
+retry_same_model_on_timeout = false
 
 # ONE fallback, and it is not the cheap kind this line used to forbid.
 #
@@ -96,6 +108,11 @@ response_language = "en-US"
 repo_context_files = ["AGENTS.md", "CLAUDE.md"]
 
 [pr_reviewer]
+# Upstream's default is 3, and a review is `complete` only with FEWER findings
+# than this (`allow_resolution`, pr_reviewer.py): at the cap there may be more it
+# did not say. The merge rule requires a complete review, so at 3 any review with
+# three real findings blocked the merge by construction (#1955, two heads).
+num_max_findings = 5
 require_score_review = false
 require_tests_review = true
 require_security_review = true
