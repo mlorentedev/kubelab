@@ -24,6 +24,8 @@ tags: [kubelab, ansible-provisioning, idempotence, jinja, dev-node]
 
 Two consecutive provisions then reported `ok=57 changed=0 failed=0`, and `ssh -T` from ace2 authenticated as the machine identity for the first time.
 
+The ticket's third symptom, the dotfiles `git:` task reporting `changed`, was measured instead of silenced. It reported `changed` on the first pass and `ok` on the seven after it. The clone's reflog on ace2 shows one SHA change for each move of `origin/main`, and the dotfiles repository moves several times a day. So the task tells the truth: it updates the clone. A `changed_when` there would hide the clone falling behind.
+
 **Rule**:
 - **Run a fix to the end of the role, and keep running it.** A converging task can unmask a failing one behind it, and a recap that ends early counts nothing after the failure.
 - **Never write a backreference as `'\N'` in a Jinja string.** It becomes a control character, and the regex silently replaces with garbage.

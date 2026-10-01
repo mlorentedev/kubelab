@@ -107,3 +107,12 @@ def test_the_forge_key_is_looked_up_by_fingerprint() -> None:
     assert "regex_replace" not in register["when"]
     assert "_gitea_keys.json" in register["when"]
     assert register["changed_when"] == "_gitea_key_post.status == 201", "a POST that creates a key is a change"
+
+
+def test_the_forge_key_lookup_survives_a_dry_run() -> None:
+    """`--check` skips a `command` task, and the lookup templates its stdout."""
+    fingerprint = _task_named("Fingerprint the public half, to look it up on the forge")
+    lookup = _task_named("Look up this node's key on the machine account")
+    assert fingerprint.get("check_mode") is False
+    assert lookup.get("check_mode") is False
+    assert lookup.get("when") == "_gitea_key_fp.rc == 0"

@@ -534,6 +534,12 @@
         cmd: "ssh-keygen -l -E sha256 -f {{ dev_node_gitea_key_path }}.pub"
       changed_when: false
       register: _gitea_key_fp
+      # Read-only, so it runs in a dry run too: a `command` skipped by `--check`
+      # leaves no stdout for the lookup below to template (lessons 392/397). On a
+      # fresh node in check mode the key does not exist yet, so a failure is only
+      # fatal in a real run.
+      check_mode: false
+      failed_when: _gitea_key_fp.rc != 0 and not ansible_check_mode
 
     # Registration runs on the CONTROLLER: the bot token is the credential that
     # can add a key to the account, and it has no business being on the node.
@@ -556,6 +562,9 @@
       changed_when: false
       no_log: true
       register: _gitea_keys
+      # A GET, so it is as safe in a dry run as the fingerprint above.
+      check_mode: false
+      when: _gitea_key_fp.rc == 0
 
     - name: Register this node's public key on the machine account
       ansible.builtin.uri:
