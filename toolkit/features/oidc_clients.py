@@ -86,6 +86,30 @@ def _validate(client: dict[str, Any]) -> None:
         raise OidcClientError(f"OIDC client '{name}' declares invalid envs {client['envs']!r}")
 
 
+_SCHEMES = ("https", "http")
+
+
+def _redirect_uri(values: dict[str, Any], client_id: str, redirect: dict[str, Any], host: str, env: str) -> str:
+    """`https://<host><path>` unless the client declares otherwise.
+
+    `scheme` and `port` exist for a service no route serves, reached at its
+    node's MagicDNS name on its own port (AI-009 R8). `port` is a key path like
+    `domain`, so the service's port has one declaration.
+    """
+    scheme = redirect.get("scheme", "https")
+    if scheme not in _SCHEMES:
+        raise OidcClientError(f"OIDC client '{client_id}': redirect scheme '{scheme}' is not one of {_SCHEMES}")
+    authority = host
+    if "port" in redirect:
+        port = _lookup(values, redirect["port"])
+        if not isinstance(port, int) or isinstance(port, bool):
+            raise OidcClientError(
+                f"OIDC client '{client_id}': redirect port '{redirect['port']}' resolves to no port in {env}"
+            )
+        authority = f"{host}:{port}"
+    return f"{scheme}://{authority}{redirect['path']}"
+
+
 def resolve_clients(values: dict[str, Any], env: str) -> list[dict[str, Any]]:
     """The clients registered in `env`, in Authelia's shape, without `client_secret`."""
     resolved = []
@@ -100,6 +124,7 @@ def resolve_clients(values: dict[str, Any], env: str) -> list[dict[str, Any]]:
                 f"OIDC client '{client['client_id']}': redirect domain '{redirect['domain']}' "
                 f"resolves to nothing in {env}"
             )
+        redirect_uri = _redirect_uri(values, client["client_id"], redirect, host, env)
         resolved.append(
             {
                 "client_id": client["client_id"],
@@ -109,7 +134,7 @@ def resolve_clients(values: dict[str, Any], env: str) -> list[dict[str, Any]]:
                 "public": False,
                 "authorization_policy": client["authorization_policy"],
                 "token_endpoint_auth_method": client["token_endpoint_auth_method"],
-                "redirect_uris": [f"https://{host}{redirect['path']}"],
+                "redirect_uris": [redirect_uri],
                 "scopes": list(client["scopes"]),
                 "consent_mode": client["consent_mode"],
                 # Optional: absent means Authelia's default, an opaque token.

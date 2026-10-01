@@ -71,6 +71,42 @@ class TestResolve:
         with pytest.raises(oidc_clients.OidcClientError, match="grafana"):
             oidc_clients.resolve_clients(_values([client]), "prod")
 
+    def test_a_tailnet_client_declares_its_scheme_and_port(self) -> None:
+        """A service with no route is reached at its node's MagicDNS name over
+        plain HTTP on its own port (AI-009 R8), and the redirect URI must say so."""
+        client = _grafana(
+            redirect={
+                "domain": "apps.services.ai.webui.host",
+                "scheme": "http",
+                "port": "apps.services.ai.webui.port",
+                "path": "/oauth/oidc/callback",
+            }
+        )
+        values = _values([client])
+        values["apps"]["services"]["ai"] = {"webui": {"host": "ace2.example.internal", "port": 3080}}
+
+        [resolved] = oidc_clients.resolve_clients(values, "prod")
+
+        assert resolved["redirect_uris"] == ["http://ace2.example.internal:3080/oauth/oidc/callback"]
+
+    def test_a_port_reference_that_resolves_to_nothing_fails(self) -> None:
+        client = _grafana(
+            redirect={
+                "domain": "apps.services.observability.grafana.domain",
+                "port": "apps.services.observability.grafana.nope",
+                "path": "/cb",
+            }
+        )
+
+        with pytest.raises(oidc_clients.OidcClientError, match="grafana.*port"):
+            oidc_clients.resolve_clients(_values([client]), "prod")
+
+    def test_only_http_and_https_are_schemes(self) -> None:
+        client = _grafana(redirect={"domain": "apps.services.observability.grafana.domain", "scheme": "ftp", "path": "/cb"})
+
+        with pytest.raises(oidc_clients.OidcClientError, match="grafana.*scheme"):
+            oidc_clients.resolve_clients(_values([client]), "prod")
+
     def test_an_unknown_env_fails(self) -> None:
         with pytest.raises(oidc_clients.OidcClientError, match="grafana"):
             oidc_clients.resolve_clients(_values([_grafana(envs=["prdo"])]), "prod")
