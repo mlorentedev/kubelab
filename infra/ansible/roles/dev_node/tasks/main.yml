@@ -148,14 +148,28 @@
       tags: [dev_node, mise]
 
     # --- Agent CLI tooling (Claude Code, etc.) ---
+    # `state: present`, not a shelled `npm install -g` (#1300). npm prints
+    # `changed N packages` for a package already installed at the same version,
+    # so a changed_when parsing its output matched every pass. The module lists
+    # the global tree and installs only what is missing.
+    #
+    # Not pinned: Claude Code updates itself in place, so a pinned version would
+    # be moved forward by the updater and back by the next provision, reporting
+    # changed every time. Ansible owns that the tool exists; the updater owns its
+    # version. tests/test_dev_node_npm_converges.py.
     - name: Install global agent CLI tools via mise node npm
-      ansible.builtin.command:
-        cmd: "{{ dev_node_home }}/.local/bin/mise exec -- npm install -g {{ item }}"
+      community.general.npm:
+        name: "{{ item }}"
+        global: true
+        state: present
+        executable: "{{ _dev_node_mise_node_bin }}/npm"
       environment:
-        PATH: "{{ dev_node_home }}/.local/bin:/usr/local/bin:/usr/bin:/bin:{{ ansible_env.PATH | default('') }}"
+        # mise's bin/npm is a script that execs `node`, so the pinned node must
+        # be on PATH, not only npm's own path.
+        PATH: "{{ _dev_node_mise_node_bin }}:/usr/local/bin:/usr/bin:/bin"
+      vars:
+        _dev_node_mise_node_bin: "{{ dev_node_home }}/.local/share/mise/installs/node/{{ dev_node_toolchains.node }}/bin"
       loop: "{{ dev_node_global_agent_npm_packages }}"
-      register: _npm_global_install
-      changed_when: "'added' in _npm_global_install.stdout or 'changed' in _npm_global_install.stdout"
       tags: [dev_node, mise, agents]
 
 
