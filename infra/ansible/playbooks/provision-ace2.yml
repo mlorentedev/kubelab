@@ -253,7 +253,7 @@
     - role: ../roles/agent_stack
       tags: [agent_stack]
       vars:
-        agent_stack_tailscale_ip: "{{ config.networking.nodes.ace2.tailscale_ip }}"
+        tailscale_ip: "{{ config.networking.nodes.ace2.tailscale_ip }}"
         agent_stack_webui: "{{ config.apps.services.ai.open_webui }}"
         agent_stack_webui_oidc_client_id: open-webui-oidc
         agent_stack_oidc_issuer: "https://{{ gitea_config.apps.services.security.authelia.domain }}"

@@ -158,7 +158,7 @@
 
     - name: Verify Open WebUI answers on the Tailscale address
       ansible.builtin.uri:
-        url: "http://{{ agent_stack_tailscale_ip }}:{{ agent_stack_webui.default_port }}/health"
+        url: "http://{{ tailscale_ip }}:{{ agent_stack_webui.default_port }}/health"
         status_code: 200
         timeout: 10
       register: _agent_stack_health

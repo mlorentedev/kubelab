@@ -31,7 +31,7 @@ def _context() -> dict:
     return {
         **defaults,
         "ansible_managed": "managed",
-        "agent_stack_tailscale_ip": common["networking"]["nodes"]["ace2"]["tailscale_ip"],
+        "tailscale_ip": common["networking"]["nodes"]["ace2"]["tailscale_ip"],
         "agent_stack_webui": common["apps"]["services"]["ai"]["open_webui"],
         "agent_stack_webui_oidc_client_id": "open-webui-oidc",
         "agent_stack_oidc_issuer": "https://auth.example.test",
@@ -77,7 +77,7 @@ def test_every_service_is_memory_bounded_under_the_adr_limit() -> None:
 
 def test_the_port_is_published_on_the_tailscale_address_only() -> None:
     """A bare `<port>:8080` listens everywhere, and ufw cannot restrict it (#959)."""
-    ip = _context()["agent_stack_tailscale_ip"]
+    ip = _context()["tailscale_ip"]
     compose = yaml.safe_load(_render("compose-webui.yml.j2"))
     for name, service in compose["services"].items():
         for port in service.get("ports", []):

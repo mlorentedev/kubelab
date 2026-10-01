@@ -7,7 +7,9 @@ agent_stack_webui_project: agent-stack-webui
 
 # Inputs set by the playbook (no defaults on purpose, so a missing SSOT key
 # fails the play instead of rendering an empty value):
-#   agent_stack_tailscale_ip, agent_stack_webui (the apps.services.ai.open_webui
+#   tailscale_ip (the fleet name, so the boot-race guard in
+#   tests/test_tailscale_bound_ports_survive_boot.py sees the bind),
+#   agent_stack_webui (the apps.services.ai.open_webui
 #   map), agent_stack_webui_oidc_client_id, agent_stack_oidc_issuer.
 
 # Delivered from prod SOPS by the playbook. Empty means "not configured": the

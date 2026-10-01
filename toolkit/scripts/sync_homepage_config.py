@@ -462,6 +462,23 @@ def build_service_tables(
             "Edge AI · on-demand",
         ),
     ]
+    # AI-009 (ADR-068): tailnet-only on ace2, with no route, so the address is
+    # the declared scheme, host and port. Absent from the SSOT, absent here.
+    open_webui = services.get("ai", {}).get("open_webui", {})
+    if open_webui:
+        webui_url = f"{open_webui['scheme']}://{open_webui['host']}:{open_webui['default_port']}"
+        shared.append(
+            _svc(
+                "Open WebUI",
+                webui_url,
+                f"{webui_url}/health",
+                "Authelia (OIDC)",
+                "AI",
+                "ace2",
+                "Chat over NaN models · on-demand",
+                version=_ver(open_webui.get("image", "")),
+            )
+        )
 
     return staging, prod, shared
 

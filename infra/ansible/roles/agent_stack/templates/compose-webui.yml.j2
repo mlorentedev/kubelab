@@ -13,7 +13,7 @@ services:
     # every interface, and ufw cannot restrict a Docker-published port (the
     # rpi3_services rule). Reached at {{ agent_stack_webui.scheme }}://{{ agent_stack_webui.host }}:{{ agent_stack_webui.default_port }}.
     ports:
-      - "{{ agent_stack_tailscale_ip }}:{{ agent_stack_webui.default_port }}:{{ agent_stack_webui.container_port }}"
+      - "{{ tailscale_ip }}:{{ agent_stack_webui.default_port }}:{{ agent_stack_webui.container_port }}"
     env_file:
       - {{ agent_stack_dir }}/webui.env
     volumes:

@@ -13,7 +13,7 @@ Wants=network-online.target tailscaled.service
 Type=oneshot
 RemainAfterExit=yes
 TimeoutStartSec=180
-ExecStartPre={{ agent_stack_dir }}/wait-for-tailscale-addr.sh {{ agent_stack_tailscale_ip }}
+ExecStartPre={{ agent_stack_dir }}/wait-for-tailscale-addr.sh {{ tailscale_ip }}
 # --force-recreate: a container left unbound by a lost boot race has an
 # unchanged spec hash, so a plain `up -d` would leave it alone (glances unit).
 ExecStart=/usr/bin/docker compose -p {{ agent_stack_webui_project }} -f {{ agent_stack_dir }}/compose-webui.yml up -d --force-recreate
