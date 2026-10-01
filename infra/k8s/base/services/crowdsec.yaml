@@ -147,6 +147,12 @@ spec:
               value: "1000"
             - name: COLLECTIONS
               value: "crowdsecurity/traefik crowdsecurity/http-cve crowdsecurity/linux"
+            # WAL, so node-backup's hourly `.backup` of crowdsec-db reads while
+            # CrowdSec writes. In rollback-journal mode a commit locks readers
+            # out (#1984). docker_start.sh sets db_config.use_wal from this on
+            # every start, and SQLite keeps the mode in the file.
+            - name: USE_WAL
+              value: "true"
             - name: BOUNCER_KEY_crowdsec-bouncer
               valueFrom:
                 secretKeyRef:
