@@ -16,6 +16,18 @@ created: "2026-06-20"
 
 Accepted — 2026-06-20. Output of an `/architecture-session`. Builds on ADR-026 (IDP 4-layer), ADR-029 (intelligence layer), ADR-042 (reference architecture), ADR-043 (knowledge/memory plane). Gives the `kubelab-console` component spec (2026-02-21) its concrete shape and **absorbs DASH-001** (Homepage cockpit). **Retires the GitHub Projects v2 _board_ as the task surface** (see D3) while preserving GitHub/Gitea _issues_. **Supersede-candidate for the Open WebUI operator-console role** of ADR-042 (see D5). Triggers a follow-up review of the cross-project bitácora governance (issue tracking currently spans `kubelab` / `iris` / `knowledge` GitHub Projects).
 
+## Amendment — 2026-10-01 (D5 default with no local provider)
+
+**A Context with no explicit policy now has no provider: explicit deny, no inference.** D5 made the default "local-only (Ollama)", and AI-007 retired Ollama on 2026-08-09 (ADR-029's amendment). Read literally, "local-only" then named a provider that does not exist, and the two ways to fill that gap point in opposite directions: route to whatever provider is configured, or route nowhere. The first silently turns a security control into a cloud default. The operator chose the second (#1968, 2026-10-01).
+
+- A Context with no explicit provider policy resolves to **no provider**. A routing decision for it is refused, not degraded.
+- Cloud providers still require an explicit per-context grant, unchanged. Employer and client contexts get no provider until they are granted one.
+- When a local provider exists again, the default reverts to local-only. ADR-029 defers local inference until a GPU node exists; it does not replace it, so this amendment is the interim state, not the target.
+
+The control is unchanged in kind: D5 was always default-deny for cloud egress. What changes is the fallback, from "local" to "none", because "local" currently resolves to nothing.
+
+**Amended, not superseded**: D1-D4, D6 and D7 are unaffected. CONSOLE-002, the spec that implements D5, is updated in the same change.
+
 ## Context
 
 The session began as "replace GitHub Projects as the bitácora" and converged, through brainstorming, on something larger: a single **cross-context command center** — the operator's one place to run all work across separate life-contexts (personal projects, employer work, freelance/client work). The driver is constant context-switching: with work scattered across forges, boards, and notes, nothing has a single picture, so prioritization and deadlines slip. Centralizing gives an LLM a live photograph of all work so it can help prioritize, schedule, and orchestrate, with multi-channel task capture (chat, email, Telegram) and federation of the operator's own products (IRIS today, others later).
@@ -80,7 +92,7 @@ The decision affects cross-instance reuse (a federation/module contract that wil
 
 **D4 — `Context` is the central primitive.** Each Context (personal / employer / freelance-client / demo) carries: isolation level, allowed LLM providers + keys, visibility (demoable?), and owner. **Work items and PRs belong to a Context** and carry an **append-only event/transition history** (created, re-prioritized, deadline moved, done) so the LLM sees _trajectory_ (slippage, real-vs-estimated duration, velocity), not just a snapshot. Federated products declare which Contexts they serve.
 
-**D5 — Per-context LLM routing, default-deny.** The `Context → allowed-providers` policy is a **security control**: a Context with no explicit policy is local-only (Ollama). Cloud providers require an explicit per-context grant; employer/client contexts default to local-only. Routing is per-context (cloud + local, chosen by the work at hand), not a single global rule. The console's chat panel makes the standalone Open WebUI operator-console role (ADR-042) a **supersede-candidate** — confirm during AI-003.
+**D5 — Per-context LLM routing, default-deny.** The `Context → allowed-providers` policy is a **security control**: a Context with no explicit policy is local-only (Ollama). _(Amended 2026-10-01: with Ollama retired, the default is no provider. See the amendment above.)_ Cloud providers require an explicit per-context grant; employer/client contexts default to local-only. Routing is per-context (cloud + local, chosen by the work at hand), not a single global rule. The console's chat panel makes the standalone Open WebUI operator-console role (ADR-042) a **supersede-candidate** — confirm during AI-003.
 
 **D6 — Prioritization = explicit rubric the LLM applies.** The ranking policy (deadline proximity, context/energy fit, dependencies, value, WIP-aging) is a first-class, inspectable artifact; the LLM is the _interface_ to it, not the authority. This makes the recommendation trustworthy enough to use daily and explainable in a talk ("here is my prioritization model; the LLM executes it").
 
