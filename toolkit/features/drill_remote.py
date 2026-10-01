@@ -110,7 +110,10 @@ def preflight(git: GitRun, root: Path) -> Optional[str]:
         logger.error(f"drill: CANNOT CHECK — git could not list remote branches: {err.strip()[:160]}")
         return None
     if not any(line.strip().startswith("origin/") for line in branches.splitlines()):
-        logger.error(f"drill: CANNOT CHECK — origin does not have {sha[:12]}; push it first")
+        logger.error(
+            f"drill: CANNOT CHECK — no origin/* branch here contains {sha[:12]}; "
+            "push it, or `git fetch origin` if these refs are stale"
+        )
         return None
     return sha
 
@@ -150,6 +153,10 @@ def drill_on_host(
         return False
     try:
         net = ConfigurationManager(env, root).get_plaintext_values()["networking"]
+    except KeyError:
+        logger.error(f"drill: CANNOT CHECK — the {env} config declares no networking block")
+        return False
+    try:
         target = ssh_target(net, host)
     except KeyError:
         logger.error(f"drill: CANNOT CHECK — networking.nodes.{host} is not declared")

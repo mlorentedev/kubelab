@@ -16,6 +16,8 @@ import pytest
 import yaml
 from typer.testing import CliRunner
 
+from tests.test_gitea_drill import _Fake as _GiteaFake
+from tests.test_gitea_drill import _Live as _GiteaLive
 from tests.test_headscale_drill import IMAGE, STAGING, _Fake
 from toolkit.cli.backup import app
 from toolkit.features import drill_remote, gitea_drill, headscale_drill
@@ -168,7 +170,7 @@ def _git(porcelain: str = "", remote_branches: str = "  origin/feat/x\n", rc: in
     [
         (_git(porcelain=" M toolkit/features/gitea_drill.py\n"), "the tree has uncommitted changes"),
         (_git(porcelain="?? scratch.txt\n"), "the tree has uncommitted changes"),
-        (_git(remote_branches=""), "origin does not have"),
+        (_git(remote_branches=""), "git fetch origin"),
         (_git(rc=128), "git"),
     ],
     ids=["modified", "untracked", "unpushed", "git-fails"],
@@ -193,8 +195,12 @@ def test_a_clean_pushed_tree_sends_its_head(monkeypatch) -> None:
     assert SHA in " ".join(argv)
 
 
-@pytest.mark.parametrize("values", [{}, {"networking": {"nodes": {}}}], ids=["no-networking", "undeclared-host"])
-def test_a_host_the_config_cannot_place_is_cannot_check(monkeypatch, capsys, values) -> None:
+@pytest.mark.parametrize(
+    "values, named",
+    [({}, "declares no networking block"), ({"networking": {"nodes": {}}}, "networking.nodes.ace2")],
+    ids=["no-networking", "undeclared-host"],
+)
+def test_a_host_the_config_cannot_place_is_cannot_check(monkeypatch, capsys, values, named) -> None:
     from toolkit.features import configuration
 
     stream = _Stream()
@@ -204,7 +210,7 @@ def test_a_host_the_config_cannot_place_is_cannot_check(monkeypatch, capsys, val
         "gitea", env="prod", host="ace2", project_root=REPO, git=_git(), stream=stream
     )
     out = " ".join(capsys.readouterr().out.split())
-    assert "CANNOT CHECK" in out and "networking.nodes.ace2" in out
+    assert "CANNOT CHECK" in out and named in out
     assert not stream.calls
 
 
@@ -274,6 +280,43 @@ def test_a_real_restore_on_the_host_writes_no_injected_value_to_disk(tmp_path, m
     monkeypatch.setattr(headscale_drill.shutil, "rmtree", inspect_then_remove)
     payload = json.dumps({"drill": "headscale", "inputs": _headscale_inputs()})
     result = CliRunner().invoke(app, ["drill-headscale", "--inputs-stdin"], input=payload)
+    assert result.exit_code == 0, result.output
+    written += [p for p in tmp_path.rglob("*") if p.is_file()]
+    assert written, "the fake restore wrote nothing, so this test would prove nothing"
+    leaked += [str(p) for p in written if p.exists() for s in _all_secrets() if s.encode() in p.read_bytes()]
+    assert not leaked
+
+
+def test_a_real_gitea_restore_on_the_host_writes_no_injected_value_to_disk(tmp_path, monkeypatch, no_config) -> None:
+    monkeypatch.setattr("tempfile.tempdir", str(tmp_path))
+    written: list[Path] = []
+    leaked: list[str] = []
+
+    def scan(root: Path) -> None:
+        for f in root.rglob("*"):
+            if f.is_file():
+                written.append(f)
+                leaked.extend(str(f) for s in _all_secrets() if s.encode() in f.read_bytes())
+
+    fake = _GiteaFake()
+
+    def run(argv, *, env=None):
+        # The root-run wipe empties the tree before rmtree sees it, so read it here too.
+        if argv[:3] == ["docker", "run", "--rm"]:
+            scan(Path(argv[argv.index("-v") + 1].split(":")[0]))
+        return fake(argv, env=env)
+
+    monkeypatch.setattr(gitea_drill, "_default_run", run)
+    monkeypatch.setattr("toolkit.features.gitea_client.GiteaClient", lambda url, token: _GiteaLive())
+    real_rmtree = gitea_drill.shutil.rmtree
+
+    def inspect_then_remove(path, *a, **kw):
+        scan(Path(path))
+        return real_rmtree(path, *a, **kw)
+
+    monkeypatch.setattr(gitea_drill.shutil, "rmtree", inspect_then_remove)
+    payload = json.dumps({"drill": "gitea", "inputs": _gitea_inputs()})
+    result = CliRunner().invoke(app, ["drill-gitea", "--inputs-stdin"], input=payload)
     assert result.exit_code == 0, result.output
     written += [p for p in tmp_path.rglob("*") if p.is_file()]
     assert written, "the fake restore wrote nothing, so this test would prove nothing"

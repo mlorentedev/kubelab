@@ -430,6 +430,7 @@ def run_from_inputs(inputs: dict[str, Any]) -> bool:
         image=str(inputs["image"]),
         admin_user=str(inputs["admin_user"]),
         live=GiteaClient(str(inputs["gitea_url"]), str(inputs["token"])),
+        run=_default_run,
     )
 
 
