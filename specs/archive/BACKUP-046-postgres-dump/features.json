@@ -4,34 +4,34 @@
     "behavior": "AC2: the capture stages a complete pg_dumpall and refuses a failed or truncated one",
     "verification": "poetry run pytest -q -p no:cacheprovider --no-cov tests/test_node_backup_capture_postgres.py tests/test_backup_sources.py",
     "state": "pending",
-    "evidence": ""
+    "evidence": "2026-10-01 on d7d58861: 17 passed (truncated dump and failed exec each exit non-zero, name the source, leave no sentinel)"
   },
   {
     "id": "BACKUP-046-postgres-dump-f2",
     "behavior": "AC3: every prod PVC has a ruling, and every exclusion is tier 3 with a reason",
     "verification": "poetry run pytest -q -p no:cacheprovider --no-cov tests/test_backup_pvc_coverage.py tests/test_backup_volume_coverage.py",
     "state": "pending",
-    "evidence": ""
+    "evidence": "2026-10-01 on d7d58861: 8 passed; test_every_exclusion_is_tier_3_with_a_reason mutated (tier 2, reason renamed) went red each time"
   },
   {
     "id": "BACKUP-046-postgres-dump-f3",
     "behavior": "AC1: the VPS snapshot in R2 contains postgres/pg_dumpall.sql with the completion trailer",
-    "verification": "make backup-drill-postgres ENV=prod (names the snapshot it restored and the trailer it found)",
+    "verification": "make backup-drill-postgres ENV=prod",
     "state": "pending",
-    "evidence": ""
+    "evidence": "2026-10-01 prod: make backup-drill-postgres ENV=prod read /opt/node-backup/staging/postgres/pg_dumpall.sql from snapshot 00b263a5, 73875 bytes with the completion trailer; rerun 15:09Z on 46f892f1"
   },
   {
     "id": "BACKUP-046-postgres-dump-f4",
     "behavior": "AC4: make backup-coverage names every live PVC with no ruling",
     "verification": "make backup-coverage ENV=prod",
     "state": "pending",
-    "evidence": ""
+    "evidence": "2026-10-01 21:40Z prod: make backup-coverage ENV=prod rc=0, 4 nodes covered, 'all 8 live claims on vps have a backup ruling'"
   },
   {
     "id": "BACKUP-046-postgres-dump-f5",
     "behavior": "AC5: the newest dump in R2 restores completely: every live database and table exists, none with live rows comes back empty",
     "verification": "make backup-drill-postgres ENV=prod",
     "state": "pending",
-    "evidence": ""
+    "evidence": "2026-10-01 prod: make backup-drill-postgres ENV=prod rc=0, snapshot 46f892f1 restores completely (34 tables, all match live), no volume left behind"
   }
 ]

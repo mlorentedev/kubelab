@@ -77,3 +77,20 @@ Rerun at 09:20Z on the same snapshot: `restores completely (34 tables)`, rc 0, a
 
 - `docs/runbooks/offsite-backup-restore.md`: "Postgres" under restoring (drill, whole-cluster loss, one damaged database) and "Adding a stateful service".
 - `docs/lessons/storage-backup/lesson-495-a-backup-exclusion-with-a-trigger-is-a-promise-nobody-keeps.md` (merged in #1979).
+
+## Review findings (review.md, nan/mimo-v2.6-flash, PASS-WITH-GAPS on `a5adf858`)
+
+| Finding | Disposition | Evidence |
+|---|---|---|
+| Major (THEORETICAL): the trust-auth scratch Postgres ran on the default bridge, unlike the three sibling drills | **Applied** in `238a4c4b`. The container now runs with `--network none`. `pg_isready -h 127.0.0.1` still answers on loopback. | `test_the_trust_auth_server_has_no_network`. With the flag removed, 1 failed. Rerun live on prod at 22:08Z from `238a4c4b`: snapshot `024a9582` `restores completely (34 tables)`, rc 0, no `pgdrill` container left. |
+| Minor: the deleted retired-PVC test kept grafana/crowdsec/loki out of `backup.sources.vps`; only the postgres half was replaced | **Declined, accepted on purpose.** Moving a claim from `excluded` into `sources` is the safe direction: it adds a backup and loses nothing. `test_no_claim_is_both_backed_up_and_excluded` still refuses a claim that is in both. A test forbidding a backup would lock in a tier-3 ruling that should stay reversible. | none |
+| Minor: `_load_and_check` is 118 lines, and no gate holds the bar | **Ticketed.** #2015 item 3 already covers the four drills' complexity and the missing `C901` gate. The Postgres function was added there (comment on #2015). Splitting it here would refactor a drill just verified live, outside this spec. | #2015 |
+| Minor (SPECULATIVE): `check_claim_rulings` passes when a cluster node declares no backups at all | **Declined.** The static guard `test_every_prod_claim_has_a_backup_ruling` fails in that scenario, before anything ships, and the live guard reports it rather than staying silent. The pass is pinned on purpose: on a node with no declarations, the static guard is the decision. | `test_a_cluster_node_with_no_backups_declared_is_reported_and_skipped` |
+| Minor (SPECULATIVE): `pg_dumpall.deployment`/`container` are rendered unquoted into the capture script | **Applied** in `238a4c4b`. The schema test now requires both to be Kubernetes names. | Mutating `deployment` to `"postgres; id"` failed with `is not a Kubernetes name`. |
+| Question: `features.json` entries are `pending` with evidence filled | **Answered.** Only the harness may write `passing`, after it runs each verification. An agent writing it is what reviewers are told to reject. | none |
+
+## Promotion candidates
+
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/storage-backup/lesson-495-a-backup-exclusion-with-a-trigger-is-a-promise-nobody-keeps.md
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: the tier-2 ruling and the logical-dump method apply the existing backup tiers in `common.yaml` and decide nothing architectural
+- [x] New pattern candidate for `00_meta/patterns/`? no: one project, one engine
