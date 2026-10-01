@@ -285,4 +285,8 @@ class TestPvcSources:
                     bad.append(f"{node}.{name}: pg_dumpall and sqlite together")
                 if set(entry["pg_dumpall"]) != {"deployment", "container"}:
                     bad.append(f"{node}.{name}: pg_dumpall needs exactly deployment+container")
+                # Both are rendered unquoted into the capture's shell script.
+                for key, value in entry["pg_dumpall"].items():
+                    if not re.fullmatch(r"[a-z0-9]([-a-z0-9]*[a-z0-9])?", str(value)):
+                        bad.append(f"{node}.{name}: pg_dumpall.{key} {value!r} is not a Kubernetes name")
         assert not bad, bad
