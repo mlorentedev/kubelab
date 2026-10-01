@@ -42,6 +42,13 @@
     "evidence": ""
   },
   {
+    "id": "BACKUP-057-f9",
+    "behavior": "On the scratch bucket under a 1-day lock, --max-repack-size 0 takes the dry-run repack list from at least one pack to none, a prune of packs younger than R is refused, and the same prune is accepted once they are older than R (AC2, AC3)",
+    "verification": "Manual, tasks.md PR 2 scratch measurement steps 2b, 3 and 5 after make tf-r2-apply SCRATCH=1; each step's command, exit status and restic output recorded in verification.md",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
     "id": "BACKUP-057-f6",
     "behavior": "In prod, under the lock, every node ships and the watcher reports healthy:4; a young data/ delete and a cross-node list are refused (AC1, AC3)",
     "verification": "make backup-node NODE=all ENV=prod && make backup-isolation-probe ENV=prod && make watcher-run ENV=prod",
