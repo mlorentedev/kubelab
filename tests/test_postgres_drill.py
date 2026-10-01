@@ -56,18 +56,28 @@ def test_a_table_empty_in_both_is_not_a_failure() -> None:
 class _Fake:
     """Plays restic, docker and kubectl. Every call is recorded."""
 
-    def __init__(self, *, trailer: bool = True, load_rc: int = 0) -> None:
+    def __init__(
+        self, *, trailer: bool = True, load_rc: int = 0, run_rc: int = 0, live_tables: bool = True, dump_rc: int = 0
+    ) -> None:
         self.trailer = trailer
         self.load_rc = load_rc
+        self.run_rc = run_rc
+        self.live_tables = live_tables
+        self.dump_rc = dump_rc
         self.calls: list[list[str]] = []
         self.dump_path: Path | None = None
 
-    def __call__(self, argv, *, env=None, stdin=None, stdout_path=None):
+    def __call__(self, argv, *, env=None, stdin=None, stdout_path=None, stderr_to_file=True):
         self.calls.append(argv)
         joined = " ".join(argv)
         if argv[:1] == ["restic"] and "snapshots" in argv:
             return 0, '[{"short_id": "abc12345", "time": "2026-10-01T08:04:00Z"}]', ""
         if argv[:1] == ["restic"] and "dump" in argv:
+            if self.dump_rc:
+                # A real restic writes its error to stderr; if that went into the
+                # dump file, the drill would read an error message as SQL.
+                assert stderr_to_file is False
+                return self.dump_rc, "", "Fatal: repository is locked"
             body = f"CREATE DATABASE vikunja;\nINSERT '{SECRET}';\n"
             if self.trailer:
                 body += f"--\n{TRAILER}\n--\n"
@@ -77,7 +87,7 @@ class _Fake:
         if "get" in argv and "deploy" in argv:
             return 0, "postgres:16-alpine", ""
         if argv[:2] == ["docker", "run"]:
-            return 0, "cid", ""
+            return self.run_rc, "cid", "port is already allocated" if self.run_rc else ""
         if "pg_isready" in joined:
             return 0, "", ""
         if "psql" in joined and stdin is None and stdout_path:
@@ -91,7 +101,9 @@ class _Fake:
         if "datname" in (stdin or ""):
             return 0, "postgres\nvikunja\n", ""
         if "query_to_xml" in (stdin or ""):
-            return 0, f"public.tasks|5\npublic.notes|1\n{''}", ""
+            if not self.live_tables and argv[0] == "kubectl":
+                return 0, "", ""
+            return 0, "public.tasks|5\npublic.notes|1\n", ""
         return 0, "", ""
 
 
@@ -122,8 +134,39 @@ def test_a_good_dump_passes_names_the_snapshot_and_cleans_up(drill, tmp_path: Pa
     out = capsys.readouterr().out
     assert "abc12345" in out and "trailer" in out
     assert SECRET not in out
-    assert ["docker", "rm", "-f"] == next(c for c in fake.calls if c[:2] == ["docker", "rm"])[:3]
     assert not fake.dump_path.parent.exists()
+
+
+def _removes_container_and_volume(fake: _Fake) -> bool:
+    """`-v` is what deletes the restored data: the image keeps it in an anonymous volume."""
+    return any(c[:2] == ["docker", "rm"] and "-f" in c and "-v" in c for c in fake.calls)
+
+
+def test_teardown_removes_the_data_volume_with_the_container(drill) -> None:
+    fake = _Fake()
+    drill(fake)
+    assert _removes_container_and_volume(fake)
+
+
+def test_a_container_that_fails_to_start_is_still_removed_with_its_volume(drill, capsys) -> None:
+    """`docker run -d` can create the container and then fail to start it."""
+    fake = _Fake(run_rc=125)
+    assert drill(fake) is False
+    assert "did not start" in capsys.readouterr().out
+    assert _removes_container_and_volume(fake)
+
+
+def test_live_with_no_tables_is_cannot_check_not_a_pass(drill, capsys) -> None:
+    """Every check is per table live has; zero tables would compare nothing and pass (lesson-416)."""
+    assert drill(_Fake(live_tables=False)) is False
+    assert "CANNOT CHECK" in capsys.readouterr().out
+
+
+def test_a_restic_failure_is_quoted_and_kept_out_of_the_dump(drill, capsys) -> None:
+    fake = _Fake(dump_rc=1)
+    assert drill(fake) is False
+    assert "repository is locked" in capsys.readouterr().out
+    assert not any(c[:2] == ["docker", "run"] for c in fake.calls)
 
 
 def test_the_restore_uses_the_image_live_runs(drill) -> None:
@@ -147,7 +190,7 @@ def test_a_statement_that_did_not_load_fails_and_is_counted_not_printed(drill, c
     out = capsys.readouterr().out
     assert "1 statement" in out
     assert SECRET not in out
-    assert any(c[:2] == ["docker", "rm"] for c in fake.calls)
+    assert _removes_container_and_volume(fake)
     assert not fake.dump_path.parent.exists()
 
 

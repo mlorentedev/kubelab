@@ -15,8 +15,10 @@ would fail on a busy afternoon and prove nothing more.
 
 The dump holds role password hashes and every row. It stays in a private temp
 directory, psql's own output goes to a file there, and only names and counts are
-printed. The container and the directory are removed on every exit path: the
-teardown is a `finally`, not a step (the principle `pvc_drill` was built on).
+printed. The container, its data volume and the directory are removed on every
+exit path: the teardown is a `finally`, not a step (the principle `pvc_drill`
+was built on). The volume matters most: the image declares one for its data
+directory, and `docker rm` without `-v` leaves the restored database in it.
 """
 
 from __future__ import annotations
@@ -60,14 +62,18 @@ def _default_run(
     env: Optional[dict[str, str]] = None,
     stdin: Optional[str] = None,
     stdout_path: Optional[str] = None,
+    stderr_to_file: bool = True,
 ) -> tuple[int, str, str]:
     merged = {**os.environ, **(env or {})}
     if stdout_path:
-        # stdout and stderr both go to the file: psql reports a failed statement
-        # on stderr, and its text can carry row data.
+        # By default stderr goes to the file too: psql reports a failed statement
+        # on stderr, and its text can carry row data. restic's stderr carries no
+        # rows and is returned instead, so it cannot corrupt the dump it writes.
         with open(stdout_path, "w", opener=lambda p, f: os.open(p, f, 0o600)) as sink:
-            to_file = subprocess.run(argv, stdout=sink, stderr=subprocess.STDOUT, env=merged, check=False)
-        return to_file.returncode, "", ""
+            stderr = subprocess.STDOUT if stderr_to_file else subprocess.PIPE
+            to_file = subprocess.run(argv, stdout=sink, stderr=stderr, env=merged, check=False)
+        err = "" if stderr_to_file else to_file.stderr.decode("utf-8", "replace")
+        return to_file.returncode, "", err
     proc = subprocess.run(argv, input=stdin, capture_output=True, text=True, env=merged, check=False)
     return proc.returncode, proc.stdout, proc.stderr
 
@@ -153,14 +159,18 @@ def run_drill(
 
     workdir = Path(tempfile.mkdtemp(prefix="pgdrill-"))
     name = f"pgdrill-{secrets.token_hex(4)}"
-    started = False
     try:
         dump = workdir / "pg_dumpall.sql"
         rc, _, err = run(
-            ["restic", "-r", repo, "dump", snapshot["short_id"], dump_path], env=restic_env, stdout_path=str(dump)
+            ["restic", "-r", repo, "dump", snapshot["short_id"], dump_path],
+            env=restic_env,
+            stdout_path=str(dump),
+            stderr_to_file=False,
         )
         if rc != 0 or not dump.exists():
-            logger.error(f"drill: restic could not read {dump_path} from snapshot {snapshot['short_id']}")
+            logger.error(
+                f"drill: restic could not read {dump_path} from snapshot {snapshot['short_id']}: {err.strip()[:160]}"
+            )
             return False
         if not _has_trailer(dump):
             logger.error("drill: the dump has no completion trailer: this backup would not restore whole")
@@ -178,8 +188,7 @@ def run_drill(
         # No published port and trust auth: the container is reachable only
         # through `docker exec` on this machine, for the drill's lifetime.
         rc, _, err = run(["docker", "run", "-d", "--name", name, "-e", "POSTGRES_HOST_AUTH_METHOD=trust", image])
-        started = rc == 0
-        if not started:
+        if rc != 0:
             logger.error(f"drill: the scratch container did not start: {err.strip()[:160]}")
             return False
         # Over TCP on purpose: the image's init server listens on the socket only,
@@ -245,6 +254,11 @@ def run_drill(
         if live is None or restored is None:
             logger.error("drill: CANNOT CHECK — counting failed on " + ("live" if live is None else "the restore"))
             return False
+        if not any(live.values()):
+            # Every check below is "for each table live has", so an empty answer
+            # would pass with nothing compared (lesson-416).
+            logger.error("drill: CANNOT CHECK — live reported no tables at all")
+            return False
 
         ok, lines = compare(live, restored)
         for line in lines:
@@ -255,8 +269,11 @@ def run_drill(
             )
         return ok
     finally:
-        if started:
-            run(["docker", "rm", "-f", name])
+        # `-v` is the data: the image declares VOLUME /var/lib/postgresql/data,
+        # so without it the restored database outlives the container in an
+        # anonymous volume. Unconditional: `docker run -d` can create the
+        # container and still fail, and removing a name that is absent is harmless.
+        run(["docker", "rm", "-f", "-v", name])
         shutil.rmtree(workdir, ignore_errors=True)
 
 
