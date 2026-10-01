@@ -1056,17 +1056,13 @@ def _toml() -> dict:
     return tomllib.loads(PR_AGENT_CONFIG.read_text(encoding="utf-8"))
 
 
-def test_a_hung_model_is_not_retried_before_the_fallback_runs() -> None:
-    """A model that hangs past `ai_timeout` hangs again, and PR-Agent 0.46.0
-    replays it at two layers before the fallback is consulted: the handler's own
-    retry (`MODEL_RETRIES = 2`, timeouts included while `retry_same_model_on_timeout`
-    is true) times the completion client's default retries, which upstream's
-    configuration.toml says "multiply the handler's own retry attempts". At
-    `ai_timeout = 120` that is 2 x 3 x 120 s = 720 s on the PRIMARY alone, the
-    figure every failed run of #1909 took. PR-Agent logs nothing after "PR diff",
-    so the proof is durations: two models at 3 x 120 s each cap at 720 s, yet
-    #1885's runs held the step for 886 s until the job was killed. Both layers
-    off, a hang costs one timeout per model.
+def test_a_failed_call_is_not_replayed_before_the_next_model_runs() -> None:
+    """PR-Agent 0.46.0 replays a failed call at two layers before it consults the
+    fallback: the handler's `MODEL_RETRIES = 2` (timeouts included while
+    `retry_same_model_on_timeout` is true) times the completion client's default
+    retries. Run 36800846902, one of #1909's 720 s failures: mimo-v2.5 answered
+    401 at once, then deepseek took 2 x 3 x 120 s. Both layers off, each model in
+    the chain gets one attempt.
 
     Asserted in BOTH files: PR-Agent reads `.pr_agent.toml` from the default
     branch, the workflow from the PR head, so only the env value reaches the PR
@@ -1078,6 +1074,24 @@ def test_a_hung_model_is_not_retried_before_the_fallback_runs() -> None:
     assert str(env.get("CONFIG__RETRY_SAME_MODEL_ON_TIMEOUT")).lower() == "false"
     assert config.get("num_retries") == 0
     assert str(env.get("CONFIG__NUM_RETRIES")) == "0"
+
+
+def test_every_request_to_nan_is_streamed() -> None:
+    """NaN sits behind Cloudflare, which answers 524 to a request that sends no
+    bytes for about 125 s. A review takes mimo-v2.6-flash longer: #1962's own
+    prompt, sent directly, returned 524 at 126 s unstreamed and 200 at 275 s
+    streamed. Upstream forces streaming only when BOTH the declared provider and
+    an api_base substring match, so all three keys must agree with the base URL
+    the workflow sends, in both files.
+    """
+    litellm = _toml()["litellm"]
+    env = _review_env()
+    host = env["OPENAI__API_BASE"].split("//", 1)[1].split("/", 1)[0]
+    assert litellm["custom_llm_provider"] == litellm["force_streaming_custom_llm_provider"] == "openai"
+    assert any(s in host for s in litellm["force_streaming_api_base_substrings"])
+    assert env["LITELLM__CUSTOM_LLM_PROVIDER"] == litellm["custom_llm_provider"]
+    assert env["LITELLM__FORCE_STREAMING_CUSTOM_LLM_PROVIDER"] == litellm["force_streaming_custom_llm_provider"]
+    assert json.loads(env["LITELLM__FORCE_STREAMING_API_BASE_SUBSTRINGS"]) == litellm["force_streaming_api_base_substrings"]
 
 
 def test_a_review_can_report_more_findings_than_the_upstream_default() -> None:
@@ -1092,16 +1106,16 @@ def test_a_review_can_report_more_findings_than_the_upstream_default() -> None:
 
 
 def test_every_model_in_the_chain_gets_its_whole_timeout_inside_the_job() -> None:
-    """With no replay of a hung call, the worst case is one `ai_timeout` per model
-    in the chain, and all of it must end before `timeout-minutes` kills the job:
-    a cancelled job publishes nothing and names nothing. The timeout itself must
-    exceed what a review takes. At upstream's 120 s, mimo-v2.6-flash timed out on
-    a 29k-token diff (#1962, run 36803951714: 242 s after "PR diff", one attempt
-    per model, nothing published), where a second attempt had published at 246 s.
-    The 60 s is setup and publish, measured at about 45 s on the same runs.
+    """With no replay of a failed call, the worst case is one `ai_timeout` per
+    model in the chain, and all of it must end before `timeout-minutes` kills the
+    job: a cancelled job publishes nothing and names nothing. The timeout itself
+    must exceed what a streamed review takes: 275-300 s for #1962's 30k-token
+    diff on mimo-v2.6-flash (a direct call, and a local run of the pinned
+    PR-Agent). Upstream's 120 s timed out on both models in run 36803951714.
+    The 60 s is setup and publish, measured at about 45 s on #1962's runs.
     """
     timeout = int(_toml()["config"]["ai_timeout"])
     assert str(_review_env()["CONFIG__AI_TIMEOUT"]) == str(timeout)
     chain = 1 + len(_fallback_model_names())
-    assert timeout > 240
+    assert timeout > 300
     assert chain * timeout + 60 < int(_review_job()["timeout-minutes"]) * 60

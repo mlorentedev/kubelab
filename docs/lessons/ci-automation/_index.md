@@ -4,7 +4,7 @@
 
 | # | Lesson | Date |
 |---|---|---|
-| 491 | [A PR-Agent review at its findings cap is partial by construction, and a timeout is retried on the model that just hung](lesson-491-a-review-at-its-findings-cap-is-partial-by-construction.md) | 2026-10-01 |
+| 491 | [A PR-Agent review at its findings cap is partial by construction, and NaN cuts any unstreamed call at about 125 s](lesson-491-a-review-at-its-findings-cap-is-partial-by-construction.md) | 2026-10-01 |
 | 487 | [A failed review names its cause per model; read it before filing it under a known one](lesson-487-a-failed-review-names-its-cause-per-model.md) | 2026-09-30 |
 | 486 | [A run the job's `if:` skips still cancels the run that would have reviewed](lesson-486-a-run-the-jobs-if-skips-still-cancels-the-run-that-would-have-reviewed.md) | 2026-09-30 |
 | 483 | [A squash merge turns the PR body into plain text, where code shields no closing keyword](lesson-483-a-squash-merge-turns-the-pr-body-into-plain-text-where-code-shields-no-closing-keyword.md) | 2026-09-28 |

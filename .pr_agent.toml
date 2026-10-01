@@ -21,10 +21,11 @@
 # set as OPENAI__API_BASE in the workflow. Nothing here talks to OpenAI.
 #
 # mimo-v2.6-flash leads, deepseek-v4-flash follows. mimo-v2.6-flash replaced
-# mimo-v2.5 on 2026-10-01, when NaN retired the older model. Review-sized calls
-# to it hung until the timeout (run 36800846902, 01:39Z), and minutes later a
-# minimal call answered 401 "This API key does not have access to the requested
-# model". Admitted to harness/reviewer-pool.json on the same bar, see its entry. What follows was measured on mimo-v2.5 and is carried over, not re-run.
+# mimo-v2.5 on 2026-10-01, when NaN retired the older model: it answers 401
+# "This API key does not have access to the requested model" (run 36800846902,
+# and a direct call from this repo's key). Admitted to harness/reviewer-pool.json
+# on the same bar, see its entry. What follows was measured on mimo-v2.5 and is
+# carried over, not re-run.
 #
 # mimo leads, deepseek follows, and the order was the other way
 # round until #1205 measured why it could not work. deepseek returns a 200 with
@@ -43,21 +44,26 @@
 # an answer is the property being selected for.
 model = "openai/mimo-v2.6-flash"
 
-# A model that hangs past `ai_timeout` hangs again, and upstream replays it at
-# two layers before the fallback is consulted: the handler's retry
-# (MODEL_RETRIES = 2, timeouts included while the first setting is true) times the
-# completion client's default retries, which "multiply" it (upstream's own
-# comment). At 120 s that is 2 x 3 x 120 s = 720 s on the PRIMARY alone. The
-# proof is in durations, because PR-Agent logs nothing after "PR diff": two
-# models split 3 x 120 s each can never pass 720 s, yet #1885's runs held the
-# step for 886 s until the job's 15 minutes killed it. Primary 720 s, then the
-# fallback cut off mid-attempt. Both layers off, each model gets one attempt.
+# How long a review takes, and what cuts it off. Measured 2026-10-01 from the
+# raw run logs (`gh run view --log` drops the lines after the diff artifact; the
+# zip from `actions/runs/<id>/logs` has them):
+#
+# - NaN sits behind Cloudflare, which answers 524 to any request that sends no
+#   bytes for about 125 s, whatever `ai_timeout` says. A review prompt for a
+#   30k-token diff takes mimo-v2.6-flash about 275-300 s. So a non-streamed
+#   review succeeds only on the days the model is quick: #1962's prompt, sent
+#   directly, returned 524 at 126 s without streaming and 200 at 275 s with it.
+# - Upstream replays a failed call at two layers before consulting the next
+#   model: the handler's MODEL_RETRIES = 2 (timeouts included while the first
+#   setting below is true) times the completion client's default retries.
+#   Run 36800846902 (#1909's 720 s): mimo-v2.5 answered 401 at once, and
+#   deepseek then took 2 x 3 x 120 s before "Failed to review PR".
+#
+# Hence: stream (the [litellm] block below), one attempt per model, and an
+# attempt long enough to finish. `tests/test_pr_agent_workflow.py` holds
+# chain x ai_timeout + setup under the job's `timeout-minutes`.
 retry_same_model_on_timeout = false
 num_retries = 0
-# One attempt has to be long enough to finish. At upstream's 120 s,
-# mimo-v2.6-flash timed out on a 29k-token diff (#1962), and only a retry had
-# landed it. 360 s, and `tests/test_pr_agent_workflow.py` holds
-# chain x ai_timeout + setup under the job's `timeout-minutes`.
 ai_timeout = 360
 
 # ONE fallback, and it is not the cheap kind this line used to forbid.
@@ -117,6 +123,15 @@ response_language = "en-US"
 # same shape as a guard citing a check it cannot run: it reads as rigour and
 # asserts nothing.
 repo_context_files = ["AGENTS.md", "CLAUDE.md"]
+
+[litellm]
+# Stream every request to NaN, so bytes flow and Cloudflare never sees an idle
+# connection to cut at 125 s (see `ai_timeout` above). Upstream's switch for an
+# OpenAI-compatible endpoint takes BOTH a provider and an api_base substring, and
+# matches the provider only when one is declared, hence `custom_llm_provider`.
+custom_llm_provider = "openai"
+force_streaming_custom_llm_provider = "openai"
+force_streaming_api_base_substrings = ["api.nan.builders"]
 
 [pr_reviewer]
 # Upstream's default is 3, and a review is `complete` only with FEWER findings
