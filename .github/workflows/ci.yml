@@ -99,7 +99,7 @@ jobs:
         # unit test touches, and all of which need credentials CI does not have.
         run: poetry install --no-interaction --no-ansi
 
-      # Same three gates the Definition of Done requires locally, in the same
+      # Same gates the Definition of Done requires locally (`make check`), in the same
       # order, through the same Makefile targets — so a green CI run and a green
       # workstation run mean the same thing. Cluster-dependent suites carry the
       # `infra`/`e2e` markers and are deselected by the pytest config, so nothing
@@ -112,6 +112,13 @@ jobs:
 
       - name: Types
         run: make type
+
+      # The fourth gate of `make check`. Until this step it ran only in the
+      # Windows job of the Config Drift Gate, which is not required, so a stale
+      # generated file could merge with every required check green (#1990).
+      # No SOPS key here: the oidc target skips itself and says so.
+      - name: Generated files match their SSOT
+        run: make validate-sync
 
       # Nothing validated Ansible in this repo before this: `make lint` is ruff
       # over toolkit/, and pre-commit's yamllint only proves a file is YAML. A
