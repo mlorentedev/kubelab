@@ -52,14 +52,19 @@ Three details decide whether such a barrier works, and each was a choice:
 - **It sits on `subprocess.Popen.__init__`**, installed in `pytest_configure`.
   `run`, `check_output`, `call` and asyncio's subprocess transport all construct
   a `Popen`, and `from subprocess import Popen` is the same class object, so
-  one patch covers every route. An autouse fixture would miss module- and
-  session-scoped fixtures, which run before it.
+  one patch covers all of them. `os.system` does not build a `Popen`, so it is
+  patched too (#2007). `os.exec*` and `os.posix_spawn` are left unguarded and
+  named as such, since nothing here uses them. An autouse fixture would miss
+  module- and session-scoped fixtures, which run before it.
 - **The refusal is a `BaseException`**. The toolkit wraps its subprocess calls
   in `except OSError` and `except Exception` (29 handlers), because a missing
   binary must not crash a CLI. A refusal raised as an ordinary exception would
   be swallowed by exactly the code it is meant to stop, and the test would pass.
   The hit is also recorded on the test and its report forced red, so even code
-  that catches `BaseException` cannot hide it.
+  that catches `BaseException` cannot hide it. The record is consumed by the
+  phase that reports it, teardown included. The first version excluded
+  teardown instead, which kept a failed call from being reported twice and
+  also let a finalizer that swallowed the refusal pass (#2007).
 - **It reads the command position, not every token**. `argv[0]`, the command
   after `sudo`/`timeout`/`env`, and each command inside an `sh -c` string
   count; an argument that happens to be named `restic` does not.
