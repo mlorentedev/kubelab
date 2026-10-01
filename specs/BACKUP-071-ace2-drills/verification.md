@@ -53,6 +53,11 @@ Implementation branch `feat/backup-071-ace2-drills`. Commits: `d89a5b83` (IaC), 
   - M2, a malformed payload is echoed: 3 failures;
   - M3, a dirty tree is accepted: 2 failures;
   - M4, ssh failure is not classed: 1 failure.
+- Round 1 mutations, same discipline. Each turns the suites red with 1 failure:
+  - M5: `apt: name=restic` added to `drill_runtime.yml`;
+  - M6: an `unarchive` of a restic asset;
+  - M7: a `shell` that pipes `curl` into `/usr/local/bin/restic`;
+  - M8: the `networking` read moved back outside the guard.
 - No regressions. Without `HOST`, the local drills keep today's behaviour, and `tests/test_headscale_drill.py` (40) is green.
 
 ## Decisions made during implementation
