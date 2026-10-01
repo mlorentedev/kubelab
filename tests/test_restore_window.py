@@ -297,6 +297,7 @@ class TestClose:
     @pytest.mark.parametrize("env", ["staging", "prod"])
     def test_the_restored_policy_is_exactly_gits(self, env: str) -> None:
         kube = FakeKube(env=env)
+        clock = Clock()
         open_window(
             env=env,
             deployment="n8n",
@@ -304,8 +305,8 @@ class TestClose:
             spoke_kubeconfig=SPOKE,
             holder="t@h",
             run=kube,
-            sleep=Clock().sleep,
-            clock=Clock(),
+            sleep=clock.sleep,
+            clock=clock,
         )
         kube.app["spec"]["syncPolicy"]["automated"]["allowEmpty"] = True  # drift a hand edit could add
         close_window(
@@ -314,8 +315,8 @@ class TestClose:
             hub_kubeconfig=HUB,
             spoke_kubeconfig=SPOKE,
             run=kube,
-            sleep=Clock().sleep,
-            clock=Clock(),
+            sleep=clock.sleep,
+            clock=clock,
         )
         assert kube.app["spec"]["syncPolicy"] == declared_sync_policy(APPLICATIONS, env)
         assert ANNOTATION not in kube.app["metadata"]["annotations"]
