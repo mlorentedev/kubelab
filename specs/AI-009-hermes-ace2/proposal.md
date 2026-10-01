@@ -70,6 +70,7 @@ Items marked **BLOCKING** must be resolved before the PR that depends on them is
 - **R8, decided here: Open WebUI is served over plain HTTP on the tailnet, at ace2's MagicDNS name.** The transport is WireGuard, so the traffic is encrypted end to end between tailnet nodes. Authelia accepts an `http` redirect URI for any host (its client docs allow `http` or `https`, with no loopback rule). The redirect URI is `http://<ace2 MagicDNS name>:<port>/oauth/oidc/callback`, so it does not change when the address does.
   - The alternative is TLS on ace2: the `pihole.kubelab.live` pattern (OPS-022), a DNS-only Cloudflare record to a Tailscale address. It was rejected for this node. That pattern terminates TLS in staging Traefik on ace1, which is O2's dependency. Terminating on ace2 instead needs a DNS-01 Cloudflare token on the node that hosts the agent: a credential that can edit the zone, on the box with the largest attack surface.
   - Reopen when a browser feature Open WebUI needs requires a secure context (microphone input, clipboard), or when the chat leaves the tailnet.
+  - **Cost found while planning PR 1:** `toolkit/features/oidc_clients.py:112` renders every redirect as `https://{host}{path}`, so R8 needs an optional `redirect.scheme` and a port in the SSOT. `tests/test_break_glass.py` derives which services need a break-glass entry from each client's redirect host. A host that no route serves has to be handled explicitly there, not left to fall through.
 
 ## Acceptance criteria
 
