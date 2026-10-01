@@ -104,8 +104,13 @@ def test_the_forge_key_is_looked_up_by_fingerprint() -> None:
     lookup = _task_named("Look up this node's key on the machine account")
     assert "/user/keys?fingerprint=" in lookup["ansible.builtin.uri"]["url"]
     register = _task_named("Register this node's public key on the machine account")
-    assert "regex_replace" not in register["when"]
-    assert "_gitea_keys.json" in register["when"]
+    when = " ".join(register["when"]) if isinstance(register["when"], list) else register["when"]
+    assert "regex_replace" not in when
+    assert "_gitea_keys.json" in when
+    assert "selectattr('fingerprint'" in when, (
+        "match the fingerprint on the answer too: a forge that ignored the filter "
+        "would return every key, and any key would read as this node's"
+    )
     assert register["changed_when"] == "_gitea_key_post.status == 201", "a POST that creates a key is a change"
 
 

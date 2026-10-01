@@ -592,4 +592,12 @@
       # Idempotence is by KEY MATERIAL, through its fingerprint, not by title.
       # A title match with different material would leave the node holding a
       # key the forge does not know, and the play would still report changed=0.
-      when: _gitea_keys.json | default([]) | length == 0
+      # The forge filters by fingerprint (FindPublicKeyOptions in Gitea's
+      # routers/api/v1/user/key.go); matching it again here keeps a forge that
+      # ignored the filter from passing node A's key off as node B's.
+      when:
+        - _gitea_key_fp.rc == 0
+        - >-
+          _gitea_keys.json | default([])
+          | selectattr('fingerprint', 'equalto', _gitea_key_fp.stdout.split(' ')[1])
+          | list | length == 0
