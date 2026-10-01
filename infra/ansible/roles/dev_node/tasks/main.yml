@@ -459,8 +459,8 @@
     # `creates:`-guarded rather than `force: false` on openssh_keypair, because
     # the community collection is not a dependency of this role and adding one
     # for a single call is a heavier change than the call is worth.
-    # The comment carries the RESOLVED identity, which is the only place
-    # `dev_node_gitea_user` is consumed: Gitea's OpenSSH always authenticates the
+    # The comment carries the RESOLVED identity. Besides the key lookup below, it
+    # is where `dev_node_gitea_user` is consumed: Gitea's OpenSSH always authenticates the
     # transport as `git@` and resolves the owning account from the key itself, so
     # the identity can never appear in the SSH user field. Putting it in the
     # comment is what makes `ssh-keygen -lf` on the node and the key's title in
@@ -555,9 +555,13 @@
     # ever matched. Measured on ace2 2026-10-01: the first pass POSTed the key
     # (201, reported ok), and every pass after it POSTed again into a 422.
     # Filtering also keeps the answer off the first page of a paginated list.
+    # Asked of the named account, not of `/user/keys`: Gitea 1.25 restricts a
+    # fingerprint query to an owner only when the path names one, so
+    # `/user/keys?fingerprint=` would also answer with the same key held by
+    # another account, and the play would report a key it never registered here.
     - name: Look up this node's key on the machine account
       ansible.builtin.uri:
-        url: "{{ dev_node_gitea_api_url }}/user/keys?fingerprint={{ _gitea_key_fp.stdout.split(' ')[1] | urlencode }}"
+        url: "{{ dev_node_gitea_api_url }}/users/{{ dev_node_gitea_user }}/keys?fingerprint={{ _gitea_key_fp.stdout.split(' ')[1] | urlencode }}"
         headers:
           Authorization: "token {{ dev_node_gitea_bot_token }}"
         return_content: true

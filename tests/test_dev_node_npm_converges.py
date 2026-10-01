@@ -102,7 +102,9 @@ def test_the_forge_key_is_looked_up_by_fingerprint() -> None:
     POSTed the key again and failed on Gitea's 422 (ace2, 2026-10-01).
     """
     lookup = _task_named("Look up this node's key on the machine account")
-    assert "/user/keys?fingerprint=" in lookup["ansible.builtin.uri"]["url"]
+    assert "/users/{{ dev_node_gitea_user }}/keys?fingerprint=" in lookup["ansible.builtin.uri"]["url"], (
+        "a fingerprint query on /user/keys is not restricted to an owner, so another account's copy would match"
+    )
     register = _task_named("Register this node's public key on the machine account")
     when = " ".join(register["when"]) if isinstance(register["when"], list) else register["when"]
     assert "regex_replace" not in when
