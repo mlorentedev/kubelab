@@ -110,6 +110,7 @@ markers = [
     "e2e: End-to-end tests (require network access to target environment)",
     "infra: Infrastructure tests (require VPN + SSH access to homelab nodes)",
     "requires_sops: Needs real SOPS decryption (age key); skipped where unavailable",
+    "allow_host_clients(reason): may spawn kubectl/ssh/helm and the other clients the conftest barrier refuses; reason= required (#1886)",
 ]
 
 [tool.coverage.run]

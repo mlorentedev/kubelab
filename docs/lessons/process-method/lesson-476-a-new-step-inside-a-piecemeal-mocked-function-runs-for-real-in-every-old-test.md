@@ -38,15 +38,45 @@ a mock that succeeds.
 
 **Solution**: `d58a5e05` mocked the new step and asserted that it was called
 (`retired_for == ["staging"]`). That proves the wiring, and it keeps this one
-test off the cluster. The class stays open until the barrier is structural:
-#1886 (TEST-003) is a default-deny in `tests/conftest.py` that raises when a
-unit test reaches `kubectl`, `helm`, `ssh` or `ansible-playbook` without
-opting in.
+test off the cluster. The class was closed by #1886 (TEST-003): a
+default-deny in `tests/conftest.py` that refuses, in any test outside
+`tests/e2e` and `tests/infra`, a subprocess whose command is a cluster or host
+client (`kubectl`, `helm`, `ssh`, `scp`, `rsync`, `ansible*`, `terraform`,
+`tofu`, `tailscale`, `headscale`, `restic`). Local subcommands stay allowed
+(`kubectl kustomize`, `kubectl version --client`, `helm template`). A test that
+must reach a host opts in with `@pytest.mark.allow_host_clients(reason=...)`;
+`integration`, `e2e` and `infra` are exempt by marker.
+
+Three details decide whether such a barrier works, and each was a choice:
+
+- **It sits on `subprocess.Popen.__init__`**, installed in `pytest_configure`.
+  `run`, `check_output`, `call` and asyncio's subprocess transport all construct
+  a `Popen`, and `from subprocess import Popen` is the same class object, so
+  one patch covers every route. An autouse fixture would miss module- and
+  session-scoped fixtures, which run before it.
+- **The refusal is a `BaseException`**. The toolkit wraps its subprocess calls
+  in `except OSError` and `except Exception` (29 handlers), because a missing
+  binary must not crash a CLI. A refusal raised as an ordinary exception would
+  be swallowed by exactly the code it is meant to stop, and the test would pass.
+  The hit is also recorded on the test and its report forced red, so even code
+  that catches `BaseException` cannot hide it.
+- **It reads the command position, not every token**. `argv[0]`, the command
+  after `sudo`/`timeout`/`env`, and each command inside an `sh -c` string
+  count; an argument that happens to be named `restic` does not.
 
 **Rule**: When you add a side-effecting step to a function, grep the tests
 that mock that function's *other* steps. Each one now runs your step for real.
 Isolation that depends on listing every dangerous call fails open, and it fails
 at the moment someone adds one. Deny by default at the process boundary, and
 let a test opt in, never out.
+
+**Verify**: the mutation needs two edits, because `RETIRED_SECRETS` has been
+empty since the MinIO retirement and an empty list spawns nothing. In
+`tests/test_secret_consumers.py`, drop `d58a5e05`'s mock of
+`delete_retired_secrets` and its `retired_for` assertion; in
+`toolkit/features/k8s_secrets.py`, give `RETIRED_SECRETS` one entry. The test
+must then fail with ``HostClientRefused: unit test spawned `kubectl delete` ``,
+on a machine with kubectl as well as on one without it. With only the first
+edit it passes, which says nothing about the barrier.
 
 **Tags**: `#testing` `#mocks` `#pr-1788` `#issue-1886`
