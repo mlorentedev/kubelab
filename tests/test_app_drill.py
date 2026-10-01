@@ -97,6 +97,8 @@ class _Fake:
         mutate_live: Optional[Callable[[sqlite3.Connection], None]] = None,
         corrupt: bool = False,
         image_rc: int = 0,
+        image_out: Optional[str] = None,
+        health_body: Optional[str] = None,
         pv: Optional[str] = None,
         live_rc: int = 0,
         snapshots: str = json.dumps([{"short_id": "a59acffe", "time": TAKEN}]),
@@ -117,6 +119,8 @@ class _Fake:
         self.mutate = mutate
         self.corrupt = corrupt
         self.image_rc = image_rc
+        self.image_out = IMAGES[service] if image_out is None else image_out
+        self.health_body = health_body
         self.pv = f"{service}-data\t/var/lib/rancher/k3s/storage/pvc-1_kubelab_{service}-data\n" if pv is None else pv
         self.live_rc = live_rc
         self.snapshots = snapshots
@@ -142,7 +146,7 @@ class _Fake:
     def __call__(self, argv: list[str], *, env=None):
         self.calls.append(argv)
         if argv[:1] == ["kubectl"] and "deploy" in argv:
-            return (1, "", "forbidden") if self.image_rc else (0, IMAGES[self.service], "")
+            return (1, "", "forbidden") if self.image_rc else (0, self.image_out, "")
         if argv[:1] == ["kubectl"] and "pv" in argv:
             return 0, self.pv, ""
         if argv[:1] == ["ssh"]:
@@ -192,6 +196,8 @@ class _Fake:
             if "wget" in argv:
                 if not self.healthy:
                     return 1, "", "wget: can't connect to remote host (127.0.0.1): Connection refused"
+                if self.health_body is not None:
+                    return 0, self.health_body, ""
                 return 0, '{"status":"OK"}' if self.service == "authelia" else '{"status":"ok"}', ""
             if "export:credentials" in argv:
                 return self.export_rc, "", ""
@@ -427,6 +433,20 @@ def test_a_server_that_never_answers_healthy_fails(drill, capsys, tmp_path, serv
     assert _torn_down(fake)
 
 
+@pytest.mark.parametrize("service", ["authelia", "n8n"])
+def test_an_answer_that_is_not_healthy_is_not_a_pass(drill, capsys, tmp_path, service) -> None:
+    fake = _fake(tmp_path, service, health_body='{"status":"KO"}')
+    assert drill(fake) is False
+    assert "did not answer healthy" in _out(capsys)
+
+
+def test_an_n8n_that_exited_is_not_waited_on(drill, tmp_path) -> None:
+    """A container that stopped will never answer; the drill says so at once, not after two minutes."""
+    fake = _fake(tmp_path, "n8n", healthy=False, running=False)
+    assert drill(fake) is False
+    assert sum(1 for c in fake.calls if c[:2] == ["docker", "exec"] and "wget" in c) == 1
+
+
 def test_n8n_names_a_key_that_is_not_the_datas(drill, capsys, tmp_path) -> None:
     fake = _fake(
         tmp_path,
@@ -452,6 +472,7 @@ def test_n8n_fails_when_a_credential_does_not_decrypt(drill, capsys, tmp_path) -
     ("kwargs", "named"),
     [
         ({"image_rc": 1}, "image live runs could not be read"),
+        ({"image_out": ""}, "image live runs could not be read"),
         ({"pv": ""}, "no local-path volume bound to kubelab/"),
         ({"live_rc": 255}, "live's database could not be read"),
         ({"snapshots": "[]"}, "no snapshot readable"),
