@@ -4,6 +4,7 @@
 
 | # | Lesson | Date |
 |---|---|---|
+| 492 | [Read what the agent runtime ships before designing its jail, and apply "always-on" to callees, not callers](lesson-492-read-what-the-runtime-ships-before-designing-the-jail.md) | 2026-09-30 |
 | 480 | [A WIP commit that a hook refused turns the safe restore back into the destructive one](lesson-480-a-wip-commit-a-hook-refused-turns-the-safe-restore-back-into-the-destructive-one.md) | 2026-09-27 |
 | 476 | [A new step inside a function that tests mock piecemeal runs for real in every test written before it](lesson-476-a-new-step-inside-a-piecemeal-mocked-function-runs-for-real-in-every-old-test.md) | 2026-09-24 |
 | 452 | [A partial view of a corpus answers exactly like the whole corpus](lesson-452-a-partial-view-of-a-corpus-answers-like-the-whole-corpus.md) | 2026-09-06 |
@@ -76,4 +77,3 @@
 | 428 | [A sample is not the population — state the frame next to the verdict](lesson-428-a-sample-is-not-the-population-say-which-frame-you-measured.md) | 2026-09-04 |
 | 433 | [A branch that only improves a message is invisible to a test that asserts only failure](lesson-433-a-branch-that-only-improves-a-message-is-invisible-to-a-test-that-asserts-only-failure.md) | 2026-09-05 |
 | 430 | [Fetching is what arms the `--force-with-lease` trap](lesson-430-fetching-is-what-arms-the-force-with-lease-trap.md) | 2026-09-04 |
-| 492 | [Read what the agent runtime ships before designing its jail, and apply "always-on" to callees, not callers](lesson-492-read-what-the-runtime-ships-before-designing-the-jail.md) | 2026-09-30 |
