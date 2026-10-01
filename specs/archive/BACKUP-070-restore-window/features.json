@@ -16,7 +16,7 @@
   {
     "id": "BACKUP-070-restore-window-f3",
     "behavior": "AC1/AC2/AC3: a live window on staging opens (n8n at zero) and the hub reads back automated.enabled=false, a second open is refused, and the close returns to Synced/Healthy with the declared replicas and no enabled field; the transcript goes in verification.md",
-    "verification": "make restore-window APP=n8n ENV=staging && test \"$(kubectl --kubeconfig ~/.kube/kubelab-hub-config -n argocd get application kubelab-staging -o jsonpath='{.spec.syncPolicy.automated.enabled}')\" = false && ! make restore-window APP=n8n ENV=staging && make restore-window APP=n8n ENV=staging END=1 && test -z \"$(kubectl --kubeconfig ~/.kube/kubelab-hub-config -n argocd get application kubelab-staging -o jsonpath='{.spec.syncPolicy.automated.enabled}')\"",
+    "verification": "make restore-window APP=n8n ENV=staging && test \"$(kubectl --kubeconfig ~/.kube/kubelab-hub-config -n argocd get application kubelab-staging -o jsonpath='{.spec.syncPolicy.automated.enabled}')\" = false && ! out=$(make restore-window APP=n8n ENV=staging 2>&1) && printf '%s' \"$out\" | grep -q 'already has a restore window open' && make restore-window APP=n8n ENV=staging END=1 && test -z \"$(kubectl --kubeconfig ~/.kube/kubelab-hub-config -n argocd get application kubelab-staging -o jsonpath='{.spec.syncPolicy.automated.enabled}')\"",
     "state": "pending",
     "evidence": ""
   },
