@@ -1,0 +1,9 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfplan
+
+# Generated from common.yaml by `toolkit infra terraform r2-tfvars`, and removed
+# after every run by the Makefile target. The SSOT is backup.* in common.yaml.
+r2.tfvars

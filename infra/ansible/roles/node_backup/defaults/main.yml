@@ -219,7 +219,13 @@ node_backup_heartbeat_token_file: /opt/node-backup-heartbeat-token
 # (tasks.md "Approved operating parameters") — ~a year of restore points,
 # dedup makes the history nearly free. Frozen here rather than re-derived at
 # call time, so a script invocation always carries the ratified policy.
-node_backup_retention_flags: "--keep-daily 7 --keep-weekly 4 --keep-monthly 6"
+#
+# --keep-within (BACKUP-057): nothing younger than it is ever forgotten, so
+# `prune` never needs to delete an object the bucket lock still holds. It must
+# stay above backup.r2.lock_retention_days (R + 1d); tests/test_r2_terraform.py
+# enforces it. It keeps every daily snapshot for the window, which the R2 size
+# gate in specs/BACKUP-057/verification.md already counted.
+node_backup_retention_flags: "--keep-within 31d --keep-daily 7 --keep-weekly 4 --keep-monthly 6"
 
 # `restic check` runs weekly, not per invocation (16x headroom on repository
 # growth, per the same approved-parameters table). The ship script supports
