@@ -220,8 +220,12 @@ setup-local-dns:
 .PHONY: worktree-init
 worktree-init:
 	@echo "=== Bootstrapping worktree: $$(pwd) ==="
-	@$(POETRY) check --lock >/dev/null 2>&1 || $(POETRY) lock --no-interaction
-	@$(POETRY) install --no-interaction
+	@# No private package source exists, so Poetry has no credential to fetch.
+	@# Without a null keyring it still asks the desktop Secret Service, and in a
+	@# session where that cannot be unlocked the install hangs with no output
+	@# (measured 2026-10-01: stuck 15 min at 181/209 packages with no open socket; the rerun with it completed).
+	@PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring $(POETRY) check --lock >/dev/null 2>&1 || PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring $(POETRY) lock --no-interaction
+	@PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring $(POETRY) install --no-interaction
 	@hookspath=$$(git config --get core.hooksPath 2>/dev/null || echo ""); \
 	if [ -n "$$hookspath" ] && [ -x "$$hookspath/pre-commit" ]; then \
 		echo "✓ pre-commit hooks shared from $$hookspath (no re-install needed)"; \
