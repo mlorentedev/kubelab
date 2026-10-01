@@ -85,3 +85,25 @@ def test_no_task_runs_npm_install_as_a_raw_command() -> None:
             body = task.get(key)
             cmd = body.get("cmd", "") if isinstance(body, dict) else (body or "")
             assert "npm install -g" not in cmd, f"{task.get('name')!r} still shells out to npm install -g"
+
+
+def _task_named(name: str) -> dict:
+    for task in _tasks():
+        if task.get("name") == name:
+            return task
+    raise AssertionError(f"no task named {name!r}")
+
+
+def test_the_forge_key_is_looked_up_by_fingerprint() -> None:
+    """The forge answers whether the key is registered; the role does not parse a list.
+
+    The previous comparison ran `regex_replace(..., '\\2')` inside Jinja, which
+    reads '\\2' as chr(2). No key ever matched, so every pass after the first
+    POSTed the key again and failed on Gitea's 422 (ace2, 2026-10-01).
+    """
+    lookup = _task_named("Look up this node's key on the machine account")
+    assert "/user/keys?fingerprint=" in lookup["ansible.builtin.uri"]["url"]
+    register = _task_named("Register this node's public key on the machine account")
+    assert "regex_replace" not in register["when"]
+    assert "_gitea_keys.json" in register["when"]
+    assert register["changed_when"] == "_gitea_key_post.status == 201", "a POST that creates a key is a change"

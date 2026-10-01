@@ -538,12 +538,13 @@
     # Registration runs on the CONTROLLER: the bot token is the credential that
     # can add a key to the account, and it has no business being on the node.
     #
-    # Filtered by fingerprint, never listed whole (#1300). `/user/keys` is
-    # paginated, and the machine account holds one key per node and runner, so
-    # an unfiltered GET returns the first page only. Measured on ace2
-    # 2026-10-01: the key was POSTed on one pass, missing from the next pass's
-    # listing, and POSTed again into a 422, so the role failed on every run
-    # after its first success.
+    # Looked up by fingerprint, which is a hash of the key material, so the
+    # forge answers "is this key registered" itself (#1300). The role used to
+    # list every key and compare material with a Jinja regex_replace whose
+    # replacement '\2' Jinja reads as the control character chr(2), so no key
+    # ever matched. Measured on ace2 2026-10-01: the first pass POSTed the key
+    # (201, reported ok), and every pass after it POSTed again into a 422.
+    # Filtering also keeps the answer off the first page of a paginated list.
     - name: Look up this node's key on the machine account
       ansible.builtin.uri:
         url: "{{ dev_node_gitea_api_url }}/user/keys?fingerprint={{ _gitea_key_fp.stdout.split(' ')[1] | urlencode }}"
@@ -575,16 +576,7 @@
       # The POST creates a key, so it reports changed. uri says ok by default,
       # which hid the first registration on ace2.
       changed_when: _gitea_key_post.status == 201
-      # Idempotence is by KEY MATERIAL, not by title. A title match with
-      # different material would leave the node holding a key the forge does not
-      # know, and the play would still report changed=0 — green, and broken.
-      # `trim` before splitting, deliberately: ssh-keygen writes a trailing
-      # newline, and a key generated without a comment would put it inside the
-      # material field. The comparison would then never match an already-
-      # registered key, and every provision would POST a duplicate — the play
-      # reporting `changed` forever and the account accumulating one key per run,
-      # which is the opposite of what AC1's `changed=0` asserts.
-      when: >-
-        (((_gitea_pubkey.content | b64decode) | trim).split(' ')[1] | default('', true))
-        not in (_gitea_keys.json | default([]) | map(attribute='key')
-                | map('regex_replace', '^(\S+)\s+(\S+).*$', '\2') | list)
+      # Idempotence is by KEY MATERIAL, through its fingerprint, not by title.
+      # A title match with different material would leave the node holding a
+      # key the forge does not know, and the play would still report changed=0.
+      when: _gitea_keys.json | default([]) | length == 0
