@@ -46,7 +46,7 @@ The size decides whether R = 30 fits the free tier. It is measured by the watche
 
   `terraform validate` passes.
 - [ ] [AC2] `make tf-r2-plan` / `make tf-r2-apply` in the `tf-vps-firewall-*` shape. The Cloudflare token goes in `TF_VAR_*` in the child process's environment, never as an argument.
-- [ ] Verify by consequence that the SOPS Cloudflare token can manage R2 buckets and locks: `make tf-r2-plan` with `nodes = {}` and `scratch = true` returns rc 0. If it is refused, a separate admin token is minted by the operator and added to `SECRET_CATALOG`; record which one it was.
+- [ ] Verify by consequence that the SOPS Cloudflare token can manage R2 buckets and locks: `make tf-r2-plan` with `nodes = {}` and `scratch = true` returns rc 0. If it is refused, a separate admin token is minted by the operator and added to `SECRET_CATALOG`; record which one it was. Either way, the token that manages the locks is in a file every SOPS recipient decrypts, so record in `verification.md` that #1852 gates the archive (proposal item 1).
 - [ ] [AC3] Scratch measurement, recorded in `verification.md`:
   1. Apply the scratch bucket with R = 1 day, which also confirms the API accepts a short retention.
   2. Point a throwaway restic repository at it and take two `backup`s, then run `check`. Both must return rc 0. Each `backup` deletes its own file under `locks/`, so this is the measurement that `locks/` is outside the rule. The no-deletion half of the ship proves nothing here: every snapshot is younger than `--keep-within`, so `forget` selects nothing and `prune` issues no DELETE.
@@ -100,13 +100,13 @@ The size decides whether R = 30 fits the free tier. It is measured by the watche
 - [ ] [AC5] `offsite-backup-restore.md` and `runbook-disaster-recovery.md` state what was measured:
   - per-node isolation;
   - the lock on four prefixes;
-  - what it does not cover: the admin token (where it is held; no node has it), data older than R, and a SOPS recipient key (every node's history is readable with it until #1852).
+  - what it does not cover: the admin token (where it is held; no node has it), data older than R, and a SOPS recipient key (until #1852, every node's history is readable with it, and the Cloudflare token it decrypts can remove a lock rule).
 
   They also give the recovery procedure for a node whose index was deleted (`restic repair index`).
 - [ ] [AC5] `tests/test_offsite_runbook_claims.py`:
   - the runbook names every node bucket derived from `backup.sources`;
   - it names the four locked prefixes and R read from `common.yaml`;
-  - it names the three uncovered cases: the admin token, data older than R, and a SOPS recipient key (the last only while `.sops.yaml` lists more than the operator's key);
+  - it names the three uncovered cases: the admin token, data older than R, and a SOPS recipient key, as both a read and a lock-removal path (the last only while `.sops.yaml` lists more than the operator's key);
   - it no longer claims a single shared bucket.
 
   The test fails on today's runbook.
@@ -116,4 +116,5 @@ The size decides whether R = 30 fits the free tier. It is measured by the watche
 
 - [ ] Every acceptance criterion is covered by a test and has a `features.json` entry with a non-vacuous verification
 - [ ] `make test` and lint green
+- [ ] #1852 is closed and `.sops.yaml` lists only the human recipient. Until then the lock is liftable through the CI key, so the spec does not archive
 - [ ] `verification.md` filled; independent `dotf spec review` (a different model); archive PR closes #1920

@@ -2,7 +2,7 @@
   {
     "id": "BACKUP-057-f1",
     "behavior": "The watcher reports each repository's raw size and the fleet sum, and a Grafana rule fires above 80% of the declared free tier (AC2 prerequisite, Q3)",
-    "verification": "poetry run pytest \"tests/test_r2_backup_watcher_probe.py::test_a_node_line_reports_its_raw_size\" tests/test_r2_backup_rules.py --no-cov -q",
+    "verification": "poetry run pytest \"tests/test_r2_backup_watcher_probe.py::test_each_node_and_the_fleet_report_their_raw_size\" \"tests/test_r2_backup_watcher_probe.py::test_an_unknown_size_is_null_and_never_fails_a_healthy_node\" tests/test_r2_backup_alerting_rules.py --no-cov -q",
     "state": "pending",
     "evidence": ""
   },
