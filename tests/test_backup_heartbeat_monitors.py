@@ -28,7 +28,6 @@ from __future__ import annotations
 import json
 import os
 import pathlib
-import re
 import shutil
 import subprocess
 
@@ -337,11 +336,20 @@ def test_a_manual_run_takes_the_same_path_the_timer_does() -> None:
     """
     playbook = yaml.safe_load((REPO / "infra/ansible/playbooks/backup-node.yml").read_text())
     [play] = playbook
-    assert play["vars"]["backup_unit"] == "node-backup-ship.service", (
-        "the manual trigger must start the ship unit; starting capture instead would stage a snapshot and never send it"
-    )
+    # Either rendering (the frequent unit, or INTEGRITY=1's weekly one) is a
+    # ship unit; neither may be capture. BACKUP-063 made the name a selection.
+    from tests.test_backup_node_integrity import _unit
+
+    for unit in (_unit(), _unit(integrity="true")):
+        assert unit.startswith("node-backup-ship"), (
+            "the manual trigger must start a ship unit; starting capture would stage a snapshot and never send it"
+        )
     starts = [task for task in play["tasks"] if task.get("ansible.builtin.systemd", {}).get("state") == "started"]
     assert len(starts) == 1, "exactly one unit is started, or the topology is bypassed"
+    # The rendering above proves only the variable: the started task must read it.
+    assert starts[0]["ansible.builtin.systemd"]["name"] == "{{ backup_unit }}", (
+        "the started task names its unit directly, so the ship-unit check above no longer covers it"
+    )
 
 
 def test_the_dry_run_does_not_report_a_failure_it_invented() -> None:

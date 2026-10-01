@@ -203,7 +203,13 @@ fi
 $RESTIC forget {{ node_backup_retention_flags }} --prune
 
 if [ "$RUN_CHECK" -eq 1 ]; then
-    $RESTIC check
+    # Reads one group of pack data back from the destination (BACKUP-063), so
+    # a corrupted pack pages here instead of in a restore. Epoch weeks rotate the
+    # group; see node_backup_check_read_data_groups for why not the ISO week.
+    READ_DATA_GROUPS={{ node_backup_check_read_data_groups }}
+    READ_DATA_GROUP=$(( $(date +%s) / 604800 % READ_DATA_GROUPS + 1 ))
+    echo "reading pack group $READ_DATA_GROUP/$READ_DATA_GROUPS"
+    $RESTIC check --read-data-subset "$READ_DATA_GROUP/$READ_DATA_GROUPS"
 fi
 
 echo "ship complete: $REPO"

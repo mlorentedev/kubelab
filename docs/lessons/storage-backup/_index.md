@@ -1,10 +1,11 @@
 # Backups, volumes and persistence
 
-13 lessons, newest first. Back to [all categories](../_index.md).
+14 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
 | 490 | [Sizing a restic repository costs its file count, not its bytes](lesson-490-sizing-a-restic-repository-costs-its-file-count-not-its-bytes.md) | 2026-09-30 |
+| 489 | [A rotation keyed on the ISO week breaks its coverage guarantee once a year; key it on epoch weeks](lesson-489-a-rotation-keyed-on-the-iso-week-breaks-once-a-year.md) | 2026-09-30 |
 | 488 | [restic's `--stuck-request-timeout` bounds a stalled request, not a refused one, and R2's credential refusals are retried for 15 minutes](lesson-488-stuck-request-timeout-bounds-a-stalled-request-not-a-refused-one.md) | 2026-09-30 |
 | 485 | ["Initialise it if it does not open" turns a deleted backup repository into a healthy, empty one](lesson-485-init-if-it-does-not-open-turns-a-deleted-backup-into-a-healthy-empty-one.md) | 2026-09-30 |
 | 465 | [A read-only object-store token cannot run restic's read commands unless they skip the lock](lesson-465-a-read-only-restic-token-needs-no-lock-even-to-read.md) | 2026-09-26 |

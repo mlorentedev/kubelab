@@ -11,6 +11,13 @@
 # Usage:
 #   make backup-node NODE=rpi3 ENV=prod
 #   make backup-node NODE=all ENV=prod
+#   make backup-node NODE=rpi3 ENV=prod INTEGRITY=1   # the weekly unit, with its check
+#
+# INTEGRITY=1 starts the weekly integrity-check instance instead of the frequent
+# ship unit (BACKUP-063): the same script with --check, under the same cgroup
+# limits and timeout as its timer run. The journal it prints ends with systemd's
+# `memory peak` line, which is how the check's footprint is measured. It is not
+# CHECK=1, which the Makefile already spends on Ansible check mode.
 #
 # Starts the SHIP unit, not capture. That is deliberate and it is the real
 # path: ship carries `Wants=node-backup-capture.service` plus `After=`, so one
@@ -33,8 +40,14 @@
   # the homelab is asleep teaches people to ignore the result.
   ignore_unreachable: true
 
+  # Unit names come from the role's own defaults, never a second copy.
+  vars_files:
+    - ../roles/node_backup/defaults/main.yml
+
   vars:
-    backup_unit: node-backup-ship.service
+    backup_unit: >-
+      {{ node_backup_ship_check_service_name if (integrity | default(false) | bool)
+         else node_backup_ship_service_name }}
 
   tasks:
     - name: Reset any prior failed state
@@ -61,6 +74,7 @@
       ansible.builtin.command:
         cmd: systemctl show {{ backup_unit }}
              --property=Result --property=ExecMainStatus
+             --property=ExecMainStartTimestamp --property=ExecMainExitTimestamp
       register: backup_result
       changed_when: false
 
@@ -70,7 +84,7 @@
       # heartbeat line are the evidence a reader wants, and an exit code alone
       # cannot show that the coverage heartbeat was posted.
       ansible.builtin.command:
-        cmd: journalctl -u {{ backup_unit }} -n 15 --no-pager
+        cmd: journalctl -u {{ backup_unit }} -n 30 --no-pager
       register: backup_journal
       changed_when: false
 
