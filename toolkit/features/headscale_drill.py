@@ -39,9 +39,10 @@ import sqlite3
 import subprocess
 import tempfile
 import time
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 import yaml
 
@@ -204,21 +205,38 @@ def _drill_config(cidr: str) -> str:
     )
 
 
-def run_drill(
-    *,
-    repo: str,
-    restic_env: dict[str, str],
-    staging_dir: str,
-    image: str,
-    volume: str,
-    ssh_target: str,
-    cidr: str,
-    run: Run = _default_run,
-    sleep: Callable[[float], None] = time.sleep,
-    clock: Callable[[], float] = time.monotonic,
-) -> bool:
-    """Restore the newest Headscale capture in `repo` and check it against live. True only on a whole restore."""
-    # Live first: every check below is "for each thing live has" (lesson-416).
+@dataclass(frozen=True)
+class LiveState:
+    """What live Headscale holds: the drill's reference, read once on the workstation (BACKUP-071).
+
+    Read apart from the restore so the restore can run on a host with no ssh path
+    to the VPS. `hashes` are digests of the private keys, never the keys, and are
+    still never printed.
+    """
+
+    nodes: Entries
+    users: Entries
+    hashes: dict[str, str]
+
+    def to_payload(self) -> dict[str, Any]:
+        """JSON-safe form: JSON objects key by string and have no tuples."""
+        return {
+            "nodes": {str(k): list(v) for k, v in self.nodes.items()},
+            "users": {str(k): list(v) for k, v in self.users.items()},
+            "hashes": dict(self.hashes),
+        }
+
+    @classmethod
+    def from_payload(cls, payload: dict[str, Any]) -> "LiveState":
+        def entries(raw: dict[str, Any]) -> Entries:
+            return {int(k): (str(v[0]), str(v[1]), float(v[2])) for k, v in raw.items()}
+
+        return cls(nodes=entries(payload["nodes"]), users=entries(payload["users"]), hashes=dict(payload["hashes"]))
+
+
+def read_live(run: Run, ssh_target: str, volume: str) -> Optional[LiveState]:
+    """Read live nodes, users and key hashes over ssh. None, after naming what failed, when any is unreadable."""
+    # Live first: every check of the restore is "for each thing live has" (lesson-416).
     reads = {}
     for kind in ("nodes", "users"):
         rc, out, err = ssh(run, ssh_target, f"docker exec {LIVE_CONTAINER} headscale {kind} list -o json")
@@ -226,15 +244,33 @@ def run_drill(
             reads[kind] = parse_entries(out, "machine_key" if kind == "nodes" else None) if rc == 0 else {}
         except (ValueError, KeyError) as exc:
             logger.error(f"drill: CANNOT CHECK — live Headscale {kind} could not be read: {str(exc)[:160]}")
-            return False
+            return None
         if not reads[kind]:
             logger.error(f"drill: CANNOT CHECK — live Headscale listed no {kind}: {err.strip()[:160]}")
-            return False
-    live_hashes = _live_key_hashes(run, ssh_target, volume)
-    if live_hashes is None:
+            return None
+    hashes = _live_key_hashes(run, ssh_target, volume)
+    if hashes is None:
         logger.error("drill: CANNOT CHECK — the live key files could not be hashed (`sudo -n` on the VPS)")
-        return False
+        return None
+    return LiveState(nodes=reads["nodes"], users=reads["users"], hashes=hashes)
 
+
+def run_drill(
+    *,
+    repo: str,
+    restic_env: dict[str, str],
+    staging_dir: str,
+    image: str,
+    cidr: str,
+    live: LiveState,
+    run: Run = _default_run,
+    sleep: Callable[[float], None] = time.sleep,
+    clock: Callable[[], float] = time.monotonic,
+) -> bool:
+    """Restore the newest Headscale capture in `repo` and check it against `live`. True only on a whole restore.
+
+    Opens no connection to the VPS: `live` comes from `read_live`, possibly on another host.
+    """
     rc, out, err = run(["restic", "-r", repo, "snapshots", "--json", "--latest", "1"], env=restic_env)
     snapshots = json.loads(out or "[]") if rc == 0 else []
     if not snapshots:
@@ -258,9 +294,9 @@ def run_drill(
             name=name,
             image=image,
             cidr=cidr,
-            live_nodes=reads["nodes"],
-            live_users=reads["users"],
-            live_hashes=live_hashes,
+            live_nodes=live.nodes,
+            live_users=live.users,
+            live_hashes=live.hashes,
             sleep=sleep,
             clock=clock,
         )
@@ -409,12 +445,18 @@ def drill_headscale(env: str = "prod", project_root: Optional[Path] = None) -> b
         logger.error(f"drill: expected one node capturing {SERVICE} in backup.sources, found {nodes or 'none'}")
         return False
     net = merged["networking"]
+    live = read_live(
+        _default_run,
+        f"{net['ssh_users']['cloud']}@{net['vps']['public_ip']}",
+        str(sources[nodes[0]][SERVICE]["volume"]),
+    )
+    if live is None:
+        return False
     return run_drill(
         repo=repo_url(dest, repository_name(cm, nodes[0])),
         restic_env=restic_env,
         staging_dir=staging_dir(root),
         image=str(merged["apps"]["services"]["core"]["headscale"]["image"]),
-        volume=str(sources[nodes[0]][SERVICE]["volume"]),
-        ssh_target=f"{net['ssh_users']['cloud']}@{net['vps']['public_ip']}",
         cidr=str(net["tailscale_cidr"]),
+        live=live,
     )
