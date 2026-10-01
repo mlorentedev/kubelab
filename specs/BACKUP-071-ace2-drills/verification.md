@@ -5,6 +5,10 @@ created: "2026-10-01"
 
 # Verification - BACKUP-071-ace2-drills
 
+## Baseline on ace2 (2026-10-01, before any change)
+
+`ssh ace2` (non-interactive): user `manu` is in `docker`; `docker`, `make`, `git` and `/usr/bin/python3` are present; `restic` and `poetry` are missing; no `~/.config/sops/age`; no `~/.local/share/kubelab-drill`. mise pins python 3.12.13 for interactive shells only, so a non-interactive ssh session sees the system python.
+
 ## Evidence
 
 Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).

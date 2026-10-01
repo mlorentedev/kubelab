@@ -10,7 +10,7 @@ created: "2026-10-01"
 ## Setup
 
 - [ ] Spec PR merged (this folder), then branch `feat/backup-071-ace2-drills` from master in a sibling worktree, `make worktree-init`.
-- [ ] Measure on ace2 before writing IaC: `ssh ace2 'id -nG; command -v restic poetry docker; ls ~/.config/sops/age 2>&1'`. Record the output in `verification.md` as the baseline.
+- [x] Measure on ace2 before writing IaC: `ssh ace2 'id -nG; command -v restic poetry docker; ls ~/.config/sops/age 2>&1'`. Record the output in `verification.md` as the baseline. ✓ 2026-10-01
 
 ## Implementation
 
@@ -18,7 +18,7 @@ created: "2026-10-01"
 
 - [ ] [P] [AC1] Test `tests/test_restic_install_shared.py`: `node_backup` and `dev_node` both include `roles/node_backup/tasks/restic.yml` (or the agreed shared path), and no other task file in either role downloads a `restic_` asset. Expected: FAIL (the install lives inline in `node_backup/tasks/main.yml`).
 - [ ] [AC1] Move the restic install tasks into the shared file, include it from `node_backup`, and confirm `make provision NODE=bee ENV=prod --check` (or the role's molecule/check path) still shows no change on a node that has restic.
-- [ ] [AC1] `dev_node`: include the restic tasks with `backup.r2.restic_version`, install poetry pinned (version in `dev_node` defaults, matching CI's major), and assert the dev user is in the `docker` group (fail provisioning, do not add silently if the group is missing).
+- [ ] [AC1] `dev_node`: include the restic tasks with `backup.r2.restic_version`, install poetry pinned (version in `dev_node` defaults, matching CI's major) and add it to `dev_node_local_bin_wrapped` so a non-interactive ssh session finds it, and assert the dev user is in the `docker` group (fail provisioning, do not add silently if the group is missing).
 - [ ] [AC1] `dev_node`: clone the public kubelab repo into `~/.local/share/kubelab-drill` with `update: false`, owned by the dev user. The drill run moves it, not provisioning.
 - [ ] [AC1] `make provision NODE=ace2 ENV=prod` twice: second run `changed=0`. `ssh ace2 test ! -e ~/.config/sops/age/keys.txt`.
 
