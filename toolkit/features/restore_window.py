@@ -58,8 +58,15 @@ class WindowHeldError(WindowError):
     """Another restore holds the window on this env."""
 
 
+#: Seconds one kubectl call may take. The poll budgets cannot bound a call that never returns.
+_CALL_TIMEOUT = 60
+
+
 def _default_run(argv: list[str]) -> tuple[int, str, str]:
-    proc = subprocess.run(argv, capture_output=True, text=True, check=False)
+    try:
+        proc = subprocess.run(argv, capture_output=True, text=True, check=False, timeout=_CALL_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        return 124, "", f"kubectl timed out after {_CALL_TIMEOUT}s"
     return proc.returncode, proc.stdout, proc.stderr
 
 
@@ -196,14 +203,32 @@ def open_window(
     replaced: dict[str, Any] = before["spec"]["syncPolicy"]
 
     still_open = f"The window stays open: close it with `make restore-window APP={deployment} ENV={env} END=1`."
+    started = clock()
+    # A sync Argo CD started before the pause keeps running, and it would put the
+    # replicas back after the scale below. Pausing stops new ones only.
+    while True:
+        app = _json(run, _kubectl(hub_kubeconfig, HUB_NAMESPACE, "get", "application", name, "-o", "json"))
+        phase = ((app.get("status") or {}).get("operationState") or {}).get("phase")
+        if not app.get("operation") and phase != "Running":
+            break
+        if clock() - started >= timeout:
+            raise WindowError(f"after {timeout:.0f}s {name} is still syncing; nothing was scaled. {still_open}")
+        sleep(_POLL_SECONDS)
+
     rc, _, err = run(_kubectl(spoke_kubeconfig, APP_NAMESPACE, "scale", f"deployment/{deployment}", "--replicas=0"))
     if rc != 0:
         raise WindowError(f"scaling deployment/{deployment} to zero failed: {err.strip()[:200]}. {still_open}")
 
     spec = _json(run, _kubectl(spoke_kubeconfig, APP_NAMESPACE, "get", "deployment", deployment, "-o", "json"))
-    labels = spec["spec"]["selector"].get("matchLabels") or {}
+    selector = spec["spec"].get("selector") or {}
+    labels = selector.get("matchLabels") or {}
+    if selector.get("matchExpressions") or not labels:
+        # Only matchLabels is evaluated; an empty set would match every pod in the namespace.
+        raise WindowError(
+            f"deployment/{deployment}'s selector is not plain matchLabels, which is all the window evaluates. "
+            f"{still_open}"
+        )
     claims = _claims(spec)
-    started = clock()
     while True:
         pods = _json(run, _kubectl(spoke_kubeconfig, APP_NAMESPACE, "get", "pods", "-o", "json"))["items"]
         blocking = _blocking_pods(pods, labels, claims)
@@ -245,7 +270,8 @@ def close_window(
     before, sent = _patch_application(run, hub_kubeconfig, name, build)
     if sent is None:
         return None
-    deployment = str(held.get("deployment"))
+    named = held.get("deployment")
+    deployment = named if isinstance(named, str) and named not in ("", "?") else ""
 
     # Re-enabling auto-sync can start a sync by itself (it does whenever git
     # moved since the last one, measured on staging 2026-10-01). Writing
@@ -265,8 +291,13 @@ def close_window(
     except WindowError as exc:
         raise WindowError(
             f"the window is closed, but triggering the sync failed: {exc}. "
-            f"Run `make sync-app APP={name}` and check {deployment} comes back."
+            f"Run `make sync-app APP={name}` and check {deployment or 'the app'} comes back."
         ) from exc
+    if not deployment:
+        raise WindowError(
+            f"the window is closed and the sync requested, but its annotation names no deployment, "
+            f"so nothing was waited for. Check {name} is Synced/Healthy and the restored app's replicas are ready."
+        )
 
     started = clock()
     while True:

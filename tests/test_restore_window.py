@@ -65,6 +65,8 @@ class FakeKube:
         self.conflicts_left = 0
         self.synced = False
         self.autosync_on_resume = False
+        self.operation_polls = 0  # application reads an in-flight sync survives
+        self.scaled_during_operation = False
 
     # --- argv router -------------------------------------------------------
     def __call__(self, argv: list[str]) -> tuple[int, str, str]:
@@ -74,6 +76,7 @@ class FakeKube:
         if kind.startswith("application"):
             return self._application(verb, argv)
         if verb == "scale":
+            self.scaled_during_operation = self._operating()
             self.replicas = int(next(a for a in argv if a.startswith("--replicas=")).split("=", 1)[1])
             return 0, "scaled", ""
         if kind == "deployment":
@@ -86,6 +89,11 @@ class FakeKube:
         if verb == "get" and argv[-2:] == ["-o", "json"] and "applications" in argv:
             return 0, json.dumps({"items": [self.app]}), ""
         if verb == "get":
+            if self.operation_polls > 0:
+                self.operation_polls -= 1
+                if self.operation_polls == 0:
+                    self.app.pop("operation", None)
+                    self.app["status"]["operationState"] = {"phase": "Succeeded"}
             return 0, json.dumps(self.app), ""
         body = json.loads(argv[argv.index("-p") + 1])
         self.patches.append(body)
@@ -110,6 +118,10 @@ class FakeKube:
             self.app["operation"] = {"initiatedBy": {"automated": True}, "sync": {"revision": "abc"}}
             self.replicas = self.declared_replicas
         return 0, json.dumps(self.app), ""
+
+    def _operating(self) -> bool:
+        phase = (self.app["status"].get("operationState") or {}).get("phase")
+        return bool(self.app.get("operation")) or phase == "Running"
 
     def _bump(self) -> None:
         self.app["metadata"]["resourceVersion"] = str(int(self.app["metadata"]["resourceVersion"]) + 1)
@@ -276,6 +288,43 @@ class TestScaleAndWait:
             _open(kube, timeout=30)
         assert ANNOTATION in kube.app["metadata"]["annotations"]
 
+    def test_the_open_waits_for_a_sync_in_flight_before_scaling(self) -> None:
+        """A sync started before the pause would put the replicas back after the scale."""
+        kube = FakeKube()
+        kube.app["operation"] = {"initiatedBy": {"automated": True}, "sync": {"revision": "abc"}}
+        kube.app["status"]["operationState"] = {"phase": "Running"}
+        kube.operation_polls = 3
+        _open(kube)
+        assert kube.operation_polls == 0
+        assert kube.scaled_during_operation is False
+
+    def test_a_sync_that_never_finishes_scales_nothing_and_says_the_window_stays_open(self) -> None:
+        kube = FakeKube()
+        kube.app["status"]["operationState"] = {"phase": "Running"}
+        kube.operation_polls = 10_000
+        with pytest.raises(WindowError, match="(?i)window stays open"):
+            _open(kube, timeout=30)
+        assert not [c for c in kube.calls if "scale" in c]
+        assert ANNOTATION in kube.app["metadata"]["annotations"]
+
+    @pytest.mark.parametrize(
+        "selector",
+        [{"matchExpressions": [{"key": "app", "operator": "In", "values": ["n8n"]}]}, {}],
+        ids=["match-expressions", "empty"],
+    )
+    def test_a_selector_the_window_cannot_evaluate_fails_instead_of_matching_every_pod(self, selector) -> None:
+        kube = FakeKube()
+        original = kube._deployment
+
+        def with_selector() -> dict[str, Any]:
+            dep = original()
+            dep["spec"]["selector"] = selector
+            return dep
+
+        kube._deployment = with_selector  # type: ignore[method-assign]
+        with pytest.raises(WindowError, match="(?i)selector.*window stays open"):
+            _open(kube, timeout=30)
+
     def test_a_pod_from_another_owner_mounting_the_claim_still_blocks(self) -> None:
         kube = FakeKube(pods_linger=0)
         original = kube._pods
@@ -382,6 +431,17 @@ class TestClose:
         with pytest.raises(WindowError, match="Degraded"):
             _close(kube, timeout=30)
 
+    @pytest.mark.parametrize("raw", ["not json", '{"by": "tester@host"}', '{"deployment": ""}'])
+    def test_a_holder_that_names_no_deployment_still_closes_and_says_so(self, raw: str) -> None:
+        kube = FakeKube()
+        _open(kube)
+        kube.app["metadata"]["annotations"][ANNOTATION] = raw
+        with pytest.raises(WindowError, match="(?i)window is closed.*names no deployment"):
+            _close(kube)
+        assert ANNOTATION not in kube.app["metadata"]["annotations"]
+        assert kube.app["spec"]["syncPolicy"] == declared_sync_policy(APPLICATIONS, "staging")
+        assert not [c for c in kube.calls if "deployment" in c and c[-3:-2] in (["?"], ["None"], [""])]
+
     def test_closing_with_no_window_open_is_a_no_op(self) -> None:
         kube = FakeKube()
         assert _close(kube) is None
@@ -432,3 +492,21 @@ def test_deploy_apps_checks_the_window_before_it_applies() -> None:
     check = next(i for i, line in enumerate(lines) if "infra argo check-window" in line)
     apply = next(i for i, line in enumerate(lines) if "kubectl apply" in line)
     assert check < apply
+
+
+def test_a_kubectl_call_that_hangs_is_an_error_not_a_hang(monkeypatch) -> None:
+    """A hung apiserver connection would otherwise block past every poll budget."""
+    import subprocess
+
+    from toolkit.features import restore_window
+
+    seen: dict[str, Any] = {}
+
+    def hang(argv, **kw):
+        seen.update(kw)
+        raise subprocess.TimeoutExpired(argv, kw.get("timeout"))
+
+    monkeypatch.setattr(restore_window.subprocess, "run", hang)
+    rc, out, err = restore_window._default_run(["kubectl", "--kubeconfig", HUB, "-n", "argocd", "get", "app"])
+    assert seen.get("timeout"), "every kubectl call needs a finite timeout"
+    assert rc != 0 and out == "" and "timed out" in err
