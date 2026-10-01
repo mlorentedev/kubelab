@@ -55,6 +55,7 @@ def _tree(root: pathlib.Path, categories: dict[str, int], total: int | None = No
             # same one, so a tree built here is internally consistent and any
             # fix the deriver reports is about a count, not about the date.
             lines.append(f"| {n} | [A lesson]({fname}) | 2026-01-01 |")
+        lines.reverse()  # newest first: one date, so the higher number leads
         (cat / "_index.md").write_text(
             f"# {slug}\n\n{declared} lessons, newest first. Back to [all categories](../_index.md).\n\n"
             "| # | Lesson | Date |\n|---|---|---|\n" + "\n".join(lines) + "\n",
@@ -109,6 +110,53 @@ class TestTheDeriverActuallyDerives:
         assert (root / "_index.md").read_text() == before
 
 
+def _rows(index: pathlib.Path) -> list[str]:
+    return [line for line in index.read_text().splitlines() if lessons_index.LESSON_ROW.match(line)]
+
+
+def _set_rows(index: pathlib.Path, rows: list[str]) -> None:
+    head = [line for line in index.read_text().splitlines() if not lessons_index.LESSON_ROW.match(line)]
+    index.write_text("\n".join(head + rows) + "\n")
+
+
+class TestTheRowsAreOrderedNotHandPlaced:
+    """Each category lists its lessons newest first (#1912).
+
+    The order was hand-placed by every lesson PR while the counters next to it
+    were derived, and seven indexes drifted.
+    """
+
+    def test_an_older_row_above_a_newer_one_is_found_and_moved(self, tmp_path: pathlib.Path) -> None:
+        root = _tree(tmp_path / "lessons", {"alpha": 2})
+        index = root / "alpha" / "_index.md"
+        _set_rows(
+            index,
+            [
+                "| 101 | [Older](lesson-101-a-lesson.md) | 2026-01-01 |",
+                "| 102 | [Newer](lesson-102-a-lesson.md) | 2026-02-01 |",
+            ],
+        )
+        assert any(f.path == index for f in lessons_index.reconcile(root))
+        lessons_index.reconcile(root, apply=True)
+        assert [r.split(" | ")[0] for r in _rows(index)] == ["| 102", "| 101"]
+        assert not [f for f in lessons_index.reconcile(root) if f.path == index]
+
+    def test_within_one_date_the_higher_number_comes_first(self, tmp_path: pathlib.Path) -> None:
+        root = _tree(tmp_path / "lessons", {"alpha": 2})
+        index = root / "alpha" / "_index.md"
+        _set_rows(index, list(reversed(_rows(index))))
+        lessons_index.reconcile(root, apply=True)
+        assert [r.split(" | ")[0] for r in _rows(index)] == ["| 102", "| 101"]
+
+    def test_a_last_row_without_a_newline_does_not_merge_lines_when_moved(self, tmp_path: pathlib.Path) -> None:
+        root = _tree(tmp_path / "lessons", {"alpha": 2})
+        index = root / "alpha" / "_index.md"
+        _set_rows(index, list(reversed(_rows(index))))
+        index.write_text(index.read_text().rstrip("\n"))
+        lessons_index.reconcile(root, apply=True)
+        assert len(_rows(index)) == 2
+
+
 class TestTheDeriverReadsTheRealCorpus:
     """The fixtures above prove the logic; this proves it fits this repo.
 
@@ -125,7 +173,9 @@ class TestTheDeriverReadsTheRealCorpus:
         """If this fails, the committed indexes are stale — run
         `toolkit tools lessons-index --fix`."""
         fixes = lessons_index.reconcile(REAL_LESSONS)
-        assert not fixes, "committed counters disagree with the files:\n" + "\n".join(str(f) for f in fixes)
+        assert not fixes, "committed indexes disagree with the files (counters or row order):\n" + "\n".join(
+            str(f) for f in fixes
+        )
 
     def test_the_newest_date_comes_from_rows_not_mtimes(self) -> None:
         """mtime records when a file was last touched — a rebase or a typo fix

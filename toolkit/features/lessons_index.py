@@ -125,7 +125,7 @@ class Hazard:
 
 @dataclasses.dataclass(frozen=True)
 class Fix:
-    """One counter that disagreed with the files."""
+    """One index line that disagreed with the files: a counter, or a row out of order."""
 
     path: pathlib.Path
     line_number: int
@@ -324,8 +324,35 @@ def _rewrite(path: pathlib.Path, apply: bool, edit: Callable[[str], str | None])
     return fixes
 
 
+def _row_key(row: str) -> tuple[str, int]:
+    m = LESSON_ROW.match(row)
+    assert m, row
+    return m.group("date"), int(row.split("|")[1])
+
+
+def _order_rows(path: pathlib.Path, apply: bool) -> list[Fix]:
+    """Order a category's rows newest first: by date, then by number within a date (#1912).
+
+    Rows keep the line endings of the positions they move into, so a last row
+    with no trailing newline cannot glue itself to the next one.
+    """
+    lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    at = [i for i, line in enumerate(lines) if LESSON_ROW.match(line)]
+    rows = sorted((lines[i].rstrip("\n") for i in at), key=_row_key, reverse=True)
+    fixes: list[Fix] = []
+    for i, row in zip(at, rows, strict=True):
+        moved = row + lines[i][len(lines[i].rstrip("\n")) :]
+        if moved != lines[i]:
+            fixes.append(Fix(path=path, line_number=i + 1, was=lines[i], now=moved))
+            lines[i] = moved
+    if fixes and apply:
+        path.write_text("".join(lines), encoding="utf-8")
+    return fixes
+
+
 def reconcile(root: pathlib.Path, apply: bool = False) -> list[Fix]:
-    """Bring every counter in the lesson indexes in line with the files.
+    """Bring every counter in the lesson indexes in line with the files, and every
+    category's rows into newest-first order.
 
     Returns the fixes needed; writes them when `apply`. An empty list means the
     indexes already agree with the corpus.
@@ -360,5 +387,6 @@ def reconcile(root: pathlib.Path, apply: bool = False) -> list[Fix]:
 
     for cat in category_dirs(root):
         fixes += _rewrite(cat / "_index.md", apply, category_heading(counts[cat.name]))
+        fixes += _order_rows(cat / "_index.md", apply)
 
     return fixes

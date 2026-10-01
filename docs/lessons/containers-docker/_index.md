@@ -5,6 +5,8 @@
 | # | Lesson | Date |
 |---|---|---|
 | 468 | [A healthcheck that needs a shell never passes on a distroless image, and blocks whatever waits on it](lesson-468-a-healthcheck-that-needs-a-shell-never-passes-on-a-distroless-image.md) | 2026-09-26 |
+| 437 | [A restart policy makes container uptime measure the host, not the container](lesson-437-a-restart-policy-makes-container-uptime-measure-the-host.md) | 2026-09-05 |
+| 431 | [A cgroup limit does not reach what the bounded process starts](lesson-431-a-cgroup-limit-does-not-reach-what-the-bounded-process-starts.md) | 2026-09-04 |
 | 396 | [Replacing a bind-mounted file does not replace what the container runs](lesson-396-replacing-a-bind-mounted-file-does-not-replace-what-the-container-runs.md) | 2026-08-26 |
 | 308 | [Containers keep running with no published ports, and every restart reports success](lesson-308-containers-keep-running-with-no-published-por.md) | 2026-08-10 |
 | 290 | [A base-image CVE fixed upstream doesn't need a new base image tag — `apk upgrade` at build time gets it sooner](lesson-290-a-base-image-cve-fixed-upstream-doesn-t-need-.md) | 2026-07-08 |
@@ -17,5 +19,3 @@
 | 062 | [Docker Compose Prefixes Volumes with the Project Name](lesson-062-docker-compose-prefixes-volumes-with-the-proj.md) | 2026-02-21 |
 | 053 | [Docker Bind Mounts Resolve from Compose File Directory](lesson-053-docker-bind-mounts-resolve-from-compose-file-.md) | 2026-02-14 |
 | 046 | [Docker Anonymous Volumes Inherit Image Ownership](lesson-046-docker-anonymous-volumes-inherit-image-owners.md) | 2026-02-09 |
-| 437 | [A restart policy makes container uptime measure the host, not the container](lesson-437-a-restart-policy-makes-container-uptime-measure-the-host.md) | 2026-09-05 |
-| 431 | [A cgroup limit does not reach what the bounded process starts](lesson-431-a-cgroup-limit-does-not-reach-what-the-bounded-process-starts.md) | 2026-09-04 |
