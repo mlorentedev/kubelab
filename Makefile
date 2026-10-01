@@ -1656,6 +1656,13 @@ sync-r2-watcher-targets:
 backup-coverage:
 	@$(TOOLKIT) backup coverage --env $(or $(filter staging prod,$(ENV)),prod)
 
+# Restore the newest Postgres dump from R2 into a scratch container on this
+# machine and check it is complete (BACKUP-046 AC5). Needs docker and the env's
+# kubeconfig; prints names and counts, never rows.
+.PHONY: backup-drill-postgres
+backup-drill-postgres:
+	@$(TOOLKIT) backup drill-postgres --env $(or $(filter staging prod,$(ENV)),prod)
+
 # Generate the restic repository password into SOPS. The value is never printed;
 # read it once with `make secrets-show KEY=backup.restic_password
 # SECRETS_ENV=common` to place the offsite escrow copy. Refuses to overwrite an

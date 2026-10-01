@@ -1,9 +1,10 @@
 # Backups, volumes and persistence
 
-15 lessons, newest first. Back to [all categories](../_index.md).
+16 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 498 | [`docker rm` without `-v` keeps the restored database: the image declares the volume](lesson-498-docker-rm-without-v-keeps-the-restored-database.md) | 2026-10-01 |
 | 495 | [A backup exclusion with a trigger is a promise nobody keeps; only a tier is a ruling](lesson-495-a-backup-exclusion-with-a-trigger-is-a-promise-nobody-keeps.md) | 2026-10-01 |
 | 490 | [Sizing a restic repository costs its file count, not its bytes](lesson-490-sizing-a-restic-repository-costs-its-file-count-not-its-bytes.md) | 2026-09-30 |
 | 489 | [A rotation keyed on the ISO week breaks its coverage guarantee once a year; key it on epoch weeks](lesson-489-a-rotation-keyed-on-the-iso-week-breaks-once-a-year.md) | 2026-09-30 |

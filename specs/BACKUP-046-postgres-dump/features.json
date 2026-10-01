@@ -16,7 +16,7 @@
   {
     "id": "BACKUP-046-postgres-dump-f3",
     "behavior": "AC1: the VPS snapshot in R2 contains postgres/pg_dumpall.sql with the completion trailer",
-    "verification": "manual, after PR 1 deploys: make backup-node NODE=vps ENV=prod, then list the newest snapshot's postgres/ from R2",
+    "verification": "make backup-drill-postgres ENV=prod (names the snapshot it restored and the trailer it found)",
     "state": "pending",
     "evidence": ""
   },
@@ -29,7 +29,7 @@
   },
   {
     "id": "BACKUP-046-postgres-dump-f5",
-    "behavior": "AC5: the dump restores from R2 into a scratch database with row counts equal to live",
+    "behavior": "AC5: the newest dump in R2 restores completely: every live database and table exists, none with live rows comes back empty",
     "verification": "make backup-drill-postgres ENV=prod",
     "state": "pending",
     "evidence": ""

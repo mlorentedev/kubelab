@@ -68,6 +68,16 @@ the age and does **not** judge it — an on-demand node is legitimately hours or
 days stale, and that judgement belongs to the coverage monitor in Uptime Kuma
 (AC9), which knows the node's class. Two controls, one opinion each.
 
+It then reads every PersistentVolumeClaim on the prod cluster and fails on any
+claim that is in neither `backup.sources.<node>` nor `backup.excluded.<node>`
+(BACKUP-046). That includes claims nothing in git declares, such as
+`kube-system/traefik` from K3s's own chart. A cluster it cannot read is
+`CANNOT CHECK` and fails, never a pass:
+
+```
+[SUCCESS] claims: all 8 live claims on 'vps' have a backup ruling
+```
+
 ## R2 backup alert
 
 `obs015-r2-backup-health` reads the in-cluster watcher (BACKUP-055): a CronJob in
@@ -280,6 +290,52 @@ restored file before putting it in place:
 sqlite3 /tmp/restore-check/path/to/db 'PRAGMA integrity_check;'
 ```
 
+### Postgres
+
+Prod Postgres (the task board's database, among others) is captured by
+`pg_dumpall` into `postgres/pg_dumpall.sql` in the VPS repository, never as a
+copy of its data directory. **Prove the snapshot before you use it:**
+
+```bash
+make backup-drill-postgres ENV=prod
+```
+
+It restores the newest dump into a throwaway container on this machine, running
+the image live runs. It passes only if the dump ends with pg_dumpall's
+completion trailer, every live database and table exists in the restore, and no
+table with rows live came back empty. It prints names and counts, never rows
+(the dump also holds role password hashes), and removes the container, its data
+volume and the file on every exit path, then confirms with docker that the
+container and its volume are gone. If they are not, the drill fails even when the
+restore was complete, and prints the `docker rm -f -v` to run. Counts lower than
+live are expected: the snapshot is up to four hours old.
+
+**Whole cluster lost** (the claim is gone, the Deployment starts on an empty
+volume). Load the whole dump into the fresh server:
+
+```bash
+D=$(mktemp -d) && chmod 700 "$D"          # private: the dump holds password hashes
+restic -r "$REPO" dump latest /opt/node-backup/staging/postgres/pg_dumpall.sql > "$D/dump.sql"
+tail -n 3 "$D/dump.sql"                   # must show: -- PostgreSQL database cluster dump complete
+kubectl --kubeconfig ~/.kube/kubelab-prod-config -n kubelab exec -i deploy/postgres -c postgres -- \
+  sh -c 'psql -U "$POSTGRES_USER" -d postgres -q -o /dev/null' < "$D/dump.sql"
+rm -rf "$D"
+```
+
+Expect `role ... already exists` for the server's own superuser; nothing else.
+Then restart the apps that use it, because they hold pooled connections to the
+empty server.
+
+**One database damaged, the rest fine.** Do not load `pg_dumpall` into the live
+server: it carries `CREATE DATABASE` for every database and fails on each one
+that exists. Restore the whole dump into a scratch container, take that one
+database out with `pg_dump -Fc <db>`, and `pg_restore --clean --if-exists -d <db>`
+it into live with its app scaled to zero. Build the scratch container the way the
+drill does (`docker run -d -e POSTGRES_HOST_AUTH_METHOD=trust <live image>`, no
+published port) and remove it with `docker rm -f -v`. Without `-v` the restored
+database stays on this machine in an anonymous volume, because the image
+declares one for its data directory.
+
 ## Restoring — the disaster case
 
 **This is the scenario the escrow exists for.** The laptop and the USB stick are
@@ -369,6 +425,32 @@ Two things that would break this, in order of likelihood:
    the first time space is reclaimed.
 2. **Storage class drift.** The free tier does **not** apply to Infrequent
    Access. The cheaper-looking class is the more expensive one at this volume.
+
+## Adding a stateful service
+
+Anything that keeps state on disk gets a backup ruling **in the same PR that
+creates it**: a database, a Docker volume, a PVC, a bind mount. There is no
+third option, and "not yet" is not one. Prod Postgres went unbacked for five
+weeks because its exclusion said "joins this list the day something writes to
+it", and nothing watches a sentence (lesson-495).
+
+1. **Pick the tier** from epic #1923. Tier 1 and 2 are backed up; tier 3
+   ("rebuilt from git", "re-downloaded from upstream") is excluded.
+2. **Backed up:** declare it in `backup.sources.<node>` in `common.yaml` with a
+   capture that is consistent for its engine:
+   - `sqlite: [files]` for SQLite (online `.backup`, never a file copy);
+   - `pg_dumpall: {deployment, container}` with `pvc:` for Postgres;
+   - `path:`, `volume:` or `pvc:` alone only for files nothing writes while the capture runs.
+3. **Excluded:** declare it in `backup.excluded.<node>` with `reason:` and
+   `tier: 3`. A reason that names a condition ("until", "once", "for now") is a
+   deferral, so back it up instead. If the database is still empty, backing it
+   up costs nothing.
+4. `make sync-r2-watcher-targets`, then `make test`. `test_backup_pvc_coverage`
+   and `test_backup_volume_coverage` fail on anything left without a ruling.
+5. After merge: `make backup ENV=prod`, then `make backup-node NODE=<node> ENV=prod`.
+6. **Prove it once:** `make backup-coverage ENV=prod`, then restore it. For
+   Postgres that is `make backup-drill-postgres ENV=prod`; for SQLite, the
+   `integrity_check` above. Until a restore has been seen, it is a hypothesis.
 
 ## Gotchas
 

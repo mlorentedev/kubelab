@@ -120,6 +120,23 @@ def coverage_cmd(
         raise typer.Exit(code=1)
 
 
+@app.command("drill-postgres")
+def drill_postgres_cmd(
+    env: Annotated[str, typer.Option("--env", "-e", help="Environment whose merged config is used")] = "prod",
+    project_root: Annotated[Optional[Path], typer.Option("--project-root", help="Repo root")] = None,
+) -> None:
+    """Restore the newest Postgres dump from R2 into a scratch container and check it is complete.
+
+    Passes when the dump carries its trailer, every live database and table exists
+    in the restore, and no table with rows live came back empty. Prints names and
+    counts only, and removes the container and the dump on every exit path.
+    """
+    from toolkit.features.postgres_drill import drill_postgres
+
+    if not drill_postgres(env=env, project_root=project_root):
+        raise typer.Exit(code=1)
+
+
 @app.command("health-check")
 def health_check_cmd(
     env: Annotated[str, typer.Option("--env", "-e", help="Environment whose merged config is used")] = "prod",
