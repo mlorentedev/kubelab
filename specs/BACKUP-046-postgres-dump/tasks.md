@@ -15,15 +15,15 @@ created: "2026-10-01"
 
 ## PR 1 — Postgres reaches R2, and the static guard
 
-- [ ] [P] [AC3] `tests/test_backup_pvc_coverage.py`: render the prod overlay, collect every PVC, fail on any with no ruling in `backup.sources.vps` or `backup.excluded.vps`. Expected red on master: `postgres-data`, `grafana-data`, `loki-data`, `crowdsec-db`, `crowdsec-config`.
-- [ ] [AC3] Same file: every exclusion (volumes and claims) carries a non-empty `reason` and `tier: 3`; a claim exclusion carries `pvc: {namespace, claim}`. Red until the data below exists.
-- [ ] [AC3] `common.yaml`: replace the "NOT here" prose with `backup.excluded.vps` entries for grafana, loki, crowdsec ×2 and `kube-system/traefik`; add `tier: 3` to the Beelink volume exclusions. Green.
-- [ ] [P] [AC2] `tests/test_backup_sources.py`: `pg_dumpall` is a capture method next to `sqlite`, needs `pvc`, takes exactly `{deployment, container}`, and never co-exists with `sqlite`. Replace `test_the_retired_and_deferred_pvcs_stay_out`'s postgres half.
-- [ ] [AC2] Test that runs the rendered capture script with a fake `kubectl` on `PATH`: a good dump is staged at `postgres/pg_dumpall.sql`; a dump missing the trailer, or a failing exec, exits non-zero with no sentinel; the claim's data directory is not copied. Red.
-- [ ] [AC2] `node-backup-capture.sh.j2`: the `pg_dumpall` branch. Green.
-- [ ] [AC1] `common.yaml`: declare `backup.sources.vps.postgres`.
-- [ ] [AC6] Lesson: a deferral with an unwatched trigger is how the board went unbacked.
-- [ ] `make test` green; PR opened as draft; reviews triaged.
+- [x] [P] [AC3] `tests/test_backup_pvc_coverage.py`: render the prod overlay, collect every PVC, fail on any with no ruling in `backup.sources.vps` or `backup.excluded.vps`. Expected red on master: `postgres-data`, `grafana-data`, `loki-data`, `crowdsec-db`, `crowdsec-config`.
+- [x] [AC3] Same file: every exclusion (volumes and claims) carries a non-empty `reason` and `tier: 3`; a claim exclusion carries `pvc: {namespace, claim}`. Red until the data below exists.
+- [x] [AC3] `common.yaml`: replace the "NOT here" prose with `backup.excluded.vps` entries for grafana, loki, crowdsec ×2 and `kube-system/traefik`; add `tier: 3` to the Beelink volume exclusions. Green.
+- [x] [P] [AC2] `tests/test_backup_sources.py`: `pg_dumpall` is a capture method next to `sqlite`, needs `pvc`, takes exactly `{deployment, container}`, and never co-exists with `sqlite`. Replace `test_the_retired_and_deferred_pvcs_stay_out`'s postgres half.
+- [x] [AC2] Test that runs the rendered capture script with a fake `kubectl` on `PATH`: a good dump is staged at `postgres/pg_dumpall.sql`; a dump missing the trailer, or a failing exec, exits non-zero with no sentinel; the claim's data directory is not copied. Red.
+- [x] [AC2] `node-backup-capture.sh.j2`: the `pg_dumpall` branch. Green.
+- [x] [AC1] `common.yaml`: declare `backup.sources.vps.postgres`.
+- [x] [AC6] Lesson: a deferral with an unwatched trigger is how the board went unbacked.
+- [ ] `make test` green (3147 passed, 2026-10-01); PR opened as draft; reviews triaged.
 - [ ] [AC1] After merge: deploy the role to the VPS, `make backup-node NODE=vps ENV=prod`, then list the snapshot's `postgres/` from R2.
 
 ## PR 2 — the live guard and the drill
