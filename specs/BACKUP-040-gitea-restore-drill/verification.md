@@ -58,7 +58,7 @@ On prod, after both runs: 49 docker volumes before and after, no `giteadrill-*` 
 ## Test status
 
 - `poetry run pytest -q -p no:cacheprovider --no-cov tests/test_gitea_drill.py tests/test_postgres_drill.py tests/test_gitea_client_pagination.py tests/test_make_env_default_is_reachable.py`: 111 passed.
-- `make test`: see the PR.
+- `make test` on `3be72f2e`: 3250 passed, 16 skipped, 2 xfailed, rc 0 (2026-10-01).
 
 ## Decisions made during implementation
 
