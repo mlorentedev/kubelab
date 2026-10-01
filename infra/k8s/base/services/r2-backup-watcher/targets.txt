@@ -3,4 +3,4 @@
 beelink s3:https://76967f5ede1ce50efce34d90b7e94958.r2.cloudflarestorage.com/kubelab-backups/beelink 69e70ca8307994ac6076171f9dd7ce7b6681de24ad7c941b5be76b29a51133fa gitea
 rpi3 s3:https://76967f5ede1ce50efce34d90b7e94958.r2.cloudflarestorage.com/kubelab-backups/rpi3 5ccc440d50e7b601cad0d292d366a32347a63998eca91fb78d910c4081e6641d uptime_kuma
 rpi4 s3:https://76967f5ede1ce50efce34d90b7e94958.r2.cloudflarestorage.com/kubelab-backups/rpi4 a35c05eb848b35e6e8073d6d9df4feb16c8617caa46edb6ade46fe2c34cf9177 pihole
-vps s3:https://76967f5ede1ce50efce34d90b7e94958.r2.cloudflarestorage.com/kubelab-backups/kubelab-vps 2e9148a2db7f0881caba395c2d8f1308d9ef71f48cc8c1acfb950d40c9878409 authelia headscale n8n
+vps s3:https://76967f5ede1ce50efce34d90b7e94958.r2.cloudflarestorage.com/kubelab-backups/kubelab-vps 2e9148a2db7f0881caba395c2d8f1308d9ef71f48cc8c1acfb950d40c9878409 authelia headscale n8n postgres
