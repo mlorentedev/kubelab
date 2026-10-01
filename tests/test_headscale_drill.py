@@ -131,6 +131,7 @@ class _Fake:
         run_rc: int = 0,
         ready: bool = True,
         exec_out: Optional[str] = None,
+        users_rc: int = 0,
         live_nodes: Optional[list] = None,
         restored_nodes: Optional[list] = None,
         live_rc: int = 0,
@@ -145,6 +146,7 @@ class _Fake:
         self.run_rc = run_rc
         self.ready = ready
         self.exec_out = exec_out
+        self.users_rc = users_rc
         default = [_node(2, "kubelab-vps", "mkey:v"), _node(64, "gcp1", "mkey:g")]
         self.live_nodes = default if live_nodes is None else live_nodes
         self.restored_nodes = default if restored_nodes is None else restored_nodes
@@ -198,6 +200,8 @@ class _Fake:
         if argv[:2] == ["docker", "exec"]:
             if not self.ready:
                 return 1, "", "dial unix headscale.sock: connect: no such file or directory"
+            if "users" in argv and self.users_rc:
+                return self.users_rc, "[]", "rpc error: code = Unavailable"
             if self.exec_out is not None:
                 return 0, self.exec_out, ""
             payload = self.restored_nodes if "nodes" in argv else self.users
@@ -374,3 +378,10 @@ def test_the_drill_runs_the_image_volume_and_pool_the_ssot_declares(monkeypatch)
     assert seen["volume"] == common["backup"]["sources"]["vps"]["headscale"]["volume"]
     assert seen["cidr"] == common["networking"]["tailscale_cidr"]
     assert seen["ssh_target"].endswith("@" + common["networking"]["vps"]["public_ip"])
+
+
+def test_a_restored_user_list_that_fails_is_cannot_check_even_with_valid_output(drill, capsys) -> None:
+    fake = _Fake(users_rc=1)
+    assert drill(fake) is False
+    assert "CANNOT CHECK" in capsys.readouterr().out
+    assert _torn_down(fake)
