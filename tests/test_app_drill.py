@@ -22,7 +22,7 @@ from typing import Callable, Optional
 
 import pytest
 
-from toolkit.features.app_drill import APPS, compare, parse_rows, rows_sql, run_drill
+from toolkit.features.app_drill import APPS, SEQUENCE, compare, parse_rows, rows_sql, run_drill
 
 STAGING = "/opt/node-backup/staging"
 IMAGES = {"authelia": "authelia/authelia:4.39.15", "n8n": "n8nio/n8n:2.12.3"}
@@ -282,12 +282,29 @@ def test_a_row_created_after_the_snapshot_is_reported_not_failed() -> None:
     assert any("row 3: newer than the snapshot" in line for line in lines)
 
 
-def test_without_a_timestamp_an_id_above_the_restores_highest_is_newer() -> None:
-    restored = {"user_preferences": {"1": (None, "")}}
+def test_without_a_timestamp_an_id_above_the_restores_sequence_is_newer() -> None:
+    restored = {"user_preferences": {"1": (None, "")}, SEQUENCE: {"user_preferences": (1, "")}}
     live = {"user_preferences": {"1": (None, ""), "2": (None, "")}}
     ok, lines = compare(live=live, restored=restored, tables=AUTHELIA, taken=SNAP)
     assert ok
     assert any("user_preferences row 2: newer" in line for line in lines)
+
+
+def test_without_a_timestamp_a_lost_trailing_row_fails() -> None:
+    """The restore had allocated id 5, so a live row 5 missing from it was lost, not added later."""
+    restored = {"user_preferences": {str(i): (None, "") for i in range(1, 5)}, SEQUENCE: {"user_preferences": (5, "")}}
+    live = {"user_preferences": {str(i): (None, "") for i in range(1, 6)}}
+    ok, lines = compare(live=live, restored=restored, tables=AUTHELIA, taken=SNAP)
+    assert not ok
+    assert any(line.startswith("FAIL user_preferences row 5") for line in lines)
+
+
+def test_without_a_timestamp_or_a_sequence_a_missing_row_cannot_be_excused() -> None:
+    restored = {"user_preferences": {"1": (None, "")}}
+    live = {"user_preferences": {"1": (None, ""), "2": (None, "")}}
+    ok, lines = compare(live=live, restored=restored, tables=AUTHELIA, taken=SNAP)
+    assert not ok
+    assert any(line.startswith("FAIL user_preferences row 2") for line in lines)
 
 
 def test_without_a_timestamp_a_missing_id_below_the_restores_highest_is_lost() -> None:
@@ -339,6 +356,7 @@ def test_the_query_reads_every_declared_table_and_the_schema_version(tmp_path: P
     con.close()
     assert version == "23"
     assert set(rows["user_opaque_identifier"]) == {"1", "2"} and set(rows["user_preferences"]) == {"1"}
+    assert rows[SEQUENCE] == {"user_opaque_identifier": (2, ""), "user_preferences": (1, "")}
     assert rows["totp_configurations"]["1"][0] == 1_789_984_800  # 2026-09-21 10:00:00 UTC
 
 
@@ -491,6 +509,7 @@ def test_n8n_fails_when_a_credential_does_not_decrypt(drill, capsys, tmp_path) -
         ({"pv": ""}, "no local-path volume bound to kubelab/"),
         ({"live_rc": 255}, "live's database could not be read"),
         ({"snapshots": "[]"}, "no snapshot readable"),
+        ({"snapshots": "<html>proxy error</html>"}, "snapshot list could not be parsed"),
     ],
 )
 def test_live_or_the_repository_that_cannot_be_read_is_cannot_check(drill, capsys, tmp_path, kwargs, named) -> None:
@@ -559,3 +578,32 @@ def test_the_drill_reads_the_files_keys_and_target_the_ssot_declares(monkeypatch
             == f"{common['networking']['ssh_users']['cloud']}@{common['networking']['vps']['public_ip']}"
         )
     assert asked == [APPS["authelia"].key_path, APPS["n8n"].key_path]
+
+
+@pytest.mark.parametrize("missing", ["sqlite", "pvc"])
+def test_a_source_the_ssot_declares_incompletely_is_cannot_check(monkeypatch, capsys, missing) -> None:
+    import copy
+
+    from toolkit.features import app_drill, backup_destination
+    from toolkit.features.configuration import ConfigurationManager
+
+    repo = Path(__file__).resolve().parents[1]
+    real = ConfigurationManager.get_merged_config
+
+    def without(self):
+        merged = copy.deepcopy(real(self))
+        del merged["backup"]["sources"]["vps"]["authelia"][missing]
+        return merged
+
+    seen: list[str] = []
+    monkeypatch.setattr(ConfigurationManager, "_decrypt_sops", lambda self, path: {})
+    monkeypatch.setattr(ConfigurationManager, "get_merged_config", without)
+    monkeypatch.setattr(ConfigurationManager, "get_secret_by_path", lambda self, p: "k")
+    monkeypatch.setattr(backup_destination, "restic_context", lambda cm: ({}, {}))
+    monkeypatch.setattr(backup_destination, "repo_url", lambda dest, name: name)
+    monkeypatch.setattr(app_drill, "run_drill", lambda **kw: seen.append(kw["app"].service) or True)
+
+    assert app_drill.drill_apps(env="prod", project_root=repo) is False
+    out = _out(capsys)
+    assert "authelia: CANNOT CHECK" in out and f"backup.sources.vps.authelia.{missing}" in out
+    assert seen == ["n8n"], "the other app still runs"
