@@ -35,6 +35,28 @@ Live runs on staging used `ea6b474c`, the branch HEAD. Kubeconfigs were `~/.kube
   - `test_deploy_apps_checks_the_window_before_it_applies` asserts that `check-window` runs before `kubectl apply` in the `deploy-apps` recipe.
 - [x] **AC6.** The `features.json` f4 command exits 0 on `642955c1`: no "scale --replicas=0", "scaled to zero" or "#1998 is the fix" remains, and the runbook has 5 `make restore-window` mentions. The Postgres section and the Authelia/n8n section each open the window before replacing data and close it afterwards.
 
+## Review dispositions
+
+Two reviews ran on `ad47aa4f`: CodeRabbit on PR #2018 and the pooled spec review
+(`review.md`, agy/gemini-3.1-pro-high, PASS WITH GAPS). PR-Agent published no review
+(run 36934979231, case 2 of #1966). The fixes are in `e9e80bfd`, one iteration.
+
+| Source | Finding | Disposition |
+|---|---|---|
+| CodeRabbit | `kubectl` runs with no timeout, so a hung call outlasts every poll budget | Fixed: 60 s per call, a timeout returns rc 124. `test_a_kubectl_call_that_hangs_is_an_error_not_a_hang` |
+| CodeRabbit | the open does not wait for a sync already running, which could put the replicas back after the scale | Fixed: the open waits until no `operation` is pending and none is `Running`, within the same budget; on timeout nothing is scaled and the window stays open. `test_the_open_waits_for_a_sync_in_flight_before_scaling`, `test_a_sync_that_never_finishes_scales_nothing_and_says_the_window_stays_open` |
+| CodeRabbit | a holder annotation with no `deployment` makes the close wait on `deployment/?` | Fixed: the close still restores the policy, removes the annotation and requests the sync, then fails saying the window is closed and nothing was waited for. `test_a_holder_that_names_no_deployment_still_closes_and_says_so` (3 cases) |
+| Spec review | a selector with `matchExpressions` and no `matchLabels` matches every pod | Fixed: a selector that is not plain `matchLabels` fails, and the window stays open. `test_a_selector_the_window_cannot_evaluate_fails_instead_of_matching_every_pod` (2 cases) |
+| Spec review | the close never ends when git declares `replicas: 0` | Declined: a Deployment git keeps at zero has no app for a restore to bring back, and the close does not hang silently. It fails at its timeout naming `0/0` replicas. `want > 0` is what waits out the live `replicas: 0` before the sync lands. |
+| Spec review | a failed `kubectl scale` leaves the window held | Declined: by design. Re-enabling auto-sync automatically after a failure mid-open would race the operator. The error names the window as open and gives the close command (`test_a_pod_that_never_goes_fails_and_says_the_window_stays_open` pins the same contract). |
+
+Each fix was mutated out on a committed tree and its test went red: drain loop
+2 failed, call timeout 1, selector guard 2, holder guard 3.
+
+Run 4 on staging, on `e9e80bfd`, 2026-10-01 22:41Z:
+- open: `window open: n8n is at zero and kubelab-staging will not sync` (9 s);
+- close: `window closed: kubelab-staging syncs from git again and the app is back` (28 s).
+
 ## Test status
 
 - Test suite: `make test` on this branch: 3425 passed, 16 skipped, 1 failed. The failure was `test_the_table_covers_every_site`: the new `restore-window` target was missing from `ENV_TARGETS`. It is now added with its `prod` default, and that file passes 81/81.
