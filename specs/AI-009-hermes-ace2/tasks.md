@@ -12,7 +12,7 @@ created: "2026-09-30"
 ## Setup
 
 - [ ] Spec PR merged (`docs/ai-009-spec`) after ADR-068 (#1967)
-- [ ] Prerequisite **task 0**: #1300 merged, and a second `make provision NODE=ace2 ENV=staging TAGS=dev_node` reports `changed=0`
+- [x] Prerequisite **task 0**: #1300 merged, and a second `make provision NODE=ace2 ENV=staging TAGS=dev_node` reports `changed=0` ✓ 2026-10-01 (#1971; first run `changed=2` from upstream dotfiles commits, second run `ok=57 changed=0`)
 - [ ] R1 and R2 answered by the operator before PR 3 and PR 4 merge
 
 ## Implementation
