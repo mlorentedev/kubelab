@@ -11,12 +11,12 @@
     "behavior": "AC1/AC2/AC3: a missing file, a corrupt database, a key mismatch, a missing node or user, or a changed machine key fails and is named; live unreadable or empty, and no snapshot, are CANNOT CHECK",
     "verification": "poetry run pytest -q -p no:cacheprovider --no-cov tests/test_headscale_drill.py",
     "state": "passing",
-    "evidence": "30 passed; every guard mutation-killed (verification.md)"
+    "evidence": "34 passed (30 at #1995, +4 from BACKUP-069 #1997); every guard mutation-killed (verification.md)"
   },
   {
     "id": "BACKUP-067-headscale-restore-drill-f3",
     "behavior": "AC4: the container and the restored directory are gone on every exit path, read back",
-    "verification": "poetry run pytest -q -p no:cacheprovider --no-cov tests/test_headscale_drill.py -k 'torn_down or cleans_up or removed or behind'",
+    "verification": "poetry run pytest -q -p no:cacheprovider --no-cov tests/test_headscale_drill.py::test_a_good_restore_passes_names_the_snapshot_and_cleans_up tests/test_headscale_drill.py::test_a_capture_missing_a_file_fails_names_it_and_never_starts_a_server tests/test_headscale_drill.py::test_a_corrupt_database_fails_and_never_starts_a_server tests/test_headscale_drill.py::test_a_key_that_differs_from_live_fails tests/test_headscale_drill.py::test_a_server_that_fails_to_start_is_still_removed tests/test_headscale_drill.py::test_a_server_that_never_answers_fails tests/test_headscale_drill.py::test_a_node_missing_from_the_restore_fails_and_is_named tests/test_headscale_drill.py::test_restored_nodes_without_machine_keys_are_cannot_check tests/test_headscale_drill.py::test_a_complete_restore_that_leaves_its_container_behind_fails tests/test_headscale_drill.py::test_a_complete_restore_that_leaves_the_keys_on_disk_fails tests/test_headscale_drill.py::test_a_restored_list_that_cannot_be_read_is_cannot_check tests/test_headscale_drill.py::test_a_restored_user_list_that_fails_is_cannot_check_even_with_valid_output",
     "state": "passing",
     "evidence": "prod run: no hsdrill-* container and no hsdrill-* directory left"
   }
