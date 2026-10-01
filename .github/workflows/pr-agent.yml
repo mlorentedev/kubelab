@@ -381,6 +381,12 @@ jobs:
           fi
       - name: PR-Agent
         if: steps.reviewable.outputs.any == 'true'
+        # Its own limit, under the job's 15. The healthy chain is one ai_timeout
+        # per model (2 x 360 s); a non-timeout APIError is replayed once on the
+        # same model with no setting to stop it, up to 2 x 2 x 360 s. Cutting the
+        # step here, not the job, leaves "Fail if no review was published" time
+        # to name the failure. tests/test_pr_agent_workflow.py holds both bounds.
+        timeout-minutes: 13
         # Pinned by COMMIT SHA, not by tag, and this deliberately exceeds the
         # upstream it ports from. A tag is mutable: whoever can move `v0.42.0`
         # can change what runs in a job that holds `NAN_API_KEY` on a public
@@ -400,7 +406,14 @@ jobs:
           # PR-Agent loads .pr_agent.toml from the default branch, so the PR that changes
           # the model there reviews with the old one until merge; the workflow file is
           # read from the PR head, so the model travels here too. Keep the two in step.
-          CONFIG__MODEL: openai/mimo-v2.5
+          CONFIG__MODEL: openai/mimo-v2.6-flash
+          CONFIG__RETRY_SAME_MODEL_ON_TIMEOUT: "false"
+          CONFIG__NUM_RETRIES: "0"
+          CONFIG__AI_TIMEOUT: "360"
+          LITELLM__CUSTOM_LLM_PROVIDER: openai
+          LITELLM__FORCE_STREAMING_CUSTOM_LLM_PROVIDER: openai
+          LITELLM__FORCE_STREAMING_API_BASE_SUBSTRINGS: '["api.nan.builders"]'
+          PR_REVIEWER__NUM_MAX_FINDINGS: "5"
           CONFIG__FALLBACK_MODELS: '["openai/deepseek-v4-flash"]'
           CONFIG__CUSTOM_MODEL_MAX_TOKENS: "200000"
           CONFIG__PUBLISH_OUTPUT_PROGRESS: false

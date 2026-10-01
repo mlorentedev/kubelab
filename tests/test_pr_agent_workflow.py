@@ -868,8 +868,8 @@ def _fallback_model_names() -> set[str]:
 
     The prefix differs between the two files by design and comparing full ids
     would make this guard either vacuous or permanently red: the toml says
-    `openai/mimo-v2.5` because LiteLLM reaches NaN over the OpenAI-compatible
-    transport, while the pool says `nan/mimo-v2.5` because that is the provider
+    `openai/mimo-v2.6-flash` because LiteLLM reaches NaN over the OpenAI-compatible
+    transport, while the pool says `nan/mimo-v2.6-flash` because that is the provider
     a reviewer records. Same model, two namespaces.
     """
     raw = re.search(r"^fallback_models\s*=\s*\[(.*?)\]", PR_AGENT_CONFIG.read_text(), re.M | re.S)
@@ -1040,3 +1040,116 @@ def test_a_run_the_job_skips_cannot_cancel_one_that_reviews() -> None:
     skipped = {_evaluate(group, run) for run in runs if not _evaluate(job_if, run)}
     assert reviewed and skipped, "every run reviews, or none does: the fixture no longer exercises the job's if:"
     assert not reviewed & skipped, f"a skipped run shares a group with a reviewing one: {sorted(reviewed & skipped)}"
+
+
+# --- the reviewer's time and findings budget, held in two files -------------
+
+
+def _review_env() -> dict:
+    step = next(s for s in _review_job()["steps"] if "pr-agent@" in str(s.get("uses", "")))
+    return step.get("env", {})
+
+
+def _toml() -> dict:
+    import tomllib
+
+    return tomllib.loads(PR_AGENT_CONFIG.read_text(encoding="utf-8"))
+
+
+def test_a_failed_call_is_not_replayed_before_the_next_model_runs() -> None:
+    """PR-Agent 0.46.0 replays a failed call at two layers before it consults the
+    fallback: the handler's `MODEL_RETRIES = 2` (timeouts included while
+    `retry_same_model_on_timeout` is true) times the completion client's default
+    retries. Run 36800846902, one of #1909's 720 s failures: mimo-v2.5 answered
+    401 at once, then deepseek took 2 x 3 x 120 s. With both settings off a
+    timed-out call goes straight to the next model. A non-timeout `APIError` is
+    still replayed once: `_should_retry_same_model` has no setting for it, and
+    the step limit asserted below is what bounds that case.
+
+    Asserted in BOTH files: PR-Agent reads `.pr_agent.toml` from the default
+    branch, the workflow from the PR head, so only the env value reaches the PR
+    that changes it, and the toml value is what every later PR inherits.
+    """
+    config = _toml()["config"]
+    env = _review_env()
+    assert config.get("retry_same_model_on_timeout") is False
+    assert str(env.get("CONFIG__RETRY_SAME_MODEL_ON_TIMEOUT")).lower() == "false"
+    assert config.get("num_retries") == 0
+    assert str(env.get("CONFIG__NUM_RETRIES")) == "0"
+
+
+def test_every_request_to_nan_is_streamed() -> None:
+    """NaN sits behind Cloudflare, which answers 524 to a request that sends no
+    bytes for about 125 s. A review takes mimo-v2.6-flash longer: #1962's own
+    prompt, sent directly, returned 524 at 126 s unstreamed and 200 at 275 s
+    streamed. Upstream forces streaming only when BOTH the declared provider and
+    an api_base substring match, so all three keys must agree with the base URL
+    the workflow sends, in both files.
+    """
+    litellm = _toml()["litellm"]
+    env = _review_env()
+    host = env["OPENAI__API_BASE"].split("//", 1)[1].split("/", 1)[0]
+    assert litellm["custom_llm_provider"] == litellm["force_streaming_custom_llm_provider"] == "openai"
+    assert any(s in host for s in litellm["force_streaming_api_base_substrings"])
+    assert env["LITELLM__CUSTOM_LLM_PROVIDER"] == litellm["custom_llm_provider"]
+    assert env["LITELLM__FORCE_STREAMING_CUSTOM_LLM_PROVIDER"] == litellm["force_streaming_custom_llm_provider"]
+    assert json.loads(env["LITELLM__FORCE_STREAMING_API_BASE_SUBSTRINGS"]) == litellm["force_streaming_api_base_substrings"]
+
+
+def test_a_review_can_report_more_findings_than_the_upstream_default() -> None:
+    """PR-Agent 0.46.0 marks a review `complete` only when it reports FEWER
+    findings than `num_max_findings` (`allow_resolution` in `pr_reviewer.py`):
+    at the cap, there may be more it did not say. At the default of 3, any review
+    with three findings is partial by construction, and the merge rule requires a
+    complete one. #1955 hit it on two heads in a row with three real findings each.
+    """
+    assert int(_toml()["pr_reviewer"]["num_max_findings"]) > 3
+    assert int(_review_env()["PR_REVIEWER__NUM_MAX_FINDINGS"]) == int(_toml()["pr_reviewer"]["num_max_findings"])
+
+
+def test_every_model_in_the_chain_gets_its_whole_timeout_inside_the_job() -> None:
+    """Two bounds, because the pinned handler gives a model two shapes of worst case.
+
+    A timed-out call is not replayed, so the healthy chain costs one `ai_timeout`
+    per model and must fit inside the PR-Agent step's own limit. The timeout
+    itself must exceed what a streamed review takes: 275-300 s for #1962's
+    30k-token diff on mimo-v2.6-flash. Upstream's 120 s timed out on both models
+    in run 36803951714.
+
+    A non-timeout `APIError` (a 5xx, a dropped stream) is replayed once on the
+    same model: `MODEL_RETRIES = 2` at litellm_ai_handler.py:141 in the pinned
+    v0.46.0, with no setting. That costs up to 2 x 2 x `ai_timeout`, more than the
+    job's 15 min. The step limit cuts it, and must leave the job time for the
+    step after it to name the failure: a cancelled job publishes nothing and
+    names nothing, which is #1909, and its AC2 asks for a named failure in under
+    15 min. The 60 s is setup and that step, measured at about 45 s on #1962.
+
+    Inside the step, PR-Agent works 11-13 s before its first request (config,
+    diff, prompt; runs 36806561401, 36807143031, 36807944435), so the chain gets
+    the step minus a 60 s slack. With streaming, `ai_timeout` is the HTTP
+    client's per-read timeout, not a total: run 36807143031's answer arrived
+    360 s after its request. The step limit is the only total bound.
+    """
+    timeout = int(_toml()["config"]["ai_timeout"])
+    assert str(_review_env()["CONFIG__AI_TIMEOUT"]) == str(timeout)
+    # The chain the job runs is the env's, which overrides the toml; count it
+    # from the toml only after proving the two agree.
+    assert json.loads(_review_env()["CONFIG__FALLBACK_MODELS"]) == _toml()["config"]["fallback_models"]
+    chain = 1 + len(_fallback_model_names())
+    assert timeout > 300
+    step = next(s for s in _review_job()["steps"] if "pr-agent@" in str(s.get("uses", "")))
+    assert "timeout-minutes" in step, "the PR-Agent step has no limit of its own; a replayed APIError outlives the job"
+    step_seconds = int(step["timeout-minutes"]) * 60
+    assert chain * timeout + 60 <= step_seconds
+    assert step_seconds + 60 < int(_review_job()["timeout-minutes"]) * 60
+    # Time left after the cut names nothing unless the naming step runs after a
+    # failed step; the default `success()` would skip it.
+    naming = next(s for s in _review_job()["steps"] if s.get("name") == "Fail if no review was published")
+    assert "always()" in str(naming.get("if", ""))
+
+
+def test_the_workflow_reviews_with_the_toml_model() -> None:
+    """The env reaches the PR under test, the toml every later default-branch
+    read. Two models in two files is how mimo-v2.5's retirement produced a 401
+    on one path and not the other (#1909)."""
+    assert _review_env()["CONFIG__MODEL"] == _toml()["config"]["model"]

@@ -20,7 +20,14 @@
 # `openai/` selects LiteLLM's OpenAI-compatible transport; the endpoint is NaN's,
 # set as OPENAI__API_BASE in the workflow. Nothing here talks to OpenAI.
 #
-# mimo-v2.5 leads, deepseek-v4-flash follows, and the order was the other way
+# mimo-v2.6-flash leads, deepseek-v4-flash follows. mimo-v2.6-flash replaced
+# mimo-v2.5 on 2026-10-01, when NaN retired the older model: it answers 401
+# "This API key does not have access to the requested model" (run 36800846902,
+# and a direct call from this repo's key). Admitted to harness/reviewer-pool.json
+# on the same bar, see its entry. What follows was measured on mimo-v2.5 and is
+# carried over, not re-run.
+#
+# mimo leads, deepseek follows, and the order was the other way
 # round until #1205 measured why it could not work. deepseek returns a 200 with
 # an empty body — it spends its OUTPUT budget on the reasoning chain and never
 # writes the answer — which raises no exception, so LiteLLM never consults the
@@ -35,7 +42,32 @@
 # is not a quality ranking — none exists, and harness/reviewer-pool.json says so
 # in its own entry. For a reviewer whose current failure is silence, delivering
 # an answer is the property being selected for.
-model = "openai/mimo-v2.5"
+model = "openai/mimo-v2.6-flash"
+
+# How long a review takes, and what cuts it off. Measured 2026-10-01 from the
+# raw run logs (`gh run view --log` drops the lines after the diff artifact; the
+# zip from `actions/runs/<id>/logs` has them):
+#
+# - NaN sits behind Cloudflare, which answers 524 to any request that sends no
+#   bytes for about 125 s, whatever `ai_timeout` says. A review prompt for a
+#   30k-token diff takes mimo-v2.6-flash about 275-300 s. So a non-streamed
+#   review succeeds only on the days the model is quick: #1962's prompt, sent
+#   directly, returned 524 at 126 s without streaming and 200 at 275 s with it.
+# - Upstream replays a failed call at two layers before consulting the next
+#   model: the handler's MODEL_RETRIES = 2 (timeouts included while the first
+#   setting below is true) times the completion client's default retries.
+#   Run 36800846902 (#1909's 720 s): mimo-v2.5 answered 401 at once, and
+#   deepseek then took 2 x 3 x 120 s before "Failed to review PR".
+#
+# Hence: stream (the [litellm] block below), no replay of a timed-out call,
+# and an attempt long enough to finish. A non-timeout error (a 5xx, a dropped
+# stream) is still replayed once on the same model: MODEL_RETRIES is a
+# constant with no setting. So the PR-Agent step carries its own
+# `timeout-minutes`, which cuts that worst case and leaves the next step time
+# to name the failure. `tests/test_pr_agent_workflow.py` holds both bounds.
+retry_same_model_on_timeout = false
+num_retries = 0
+ai_timeout = 360
 
 # ONE fallback, and it is not the cheap kind this line used to forbid.
 #
@@ -95,7 +127,21 @@ response_language = "en-US"
 # asserts nothing.
 repo_context_files = ["AGENTS.md", "CLAUDE.md"]
 
+[litellm]
+# Stream every request to NaN, so bytes flow and Cloudflare never sees an idle
+# connection to cut at 125 s (see `ai_timeout` above). Upstream's switch for an
+# OpenAI-compatible endpoint takes BOTH a provider and an api_base substring, and
+# matches the provider only when one is declared, hence `custom_llm_provider`.
+custom_llm_provider = "openai"
+force_streaming_custom_llm_provider = "openai"
+force_streaming_api_base_substrings = ["api.nan.builders"]
+
 [pr_reviewer]
+# Upstream's default is 3, and a review is `complete` only with FEWER findings
+# than this (`allow_resolution`, pr_reviewer.py): at the cap there may be more it
+# did not say. The merge rule requires a complete review, so at 3 any review with
+# three real findings blocked the merge by construction (#1955, two heads).
+num_max_findings = 5
 require_score_review = false
 require_tests_review = true
 require_security_review = true
