@@ -162,6 +162,14 @@ class TestTheRootMatchesWhatIsRendered:
             assert "for_each" not in body, name
             assert "prevent_destroy" not in body, name
 
+    def test_the_hcl_declares_no_prefix_of_its_own(self) -> None:
+        """The rendered list is the one the lock applies only if the HCL has none
+        of its own: a literal here would lock what the renderer's tests never see."""
+        text = (ROOT / "main.tf").read_text(encoding="utf-8")
+        assert re.search(r"for\s+prefix\s+in\s+var\.locked_prefixes", text)
+        for prefix in (*r2_tfvars.LOCKED_PREFIXES, "locks/", "index/"):
+            assert f'"{prefix}"' not in text, f"main.tf hardcodes {prefix!r}"
+
     def test_the_provider_is_pinned_to_v5(self) -> None:
         text = (ROOT / "main.tf").read_text(encoding="utf-8")
         assert re.search(r'version\s*=\s*"~>\s*5\.\d+"', text)
