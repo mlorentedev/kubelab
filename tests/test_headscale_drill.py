@@ -130,6 +130,7 @@ class _Fake:
         corrupt_db: bool = False,
         run_rc: int = 0,
         ready: bool = True,
+        exec_out: Optional[str] = None,
         live_nodes: Optional[list] = None,
         restored_nodes: Optional[list] = None,
         live_rc: int = 0,
@@ -143,6 +144,7 @@ class _Fake:
         self.corrupt_db = corrupt_db
         self.run_rc = run_rc
         self.ready = ready
+        self.exec_out = exec_out
         default = [_node(2, "kubelab-vps", "mkey:v"), _node(64, "gcp1", "mkey:g")]
         self.live_nodes = default if live_nodes is None else live_nodes
         self.restored_nodes = default if restored_nodes is None else restored_nodes
@@ -196,6 +198,8 @@ class _Fake:
         if argv[:2] == ["docker", "exec"]:
             if not self.ready:
                 return 1, "", "dial unix headscale.sock: connect: no such file or directory"
+            if self.exec_out is not None:
+                return 0, self.exec_out, ""
             payload = self.restored_nodes if "nodes" in argv else self.users
             return 0, json.dumps(payload), ""
         return 0, "", ""
@@ -214,6 +218,7 @@ def drill(tmp_path: Path, monkeypatch):
             image=IMAGE,
             volume="headscale_headscale_data",
             ssh_target="manu@vps",
+            cidr="100.64.0.0/10",
             run=fake,
             sleep=lambda s: None,
             clock=lambda: float(next(ticks)),
@@ -241,7 +246,7 @@ def test_a_good_restore_passes_names_the_snapshot_and_cleans_up(drill, capsys) -
     assert _torn_down(fake)
 
 
-def test_the_restored_server_has_no_network_runs_as_the_caller_and_the_pinned_image(drill) -> None:
+def test_the_restored_server_has_no_network_runs_as_the_caller_and_the_image_it_is_given(drill) -> None:
     fake = _Fake()
     drill(fake)
     start = next(c for c in fake.calls if c[:2] == ["docker", "run"])
@@ -337,3 +342,35 @@ def test_a_complete_restore_that_leaves_the_keys_on_disk_fails(drill, capsys, mo
     fake = _Fake()
     assert drill(fake) is False
     assert "private keys, delete it now" in " ".join(capsys.readouterr().out.split())
+
+
+@pytest.mark.parametrize("exec_out", ["", "WRN something\n[]", json.dumps([{"given_name": "no-id"}])])
+def test_a_restored_list_that_cannot_be_read_is_cannot_check(drill, capsys, exec_out) -> None:
+    fake = _Fake(exec_out=exec_out)
+    assert drill(fake) is False
+    assert "CANNOT CHECK" in capsys.readouterr().out
+    assert _torn_down(fake)
+
+
+def test_the_drill_runs_the_image_volume_and_pool_the_ssot_declares(monkeypatch) -> None:
+    """The plumbing from `common.yaml` to the drill, which the fakes above cannot see."""
+    import yaml
+
+    from toolkit.features import backup_destination, headscale_drill
+
+    repo = Path(__file__).resolve().parents[1]
+    common = yaml.safe_load((repo / "infra/config/values/common.yaml").read_text())
+    seen: dict = {}
+    from toolkit.features.configuration import ConfigurationManager
+
+    # Hermetic: no value here is a secret, so nothing is decrypted.
+    monkeypatch.setattr(ConfigurationManager, "_decrypt_sops", lambda self, path: {})
+    monkeypatch.setattr(backup_destination, "restic_context", lambda cm: ({}, {}))
+    monkeypatch.setattr(backup_destination, "repo_url", lambda dest, name: name)
+    monkeypatch.setattr(headscale_drill, "run_drill", lambda **kw: seen.update(kw) or True)
+
+    assert headscale_drill.drill_headscale(env="prod", project_root=repo)
+    assert seen["image"] == common["apps"]["services"]["core"]["headscale"]["image"]
+    assert seen["volume"] == common["backup"]["sources"]["vps"]["headscale"]["volume"]
+    assert seen["cidr"] == common["networking"]["tailscale_cidr"]
+    assert seen["ssh_target"].endswith("@" + common["networking"]["vps"]["public_ip"])

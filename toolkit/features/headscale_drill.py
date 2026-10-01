@@ -158,7 +158,9 @@ def _intact(database: Path) -> bool:
 def _drill_config(cidr: str) -> str:
     """A config that serves the restored database and nothing else.
 
-    No DERP map download and no listener outside the container. The socket sits
+    No DERP map download, no MagicDNS and no listener outside the container, so
+    the only network value in it is the address pool, `networking.tailscale_cidr`
+    passed in by the caller. The socket sits
     in the data directory because the container runs as the invoking user, who
     cannot write `/var/run`. The embedded DERP server is on so that it loads the
     restored DERP key the way live does.
@@ -171,7 +173,7 @@ def _drill_config(cidr: str) -> str:
             "metrics_listen_addr": "127.0.0.1:9090",
             "grpc_listen_addr": "127.0.0.1:50443",
             "noise": {"private_key_path": f"{data}/noise_private.key"},
-            "prefixes": {"v4": cidr, "v6": "fd7a:115c:a1e0::/48", "allocation": "sequential"},
+            "prefixes": {"v4": cidr, "allocation": "sequential"},
             "derp": {
                 "server": {
                     "enabled": True,
@@ -186,12 +188,7 @@ def _drill_config(cidr: str) -> str:
                 "paths": [],
                 "auto_update_enabled": False,
             },
-            "dns": {
-                "magic_dns": True,
-                "base_domain": "kubelab.internal",
-                "override_local_dns": False,
-                "nameservers": {"global": ["1.1.1.1"]},
-            },
+            "dns": {"magic_dns": False, "override_local_dns": False},
             "database": {"type": "sqlite", "sqlite": {"path": f"{data}/{DATABASE}"}},
             "disable_check_updates": True,
             "unix_socket": f"{data}/headscale.sock",
@@ -211,7 +208,7 @@ def run_drill(
     image: str,
     volume: str,
     ssh_target: str,
-    cidr: str = "100.64.0.0/10",
+    cidr: str,
     run: Run = _default_run,
     sleep: Callable[[float], None] = time.sleep,
     clock: Callable[[], float] = time.monotonic,
@@ -358,12 +355,17 @@ def _restore_and_check(
             return False
         sleep(1)
     ready = clock()
-    restored_nodes = parse_entries(out, "machine_key")
-    rc, out, err = run(["docker", "exec", name, "headscale", "users", "list", "-o", "json"])
-    if rc != 0:
-        logger.error(f"drill: CANNOT CHECK — the restored server did not list users: {err.strip()[:160]}")
+    nodes_out = out
+    rc, users_out, err = run(["docker", "exec", name, "headscale", "users", "list", "-o", "json"])
+    try:
+        if rc != 0:
+            raise ValueError(err.strip()[:160])
+        restored_nodes = parse_entries(nodes_out, "machine_key")
+        restored_users = parse_entries(users_out, None)
+    except (ValueError, KeyError) as exc:
+        # The same guard as the live reads: an unreadable answer names itself.
+        logger.error(f"drill: CANNOT CHECK — the restored server's lists could not be read: {str(exc)[:160]}")
         return False
-    restored_users = parse_entries(out, None)
 
     ok, lines = compare(
         live_nodes=live_nodes,
