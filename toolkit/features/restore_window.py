@@ -301,8 +301,14 @@ def close_window(
 
     started = clock()
     while True:
-        app = _json(run, _kubectl(hub_kubeconfig, HUB_NAMESPACE, "get", "application", name, "-o", "json"))
-        dep = _json(run, _kubectl(spoke_kubeconfig, APP_NAMESPACE, "get", "deployment", deployment, "-o", "json"))
+        try:
+            app = _json(run, _kubectl(hub_kubeconfig, HUB_NAMESPACE, "get", "application", name, "-o", "json"))
+            dep = _json(run, _kubectl(spoke_kubeconfig, APP_NAMESPACE, "get", "deployment", deployment, "-o", "json"))
+        except WindowError as exc:
+            raise WindowError(
+                f"the window is closed and the sync requested, but the wait could not read its state: {exc}. "
+                f"Check {name} is Synced/Healthy and deployment/{deployment} has its replicas ready."
+            ) from exc
         sync = (app.get("status") or {}).get("sync", {}).get("status", "Unknown")
         health = (app.get("status") or {}).get("health", {}).get("status", "Unknown")
         want = int(dep["spec"].get("replicas") or 0)
