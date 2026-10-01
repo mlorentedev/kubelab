@@ -305,8 +305,10 @@ the image live runs. It passes only if the dump ends with pg_dumpall's
 completion trailer, every live database and table exists in the restore, and no
 table with rows live came back empty. It prints names and counts, never rows
 (the dump also holds role password hashes), and removes the container, its data
-volume and the file on every exit path. Counts lower than live are expected: the snapshot is up
-to four hours old.
+volume and the file on every exit path, then confirms with docker that the
+container and its volume are gone. If they are not, the drill fails even when the
+restore was complete, and prints the `docker rm -f -v` to run. Counts lower than
+live are expected: the snapshot is up to four hours old.
 
 **Whole cluster lost** (the claim is gone, the Deployment starts on an empty
 volume). Load the whole dump into the fresh server:
