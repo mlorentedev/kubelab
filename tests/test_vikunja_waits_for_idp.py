@@ -24,17 +24,21 @@ REPO = Path(__file__).resolve().parent.parent
 AUTHURL = "VIKUNJA_AUTH_OPENID_PROVIDERS_AUTHELIA_AUTHURL"
 
 
-def _vikunja_pod(overlay: str) -> dict:
+def _render(overlay: str) -> list[dict]:
     if shutil.which("kubectl") is None:
         pytest.skip("kubectl not on PATH: cannot render the overlay (a skip is CANNOT CHECK, not OK)")
     out = subprocess.run(
         ["kubectl", "kustomize", str(REPO / "infra/k8s/overlays" / overlay)], capture_output=True, text=True
     )
     assert out.returncode == 0, out.stderr
-    for doc in yaml.safe_load_all(out.stdout):
-        if doc and doc.get("kind") == "Deployment" and doc["metadata"]["name"] == "vikunja":
+    return [doc for doc in yaml.safe_load_all(out.stdout) if doc]
+
+
+def _vikunja_pod(docs: list[dict]) -> dict:
+    for doc in docs:
+        if doc.get("kind") == "Deployment" and doc["metadata"]["name"] == "vikunja":
             return doc["spec"]["template"]["spec"]
-    raise AssertionError(f"no vikunja Deployment in {overlay}")
+    raise AssertionError("no vikunja Deployment in the render")
 
 
 def _config_refs(container: dict) -> set[str]:
@@ -43,7 +47,8 @@ def _config_refs(container: dict) -> set[str]:
 
 @pytest.mark.parametrize("overlay", ["staging", "prod"])
 def test_vikunja_starts_only_after_its_idp_answers(overlay: str) -> None:
-    pod = _vikunja_pod(overlay)
+    docs = _render(overlay)
+    pod = _vikunja_pod(docs)
     waits = [c for c in pod.get("initContainers", []) if c["name"] == "wait-for-idp"]
     assert waits, "no init container waits for the IdP's discovery document"
     script = " ".join(waits[0]["command"])
@@ -51,12 +56,22 @@ def test_vikunja_starts_only_after_its_idp_answers(overlay: str) -> None:
     # Authelia answers 200 on any path, so only the document's content proves
     # discovery works.
     assert '"authorization_endpoint"' in script
-    # busybox's TLS cannot complete a handshake with prod Traefik (alert 47).
+    # The busybox image's own TLS cannot complete a handshake with prod Traefik
+    # (alert 47). Alpine's busybox wget hands TLS to `ssl_client` (OpenSSL 3).
     assert not waits[0]["image"].startswith("busybox")
     # The URL comes from Vikunja's own ConfigMap, so the wait and the app can
-    # never check two different IdPs.
+    # never check two different IdPs. An `env:` entry wins over `envFrom`, so
+    # neither container may set the key directly.
     [app] = [c for c in pod["containers"] if c["name"] == "vikunja"]
-    assert _config_refs(waits[0]) == _config_refs(app)
+    refs = _config_refs(waits[0])
+    assert refs and refs == _config_refs(app)
+    for container in (waits[0], app):
+        assert AUTHURL not in {e["name"] for e in container.get("env", [])}, container["name"]
+    # And the key is there: an empty URL would leave the pod in Init forever,
+    # which is worse than the failure this wait replaces.
+    configmaps = {d["metadata"]["name"]: d.get("data", {}) for d in docs if d.get("kind") == "ConfigMap"}
+    urls = [configmaps[r].get(AUTHURL, "") for r in refs]
+    assert any(u.startswith("https://") for u in urls), f"{AUTHURL} is missing or not https in {sorted(refs)}"
 
 
 def _generator_env_files() -> list[Path]:

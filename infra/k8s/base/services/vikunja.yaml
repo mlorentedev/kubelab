@@ -33,9 +33,10 @@ spec:
         # probe with, so the pod waits here, not ready, until discovery answers.
         # The URL is read from Vikunja's own ConfigMap: one IdP, never two.
         - name: wait-for-idp
-          # Not busybox: its built-in TLS fails the handshake with prod Traefik
-          # (alert 47), so it would wait forever. Alpine's wget uses OpenSSL,
-          # and this image is already pinned and pulled for postgres.
+          # Not the busybox image: its built-in TLS fails the handshake with prod
+          # Traefik (alert 47), so it would wait forever. Alpine's wget is also
+          # busybox, but it hands TLS to `ssl_client` (OpenSSL 3), measured
+          # against prod on 2026-10-01; this image is already pinned and pulled.
           image: postgres:16-alpine
           envFrom:
             - configMapRef:
