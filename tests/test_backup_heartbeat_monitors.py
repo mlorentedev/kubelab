@@ -346,6 +346,10 @@ def test_a_manual_run_takes_the_same_path_the_timer_does() -> None:
         )
     starts = [task for task in play["tasks"] if task.get("ansible.builtin.systemd", {}).get("state") == "started"]
     assert len(starts) == 1, "exactly one unit is started, or the topology is bypassed"
+    # The rendering above proves only the variable: the started task must read it.
+    assert starts[0]["ansible.builtin.systemd"]["name"] == "{{ backup_unit }}", (
+        "the started task names its unit directly, so the ship-unit check above no longer covers it"
+    )
 
 
 def test_the_dry_run_does_not_report_a_failure_it_invented() -> None:
