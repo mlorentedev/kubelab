@@ -44,6 +44,7 @@ PREFIX = "s3:https://example.r2.cloudflarestorage.com/kubelab-backups"
 #   <repo>.id     the repository id `cat config --json` reports (BACKUP-058)
 #   <repo>.size   the `total_size` `stats --mode raw-data --json` reports
 #   <repo>.nostats `stats` alone fails, the rest of the repository reads fine
+#   <repo>.nototal `stats` exits 0 and its JSON has no `total_size`
 # Any call without --no-lock is refused the way the read-only token refuses it
 # (PutObject AccessDenied on the lock) and logged as `locked <repo>`.
 FAKE_RESTIC = r"""#!/bin/sh
@@ -80,6 +81,7 @@ case "$cmd" in
   cat) printf '{"version":2,"id":"%s","chunker_polynomial":"3dea92648f6e83"}\n' "$(cat "$FAKE_DIR/$name.id")" ;;
   stats)
     [ -f "$FAKE_DIR/$name.nostats" ] && { echo "Load(<index/0a1b>) failed: timeout" >&2; exit 1; }
+    [ -f "$FAKE_DIR/$name.nototal" ] && { echo '{"total_blob_count":42,"snapshots_count":3}'; exit 0; }
     case " $ORIG_ARGS " in *" --mode raw-data "*) ;; *) echo "wrong stats mode: $ORIG_ARGS" >&2; exit 2 ;; esac
     printf '{"total_size":%s,"total_uncompressed_size":%s,"compression_ratio":1.9,"total_blob_count":42,"snapshots_count":3}\n' \
       "$(cat "$FAKE_DIR/$name.size")" "$(( $(cat "$FAKE_DIR/$name.size") * 2 ))" ;;
@@ -346,6 +348,20 @@ def test_an_unknown_size_is_null_and_never_fails_a_healthy_node(fleet) -> None:
     assert vps["raw_bytes"] is None
     assert _node(nodes, "rpi3")["raw_bytes"] == SIZES["rpi3"]
     assert summary["raw_bytes"] is None
+
+
+@pytest.mark.parametrize(
+    ("marker", "reason"),
+    [("nostats", "Load(<index/0a1b>) failed: timeout"), ("nototal", "stats returned no total_size")],
+)
+def test_an_unknown_size_names_its_reason(fleet, marker, reason) -> None:
+    """A `null` comes with a `size unknown:` line naming why, including when `stats` itself succeeded."""
+    fake, _, env = fleet
+    (fake / f"kubelab-vps.{marker}").write_text("")
+    shell = env.get("PROBE_SHELL", "sh").split()
+    proc = subprocess.run([*shell, str(PROBE)], env=env, capture_output=True, text=True, timeout=60)
+    assert proc.returncode == 0
+    assert f"r2-backup-watcher: vps: size unknown: {reason}\n" in proc.stderr
 
 
 def test_an_unreadable_node_has_no_size(fleet) -> None:
