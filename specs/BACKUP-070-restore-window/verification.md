@@ -9,9 +9,12 @@ created: "2026-10-01"
 
 Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
 
-- [ ] Criterion 1 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 2 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 3 -> commit `<hash>` / test `<name>`
+- [ ] AC1 -> commit `<hash>` / test `<name>`
+- [ ] AC2 -> commit `<hash>` / test `<name>`
+- [ ] AC3 -> commit `<hash>` / test `<name>`
+- [ ] AC4 -> commit `<hash>` / test `<name>`
+- [ ] AC5 -> commit `<hash>` / test `<name>`
+- [ ] AC6 -> commit `<hash>` / test `<name>`
 
 ## Test status
 
