@@ -1063,9 +1063,10 @@ def test_a_hung_model_is_not_retried_before_the_fallback_runs() -> None:
     is true) times the completion client's default retries, which upstream's
     configuration.toml says "multiply the handler's own retry attempts". At
     `ai_timeout = 120` that is 2 x 3 x 120 s = 720 s on the PRIMARY alone, the
-    figure every failed run of #1909 took. Run 36800846902 logs one "Generating
-    prediction with openai/mimo-v2.5" and nothing else for 728 s: the fallback
-    never ran. Both layers off, a hang costs one timeout per model.
+    figure every failed run of #1909 took. PR-Agent logs nothing after "PR diff",
+    so the proof is durations: two models at 3 x 120 s each cap at 720 s, yet
+    #1885's runs held the step for 886 s until the job was killed. Both layers
+    off, a hang costs one timeout per model.
 
     Asserted in BOTH files: PR-Agent reads `.pr_agent.toml` from the default
     branch, the workflow from the PR head, so only the env value reaches the PR
@@ -1088,3 +1089,19 @@ def test_a_review_can_report_more_findings_than_the_upstream_default() -> None:
     """
     assert int(_toml()["pr_reviewer"]["num_max_findings"]) > 3
     assert int(_review_env()["PR_REVIEWER__NUM_MAX_FINDINGS"]) == int(_toml()["pr_reviewer"]["num_max_findings"])
+
+
+def test_every_model_in_the_chain_gets_its_whole_timeout_inside_the_job() -> None:
+    """With no replay of a hung call, the worst case is one `ai_timeout` per model
+    in the chain, and all of it must end before `timeout-minutes` kills the job:
+    a cancelled job publishes nothing and names nothing. The timeout itself must
+    exceed what a review takes. At upstream's 120 s, mimo-v2.6-flash timed out on
+    a 29k-token diff (#1962, run 36803951714: 242 s after "PR diff", one attempt
+    per model, nothing published), where a second attempt had published at 246 s.
+    The 60 s is setup and publish, measured at about 45 s on the same runs.
+    """
+    timeout = int(_toml()["config"]["ai_timeout"])
+    assert str(_review_env()["CONFIG__AI_TIMEOUT"]) == str(timeout)
+    chain = 1 + len(_fallback_model_names())
+    assert timeout > 240
+    assert chain * timeout + 60 < int(_review_job()["timeout-minutes"]) * 60

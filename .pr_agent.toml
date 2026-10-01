@@ -43,15 +43,22 @@
 # an answer is the property being selected for.
 model = "openai/mimo-v2.6-flash"
 
-# A model that hangs past `ai_timeout` (120 s) hangs again, and upstream replays
-# it at two layers before the fallback is consulted: the handler's retry
+# A model that hangs past `ai_timeout` hangs again, and upstream replays it at
+# two layers before the fallback is consulted: the handler's retry
 # (MODEL_RETRIES = 2, timeouts included while the first setting is true) times the
 # completion client's default retries, which "multiply" it (upstream's own
-# comment). 2 x 3 x 120 s = 720 s on the PRIMARY alone, the figure every failed
-# run of #1909 took; run 36800846902 never logs a fallback attempt. Both off, a
-# hung model costs one timeout and the next one in the chain runs.
+# comment). At 120 s that is 2 x 3 x 120 s = 720 s on the PRIMARY alone. The
+# proof is in durations, because PR-Agent logs nothing after "PR diff": two
+# models split 3 x 120 s each can never pass 720 s, yet #1885's runs held the
+# step for 886 s until the job's 15 minutes killed it. Primary 720 s, then the
+# fallback cut off mid-attempt. Both layers off, each model gets one attempt.
 retry_same_model_on_timeout = false
 num_retries = 0
+# One attempt has to be long enough to finish. At upstream's 120 s,
+# mimo-v2.6-flash timed out on a 29k-token diff (#1962), and only a retry had
+# landed it. 360 s, and `tests/test_pr_agent_workflow.py` holds
+# chain x ai_timeout + setup under the job's `timeout-minutes`.
+ai_timeout = 360
 
 # ONE fallback, and it is not the cheap kind this line used to forbid.
 #
