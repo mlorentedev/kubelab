@@ -37,6 +37,7 @@ spec:
           # Traefik (alert 47), so it would wait forever. Alpine's wget is also
           # busybox, but it hands TLS to `ssl_client` (OpenSSL 3), measured
           # against prod on 2026-10-01; this image is already pinned and pulled.
+          # Mirrors infra.postgres.image; the test pins it to the postgres Deployment's.
           image: postgres:16-alpine
           envFrom:
             - configMapRef:

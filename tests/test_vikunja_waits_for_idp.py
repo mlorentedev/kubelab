@@ -65,6 +65,15 @@ def test_vikunja_starts_only_after_its_idp_answers(overlay: str) -> None:
     # The busybox image's own TLS cannot complete a handshake with prod Traefik
     # (alert 47). Alpine's busybox wget hands TLS to `ssl_client` (OpenSSL 3).
     assert not waits[0]["image"].startswith("busybox")
+    # Pinned to the image the wait was measured with: the one prod Postgres runs,
+    # so the cluster already holds it. Any other image (no wget, no ssl_client)
+    # could wait forever on a healthy IdP while every assertion above passes.
+    [postgres] = [
+        d["spec"]["template"]["spec"]["containers"][0]["image"]
+        for d in docs
+        if d.get("kind") == "Deployment" and d["metadata"]["name"] == "postgres"
+    ]
+    assert waits[0]["image"] == postgres, (waits[0]["image"], postgres)
     # The URL comes from Vikunja's own ConfigMap, so the wait and the app can
     # never check two different IdPs. An `env:` entry wins over `envFrom`, so
     # neither container may set the key directly.
