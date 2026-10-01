@@ -110,8 +110,8 @@ class _Fake:
             target = Path(argv[argv.index("--target") + 1])
             self.workdir = target
             data = target / STAGING.lstrip("/") / "gitea"
-            for repo in ("manu/imagesensortool.git", "personal/resume.git"):
-                (data / "git/repositories" / repo).mkdir(parents=True)
+            for repo in self.heads:  # Gitea stores owner and name in lower case on disk
+                (data / "git/repositories" / f"{repo.lower()}.git").mkdir(parents=True)
             (data / "gitea/conf").mkdir(parents=True)
             (data / "gitea/conf/app.ini").write_text("SECRET_KEY = do-not-print\n")
             return 0, "", ""
@@ -129,6 +129,8 @@ class _Fake:
                 owners = [{"owner": {"username": f.split("/")[0]}, "name": f.split("/")[1]} for f in self.heads]
                 return 0, json.dumps({"data": owners}), ""
             full = url.split("/repos/")[1].split("/branches")[0]
+            if not self.heads[full]:
+                return 0, "null", ""  # what Gitea answers for a repository with no commits
             return 0, json.dumps([{"name": b, "commit": {"id": s}} for b, s in self.heads[full].items()]), ""
         if argv[:3] == ["docker", "run", "--rm"]:
             # The root-run wipe: the real one empties the bind-mounted directory.
@@ -143,6 +145,7 @@ def drill(tmp_path: Path, monkeypatch):
     monkeypatch.setattr("tempfile.tempdir", str(tmp_path))
 
     def go(fake: _Fake, live: Optional[_Live] = None) -> bool:
+        ticks = iter(range(0, 100_000, 5))  # each read of the clock advances 5s
         return run_drill(
             repo="s3:https://e/b/kubelab-beelink",
             restic_env={"RESTIC_PASSWORD": "x"},
@@ -152,6 +155,7 @@ def drill(tmp_path: Path, monkeypatch):
             live=live or _Live(),
             run=fake,
             sleep=lambda s: None,
+            clock=lambda: float(next(ticks)),
         )
 
     return go
@@ -222,3 +226,25 @@ def test_the_drill_restores_the_path_the_capture_stages() -> None:
 
     repo = Path(__file__).resolve().parents[1]
     assert _staging_dir(repo) == STAGING
+
+
+def test_a_repository_empty_live_and_restored_passes(drill) -> None:
+    """Gitea answers `/branches` of an empty repository with `null`, on both sides."""
+    live = _Live(repos={"manu/ImageSensorTool": ["a1"], "personal/resume": ["b1"], "teledyne/openkm-brain": []})
+    fake = _Fake(
+        heads={"manu/ImageSensorTool": {"main": "a1"}, "personal/resume": {"main": "b1"}, "teledyne/openkm-brain": {}}
+    )
+    assert drill(fake, live) is True
+
+
+def test_a_scratch_read_that_fails_is_cannot_check(drill, capsys) -> None:
+    fake = _Fake()
+    original = fake.__call__
+
+    def failing(argv, *, env=None):
+        if argv[:2] == ["docker", "exec"] and "wget" in argv and "/branches" in argv[-1]:
+            return 1, "", "connection refused"
+        return original(argv, env=env)
+
+    assert drill(failing) is False
+    assert "CANNOT CHECK" in capsys.readouterr().out

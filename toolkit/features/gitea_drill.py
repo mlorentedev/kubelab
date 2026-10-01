@@ -115,16 +115,23 @@ def compare(
     return ok, lines
 
 
-def _paginate(fetch: Callable[[str], Optional[Any]], path: str, key: Optional[str] = None) -> Optional[list]:
-    """Walk a Gitea list endpoint until a short page. None if any page could not be read."""
-    items: list = []
+_UNREAD = object()
+
+
+def _paginate(fetch: Callable[[str], Any], path: str, key: Optional[str] = None) -> Optional[list[Any]]:
+    """Walk a Gitea list endpoint until a short page. None if any page could not be read.
+
+    A JSON `null` page is an empty collection: Gitea answers `/branches` of a
+    repository with no commits that way. Only `_UNREAD` means the read failed.
+    """
+    items: list[Any] = []
     page = 1
     while True:
         sep = "&" if "?" in path else "?"
         body = fetch(f"{path}{sep}limit=50&page={page}")
-        if body is None:
+        if body is _UNREAD:
             return None
-        batch = body[key] if key else body
+        batch = (body[key] if key else body) if body is not None else []
         items.extend(batch)
         if len(batch) < 50:
             return items
@@ -139,7 +146,8 @@ class _Scratch:
         self.name = name
         self.token = ""
 
-    def get(self, path: str) -> Optional[Any]:
+    def get(self, path: str) -> Any:
+        """The decoded body, or `_UNREAD` when the request or the decode failed."""
         rc, out, _ = self.run(
             [
                 "docker",
@@ -153,11 +161,11 @@ class _Scratch:
             ]
         )
         if rc != 0:
-            return None
+            return _UNREAD
         try:
             return json.loads(out)
         except json.JSONDecodeError:
-            return None
+            return _UNREAD
 
     def heads(self) -> Optional[dict[str, dict[str, str]]]:
         repos = _paginate(self.get, "/repos/search", key="data")

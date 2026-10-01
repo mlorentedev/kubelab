@@ -281,7 +281,10 @@ class GiteaClient:
             # rather than an error, which is why it gets a guard and not just a fix.
             separator = "&" if "?" in endpoint else "?"
             payload = self._request("GET", f"{endpoint}{separator}page={page}&limit={PAGE_SIZE}")
-            items = payload.get(key, []) if key else payload
+            # Gitea answers an empty collection with a JSON `null` on some endpoints:
+            # `/repos/{o}/{r}/branches` of a repository with no commits, measured on
+            # prod 2026-10-01 (`teledyne/openkm-brain`). That is "none", not an error.
+            items = (payload.get(key, []) if key else payload) if payload is not None else []
             if not isinstance(items, list):
                 raise GiteaError(f"Gitea API GET {endpoint} returned {type(items).__name__}, expected a list")
             yield from items

@@ -45,3 +45,22 @@ def test_an_endpoint_with_a_filter_gets_an_ampersand() -> None:
     url = client.requested[0]
     assert url.count("?") == 1, f"{url} carries two query separators; the filter is swallowed"
     assert url == f"/repos/personal/resume/issues?state=open&type=issues&page=1&limit={PAGE_SIZE}"
+
+
+class NullClient(GiteaClient):
+    """Answers every page with JSON `null`, as Gitea does for a repository with no commits."""
+
+    def __init__(self) -> None:
+        super().__init__("https://forge.invalid", token="unused")
+
+    def _request(self, method: str, endpoint: str, **kwargs: Any) -> Any:
+        return None
+
+
+def test_a_null_page_is_an_empty_collection_not_an_error() -> None:
+    """Measured on prod 2026-10-01: `/branches` of an empty repository is `null`.
+
+    Raising there made the restore drill answer CANNOT CHECK for the whole forge
+    because one repository had never been pushed to.
+    """
+    assert NullClient().list_branches("teledyne", "openkm-brain") == []
