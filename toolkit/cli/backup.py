@@ -137,10 +137,33 @@ def drill_postgres_cmd(
         raise typer.Exit(code=1)
 
 
+_HOST_HELP = "Run the drill on this homelab node, from the commit this tree is at (it must be pushed)"
+_INPUTS_HELP = "Read resolved inputs as JSON on stdin and read no config (the host side of --host)"
+
+
+def _drill(drill: str, *, env: str, project_root: Optional[Path], host: Optional[str], inputs_stdin: bool) -> bool:
+    """Dispatch a drill: here, on `host` (BACKUP-071), or as the host side reading its inputs from stdin."""
+    import sys
+
+    from toolkit.features import drill_remote
+
+    if host and inputs_stdin:
+        logger.error("drill: --host and --inputs-stdin are the two ends of one run; pass one")
+        return False
+    if inputs_stdin:
+        return drill_remote.run_from_stdin(drill, sys.stdin.read())
+    if host:
+        return drill_remote.drill_on_host(drill, env=env, host=host, project_root=project_root)
+    module = drill_remote._module(drill)
+    return bool(getattr(module, f"drill_{drill}")(env=env, project_root=project_root))
+
+
 @app.command("drill-gitea")
 def drill_gitea_cmd(
     env: Annotated[str, typer.Option("--env", "-e", help="Environment whose merged config is used")] = "prod",
     project_root: Annotated[Optional[Path], typer.Option("--project-root", help="Repo root")] = None,
+    host: Annotated[Optional[str], typer.Option("--host", help=_HOST_HELP)] = None,
+    inputs_stdin: Annotated[bool, typer.Option("--inputs-stdin", help=_INPUTS_HELP)] = False,
 ) -> None:
     """Restore the newest Gitea capture from R2 into a scratch server and check it brings the forge back.
 
@@ -149,9 +172,7 @@ def drill_gitea_cmd(
     lists is restored with branch heads live knows. Prints names and counts only,
     and removes the container, its volumes and the data on every exit path.
     """
-    from toolkit.features.gitea_drill import drill_gitea
-
-    if not drill_gitea(env=env, project_root=project_root):
+    if not _drill("gitea", env=env, project_root=project_root, host=host, inputs_stdin=inputs_stdin):
         raise typer.Exit(code=1)
 
 
@@ -159,6 +180,8 @@ def drill_gitea_cmd(
 def drill_headscale_cmd(
     env: Annotated[str, typer.Option("--env", "-e", help="Environment whose merged config is used")] = "prod",
     project_root: Annotated[Optional[Path], typer.Option("--project-root", help="Repo root")] = None,
+    host: Annotated[Optional[str], typer.Option("--host", help=_HOST_HELP)] = None,
+    inputs_stdin: Annotated[bool, typer.Option("--inputs-stdin", help=_INPUTS_HELP)] = False,
 ) -> None:
     """Restore the newest Headscale capture from R2 into a scratch container and check it is complete.
 
@@ -167,9 +190,7 @@ def drill_headscale_cmd(
     time is in it. Prints names and ids only, never a key, and removes the
     container and the restore on every exit path.
     """
-    from toolkit.features.headscale_drill import drill_headscale
-
-    if not drill_headscale(env=env, project_root=project_root):
+    if not _drill("headscale", env=env, project_root=project_root, host=host, inputs_stdin=inputs_stdin):
         raise typer.Exit(code=1)
 
 

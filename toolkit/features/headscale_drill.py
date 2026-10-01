@@ -423,27 +423,30 @@ def _restore_and_check(
     return ok
 
 
-def drill_headscale(env: str = "prod", project_root: Optional[Path] = None) -> bool:
-    """Resolve every input from the SSOT and run the drill against the VPS capture."""
+def resolve_inputs(env: str = "prod", project_root: Optional[Path] = None) -> Optional[dict[str, Any]]:
+    """Every input the drill takes, live state included, resolved on this machine. JSON-safe.
+
+    None, after naming what is missing. Live is read here, over ssh and `sudo -n`
+    on the VPS, so a host that runs the restore needs neither (BACKUP-071).
+    """
     from toolkit.features.backup_destination import DestinationError, repo_url, repository_name, restic_context
     from toolkit.features.configuration import ConfigurationManager
     from toolkit.features.postgres_drill import staging_dir
 
     cm = ConfigurationManager(env, project_root)
     root = Path(project_root or cm.project_root)
-    logger.section(f"headscale restore drill — newest capture in R2 into a scratch container ({env})")
     try:
         dest, restic_env = restic_context(cm)
     except DestinationError as exc:
         logger.error(str(exc))
-        return False
+        return None
 
     merged = cm.get_merged_config()
     sources = (merged.get("backup", {}) or {}).get("sources", {}) or {}
     nodes = [node for node, entries in sorted(sources.items()) if SERVICE in (entries or {})]
     if len(nodes) != 1:
         logger.error(f"drill: expected one node capturing {SERVICE} in backup.sources, found {nodes or 'none'}")
-        return False
+        return None
     net = merged["networking"]
     live = read_live(
         _default_run,
@@ -451,12 +454,32 @@ def drill_headscale(env: str = "prod", project_root: Optional[Path] = None) -> b
         str(sources[nodes[0]][SERVICE]["volume"]),
     )
     if live is None:
-        return False
+        return None
+    return {
+        "repo": repo_url(dest, repository_name(cm, nodes[0])),
+        "restic_env": dict(restic_env),
+        "staging_dir": staging_dir(root),
+        "image": str(merged["apps"]["services"]["core"]["headscale"]["image"]),
+        "cidr": str(net["tailscale_cidr"]),
+        "live": live.to_payload(),
+    }
+
+
+def run_from_inputs(inputs: dict[str, Any]) -> bool:
+    """Run the restore half on resolved inputs. Opens no connection to the VPS and reads no config."""
     return run_drill(
-        repo=repo_url(dest, repository_name(cm, nodes[0])),
-        restic_env=restic_env,
-        staging_dir=staging_dir(root),
-        image=str(merged["apps"]["services"]["core"]["headscale"]["image"]),
-        cidr=str(net["tailscale_cidr"]),
-        live=live,
+        repo=str(inputs["repo"]),
+        restic_env={str(k): str(v) for k, v in inputs["restic_env"].items()},
+        staging_dir=str(inputs["staging_dir"]),
+        image=str(inputs["image"]),
+        cidr=str(inputs["cidr"]),
+        live=LiveState.from_payload(inputs["live"]),
+        run=_default_run,
     )
+
+
+def drill_headscale(env: str = "prod", project_root: Optional[Path] = None) -> bool:
+    """Resolve every input from the SSOT, read live, and run the drill on this machine."""
+    logger.section(f"headscale restore drill — newest capture in R2 into a scratch container ({env})")
+    inputs = resolve_inputs(env, project_root)
+    return inputs is not None and run_from_inputs(inputs)

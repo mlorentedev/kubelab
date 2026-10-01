@@ -378,40 +378,63 @@ def _restore_and_check(
     return ok
 
 
-def drill_gitea(env: str = "prod", project_root: Optional[Path] = None) -> bool:
-    """Resolve every input from the SSOT and run the drill on the node that hosts Gitea."""
+def resolve_inputs(env: str = "prod", project_root: Optional[Path] = None) -> Optional[dict[str, Any]]:
+    """Every input the drill takes, resolved from the SSOT and SOPS on this machine. JSON-safe.
+
+    None, after naming what is missing. Holds the restic credentials and the admin
+    token: it travels to another host only on an ssh session's stdin (BACKUP-071).
+    """
     from toolkit.features.backup_destination import DestinationError, repo_url, repository_name, restic_context
     from toolkit.features.configuration import ConfigurationManager
-    from toolkit.features.gitea_client import GiteaClient
     from toolkit.features.postgres_drill import staging_dir
 
     cm = ConfigurationManager(env, project_root)
     root = Path(project_root or cm.project_root)
     merged = cm.get_merged_config()
-    logger.section(f"gitea restore drill — newest capture in R2 into a scratch server ({env})")
     try:
         dest, restic_env = restic_context(cm)
     except DestinationError as exc:
         logger.error(str(exc))
-        return False
+        return None
 
     sources = (merged.get("backup", {}) or {}).get("sources", {}) or {}
     nodes = [node for node, entries in sorted(sources.items()) if SERVICE in (entries or {})]
     if len(nodes) != 1:
         logger.error(f"drill: expected exactly one node with a '{SERVICE}' backup source, found {nodes}")
-        return False
+        return None
 
     gitea = merged["apps"]["services"]["core"]["gitea"]
     token = gitea.get("admin_token")
     if not token:
         logger.error(f"drill: CANNOT CHECK — apps.services.core.gitea.admin_token is missing from {env} SOPS")
-        return False
-    live = GiteaClient(f"https://{gitea['domain']}", str(token))
+        return None
+    return {
+        "repo": repo_url(dest, repository_name(cm, nodes[0])),
+        "restic_env": dict(restic_env),
+        "staging_dir": staging_dir(root),
+        "image": str(gitea["image"]),
+        "admin_user": str(merged["apps"]["auth"]["identities"]["superadmin"]),
+        "gitea_url": f"https://{gitea['domain']}",
+        "token": str(token),
+    }
+
+
+def run_from_inputs(inputs: dict[str, Any]) -> bool:
+    """Run the drill on resolved inputs. Reads no config, so it runs on a host with no SOPS key."""
+    from toolkit.features.gitea_client import GiteaClient
+
     return run_drill(
-        repo=repo_url(dest, repository_name(cm, nodes[0])),
-        restic_env=restic_env,
-        staging_dir=staging_dir(root),
-        image=str(gitea["image"]),
-        admin_user=str(merged["apps"]["auth"]["identities"]["superadmin"]),
-        live=live,
+        repo=str(inputs["repo"]),
+        restic_env={str(k): str(v) for k, v in inputs["restic_env"].items()},
+        staging_dir=str(inputs["staging_dir"]),
+        image=str(inputs["image"]),
+        admin_user=str(inputs["admin_user"]),
+        live=GiteaClient(str(inputs["gitea_url"]), str(inputs["token"])),
     )
+
+
+def drill_gitea(env: str = "prod", project_root: Optional[Path] = None) -> bool:
+    """Resolve every input from the SSOT and run the drill on this machine."""
+    logger.section(f"gitea restore drill — newest capture in R2 into a scratch server ({env})")
+    inputs = resolve_inputs(env, project_root)
+    return inputs is not None and run_from_inputs(inputs)

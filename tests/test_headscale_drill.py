@@ -415,7 +415,7 @@ def test_the_drill_runs_the_image_volume_and_pool_the_ssot_declares(monkeypatch)
     assert seen["volume"] == common["backup"]["sources"]["vps"]["headscale"]["volume"]
     assert seen["cidr"] == common["networking"]["tailscale_cidr"]
     assert seen["ssh_target"].endswith("@" + common["networking"]["vps"]["public_ip"])
-    assert seen["live"] is live
+    assert seen["live"] == live
 
 
 def test_a_restored_user_list_that_fails_is_cannot_check_even_with_valid_output(drill, capsys) -> None:
