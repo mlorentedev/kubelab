@@ -135,7 +135,9 @@ class _Fake:
         live_rc: int = 0,
         hashes_rc: int = 0,
         snapshots: str = json.dumps([{"short_id": "46f892f1", "time": TAKEN}]),
+        rm_fails: bool = False,
     ) -> None:
+        self.rm_fails = rm_fails
         self.restored = {"noise_private.key": restored_noise, "derp_server_private.key": restored_derp}
         self.missing = missing
         self.corrupt_db = corrupt_db
@@ -184,6 +186,8 @@ class _Fake:
         if argv[:3] == ["docker", "container", "inspect"]:
             return (0, "", "") if self.exists else (1, "", f"Error: No such container: {argv[-1]}")
         if argv[:2] == ["docker", "rm"]:
+            if self.rm_fails:
+                return 1, "", "Error response from daemon: device or resource busy"
             self.exists = False
             return 0, argv[-1], ""
         if argv[:2] == ["docker", "run"]:
@@ -320,3 +324,16 @@ def test_the_drill_restores_the_path_the_capture_stages() -> None:
 
     repo = Path(__file__).resolve().parents[1]
     assert staging_dir(repo) == STAGING
+
+
+def test_a_complete_restore_that_leaves_its_container_behind_fails(drill, capsys) -> None:
+    fake = _Fake(rm_fails=True)
+    assert drill(fake) is False
+    assert "still on this machine" in capsys.readouterr().out
+
+
+def test_a_complete_restore_that_leaves_the_keys_on_disk_fails(drill, capsys, monkeypatch) -> None:
+    monkeypatch.setattr("toolkit.features.headscale_drill.shutil.rmtree", lambda *a, **k: None)
+    fake = _Fake()
+    assert drill(fake) is False
+    assert "private keys, delete it now" in " ".join(capsys.readouterr().out.split())
