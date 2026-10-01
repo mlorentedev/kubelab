@@ -155,6 +155,24 @@ def drill_gitea_cmd(
         raise typer.Exit(code=1)
 
 
+@app.command("drill-headscale")
+def drill_headscale_cmd(
+    env: Annotated[str, typer.Option("--env", "-e", help="Environment whose merged config is used")] = "prod",
+    project_root: Annotated[Optional[Path], typer.Option("--project-root", help="Repo root")] = None,
+) -> None:
+    """Restore the newest Headscale capture from R2 into a scratch container and check it is complete.
+
+    Passes when the database is intact, both server keys match live, the restored
+    server starts with no network, and every node and user live had at snapshot
+    time is in it. Prints names and ids only, never a key, and removes the
+    container and the restore on every exit path.
+    """
+    from toolkit.features.headscale_drill import drill_headscale
+
+    if not drill_headscale(env=env, project_root=project_root):
+        raise typer.Exit(code=1)
+
+
 @app.command("health-check")
 def health_check_cmd(
     env: Annotated[str, typer.Option("--env", "-e", help="Environment whose merged config is used")] = "prod",

@@ -143,6 +143,7 @@ ENV_TARGETS: dict[str, tuple[str, str]] = {
     # Added with the target (BACKUP-046): it reads prod data, so prod is the default.
     "backup-drill-postgres": ("--env", "prod"),
     "backup-drill-gitea": ("--env", "prod"),
+    "backup-drill-headscale": ("--env", "prod"),
     # Already correct before #1644. Included as a regression net: "correct and
     # untested" is exactly the state the eight above were in.
     "maintain": ("-e", "staging"),
