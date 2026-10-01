@@ -1,9 +1,23 @@
 [
   {
     "id": "BACKUP-067-headscale-restore-drill-f1",
-    "behavior": "Outcome 1",
-    "verification": "echo 'not implemented' && exit 1",
-    "state": "pending",
-    "evidence": ""
+    "behavior": "AC1/AC2: the newest VPS snapshot restores, db.sqlite passes integrity_check, both keys match live, the pinned image serves it with no network, and every node and user live had at snapshot time is restored",
+    "verification": "make backup-drill-headscale ENV=prod (names the snapshot, the node and user counts and the RTO)",
+    "state": "passing",
+    "evidence": "2026-10-01 prod: snapshot 46f892f1, 12 nodes, 4 users, noise and DERP keys match, RTO 2s, rc=0"
+  },
+  {
+    "id": "BACKUP-067-headscale-restore-drill-f2",
+    "behavior": "AC1/AC2/AC3: a missing file, a corrupt database, a key mismatch, a missing node or user, or a changed machine key fails and is named; live unreadable or empty, and no snapshot, are CANNOT CHECK",
+    "verification": "poetry run pytest -q -p no:cacheprovider --no-cov tests/test_headscale_drill.py",
+    "state": "passing",
+    "evidence": "25 passed; every guard mutation-killed (verification.md)"
+  },
+  {
+    "id": "BACKUP-067-headscale-restore-drill-f3",
+    "behavior": "AC4: the container and the restored directory are gone on every exit path, read back",
+    "verification": "poetry run pytest -q -p no:cacheprovider --no-cov tests/test_headscale_drill.py -k 'torn_down or cleans_up or removed or behind'",
+    "state": "passing",
+    "evidence": "prod run: no hsdrill-* container and no hsdrill-* directory left"
   }
 ]

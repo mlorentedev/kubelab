@@ -382,6 +382,61 @@ listed, and `git fsck` clean on a fresh clone of the one you care most about.
 Keep `data.broken-*` until you have. Pushes made after the snapshot are lost on
 the server; anyone who still has them in a clone pushes them again.
 
+### Headscale
+
+The VPS capture stages the `headscale_headscale_data` volume at
+`/opt/node-backup/staging/headscale` in the VPS repository: `db.sqlite` (copied with
+`sqlite3 .backup`), `noise_private.key` and `derp_server_private.key`. The keys are the
+server's identity: a node trusts the server by the noise key, so a restore with the
+same keys lets every node reconnect without registering again. The ACL policy is not
+in the capture; Ansible renders it from git. **Prove the snapshot before you use it:**
+
+```bash
+make backup-drill-headscale ENV=prod
+```
+
+It reads live first, over SSH to the VPS: the node and user lists, and a SHA-256 of
+each live key file (`sudo -n` there). Then it restores the newest snapshot into a
+private temp directory on this machine, runs `PRAGMA integrity_check` on the restored
+database, and compares the restored keys with live by hash. It starts the Headscale
+image pinned in `common.yaml` on the restored data with `--network none` and a
+drill-only config, running as you so that everything it writes is yours to delete.
+It passes only if every node live had when the snapshot was taken is restored under
+the same id with the same machine key, and every user likewise. A node registered
+since, or deleted since, is reported and is not a failure. Nodes are matched by id,
+because a node that registers again keeps its name and gets a new id. It prints names
+and ids only, never a key or a hash, and on every exit path removes the container and
+the directory, then confirms that both are gone. Measured 2026-10-01: 12 nodes,
+4 users, both keys matching, 2 s from the start of the restore to a server that
+answers.
+
+**Restoring it for real** (the volume is lost or the database is corrupt). Use the
+snapshot the drill just passed. Run this on the VPS over its public IP, never the
+tailnet (the tailnet is what you are restoring), with the restic environment from
+"Restoring — normal case" loaded. If the VPS itself is new, run
+`make deploy TARGET=vps ENV=prod` first so the volume and the compose file exist.
+
+```bash
+# As root, so restic gives back the owners it recorded (0:0, as live).
+# If sudoers does not keep the environment for -E, run these lines in `sudo -s`.
+sudo -E restic -r "$REPO" restore <snapshot-id> \
+  --include /opt/node-backup/staging/headscale --target /tmp/headscale-restore
+cd /opt/headscale && sudo docker compose stop headscale
+v=$(sudo docker volume inspect -f '{{.Mountpoint}}' headscale_headscale_data)
+sudo cp -a "$v" "/root/headscale-data.broken-$(date +%F)"
+# Empty it completely: a db.sqlite-wal left from the broken database would be
+# replayed onto the restored one when Headscale opens it.
+sudo find "$v" -mindepth 1 -delete
+sudo cp -a /tmp/headscale-restore/opt/node-backup/staging/headscale/. "$v"/
+sudo docker compose start headscale
+sudo docker exec headscale headscale nodes list
+```
+
+Nodes reconnect on their own within a few minutes. A node registered after the
+snapshot is unknown to the restored server and registers again with a pre-auth key.
+Keep `/root/headscale-data.broken-*` until every node you need is back online, then
+delete it and `/tmp/headscale-restore`: both hold the private keys.
+
 ## Restoring — the disaster case
 
 **This is the scenario the escrow exists for.** The laptop and the USB stick are

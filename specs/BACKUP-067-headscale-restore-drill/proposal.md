@@ -49,11 +49,11 @@ The drill prints the measured RTO (download, then time until the CLI answers).
 
 ## Acceptance criteria
 
-- [ ] AC1: `make backup-drill-headscale ENV=prod` restores the newest VPS snapshot, fails when `db.sqlite` or either key is missing or `integrity_check` is not `ok`, and fails when either restored key differs from live.
-- [ ] AC2: The pinned image starts on the restored data with no network. The drill fails and names the node or user when a live node created before the snapshot is missing or carries a different machine key, or a live user created before the snapshot is missing.
-- [ ] AC3: The drill is CANNOT CHECK, never a pass, when live nodes, live users or live key hashes cannot be read or come back empty, and when no snapshot is readable.
-- [ ] AC4: On every exit path the container and the temp directory are gone, read back. Tests pin it; `verification.md` shows it measured.
-- [ ] AC5: `docs/runbooks/offsite-backup-restore.md` documents the drill and the real restore onto the VPS. `verification.md` records the prod transcript and measured RTO.
+- [x] AC1: `make backup-drill-headscale ENV=prod` restores the newest VPS snapshot, fails when `db.sqlite` or either key is missing or `integrity_check` is not `ok`, and fails when either restored key differs from live.
+- [x] AC2: The pinned image starts on the restored data with no network. The drill fails and names the node or user when a live node created before the snapshot is missing or carries a different machine key, or a live user created before the snapshot is missing.
+- [x] AC3: The drill is CANNOT CHECK, never a pass, when live nodes, live users or live key hashes cannot be read or come back empty, and when no snapshot is readable.
+- [x] AC4: On every exit path the container and the temp directory are gone, read back. Tests pin it; `verification.md` shows it measured.
+- [x] AC5: `docs/runbooks/offsite-backup-restore.md` documents the drill and the real restore onto the VPS. `verification.md` records the prod transcript and measured RTO.
 
 ## References
 
