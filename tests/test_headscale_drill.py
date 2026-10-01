@@ -56,6 +56,18 @@ def test_proto_json_without_created_at_is_treated_as_old() -> None:
     assert parse_entries(json.dumps([entry]), key=None) == {1: ("manu", "", 0.0)}
 
 
+@pytest.mark.parametrize("machine_key", [None, ""], ids=["absent", "empty"])
+def test_a_node_without_its_machine_key_is_unreadable_not_equal(machine_key) -> None:
+    """Two lists that both lack the key would compare "" with "" and pass (lesson-416)."""
+    node = _node(64, "gcp1", "mkey:g")
+    if machine_key is None:
+        del node["machine_key"]
+    else:
+        node["machine_key"] = machine_key
+    with pytest.raises(ValueError, match="gcp1 has no machine_key"):
+        parse_entries(json.dumps([node]), key="machine_key")
+
+
 def _compare(live_nodes, restored_nodes, live_users=None, restored_users=None):
     users = {1: ("kubelab", "", float(BEFORE))}
     return compare(
@@ -320,6 +332,22 @@ def test_live_that_cannot_be_read_is_cannot_check(drill, capsys, fake) -> None:
     assert drill(fake) is False
     assert "CANNOT CHECK" in capsys.readouterr().out
     assert not any(c[:1] == ["restic"] and "restore" in c for c in fake.calls)
+
+
+def test_live_nodes_without_machine_keys_are_cannot_check(drill, capsys) -> None:
+    fake = _Fake(live_nodes=[_node(2, "kubelab-vps", "")], restored_nodes=[_node(2, "kubelab-vps", "")])
+    assert drill(fake) is False
+    out = " ".join(capsys.readouterr().out.split())
+    assert "CANNOT CHECK — live Headscale nodes could not be read: kubelab-vps has no machine_key" in out
+    assert not any(c[:1] == ["restic"] and "restore" in c for c in fake.calls)
+
+
+def test_restored_nodes_without_machine_keys_are_cannot_check(drill, capsys) -> None:
+    fake = _Fake(restored_nodes=[_node(2, "kubelab-vps", ""), _node(64, "gcp1", "mkey:g")])
+    assert drill(fake) is False
+    out = " ".join(capsys.readouterr().out.split())
+    assert "CANNOT CHECK — the restored server's lists could not be read: kubelab-vps has no machine_key" in out
+    assert _torn_down(fake)
 
 
 def test_no_readable_snapshot_is_cannot_check(drill, capsys) -> None:

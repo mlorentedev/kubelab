@@ -77,13 +77,17 @@ def parse_entries(payload: str, key: Optional[str]) -> Entries:
 
     A node is labelled by `given_name`, a user by `name`. A missing `created_at`
     reads as 0, the oldest possible, so it can never excuse an entry from the
-    check.
+    check. A missing or empty `key` is unreadable, not "": live and restored would
+    both read "" and the comparison would pass with nothing compared (lesson-416).
     """
     entries: Entries = {}
     for raw in json.loads(payload) or []:
         label = raw.get("given_name") or raw.get("name") or ""
         created = float((raw.get("created_at") or {}).get("seconds", 0))
-        entries[int(raw["id"])] = (label, str(raw.get(key, "")) if key else "", created)
+        value = str(raw.get(key) or "") if key else ""
+        if key and not value:
+            raise ValueError(f"{label or raw.get('id')} has no {key}")
+        entries[int(raw["id"])] = (label, value, created)
     return entries
 
 
@@ -220,8 +224,9 @@ def run_drill(
         rc, out, err = ssh(run, ssh_target, f"docker exec {LIVE_CONTAINER} headscale {kind} list -o json")
         try:
             reads[kind] = parse_entries(out, "machine_key" if kind == "nodes" else None) if rc == 0 else {}
-        except (ValueError, KeyError):
-            reads[kind] = {}
+        except (ValueError, KeyError) as exc:
+            logger.error(f"drill: CANNOT CHECK — live Headscale {kind} could not be read: {str(exc)[:160]}")
+            return False
         if not reads[kind]:
             logger.error(f"drill: CANNOT CHECK — live Headscale listed no {kind}: {err.strip()[:160]}")
             return False
