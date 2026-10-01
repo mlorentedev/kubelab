@@ -1445,6 +1445,34 @@ tf-vps-firewall-apply:
 		cd infra/terraform/vps-firewall && terraform init -input=false >/dev/null && \
 		terraform apply
 
+# BACKUP-057: one R2 bucket per node under a lock no node token can change.
+# Same shape as tf-vps-firewall-*: the token from SOPS goes into the child
+# process's environment, never argv; the tfvars is plaintext policy rendered from
+# backup.* in common.yaml. It is removed after every run, failed or not, so a
+# stale render can never be a second declaration of the SSOT.
+#
+# SCRATCH=1 plans or applies ONLY the scratch bucket and its one-day lock, the
+# measurement pair in specs/BACKUP-057/tasks.md. No -auto-approve on apply: a
+# lock rule cannot be lifted by a node, so read the plan before giving it one.
+_TF_R2_SCOPE = $(if $(SCRATCH),-var=scratch=true -target=cloudflare_r2_bucket.scratch -target=cloudflare_r2_bucket_lock.scratch)
+
+.PHONY: tf-r2-plan tf-r2-apply
+tf-r2-plan:
+	@$(POETRY) run toolkit infra terraform r2-tfvars
+	@TF_VAR_cloudflare_api_token=$$($(POETRY) run toolkit secrets show cloudflare.api_token --env common 2>/dev/null | tail -1) && \
+		export TF_VAR_cloudflare_api_token && \
+		cd infra/terraform/r2 && terraform init -input=false >/dev/null && \
+		terraform plan -var-file=r2.tfvars $(_TF_R2_SCOPE); \
+		_exit=$$?; rm -f r2.tfvars; exit $$_exit
+
+tf-r2-apply:
+	@$(POETRY) run toolkit infra terraform r2-tfvars
+	@TF_VAR_cloudflare_api_token=$$($(POETRY) run toolkit secrets show cloudflare.api_token --env common 2>/dev/null | tail -1) && \
+		export TF_VAR_cloudflare_api_token && \
+		cd infra/terraform/r2 && terraform init -input=false >/dev/null && \
+		terraform apply -var-file=r2.tfvars $(_TF_R2_SCOPE); \
+		_exit=$$?; rm -f r2.tfvars; exit $$_exit
+
 # The only check that can tell an APPLIED firewall from a DECLARED one. The
 # token goes into pytest's environment and nowhere else -- never printed, never
 # an argument, so it stays out of shell history and out of transcripts.

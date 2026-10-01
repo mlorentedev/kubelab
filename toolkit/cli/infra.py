@@ -1852,6 +1852,29 @@ def tf_vps_firewall_tfvars() -> None:
     logger.success(f"Generated {tfvars_path} ({len(rules)} rules)")
 
 
+@terraform_app.command("r2-tfvars")
+def tf_r2_tfvars() -> None:
+    """Render the R2 root's inputs from backup.* in common.yaml (BACKUP-057).
+
+    Plaintext, like `vps-firewall-tfvars`: bucket names and the lock policy
+    belong in a reviewable diff. The Cloudflare token travels separately, as
+    TF_VAR_cloudflare_api_token in the child process's environment.
+    """
+    from toolkit.features import r2_tfvars
+    from toolkit.features.configuration import ConfigurationManager
+
+    tfvars_path = settings.project_root / "infra" / "terraform" / "r2" / "r2.tfvars"
+    merged = ConfigurationManager("common", settings.project_root).get_merged_config()
+    try:
+        rendered = r2_tfvars.render(merged)
+    except r2_tfvars.RenderError as e:
+        logger.error(str(e))
+        raise typer.Exit(1) from None
+
+    tfvars_path.write_text(rendered)
+    logger.success(f"Generated {tfvars_path}")
+
+
 @terraform_app.command("aws-tfvars")
 def tf_aws_tfvars() -> None:
     """Generate aws.tfvars from SOPS secrets for AWS Argo CD hub."""

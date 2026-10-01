@@ -37,6 +37,8 @@ RENDERING_TARGETS = {
     "tf-gcp-apply": "gcp.tfvars",
     "tf-gcp-destroy": "gcp.tfvars",
     "tf-gcp-bootstrap-plan": "gcp-bootstrap.tfvars",
+    "tf-r2-plan": "r2.tfvars",
+    "tf-r2-apply": "r2.tfvars",
     "tf-gcp-bootstrap-apply": "gcp-bootstrap.tfvars",
     # MISSED by the first version of this list, and the worst one to miss: this
     # is the target run during an incident, when nobody is auditing the working
