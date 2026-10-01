@@ -1,0 +1,30 @@
+[
+  {
+    "id": "BACKUP-070-restore-window-f1",
+    "behavior": "AC2/AC3/AC4: open, refused second open, close-from-git and the resourceVersion precondition, at the argv boundary",
+    "verification": "poetry run pytest -q -p no:cacheprovider --no-cov tests/test_restore_window.py",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-070-restore-window-f2",
+    "behavior": "AC5: deploy-apps refuses while a window is held",
+    "verification": "poetry run pytest -q -p no:cacheprovider --no-cov tests/test_restore_window.py -k check_window",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-070-restore-window-f3",
+    "behavior": "AC1/AC2/AC3: a live window on staging opens (n8n at zero), refuses a second holder, and closes back to Synced/Healthy with the declared replicas; each step's exit status is the proof, and the transcript goes in verification.md",
+    "verification": "make restore-window APP=n8n ENV=staging && ! make restore-window APP=n8n ENV=staging && make restore-window APP=n8n ENV=staging END=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-070-restore-window-f4",
+    "behavior": "AC6: the runbook no longer tells the operator to scale a prod app to zero by hand",
+    "verification": "! grep -n -i -E 'scale --replicas=0|scaled to zero|#1998 is the fix' docs/runbooks/offsite-backup-restore.md && grep -c 'make restore-window' docs/runbooks/offsite-backup-restore.md",
+    "state": "pending",
+    "evidence": ""
+  }
+]
