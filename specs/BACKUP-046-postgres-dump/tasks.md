@@ -28,11 +28,11 @@ created: "2026-10-01"
 
 ## PR 2 — the live guard and the drill
 
-- [ ] [P] [AC4] Test for `toolkit backup coverage`: a live claim with no ruling is reported, by namespace and name, and fails the command. Red.
-- [ ] [AC4] Implement it in `toolkit/features/backup_destination.py` over the prod kubeconfig. Green, then run `make backup-coverage ENV=prod`.
-- [ ] [P] [AC5] Test for the drill's comparison: a missing database or table fails and is named, a table empty in the restore but not live fails, a lower non-zero count passes and is shown, and the output never contains row contents. Red.
+- [x] [P] [AC4] Test for `toolkit backup coverage`: a live claim with no ruling is reported, by namespace and name, and fails the command. Red.
+- [x] [AC4] Implement it in `toolkit/features/backup_destination.py` over the prod kubeconfig. Green; `make backup-coverage ENV=prod` 2026-10-01: all 8 live claims ruled.
+- [x] [P] [AC5] Test for the drill's comparison: a missing database or table fails and is named, a table empty in the restore but not live fails, a lower non-zero count passes and is shown, and the output never contains row contents. Red.
 - [ ] [AC5] `toolkit backup drill-postgres` + `make backup-drill-postgres`: restic dump from R2, scratch container, row counts against live, cleanup on every exit path. Green, then run it on prod.
-- [ ] [AC6] Runbook: "Restoring Postgres" and "Adding a stateful service" in `docs/runbooks/offsite-backup-restore.md`.
+- [x] [AC6] Runbook: "Restoring Postgres" and "Adding a stateful service" in `docs/runbooks/offsite-backup-restore.md`.
 
 ## Closing
 
