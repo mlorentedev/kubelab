@@ -529,11 +529,24 @@
         src: "{{ dev_node_gitea_key_path }}.pub"
       register: _gitea_pubkey
 
+    - name: Fingerprint the public half, to look it up on the forge
+      ansible.builtin.command:
+        cmd: "ssh-keygen -l -E sha256 -f {{ dev_node_gitea_key_path }}.pub"
+      changed_when: false
+      register: _gitea_key_fp
+
     # Registration runs on the CONTROLLER: the bot token is the credential that
     # can add a key to the account, and it has no business being on the node.
-    - name: List the keys already on the machine account
+    #
+    # Filtered by fingerprint, never listed whole (#1300). `/user/keys` is
+    # paginated, and the machine account holds one key per node and runner, so
+    # an unfiltered GET returns the first page only. Measured on ace2
+    # 2026-10-01: the key was POSTed on one pass, missing from the next pass's
+    # listing, and POSTed again into a 422, so the role failed on every run
+    # after its first success.
+    - name: Look up this node's key on the machine account
       ansible.builtin.uri:
-        url: "{{ dev_node_gitea_api_url }}/user/keys"
+        url: "{{ dev_node_gitea_api_url }}/user/keys?fingerprint={{ _gitea_key_fp.stdout.split(' ')[1] | urlencode }}"
         headers:
           Authorization: "token {{ dev_node_gitea_bot_token }}"
         return_content: true
@@ -558,6 +571,10 @@
       delegate_to: localhost
       become: false
       no_log: true
+      register: _gitea_key_post
+      # The POST creates a key, so it reports changed. uri says ok by default,
+      # which hid the first registration on ace2.
+      changed_when: _gitea_key_post.status == 201
       # Idempotence is by KEY MATERIAL, not by title. A title match with
       # different material would leave the node holding a key the forge does not
       # know, and the play would still report changed=0 — green, and broken.
