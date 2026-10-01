@@ -257,19 +257,32 @@ class TestPvcSources:
             "`sqlite3 .backup`; a plain copy loses whatever is in the WAL"
         )
 
-    def test_the_retired_and_deferred_pvcs_stay_out(self, sources: dict[str, Any]) -> None:
-        """Absence here is a decision, and each one has a different reason.
+    def test_postgres_is_captured_by_logical_dump(self, sources: dict[str, Any]) -> None:
+        """BACKUP-046 (#1111): the board's database, by `pg_dumpall`, never by file copy.
 
-        Left as a test so re-adding one is deliberate rather than incidental:
-        postgres was measured EMPTY (0 tables) and joins the day something
-        writes to it — with `pg_dump`, a different mechanism; grafana's
-        dashboards belong in git; crowdsec's decisions regenerate.
+        Excluded on 2026-08-22 as empty and unbacked until 2026-10-01 while Vikunja
+        wrote to it. The claims that stay out are ruled in `backup.excluded.vps`,
+        where tests/test_backup_pvc_coverage.py holds them to tier 3.
         """
-        declared = set(sources["vps"])
-        for name in ("postgres", "grafana", "crowdsec", "loki"):
-            assert name not in declared, (
-                f"{name} was added to the VPS backup sources. That may be right — "
-                f"postgres in particular joins the moment it stops being empty — "
-                f"but it needs its own reasoning and, for postgres, a capture "
-                f"mechanism that is not `sqlite3 .backup`."
-            )
+        pg = sources["vps"]["postgres"]
+        assert pg["pvc"] == {"namespace": "kubelab", "claim": "postgres-data"}
+        assert pg["pg_dumpall"] == {"deployment": "postgres", "container": "postgres"}
+
+    def test_pg_dumpall_is_a_capture_method_for_a_claim(self, sources: dict[str, Any]) -> None:
+        """Like `sqlite`, a method on top of the source type, and exclusive with it.
+
+        It needs `pvc`, because the dump runs inside the workload that owns the
+        claim. It cannot sit beside `sqlite`: one source is one database engine.
+        """
+        bad: list[str] = []
+        for node, entries in sources.items():
+            for name, entry in entries.items():
+                if "pg_dumpall" not in entry:
+                    continue
+                if "pvc" not in entry:
+                    bad.append(f"{node}.{name}: pg_dumpall without pvc")
+                if "sqlite" in entry:
+                    bad.append(f"{node}.{name}: pg_dumpall and sqlite together")
+                if set(entry["pg_dumpall"]) != {"deployment", "container"}:
+                    bad.append(f"{node}.{name}: pg_dumpall needs exactly deployment+container")
+        assert not bad, bad
