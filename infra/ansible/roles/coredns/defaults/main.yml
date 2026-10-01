@@ -9,11 +9,35 @@ coredns_health_port: 8080
 pihole_port: 53
 pihole_web_port: 80
 pihole_timezone: "America/Denver"
-restart_policy: "unless-stopped"
-
-# Populated from playbook mapping
-base_domain: "kubelab.live"
-staging_domain: "staging.kubelab.live"
-node_ips: {}
-service_domains: {}
-vps_public_ip: ""
+# Derived from the SSOT here, once, rather than passed by each playbook. Two
+# playbooks run this role (deploy-dns.yml and provision-rpi4.yml) and each
+# copied the mapping by hand, so the copies drifted: #1278 added
+# `coredns_health_bind_ip` to one, and `make provision NODE=rpi4` has failed on
+# it since (#1982). Every caller loads common.yaml as `common` in its
+# pre_tasks; defaults are templated lazily, so that is in place by the time a
+# task reads them.
+#
+# common.yaml, not the env-merged `config`: the RPi4 gateway serves DNS for
+# every environment, so it takes the base values, never an env override.
+restart_policy: "{{ common.global.restart_policy }}"
+base_domain: "{{ common.global.base_domain }}"
+staging_domain: "staging.{{ common.global.base_domain }}"
+staging_zones: "{{ common.networking.staging_zones }}"
+vps_public_ip: "{{ common.networking.vps.public_ip }}"
+# Where CoreDNS binds its health port. The LAN address deliberately, not
+# `node_ips.rpi4`: Docker restores containers on boot before tailscaled has
+# assigned the Tailscale address, and a failed bind drops the whole
+# container's port publication. See the comment in docker-compose.yml.j2.
+coredns_health_bind_ip: "{{ common.networking.nodes.rpi4.lan_ip }}"
+node_ips:
+  vps: "{{ common.networking.vps.tailscale_ip }}"
+  ace1: "{{ common.networking.nodes.ace1.tailscale_ip }}"
+  ace2: "{{ common.networking.nodes.ace2.tailscale_ip }}"
+  rpi3: "{{ common.networking.nodes.rpi3.tailscale_ip }}"
+  rpi4: "{{ common.networking.nodes.rpi4.tailscale_ip }}"
+  beelink: "{{ common.networking.nodes.beelink.tailscale_ip }}"
+  jetson: "{{ common.networking.nodes.jetson.tailscale_ip }}"
+service_domains:
+  vpn: "{{ common.apps.services.core.headscale.domain }}"
+  status: "{{ common.apps.services.observability.uptime_kuma.domain }}"
+  jetson: "jetson.{{ common.global.base_domain }}"

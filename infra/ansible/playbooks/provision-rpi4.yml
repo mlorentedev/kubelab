@@ -115,23 +115,6 @@
 
     - role: ../roles/coredns
       tags: [coredns]
-      vars:
-        base_domain: "{{ config.global.base_domain }}"
-        staging_domain: "staging.{{ config.global.base_domain }}"
-        vps_public_ip: "{{ config.networking.vps.public_ip }}"
-        restart_policy: "{{ config.global.restart_policy }}"
-        node_ips:
-          vps: "{{ config.networking.vps.tailscale_ip }}"
-          ace1: "{{ config.networking.nodes.ace1.tailscale_ip }}"
-          ace2: "{{ config.networking.nodes.ace2.tailscale_ip }}"
-          rpi3: "{{ config.networking.nodes.rpi3.tailscale_ip }}"
-          rpi4: "{{ config.networking.nodes.rpi4.tailscale_ip }}"
-          beelink: "{{ config.networking.nodes.beelink.tailscale_ip }}"
-          jetson: "{{ config.networking.nodes.jetson.tailscale_ip }}"
-        service_domains:
-          vpn: "{{ config.apps.services.core.headscale.domain }}"
-          status: "{{ config.apps.services.observability.uptime_kuma.domain }}"
-          jetson: "jetson.{{ config.global.base_domain }}"
 
     - role: ../roles/glances
       tags: [monitoring, glances]
