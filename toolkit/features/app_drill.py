@@ -64,13 +64,19 @@ Rows = dict[str, dict[str, tuple[Optional[int], str]]]
 
 _VERSION = "__schema_version__"
 
+#: Pseudo-table holding `sqlite_sequence`: `{table: (highest id ever allocated, "")}`.
+SEQUENCE = "__sequence__"
+
 
 @dataclass(frozen=True)
 class Table:
     """A table whose rows must survive a restore.
 
-    `created` names the creation-time column; a table without one relies on its
-    `AUTOINCREMENT` id, so a live id above the restore's highest is newer.
+    `created` names the creation-time column. A table without one must use an
+    `AUTOINCREMENT` id: the restore's `sqlite_sequence` then says which ids it had
+    allocated, so a live id above that is newer and a missing one at or below it
+    was lost. The restore's highest surviving id cannot say that, because a lost
+    trailing row lowers it.
     `identity` names columns that must come back unchanged.
     """
 
@@ -133,6 +139,13 @@ def rows_sql(app: App) -> str:
             f"select '{table.name}' as tbl, CAST(id AS TEXT) as k, {created} as t, {identity} as ident"
             f" from {table.name}"
         )
+    by_sequence = [t.name for t in app.tables if not t.created]
+    if by_sequence:
+        names = ", ".join(f"'{name}'" for name in by_sequence)
+        parts.append(
+            f"select '{SEQUENCE}' as tbl, name as k, seq as t, NULL as ident"
+            f" from sqlite_sequence where name in ({names})"
+        )
     if app.version_sql:
         parts.append(f"select '{_VERSION}' as tbl, CAST(({app.version_sql}) AS TEXT) as k, NULL as t, NULL as ident")
     return " union all ".join(parts) + ";"
@@ -167,8 +180,7 @@ def compare(*, live: Rows, restored: Rows, tables: tuple[Table, ...], taken: flo
     ok = True
     for table in tables:
         have, got = live.get(table.name, {}), restored.get(table.name, {})
-        numeric = [int(k) for k in got if k.isdigit()]
-        highest = max(numeric) if numeric else None
+        allocated = restored.get(SEQUENCE, {}).get(table.name, (None, ""))[0]
         for key, (created, digest) in sorted(have.items()):
             what = f"{table.name} row {key}"
             if key in got:
@@ -177,7 +189,7 @@ def compare(*, live: Rows, restored: Rows, tables: tuple[Table, ...], taken: flo
                     lines.append(f"FAIL {what}: restored with different contents")
             elif created is not None and created > taken:
                 lines.append(f"INFO {what}: newer than the snapshot")
-            elif created is None and key.isdigit() and highest is not None and int(key) > highest:
+            elif created is None and key.isdigit() and allocated is not None and int(key) > allocated:
                 lines.append(f"INFO {what}: newer than the snapshot")
             else:
                 ok = False
@@ -418,12 +430,16 @@ def run_drill(
     except (ValueError, KeyError) as exc:
         logger.error(f"drill: {service}: CANNOT CHECK — live's database could not be read: {str(exc)[:160]}")
         return False
-    if not any(live.values()):
+    if not any(live.get(table.name) for table in app.tables):  # the sequence is not a row
         logger.error(f"drill: {service}: CANNOT CHECK — live has no durable rows at all")
         return False
 
     rc, out, err = run(["restic", "-r", repo, "snapshots", "--json", "--latest", "1"], env=restic_env)
-    snapshots = json.loads(out or "[]") if rc == 0 else []
+    try:
+        snapshots = json.loads(out or "[]") if rc == 0 else []
+    except ValueError:
+        logger.error(f"drill: {service}: CANNOT CHECK — the snapshot list could not be parsed from {repo}")
+        return False
     if not snapshots:
         logger.error(f"drill: {service}: CANNOT CHECK — no snapshot readable in {repo}: {err.strip()[:160]}")
         return False
@@ -505,7 +521,14 @@ def drill_apps(env: str = "prod", project_root: Optional[Path] = None) -> bool:
             logger.error(f"drill: expected {service} captured on the vps in backup.sources, found {nodes or 'none'}")
             ok = False
             continue
-        spec = sources["vps"][service]
+        spec = sources["vps"][service] or {}
+        absent = [k for k in ("sqlite", "pvc") if not spec.get(k)]
+        absent += [f"pvc.{k}" for k in ("namespace", "claim") if spec.get("pvc") and not spec["pvc"].get(k)]
+        if absent:
+            names = ", ".join(f"backup.sources.vps.{service}.{k}" for k in absent)
+            logger.error(f"drill: {service}: CANNOT CHECK — the SSOT does not declare {names}")
+            ok = False
+            continue
         key = cm.get_secret_by_path(app.key_path)
         if not key:
             logger.error(f"drill: {service}: CANNOT CHECK — {app.key_path} is not in SOPS for {env}")

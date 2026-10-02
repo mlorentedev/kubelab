@@ -1,9 +1,10 @@
 # Backups, volumes and persistence
 
-18 lessons, newest first. Back to [all categories](../_index.md).
+19 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 503 | [A restore's highest surviving id cannot date a missing row; its `sqlite_sequence` can](lesson-503-the-highest-surviving-id-cannot-date-a-missing-row.md) | 2026-10-01 |
 | 500 | [n8n's CLI answers nothing, with exit 0, at `N8N_LOG_LEVEL=warn`, and in its pod it costs a second n8n](lesson-500-n8n-cli-answers-nothing-at-log-level-warn.md) | 2026-10-01 |
 | 499 | [Gitea answers an empty list with `null`: one empty repository made the restore drill unable to check anything](lesson-499-gitea-answers-an-empty-list-with-null.md) | 2026-10-01 |
 | 498 | [`docker rm` without `-v` keeps the restored database: the image declares the volume](lesson-498-docker-rm-without-v-keeps-the-restored-database.md) | 2026-10-01 |
