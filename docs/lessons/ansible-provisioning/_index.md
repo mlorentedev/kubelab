@@ -1,9 +1,10 @@
 # Ansible roles and node provisioning
 
-52 lessons, newest first. Back to [all categories](../_index.md).
+53 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 497 | [A folded YAML scalar keeps `'\n'` as two characters, so a guard built on it can loop over nothing](lesson-497-a-folded-yaml-scalar-keeps-backslash-n-so-a-guard-can-loop-over-nothing.md) | 2026-10-01 |
 | 496 | [`changed_when: false` does not make a task a read](lesson-496-changed-when-false-does-not-make-a-task-a-read.md) | 2026-10-01 |
 | 493 | [Three convergence bugs in one role each looked like a different symptom, and the recap showed none of them](lesson-493-a-role-that-fails-after-its-first-success-hides-behind-the-recap.md) | 2026-10-01 |
 | 466 | [A "back up the current file" task before a template reports `changed` on the run after every change](lesson-466-a-backup-copy-before-a-template-reports-changed-on-the-next-run.md) | 2026-09-26 |

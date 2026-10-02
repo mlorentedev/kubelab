@@ -190,3 +190,9 @@
         enabled: true
         daemon_reload: true
       when: not ansible_check_mode
+
+# Imported, not included: an include is dynamic and its tasks do not inherit
+# the role's `agent_stack` tag, so `--tags agent_stack` would skip all of them.
+- name: Provision the agent's user and its rootless daemon
+  ansible.builtin.import_tasks: agent_user.yml
+  tags: [agent_stack]

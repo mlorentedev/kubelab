@@ -266,6 +266,16 @@
         # Which NaN key Open WebUI uses is the spec's R1, still open. Empty
         # means Open WebUI starts with no model backend.
         agent_stack_nan_api_key: "{{ secrets.apps.services.ai.open_webui.nan_api_key | default('') }}"
+        agent_stack_agent_user: "{{ config.apps.services.ai.hermes_kubelab.user }}"
+        agent_stack_agent_probe_image: "{{ config.apps.services.ai.hermes_kubelab.probe.image }}"
+        # What the agent must fail to read (ADR-058 D3, spec AC2): the dev
+        # user's credentials, and the system daemon's socket, which is root.
+        agent_stack_dev_home: "/home/{{ config.networking.ssh_users.homelab }}"
+        agent_stack_protected_paths:
+          - "/home/{{ config.networking.ssh_users.homelab }}/.config/gh/hosts.yml"
+          - "/home/{{ config.networking.ssh_users.homelab }}/.ssh"
+          - "/home/{{ config.networking.ssh_users.homelab }}/.kube"
+          - /var/run/docker.sock
 
     # The fleet's failure-notification path, and the fleet webhook secret it
     # reads. Ordered BEFORE node_maintenance deliberately: that role's unit

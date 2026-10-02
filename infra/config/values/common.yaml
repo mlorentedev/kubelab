@@ -1907,6 +1907,18 @@ apps:
         # ADR-068 D1: at most 1.5 GB per service, so the dev node keeps 4 GB free.
         memory_limit: 1536m
         cpu_limit: "2.0"
+      hermes_kubelab:
+        # The agent (ADR-068 D2). Its sessions, memory and vault clone live only
+        # on ace2, and a second instance would fork them.
+        state_promotion: singleton
+        location: on-demand
+        # Its own Unix user on ace2: no sudo, no `docker` group (that group is
+        # root on the host), and a rootless daemon inside the user's namespace.
+        user: hermes-kubelab
+        # Run through the agent's daemon at every provision, with a memory and a
+        # CPU limit, to prove the sandbox Hermes executes commands in can start.
+        probe:
+          image: busybox:1.37.0
 
 # =============================================================================
 # Backup sources — the SSOT allow-list (BACKUP-044, #1092 AC3)
