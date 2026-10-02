@@ -89,9 +89,29 @@ esac
 """
 
 
+# Stands in for busybox `nc -z -w <s> <address> <port>` (BACKUP-032). Behaviour
+# per address from files in $FAKE_DIR: <address>.down refuses (exit 1),
+# <address>.hang never answers. Otherwise the port is open. Every call is
+# logged with its arguments, so a test can read which port was knocked on.
+FAKE_NC = r"""#!/bin/sh
+echo "nc $*" >> "$FAKE_DIR/calls"
+for last; do :; done
+port="$last"
+address=""
+for arg; do [ "$arg" = "$port" ] && break; address="$arg"; done
+[ -f "$FAKE_DIR/$address.down" ] && exit 1
+[ -f "$FAKE_DIR/$address.hang" ] && exec sleep 30
+exit 0
+"""
+
 # Repository ids as `restic cat config` reports them: new for every `init`,
 # fixed otherwise. The targets file declares the id each node must still have.
 IDS = {"rpi3": "1" * 64, "kubelab-vps": "2" * 64}
+# The probe's clock, pinned so an age is an exact number. The fake restic's
+# default snapshot is stamped 2026-09-26T00:00:00Z, so every default age is 6 h.
+SNAPSHOT_TIME = "2026-09-26T00:00:00Z"
+SNAPSHOT_EPOCH = 1_790_380_800
+NOW = SNAPSHOT_EPOCH + 6 * 3600
 # Where the probe knocks (BACKUP-032). Documentation addresses (RFC 5737): the
 # fake `nc` answers for them from files, and nothing real is ever contacted.
 ADDRESSES = {"rpi3": "192.0.2.6", "vps": "192.0.2.2"}
@@ -123,6 +143,9 @@ def fleet(tmp_path: pathlib.Path, request):
     restic = bin_dir / "restic"
     restic.write_text(FAKE_RESTIC)
     restic.chmod(0o755)
+    nc = bin_dir / "nc"
+    nc.write_text(FAKE_NC)
+    nc.chmod(0o755)
     targets = tmp_path / "targets.txt"
     targets.write_text(
         "# header comment\n"
@@ -141,6 +164,10 @@ def fleet(tmp_path: pathlib.Path, request):
         "STAGING_DIR": STAGING,
         "SENTINEL": ".capture-complete",
         "RESTIC_TIMEOUT": "2",
+        "REACH_TIMEOUT": "1",
+        # By path: Ubuntu's busybox `sh` prefers its own `nc` applet to PATH.
+        "NC": str(nc),
+        "PROBE_NOW": str(NOW),
         "RESTIC_PASSWORD": "not-a-real-value-fixture",
         "AWS_ACCESS_KEY_ID": "not-a-real-value-fixture",
         "AWS_SECRET_ACCESS_KEY": "not-a-real-value-fixture",
@@ -389,3 +416,129 @@ def test_a_probe_that_stops_early_reports_no_fleet_size(fleet) -> None:
     (summary,) = [json.loads(line) for line in out.splitlines() if '"r2_backup_health"' in line]
     assert summary["healthy"] == 0
     assert summary["raw_bytes"] is None
+
+
+# --- BACKUP-032: snapshot age, reachability and class -----------------------
+
+
+def _snaps(*times: str) -> str:
+    return "[" + ",".join(f'{{"time":"{t}","id":"x{i}","short_id":"s{i}"}}' for i, t in enumerate(times)) + "]\n"
+
+
+def test_each_node_reports_its_newest_snapshot_age_reachability_and_class(fleet) -> None:
+    _, _, env = fleet
+    rc, nodes, (summary,) = _run(env)
+    assert rc == 0 and summary["healthy"] == 1
+    for n in nodes:
+        assert n["newest_snapshot"] == SNAPSHOT_TIME, n
+        assert n["snapshot_age_seconds"] == 6 * 3600, n
+        assert n["reachable"] == 1, n
+        assert n["class"] == "always-on", n
+
+
+@pytest.mark.parametrize(
+    ("stamp", "utc"),
+    [
+        # What the fleet writes today (measured 2026-10-02): a 9- or 8-digit
+        # fraction, and the source node's offset.
+        ("2026-09-26T02:00:00.123456789+02:00", "2026-09-26T00:00:00Z"),
+        ("2026-09-26T02:00:00.12345678+02:00", "2026-09-26T00:00:00Z"),
+        ("2026-09-26T00:00:00.123456789Z", "2026-09-26T00:00:00Z"),
+        # Offsets whose hours read as octal in shell arithmetic: `$((08))` is an
+        # error in busybox and dash, so a +02:00-only test passes with that bug.
+        ("2026-09-25T16:00:00-08:00", "2026-09-26T00:00:00Z"),
+        ("2026-09-26T09:30:00+09:30", "2026-09-26T00:00:00Z"),
+        ("2026-09-26T00:00:00Z", "2026-09-26T00:00:00Z"),
+    ],
+)
+def test_the_snapshot_time_is_converted_to_utc_from_any_offset(fleet, stamp, utc) -> None:
+    fake, _, env = fleet
+    (fake / "kubelab-vps.snaps").write_text(_snaps(stamp))
+    rc, nodes, _ = _run(env)
+    vps = _node(nodes, "vps")
+    assert rc == 0 and vps["healthy"] == 1
+    assert vps["newest_snapshot"] == utc
+    assert vps["snapshot_age_seconds"] == 6 * 3600
+
+
+def test_the_newest_of_several_snapshots_is_the_one_reported(fleet) -> None:
+    """`--latest 1` answers once per path group, so two groups return two snapshots.
+
+    The older one comes first here: a probe that took the first `time` would
+    report a stale backup for a node that shipped an hour ago.
+    """
+    fake, _, env = fleet
+    (fake / "kubelab-vps.snaps").write_text(_snaps("2026-09-20T00:00:00Z", "2026-09-26T05:00:00Z"))
+    rc, nodes, _ = _run(env)
+    vps = _node(nodes, "vps")
+    assert vps["newest_snapshot"] == "2026-09-26T05:00:00Z"
+    assert vps["snapshot_age_seconds"] == 3600
+
+
+@pytest.mark.parametrize("breakage", ["restic fails", "zero snapshots"])
+def test_no_snapshot_to_read_is_null_never_a_fresh_looking_age(fleet, breakage) -> None:
+    """A `null` age is dropped by the freshness rule's `unwrap`, and the node is
+    unhealthy, so the health rule pages instead: never a 0 that reads as fresh."""
+    fake, _, env = fleet
+    if breakage == "restic fails":
+        (fake / "kubelab-vps.fail").write_text("Fatal: wrong password or no key found\n")
+    else:
+        (fake / "kubelab-vps.snaps").write_text("[]\n")
+    rc, nodes, _ = _run(env)
+    vps = _node(nodes, "vps")
+    assert vps["newest_snapshot"] is None and vps["snapshot_age_seconds"] is None
+    assert vps["healthy"] == 0 and rc != 0
+
+
+def test_an_unparseable_snapshot_time_is_null_and_fails_the_node(fleet) -> None:
+    """A time the probe cannot read would leave the freshness rule blind for that
+    node with nothing paging, so it fails closed, like an unreadable repository id."""
+    fake, _, env = fleet
+    (fake / "kubelab-vps.snaps").write_text(_snaps("26/09/2026 00:00"))
+    rc, nodes, (summary,) = _run(env)
+    vps = _node(nodes, "vps")
+    assert vps["newest_snapshot"] is None and vps["snapshot_age_seconds"] is None
+    assert vps["healthy"] == 0 and "snapshot time unreadable" in vps["reason"]
+    assert summary["healthy"] == 0 and rc != 0
+
+
+def test_the_probe_knocks_on_each_nodes_declared_port_with_a_timeout(fleet) -> None:
+    fake, targets, env = fleet
+    targets.write_text(targets.read_text().replace(f"{ADDRESSES['rpi3']} 22 ", f"{ADDRESSES['rpi3']} 2222 "))
+    _run(env)
+    calls = [c for c in (fake / "calls").read_text().splitlines() if c.startswith("nc ")]
+    assert f"nc -z -w 1 {ADDRESSES['rpi3']} 2222" in calls, calls
+    assert f"nc -z -w 1 {ADDRESSES['vps']} 22" in calls, calls
+
+
+def _make_on_demand(targets: pathlib.Path, node: str) -> None:
+    lines = targets.read_text().splitlines(keepends=True)
+    targets.write_text("".join(ln.replace(" always-on ", " on-demand ") if ln.startswith(f"{node} ") else ln for ln in lines))
+
+
+def test_an_on_demand_node_that_is_off_stays_healthy(fleet) -> None:
+    """Off is that node's normal state (ADR-028): the class is what makes 0 fine."""
+    fake, targets, env = fleet
+    _make_on_demand(targets, "rpi3")
+    (fake / f"{ADDRESSES['rpi3']}.down").write_text("")
+    rc, nodes, (summary,) = _run(env)
+    rpi3 = _node(nodes, "rpi3")
+    assert rpi3["reachable"] == 0 and rpi3["class"] == "on-demand"
+    assert rpi3["healthy"] == 1 and summary["healthy"] == 1 and rc == 0
+
+
+@pytest.mark.parametrize("failure", ["down", "hang"])
+def test_an_always_on_node_the_probe_cannot_reach_fails_the_fleet(fleet, failure) -> None:
+    """BACKUP-032 AC6: the positive control. An always-on node is never off, so
+    `reachable=0` there means the probe is broken (a port, an ACL, the pod's
+    route), and a broken probe would read every on-demand node as off forever."""
+    fake, _, env = fleet
+    (fake / f"{ADDRESSES['vps']}.{failure}").write_text("")
+    started = time.monotonic()
+    rc, nodes, (summary,) = _run(env)
+    assert time.monotonic() - started < 20, "a silent address must be cut off by the timeout"
+    vps = _node(nodes, "vps")
+    assert vps["reachable"] == 0 and vps["healthy"] == 0
+    assert "probe cannot reach an always-on node" in vps["reason"]
+    assert _node(nodes, "rpi3")["healthy"] == 1
+    assert summary["healthy"] == 0 and summary["unhealthy"] == 1 and rc != 0
