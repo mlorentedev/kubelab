@@ -296,8 +296,9 @@ def _restore_and_check(
     data = restore_source(run, repo=repo, restic_env=restic_env, snapshot=snapshot, source=source, workdir=workdir)
     if data is None:
         return False
+    restored_at = clock()
     on_disk = repos_on_disk(data)
-    logger.success(f"drill: restored {len(on_disk)} repositories in {clock() - started:.0f}s")
+    logger.success(f"drill: restored {len(on_disk)} repositories in {restored_at - started:.0f}s")
     if not _fsck_all(run, data, on_disk) or not _serve(run, name, data, image, sleep, clock):
         return False
     logger.success(f"drill: the restored server answers, {clock() - started:.0f}s after the restore began")
