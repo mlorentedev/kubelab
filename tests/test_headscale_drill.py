@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sqlite3
 from pathlib import Path
 from typing import Optional
@@ -114,6 +115,14 @@ def test_a_node_reregistered_under_the_same_name_is_matched_by_id_not_name() -> 
     assert ok, lines
     assert any("gcp1 (id 65)" in line and "newer than the snapshot" in line for line in lines)
     assert any("gcp1 (id 64)" in line and "deleted since the snapshot" in line for line in lines)
+
+
+def test_a_node_created_at_the_snapshot_instant_is_checked_not_excused() -> None:
+    """Only `created > taken` is newer: an entry from the same instant was in the capture."""
+    taken = float(BEFORE + 86400)
+    ok, lines = _compare({64: ("gcp1", "mkey:g", taken)}, {})
+    assert not ok
+    assert any(line.startswith("FAIL gcp1 (id 64)") for line in lines), lines
 
 
 def test_a_missing_user_fails_and_a_newer_one_is_reported() -> None:
@@ -274,7 +283,7 @@ def test_the_restored_server_has_no_network_runs_as_the_caller_and_the_image_it_
     drill(fake)
     start = next(c for c in fake.calls if c[:2] == ["docker", "run"])
     assert start[start.index("--network") + 1] == "none"
-    assert "--user" in start
+    assert start[start.index("--user") + 1] == f"{os.getuid()}:{os.getgid()}"
     assert IMAGE in start and start[-1] == "serve"
 
 
@@ -437,8 +446,11 @@ def test_a_restored_user_list_that_fails_is_cannot_check_even_with_valid_output(
 
 
 def test_read_live_returns_nodes_users_and_key_hashes() -> None:
-    live = read_live(_Fake(), "manu@vps", "headscale_headscale_data")
+    fake = _Fake()
+    live = read_live(fake, "manu@vps", "headscale_headscale_data")
     assert live is not None
+    ssh_calls = [c for c in fake.calls if c[0] == "ssh"]
+    assert ssh_calls and all("BatchMode=yes" in c and "ConnectTimeout=10" in c for c in ssh_calls), ssh_calls
     assert sorted(live.nodes) == [2, 64] and sorted(live.users) == [1, 2]
     assert set(live.hashes) == {"noise_private.key", "derp_server_private.key"}
 
