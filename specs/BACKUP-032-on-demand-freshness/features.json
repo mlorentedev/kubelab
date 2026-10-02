@@ -23,14 +23,14 @@
   {
     "id": "BACKUP-032-on-demand-freshness-f4",
     "behavior": "targets.txt carries each node's Tailscale IP, probe port and class from common.yaml and make validate-sync catches drift",
-    "verification": "make validate-sync",
+    "verification": "poetry run toolkit sync r2-watcher-targets --check",
     "state": "pending",
     "evidence": ""
   },
   {
     "id": "BACKUP-032-on-demand-freshness-f5",
     "behavior": "A live prod watcher run reports the new fields for every node, with reachable=1 on vps, rpi3 and an up on-demand node",
-    "verification": "echo 'operator-observed: see verification.md AC5' && exit 1",
+    "verification": "command grep -Eq '^- \\[x\\] \\*\\*AC5\\*\\* -> ' specs/BACKUP-032-on-demand-freshness/verification.md",
     "state": "pending",
     "evidence": ""
   },
