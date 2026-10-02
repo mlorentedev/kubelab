@@ -323,3 +323,18 @@ def test_a_keyless_list_page_that_is_not_a_list_is_unread(body) -> None:
 
 def test_a_null_page_is_an_empty_collection() -> None:
     assert _paginate(lambda path: None, "/repos/x/branches") == []
+
+
+def test_a_restore_restic_cannot_finish_fails_names_it_and_never_starts_a_server(drill, capsys) -> None:
+    fake = _Fake()
+    original = fake.__call__
+
+    def failing(argv, *, env=None):
+        if argv[:1] == ["restic"] and "restore" in argv:
+            return 1, "", "Fatal: unable to restore"
+        return original(argv, env=env)
+
+    assert drill(failing) is False
+    out = " ".join(capsys.readouterr().out.split())
+    assert "restic could not restore" in out and "unable to restore" in out
+    assert not any(c[:2] == ["docker", "run"] and "-d" in c for c in fake.calls)
