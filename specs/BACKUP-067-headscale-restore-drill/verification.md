@@ -88,6 +88,8 @@ drill: ace2 has no sops and no key, so nothing was decrypted (#2021, TOOL-097).
 
 - `poetry run pytest -q -p no:cacheprovider --no-cov tests/test_headscale_drill.py` → 30 passed (25 at first push, 5 added in the review round).
 - `make test` on `613e331a`: 3274 passed, 1 failed (`test_the_table_covers_every_site`: the new target was missing from `ENV_TARGETS`), fixed in `c173e41c`; that file then 75 passed.
+- `tests/test_headscale_drill.py` on master `4d995e69`: 40 passed, which includes BACKUP-069's machine-key guard (#1997).
+- `make test` on master `4d995e69` (with BACKUP-071 merged), before the archive: 3484 passed, 16 skipped, 154 deselected, 2 xfailed, rc 0 (2026-10-01).
 
 ## Decisions made during implementation
 

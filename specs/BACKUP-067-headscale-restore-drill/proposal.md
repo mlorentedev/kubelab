@@ -42,8 +42,8 @@ The drill prints the measured RTO (download, then time until the CLI answers).
 
 ## Risks / open questions
 
-- **Q1 [AGENT-DRAFT — review before archive]:** where the drill runs. Same question as BACKUP-040's Q1, answered the same way: the workstation, because the command is host-agnostic.
-- **Q2 [AGENT-DRAFT — review before archive]:** what proves "nodes reconnect without re-registration". Proposed answer: identical noise and DERP keys plus every node present under its id and machine key. A client re-handshakes with a server that holds the same noise key and finds its machine key registered. The scratch server proves this through the keys and the database, not through an actual reconnect.
+- **Q1, answered by the operator on 2026-10-01: require an ace2 run before archive.** Same answer as BACKUP-040's Q1. BACKUP-071 (#2011, merged in #2024) runs the drill on ace2 with secrets passed for that one run, and the Headscale live reads stay on the workstation, so ace2 holds no VPS credential. The prod run on ace2 is recorded in `verification.md`.
+- **Q2, answered by the operator on 2026-10-01: the keys and the database are enough.** What proves "nodes reconnect without re-registration" is identical noise and DERP keys plus every node present under its id and machine key. A client re-handshakes with a server that holds the same noise key and finds its machine key registered. The scratch server proves this through the keys and the database, not through an actual reconnect.
 - The drill reads two private-key hashes from live. A SHA-256 of a 32-byte random key reveals nothing usable, and the drill does not print it anyway.
 - The headscale image is distroless (no shell), so the teardown cannot wipe files from inside a container as the Gitea drill does. Running the container as the invoking user means everything it writes belongs to that user, so a plain `rmtree` removes it on any host, rootless or not.
 

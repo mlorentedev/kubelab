@@ -9,7 +9,7 @@ created: "2026-10-01"
 
 - [x] Branch `feat/backup-067-headscale-restore-drill`, stacked on BACKUP-040 (#1993) for `staging_dir`; rebased onto master once #1993 merges
 - [x] Spike on prod data, torn down: v0.28.0 starts with `--network none` and `--user`, lists 12 nodes and 4 users; key hashes match live
-- [ ] Q1 and Q2 answered by the operator before archive
+- [x] Q1 and Q2 answered by the operator before archive: Q1 an ace2 run (done by BACKUP-071, #2024), Q2 keys plus database ✓ 2026-10-01
 
 ## Implementation
 
@@ -23,6 +23,6 @@ created: "2026-10-01"
 
 ## Closing
 
-- [ ] `make test` green
+- [x] `make test` green: 3484 passed on master `4d995e69` ✓ 2026-10-01
 - [x] Prod run: transcript and RTO in `verification.md`
 - [ ] `dotf spec review` by a different model
