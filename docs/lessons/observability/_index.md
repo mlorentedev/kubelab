@@ -1,9 +1,10 @@
 # Metrics, logs, dashboards and alerting
 
-25 lessons, newest first. Back to [all categories](../_index.md).
+26 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 512 | [A JSON field named like a stream label is renamed, and `by (<field>)` silently groups on the stream label instead](lesson-512-a-json-field-named-like-a-stream-label-is-renamed-and-the-grouping-moves.md) | 2026-10-02 |
 | 510 | [A throwaway Loki answers "no data" for lines older than 3 h, whatever the querier flags say](lesson-510-loki-answers-no-data-for-ranges-older-than-3h-it-never-flushed.md) | 2026-10-02 |
 | 509 | [A check inside the unit it guards cannot see the unit not running, and filtering on "is it up" turns "all off" into a page](lesson-509-a-check-inside-the-unit-cannot-see-the-unit-not-running.md) | 2026-10-02 |
 | 481 | [A mounted config that the command never names is not the config that runs](lesson-481-a-mounted-config-the-command-never-names-is-not-the-config-that-runs.md) | 2026-09-26 |

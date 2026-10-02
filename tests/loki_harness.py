@@ -18,6 +18,11 @@ Two limits, stated so nobody reads more into a green test than it proves:
   that needs "held across two probes" evaluates at two times.
 - Cases share one Loki, so each takes its own time slot, far enough from the
   others that no rule window reaches across (`slot()`).
+
+Streams carry the labels Vector gives them in prod (`stream_labels()`), read
+from Vector's Loki sink. A fixture without them proves a rule against a label
+set prod does not have: Vector's `node` label is why a plain `| json` renames a
+line's own `node` field, which the first BACKUP-032 rules grouped on (lesson-512).
 """
 
 from __future__ import annotations
@@ -39,6 +44,7 @@ import yaml
 
 REPO = Path(__file__).resolve().parent.parent
 ALERTING_DIR = REPO / "infra/k8s/base/services/grafana-alerting"
+VECTOR_CONFIG = REPO / "infra/k8s/base/services/vector-config/vector.yaml"
 
 # Far enough apart that no rule window (24 h at most today) spans two slots.
 SLOT_SECONDS = 3 * 86400
@@ -51,6 +57,23 @@ def loki_image() -> str:
     kustomization = yaml.safe_load((REPO / "infra/k8s/base/kustomization.yaml").read_text())
     pin = next(i for i in kustomization["images"] if i["name"] == "grafana/loki")
     return f"grafana/loki:{pin['newTag']}"
+
+
+def vector_stream_labels() -> set[str]:
+    """The label names Vector's Loki sink puts on every stream in prod."""
+    config = yaml.safe_load(VECTOR_CONFIG.read_text())
+    return set(config["sinks"]["loki"]["labels"])
+
+
+def stream_labels(**values: str) -> dict[str, str]:
+    """A stream's labels: one value for each label Vector sets, no more and no fewer.
+
+    A label Vector gains fails here until the fixtures say what it holds,
+    instead of the rules being proven without it."""
+    expected = vector_stream_labels()
+    if set(values) != expected:
+        raise ValueError(f"stream labels {sorted(values)} differ from Vector's sink labels {sorted(expected)}")
+    return dict(values)
 
 
 def rule_expr(uid: str, ref: str = "A") -> str:

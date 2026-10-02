@@ -27,7 +27,7 @@ from dataclasses import dataclass
 import pytest
 import yaml
 
-from tests.loki_harness import ALERTING_DIR, Loki, rule_expr, run_loki, slot
+from tests.loki_harness import ALERTING_DIR, Loki, rule_expr, run_loki, slot, stream_labels
 from tests.test_r2_backup_watcher_probe import FAKE_NC, FAKE_RESTIC, PREFIX, PROBE, STAGING, _listing
 
 FRESHNESS = "backup032-on-demand-freshness"
@@ -35,7 +35,9 @@ SHRINK = "backup032-r2-backup-shrink"
 HEALTH = "obs015-r2-backup-health"
 THREE_HOURS = 3 * 3600
 PROBE_INTERVAL = 6 * 3600
-WATCHER = {"container": "r2-backup-watcher", "namespace": "kubelab"}
+# The K8s node the Job ran on, as Vector labels it: a different thing from the
+# backup node a line reports on, and the reason the rules extract `backup_node`.
+K8S_NODE = "k8s-node-fixture"
 _case = itertools.count()
 
 
@@ -107,19 +109,26 @@ class Case:
     def __init__(self, loki: Loki, tmp_path: pathlib.Path) -> None:
         self.loki, self.tmp_path = loki, tmp_path
         self.start = slot(next(_case))
-        self.labels = {**WATCHER, "case": str(self.start)}
 
     def probe(self, offset: int, nodes: list[Node]) -> list[dict]:
-        """Probe at `start + offset` and ship the lines to Loki with that timestamp."""
+        """Probe at `start + offset` and ship the lines to Loki with that timestamp.
+
+        Each run is a new Job pod, so each lands in its own stream, as in prod."""
         at = self.start + offset
         records = _probe(self.tmp_path, nodes, at)
-        self.loki.push(self.labels, [(at, record) for record in records])
+        labels = stream_labels(
+            namespace="kubelab",
+            container="r2-backup-watcher",
+            pod=f"r2-backup-watcher-{at}",
+            node=K8S_NODE,
+        )
+        self.loki.push({**labels, "case": str(self.start)}, [(at, record) for record in records])
         return records
 
     def value(self, uid: str, offset: int) -> dict[str, float]:
-        """The rule's query at `start + offset`, keyed by node (or namespace for fleet rules)."""
+        """The rule's query at `start + offset`, keyed by backup node (or namespace for fleet rules)."""
         result = self.loki.query(rule_expr(uid), self.start + offset)
-        return {dict(labels).get("node", dict(labels).get("namespace", "")): v for labels, v in result.items()}
+        return {dict(labels).get("backup_node", dict(labels).get("namespace", "")): v for labels, v in result.items()}
 
 
 @pytest.fixture
@@ -155,6 +164,16 @@ def test_the_harness_reads_the_existing_health_rule_both_ways(case: Case) -> Non
 def test_a_reachable_on_demand_node_that_stopped_shipping_fires(case: Case) -> None:
     case.probe(0, [Node("beelink", "on-demand", age=4 * 3600), Node("vps", "always-on")])
     case.probe(PROBE_INTERVAL, [Node("beelink", "on-demand", age=10 * 3600), Node("vps", "always-on")])
+    assert _held(case) == {"beelink"}
+
+
+def test_each_on_demand_node_is_judged_on_its_own(case: Case) -> None:
+    """Two on-demand nodes in one probe, one stale and one fresh: only the stale
+    one fires. Rules that group on Vector's `node` label (the K8s node) fold both
+    into one series and judge whichever line came last (lesson-512)."""
+    nodes = [Node("beelink", "on-demand", age=10 * 3600), Node("rpi4", "on-demand", age=600)]
+    case.probe(0, nodes)
+    case.probe(PROBE_INTERVAL, nodes)
     assert _held(case) == {"beelink"}
 
 
@@ -215,6 +234,22 @@ def test_the_shrink_rule_fires_only_on_a_drop_of_more_than_half(case: Case, befo
     case.probe(PROBE_INTERVAL, [Node("rpi4", "on-demand", size=after)])
     values = case.value(SHRINK, PROBE_INTERVAL + 60)
     assert ({n for n, v in values.items() if v < 0.5} == {"rpi4"}) is fires, values
+
+
+def test_nodes_of_different_sizes_never_read_as_a_shrink(case: Case) -> None:
+    """Sizes are compared per backup node, never across them: a small node after
+    a large one is not a drop (the first rules divided vps by beelink, lesson-512)."""
+    nodes = [Node("beelink", "on-demand", size=2_000_000), Node("vps", "always-on", size=500_000)]
+    case.probe(0, nodes)
+    case.probe(PROBE_INTERVAL, nodes)
+    assert case.value(SHRINK, PROBE_INTERVAL + 60) == {"beelink": 1.0, "vps": 1.0}
+
+
+def test_the_fixture_streams_carry_every_label_vector_sets() -> None:
+    """The guard on the guard: fixtures pushed without Vector's labels would
+    prove the rules against a stream shape prod never has."""
+    with pytest.raises(ValueError):
+        stream_labels(namespace="kubelab", container="r2-backup-watcher")
 
 
 def test_a_single_probe_never_reads_as_a_shrink(case: Case) -> None:

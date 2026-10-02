@@ -39,11 +39,15 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - **`NC` is an override, for the tests.** Ubuntu's busybox `sh` runs its own `nc` applet (which has no `-z`) ahead of `PATH`, so the tests pass the fake by path. The pinned image uses the default `nc`.
 - **The Loki harness evaluates the rule as written,** read from the rules YAML, in the image prod pins. Slots lie in the future because a throwaway Loki answers "no data" for ranges older than 3 h (lesson-510). It needs only a local docker and no cluster access; CI fails, never skips, without docker.
 
+## Correction after merge (2026-10-02)
+
+The rules as merged in #2037 (`a19f5a2e`) grouped `by (node)`. In prod, Vector sets a `node` stream label (the K8s node), so `| json` renamed the probe's field and every backup node fell into one series. Read against prod Loki minutes after merge, the shrink rule gave 0.477 (vps last over beelink first) and would have paged on every evaluation. AC2 and AC3 evidence from `7d29f469` is therefore void. It is replaced by the fix PR: the rules extract `backup_node`, the harness takes its stream labels from Vector's sink with one `pod` per run, and two cross-node tests fail on the merged rules (6 failed, 12 passed against `a19f5a2e`'s rules). After the fix, prod Loki gives the corrected shrink expression one value per backup node: 1.19, 1.0005, 1.02 and 1.04. lesson-512.
+
 ## Promotion candidates
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.
 
-- [x] Lesson for the repo's `docs/lessons/`? yes: `docs/lessons/observability/lesson-509-a-check-inside-the-unit-cannot-see-the-unit-not-running.md`, and `docs/lessons/observability/lesson-510-loki-answers-no-data-for-ranges-older-than-3h-it-never-flushed.md`
+- [x] Lesson for the repo's `docs/lessons/`? yes: `docs/lessons/observability/lesson-509-a-check-inside-the-unit-cannot-see-the-unit-not-running.md`, `docs/lessons/observability/lesson-510-loki-answers-no-data-for-ranges-older-than-3h-it-never-flushed.md` and `docs/lessons/observability/lesson-512-a-json-field-named-like-a-stream-label-is-renamed-and-the-grouping-moves.md`
 - [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? <yes: path / no: reason>
 - [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes: path / no: reason>
 
