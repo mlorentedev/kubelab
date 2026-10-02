@@ -18,9 +18,9 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 
 ## Test status
 
-- Test suite: `<command> -> <output / coverage %>`
-- Manual smoke test: what was exercised, what was observed
-- No regressions in existing test suite: yes / no (if no, document)
+- Test suite: `make test` -> 3598 passed, 1 failed (`platform.json` stale after the `common.yaml` edit), fixed in `6c989e45`; `tests/test_sync_platform_json.py` 26 passed after it. `make lint` passes.
+- Manual smoke test (staging, 2026-10-02): Argo CD `kubelab-staging` repointed to the branch (`master` → branch), then `make watcher-run NAME=r2-backup-watcher ENV=staging`, Job succeeded in 209 s. Every node line carried the new fields: beelink (on-demand) age 3463 s, rpi4 (on-demand) 133 s, rpi3 (always-on) 9758 s, vps (always-on) 2403 s, all `reachable=1`, `healthy=1`; the fleet line read `nodes=4 unhealthy=0`. Staging runs on ace1, LAN-adjacent to the homelab, so this proves the probe and its parsing in the pinned image, not reachability from the VPS (that is AC5).
+- No regressions in existing test suite: yes
 
 ## Measurements (2026-10-02)
 
