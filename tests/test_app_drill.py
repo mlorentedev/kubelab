@@ -282,12 +282,17 @@ def test_a_row_created_after_the_snapshot_is_reported_not_failed() -> None:
     assert any("row 3: newer than the snapshot" in line for line in lines)
 
 
-def test_without_a_timestamp_an_id_above_the_restores_sequence_is_newer() -> None:
-    restored = {"user_preferences": {"1": (None, "")}, SEQUENCE: {"user_preferences": (1, "")}}
-    live = {"user_preferences": {"1": (None, ""), "2": (None, "")}}
+def test_without_a_timestamp_the_restores_sequence_splits_lost_from_newer() -> None:
+    """The restore keeps row 1 and had allocated up to 3, so live row 3 was lost and row 4 is newer.
+
+    The highest surviving id (1) would have excused both.
+    """
+    restored = {"user_preferences": {"1": (None, "")}, SEQUENCE: {"user_preferences": (3, "")}}
+    live = {"user_preferences": {"1": (None, ""), "3": (None, ""), "4": (None, "")}}
     ok, lines = compare(live=live, restored=restored, tables=AUTHELIA, taken=SNAP)
-    assert ok
-    assert any("user_preferences row 2: newer" in line for line in lines)
+    assert not ok
+    assert any(line.startswith("FAIL user_preferences row 3") for line in lines)
+    assert any("user_preferences row 4: newer" in line for line in lines)
 
 
 def test_without_a_timestamp_a_lost_trailing_row_fails() -> None:
@@ -520,12 +525,15 @@ def test_live_or_the_repository_that_cannot_be_read_is_cannot_check(drill, capsy
     assert not _started(fake)
 
 
-def test_a_live_database_with_no_durable_rows_is_cannot_check(drill, capsys, tmp_path) -> None:
-    def empty(con: sqlite3.Connection) -> None:
-        con.execute("delete from workflow_entity")
-        con.execute("delete from credentials_entity")
+@pytest.mark.parametrize("service", ["n8n", "authelia"])
+def test_a_live_database_with_no_durable_rows_is_cannot_check(drill, capsys, tmp_path, service) -> None:
+    """Authelia's `sqlite_sequence` keeps its rows after a DELETE; they are not durable rows."""
 
-    fake = _fake(tmp_path, "n8n", mutate_live=empty)
+    def empty(con: sqlite3.Connection) -> None:
+        for table in APPS[service].tables:
+            con.execute(f"delete from {table.name}")
+
+    fake = _fake(tmp_path, service, mutate_live=empty)
     assert drill(fake) is False
     assert "CANNOT CHECK — live has no durable rows" in _out(capsys)
 

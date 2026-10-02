@@ -430,7 +430,7 @@ def run_drill(
     except (ValueError, KeyError) as exc:
         logger.error(f"drill: {service}: CANNOT CHECK — live's database could not be read: {str(exc)[:160]}")
         return False
-    if not any(live.values()):
+    if not any(live.get(table.name) for table in app.tables):  # the sequence is not a row
         logger.error(f"drill: {service}: CANNOT CHECK — live has no durable rows at all")
         return False
 
