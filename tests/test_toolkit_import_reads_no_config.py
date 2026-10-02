@@ -14,7 +14,6 @@ import textwrap
 from pathlib import Path
 
 import pytest
-from typer.testing import CliRunner
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -37,19 +36,25 @@ def test_importing_the_cli_builds_no_configuration_manager() -> None:
     assert done.returncode == 0 and "imported" in done.stdout, done.stderr[-2000:]
 
 
-def test_help_decrypts_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
-    import toolkit.config.settings as settings_module
-    from toolkit.features import configuration
-    from toolkit.main import app
+def test_help_decrypts_nothing() -> None:
+    """The whole process, not the invoke: patching after the import would miss a decrypt done at import."""
+    script = textwrap.dedent(
+        """
+        import toolkit.features.configuration as c
 
-    monkeypatch.setattr(settings_module, "_settings_cache", {})
+        def refuse(*a, **k):
+            raise AssertionError("SOPS decrypted by --help")
 
-    def refuse(*a, **k):
-        raise AssertionError("SOPS decrypted by --help")
+        c.ConfigurationManager._decrypt_sops = refuse
+        from typer.testing import CliRunner
+        from toolkit.main import app
 
-    monkeypatch.setattr(configuration.ConfigurationManager, "_decrypt_sops", refuse)
-    result = CliRunner().invoke(app, ["--help"])
-    assert result.exit_code == 0, result.output
+        result = CliRunner().invoke(app, ["--help"])
+        print("exit", result.exit_code)
+        """
+    )
+    done = subprocess.run([sys.executable, "-c", script], cwd=ROOT, capture_output=True, text=True, timeout=120)
+    assert done.returncode == 0 and "exit 0" in done.stdout, (done.stdout + done.stderr)[-2000:]
 
 
 def test_settings_still_resolve_on_first_use(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -102,7 +107,10 @@ def test_the_logger_takes_the_import_environments_level_and_format(monkeypatch, 
     other = "prod" if env != "prod" else "staging"
     _fake_config(
         monkeypatch,
-        {env: {"log_level": "DEBUG", "log_format": "json"}, other: {"log_level": "ERROR", "log_format": "%(message)s"}},
+        {
+            env: {"log_level": "WARNING", "log_format": "drill %(message)s"},
+            other: {"log_level": "ERROR", "log_format": "%(message)s"},
+        },
     )
     logger_state.logger.setLevel(logging.INFO)
 
@@ -110,5 +118,5 @@ def test_the_logger_takes_the_import_environments_level_and_format(monkeypatch, 
     assert logger_state.logger.level == logging.INFO
 
     settings_module.get_settings(env)
-    assert logger_state.logger.level == logging.DEBUG
-    assert all(h.formatter._fmt == "%(levelname)s - %(name)s - %(message)s" for h in logger_state.logger.handlers)
+    assert logger_state.logger.level == logging.WARNING
+    assert all(h.formatter._fmt == "drill %(message)s" for h in logger_state.logger.handlers)
