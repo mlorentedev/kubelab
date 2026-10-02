@@ -90,7 +90,7 @@ On prod, after both runs: 49 docker volumes before and after, no `giteadrill-*` 
 - `poetry run pytest -q -p no:cacheprovider --no-cov tests/test_gitea_drill.py tests/test_postgres_drill.py tests/test_gitea_client_pagination.py tests/test_make_env_default_is_reachable.py`: 111 passed.
 - `make test` on `3be72f2e`: 3250 passed, 16 skipped, 2 xfailed, rc 0 (2026-10-01).
 - `make test` on master `4d995e69` (with BACKUP-071 merged), before the archive: 3484 passed, 16 skipped, 154 deselected, 2 xfailed, rc 0 (2026-10-01).
-- After the review dispositions: `tests/test_gitea_drill.py tests/test_drill_remote.py` 61 passed.
+- After the review dispositions: `tests/test_gitea_drill.py tests/test_drill_remote.py` 61 passed; after round 3, `tests/test_gitea_drill.py` 32 passed.
 
 ## Review dispositions (`review.md` at `8033834e`, FAIL)
 
@@ -104,6 +104,15 @@ The contract set (`proposal.md`, `tasks.md`) is unchanged. `features.json` gaine
 | Minor: a repository renamed since the snapshot fails the drill | Accepted as a limit and documented in the module docstring. The failure is a false alarm, never a false pass, and the next capture clears it. Telling a rename from a loss would need the snapshot's own database as the reference, which is a different drill. | Docstring, `toolkit/features/gitea_drill.py`. |
 | Minor: a repository in the restored DB but gone from live and from disk is not checked | Accepted as a limit and documented in the module docstring. The drill proves the restore brings back what live has. A repository live has deleted is not something a restore owes. | Docstring, same file. |
 | Minor: `_restore_and_check` over the complexity bar | Carried by #2015 item 3, which extracts the shared restore → compare → prove phases for all four drills under their behavioural tests. | #2015 (open). |
+
+## Review dispositions, round 3 (`review.md` at `dbdbfc88`, PASS-WITH-GAPS)
+
+| Finding | Disposition | Evidence |
+|---|---|---|
+| Minor: the "restic could not restore" return has no named test | Applied (`a2479019`): `test_a_restore_restic_cannot_finish_fails_names_it_and_never_starts_a_server`. | `if rc != 0 or not data.is_dir():` → `if False:`: 1 failed, 31 passed. |
+| Minor: complexity | Carried by #2015 item 3, as in round 2. | #2015 (open). |
+| Minor: `snapshots[-1]` here, `snapshots[0]` in the Postgres drill | Carried by #2015 item 3. Today one snapshot per run holds every source, so the two agree. The shared restore phase that item extracts will choose the snapshot once, for all four drills. | Comment on #2015. |
+| Minor: the two documented limits | Accepted, as in round 2. | Module docstring. |
 
 ## Decisions made during implementation
 
