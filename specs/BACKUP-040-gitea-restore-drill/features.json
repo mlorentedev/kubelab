@@ -3,21 +3,21 @@
     "id": "BACKUP-040-gitea-restore-drill-f1",
     "behavior": "AC1/AC2: the newest Beelink snapshot restores, every repository passes git fsck --full, the pinned image serves it with no network, and the restore is complete against live",
     "verification": "make backup-drill-gitea ENV=prod (names the snapshot, the repository count and the time to a complete check)",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "verification.md 'AC1, AC2: the prod drill on ace2': make backup-drill-gitea HOST=ace2 ENV=prod at 86f6d16a, snapshot 0b556cbb, 5 repositories, fsck ok, rc 0, nothing left on ace2. Workstation run 2026-10-01: snapshot af115af1, 17s end to end, rc 0"
   },
   {
     "id": "BACKUP-040-gitea-restore-drill-f2",
     "behavior": "AC2/AC3: a repository missing, emptied or carrying a head live does not know fails and is named; live unreadable or empty is CANNOT CHECK",
     "verification": "poetry run pytest -q -p no:cacheprovider --no-cov tests/test_gitea_drill.py tests/test_gitea_client_pagination.py",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "tests/test_gitea_drill.py + tests/test_gitea_client_pagination.py green on the archive branch; incomplete-restore, forged-head, live-unreadable/empty, unreadable-snapshot and wrong-shape-page cases each named; mutations recorded in verification.md 'Review dispositions'"
   },
   {
     "id": "BACKUP-040-gitea-restore-drill-f3",
     "behavior": "AC4: the container, its volumes and the restored directory are gone on every exit path, read back from docker",
     "verification": "poetry run pytest -q -p no:cacheprovider --no-cov tests/test_gitea_drill.py tests/test_postgres_drill.py -k 'torn_down or cleans_up or removed or leaves_its_data or left_behind'",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "test_a_complete_restore_whose_container_is_left_behind_fails and test_a_complete_restore_that_leaves_its_data_on_disk_fails guard `return ok and removed and wiped`; dropping each term turns a test red (verification.md 'Review dispositions'); every exit-path test asserts _torn_down"
   }
 ]

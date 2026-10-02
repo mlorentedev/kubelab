@@ -90,6 +90,20 @@ On prod, after both runs: 49 docker volumes before and after, no `giteadrill-*` 
 - `poetry run pytest -q -p no:cacheprovider --no-cov tests/test_gitea_drill.py tests/test_postgres_drill.py tests/test_gitea_client_pagination.py tests/test_make_env_default_is_reachable.py`: 111 passed.
 - `make test` on `3be72f2e`: 3250 passed, 16 skipped, 2 xfailed, rc 0 (2026-10-01).
 - `make test` on master `4d995e69` (with BACKUP-071 merged), before the archive: 3484 passed, 16 skipped, 154 deselected, 2 xfailed, rc 0 (2026-10-01).
+- After the review dispositions: `tests/test_gitea_drill.py tests/test_drill_remote.py` 61 passed.
+
+## Review dispositions (`review.md` at `8033834e`, FAIL)
+
+The contract set (`proposal.md`, `tasks.md`) is unchanged. `features.json` gained only `state` and `evidence`. The fixes are code and tests:
+
+| Finding | Disposition | Evidence |
+|---|---|---|
+| Major: `return ok and removed and wiped` enforced by no test | Applied (`5d489bd2`). `test_a_complete_restore_whose_container_is_left_behind_fails` makes `docker rm` leave the container; `test_a_complete_restore_that_leaves_its_data_on_disk_fails` makes the wipe and `rmtree` leave the directory. Both assert that the restore itself passed, so the failure comes from the teardown. | `return ok`: 2 failed. `return ok and wiped`: 1 failed. `return ok and removed`: 1 failed. |
+| Major: no-snapshot branch untested and not labelled CANNOT CHECK | Applied. The message is `drill: CANNOT CHECK — no snapshot readable in <repo>`, as in the Headscale drill. A malformed snapshot list, which raised before, now takes the same branch. `test_no_readable_snapshot_is_cannot_check` covers restic failing, an empty list and malformed JSON, and asserts that nothing is restored. | Label removed: 3 failed. `except ValueError` → `except KeyError`: 1 failed. |
+| Minor: `_paginate` raised on a non-list body | Applied. A page that is not the list the endpoint returns (`{"data": null}`, a dict without the key, a string, a number) is an unread page, and the caller already reports that as CANNOT CHECK. A top-level `null` is still an empty collection (lesson-499). Three tests cover it. | `isinstance(batch, list)` → `batch is None`: 2 failed. |
+| Minor: a repository renamed since the snapshot fails the drill | Accepted as a limit and documented in the module docstring. The failure is a false alarm, never a false pass, and the next capture clears it. Telling a rename from a loss would need the snapshot's own database as the reference, which is a different drill. | Docstring, `toolkit/features/gitea_drill.py`. |
+| Minor: a repository in the restored DB but gone from live and from disk is not checked | Accepted as a limit and documented in the module docstring. The drill proves the restore brings back what live has. A repository live has deleted is not something a restore owes. | Docstring, same file. |
+| Minor: `_restore_and_check` over the complexity bar | Carried by #2015 item 3, which extracts the shared restore → compare → prove phases for all four drills under their behavioural tests. | #2015 (open). |
 
 ## Decisions made during implementation
 

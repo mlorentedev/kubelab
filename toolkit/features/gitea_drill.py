@@ -24,6 +24,14 @@ wiped from inside a container first; a leftover fails the drill.
 
 Live is read with the admin token, whose grant is `read:repository` and never a
 write scope.
+
+Two limits follow from checking against live rather than against the snapshot's
+own database. A repository renamed or moved since the snapshot fails the drill
+under its new name: a false alarm, never a false pass, and the next capture
+clears it. A repository the restored database lists but live no longer does is
+reported as gone since the snapshot and is not fsck'd if its directory is
+missing: the drill proves the restore brings back what live has, not what live
+has since deleted.
 """
 
 from __future__ import annotations
