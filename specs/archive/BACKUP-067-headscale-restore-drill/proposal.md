@@ -1,7 +1,7 @@
 ---
 id: "BACKUP-067-headscale-restore-drill"
 type: spec
-status: implementing # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-10-01"
 issue: "mlorentedev/kubelab#1994"
 tags: [spec, proposal, backup, headscale]

@@ -118,5 +118,5 @@ The contract set is unchanged. Each Minor is applied in tests or carried by a ti
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/BACKUP-067-headscale-restore-drill/` -> `specs/archive/BACKUP-067-headscale-restore-drill/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/BACKUP-067-headscale-restore-drill/` -> `specs/archive/BACKUP-067-headscale-restore-drill/`
