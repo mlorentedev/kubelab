@@ -104,7 +104,7 @@ reason_from_stderr() {
 
 # `|| [ -n "$node" ]`: `read` fails on a last line with no newline, and that
 # node would silently drop out of a fleet reported healthy.
-while read -r node repo declared_id services || [ -n "$node" ]; do
+while read -r node repo declared_id address port class services || [ -n "$node" ]; do
     case "$node" in '' | \#*) continue ;; esac
     nodes=$((nodes + 1))
     readable=0

@@ -2021,6 +2021,14 @@ backup:
   # `restic_version` is bumped with it, which is the coordination it forces.
   watcher:
     image: restic/restic:0.19.1
+    # BACKUP-032: the TCP port the watcher connects to on each node's Tailscale
+    # IP, to tell "node off" from "node up and not shipping". sshd, because it is
+    # the one port open on every node (base_system `firewall_allowed_ports`,
+    # `networking.firewall.vps_inbound`) and listening on every address
+    # (`sshd_config.j2`). A node whose sshd moves gets an entry in
+    # `reachability_ports`; none needs one today. Rendered into targets.txt.
+    reachability_port: 22
+    reachability_ports: {}
   # Every named Docker volume on a covered node, and every prod PVC, is either
   # backed up below or excluded HERE, with its reason and `tier: 3`. Enforced by
   # tests/test_backup_volume_coverage.py over the compose template and by

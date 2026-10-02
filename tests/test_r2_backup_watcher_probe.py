@@ -92,6 +92,9 @@ esac
 # Repository ids as `restic cat config` reports them: new for every `init`,
 # fixed otherwise. The targets file declares the id each node must still have.
 IDS = {"rpi3": "1" * 64, "kubelab-vps": "2" * 64}
+# Where the probe knocks (BACKUP-032). Documentation addresses (RFC 5737): the
+# fake `nc` answers for them from files, and nothing real is ever contacted.
+ADDRESSES = {"rpi3": "192.0.2.6", "vps": "192.0.2.2"}
 # What `stats --mode raw-data` reports as `total_size`: the stored, compressed
 # bytes of every blob the snapshots reference (BACKUP-057 Q3).
 SIZES = {"rpi3": 123_456_789, "kubelab-vps": 2_345_678_901}
@@ -123,8 +126,8 @@ def fleet(tmp_path: pathlib.Path, request):
     targets = tmp_path / "targets.txt"
     targets.write_text(
         "# header comment\n"
-        f"rpi3 {PREFIX}/rpi3 {IDS['rpi3']} uptime_kuma\n"
-        f"vps {PREFIX}/kubelab-vps {IDS['kubelab-vps']} authelia n8n\n"
+        f"rpi3 {PREFIX}/rpi3 {IDS['rpi3']} {ADDRESSES['rpi3']} 22 always-on uptime_kuma\n"
+        f"vps {PREFIX}/kubelab-vps {IDS['kubelab-vps']} {ADDRESSES['vps']} 22 always-on authelia n8n\n"
     )
     for name, repository_id in IDS.items():
         (fake / f"{name}.id").write_text(f"{repository_id}\n")

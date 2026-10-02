@@ -346,20 +346,26 @@ def repository_name(cm: ConfigurationManager, node: str) -> str:
     return _repository_name_in(cm.get_merged_config(), node)
 
 
-def _repository_name_in(config: dict[str, Any], node: str) -> str:
-    """`repository_name()` over an already-merged config, so a renderer needs no SOPS."""
+def _node_entry(config: dict[str, Any], node: str) -> dict[str, Any]:
+    """A node's `networking` entry: `networking.<node>` for cloud nodes (vps, aws,
+    gcp), `networking.nodes.<node>` for the homelab — the same sibling-vs-member
+    shape SSOT-014a keys off."""
     networking = config.get("networking", {})
     nodes = networking.get("nodes", {})
-    # `networking.<node>` for cloud nodes (vps, aws, gcp), `networking.nodes.<node>`
-    # for the homelab — the same sibling-vs-member shape SSOT-014a keys off.
     entry = nodes.get(node) if node in nodes else networking.get(node, {})
+    return entry or {}
+
+
+def _repository_name_in(config: dict[str, Any], node: str) -> str:
+    """`repository_name()` over an already-merged config, so a renderer needs no SOPS."""
+    entry = _node_entry(config, node)
     # `hostname` IS the inventory name, verbatim, with no prefix rule to apply:
     # `networking.vps.hostname` is already `kubelab-vps` while every homelab node
     # is its own bare name. An earlier revision inferred the prefix from the
     # node's position instead of reading it, and produced `kubelab-kubelab-vps`
     # — reporting the VPS as UNCOVERED with a nightly backup sitting in R2.
     # Caught by running it, not by reading it.
-    return str((entry or {}).get("hostname") or node)
+    return str(entry.get("hostname") or node)
 
 
 # Where the in-cluster watcher's targets live (BACKUP-055). Served to the
@@ -369,12 +375,30 @@ WATCHER_TARGETS_PATH = "infra/k8s/base/services/r2-backup-watcher/targets.txt"
 
 _WATCHER_TARGETS_HEADER = (
     "# Generated from backup.sources in common.yaml by `make sync-r2-watcher-targets`. Do not edit.\n"
-    "# One line per node: <node> <restic repository URL> <repository id, or -> <declared source>...\n"
+    "# One line per node: <node> <restic repository URL> <repository id, or -> <tailscale ip> <probe port>\n"
+    "#   <ADR-028 class> <declared source>...\n"
 )
 
 
+def _reachability(config: dict[str, Any], node: str) -> list[str]:
+    """Where the probe knocks to tell "off" from "up and not shipping" (BACKUP-032).
+
+    Raises on a node with no Tailscale IP or no class. Both would render a row
+    that is silently wrong: no address reads as "always off", and no class is a
+    node the freshness rule, which filters on it, never sees.
+    """
+    entry = _node_entry(config, node)
+    missing = [field for field in ("tailscale_ip", "location") if not entry.get(field)]
+    if missing:
+        raise ValueError(f"backup node {node} has no networking {', '.join(missing)}: the watcher cannot judge it")
+    watcher = (config.get("backup", {}) or {}).get("watcher", {}) or {}
+    port = (watcher.get("reachability_ports") or {}).get(node) or watcher.get("reachability_port", 22)
+    return [str(entry["tailscale_ip"]), str(port), str(entry["location"])]
+
+
 def render_watcher_targets(config: dict[str, Any]) -> str:
-    """What the watcher must find in R2: per node, its repository, its id and declared sources.
+    """What the watcher must find in R2: per node, its repository, its id, where to
+    knock, its class and its declared sources.
 
     Plain whitespace-separated lines, because the reader is `sh` in a restic
     image that has no YAML or JSON parser.
@@ -395,6 +419,7 @@ def render_watcher_targets(config: dict[str, Any]) -> str:
                 node,
                 f"{prefix}/{_repository_name_in(config, node)}",
                 str(repository_ids.get(node) or "-"),
+                *_reachability(config, node),
                 *sorted(sources[node] or {}),
             ]
         )

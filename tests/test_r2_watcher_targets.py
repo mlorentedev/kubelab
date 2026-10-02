@@ -19,6 +19,8 @@ import pathlib
 
 import yaml
 
+import pytest
+
 from toolkit.features.backup_destination import WATCHER_TARGETS_PATH, render_watcher_targets
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
@@ -29,8 +31,8 @@ def _rows(text: str) -> dict[str, list[str]]:
     rows = {}
     for line in text.splitlines():
         if line.strip() and not line.startswith("#"):
-            node, repository, repository_id, *services = line.split()
-            rows[node] = [repository, repository_id, *services]
+            node, repository, repository_id, *rest = line.split()
+            rows[node] = [repository, repository_id, *rest]
     return rows
 
 
@@ -47,7 +49,7 @@ def test_every_declared_node_and_source_is_a_target() -> None:
     sources = COMMON["backup"]["sources"]
     assert set(rows) == set(sources)
     for node, declared in sources.items():
-        assert sorted(rows[node][2:]) == sorted(declared), node
+        assert sorted(rows[node][5:]) == sorted(declared), node
 
 
 def test_the_vps_targets_its_real_repository() -> None:
@@ -107,4 +109,42 @@ def test_an_undeclared_node_renders_the_dash_token() -> None:
     del mutated["backup"]["r2"]["repository_ids"]["rpi3"]
     rows = _rows(render_watcher_targets(mutated))
     assert rows["rpi3"][1] == "-"
-    assert rows["rpi3"][2:] == sorted(COMMON["backup"]["sources"]["rpi3"])
+    assert rows["rpi3"][5:] == sorted(COMMON["backup"]["sources"]["rpi3"])
+
+
+def _networking_entry(config: dict, node: str) -> dict:
+    networking = config["networking"]
+    return networking["nodes"][node] if node in networking.get("nodes", {}) else networking[node]
+
+
+def test_every_node_carries_its_tailscale_ip_probe_port_and_class() -> None:
+    """BACKUP-032 AC4: what the probe needs to tell "off" from "up and not shipping".
+
+    The IP and the ADR-028 class come from `networking.*`, the port from
+    `backup.watcher`. Read here from common.yaml, never retyped, so a node that
+    moves address or class moves its watcher row with it.
+    """
+    rows = _rows(render_watcher_targets(COMMON))
+    port = str(COMMON["backup"]["watcher"]["reachability_port"])
+    for node, row in rows.items():
+        entry = _networking_entry(COMMON, node)
+        assert row[2:5] == [entry["tailscale_ip"], port, entry["location"]], node
+    assert {row[4] for row in rows.values()} == {"always-on", "on-demand"}
+
+
+def test_a_per_node_port_overrides_the_default() -> None:
+    mutated = yaml.safe_load(yaml.safe_dump(COMMON))
+    mutated["backup"]["watcher"]["reachability_ports"] = {"rpi4": 61208}
+    rows = _rows(render_watcher_targets(mutated))
+    assert rows["rpi4"][3] == "61208"
+    assert rows["beelink"][3] == str(COMMON["backup"]["watcher"]["reachability_port"])
+
+
+@pytest.mark.parametrize("field", ["tailscale_ip", "location"])
+def test_a_node_without_an_address_or_a_class_refuses_to_render(field) -> None:
+    """Fail closed. A row with no class is a node the freshness rule never sees,
+    and a row with no address is one the probe always reports off: both silent."""
+    mutated = yaml.safe_load(yaml.safe_dump(COMMON))
+    del _networking_entry(mutated, "rpi4")[field]
+    with pytest.raises(ValueError, match=f"rpi4.*{field}"):
+        render_watcher_targets(mutated)
