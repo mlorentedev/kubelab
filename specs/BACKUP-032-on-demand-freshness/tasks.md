@@ -13,16 +13,16 @@ created: "2026-10-01"
 
 ## Setup
 
-- [ ] Spec PR merged (`docs/backup-032-spec`, Refs #485)
-- [ ] Implementation branch from master: `feat/backup-032-on-demand-freshness`; new worktree gets `poetry.lock` copied before `make worktree-init` (DEBT-015 #1128)
-- [ ] Before touching `targets.txt`: re-read BACKUP-057 (#1959) for changes to the watcher or `backup_destination.py` (none on 2026-10-02)
+- [x] Spec PR merged (`docs/backup-032-spec`, Refs #485) ✓ 2026-10-02 (#2035)
+- [x] Implementation branch from master: `feat/backup-032-on-demand-freshness` ✓ 2026-10-02; new worktree gets `poetry.lock` copied before `make worktree-init` (DEBT-015 #1128)
+- [x] Before touching `targets.txt`: re-read BACKUP-057 (#1959) for changes to the watcher or `backup_destination.py` (none on 2026-10-02) ✓ 2026-10-02
 
 ## Implementation
 
 Measurements first, then the probe, then the harness, then the rules.
 
-- [ ] [P] [AC5] **Measure reachability** from a pod in the prod `kubelab` namespace, using the pinned `restic/restic:0.19.1` image: `nc -z -w 5 <tailscale_ip> 22` for vps, rpi3, and beelink/rpi4 while they are up. Record rc per node in `verification.md`. If 22 is refused on a homelab node, take that node's Glances port as its probe port.
-- [ ] [P] [AC1] **Measure the time format:** one `restic snapshots --json --latest 1` per repository, through the toolkit. Record only the *shape* of `time` (fraction digits, `Z` or offset), never ids or paths beyond what `make backup-coverage` already prints. Then find the busybox `date` invocation that parses it in the pinned image.
+- [x] [P] [AC5] **Measure reachability** ✓ 2026-10-02 (replaced, see `verification.md`) from a pod in the prod `kubelab` namespace, using the pinned `restic/restic:0.19.1` image: `nc -z -w 5 <tailscale_ip> 22` for vps, rpi3, and beelink/rpi4 while they are up. Record rc per node in `verification.md`. If 22 is refused on a homelab node, take that node's Glances port as its probe port.
+- [x] [P] [AC1] **Measure the time format:** ✓ 2026-10-02 one `restic snapshots --json --latest 1` per repository, through the toolkit. Record only the *shape* of `time` (fraction digits, `Z` or offset), never ids or paths beyond what `make backup-coverage` already prints. Then find the busybox `date` invocation that parses it in the pinned image.
 - [ ] [AC4] Failing test: `toolkit sync r2-watcher-targets` renders `<node> <repo> <id> <tailscale_ip> <port> <class> <sources>...` from `networking.*` and `backup.sources`; `--check` fails on a hand edit.
 - [ ] [AC4] Extend `_sync_r2_watcher_targets` (`toolkit/features/backup_destination.py`) and regenerate `targets.txt`. Update `probe.sh`'s reader in the same commit, so the format and its reader never drift apart.
 - [ ] [AC1] Failing tests in `tests/test_r2_backup_watcher_probe.py`, using the fake-restic harness: `newest_snapshot` and `snapshot_age_seconds` for a readable repository; both `null` on a restic failure and on an unparseable time; ages for the `Z` and `+HH:MM` forms; `reachable` 1 and 0 with a fake `nc`.

@@ -19,10 +19,11 @@ An on-demand node (Beelink, RPi4) can be up and writing while its backup never r
 
 ## What
 
-- `r2-backup-watcher` adds two fields to each `r2_backup_node` line:
+- `r2-backup-watcher` adds these fields to each `r2_backup_node` line:
   - `newest_snapshot`: the time of the newest snapshot, ISO 8601 UTC, read with the same `restic snapshots --latest 1` call, for the operator to read.
   - `snapshot_age_seconds`: the age of that snapshot at probe time. It is a measurement, not a verdict, so the probe still judges no age. It exists because LogQL can `unwrap` a number but not a timestamp.
   - Both are `null` when restic cannot answer, never a value that reads as fresh.
+  - `class`: the node's ADR-028 class from `targets.txt`. The freshness rule filters on it, so the probe must emit it: a filter on a label nobody emits matches nothing and pages forever through `noDataState` (#2035 review).
   - `reachable`: `1` when a TCP connect to the node's Tailscale IP on its probe port (a per-node field in `targets.txt`, 22 by default) succeeds within 5 s (`nc -z -w 5`, present in the pinned `restic/restic:0.19.1` image), and `0` otherwise.
 - `targets.txt` gains each node's Tailscale IP and its ADR-028 class (`always-on` or `on-demand`). Both are generated from `networking.*` in `common.yaml` by `make sync-r2-watcher-targets` and are never hand-written.
 - A new Grafana rule fires for an **on-demand** node that is reachable and whose newest snapshot is older than 3 × `node_backup_interval` (3 h). It computes the per-node product of `snapshot_age_seconds` and `reachable`, so it never filters on `reachable` and an off node never turns into "no data". The condition must hold across two consecutive probes. It stays silent while the node is off: that case is the `infra`/`vpn` ping monitor's, which is not muted.
@@ -56,7 +57,7 @@ An on-demand node (Beelink, RPi4) can be up and writing while its backup never r
 
 ## Acceptance criteria
 
-- [ ] **AC1** Every `r2_backup_node` line carries `newest_snapshot` (ISO 8601 UTC), `snapshot_age_seconds` (both `null` when restic fails) and `reachable` (`0` or `1`). `tests/test_r2_backup_watcher_probe.py` covers: a readable repository, a restic failure (`null`, never a fresh-looking value), a reachable host and an unreachable one.
+- [ ] **AC1** Every `r2_backup_node` line carries `newest_snapshot` (ISO 8601 UTC), `snapshot_age_seconds` (both `null` when restic fails) and `reachable` (`0` or `1`), plus the node's `class` (`always-on` or `on-demand`) copied from `targets.txt`, which the freshness rule filters on. `tests/test_r2_backup_watcher_probe.py` covers: a readable repository, a restic failure (`null`, never a fresh-looking value), a reachable host and an unreachable one.
 - [ ] **AC2** The freshness rule fires for an on-demand node that is reachable on two consecutive probes with `newest_snapshot` older than 3 h. It does not fire for an unreachable on-demand node, nor for any always-on node, and it does not go to "no data" when every on-demand node is off. All of this is proven by a test that evaluates the rule expression against fixture lines.
 - [ ] **AC3** The shrink rule fires when consecutive `raw_bytes` for one node drop by more than 50 %, and does not fire on a `null` size. Proven by a fixture test.
 - [ ] **AC4** `targets.txt` takes each node's Tailscale IP and class from `common.yaml` through `make sync-r2-watcher-targets`. `make validate-sync` fails if they drift.
