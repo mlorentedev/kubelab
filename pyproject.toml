@@ -56,10 +56,20 @@ src = ["toolkit"]
 # F: Pyflakes
 # I: isort (Importante para ordenar imports)
 # B: flake8-bugbear (encuentra bugs potenciales)
-select = ["E", "W", "F", "I", "B"]
+# C901: cyclomatic complexity, enforced only where it has been paid down (below)
+select = ["E", "W", "F", "I", "B", "C901"]
 ignore = [
     "B008",  # Typer uses function calls in defaults (standard pattern)
 ]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.per-file-ignores]
+# The bar binds the restore drills, which share their phases in restore_drill.py
+# (BACKUP-072, #2015). The rest of the toolkit is not yet under it; widen this
+# pattern as each module is brought down, never the other way.
+"!toolkit/features/*drill*.py" = ["C901"]
 
 [tool.ruff.format]
 # Configuración del formateador (estilo Black)
