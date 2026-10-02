@@ -541,8 +541,15 @@ def test_the_actions_cache_lives_in_the_runner_volume() -> None:
     read from the rendered compose rather than restated here.
     """
     mounts = [str(v) for v in _runner().get("volumes", [])]
-    data = next((v.split(":")[1] for v in mounts if v.startswith("act_runner_data:")), None)
+    volume, data = next((v.split(":")[:2] for v in mounts if v.startswith("act_runner_data:")), (None, None))
     assert data, f"act_runner_data is not mounted on the runner; volumes: {mounts}"
+
+    # The exclusion's ruling covers the cache only while it names this volume and
+    # says it holds the cache; a rename on either side must fail here.
+    common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
+    excluded = common["backup"]["excluded"]["beelink"]
+    assert volume in excluded, f"backup.excluded.beelink does not name {volume}: {sorted(excluded)}"
+    assert "cache" in excluded[volume]["reason"], f"the exclusion of {volume} does not rule on the cache"
 
     cache_dir = str(_config()["cache"].get("dir") or "")
     assert cache_dir.startswith(f"{data.rstrip('/')}/"), (

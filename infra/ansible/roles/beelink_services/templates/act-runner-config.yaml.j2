@@ -38,7 +38,9 @@ runner:
 cache:
   # actions/cache support. On by default in act_runner, and left on: the whole
   # point of the forge holding CI is that builds are fast enough to be a gate.
-  # Gitea's retention settings do not reach it: act_runner serves the cache itself.
+  # Gitea's retention settings do not reach it: act_runner serves the cache itself,
+  # and bounds it with its own GC (gitea/act v0.261.7, pkg/artifactcache: entries
+  # unused for 7 days, or created over 30 days ago, are removed).
   enabled: true
   # Left empty, act_runner uses `$HOME/.cache/actcache`, and the image runs as
   # root, so HOME is /root and the cache landed in the container's
