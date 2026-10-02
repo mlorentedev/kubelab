@@ -528,3 +528,31 @@ def test_every_notify_names_a_handler_that_exists() -> None:
         "no handler — no error, no warning, the play still goes green and whatever the "
         "handler was going to do simply does not happen."
     )
+
+
+def test_the_actions_cache_lives_in_the_runner_volume() -> None:
+    """An empty `cache.dir` makes act_runner use `$HOME/.cache/actcache`.
+
+    The image declares no USER, so it runs as root and that is `/root/.cache/actcache`:
+    the container's writable layer. It is lost on every recreation, invisible to
+    `docker volume ls`, and contradicts the backup exclusion in `common.yaml`,
+    which rules on `act_runner_data` as the volume that holds this cache.
+    The directory must therefore sit under the path that volume is mounted on,
+    read from the rendered compose rather than restated here.
+    """
+    mounts = [str(v) for v in _runner().get("volumes", [])]
+    volume, data = next((v.split(":")[:2] for v in mounts if v.startswith("act_runner_data:")), (None, None))
+    assert data, f"act_runner_data is not mounted on the runner; volumes: {mounts}"
+
+    # The exclusion's ruling covers the cache only while it names this volume and
+    # says it holds the cache; a rename on either side must fail here.
+    common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
+    excluded = common["backup"]["excluded"]["beelink"]
+    assert volume in excluded, f"backup.excluded.beelink does not name {volume}: {sorted(excluded)}"
+    assert "cache" in excluded[volume]["reason"], f"the exclusion of {volume} does not rule on the cache"
+
+    cache_dir = str(_config()["cache"].get("dir") or "")
+    assert cache_dir.startswith(f"{data.rstrip('/')}/"), (
+        f"cache.dir is {cache_dir!r}, not under the {data} volume. Left empty, "
+        "act_runner writes the cache to /root/.cache/actcache in the container layer."
+    )
