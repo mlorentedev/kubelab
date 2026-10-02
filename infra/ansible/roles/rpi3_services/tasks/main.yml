@@ -2,10 +2,23 @@
 # rpi3_services owns Uptime Kuma only since DASH-DT-014b. Glances was
 # extracted to the shared `roles/glances/` role (one role for all nodes,
 # tailscale_ip bind, more secure than the previous 0.0.0.0 bind here).
-- name: Stop legacy Uptime Kuma container (pre-Ansible ad-hoc deployment)
-  command: docker rm -f uptime-kuma
-  failed_when: false
+# A container named uptime-kuma from outside this stack (the pre-Ansible ad-hoc
+# deployment) would hold the name and break `compose up`. Remove only that one:
+# removing it unconditionally took the external monitor of prod down on every
+# provision and reported nothing (2026-10-02). Same guard as roles/glances.
+- name: Detect compose project of any existing 'uptime-kuma' container
+  command: docker inspect uptime-kuma --format '{% raw %}{{index .Config.Labels "com.docker.compose.project"}}{% endraw %}'
+  register: _kuma_project
   changed_when: false
+  check_mode: false
+  failed_when: false
+
+- name: Force-remove a legacy Uptime Kuma container (not this stack's)
+  command: docker rm -f uptime-kuma
+  when:
+    - _kuma_project.rc == 0
+    - _kuma_project.stdout != (rpi3_deploy_dir | basename)
+  changed_when: true
 
 - name: Create deployment directories
   file:
@@ -79,7 +92,10 @@
 
 - name: Start services
   command: docker compose -f {{ rpi3_deploy_dir }}/compose.yml up -d
-  changed_when: true
+  register: _compose_up
+  # compose v2 writes progress to stderr. `Running` is no change; Started and
+  # Created (which Recreated contains) are.
+  changed_when: "'Started' in _compose_up.stderr or 'Created' in _compose_up.stderr"
 
 - name: Wait for services to stabilize
   pause:
@@ -87,7 +103,9 @@
 
 - name: Verify Uptime Kuma health
   uri:
-    url: "http://localhost:{{ uptime_kuma_port }}"
+    # The port is published on the tailnet address only (compose.yml.j2), so
+    # nothing listens on localhost: ask where it is bound.
+    url: "http://{{ tailscale_ip }}:{{ uptime_kuma_port }}"
     method: GET
     status_code: [200, 302]
     timeout: 10

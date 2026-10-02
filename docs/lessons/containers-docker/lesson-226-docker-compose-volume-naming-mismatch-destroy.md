@@ -14,3 +14,5 @@ tags: [kubelab, containers-docker]
 **Problem:** Ad-hoc containers used volume name `uptime-kuma_uptime_kuma_data`. Compose generated `uptime_kuma_data` (different naming convention). New empty volume was mounted, data appeared lost. Uptime Kuma showed setup wizard instead of existing dashboard.
 **Solution:** Use `external: true` with the exact original volume name in compose template. For migration: copy data between volumes with alpine container, then restart. For future: always check `docker volume ls` before provisioning nodes with existing data.
 **Tags:** `#docker` `#ansible` `#data-loss` `#volumes`
+
+**Superseded in part (2026-10-02)**: pinning the original name was right in March and wrong once the data moved to `uptime_kuma_data`. The pinned literal then mounted the orphan on the next provision. Derive the name from `backup.sources` instead (lesson-508).

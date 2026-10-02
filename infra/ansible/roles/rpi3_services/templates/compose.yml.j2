@@ -34,5 +34,7 @@ services:
 
 volumes:
   uptime-kuma-data:
-    name: uptime-kuma_uptime_kuma_data
+    # From backup.sources.rpi3.uptime_kuma.volume, the declaration that names
+    # the live volume (#1092). The old literal here named an orphan.
+    name: {{ uptime_kuma_volume }}
     external: true
