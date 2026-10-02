@@ -67,6 +67,21 @@ Afterwards `restic snapshots` still listed all three snapshots, `715f817d` inclu
 
 **Measured for PR 4: a refused DELETE costs about 14.5 minutes, not an instant error.** restic retries each refused object with backoff, about 13 retries over 14:29 on 0.19.1, before giving up. This was measured for one snapshot file. Whether k refused objects cost k times that, or run concurrently, is not measured. Size the ship's prune step for this. `node-backup-ship.service.j2:44` sets `TimeoutStartSec=600`, which is shorter than one refused DELETE. On the current unit, systemd would kill the ship mid-retry with `Result=timeout`, after a successful `backup`. The ship would fail as a whole, which is the outcome Q6 rules out, and the prune-failure line would never be written. PR 4 has to bound the prune itself, below the unit's timeout, and report the bound being hit as a prune failure (tasks.md, the Q6 task).
 
+**Step 3b: R2 refuses the pack DELETE, and restic exits 0.** A 0.19.1 `backup` of 300 MiB was killed after it had written three packs (6 to 9 under `data/`) and before any snapshot. The kill left a restic lock behind, so the first `prune` stopped on it with rc 11 (`repository is already locked`), a restic-side error. A plain `unlock` did not remove a 20-second-old lock from another host. After `unlock --remove-all`, `prune --max-repack-size 0` planned `to delete: 0 blobs / 48.773 MiB` (the three unreferenced packs) and then:
+
+```
+deleting unreferenced packs
+Remove(<data/4de1b7dfaa>) failed: client.RemoveObject: The object is locked by the bucket policy.
+unable to remove data/4de1b7dfaa7f2fb21e1509a17cec8be3059acbcc46e0cf8a422856a0f0179d36 from the repository
+(the same two lines for data/12fd9c4d6f... and data/6febda4f54...)
+[14:53] 0.00%  0 / 3 files deleted
+done
+```
+
+**rc 0**, after 58 retries over 14:53. The three packs ran their retries concurrently, so three refused objects cost about what one did. Afterwards there were still 9 packs and 3 snapshots, and `check` reported `no errors were found`, rc 0.
+
+What this changes for Q6: restic reports the two refusals differently. A refused **snapshot** DELETE (step 3) exits 3. A refused **pack** DELETE (step 3b) exits 0. The pack case is the one the proposal expects on every on-demand node: a node powered off mid-run leaves unreferenced packs, and each `prune` within R of that will hit them. A prune signal keyed on restic's exit code would stay silent for this case. Nothing would fail, but every nightly prune would take about 15 minutes until the packs age past R. Under today's `TimeoutStartSec=600`, systemd would kill the ship instead. The only output that distinguishes the case is the text: `unable to remove ... from the repository` and `The object is locked by the bucket policy`. PR 4 has to read that text, not only the exit code. How it does so is a design decision for the operator, recorded in `tasks.md` with the Q6 task.
+
 ## Test status
 
 - Test suite: `<command> -> <output / coverage %>`
