@@ -88,6 +88,9 @@ drill: ace2 has no sops and no key, so nothing was decrypted (#2021, TOOL-097).
 
 - `poetry run pytest -q -p no:cacheprovider --no-cov tests/test_headscale_drill.py` → 30 passed (25 at first push, 5 added in the review round).
 - `make test` on `613e331a`: 3274 passed, 1 failed (`test_the_table_covers_every_site`: the new target was missing from `ENV_TARGETS`), fixed in `c173e41c`; that file then 75 passed.
+- `tests/test_headscale_drill.py` on master `4d995e69`: 40 passed, which includes BACKUP-069's machine-key guard (#1997).
+- `make test` on master `4d995e69` (with BACKUP-071 merged), before the archive: 3484 passed, 16 skipped, 154 deselected, 2 xfailed, rc 0 (2026-10-01).
+- After the review dispositions (`5719da06`): `tests/test_headscale_drill.py` 41 passed.
 
 ## Decisions made during implementation
 
@@ -102,7 +105,18 @@ drill: ace2 has no sops and no key, so nothing was decrypted (#2021, TOOL-097).
 - [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: it applies the drill pattern of BACKUP-046 and BACKUP-040 to a third source.
 - [x] New pattern candidate for `00_meta/patterns/`? no: single project.
 
+## Review dispositions (`review.md`, PASS-WITH-GAPS)
+
+The contract set is unchanged. Each Minor is applied in tests or carried by a ticket:
+
+| Finding | Disposition | Evidence |
+|---|---|---|
+| `--user` value unguarded | Applied: the test asserts `--user` equals `f"{os.getuid()}:{os.getgid()}"` (`5719da06`). | Mutation `"{uid}:{gid}"` → `"{uid}:0"`: 1 failed, 40 passed. |
+| `created == taken` boundary unguarded | Applied: `test_a_node_created_at_the_snapshot_instant_is_checked_not_excused` pins the current rule. Only `created > taken` is excused, so a missing entry from the same instant fails. The review suggested pinning "excused" at the tie. That would reverse the code, so this keeps the fail-closed direction: when the snapshot cannot tell, the drill checks. | Mutation `>` → `>=`: 1 failed, 40 passed. |
+| `ssh()` options unguarded | Applied: `test_read_live_returns_nodes_users_and_key_hashes` asserts every ssh call carries `BatchMode=yes` and `ConnectTimeout=10`. | Mutation `BatchMode=yes` → `no`: 1 failed, 40 passed. |
+| `_restore_and_check` at CC 21 | Carried by #2015 item 3, which extracts the restore → compare → prove phases once for all four drills. Splitting one drill here would set the shape before the other three are read. | #2015 (open). |
+
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/BACKUP-067-headscale-restore-drill/` -> `specs/archive/BACKUP-067-headscale-restore-drill/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/BACKUP-067-headscale-restore-drill/` -> `specs/archive/BACKUP-067-headscale-restore-drill/`
