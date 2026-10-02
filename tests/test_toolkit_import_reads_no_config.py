@@ -58,3 +58,57 @@ def test_settings_still_resolve_on_first_use(monkeypatch: pytest.MonkeyPatch) ->
 
     assert settings.project_root == PROJECT_ROOT
     assert settings.environment == get_settings().environment
+
+
+@pytest.fixture
+def logger_state():
+    """The process-wide logger, restored after the test reconfigures it."""
+    from toolkit.core.logging import logger
+
+    level = logger.logger.level
+    formats = [h.formatter for h in logger.logger.handlers]
+    yield logger
+    logger.logger.setLevel(level)
+    for handler, fmt in zip(logger.logger.handlers, formats, strict=True):
+        handler.setFormatter(fmt)
+
+
+def _fake_config(monkeypatch: pytest.MonkeyPatch, values: dict) -> None:
+    import toolkit.config.settings as settings_module
+    from toolkit.features import configuration
+
+    class Fake:
+        def __init__(self, env, root=None):
+            self.env = env
+
+        def get_env_vars(self):
+            return dict(values[self.env])
+
+    monkeypatch.setattr(configuration, "ConfigurationManager", Fake)
+    monkeypatch.setattr(settings_module, "_settings_cache", {})
+    # get_settings() writes these into os.environ; registering them first makes teardown undo it.
+    for key in {k for env_values in values.values() for k in env_values}:
+        monkeypatch.setenv(key, "")
+        monkeypatch.delenv(key)
+
+
+def test_the_logger_takes_the_import_environments_level_and_format(monkeypatch, logger_state) -> None:
+    """What building settings at import used to do, now done when they are first built."""
+    import logging
+
+    import toolkit.config.settings as settings_module
+
+    env = settings_module._IMPORT_ENV
+    other = "prod" if env != "prod" else "staging"
+    _fake_config(
+        monkeypatch,
+        {env: {"log_level": "DEBUG", "log_format": "json"}, other: {"log_level": "ERROR", "log_format": "%(message)s"}},
+    )
+    logger_state.logger.setLevel(logging.INFO)
+
+    settings_module.get_settings(other)  # another environment leaves the logger alone
+    assert logger_state.logger.level == logging.INFO
+
+    settings_module.get_settings(env)
+    assert logger_state.logger.level == logging.DEBUG
+    assert all(h.formatter._fmt == "%(levelname)s - %(name)s - %(message)s" for h in logger_state.logger.handlers)
