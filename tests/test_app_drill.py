@@ -551,7 +551,7 @@ def test_a_complete_restore_that_leaves_its_container_behind_fails(drill, capsys
 
 def test_a_complete_restore_that_leaves_the_data_on_disk_fails(drill, capsys, tmp_path, monkeypatch) -> None:
     fake = _fake(tmp_path, "n8n")
-    monkeypatch.setattr("toolkit.features.app_drill.shutil.rmtree", lambda *a, **k: None)
+    monkeypatch.setattr("toolkit.features.restore_drill.shutil.rmtree", lambda *a, **k: None)
     assert drill(fake) is False
     assert "delete it now" in _out(capsys)
 

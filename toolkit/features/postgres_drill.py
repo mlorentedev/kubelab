@@ -23,17 +23,14 @@ directory, and `docker rm` without `-v` leaves the restored database in it.
 
 from __future__ import annotations
 
-import json
 import os
-import secrets
-import shutil
 import subprocess
-import tempfile
 import time
 from pathlib import Path
 from typing import Any, Callable, Optional
 
 from toolkit.core.logging import logger
+from toolkit.features.restore_drill import latest_snapshot, report, scratch
 
 TRAILER = "-- PostgreSQL database cluster dump complete"
 
@@ -54,8 +51,6 @@ order by 1;
 
 Run = Callable[..., "tuple[int, str, str]"]
 
-#: The names of the volumes a container mounts, space-separated.
-_VOLUMES_FORMAT = '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}} {{end}}{{end}}'
 Counts = dict[str, dict[str, int]]
 
 
@@ -152,69 +147,28 @@ def run_drill(
     deployment = source["pg_dumpall"]["deployment"]
     container = source["pg_dumpall"]["container"]
 
-    rc, out, err = run(["restic", "-r", repo, "snapshots", "--json", "--latest", "1"], env=restic_env)
-    snapshots = json.loads(out or "[]") if rc == 0 else []
-    if not snapshots:
-        logger.error(f"drill: no snapshot readable in {repo}: {err.strip()[:160]}")
+    snapshot = latest_snapshot(run, repo, restic_env)
+    if snapshot is None:
         return False
-    snapshot = snapshots[0]
-    logger.info(f"drill: snapshot {snapshot['short_id']} taken {snapshot['time']}")
 
-    workdir = Path(tempfile.mkdtemp(prefix="pgdrill-"))
-    name = f"pgdrill-{secrets.token_hex(4)}"
     ok = False
-    try:
+    with scratch(run, "pgdrill", holds="a full dump of the cluster") as box:
         ok = _load_and_check(
             run=run,
             repo=repo,
             restic_env=restic_env,
             snapshot=snapshot["short_id"],
             dump_path=dump_path,
-            workdir=workdir,
-            name=name,
+            workdir=box.workdir,
+            name=box.name,
             namespace=namespace,
             deployment=deployment,
             container=container,
             kubeconfig=kubeconfig,
             sleep=sleep,
         )
-    finally:
-        # Unconditional: `docker run -d` can create the container and still fail.
-        try:
-            clean = remove_scratch_container(run, name)
-        finally:
-            shutil.rmtree(workdir, ignore_errors=True)
     # A restore that passed but left the restored data behind is not a pass.
-    return ok and clean
-
-
-def remove_scratch_container(run: Run, name: str) -> bool:
-    """Remove a drill's container with its volumes, then confirm both are gone.
-
-    `-v` is the data: an image that declares a VOLUME (postgres, gitea) keeps the
-    restored database in an anonymous volume that outlives a plain `docker rm`
-    (lesson-498). The exit code of `docker rm` cannot tell a removal that failed
-    from one that had nothing to remove, since both are non-zero, so the answer
-    is read back: the container must be unknown to docker, and so must each
-    volume it mounted.
-    """
-    rc, out, _ = run(["docker", "container", "inspect", "-f", _VOLUMES_FORMAT, name])
-    volumes = out.split() if rc == 0 else []
-    run(["docker", "rm", "-f", "-v", name])
-    left = []
-    rc, _, err = run(["docker", "container", "inspect", name])
-    if rc == 0 or "no such container" not in err.lower():
-        left.append(f"container {name}")
-    for volume in volumes:
-        rc, _, err = run(["docker", "volume", "inspect", volume])
-        if rc == 0 or "no such volume" not in err.lower():
-            left.append(f"volume {volume}")
-    if left:
-        logger.error(
-            f"drill: restored data is still on this machine ({', '.join(left)}): "
-            f"remove it now with `docker rm -f -v {name}` and `docker volume rm` on each volume"
-        )
-    return not left
+    return ok and box.clean
 
 
 def _load_and_check(
@@ -256,50 +210,7 @@ def _load_and_check(
         return False
     image = image.strip()
 
-    # Trust auth is safe only because nothing can connect: no network at all
-    # (loopback still serves the checks below), so the restored rows and role
-    # hashes are reachable only through `docker exec`, for the drill's lifetime.
-    rc, _, err = run(
-        ["docker", "run", "-d", "--name", name, "--network", "none", "-e", "POSTGRES_HOST_AUTH_METHOD=trust", image]
-    )
-    if rc != 0:
-        logger.error(f"drill: the scratch container did not start: {err.strip()[:160]}")
-        return False
-    # Over TCP on purpose: the image's init server listens on the socket only,
-    # so a socket check can pass before the real server is up.
-    for _ in range(60):
-        if run(["docker", "exec", name, "pg_isready", "-h", "127.0.0.1", "-U", "postgres", "-q"])[0] == 0:
-            break
-        sleep(1)
-    else:
-        logger.error("drill: the scratch server never became ready")
-        return False
-
-    run(["docker", "cp", str(dump), f"{name}:/tmp/pg_dumpall.sql"])
-    log = workdir / "psql.log"
-    run(
-        [
-            "docker",
-            "exec",
-            name,
-            "psql",
-            "-U",
-            "postgres",
-            "-d",
-            "postgres",
-            "-v",
-            "ON_ERROR_STOP=0",
-            "-q",
-            "-f",
-            "/tmp/pg_dumpall.sql",
-        ],
-        stdout_path=str(log),
-    )
-    errors = [line for line in log.read_text(errors="replace").splitlines() if "ERROR:" in line]
-    failed = [line for line in errors if not ("role " in line and "already exists" in line)]
-    if failed:
-        # Counted, never printed: a failed statement's text can carry row data.
-        logger.error(f"drill: {len(failed)} statement(s) did not load (text withheld: it can carry row data)")
+    if not _start_scratch(run, name, image, sleep) or not _load_dump(run, name, dump, workdir):
         return False
 
     live = _counts(
@@ -333,11 +244,64 @@ def _load_and_check(
         return False
 
     ok, lines = compare(live, restored)
-    for line in lines:
-        (logger.error if line.startswith("FAIL") else logger.info)(line)
+    report(lines)
     if ok:
         logger.success(f"drill: snapshot {snapshot} restores completely ({sum(map(len, live.values()))} tables)")
     return ok
+
+
+def _start_scratch(run: Run, name: str, image: str, sleep: Callable[[float], None]) -> bool:
+    """Start the scratch server with no network and wait until it accepts connections."""
+    # Trust auth is safe only because nothing can connect: no network at all
+    # (loopback still serves the checks below), so the restored rows and role
+    # hashes are reachable only through `docker exec`, for the drill's lifetime.
+    rc, _, err = run(
+        ["docker", "run", "-d", "--name", name, "--network", "none", "-e", "POSTGRES_HOST_AUTH_METHOD=trust", image]
+    )
+    if rc != 0:
+        logger.error(f"drill: the scratch container did not start: {err.strip()[:160]}")
+        return False
+    # Over TCP on purpose: the image's init server listens on the socket only,
+    # so a socket check can pass before the real server is up.
+    for _ in range(60):
+        if run(["docker", "exec", name, "pg_isready", "-h", "127.0.0.1", "-U", "postgres", "-q"])[0] == 0:
+            break
+        sleep(1)
+    else:
+        logger.error("drill: the scratch server never became ready")
+        return False
+    return True
+
+
+def _load_dump(run: Run, name: str, dump: Path, workdir: Path) -> bool:
+    """Load the dump into the scratch server. False when any statement but a role re-creation failed."""
+    run(["docker", "cp", str(dump), f"{name}:/tmp/pg_dumpall.sql"])
+    log = workdir / "psql.log"
+    run(
+        [
+            "docker",
+            "exec",
+            name,
+            "psql",
+            "-U",
+            "postgres",
+            "-d",
+            "postgres",
+            "-v",
+            "ON_ERROR_STOP=0",
+            "-q",
+            "-f",
+            "/tmp/pg_dumpall.sql",
+        ],
+        stdout_path=str(log),
+    )
+    errors = [line for line in log.read_text(errors="replace").splitlines() if "ERROR:" in line]
+    failed = [line for line in errors if not ("role " in line and "already exists" in line)]
+    if failed:
+        # Counted, never printed: a failed statement's text can carry row data.
+        logger.error(f"drill: {len(failed)} statement(s) did not load (text withheld: it can carry row data)")
+        return False
+    return True
 
 
 def staging_dir(project_root: Path) -> str:

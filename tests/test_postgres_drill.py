@@ -253,3 +253,13 @@ def test_the_drill_reads_the_path_the_capture_stages() -> None:
     template = (repo / "infra/ansible/roles/node_backup/templates/node-backup-capture.sh.j2").read_text()
     assert 'mv "$PG_PARTIAL_{{ service }}" "$STAGING/{{ service }}/pg_dumpall.sql"' in template
     assert staging_dir(repo) == "/opt/node-backup/staging"
+
+
+def test_a_complete_restore_that_leaves_the_dump_on_disk_fails(drill, capsys, monkeypatch) -> None:
+    """The scratch directory holds a full dump of the cluster; a drill that cannot delete it has not passed."""
+    monkeypatch.setattr("toolkit.features.restore_drill.shutil.rmtree", lambda *a, **k: None)
+    fake = _Fake()
+    assert drill(fake) is False
+    out = " ".join(capsys.readouterr().out.split())
+    assert "restores completely" in out
+    assert "a full dump of the cluster, delete it now" in out

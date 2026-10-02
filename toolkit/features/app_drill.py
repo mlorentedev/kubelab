@@ -37,9 +37,7 @@ import json
 import os
 import secrets
 import shlex
-import shutil
 import sqlite3
-import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -49,7 +47,7 @@ import yaml
 
 from toolkit.core.logging import logger
 from toolkit.features.headscale_drill import snapshot_time, sqlite_intact, ssh
-from toolkit.features.postgres_drill import remove_scratch_container
+from toolkit.features.restore_drill import latest_snapshot, report, restore_source, scratch
 
 Run = Callable[..., "tuple[int, str, str]"]
 
@@ -402,14 +400,54 @@ def run_drill(
 ) -> bool:
     """Restore `app`'s newest capture in `repo` and check it against live. True only on a whole restore."""
     service = app.service
-    kubectl = ["kubectl", "--kubeconfig", kubeconfig]
+    read = _read_live(app, database, ["kubectl", "--kubeconfig", kubeconfig], namespace, claim, ssh_target, run)
+    if read is None:
+        return False
+    image, live, live_version = read
+    label = f"drill: {service}"
+    snapshot = latest_snapshot(run, repo, restic_env, label=label)
+    if snapshot is None:
+        return False
+
+    ok = False
+    with scratch(run, f"{service}drill", holds=f"{service}'s data and key") as box:
+        started = clock()
+        source = f"{staging_dir}/{service}"
+        data = restore_source(
+            run,
+            repo=repo,
+            restic_env=restic_env,
+            snapshot=snapshot["short_id"],
+            source=source,
+            workdir=box.workdir,
+            required=database,
+            label=label,
+        )
+        if data is not None and _restore_matches(app, data, database, live, live_version, snapshot["time"]):
+            keys = box.workdir / "secrets"
+            keys.mkdir(mode=0o700)
+            _write_secret(keys / "key", key)
+            ok = PROVE[service](_Scratch(run, app, box.name, image, data, keys, database, sleep, clock))
+            if ok:
+                logger.info(f"{label}: RTO {clock() - started:.0f}s from download to a server that answers")
+                logger.success(f"drill: snapshot {snapshot['short_id']} restores {service} completely")
+    # A restore that passed but left the data and key behind is not a pass.
+    return ok and box.clean
+
+
+def _read_live(
+    app: App, database: str, kubectl: list[str], namespace: str, claim: str, ssh_target: str, run: Run
+) -> Optional[tuple[str, Rows, Optional[str]]]:
+    """The image live runs, its durable rows and its schema version, or None after naming what is unreadable.
+
+    Live first: every check after it is "for each row live has" (lesson-416).
+    """
+    service = app.service
     jsonpath = f'{{.spec.template.spec.containers[?(@.name=="{service}")].image}}'
     rc, image, err = run([*kubectl, "-n", namespace, "get", "deploy", service, "-o", f"jsonpath={jsonpath}"])
     if rc != 0 or not image.strip():
         logger.error(f"drill: {service}: CANNOT CHECK — the image live runs could not be read: {err.strip()[:160]}")
-        return False
-
-    # Live first: every check below is "for each row live has" (lesson-416).
+        return None
     pv = (
         f'{{range .items[?(@.spec.claimRef.namespace=="{namespace}")]}}'
         '{.spec.claimRef.name}{"\\t"}{.spec.local.path}{"\\n"}{end}'
@@ -418,7 +456,7 @@ def run_drill(
     paths = [line.split("\t", 1)[1] for line in out.splitlines() if line.split("\t", 1)[0] == claim and "\t" in line]
     if rc != 0 or len(paths) != 1 or not paths[0]:
         logger.error(f"drill: {service}: CANNOT CHECK — no local-path volume bound to {namespace}/{claim}")
-        return False
+        return None
     sql = rows_sql(app)
     rc, out, err = ssh(
         run, ssh_target, f"sudo -n sqlite3 -readonly -json {shlex.quote(f'{paths[0]}/{database}')} {shlex.quote(sql)}"
@@ -429,69 +467,25 @@ def run_drill(
         live, live_version = parse_rows(json.loads(out) if out.strip() else [])
     except (ValueError, KeyError) as exc:
         logger.error(f"drill: {service}: CANNOT CHECK — live's database could not be read: {str(exc)[:160]}")
-        return False
+        return None
     if not any(live.get(table.name) for table in app.tables):  # the sequence is not a row
         logger.error(f"drill: {service}: CANNOT CHECK — live has no durable rows at all")
-        return False
+        return None
+    return image.strip(), live, live_version
 
-    rc, out, err = run(["restic", "-r", repo, "snapshots", "--json", "--latest", "1"], env=restic_env)
-    try:
-        snapshots = json.loads(out or "[]") if rc == 0 else []
-    except ValueError:
-        logger.error(f"drill: {service}: CANNOT CHECK — the snapshot list could not be parsed from {repo}")
-        return False
-    if not snapshots:
-        logger.error(f"drill: {service}: CANNOT CHECK — no snapshot readable in {repo}: {err.strip()[:160]}")
-        return False
-    snapshot = snapshots[-1]
-    logger.info(f"drill: {service}: snapshot {snapshot['short_id']} taken {snapshot['time']}")
 
-    workdir = Path(tempfile.mkdtemp(prefix=f"{service}drill-"))
-    name = f"{service}drill-{secrets.token_hex(4)}"
-    ok = False
-    try:
-        started = clock()
-        source = f"{staging_dir}/{service}"
-        rc, _, err = run(
-            ["restic", "-r", repo, "restore", snapshot["short_id"], "--include", source, "--target", str(workdir)],
-            env=restic_env,
-        )
-        data = workdir / source.lstrip("/")
-        if rc != 0 or not (data / database).is_file():
-            logger.error(f"drill: {service}: restic could not restore {source}/{database}: {err.strip()[:160]}")
-        elif not sqlite_intact(data / database):
-            logger.error(f"FAIL {service}: {database}: PRAGMA integrity_check did not answer ok")
-        else:
-            restored, version = parse_rows(_restored_records(data / database, sql))
-            complete, lines = compare(
-                live=live, restored=restored, tables=app.tables, taken=snapshot_time(snapshot["time"])
-            )
-            for line in lines:
-                (logger.error if line.startswith("FAIL") else logger.info)(f"drill: {service}: {line}")
-            if app.version_sql:
-                logger.info(f"drill: {service}: schema version live {live_version}, restored {version}")
-            if complete:
-                keys = workdir / "secrets"
-                keys.mkdir(mode=0o700)
-                _write_secret(keys / "key", key)
-                box = _Scratch(run, app, name, image.strip(), data, keys, database, sleep, clock)
-                ok = PROVE[service](box)
-                if ok:
-                    logger.info(
-                        f"drill: {service}: RTO {clock() - started:.0f}s from download to a server that answers"
-                    )
-                    logger.success(f"drill: snapshot {snapshot['short_id']} restores {service} completely")
-    finally:
-        # Unconditional: `docker run -d` can create the container and still fail.
-        try:
-            removed = remove_scratch_container(run, name)
-        finally:
-            shutil.rmtree(workdir, ignore_errors=True)
-            wiped = not workdir.exists()
-            if not wiped:
-                logger.error(f"drill: could not remove {workdir}; it holds {service}'s data and key, delete it now")
-    # A restore that passed but left the data and key behind is not a pass.
-    return ok and removed and wiped
+def _restore_matches(app: App, data: Path, database: str, live: Rows, live_version: Optional[str], taken: str) -> bool:
+    """The restored database is intact and holds every row live had when the snapshot was taken."""
+    service = app.service
+    if not sqlite_intact(data / database):
+        logger.error(f"FAIL {service}: {database}: PRAGMA integrity_check did not answer ok")
+        return False
+    restored, version = parse_rows(_restored_records(data / database, rows_sql(app)))
+    complete, lines = compare(live=live, restored=restored, tables=app.tables, taken=snapshot_time(taken))
+    report(lines, prefix=f"drill: {service}: ")
+    if app.version_sql:
+        logger.info(f"drill: {service}: schema version live {live_version}, restored {version}")
+    return complete
 
 
 def drill_apps(env: str = "prod", project_root: Optional[Path] = None) -> bool:
