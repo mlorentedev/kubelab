@@ -89,10 +89,11 @@ On prod, after both runs: 49 docker volumes before and after, no `giteadrill-*` 
 
 - `poetry run pytest -q -p no:cacheprovider --no-cov tests/test_gitea_drill.py tests/test_postgres_drill.py tests/test_gitea_client_pagination.py tests/test_make_env_default_is_reachable.py`: 111 passed.
 - `make test` on `3be72f2e`: 3250 passed, 16 skipped, 2 xfailed, rc 0 (2026-10-01).
+- `make test` on master `4d995e69` (with BACKUP-071 merged), before the archive: 3484 passed, 16 skipped, 154 deselected, 2 xfailed, rc 0 (2026-10-01).
 
 ## Decisions made during implementation
 
-- The drill runs on the workstation (Q1, pending the operator). It needs only docker, restic and the R2 credentials, and it runs unchanged on ace2.
+- Where the drill runs (Q1): the operator required ace2. The command needs only docker, restic and the inputs, so `HOST=ace2` runs the same drill there (BACKUP-071), and the ace2 run is the evidence of record.
 - Live is read with the admin token, `read:repository` only. The restored server is read with a token minted inside it, because it has no network and its database holds no token the drill could know.
 - The restored server is reached through `docker exec wget`, not a published port, so nothing on the host network can reach the copy.
 
