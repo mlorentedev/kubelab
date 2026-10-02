@@ -31,6 +31,16 @@ Projection for `--keep-within 31d`, as an upper bound that assumes no deduplicat
 
 The first run returned `null` for the Beelink: `stats --mode raw-data` walks every tree, and its Gitea tree outran the 60 s `RESTIC_TIMEOUT` ("signal terminated received", Loki). That is the tolerated failure working as designed; the fleet sum was `null` and the gate would have stopped. `stats` now has its own `STATS_TIMEOUT` (600 s, about 4× the measurement), and the deadline and grace period are derived from the probe's calls.
 
+## PR 2 gate: the token that manages the locks (scratch step 1)
+
+2026-10-02. `make tf-r2-apply SCRATCH=1` with the SOPS DNS token `cloudflare.api_token` was refused before any lock call: `POST /accounts/<id>/r2/buckets` returned **403**, code 10000 "Authentication error". A plan had shown nothing, as tasks.md predicted: planning a resource that does not exist yet makes no R2 call.
+
+The operator minted a separate user API token, `Account · Workers R2 Storage · Edit` on this account only, stored as `cloudflare.r2_admin_token` in `common.enc.yaml` and registered in `SECRET_CATALOG` (`envs=("prod",)`, `Expiry.PROVIDER`, checked by `cloudflare_token_expiry`; `toolkit secrets check-expiry` reads it as valid, no expiry set). `tf-r2-plan` / `tf-r2-apply` read that key, never the DNS token, so the token that can lift a lock reaches nothing that only needs DNS. Commit `e529a5c1`.
+
+The same apply with it returned rc 0: `cloudflare_r2_bucket.scratch` and `cloudflare_r2_bucket_lock.scratch` created (the four rules, `data/`, `snapshots/`, `keys/`, `config`, each `Age` 86400 s). **Step 1 passes**, which also shows the API accepts a one-day retention.
+
+The admin token sits in a file every SOPS recipient decrypts, so #1852 (SEC-022) gates this spec's archive (proposal item 1).
+
 ## Test status
 
 - Test suite: `<command> -> <output / coverage %>`
