@@ -43,7 +43,7 @@ Measurements first, then the probe, then the harness, then the rules.
 - [ ] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command
 - [ ] `make lint` and `make test` pass
 - [ ] No unrelated changes in the diff
-- [ ] lesson-506 written (a check inside the unit it guards cannot see the unit not running; filtering on a field turns "all off" into "no data")
+- [x] lesson-509 written ✓ 2026-10-02 (506 to 508 held by other lanes), plus lesson-510 (the Loki harness) (a check inside the unit it guards cannot see the unit not running; filtering on a field turns "all off" into "no data")
 - [ ] `verification.md` filled in; independent `dotf spec review` (different model) before archive
 - [ ] Runbook: the new alerts' section in `docs/runbooks/offsite-backup-restore.md`
 

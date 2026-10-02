@@ -1,9 +1,11 @@
 # Metrics, logs, dashboards and alerting
 
-23 lessons, newest first. Back to [all categories](../_index.md).
+25 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 510 | [A throwaway Loki answers "no data" for lines older than 3 h, whatever the querier flags say](lesson-510-loki-answers-no-data-for-ranges-older-than-3h-it-never-flushed.md) | 2026-10-02 |
+| 509 | [A check inside the unit it guards cannot see the unit not running, and filtering on "is it up" turns "all off" into a page](lesson-509-a-check-inside-the-unit-cannot-see-the-unit-not-running.md) | 2026-10-02 |
 | 481 | [A mounted config that the command never names is not the config that runs](lesson-481-a-mounted-config-the-command-never-names-is-not-the-config-that-runs.md) | 2026-09-26 |
 | 464 | [Vector interpolates every `${...}` in its config file, comments included, and refuses to start on an unset one](lesson-464-vector-interpolates-every-dollar-in-its-config-comments-included.md) | 2026-09-26 |
 | 474 | [A client that mocks itself when unconfigured reports a success it never had](lesson-474-a-client-that-mocks-itself-when-unconfigured-reports-success-it-never-had.md) | 2026-09-24 |
