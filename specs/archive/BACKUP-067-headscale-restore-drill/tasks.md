@@ -25,4 +25,4 @@ created: "2026-10-01"
 
 - [x] `make test` green: 3484 passed on master `4d995e69` ✓ 2026-10-01
 - [x] Prod run: transcript and RTO in `verification.md`
-- [ ] `dotf spec review` by a different model
+- [x] `dotf spec review` by a different model ✓ 2026-10-01: PASS-WITH-GAPS (`nan/deepseek-v4-flash`, `review.md`)
