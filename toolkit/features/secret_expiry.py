@@ -373,6 +373,8 @@ def cloudflare_token_expiry(token: str, timeout: float = 15.0) -> datetime | Non
 # and we cannot find out when" is a finding, not a blank line.
 PROVIDER_CHECKS = {
     "cloudflare.api_token": cloudflare_token_expiry,
+    # A user token from My Profile, so the same verify endpoint answers for it.
+    "cloudflare.r2_admin_token": cloudflare_token_expiry,
     "apps.services.automation.github_runner.token": github_pat_expiry,
     "apps.services.automation.dev_node.github_token": github_pat_expiry,
     # TOOL-035 (#1076). A fine-grained PAT with only repository permissions still

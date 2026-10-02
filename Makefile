@@ -1454,12 +1454,16 @@ tf-vps-firewall-apply:
 # SCRATCH=1 plans or applies ONLY the scratch bucket and its one-day lock, the
 # measurement pair in specs/BACKUP-057/tasks.md. No -auto-approve on apply: a
 # lock rule cannot be lifted by a node, so read the plan before giving it one.
+#
+# The token is cloudflare.r2_admin_token, not the DNS cloudflare.api_token: the
+# DNS token was refused with a 403 on the R2 bucket API (2026-10-02), and the
+# token that can lift a lock rule stays out of everything that only needs DNS.
 _TF_R2_SCOPE = $(if $(SCRATCH),-var=scratch=true -target=cloudflare_r2_bucket.scratch -target=cloudflare_r2_bucket_lock.scratch)
 
 .PHONY: tf-r2-plan tf-r2-apply
 tf-r2-plan:
 	@$(POETRY) run toolkit infra terraform r2-tfvars
-	@TF_VAR_cloudflare_api_token=$$($(POETRY) run toolkit secrets show cloudflare.api_token --env common 2>/dev/null | tail -1) && \
+	@TF_VAR_cloudflare_api_token=$$($(POETRY) run toolkit secrets show cloudflare.r2_admin_token --env common 2>/dev/null | tail -1) && \
 		export TF_VAR_cloudflare_api_token && \
 		cd infra/terraform/r2 && terraform init -input=false >/dev/null && \
 		terraform plan -var-file=r2.tfvars $(_TF_R2_SCOPE); \
@@ -1467,7 +1471,7 @@ tf-r2-plan:
 
 tf-r2-apply:
 	@$(POETRY) run toolkit infra terraform r2-tfvars
-	@TF_VAR_cloudflare_api_token=$$($(POETRY) run toolkit secrets show cloudflare.api_token --env common 2>/dev/null | tail -1) && \
+	@TF_VAR_cloudflare_api_token=$$($(POETRY) run toolkit secrets show cloudflare.r2_admin_token --env common 2>/dev/null | tail -1) && \
 		export TF_VAR_cloudflare_api_token && \
 		cd infra/terraform/r2 && terraform init -input=false >/dev/null && \
 		terraform apply -var-file=r2.tfvars $(_TF_R2_SCOPE); \

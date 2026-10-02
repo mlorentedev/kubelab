@@ -995,6 +995,23 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("traefik", "terraform"),
         rotate_note="Re-provision K3s nodes (Ansible) + re-run terraform apply. Both read from SOPS.",
     ),
+    # BACKUP-057: the only credential that manages the R2 node buckets and their
+    # lock rules, so the only one that can lift a lock. The DNS token above was
+    # refused on the R2 bucket API (403, 2026-10-02), and it is kept that way.
+    # Read by `make tf-r2-plan` / `tf-r2-apply` from the operator workstation; no
+    # node ever receives it. Lives in common.enc.yaml, audited under prod.
+    SecretSpec(
+        key_path="cloudflare.r2_admin_token",
+        expiry=Expiry.PROVIDER,
+        description="Cloudflare account API token, Workers R2 Storage: Edit (R2 Terraform root)",
+        kind=SecretKind.EXTERNAL,
+        services=("terraform",),
+        envs=("prod",),
+        rotate_note=(
+            "Mint a new token in the Cloudflare dashboard, `toolkit secrets set` it, "
+            "revoke the old one. Nothing deployed reads it."
+        ),
+    ),
     # Offsite backup destination (BACKUP-044 / #1056, ADR-049 D3). Stored in
     # common.enc.yaml because the pipeline spans prod (VPS) and homelab nodes, but
     # registered under `envs=("prod",)` — `envs` is the AUDIT dimension, not the
