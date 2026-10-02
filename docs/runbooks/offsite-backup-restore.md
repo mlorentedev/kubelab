@@ -85,8 +85,11 @@ each cluster that, every 6h, asks R2 the same question `backup-coverage` asks,
 with a **read-only** token. For every node in `backup.sources` it checks that the
 repository opens, holds a snapshot, contains every declared source under the
 staging dir, and contains the capture sentinel (`.capture-complete`), which the
-node writes last and refuses to ship without. It does **not** judge age; the
-Uptime Kuma coverage monitor owns that.
+node writes last and refuses to ship without. It **measures** age and
+reachability and judges neither here: the Uptime Kuma coverage monitor judges
+always-on nodes, and [On-demand backup stale](#on-demand-backup-stale) judges the
+rest. One exception: an always-on node it cannot reach fails the probe, because
+that node is never off.
 
 The rule fires in two cases, and the first step tells them apart:
 
@@ -114,6 +117,8 @@ toolkit obs logs --env prod -q '{namespace="kubelab"} |= "r2_backup_"' --since 2
 | `repository id changed` | The repository at the node's path is not the history declared in `backup.r2.repository_ids`: it was deleted and re-created, or replaced. `repository_id` on the line is the id R2 holds now | [Repository missing or replaced](#repository-missing-or-replaced) |
 | `repository id not declared` | The node has no entry in `backup.r2.repository_ids` | A new node, or one after `backup-repo-reinit`: declare the `repository_id` from this line in a PR, after checking it is the history you mean to accept |
 | `config unreadable: ...` / `repository id unreadable` | `restic cat config` failed after `snapshots` succeeded | Usually transient; if it persists, read the repository with the node's credentials |
+| `snapshot time unreadable` | restic answered with a `time` the probe cannot parse, so the node's age is unknown and the freshness rule is blind for it | A restic upgrade changed the format: compare one `restic snapshots --json --latest 1` with `epoch_of` in `probe.sh` |
+| `probe cannot reach an always-on node` | A TCP connect from the watcher pod to the node's tailnet address and probe port failed. An always-on node is never off, so the probe is what broke, and every on-demand node would read "off" through it | Check the node is up on the tailnet, then the port in `targets.txt` (22 unless `backup.watcher.reachability_ports` says otherwise), then the Headscale ACL |
 
 A fleet line with `"error":"terminated by signal"` or `"probe stopped before
 checking every node"` means the Job hit its deadline. The per-node lines printed
@@ -167,6 +172,55 @@ else, so a leak from the cluster cannot delete or rewrite a backup.
 
 In the dashboard's own terms, this is the account token scope
 "Workers R2 Storage Bucket Item Read" on `kubelab-backups`.
+
+## On-demand backup stale
+
+`backup032-on-demand-freshness` fires when an **on-demand** node (beelink, rpi4)
+answered the watcher on two consecutive probes and its newest snapshot is older
+than 3 hours. Such a node ships hourly while it is up, so it is up and not
+shipping. Nothing else catches that: the ship's failure hook needs the ship to
+run, and the node's Uptime Kuma heartbeat is muted for the `on-demand` tag.
+
+It never fires for a node that is off, which is that node's normal state
+(ADR-028). The rule multiplies the age by `reachable`, so an off node is 0.
+
+1. Read the node's lines: `newest_snapshot`, `snapshot_age_seconds`, `reachable`.
+
+   ```bash
+   toolkit obs logs --env prod -q '{namespace="kubelab"} |= "r2_backup_node"' --since 24h
+   ```
+
+2. On the node, ask systemd why the ship has not run:
+   `systemctl list-timers 'node-backup*'` and
+   `journalctl -u node-backup-ship.service --since -6h`. A disabled timer, a unit
+   that never started and a capture stuck before the ship are the usual three.
+3. Ship once by hand and confirm: `make backup-node NODE=<node> ENV=prod`, then
+   `make watcher-run NAME=r2-backup-watcher ENV=prod`.
+
+If every node looks fine and the alert still fires, it is the **no data** case:
+the watcher stopped (the health rule above is then paging too), or no node in
+`targets.txt` is on-demand. Start with [R2 backup alert](#r2-backup-alert).
+
+## R2 backup shrank
+
+`backup032-r2-backup-shrink` fires when a node's repository (`raw_bytes`) is less
+than half the size it was one probe earlier (operator decision, 2026-10-02).
+Data does not halve by itself: a `forget`/`prune` that removed snapshots it should
+have kept, or a source that started capturing an empty directory, are the causes
+to rule out. Act before the next `forget` removes the older snapshots, which are
+the ones that still hold the data.
+
+1. Compare the node's two most recent `r2_backup_node` lines (command above).
+2. List the newest snapshots and their sizes from the workstation, as in
+   [Restoring — normal case](#restoring--normal-case) step 3, and look at the
+   source that shrank: `restic ls latest /opt/node-backup/staging/<source>`.
+3. If a source captured nothing, fix the capture on the node and ship again. If
+   the repository lost snapshots, see
+   [Repository missing or replaced](#repository-missing-or-replaced).
+
+It resolves by itself once the earlier probe leaves its 9 h window, so read it
+when it fires. With no data at all (no node reported a size), the watcher
+stopped: see [R2 backup alert](#r2-backup-alert).
 
 ## Repository missing or replaced
 

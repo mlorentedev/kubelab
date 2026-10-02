@@ -151,3 +151,171 @@ groups:
               datasource:
                 type: __expr__
                 uid: __expr__
+      # BACKUP-032: an on-demand node that is up and has stopped shipping. Its
+      # failure hook needs the ship to run, and its Uptime Kuma heartbeat is
+      # muted for the `on-demand` tag, so a ship that never starts paged nobody.
+      # The age is multiplied by `reachable`, never filtered on it: a node that
+      # is off answers 0, so "every on-demand node off" is a value and not "no
+      # data". Evaluated against fixture lines from the real probe by
+      # tests/test_r2_backup_freshness_rule.py.
+      - uid: backup032-on-demand-freshness
+        title: On-demand node is up and its R2 backup is stale
+        condition: C
+        # Longer than the watcher's 6 h schedule, so two consecutive probes must
+        # agree: one stale line is a node that booted moments before the probe.
+        for: 7h
+        # No data has two causes: the watcher stopped (the health rule pages for
+        # that too, so expect both), or no node in targets.txt is on-demand.
+        noDataState: Alerting
+        execErrState: Alerting
+        annotations:
+          summary: >-
+            An on-demand node answered the watcher on two consecutive probes and its newest
+            snapshot in R2 is older than 3 hours, three times its hourly schedule: it is up and
+            not shipping. If every node is quiet and this still fires, it is "no data": the
+            watcher stopped, or no node is on-demand, and the health rule is paging too.
+          runbook_url: >-
+            https://github.com/mlorentedev/kubelab/blob/master/docs/runbooks/offsite-backup-restore.md#on-demand-backup-stale
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 25200
+              to: 0
+            datasourceUid: loki
+            model:
+              refId: A
+              datasource:
+                type: loki
+                uid: loki
+              editorMode: code
+              queryType: range
+              # Per node: age x reachable. `class` is emitted by the probe from
+              # targets.txt; both operands must select the same nodes.
+              expr: >-
+                last_over_time(
+                  {container="r2-backup-watcher"}
+                    | json
+                    | metric=`r2_backup_node`
+                    | class=`on-demand`
+                    | unwrap snapshot_age_seconds
+                  [7h]
+                ) by (node)
+                *
+                last_over_time(
+                  {container="r2-backup-watcher"}
+                    | json
+                    | metric=`r2_backup_node`
+                    | class=`on-demand`
+                    | unwrap reachable
+                  [7h]
+                ) by (node)
+          - refId: B
+            relativeTimeRange:
+              from: 25200
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              reducer: last
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+          - refId: C
+            relativeTimeRange:
+              from: 25200
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    # 3 x node_backup_interval (1 h), in seconds.
+                    params: [10800]
+              datasource:
+                type: __expr__
+                uid: __expr__
+      # BACKUP-032: a node's repository lost more than half its size between two
+      # probes (operator decision, 2026-10-02). A prune that removed real data, or
+      # a source that started capturing an empty directory. The size is never a
+      # health check in the probe, so this judgement lives here.
+      - uid: backup032-r2-backup-shrink
+        title: A node's R2 backup shrank by more than half
+        condition: C
+        for: 10m
+        noDataState: Alerting
+        execErrState: Alerting
+        annotations:
+          summary: >-
+            A node's repository in R2 is less than half the size it was one probe earlier.
+            Check the node's newest snapshot holds every source and its data, not just the
+            directories, before the next `forget` removes the older ones. The alert resolves
+            by itself once the earlier probe leaves the 9 h window: read it, do not wait it out.
+            Or the watcher stopped and there is no data: with no node lines at all, start
+            with the health rule's runbook.
+          runbook_url: https://github.com/mlorentedev/kubelab/blob/master/docs/runbooks/offsite-backup-restore.md#r2-backup-shrank
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 32400
+              to: 0
+            datasourceUid: loki
+            model:
+              refId: A
+              datasource:
+                type: loki
+                uid: loki
+              editorMode: code
+              queryType: range
+              # 9 h holds the current probe and the one before it (6 h apart).
+              # A `null` size is dropped by `unwrap`, so a failed `stats` keeps the
+              # last known size instead of reading as a drop.
+              expr: >-
+                last_over_time(
+                  {container="r2-backup-watcher"}
+                    | json
+                    | metric=`r2_backup_node`
+                    | unwrap raw_bytes
+                  [9h]
+                ) by (node)
+                /
+                first_over_time(
+                  {container="r2-backup-watcher"}
+                    | json
+                    | metric=`r2_backup_node`
+                    | unwrap raw_bytes
+                  [9h]
+                ) by (node)
+          - refId: B
+            relativeTimeRange:
+              from: 32400
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              reducer: last
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+          - refId: C
+            relativeTimeRange:
+              from: 32400
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: lt
+                    params: [0.5]
+              datasource:
+                type: __expr__
+                uid: __expr__

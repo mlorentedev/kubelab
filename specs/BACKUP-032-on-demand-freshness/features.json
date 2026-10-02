@@ -16,7 +16,7 @@
   {
     "id": "BACKUP-032-on-demand-freshness-f3",
     "behavior": "The shrink rule fires on a >50% drop between consecutive probes and not on growth, a single probe or a null size",
-    "verification": "poetry run pytest -q -p no:cacheprovider --no-cov tests/test_r2_backup_shrink_rule.py",
+    "verification": "poetry run pytest -q -p no:cacheprovider --no-cov tests/test_r2_backup_freshness_rule.py -k shrink",
     "state": "pending",
     "evidence": ""
   },

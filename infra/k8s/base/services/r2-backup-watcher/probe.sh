@@ -16,7 +16,16 @@
 #             like the real one; its id is the only thing that differs. A node
 #             with no declared id is unhealthy too: accepting a new history is a
 #             reviewed change, never a default.
-# It does NOT judge age: each node's Uptime Kuma push monitor owns that.
+# It MEASURES age and judges none (BACKUP-032): `snapshot_age_seconds` is for
+# the freshness rule in Grafana, which knows the ADR-028 class. Always-on nodes
+# keep their Uptime Kuma push monitor; on-demand ones, whose monitor is muted,
+# are judged by that rule, and only while `reachable` says they are up.
+#
+# reachable  a TCP connect to the node's tailnet address and probe port. It is
+#            what tells "off" from "up and not shipping". On an always-on node
+#            it is also the probe's positive control: that node is never off,
+#            so 0 there means the probe cannot see the fleet, and the node is
+#            reported unhealthy rather than every on-demand node reading "off".
 #
 # It also reports each repository's size (BACKUP-057 Q3), `restic stats --mode
 # raw-data`: the stored, compressed bytes of every blob the snapshots reference.
@@ -39,6 +48,10 @@ STAGING="${STAGING_DIR:-/opt/node-backup/staging}"
 SENTINEL_NAME="${SENTINEL:-.capture-complete}"
 TIMEOUT="${RESTIC_TIMEOUT:-60}"
 STATS_TIMEOUT="${STATS_TIMEOUT:-600}"
+REACH_TIMEOUT="${REACH_TIMEOUT:-5}"
+# A path, so a test can stand in for it: a busybox shell built as a standalone
+# shell runs its own `nc` applet before anything on PATH.
+NC="${NC:-nc}"
 
 nodes=0
 unhealthy=0
@@ -97,6 +110,39 @@ restic_stats() {
     timeout "$STATS_TIMEOUT" restic -r "$repo" --no-lock --no-cache stats --mode raw-data --json 2>"$errfile"
 }
 
+# The epoch of one restic `time`, or a failure when the stamp is not the shape
+# restic writes. restic stamps a snapshot with the SOURCE node's offset and a
+# fraction of 8 or 9 digits (measured 2026-10-02: `+02:00` on the homelab, `Z`
+# on the VPS), and busybox `date -d` takes neither, so both are split off here.
+epoch_of() {
+    # shellcheck disable=SC2046 # the split into fields is the point
+    set -- $(printf '%s\n' "$1" | sed -nE 's/^([0-9]{4}-[0-9]{2}-[0-9]{2})T([0-9]{2}:[0-9]{2}:[0-9]{2})(\.[0-9]+)?(Z|([+-])([0-9]{2}):([0-9]{2}))$/\1 \2 \5 \6 \7/p')
+    [ $# -eq 2 ] || [ $# -eq 5 ] || return 1
+    seconds="$(date -u -d "$1 $2" +%s 2>/dev/null)" && [ -n "$seconds" ] || return 1
+    if [ $# -eq 5 ]; then
+        # `${4#0}`: `$((08))` is an octal error in busybox and dash alike.
+        offset=$((${4#0} * 3600 + ${5#0} * 60))
+        if [ "$3" = "+" ]; then seconds=$((seconds - offset)); else seconds=$((seconds + offset)); fi
+    fi
+    printf '%s\n' "$seconds"
+}
+
+# The newest epoch among every snapshot in a `snapshots --json` answer: one per
+# path group, so not the first. Fails if any stamp is unreadable, because a
+# skipped one could be the newest.
+newest_epoch_of() {
+    newest=""
+    stamps="$(printf '%s' "$1" | grep -o '"time": *"[^"]*"' | cut -d'"' -f4)"
+    [ -n "$stamps" ] || return 1
+    while IFS= read -r stamp; do
+        epoch="$(epoch_of "$stamp")" || return 1
+        if [ -z "$newest" ] || [ "$epoch" -gt "$newest" ]; then newest="$epoch"; fi
+    done <<STAMPS
+$stamps
+STAMPS
+    printf '%s\n' "$newest"
+}
+
 # First stderr line, stripped of what would break the JSON string.
 reason_from_stderr() {
     head -n 1 "$errfile" | tr -d '"\\' | cut -c1-160
@@ -104,7 +150,7 @@ reason_from_stderr() {
 
 # `|| [ -n "$node" ]`: `read` fails on a last line with no newline, and that
 # node would silently drop out of a fleet reported healthy.
-while read -r node repo declared_id services || [ -n "$node" ]; do
+while read -r node repo declared_id address port class services || [ -n "$node" ]; do
     case "$node" in '' | \#*) continue ;; esac
     nodes=$((nodes + 1))
     readable=0
@@ -114,11 +160,25 @@ while read -r node repo declared_id services || [ -n "$node" ]; do
     reason=""
     repository_id=""
     size=null
+    newest_snapshot=null
+    snapshot_age=null
+    reachable=0
 
     if out="$(restic_read snapshots --json --latest 1)"; then
         readable=1
         snapshots="$(printf '%s' "$out" | grep -o '"short_id"' | wc -l | tr -d ' ')"
-        [ "$snapshots" -gt 0 ] || reason="no snapshots"
+        if [ "$snapshots" -gt 0 ]; then
+            # Fails closed: a time the probe cannot read would leave the
+            # freshness rule blind for this node with nothing paging.
+            if newest="$(newest_epoch_of "$out")"; then
+                newest_snapshot="\"$(date -u -d "@$newest" +%Y-%m-%dT%H:%M:%SZ)\""
+                snapshot_age=$((${PROBE_NOW:-$(date +%s)} - newest))
+            else
+                reason="snapshot time unreadable"
+            fi
+        else
+            reason="no snapshots"
+        fi
     else
         reason="unreadable: $(reason_from_stderr)"
     fi
@@ -157,6 +217,15 @@ while read -r node repo declared_id services || [ -n "$node" ]; do
         fi
     fi
 
+    # Independent of R2: an unreadable repository on a node that is up is a
+    # different page from one on a node that is off. `</dev/null`: the loop's
+    # stdin is the targets file, and nothing may read from it but `read`.
+    if timeout $((REACH_TIMEOUT + 2)) "$NC" -z -w "$REACH_TIMEOUT" "$address" "$port" </dev/null >/dev/null 2>&1; then
+        reachable=1
+    elif [ "$class" = "always-on" ]; then
+        reason="${reason:+$reason, }probe cannot reach an always-on node"
+    fi
+
     # After every health check, so a slow `stats` cannot starve them of the
     # timeout. Its failure is logged, not judged.
     if [ "$readable" -eq 1 ]; then
@@ -193,8 +262,8 @@ while read -r node repo declared_id services || [ -n "$node" ]; do
         unhealthy=$((unhealthy + 1))
     fi
 
-    printf '{"metric":"r2_backup_node","namespace":"kubelab","node":"%s","readable":%d,"snapshots":%d,"missing":[%s],"sentinel":%d,"repository_id":"%s","raw_bytes":%s,"healthy":%d,"reason":"%s"}\n' \
-        "$node" "$readable" "$snapshots" "$missing_json" "$sentinel" "$repository_id" "$size" "$healthy" "$reason"
+    printf '{"metric":"r2_backup_node","namespace":"kubelab","node":"%s","class":"%s","readable":%d,"snapshots":%d,"missing":[%s],"sentinel":%d,"repository_id":"%s","newest_snapshot":%s,"snapshot_age_seconds":%s,"reachable":%d,"raw_bytes":%s,"healthy":%d,"reason":"%s"}\n' \
+        "$node" "$class" "$readable" "$snapshots" "$missing_json" "$sentinel" "$repository_id" "$newest_snapshot" "$snapshot_age" "$reachable" "$size" "$healthy" "$reason"
 done <"$TARGETS"
 
 rm -f "$errfile"
