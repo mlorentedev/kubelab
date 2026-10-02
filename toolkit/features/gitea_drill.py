@@ -123,7 +123,8 @@ def _paginate(fetch: Callable[[str], Any], path: str, key: Optional[str] = None)
     """Walk a Gitea list endpoint until a short page. None if any page could not be read.
 
     A JSON `null` page is an empty collection: Gitea answers `/branches` of a
-    repository with no commits that way. Only `_UNREAD` means the read failed.
+    repository with no commits that way. `_UNREAD`, or a body that is not the
+    list the endpoint returns, means the read failed.
     """
     items: list[Any] = []
     page = 1
@@ -132,7 +133,14 @@ def _paginate(fetch: Callable[[str], Any], path: str, key: Optional[str] = None)
         body = fetch(f"{path}{sep}limit=50&page={page}")
         if body is _UNREAD:
             return None
-        batch = (body[key] if key else body) if body is not None else []
+        if body is None:
+            batch: Any = []
+        elif key:
+            batch = body.get(key) if isinstance(body, dict) else None
+        else:
+            batch = body
+        if not isinstance(batch, list):
+            return None
         items.extend(batch)
         if len(batch) < 50:
             return items
@@ -224,9 +232,12 @@ def run_drill(
     and `commit_exists` are the only methods called.
     """
     rc, out, err = run(["restic", "-r", repo, "snapshots", "--json", "--latest", "1"], env=restic_env)
-    snapshots = json.loads(out or "[]") if rc == 0 else []
+    try:
+        snapshots = json.loads(out or "[]") if rc == 0 else []
+    except ValueError:
+        snapshots, err = [], "the snapshot list could not be parsed"
     if not snapshots:
-        logger.error(f"drill: no snapshot readable in {repo}: {err.strip()[:160]}")
+        logger.error(f"drill: CANNOT CHECK — no snapshot readable in {repo}: {err.strip()[:160]}")
         return False
     snapshot = snapshots[-1]
     logger.info(f"drill: snapshot {snapshot['short_id']} taken {snapshot['time']}")
