@@ -87,7 +87,9 @@
 
 - name: Verify Uptime Kuma health
   uri:
-    url: "http://localhost:{{ uptime_kuma_port }}"
+    # The port is published on the tailnet address only (compose.yml.j2), so
+    # nothing listens on localhost: ask where it is bound.
+    url: "http://{{ tailscale_ip }}:{{ uptime_kuma_port }}"
     method: GET
     status_code: [200, 302]
     timeout: 10
