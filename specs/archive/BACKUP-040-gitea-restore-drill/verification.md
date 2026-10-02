@@ -128,7 +128,7 @@ The contract set (`proposal.md`, `tasks.md`) is unchanged. `features.json` gaine
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/BACKUP-040-gitea-restore-drill/` -> `specs/archive/BACKUP-040-gitea-restore-drill/`
-- [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/BACKUP-040-gitea-restore-drill/` -> `specs/archive/BACKUP-040-gitea-restore-drill/`
+- [x] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018): #487 closes with the archive PR
+- [x] Promotions above executed (if any): lesson-499
