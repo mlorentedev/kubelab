@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from toolkit.config.settings import settings
+from toolkit.config.settings import PROJECT_ROOT, settings
 from toolkit.core.logging import logger
 from toolkit.features.configuration import ConfigurationManager
 
@@ -12,7 +12,7 @@ class TemplateProcessor:
 
     def __init__(self) -> None:
         """Initialize the template processor."""
-        self.project_root = settings.project_root
+        self.project_root = PROJECT_ROOT  # what settings.project_root resolves to, without building settings
 
     # Removed escape_for_replacement() - never called, archived in Phase 4
 

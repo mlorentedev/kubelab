@@ -14,7 +14,7 @@ import yaml
 from argon2 import PasswordHasher
 
 from toolkit.config.constants import AUTHELIA_CONFIG, PATH_STRUCTURES
-from toolkit.config.settings import settings
+from toolkit.config.settings import PROJECT_ROOT, settings
 from toolkit.core.logging import logger
 from toolkit.core.sops import age_key_env
 from toolkit.features.configuration import ConfigurationManager
@@ -62,10 +62,23 @@ class CredentialsManager:
 
     def __init__(self) -> None:
         """Initialize the credentials manager."""
-        self.project_root = settings.project_root
-        # Initialize ConfigurationManager with default environment.
-        # It's reassigned in methods if a specific env is passed.
-        self.config_manager = ConfigurationManager(settings.environment)
+        self.project_root = PROJECT_ROOT  # what settings.project_root resolves to, without building settings
+        self._config_manager: ConfigurationManager | None = None
+
+    @property
+    def config_manager(self) -> ConfigurationManager:
+        """The default environment's manager, built on first use; methods retarget it with `.env`.
+
+        Built lazily because `credentials_manager` is a module-level instance, and
+        importing the toolkit must read no configuration (TOOL-097).
+        """
+        if self._config_manager is None:
+            self._config_manager = ConfigurationManager(settings.environment)
+        return self._config_manager
+
+    @config_manager.setter
+    def config_manager(self, value: ConfigurationManager) -> None:
+        self._config_manager = value
 
     def generate_password(self, length: int = 16) -> str:
         """Generate a secure random password."""
