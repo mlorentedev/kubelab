@@ -191,24 +191,28 @@ groups:
               queryType: range
               # Per node: age x reachable. `class` is emitted by the probe from
               # targets.txt; both operands must select the same nodes.
+              # The probe's `node` is extracted as `backup_node`: Vector already
+              # sets a `node` stream label (the K8s node the Job ran on), so a
+              # plain `| json` renames the probe's field and `by (node)` would
+              # fold every backup node into one series (lesson-512).
               expr: >-
                 last_over_time(
                   {container="r2-backup-watcher"}
-                    | json
+                    | json backup_node="node", metric="metric", class="class", snapshot_age_seconds="snapshot_age_seconds"
                     | metric=`r2_backup_node`
                     | class=`on-demand`
                     | unwrap snapshot_age_seconds
                   [7h]
-                ) by (node)
+                ) by (backup_node)
                 *
                 last_over_time(
                   {container="r2-backup-watcher"}
-                    | json
+                    | json backup_node="node", metric="metric", class="class", reachable="reachable"
                     | metric=`r2_backup_node`
                     | class=`on-demand`
                     | unwrap reachable
                   [7h]
-                ) by (node)
+                ) by (backup_node)
           - refId: B
             relativeTimeRange:
               from: 25200
@@ -273,23 +277,24 @@ groups:
               queryType: range
               # 9 h holds the current probe and the one before it (6 h apart).
               # A `null` size is dropped by `unwrap`, so a failed `stats` keeps the
-              # last known size instead of reading as a drop.
+              # last known size instead of reading as a drop. `backup_node`, not
+              # `node`: see the freshness rule above (lesson-512).
               expr: >-
                 last_over_time(
                   {container="r2-backup-watcher"}
-                    | json
+                    | json backup_node="node", metric="metric", raw_bytes="raw_bytes"
                     | metric=`r2_backup_node`
                     | unwrap raw_bytes
                   [9h]
-                ) by (node)
+                ) by (backup_node)
                 /
                 first_over_time(
                   {container="r2-backup-watcher"}
-                    | json
+                    | json backup_node="node", metric="metric", raw_bytes="raw_bytes"
                     | metric=`r2_backup_node`
                     | unwrap raw_bytes
                   [9h]
-                ) by (node)
+                ) by (backup_node)
           - refId: B
             relativeTimeRange:
               from: 32400
