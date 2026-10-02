@@ -94,8 +94,24 @@ class TestDockerHubClient:
     def test_from_env_requires_credentials(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("DOCKERHUB_USERNAME", raising=False)
         monkeypatch.delenv("DOCKERHUB_TOKEN", raising=False)
+        monkeypatch.setattr("toolkit.config.settings.get_settings", lambda: None)  # a config that has none
         with pytest.raises(ValueError, match="DOCKERHUB_USERNAME"):
             DockerHubClient.from_env()
+
+    def test_from_env_reads_the_workstation_config_when_ci_has_not_set_them(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Importing the toolkit injects nothing (TOOL-097), so `from_env` builds settings itself."""
+        monkeypatch.delenv("DOCKERHUB_USERNAME", raising=False)
+        monkeypatch.delenv("DOCKERHUB_TOKEN", raising=False)
+
+        def inject() -> None:  # what get_settings() does with the SOPS values
+            monkeypatch.setenv("DOCKERHUB_USERNAME", "ns")
+            monkeypatch.setenv("DOCKERHUB_TOKEN", "t")
+
+        monkeypatch.setattr("toolkit.config.settings.get_settings", inject)
+        monkeypatch.setattr(DockerHubClient, "_login", staticmethod(lambda user, password: "jwt"))
+        assert DockerHubClient.from_env().namespace == "ns"
 
 
 class TestPrune:

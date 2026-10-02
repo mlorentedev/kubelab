@@ -6,7 +6,7 @@ import json
 import os
 from pathlib import Path
 from threading import Lock
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -367,6 +367,8 @@ class PlatformSettings(BaseSettings):
 
 _settings_cache: dict[str, PlatformSettings] = {}
 _cache_lock = Lock()
+#: Resolved once, at import, as `settings` always was.
+_IMPORT_ENV = _resolve_environment()
 
 
 def get_settings(env: str | None = None) -> PlatformSettings:
@@ -409,6 +411,11 @@ def get_settings(env: str | None = None) -> PlatformSettings:
         )
 
         _settings_cache[target_env] = base_settings
+        if target_env == _IMPORT_ENV:
+            # The logger follows the import-time environment, as it did when settings were built at import.
+            from toolkit.core.logging import logger
+
+            logger.configure(base_settings.log_level, base_settings.log_format)
         return base_settings
 
 
@@ -416,4 +423,30 @@ def get_settings(env: str | None = None) -> PlatformSettings:
 # GLOBAL INSTANCE
 # =============================================================================
 
-settings = get_settings()
+
+class _LazySettings:
+    """`get_settings()` for the environment resolved at import, built on first attribute access.
+
+    Importing the toolkit must read no configuration: building settings decrypts
+    SOPS into `os.environ`, and `--help` or a drill fed on stdin needs none of it
+    (TOOL-097). Reads and writes go to the real object, so a test that patches
+    `settings.project_root` patches what every importer sees.
+    """
+
+    def __init__(self, env: str) -> None:
+        object.__setattr__(self, "_env", env)
+
+    def _target(self) -> PlatformSettings:
+        return get_settings(object.__getattribute__(self, "_env"))
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._target(), name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        setattr(self._target(), name, value)
+
+    def __delattr__(self, name: str) -> None:
+        delattr(self._target(), name)
+
+
+settings = cast(PlatformSettings, _LazySettings(_IMPORT_ENV))

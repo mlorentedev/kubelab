@@ -91,7 +91,16 @@ class DockerHubClient:
 
     @classmethod
     def from_env(cls) -> DockerHubClient:
-        """Build a client from ``DOCKERHUB_USERNAME``/``DOCKERHUB_TOKEN`` (CI secrets)."""
+        """Build a client from ``DOCKERHUB_USERNAME``/``DOCKERHUB_TOKEN`` (CI secrets).
+
+        On a workstation they come from SOPS, which `get_settings()` injects into
+        the environment. Importing the toolkit no longer does that (TOOL-097), so
+        build settings here when CI has not set them.
+        """
+        if not (os.environ.get("DOCKERHUB_USERNAME") and os.environ.get("DOCKERHUB_TOKEN")):
+            from toolkit.config.settings import get_settings
+
+            get_settings()
         user = os.environ.get("DOCKERHUB_USERNAME")
         password = os.environ.get("DOCKERHUB_TOKEN")
         if not user or not password:

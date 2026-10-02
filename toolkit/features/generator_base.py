@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
-from toolkit.config.settings import settings
+from toolkit.config.settings import PROJECT_ROOT, settings
 from toolkit.core.logging import logger
 from toolkit.features.configuration import ConfigurationManager
 
@@ -14,7 +14,7 @@ class BaseGenerator(ABC):
 
     def __init__(self) -> None:
         """Initialize the generator."""
-        self.project_root = settings.project_root
+        self.project_root = PROJECT_ROOT  # what settings.project_root resolves to, without building settings
 
     @abstractmethod
     def generate(self, env: str) -> dict[str, Any]:

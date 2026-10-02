@@ -6,7 +6,7 @@ from functools import lru_cache
 from typing import Any
 
 from toolkit.config.constants import MESSAGES
-from toolkit.config.settings import settings
+from toolkit.config.settings import PROJECT_ROOT
 from toolkit.core.logging import logger
 from toolkit.features.configuration import ConfigurationManager
 
@@ -16,7 +16,7 @@ class GitHubSecretsManager:
 
     def __init__(self) -> None:
         """Initialize the GitHub secrets manager."""
-        self.project_root = settings.project_root
+        self.project_root = PROJECT_ROOT  # what settings.project_root resolves to, without building settings
 
         self.repo_info = self.get_repository_info()
 

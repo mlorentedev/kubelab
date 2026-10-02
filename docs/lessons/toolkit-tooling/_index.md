@@ -1,9 +1,10 @@
 # The toolkit CLI, Make, Python and local tooling
 
-40 lessons, newest first. Back to [all categories](../_index.md).
+41 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 504 | [A settings object built at import makes every command a secrets read](lesson-504-a-settings-object-built-at-import-makes-every-command-a-secrets-read.md) | 2026-10-01 |
 | 502 | [A patch applied after import cannot see what the import already did](lesson-502-a-patch-applied-after-import-cannot-see-what-the-import-did.md) | 2026-10-01 |
 | 469 | [A default argument binds at import, so monkeypatching the module constant misses it](lesson-469-a-default-argument-binds-at-import-so-monkeypatch-misses-it.md) | 2026-09-27 |
 | 435 | [A stub's canned answer decides which of your assertions can fail](lesson-435-a-stubs-canned-answer-decides-which-assertions-can-fail.md) | 2026-09-05 |

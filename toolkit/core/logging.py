@@ -10,7 +10,6 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.prompt import Confirm, Prompt
 
 # Removed static import of settings to avoid circular dependency
-# from toolkit.config.settings import settings
 
 # =============================================================================
 # Custom Exceptions
@@ -107,26 +106,19 @@ class PlatformLogger:
             show_time=False,
         )
 
-        # Defaults (safe without settings)
-        log_format = "%(message)s"
-        log_level = "INFO"
-
-        # Try to load settings dynamically, but fail silently if circular import
-        try:
-            from toolkit.config.settings import settings
-
-            log_level = settings.log_level
-            if settings.log_format.lower() == "json":
-                log_format = "%(levelname)s - %(name)s - %(message)s"
-            else:
-                log_format = settings.log_format
-        except (ImportError, AttributeError, RuntimeError):
-            # If settings aren't ready, use defaults
-            pass
-
-        handler.setFormatter(logging.Formatter(log_format))
+        # Defaults until settings exist: importing the toolkit reads no configuration
+        # (TOOL-097), so `get_settings()` applies the configured level and format.
+        handler.setFormatter(logging.Formatter("%(message)s"))
         self.logger.addHandler(handler)
-        self.logger.setLevel(getattr(logging, log_level.upper()))
+        self.logger.setLevel(logging.INFO)
+
+    def configure(self, level: str, fmt: str) -> None:
+        """Apply the configured log level and format to this logger's handlers."""
+        if fmt.lower() == "json":
+            fmt = "%(levelname)s - %(name)s - %(message)s"
+        for handler in self.logger.handlers:
+            handler.setFormatter(logging.Formatter(fmt))
+        self.logger.setLevel(getattr(logging, level.upper(), logging.INFO))
 
     def debug(self, message: str, **kwargs: Any) -> None:
         """Log debug message."""
