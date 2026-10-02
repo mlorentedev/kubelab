@@ -1,8 +1,43 @@
 [
   {
     "id": "BACKUP-032-on-demand-freshness-f1",
-    "behavior": "Outcome 1",
-    "verification": "echo 'not implemented' && exit 1",
+    "behavior": "Every r2_backup_node line carries newest_snapshot, snapshot_age_seconds (null on restic failure) and reachable",
+    "verification": "poetry run pytest -q -p no:cacheprovider --no-cov tests/test_r2_backup_watcher_probe.py",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-032-on-demand-freshness-f2",
+    "behavior": "The freshness rule fires for a reachable on-demand node with a snapshot older than 3h on two probes, and stays silent for off, always-on, fresh and all-off cases",
+    "verification": "poetry run pytest -q -p no:cacheprovider --no-cov tests/test_r2_backup_freshness_rule.py",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-032-on-demand-freshness-f3",
+    "behavior": "The shrink rule fires on a >50% drop between consecutive probes and not on growth, a single probe or a null size",
+    "verification": "poetry run pytest -q -p no:cacheprovider --no-cov tests/test_r2_backup_shrink_rule.py",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-032-on-demand-freshness-f4",
+    "behavior": "targets.txt carries each node's Tailscale IP, probe port and class from common.yaml and make validate-sync catches drift",
+    "verification": "make validate-sync",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-032-on-demand-freshness-f5",
+    "behavior": "A live prod watcher run reports the new fields for every node, with reachable=1 on vps, rpi3 and an up on-demand node",
+    "verification": "echo 'operator-observed: see verification.md AC5' && exit 1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BACKUP-032-on-demand-freshness-f6",
+    "behavior": "reachable=0 on an always-on node makes the health verdict unhealthy",
+    "verification": "poetry run pytest -q -p no:cacheprovider --no-cov tests/test_r2_backup_watcher_probe.py -k always_on",
     "state": "pending",
     "evidence": ""
   }

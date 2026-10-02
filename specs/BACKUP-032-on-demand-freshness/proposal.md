@@ -43,8 +43,12 @@ An on-demand node (Beelink, RPi4) can be up and writing while its backup never r
   - A freshness check inside the ship script cannot see a ship that never ran.
   - A second node-side timer shares systemd and the role with the thing it guards; a dead systemd or a removed role silences both.
   - The watcher is the only always-on component that depends on none of the node's own units.
-- **Boot window:** a node probed in its first minutes after boot is reachable and still carries its pre-shutdown snapshot. The first ship comes 2 min + up to 5 min after boot. Requiring the condition on two consecutive probes (6 h cadence) absorbs this. **Resolve before tasks:** confirm how `for:` composes with `last_over_time` over a 6 h series, using the existing `r2-backup-rules.yaml` and `disk-rules.yaml` as the reference.
-- **Reachability from the pod:** pods reach tailnet IPs (the Uptime Kuma EndpointSlice to `100.64.0.6:3001`), and the Headscale policy accepts `kubelab@ → *:*`. Port 22 on beelink and rpi4 from the watcher pod is still unmeasured; measure it in the first task.
+- **Boot window:** a node probed in its first minutes after boot is reachable and still carries its pre-shutdown snapshot. The first ship comes 2 min + up to 5 min after boot. The rule reads `last_over_time` over a window longer than the 6 h cadence, so each probe's value holds until the next one, and `for: 7h` then demands two consecutive stale probes. **Limit:** the LogQL harness (AC2) evaluates the expression, not Grafana's `for:` state machine, so `for >= 7h` is pinned by a static test and not exercised end to end.
+- **Reachability from the pod:** pods reach tailnet IPs (the Uptime Kuma EndpointSlice to `100.64.0.6:3001`), and the Headscale policy accepts `kubelab@ → *:*`. Port 22 on beelink and rpi4 from the watcher pod is not yet measured; the first task measures it. A port refused by ufw or sshd would read `reachable=0` forever: a silent false negative that looks like "node off". Two defences:
+  - The port is a per-node field in `targets.txt` (Glances, bound to the Tailscale IP, is the fallback), never hardcoded.
+  - The always-on nodes are a positive control. The watcher runs on the VPS, so `reachable=0` for an always-on node means a broken probe, not a node that is off, and the health verdict reports it.
+- **`unwrap` drops `null`:** a restic failure leaves `snapshot_age_seconds` `null`, LogQL marks the line `__error__`, and that series vanishes. If every on-demand node fails this way, the freshness rule goes to no data and pages alongside the health rule (readable=0). That is a double page, not a defect, and the annotation says so. For the shrink rule it is intended: a change from `null` to a number is not a drop.
+- **Restic time format:** the snapshot `time` is RFC 3339 with nanoseconds and possibly a zone offset, and busybox `date` is weak on both. The parse is measured in the pinned image and tested with the `Z` and `+HH:MM` forms. A failed parse yields `null`, never `0`.
 - **Shrink threshold, resolved 2026-10-02:** 50 %. `forget` plus `prune` legitimately shrinks raw data when retention drops old snapshots, but never by half in one 6 h window on this fleet.
 - **Live proof, resolved 2026-10-02:** a fixture test on the rule expressions plus one real prod watcher run reporting the new fields. No prod node is stalled on purpose.
 - **Filtering trap:** a rule that keeps only `reachable="1"` lines has no data whenever every on-demand node is off. With `noDataState: Alerting`, that pages every night. The product form in What avoids this, and AC2 tests it.
@@ -56,11 +60,13 @@ An on-demand node (Beelink, RPi4) can be up and writing while its backup never r
 - [ ] **AC2** The freshness rule fires for an on-demand node that is reachable on two consecutive probes with `newest_snapshot` older than 3 h. It does not fire for an unreachable on-demand node, nor for any always-on node, and it does not go to "no data" when every on-demand node is off. All of this is proven by a test that evaluates the rule expression against fixture lines.
 - [ ] **AC3** The shrink rule fires when consecutive `raw_bytes` for one node drop by more than 50 %, and does not fire on a `null` size. Proven by a fixture test.
 - [ ] **AC4** `targets.txt` takes each node's Tailscale IP and class from `common.yaml` through `make sync-r2-watcher-targets`. `make validate-sync` fails if they drift.
-- [ ] **AC5** Live in prod: one watcher run reports `reachable` and `newest_snapshot` for all four nodes, read from Loki. `make provision` on beelink and rpi4 reports `changed=0`.
+- [ ] **AC5** Live in prod, one watcher run, read from Loki: every node reports `newest_snapshot` and `snapshot_age_seconds`. vps and rpi3 report `reachable=1`, and so does at least one on-demand node that is up at that moment (the positive control). `make provision` on beelink and rpi4 reports `changed=0`.
+- [ ] **AC6** The health verdict treats `reachable=0` on an always-on node as unhealthy (a broken probe), and `tests/test_r2_backup_watcher_probe.py` covers it.
 
 ## References
 
 - Bitácora: mlorentedev/kubelab#485, under epic #1923, sequenced in #1727 (OBS-027).
 - ADR-028 (always-on and on-demand classes).
 - BACKUP-044 AC9 (the coverage heartbeat and its muting), BACKUP-055 (the watcher probe), BACKUP-057 Q3 (`raw_bytes`), OBS-015 (`disk-rules.yaml`, the two-cause `noDataState`).
+- OBS-018 (#1377): an alert that fired from its first day because its LogQL had never been evaluated; the reason AC2 runs the real expression.
 - `infra/ansible/roles/node_backup/templates/node-backup-capture.service.j2` (the AC9 comment), `infra/k8s/base/services/r2-backup-watcher/probe.sh`, `infra/k8s/base/services/grafana-alerting/r2-backup-rules.yaml`.

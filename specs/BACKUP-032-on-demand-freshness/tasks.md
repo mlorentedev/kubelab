@@ -13,31 +13,39 @@ created: "2026-10-01"
 
 ## Setup
 
-- [ ] Branch created from main: `feat/BACKUP-032-on-demand-freshness`
-- [ ] `proposal.md` is complete and acceptance criteria are testable
-- [ ] No open questions left in `proposal.md` "Risks / open questions"
+- [ ] Spec PR merged (`docs/backup-032-spec`, Refs #485)
+- [ ] Implementation branch from master: `feat/backup-032-on-demand-freshness`; new worktree gets `poetry.lock` copied before `make worktree-init` (DEBT-015 #1128)
+- [ ] Before touching `targets.txt`: re-read BACKUP-057 (#1959) for changes to the watcher or `backup_destination.py` (none on 2026-10-02)
 
 ## Implementation
 
-> Replace these with the actual steps for this feature. Keep them small (one commit each) and in TDD order.
-> The `[P]` / `[AC<n>]` markers are optional — see the legend above. Behaviors 1 and 2 below are independent, so their *first* test task carries `[P]`.
+Measurements first, then the probe, then the harness, then the rules.
 
-- [ ] [P] [AC1] Write failing test for <behavior 1>
-- [ ] [AC1] Implement <module/function> to make it pass
-- [ ] Refactor for clarity (extract, rename, dedupe)
-- [ ] [P] [AC2] Write failing test for <behavior 2>
-- [ ] [AC2] Implement to make it pass
-- [ ] ...
+- [ ] [P] [AC5] **Measure reachability** from a pod in the prod `kubelab` namespace, using the pinned `restic/restic:0.19.1` image: `nc -z -w 5 <tailscale_ip> 22` for vps, rpi3, and beelink/rpi4 while they are up. Record rc per node in `verification.md`. If 22 is refused on a homelab node, take that node's Glances port as its probe port.
+- [ ] [P] [AC1] **Measure the time format:** one `restic snapshots --json --latest 1` per repository, through the toolkit. Record only the *shape* of `time` (fraction digits, `Z` or offset), never ids or paths beyond what `make backup-coverage` already prints. Then find the busybox `date` invocation that parses it in the pinned image.
+- [ ] [AC4] Failing test: `toolkit sync r2-watcher-targets` renders `<node> <repo> <id> <tailscale_ip> <port> <class> <sources>...` from `networking.*` and `backup.sources`; `--check` fails on a hand edit.
+- [ ] [AC4] Extend `_sync_r2_watcher_targets` (`toolkit/features/backup_destination.py`) and regenerate `targets.txt`. Update `probe.sh`'s reader in the same commit, so the format and its reader never drift apart.
+- [ ] [AC1] Failing tests in `tests/test_r2_backup_watcher_probe.py`, using the fake-restic harness: `newest_snapshot` and `snapshot_age_seconds` for a readable repository; both `null` on a restic failure and on an unparseable time; ages for the `Z` and `+HH:MM` forms; `reachable` 1 and 0 with a fake `nc`.
+- [ ] [AC1] Implement in `probe.sh`, measurement only: no age threshold in the probe.
+- [ ] [AC6] Failing test: an always-on node with `reachable=0` makes the node and the fleet line unhealthy, with reason `probe cannot reach an always-on node`. An on-demand node with `reachable=0` stays healthy.
+- [ ] [AC6] Implement in `probe.sh`.
+- [ ] [AC2] **LogQL harness** (`tests/loki_harness.py`): start the pinned `grafana/loki:3.6.4` with a minimal single-binary config, push fixture lines with controlled timestamps to `/loki/api/v1/push`, and run a rule's `expr` **read from the rules YAML, never retyped** as an instant query at a chosen time. Skip when docker is absent locally and fail in CI, following `tests/test_oauth_tokens_not_logged.py`. Declare `allow_host_clients(reason=...)` per TEST-003. Prove it by running the existing `obs015-r2-backup-health` expression against a healthy fixture and an unhealthy one.
+- [ ] [AC2] Failing harness tests for the freshness rule. These cases must FIRE: on-demand, reachable, age > 3 h. These cases must stay SILENT: on-demand unreachable, always-on stale, on-demand fresh, every on-demand node off (a series is still present: no "no data").
+- [ ] [AC2] Add the freshness rule to `r2-backup-rules.yaml`. Its expression is `last_over_time(age)` times `last_over_time(reachable)` by node, filtered on `class="on-demand"`, then `> 10800`. It also sets `for: 7h` and `noDataState: Alerting`, and its annotation names both causes and the double page with the health rule. Add a static test that pins `for >= 7h` and the class filter.
+- [ ] [AC3] Failing harness tests for the shrink rule. A drop of more than 50 % between two probes FIRES. A 30 % drop, a 2× growth, a single probe and a `null` size stay SILENT.
+- [ ] [AC3] Add the shrink rule: `last_over_time / first_over_time < 0.5` over a window of about 9 h, by node. Fill in `runbook_url` and the section it points to in `docs/runbooks/offsite-backup-restore.md`.
+- [ ] Refactor `probe.sh` and the harness for clarity. `make lint` and `make test` must pass.
+- [ ] [AC5] After merge, run the prod watcher once (`make watcher-run NAME=r2-backup-watcher ENV=prod`) and read it from Loki (`toolkit obs logs`). Record per node `reachable` and whether `snapshot_age_seconds` is a number, never the raw values. Run `make provision NODE=bee ENV=prod` and the same for rpi4 (or their check mode) and confirm `changed=0`.
 
 ## Closing
 
 - [ ] Every acceptance criterion from `proposal.md` is covered by at least one test
-- [ ] Every acceptance criterion has a matching entry in `features.json` (see below) with a non-vacuous verification command
-- [ ] Type checks pass
-- [ ] Lint passes
-- [ ] No unrelated changes in the diff (no scope creep)
-- [ ] `verification.md` filled in
-- [ ] PR opened referencing this spec folder
+- [ ] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command
+- [ ] `make lint` and `make test` pass
+- [ ] No unrelated changes in the diff
+- [ ] lesson-506 written (a check inside the unit it guards cannot see the unit not running; filtering on a field turns "all off" into "no data")
+- [ ] `verification.md` filled in; independent `dotf spec review` (different model) before archive
+- [ ] Runbook: the new alerts' section in `docs/runbooks/offsite-backup-restore.md`
 
 ## Machine-readable features
 
