@@ -41,6 +41,32 @@ The same apply with it returned rc 0: `cloudflare_r2_bucket.scratch` and `cloudf
 
 The admin token sits in a file every SOPS recipient decrypts, so #1852 (SEC-022) gates this spec's archive (proposal item 1).
 
+## Scratch steps 2, 2b and 3
+
+2026-10-02, against `kubelab-backup-scratch` with the repository at the bucket root, so `data/`, `snapshots/`, `keys/` and `config` sit under the lock rules. A first `init` under a `measure/` prefix put the repository outside every rule; it was deleted and re-initialised at the root before any step was recorded. Credentials were a scratch Object Read & Write token, read from SOPS into the child process only.
+
+**Step 2 passes.** Two `backup`s of different data saved `715f817d` and `cb2bde94`, and `check` reported `no errors were found`. Each `backup` removed its own lock file: `locks/` held 0 objects afterwards, so `locks/` is outside the rule as intended. The exit codes of these three calls were not captured (the wrapper read `PIPESTATUS` in zsh). The saved snapshots and the later `check` (rc 0, below) are the evidence.
+
+**Step 2b passes.** A third `backup` changed a subset of the second's files (`eac4003f`, rc 0, 6 packs). `forget cb2bde94 --prune --dry-run` without `--max-repack-size 0` planned `to repack: 14 blobs / 11.446 MiB`. With the flag it planned `to repack: 0 blobs / 0 B`. Both rc 0. The flag is what stops a rewrite, which is the only path that makes a pack younger than its snapshots.
+
+**Step 3 passes on the fleet's restic, and the version matters.** `forget 715f817d` is the first snapshot, younger than R. R2 refused the snapshot file's DELETE:
+
+```
+Remove(<snapshot/715f817d4c>) returned error, retrying after ...: client.RemoveObject: The object is locked by the bucket policy.
+Remove(<snapshot/715f817d4c>) failed: client.RemoveObject: The object is locked by the bucket policy.
+unable to remove snapshot/715f817d4cee9517b3ed3bd08a3fcc696469a46ee4af33de4b5c8993dc34eed1 from the repository
+failed to remove one or more snapshots
+```
+
+This is R2's lock refusal, not a restic-side error, so no `restic unlock` was needed.
+
+- **restic 0.19.1** (`backup.r2.restic_version`, what every node runs; run in `restic/restic:0.19.1`), in the ship's form `forget <id> --prune --max-repack-size 0`: **rc 3** after 14:29 of retries, and the prune never ran. This is the exit code Q6's prune signal keys on.
+- **restic 0.18.1** (the workstation's), plain `forget <id>`: the same refusal and the same 14:43 of retries, but **rc 0**. The following `prune --max-repack-size 0` found nothing to delete (rc 0). Any measurement of this path has to run the pinned version. On 0.18.1 a refused forget reads as success.
+
+Afterwards `restic snapshots` still listed all three snapshots, `715f817d` included. `repair index` returned rc 0, and `check` returned `no errors were found`, rc 0.
+
+**Measured for PR 4: a refused DELETE costs about 14.5 minutes, not an instant error.** restic retries each refused object with backoff, about 13 retries over 14:29 on 0.19.1, before giving up. This was measured for one snapshot file. Whether k refused objects cost k times that, or run concurrently, is not measured. Size the ship's prune step for this. `node-backup-ship.service.j2:44` sets `TimeoutStartSec=600`, which is shorter than one refused DELETE. On the current unit, systemd would kill the ship mid-retry with `Result=timeout`, after a successful `backup`. The ship would fail as a whole, which is the outcome Q6 rules out, and the prune-failure line would never be written. PR 4 has to bound the prune itself, below the unit's timeout, and report the bound being hit as a prune failure (tasks.md, the Q6 task).
+
 ## Test status
 
 - Test suite: `<command> -> <output / coverage %>`
