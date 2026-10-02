@@ -84,6 +84,11 @@ What this changes for Q6: restic reports the two refusals differently. A refused
 
 **Step 4 passes.** At 04:38Z, a direct `aws s3api delete-object` of `data/12/121edff0...1161` (from the first two snapshots, written at 03:18Z) was made with the scratch Object Read & Write token, the credential class each node will hold. It returned `An error occurred (ObjectLockedByBucketPolicy) when calling the DeleteObject operation: The object is locked by the bucket policy.` with rc 254. `head-object` afterwards still returned the object (12001156 bytes). A node's own credential cannot delete its young backups, which is the half of AC3 the scratch bucket can show. The prod-bucket repeat stays with the prod task.
 
+**Two inputs for the Q6 decision, measured on 0.19.1.**
+
+- **The nightly form does not prune when `forget` selects nothing.** `forget --keep-within 31d --prune --dry-run --max-repack-size 0`, with every snapshot younger than 31 days, kept all three snapshots and printed no prune phase at all (rc 0). The three orphan packs from step 3b were not planned. A ship only reaches the refused pack DELETEs on a night when `forget` removes a snapshot. In prod that means a night when a snapshot crosses 31 days, while an orphan pack younger than R exists.
+- **restic has no knob that shortens the retries.** `restic --help` offers `--retry-lock` (repository locks) and `--stuck-request-timeout` (stalled requests). `restic options` lists `s3.retries`. `forget 715f817d -o s3.retries=0` still took 14:48 (894 s, 22 retry lines printed) and exited 3. The backoff comes from restic's own retry layer (`Remove(...) returned error, retrying after`), not from the S3 client. Any bound on a refused prune has to come from outside restic: a `timeout` around the step, or the prune in a unit of its own.
+
 **Step 5 is not before 2026-10-03T05:00Z.** The last write to a locked prefix was step 3b's packs, at about 04:18:45Z. Every later step either wrote nothing under the rules or was refused. R is one day, so 05:00Z on 2026-10-03 leaves a margin over the last write.
 
 ## Test status
