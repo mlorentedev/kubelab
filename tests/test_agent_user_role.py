@@ -84,9 +84,13 @@ def test_the_daemon_is_the_users_own_socket() -> None:
     assert host.endswith("/docker.sock"), host
 
 
-def test_no_template_or_default_can_render_the_rootful_socket() -> None:
-    """AC2: the role must not be able to point the agent at the root daemon."""
-    for path in [ROLE / "defaults/main.yml", *(ROLE / "templates").glob("*")]:
+def test_no_file_in_the_role_can_render_the_rootful_socket() -> None:
+    """AC2: the role must not be able to point the agent at the root daemon.
+
+    Tasks are read too: an `environment:` block is where `DOCKER_HOST` is set,
+    so a hardcoded socket there would bypass the default this test pins.
+    """
+    for path in [ROLE / "defaults/main.yml", *(ROLE / "templates").glob("*"), *(ROLE / "tasks").glob("*.yml")]:
         text = path.read_text()
         for socket in ROOTFUL_SOCKETS:
             assert socket not in text, f"{path.relative_to(REPO)} names {socket}"
