@@ -273,7 +273,11 @@ class CredentialsManager:
         logger.info(f"  git add {sops_file} && git commit")
         logger.info(f"  make apply-secrets ENV={env}    # deliver it to the cluster")
         logger.info("")
-        logger.info("Authelia reloads its users file from a watched directory, so no pod restart is needed.")
+        # No reader picks up a Secret volume update by itself here: Authelia's
+        # `watch: true` waits for an event naming the file, and the kubelet swaps
+        # the `..data` symlink instead (lesson-455). apply-secrets restarts every
+        # reader itself (#1804). The key may be any hash, not only a user's.
+        logger.info("apply-secrets restarts every workload reading a changed Secret; none re-reads it alone.")
 
     def _read_existing_secrets(self, env: str) -> dict[str, Any]:
         """Read existing secrets from the SOPS file for the given environment.
