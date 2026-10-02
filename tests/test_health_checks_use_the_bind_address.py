@@ -10,23 +10,49 @@ before the bind moved, and rpi3 had not been provisioned since.
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 import pytest
 import yaml
 
 ROLES = Path(__file__).resolve().parent.parent / "infra/ansible/roles"
-PUBLISHED = re.compile(r'^\s*-\s*"([^"]*\{\{[^"]*\}\}[^"]*):[^:"]+:[^:"]+"\s*$', re.MULTILINE)
 LOOPBACK = ("localhost", "127.0.0.1", "[::1]")
 
 
-def _tailnet_only_roles() -> list[Path]:
-    """Roles whose every published port is bound to the node's tailnet address."""
+def _bind_hosts(template: Path) -> list[str | None]:
+    """The host part of every mapping under a `ports:` key; None means all interfaces.
+
+    Every list item in a `ports:` block is read, literal or templated, so a role
+    is classified on all of its published ports and not on a matching subset.
+    """
+    hosts: list[str | None] = []
+    indent = None
+    for line in template.read_text().splitlines():
+        stripped = line.strip()
+        if indent is not None:
+            if not stripped or stripped.startswith("#"):
+                continue
+            if stripped.startswith("- ") and len(line) - len(line.lstrip()) > indent:
+                mapping = stripped[2:].split(" #")[0].strip().strip("\"'")
+                parts = mapping.split(":")
+                hosts.append(parts[0] if len(parts) == 3 else None)
+                continue
+            indent = None
+        if stripped == "ports:":
+            indent = len(line) - len(line.lstrip())
+    return hosts
+
+
+def _loopback_free_roles() -> list[Path]:
+    """Roles whose every published port names a host other than the loopback.
+
+    Nothing listens on the host's loopback for such a role, whichever address
+    the ports are bound to: the tailnet one, a LAN one or a public one.
+    """
     roles = []
     for role in sorted(p for p in ROLES.iterdir() if p.is_dir()):
-        binds = [b for t in role.glob("templates/compose*.j2") for b in PUBLISHED.findall(t.read_text())]
-        if binds and all("tailscale_ip" in bind for bind in binds):
+        hosts = [h for t in role.glob("templates/*compose*.yml.j2") for h in _bind_hosts(t)]
+        if hosts and all(h is not None and not any(lb in h for lb in LOOPBACK) for h in hosts):
             roles.append(role)
     return roles
 
@@ -50,14 +76,16 @@ def _uri_urls(role: Path) -> list[tuple[str, str]]:
 
 
 def test_the_bound_roles_are_found() -> None:
-    names = {role.name for role in _tailnet_only_roles()}
-    assert {"rpi3_services", "glances", "beelink_services"} <= names, names
+    names = {role.name for role in _loopback_free_roles()}
+    assert {"rpi3_services", "glances", "beelink_services", "agent_stack"} <= names, names
+    # A role with one port on all interfaces has something on the loopback.
+    assert not {"headscale", "coredns", "traefik_vps"} & names, names
 
 
-@pytest.mark.parametrize("role", _tailnet_only_roles(), ids=lambda r: r.name)
+@pytest.mark.parametrize("role", _loopback_free_roles(), ids=lambda r: r.name)
 def test_no_health_check_asks_the_loopback(role: Path) -> None:
     for name, url in _uri_urls(role):
         assert not any(host in url for host in LOOPBACK), (
-            f"{role.name}: '{name}' asks {url}, but the role publishes its ports on "
-            "{{ tailscale_ip }} only, so nothing listens there"
+            f"{role.name}: '{name}' asks {url}, but every port the role publishes is "
+            "bound to a named address, so nothing listens on the loopback"
         )
