@@ -1,7 +1,7 @@
 ---
 id: "BACKUP-071-ace2-drills"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-10-01"
 issue: "mlorentedev/kubelab#2011"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal, backup]
@@ -22,7 +22,7 @@ The operator ruled on 2026-10-01 that the Gitea (BACKUP-040, #487) and Headscale
 2. **The workstation resolves, ace2 executes.**
    - The workstation reads SOPS and the merged config and builds one JSON payload with everything the drill takes: restic repository and environment, image, staging directory, the Gitea admin token where the drill needs it, and the live reads (below).
    - It sends the payload to `toolkit backup drill-<x> --inputs-stdin` on ace2 over the ssh session's **stdin**. A secret never appears in argv (visible in `ps` on both ends), in a remote shell's environment assignment, or in a file.
-   - The remote process never constructs a `ConfigurationManager` and never touches SOPS. It calls the same `run_drill` a local run calls.
+   - The remote drill path never constructs a `ConfigurationManager` and reads no config: it calls the same `run_drill` a local run calls, on the payload alone. The toolkit process still loads the `dev` config at import (`toolkit/config/settings.py`, #2021), so the guarantee that ace2 decrypts nothing rests on ace2 having neither `sops` on the non-interactive PATH nor an age key. Both are checked by the AC1 gate, and provisioning fails if the key appears.
 3. **Live reads stay on the workstation.** For Headscale, the live node and user lists and the hashes of the live key files need ssh and `sudo -n` on the VPS. The workstation reads them and passes them as inputs; none of them is a secret. ace2 gets no VPS credential and no forwarded agent. `headscale_drill.run_drill` is split at that seam: `read_live(...)` on the workstation, and the restore and compare against a given live state on whichever host runs it. A local run calls both, in the same order as today.
 4. **ace2 runs the code being tested, not master.**
    - The `dev_node` role owns a dedicated checkout at `~/.local/share/kubelab-drill`, separate from any developer clone, plus the runtime: pinned restic, pinned poetry, and docker access for the dev user.
@@ -48,12 +48,12 @@ The operator ruled on 2026-10-01 that the Gitea (BACKUP-040, #487) and Headscale
 
 ## Acceptance criteria
 
-- [ ] **AC1** `make provision NODE=ace2 ENV=prod` reports `changed=0` on its second run. ace2 then has restic at the pinned version, poetry, the drill checkout and docker access for the dev user, and no SOPS age key: `ssh ace2 test ! -e ~/.config/sops/age/keys.txt` exits 0. `node_backup` and `dev_node` include the same restic tasks file. A test fails if either role grows its own copy.
+- [ ] **AC1** `make provision NODE=ace2 ENV=prod` reports `changed=0` on its second run. ace2 then has restic at the pinned version, poetry, the drill checkout and docker access for the dev user, and no SOPS age key and no `sops` on the non-interactive PATH: `ssh ace2 'test ! -e ~/.config/sops/age/keys.txt && ! command -v sops'` exits 0. `node_backup` and `dev_node` include the same restic tasks file. A test fails if either role grows its own copy.
 - [ ] **AC2** `make backup-drill-gitea HOST=ace2` and `make backup-drill-headscale HOST=ace2` pass from a pushed branch and print only names, ids and counts, as they do locally. Each refuses to start from a dirty tree, or from a commit `origin` lacks, with CANNOT CHECK naming the reason.
 - [ ] **AC3** Unit tests, against the command the toolkit builds and the remote entrypoint with a fake runner:
   - no injected value (restic password, R2 keys, Gitea token) appears in the ssh argv;
   - the payload travels on stdin;
-  - the remote entrypoint never builds a `ConfigurationManager`;
+  - the remote entrypoint's drill path never builds a `ConfigurationManager` (the import-time `dev` load is #2021's, and ace2 is kept unable to decrypt by AC1);
   - after a run, no file under the work directory contains an injected value;
   - a malformed payload fails without echoing any of its values.
 - [ ] **AC4** The `verification.md` of BACKUP-040 and of BACKUP-067 carries its ace2 run (host, commit, snapshot, result). That unblocks their archive PRs.

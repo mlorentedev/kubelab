@@ -18,11 +18,16 @@ from pathlib import Path
 from typing import Optional
 
 import pytest
+import yaml
 
-from toolkit.features.headscale_drill import compare, parse_entries, run_drill
+from toolkit.features.headscale_drill import LiveState, compare, parse_entries, read_live, run_drill
 
 STAGING = "/opt/node-backup/staging"
 IMAGE = "headscale/headscale:v0.28.0"
+#: From the SSOT, never a literal (CLAUDE.md, networking.*).
+CIDR = yaml.safe_load((Path(__file__).resolve().parents[1] / "infra/config/values/common.yaml").read_text())[
+    "networking"
+]["tailscale_cidr"]
 TAKEN = "2026-10-01T12:04:45.886043275Z"
 BEFORE = 1_790_000_000  # 2026-09-21, before the snapshot
 AFTER = 1_790_000_000 + 30 * 86400  # after it
@@ -227,14 +232,16 @@ def drill(tmp_path: Path, monkeypatch):
 
     def go(fake) -> bool:
         ticks = iter(range(0, 100_000, 5))
+        live = read_live(fake, "manu@vps", "headscale_headscale_data")
+        if live is None:
+            return False
         return run_drill(
             repo="s3:https://e/b/kubelab-vps",
             restic_env={"RESTIC_PASSWORD": "x"},
             staging_dir=STAGING,
             image=IMAGE,
-            volume="headscale_headscale_data",
-            ssh_target="manu@vps",
-            cidr="100.64.0.0/10",
+            cidr=CIDR,
+            live=live,
             run=fake,
             sleep=lambda s: None,
             clock=lambda: float(next(ticks)),
@@ -399,6 +406,13 @@ def test_the_drill_runs_the_image_volume_and_pool_the_ssot_declares(monkeypatch)
     monkeypatch.setattr(ConfigurationManager, "_decrypt_sops", lambda self, path: {})
     monkeypatch.setattr(backup_destination, "restic_context", lambda cm: ({}, {}))
     monkeypatch.setattr(backup_destination, "repo_url", lambda dest, name: name)
+    live = LiveState(nodes={}, users={}, hashes={})
+
+    def fake_read_live(run, ssh_target, volume):
+        seen.update(ssh_target=ssh_target, volume=volume)
+        return live
+
+    monkeypatch.setattr(headscale_drill, "read_live", fake_read_live)
     monkeypatch.setattr(headscale_drill, "run_drill", lambda **kw: seen.update(kw) or True)
 
     assert headscale_drill.drill_headscale(env="prod", project_root=repo)
@@ -406,6 +420,7 @@ def test_the_drill_runs_the_image_volume_and_pool_the_ssot_declares(monkeypatch)
     assert seen["volume"] == common["backup"]["sources"]["vps"]["headscale"]["volume"]
     assert seen["cidr"] == common["networking"]["tailscale_cidr"]
     assert seen["ssh_target"].endswith("@" + common["networking"]["vps"]["public_ip"])
+    assert seen["live"] == live
 
 
 def test_a_restored_user_list_that_fails_is_cannot_check_even_with_valid_output(drill, capsys) -> None:
@@ -413,3 +428,57 @@ def test_a_restored_user_list_that_fails_is_cannot_check_even_with_valid_output(
     assert drill(fake) is False
     assert "CANNOT CHECK" in capsys.readouterr().out
     assert _torn_down(fake)
+
+
+# --- The live read is split from the restore (BACKUP-071 AC2) ----------------
+# The drill can run on ace2, but the live reads stay on the workstation: ace2
+# has no ssh path to the VPS, and `sudo -n` there is the operator's. So the
+# restore half takes live state as a value and never opens a connection.
+
+
+def test_read_live_returns_nodes_users_and_key_hashes() -> None:
+    live = read_live(_Fake(), "manu@vps", "headscale_headscale_data")
+    assert live is not None
+    assert sorted(live.nodes) == [2, 64] and sorted(live.users) == [1, 2]
+    assert set(live.hashes) == {"noise_private.key", "derp_server_private.key"}
+
+
+@pytest.mark.parametrize(
+    "fake, named",
+    [
+        (_Fake(live_rc=255), "live Headscale listed no nodes"),
+        (_Fake(live_nodes=[]), "live Headscale listed no nodes"),
+        (_Fake(hashes_rc=1), "the live key files could not be hashed"),
+    ],
+    ids=["unreachable", "empty", "hashes"],
+)
+def test_read_live_names_what_it_could_not_read(capsys, fake, named) -> None:
+    assert read_live(fake, "manu@vps", "headscale_headscale_data") is None
+    out = " ".join(capsys.readouterr().out.split())
+    assert "CANNOT CHECK" in out and named in out
+
+
+def test_run_drill_compares_against_the_given_state_and_opens_no_connection(tmp_path, monkeypatch, capsys) -> None:
+    monkeypatch.setattr("tempfile.tempdir", str(tmp_path))
+    live = read_live(_Fake(), "manu@vps", "headscale_headscale_data")
+    fake = _Fake()
+    ticks = iter(range(0, 100_000, 5))
+    ok = run_drill(
+        repo="s3:https://e/b/kubelab-vps",
+        restic_env={"RESTIC_PASSWORD": "x"},
+        staging_dir=STAGING,
+        image=IMAGE,
+        cidr=CIDR,
+        live=live,
+        run=fake,
+        sleep=lambda s: None,
+        clock=lambda: float(next(ticks)),
+    )
+    assert ok is True, capsys.readouterr().out
+    assert not [c for c in fake.calls if c[:1] == ["ssh"]], "the restore half must never reach the VPS"
+
+
+def test_live_state_round_trips_through_a_json_payload() -> None:
+    live = read_live(_Fake(), "manu@vps", "headscale_headscale_data")
+    assert live is not None
+    assert LiveState.from_payload(json.loads(json.dumps(live.to_payload()))) == live

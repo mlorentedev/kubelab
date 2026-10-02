@@ -30,6 +30,36 @@ rc 0, 23.7 s wall time including the toolkit's start. `personal/resume` has one 
 
 **The first run failed, as designed.** It stopped at CANNOT CHECK before restoring anything: `GET /repos/teledyne/openkm-brain/branches returned NoneType, expected a list`. Gitea answers an empty repository's branches with `null`. Fixed in `f133d87e`, recorded as lesson-499.
 
+### AC1, AC2: the prod drill on ace2 (2026-10-01, BACKUP-071)
+
+The operator required an ace2 run before archive (#487). Run with
+`make backup-drill-gitea HOST=ace2 ENV=prod` from branch
+`feat/backup-071-ace2-drills` at `86f6d16a`, pushed. The workstation resolved the
+restic environment and the admin token from SOPS and sent them on the ssh
+session's stdin; ace2 restored, started the scratch server and read live Gitea
+itself.
+
+```text
+gitea restore drill on ace2 (prod)
+[INFO] drill: running gitea on manu@100.64.0.5 at 86f6d16aeaa4
+[INFO] drill: snapshot 0b556cbb taken 2026-10-02T00:29:50.730823192+02:00
+[SUCCESS] drill: restored 5 repositories in 6s
+[SUCCESS] drill: git fsck --full passed on all 5 repositories
+[SUCCESS] drill: the restored server answers, 14s after the restore began
+[INFO]      manu/imagesensortool: 1 branch(es) restored, live 1
+[INFO]      personal/resume: 6 branch(es) restored, live 6
+[INFO]      teledyne/fae-brain: 13 branch(es) restored, live 13
+[INFO]      teledyne/openkm-brain: 0 branch(es) restored, live 0
+[INFO]      teledyne/projects-toolkit: 2 branch(es) restored, live 2
+[SUCCESS] drill: snapshot 0b556cbb restores Gitea completely (5 repositories, 22s end to end)
+rc=0
+```
+
+The `make worktree-init` output between the first two lines is omitted. Two
+`SOPS is not installed` warnings came from the toolkit's import, not from the
+drill (#2021, TOOL-097). Afterwards on ace2: no `giteadrill-*` container and no
+`giteadrill-*` directory under `/tmp`.
+
 ### AC2, AC3: the guards (tests and mutations)
 
 `tests/test_gitea_drill.py` (19 tests) and `tests/test_gitea_client_pagination.py`. Each guard below was mutated out on a committed tree, and its test went red. The tree was restored with `git checkout HEAD --`.

@@ -98,6 +98,9 @@ app = typer.Typer(
     help="Toolkit - Unified infrastructure management tool.",
     no_args_is_help=True,
     add_completion=False,
+    # A traceback's locals would print whatever a command held: a drill's
+    # restic credentials, a decrypted SOPS value (BACKUP-071).
+    pretty_exceptions_show_locals=False,
 )
 
 

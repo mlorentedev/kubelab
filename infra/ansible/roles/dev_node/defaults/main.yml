@@ -63,6 +63,7 @@ dev_node_local_bin_wrapped:
   - dotf
   - hive
   - hive-vault
+  - poetry
 
 # --- workspace skeleton ----------------------------------------------------
 # Each agent gets its own clone dir for filesystem isolation between concurrent
@@ -123,3 +124,13 @@ dev_node_gitea_key_path: "{{ dev_node_home }}/.ssh/id_gitea_{{ inventory_hostnam
 # Titles the key PER NODE, so `DELETE /user/keys/{id}` revokes one node's access
 # and nothing else — the property D2 exists to buy.
 dev_node_gitea_key_title: "kubelab-{{ inventory_hostname }}-dev-node"
+
+# --- restore drills (BACKUP-071) ------------------------------------------------
+# restic comes from backup.r2.restic_version, passed in by the playbook; empty
+# here so a play that forgets it fails in the shared install's assert.
+dev_node_restic_version: ""
+# Matches the poetry the workstation runs. CI installs it unpinned with pipx.
+dev_node_poetry_version: "2.2.1"
+# Public repository: cloning needs no credential.
+dev_node_drill_repo: "https://github.com/mlorentedev/kubelab.git"
+dev_node_drill_checkout: "{{ dev_node_home }}/.local/share/kubelab-drill"
