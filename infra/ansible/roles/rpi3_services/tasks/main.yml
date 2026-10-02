@@ -79,7 +79,10 @@
 
 - name: Start services
   command: docker compose -f {{ rpi3_deploy_dir }}/compose.yml up -d
-  changed_when: true
+  register: _compose_up
+  # compose v2 writes progress to stderr. `Running` is no change; Started and
+  # Created (which Recreated contains) are.
+  changed_when: "'Started' in _compose_up.stderr or 'Created' in _compose_up.stderr"
 
 - name: Wait for services to stabilize
   pause:
