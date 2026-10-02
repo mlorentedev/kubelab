@@ -57,6 +57,33 @@ Each guard was broken in turn on a committed tree, the suite run, and the file r
 | failed restored user list accepted (review round) | 1 failed |
 | unreadable restored list not caught (review round) | 3 failed |
 
+### Prod run, 2026-10-01, on ace2 (BACKUP-071)
+
+The operator required an ace2 run before archive (#1994). Run with
+`make backup-drill-headscale HOST=ace2 ENV=prod` from branch
+`feat/backup-071-ace2-drills` at `66a5fcc6`, pushed. The workstation read live
+(nodes, users, key hashes) and sent it with the restic environment on the ssh
+session's stdin; ace2 restored and compared.
+
+```text
+headscale restore drill on ace2 (prod)
+[INFO] drill: running headscale on manu@100.64.0.5 at 66a5fcc68486
+[INFO] drill: snapshot 024a9582 taken 2026-10-01T20:05:08.885349566Z
+[SUCCESS] drill: restored /opt/node-backup/staging/headscale in 3s
+[SUCCESS] drill: db.sqlite integrity_check ok
+[SUCCESS] drill: noise key: match
+[SUCCESS] drill: DERP key: match
+[INFO] ok 12 nodes, 4 users restored
+[INFO] drill: RTO 8s from download to a server that answers
+[SUCCESS] drill: snapshot 024a9582 restores Headscale completely
+rc=0
+```
+
+The `make worktree-init` output between the second and third lines is omitted
+(first run in the ace2 checkout: it resolved the lock and installed the venv). Two
+`SOPS is not installed` warnings came from the toolkit's import, not from the
+drill: ace2 has no sops and no key, so nothing was decrypted (#2021, TOOL-097).
+
 ## Test status
 
 - `poetry run pytest -q -p no:cacheprovider --no-cov tests/test_headscale_drill.py` → 30 passed (25 at first push, 5 added in the review round).

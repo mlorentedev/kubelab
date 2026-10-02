@@ -217,6 +217,8 @@
       tags: [dev_node, cde]
       vars:
         dev_node_user: "{{ config.networking.ssh_users.homelab }}"
+        # BACKUP-071: the drills read repositories written by node_backup's restic.
+        dev_node_restic_version: "{{ config.backup.r2.restic_version }}"
         # Machine identity (ANSIBLE-033). Sourced from COMMON secrets, decrypted
         # controller-side above — the node never sees an age key. `default('')`
         # is what makes the role's "not configured" path reachable: an operator

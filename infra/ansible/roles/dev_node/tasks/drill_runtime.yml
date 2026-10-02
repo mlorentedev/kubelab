@@ -1,0 +1,91 @@
+---
+# What the restore drills need to run on ace2 (BACKUP-071, AC1).
+#
+# The workstation resolves every input, secrets included, and sends them to
+# `toolkit backup drill-<x> --inputs-stdin` over ssh. ace2 executes, so it needs
+# the runtime and nothing else: restic at the fleet's pinned version, poetry,
+# docker for the dev user, and a checkout of its own. It never gets a SOPS age
+# key; the last task fails provisioning if one appears.
+
+- name: Install restic at the pinned version (node_backup's install, shared)
+  # import, not include: resolved when the play is parsed, so `--syntax-check`
+  # proves the path, and the tags below reach every imported task.
+  ansible.builtin.import_role:
+    name: ../roles/node_backup
+    tasks_from: restic
+  vars:
+    node_backup_restic_version: "{{ dev_node_restic_version }}"
+  tags: [dev_node, drill]
+
+- name: Install pipx (poetry's installer, as in CI)
+  ansible.builtin.apt:
+    name: pipx
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  tags: [dev_node, drill]
+
+- name: Read the poetry version the dev user has
+  ansible.builtin.command: "{{ dev_node_home }}/.local/bin/poetry --version"
+  register: _dev_node_poetry
+  failed_when: false
+  changed_when: false
+  # A read: skipped under --check, the install below would report a change.
+  check_mode: false
+  become: true
+  become_user: "{{ dev_node_user }}"
+  tags: [dev_node, drill]
+
+- name: Install poetry at the pinned version for the dev user
+  ansible.builtin.command: pipx install --force "poetry=={{ dev_node_poetry_version }}"
+  environment:
+    HOME: "{{ dev_node_home }}"
+  when: ("(version " ~ dev_node_poetry_version ~ ")") not in _dev_node_poetry.stdout
+  changed_when: true
+  become: true
+  become_user: "{{ dev_node_user }}"
+  tags: [dev_node, drill]
+
+- name: Read the dev user's groups
+  ansible.builtin.command: id -nG {{ dev_node_user }}
+  register: _dev_node_groups
+  changed_when: false
+  check_mode: false
+  tags: [dev_node, drill]
+
+# Asserted, never added: the drills call `docker` directly, and a sudo prompt in
+# a non-interactive ssh run would hang it. Membership belongs to the docker role.
+- name: The dev user reaches docker without sudo
+  ansible.builtin.assert:
+    that: "'docker' in _dev_node_groups.stdout.split()"
+    fail_msg: >-
+      {{ dev_node_user }} is not in the docker group, so a drill on this node
+      cannot start its scratch containers. Fix it in the docker role.
+    quiet: true
+  tags: [dev_node, drill]
+
+# `update: false`: each drill run fetches and detaches this checkout at the
+# commit the workstation runs. Provisioning only makes sure it exists.
+- name: Clone the drill checkout (moved by each run, not by provisioning)
+  ansible.builtin.git:
+    repo: "{{ dev_node_drill_repo }}"
+    dest: "{{ dev_node_drill_checkout }}"
+    update: false
+  become: true
+  become_user: "{{ dev_node_user }}"
+  tags: [dev_node, drill]
+
+- name: Look for a SOPS age key on the node
+  ansible.builtin.stat:
+    path: "{{ dev_node_home }}/.config/sops/age/keys.txt"
+  register: _dev_node_age_key
+  tags: [dev_node, drill]
+
+- name: ace2 holds no SOPS age key (secrets reach a drill per run, on stdin)
+  ansible.builtin.assert:
+    that: not _dev_node_age_key.stat.exists
+    fail_msg: >-
+      {{ dev_node_home }}/.config/sops/age/keys.txt exists. The operator ruled
+      on 2026-10-01 (#2011) that this node never holds the key. Remove it.
+    quiet: true
+  tags: [dev_node, drill]

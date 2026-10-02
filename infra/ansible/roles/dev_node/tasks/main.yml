@@ -81,7 +81,10 @@
 
 - name: Add GitHub CLI apt repository
   ansible.builtin.apt_repository:
-    repo: "deb [arch={{ 'arm64' if ansible_facts.architecture == 'aarch64' else 'amd64' }} signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main"
+    repo: >-
+      deb [arch={{ 'arm64' if ansible_facts.architecture == 'aarch64' else 'amd64' }}
+      signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg]
+      https://cli.github.com/packages stable main
     filename: github-cli
     state: present
     update_cache: true
@@ -171,7 +174,6 @@
         _dev_node_mise_node_bin: "{{ dev_node_home }}/.local/share/mise/installs/node/{{ dev_node_toolchains.node }}/bin"
       loop: "{{ dev_node_global_agent_npm_packages }}"
       tags: [dev_node, mise, agents]
-
 
 
     # --- tmux-resurrect (vendored plugin; base tmux comes from base_system) ---
@@ -561,6 +563,7 @@
     # another account, and the play would report a key it never registered here.
     - name: Look up this node's key on the machine account
       ansible.builtin.uri:
+        # yamllint disable-line rule:line-length
         url: "{{ dev_node_gitea_api_url }}/users/{{ dev_node_gitea_user }}/keys?fingerprint={{ _gitea_key_fp.stdout.split(' ')[1] | urlencode }}"
         headers:
           Authorization: "token {{ dev_node_gitea_bot_token }}"
@@ -605,3 +608,7 @@
           _gitea_keys.json | default([])
           | selectattr('fingerprint', 'equalto', _gitea_key_fp.stdout.split(' ')[1])
           | list | length == 0
+
+# --- restore drills (BACKUP-071) ----------------------------------------------
+- name: Provision the restore-drill runtime
+  ansible.builtin.import_tasks: drill_runtime.yml

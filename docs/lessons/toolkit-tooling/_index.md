@@ -1,9 +1,10 @@
 # The toolkit CLI, Make, Python and local tooling
 
-39 lessons, newest first. Back to [all categories](../_index.md).
+40 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 502 | [A patch applied after import cannot see what the import already did](lesson-502-a-patch-applied-after-import-cannot-see-what-the-import-did.md) | 2026-10-01 |
 | 469 | [A default argument binds at import, so monkeypatching the module constant misses it](lesson-469-a-default-argument-binds-at-import-so-monkeypatch-misses-it.md) | 2026-09-27 |
 | 435 | [A stub's canned answer decides which of your assertions can fail](lesson-435-a-stubs-canned-answer-decides-which-assertions-can-fail.md) | 2026-09-05 |
 | 450 | [A key appended by ruamel renders below the next block's comment](lesson-450-a-key-appended-by-ruamel-renders-below-the-next-blocks-comment.md) | 2026-09-04 |

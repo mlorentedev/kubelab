@@ -583,7 +583,7 @@ def test_the_role_needs_no_external_decompressor():
         "sqlite3 must remain the role's only apt package — counted across every apt task, not just the first one"
     )
 
-    tasks = yaml.safe_load((ROLE / "tasks/main.yml").read_text())
+    tasks = [t for f in ("main.yml", "restic.yml") for t in yaml.safe_load((ROLE / "tasks" / f).read_text())]
     shells = " ".join(str(t.get("shell", "")) for t in tasks)
     assert "bunzip2" not in shells, "no external decompressor — use stdlib bz2"
     assert "import bz2" in shells, "decompression must come from Python's stdlib"
@@ -593,7 +593,8 @@ def test_restic_is_decompressed_via_a_temp_path_never_onto_the_install_path():
     """A redirect straight onto the install path truncates it before bunzip2
     even runs, so any failure leaves a broken binary where the capture and
     ship scripts expect a working one."""
-    tasks_src = (ROLE / "tasks/main.yml").read_text()
+    # The install lives in the file node_backup shares with dev_node (BACKUP-071).
+    tasks_src = (ROLE / "tasks/restic.yml").read_text()
     decompress = next(t for t in yaml.safe_load(tasks_src) if "bz2" in str(t.get("shell", "")))
     # Anchored to the SSOT variable, not to an expanded path: the folded
     # scalar carries the Jinja reference verbatim, and asserting on it also
@@ -951,6 +952,6 @@ def test_the_restic_version_probe_runs_in_check_mode() -> None:
     download that keys on it reports `changed` on every node: `make backup CHECK=1`
     then claims every node needs restic. The probe only reads, so it runs anyway.
     """
-    tasks = yaml.safe_load((ROLE / "tasks/main.yml").read_text())
+    tasks = yaml.safe_load((ROLE / "tasks/restic.yml").read_text())
     probe = next(t for t in tasks if t.get("register") == "node_backup_restic_installed")
     assert probe.get("check_mode") is False
