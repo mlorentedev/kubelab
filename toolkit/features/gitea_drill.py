@@ -244,6 +244,8 @@ def run_drill(
         snapshots = json.loads(out or "[]") if rc == 0 else []
     except ValueError:
         snapshots, err = [], "the snapshot list could not be parsed"
+    if not isinstance(snapshots, list):
+        snapshots, err = [], "the snapshot list is not a list"
     if not snapshots:
         logger.error(f"drill: CANNOT CHECK — no snapshot readable in {repo}: {err.strip()[:160]}")
         return False

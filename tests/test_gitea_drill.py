@@ -279,16 +279,11 @@ def test_a_complete_restore_whose_container_is_left_behind_fails(drill, capsys) 
 
 def test_a_complete_restore_that_leaves_its_data_on_disk_fails(drill, capsys, monkeypatch) -> None:
     """The directory is a full copy of the forge; one that survives the teardown is not a pass."""
+    # The wipe empties the directory as usual; only `rmtree` fails, so only the read-back can catch it.
     monkeypatch.setattr("toolkit.features.gitea_drill.shutil.rmtree", lambda *a, **k: None)
     fake = _Fake()
-    original = fake.__call__
-
-    def keep_files(argv, *, env=None):
-        if argv[:3] == ["docker", "run", "--rm"]:
-            return 1, "", "wipe refused"
-        return original(argv, env=env)
-
-    assert drill(keep_files) is False
+    assert drill(fake) is False
+    assert fake.workdir is not None and fake.workdir.exists()
     out = " ".join(capsys.readouterr().out.split())
     assert "restores Gitea completely" in out
     assert "could not remove" in out and "delete it now" in out
@@ -296,8 +291,8 @@ def test_a_complete_restore_that_leaves_its_data_on_disk_fails(drill, capsys, mo
 
 @pytest.mark.parametrize(
     "snapshots",
-    [(1, ""), (0, "[]"), (0, "not json")],
-    ids=["restic-fails", "empty", "malformed"],
+    [(1, ""), (0, "[]"), (0, "not json"), (0, '{"error": "x"}'), (0, '"x"')],
+    ids=["restic-fails", "empty", "malformed", "object", "string"],
 )
 def test_no_readable_snapshot_is_cannot_check(drill, capsys, snapshots) -> None:
     fake = _Fake(snapshots=snapshots)
