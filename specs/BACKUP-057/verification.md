@@ -82,6 +82,10 @@ done
 
 What this changes for Q6: restic reports the two refusals differently. A refused **snapshot** DELETE (step 3) exits 3. A refused **pack** DELETE (step 3b) exits 0. The pack case is the one the proposal expects on every on-demand node: a node powered off mid-run leaves unreferenced packs, and each `prune` within R of that will hit them. A prune signal keyed on restic's exit code would stay silent for this case. Nothing would fail, but every nightly prune would take about 15 minutes until the packs age past R. Under today's `TimeoutStartSec=600`, systemd would kill the ship instead. The only output that distinguishes the case is the text: `unable to remove ... from the repository` and `The object is locked by the bucket policy`. PR 4 has to read that text, not only the exit code. How it does so is a design decision for the operator, recorded in `tasks.md` with the Q6 task.
 
+**Step 4 passes.** At 04:38Z, a direct `aws s3api delete-object` of `data/12/121edff0...1161` (from the first two snapshots, written at 03:18Z) was made with the scratch Object Read & Write token, the credential class each node will hold. It returned `An error occurred (ObjectLockedByBucketPolicy) when calling the DeleteObject operation: The object is locked by the bucket policy.` with rc 254. `head-object` afterwards still returned the object (12001156 bytes). A node's own credential cannot delete its young backups, which is the half of AC3 the scratch bucket can show. The prod-bucket repeat stays with the prod task.
+
+**Step 5 is not before 2026-10-03T05:00Z.** The last write to a locked prefix was step 3b's packs, at about 04:18:45Z. Every later step either wrote nothing under the rules or was refused. R is one day, so 05:00Z on 2026-10-03 leaves a margin over the last write.
+
 ## Test status
 
 - Test suite: `<command> -> <output / coverage %>`
