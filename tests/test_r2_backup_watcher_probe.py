@@ -475,6 +475,14 @@ def test_the_newest_of_several_snapshots_is_the_one_reported(fleet) -> None:
     assert vps["snapshot_age_seconds"] == 3600
 
 
+def test_a_snapshot_list_with_spaces_after_its_colons_still_reads(fleet) -> None:
+    """restic prints compact JSON today; a pretty-printed answer is the same answer."""
+    fake, _, env = fleet
+    (fake / "kubelab-vps.snaps").write_text('[{"time": "2026-09-26T00:00:00Z", "id": "x", "short_id": "s"}]\n')
+    _, nodes, _ = _run(env)
+    assert _node(nodes, "vps")["snapshot_age_seconds"] == 6 * 3600
+
+
 @pytest.mark.parametrize("breakage", ["restic fails", "zero snapshots"])
 def test_no_snapshot_to_read_is_null_never_a_fresh_looking_age(fleet, breakage) -> None:
     """A `null` age is dropped by the freshness rule's `unwrap`, and the node is

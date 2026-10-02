@@ -132,7 +132,7 @@ epoch_of() {
 # skipped one could be the newest.
 newest_epoch_of() {
     newest=""
-    stamps="$(printf '%s' "$1" | grep -o '"time":"[^"]*"' | cut -d'"' -f4)"
+    stamps="$(printf '%s' "$1" | grep -o '"time": *"[^"]*"' | cut -d'"' -f4)"
     [ -n "$stamps" ] || return 1
     while IFS= read -r stamp; do
         epoch="$(epoch_of "$stamp")" || return 1
