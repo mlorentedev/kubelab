@@ -33,11 +33,8 @@ import hashlib
 import json
 import os
 import re
-import secrets
-import shutil
 import sqlite3
 import subprocess
-import tempfile
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -47,7 +44,7 @@ from typing import Any, Callable, Optional
 import yaml
 
 from toolkit.core.logging import logger
-from toolkit.features.postgres_drill import remove_scratch_container
+from toolkit.features.restore_drill import latest_snapshot, report, restore_source, scratch, wait_until
 
 Run = Callable[..., "tuple[int, str, str]"]
 
@@ -271,18 +268,12 @@ def run_drill(
 
     Opens no connection to the VPS: `live` comes from `read_live`, possibly on another host.
     """
-    rc, out, err = run(["restic", "-r", repo, "snapshots", "--json", "--latest", "1"], env=restic_env)
-    snapshots = json.loads(out or "[]") if rc == 0 else []
-    if not snapshots:
-        logger.error(f"drill: CANNOT CHECK — no snapshot readable in {repo}: {err.strip()[:160]}")
+    snapshot = latest_snapshot(run, repo, restic_env)
+    if snapshot is None:
         return False
-    snapshot = snapshots[-1]
-    logger.info(f"drill: snapshot {snapshot['short_id']} taken {snapshot['time']}")
 
-    workdir = Path(tempfile.mkdtemp(prefix="hsdrill-"))
-    name = f"hsdrill-{secrets.token_hex(4)}"
     ok = False
-    try:
+    with scratch(run, "hsdrill", holds="Headscale's private keys") as box:
         ok = _restore_and_check(
             run=run,
             repo=repo,
@@ -290,8 +281,8 @@ def run_drill(
             snapshot=snapshot["short_id"],
             taken=snapshot_time(snapshot["time"]),
             source=f"{staging_dir}/{SERVICE}",
-            workdir=workdir,
-            name=name,
+            workdir=box.workdir,
+            name=box.name,
             image=image,
             cidr=cidr,
             live_nodes=live.nodes,
@@ -300,17 +291,8 @@ def run_drill(
             sleep=sleep,
             clock=clock,
         )
-    finally:
-        # Unconditional: `docker run -d` can create the container and still fail.
-        try:
-            removed = remove_scratch_container(run, name)
-        finally:
-            shutil.rmtree(workdir, ignore_errors=True)
-            wiped = not workdir.exists()
-            if not wiped:
-                logger.error(f"drill: could not remove {workdir}; it holds Headscale's private keys, delete it now")
     # A restore that passed but left the keys behind is not a pass.
-    return ok and removed and wiped
+    return ok and box.clean
 
 
 def _restore_and_check(
@@ -332,16 +314,34 @@ def _restore_and_check(
     clock: Callable[[], float],
 ) -> bool:
     started = clock()
-    rc, _, err = run(
-        ["restic", "-r", repo, "restore", snapshot, "--include", source, "--target", str(workdir)],
-        env=restic_env,
-    )
-    data = workdir / source.lstrip("/")
-    if rc != 0 or not data.is_dir():
-        logger.error(f"drill: restic could not restore {source}: {err.strip()[:160]}")
+    data = restore_source(run, repo=repo, restic_env=restic_env, snapshot=snapshot, source=source, workdir=workdir)
+    if data is None or not _capture_matches(data, live_hashes):
         return False
-    logger.success(f"drill: restored {source} in {clock() - started:.0f}s")
+    logger.success(f"drill: restored {source} and checked it in {clock() - started:.0f}s")
 
+    if not _serve(run, name, data, workdir, image, cidr, sleep, clock):
+        return False
+    ready = clock()
+    restored = _restored_lists(run, name)
+    if restored is None:
+        return False
+
+    ok, lines = compare(
+        live_nodes=live_nodes,
+        restored_nodes=restored[0],
+        live_users=live_users,
+        restored_users=restored[1],
+        taken=taken,
+    )
+    report(lines)
+    logger.info(f"drill: RTO {ready - started:.0f}s from download to a server that answers")
+    if ok:
+        logger.success(f"drill: snapshot {snapshot} restores Headscale completely")
+    return ok
+
+
+def _capture_matches(data: Path, live_hashes: dict[str, str]) -> bool:
+    """The capture holds an intact database and the same private keys live runs with."""
     missing = [f for f in (DATABASE, *KEYS) if not (data / f).is_file()]
     if missing:
         logger.error(f"FAIL the capture lacks {', '.join(missing)}")
@@ -356,9 +356,20 @@ def _restore_and_check(
         same = hashlib.sha256((data / file).read_bytes()).hexdigest() == live_hashes[file]
         keys_ok = keys_ok and same
         (logger.success if same else logger.error)(f"drill: {label}: {'match' if same else 'mismatch'}")
-    if not keys_ok:
-        return False
+    return keys_ok
 
+
+def _serve(
+    run: Run,
+    name: str,
+    data: Path,
+    workdir: Path,
+    image: str,
+    cidr: str,
+    sleep: Callable[[float], None],
+    clock: Callable[[], float],
+) -> bool:
+    """Start the restored server with no network and wait until its CLI answers."""
     config = workdir / "config"
     config.mkdir()
     (config / "config.yaml").write_text(_drill_config(cidr))
@@ -385,42 +396,26 @@ def _restore_and_check(
     if rc != 0:
         logger.error(f"drill: the restored server did not start: {err.strip()[:160]}")
         return False
+    nodes_list = ["docker", "exec", name, "headscale", "nodes", "list", "-o", "json"]
+    if not wait_until(lambda: run(nodes_list)[0] == 0, timeout=READY_TIMEOUT, sleep=sleep, clock=clock):
+        logger.error(f"drill: the restored server did not answer within {READY_TIMEOUT}s")
+        return False
+    return True
 
-    deadline = clock() + READY_TIMEOUT
-    while True:
-        rc, out, _ = run(["docker", "exec", name, "headscale", "nodes", "list", "-o", "json"])
-        if rc == 0:
-            break
-        if clock() > deadline:
-            logger.error(f"drill: the restored server did not answer within {READY_TIMEOUT}s")
-            return False
-        sleep(1)
-    ready = clock()
-    nodes_out = out
-    rc, users_out, err = run(["docker", "exec", name, "headscale", "users", "list", "-o", "json"])
+
+def _restored_lists(run: Run, name: str) -> Optional[tuple[Entries, Entries]]:
+    """The restored server's nodes and users, or None after naming what could not be read."""
+    rc, nodes_out, err = run(["docker", "exec", name, "headscale", "nodes", "list", "-o", "json"])
+    if rc == 0:
+        rc, users_out, err = run(["docker", "exec", name, "headscale", "users", "list", "-o", "json"])
     try:
         if rc != 0:
             raise ValueError(err.strip()[:160])
-        restored_nodes = parse_entries(nodes_out, "machine_key")
-        restored_users = parse_entries(users_out, None)
+        return parse_entries(nodes_out, "machine_key"), parse_entries(users_out, None)
     except (ValueError, KeyError) as exc:
         # The same guard as the live reads: an unreadable answer names itself.
         logger.error(f"drill: CANNOT CHECK — the restored server's lists could not be read: {str(exc)[:160]}")
-        return False
-
-    ok, lines = compare(
-        live_nodes=live_nodes,
-        restored_nodes=restored_nodes,
-        live_users=live_users,
-        restored_users=restored_users,
-        taken=taken,
-    )
-    for line in lines:
-        (logger.error if line.startswith("FAIL") else logger.info)(line)
-    logger.info(f"drill: RTO {ready - started:.0f}s from download to a server that answers")
-    if ok:
-        logger.success(f"drill: snapshot {snapshot} restores Headscale completely")
-    return ok
+        return None
 
 
 def resolve_inputs(env: str = "prod", project_root: Optional[Path] = None) -> Optional[dict[str, Any]]:

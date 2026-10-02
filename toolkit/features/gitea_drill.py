@@ -41,13 +41,12 @@ import os
 import secrets
 import shutil
 import subprocess
-import tempfile
 import time
 from pathlib import Path
 from typing import Any, Callable, Optional
 
 from toolkit.core.logging import logger
-from toolkit.features.postgres_drill import remove_scratch_container
+from toolkit.features.restore_drill import latest_snapshot, report, restore_source, scratch, wait_until
 
 Run = Callable[..., "tuple[int, str, str]"]
 
@@ -239,18 +238,9 @@ def run_drill(
     `live` is a Gitea client holding the admin token: `list_repos`, `list_branches`
     and `commit_exists` are the only methods called.
     """
-    rc, out, err = run(["restic", "-r", repo, "snapshots", "--json", "--latest", "1"], env=restic_env)
-    try:
-        snapshots = json.loads(out or "[]") if rc == 0 else []
-    except ValueError:
-        snapshots, err = [], "the snapshot list could not be parsed"
-    if not isinstance(snapshots, list):
-        snapshots, err = [], "the snapshot list is not a list"
-    if not snapshots:
-        logger.error(f"drill: CANNOT CHECK — no snapshot readable in {repo}: {err.strip()[:160]}")
+    snapshot = latest_snapshot(run, repo, restic_env)
+    if snapshot is None:
         return False
-    snapshot = snapshots[-1]
-    logger.info(f"drill: snapshot {snapshot['short_id']} taken {snapshot['time']}")
 
     try:
         live_repos = sorted(live.list_repos())
@@ -263,18 +253,18 @@ def run_drill(
         logger.error("drill: CANNOT CHECK — live Gitea listed no repositories")
         return False
 
-    workdir = Path(tempfile.mkdtemp(prefix="giteadrill-"))
-    name = f"giteadrill-{secrets.token_hex(4)}"
     ok = False
-    try:
+    with scratch(
+        run, "giteadrill", holds="a full copy of the forge", wipe=lambda workdir: _wipe(run, image, workdir)
+    ) as box:
         ok = _restore_and_check(
             run=run,
             repo=repo,
             restic_env=restic_env,
             snapshot=snapshot["short_id"],
             source=f"{staging_dir}/{SERVICE}",
-            workdir=workdir,
-            name=name,
+            workdir=box.workdir,
+            name=box.name,
             image=image,
             admin_user=admin_user,
             live=live,
@@ -282,16 +272,8 @@ def run_drill(
             sleep=sleep,
             clock=clock,
         )
-    finally:
-        # Unconditional: `docker run -d` can create the container and still fail.
-        try:
-            removed = remove_scratch_container(run, name)
-        finally:
-            wiped = _wipe(run, image, workdir)
-            if not wiped:
-                logger.error(f"drill: could not remove {workdir}; it holds a full copy of the forge, delete it now")
     # A restore that passed but left the forge's copy behind is not a pass.
-    return ok and removed and wiped
+    return ok and box.clean
 
 
 def _restore_and_check(
@@ -311,18 +293,41 @@ def _restore_and_check(
     clock: Callable[[], float],
 ) -> bool:
     started = clock()
-    rc, _, err = run(
-        ["restic", "-r", repo, "restore", snapshot, "--include", source, "--target", str(workdir)],
-        env=restic_env,
-    )
-    data = workdir / source.lstrip("/")
-    if rc != 0 or not data.is_dir():
-        logger.error(f"drill: restic could not restore {source}: {err.strip()[:160]}")
+    data = restore_source(run, repo=repo, restic_env=restic_env, snapshot=snapshot, source=source, workdir=workdir)
+    if data is None:
         return False
-    restored_at = clock()
     on_disk = repos_on_disk(data)
-    logger.success(f"drill: restored {len(on_disk)} repositories in {restored_at - started:.0f}s")
+    logger.success(f"drill: restored {len(on_disk)} repositories in {clock() - started:.0f}s")
+    if not _fsck_all(run, data, on_disk) or not _serve(run, name, data, image, sleep, clock):
+        return False
+    logger.success(f"drill: the restored server answers, {clock() - started:.0f}s after the restore began")
 
+    scratch = _Scratch(run, name)
+    if not _mint_token(run, scratch, admin_user):
+        return False
+    restored = scratch.heads()
+    if restored is None:
+        logger.error("drill: CANNOT CHECK — the restored server's API could not be read")
+        return False
+
+    def commit_known(full: str, sha: str) -> Optional[bool]:
+        try:
+            return bool(live.commit_exists(*full.split("/", 1), sha))
+        except Exception:  # noqa: BLE001 - reported per branch as CANNOT CHECK
+            return None
+
+    ok, lines = compare(live_counts, restored, on_disk, commit_known)
+    report(lines)
+    if ok:
+        logger.success(
+            f"drill: snapshot {snapshot} restores Gitea completely "
+            f"({len(live_counts)} repositories, {clock() - started:.0f}s end to end)"
+        )
+    return ok
+
+
+def _fsck_all(run: Run, data: Path, on_disk: set[str]) -> bool:
+    """`git fsck --full` on every restored repository; False after naming each that fails."""
     broken = [
         full
         for full in sorted(on_disk)
@@ -336,22 +341,29 @@ def _restore_and_check(
     if broken:
         return False
     logger.success(f"drill: git fsck --full passed on all {len(on_disk)} repositories")
+    return True
 
+
+def _serve(
+    run: Run, name: str, data: Path, image: str, sleep: Callable[[float], None], clock: Callable[[], float]
+) -> bool:
+    """Start the restored server with no network and wait until it answers its health check."""
     # No network: the restored app.ini points at live services, mailers and
     # webhooks, and none of them may hear from a copy.
     rc, _, err = run(["docker", "run", "-d", "--name", name, "--network", "none", "-v", f"{data}:/data", image])
     if rc != 0:
         logger.error(f"drill: the restored server did not start: {err.strip()[:160]}")
         return False
-    deadline = clock() + READY_TIMEOUT
-    while run(["docker", "exec", name, "wget", "-qO", "/dev/null", "http://localhost:3000/api/healthz"])[0] != 0:
-        if clock() > deadline:
-            logger.error(f"drill: the restored server did not answer within {READY_TIMEOUT}s")
-            return False
-        sleep(2)
-    logger.success(f"drill: the restored server answers, {clock() - started:.0f}s after the restore began")
+    health = ["docker", "exec", name, "wget", "-qO", "/dev/null", "http://localhost:3000/api/healthz"]
+    if not wait_until(lambda: run(health)[0] == 0, timeout=READY_TIMEOUT, sleep=sleep, clock=clock, interval=2):
+        logger.error(f"drill: the restored server did not answer within {READY_TIMEOUT}s")
+        return False
+    return True
 
-    scratch = _Scratch(run, name)
+
+def _mint_token(run: Run, scratch: _Scratch, admin_user: str) -> bool:
+    """Give `scratch` a read-only token for `admin_user`, minted inside the restored server."""
+    name = scratch.name
     rc, token, err = run(
         [
             "docker",
@@ -377,26 +389,7 @@ def _restore_and_check(
         # The token is never printed; Gitea's error names the cause without it.
         logger.error(f"drill: could not mint a token in the restored server: {err.strip()[:160]}")
         return False
-    restored = scratch.heads()
-    if restored is None:
-        logger.error("drill: CANNOT CHECK — the restored server's API could not be read")
-        return False
-
-    def commit_known(full: str, sha: str) -> Optional[bool]:
-        try:
-            return bool(live.commit_exists(*full.split("/", 1), sha))
-        except Exception:  # noqa: BLE001 - reported per branch as CANNOT CHECK
-            return None
-
-    ok, lines = compare(live_counts, restored, on_disk, commit_known)
-    for line in lines:
-        (logger.error if line.startswith("FAIL") else logger.info)(line)
-    if ok:
-        logger.success(
-            f"drill: snapshot {snapshot} restores Gitea completely "
-            f"({len(live_counts)} repositories, {clock() - started:.0f}s end to end)"
-        )
-    return ok
+    return True
 
 
 def resolve_inputs(env: str = "prod", project_root: Optional[Path] = None) -> Optional[dict[str, Any]]:

@@ -20,7 +20,7 @@ from tests.test_gitea_drill import _Fake as _GiteaFake
 from tests.test_gitea_drill import _Live as _GiteaLive
 from tests.test_headscale_drill import IMAGE, STAGING, _Fake
 from toolkit.cli.backup import app
-from toolkit.features import drill_remote, gitea_drill, headscale_drill
+from toolkit.features import drill_remote, gitea_drill, headscale_drill, restore_drill
 from toolkit.features.configuration import ConfigurationManager
 from toolkit.features.headscale_drill import read_live
 
@@ -269,7 +269,7 @@ def test_a_real_restore_on_the_host_writes_no_injected_value_to_disk(tmp_path, m
     monkeypatch.setattr(headscale_drill.time, "sleep", lambda s: None)
     monkeypatch.setattr(headscale_drill.time, "monotonic", lambda: float(next(ticks)))
     # Read every file the drill wrote at the moment it tears its tree down.
-    real_rmtree = headscale_drill.shutil.rmtree
+    real_rmtree = restore_drill.shutil.rmtree
     written: list[Path] = []
     leaked: list[str] = []
 
@@ -280,7 +280,7 @@ def test_a_real_restore_on_the_host_writes_no_injected_value_to_disk(tmp_path, m
                 leaked.extend(str(f) for s in _all_secrets() if s.encode() in f.read_bytes())
         return real_rmtree(path, *a, **kw)
 
-    monkeypatch.setattr(headscale_drill.shutil, "rmtree", inspect_then_remove)
+    monkeypatch.setattr(restore_drill.shutil, "rmtree", inspect_then_remove)
     payload = json.dumps({"drill": "headscale", "inputs": _headscale_inputs()})
     result = CliRunner().invoke(app, ["drill-headscale", "--inputs-stdin"], input=payload)
     assert result.exit_code == 0, result.output

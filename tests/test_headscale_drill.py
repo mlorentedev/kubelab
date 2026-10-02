@@ -386,7 +386,7 @@ def test_a_complete_restore_that_leaves_its_container_behind_fails(drill, capsys
 
 
 def test_a_complete_restore_that_leaves_the_keys_on_disk_fails(drill, capsys, monkeypatch) -> None:
-    monkeypatch.setattr("toolkit.features.headscale_drill.shutil.rmtree", lambda *a, **k: None)
+    monkeypatch.setattr("toolkit.features.restore_drill.shutil.rmtree", lambda *a, **k: None)
     fake = _Fake()
     assert drill(fake) is False
     assert "private keys, delete it now" in " ".join(capsys.readouterr().out.split())
