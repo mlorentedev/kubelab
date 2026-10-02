@@ -11,7 +11,7 @@ created: "2026-10-01"
 
 - [x] Branch `feat/backup-040-gitea-restore-drill`, worktree `~/Projects/kubelab-backup-040-wt`, stacked on BACKUP-046 PR 2 (#1988) for the shared drill helpers. ✓ 2026-10-01
 - [x] `proposal.md` complete, acceptance criteria testable. ✓ 2026-10-01
-- [ ] Q1 answered by the operator: accept the workstation run, or require an ace2 run before archive.
+- [x] Q1 answered by the operator: require an ace2 run before archive. Done by BACKUP-071 (#2024). ✓ 2026-10-01
 
 ## Implementation
 
@@ -28,4 +28,4 @@ created: "2026-10-01"
 
 - [x] `features.json` verifications non-vacuous; `verification.md` filled with the prod transcript and the RTO. ✓ 2026-10-01
 - [x] Lesson-499 written and indexed. ✓ 2026-10-01
-- [ ] Independent adversarial review, then archive; the gate in #1090 ("a repository pushed to Gitea has survived one exercised restore") is met by this drill.
+- [x] Independent adversarial review, then archive ✓ 2026-10-01 (PASS-WITH-GAPS, round 3); the gate in #1090 ("a repository pushed to Gitea has survived one exercised restore") is met by this drill.

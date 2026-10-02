@@ -24,6 +24,14 @@ wiped from inside a container first; a leftover fails the drill.
 
 Live is read with the admin token, whose grant is `read:repository` and never a
 write scope.
+
+Two limits follow from checking against live rather than against the snapshot's
+own database. A repository renamed or moved since the snapshot fails the drill
+under its new name: a false alarm, never a false pass, and the next capture
+clears it. A repository the restored database lists but live no longer does is
+reported as gone since the snapshot and is not fsck'd if its directory is
+missing: the drill proves the restore brings back what live has, not what live
+has since deleted.
 """
 
 from __future__ import annotations
@@ -123,7 +131,8 @@ def _paginate(fetch: Callable[[str], Any], path: str, key: Optional[str] = None)
     """Walk a Gitea list endpoint until a short page. None if any page could not be read.
 
     A JSON `null` page is an empty collection: Gitea answers `/branches` of a
-    repository with no commits that way. Only `_UNREAD` means the read failed.
+    repository with no commits that way. `_UNREAD`, or a body that is not the
+    list the endpoint returns, means the read failed.
     """
     items: list[Any] = []
     page = 1
@@ -132,7 +141,14 @@ def _paginate(fetch: Callable[[str], Any], path: str, key: Optional[str] = None)
         body = fetch(f"{path}{sep}limit=50&page={page}")
         if body is _UNREAD:
             return None
-        batch = (body[key] if key else body) if body is not None else []
+        if body is None:
+            batch: Any = []
+        elif key:
+            batch = body.get(key) if isinstance(body, dict) else None
+        else:
+            batch = body
+        if not isinstance(batch, list):
+            return None
         items.extend(batch)
         if len(batch) < 50:
             return items
@@ -224,9 +240,14 @@ def run_drill(
     and `commit_exists` are the only methods called.
     """
     rc, out, err = run(["restic", "-r", repo, "snapshots", "--json", "--latest", "1"], env=restic_env)
-    snapshots = json.loads(out or "[]") if rc == 0 else []
+    try:
+        snapshots = json.loads(out or "[]") if rc == 0 else []
+    except ValueError:
+        snapshots, err = [], "the snapshot list could not be parsed"
+    if not isinstance(snapshots, list):
+        snapshots, err = [], "the snapshot list is not a list"
     if not snapshots:
-        logger.error(f"drill: no snapshot readable in {repo}: {err.strip()[:160]}")
+        logger.error(f"drill: CANNOT CHECK — no snapshot readable in {repo}: {err.strip()[:160]}")
         return False
     snapshot = snapshots[-1]
     logger.info(f"drill: snapshot {snapshot['short_id']} taken {snapshot['time']}")

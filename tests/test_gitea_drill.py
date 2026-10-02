@@ -20,7 +20,7 @@ from typing import Optional
 
 import pytest
 
-from toolkit.features.gitea_drill import compare, repos_on_disk, run_drill
+from toolkit.features.gitea_drill import _paginate, compare, repos_on_disk, run_drill
 
 TOKEN = "SCRATCH-TOKEN-THAT-MUST-NOT-PRINT"
 STAGING = "/opt/node-backup/staging"
@@ -93,9 +93,18 @@ class _Fake:
     """Plays restic, git and docker. Every call is recorded."""
 
     def __init__(
-        self, *, fsck_bad: str = "", run_rc: int = 0, ready: bool = True, heads: Optional[dict] = None
+        self,
+        *,
+        fsck_bad: str = "",
+        run_rc: int = 0,
+        ready: bool = True,
+        heads: Optional[dict] = None,
+        rm_fails: bool = False,
+        snapshots: tuple[int, str] = (0, '[{"short_id": "beaa6d4b", "time": "2026-10-01T08:49:35Z"}]'),
     ) -> None:
         self.fsck_bad = fsck_bad
+        self.rm_fails = rm_fails
+        self.snapshots = snapshots
         self.run_rc = run_rc
         self.ready = ready
         self.heads = heads or {"manu/ImageSensorTool": {"main": "a1"}, "personal/resume": {"main": "b1"}}
@@ -106,7 +115,7 @@ class _Fake:
     def __call__(self, argv: list[str], *, env=None):
         self.calls.append(argv)
         if argv[:1] == ["restic"] and "snapshots" in argv:
-            return 0, '[{"short_id": "beaa6d4b", "time": "2026-10-01T08:49:35Z"}]', ""
+            return self.snapshots[0], self.snapshots[1], "Fatal: unable to open repository" if self.snapshots[0] else ""
         if argv[:1] == ["restic"] and "restore" in argv:
             target = Path(argv[argv.index("--target") + 1])
             self.workdir = target
@@ -122,7 +131,7 @@ class _Fake:
             # A bind mount, not a volume: `-f` lists no volume names.
             return (0, "", "") if self.exists else (1, "", f"Error: No such container: {argv[-1]}")
         if argv[:2] == ["docker", "rm"]:
-            self.exists = False
+            self.exists = self.exists and self.rm_fails
             return 0, argv[-1], ""
         if argv[:2] == ["docker", "run"] and "-d" in argv:
             self.exists = True  # created even when it then fails to start
@@ -256,3 +265,71 @@ def test_a_scratch_read_that_fails_is_cannot_check(drill, capsys) -> None:
 
     assert drill(failing) is False
     assert "CANNOT CHECK" in capsys.readouterr().out
+
+
+def test_a_complete_restore_whose_container_is_left_behind_fails(drill, capsys) -> None:
+    """`docker rm` failing must not pass silently: the container holds the restored forge."""
+    fake = _Fake(rm_fails=True)
+    assert drill(fake) is False
+    out = " ".join(capsys.readouterr().out.split())  # the logger wraps long lines
+    assert "restores Gitea completely" in out  # the restore itself was fine
+    assert "still on this machine" in out and "container giteadrill-" in out
+    assert not fake.workdir.exists()  # the directory goes even when the container does not
+
+
+def test_a_complete_restore_that_leaves_its_data_on_disk_fails(drill, capsys, monkeypatch) -> None:
+    """The directory is a full copy of the forge; one that survives the teardown is not a pass."""
+    # The wipe empties the directory as usual; only `rmtree` fails, so only the read-back can catch it.
+    monkeypatch.setattr("toolkit.features.gitea_drill.shutil.rmtree", lambda *a, **k: None)
+    fake = _Fake()
+    assert drill(fake) is False
+    assert fake.workdir is not None and fake.workdir.exists()
+    out = " ".join(capsys.readouterr().out.split())
+    assert "restores Gitea completely" in out
+    assert "could not remove" in out and "delete it now" in out
+
+
+@pytest.mark.parametrize(
+    "snapshots",
+    [(1, ""), (0, "[]"), (0, "not json"), (0, '{"error": "x"}'), (0, '"x"')],
+    ids=["restic-fails", "empty", "malformed", "object", "string"],
+)
+def test_no_readable_snapshot_is_cannot_check(drill, capsys, snapshots) -> None:
+    fake = _Fake(snapshots=snapshots)
+    assert drill(fake) is False
+    out = " ".join(capsys.readouterr().out.split())
+    assert "CANNOT CHECK" in out and "no snapshot readable in" in out
+    assert not any(c[:1] == ["restic"] and "restore" in c for c in fake.calls)
+
+
+@pytest.mark.parametrize(
+    "body",
+    [{"data": None}, {"items": []}, "a string", 7],
+    ids=["data-null", "dict-without-key", "string", "number"],
+)
+def test_a_list_page_of_the_wrong_shape_is_unread_not_empty(body) -> None:
+    assert _paginate(lambda path: body, "/repos/search", key="data") is None
+
+
+@pytest.mark.parametrize("body", [{"data": []}, "a string"], ids=["dict", "string"])
+def test_a_keyless_list_page_that_is_not_a_list_is_unread(body) -> None:
+    assert _paginate(lambda path: body, "/repos/x/branches") is None
+
+
+def test_a_null_page_is_an_empty_collection() -> None:
+    assert _paginate(lambda path: None, "/repos/x/branches") == []
+
+
+def test_a_restore_restic_cannot_finish_fails_names_it_and_never_starts_a_server(drill, capsys) -> None:
+    fake = _Fake()
+    original = fake.__call__
+
+    def failing(argv, *, env=None):
+        if argv[:1] == ["restic"] and "restore" in argv:
+            return 1, "", "Fatal: unable to restore"
+        return original(argv, env=env)
+
+    assert drill(failing) is False
+    out = " ".join(capsys.readouterr().out.split())
+    assert "restic could not restore" in out and "unable to restore" in out
+    assert not any(c[:2] == ["docker", "run"] and "-d" in c for c in fake.calls)

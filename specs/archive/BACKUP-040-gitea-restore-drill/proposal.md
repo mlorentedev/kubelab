@@ -1,7 +1,7 @@
 ---
 id: "BACKUP-040-gitea-restore-drill"
 type: spec
-status: implementing # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-10-01"
 issue: "mlorentedev/kubelab#487"
 tags: [spec, proposal, backup, gitea]
@@ -41,9 +41,9 @@ The drill also records how long the restore takes (download, fsck, time until th
 
 ## Risks / open questions
 
-- **Q1 [AGENT-DRAFT — review before archive]:** the epic names ace2 as the target for this restore, and its item 4 names an ephemeral namespace on staging for the automated drill. This spec runs the drill on the operator's workstation, because ace2 is on-demand and the drill only needs docker, restic and the R2 credentials, which the workstation already has. The command is host-agnostic, so it runs unchanged on ace2. Accept running on the workstation, or require an ace2 run before archive?
+- **Q1, answered by the operator on 2026-10-01: require an ace2 run before archive.** The epic names ace2 as the target for this restore. The drill was built and first run on the workstation. BACKUP-071 (#2011, merged in #2024) then made it run on ace2, with every secret resolved on the workstation and handed over for that one run, and no age key on ace2. The prod run on ace2 is recorded in `verification.md`.
 - The restored data is a full copy of the forge, private repositories included. It stays in a `0700` temp directory and is deleted in a `finally`. A crash that kills the process (SIGKILL, power loss) leaves it behind. The same applies to the Postgres drill.
-- Gitea may try to write to `/data` on start (queues, indexers, sessions). That is the scratch copy, so writes are harmless, but a start that blocks on a missing directory would read as a failed restore. Observe it on the first live run.
+- Gitea may try to write to `/data` on start (queues, indexers, sessions). That is the scratch copy, so writes are harmless, but a start that blocks on a missing directory would read as a failed restore. Observed on the prod runs (workstation and ace2, 2026-10-01): the server starts and answers.
 
 ## Acceptance criteria
 
