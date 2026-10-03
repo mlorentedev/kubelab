@@ -1,11 +1,12 @@
 # Backups, volumes and persistence
 
-21 lessons, newest first. Back to [all categories](../_index.md).
+22 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
 | 508 | [A volume name pinned in a template outlives the data it named](lesson-508-a-volume-name-pinned-in-a-template-outlives-the-data-it-named.md) | 2026-10-02 |
 | 505 | [Four copies of one phase drift in their guards](lesson-505-four-copies-of-one-phase-drift-in-their-guards.md) | 2026-10-02 |
+| 515 | [A SQLite journal mode can be read from the file header when the image ships no `sqlite3`](lesson-515-a-sqlite-journal-mode-is-read-from-the-file-header-when-the-image-ships-no-sqlite3.md) | 2026-10-01 |
 | 503 | [A restore's highest surviving id cannot date a missing row; its `sqlite_sequence` can](lesson-503-the-highest-surviving-id-cannot-date-a-missing-row.md) | 2026-10-01 |
 | 500 | [n8n's CLI answers nothing, with exit 0, at `N8N_LOG_LEVEL=warn`, and in its pod it costs a second n8n](lesson-500-n8n-cli-answers-nothing-at-log-level-warn.md) | 2026-10-01 |
 | 499 | [Gitea answers an empty list with `null`: one empty repository made the restore drill unable to check anything](lesson-499-gitea-answers-an-empty-list-with-null.md) | 2026-10-01 |

@@ -1,9 +1,11 @@
 # The toolkit CLI, Make, Python and local tooling
 
-41 lessons, newest first. Back to [all categories](../_index.md).
+43 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 518 | [Poetry caches a release's file list forever, so a lock taken during the upload misses wheels for good](lesson-518-poetry-caches-a-release-file-list-taken-mid-upload-forever.md) | 2026-10-03 |
+| 514 | [Poetry asks the desktop keyring even when no private source exists, and a locked keyring hangs the install with no output](lesson-514-poetry-asks-the-desktop-keyring-even-with-no-private-source.md) | 2026-10-01 |
 | 504 | [A settings object built at import makes every command a secrets read](lesson-504-a-settings-object-built-at-import-makes-every-command-a-secrets-read.md) | 2026-10-01 |
 | 502 | [A patch applied after import cannot see what the import already did](lesson-502-a-patch-applied-after-import-cannot-see-what-the-import-did.md) | 2026-10-01 |
 | 469 | [A default argument binds at import, so monkeypatching the module constant misses it](lesson-469-a-default-argument-binds-at-import-so-monkeypatch-misses-it.md) | 2026-09-27 |

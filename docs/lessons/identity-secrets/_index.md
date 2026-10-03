@@ -1,6 +1,6 @@
 # Identity, auth and secret material
 
-70 lessons, newest first. Back to [all categories](../_index.md).
+71 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
@@ -14,6 +14,7 @@
 | 458 | [A second login door that answers first replaces the one you configured, and yours never runs](lesson-458-a-second-login-door-that-answers-first-replaces-the-one-you-configured.md) | 2026-09-24 |
 | 457 | [A default in a claim mapping hides the claim source it never reads, so the admin tier was never enforced](lesson-457-a-default-in-a-claim-mapping-hides-the-claim-source-it-never-reads.md) | 2026-09-24 |
 | 456 | [A session cookie on a parent domain shadows a same-named cookie in a child environment, so login succeeds and access is anonymous](lesson-456-a-parent-domain-cookie-shadows-a-same-named-cookie-in-a-child-environment.md) | 2026-09-24 |
+| 517 | [A per-env copy of a common secret wins the merge, and every check that compares a pair with itself passes](lesson-517-a-per-env-copy-of-a-common-secret-wins-the-merge-and-every-pair-check-passes.md) | 2026-09-23 |
 | 454 | [A SOPS file conflict is resolved by re-setting the key on upstream's file, never by merging the text](lesson-454-a-sops-conflict-is-resolved-by-re-setting-the-key-not-by-merging-text.md) | 2026-09-23 |
 | 425 | [A capability probe can stop at the first authorization layer and report the whole answer](lesson-425-a-capability-probe-can-stop-at-the-first-authorization-layer.md) | 2026-09-04 |
 | 421 | [A secret read from the wrong SOPS store resolves to `''`, so a presence gate on it is open forever](lesson-421-secret-written-to-one-sops-store-read-from-another.md) | 2026-09-02 |
