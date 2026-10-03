@@ -31,6 +31,101 @@ Projection for `--keep-within 31d`, as an upper bound that assumes no deduplicat
 
 The first run returned `null` for the Beelink: `stats --mode raw-data` walks every tree, and its Gitea tree outran the 60 s `RESTIC_TIMEOUT` ("signal terminated received", Loki). That is the tolerated failure working as designed; the fleet sum was `null` and the gate would have stopped. `stats` now has its own `STATS_TIMEOUT` (600 s, about 4× the measurement), and the deadline and grace period are derived from the probe's calls.
 
+## PR 2 gate: the token that manages the locks (scratch step 1)
+
+2026-10-02. `make tf-r2-apply SCRATCH=1` with the SOPS DNS token `cloudflare.api_token` was refused before any lock call: `POST /accounts/<id>/r2/buckets` returned **403**, code 10000 "Authentication error". A plan had shown nothing, as tasks.md predicted: planning a resource that does not exist yet makes no R2 call.
+
+The operator minted a separate user API token, `Account · Workers R2 Storage · Edit` on this account only, stored as `cloudflare.r2_admin_token` in `common.enc.yaml` and registered in `SECRET_CATALOG` (`envs=("prod",)`, `Expiry.PROVIDER`, checked by `cloudflare_token_expiry`; `toolkit secrets check-expiry` reads it as valid, no expiry set). `tf-r2-plan` / `tf-r2-apply` read that key, never the DNS token, so the token that can lift a lock reaches nothing that only needs DNS. Commit `e529a5c1`.
+
+The same apply with it returned rc 0: `cloudflare_r2_bucket.scratch` and `cloudflare_r2_bucket_lock.scratch` created (the four rules, `data/`, `snapshots/`, `keys/`, `config`, each `Age` 86400 s). **Step 1 passes**, which also shows the API accepts a one-day retention.
+
+The admin token sits in a file every SOPS recipient decrypts, so #1852 (SEC-022) gates this spec's archive (proposal item 1).
+
+## Scratch steps 2, 2b and 3
+
+2026-10-02, against `kubelab-backup-scratch` with the repository at the bucket root, so `data/`, `snapshots/`, `keys/` and `config` sit under the lock rules. A first `init` under a `measure/` prefix put the repository outside every rule; it was deleted and re-initialised at the root before any step was recorded. Credentials were a scratch Object Read & Write token, read from SOPS into the child process only.
+
+**Step 2 passes.** Two `backup`s of different data saved `715f817d` and `cb2bde94`, and `check` reported `no errors were found`. Each `backup` removed its own lock file: `locks/` held 0 objects afterwards, so `locks/` is outside the rule as intended. The exit codes of these three calls were not captured (the wrapper read `PIPESTATUS` in zsh). The saved snapshots and the later `check` (rc 0, below) are the evidence.
+
+**Step 2b passes.** A third `backup` changed a subset of the second's files (`eac4003f`, rc 0, 6 packs). `forget cb2bde94 --prune --dry-run` without `--max-repack-size 0` planned `to repack: 14 blobs / 11.446 MiB`. With the flag it planned `to repack: 0 blobs / 0 B`. Both rc 0. The flag is what stops a rewrite, which is the only path that makes a pack younger than its snapshots.
+
+**Step 3 passes on the fleet's restic, and the version matters.** `forget 715f817d` is the first snapshot, younger than R. R2 refused the snapshot file's DELETE:
+
+```
+Remove(<snapshot/715f817d4c>) returned error, retrying after ...: client.RemoveObject: The object is locked by the bucket policy.
+Remove(<snapshot/715f817d4c>) failed: client.RemoveObject: The object is locked by the bucket policy.
+unable to remove snapshot/715f817d4cee9517b3ed3bd08a3fcc696469a46ee4af33de4b5c8993dc34eed1 from the repository
+failed to remove one or more snapshots
+```
+
+This is R2's lock refusal, not a restic-side error, so no `restic unlock` was needed.
+
+- **restic 0.19.1** (`backup.r2.restic_version`, what every node runs; run in `restic/restic:0.19.1`), in the ship's form `forget <id> --prune --max-repack-size 0`: **rc 3** after 14:29 of retries, and the prune never ran. This is the exit code Q6's prune signal keys on.
+- **restic 0.18.1** (the workstation's), plain `forget <id>`: the same refusal and the same 14:43 of retries, but **rc 0**. The following `prune --max-repack-size 0` found nothing to delete (rc 0). Any measurement of this path has to run the pinned version. On 0.18.1 a refused forget reads as success.
+
+Afterwards `restic snapshots` still listed all three snapshots, `715f817d` included. `repair index` returned rc 0, and `check` returned `no errors were found`, rc 0.
+
+**Measured for PR 4: a refused DELETE costs about 14.5 minutes, not an instant error.** restic retries each refused object with backoff, about 13 retries over 14:29 on 0.19.1, before giving up. This was measured for one snapshot file. Whether k refused objects cost k times that, or run concurrently, is not measured. Size the ship's prune step for this. `node-backup-ship.service.j2:44` sets `TimeoutStartSec=600`, which is shorter than one refused DELETE. On the current unit, systemd would kill the ship mid-retry with `Result=timeout`, after a successful `backup`. The ship would fail as a whole, which is the outcome Q6 rules out, and the prune-failure line would never be written. PR 4 has to bound the prune itself, below the unit's timeout, and report the bound being hit as a prune failure (tasks.md, the Q6 task).
+
+**Step 3b: R2 refuses the pack DELETE, and restic exits 0.** A 0.19.1 `backup` of 300 MiB was killed after it had written three packs (6 to 9 under `data/`) and before any snapshot. The kill left a restic lock behind, so the first `prune` stopped on it with rc 11 (`repository is already locked`), a restic-side error. A plain `unlock` did not remove a 20-second-old lock from another host. After `unlock --remove-all`, `prune --max-repack-size 0` planned `to delete: 0 blobs / 48.773 MiB` (the three unreferenced packs) and then:
+
+```
+deleting unreferenced packs
+Remove(<data/4de1b7dfaa>) failed: client.RemoveObject: The object is locked by the bucket policy.
+unable to remove data/4de1b7dfaa7f2fb21e1509a17cec8be3059acbcc46e0cf8a422856a0f0179d36 from the repository
+(the same two lines for data/12fd9c4d6f... and data/6febda4f54...)
+[14:53] 0.00%  0 / 3 files deleted
+done
+```
+
+**rc 0**, after 58 retries over 14:53. The three packs ran their retries concurrently, so three refused objects cost about what one did. Afterwards there were still 9 packs and 3 snapshots, and `check` reported `no errors were found`, rc 0.
+
+What this changes for Q6: restic reports the two refusals differently. A refused **snapshot** DELETE (step 3) exits 3. A refused **pack** DELETE (step 3b) exits 0. The pack case is the one the proposal expects on every on-demand node: a node powered off mid-run leaves unreferenced packs, and each `prune` within R of that will hit them. A prune signal keyed on restic's exit code would stay silent for this case. Nothing would fail, but every nightly prune would take about 15 minutes until the packs age past R. Under today's `TimeoutStartSec=600`, systemd would kill the ship instead. The only output that distinguishes the case is the text: `unable to remove ... from the repository` and `The object is locked by the bucket policy`. PR 4 has to read that text, not only the exit code. How it does so is a design decision for the operator, recorded in `tasks.md` with the Q6 task.
+
+**Step 4 passes.** At 04:38Z, a direct `aws s3api delete-object` of `data/12/121edff0...1161` (from the first two snapshots, written at 03:18Z) was made with the scratch Object Read & Write token, the credential class each node will hold. It returned `An error occurred (ObjectLockedByBucketPolicy) when calling the DeleteObject operation: The object is locked by the bucket policy.` with rc 254. `head-object` afterwards still returned the object (12001156 bytes). A node's own credential cannot delete its young backups, which is the half of AC3 the scratch bucket can show. The prod-bucket repeat stays with the prod task.
+
+**Two inputs for the Q6 decision, measured on 0.19.1.**
+
+- **The nightly form does not prune when `forget` selects nothing.** `forget --keep-within 31d --prune --dry-run --max-repack-size 0`, with every snapshot younger than 31 days, kept all three snapshots and printed no prune phase at all (rc 0). The three orphan packs from step 3b were not planned. A ship only reaches the refused pack DELETEs on a night when `forget` removes a snapshot. In prod that means a night when a snapshot crosses 31 days, while an orphan pack younger than R exists.
+- **restic has no knob that shortens the retries.** `restic --help` offers `--retry-lock` (repository locks) and `--stuck-request-timeout` (stalled requests). `restic options` lists `s3.retries`. `forget 715f817d -o s3.retries=0` still took 14:48 (894 s, 22 retry lines printed) and exited 3. The backoff comes from restic's own retry layer (`Remove(...) returned error, retrying after`), not from the S3 client. Any bound on a refused prune has to come from outside restic: a `timeout` around the step, or the prune in a unit of its own.
+
+**Step 5 is not before 2026-10-03T05:00Z.** The last write to a locked prefix was step 3b's packs, at about 04:18:45Z. Every later step either wrote nothing under the rules or was refused. R is one day, so 05:00Z on 2026-10-03 leaves a margin over the last write.
+
+## Scratch step 5
+
+2026-10-03 at 22:07Z, about 42 hours after the last write. The wrapper and credentials were the same as in steps 2-4. Before the step, `restic snapshots` listed all three snapshots, `715f817d` among them, with 9 packs under `data/` and no repository locks.
+
+**Step 5 passes.** This is the measurement showing that the schedule can prune under the lock.
+
+| Call | rc | Retries | Output |
+|---|---|---|---|
+| `forget 715f817d` | 0 | 0 | `1 / 1 files deleted` (22:08:03Z) |
+| `prune --max-repack-size 0` | 0 | 0 | `to delete: 13 blobs / 60.219 MiB`; `deleting unreferenced packs 3 / 3`; `removing 2 old packs 2 / 2`; `done`; 7 s (22:08:10Z to 22:08:17Z) |
+
+The prune log has no `locked` or `retrying` line. Afterwards:
+
+- `restic snapshots` lists 2 snapshots, `cb2bde94` and `eac4003f`.
+- The pack count under `data/` dropped from 9 to 4.
+- `check` reports `no errors were found`, rc 0.
+
+Among the deletions are the three orphan packs that step 3b's interrupted `backup` left behind. They were refused at step 3b, because they were younger than R. Here they are older and their DELETE was accepted. A node's unreferenced packs therefore clear themselves once they age past R, with nobody acting on them.
+
+## Scratch step 6
+
+2026-10-03, right after step 5. These are the steps the teardown took.
+
+1. **Empty the bucket.** Terraform cannot destroy a bucket that still holds objects. `aws s3 rm s3://kubelab-backup-scratch --recursive` used the scratch Object Read & Write token and returned rc 0. It deleted all 9 objects, and a listing afterwards found 0. The locked prefixes were deleted with the rest: every object in them was older than R, the same reason step 5's DELETEs were accepted.
+2. **Remove the lock, then the bucket, through Make.** The command is `make tf-r2-apply SCRATCH=1 SCRATCH_DESTROY=1`. `SCRATCH_DESTROY` keeps the scratch `-target`s and turns `scratch` off (commit `78a54879`). On its own it is refused: without the targets, an apply with `scratch` off would also create every node bucket.
+   - The plan read `0 to add, 0 to change, 2 to destroy`.
+   - The apply ran from 22:13:43Z to 22:13:49Z and returned rc 0. Terraform destroyed `cloudflare_r2_bucket_lock.scratch[0]` before `cloudflare_r2_bucket.scratch[0]`.
+   - `terraform state list` is now empty.
+   - A listing of the bucket returns `NoSuchBucket`.
+3. **Delete the three scratch keys from `common.enc.yaml`.** They had never been committed, and the uncommitted diff held only them plus SOPS's own metadata. Restoring the committed file therefore removed exactly those three keys, with no re-encryption. `toolkit secrets show` now exits 1 for each of them, and still exits 0 for `cloudflare.r2_admin_token`.
+
+The scratch Object Read & Write token itself still exists in Cloudflare. The bucket it reached is gone, so it can read or write nothing. The operator revokes it in the dashboard (R2, then *Manage API tokens*), because no IaC manages it.
+
+**AC3's scratch measurement is complete.** The prod-bucket repeat of step 4 stays with the prod task.
+
 ## Test status
 
 - Test suite: `<command> -> <output / coverage %>`

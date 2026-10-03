@@ -1979,6 +1979,14 @@ backup:
     # The `r2-backup-size` Grafana rule mirrors 80% of it
     # (tests/test_r2_backup_alerting_rules.py compares the two).
     free_tier_bytes: 10000000000
+    # R, the age in days for which each node bucket's lock refuses deletes
+    # (BACKUP-057, operator 2026-09-30; fits the free tier with both copies,
+    # specs/BACKUP-057/verification.md). Rendered into infra/terraform/r2/ by
+    # `toolkit infra terraform r2-tfvars`. Must stay below the --keep-within
+    # days in node_backup_retention_flags, and those flags must forbid repacking
+    # (--max-repack-size 0), or prune deletes a pack younger than R and the lock
+    # refuses it; tests/test_r2_terraform.py enforces both.
+    lock_retention_days: 30
     bucket: kubelab-backups
     endpoint: "https://76967f5ede1ce50efce34d90b7e94958.r2.cloudflarestorage.com"
     # restic addresses R2 through its S3 backend; this is the repository prefix,

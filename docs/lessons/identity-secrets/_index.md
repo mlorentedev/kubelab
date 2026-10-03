@@ -1,9 +1,10 @@
 # Identity, auth and secret material
 
-71 lessons, newest first. Back to [all categories](../_index.md).
+72 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 507 | [A `terraform plan` cannot prove a token may create something that does not exist yet](lesson-507-a-terraform-plan-cannot-prove-a-token-may-create-what-does-not-exist.md) | 2026-10-02 |
 | 484 | [A reconciler downstream of a stale source reports a bound that cannot converge](lesson-484-a-reconciler-downstream-of-a-stale-source-reports-a-bound-that-cannot-converge.md) | 2026-09-29 |
 | 473 | [The Argo CD UI asks for confirmation before the server authorizes, so the modal is not a permission](lesson-473-the-argo-cd-ui-asks-for-confirmation-before-the-server-authorizes.md) | 2026-09-26 |
 | 471 | [A UserInfo cache does not bound a demotion: the token lifespan does](lesson-471-a-userinfo-cache-does-not-bound-a-demotion-the-token-lifespan-does.md) | 2026-09-26 |

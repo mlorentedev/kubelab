@@ -1,10 +1,10 @@
 # Lessons
 
-514 lessons, one file each. Newest: 2026-10-03. Open a category for its list.
+516 lessons, one file each. Newest: 2026-10-03. Open a category for its list.
 
 | Category | # | Scope |
 |---|---|---|
-| [identity-secrets](identity-secrets/_index.md) | 71 | Authelia, OIDC, SOPS, credentials |
+| [identity-secrets](identity-secrets/_index.md) | 72 | Authelia, OIDC, SOPS, credentials |
 | [kubernetes](kubernetes/_index.md) | 56 | Cluster, workloads, manifests |
 | [networking-dns](networking-dns/_index.md) | 47 | DNS, VPN mesh, host networking |
 | [ansible-provisioning](ansible-provisioning/_index.md) | 54 | Roles, playbooks, IaC, node setup |
@@ -15,7 +15,7 @@
 | [ci-automation](ci-automation/_index.md) | 40 | CI workflows, gates, GitHub |
 | [observability](observability/_index.md) | 26 | Metrics, logs, alerting |
 | [containers-docker](containers-docker/_index.md) | 16 | Docker, Compose, image builds |
-| [storage-backup](storage-backup/_index.md) | 22 | Backups, volumes, persistence |
+| [storage-backup](storage-backup/_index.md) | 23 | Backups, volumes, persistence |
 | [apps-web](apps-web/_index.md) | 7 | Application code (API, web) |
 
 New lessons: see [`_format.md`](_format.md) — one file per lesson, appended
