@@ -5,6 +5,8 @@ status: draft # draft | implementing | verifying | archived
 created: "2026-08-16"
 issue: "mlorentedev/kubelab#1102"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
+review: waived
+review_waived_reason: "abandoned before implementation: aws1 was destroyed 2026-08-23 (GCP-001 AC6) and the live hub's replace path already provisions; no task was started (0/21)."
 template_version: "1.0"
 ---
 

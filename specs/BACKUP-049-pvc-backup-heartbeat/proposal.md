@@ -5,6 +5,8 @@ status: draft # draft | implementing | verifying | archived
 created: "2026-08-19"
 issue: "mlorentedev/kubelab#1171"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
+review: waived
+review_waived_reason: "abandoned before implementation: kubelab#1171 is closed and the pvc-backup CronJob this spec watches was removed by OPS-023; 2/25 tasks, none shipped as code here."
 template_version: "1.0"
 ---
 
