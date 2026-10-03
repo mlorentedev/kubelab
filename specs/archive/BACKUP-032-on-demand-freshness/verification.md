@@ -61,6 +61,13 @@ First archive review (`nan/deepseek-v4-flash`, FAIL on `6ad0c6c7`):
 3. **Major, `tasks.md` edited after the review captured its digests.** Applied by re-running the review on the final contract set, not by reverting the ticks.
 4. **Minor (theoretical), alert windows retyped in the tests.** Applied: the freshness test reads the probe interval from the CronJob `schedule:` and the on-demand ship interval from `node_backup_interval`, and asserts the rule's `for:` and the shrink window each outlast one probe interval and the threshold is at least three ship intervals (`test_the_alert_windows_follow_the_cadences_they_depend_on`).
 
+Second archive review (`nan/mimo-v2.6-flash`, PASS-WITH-GAPS on `805f67d6`). The contract set is closed by that verdict, so these are recorded here only:
+
+1. **Minor, "No unrelated changes" vs the review's diff range.** Declined: the box refers to this spec's own commits (`f651d313`, `a19f5a2e`, `da13afc6`, `6ad0c6c7`, `805f67d6`). The range the launcher diffed also carries #1960, #2032, #2036, #2040 and #2042, each merged through its own reviewed PR.
+2. **Minor, `f2` evidence says 18 passed where HEAD has 19.** Declined: `805f67d6` added the cadence test after that capture; the command passes with 19 (`poetry run pytest ... tests/test_r2_backup_freshness_rule.py`, 2026-10-03).
+3. **Minor (theoretical), a missed watcher run stretches the shrink window's two probes to 12 h.** Declined: it delays a true page by one run and self-heals on the next. A fixture case gets added only if a page is ever traced to it.
+4. **Question, `for: 7h` is Grafana state the harness cannot run.** No action: a declared limit in `proposal.md`, pinned statically against the CronJob schedule.
+
 ## Promotion candidates
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.
@@ -71,7 +78,7 @@ Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`.
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/BACKUP-032-on-demand-freshness/` -> `specs/archive/BACKUP-032-on-demand-freshness/`
-- [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/BACKUP-032-on-demand-freshness/` -> `specs/archive/BACKUP-032-on-demand-freshness/`
+- [x] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018): #485 closes with the archive PR
+- [x] Promotions above executed (if any): lessons 509, 510, 512 merged with #2037 and #2038
