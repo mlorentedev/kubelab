@@ -67,9 +67,10 @@ max-complexity = 10
 
 [tool.ruff.lint.per-file-ignores]
 # The bar binds the restore drills, which share their phases in restore_drill.py
-# (BACKUP-072, #2015). The rest of the toolkit is not yet under it; widen this
-# pattern as each module is brought down, never the other way.
-"!toolkit/features/*drill*.py" = ["C901"]
+# (BACKUP-072, #2015), and every module named here once brought under it
+# (TOOL-098, #2030). The rest of the toolkit is not yet; widen this pattern as
+# each module is brought down, never the other way.
+"!toolkit/features/{*drill*,generator_ansible}.py" = ["C901"]
 
 [tool.ruff.format]
 # Configuración del formateador (estilo Black)
