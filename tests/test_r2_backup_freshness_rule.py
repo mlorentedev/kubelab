@@ -38,8 +38,15 @@ NODE_BACKUP_DEFAULTS = REPO / "infra/ansible/roles/node_backup/defaults/main.yml
 
 
 def _seconds(duration: str) -> int:
+    """A Go-style duration (`1h`, `90m`, `1h30m`) in seconds. Anything else raises:
+    a unit this cannot read must fail the guard that uses it, never read as 0."""
     units = {"h": 3600, "m": 60, "s": 1}
-    return sum(int(n) * units[u] for n, u in re.findall(r"(\d+)([hms])", duration))
+    if not re.fullmatch(r"(\d+[hms])+", duration):
+        raise ValueError(f"unreadable duration {duration!r}")
+    seconds = sum(int(n) * units[u] for n, u in re.findall(r"(\d+)([hms])", duration))
+    if seconds <= 0:
+        raise ValueError(f"zero duration {duration!r}")
+    return seconds
 
 
 def _probe_interval() -> int:
@@ -53,9 +60,9 @@ def _probe_interval() -> int:
     return int(every.group(1)) * 3600
 
 
-def _ship_interval() -> int:
+def _ship_interval(defaults: pathlib.Path = NODE_BACKUP_DEFAULTS) -> int:
     """Seconds between ships on an on-demand node, from the role default that sets them."""
-    return _seconds(yaml.safe_load(NODE_BACKUP_DEFAULTS.read_text())["node_backup_interval"])
+    return _seconds(yaml.safe_load(defaults.read_text())["node_backup_interval"])
 
 
 THREE_HOURS = 3 * 3600
@@ -321,6 +328,23 @@ def test_the_alert_windows_follow_the_cadences_they_depend_on() -> None:
     assert _hours(_rule(FRESHNESS)["for"]) * 3600 > probe, "for: must outlast one probe interval"
     (shrink_window,) = set(re.findall(r"\[(\d+[hms])\]", rule_expr(SHRINK)))
     assert _seconds(shrink_window) > probe, "the shrink window must hold two probes"
+
+
+@pytest.mark.parametrize("duration", ["1d", "1w", "", "{{ node_backup_interval }}", "0h", "1h30x"])
+def test_a_duration_the_guard_cannot_read_fails_instead_of_reading_as_zero(duration: str) -> None:
+    """A unit `_seconds` does not know must never read as 0: `THREE_HOURS >= 3 * 0`
+    holds for any threshold, so the cadence guard would pass without measuring (#2045)."""
+    with pytest.raises(ValueError):
+        _seconds(duration)
+
+
+def test_a_ship_interval_in_days_fails_the_cadence_guard(tmp_path: pathlib.Path) -> None:
+    """The same failure through the path the guard reads, so a refactor of
+    `_ship_interval` that swallows the error turns this red (#2045)."""
+    defaults = tmp_path / "main.yml"
+    defaults.write_text('node_backup_interval: "1d"\n')
+    with pytest.raises(ValueError):
+        _ship_interval(defaults)
 
 
 def test_the_shrink_rule_threshold_is_half() -> None:
