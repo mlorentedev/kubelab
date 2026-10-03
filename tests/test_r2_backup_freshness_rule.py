@@ -60,9 +60,9 @@ def _probe_interval() -> int:
     return int(every.group(1)) * 3600
 
 
-def _ship_interval() -> int:
+def _ship_interval(defaults: pathlib.Path = NODE_BACKUP_DEFAULTS) -> int:
     """Seconds between ships on an on-demand node, from the role default that sets them."""
-    return _seconds(yaml.safe_load(NODE_BACKUP_DEFAULTS.read_text())["node_backup_interval"])
+    return _seconds(yaml.safe_load(defaults.read_text())["node_backup_interval"])
 
 
 THREE_HOURS = 3 * 3600
@@ -336,6 +336,15 @@ def test_a_duration_the_guard_cannot_read_fails_instead_of_reading_as_zero(durat
     holds for any threshold, so the cadence guard would pass without measuring (#2045)."""
     with pytest.raises(ValueError):
         _seconds(duration)
+
+
+def test_a_ship_interval_in_days_fails_the_cadence_guard(tmp_path: pathlib.Path) -> None:
+    """The same failure through the path the guard reads, so a refactor of
+    `_ship_interval` that swallows the error turns this red (#2045)."""
+    defaults = tmp_path / "main.yml"
+    defaults.write_text('node_backup_interval: "1d"\n')
+    with pytest.raises(ValueError):
+        _ship_interval(defaults)
 
 
 def test_the_shrink_rule_threshold_is_half() -> None:
