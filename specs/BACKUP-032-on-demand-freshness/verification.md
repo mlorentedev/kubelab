@@ -13,12 +13,16 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - [x] **AC2** -> commit `7d29f469` / `tests/test_r2_backup_freshness_rule.py`: `test_a_reachable_on_demand_node_that_stopped_shipping_fires`, `test_the_freshness_rule_stays_silent[*]` (off, turned off, fresh, always-on), `test_every_on_demand_node_off_is_a_zero_never_no_data`, evaluated in the pinned Loki against lines printed by the real probe
 - [x] **AC3** -> commit `7d29f469` / `test_the_shrink_rule_fires_only_on_a_drop_of_more_than_half[*]` (including the `null` size), `test_a_single_probe_never_reads_as_a_shrink`
 - [x] **AC4** -> commit `5c81b815` / `tests/test_r2_watcher_targets.py` (IP, port and class from networking; a missing field raises); `make validate-sync` compares the committed `targets.txt`
-- [x] **AC5** -> measured 2026-10-02 after #2037 and #2038 merged (also on #485). Met in substance; the literal `changed=0` is not, for reasons outside this spec, recorded here for the reviewer to judge:
-  - `make watcher-run NAME=r2-backup-watcher ENV=prod` succeeded in 379 s. Read from Loki (`toolkit obs logs --env prod`): every node carried `newest_snapshot` and a numeric `snapshot_age_seconds`, and every node was `reachable=1`, `healthy=1`: vps and rpi3 (always-on), beelink and rpi4 (on-demand, up at that moment: the positive control).
+- [x] **AC5** -> measured 2026-10-02 after #2037 and #2038 merged (also on #485), against the AC as reworded on 2026-10-03 (see "Review dispositions"):
+  - `make watcher-run NAME=r2-backup-watcher ENV=prod` succeeded in 379 s. Read from Loki (`toolkit obs logs --env prod`), one line per node, each with `newest_snapshot` set:
+    - `vps` (always-on): `reachable=1`, `healthy=1`, `snapshot_age_seconds` 7894
+    - `rpi3` (always-on): `reachable=1`, `healthy=1`, `snapshot_age_seconds` 610
+    - `beelink` (on-demand, up: positive control): `reachable=1`, `healthy=1`, `snapshot_age_seconds` 1274
+    - `rpi4` (on-demand, up: positive control): `reachable=1`, `healthy=1`, `snapshot_age_seconds` 1745
   - Against prod Loki after #2038: the freshness expression answers one value per on-demand node, the shrink expression one per backup node (1.0005 to 1.19). `make alerts`: nothing firing.
   - `make provision NODE=bee ENV=prod CHECK=1`: `changed=3`, all known check-mode noise (apt cache and upgrade, #1594; Docker GPG key, #1426).
   - `make provision NODE=rpi4 ENV=prod CHECK=1`: `changed=15`: 4 check-mode noise (#1594, #1426 and the handler it queues), 3 known coredns drift, 8 role changes never applied to the node (sshd, `/etc/hosts`, node_maintenance), tracked in #2039.
-  - No `node_backup` task changed on either node. This spec changed no Ansible.
+  - `node_backup` tasks changed: 0 on beelink, 0 on rpi4. This spec changed no Ansible.
 - [x] **AC6** -> commit `c7d5b480` / the always-on down and always-on hang tests in `tests/test_r2_backup_watcher_probe.py`
 
 ## Test status
@@ -47,6 +51,15 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 ## Correction after merge (2026-10-02)
 
 The rules as merged in #2037 (`a19f5a2e`) grouped `by (node)`. In prod, Vector sets a `node` stream label (the K8s node), so `| json` renamed the probe's field and every backup node fell into one series. Read against prod Loki minutes after merge, the shrink rule gave 0.477 (vps last over beelink first) and would have paged on every evaluation. AC2 and AC3 evidence from `7d29f469` is therefore void. It is replaced by the fix PR: the rules extract `backup_node`, the harness takes its stream labels from Vector's sink with one `pod` per run, and two cross-node tests fail on the merged rules (6 failed, 12 passed against `a19f5a2e`'s rules). After the fix, prod Loki gives the corrected shrink expression one value per backup node: 1.19, 1.0005, 1.02 and 1.04. lesson-512.
+
+## Review dispositions (2026-10-03)
+
+First archive review (`nan/deepseek-v4-flash`, FAIL on `6ad0c6c7`):
+
+1. **Major, `f5` was a vacuous checkbox grep.** Applied: `f5` now reads the AC5 block and fails unless each of the four nodes has a `reachable=1` line with a numeric age, and both provision runs report 0 `node_backup` changes.
+2. **Minor, AC5 ticked while `changed=0` was unmet.** Applied: AC5 and the "No node-side change" line in `proposal.md` are reworded to the checkable intent (no `node_backup` task changes). The original wording is quoted in both places; the drift that made it unmeetable is #2039.
+3. **Major, `tasks.md` edited after the review captured its digests.** Applied by re-running the review on the final contract set, not by reverting the ticks.
+4. **Minor (theoretical), alert windows retyped in the tests.** Applied: the freshness test reads the probe interval from the CronJob `schedule:` and the on-demand ship interval from `node_backup_interval`, and asserts the rule's `for:` and the shrink window each outlast one probe interval and the threshold is at least three ship intervals (`test_the_alert_windows_follow_the_cadences_they_depend_on`).
 
 ## Promotion candidates
 

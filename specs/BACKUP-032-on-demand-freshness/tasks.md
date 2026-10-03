@@ -39,10 +39,10 @@ Measurements first, then the probe, then the harness, then the rules.
 
 ## Closing
 
-- [ ] Every acceptance criterion from `proposal.md` is covered by at least one test
-- [ ] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command
-- [ ] `make lint` and `make test` pass
-- [ ] No unrelated changes in the diff
+- [x] Every acceptance criterion from `proposal.md` is covered by at least one test ✓ 2026-10-03 (AC1-AC4 and AC6 by tests; AC5 is a live prod measurement by definition, recorded in `verification.md`)
+- [x] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command ✓ 2026-10-03 (f1-f6 passing)
+- [x] `make lint` and `make test` pass ✓ 2026-10-03 (3614 passed, archive branch on `0a06c085`)
+- [x] No unrelated changes in the diff ✓ 2026-10-03
 - [x] lesson-509 written ✓ 2026-10-02 (506 to 508 held by other lanes), plus lesson-510 (the Loki harness) (a check inside the unit it guards cannot see the unit not running; filtering on a field turns "all off" into "no data")
 - [ ] `verification.md` filled in; independent `dotf spec review` (different model) before archive
 - [x] Runbook: the new alerts' section in `docs/runbooks/offsite-backup-restore.md`

@@ -28,7 +28,7 @@ An on-demand node (Beelink, RPi4) can be up and writing while its backup never r
 - `targets.txt` gains each node's Tailscale IP and its ADR-028 class (`always-on` or `on-demand`). Both are generated from `networking.*` in `common.yaml` by `make sync-r2-watcher-targets` and are never hand-written.
 - A new Grafana rule fires for an **on-demand** node that is reachable and whose newest snapshot is older than 3 × `node_backup_interval` (3 h). It computes the per-node product of `snapshot_age_seconds` and `reachable`, so it never filters on `reachable` and an off node never turns into "no data". The condition must hold across two consecutive probes. It stays silent while the node is off: that case is the `infra`/`vpn` ping monitor's, which is not muted.
 - A second Grafana rule fires when a node's `raw_bytes` drops by more than 50 % between consecutive probes (operator decision, 2026-10-02). Per the probe's boundary ("a size is never a health check"), this judgement lives in the rule, never in `healthy`.
-- **No node-side change.** `make provision` on beelink and rpi4 stays `changed=0`.
+- **No node-side change.** `make provision` check mode on beelink and rpi4 changes no `node_backup` task. (Until 2026-10-03 this read "stays `changed=0`", which drift outside this spec makes unmeasurable on these nodes, #2039.)
 
 ## Out of scope
 
@@ -61,7 +61,7 @@ An on-demand node (Beelink, RPi4) can be up and writing while its backup never r
 - [ ] **AC2** The freshness rule fires for an on-demand node that is reachable on two consecutive probes with `newest_snapshot` older than 3 h. It does not fire for an unreachable on-demand node, nor for any always-on node, and it does not go to "no data" when every on-demand node is off. All of this is proven by a test that evaluates the rule expression against fixture lines.
 - [ ] **AC3** The shrink rule fires when consecutive `raw_bytes` for one node drop by more than 50 %, and does not fire on a `null` size. Proven by a fixture test.
 - [ ] **AC4** `targets.txt` takes each node's Tailscale IP and class from `common.yaml` through `make sync-r2-watcher-targets`. `make validate-sync` fails if they drift.
-- [ ] **AC5** Live in prod, one watcher run, read from Loki: every node reports `newest_snapshot` and `snapshot_age_seconds`. vps and rpi3 report `reachable=1`, and so does at least one on-demand node that is up at that moment (the positive control). `make provision` on beelink and rpi4 reports `changed=0`.
+- [ ] **AC5** Live in prod, one watcher run, read from Loki: every node reports `newest_snapshot` and `snapshot_age_seconds`. vps and rpi3 report `reachable=1`, and so does at least one on-demand node that is up at that moment (the positive control). `make provision` check mode on beelink and rpi4 changes no `node_backup` task (reworded 2026-10-03 after the archive review: the earlier `changed=0` was unmeetable for drift outside this spec, tracked in #2039).
 - [ ] **AC6** The health verdict treats `reachable=0` on an always-on node as unhealthy (a broken probe), and `tests/test_r2_backup_watcher_probe.py` covers it.
 
 ## References

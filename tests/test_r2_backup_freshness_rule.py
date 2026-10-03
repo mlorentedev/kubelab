@@ -27,14 +27,39 @@ from dataclasses import dataclass
 import pytest
 import yaml
 
-from tests.loki_harness import ALERTING_DIR, Loki, rule_expr, run_loki, slot, stream_labels
+from tests.loki_harness import ALERTING_DIR, REPO, Loki, rule_expr, run_loki, slot, stream_labels
 from tests.test_r2_backup_watcher_probe import FAKE_NC, FAKE_RESTIC, PREFIX, PROBE, STAGING, _listing
 
 FRESHNESS = "backup032-on-demand-freshness"
 SHRINK = "backup032-r2-backup-shrink"
 HEALTH = "obs015-r2-backup-health"
+WATCHER_MANIFEST = REPO / "infra/k8s/base/services/r2-backup-watcher.yaml"
+NODE_BACKUP_DEFAULTS = REPO / "infra/ansible/roles/node_backup/defaults/main.yml"
+
+
+def _seconds(duration: str) -> int:
+    units = {"h": 3600, "m": 60, "s": 1}
+    return sum(int(n) * units[u] for n, u in re.findall(r"(\d+)([hms])", duration))
+
+
+def _probe_interval() -> int:
+    """Seconds between watcher runs, read from the CronJob `schedule:`, never retyped:
+    the rule's `for:` and windows mean "two probes" only relative to it."""
+    cron = next(d for d in yaml.safe_load_all(WATCHER_MANIFEST.read_text()) if d and d.get("kind") == "CronJob")
+    schedule = cron["spec"]["schedule"]
+    minute, hour, *rest = schedule.split()
+    every = re.fullmatch(r"\*/(\d+)", hour)
+    assert minute.isdigit() and every and rest == ["*", "*", "*"], f"unparsed schedule {schedule!r}"
+    return int(every.group(1)) * 3600
+
+
+def _ship_interval() -> int:
+    """Seconds between ships on an on-demand node, from the role default that sets them."""
+    return _seconds(yaml.safe_load(NODE_BACKUP_DEFAULTS.read_text())["node_backup_interval"])
+
+
 THREE_HOURS = 3 * 3600
-PROBE_INTERVAL = 6 * 3600
+PROBE_INTERVAL = _probe_interval()
 # The K8s node the Job ran on, as Vector labels it: a different thing from the
 # backup node a line reports on, and the reason the rules extract `backup_node`.
 K8S_NODE = "k8s-node-fixture"
@@ -285,6 +310,17 @@ def test_the_freshness_rule_waits_for_two_probes_and_judges_only_on_demand_nodes
     assert "unwrap snapshot_age_seconds" in expr and "unwrap reachable" in expr
     (threshold,) = next(d for d in rule["data"] if d["refId"] == "C")["model"]["conditions"]
     assert threshold["evaluator"] == {"type": "gt", "params": [THREE_HOURS]}
+
+
+def test_the_alert_windows_follow_the_cadences_they_depend_on() -> None:
+    """The windows are literals in the rules, and the cadences live elsewhere: the
+    watcher's CronJob and the role's ship interval. A change to either must turn
+    this red, never leave a rule that pages healthy nodes or sees a single probe."""
+    probe, ship = _probe_interval(), _ship_interval()
+    assert THREE_HOURS >= 3 * ship, f"a healthy node ships every {ship} s; a {THREE_HOURS} s threshold pages it"
+    assert _hours(_rule(FRESHNESS)["for"]) * 3600 > probe, "for: must outlast one probe interval"
+    (shrink_window,) = set(re.findall(r"\[(\d+[hms])\]", rule_expr(SHRINK)))
+    assert _seconds(shrink_window) > probe, "the shrink window must hold two probes"
 
 
 def test_the_shrink_rule_threshold_is_half() -> None:
