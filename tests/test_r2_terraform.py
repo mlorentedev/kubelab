@@ -46,7 +46,7 @@ def _assigned(rendered: str, name: str) -> str:
 def _node_buckets(rendered: str) -> dict[str, str]:
     block = re.search(r"^node_buckets\s*=\s*\{\n(.*?)^\}", rendered, re.M | re.S)
     assert block, f"node_buckets is not a map in:\n{rendered}"
-    return dict(re.findall(r'^\s*(\S+)\s*=\s*"([^"]+)"', block.group(1), re.M))
+    return dict(re.findall(r'^\s*"([^"]+)"\s*=\s*"([^"]+)"', block.group(1), re.M))
 
 
 @pytest.fixture
@@ -69,9 +69,11 @@ class TestOneBucketPerNode:
         config["backup"]["sources"]["gamma"] = {}
         assert _node_buckets(r2_tfvars.render(config))["gamma"] == "kubelab-backup-gamma"
 
-    def test_no_two_nodes_share_a_bucket(self) -> None:
-        buckets = list(_node_buckets(r2_tfvars.render(_common())).values())
-        assert len(buckets) == len(set(buckets))
+    def test_a_node_name_that_is_not_an_hcl_identifier_still_renders(self, config: dict) -> None:
+        """Map keys are quoted: an unquoted key that starts with a digit is not
+        an HCL identifier, and the tfvars would fail to parse."""
+        config["backup"]["sources"]["3pi"] = {}
+        assert _node_buckets(r2_tfvars.render(config))["3pi"] == "kubelab-backup-3pi"
 
     def test_a_node_whose_bucket_would_be_the_scratch_bucket_is_refused(self, config: dict) -> None:
         """The scratch bucket has no `prevent_destroy`. A node sharing its name
@@ -108,6 +110,13 @@ class TestTheLockCoversTheRepositoryButNotItsLocksOrIndex:
     def test_a_missing_r2_key_is_refused_naming_it(self, config: dict, key: str) -> None:
         del config["backup"]["r2"][key]
         with pytest.raises(r2_tfvars.RenderError, match=f"backup.r2.{key}"):
+            r2_tfvars.render(config)
+
+    @pytest.mark.parametrize("days", [30.9, 0.5, 0, -1, "30", True])
+    def test_r_that_is_not_a_positive_whole_number_of_days_is_refused(self, config: dict, days: object) -> None:
+        """`int()` would turn 30.9 into a 30-day lock and 0.5 into no lock at all."""
+        config["backup"]["r2"]["lock_retention_days"] = days
+        with pytest.raises(r2_tfvars.RenderError, match="lock_retention_days"):
             r2_tfvars.render(config)
 
     def test_r_is_shorter_than_the_keep_within_the_nodes_prune_with(self) -> None:
