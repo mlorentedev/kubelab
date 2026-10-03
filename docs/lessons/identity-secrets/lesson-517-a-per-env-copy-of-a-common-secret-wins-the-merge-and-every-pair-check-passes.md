@@ -27,6 +27,8 @@ Authelia's token endpoint told the two apart: prod's plaintext answered
 sync-oidc-hashes ENV=prod`. The new digest verifies common's plaintext, so nothing on
 the hub changed. `credentials generate` now writes all four hub keys to `hub_secrets`
 (common), asserted by `TestCredentialsGenerateWritesHubKeysToCommon` with I/O mocked.
+That fix covers the argocd pair only. The rest of the writer's hardcoded client list
+has drifted from the registered clients and is still open as #1777 (SSOT-026).
 `tests/test_hub_secrets_not_shadowed.py` fails CI when any `HUB_MANAGED` or
 `sync_to_secret_manager` key appears in a per-env file. SOPS leaves key names in
 plaintext, so the test needs no decryption. The key set is derived from the catalog, with
@@ -37,6 +39,6 @@ a check that fails if it is ever empty. It was red on the first commit, for exac
 have one owner needs a guard on where it may appear, not only on whether it is
 consistent. Two self-consistent copies are the failure that consistency checks cannot
 see. Fix the writer that created the copy in the same change, or it comes back on the
-next run.
+next run. Here that holds for the argocd pair only; #1777 tracks the remaining clients.
 
 **Tags**: `#sops` `#ssot` `#argocd` `#oidc` `#pr-1790` `#issue-1789`

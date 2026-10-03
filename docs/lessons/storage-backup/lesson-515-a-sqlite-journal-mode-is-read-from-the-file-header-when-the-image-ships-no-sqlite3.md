@@ -22,8 +22,12 @@ lock that refuses readers. The hourly capture then depended on its own timeout a
 retries, the same exposure that failed Gitea's capture on 2026-09-04.
 
 **Solution**: read the mode from the file itself. Bytes 18 and 19 of a SQLite header are
-the write and read format versions: `1 1` means rollback journal, `2 2` means WAL.
-Measured `1 1` before #2002 and `2 2` after it, with `crowdsec.db-wal` and `-shm` present.
+the write and read format versions. SQLite's file-format spec sets them to `1 1` in a
+rollback journal mode and `2 2` in WAL, and switching modes rewrites them, so they record
+the persistent mode rather than a capability. Do not require a `-wal` sibling as well:
+SQLite removes it when the last connection closes cleanly, so a WAL database at rest
+can have none. Measured `1 1` before #2002 and `2 2` after it. `crowdsec.db-wal` and
+`-shm` were also present then, because CrowdSec held the database open.
 The change itself is the image's own knob, `USE_WAL=true` in the base, so both overlays
 get it. The image's start script re-applies `db_config.use_wal` on every start, which
 matters because the config lives on a PVC that a hand edit would not survive. The
