@@ -52,8 +52,14 @@ def render(config: dict[str, Any]) -> str:
             "bucket, which a plan is allowed to destroy. Rename the node."
         )
 
-    days = int(r2["lock_retention_days"])
-    width = max(len(node) for node in buckets)
+    days = r2["lock_retention_days"]
+    if isinstance(days, bool) or not isinstance(days, int) or days <= 0:
+        raise RenderError(
+            f"backup.r2.lock_retention_days must be a positive whole number of days, got {days!r}. Refusing to render."
+        )
+    # Keys are quoted: an HCL identifier cannot start with a digit.
+    keys = {node: f'"{node}"' for node in buckets}
+    width = max(len(key) for key in keys.values())
     prefixes = ", ".join(f'"{p}"' for p in LOCKED_PREFIXES)
 
     lines = [
@@ -63,7 +69,7 @@ def render(config: dict[str, Any]) -> str:
         f"lock_max_age_seconds = {days * SECONDS_PER_DAY}",
         f"locked_prefixes      = [{prefixes}]",
         "node_buckets = {",
-        *(f'  {node.ljust(width)} = "{bucket}"' for node, bucket in buckets.items()),
+        *(f'  {keys[node].ljust(width)} = "{bucket}"' for node, bucket in buckets.items()),
         "}",
     ]
     return "\n".join(lines) + "\n"
