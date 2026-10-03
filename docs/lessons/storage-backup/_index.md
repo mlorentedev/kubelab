@@ -1,6 +1,6 @@
 # Backups, volumes and persistence
 
-22 lessons, newest first. Back to [all categories](../_index.md).
+23 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|

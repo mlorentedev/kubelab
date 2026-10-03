@@ -1,6 +1,6 @@
 # Identity, auth and secret material
 
-71 lessons, newest first. Back to [all categories](../_index.md).
+72 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
