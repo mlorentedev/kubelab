@@ -110,6 +110,22 @@ The prune log has no `locked` or `retrying` line. Afterwards:
 
 Among the deletions are the three orphan packs that step 3b's interrupted `backup` left behind. They were refused at step 3b, because they were younger than R. Here they are older and their DELETE was accepted. A node's unreferenced packs therefore clear themselves once they age past R, with nobody acting on them.
 
+## Scratch step 6
+
+2026-10-03, right after step 5. These are the steps the teardown took.
+
+1. **Empty the bucket.** Terraform cannot destroy a bucket that still holds objects. `aws s3 rm s3://kubelab-backup-scratch --recursive` used the scratch Object Read & Write token and returned rc 0. It deleted all 9 objects, and a listing afterwards found 0. The locked prefixes were deleted with the rest: every object in them was older than R, the same reason step 5's DELETEs were accepted.
+2. **Remove the lock, then the bucket, through Make.** The command is `make tf-r2-apply SCRATCH=1 SCRATCH_DESTROY=1`. `SCRATCH_DESTROY` keeps the scratch `-target`s and turns `scratch` off (commit `78a54879`). On its own it is refused: without the targets, an apply with `scratch` off would also create every node bucket.
+   - The plan read `0 to add, 0 to change, 2 to destroy`.
+   - The apply ran from 22:13:43Z to 22:13:49Z and returned rc 0. Terraform destroyed `cloudflare_r2_bucket_lock.scratch[0]` before `cloudflare_r2_bucket.scratch[0]`.
+   - `terraform state list` is now empty.
+   - A listing of the bucket returns `NoSuchBucket`.
+3. **Delete the three scratch keys from `common.enc.yaml`.** They had never been committed, and the uncommitted diff held only them plus SOPS's own metadata. Restoring the committed file therefore removed exactly those three keys, with no re-encryption. `toolkit secrets show` now exits 1 for each of them, and still exits 0 for `cloudflare.r2_admin_token`.
+
+The scratch Object Read & Write token itself still exists in Cloudflare. The bucket it reached is gone, so it can read or write nothing. The operator revokes it in the dashboard (R2, then *Manage API tokens*), because no IaC manages it.
+
+**AC3's scratch measurement is complete.** The prod-bucket repeat of step 4 stays with the prod task.
+
 ## Test status
 
 - Test suite: `<command> -> <output / coverage %>`
