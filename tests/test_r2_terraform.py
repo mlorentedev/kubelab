@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import pathlib
 import re
+import subprocess
 
 import pytest
 import yaml
@@ -185,3 +186,45 @@ class TestTheRootMatchesWhatIsRendered:
     def test_the_provider_is_pinned_to_v5(self) -> None:
         text = (ROOT / "main.tf").read_text(encoding="utf-8")
         assert re.search(r'version\s*=\s*"~>\s*5\.\d+"', text)
+
+
+def _make_dry_run(target: str, *args: str) -> subprocess.CompletedProcess[str]:
+    """`make -n` prints the recipe without running it, so no token is read."""
+    return subprocess.run(
+        ["make", "-n", "--no-print-directory", "-C", str(REPO), target, *args],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+
+
+def _terraform_line(out: str, verb: str) -> str:
+    return next(line for line in out.splitlines() if f"terraform {verb} " in line)
+
+
+class TestTheScratchPairIsTornDownByTheSameScope:
+    """Step 6 of the measurement destroys the scratch pair. It goes through the
+    same Make scope as its creation, so the teardown can never become an
+    untargeted apply: with `scratch` false and no `-target`, that apply would
+    also create every node bucket."""
+
+    def test_scratch_destroy_turns_the_pair_off_and_targets_only_it(self) -> None:
+        run = _make_dry_run("tf-r2-apply", "SCRATCH=1", "SCRATCH_DESTROY=1")
+        assert run.returncode == 0, run.stderr
+        line = _terraform_line(run.stdout, "apply")
+        assert "-var=scratch=false" in line
+        assert "-var=scratch=true" not in line
+        assert re.findall(r"-target=([\w.]+)", line) == [
+            "cloudflare_r2_bucket.scratch",
+            "cloudflare_r2_bucket_lock.scratch",
+        ]
+
+    def test_scratch_alone_still_creates_the_pair(self) -> None:
+        run = _make_dry_run("tf-r2-plan", "SCRATCH=1")
+        assert run.returncode == 0, run.stderr
+        assert "-var=scratch=true" in _terraform_line(run.stdout, "plan")
+
+    def test_scratch_destroy_without_scratch_is_refused(self) -> None:
+        run = _make_dry_run("tf-r2-apply", "SCRATCH_DESTROY=1")
+        assert run.returncode != 0
+        assert "SCRATCH_DESTROY" in run.stderr

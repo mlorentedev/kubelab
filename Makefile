@@ -1458,7 +1458,17 @@ tf-vps-firewall-apply:
 # The token is cloudflare.r2_admin_token, not the DNS cloudflare.api_token: the
 # DNS token was refused with a 403 on the R2 bucket API (2026-10-02), and the
 # token that can lift a lock rule stays out of everything that only needs DNS.
-_TF_R2_SCOPE = $(if $(SCRATCH),-var=scratch=true -target=cloudflare_r2_bucket.scratch -target=cloudflare_r2_bucket_lock.scratch)
+#
+# SCRATCH=1 SCRATCH_DESTROY=1 is the teardown: the same targets with scratch
+# turned off, so terraform removes the lock and then the bucket. The bucket
+# must be empty first. SCRATCH_DESTROY alone is refused, because an untargeted
+# apply with scratch off would also create every node bucket.
+ifneq ($(SCRATCH_DESTROY),)
+ifeq ($(SCRATCH),)
+$(error SCRATCH_DESTROY=1 needs SCRATCH=1, so the apply stays targeted at the scratch pair)
+endif
+endif
+_TF_R2_SCOPE = $(if $(SCRATCH),-var=scratch=$(if $(SCRATCH_DESTROY),false,true) -target=cloudflare_r2_bucket.scratch -target=cloudflare_r2_bucket_lock.scratch)
 
 .PHONY: tf-r2-plan tf-r2-apply
 tf-r2-plan:
