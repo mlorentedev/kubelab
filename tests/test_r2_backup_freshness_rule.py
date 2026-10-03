@@ -38,8 +38,15 @@ NODE_BACKUP_DEFAULTS = REPO / "infra/ansible/roles/node_backup/defaults/main.yml
 
 
 def _seconds(duration: str) -> int:
+    """A Go-style duration (`1h`, `90m`, `1h30m`) in seconds. Anything else raises:
+    a unit this cannot read must fail the guard that uses it, never read as 0."""
     units = {"h": 3600, "m": 60, "s": 1}
-    return sum(int(n) * units[u] for n, u in re.findall(r"(\d+)([hms])", duration))
+    if not re.fullmatch(r"(\d+[hms])+", duration):
+        raise ValueError(f"unreadable duration {duration!r}")
+    seconds = sum(int(n) * units[u] for n, u in re.findall(r"(\d+)([hms])", duration))
+    if seconds <= 0:
+        raise ValueError(f"zero duration {duration!r}")
+    return seconds
 
 
 def _probe_interval() -> int:
@@ -321,6 +328,14 @@ def test_the_alert_windows_follow_the_cadences_they_depend_on() -> None:
     assert _hours(_rule(FRESHNESS)["for"]) * 3600 > probe, "for: must outlast one probe interval"
     (shrink_window,) = set(re.findall(r"\[(\d+[hms])\]", rule_expr(SHRINK)))
     assert _seconds(shrink_window) > probe, "the shrink window must hold two probes"
+
+
+@pytest.mark.parametrize("duration", ["1d", "1w", "", "{{ node_backup_interval }}", "0h", "1h30x"])
+def test_a_duration_the_guard_cannot_read_fails_instead_of_reading_as_zero(duration: str) -> None:
+    """A unit `_seconds` does not know must never read as 0: `THREE_HOURS >= 3 * 0`
+    holds for any threshold, so the cadence guard would pass without measuring (#2045)."""
+    with pytest.raises(ValueError):
+        _seconds(duration)
 
 
 def test_the_shrink_rule_threshold_is_half() -> None:
