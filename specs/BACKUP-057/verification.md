@@ -91,6 +91,25 @@ What this changes for Q6: restic reports the two refusals differently. A refused
 
 **Step 5 is not before 2026-10-03T05:00Z.** The last write to a locked prefix was step 3b's packs, at about 04:18:45Z. Every later step either wrote nothing under the rules or was refused. R is one day, so 05:00Z on 2026-10-03 leaves a margin over the last write.
 
+## Scratch step 5
+
+2026-10-03 at 22:07Z, about 42 hours after the last write. The wrapper and credentials were the same as in steps 2-4. Before the step, `restic snapshots` listed all three snapshots, `715f817d` among them, with 9 packs under `data/` and no repository locks.
+
+**Step 5 passes.** This is the measurement showing that the schedule can prune under the lock.
+
+| Call | rc | Retries | Output |
+|---|---|---|---|
+| `forget 715f817d` | 0 | 0 | `1 / 1 files deleted` (22:08:03Z) |
+| `prune --max-repack-size 0` | 0 | 0 | `to delete: 13 blobs / 60.219 MiB`; `deleting unreferenced packs 3 / 3`; `removing 2 old packs 2 / 2`; `done`; 7 s (22:08:10Z to 22:08:17Z) |
+
+The prune log has no `locked` or `retrying` line. Afterwards:
+
+- `restic snapshots` lists 2 snapshots, `cb2bde94` and `eac4003f`.
+- The pack count under `data/` dropped from 9 to 4.
+- `check` reports `no errors were found`, rc 0.
+
+Among the deletions are the three orphan packs that step 3b's interrupted `backup` left behind. They were refused at step 3b, because they were younger than R. Here they are older and their DELETE was accepted. A node's unreferenced packs therefore clear themselves once they age past R, with nobody acting on them.
+
 ## Test status
 
 - Test suite: `<command> -> <output / coverage %>`
