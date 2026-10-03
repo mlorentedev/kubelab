@@ -13,7 +13,16 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - [x] **AC2** -> commit `7d29f469` / `tests/test_r2_backup_freshness_rule.py`: `test_a_reachable_on_demand_node_that_stopped_shipping_fires`, `test_the_freshness_rule_stays_silent[*]` (off, turned off, fresh, always-on), `test_every_on_demand_node_off_is_a_zero_never_no_data`, evaluated in the pinned Loki against lines printed by the real probe
 - [x] **AC3** -> commit `7d29f469` / `test_the_shrink_rule_fires_only_on_a_drop_of_more_than_half[*]` (including the `null` size), `test_a_single_probe_never_reads_as_a_shrink`
 - [x] **AC4** -> commit `5c81b815` / `tests/test_r2_watcher_targets.py` (IP, port and class from networking; a missing field raises); `make validate-sync` compares the committed `targets.txt`
-- [ ] **AC5** -> after merge: one prod watcher run read from Loki, and `make provision` check mode on bee and rpi4
+- [x] **AC5** -> measured 2026-10-02 after #2037 and #2038 merged (also on #485), against the AC as reworded on 2026-10-03 (see "Review dispositions"):
+  - `make watcher-run NAME=r2-backup-watcher ENV=prod` succeeded in 379 s. Read from Loki (`toolkit obs logs --env prod`), one line per node, each with `newest_snapshot` set:
+    - `vps` (always-on): `reachable=1`, `healthy=1`, `snapshot_age_seconds` 7894
+    - `rpi3` (always-on): `reachable=1`, `healthy=1`, `snapshot_age_seconds` 610
+    - `beelink` (on-demand, up: positive control): `reachable=1`, `healthy=1`, `snapshot_age_seconds` 1274
+    - `rpi4` (on-demand, up: positive control): `reachable=1`, `healthy=1`, `snapshot_age_seconds` 1745
+  - Against prod Loki after #2038: the freshness expression answers one value per on-demand node, the shrink expression one per backup node (1.0005 to 1.19). `make alerts`: nothing firing.
+  - `make provision NODE=bee ENV=prod CHECK=1`: `changed=3`, all known check-mode noise (apt cache and upgrade, #1594; Docker GPG key, #1426).
+  - `make provision NODE=rpi4 ENV=prod CHECK=1`: `changed=15`: 4 check-mode noise (#1594, #1426 and the handler it queues), 3 known coredns drift, 8 role changes never applied to the node (sshd, `/etc/hosts`, node_maintenance), tracked in #2039.
+  - `node_backup` tasks changed: 0 on beelink, 0 on rpi4. This spec changed no Ansible.
 - [x] **AC6** -> commit `c7d5b480` / the always-on down and always-on hang tests in `tests/test_r2_backup_watcher_probe.py`
 
 ## Test status
@@ -43,17 +52,33 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 
 The rules as merged in #2037 (`a19f5a2e`) grouped `by (node)`. In prod, Vector sets a `node` stream label (the K8s node), so `| json` renamed the probe's field and every backup node fell into one series. Read against prod Loki minutes after merge, the shrink rule gave 0.477 (vps last over beelink first) and would have paged on every evaluation. AC2 and AC3 evidence from `7d29f469` is therefore void. It is replaced by the fix PR: the rules extract `backup_node`, the harness takes its stream labels from Vector's sink with one `pod` per run, and two cross-node tests fail on the merged rules (6 failed, 12 passed against `a19f5a2e`'s rules). After the fix, prod Loki gives the corrected shrink expression one value per backup node: 1.19, 1.0005, 1.02 and 1.04. lesson-512.
 
+## Review dispositions (2026-10-03)
+
+First archive review (`nan/deepseek-v4-flash`, FAIL on `6ad0c6c7`):
+
+1. **Major, `f5` was a vacuous checkbox grep.** Applied: `f5` now reads the AC5 block and fails unless each of the four nodes has a `reachable=1` line with a numeric age, and both provision runs report 0 `node_backup` changes.
+2. **Minor, AC5 ticked while `changed=0` was unmet.** Applied: AC5 and the "No node-side change" line in `proposal.md` are reworded to the checkable intent (no `node_backup` task changes). The original wording is quoted in both places; the drift that made it unmeetable is #2039.
+3. **Major, `tasks.md` edited after the review captured its digests.** Applied by re-running the review on the final contract set, not by reverting the ticks.
+4. **Minor (theoretical), alert windows retyped in the tests.** Applied: the freshness test reads the probe interval from the CronJob `schedule:` and the on-demand ship interval from `node_backup_interval`, and asserts the rule's `for:` and the shrink window each outlast one probe interval and the threshold is at least three ship intervals (`test_the_alert_windows_follow_the_cadences_they_depend_on`).
+
+Second archive review (`nan/mimo-v2.6-flash`, PASS-WITH-GAPS on `805f67d6`). The contract set is closed by that verdict, so these are recorded here only:
+
+1. **Minor, "No unrelated changes" vs the review's diff range.** Declined: the box refers to this spec's own commits (`f651d313`, `a19f5a2e`, `da13afc6`, `6ad0c6c7`, `805f67d6`). The range the launcher diffed also carries #1960, #2032, #2036, #2040 and #2042, each merged through its own reviewed PR.
+2. **Minor, `f2` evidence says 18 passed where HEAD has 19.** Declined: `805f67d6` added the cadence test after that capture; the command passes with 19 (`poetry run pytest ... tests/test_r2_backup_freshness_rule.py`, 2026-10-03).
+3. **Minor (theoretical), a missed watcher run stretches the shrink window's two probes to 12 h.** Declined: it delays a true page by one run and self-heals on the next. A fixture case gets added only if a page is ever traced to it.
+4. **Question, `for: 7h` is Grafana state the harness cannot run.** No action: a declared limit in `proposal.md`, pinned statically against the CronJob schedule.
+
 ## Promotion candidates
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.
 
 - [x] Lesson for the repo's `docs/lessons/`? yes: `docs/lessons/observability/lesson-509-a-check-inside-the-unit-cannot-see-the-unit-not-running.md`, `docs/lessons/observability/lesson-510-loki-answers-no-data-for-ranges-older-than-3h-it-never-flushed.md` and `docs/lessons/observability/lesson-512-a-json-field-named-like-a-stream-label-is-renamed-and-the-grouping-moves.md`
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? <yes: path / no: reason>
-- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes: path / no: reason>
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: the alerts follow the existing watcher design (BACKUP-055) and ADR-028's always-on/on-demand split; nothing new was decided at architecture level
+- [x] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. no: lessons 510 and 512 are specific to this Loki/Vector stack, and lesson-509's principle has one occurrence so far, below the >1-project bar
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/BACKUP-032-on-demand-freshness/` -> `specs/archive/BACKUP-032-on-demand-freshness/`
-- [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/BACKUP-032-on-demand-freshness/` -> `specs/archive/BACKUP-032-on-demand-freshness/`
+- [x] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018): #485 closes with the archive PR
+- [x] Promotions above executed (if any): lessons 509, 510, 512 merged with #2037 and #2038

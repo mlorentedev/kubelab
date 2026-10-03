@@ -3,42 +3,42 @@
     "id": "BACKUP-032-on-demand-freshness-f1",
     "behavior": "Every r2_backup_node line carries newest_snapshot, snapshot_age_seconds (null on restic failure) and reachable",
     "verification": "poetry run pytest -q -p no:cacheprovider --no-cov tests/test_r2_backup_watcher_probe.py",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "2026-10-03 on the archive branch: 84 passed in 30.39s"
   },
   {
     "id": "BACKUP-032-on-demand-freshness-f2",
     "behavior": "The freshness rule fires for a reachable on-demand node with a snapshot older than 3h on two probes, and stays silent for off, always-on, fresh and all-off cases",
     "verification": "poetry run pytest -q -p no:cacheprovider --no-cov tests/test_r2_backup_freshness_rule.py",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "2026-10-03 on the archive branch: 18 passed in 21.14s"
   },
   {
     "id": "BACKUP-032-on-demand-freshness-f3",
     "behavior": "The shrink rule fires on a >50% drop between consecutive probes and not on growth, a single probe or a null size",
     "verification": "poetry run pytest -q -p no:cacheprovider --no-cov tests/test_r2_backup_freshness_rule.py -k shrink",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "2026-10-03 on the archive branch: 7 passed, 11 deselected in 18.37s"
   },
   {
     "id": "BACKUP-032-on-demand-freshness-f4",
     "behavior": "targets.txt carries each node's Tailscale IP, probe port and class from common.yaml and make validate-sync catches drift",
     "verification": "poetry run toolkit sync r2-watcher-targets --check",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "2026-10-03 on the archive branch: infra/k8s/base/services/r2-backup-watcher/targets.txt is current"
   },
   {
     "id": "BACKUP-032-on-demand-freshness-f5",
-    "behavior": "A live prod watcher run reports the new fields for every node, with reachable=1 on vps, rpi3 and an up on-demand node",
-    "verification": "command grep -Eq '^- \\[x\\] \\*\\*AC5\\*\\* -> ' specs/BACKUP-032-on-demand-freshness/verification.md",
-    "state": "pending",
-    "evidence": ""
+    "behavior": "A live prod watcher run reports the new fields for every node, with reachable=1 on vps, rpi3 and an up on-demand node, and provision changes no node_backup task",
+    "verification": "python3 -c \"import re,sys; s=open('specs/archive/BACKUP-032-on-demand-freshness/verification.md').read(); b=s.split('**AC5**',1)[1].split('- [x] **AC6**',1)[0]; miss=[n for n in ('vps','rpi3','beelink','rpi4') if not re.search(r'- \\x60'+n+r'\\x60 .*\\x60reachable=1\\x60.*snapshot_age_seconds\\x60 \\d+',b)]; ok=re.search(r'node_backup\\x60 tasks changed: 0 on beelink, 0 on rpi4',b); sys.exit('AC5 evidence missing: '+','.join(miss) if miss or not ok else 0)\"",
+    "state": "passing",
+    "evidence": "2026-10-03: AC5 recorded in verification.md (prod watcher run 2026-10-02, evidence also on #485)"
   },
   {
     "id": "BACKUP-032-on-demand-freshness-f6",
     "behavior": "reachable=0 on an always-on node makes the health verdict unhealthy",
     "verification": "poetry run pytest -q -p no:cacheprovider --no-cov tests/test_r2_backup_watcher_probe.py -k always_on",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "2026-10-03 on the archive branch: 4 passed, 80 deselected in 6.71s"
   }
 ]

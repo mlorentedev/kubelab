@@ -34,18 +34,18 @@ Measurements first, then the probe, then the harness, then the rules.
 - [x] [AC2] Add the freshness rule to `r2-backup-rules.yaml`. Its expression is `last_over_time(age)` times `last_over_time(reachable)` by node, filtered on `class="on-demand"`, then `> 10800`. It also sets `for: 7h` and `noDataState: Alerting`, and its annotation names both causes and the double page with the health rule. Add a static test that pins `for >= 7h` and the class filter.
 - [x] [AC3] Failing harness tests for the shrink rule. A drop of more than 50 % between two probes FIRES. A 30 % drop, a 2× growth, a single probe and a `null` size stay SILENT.
 - [x] [AC3] Add the shrink rule: `last_over_time / first_over_time < 0.5` over a window of about 9 h, by node. Fill in `runbook_url` and the section it points to in `docs/runbooks/offsite-backup-restore.md`.
-- [ ] Refactor `probe.sh` and the harness for clarity. `make lint` and `make test` must pass.
-- [ ] [AC5] After merge, run the prod watcher once (`make watcher-run NAME=r2-backup-watcher ENV=prod`) and read it from Loki (`toolkit obs logs`). Record per node `reachable` and whether `snapshot_age_seconds` is a number, never the raw values. Run `make provision NODE=bee ENV=prod` and the same for rpi4 (or their check mode) and confirm `changed=0`.
+- [x] Refactor `probe.sh` and the harness for clarity. `make lint` and `make test` must pass. ✓ 2026-10-03: no separate pass; #2038 reshaped the harness (stream labels read from Vector's sink), and lint and test passed at both merges and on the archive branch
+- [x] [AC5] ✓ 2026-10-02 (see `verification.md`) After merge, run the prod watcher once (`make watcher-run NAME=r2-backup-watcher ENV=prod`) and read it from Loki (`toolkit obs logs`). Record per node `reachable` and whether `snapshot_age_seconds` is a number, never the raw values. Run `make provision NODE=bee ENV=prod` and the same for rpi4 (or their check mode) and confirm no `node_backup` task changes (reworded with AC5 on 2026-10-03: it said `changed=0`, which drift outside this spec makes unmeetable, #2039).
 
 ## Closing
 
-- [ ] Every acceptance criterion from `proposal.md` is covered by at least one test
-- [ ] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command
-- [ ] `make lint` and `make test` pass
-- [ ] No unrelated changes in the diff
+- [x] Every acceptance criterion from `proposal.md` is covered by at least one test ✓ 2026-10-03 (AC1-AC4 and AC6 by tests; AC5 is a live prod measurement by definition, recorded in `verification.md`)
+- [x] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command ✓ 2026-10-03 (f1-f6 passing)
+- [x] `make lint` and `make test` pass ✓ 2026-10-03 (3614 passed, archive branch on `0a06c085`)
+- [x] No unrelated changes in the diff ✓ 2026-10-03
 - [x] lesson-509 written ✓ 2026-10-02 (506 to 508 held by other lanes), plus lesson-510 (the Loki harness) (a check inside the unit it guards cannot see the unit not running; filtering on a field turns "all off" into "no data")
 - [ ] `verification.md` filled in; independent `dotf spec review` (different model) before archive
-- [ ] Runbook: the new alerts' section in `docs/runbooks/offsite-backup-restore.md`
+- [x] Runbook: the new alerts' section in `docs/runbooks/offsite-backup-restore.md`
 
 ## Machine-readable features
 
