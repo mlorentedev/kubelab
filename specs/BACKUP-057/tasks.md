@@ -61,21 +61,21 @@ The size decides whether R = 30 fits the free tier. It is measured by the watche
 
 ## PR 3 — per-node credentials, minted into SOPS (Q1)
 
-- [ ] [P] [AC1] Failing test, `tests/test_backup_node_credentials.py`:
+- [x] [P] [AC1] (✓ 2026-10-03; the third bullet's watcher config is PR 4, which reads each node's own key) Failing test, `tests/test_backup_node_credentials.py`:
   - `SECRET_CATALOG` declares `backup.r2.nodes.<node>.{access_key_id,secret_access_key}` and `backup.nodes.<node>.restic_password` for every `backup.sources` key;
   - two nodes never share a SOPS path;
   - the watcher has one read-only pair, and reads each node's restic password from that node's own key rather than from a copy.
 
   Expected: FAIL.
-- [ ] [AC1] `toolkit backup mint-node-tokens --env prod [--node <n>]`:
+- [x] [AC1] (✓ 2026-10-03) `toolkit backup mint-node-tokens --env prod [--node <n>]`:
   - creates an Object Read & Write token scoped to `kubelab-backup-<node>` through the Cloudflare API and writes the S3 pair straight into SOPS;
   - never prints either value, and verifies each one by consequence (it lists its own bucket, and listing another node's bucket is refused);
   - is idempotent: an existing pair is kept unless `--rotate` is given;
   - also mints the watcher's Object Read token, scoped to the node buckets and to nothing else. Verify by consequence that it lists every node bucket and is refused on `kubelab-backups`. If one token cannot be scoped to several named buckets, the mint stops and says so: the fallback (one read token per node, or an account-wide one) changes proposal item 4 and goes back to the operator.
 
   Unit tests mock the API and SOPS I/O, following `TestCredentialsGenerateWritesHubKeysToCommon`.
-- [ ] [AC3] Failing test in `tests/test_backup_per_node_isolation.py`, against the mocked Cloudflare API: the token `toolkit backup mint-node-tokens` requests for each node names exactly one bucket, `kubelab-backup-<node>`, and the watcher's read token names exactly the node buckets. A policy that spans several buckets, or the whole account, fails it. Distinct key pairs alone cannot catch that, so this is the test that makes ticket AC3 fail in CI rather than only at runtime. Expected: FAIL.
-- [ ] [AC1] `make backup-mint-node-tokens ENV=prod`. Run it and record `make secrets-audit ENV=prod` rc 0 in `verification.md`. Nothing reads the new keys yet.
+- [x] [AC3] (✓ 2026-10-03) Failing test in `tests/test_backup_per_node_isolation.py`, against the mocked Cloudflare API: the token `toolkit backup mint-node-tokens` requests for each node names exactly one bucket, `kubelab-backup-<node>`, and the watcher's read token names exactly the node buckets. A policy that spans several buckets, or the whole account, fails it. Distinct key pairs alone cannot catch that, so this is the test that makes ticket AC3 fail in CI rather than only at runtime. Expected: FAIL.
+- [x] [AC1] (✓ 2026-10-03) `make backup-mint-node-tokens ENV=prod`. Run it and record `make secrets-audit ENV=prod` rc 0 in `verification.md`. Nothing reads the new keys yet.
 
 ## PR 4 — every consumer becomes per node, then the migration (Q2)
 

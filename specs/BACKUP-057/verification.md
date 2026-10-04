@@ -134,22 +134,34 @@ The scratch Object Read & Write token itself still exists in Cloudflare. The buc
 - `make tf-r2-apply` created `kubelab-backup-{beelink,rpi3,rpi4,vps}` and their locks, returning `8 added, 0 changed, 0 destroyed`.
 - **The second plan was not clean.** It read `0 to add, 4 to change`, and the change was a reorder only. The API returns a bucket's lock rules sorted by `id`. The HCL listed them in the order `LOCKED_PREFIXES` renders them (`data/`, `snapshots/`, `keys/`, `config`). Every plan would have shown the same diff, so AC2's "no diff" could never hold. The scratch measurement never ran a second plan, which is why it did not see this.
 - Fix: `lock_rules` now iterates a map keyed by the rule id, so Terraform emits it in id order. Planned against the live state with the fix applied, the result is `No changes. Your infrastructure matches the configuration.` `test_the_lock_rules_are_ordered_by_id_as_the_api_returns_them` pins the shape.
-## PR 3: what is built, and what is not run
+- The fix merged as #2055 (`a1a7f300`). `make tf-r2-plan` run from the main checkout on master reads `No changes. Your infrastructure matches the configuration.`
 
-Built and tested against a mocked API and SOPS (`tests/test_backup_node_credentials.py`, `tests/test_backup_per_node_isolation.py`): `toolkit backup mint-node-tokens`, `make backup-mint-node-tokens`, and the twelve per-node `SECRET_CATALOG` entries.
+## PR 3: the per-node credentials, minted
 
-**The live mint is not run.** Two things stand in the way, and neither is code:
+2026-10-03. The operator settled the open items:
 
-1. **AC2 has not been applied.** A token scoped to `kubelab-backup-<node>` needs the bucket to exist. The apply waits on where the R2 Terraform state lives: the backend is local, so applying from a worktree strands the state of four `prevent_destroy` buckets in a directory that gets removed.
-2. **The minting credential.** Creating an account token needs *Account API Tokens Write*. On 2026-10-03 a read-only probe with `cloudflare.r2_admin_token` against `GET /accounts/{id}/tokens/permission_groups` answered **HTTP 403**, so that token cannot mint. A token holding that permission can create a token with any permission, so which token carries it is the operator's decision. `MINTER_KEY` in `backup_node_credentials.py` is the one place that names it.
+- **Minting token.** `cloudflare.r2_token_minter` is an account token holding only *Account API Tokens: Edit*, with a 30-day TTL. `cloudflare.r2_admin_token` was not widened.
+  - Before it existed, a read-only probe with `r2_admin_token` against `GET /accounts/{id}/tokens/permission_groups` got **HTTP 403**. The new token gets 200.
+  - Cloudflare's *user* verify endpoint answers **401** for an account token. Its expiry is read from `/accounts/{id}/tokens/verify` (`cloudflare_account_token_expiry`), which reports 2026-11-03.
+- **Where the keys live.** Each node's write pair goes to `prod.enc.yaml`, audited under prod. The restic passwords and the watcher pair go to `common.enc.yaml`, audited under staging and prod, because the staging watcher reads them. `sops_file_for` decides the file, and a test ties that choice to each key's audit envs.
+- **Watcher pair.** It lives at `backup.r2.watcher.{access_key_id,secret_access_key}`, in one token naming the four node buckets. Cloudflare's token policy takes a map of resources, so proposal item 4 needed no fallback.
 
-**One token can name several buckets.** Per Cloudflare's API token documentation, a policy's `resources` is a map, and an R2 bucket resource is `com.cloudflare.edge.r2.bucket.<account>_<jurisdiction>_<bucket>`. The watcher's read token can therefore be one token naming the four node buckets, with no fallback to proposal item 4. It is not built here: its SOPS path is open (see below).
+`make backup-mint-node-tokens ENV=prod` returned rc 0. All five tokens passed the by-consequence check before anything was stored:
 
-**Open for the operator before the watcher half:**
+- each node token listed its own bucket and got `AccessDenied` on another node's;
+- the watcher token listed all four node buckets and got `AccessDenied` on `kubelab-backups`.
 
-- **The watcher read pair's SOPS path.** `backup.r2.readonly_*` is what the running watcher reads today. Overwriting it with a pair that cannot reach `kubelab-backups` breaks the watcher before PR 4 switches it.
-- **Prod or common.** The node keys are written to `prod.enc.yaml` (proposal item 1), but the watcher runs on staging and will need each node's restic password in PR 4.
-- **Escrow** of the four new restic passwords in Bitwarden, the same as the shared one.
+The two SOPS files were decrypted before and after the mint and compared by path, never by value:
+
+- `prod.enc.yaml`: added 8 (`backup.r2.nodes.<node>.{access_key_id,secret_access_key}`), removed 0, changed 0.
+- `common.enc.yaml`: added 6 (four `backup.nodes.<node>.restic_password` and the watcher pair), removed 0, changed 0.
+- Both files kept the same two age recipients.
+
+The writer re-encrypts the whole file, so the git diff spans every line. That is filed as #2056 (TOOL-099).
+
+`make secrets-audit ENV=prod` and `make secrets-audit ENV=staging` both returned rc 0.
+
+**Escrow.** The four new restic passwords are copied into Bitwarden by the operator, the same way as `backup.restic_password`.
 
 ## Test status
 
