@@ -88,8 +88,6 @@
         gateway_uplink_interfaces:
           - "enx*"
           - "wlan0"
-        gateway_vpn_domain: "{{ config.apps.services.core.headscale.domain }}"
-        gateway_vpn_public_ip: "{{ config.networking.vps.public_ip }}"
         gateway_dhcp_reservations:
           - { mac: "68:1D:EF:38:C5:6F", hostname: "kubelab-ace1", ip: "{{ config.networking.nodes.ace1.lan_ip }}" }
           - { mac: "68:1D:EF:38:C5:8B", hostname: "kubelab-ace2", ip: "{{ config.networking.nodes.ace2.lan_ip }}" }

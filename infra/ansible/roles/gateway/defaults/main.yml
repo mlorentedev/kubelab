@@ -9,5 +9,3 @@ gateway_dhcp_range_end: "172.16.1.150"
 gateway_dhcp_lease: "12h"
 gateway_dns_servers: "8.8.8.8,1.1.1.1"
 gateway_dhcp_reservations: []
-gateway_vpn_domain: ""
-gateway_vpn_public_ip: ""

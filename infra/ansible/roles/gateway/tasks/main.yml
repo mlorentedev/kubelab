@@ -75,11 +75,3 @@
     name: dnsmasq
     state: started
     enabled: true
-
-- name: Ensure VPN domain resolves to public IP (/etc/hosts)
-  lineinfile:
-    path: /etc/hosts
-    regexp: "{{ gateway_vpn_domain }}$"
-    line: "{{ gateway_vpn_public_ip }} {{ gateway_vpn_domain }}"
-    state: present
-  when: gateway_vpn_domain != '' and gateway_vpn_public_ip != ''
