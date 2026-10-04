@@ -1,7 +1,7 @@
 ---
 id: "ANSIBLE-041-aws1-replacement-provisioning"
 type: spec
-status: abandoned # draft | implementing | verifying | archived
+status: abandoned # draft | implementing | verifying | archived | abandoned
 created: "2026-08-16"
 issue: "mlorentedev/kubelab#1102"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]

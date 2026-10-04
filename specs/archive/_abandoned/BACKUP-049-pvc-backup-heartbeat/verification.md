@@ -7,7 +7,7 @@ created: "2026-08-19"
 
 ## Abandoned
 
-Abandoned 2026-10-03 (DEBT-019, #2034): the subject no longer exists. The in-cluster `pvc-backup` CronJob whose missing heartbeat this spec targets was removed by OPS-023 PR 1; prod PVCs are now backed up from the node by `node_backup`. `r2-backup-watcher` and the BACKUP-032 freshness rule judge those backups from the destination, which is the dead man's switch this spec asked for. kubelab#1171 is closed.
+Abandoned 2026-10-03 (DEBT-019, #2034): the subject no longer exists. The in-cluster `pvc-backup` CronJob whose missing heartbeat this spec targets was removed by OPS-023 PR 1; prod PVCs are now backed up from the node by `node_backup`. A run that never starts is caught by the Uptime Kuma push heartbeat that `node_backup` sends on every completed ship (BACKUP-044 AC9; the always-on VPS, which holds the prod PVCs). On on-demand nodes, where that heartbeat is muted, the BACKUP-032 rule `backup032-on-demand-freshness` catches it from R2. `obs015-r2-backup-health` adds integrity and coverage checks on R2. kubelab#1171 is closed.
 
 ## Evidence
 
