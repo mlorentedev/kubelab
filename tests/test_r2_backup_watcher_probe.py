@@ -121,7 +121,9 @@ SIZES = {"rpi3": 123_456_789, "kubelab-vps": 2_345_678_901}
 
 
 def _listing(*services: str, sentinel: bool = True) -> str:
-    lines = ["snapshot abc12345 of [/opt/node-backup/staging] at 2026-09-26 00:00:00 filtered by [/opt/node-backup/staging]:"]
+    lines = [
+        "snapshot abc12345 of [/opt/node-backup/staging] at 2026-09-26 00:00:00 filtered by [/opt/node-backup/staging]:"
+    ]
     lines += [f"{STAGING}/{s}" for s in services]
     if sentinel:
         lines.append(f"{STAGING}/.capture-complete")
@@ -521,7 +523,9 @@ def test_the_probe_knocks_on_each_nodes_declared_port_with_a_timeout(fleet) -> N
 
 def _make_on_demand(targets: pathlib.Path, node: str) -> None:
     lines = targets.read_text().splitlines(keepends=True)
-    targets.write_text("".join(ln.replace(" always-on ", " on-demand ") if ln.startswith(f"{node} ") else ln for ln in lines))
+    targets.write_text(
+        "".join(ln.replace(" always-on ", " on-demand ") if ln.startswith(f"{node} ") else ln for ln in lines)
+    )
 
 
 def test_an_on_demand_node_that_is_off_stays_healthy(fleet) -> None:

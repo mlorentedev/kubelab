@@ -235,7 +235,9 @@ def test_the_generator_reads_only_the_subtrees_listed_here() -> None:
     )
 
 
-@pytest.mark.parametrize("path", sorted((_ROOT / "infra" / "config" / "secrets").glob("*.enc.yaml")), ids=lambda p: p.name)
+@pytest.mark.parametrize(
+    "path", sorted((_ROOT / "infra" / "config" / "secrets").glob("*.enc.yaml")), ids=lambda p: p.name
+)
 def test_no_sops_file_declares_what_the_inventory_is_built_from(path: Path) -> None:
     """Key names are plaintext in a SOPS file, so this needs no decryption key."""
     doc = yaml.safe_load(path.read_text()) or {}

@@ -196,7 +196,14 @@ class TestValidate:
             ({"login": "bg", "email": "info@example.test", "secret": _GRAFANA_SECRET}, "adopt"),
             ({"cluster": "hub", "path": "/login"}, "reachable"),
             ({"none": "x", "path": "/login"}, "reachable"),
-            ({"identity": "superadmin", "secret": "apps.services.observability.grafana.admin_password", "path": "login"}, "'/'"),
+            (
+                {
+                    "identity": "superadmin",
+                    "secret": "apps.services.observability.grafana.admin_password",
+                    "path": "login",
+                },
+                "'/'",
+            ),
         ],
     )
     def test_invalid_declarations_fail_naming_the_service(self, decl: dict[str, Any], fragment: str) -> None:

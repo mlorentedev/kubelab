@@ -1093,7 +1093,10 @@ def test_every_request_to_nan_is_streamed() -> None:
     assert any(s in host for s in litellm["force_streaming_api_base_substrings"])
     assert env["LITELLM__CUSTOM_LLM_PROVIDER"] == litellm["custom_llm_provider"]
     assert env["LITELLM__FORCE_STREAMING_CUSTOM_LLM_PROVIDER"] == litellm["force_streaming_custom_llm_provider"]
-    assert json.loads(env["LITELLM__FORCE_STREAMING_API_BASE_SUBSTRINGS"]) == litellm["force_streaming_api_base_substrings"]
+    assert (
+        json.loads(env["LITELLM__FORCE_STREAMING_API_BASE_SUBSTRINGS"])
+        == litellm["force_streaming_api_base_substrings"]
+    )
 
 
 def test_a_review_can_report_more_findings_than_the_upstream_default() -> None:

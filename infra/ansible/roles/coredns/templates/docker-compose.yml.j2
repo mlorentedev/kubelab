@@ -1,5 +1,9 @@
 # Managed by Ansible — do not edit manually
 # Source: infra/ansible/roles/coredns/templates/docker-compose.yml.j2
+# Pinned, not derived from the directory name: it names the Pi-hole volume
+# (`<project>_pihole_data`), which holds Pi-hole's state (ANSIBLE-064).
+name: {{ coredns_project }}
+
 services:
   pihole:
     container_name: pihole

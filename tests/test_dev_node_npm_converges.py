@@ -58,8 +58,7 @@ def test_global_agent_clis_use_the_npm_module_not_a_command() -> None:
 def test_the_install_ensures_presence_and_never_chases_latest() -> None:
     module = _npm_install_task()["community.general.npm"]
     assert module.get("state", "present") == "present", (
-        "state must be present: `latest` reinstalls whenever the registry moves, "
-        "and the CLI already updates itself"
+        "state must be present: `latest` reinstalls whenever the registry moves, and the CLI already updates itself"
     )
 
 

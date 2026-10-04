@@ -219,7 +219,10 @@ def test_capture_script_fails_closed_on_error():
 def test_ship_script_carries_the_approved_retention_flags_verbatim():
     script = _render("node-backup-ship.sh.j2")
     d = _defaults()
-    assert d["node_backup_retention_flags"] == "--keep-within 31d --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --max-repack-size 0"
+    assert (
+        d["node_backup_retention_flags"]
+        == "--keep-within 31d --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --max-repack-size 0"
+    )
     assert str(d["node_backup_retention_flags"]) in script
 
 
