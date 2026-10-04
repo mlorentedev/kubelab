@@ -184,6 +184,10 @@
     name: "{{ node_backup_prune_timer_name }}"
     enabled: true
     state: started
+  # Under --check the unit file was never written, so systemd cannot find a
+  # timer this run is introducing (measured on beelink, 2026-10-03). Only the
+  # dry run may skip past that; a real run still fails on it.
+  ignore_errors: "{{ ansible_check_mode }}"
 
 - name: Enable and start the shutdown-snapshot unit (on-demand nodes only —
     RemainAfterExit=yes, must be active now to protect this session's own
