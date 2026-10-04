@@ -1685,7 +1685,7 @@ backup-verify-destination:
 # tokens and revokes the old ones. Restic passwords are never replaced.
 .PHONY: backup-mint-node-tokens
 backup-mint-node-tokens:
-	@$(TOOLKIT) backup mint-node-tokens --env $(or $(filter staging prod,$(ENV)),prod) $(if $(NODE),--node $(NODE)) $(if $(ROTATE),--rotate)
+	@$(TOOLKIT) backup mint-node-tokens --env $(or $(filter staging prod,$(ENV)),prod) $(if $(NODE),--node $(NODE)) $(if $(filter 1,$(ROTATE)),--rotate)
 
 # One level above backup-verify-destination: that one proves the BUCKET works,
 # this one proves RESTIC works in it. Runs the full lifecycle (init, backup,

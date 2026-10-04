@@ -204,9 +204,11 @@ class TestMinting:
         refused mint are exercised: an error message is output too."""
         log = MagicMock()
         monkeypatch.setattr(bnc, "logger", log)
-        _mint("vps", FakeStore(), FakeHttp())
+        http = FakeHttp()  # shared, so the refused mint yields VALUE-2, not VALUE-1 again
+        _mint("vps", FakeStore(), http)
         with pytest.raises(bnc.MintError) as refused:
-            _mint("vps", FakeStore(), FakeHttp(), run=_scope_runner(other_ok=True))
+            _mint("vps", FakeStore(), http, run=_scope_runner(other_ok=True))
+        assert http.minted == 2
         out = capsys.readouterr()
         for n in (1, 2):
             value = f"VALUE-{n}-do-not-print"
@@ -294,9 +296,48 @@ class TestResticPasswords:
         assert store.values[bnc.restic_password_path("vps")] == "keep-me"
         assert store.writes == []
 
-    def test_rotate_does_not_reach_the_restic_password(self) -> None:
-        """`mint_all(rotate=True)` rotates tokens. It has no path to a password."""
-        assert "rotate" not in bnc.ensure_restic_password.__code__.co_varnames
+    def test_rotate_does_not_reach_the_restic_password(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """`mint_all(rotate=True)` rotates every token and keeps every password.
+
+        Driven end to end, with SOPS, the API and the aws CLI faked: the token
+        pairs are replaced and the old tokens revoked, while no write carries a
+        password path and each stored password is the one that was there."""
+        from toolkit.features import backup_destination
+
+        nodes = _nodes()
+        legacy = "kubelab-backups"
+        held = {bnc.MINTER_KEY: "minter"}
+        for i, node in enumerate(nodes):
+            held |= {
+                bnc.access_key_path(node): f"tok-old-{i}",
+                bnc.secret_key_path(node): f"s-old-{i}",
+                bnc.restic_password_path(node): f"keep-{node}",
+            }
+        held |= {bnc.WATCHER_ACCESS_KEY_PATH: "tok-old-w", bnc.WATCHER_SECRET_KEY_PATH: "s-old-w"}
+
+        store = FakeStore(held)
+        r2 = {"account_id": ACCOUNT, "endpoint": ENDPOINT, "bucket": legacy}
+        store._cm = MagicMock()
+        store._cm.get_merged_config.return_value = {"backup": {"sources": dict.fromkeys(nodes, {}), "r2": r2}}
+        http = FakeHttp()
+        # The newest mint's token can list exactly the buckets its policy names.
+        def run(argv: list[str], env: dict[str, str]) -> tuple[int, str, str]:
+            body = http.posts()[-1]
+            buckets = {key.rsplit("_default_", 1)[1] for key in body["policies"][0]["resources"]}
+            bucket = argv[argv.index("--bucket") + 1]
+            return (0, "{}", "") if bucket in buckets else (254, "", "An error occurred (AccessDenied)")
+
+        monkeypatch.setattr(bnc, "SopsStore", lambda: store)
+        monkeypatch.setattr(bnc, "cloudflare_http", lambda _token: http)
+        monkeypatch.setattr(backup_destination, "_default_run", run)
+
+        assert bnc.mint_all(rotate=True) is True
+        passwords = {bnc.restic_password_path(node) for node in nodes}
+        assert not any(passwords & set(batch) for batch in store.writes)
+        assert {path: store.values[path] for path in passwords} == {
+            bnc.restic_password_path(node): f"keep-{node}" for node in nodes
+        }
+        assert sorted(http.deletes()) == sorted([f"tok-old-{i}" for i in range(len(nodes))] + ["tok-old-w"])
 
 
 def _watcher_runner(legacy: str, legacy_ok: bool = False, legacy_error: str = "AccessDenied", unreadable: str = ""):
@@ -351,3 +392,30 @@ class TestTheWatcherToken:
         http = FakeHttp()
         assert _mint_watcher(store, http, _watcher_runner("kubelab-backups")) == "kept"
         assert http.calls == []
+
+
+@pytest.mark.parametrize(("rotate", "expected"), [("", False), ("0", False), ("1", True)])
+def test_only_rotate_1_rotates(rotate: str, expected: bool) -> None:
+    """`$(if $(ROTATE),...)` tests emptiness, so ROTATE=0 would rotate (pr-agent on #2050)."""
+    import subprocess
+
+    out = subprocess.run(
+        ["make", "-n", "-C", str(REPO), "backup-mint-node-tokens", "ENV=prod", f"ROTATE={rotate}"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    line = next(ln for ln in out.splitlines() if "mint-node-tokens" in ln)
+    assert ("--rotate" in line) is expected, line
+
+
+class TestTheSopsStore:
+    def test_a_batch_spanning_two_files_is_refused_before_anything_is_written(self) -> None:
+        """A write that landed in one file and failed in the other would be reported as
+        nothing stored, and the next run would keep a pair whose token was revoked."""
+        store = object.__new__(bnc.SopsStore)
+        store._cm = MagicMock()
+        store._dir = pathlib.Path("/nonexistent")
+        with pytest.raises(ValueError, match="one SOPS file"):
+            store.write({bnc.access_key_path("vps"): "a", bnc.restic_password_path("vps"): "b"})
+        store._cm.batch_update_secrets.assert_not_called()

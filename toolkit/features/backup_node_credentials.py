@@ -339,13 +339,12 @@ class SopsStore:
         return str(value) if value else None
 
     def write(self, data: dict[str, str]) -> bool:
-        by_file: dict[str, dict[str, str]] = {}
-        for path, value in data.items():
-            by_file.setdefault(sops_file_for(path), {})[path] = value
-        return all(
-            self._cm.batch_update_secrets(batch, secret_file_path=self._dir / f"{name}.enc.yaml")
-            for name, batch in by_file.items()
-        )
+        # One file per write: a batch that landed in one file and failed in the
+        # other would read as "nothing stored" while half of it was.
+        files = {sops_file_for(path) for path in data}
+        if len(files) != 1:
+            raise ValueError(f"a write must target one SOPS file, not {sorted(files)}")
+        return bool(self._cm.batch_update_secrets(data, secret_file_path=self._dir / f"{files.pop()}.enc.yaml"))
 
 
 def mint_all(node: Optional[str] = None, rotate: bool = False) -> bool:
