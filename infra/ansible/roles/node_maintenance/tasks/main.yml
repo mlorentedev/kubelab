@@ -330,6 +330,13 @@
   changed_when: "'remove ' in _docker_reclaim.stdout"
   when: maintenance_run_cleanup | bool and maintenance_docker_reclaim | bool
 
+- name: Show what the reclaim removed and kept
+  # The keep lines are the point: "nothing removed" and "six volumes, all
+  # still held" are different states, and only the plan tells them apart.
+  debug:
+    var: _docker_reclaim.stdout_lines
+  when: maintenance_run_cleanup | bool and maintenance_docker_reclaim | bool
+
 - name: Prune unused Docker images
   command: docker image prune -af
   when: maintenance_run_cleanup | bool and 'docker_hosts' in group_names
