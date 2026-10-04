@@ -109,7 +109,9 @@ def test_no_secret_reaches_the_compose_file(secret: str) -> None:
 
 
 def _env() -> dict[str, str]:
-    return dict(line.split("=", 1) for line in _render("webui.env.j2").splitlines() if line and not line.startswith("#"))
+    return dict(
+        line.split("=", 1) for line in _render("webui.env.j2").splitlines() if line and not line.startswith("#")
+    )
 
 
 def test_sso_signs_up_and_the_form_admits_only_the_seeded_break_glass_account() -> None:
@@ -183,6 +185,40 @@ def test_the_role_runs_on_ace2_after_dev_node() -> None:
     roles = [r["role"].rsplit("/", 1)[-1] for r in plays[1]["roles"]]
     assert "agent_stack" in roles
     assert roles.index("agent_stack") > roles.index("dev_node")
+
+
+def test_open_webui_reads_the_one_nan_key_pr_agent_uses() -> None:
+    """R1 (operator, 2026-10-04): one NaN key in the vault, read where it lives; no second vault path."""
+    from toolkit.features.secrets_manager import SECRET_CATALOG
+
+    key = "apps.services.automation.pr_agent.nan_api_key"
+    plays = yaml.safe_load((REPO / "infra/ansible/playbooks/provision-ace2.yml").read_text())
+    [stack] = [r for r in plays[1]["roles"] if r["role"].endswith("agent_stack")]
+    # Prod's vault: the key is registered `envs=("prod",)`, and `secrets` here is staging's.
+    assert stack["vars"]["agent_stack_nan_api_key"] == "{{ gitea_secrets." + key + " | default('') }}"
+    [spec] = [s for s in SECRET_CATALOG if s.key_path == key]
+    assert "open_webui" in spec.services, "a rotation must name every consumer, or ace2 keeps the old key"
+    # Key names are plaintext in SOPS, so the vault itself is read: an unregistered
+    # copy (the old `open_webui.nan_api_key` path) would escape the catalog and the
+    # audit. A second key that Hermes's R1 may mint is fine once it is registered;
+    # what fails is a NaN key the catalog does not know, or one stored in a vault
+    # its spec does not cover (common merges into every env, so it covers all).
+    specs = {s.key_path: s for s in SECRET_CATALOG}
+    stray = sorted(
+        f"{store.name}:{path}"
+        for store in sorted((REPO / "infra/config/secrets").glob("*.enc.yaml"))
+        for path in _key_paths(yaml.safe_load(store.read_text()))
+        if path.endswith(".nan_api_key")
+        and not (path in specs and store.name.split(".")[0] in ("common", *specs[path].envs))
+    )
+    assert not stray, f"a NaN key outside the catalog, or in a vault its spec does not cover: {stray}"
+    assert key in _key_paths(yaml.safe_load((REPO / "infra/config/secrets/prod.enc.yaml").read_text()))
+
+
+def _key_paths(node: object, prefix: str = "") -> list[str]:
+    if not isinstance(node, dict):
+        return [prefix]
+    return [p for k, v in node.items() if k != "sops" for p in _key_paths(v, f"{prefix}.{k}" if prefix else k)]
 
 
 def test_an_unconfigured_run_takes_a_previous_open_webui_down() -> None:

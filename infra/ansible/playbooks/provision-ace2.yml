@@ -269,9 +269,12 @@
           {{ gitea_config.apps.services.security.authelia.break_glass.open_webui.email }}
         agent_stack_webui_admin_password: >-
           {{ gitea_secrets.apps.services.ai.open_webui.admin_password | default('') }}
-        # Which NaN key Open WebUI uses is the spec's R1, still open. Empty
-        # means Open WebUI starts with no model backend.
-        agent_stack_nan_api_key: "{{ secrets.apps.services.ai.open_webui.nan_api_key | default('') }}"
+        # R1 (operator, 2026-10-04): Open WebUI shares PR-Agent's NaN key, read
+        # from where it lives in prod's vault, with no second vault path. Its one
+        # other copy is the rendered env file on ace2, which only a re-provision
+        # refreshes (the key's rotate note says so). The two share its rate limit.
+        # Empty means no model backend.
+        agent_stack_nan_api_key: "{{ gitea_secrets.apps.services.automation.pr_agent.nan_api_key | default('') }}"
         agent_stack_agent_user: "{{ config.apps.services.ai.hermes_kubelab.user }}"
         agent_stack_agent_probe_image: "{{ config.apps.services.ai.hermes_kubelab.probe.image }}"
         # What the agent must fail to read (ADR-058 D3, spec AC2): the dev
