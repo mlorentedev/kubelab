@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 import yaml
 
-from toolkit.features.docker_service import DockerService
+from toolkit.features.docker_service import DockerService, _missing_bind_sources
 
 
 def _service(
@@ -83,10 +83,11 @@ def test_it_fails_open_when_the_config_cannot_be_read(
 
 
 def test_an_unreadable_source_counts_as_present(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """The Docker daemon may read what the toolkit cannot. Asked of the helper, not of
+    `validate_volume_mounts`, whose broad fail-open would answer True even without the guard."""
+
     def denied(self: Path) -> bool:
         raise PermissionError
 
-    stdout = _compose("/root/secret:/s")
-    svc = _service(monkeypatch, tmp_path, stdout=stdout)
     monkeypatch.setattr(Path, "exists", denied)
-    assert svc.validate_volume_mounts(tmp_path, "dev") is True
+    assert _missing_bind_sources(yaml.safe_load(_compose("/root/secret:/s")), tmp_path) == []
