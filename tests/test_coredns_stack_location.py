@@ -44,3 +44,11 @@ def test_the_compose_project_is_pinned_to_the_live_volume() -> None:
     assert defaults["coredns_project"] == LIVE_PROJECT, (
         f"renaming the project orphans the Pi-hole volume `{LIVE_PROJECT}_pihole_data`; migrate the volume first"
     )
+
+
+def test_pihole_loads_the_forwarding_config_by_declaration() -> None:
+    """Pi-hole v6 ignores /etc/dnsmasq.d unless told otherwise, and the forwarding to
+    CoreDNS lives there. It used to be switched on by a `sed` inside the volume, so a
+    new volume silently lost every staging name."""
+    template = (ROLE / "templates/docker-compose.yml.j2").read_text()
+    assert "FTLCONF_misc_etc_dnsmasq_d=true" in template
