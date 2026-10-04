@@ -196,12 +196,27 @@ class TestValidate:
             ({"login": "bg", "email": "info@example.test", "secret": _GRAFANA_SECRET}, "adopt"),
             ({"cluster": "hub", "path": "/login"}, "reachable"),
             ({"none": "x", "path": "/login"}, "reachable"),
-            ({"identity": "superadmin", "secret": "apps.services.observability.grafana.admin_password", "path": "login"}, "'/'"),
+            (
+                {
+                    "identity": "superadmin",
+                    "secret": "apps.services.observability.grafana.admin_password",
+                    "path": "login",
+                },
+                "'/'",
+            ),
         ],
     )
     def test_invalid_declarations_fail_naming_the_service(self, decl: dict[str, Any], fragment: str) -> None:
         with pytest.raises(bg.BreakGlassError, match=rf"grafana.*{fragment}|{fragment}.*grafana"):
             self._ok(grafana=decl)
+
+    def test_one_error_lists_every_service_and_a_shape_error_stops_its_checks(self) -> None:
+        with pytest.raises(bg.BreakGlassError) as exc:
+            self._ok(grafana={"typo": 1, "none": ""}, loki={"none": "", "path": "x"})
+        assert str(exc.value) == (
+            "invalid break-glass declaration: grafana: unknown field(s) ['typo']; "
+            "loki: `none` needs a reason; loki: `path` only applies to a reachable form, not ['none']"
+        )
 
     def test_an_account_signs_in_as_its_own_login_or_its_identity(self) -> None:
         values = _values()
