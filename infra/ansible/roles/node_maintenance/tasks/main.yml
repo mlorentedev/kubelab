@@ -285,7 +285,58 @@
   ignore_errors: true
   when: maintenance_run_cleanup | bool
 
+# --- Docker CI residue reclaimer (OPS-024) ---
+# Installed whenever the role either installs the timer or runs a cleanup, so
+# `make maintain` and the timer run the same file. It is the module the
+# emergency `make node-reclaim` imports, copied verbatim: one filter, two callers.
+- name: Install the Docker residue reclaimer
+  copy:
+    src: "{{ maintenance_docker_reclaim_source }}"
+    dest: "{{ maintenance_docker_reclaim_script }}"
+    mode: "0700"
+  when: maintenance_docker_reclaim | bool
+        and (maintenance_install_timer | bool or maintenance_run_cleanup | bool)
+
+- name: Install the backup declaration the reclaimer protects
+  # `sources` and `excluded` only: the names, not the destination details.
+  copy:
+    content: >-
+      {{ {'sources': maintenance_backup_declaration.sources,
+          'excluded': maintenance_backup_declaration.excluded} | to_nice_json }}
+    dest: "{{ maintenance_backup_declaration_file }}"
+    mode: "0644"
+  when: maintenance_docker_reclaim | bool
+        and (maintenance_install_timer | bool or maintenance_run_cleanup | bool)
+
 # --- Docker cleanup (docker_hosts group) ---
+# Order: stopped containers first, so the reclaim sees their volumes as unheld
+# and the image prune can take the images they pinned; then the reclaim; then
+# images and build cache. Same order as kubelab-maintenance.sh.j2.
+- name: Remove stopped Docker containers
+  command: docker container prune -f
+  when: maintenance_run_cleanup | bool and 'docker_hosts' in group_names
+  register: _docker_container_prune
+  changed_when: "'Total reclaimed space' in _docker_container_prune.stdout"
+  ignore_errors: true
+
+- name: Reclaim orphaned buildx builders and CI job volumes
+  # NOT ignore_errors: a reclaim that failed is a finding, and the timer's twin
+  # of this step fails its run for the same reason.
+  command: >-
+    python3 {{ maintenance_docker_reclaim_script }} --apply
+    --declaration {{ maintenance_backup_declaration_file }}
+    --min-age-hours {{ maintenance_docker_reclaim_min_age_hours }}
+  register: _docker_reclaim
+  changed_when: "'remove ' in _docker_reclaim.stdout"
+  when: maintenance_run_cleanup | bool and maintenance_docker_reclaim | bool
+
+- name: Show what the reclaim removed and kept
+  # The keep lines are the point: "nothing removed" and "six volumes, all
+  # still held" are different states, and only the plan tells them apart.
+  debug:
+    var: _docker_reclaim.stdout_lines
+  when: maintenance_run_cleanup | bool and maintenance_docker_reclaim | bool
+
 - name: Prune unused Docker images
   command: docker image prune -af
   when: maintenance_run_cleanup | bool and 'docker_hosts' in group_names
@@ -303,13 +354,6 @@
   when: maintenance_run_cleanup | bool and 'docker_hosts' in group_names
   register: _docker_builder
   changed_when: "'Total reclaimed space' in _docker_builder.stdout"
-  ignore_errors: true
-
-- name: Remove stopped Docker containers
-  command: docker container prune -f
-  when: maintenance_run_cleanup | bool and 'docker_hosts' in group_names
-  register: _docker_container_prune
-  changed_when: "'Total reclaimed space' in _docker_container_prune.stdout"
   ignore_errors: true
 
 - name: Find running ad-hoc buildx builder containers
@@ -336,10 +380,10 @@
   when: maintenance_run_cleanup | bool and 'docker_hosts' in group_names
 
 - name: Warn about orphaned buildx builder containers
-  # Not auto-removed: this timer cannot tell an orphan apart from a build
-  # genuinely in progress, and killing a live build unattended is worse than
-  # leaving a stray container running. Same posture as the reboot-required
-  # check above — report, and an operator clears it with `docker rm -f`.
+  # Not removed here: where the reclaim runs (maintenance_docker_reclaim) it
+  # already removed every builder older than its age gate, by `Created`, so
+  # what remains is young enough to be mid-build, or on a node without the
+  # reclaim. Report it; `make node-reclaim` is the operator's tool for the rest.
   debug:
     msg: >-
       WARNING: {{ inventory_hostname }} has {{ _orphan_buildx.stdout_lines | default([]) | length }}
@@ -394,6 +438,26 @@
       BEFORE: {{ _disk_before.stdout_lines | default([]) | last | default('N/A') }}
       AFTER:  {{ _disk_after.stdout_lines | default([]) | last | default('N/A') }}
   when: maintenance_run_cleanup | bool
+
+- name: Read root filesystem usage after cleanup
+  command: df --output=pcent /
+  register: _disk_pcent
+  changed_when: false
+  check_mode: false
+  when: maintenance_run_cleanup | bool
+
+- name: Fail when the disk is still above the alert threshold after cleanup
+  # The timer's twin of this check exits non-zero, which fires OnFailure=.
+  # Here it fails `make maintain`, so the operator who ran it sees it too.
+  fail:
+    msg: >-
+      {{ inventory_hostname }}: / is at {{ _disk_pcent.stdout_lines | last | trim }} after
+      cleanup (threshold {{ maintenance_disk_alert_percent }}%). The disk is filling faster than
+      maintenance reclaims it; see `docker system df` on the node (OPS-024, #1657).
+  when:
+    - maintenance_run_cleanup | bool
+    - (_disk_pcent.stdout_lines | default(['0%']) | last | regex_replace('[^0-9]', '') | int)
+      >= (maintenance_disk_alert_percent | int)
 
 # --- Systemd timer (optional) ---
 - name: Install maintenance script

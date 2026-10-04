@@ -6,7 +6,14 @@ maintenance_tmp_max_days: 7
 # imperative follow-up (make maintain NODE=x TIMER=1). Default true so
 # every node that includes this role gets it, unless a playbook opts out.
 maintenance_install_timer: true
-maintenance_timer_schedule: "weekly"
+# DAILY on the CI node, weekly elsewhere (OPS-024, #1657). Measured on the
+# Beelink 2026-10-04: every build-cache entry was under five days old, so the
+# weekly prune was running, and two busy CI days (~700 Gitea tasks) still left
+# 31 GB of build cache, 5 GB of exited job containers and 19 GB of images. A
+# weekly bound lets a single busy week fill a 98 GB disk; a daily one bounds it
+# to a day. The cost is a re-pull of `runner-images` after each prune, which
+# act_runner's `force_pull: true` already pays on every job anyway.
+maintenance_timer_schedule: "{{ 'daily' if maintenance_docker_reclaim | bool else 'weekly' }}"
 # Override for nodes with K3s but not in k3s_servers group (e.g. aws1 hub)
 maintenance_is_k3s_node: false
 
@@ -90,3 +97,42 @@ maintenance_superseded_notify_units:
 maintenance_superseded_notify_files:
   - /opt/kubelab-maintenance-notify.sh
   - /opt/kubelab-maintenance-notify-secret
+
+# --- CI residue reclaim (OPS-024, #1657) ------------------------------------
+# act_runner (0.2.13, gitea/act v0.261.7) removes a job's two named volumes in
+# a cleanup that runs only after the job container STARTED: `job_executor.go`
+# chains it behind `startContainer()`, so a job cancelled during setup (nine of
+# ten measured leaks, cancelled 1-5s after start, mid-`docker pull`) or a runner
+# lost mid-job (the tenth: the node went down) skips it, and Docker's `--rm`
+# never removes NAMED volumes. No setting in this version changes that, so the
+# residue is bounded here, by the same filter the emergency `make node-reclaim`
+# uses: toolkit/features/docker_reclaim.py, copied to the node as-is.
+#
+# On by inventory group, not by a per-playbook flag: `platform_nodes` is the CI
+# node (ADR-028), and both callers of this role -- provision-bee and `make
+# maintain` -- see the same group, so neither can install a timer without it.
+maintenance_docker_reclaim: "{{ 'platform_nodes' in group_names }}"
+maintenance_docker_reclaim_script: /opt/kubelab-docker-reclaim.py
+# The source the role copies. Resolved from the role, not the playbook, so it
+# is the same file whichever playbook runs this.
+maintenance_docker_reclaim_source: "{{ role_path }}/../../../../toolkit/features/docker_reclaim.py"
+# Unattended, so wider than the module's 4h default (an operator watching a
+# `make node-reclaim` plan can go lower). A day is far above anything this
+# fleet runs: act_runner kills a job container after 3h (`sleep 10800`).
+maintenance_docker_reclaim_min_age_hours: 24
+# What the reclaim may never take, as DATA: common.yaml's `backup` block, which
+# the module turns into names (`protected_volumes`) and refuses to run without.
+# Read through `role_path` for the same reason as the source above.
+maintenance_backup_declaration_file: /opt/kubelab-backup-declaration.json
+maintenance_backup_declaration: >-
+  {{ (lookup('ansible.builtin.file', role_path ~ '/../../../config/values/common.yaml')
+      | from_yaml).backup }}
+
+# --- disk pressure is a failure, not a log line (OPS-024 invariant 4) -------
+# After cleanup, a root filesystem at or above this percentage fails the run,
+# so `OnFailure=kubelab-notify@` tells someone. Mirrors the live threshold in
+# tests/infra/test_nodes.py (80, and 92 on the hub, whose 8 GB disk sits high
+# by design); tests/test_node_maintenance_docker_reclaim.py keeps them equal.
+# The alarm runs at the timer's cadence. A continuous signal is OBS-027 (#1727)
+# step 3.
+maintenance_disk_alert_percent: "{{ 92 if 'hub' in group_names else 80 }}"

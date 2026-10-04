@@ -41,14 +41,32 @@ instant, which is a property of the moment rather than of the declaration.
 
 DEFAULT IS A PLAN. Removing a builder that is genuinely mid-build fails that
 job, so the command reports what it would do and changes nothing until told.
+
+ONE FILTER, TWO CALLERS (OPS-024, 2026-10-04). The emergency path runs this from
+the controller over SSH; the `node_maintenance` timer runs THIS SAME FILE on the
+node (`main()` below; the role copies it to /opt), so the filter that decides what
+an unattended timer deletes is the one these tests read. That is why the module
+imports the standard library only: it has no toolkit to import on the node, and
+`tests/test_node_maintenance_docker_reclaim.py` fails if it ever tries.
+
+Every volume declared in `backup.sources` or ruled on in `backup.excluded` is
+protected by name, derived from the declaration (`protected_volumes`) rather
+than from a list kept here, and an empty derivation is refused: a reaper whose
+protection silently came out empty is a `docker volume prune` with extra steps.
 """
 
 from __future__ import annotations
 
+import argparse
+import json
 import re
 import subprocess
+import sys
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any
 
 # `docker/setup-buildx-action`'s containers, and only those. The managed
 # "multiarch" builder this fleet provisions deliberately is named
@@ -114,6 +132,25 @@ class Container:
     def label(self, now: datetime) -> str:
         hours = self.age(now).total_seconds() / 3600
         return f"{self.name} (created {hours:.1f}h ago, {'running' if self.running else 'stopped'})"
+
+
+@dataclass(frozen=True)
+class Volume:
+    """A Docker volume, with what the plan needs to judge one nobody named.
+
+    `created` is None only for a bare-name line (the 2026-09-05 transcription
+    format); the live probe always reads `CreatedAt` and refuses a line it
+    cannot parse. `anonymous` comes from the label Docker itself sets, never
+    from the shape of the name: a 64-hex name is a convention, the label is a
+    fact.
+    """
+
+    name: str
+    created: datetime | None = None
+    anonymous: bool = False
+
+
+ANONYMOUS_LABEL = "com.docker.volume.anonymous"
 
 
 @dataclass(frozen=True)
@@ -183,27 +220,92 @@ def _parse_created(raw: str) -> datetime:
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
-def parse_volumes(payload: str) -> list[str]:
-    """`docker volume ls --format '{{.Name}}'`."""
-    return [line.strip() for line in payload.splitlines() if line.strip()]
+def parse_volumes(payload: str) -> list[Volume]:
+    """`docker volume inspect -f '{{.Name}}|{{.CreatedAt}}|{{json .Labels}}'`.
+
+    A bare name per line (`docker volume ls --format '{{.Name}}'`) is still
+    accepted, as a volume of unknown age that is not known to be anonymous --
+    which the plan treats exactly as #1665 did: a name pattern or nothing.
+    """
+    volumes: list[Volume] = []
+    for line in payload.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if "|" not in line:
+            volumes.append(Volume(name=line))
+            continue
+        parts = line.split("|", 2)
+        if len(parts) != 3:
+            raise DockerUnavailableError(f"cannot parse volume line: {line!r}")
+        name, created, labels = parts
+        try:
+            label_map = json.loads(labels) or {}
+        except ValueError as exc:
+            raise DockerUnavailableError(f"cannot parse labels of volume {name!r}: {labels!r}") from exc
+        volumes.append(Volume(name=name, created=_parse_created(created), anonymous=ANONYMOUS_LABEL in label_map))
+    return volumes
+
+
+def protected_volumes(backup: Mapping[str, Any]) -> frozenset[str]:
+    """Every volume name `common.yaml`'s `backup` block declares, on any node.
+
+    `backup.sources.<node>.<name>.volume` is backed up; every key under
+    `backup.excluded.<node>` is a volume someone ruled on (a `pvc:` entry names
+    a Kubernetes claim instead, and is skipped). All nodes, not just this one:
+    a name declared anywhere is a name no reaper may take, and a per-node
+    lookup is one more thing to get wrong.
+
+    Refuses an empty result. The declaration names several volumes today, so
+    nothing at all means the derivation broke (a missing file, a renamed key),
+    and a reaper with no protection is the failure this function exists for.
+    """
+    names: set[str] = set()
+    for node in (backup.get("sources") or {}).values():
+        for source in (node or {}).values():
+            if isinstance(source, Mapping) and source.get("volume"):
+                names.add(str(source["volume"]))
+    for node in (backup.get("excluded") or {}).values():
+        for name, ruling in (node or {}).items():
+            if not (isinstance(ruling, Mapping) and "pvc" in ruling):
+                names.add(str(name))
+    if not names:
+        raise ReclaimRefused(
+            "the backup declaration names no volume at all -- refusing to reclaim without "
+            "knowing what to protect (is common.yaml's `backup` block where it was?)"
+        )
+    return frozenset(names)
+
+
+def is_candidate(volume: Volume) -> bool:
+    """CI residue by provenance: a runner's job volume, a builder's state, or a
+    volume Docker created without a name. Anything else is never considered."""
+    return bool(_RECLAIMABLE_VOLUME.match(volume.name)) or volume.anonymous
 
 
 def plan_reclaim(
     containers: list[Container],
-    volumes: list[str],
+    volumes: Sequence[Volume],
     now: datetime,
     min_age_hours: int = DEFAULT_MIN_AGE_HOURS,
+    *,
+    protected: frozenset[str],
 ) -> ReclaimPlan:
     """Which builders are certainly abandoned, and which volumes follow them.
 
-    A volume is removed only if EVERY container holding it is also being
-    removed. That derivation is what makes the command safe on a daemon it does
-    not know the inventory of -- it never needs to be told that
-    `github_runner_toolcache` matters, because the running container holding it
-    says so.
+    A volume is removed only if it is CI residue by provenance (`is_candidate`),
+    is not declared in the backup SSOT (`protected`), is held by no container
+    that survives this plan -- stopped ones included -- and, when its creation
+    time is known, is older than the gate. The attachment rule is what makes the
+    command safe on a daemon it does not know the inventory of: it never needs
+    to be told that `github_runner_toolcache` matters, because the container
+    holding it says so. The name rule is what makes it safe when that container
+    happens not to exist at this instant.
     """
     if min_age_hours < 0:
         raise ReclaimRefused(f"refusing a negative age gate ({min_age_hours}h)")
+    if not protected:
+        raise ReclaimRefused("refusing to plan with no protected volumes (see protected_volumes)")
 
     cutoff = timedelta(hours=min_age_hours)
     doomed: list[Container] = []
@@ -231,19 +333,26 @@ def plan_reclaim(
     # hold this", and only the survivors can answer it.
     holders: dict[str, set[str]] = {}
     for container in containers:
-        for volume in container.volumes:
-            holders.setdefault(volume, set()).add(container.name)
+        for mounted in container.volumes:
+            holders.setdefault(mounted, set()).add(container.name)
 
     doomed_volumes: list[str] = []
     kept_volumes: list[tuple[str, str]] = []
-    for volume in sorted(volumes):
-        if not _RECLAIMABLE_VOLUME.match(volume):
+    for volume in sorted(volumes, key=lambda v: v.name):
+        if not is_candidate(volume):
             continue
-        survivors = holders.get(volume, set()) - doomed_names
+        if volume.name in protected:
+            kept_volumes.append((volume.name, "declared in common.yaml `backup` -- never reclaimed"))
+            continue
+        survivors = holders.get(volume.name, set()) - doomed_names
         if survivors:
-            kept_volumes.append((volume, f"still held by {', '.join(sorted(survivors))}"))
+            kept_volumes.append((volume.name, f"still held by {', '.join(sorted(survivors))}"))
             continue
-        doomed_volumes.append(volume)
+        if volume.created is not None and volume.created > now - cutoff:
+            hours = (now - volume.created).total_seconds() / 3600
+            kept_volumes.append((volume.name, f"created {hours:.1f}h ago, under the {min_age_hours}h gate"))
+            continue
+        doomed_volumes.append(volume.name)
 
     return ReclaimPlan(
         containers=tuple(doomed),
@@ -253,31 +362,45 @@ def plan_reclaim(
     )
 
 
-def _ssh(ssh_target: str, command: str, timeout: int = 300) -> str:
-    result = subprocess.run(
-        ["ssh", "-o", "ConnectTimeout=10", "-o", "BatchMode=yes", ssh_target, command],
-        capture_output=True,
-        text=True,
-        timeout=timeout,
+# `None` as the target means "this host": the node_maintenance timer runs the
+# module on the node itself, with the same commands the emergency path sends.
+LOCAL = None
+
+
+def _ssh(ssh_target: str | None, command: str, timeout: int = 300) -> str:
+    argv = (
+        ["sh", "-c", command]
+        if ssh_target is LOCAL
+        else ["ssh", "-o", "ConnectTimeout=10", "-o", "BatchMode=yes", ssh_target, command]
     )
+    result = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
     if result.returncode != 0:
-        raise DockerUnavailableError(f"{command} failed on {ssh_target}: {result.stderr.strip()}")
+        raise DockerUnavailableError(f"{command} failed on {ssh_target or 'localhost'}: {result.stderr.strip()}")
     return result.stdout
 
 
-def probe(ssh_target: str) -> tuple[list[Container], list[str]]:
-    """One round trip each for containers and volumes.
+def probe(ssh_target: str | None) -> tuple[list[Container], list[Volume]]:
+    """One round trip each for volumes and containers, VOLUMES FIRST.
 
-    `docker ps -aq` can be empty, and `docker inspect` with no arguments exits
-    non-zero, so the inspect is guarded remotely rather than here -- an empty
-    daemon is a legitimate answer, not a failure.
+    The order closes a race. A job that starts between the two reads creates
+    its volume and its container together, so with containers read first that
+    volume would appear unheld. Read volumes first and any container created
+    afterwards that mounts one is in the container read.
+
+    `docker ps -aq` and `docker volume ls -q` can be empty, and `docker inspect`
+    with no arguments exits non-zero, so both inspects are guarded remotely
+    rather than here -- an empty daemon is a legitimate answer, not a failure.
     """
+    raw_volumes = _ssh(
+        ssh_target,
+        'vols=$(docker volume ls -q); [ -z "$vols" ] || docker volume inspect '
+        "-f '{{.Name}}|{{.CreatedAt}}|{{json .Labels}}' $vols",
+    )
     raw_containers = _ssh(
         ssh_target,
         'ids=$(docker ps -aq); [ -z "$ids" ] || docker inspect '
         "-f '{{.Name}}|{{.Created}}|{{.State.Running}}|{{range .Mounts}}{{.Name}},{{end}}' $ids",
     )
-    raw_volumes = _ssh(ssh_target, "docker volume ls --format '{{.Name}}'")
     return parse_containers(raw_containers), parse_volumes(raw_volumes)
 
 
@@ -326,7 +449,7 @@ def set_runners(ssh_target: str, running: bool, containers: tuple[str, ...] = RU
     return acted
 
 
-def remove(ssh_target: str, plan: ReclaimPlan) -> None:
+def remove(ssh_target: str | None, plan: ReclaimPlan) -> None:
     """Containers first, then volumes. The order is not interchangeable:
     Docker refuses to remove a volume that is still attached, so a volume pass
     before the container pass fails on every volume that matters."""
@@ -347,3 +470,44 @@ def prune_images(ssh_target: str, include_tagged: bool = False) -> str:
     """
     flag = "-af" if include_tagged else "-f"
     return _ssh(ssh_target, f"docker image prune {flag}", timeout=600).strip()
+
+
+def main(argv: list[str] | None = None) -> int:
+    """The `node_maintenance` timer's entry point, run on the node itself.
+
+    No runner pause and no image prune here: the age gate is what protects a
+    live build on an unattended run, and the maintenance script prunes images
+    after this returns. Exits non-zero on anything it could not do, so the
+    script records a failure and the unit's `OnFailure=` tells someone.
+    """
+    parser = argparse.ArgumentParser(description="Reclaim orphaned buildx builders and CI job volumes on this host.")
+    parser.add_argument("--declaration", required=True, type=Path, help="JSON of common.yaml's `backup` block")
+    parser.add_argument("--min-age-hours", type=int, default=DEFAULT_MIN_AGE_HOURS)
+    parser.add_argument("--apply", action="store_true", help="remove; default reports only")
+    args = parser.parse_args(argv)
+
+    now = datetime.now(timezone.utc)
+    try:
+        protected = protected_volumes(json.loads(args.declaration.read_text(encoding="utf-8")))
+        containers, volumes = probe(LOCAL)
+        plan = plan_reclaim(containers, volumes, now, args.min_age_hours, protected=protected)
+        for container in plan.containers:
+            print(f"remove container  {container.label(now)}")
+        for name in plan.volumes:
+            print(f"remove volume     {name}")
+        for container, why in plan.kept_containers:
+            print(f"keep container    {container.name} -- {why}")
+        for name, why in plan.kept_volumes:
+            print(f"keep volume       {name} -- {why}")
+        if args.apply:
+            remove(LOCAL, plan)
+    except (DockerUnavailableError, ReclaimRefused, OSError, ValueError) as exc:
+        print(f"docker reclaim FAILED: {exc}", file=sys.stderr)
+        return 1
+    verb = "reclaimed" if args.apply else "would reclaim"
+    print(f"{verb} {len(plan.containers)} container(s), {len(plan.volumes)} volume(s)")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

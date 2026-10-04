@@ -1,6 +1,6 @@
 # {{ ansible_managed }}
 [Unit]
-Description=Weekly KubeLab node maintenance
+Description=KubeLab node maintenance ({{ maintenance_timer_schedule }})
 
 [Timer]
 OnCalendar={{ maintenance_timer_schedule }}

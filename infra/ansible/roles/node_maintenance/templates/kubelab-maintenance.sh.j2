@@ -4,6 +4,14 @@
 set -euo pipefail
 
 echo "[$(date)] Starting maintenance on $(hostname)"
+# Before and after in the same journal, so one run is its own evidence.
+df -h /
+
+# Failures that must reach a human (OPS-024). Each step below still runs when an
+# earlier one fails -- a node that cannot reclaim still needs its journal
+# vacuumed -- and the run exits non-zero at the END if any was recorded, which
+# fires this unit's OnFailure=kubelab-notify@ with the journal tail as the body.
+FAILURES=""
 
 {% if maintenance_security_updates | bool %}
 # --- security patching, BEFORE the cleanup that wipes the package lists ----
@@ -125,14 +133,29 @@ snap list --all 2>/dev/null | awk '/disabled/{system("snap remove " $1 " --revis
 
 # Docker cleanup (skip if not installed)
 if command -v docker &>/dev/null; then
+    # Stopped containers first: the reclaim then sees their volumes as unheld,
+    # and the image prune can take the images they pinned.
+    docker container prune -f || echo "WARN: docker container prune failed"
+{% if maintenance_docker_reclaim | bool %}
+    # Orphaned buildx builders (by `Created`, never uptime) and CI job volumes
+    # act_runner skipped removing, never a volume common.yaml's `backup` block
+    # names. The same module `make node-reclaim` runs (OPS-024, #1657).
+    if ! python3 {{ maintenance_docker_reclaim_script }} --apply \
+         --declaration {{ maintenance_backup_declaration_file }} \
+         --min-age-hours {{ maintenance_docker_reclaim_min_age_hours }}; then
+        echo "ERROR: Docker residue reclaim failed -- see above"
+        FAILURES="$FAILURES docker-reclaim"
+    fi
+{% endif %}
     docker image prune -af || echo "WARN: docker image prune failed"
     docker builder prune -af || echo "WARN: docker builder prune failed"
-    docker container prune -f || echo "WARN: docker container prune failed"
 
     # Ad-hoc buildx builder containers (docker/setup-buildx-action, per CI job)
     # outlive the ephemeral runner that created them and are invisible to
-    # `docker buildx ls` / `docker builder prune` above — see #1456. Reported,
-    # not removed: this timer cannot tell an orphan from a build in progress.
+    # `docker buildx ls` / `docker builder prune` above — see #1456. Reported
+    # only: where the reclaim runs it already removed every builder past its
+    # age gate, so what is listed here is young (maybe mid-build) or on a node
+    # without the reclaim.
     ORPHAN_BUILDX="$(docker ps --filter 'name=buildx_buildkit_builder-' --format '{% raw %}{{.Names}} ({{.Status}}){% endraw %}' 2>/dev/null || true)"
     if [ -n "$ORPHAN_BUILDX" ]; then
         echo "WARNING: ad-hoc buildx builder container(s) still running (not the managed \"multiarch\" builder):"
@@ -151,3 +174,17 @@ find /tmp /var/tmp -type f -not -type l -atime +{{ maintenance_tmp_max_days }} -
 
 echo "[$(date)] Maintenance complete:"
 df -h /
+
+# Disk pressure AFTER cleanup is a failure, not a log line: nothing else watches
+# this node's disk (OPS-024; the continuous signal is OBS-027 step 3).
+DISK_PCENT="$(df --output=pcent / | tail -1 | tr -dc '0-9')"
+if [ "${DISK_PCENT:-0}" -ge {{ maintenance_disk_alert_percent }} ]; then
+    echo "ERROR: / is at ${DISK_PCENT}% after cleanup (threshold {{ maintenance_disk_alert_percent }}%)."
+    echo "  The disk is filling faster than maintenance reclaims it: docker system df"
+    FAILURES="$FAILURES disk-${DISK_PCENT}%"
+fi
+
+if [ -n "$FAILURES" ]; then
+    echo "maintenance FAILED:$FAILURES"
+    exit 1
+fi
