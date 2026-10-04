@@ -226,6 +226,7 @@ def test_drift_after_an_interrupted_run_names_the_git_restore(monkeypatch: pytes
     )
     monkeypatch.setattr(bg, "declarations", lambda values: {})
     monkeypatch.setattr(bg, "resolve", lambda env, service, root: ({}, None, bg.Direct(url="http://x")))
+    monkeypatch.setattr(rot, "_listening", lambda url: True)  # the fake service is up; only its password drifted
     monkeypatch.setattr(bg, "secret_file", lambda key, env, d: "staging")
     monkeypatch.setattr(rot, "RECONCILERS", {"grafana": lambda: FakeService("LIVE")})
     monkeypatch.setattr(
@@ -250,3 +251,74 @@ def test_drift_after_an_interrupted_run_names_the_git_restore(monkeypatch: pytes
     [outcome] = rot.rotate_break_glass("staging", tmp_path, lambda _: None)
     assert not outcome.ok
     assert "git checkout -- infra/config/secrets/staging.enc.yaml" in outcome.detail
+
+
+class TestOpenWebUI:
+    """Open WebUI signs in by email and takes the change with a bearer token, not basic auth."""
+
+    def _service(self, password: str = "OLD", email: str = "bg@x.test") -> tuple[Any, list[tuple[str, str, Any, str]]]:
+        sent: list[tuple[str, str, Any, str]] = []
+
+        def request(method: str, url: str, body: Any, auth: str) -> tuple[int, Any]:
+            sent.append((method, url, body, auth))
+            if url.endswith("/api/v1/auths/signin"):
+                ok = body == {"email": email, "password": password}
+                return (200, {"email": email, "token": "TOKEN"}) if ok else (400, {})
+            if url.endswith("/api/v1/auths/update/password"):
+                return (200, True) if auth == "Bearer TOKEN" and body["password"] == password else (400, {})
+            return 404, {}
+
+        return rot.OpenWebUIAdminPassword(request=request), sent
+
+    def test_it_signs_in_with_the_email(self) -> None:
+        assert rot.OpenWebUIAdminPassword.signs_in_with == "email"
+
+    def test_the_change_is_authenticated_by_a_session_of_the_old_password(self) -> None:
+        webui, sent = self._service()
+        webui.set_password("http://w", "bg@x.test", "OLD", "NEW")
+        assert [(m, u) for m, u, *_ in sent] == [
+            ("POST", "http://w/api/v1/auths/signin"),
+            ("POST", "http://w/api/v1/auths/update/password"),
+        ]
+        assert sent[1][2] == {"password": "OLD", "new_password": "NEW"} and sent[1][3] == "Bearer TOKEN"
+
+    def test_verify_requires_the_right_account_not_just_a_200(self) -> None:
+        webui, _ = self._service()
+        assert webui.verify("http://w", "bg@x.test", "OLD")
+        assert not webui.verify("http://w", "bg@x.test", "WRONG")
+        other = rot.OpenWebUIAdminPassword(request=lambda *a: (200, {"email": "someone@x.test", "token": "T"}))
+        assert not other.verify("http://w", "bg@x.test", "OLD")
+
+    def test_a_refused_change_raises(self) -> None:
+        webui, _ = self._service(password="LIVE")
+        with pytest.raises(rot.RotationError):
+            webui.set_password("http://w", "bg@x.test", "OLD", "NEW")
+
+
+def test_a_local_account_target_carries_its_email() -> None:
+    decls = {"open_webui": {"login": "breakglass", "email": "bg@x.test", "secret": "k"}}
+    [target] = rot.targets(decls, {})
+    assert (target.login, target.email) == ("breakglass", "bg@x.test")
+
+
+def test_a_service_on_a_powered_off_node_is_skipped_not_reported_as_drift(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> None:
+    """ace2 is on-demand (ADR-028): its absence is not a drifted password, and it must not stop the others."""
+    import socket
+
+    from toolkit.features import break_glass as bg
+
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        closed = sock.getsockname()[1]  # nothing listens once the socket closes
+    monkeypatch.setattr(rot, "targets", lambda decls, values: [rot.Target("open_webui", "breakglass", "k", "bg@x")])
+    monkeypatch.setattr(bg, "declarations", lambda values: {})
+    monkeypatch.setattr(bg, "resolve", lambda env, s, root: ({}, None, bg.Direct(url=f"http://127.0.0.1:{closed}")))
+    monkeypatch.setattr(bg, "secret_file", lambda key, env, d: (_ for _ in ()).throw(AssertionError("no SOPS read")))
+    monkeypatch.setattr("toolkit.features.oidc_clients.load_values", lambda env, root=None: {})
+    monkeypatch.setattr("toolkit.features.secrets_manager.SecretsManager", lambda *_: None)
+
+    lines: list[str] = []
+    assert rot.rotate_break_glass("prod", tmp_path, lines.append) == []
+    assert any("open_webui: skipped" in line and "not reachable" in line for line in lines)

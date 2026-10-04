@@ -61,3 +61,17 @@ identity_providers:
       - profile
       - email
       consent_mode: implicit
+    - client_id: open-webui-oidc
+      client_secret: $argon2id$v=19$m=65536,t=3,p=4$KwDj8gf7o/6Wd8Fl5K/ytQ$GSII7Ab2P1L8zeGGkd9T3jkIUMUO9BRzfZ4EPuz8/x0
+      client_name: Open WebUI
+      public: false
+      authorization_policy: one_factor
+      token_endpoint_auth_method: client_secret_basic
+      redirect_uris:
+      - http://ace2.kubelab.internal:3080/oauth/oidc/callback
+      scopes:
+      - openid
+      - profile
+      - email
+      - groups
+      consent_mode: implicit

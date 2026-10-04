@@ -18,7 +18,13 @@ COMMON = REPO / "infra/config/values/common.yaml"
 
 # ADR-068 D1: no single service on the dev node may take more than 1.5 GB.
 MAX_MEMORY_BYTES = 1536 * 1024**2
-SECRET_INPUTS = ("agent_stack_webui_oidc_client_secret", "agent_stack_nan_api_key", "_agent_stack_webui_secret_key")
+SECRET_INPUTS = (
+    "agent_stack_webui_oidc_client_secret",
+    "agent_stack_webui_admin_password",
+    "agent_stack_nan_api_key",
+    "_agent_stack_webui_secret_key",
+)
+CONFIGURED = "agent_stack_webui_configured | bool"
 
 
 def _common() -> dict:
@@ -36,6 +42,8 @@ def _context() -> dict:
         "agent_stack_webui_oidc_client_id": "open-webui-oidc",
         "agent_stack_oidc_issuer": "https://auth.example.test",
         "agent_stack_webui_oidc_client_secret": "oidc-secret-sentinel",
+        "agent_stack_webui_admin_email": "breakglass@example.test",
+        "agent_stack_webui_admin_password": "admin-password-sentinel",
         "agent_stack_nan_api_key": "nan-key-sentinel",
         "_agent_stack_webui_secret_key": "session-key-sentinel",
     }
@@ -100,23 +108,71 @@ def test_no_secret_reaches_the_compose_file(secret: str) -> None:
     assert _context()[secret] not in _render("compose-webui.yml.j2")
 
 
-def test_oidc_is_the_only_way_in() -> None:
-    """Without OIDC the first visitor becomes admin; the tailnet includes `work@` bridges."""
-    env = dict(line.split("=", 1) for line in _render("webui.env.j2").splitlines() if line and not line.startswith("#"))
-    assert env["ENABLE_LOGIN_FORM"] == "false"
+def _env() -> dict[str, str]:
+    return dict(line.split("=", 1) for line in _render("webui.env.j2").splitlines() if line and not line.startswith("#"))
+
+
+def test_sso_signs_up_and_the_form_admits_only_the_seeded_break_glass_account() -> None:
+    """The form is the break-glass door (ADR-062 D4). Nobody can sign up through it.
+
+    `ENABLE_LOGIN_FORM=false` would only hide the form: `/api/v1/auths/signin` keeps
+    taking passwords (v0.11.4, lesson-520), so it never made SSO the only door.
+    """
+    env = _env()
+    assert env["ENABLE_LOGIN_FORM"] == "true"
     assert env["ENABLE_SIGNUP"] == "false"
+    assert env["ENABLE_OAUTH_SIGNUP"] == "true"
+    assert env["OAUTH_MERGE_ACCOUNTS_BY_EMAIL"] == "false", "an SSO login must never adopt the local account"
+    assert env["WEBUI_ADMIN_EMAIL"] == "breakglass@example.test"
+    assert env["WEBUI_ADMIN_PASSWORD"] == "admin-password-sentinel"
     assert env["OAUTH_CLIENT_SECRET"] == "oidc-secret-sentinel"
     assert env["ENABLE_OLLAMA_API"] == "false"
 
 
-def test_open_webui_is_not_deployed_without_an_oidc_secret() -> None:
+def test_tiers_come_from_authelia_groups_and_anyone_else_is_refused() -> None:
+    """ADR-062 D2: `admins` is admin, `users` is user; a login with neither gets a 403."""
+    env = _env()
+    assert env["ENABLE_OAUTH_ROLE_MANAGEMENT"] == "true"
+    assert env["OAUTH_ROLES_CLAIM"] == "groups"
+    assert env["OAUTH_ADMIN_ROLES"] == "admins"
+    assert set(env["OAUTH_ALLOWED_ROLES"].split(",")) == {"users", "admins"}
+
+
+def test_userinfo_is_always_read_because_authelia_sends_groups_only_there() -> None:
+    """lesson-457: groups are in UserInfo, not the ID token. Open WebUI v0.11.4 calls
+    UserInfo only when the ID token lacks the email or the username claim, so the
+    username claim is one Authelia keeps out of the ID token."""
+    assert _env()["OAUTH_USERNAME_CLAIM"] == "preferred_username"
+
+
+def test_the_env_file_is_the_configuration_of_record() -> None:
+    """With persistent config on, env only seeds the first start and a later edit is a silent no-op."""
+    assert _env()["ENABLE_PERSISTENT_CONFIG"] == "false"
+
+
+def test_open_webui_is_not_deployed_without_an_oidc_secret_and_a_break_glass_password() -> None:
+    """With the form on and an empty database, the first visitor to sign up becomes admin
+    (`auths.py` gates the first signup on neither ENABLE_SIGNUP nor anything else). The
+    seeded break-glass account is what closes that, so no seed, no start."""
+    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text())
+    gate = defaults["agent_stack_webui_configured"]
+    assert "agent_stack_webui_oidc_client_secret | length > 0" in gate
+    assert "agent_stack_webui_admin_password | length > 0" in gate
     [block] = [t for t in _tasks() if t.get("name") == "Deploy Open WebUI"]
-    assert block["when"] == "agent_stack_webui_oidc_client_secret | length > 0"
+    assert block["when"] == CONFIGURED
+
+
+def test_the_seeded_account_is_proved_to_be_the_admin_after_every_start() -> None:
+    [check] = [t for t in _tasks() if t.get("name") == "Verify the break-glass account is the seeded admin"]
+    spec = check["ansible.builtin.uri"]
+    assert spec["url"].endswith("/api/v1/auths/signin") and spec["method"] == "POST"
+    assert check.get("no_log") is True, "the request body carries the password"
+    assert "admin" in str(check["failed_when"])
 
 
 def test_the_redirect_uri_matches_the_declared_scheme_host_and_port() -> None:
     webui = _context()["agent_stack_webui"]
-    env = dict(line.split("=", 1) for line in _render("webui.env.j2").splitlines() if line and not line.startswith("#"))
+    env = _env()
     base = f"{webui['scheme']}://{webui['host']}:{webui['default_port']}"
     assert env["WEBUI_URL"] == base
     assert env["OPENID_REDIRECT_URI"] == f"{base}/oauth/oidc/callback"
@@ -132,7 +188,7 @@ def test_the_role_runs_on_ace2_after_dev_node() -> None:
 def test_an_unconfigured_run_takes_a_previous_open_webui_down() -> None:
     """Removing the secret from SOPS must stop Open WebUI, not leave it serving."""
     [stop] = [t for t in _tasks() if t.get("name") == "Stop Open WebUI when it is not configured"]
-    assert stop["when"] == "agent_stack_webui_oidc_client_secret | length == 0"
+    assert stop["when"] == "not (" + CONFIGURED + ")"
     commands = [t["ansible.builtin.command"] for t in stop["block"] if "ansible.builtin.command" in t]
     assert any(c.rstrip().endswith(" down") for c in commands)
     [remove] = [t for t in stop["block"] if "ansible.builtin.file" in t]
