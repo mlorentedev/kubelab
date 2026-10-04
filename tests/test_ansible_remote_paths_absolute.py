@@ -60,6 +60,8 @@ def _tilde_vars(root: pathlib.Path) -> set[str]:
             collect(task.get("vars"))
     for path in root.glob("playbooks/**/*.y*ml"):
         for play in yaml.safe_load(path.read_text()) or []:
+            if not isinstance(play, dict):
+                continue
             collect(play.get("vars"))
             for role in play.get("roles") or []:
                 if isinstance(role, dict):
@@ -100,6 +102,8 @@ def _all_tasks(root: pathlib.Path) -> Iterator[tuple[pathlib.Path, dict[str, Any
             yield path, task, here
     for path in root.glob("playbooks/**/*.y*ml"):
         for play in yaml.safe_load(path.read_text()) or []:
+            if not isinstance(play, dict):
+                continue
             for task, here in _tasks_in_play(play):
                 yield path, task, here
 

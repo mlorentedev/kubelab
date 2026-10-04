@@ -20,10 +20,10 @@ lesson-242 had found the same mechanism in March, as buildx state split between 
 - **Absolute path:** the stack moves to `/opt/coredns`, like every other service.
 - **Own privilege:** the role wraps its tasks in a block with `become: true`, so the caller's privilege no longer matters.
 - **Pinned project name:** the compose file pins `name: coredns`. That keeps the Pi-hole volume `coredns_pihole_data` by declaration, no longer by the accident of a directory's name.
-- **Cleanup:** after both health waits pass, the role removes the two legacy directories.
+- **Cleanup:** the role removes the two legacy directories only after its waits pass, one of them a DNS query through Pi-hole to CoreDNS.
 - **Generic guard:** `tests/test_ansible_remote_paths_absolute.py` fails on any task that runs on a managed node and uses a `~` path, either literally or through a variable defined anywhere. It decides whether a task runs on the controller from the task, its block or its play (`delegate_to: localhost`, `connection: local`, `hosts: localhost`). The fetched kubeconfig stays allowed on those grounds, not by a list of exceptions.
 - **Role guards:** `tests/test_coredns_stack_location.py` pins the role's own `become`, the absolute directory and the project name.
 
-**Rule**: On a managed node, write paths as absolute. `~`, `$HOME` and `ansible_env.HOME` all name a different directory with and without `become`, so a role that uses them gives one result per caller. And a role that more than one playbook runs should declare the privilege it needs, rather than inherit it. When a lesson finds a mechanism, write its rule at the mechanism's level, not the instance's. The buildx rule could have caught this in March.
+**Rule**: On a managed node, write paths as absolute. A remote `~` or `$HOME` expands to the home of the task's effective user, so it changes with `become`, and a role that uses one gives one result per caller. `ansible_env.HOME` is no fix: it is a fact, fixed when facts were gathered and under that run's user, so it can name a different home from the one a later task runs as. And a role that more than one playbook runs should declare the privilege it needs, rather than inherit it. When a lesson finds a mechanism, write its rule at the mechanism's level, not the instance's. The buildx rule could have caught this in March.
 
 **Tags**: `#ansible` `#become` `#coredns` `#idempotence` `#issue-2053` `#issue-2039`

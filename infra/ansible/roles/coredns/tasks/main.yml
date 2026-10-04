@@ -73,7 +73,21 @@
       delay: 5
       until: pihole_test.status in [200, 302]
 
-    # After both waits, so a stack that did not come up from coredns_remote_dir
+    # The HTTP wait above proves the admin UI, not DNS. This asks Pi-hole for a
+    # staging name, which only resolves if Pi-hole loaded the forwarding config
+    # and reaches CoreDNS: the path clients actually use. Same address match as
+    # the compose healthcheck, because `dig +short` prints errors on stdout.
+    - name: Wait for Pi-hole to resolve through CoreDNS
+      command: dig @127.0.0.1 -p {{ pihole_port }} {{ staging_domain }} +short
+      register: pihole_dns
+      retries: 6
+      delay: 5
+      until: (pihole_dns.stdout_lines | select('match', '^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$') | list | length > 0) or ansible_check_mode
+      changed_when: false
+      check_mode: false
+      ignore_errors: "{{ ansible_check_mode }}"
+
+    # After every wait, so a stack that did not come up from coredns_remote_dir
     # fails the play before the copies it could fall back to are removed.
     - name: Remove the directories ~/coredns used to resolve to (ANSIBLE-064)
       file:
