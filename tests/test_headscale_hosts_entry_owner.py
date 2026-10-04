@@ -17,7 +17,7 @@ import yaml
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 ANSIBLE = REPO / "infra/ansible"
-OWNER = ANSIBLE / "roles/dns_resilience"
+OWNER = "roles/dns_resilience"
 # A task that names the hosts file and the Headscale domain, by variable or literally.
 HEADSCALE_MARKERS = ("headscale_domain", "vpn_domain", "headscale.domain", "vpn.kubelab.live")
 
@@ -37,14 +37,17 @@ def _delegates_to_owner(task: dict[str, Any]) -> bool:
     """A task that runs the owner role writes nothing itself (provision-jetson.yml)."""
     for key in ("include_role", "import_role", "ansible.builtin.include_role", "ansible.builtin.import_role"):
         target = task.get(key)
-        if isinstance(target, dict) and str(target.get("name", "")).rstrip("/").endswith("roles/dns_resilience"):
+        # Both forms Ansible accepts: the bare role name and a relative path to it.
+        if isinstance(target, dict) and str(target.get("name", "")).rstrip("/").split("/")[-1] == "dns_resilience":
             return True
     return False
 
 
-def _writers_of_the_headscale_line() -> list[str]:
+def _writers_of_the_headscale_line(root: pathlib.Path = ANSIBLE) -> list[str]:
+    """Writers under `root`, as paths relative to it: role tasks and handlers, and playbooks."""
     found = []
-    files = [*ANSIBLE.glob("roles/*/tasks/*.yml"), *ANSIBLE.glob("playbooks/*.yml")]
+    patterns = ("roles/*/tasks/**/*.y*ml", "roles/*/handlers/**/*.y*ml", "playbooks/**/*.y*ml")
+    files = {f for pattern in patterns for f in root.glob(pattern)}
     for path in sorted(files):
         for task in _tasks(yaml.safe_load(path.read_text())):
             if _delegates_to_owner(task):
@@ -52,22 +55,45 @@ def _writers_of_the_headscale_line() -> list[str]:
             own = {k: v for k, v in task.items() if k not in ("block", "rescue", "always", "tasks")}
             text = str(own)
             if "/etc/hosts" in text and any(m in text for m in HEADSCALE_MARKERS):
-                found.append(f"{path.relative_to(REPO)}: {task.get('name', '<unnamed>')}")
+                found.append(f"{path.relative_to(root)}: {task.get('name', '<unnamed>')}")
     return found
 
 
 def test_only_dns_resilience_writes_the_headscale_hosts_line() -> None:
     writers = _writers_of_the_headscale_line()
-    owner = str(OWNER.relative_to(REPO))
     assert writers, "the scan found no writer at all: it no longer recognises the owner's task"
-    assert all(w.startswith(owner) for w in writers), f"a second owner writes it: {writers}"
+    assert all(w.startswith(OWNER) for w in writers), f"a second owner writes it: {writers}"
 
 
 def test_the_scan_sees_a_second_writer(tmp_path: pathlib.Path) -> None:
-    """The detector itself: a gateway-style lineinfile on the domain is caught."""
-    task = {
-        "name": "Ensure VPN domain resolves to public IP (/etc/hosts)",
-        "lineinfile": {"path": "/etc/hosts", "line": "{{ ip }} {{ gateway_vpn_domain }}"},
+    """The scan itself, on a fixture tree: every place a writer can hide is reported,
+    and a task that runs the owner role, in either form, is not."""
+    writer = [
+        {"name": "Pin VPN domain", "lineinfile": {"path": "/etc/hosts", "line": "{{ ip }} {{ gateway_vpn_domain }}"}}
+    ]
+    # Shaped like provision-jetson.yml's: they name the hosts file and pass the domain.
+    owner_vars = {"headscale_domain": "{{ domain }}"}
+    delegations = [
+        {
+            "hosts": "all",
+            "tasks": [
+                {"name": "DNS in /etc/hosts", "include_role": {"name": "../roles/dns_resilience"}, "vars": owner_vars},
+                {"name": "DNS in /etc/hosts", "import_role": {"name": "dns_resilience"}, "vars": owner_vars},
+            ],
+        },
+    ]
+    files = {
+        "roles/dns_resilience/tasks/main.yml": writer,
+        "roles/gateway/tasks/main.yml": writer,
+        "roles/gateway/tasks/nested/dns.yaml": writer,
+        "roles/gateway/handlers/main.yml": writer,
+        "playbooks/provision-x.yml": [{"hosts": "all", "tasks": [{"block": writer}]}],
+        "playbooks/delegates.yml": delegations,
     }
-    text = str(next(_tasks([task])))
-    assert "/etc/hosts" in text and any(m in text for m in HEADSCALE_MARKERS)
+    for rel, content in files.items():
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_text(yaml.safe_dump(content))
+
+    found = {line.split(":")[0] for line in _writers_of_the_headscale_line(tmp_path)}
+
+    assert found == set(files) - {"playbooks/delegates.yml"}
