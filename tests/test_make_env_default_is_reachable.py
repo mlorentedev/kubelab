@@ -147,6 +147,8 @@ ENV_TARGETS: dict[str, tuple[str, str]] = {
     "backup-drill-apps": ("--env", "prod"),
     # Added with the target (BACKUP-070): the window exists for prod restores.
     "restore-window": ("--env", "prod"),
+    # Added with the target (BACKUP-057): the node keys live in prod SOPS only.
+    "backup-mint-node-tokens": ("--env", "prod"),
     # Already correct before #1644. Included as a regression net: "correct and
     # untested" is exactly the state the eight above were in.
     "maintain": ("-e", "staging"),

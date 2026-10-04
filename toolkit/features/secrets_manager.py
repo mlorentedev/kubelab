@@ -26,6 +26,7 @@ from toolkit.config.constants import AUTHELIA_CONFIG, PATH_STRUCTURES, is_placeh
 from toolkit.config.settings import PROJECT_ROOT
 from toolkit.core.logging import logger
 from toolkit.core.sops import age_key_env
+from toolkit.features.backup_node_credentials import access_key_path, restic_password_path, secret_key_path
 from toolkit.features.configuration import ConfigurationManager
 from toolkit.features.secret_expiry import Expiry
 
@@ -126,6 +127,56 @@ _GDRIVE_ROTATE = (
     "prod --stdin`, then `toolkit services gitea actions-secrets --apply --force`. Without --force "
     "the forge keeps the old value: it returns names only, so a stale secret looks present."
 )
+
+
+def _backup_node_specs(node: str) -> list[SecretSpec]:
+    """One node's own R2 pair and restic password (BACKUP-057 PR 3).
+
+    Minted by `toolkit backup mint-node-tokens`. The token is Object Read & Write
+    on `kubelab-backup-<node>` only, so a node holding it cannot reach another
+    node's history. Written to prod.enc.yaml (proposal item 1) and audited under
+    prod. tests/test_backup_node_credentials.py fails when a `backup.sources`
+    node is missing here, or when one is listed that the SSOT no longer has.
+    """
+    return [
+        SecretSpec(
+            key_path=access_key_path(node),
+            expiry=Expiry.NEVER,
+            description=f"R2 access key id, Object Read & Write on kubelab-backup-{node} only",
+            kind=SecretKind.EXTERNAL,
+            services=("backup",),
+            format_hint="R2 API token id (not the token value)",
+            rotate_note=(
+                f"`make backup-mint-node-tokens ENV=prod NODE={node} ROTATE=1` mints a new token, "
+                "verifies it, stores it and revokes the old one. Re-provision the node afterwards."
+            ),
+            envs=("prod",),
+        ),
+        SecretSpec(
+            key_path=secret_key_path(node),
+            expiry=Expiry.NEVER,
+            description=f"R2 secret access key, Object Read & Write on kubelab-backup-{node} only",
+            kind=SecretKind.EXTERNAL,
+            services=("backup",),
+            format_hint="SHA-256 of the R2 API token value; shown once, not recoverable",
+            rotate_note=f"Rotated together with {access_key_path(node)}: they are one credential.",
+            envs=("prod",),
+        ),
+        SecretSpec(
+            key_path=restic_password_path(node),
+            description=f"restic password of {node}'s own repository, the only key to its history",
+            kind=SecretKind.RANDOM_TOKEN,
+            length=48,
+            format_hint="URL-safe random token",
+            rotate_note=(
+                "Never regenerate it: `restic key add` on the repository first, as for "
+                "backup.restic_password. Escrow it in Bitwarden in the same pass."
+            ),
+            services=("backup", "r2-backup-watcher"),
+            envs=("prod",),
+        ),
+    ]
+
 
 SECRET_CATALOG: list[SecretSpec] = [
     # Registered on 2026-08-26 by the reverse audit (#833), which is what showed
@@ -1109,6 +1160,12 @@ SECRET_CATALOG: list[SecretSpec] = [
         rotate_note="Rotated together with backup.r2.readonly_access_key_id — they are one credential.",
         envs=("staging", "prod"),
     ),
+    # BACKUP-057 PR 3: one pair and one password per backup.sources node. Nothing
+    # reads them until PR 4 moves each consumer onto its node's own bucket.
+    *_backup_node_specs("beelink"),
+    *_backup_node_specs("rpi3"),
+    *_backup_node_specs("rpi4"),
+    *_backup_node_specs("vps"),
     SecretSpec(
         key_path="apps.services.automation.github_runner.token",
         expiry=Expiry.PROVIDER,
