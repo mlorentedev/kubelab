@@ -34,7 +34,7 @@ What it removes, and why:
   `Created`, never by uptime.
 - **Job volumes** that act_runner 0.2.13 leaves when a job is cancelled during its image
   pull, or when the runner is lost mid-job. Its cleanup runs only after the job container
-  started (lesson 521).
+  started (lesson 522).
 - **Anonymous volumes**: only when no container holds them, they are older than 24 h, and
   they are not named in `common.yaml`'s `backup` block.
 
