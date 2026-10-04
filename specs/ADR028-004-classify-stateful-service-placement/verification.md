@@ -386,6 +386,42 @@ The failure names the service and the missing field rather than reporting a bare
 
 Method note: the edit was restored from a copied backup, deliberately **not** with `git checkout -- infra/config/values/common.yaml`. That command is what #1034 was about, and reaching for it during an experiment is how this session destroyed its own uncommitted work once already. `git diff --stat` is included above as the proof of no residue.
 
+## AC2 (second half) — The duplication clause (captured 2026-10-04)
+
+`tests/test_stateful_service_classification.py` gains `duplication_problems`: a service classified `state_promotion: singleton` fails when its PVCs render in both `overlays/staging` and `overlays/prod` (rendered with `kubectl kustomize`, as `test_backup_pvc_coverage.py` does). It could not land while gitea's and minio's twins rendered in both; gitea moved to the Beelink (PR 4) and minio left K3s under OPS-023, so it goes green on master.
+
+Green against the real repo:
+
+```
+$ poetry run pytest -q -p no:cacheprovider --no-cov tests/test_stateful_service_classification.py
+18 passed
+```
+
+Red against the real repo, with `infra.postgres.state_promotion` switched to `singleton` (postgres renders in both overlays), then restored from the commit:
+
+```
+E       AssertionError: postgres is `state_promotion: singleton` but its PVCs render in ['prod', 'staging']: a second live instance forks state that has no promotion path
+1 failed, 17 deselected
+```
+
+The synthetic controls pin the same message, the one-overlay case and the `dual` case without a cluster. `test_both_overlays_render_claims` guards against an empty render passing the clause vacuously (lesson-416).
+
+## PR 3 superseded by OPS-023 (recorded 2026-10-04)
+
+PR 3 never ran. MinIO left K3s entirely under OPS-023:
+
+- #1788 (`6abdea1b`, 2026-09-24) removed it from both overlays. Its body records `kubectl kustomize` at staging 96 objects and prod 99, with zero MinIO references.
+- #1880 (`30a90cf6`) retired its SSOT and secrets.
+
+Every AC3 task of PR 3 is ticked with that pointer.
+
+**AC4 for staging MinIO is open, and cannot be satisfied as written.** No `AC4-EVIDENCE staging/minio pre-deletion` capture was taken before #1788 deleted the PVC, and none can be taken now. `features.json` f5 therefore stays red on that marker. What #1788 recorded in its place:
+
+- the prod `pvc-backup` CronJob, MinIO's only writer, had failed every night since 2026-08-25;
+- the data it would have held (Authelia, n8n) has been in R2 via `node_backup` since #1236.
+
+R5's authenticated check of 2026-08-12 (above) had also found staging MinIO without a consumer. Whether this stands in for AC4, with f5 narrowed to the two Gitea markers and the reason recorded, or AC4 stays unmet, is for the archive review to decide. It is not decided here.
+
 ## Test status
 
 - Test suite: `<command> -> <output / coverage %>`
