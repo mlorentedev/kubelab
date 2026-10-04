@@ -199,14 +199,20 @@ def test_open_webui_reads_the_one_nan_key_pr_agent_uses() -> None:
     [spec] = [s for s in SECRET_CATALOG if s.key_path == key]
     assert "open_webui" in spec.services, "a rotation must name every consumer, or ace2 keeps the old key"
     # Key names are plaintext in SOPS, so the vault itself is read: an unregistered
-    # copy (the old `open_webui.nan_api_key` path) would escape the catalog and the audit.
-    copies = {
+    # copy (the old `open_webui.nan_api_key` path) would escape the catalog and the
+    # audit. A second key that Hermes's R1 may mint is fine once it is registered;
+    # what fails is a NaN key the catalog does not know, or one stored in a vault
+    # its spec does not cover (common merges into every env, so it covers all).
+    specs = {s.key_path: s for s in SECRET_CATALOG}
+    stray = sorted(
         f"{store.name}:{path}"
         for store in sorted((REPO / "infra/config/secrets").glob("*.enc.yaml"))
         for path in _key_paths(yaml.safe_load(store.read_text()))
         if path.endswith(".nan_api_key")
-    }
-    assert copies == {"prod.enc.yaml:" + key}, f"one NaN key, in prod's vault, and nowhere else: {sorted(copies)}"
+        and not (path in specs and store.name.split(".")[0] in ("common", *specs[path].envs))
+    )
+    assert not stray, f"a NaN key outside the catalog, or in a vault its spec does not cover: {stray}"
+    assert key in _key_paths(yaml.safe_load((REPO / "infra/config/secrets/prod.enc.yaml").read_text()))
 
 
 def _key_paths(node: object, prefix: str = "") -> list[str]:
