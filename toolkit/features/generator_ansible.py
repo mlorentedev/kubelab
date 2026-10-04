@@ -167,13 +167,43 @@ class AnsibleGenerator(BaseGenerator):
                 "Use bootstrap from a controller on the lab LAN, or bastion without it."
             )
 
-        vps = networking.get("vps", {})
-        nodes = networking.get("nodes", {})
         ssh_key = networking.get("ssh_key", "~/.ssh/id_ed25519")
-
         bastion_args = self._bastion_ssh_args(networking) if transport == "bastion" else None
+        all_nodes = self._collect_nodes(networking, bootstrap)
 
-        # Collect all nodes (VPS + AWS hub + homelab nodes)
+        # Build group → hosts mapping
+        groups: dict[str, list[str]] = defaultdict(list)
+        host_vars: dict[str, dict[str, Any]] = {}
+
+        for node in all_nodes:
+            host_vars[node["hostname"]] = self._host_vars(node, bastion_args)
+            for group in node.get("groups", []):
+                groups[group].append(node["hostname"])
+
+        for group, hostnames in self._derived_groups(all_nodes, backup_sources or {}).items():
+            groups[group].extend(h for h in hostnames if h not in groups[group])
+
+        # Build inventory structure
+        inventory: dict[str, Any] = {
+            "all": {
+                "vars": {
+                    "ansible_ssh_private_key_file": ssh_key,
+                    "ansible_ssh_common_args": "-o StrictHostKeyChecking=accept-new",
+                    "ansible_python_interpreter": "auto_silent",
+                },
+                "children": {},
+            }
+        }
+
+        for group_name, hostnames in sorted(groups.items()):
+            group_hosts = {hostname: host_vars[hostname] for hostname in hostnames}
+            inventory["all"]["children"][group_name] = {"hosts": group_hosts}
+
+        return inventory
+
+    def _collect_nodes(self, networking: dict[str, Any], bootstrap: bool) -> list[dict[str, Any]]:
+        """Every host the inventory emits (VPS, cloud hubs, homelab nodes), in that order."""
+        vps = networking.get("vps", {})
         all_nodes: list[dict[str, Any]] = []
 
         # VPS — always uses public IP (Headscale bootstrap host; Tailscale IP would create circular dependency)
@@ -190,6 +220,16 @@ class AnsibleGenerator(BaseGenerator):
                 }
             )
 
+        all_nodes.extend(self._hub_nodes(networking))
+
+        for node_key, node in networking.get("nodes", {}).items():
+            all_nodes.append(self._homelab_node(node_key, node, networking, bootstrap))
+        return all_nodes
+
+    def _hub_nodes(self, networking: dict[str, Any]) -> list[dict[str, Any]]:
+        """The cloud hub nodes, each from its own provider block."""
+        hubs: list[dict[str, Any]] = []
+
         # AWS hub node (ADR-023 Phase 3) — prefer MagicDNS (ADR-025) so Spot
         # replacement does not require an inventory regenerate. Falls back to
         # tailscale_ip only when tailscale_dns is unset (e.g. early bootstrap).
@@ -200,7 +240,7 @@ class AnsibleGenerator(BaseGenerator):
         aws = networking.get("aws", {})
         self._warn_if_retired("aws", aws)
         if aws and not aws.get("retired") and (aws.get("tailscale_dns") or aws.get("tailscale_ip")):
-            all_nodes.append(
+            hubs.append(
                 {
                     "key": "aws",
                     "location": aws.get("location"),
@@ -225,7 +265,7 @@ class AnsibleGenerator(BaseGenerator):
         gcp = networking.get("gcp", {})
         self._warn_if_retired("gcp", gcp)
         if gcp and not gcp.get("retired") and (gcp.get("tailscale_dns") or gcp.get("tailscale_ip")):
-            all_nodes.append(
+            hubs.append(
                 {
                     "key": "gcp",
                     "location": gcp.get("location"),
@@ -235,73 +275,48 @@ class AnsibleGenerator(BaseGenerator):
                     "groups": ["hub"],
                 }
             )
+        return hubs
 
-        # Homelab nodes — bootstrap uses lan_ip, normal uses tailscale_ip
-        for _node_key, node in nodes.items():
-            if bootstrap and node.get("lan_ip"):
-                host_ip = node["lan_ip"]
-            else:
-                host_ip = node.get("tailscale_ip")
-            entry: dict[str, Any] = {
-                "key": _node_key,
-                "location": node.get("location"),
-                "hostname": node.get("hostname", _node_key),
-                "ansible_host": host_ip,
-                "ansible_user": self._resolve_ssh_user(node, networking, "homelab"),
-                "groups": node.get("ansible_groups", []),
-            }
-            if node.get("lan_ip"):
-                entry["lan_ip"] = node["lan_ip"]
-            if node.get("legacy_python"):
-                entry["legacy_python"] = True
-            all_nodes.append(entry)
-
-        # Build group → hosts mapping
-        groups: dict[str, list[str]] = defaultdict(list)
-        host_vars: dict[str, dict[str, Any]] = {}
-
-        for node in all_nodes:
-            hostname = node["hostname"]
-            host_vars[hostname] = {
-                "ansible_host": node["ansible_host"],
-                "ansible_user": node["ansible_user"],
-            }
-            if node.get("public_ip"):
-                host_vars[hostname]["public_ip"] = node["public_ip"]
-            if node.get("lan_ip"):
-                host_vars[hostname]["lan_ip"] = node["lan_ip"]
-            if node.get("legacy_python"):
-                host_vars[hostname]["legacy_python"] = True
-            # bastion: mesh-only nodes (no public path) jump through the VPS; the VPS
-            # itself IS the jump and keeps the inventory-global (jump-free) args.
-            if bastion_args and not node.get("public_ip"):
-                host_vars[hostname]["ansible_ssh_common_args"] = bastion_args
-
-            for group in node.get("groups", []):
-                groups[group].append(hostname)
-
-        for group, hostnames in self._derived_groups(all_nodes, backup_sources or {}).items():
-            groups[group].extend(h for h in hostnames if h not in groups[group])
-
-        # Build inventory structure
-        inventory: dict[str, Any] = {
-            "all": {
-                "vars": {
-                    "ansible_ssh_private_key_file": ssh_key,
-                    "ansible_ssh_common_args": "-o StrictHostKeyChecking=accept-new",
-                    "ansible_python_interpreter": "auto_silent",
-                },
-                "children": {},
-            }
+    def _homelab_node(
+        self, node_key: str, node: dict[str, Any], networking: dict[str, Any], bootstrap: bool
+    ) -> dict[str, Any]:
+        """A homelab node: bootstrap addresses it by lan_ip, normal runs by tailscale_ip."""
+        if bootstrap and node.get("lan_ip"):
+            host_ip = node["lan_ip"]
+        else:
+            host_ip = node.get("tailscale_ip")
+        entry: dict[str, Any] = {
+            "key": node_key,
+            "location": node.get("location"),
+            "hostname": node.get("hostname", node_key),
+            "ansible_host": host_ip,
+            "ansible_user": self._resolve_ssh_user(node, networking, "homelab"),
+            "groups": node.get("ansible_groups", []),
         }
+        if node.get("lan_ip"):
+            entry["lan_ip"] = node["lan_ip"]
+        if node.get("legacy_python"):
+            entry["legacy_python"] = True
+        return entry
 
-        for group_name, hostnames in sorted(groups.items()):
-            group_hosts: dict[str, Any] = {}
-            for hostname in hostnames:
-                group_hosts[hostname] = host_vars[hostname]
-            inventory["all"]["children"][group_name] = {"hosts": group_hosts}
-
-        return inventory
+    @staticmethod
+    def _host_vars(node: dict[str, Any], bastion_args: str | None) -> dict[str, Any]:
+        """The per-host variables one collected node contributes to the inventory."""
+        host_vars: dict[str, Any] = {
+            "ansible_host": node["ansible_host"],
+            "ansible_user": node["ansible_user"],
+        }
+        if node.get("public_ip"):
+            host_vars["public_ip"] = node["public_ip"]
+        if node.get("lan_ip"):
+            host_vars["lan_ip"] = node["lan_ip"]
+        if node.get("legacy_python"):
+            host_vars["legacy_python"] = True
+        # bastion: mesh-only nodes (no public path) jump through the VPS; the VPS
+        # itself IS the jump and keeps the inventory-global (jump-free) args.
+        if bastion_args and not node.get("public_ip"):
+            host_vars["ansible_ssh_common_args"] = bastion_args
+        return host_vars
 
     @staticmethod
     def _derived_groups(all_nodes: list[dict[str, Any]], backup_sources: dict[str, Any]) -> dict[str, list[str]]:
