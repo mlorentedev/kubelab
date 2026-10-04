@@ -112,9 +112,14 @@ fi
 #
 # The exit code is taken inside the `if`, because `set -e` would abort on a
 # bare failing command before `$?` could be read.
+#
+# `--no-lock` on this probe and on `cat config` below: both only read, and both
+# run before `unlock`. With a lock, a stale exclusive one left by a killed
+# prune made the probe exit 11 and failed the ship before `unlock` could clear
+# it (measured on beelink 2026-10-04, BACKUP-057 Q6).
 PROBE_ERR="$(mktemp)"
 trap 'rm -f "$PROBE_ERR"' EXIT
-if timeout -k 10 {{ node_backup_probe_timeout }} $RESTIC snapshots -q >/dev/null 2>"$PROBE_ERR"; then
+if timeout -k 10 {{ node_backup_probe_timeout }} $RESTIC snapshots -q --no-lock >/dev/null 2>"$PROBE_ERR"; then
     SNAPSHOTS_RC=0
 else
     SNAPSHOTS_RC=$?
@@ -161,7 +166,7 @@ esac
 # Compared on EVERY ship, not only the first: a replaced repository answers
 # `snapshots` with 0, so this comparison is the only thing that sees it. One
 # small read per run; do not optimise it away.
-if ! CONFIG="$($RESTIC cat config --json)"; then
+if ! CONFIG="$($RESTIC cat config --json --no-lock)"; then
     echo "node-backup-ship: 'restic cat config' failed on the $DESTINATION repository (see its error above)" >&2
     exit 1
 fi

@@ -43,6 +43,9 @@ NEW_ID = "b" * 64
 #   id            the repository id `cat config` reports
 #   forget.rc     exit code of `forget` (default 0)
 #   check.rc      exit code of `check` (default 0)
+#   stale-lock    present = an exclusive lock a killed prune left behind: every
+#                 command that locks exits 11, as restic 0.19.1 does, until
+#                 `unlock` removes it; `--no-lock` reads past it
 # `init` sets a new id and makes `snapshots` succeed, as a real init would.
 # Every subcommand is appended to `calls`, which is what the tests assert on.
 FAKE_RESTIC = r"""#!/bin/bash
@@ -53,6 +56,15 @@ while [ $# -gt 0 ]; do
   esac
 done
 echo "$*" >> "$FAKE_DIR/calls"
+if [ -e "$FAKE_DIR/stale-lock" ]; then
+  case "$1 $*" in
+    unlock*) rm -f "$FAKE_DIR/stale-lock"; exit 0 ;;
+    *--no-lock*) ;;
+    *)
+      echo "unable to create lock in backend: repository is already locked exclusively by PID 1 on beelink by root (UID 0, GID 0)" >&2
+      exit 11 ;;
+  esac
+fi
 case "$1" in
   snapshots)
     rc="$(cat "$FAKE_DIR/snapshots.rc" 2>/dev/null || echo 0)"
@@ -163,7 +175,10 @@ def node(tmp_path: Path, request: pytest.FixtureRequest):
         check: bool = False,
         check_rc: int = 0,
         now: int | None = None,
+        stale_lock: bool = False,
     ):
+        if stale_lock:
+            (fake_dir / "stale-lock").touch()
         (fake_dir / "snapshots.rc").write_text(f"{snapshots_rc}\n")
         (fake_dir / "forget.rc").write_text(f"{forget_rc}\n")
         (fake_dir / "check.rc").write_text(f"{check_rc}\n")
@@ -269,6 +284,15 @@ def test_the_ship_unlocks_before_backup_and_never_prunes(node) -> None:
     proc, verbs, _marker = node(snapshots_rc=0, recorded=EXISTING_ID)
     assert proc.returncode == 0, proc.stderr
     assert "forget" not in verbs
+    assert verbs.index("unlock") < verbs.index("backup")
+
+
+def test_a_stale_lock_left_by_a_killed_prune_does_not_stop_the_ship(node) -> None:
+    """The probes before `unlock` must not lock: a stale exclusive lock made the
+    `snapshots` probe exit 11, so the ship failed before it reached `unlock`
+    (measured on beelink 2026-10-04 by SIGKILLing a prune that held its lock)."""
+    proc, verbs, _marker = node(snapshots_rc=0, recorded=EXISTING_ID, stale_lock=True)
+    assert proc.returncode == 0, proc.stderr
     assert verbs.index("unlock") < verbs.index("backup")
 
 
