@@ -1,66 +1,96 @@
 ---
-- name: Create CoreDNS directory
-  file:
-    path: "{{ coredns_remote_dir }}"
-    state: directory
-    mode: "0755"
+# The role runs as root whatever its caller declares. deploy-dns.yml has no
+# `become` and provision-rpi4.yml has it at play level, and a role whose result
+# depends on which one called it has two results (ANSIBLE-064).
+- name: DNS gateway stack (CoreDNS + Pi-hole)
+  become: true
+  block:
+    - name: Create CoreDNS directory
+      file:
+        path: "{{ coredns_remote_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
 
-- name: Template docker-compose.yml
-  template:
-    src: docker-compose.yml.j2
-    dest: "{{ coredns_remote_dir }}/docker-compose.yml"
-    mode: "0644"
-  register: coredns_compose
+    - name: Template docker-compose.yml
+      template:
+        src: docker-compose.yml.j2
+        dest: "{{ coredns_remote_dir }}/docker-compose.yml"
+        mode: "0644"
+      register: coredns_compose
 
-- name: Template Corefile
-  template:
-    src: Corefile.j2
-    dest: "{{ coredns_remote_dir }}/Corefile"
-    mode: "0644"
-  register: corefile
+    - name: Template Corefile
+      template:
+        src: Corefile.j2
+        dest: "{{ coredns_remote_dir }}/Corefile"
+        mode: "0644"
+      register: corefile
 
-- name: Template pihole-forwarding.conf
-  template:
-    src: pihole-forwarding.conf.j2
-    dest: "{{ coredns_remote_dir }}/pihole-forwarding.conf"
-    mode: "0644"
-  register: pihole_conf
+    - name: Template pihole-forwarding.conf
+      template:
+        src: pihole-forwarding.conf.j2
+        dest: "{{ coredns_remote_dir }}/pihole-forwarding.conf"
+        mode: "0644"
+      register: pihole_conf
 
-- name: Pull images
-  command: docker compose -f {{ coredns_remote_dir }}/docker-compose.yml pull
-  changed_when: false
+    - name: Pull images
+      command: docker compose -f {{ coredns_remote_dir }}/docker-compose.yml pull
+      changed_when: false
 
-- name: Start DNS stack
-  command: docker compose -f {{ coredns_remote_dir }}/docker-compose.yml up -d
-  register: dns_start
-  changed_when: "'Started' in dns_start.stderr or 'Created' in dns_start.stderr"
+    - name: Start DNS stack
+      command: docker compose -f {{ coredns_remote_dir }}/docker-compose.yml up -d
+      register: dns_start
+      changed_when: "'Started' in dns_start.stderr or 'Created' in dns_start.stderr"
 
-- name: Restart CoreDNS on config change
-  command: docker compose -f {{ coredns_remote_dir }}/docker-compose.yml restart coredns
-  when: corefile.changed
-  notify: verify coredns
+    - name: Restart CoreDNS on config change
+      command: docker compose -f {{ coredns_remote_dir }}/docker-compose.yml restart coredns
+      when: corefile.changed
+      notify: verify coredns
 
-# Pi-hole v6 quirk: reloaddns does NOT reload dnsmasq configs
-- name: Restart Pi-hole on config change
-  command: docker restart pihole
-  when: pihole_conf.changed
-  notify: verify pihole
+    # Pi-hole v6 quirk: reloaddns does NOT reload dnsmasq configs
+    - name: Restart Pi-hole on config change
+      command: docker restart pihole
+      when: pihole_conf.changed
+      notify: verify pihole
 
-- name: Wait for CoreDNS
-  command: dig @127.0.0.1 -p {{ coredns_port }} {{ service_domains.vpn | default(base_domain) }} +short
-  register: coredns_test
-  retries: 6
-  delay: 5
-  until: (coredns_test.rc == 0) or ansible_check_mode
-  changed_when: false
-  check_mode: false
-  ignore_errors: "{{ ansible_check_mode }}"
+    - name: Wait for CoreDNS
+      command: dig @127.0.0.1 -p {{ coredns_port }} {{ service_domains.vpn | default(base_domain) }} +short
+      register: coredns_test
+      retries: 6
+      delay: 5
+      until: (coredns_test.rc == 0) or ansible_check_mode
+      changed_when: false
+      check_mode: false
+      ignore_errors: "{{ ansible_check_mode }}"
 
-- name: Wait for Pi-hole
-  uri:
-    url: "http://127.0.0.1:{{ pihole_web_port }}/admin/"
-    status_code: [200, 302]
-  register: pihole_test
-  retries: 6
-  delay: 5
-  until: pihole_test.status in [200, 302]
+    - name: Wait for Pi-hole
+      uri:
+        url: "http://127.0.0.1:{{ pihole_web_port }}/admin/"
+        status_code: [200, 302]
+      register: pihole_test
+      retries: 6
+      delay: 5
+      until: pihole_test.status in [200, 302]
+
+    # The HTTP wait above proves the admin UI, not DNS. This asks Pi-hole for a
+    # staging name, which only resolves if Pi-hole loaded the forwarding config
+    # and reaches CoreDNS: the path clients actually use. Same address match as
+    # the compose healthcheck, because `dig +short` prints errors on stdout.
+    - name: Wait for Pi-hole to resolve through CoreDNS
+      command: dig @127.0.0.1 -p {{ pihole_port }} {{ staging_domain }} +short
+      register: pihole_dns
+      retries: 6
+      delay: 5
+      until: (pihole_dns.stdout_lines | select('match', '^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$') | list | length > 0) or ansible_check_mode
+      changed_when: false
+      check_mode: false
+      ignore_errors: "{{ ansible_check_mode }}"
+
+    # After every wait, so a stack that did not come up from coredns_remote_dir
+    # fails the play before the copies it could fall back to are removed.
+    - name: Remove the directories ~/coredns used to resolve to (ANSIBLE-064)
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop: "{{ coredns_legacy_dirs }}"

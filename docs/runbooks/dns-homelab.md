@@ -65,17 +65,14 @@ Any Tailscale node — resolves api.staging.kubelab.live or status.kubelab.live
 
 ### 1. Deploy CoreDNS + Pi-hole on RPi 4
 
-Both services are defined in `edge/dns-gateway/compose.base.yml`:
+Both services are rendered by the Ansible `coredns` role (`infra/ansible/roles/coredns/`) into `/opt/coredns` on the RPi 4. The compose project is `coredns`, and Pi-hole's state lives in the volume `coredns_pihole_data`.
 
 ```bash
-# From workstation — copy all config files
-scp edge/dns-gateway/Corefile edge/dns-gateway/compose.base.yml edge/dns-gateway/pihole-forwarding.conf manu@100.64.0.10:~/coredns/
-
-# On RPi 4
-ssh manu@100.64.0.10
-cd ~/coredns
-docker compose -f compose.base.yml up -d
+make deploy TARGET=dns ENV=prod CHECK=1   # dry run: read the diff first
+make deploy TARGET=dns ENV=prod           # render, restart what changed, verify
 ```
+
+`make provision NODE=rpi4 ENV=prod` runs the same role as part of the full node provision. The two must agree. Never copy files to the node by hand, and never keep the stack under `~`: a remote `~` is a different directory with and without `become` (lesson-519).
 
 **Port mapping**:
 - Pi-hole: port 53 (DNS) + port 80 (admin UI)
@@ -91,13 +88,7 @@ docker compose -f compose.base.yml up -d
 
 Pi-hole v6 uses FTL (not dnsmasq) as its DNS resolver. Custom dnsmasq config files require explicit opt-in.
 
-```bash
-# Enable dnsmasq.d config loading in Pi-hole v6
-docker exec pihole sed -i 's/etc_dnsmasq_d = false/etc_dnsmasq_d = true/' /etc/pihole/pihole.toml
-
-# Restart Pi-hole to load changes
-docker restart pihole
-```
+The compose file declares `FTLCONF_misc_etc_dnsmasq_d=true`, so Pi-hole loads `/etc/dnsmasq.d` from its first start, with a fresh volume too. There is nothing to set by hand.
 
 The `pihole-forwarding.conf` is automatically mounted via the compose file. No manual file copying needed.
 
@@ -324,10 +315,10 @@ All changes below survive reboot:
 | Component | Persistence | How |
 |-----------|------------|-----|
 | CoreDNS container | `restart: unless-stopped` in compose | Docker auto-starts |
-| CoreDNS config | Bind mount `~/coredns/Corefile` from repo | File on disk |
+| CoreDNS config | Bind mount `/opt/coredns/Corefile`, rendered by the `coredns` role | File on disk |
 | Pi-hole container | `restart: unless-stopped` in compose | Docker auto-starts |
-| Pi-hole forwarding | Bind mount `pihole-forwarding.conf` from repo | Always in sync |
-| Pi-hole `etc_dnsmasq_d=true` | In `pihole.toml` (Docker volume `pihole_data`) | Persists across restarts |
+| Pi-hole forwarding | Bind mount `/opt/coredns/pihole-forwarding.conf`, rendered by the `coredns` role | File on disk |
+| Pi-hole `etc_dnsmasq_d=true` | `FTLCONF_misc_etc_dnsmasq_d` in the compose file | Persists across restarts |
 | Avahi disabled | `systemctl disable` | Survives reboot |
 | Headscale split DNS | In `/opt/headscale/config/config.yaml` | File on disk |
 | RPi4 `--accept-dns=false` | Tailscale remembers flags | Persists across restarts |

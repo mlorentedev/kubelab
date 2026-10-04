@@ -1,7 +1,20 @@
 ---
 coredns_image: "coredns/coredns:1.12.1"
 pihole_image: "pihole/pihole:latest"
-coredns_remote_dir: "~/coredns"
+# Absolute, like every other service under /opt. A remote `~` is the home of
+# whoever the task runs as, so `~/coredns` was /home/<user>/coredns from
+# deploy-dns.yml and /root/coredns from provision-rpi4.yml: one stack, two
+# directories, each caller moving the containers to its own copy (ANSIBLE-064).
+coredns_remote_dir: /opt/coredns
+# The basename is also the compose project name, which names the Pi-hole
+# volume (`coredns_pihole_data`). The compose file pins it, so the volume no
+# longer depends on where the directory is.
+coredns_project: coredns
+# Where `~/coredns` resolved before ANSIBLE-064. Removed once the stack is
+# healthy from coredns_remote_dir.
+coredns_legacy_dirs:
+  - /root/coredns
+  - "/home/{{ common.networking.ssh_users.homelab }}/coredns"
 coredns_port: 5353
 # CoreDNS `health` plugin, published for external probing because the image is
 # distroless and cannot be probed from inside. `ready` (:8181) stays unpublished.

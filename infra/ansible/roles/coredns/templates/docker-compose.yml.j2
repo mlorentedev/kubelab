@@ -1,5 +1,9 @@
 # Managed by Ansible — do not edit manually
 # Source: infra/ansible/roles/coredns/templates/docker-compose.yml.j2
+# Pinned, not derived from the directory name: it names the Pi-hole volume
+# (`<project>_pihole_data`), which holds Pi-hole's state (ANSIBLE-064).
+name: {{ coredns_project }}
+
 services:
   pihole:
     container_name: pihole
@@ -14,6 +18,10 @@ services:
       - ./pihole-forwarding.conf:/etc/dnsmasq.d/pihole-forwarding.conf:ro
     environment:
       - TZ={{ pihole_timezone }}
+      # Pi-hole v6 ignores /etc/dnsmasq.d unless this is on, and then the
+      # forwarding to CoreDNS above is silently dropped. Declared here, not set
+      # by hand inside the volume, so a new volume gets it too (ANSIBLE-064).
+      - FTLCONF_misc_etc_dnsmasq_d=true
     # Resolves a STAGING name, not `localhost`. Pi-hole answers `localhost` from
     # its own tables without ever consulting its upstream, so the old probe
     # reported `healthy` for the entire 2026-08-22 outage while every real query

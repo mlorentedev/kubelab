@@ -22,3 +22,5 @@ tags: [kubelab, containers-docker]
 ```
 
 **Rule:** All Docker operations in Ansible must run with consistent privilege. Don't mix `become: true` and `become: false` for docker buildx commands in the same role.
+
+**Generalised (2026-10-04):** the mechanism is not specific to buildx. A remote `~` expands to the home of the task's effective user, so it changes when `become` changes that user; see lesson-519, where it split the DNS gateway stack across two directories.
