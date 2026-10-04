@@ -125,6 +125,40 @@ def test_loader_requires_status_and_priority_field_names(tmp_path: Path) -> None
         sw.load_registry(path)
 
 
+_HEAD = "project: {owner: o, number: 1, repo: o/r}\nstatus_field: Status\npriority_field: Priority\n"
+
+
+@pytest.mark.parametrize(
+    ("body", "match"),
+    [
+        ("project: [unclosed\n", "not valid YAML"),
+        ("- a list\n", "root must be a mapping"),
+        ("project: {owner: o, number: 1}\nstatus_field: S\npriority_field: P\n", r"project\.repo is required"),
+        ("project: {owner: o, number: 1, repo: o/r}\nstatus_field: S\npriority_field: '  '\n", "priority_field"),
+        (_HEAD + "stays:\n  abc: {priority: P1}\n", "stays key is not an issue number: 'abc'"),
+        (_HEAD + "parked:\n  - x7\n", "parked entry is not an issue number: 'x7'"),
+    ],
+)
+def test_loader_names_what_is_wrong(tmp_path: Path, body: str, match: str) -> None:
+    path = tmp_path / "r.yaml"
+    path.write_text(body, encoding="utf-8")
+    with pytest.raises(sw.RegistryError, match=match):
+        sw.load_registry(path)
+
+
+def test_loader_refuses_a_missing_file(tmp_path: Path) -> None:
+    with pytest.raises(sw.RegistryError, match="registry not found"):
+        sw.load_registry(tmp_path / "absent.yaml")
+
+
+def test_loader_reads_a_stays_entry_without_a_priority_as_none(tmp_path: Path) -> None:
+    path = tmp_path / "r.yaml"
+    path.write_text(_HEAD + "stays:\n  5:\n  6: P2\n  7: {priority: P1}\n", encoding="utf-8")
+    reg = sw.load_registry(path)
+    assert reg.stays == {5: None, 6: None, 7: "P1"}
+    assert (reg.status_field, reg.priority_field) == ("Status", "Priority")
+
+
 def test_fetch_fields_walks_every_page_and_requires_both(monkeypatch: pytest.MonkeyPatch) -> None:
     pages = [
         {
