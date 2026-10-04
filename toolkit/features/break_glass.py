@@ -189,35 +189,54 @@ def validate(decls: Mapping[str, Mapping[str, Any]], values: Mapping[str, Any]) 
 
     catalog = {spec.key_path for spec in SECRET_CATALOG}
     identities = _lookup(values, "apps.auth.identities") or {}
-    problems: list[str] = []
-    for name, decl in decls.items():
-        unknown = sorted(set(decl) - set(_FORMS) - set(_EXTRAS))
-        if unknown:
-            problems.append(f"{name}: unknown field(s) {unknown}")
-            continue
-        forms = [f for f in ("cluster", "none") if f in decl]
-        if set(_ACCOUNT) & set(decl):
-            forms.append("account")
-        if len(forms) > 1:
-            problems.append(f"{name}: declares {forms}; exactly one of account, cluster, none, or {{}}")
-            continue
-        if "none" in decl and not str(decl["none"]).strip():
-            problems.append(f"{name}: `none` needs a reason")
-        if "path" in decl:
-            if forms and forms != ["account"]:
-                problems.append(f"{name}: `path` only applies to a reachable form, not {forms}")
-            elif not str(decl["path"]).startswith("/"):
-                problems.append(f"{name}: `path` must start with '/'")
-        if "cluster" in decl and decl["cluster"] not in CLUSTER_TARGETS:
-            problems.append(f"{name}: cluster '{decl['cluster']}' is not one of {CLUSTER_TARGETS}")
-        if forms == ["account"]:
-            if "secret" not in decl:
-                problems.append(f"{name}: an account needs its `secret`")
-            elif decl["secret"] not in catalog:
-                problems.append(f"{name}: secret '{decl['secret']}' is not in SECRET_CATALOG")
-            problems += [f"{name}: {p}" for p in _account_problems(decl, identities, values)]
+    problems = [
+        f"{name}: {problem}"
+        for name, decl in decls.items()
+        for problem in _declaration_problems(decl, catalog, identities, values)
+    ]
     if problems:
         raise BreakGlassError("invalid break-glass declaration: " + "; ".join(problems))
+
+
+def _declaration_problems(
+    decl: Mapping[str, Any], catalog: set[str], identities: Mapping[str, Any], values: Mapping[str, Any]
+) -> list[str]:
+    """What is wrong with one declaration. A shape error stops there: the field checks would only add noise."""
+    unknown = sorted(set(decl) - set(_FORMS) - set(_EXTRAS))
+    if unknown:
+        return [f"unknown field(s) {unknown}"]
+    forms = [f for f in ("cluster", "none") if f in decl]
+    if set(_ACCOUNT) & set(decl):
+        forms.append("account")
+    if len(forms) > 1:
+        return [f"declares {forms}; exactly one of account, cluster, none, or {{}}"]
+    problems = []
+    if "none" in decl and not str(decl["none"]).strip():
+        problems.append("`none` needs a reason")
+    problems += _path_problems(decl, forms)
+    if "cluster" in decl and decl["cluster"] not in CLUSTER_TARGETS:
+        problems.append(f"cluster '{decl['cluster']}' is not one of {CLUSTER_TARGETS}")
+    if forms == ["account"]:
+        problems += _secret_problems(decl, catalog) + _account_problems(decl, identities, values)
+    return problems
+
+
+def _path_problems(decl: Mapping[str, Any], forms: list[str]) -> list[str]:
+    if "path" not in decl:
+        return []
+    if forms and forms != ["account"]:
+        return [f"`path` only applies to a reachable form, not {forms}"]
+    if not str(decl["path"]).startswith("/"):
+        return ["`path` must start with '/'"]
+    return []
+
+
+def _secret_problems(decl: Mapping[str, Any], catalog: set[str]) -> list[str]:
+    if "secret" not in decl:
+        return ["an account needs its `secret`"]
+    if decl["secret"] not in catalog:
+        return [f"secret '{decl['secret']}' is not in SECRET_CATALOG"]
+    return []
 
 
 def _account_problems(decl: Mapping[str, Any], identities: Mapping[str, Any], values: Mapping[str, Any]) -> list[str]:

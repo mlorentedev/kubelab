@@ -49,8 +49,7 @@ class Registry:
     parked: tuple[int, ...]
 
 
-def load_registry(path: Path = DEFAULT_REGISTRY) -> Registry:
-    """Load and validate the sweep registry. An issue in both `stays` and `parked` is an error."""
+def _read_mapping(path: Path) -> dict[str, Any]:
     try:
         raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     except FileNotFoundError as exc:
@@ -59,34 +58,50 @@ def load_registry(path: Path = DEFAULT_REGISTRY) -> Registry:
         raise RegistryError(f"registry is not valid YAML: {path}: {exc}") from exc
     if not isinstance(raw, dict):
         raise RegistryError(f"registry root must be a mapping: {path}")
+    return raw
+
+
+def _required_text(raw: dict[str, Any], key: str) -> str:
+    value = raw.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise RegistryError(f"registry: {key} must be a non-empty string")
+    return value.strip()
+
+
+def _parse_stays(entries: dict[Any, Any]) -> dict[int, str | None]:
+    stays: dict[int, str | None] = {}
+    for key, value in entries.items():
+        try:
+            number = int(key)
+        except (TypeError, ValueError) as exc:
+            raise RegistryError(f"registry: stays key is not an issue number: {key!r}") from exc
+        stays[number] = value.get("priority") if isinstance(value, dict) else None
+    return stays
+
+
+def _parse_parked(entries: list[Any]) -> list[int]:
+    parked: list[int] = []
+    for entry in entries:
+        try:
+            parked.append(int(entry))
+        except (TypeError, ValueError) as exc:
+            raise RegistryError(f"registry: parked entry is not an issue number: {entry!r}") from exc
+    return parked
+
+
+def load_registry(path: Path = DEFAULT_REGISTRY) -> Registry:
+    """Load and validate the sweep registry. An issue in both `stays` and `parked` is an error."""
+    raw = _read_mapping(path)
 
     project = raw.get("project") or {}
     for key in ("owner", "number", "repo"):
         if key not in project:
             raise RegistryError(f"registry: project.{key} is required")
 
-    status_field = raw.get("status_field")
-    priority_field = raw.get("priority_field")
-    if not isinstance(status_field, str) or not status_field.strip():
-        raise RegistryError("registry: status_field must be a non-empty string")
-    if not isinstance(priority_field, str) or not priority_field.strip():
-        raise RegistryError("registry: priority_field must be a non-empty string")
-
-    stays: dict[int, str | None] = {}
-    for key, value in (raw.get("stays") or {}).items():
-        try:
-            number = int(key)
-        except (TypeError, ValueError) as exc:
-            raise RegistryError(f"registry: stays key is not an issue number: {key!r}") from exc
-        priority = (value or {}).get("priority") if isinstance(value, dict) else None
-        stays[number] = priority
-
-    parked: list[int] = []
-    for entry in raw.get("parked") or []:
-        try:
-            parked.append(int(entry))
-        except (TypeError, ValueError) as exc:
-            raise RegistryError(f"registry: parked entry is not an issue number: {entry!r}") from exc
+    status_field = _required_text(raw, "status_field")
+    priority_field = _required_text(raw, "priority_field")
+    stays = _parse_stays(raw.get("stays") or {})
+    parked = _parse_parked(raw.get("parked") or [])
 
     overlap = set(stays) & set(parked)
     if overlap:
@@ -96,8 +111,8 @@ def load_registry(path: Path = DEFAULT_REGISTRY) -> Registry:
         owner=str(project["owner"]),
         number=int(project["number"]),
         repo=str(project["repo"]),
-        status_field=status_field.strip(),
-        priority_field=priority_field.strip(),
+        status_field=status_field,
+        priority_field=priority_field,
         stays=stays,
         parked=tuple(parked),
     )

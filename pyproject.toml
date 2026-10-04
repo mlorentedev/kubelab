@@ -70,7 +70,7 @@ max-complexity = 10
 # (BACKUP-072, #2015), and every module named here once brought under it
 # (TOOL-098, #2030). The rest of the toolkit is not yet; widen this pattern as
 # each module is brought down, never the other way.
-"!toolkit/features/{*drill*,generator_ansible}.py" = ["C901"]
+"!toolkit/features/{*drill*,generator_ansible,board_sweep,break_glass,docker_service}.py" = ["C901"]
 
 [tool.ruff.format]
 # Configuración del formateador (estilo Black)

@@ -95,49 +95,13 @@ class DockerService:
                 logger.warning(f"Could not parse compose file for volume validation: {result.stderr}")
                 return True  # Skip validation if we can't parse
 
-            # Parse the full YAML output
-            import yaml
-
             try:
                 compose_config = yaml.safe_load(result.stdout)
             except yaml.YAMLError:
                 logger.warning("Could not parse docker compose config output.")
                 return True
 
-            missing_files = []
-
-            # Iterate over services
-            services = compose_config.get("services", {})
-            for _service_name, service_config in services.items():
-                volumes = service_config.get("volumes", [])
-                for volume in volumes:
-                    # Docker compose config returns volumes as dicts or strings
-                    source = None
-                    if isinstance(volume, dict):
-                        if volume.get("type") == "bind":
-                            source = volume.get("source")
-                    elif isinstance(volume, str):
-                        parts = volume.split(":")
-                        if len(parts) >= 2:
-                            source = parts[0]
-
-                    if not source:
-                        continue
-
-                    # Skip named volumes (not paths)
-                    if not (source.startswith("/") or source.startswith("./") or source.startswith("../")):
-                        continue
-
-                    source_path = Path(source)
-                    if not source_path.is_absolute():
-                        source_path = (service_dir / source_path).resolve()
-
-                    try:
-                        path_exists = source_path.exists()
-                    except PermissionError:
-                        path_exists = True  # Docker daemon has access even if toolkit doesn't
-                    if not path_exists:
-                        missing_files.append(str(source_path))
+            missing_files = _missing_bind_sources(compose_config, service_dir)
 
             if missing_files:
                 logger.error("Missing volume mount sources:")
@@ -479,3 +443,39 @@ def get_docker_service() -> DockerService:
 
         _docker_service_instance = DockerService(settings)
     return _docker_service_instance
+
+
+def _bind_source(volume: Any) -> str | None:
+    """The host path a compose volume binds, or None for a named volume or a bare target.
+
+    `docker compose config` returns volumes as dicts or, for short syntax, as strings.
+    """
+    if isinstance(volume, dict):
+        source = volume.get("source") if volume.get("type") == "bind" else None
+    elif isinstance(volume, str) and len(volume.split(":")) >= 2:
+        source = volume.split(":")[0]
+    else:
+        return None
+    if not source or not source.startswith(("/", "./", "../")):
+        return None
+    return source
+
+
+def _missing_bind_sources(compose_config: dict[str, Any], service_dir: Path) -> list[str]:
+    """Bind sources that do not exist, relative ones resolved against `service_dir`."""
+    missing = []
+    for service_config in compose_config.get("services", {}).values():
+        for volume in service_config.get("volumes", []):
+            source = _bind_source(volume)
+            if source is None:
+                continue
+            source_path = Path(source)
+            if not source_path.is_absolute():
+                source_path = (service_dir / source_path).resolve()
+            try:
+                path_exists = source_path.exists()
+            except PermissionError:
+                path_exists = True  # Docker daemon has access even if toolkit doesn't
+            if not path_exists:
+                missing.append(str(source_path))
+    return missing
