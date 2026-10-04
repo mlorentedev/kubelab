@@ -1068,8 +1068,10 @@ def test_every_rendered_unit_passes_systemd_analyze_verify(tmp_path):
     }
     for name, text in units.items():
         (tmp_path / name).write_text(text)
+    # Every unit the role renders; the capture unit is only a stub for `Wants=`.
+    targets = [str(tmp_path / n) for n in units if n != "node-backup-capture.service"]
     proc = subprocess.run(
-        ["systemd-analyze", "verify", "--man=no", *(str(tmp_path / n) for n in units if n.startswith("node-backup-p"))],
+        ["systemd-analyze", "verify", "--man=no", *targets],
         capture_output=True,
         text=True,
         env={"SYSTEMD_UNIT_PATH": f"{tmp_path}:", "PATH": "/usr/bin:/bin"},
@@ -1087,3 +1089,10 @@ def test_the_schedule_arms_the_prune_and_reports_its_failures() -> None:
     assert any("node-backup-prune.service" in c and "journalctl" in c for c in commands), (
         "AC3 reads each node's prune failures over seven days; nothing in the schedule playbook reports them"
     )
+    # A node without the unit also answers "no failures": the report must say
+    # it measured nothing there, not print the same 0 as a clean week.
+    assert any("node-backup-prune.service" in c and "LoadState" in c for c in commands), (
+        "the report cannot tell a clean week from a node where the prune unit was never installed"
+    )
+    report = next(t for t in play["tasks"] if t.get("name") == "Report the prune unit's failures")
+    assert "not installed" in report["ansible.builtin.debug"]["msg"]
