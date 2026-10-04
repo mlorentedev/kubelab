@@ -1679,6 +1679,14 @@ n8n-probe:
 backup-verify-destination:
 	@$(TOOLKIT) backup verify-destination --env $(or $(filter staging prod,$(ENV)),prod)
 
+# Mints each backup.sources node its own R2 token (Object Read & Write on
+# kubelab-backup-<node> only) and restic password, straight into prod SOPS
+# (BACKUP-057 PR 3). NODE= limits it to one node; ROTATE=1 replaces existing
+# tokens and revokes the old ones. Restic passwords are never replaced.
+.PHONY: backup-mint-node-tokens
+backup-mint-node-tokens:
+	@$(TOOLKIT) backup mint-node-tokens --env $(or $(filter staging prod,$(ENV)),prod) $(if $(NODE),--node $(NODE)) $(if $(ROTATE),--rotate)
+
 # One level above backup-verify-destination: that one proves the BUCKET works,
 # this one proves RESTIC works in it. Runs the full lifecycle (init, backup,
 # snapshots, check) against a throwaway repository and removes it. They are
