@@ -88,7 +88,7 @@ The size decides whether R = 30 fits the free tier. It is measured by the watche
   - `k8s_secrets`: `r2-backup-watcher-secrets` carries the read-only pair plus one restic password per node, keyed by node. The watcher opens every repository (`snapshots`, `stats`), so it needs every password. A test fails if a node in `backup.sources` has no password entry.
 
   Expected: PASS, `make test` green.
-- [x] [AC3] (✓ 2026-10-04, on beelink; the other three nodes after merge) `forget --prune` runs in `node-backup-prune.service`, not in the ship (Q6, amended 2026-10-03). Failing tests first, in `tests/test_node_backup_prune_script.py` and `tests/test_node_backup_role.py`:
+- [x] [AC3] (✓ 2026-10-04: the implementation and its measurements on beelink; the other three nodes get it after merge. AC3 itself is not met here: its seven-day window is the open task under PR 4) `forget --prune` runs in `node-backup-prune.service`, not in the ship (Q6, amended 2026-10-03). Failing tests first, in `tests/test_node_backup_prune_script.py` and `tests/test_node_backup_role.py`:
   - the rendered prune script, run against a fake restic, unlocks stale locks, then runs `forget` with the retention flags, `--prune`, `--retry-lock` and the connection option, and exits with restic's code (0 passes, 3 fails);
   - it exits 0 without calling restic when the node has never shipped (no repository marker), so a boot-time `Persistent=` run before the first ship pages nothing;
   - the ship script no longer runs `forget`, runs `unlock` before `backup`, and reads past a stale exclusive lock before it (`--no-lock` on the probe and `cat config`);

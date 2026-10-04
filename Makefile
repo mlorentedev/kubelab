@@ -1082,6 +1082,7 @@ backup-node:
 	$(eval _ENV := $(or $(filter staging prod,$(ENV)),prod))
 	$(eval _CHECK := $(if $(CHECK),--check,))
 	$(eval _INTEGRITY := $(if $(INTEGRITY),--extra-vars "integrity=true",))
+	$(if $(filter-out 0 1,$(PRUNE)),$(error PRUNE takes 1 or 0, got '$(PRUNE)'))
 	$(eval _PRUNE := $(if $(filter 1,$(PRUNE)),--extra-vars "prune=true",))
 	$(TOOLKIT) infra ansible run -p backup-node -e $(_ENV) -l $(NODE) $(_CHECK) $(_INTEGRITY) $(_PRUNE)
 

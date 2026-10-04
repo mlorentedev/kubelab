@@ -76,6 +76,20 @@ def test_only_prune_1_prunes() -> None:
         assert ("prune=true" in out) is expected, (value, out)
 
 
+def test_an_unrecognised_prune_value_is_refused_not_ignored() -> None:
+    """`PRUNE=true` used to start the ship and report success: the operator
+    asked for a prune and got a backup, with nothing saying so."""
+    import subprocess
+
+    proc = subprocess.run(
+        ["make", "-n", "-C", str(REPO), "backup-node", "NODE=beelink", "ENV=prod", "PRUNE=true"],
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode != 0
+    assert "PRUNE" in proc.stderr
+
+
 def test_the_deploy_can_be_limited_to_one_node() -> None:
     """`make backup NODE=<node>` rolls a role change out to one node first."""
     import subprocess

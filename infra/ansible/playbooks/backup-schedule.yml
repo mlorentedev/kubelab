@@ -121,6 +121,16 @@
       failed_when: timer_active.stdout is not search('^active')
       loop: "{{ backup_timers }}"
 
+    - name: Read whether the prune unit is installed
+      # journalctl answers "no failures" for a unit that never existed too, so
+      # without this a node the role has not reached reports the same 0 as a
+      # clean week.
+      check_mode: false
+      ansible.builtin.command:
+        cmd: systemctl show node-backup-prune.service -p LoadState --value
+      register: prune_load_state
+      changed_when: false
+
     - name: Read the prune unit's failures over the last seven days
       # AC3 of BACKUP-057 (Q6, amended 2026-10-03): the prune runs in a unit of
       # its own and fails only on a real fault, so "no failure in seven days" is
@@ -138,4 +148,7 @@
     - name: Report the prune unit's failures
       check_mode: false
       ansible.builtin.debug:
-        msg: "node-backup-prune.service failures in the last 7 days: {{ prune_failures.stdout_lines | length }}"
+        msg: >-
+          {{ ('node-backup-prune.service failures in the last 7 days: ' ~ (prune_failures.stdout_lines | length))
+             if prune_load_state.stdout == 'loaded'
+             else 'node-backup-prune.service is not installed on this node (' ~ prune_load_state.stdout ~ '): nothing measured' }}
