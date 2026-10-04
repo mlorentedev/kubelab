@@ -1,9 +1,10 @@
 # Backups, volumes and persistence
 
-23 lessons, newest first. Back to [all categories](../_index.md).
+24 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 521 | [An `unlock` placed before the write is too late if a read before it takes a lock](lesson-521-a-probe-that-locks-runs-before-the-unlock-meant-to-clear-it.md) | 2026-10-04 |
 | 511 | [restic reports a refused pack DELETE as success](lesson-511-restic-reports-a-refused-pack-delete-as-success.md) | 2026-10-02 |
 | 508 | [A volume name pinned in a template outlives the data it named](lesson-508-a-volume-name-pinned-in-a-template-outlives-the-data-it-named.md) | 2026-10-02 |
 | 505 | [Four copies of one phase drift in their guards](lesson-505-four-copies-of-one-phase-drift-in-their-guards.md) | 2026-10-02 |

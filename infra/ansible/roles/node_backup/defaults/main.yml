@@ -93,6 +93,9 @@ node_backup_ship_timer_name: node-backup-ship.timer
 node_backup_ship_check_service_name: node-backup-ship-check.service
 node_backup_ship_check_timer_name: node-backup-ship-check.timer
 node_backup_shutdown_service_name: node-backup-shutdown.service
+node_backup_prune_script_path: /opt/node-backup-prune.sh
+node_backup_prune_service_name: node-backup-prune.service
+node_backup_prune_timer_name: node-backup-prune.timer
 
 # Where the shutdown snapshot leaves proof that it ran.
 #
@@ -241,6 +244,22 @@ node_backup_retention_flags: "--keep-within 31d --keep-daily 7 --keep-weekly 4 -
 # node-backup-ship.service.j2 gets — false for the frequent (hourly/4h) unit,
 # true for the weekly one (tasks/main.yml overrides it per-render).
 node_backup_check: false
+
+# `forget --prune` runs in its own unit, not in the ship (BACKUP-057 Q6,
+# amended 2026-10-03). Under the bucket lock a refused DELETE holds restic in
+# retries for about 15 minutes (measured on 0.19.1, no knob shortens it), and
+# removes run in parallel up to the S3 connection count, so k refused packs
+# cost about ceil(k / connections) x 15 minutes. 3600 s with 20 connections
+# covers about 80 refused packs (~1.3 GB of interrupted upload); past that the
+# unit times out and notifies, which an interruption that large deserves.
+# tests/test_node_backup_role.py pins that arithmetic.
+#
+# Daily is enough: `forget` only reaches the prune phase on a run that removes
+# a snapshot. Persistent=true, like the weekly check, so an on-demand node
+# prunes at boot after a missed day.
+node_backup_prune_schedule: daily
+node_backup_prune_timeout: 3600
+node_backup_prune_connections: 20
 
 # Pack data read back by the weekly check (BACKUP-063). A bare `restic check`
 # verifies structure and never downloads a pack, so a corrupted pack in R2 would

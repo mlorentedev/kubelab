@@ -29,8 +29,8 @@
   },
   {
     "id": "BACKUP-057-f8",
-    "behavior": "A prune refused after a successful backup does not fail the ship; it is reported on its own signal, and a failed backup still fails it (AC3, Q6)",
-    "verification": "poetry run pytest tests/test_node_backup_ship_script.py --no-cov -q",
+    "behavior": "forget --prune runs in its own daily unit, bounded by its own timeout and notified on failure by exit code alone; the ship no longer prunes and unlocks stale locks before backup, and a failed backup or check still fails it (AC3, Q6 amended 2026-10-03)",
+    "verification": "poetry run pytest tests/test_node_backup_prune_script.py tests/test_node_backup_ship_script.py tests/test_node_backup_role.py --no-cov -q",
     "state": "pending",
     "evidence": ""
   },

@@ -89,6 +89,12 @@
     dest: "{{ node_backup_ship_script_path }}"
     mode: "0700"
 
+- name: Render prune script (BACKUP-057 Q6)
+  template:
+    src: node-backup-prune.sh.j2
+    dest: "{{ node_backup_prune_script_path }}"
+    mode: "0700"
+
 - name: Install capture systemd unit
   template:
     src: node-backup-capture.service.j2
@@ -126,6 +132,20 @@
     mode: "0644"
   notify: Reload systemd (node_backup)
 
+- name: Install prune systemd unit (BACKUP-057 Q6)
+  template:
+    src: node-backup-prune.service.j2
+    dest: "/etc/systemd/system/{{ node_backup_prune_service_name }}"
+    mode: "0644"
+  notify: Reload systemd (node_backup)
+
+- name: Install daily prune timer (BACKUP-057 Q6)
+  template:
+    src: node-backup-prune.timer.j2
+    dest: "/etc/systemd/system/{{ node_backup_prune_timer_name }}"
+    mode: "0644"
+  notify: Reload systemd (node_backup)
+
 - name: Install shutdown-snapshot unit (Part 4, on-demand nodes only — AC5)
   template:
     src: node-backup-shutdown.service.j2
@@ -158,6 +178,16 @@
     name: "{{ node_backup_ship_check_timer_name }}"
     enabled: true
     state: started
+
+- name: Enable and start the daily prune timer (BACKUP-057 Q6)
+  systemd:
+    name: "{{ node_backup_prune_timer_name }}"
+    enabled: true
+    state: started
+  # Under --check the unit file was never written, so systemd cannot find a
+  # timer this run is introducing (measured on beelink, 2026-10-03). Only the
+  # dry run may skip past that; a real run still fails on it.
+  ignore_errors: "{{ ansible_check_mode }}"
 
 - name: Enable and start the shutdown-snapshot unit (on-demand nodes only —
     RemainAfterExit=yes, must be active now to protect this session's own

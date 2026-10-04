@@ -56,3 +56,34 @@ def test_the_make_flag_reaches_the_playbook() -> None:
     assert recipe, "Makefile has no backup-node target"
     assert '$(if $(INTEGRITY),--extra-vars "integrity=true",)' in recipe.group(0)
     assert re.search(r"infra ansible run -p backup-node .*\$\(_INTEGRITY\)", recipe.group(0))
+
+
+def test_prune_selects_the_retention_unit() -> None:
+    """`make backup-node PRUNE=1` runs node-backup-prune.service now (BACKUP-057 Q6)."""
+    assert _unit(prune="true") == yaml.safe_load(DEFAULTS.read_text())["node_backup_prune_service_name"]
+
+
+def test_only_prune_1_prunes() -> None:
+    import subprocess
+
+    for value, expected in (("", False), ("0", False), ("1", True)):
+        out = subprocess.run(
+            ["make", "-n", "-C", str(REPO), "backup-node", "NODE=beelink", "ENV=prod", f"PRUNE={value}"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+        assert ("prune=true" in out) is expected, (value, out)
+
+
+def test_the_deploy_can_be_limited_to_one_node() -> None:
+    """`make backup NODE=<node>` rolls a role change out to one node first."""
+    import subprocess
+
+    def expand(*args: str) -> str:
+        return subprocess.run(
+            ["make", "-n", "-C", str(REPO), "backup", "ENV=prod", *args], capture_output=True, text=True, check=True
+        ).stdout
+
+    assert "-l beelink" in expand("NODE=beelink")
+    assert " -l " not in expand()

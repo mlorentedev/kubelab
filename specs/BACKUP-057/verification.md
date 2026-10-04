@@ -161,7 +161,25 @@ The writer re-encrypts the whole file, so the git diff spans every line. That is
 
 `make secrets-audit ENV=prod` and `make secrets-audit ENV=staging` both returned rc 0.
 
-**Escrow.** The four new restic passwords are copied into Bitwarden by the operator, the same way as `backup.restic_password`.
+**Escrow.** The four new restic passwords were copied into Bitwarden on 2026-10-03 with `dotf`, the same way as `backup.restic_password`. Each Bitwarden entry was compared with its SOPS value by hash, never printed: 5/5 matched.
+
+## PR 4a: the prune in its own unit (Q6, amended)
+
+2026-10-03/04, on beelink (prod node, restic 0.19.1, systemd 255; rpi3 runs 257, vps and rpi4 255).
+
+- Deploy: `make backup ENV=prod NODE=beelink CHECK=1` ok (the one ignored task is the timer start, whose unit file `--check` never wrote). Real run `changed=7`, re-run `changed=0`. After the stale-lock fix: `changed=1` (the ship script), re-run `changed=0`.
+- `make backup-schedule NODE=beelink ENV=prod` lists `node-backup-prune.timer` (next run Mon 2026-10-05 00:03) and reports `failures in the last 7 days: 0`.
+- `make backup-node NODE=beelink ENV=prod PRUNE=1`: `Result=success`, rc 0, 4 s. A ship that follows logs no `forget` and no policy line.
+- **Ship queued during a prune.** systemd reports the ship as `start waiting`, and it starts only after the prune exits (06:27:14 prune exit, 06:27:16 ship start). Both succeed. This is the `After=` ordering.
+- **Prune started during a ship's `backup`.** restic logs `repo already locked, waiting up to 10m0s for the lock`. Ship 06:28:50 to 06:29:00 and prune 06:28:55 to 06:29:04, both succeed. This is `--retry-lock`.
+- **Prune killed while it held its lock.** The first attempt killed `forget` before it had locked, so it proved nothing. The test was repeated with `SIGSTOP` in steps until `restic list locks --no-lock` reported the lock, then `SIGKILL`: the unit ended `Result=signal`, and one exclusive lock remained in R2.
+  - **Defect found.** The next ship failed with exit 11 (`repository is already locked exclusively by PID 187939`). The reachability probe, `restic snapshots`, takes a lock, and it runs before `unlock`. So a killed prune would have failed every ship until someone intervened.
+  - **Fix.** The probe and `cat config` run with `--no-lock`; both only read. A fake-restic test that models a stale exclusive lock was red before the fix, and removing either `--no-lock` or the `unlock` turns it red again (lesson-521).
+  - **After the fix**, against that same real lock, the ship logged `successfully removed 1 locks` and then `snapshot 627fad41 saved`.
+- **Prune facing a stale exclusive lock.** A lock was left by hand, outside systemd so nothing paged, by killing a `forget` once it held its lock. `PRUNE=1` then logged `successfully removed 1 locks`, applied the policy (20 snapshots kept) and finished.
+- Three `OnFailure` notifications fired during these tests: two from the killed prunes (`signal`) and one from the ship that failed before the fix. Each `kubelab-notify@<unit>.service` ran and exited 0 (journal, 06:29:21, 06:32:15, 06:32:24).
+- `make backup-schedule NODE=beelink ENV=prod` then reported `node-backup-prune.service failures in the last 7 days: 2`. Those are the two deliberate kills of 2026-10-04, not faults: AC3's seven-day window must start after them.
+- `--no-lock` keeps the probe's exit codes: `restic snapshots -q --no-lock` exits **10** on a prefix with no repository and **0** on beelink's, so the first-ship `init` path is unchanged.
 
 ## Test status
 

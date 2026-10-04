@@ -43,6 +43,9 @@ NEW_ID = "b" * 64
 #   id            the repository id `cat config` reports
 #   forget.rc     exit code of `forget` (default 0)
 #   check.rc      exit code of `check` (default 0)
+#   stale-lock    present = an exclusive lock a killed prune left behind: every
+#                 command that locks exits 11, as restic 0.19.1 does, until
+#                 `unlock` removes it; `--no-lock` reads past it
 # `init` sets a new id and makes `snapshots` succeed, as a real init would.
 # Every subcommand is appended to `calls`, which is what the tests assert on.
 FAKE_RESTIC = r"""#!/bin/bash
@@ -53,6 +56,15 @@ while [ $# -gt 0 ]; do
   esac
 done
 echo "$*" >> "$FAKE_DIR/calls"
+if [ -e "$FAKE_DIR/stale-lock" ]; then
+  case "$1 $*" in
+    unlock*) rm -f "$FAKE_DIR/stale-lock"; exit 0 ;;
+    *--no-lock*) ;;
+    *)
+      echo "unable to create lock in backend: repository is already locked exclusively by PID 1" >&2
+      exit 11 ;;
+  esac
+fi
 case "$1" in
   snapshots)
     rc="$(cat "$FAKE_DIR/snapshots.rc" 2>/dev/null || echo 0)"
@@ -163,7 +175,10 @@ def node(tmp_path: Path, request: pytest.FixtureRequest):
         check: bool = False,
         check_rc: int = 0,
         now: int | None = None,
+        stale_lock: bool = False,
     ):
+        if stale_lock:
+            (fake_dir / "stale-lock").touch()
         (fake_dir / "snapshots.rc").write_text(f"{snapshots_rc}\n")
         (fake_dir / "forget.rc").write_text(f"{forget_rc}\n")
         (fake_dir / "check.rc").write_text(f"{check_rc}\n")
@@ -243,15 +258,16 @@ def test_a_replaced_repository_fails_before_writing_a_snapshot(node) -> None:
     assert "make backup-repo-reinit" in proc.stderr
 
 
-def test_the_repository_is_recorded_once_a_snapshot_exists_even_if_retention_fails(node) -> None:
+def test_the_repository_is_recorded_once_a_snapshot_exists_even_if_the_check_fails(node) -> None:
     """The history exists from the first successful `backup`, not from the end of the run.
 
-    Recording only after `forget` and `check` left a window: a first ship whose
-    retention failed held a snapshot with no marker, so a deletion before the
-    next whole run would have been re-initialised silently. The run still
-    fails, because a failed retention is a failed ship.
+    Recording only after `check` (and, until BACKUP-057 Q6 moved retention to
+    its own unit, `forget`) left a window: a first ship whose check failed held
+    a snapshot with no marker, so a deletion before the next whole run would
+    have been re-initialised silently. The run still fails, because a failed
+    check is a failed ship.
     """
-    proc, verbs, marker = node(snapshots_rc=10, forget_rc=1)
+    proc, verbs, marker = node(snapshots_rc=10, check=True, check_rc=1)
     assert proc.returncode != 0
     assert "backup" in verbs
     assert _marker_value(marker) == NEW_ID
@@ -259,6 +275,25 @@ def test_the_repository_is_recorded_once_a_snapshot_exists_even_if_retention_fai
     proc, verbs, marker = node(snapshots_rc=10)
     assert proc.returncode != 0
     assert verbs.count("init") == 1, "the second run must not initialise"
+
+
+def test_the_ship_unlocks_before_backup_and_never_prunes(node) -> None:
+    """Retention runs in node-backup-prune.service (BACKUP-057 Q6): a refused
+    DELETE under the lock retries past this unit's timeout. `unlock` clears a
+    stale lock a killed prune left, which restic 0.19.1 never skips on its own."""
+    proc, verbs, _marker = node(snapshots_rc=0, recorded=EXISTING_ID)
+    assert proc.returncode == 0, proc.stderr
+    assert "forget" not in verbs
+    assert verbs.index("unlock") < verbs.index("backup")
+
+
+def test_a_stale_lock_left_by_a_killed_prune_does_not_stop_the_ship(node) -> None:
+    """The probes before `unlock` must not lock: a stale exclusive lock made the
+    `snapshots` probe exit 11, so the ship failed before it reached `unlock`
+    (measured on beelink 2026-10-04 by SIGKILLing a prune that held its lock)."""
+    proc, verbs, _marker = node(snapshots_rc=0, recorded=EXISTING_ID, stale_lock=True)
+    assert proc.returncode == 0, proc.stderr
+    assert verbs.index("unlock") < verbs.index("backup")
 
 
 def test_no_temporary_marker_is_left_behind(node) -> None:

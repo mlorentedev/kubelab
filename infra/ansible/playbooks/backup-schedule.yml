@@ -45,6 +45,7 @@
     backup_timers:
       - node-backup-ship.timer
       - node-backup-ship-check.timer
+      - node-backup-prune.timer
     # Empty means report-only. A playbook whose default MUTATES is one an
     # operator runs to look at something and changes it instead.
     schedule_state: "{{ state | default('') }}"
@@ -119,3 +120,22 @@
       changed_when: false
       failed_when: timer_active.stdout is not search('^active')
       loop: "{{ backup_timers }}"
+
+    - name: Read the prune unit's failures over the last seven days
+      # AC3 of BACKUP-057 (Q6, amended 2026-10-03): the prune runs in a unit of
+      # its own and fails only on a real fault, so "no failure in seven days" is
+      # the half of AC3 that a green ship cannot show. journalctl exits 1 when
+      # --grep matches nothing, which here is the healthy answer.
+      check_mode: false
+      ansible.builtin.command:
+        cmd: >-
+          journalctl -u node-backup-prune.service --since "7 days ago"
+          --output cat --no-pager --grep "Failed with result"
+      register: prune_failures
+      changed_when: false
+      failed_when: prune_failures.rc not in [0, 1]
+
+    - name: Report the prune unit's failures
+      check_mode: false
+      ansible.builtin.debug:
+        msg: "node-backup-prune.service failures in the last 7 days: {{ prune_failures.stdout_lines | length }}"

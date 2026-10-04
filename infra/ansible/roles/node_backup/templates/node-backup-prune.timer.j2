@@ -1,0 +1,13 @@
+# {{ ansible_managed }}
+# BACKUP-057 Q6: daily on both node classes. Persistent=true, like the weekly
+# check, so an on-demand node prunes at boot after a missed day.
+[Unit]
+Description=BACKUP-057 node-backup daily prune ({{ inventory_hostname }})
+
+[Timer]
+OnCalendar={{ node_backup_prune_schedule }}
+Persistent=true
+RandomizedDelaySec={{ node_backup_randomized_delay }}
+
+[Install]
+WantedBy=timers.target

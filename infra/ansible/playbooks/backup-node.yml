@@ -45,8 +45,11 @@
     - ../roles/node_backup/defaults/main.yml
 
   vars:
+    # PRUNE=1 runs the daily retention unit now (BACKUP-057 Q6). It posts no
+    # heartbeat: the heartbeat belongs to the ship.
     backup_unit: >-
-      {{ node_backup_ship_check_service_name if (integrity | default(false) | bool)
+      {{ node_backup_prune_service_name if (prune | default(false) | bool)
+         else node_backup_ship_check_service_name if (integrity | default(false) | bool)
          else node_backup_ship_service_name }}
 
   tasks:
@@ -100,10 +103,10 @@
           - "'Result=success' in backup_result.stdout"
           - "'ExecMainStatus=0' in backup_result.stdout"
         success_msg: >-
-          {{ inventory_hostname }}: backup complete
+          {{ inventory_hostname }}: {{ backup_unit }} complete
           ({{ backup_result.stdout_lines | join(', ') }})
         fail_msg: >-
-          {{ inventory_hostname }}: backup FAILED
+          {{ inventory_hostname }}: {{ backup_unit }} FAILED
           ({{ backup_result.stdout_lines | join(', ') }}) —
           journal below, and the OnFailure notifier has already reported it
 

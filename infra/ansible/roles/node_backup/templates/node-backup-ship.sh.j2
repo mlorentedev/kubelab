@@ -112,9 +112,14 @@ fi
 #
 # The exit code is taken inside the `if`, because `set -e` would abort on a
 # bare failing command before `$?` could be read.
+#
+# `--no-lock` on this probe and on `cat config` below: both only read, and both
+# run before `unlock`. With a lock, a stale exclusive one left by a killed
+# prune made the probe exit 11 and failed the ship before `unlock` could clear
+# it (measured on beelink 2026-10-04, BACKUP-057 Q6).
 PROBE_ERR="$(mktemp)"
 trap 'rm -f "$PROBE_ERR"' EXIT
-if timeout -k 10 {{ node_backup_probe_timeout }} $RESTIC snapshots -q >/dev/null 2>"$PROBE_ERR"; then
+if timeout -k 10 {{ node_backup_probe_timeout }} $RESTIC snapshots -q --no-lock >/dev/null 2>"$PROBE_ERR"; then
     SNAPSHOTS_RC=0
 else
     SNAPSHOTS_RC=$?
@@ -161,7 +166,7 @@ esac
 # Compared on EVERY ship, not only the first: a replaced repository answers
 # `snapshots` with 0, so this comparison is the only thing that sees it. One
 # small read per run; do not optimise it away.
-if ! CONFIG="$($RESTIC cat config --json)"; then
+if ! CONFIG="$($RESTIC cat config --json --no-lock)"; then
     echo "node-backup-ship: 'restic cat config' failed on the $DESTINATION repository (see its error above)" >&2
     exit 1
 fi
@@ -182,11 +187,16 @@ if [ -n "$RECORDED" ] && [ "$RECORDED" != "$REPOSITORY_ID" ]; then
     exit 1
 fi
 
+# restic 0.19.1 never skips a stale lock when it takes a new one, so a prune
+# killed mid-run would fail every backup after it. Plain `unlock` removes only
+# stale locks: this host's, from a process that no longer exists.
+$RESTIC unlock
+
 $RESTIC backup "$STAGING" --tag "{{ inventory_hostname }}"
 
 # Recorded as soon as `backup` succeeds: from that moment the repository holds a
 # restore point, so it is a history this node must never silently replace, even
-# if `forget` or `check` below then fails the run. Never before `backup`, so a
+# if `check` below then fails the run. Never before `backup`, so a
 # repository that holds nothing is never pinned. Atomic (write, then rename) so
 # a torn write is never read back as an id, and through `mktemp` because the
 # frequent and weekly units can reach this line at the same time.
@@ -197,10 +207,9 @@ if [ -z "$RECORDED" ]; then
     echo "recorded $DESTINATION repository $REPOSITORY_ID in $MARKER"
 fi
 
-# Retention approved by the operator 2026-08-16 (tasks.md "Approved operating
-# parameters"): ~a year of restore points, baked in rather than passed at
-# call time so a scheduled run always carries the ratified policy.
-$RESTIC forget {{ node_backup_retention_flags }} --prune
+# Retention (`forget --prune`) is not here: it runs in node-backup-prune.service
+# (BACKUP-057 Q6, amended 2026-10-03). Under the bucket lock a refused DELETE
+# retries for about 15 minutes, past this unit's timeout.
 
 if [ "$RUN_CHECK" -eq 1 ]; then
     # Reads one group of pack data back from the destination (BACKUP-063), so

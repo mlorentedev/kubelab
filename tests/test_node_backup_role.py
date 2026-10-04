@@ -216,10 +216,13 @@ def test_capture_script_fails_closed_on_error():
 # --- ship: retention, the --check split, credentials -----------------------
 
 
-def test_ship_script_carries_the_approved_retention_flags_verbatim():
-    script = _render("node-backup-ship.sh.j2")
+def test_prune_script_carries_the_approved_retention_flags_verbatim():
+    """The prune unit applies retention since BACKUP-057 Q6 (amended 2026-10-03)."""
+    script = _render("node-backup-prune.sh.j2")
     d = _defaults()
-    assert d["node_backup_retention_flags"] == "--keep-within 31d --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --max-repack-size 0"
+    assert d["node_backup_retention_flags"] == (
+        "--keep-within 31d --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --max-repack-size 0"
+    )
     assert str(d["node_backup_retention_flags"]) in script
 
 
@@ -233,11 +236,12 @@ def test_restic_check_only_runs_when_the_check_flag_is_passed():
 
 
 def test_ship_script_reads_credentials_from_files_never_as_a_literal():
-    script = _render("node-backup-ship.sh.j2")
     d = _defaults()
-    assert f"cat {d['node_backup_restic_password_file']}" in script
-    assert f"cat {d['node_backup_r2_access_key_file']}" in script
-    assert f"cat {d['node_backup_r2_secret_key_file']}" in script
+    for template in ("node-backup-ship.sh.j2", "node-backup-prune.sh.j2"):
+        script = _render(template)
+        assert f"cat {d['node_backup_restic_password_file']}" in script, template
+        assert f"cat {d['node_backup_r2_access_key_file']}" in script, template
+        assert f"cat {d['node_backup_r2_secret_key_file']}" in script, template
 
 
 def test_credential_file_paths_are_the_same_variable_on_both_sides():
@@ -246,6 +250,7 @@ def test_credential_file_paths_are_the_same_variable_on_both_sides():
     places — the ship_script_path drift guard, applied to all three
     credential files this role writes and then reads back."""
     ship_tpl_src = (TEMPLATES / "node-backup-ship.sh.j2").read_text()
+    prune_tpl_src = (TEMPLATES / "node-backup-prune.sh.j2").read_text()
     tasks_src = (ROLE / "tasks/main.yml").read_text()
     for var in (
         "node_backup_restic_password_file",
@@ -254,6 +259,7 @@ def test_credential_file_paths_are_the_same_variable_on_both_sides():
     ):
         ref = "{{ " + var + " }}"
         assert ref in ship_tpl_src, f"{var} not read by the ship script"
+        assert ref in prune_tpl_src, f"{var} not read by the prune script"
         assert ref in tasks_src, f"{var} not written by tasks/main.yml"
 
 
@@ -955,3 +961,129 @@ def test_the_restic_version_probe_runs_in_check_mode() -> None:
     tasks = yaml.safe_load((ROLE / "tasks/restic.yml").read_text())
     probe = next(t for t in tasks if t.get("register") == "node_backup_restic_installed")
     assert probe.get("check_mode") is False
+
+
+# --- BACKUP-057 Q6 (amended 2026-10-03): the prune is a unit of its own ------
+
+
+def _code_lines(script: str) -> list[str]:
+    return [line for line in script.splitlines() if line.strip() and not line.lstrip().startswith("#")]
+
+
+def test_the_ship_no_longer_prunes_and_unlocks_before_backup():
+    """A refused DELETE retries for ~15 minutes, past the ship's timeout, so the
+    ship must never reach one. It unlocks first because a killed prune leaves an
+    exclusive lock that restic 0.19.1 never treats as stale on its own."""
+    code = _code_lines(_render("node-backup-ship.sh.j2"))
+    assert not any(re.search(r"\$RESTIC forget\b", line) for line in code), "the ship still runs forget"
+    unlock = next(i for i, line in enumerate(code) if re.search(r"\$RESTIC unlock\b", line))
+    backup = next(i for i, line in enumerate(code) if re.search(r"\$RESTIC backup\b", line))
+    assert unlock < backup
+
+
+def test_the_prune_unit_fails_loudly_within_its_own_bound():
+    defaults = _defaults()
+    unit = _render("node-backup-prune.service.j2")
+    lines = _directive_lines(unit)
+    assert "Type=oneshot" in lines
+    assert "OnFailure=kubelab-notify@%n.service" in lines
+    assert f"ExecStart={defaults['node_backup_prune_script_path']}" in lines
+    assert f"TimeoutStartSec={defaults['node_backup_prune_timeout']}" in lines
+
+
+def test_the_prune_bound_covers_the_refusals_the_spec_names():
+    """Q6's arithmetic: about 15 minutes per batch of refused packs, batches as
+    wide as the S3 connection count, and the bound sized for ~80 packs."""
+    defaults = _defaults()
+    batches = int(defaults["node_backup_prune_timeout"]) // 900
+    assert batches * int(defaults["node_backup_prune_connections"]) >= 80
+
+
+def test_the_prune_carries_the_ship_s_memory_cap():
+    """rpi3 is the monitoring of record; prune is the heavier restic operation."""
+    for template in ("node-backup-ship.service.j2", "node-backup-prune.service.j2"):
+        lines = _directive_lines(_render(template, node_backup_memory_max="128M"))
+        assert "MemoryMax=128M" in lines, template
+        assert "MemorySwapMax=0" in lines, template
+
+
+def test_a_ship_queued_during_a_prune_waits_for_it():
+    defaults = _defaults()
+    for check in (False, True):
+        lines = _directive_lines(_render("node-backup-ship.service.j2", node_backup_check=check))
+        assert f"After={defaults['node_backup_prune_service_name']}" in lines
+
+
+def test_the_prune_waits_out_a_running_ship():
+    """`--retry-lock` must outlast the longest ship, or a prune that starts
+    mid-ship fails on the lock and notifies about nothing."""
+    script = _render("node-backup-prune.sh.j2")
+    retry = re.search(r"--retry-lock (\d+)m\b", script)
+    assert retry
+    ship = _render("node-backup-ship.service.j2")
+    ceiling = int(re.search(r"^TimeoutStartSec=(\d+)$", ship, re.M).group(1))
+    assert int(retry.group(1)) * 60 >= ceiling
+
+
+def test_the_prune_timer_is_daily_and_persistent():
+    lines = _directive_lines(_render("node-backup-prune.timer.j2"))
+    assert f"OnCalendar={_defaults()['node_backup_prune_schedule']}" in lines
+    assert "Persistent=true" in lines
+
+
+def test_the_role_installs_and_arms_the_prune():
+    tasks = yaml.safe_load((ROLE / "tasks/main.yml").read_text())
+    templated = {t["template"]["src"]: t["template"]["dest"] for t in tasks if "template" in t}
+    assert templated["node-backup-prune.sh.j2"] == "{{ node_backup_prune_script_path }}"
+    assert templated["node-backup-prune.service.j2"] == "/etc/systemd/system/{{ node_backup_prune_service_name }}"
+    assert templated["node-backup-prune.timer.j2"] == "/etc/systemd/system/{{ node_backup_prune_timer_name }}"
+    armed = [
+        t["systemd"]
+        for t in tasks
+        if "systemd" in t and t["systemd"].get("name") == "{{ node_backup_prune_timer_name }}"
+    ]
+    assert armed and armed[0].get("enabled") is True and armed[0].get("state") == "started"
+
+
+def test_every_rendered_unit_passes_systemd_analyze_verify(tmp_path):
+    """The scripts are stood in by /bin/true: verify checks that ExecStart is
+    executable, and the real scripts only exist on a node."""
+    import shutil
+    import subprocess
+
+    if shutil.which("systemd-analyze") is None:
+        import pytest
+
+        pytest.skip("systemd-analyze is not installed")
+    paths = {
+        "node_backup_ship_script_path": "/bin/true",
+        "node_backup_prune_script_path": "/bin/true",
+    }
+    units = {
+        "node-backup-ship.service": _render("node-backup-ship.service.j2", **paths),
+        "node-backup-prune.service": _render("node-backup-prune.service.j2", **paths),
+        "node-backup-prune.timer": _render("node-backup-prune.timer.j2"),
+        "kubelab-notify@.service": "[Service]\nType=oneshot\nExecStart=/bin/true\n",
+        "node-backup-capture.service": "[Service]\nType=oneshot\nExecStart=/bin/true\n",
+    }
+    for name, text in units.items():
+        (tmp_path / name).write_text(text)
+    proc = subprocess.run(
+        ["systemd-analyze", "verify", "--man=no", *(str(tmp_path / n) for n in units if n.startswith("node-backup-p"))],
+        capture_output=True,
+        text=True,
+        env={"SYSTEMD_UNIT_PATH": f"{tmp_path}:", "PATH": "/usr/bin:/bin"},
+    )
+    assert proc.returncode == 0, proc.stderr
+
+
+def test_the_schedule_arms_the_prune_and_reports_its_failures() -> None:
+    play = _schedule_playbook()
+    assert "node-backup-prune.timer" in play["vars"]["backup_timers"]
+    commands = [
+        t["ansible.builtin.command"].get("cmd", "") if isinstance(t.get("ansible.builtin.command"), dict) else ""
+        for t in play["tasks"]
+    ]
+    assert any("node-backup-prune.service" in c and "journalctl" in c for c in commands), (
+        "AC3 reads each node's prune failures over seven days; nothing in the schedule playbook reports them"
+    )
