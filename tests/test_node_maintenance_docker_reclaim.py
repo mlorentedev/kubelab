@@ -125,9 +125,7 @@ def test_the_timer_script_runs_the_reclaim_between_the_two_prunes() -> None:
     # A failure is recorded, not swallowed.
     assert 'FAILURES="$FAILURES docker-reclaim"' in script
     # Stopped containers go first so their volumes read as unheld; images after.
-    assert (
-        script.index("docker container prune -f") < invocation.start() < script.index("docker image prune -af")
-    )
+    assert script.index("docker container prune -f") < invocation.start() < script.index("docker image prune -af")
 
 
 def _run_docker_section(tmp_path: Path, group_names: list[str], reclaim_rc: int) -> tuple[list[str], str]:
@@ -138,7 +136,10 @@ def _run_docker_section(tmp_path: Path, group_names: list[str], reclaim_rc: int)
     runs the section and reads what was actually called, in order.
     """
     script = render_script(group_names)
-    section = script[script.index("# Docker cleanup") : script.index("# K3s cleanup")]
+    start, end = "# Docker cleanup", "# K3s cleanup"
+    missing = [m for m in (start, end) if m not in script]
+    assert not missing, f"kubelab-maintenance.sh.j2 lost the section marker(s) this test slices on: {missing}"
+    section = script[script.index(start) : script.index(end)]
     log = tmp_path / "calls.log"
     for tool, rc in (("docker", 0), ("python3", reclaim_rc)):
         stub = tmp_path / tool
@@ -262,7 +263,7 @@ def test_an_empty_protection_is_refused() -> None:
 
 # --- the shipped file, run as the timer runs it -------------------------------
 
-FAKE_DOCKER = r'''#!/usr/bin/env python3
+FAKE_DOCKER = r"""#!/usr/bin/env python3
 import json, os, sys
 state = json.load(open(os.environ["FAKE_DOCKER_STATE"]))
 log = open(os.environ["FAKE_DOCKER_LOG"], "a")
@@ -285,7 +286,7 @@ elif args[:2] == ["rm", "-f"] or args[:2] == ["volume", "rm"]:
     log.write(" ".join(args) + "\n")
 else:
     sys.exit(f"fake docker: unexpected {args}")
-'''
+"""
 
 
 def test_the_shipped_module_reclaims_residue_and_spares_every_declared_volume(tmp_path: Path) -> None:
@@ -301,12 +302,22 @@ def test_the_shipped_module_reclaims_residue_and_spares_every_declared_volume(tm
         + [
             {"name": f"{builder}_state", "created": old, "labels": None},
             {"name": running_job, "created": old, "labels": None},
-            {"name": "399a4bea9ab2b2e72c19c786bdb14899f1afb3fecfeee2a92451db63f0787720", "created": old, "labels": anonymous},
+            {
+                "name": "399a4bea9ab2b2e72c19c786bdb14899f1afb3fecfeee2a92451db63f0787720",
+                "created": old,
+                "labels": anonymous,
+            },
             {"name": "a" * 64, "created": young, "labels": anonymous},
         ],
         "containers": [
             {"id": "c1", "name": builder, "created": old, "running": True, "mounts": [f"{builder}_state"]},
-            {"id": "c2", "name": running_job, "created": young, "running": True, "mounts": [running_job, "act-toolcache"]},
+            {
+                "id": "c2",
+                "name": running_job,
+                "created": young,
+                "running": True,
+                "mounts": [running_job, "act-toolcache"],
+            },
         ],
     }
     bin_dir = tmp_path / "bin"
