@@ -126,6 +126,7 @@ def node_reclaim(
         disk_usage,
         plan_reclaim,
         probe,
+        protected_volumes,
         prune_images,
         remove,
         resolve_gate,
@@ -135,7 +136,8 @@ def node_reclaim(
 
     gate = resolve_gate(min_age_hours)
 
-    net = ConfigurationManager("common", settings.project_root).get_merged_config()["networking"]
+    common = ConfigurationManager("common", settings.project_root).get_merged_config()
+    net = common["networking"]
     block = (net.get("nodes") or {}).get(node)
     if not block:
         declared = ", ".join(sorted(net.get("nodes") or {})) or "(none)"
@@ -150,8 +152,11 @@ def node_reclaim(
     logger.section(f"Docker reclaim — {node} ({ssh_target})")
     try:
         logger.info(f"before  {disk_usage(ssh_target)}")
+        # The same protection the node's own timer applies (OPS-024): every volume
+        # common.yaml's `backup` block names, derived, never listed here.
+        protected = protected_volumes(common.get("backup") or {})
         containers, volumes = probe(ssh_target)
-        plan = plan_reclaim(containers, volumes, datetime.now(timezone.utc), gate)
+        plan = plan_reclaim(containers, volumes, datetime.now(timezone.utc), gate, protected=protected)
     except (DockerUnavailableError, ReclaimRefused) as exc:
         logger.error(str(exc))
         raise typer.Exit(1) from exc

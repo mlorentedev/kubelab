@@ -33,11 +33,15 @@ the homelab is powered down teaches people to ignore it, which is the same reaso
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import pytest
 import yaml
+
+from tests.node_maintenance_role import resolve_defaults
+from toolkit.features import docker_reclaim
 
 from .fixtures import NodeInfo, node_ssh_run
 
@@ -75,6 +79,74 @@ def _declared_sources(node_name: str) -> list[dict[str, Any]]:
     return list(_COMMON.get("backup", {}).get("sources", {}).get(node_name, {}).values())
 
 
+def _ruled_excluded(node_name: str) -> set[str]:
+    """Volumes `backup.excluded.<node>` rules on: a recorded tier-3 decision IS
+    the acknowledgement this test asks for, so it is honoured rather than copied
+    into `_ACKNOWLEDGED_UNBACKED` (a `pvc:` ruling names a claim, not a volume)."""
+    rulings = _COMMON.get("backup", {}).get("excluded", {}).get(node_name, {}) or {}
+    return {name for name, ruling in rulings.items() if not (isinstance(ruling, dict) and "pvc" in ruling)}
+
+
+# The latest of the timer's last trigger (persisted across reboots by
+# `Persistent=true`) and the service's last start this boot (a manual run).
+# Either alone misses one: the service's timestamp resets at boot, and a manual
+# `systemctl start` does not move the timer's.
+_LAST_RUN = (
+    "for t in \"$(systemctl show kubelab-maintenance.timer -p LastTriggerUSec --value)\" "
+    "\"$(systemctl show kubelab-maintenance.service -p ExecMainStartTimestamp --value)\"; do "
+    '[ -n "$t" ] && [ "$t" != n/a ] && date -d "$t" +%s; done | sort -n | tail -1'
+)
+
+
+def _ci_residue_verdicts(node: NodeInfo) -> tuple[set[str], list[str]]:
+    """On a node whose maintenance runs the Docker reclaim (OPS-024), CI residue
+    is bounded rather than declared: job volumes and anonymous volumes appear
+    with every job, and naming them is impossible by construction.
+
+    Returns (residue the reaper is still entitled to leave, residue it should
+    already have removed). The second is judged against the reaper's OWN last
+    run: anything its plan would have taken at that moment -- a candidate, not
+    declared, unheld, older than its gate then -- and is still here is a reaper
+    that did not do its job. Judging from the last run rather than from "now
+    minus a period" keeps an on-demand node that was powered off for a week
+    from reading as a broken reaper.
+    """
+    defaults = resolve_defaults([node.group, "docker_hosts"])
+    if not defaults["maintenance_docker_reclaim"]:
+        return set(), []
+    last = node_ssh_run(node, _LAST_RUN, timeout=20)
+    if not last.stdout.strip():
+        pytest.fail(f"{node.name} runs the Docker reclaim, but kubelab-maintenance has no recorded run")
+    ran_at = datetime.fromtimestamp(int(last.stdout.strip()), tz=timezone.utc)
+
+    raw_volumes = node_ssh_run(
+        node,
+        'vols=$(docker volume ls -q); [ -z "$vols" ] || docker volume inspect '
+        "-f '{{.Name}}|{{.CreatedAt}}|{{json .Labels}}' $vols",
+        timeout=30,
+    )
+    raw_containers = node_ssh_run(
+        node,
+        'ids=$(docker ps -aq); [ -z "$ids" ] || docker inspect '
+        "-f '{{.Name}}|{{.Created}}|{{.State.Running}}|{{range .Mounts}}{{.Name}},{{end}}' $ids",
+        timeout=30,
+    )
+    assert raw_volumes.returncode == 0 and raw_containers.returncode == 0, raw_volumes.stderr + raw_containers.stderr
+    volumes = docker_reclaim.parse_volumes(raw_volumes.stdout)
+    containers = docker_reclaim.parse_containers(raw_containers.stdout)
+    plan = docker_reclaim.plan_reclaim(
+        containers,
+        volumes,
+        ran_at,
+        int(defaults["maintenance_docker_reclaim_min_age_hours"]),
+        protected=docker_reclaim.protected_volumes(_COMMON["backup"]),
+    )
+    # Created after the last run: the reaper has not had its chance yet.
+    overdue = [name for name in plan.volumes if next(v for v in volumes if v.name == name).created <= ran_at]
+    bounded = {v.name for v in volumes if docker_reclaim.is_candidate(v)} - set(overdue)
+    return bounded, overdue
+
+
 def _acknowledged(candidate: str) -> str | None:
     for marker, reason in _ACKNOWLEDGED_UNBACKED.items():
         if marker in candidate:
@@ -96,9 +168,15 @@ class TestBackupCoverage:
             pytest.skip(f"{node_name} unreachable or has no Docker — powered off is normal here")
 
         declared = {s["volume"] for s in _declared_sources(node_name) if "volume" in s}
+        declared |= _ruled_excluded(node_name)
+        bounded, overdue = _ci_residue_verdicts(node)
+        assert not overdue, (
+            f"{node_name}'s Docker reclaim left residue its own last run should have removed: "
+            f"{sorted(overdue)}. Read `journalctl -u kubelab-maintenance` on the node (OPS-024)."
+        )
         undeclared: list[str] = []
         for volume in filter(None, (v.strip() for v in probe.stdout.splitlines())):
-            if volume in declared or _acknowledged(volume):
+            if volume in declared or volume in bounded or _acknowledged(volume):
                 continue
             undeclared.append(volume)
 

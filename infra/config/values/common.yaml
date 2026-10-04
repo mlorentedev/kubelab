@@ -2108,6 +2108,14 @@ backup:
           construction: every entry is re-fetched from its upstream on demand, and
           restoring a stale copy would pin versions a fresh run would not choose.
         tier: 3
+      # Not in the compose template: act_runner creates it on the first job and
+      # mounts it at /opt/hostedtoolcache in every job container. Ruled here so
+      # the live coverage test and the node's reclaim both see it as declared.
+      act-toolcache:
+        reason: >-
+          act_runner's shared tool cache, the Gitea twin of github_runner_toolcache:
+          every entry is re-fetched from its upstream by the next job that needs it.
+        tier: 3
     vps:
       grafana:
         pvc:

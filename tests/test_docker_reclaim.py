@@ -24,6 +24,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
+import yaml
 
 from toolkit.features.docker_reclaim import (
     BUILDER_PREFIX,
@@ -33,12 +34,21 @@ from toolkit.features.docker_reclaim import (
     DockerUnavailableError,
     ReclaimPlan,
     ReclaimRefused,
+    Volume,
     _checked_name,
     parse_containers,
     parse_volumes,
     plan_reclaim,
+    protected_volumes,
     resolve_gate,
 )
+
+_COMMON = Path(__file__).resolve().parents[1] / "infra" / "config" / "values" / "common.yaml"
+
+# What the real callers pass: every volume common.yaml's `backup` block names.
+# Read from the SSOT rather than spelled here, so these tests exercise the same
+# protection the CLI and the node's timer apply (OPS-024).
+PROTECTED = protected_volumes(yaml.safe_load(_COMMON.read_text(encoding="utf-8"))["backup"])
 
 # `docker inspect -f '{{.Name}}|{{.Created}}|{{.State.Running}}|{{range .Mounts}}{{.Name}},{{end}}'`
 # on beelink (100.64.0.3), 2026-09-05, root filesystem at 100% / 0 bytes free.
@@ -104,19 +114,19 @@ def containers() -> list[Container]:
 
 
 @pytest.fixture
-def volumes() -> list[str]:
+def volumes() -> list[Volume]:
     return parse_volumes(BEELINK_VOLUMES)
 
 
 @pytest.fixture
-def plan(containers: list[Container], volumes: list[str]) -> ReclaimPlan:
-    return plan_reclaim(containers, volumes, MEASURED_AT, DEFAULT_MIN_AGE_HOURS)
+def plan(containers: list[Container], volumes: list[Volume]) -> ReclaimPlan:
+    return plan_reclaim(containers, volumes, MEASURED_AT, DEFAULT_MIN_AGE_HOURS, protected=PROTECTED)
 
 
 # --- the fixture's own properties, before anything reads it ------------------
 
 
-def test_the_fixture_is_what_it_claims(containers: list[Container], volumes: list[str]) -> None:
+def test_the_fixture_is_what_it_claims(containers: list[Container], volumes: list[Volume]) -> None:
     """Anti-vacuity floor. Every assertion below is about a partition of this
     data, and a partition of an empty set is empty and passes."""
     builders = [c for c in containers if c.name.startswith(BUILDER_PREFIX)]
@@ -134,8 +144,8 @@ def test_the_fixture_is_what_it_claims(containers: list[Container], volumes: lis
     # The trap this module exists for: every one of these reported "Up 3 hours".
     assert all(c.running for c in builders)
 
-    assert set(MUST_SURVIVE) <= set(volumes)
-    assert any(v.startswith("GITEA-ACTIONS-TASK-") for v in volumes)
+    assert set(MUST_SURVIVE) <= {v.name for v in volumes}
+    assert any(v.name.startswith("GITEA-ACTIONS-TASK-") for v in volumes)
 
 
 # --- parsing -----------------------------------------------------------------
@@ -201,7 +211,7 @@ def test_only_builder_containers_are_candidates(plan: ReclaimPlan) -> None:
         assert survivor not in {c.name for c, _ in plan.kept_containers}
 
 
-def test_the_declared_multiarch_builder_is_not_a_candidate(volumes: list[str]) -> None:
+def test_the_declared_multiarch_builder_is_not_a_candidate(volumes: list[Volume]) -> None:
     """This fleet provisions a builder called `multiarch` on purpose. It shares
     the `buildx_buildkit_` prefix and must never be reclaimed — the `builder-`
     segment is what separates an action-generated instance from a declared one."""
@@ -211,7 +221,7 @@ def test_the_declared_multiarch_builder_is_not_a_candidate(volumes: list[str]) -
         running=True,
         volumes=("buildx_buildkit_multiarch0_state",),
     )
-    result = plan_reclaim([managed], ["buildx_buildkit_multiarch0_state"], MEASURED_AT)
+    result = plan_reclaim([managed], [Volume("buildx_buildkit_multiarch0_state")], MEASURED_AT, protected=PROTECTED)
     assert result.is_noop
 
 
@@ -252,16 +262,19 @@ def test_a_volume_held_by_a_survivor_is_kept_and_said_so() -> None:
         running=True,
         volumes=(shared,),
     )
-    result = plan_reclaim([doomed, survivor], [shared], MEASURED_AT)
+    result = plan_reclaim([doomed, survivor], [Volume(shared)], MEASURED_AT, protected=PROTECTED)
 
     assert shared not in result.volumes
     assert result.kept_volumes == ((shared, "still held by something-that-stays"),)
 
 
 def test_an_undeclared_volume_is_never_touched(plan: ReclaimPlan) -> None:
-    """The two anonymous hex volumes match no pattern. Anything this module does
-    not recognise is left alone — the opposite posture from `docker volume
-    prune`, whose blast radius is whatever happens not to be running."""
+    """The two anonymous hex volumes match no pattern, and this transcription
+    carries names only, so nothing says they are anonymous. Anything this module
+    does not recognise is left alone — the opposite posture from `docker volume
+    prune`, whose blast radius is whatever happens not to be running. Since
+    OPS-024 an anonymous volume IS a candidate, but only on Docker's own label;
+    tests/test_node_maintenance_docker_reclaim.py covers that half."""
     assert "399a4bea9ab2b2e72c19c786bdb14899f1afb3fecfeee2a92451db63f0787720" not in plan.volumes
     assert "075601ddee03f27f9ec7691263de6e5b7ef243de34065feaf03decaaa0fce68e" not in plan.volumes
 
@@ -278,16 +291,16 @@ def test_a_builder_kept_for_age_keeps_its_volume(plan: ReclaimPlan) -> None:
 # --- the gate itself ---------------------------------------------------------
 
 
-def test_a_wider_gate_reclaims_the_young_builder_too(containers: list[Container], volumes: list[str]) -> None:
+def test_a_wider_gate_reclaims_the_young_builder_too(containers: list[Container], volumes: list[Volume]) -> None:
     """An operator watching the plan can lower the gate. At zero everything
     qualifies, which is the emergency case."""
-    result = plan_reclaim(containers, volumes, MEASURED_AT, min_age_hours=0)
+    result = plan_reclaim(containers, volumes, MEASURED_AT, min_age_hours=0, protected=PROTECTED)
     assert len(result.containers) == 6
     assert result.kept_containers == ()
 
 
-def test_a_gate_above_every_age_reclaims_nothing(containers: list[Container], volumes: list[str]) -> None:
-    result = plan_reclaim(containers, volumes, MEASURED_AT, min_age_hours=24 * 365)
+def test_a_gate_above_every_age_reclaims_nothing(containers: list[Container], volumes: list[Volume]) -> None:
+    result = plan_reclaim(containers, volumes, MEASURED_AT, min_age_hours=24 * 365, protected=PROTECTED)
     assert result.containers == ()
     assert len(result.kept_containers) == 6
     # And nothing follows them: every state volume is still held.
@@ -345,9 +358,9 @@ def test_make_passes_a_zero_gate_through_to_the_cli() -> None:
     assert "--min-age-hours" not in unset.stdout
 
 
-def test_a_negative_gate_is_refused(containers: list[Container], volumes: list[str]) -> None:
+def test_a_negative_gate_is_refused(containers: list[Container], volumes: list[Volume]) -> None:
     with pytest.raises(ReclaimRefused, match="negative age gate"):
-        plan_reclaim(containers, volumes, MEASURED_AT, min_age_hours=-1)
+        plan_reclaim(containers, volumes, MEASURED_AT, min_age_hours=-1, protected=PROTECTED)
 
 
 def test_is_noop_reports_both_halves() -> None:
@@ -371,13 +384,13 @@ def test_a_name_that_could_change_a_remote_command_is_refused(hostile: str) -> N
         _checked_name(hostile)
 
 
-def test_every_real_name_survives_the_check(containers: list[Container], volumes: list[str]) -> None:
+def test_every_real_name_survives_the_check(containers: list[Container], volumes: list[Volume]) -> None:
     """Anti-vacuity for the check above: a validator that rejected everything
     would pass every hostile case and be useless."""
     for container in containers:
         assert _checked_name(container.name) == container.name
     for volume in volumes:
-        assert _checked_name(volume) == volume
+        assert _checked_name(volume.name) == volume.name
 
 
 def test_containers_are_removed_before_the_volumes_they_hold(monkeypatch: pytest.MonkeyPatch) -> None:
