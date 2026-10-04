@@ -46,17 +46,18 @@
 - name: Report that Open WebUI is not configured
   ansible.builtin.debug:
     msg: >-
-      Open WebUI is NOT started: no OIDC client secret was delivered
-      (apps.services.security.authelia.oidc_client_secret_open_webui in prod
-      SOPS). Mint it with `toolkit secrets set`, run `make sync-oidc-hashes`,
-      merge, then provision again.
-  when: agent_stack_webui_oidc_client_secret | length == 0
+      Open WebUI is NOT started: it needs both the OIDC client secret
+      (apps.services.security.authelia.oidc_client_secret_open_webui) and the
+      break-glass password (apps.services.ai.open_webui.admin_password) in prod
+      SOPS. Mint them with `toolkit secrets set`, run `make sync-oidc-hashes
+      ENV=prod`, merge, then provision again.
+  when: not (agent_stack_webui_configured | bool)
   tags: [agent_stack]
 
 # The same invariant on a node that WAS configured: a secret removed from SOPS
 # must take Open WebUI down, not leave the last container serving.
 - name: Stop Open WebUI when it is not configured
-  when: agent_stack_webui_oidc_client_secret | length == 0
+  when: not (agent_stack_webui_configured | bool)
   tags: [agent_stack]
   block:
     - name: Look for a previously deployed Compose project
@@ -87,7 +88,7 @@
       loop: [compose-webui.yml, webui.env]
 
 - name: Deploy Open WebUI
-  when: agent_stack_webui_oidc_client_secret | length > 0
+  when: agent_stack_webui_configured | bool
   tags: [agent_stack]
   block:
     # Registered, not notified: the recreate has to happen before the drift
@@ -167,6 +168,29 @@
       until: _agent_stack_health.status == 200
       retries: 30
       delay: 5
+
+    # The seed runs only on an empty database, so this is what proves the first
+    # admin is ours and not a visitor's. It also catches SOPS and the database
+    # disagreeing, the state a break-glass path must never be found in.
+    - name: Verify the break-glass account is the seeded admin
+      ansible.builtin.uri:
+        url: "http://{{ tailscale_ip }}:{{ agent_stack_webui.default_port }}/api/v1/auths/signin"
+        method: POST
+        body_format: json
+        body:
+          email: "{{ agent_stack_webui_admin_email }}"
+          password: "{{ agent_stack_webui_admin_password }}"
+        status_code: [200, 400, 401, 403]
+        timeout: 10
+      register: _agent_stack_break_glass
+      failed_when: >-
+        _agent_stack_break_glass.status != 200
+        or (_agent_stack_break_glass.json | default({})).get('role') != 'admin'
+      no_log: true
+
+    - name: Report the break-glass check
+      ansible.builtin.debug:
+        msg: "break-glass account {{ agent_stack_webui_admin_email }} signs in as admin"
 
     - name: Install the Tailscale address wait helper
       ansible.builtin.copy:

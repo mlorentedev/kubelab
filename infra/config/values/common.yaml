@@ -1744,6 +1744,22 @@ apps:
           token_endpoint_auth_method: client_secret_basic
           authorization_policy: one_factor
           consent_mode: implicit
+        # Prod only: Open WebUI on ace2 trusts prod Authelia (ADR-068), and no route
+        # serves it. It is reached at ace2's MagicDNS name on its own port, so the
+        # redirect declares both (AI-009 R8), and break_glass.py reaches it there.
+        # client_secret_basic is authlib's default; the first login measures it.
+        - client_id: open-webui-oidc
+          client_name: Open WebUI
+          envs: [prod]
+          redirect:
+            domain: apps.services.ai.open_webui.host
+            scheme: http
+            port: apps.services.ai.open_webui.default_port
+            path: /oauth/oidc/callback
+          scopes: [openid, profile, email, groups]
+          token_endpoint_auth_method: client_secret_basic
+          authorization_policy: one_factor
+          consent_mode: implicit
         oidc_jwks_url: https://auth.kubelab.live/.well-known/jwks.json
         # User configuration (passwords stored in SOPS secrets)
         users:
@@ -1843,6 +1859,16 @@ apps:
             # `argocd --core` or kubectl against the hub. The local admin account
             # is not a break-glass path; it is disabled by design (ADR-062 D4).
             cluster: hub
+          open_webui:
+            # A local account of nobody, the Grafana shape (#951). The login form
+            # stays on for it: `ENABLE_LOGIN_FORM=false` only hides the form, and
+            # `/api/v1/auths/signin` keeps taking passwords either way (v0.11.4,
+            # lesson-520). `WEBUI_ADMIN_EMAIL` seeds it on an empty database, before
+            # the first request, so no visitor can sign up as the first admin. Open
+            # WebUI signs in by email, which is why rotation uses it.
+            login: breakglass
+            email: breakglass@kubelab.live
+            secret: apps.services.ai.open_webui.admin_password
           loki: {}
           vikunja:
             none: "Task board, not a 3 AM service (ADR-028): it waits for the IdP to come back."

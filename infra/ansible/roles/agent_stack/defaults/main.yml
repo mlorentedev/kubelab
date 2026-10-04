@@ -11,6 +11,7 @@ agent_stack_webui_project: agent-stack-webui
 #   tests/test_tailscale_bound_ports_survive_boot.py sees the bind),
 #   agent_stack_webui (the apps.services.ai.open_webui
 #   map), agent_stack_webui_oidc_client_id, agent_stack_oidc_issuer,
+#   agent_stack_webui_admin_email,
 #   agent_stack_agent_user, agent_stack_agent_probe_image, and
 #   agent_stack_protected_paths (what the agent must fail to read).
 
@@ -19,6 +20,15 @@ agent_stack_webui_project: agent-stack-webui
 # without OIDC its first visitor would create the admin account, and the
 # tailnet includes the `work@` bridge identities (ADR-041 rule 1).
 agent_stack_webui_oidc_client_secret: ""
+# The break-glass account's password (ADR-062 D4), from the same prod SOPS. Its
+# email comes from the break-glass declaration as `agent_stack_webui_admin_email`.
+agent_stack_webui_admin_password: ""
+# Both, or Open WebUI is not started. The login form is on, and on an empty
+# database the first visitor to sign up becomes admin unless the break-glass
+# account was seeded first.
+agent_stack_webui_configured: >-
+  {{ agent_stack_webui_oidc_client_secret | length > 0
+     and agent_stack_webui_admin_password | length > 0 }}
 agent_stack_nan_api_key: ""
 agent_stack_nan_api_base_url: https://api.nan.builders/v1
 

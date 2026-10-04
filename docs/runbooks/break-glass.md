@@ -10,6 +10,8 @@ public router (Traefik) or the IdP (Authelia). It goes over the private network:
 
 - a **port-forward** to the service, when it runs in the cluster;
 - its **EndpointSlice address over the tailnet**, when it runs outside (Gitea on the Beelink);
+- its **declared tailnet address**, when no route serves it at all (Open WebUI on ace2,
+  from its OIDC redirect's `scheme`, host and `port`);
 - the **cluster credential** itself, where no application account is used (Argo CD, Authelia).
 
 One consequence worth knowing: Grafana's public route carries the `authelia`
@@ -70,6 +72,16 @@ because it resets the password inside the pod first.
 inside the tailnet's WireGuard), by API or `git`.
 The web form is not relied on. For credential repair, see
 [gitea-credential-recovery.md](gitea-credential-recovery.md).
+
+### Open WebUI
+
+`breakglass@kubelab.live` with its local password, over the tailnet at
+`http://ace2.kubelab.internal:3080`. Open WebUI signs in by email, so that is the
+user. The form is always on and admits only this account: nobody can sign up through it,
+and SSO users never get a password. It is seeded on an empty database by
+`WEBUI_ADMIN_EMAIL`, and each provision proves it still signs in as admin. ace2 is
+on-demand (ADR-028): with the node off, there is nothing to break into, and
+`--group break-glass` skips it instead of failing the other rotations.
 
 ### Authelia itself
 

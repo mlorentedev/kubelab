@@ -50,6 +50,9 @@ def _account_guidance(env: str, decl: dict[str, Any], values: dict[str, Any]) ->
         return
     where = bg.secret_file(decl["secret"], env, _SECRETS_DIR)
     typer.echo(f"  user:     {bg.account_login(decl, values)}")
+    if decl.get("email"):
+        # A local account's own address; services that sign in by email (Open WebUI) take this.
+        typer.echo(f"  email:    {decl['email']}")
     typer.echo(f"  password: run in YOUR terminal: make secrets-show KEY={decl['secret']} SECRETS_ENV={where}")
     typer.echo(f"  after:    rotate it -- toolkit secrets rotate --group break-glass --env {env}")
 

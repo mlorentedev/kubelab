@@ -58,6 +58,8 @@ class Target:
     service: str
     login: str
     secret_key: str
+    #: A local account's own email: what a service that signs in by email is given.
+    email: str = ""
 
 
 @dataclass(frozen=True)
@@ -72,7 +74,12 @@ def targets(decls: Mapping[str, Mapping[str, Any]], values: Mapping[str, Any]) -
     from toolkit.features.break_glass import account_login
 
     return [
-        Target(service=name, login=account_login(decl, values), secret_key=str(decl["secret"]))
+        Target(
+            service=name,
+            login=account_login(decl, values),
+            secret_key=str(decl["secret"]),
+            email=str(decl.get("email") or ""),
+        )
         for name, decl in sorted(decls.items())
         if "secret" in decl
     ]
@@ -182,11 +189,68 @@ class GiteaAdminPassword(_LoginVerifier):
             raise RotationError(f"Gitea answered {status}")
 
 
+def _http_json(method: str, url: str, body: Any, auth: str) -> tuple[int, Any]:
+    """JSON request carrying AUTH as the whole Authorization header, if any.
+
+    An unreachable host answers status 0 rather than raising, so a caller can tell
+    a refused password from a service that is not there.
+    """
+    data = json.dumps(body).encode() if body is not None else None
+    request = urllib.request.Request(url, data=data, method=method)
+    if auth:
+        request.add_header("Authorization", auth)
+    if data is not None:
+        request.add_header("Content-Type", "application/json")
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            raw = response.read()
+            return response.status, json.loads(raw) if raw else {}
+    except urllib.error.HTTPError as exc:
+        return exc.code, {}
+    except (urllib.error.URLError, OSError):
+        return 0, {}
+
+
+class OpenWebUIAdminPassword:
+    """Open WebUI's own change-password endpoint, under a session the old password opened.
+
+    It signs in by email and answers with a bearer token, so it takes neither basic
+    auth nor a login name. `update/password` re-checks the old password itself.
+    """
+
+    signs_in_with = "email"
+
+    def __init__(self, request: Request = _http_json) -> None:
+        self._request = request
+
+    def _session(self, base_url: str, email: str, password: str) -> str | None:
+        body = {"email": email, "password": password}
+        status, answer = self._request("POST", base_url + "/api/v1/auths/signin", body, "")
+        if status == 200 and isinstance(answer, dict) and answer.get("email") == email:
+            return str(answer.get("token") or "") or None
+        return None
+
+    def verify(self, base_url: str, user: str, password: str) -> bool:
+        return self._session(base_url, user, password) is not None
+
+    def set_password(self, base_url: str, user: str, old: str, new: str) -> None:
+        token = self._session(base_url, user, old)
+        if token is None:
+            raise RotationError("Open WebUI refused the current password")
+        # v0.11.4 `UpdatePasswordForm` (backend/open_webui/models/auths.py:75): `password` is the
+        # current one, checked against the session's user; `new_password` replaces it.
+        body = {"password": old, "new_password": new}
+        status, answer = self._request("POST", base_url + "/api/v1/auths/update/password", body, f"Bearer {token}")
+        if status != 200 or answer is not True:
+            raise RotationError(f"Open WebUI answered {status}")
+
+
 #: One reconciler per service that declares a break-glass account. A declared
 #: account missing here fails `tests/test_break_glass_rotation.py`.
 RECONCILERS: dict[str, Callable[[], PasswordReconciler]] = {
     "grafana": GrafanaAdminPassword,
     "gitea": GiteaAdminPassword,
+    "open_webui": OpenWebUIAdminPassword,
 }
 
 
@@ -219,14 +283,20 @@ def rotate_break_glass(env: str, project_root: Any, log: Callable[[str], None]) 
         except bg.BreakGlassError as exc:
             log(f"  {target.service}: skipped -- {exc}")
             continue
+        if isinstance(plan, bg.Direct) and not _listening(plan.url):
+            # An on-demand node (ADR-028) that is off: not drift, and not a reason
+            # to stop rotating the services that are up.
+            log(f"  {target.service}: skipped -- {plan.url} is not reachable (is its node powered off?)")
+            continue
         file_env = bg.secret_file(target.secret_key, env, secrets_dir)
         reconciler = RECONCILERS[target.service]()
+        user = target.email if getattr(reconciler, "signs_in_with", "login") == "email" else target.login
         log(f"  {target.service}: rotating {target.secret_key} ({file_env}.enc.yaml)")
         read, write = _vault(manager, file_env, target.secret_key)
         with bg.private_url(env, plan) as base_url:
             outcome = rotate_one(
                 target.service,
-                target.login,
+                user,
                 base_url=base_url,
                 reconciler=reconciler,
                 read=read,
@@ -244,6 +314,20 @@ def rotate_break_glass(env: str, project_root: Any, log: Callable[[str], None]) 
         log(f"  {target.service}: {'OK' if outcome.ok else 'FAILED'} -- {outcome.detail}")
         outcomes.append(outcome)
     return outcomes
+
+
+def _listening(url: str) -> bool:
+    """Whether anything accepts a TCP connection at URL's host and port."""
+    import socket
+    import urllib.parse
+
+    parsed = urllib.parse.urlsplit(url)
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    try:
+        with socket.create_connection((parsed.hostname or "", port), timeout=5):
+            return True
+    except OSError:
+        return False
 
 
 def _vault(manager: Any, file_env: str, key: str) -> tuple[Callable[[], str | None], Callable[[str], bool]]:

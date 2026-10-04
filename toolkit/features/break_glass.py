@@ -13,7 +13,8 @@ Three things are derived rather than declared, so nothing here can go stale:
   IngressRoute. Both are read from the rendered manifests.
 - **Where the service is.** The IngressRoute's backend, and at run time the live
   Service: a selector means pods and a port-forward, none means an external
-  backend reached at its EndpointSlice address.
+  backend reached at its EndpointSlice address. A service no route serves is
+  reached at the address its OIDC redirect declares (AI-009 R8).
 - **Which SOPS file holds the password.** Found from key names, which SOPS
   leaves in plaintext, so it needs no decryption.
 
@@ -77,6 +78,9 @@ class Route:
     hosts: tuple[str, ...]
     forward_auth: bool
     backend: Backend | None
+    #: A service no IngressRoute serves, reached over the tailnet at the address its
+    #: OIDC redirect declares (AI-009 R8). Set only on routes `dependents` synthesizes.
+    direct: str | None = None
 
 
 @dataclass(frozen=True)
@@ -156,23 +160,52 @@ def routes(docs: Iterable[Mapping[str, Any]]) -> dict[str, Route]:
 
 
 def dependents(env: str, docs: Iterable[Mapping[str, Any]], values: Mapping[str, Any]) -> dict[str, Route]:
-    """The routes whose access depends on Authelia in `env`, keyed by route name."""
-    from toolkit.features.oidc_clients import resolve_clients
+    """The routes whose access depends on Authelia in `env`, keyed by route name.
+
+    A client whose redirect declares its own `port` is a service no route serves
+    (AI-009 R8). It is keyed by its service name in the SSOT and reached at the
+    address the redirect declares. Any other client must redirect to a routed host.
+    """
+    from toolkit.features.oidc_clients import declared_clients, resolve_clients
 
     all_routes = routes(docs)
     result = {name: route for name, route in all_routes.items() if route.forward_auth}
     by_host = {host: route for route in all_routes.values() for host in route.hosts}
+    redirects = {c["client_id"]: c["redirect"] for c in declared_clients(dict(values))}
     for client in resolve_clients(dict(values), env):
         for uri in client["redirect_uris"]:
-            host = uri.split("://", 1)[1].split("/", 1)[0]
-            route = by_host.get(host)
+            scheme, rest = uri.split("://", 1)
+            authority = rest.split("/", 1)[0]
+            route = by_host.get(authority) or _tailnet_route(redirects[client["client_id"]], scheme, authority)
             if route is None:
                 raise BreakGlassError(
-                    f"OIDC client '{client['client_id']}' redirects to {host}, but no IngressRoute in {env} "
+                    f"OIDC client '{client['client_id']}' redirects to {authority}, but no IngressRoute in {env} "
                     f"serves that host: its break-glass path cannot be derived"
                 )
             result[route.name] = route
     return result
+
+
+def _tailnet_route(redirect: Mapping[str, Any], scheme: str, authority: str) -> Route | None:
+    """The route of a service reached at its declared address, or None for a routed client."""
+    if "port" not in redirect:
+        return None
+    # The service is the SSOT entry that declares both its host and its port, and
+    # its key is the break-glass name. Anything else has no name to derive.
+    host_parent, port_parent = (str(redirect[k]).rpartition(".")[0] for k in ("domain", "port"))
+    if not host_parent or host_parent != port_parent:
+        raise BreakGlassError(
+            f"redirect domain '{redirect['domain']}' and port '{redirect['port']}' are not keys of one service "
+            f"entry: its break-glass name cannot be derived"
+        )
+    name = host_parent.rpartition(".")[2]
+    return Route(
+        name=name,
+        hosts=(authority.rsplit(":", 1)[0],),
+        forward_auth=False,
+        backend=None,
+        direct=f"{scheme}://{authority}",
+    )
 
 
 # --------------------------------------------------------------------------- declaration
@@ -293,6 +326,7 @@ def unreachable_backends(deps: Mapping[str, Route], decls: Mapping[str, Mapping[
         for name, route in deps.items()
         if name in decls
         and not ({"cluster", "none"} & set(decls[name]))
+        and route.direct is None
         and (route.backend is None or route.backend.kind != "Service")
     )
 
@@ -311,6 +345,8 @@ def plan_access(
         return NoBreakGlass(reason=str(decl["none"]))
     if "cluster" in decl:
         return ClusterCredential(target=str(decl["cluster"]))
+    if route.direct is not None:
+        return Direct(url=route.direct)
     backend = route.backend
     if backend is None or backend.kind != "Service":
         raise BreakGlassError(f"{route.name}: its backend is not a Service, so no private path reaches it")

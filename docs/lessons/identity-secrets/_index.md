@@ -1,9 +1,10 @@
 # Identity, auth and secret material
 
-73 lessons, newest first. Back to [all categories](../_index.md).
+74 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 520 | [Open WebUI's `ENABLE_LOGIN_FORM=false` hides the form; the password endpoint stays open](lesson-520-open-webui-login-form-flag-hides-the-form-only.md) | 2026-10-03 |
 | 513 | [A Cloudflare account token is verified against the account, not the user, and only a token that can edit tokens can mint one](lesson-513-a-cloudflare-account-token-is-verified-against-the-account-not-the-user.md) | 2026-10-03 |
 | 507 | [A `terraform plan` cannot prove a token may create something that does not exist yet](lesson-507-a-terraform-plan-cannot-prove-a-token-may-create-what-does-not-exist.md) | 2026-10-02 |
 | 484 | [A reconciler downstream of a stale source reports a bound that cannot converge](lesson-484-a-reconciler-downstream-of-a-stale-source-reports-a-bound-that-cannot-converge.md) | 2026-09-29 |

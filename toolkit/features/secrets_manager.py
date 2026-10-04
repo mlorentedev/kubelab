@@ -432,6 +432,36 @@ SECRET_CATALOG: list[SecretSpec] = [
         rotate_note="Auto-derived from oidc_client_secret_vikunja.",
         envs=_VIKUNJA_ENVS,
     ),
+    SecretSpec(
+        key_path=f"{_AUTH}.oidc_client_secret_open_webui",
+        description="Open WebUI OIDC client secret (plaintext), delivered to ace2 by provision-ace2.yml",
+        kind=SecretKind.OIDC_CLIENT_SECRET,
+        services=("authelia", "open_webui"),
+        rotate_note="Must also regenerate the open_webui hash, then provision ace2 (TAGS=agent_stack).",
+        envs=("prod",),
+    ),
+    SecretSpec(
+        key_path=f"{_AUTH}.oidc_client_secret_open_webui_hash",
+        description="Argon2 hash of Open WebUI OIDC client secret",
+        kind=SecretKind.ARGON2_HASH,
+        services=("authelia",),
+        derived_from=f"{_AUTH}.oidc_client_secret_open_webui",
+        format_hint="$argon2id$v=19$...",
+        rotate_note="Auto-derived from oidc_client_secret_open_webui.",
+        envs=("prod",),
+    ),
+    SecretSpec(
+        key_path="apps.services.ai.open_webui.admin_password",
+        description="Open WebUI break-glass admin password (local account `breakglass`, AI-009)",
+        kind=SecretKind.RANDOM_TOKEN,
+        length=32,
+        services=("open_webui",),
+        rotate_note=(
+            "Break-glass account: `toolkit secrets rotate --group break-glass --env prod`. "
+            "WEBUI_ADMIN_PASSWORD only seeds an empty database, so a reprovision never changes it."
+        ),
+        envs=("prod",),
+    ),
     # =========================================================================
     # Grafana
     # =========================================================================

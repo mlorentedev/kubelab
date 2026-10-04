@@ -76,6 +76,32 @@ def _values(**break_glass: Any) -> dict[str, Any]:
 _GRAFANA_SECRET = "apps.services.observability.grafana.admin_password"
 
 
+def _tailnet_values() -> dict[str, Any]:
+    """A client for a service on the tailnet, at its node's MagicDNS name and its own port."""
+    values = _values()
+    values["apps"]["services"]["ai"] = {
+        "open_webui": {"host": "ace2.example.internal", "scheme": "http", "default_port": 3080}
+    }
+    values["apps"]["services"]["security"]["authelia"]["oidc_clients"] = [
+        {
+            "client_id": "open-webui-oidc",
+            "client_name": "Open WebUI",
+            "envs": ["prod"],
+            "redirect": {
+                "domain": "apps.services.ai.open_webui.host",
+                "scheme": "http",
+                "port": "apps.services.ai.open_webui.default_port",
+                "path": "/oauth/oidc/callback",
+            },
+            "scopes": ["openid"],
+            "token_endpoint_auth_method": "client_secret_basic",
+            "authorization_policy": "one_factor",
+            "consent_mode": "implicit",
+        }
+    ]
+    return values
+
+
 # --------------------------------------------------------------------------- coverage
 
 
@@ -145,6 +171,39 @@ class TestDependents:
 
     def test_a_route_with_neither_is_not_a_dependent(self) -> None:
         assert bg.dependents("prod", [_route("web", "web.example.test")], _values()) == {}
+
+    def test_a_tailnet_client_with_no_route_is_reached_at_its_declared_address(self) -> None:
+        # AI-009 R8: a service no route serves declares its own scheme and port, and
+        # that declaration is the only address there is. No exemption: the service
+        # key comes from the redirect's own key path.
+        deps = bg.dependents("prod", [], _tailnet_values())
+        assert deps == {
+            "open_webui": bg.Route(
+                name="open_webui",
+                hosts=("ace2.example.internal",),
+                forward_auth=False,
+                backend=None,
+                direct="http://ace2.example.internal:3080",
+            )
+        }
+
+    def test_a_routed_client_never_falls_back_to_a_declared_address(self) -> None:
+        # Only a redirect that declares its port is a tailnet service. One without
+        # it names a routed host, so a missing route stays an error.
+        values = _tailnet_values()
+        del values["apps"]["services"]["security"]["authelia"]["oidc_clients"][0]["redirect"]["port"]
+        with pytest.raises(bg.BreakGlassError, match="open-webui-oidc"):
+            bg.dependents("prod", [], values)
+
+    def test_a_port_from_another_entry_leaves_no_name_to_derive(self) -> None:
+        # The name is the entry declaring both host and port. A port borrowed from
+        # elsewhere (a node's) would name the wrong service, so it is refused loudly.
+        values = _tailnet_values()
+        values["networking"] = {"nodes": {"ace2": {"port": 3080}}}
+        redirect = values["apps"]["services"]["security"]["authelia"]["oidc_clients"][0]["redirect"]
+        redirect["port"] = "networking.nodes.ace2.port"
+        with pytest.raises(bg.BreakGlassError, match="not keys of one service entry"):
+            bg.dependents("prod", [], values)
 
 
 # --------------------------------------------------------------------------- declaration
@@ -268,6 +327,12 @@ class TestPlanAccess:
     def test_cluster_and_none_need_no_lookup(self) -> None:
         assert bg.plan_access({"cluster": "hub"}, self.route, None, []) == bg.ClusterCredential(target="hub")
         assert bg.plan_access({"none": "why"}, self.route, None, []) == bg.NoBreakGlass(reason="why")
+
+    def test_a_tailnet_service_is_reached_directly_with_no_cluster_lookup(self) -> None:
+        [route] = bg.dependents("prod", [], _tailnet_values()).values()
+        plan = bg.plan_access({"login": "breakglass"}, route, None, [])
+        assert plan == bg.Direct(url="http://ace2.example.internal:3080")
+        assert bg.unreachable_backends({"open_webui": route}, {"open_webui": {}}) == []
 
 
 class TestSecretFile:

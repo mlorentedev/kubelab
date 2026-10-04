@@ -263,6 +263,12 @@
         # rather than an Open WebUI whose first visitor becomes its admin.
         agent_stack_webui_oidc_client_secret: >-
           {{ gitea_secrets.apps.services.security.authelia.oidc_client_secret_open_webui | default('') }}
+        # The break-glass account (ADR-062 D4): its email from the declaration,
+        # its password from the same prod vault. Missing, Open WebUI stays down.
+        agent_stack_webui_admin_email: >-
+          {{ gitea_config.apps.services.security.authelia.break_glass.open_webui.email }}
+        agent_stack_webui_admin_password: >-
+          {{ gitea_secrets.apps.services.ai.open_webui.admin_password | default('') }}
         # Which NaN key Open WebUI uses is the spec's R1, still open. Empty
         # means Open WebUI starts with no model backend.
         agent_stack_nan_api_key: "{{ secrets.apps.services.ai.open_webui.nan_api_key | default('') }}"
