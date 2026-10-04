@@ -20,6 +20,7 @@ from __future__ import annotations
 import hashlib
 import pathlib
 from typing import Any, Optional
+from unittest.mock import MagicMock
 
 import pytest
 import yaml
@@ -96,7 +97,7 @@ class FakeStore:
         return True
 
 
-def _scope_runner(own_ok: bool = True, other_ok: bool = False):
+def _scope_runner(own_ok: bool = True, other_ok: bool = False, other_error: str = "AccessDenied"):
     """The aws CLI: listing the token's own bucket and another node's."""
     seen: list[list[str]] = []
 
@@ -105,7 +106,8 @@ def _scope_runner(own_ok: bool = True, other_ok: bool = False):
         bucket = argv[argv.index("--bucket") + 1]
         own = bucket == env["_OWN_BUCKET_FOR_TEST"]
         ok = own_ok if own else other_ok
-        return (0, "{}", "") if ok else (254, "", "An error occurred (AccessDenied)")
+        error = "AccessDenied" if own else other_error
+        return (0, "{}", "") if ok else (254, "", f"An error occurred ({error})")
 
     run.seen = seen  # type: ignore[attr-defined]
     return run
@@ -173,13 +175,24 @@ class TestMinting:
             }
         ]
 
-    def test_neither_half_is_printed(self, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_neither_half_reaches_any_output(
+        self, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """capsys alone cannot see loguru, whose sink holds the original stderr,
+        so the logger is replaced with a recorder. Both the success path and a
+        refused mint are exercised: an error message is output too."""
+        log = MagicMock()
+        monkeypatch.setattr(bnc, "logger", log)
         _mint("vps", FakeStore(), FakeHttp())
+        with pytest.raises(bnc.MintError) as refused:
+            _mint("vps", FakeStore(), FakeHttp(), run=_scope_runner(other_ok=True))
         out = capsys.readouterr()
-        secret = hashlib.sha256(b"VALUE-1-do-not-print").hexdigest()
-        for text in (out.out, out.err):
-            assert "VALUE-1-do-not-print" not in text
-            assert secret not in text
+        for n in (1, 2):
+            value = f"VALUE-{n}-do-not-print"
+            secret = hashlib.sha256(value.encode()).hexdigest()
+            for text in (out.out, out.err, str(log.mock_calls), str(refused.value)):
+                assert value not in text
+                assert secret not in text
 
     def test_an_existing_pair_is_kept_and_the_api_is_not_called(self) -> None:
         store = FakeStore({bnc.access_key_path("vps"): "tok-old", bnc.secret_key_path("vps"): "s-old"})
@@ -224,6 +237,14 @@ class TestVerifiedByConsequence:
         store, http = FakeStore(), FakeHttp()
         with pytest.raises(bnc.MintError, match="another node"):
             _mint("vps", store, http, run=_scope_runner(other_ok=True))
+        assert store.writes == []
+        assert http.deletes() == ["tok-1"]
+
+    def test_another_bucket_that_fails_without_access_denied_proves_nothing(self) -> None:
+        """A missing bucket fails the listing too. Only AccessDenied is a refusal."""
+        store, http = FakeStore(), FakeHttp()
+        with pytest.raises(bnc.MintError, match="unproven"):
+            _mint("vps", store, http, run=_scope_runner(other_error="NoSuchBucket"))
         assert store.writes == []
         assert http.deletes() == ["tok-1"]
 

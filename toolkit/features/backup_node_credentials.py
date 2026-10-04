@@ -142,10 +142,10 @@ def _s3_env(key_id: str, secret: str) -> dict[str, str]:
     }
 
 
-def _lists(run: RunFn, endpoint: str, bucket: str, env: dict[str, str]) -> bool:
+def _list(run: RunFn, endpoint: str, bucket: str, env: dict[str, str]) -> tuple[int, str]:
     argv = ["aws", "--endpoint-url", endpoint, "s3api", "list-objects-v2", "--bucket", bucket, "--max-keys", "1"]
-    rc, _, _ = run(argv, env)
-    return rc == 0
+    rc, _, err = run(argv, env)
+    return rc, err
 
 
 def _scope_error(
@@ -154,14 +154,19 @@ def _scope_error(
     """Why the pair fails the by-consequence check, or None when it passes."""
     own = node_bucket(node)
     for attempt in range(_SCOPE_ATTEMPTS):
-        if _lists(run, endpoint, own, env):
+        if _list(run, endpoint, own, env)[0] == 0:
             break
         if attempt + 1 < _SCOPE_ATTEMPTS:
             sleep(_SCOPE_DELAY_S)
     else:
         return f"the token minted for {node} cannot list its own bucket {own}"
-    if _lists(run, endpoint, other_bucket, env):
+    rc, err = _list(run, endpoint, other_bucket, env)
+    if rc == 0:
         return f"the token minted for {node} can list another node's bucket {other_bucket}"
+    # Only a refusal proves the scope. A missing bucket or a network error also
+    # fails the listing, and would pass a check that looked at the exit code alone.
+    if "AccessDenied" not in err:
+        return f"listing another node's bucket {other_bucket} failed without AccessDenied, so the scope is unproven"
     return None
 
 
