@@ -50,10 +50,14 @@ def _tilde_vars(root: pathlib.Path) -> set[str]:
 
     def collect(mapping: Any) -> None:
         if isinstance(mapping, dict):
-            names.update(k for k, v in mapping.items() if isinstance(v, str) and TILDE.search(v))
+            # Any depth: a list (`loop: "{{ x_dirs }}"`) or a map (`{{ svc.dir }}`) hides one too.
+            names.update(k for k, v in mapping.items() if any(TILDE.search(s) for s in _strings(v)))
 
     for path in [*root.glob("roles/*/defaults/**/*.y*ml"), *root.glob("roles/*/vars/**/*.y*ml")]:
         collect(yaml.safe_load(path.read_text()))
+    for path in [*root.glob("roles/*/tasks/**/*.y*ml"), *root.glob("roles/*/handlers/**/*.y*ml")]:
+        for task, _ in _walk(yaml.safe_load(path.read_text()), False):
+            collect(task.get("vars"))
     for path in root.glob("playbooks/**/*.y*ml"):
         for play in yaml.safe_load(path.read_text()) or []:
             collect(play.get("vars"))
@@ -125,7 +129,13 @@ def test_no_task_on_a_managed_node_uses_a_tilde_path() -> None:
 
 def test_the_scan_reports_every_way_a_remote_tilde_hides(tmp_path: pathlib.Path) -> None:
     files: dict[str, Any] = {
-        "roles/svc/defaults/main.yml": {"svc_dir": "~/svc", "svc_kubeconfig": "~/.kube/c", "svc_abs": "/opt/svc"},
+        "roles/svc/defaults/main.yml": {
+            "svc_dir": "~/svc",
+            "svc_kubeconfig": "~/.kube/c",
+            "svc_abs": "/opt/svc",
+            "svc_dirs": ["/opt/a", "~/b"],
+            "svc_paths": {"data": "~/data"},
+        },
         "roles/svc/tasks/main.yml": [
             {"name": "via default", "file": {"path": "{{ svc_dir }}", "state": "directory"}},
             {"name": "literal", "command": "cat ~/notes"},
@@ -135,6 +145,9 @@ def test_the_scan_reports_every_way_a_remote_tilde_hides(tmp_path: pathlib.Path)
             {"name": "fetched", "fetch": {"dest": "{{ svc_kubeconfig }}"}, "delegate_to": "localhost"},
             {"name": "outer", "delegate_to": "localhost", "block": [{"name": "inherited", "stat": {"path": "~/x"}}]},
             {"name": "remote block", "become": True, "block": [{"name": "nested", "copy": {"dest": "~/y"}}]},
+            {"name": "list default", "file": {"path": "{{ item }}"}, "loop": "{{ svc_dirs }}"},
+            {"name": "map default", "file": {"path": "{{ svc_paths.data }}"}},
+            {"name": "task var", "vars": {"own_dir": "~/own"}, "file": {"path": "{{ own_dir }}"}},
         ],
         "playbooks/site.yml": [
             {
@@ -151,4 +164,4 @@ def test_the_scan_reports_every_way_a_remote_tilde_hides(tmp_path: pathlib.Path)
 
     found = {line.split(": ", 1)[1] for line in _remote_tilde_paths(tmp_path)}
 
-    assert found == {"via default", "literal", "nested", "play var"}
+    assert found == {"via default", "literal", "nested", "play var", "list default", "map default", "task var"}
