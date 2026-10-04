@@ -179,6 +179,7 @@ The writer re-encrypts the whole file, so the git diff spans every line. That is
 - **Prune facing a stale exclusive lock.** A lock was left by hand, outside systemd so nothing paged, by killing a `forget` once it held its lock. `PRUNE=1` then logged `successfully removed 1 locks`, applied the policy (20 snapshots kept) and finished.
 - Three `OnFailure` notifications fired during these tests: two from the killed prunes (`signal`) and one from the ship that failed before the fix. Each `kubelab-notify@<unit>.service` ran and exited 0 (journal, 06:29:21, 06:32:15, 06:32:24).
 - `make backup-schedule NODE=beelink ENV=prod` then reported `node-backup-prune.service failures in the last 7 days: 2`. Those are the two deliberate kills of 2026-10-04, not faults: AC3's seven-day window must start after them.
+- After review (#2066), the report tells a clean week from a node without the unit. `make backup-schedule NODE=all ENV=prod` printed `failures in the last 7 days: 2` on beelink and `is not installed on this node (not-found): nothing measured` on kubelab-vps, rpi3 and rpi4, which do not have the role yet.
 - `--no-lock` keeps the probe's exit codes: `restic snapshots -q --no-lock` exits **10** on a prefix with no repository and **0** on beelink's, so the first-ship `init` path is unchanged.
 
 ## Test status
