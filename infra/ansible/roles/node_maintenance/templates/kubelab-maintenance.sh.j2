@@ -4,6 +4,8 @@
 set -euo pipefail
 
 echo "[$(date)] Starting maintenance on $(hostname)"
+# Before and after in the same journal, so one run is its own evidence.
+df -h /
 
 # Failures that must reach a human (OPS-024). Each step below still runs when an
 # earlier one fails -- a node that cannot reclaim still needs its journal
