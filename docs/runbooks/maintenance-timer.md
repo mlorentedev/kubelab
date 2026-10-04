@@ -7,9 +7,10 @@ created: "2026-08-14"
 
 # Fleet maintenance timer — operational runbook
 
-> `kubelab-maintenance.timer` runs weekly disk hygiene (APT cache, journal
+> `kubelab-maintenance.timer` runs disk hygiene (APT cache, journal
 > vacuum, rotated-log retention, snap/Docker/crictl pruning, temp files) on
-> every Ubuntu/Debian node in the fleet. Property of provisioning since
+> every Ubuntu/Debian node in the fleet: weekly, and daily on the CI node,
+> where it also reclaims Docker residue (see below). Property of provisioning since
 > ANSIBLE-035 — a freshly provisioned or freshly replaced node comes up with
 > it already scheduled, rather than needing a manual follow-up step.
 
@@ -19,6 +20,49 @@ created: "2026-08-14"
   `provision-<node>.yml` includes `roles/node_maintenance` for.
 - **Not covered**: Jetson (Ubuntu 18.04, `legacy_python`, raw-module-only
   provisioning — the role's Ansible-module tasks aren't reachable there).
+
+## The CI node: daily Docker residue reclaim (OPS-024)
+
+On `platform_nodes` (the Beelink), `maintenance_docker_reclaim` is on. On that node the
+timer runs **daily** instead of weekly, and between the container prune and the image
+prune it runs `/opt/kubelab-docker-reclaim.py`. That file is a verbatim copy of
+`toolkit/features/docker_reclaim.py`, the same module `make node-reclaim` uses.
+
+What it removes, and why:
+
+- **buildx builders** (`buildx_buildkit_builder-*`) created more than 24 h ago, judged by
+  `Created`, never by uptime.
+- **Job volumes** that act_runner 0.2.13 leaves when a job is cancelled during its image
+  pull, or when the runner is lost mid-job. Its cleanup runs only after the job container
+  started (lesson 521).
+- **Anonymous volumes**: only when no container holds them, they are older than 24 h, and
+  they are not named in `common.yaml`'s `backup` block.
+
+Where the protected list comes from: the role writes `backup.sources` and
+`backup.excluded` to `/opt/kubelab-backup-declaration.json` at provision time. If a
+volume must survive the reclaim, declare it there; do not add it to a list in the script.
+An empty declaration makes the reclaim refuse to run, so it can never become a bare
+`docker volume prune`.
+
+`tests/test_node_maintenance_docker_reclaim.py` proves the wiring, the order and the
+protection. `tests/infra/test_backup_coverage.py` fails when residue is still present
+that the reaper's own last run should have removed.
+
+**Two conditions now fail the run** and fire the notifier described below:
+
+- the reclaim exiting non-zero;
+- `/` at or above `maintenance_disk_alert_percent` after cleanup. That is 80%, or 92% on
+  the hub, the same thresholds as `tests/infra/test_nodes.py`.
+
+In both cases the rest of the cleanup still runs, and the exit happens at the end.
+
+**Changing a node's schedule starts a run right away.** `Persistent=true` treats the
+first day the new schedule missed as owed. So the provision that switched the Beelink to
+daily started a full cleanup a minute later, measured 2026-10-04, including `docker
+builder prune -af` while CI jobs were running. Provision such a change when CI is quiet.
+
+Emergency path (disk already full, Ansible cannot run):
+`make node-reclaim NODE=beelink APPLY=1 [IMAGES_ALL=1]`.
 
 ## Checking status
 
@@ -76,7 +120,11 @@ TIMER=1`'s explicit manual invocation.
 
 ## What an OnFailure notification means
 
-A failed `kubelab-maintenance.service` run (a hard script abort — most
+On the CI node, read the journal first for `ERROR:` and `maintenance FAILED:`. Those
+lines name `docker-reclaim` or `disk-NN%`, the two failures the script records on purpose
+(see the reclaim section above).
+
+Otherwise, a failed `kubelab-maintenance.service` run (a hard script abort — most
 individual sub-tasks tolerate failure deliberately via `ignore_errors`, so
 this means something like `apt-get clean` or `journalctl --vacuum-size`
 failing outright, not a single skipped prune) triggers

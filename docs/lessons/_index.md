@@ -12,7 +12,7 @@
 | [edge-tls](edge-tls/_index.md) | 27 | Traefik, TLS, the request path |
 | [toolkit-tooling](toolkit-tooling/_index.md) | 43 | Toolkit CLI, Make, Python, tests |
 | [gitops-delivery](gitops-delivery/_index.md) | 32 | Argo CD, releases, promotion |
-| [ci-automation](ci-automation/_index.md) | 40 | CI workflows, gates, GitHub |
+| [ci-automation](ci-automation/_index.md) | 41 | CI workflows, gates, GitHub |
 | [observability](observability/_index.md) | 26 | Metrics, logs, alerting |
 | [containers-docker](containers-docker/_index.md) | 16 | Docker, Compose, image builds |
 | [storage-backup](storage-backup/_index.md) | 24 | Backups, volumes, persistence |
