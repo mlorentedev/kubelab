@@ -190,7 +190,15 @@ def _tailnet_route(redirect: Mapping[str, Any], scheme: str, authority: str) -> 
     """The route of a service reached at its declared address, or None for a routed client."""
     if "port" not in redirect:
         return None
-    name = str(redirect["domain"]).rsplit(".", 2)[-2]
+    # The service is the SSOT entry that declares both its host and its port, and
+    # its key is the break-glass name. Anything else has no name to derive.
+    host_parent, port_parent = (str(redirect[k]).rpartition(".")[0] for k in ("domain", "port"))
+    if not host_parent or host_parent != port_parent:
+        raise BreakGlassError(
+            f"redirect domain '{redirect['domain']}' and port '{redirect['port']}' are not keys of one service "
+            f"entry: its break-glass name cannot be derived"
+        )
+    name = host_parent.rpartition(".")[2]
     return Route(
         name=name,
         hosts=(authority.rsplit(":", 1)[0],),

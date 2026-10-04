@@ -195,6 +195,16 @@ class TestDependents:
         with pytest.raises(bg.BreakGlassError, match="open-webui-oidc"):
             bg.dependents("prod", [], values)
 
+    def test_a_port_from_another_entry_leaves_no_name_to_derive(self) -> None:
+        # The name is the entry declaring both host and port. A port borrowed from
+        # elsewhere (a node's) would name the wrong service, so it is refused loudly.
+        values = _tailnet_values()
+        values["networking"] = {"nodes": {"ace2": {"port": 3080}}}
+        redirect = values["apps"]["services"]["security"]["authelia"]["oidc_clients"][0]["redirect"]
+        redirect["port"] = "networking.nodes.ace2.port"
+        with pytest.raises(bg.BreakGlassError, match="not keys of one service entry"):
+            bg.dependents("prod", [], values)
+
 
 # --------------------------------------------------------------------------- declaration
 
