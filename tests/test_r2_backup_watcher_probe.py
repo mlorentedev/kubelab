@@ -40,7 +40,10 @@ PREFIX = "s3:https://example.r2.cloudflarestorage.com/kubelab-backups"
 #   <repo>.refuse retry a rejected request forever, printing restic's retry
 #                 line each time (R2's answer to a bad credential, #1939)
 #   <repo>.snaps  what `snapshots --json` prints (default: one snapshot)
-#   <repo>.ls     what `ls latest <dir>` prints
+#   <repo>.ls     what `ls --json latest <dir>` prints. A plain `ls` is refused:
+#                 it prints a file and a directory alike (#1865). So is a
+#                 `--recursive` one, logged as `recursive <repo>` (R3: 92 s on
+#                 the Beelink's Gitea)
 #   <repo>.id     the repository id `cat config --json` reports (BACKUP-058)
 #   <repo>.size   the `total_size` `stats --mode raw-data --json` reports
 #   <repo>.nostats `stats` alone fails, the rest of the repository reads fine
@@ -77,7 +80,12 @@ case "$cmd" in
   snapshots)
     if [ -f "$FAKE_DIR/$name.snaps" ]; then cat "$FAKE_DIR/$name.snaps"
     else echo '[{"time":"2026-09-26T00:00:00Z","id":"abc","short_id":"abc12345"}]'; fi ;;
-  ls) cat "$FAKE_DIR/$name.ls" ;;
+  ls)
+    case " $ORIG_ARGS " in
+      *" --recursive "*) echo "recursive $name" >> "$FAKE_DIR/calls"; echo "recursive listing refused" >&2; exit 2 ;;
+    esac
+    case " $ORIG_ARGS " in *" --json "*) ;; *) echo "plain ls cannot tell a file from a directory" >&2; exit 2 ;; esac
+    cat "$FAKE_DIR/$name.ls" ;;
   cat) printf '{"version":2,"id":"%s","chunker_polynomial":"3dea92648f6e83"}\n' "$(cat "$FAKE_DIR/$name.id")" ;;
   stats)
     [ -f "$FAKE_DIR/$name.nostats" ] && { echo "Load(<index/0a1b>) failed: timeout" >&2; exit 1; }
@@ -120,11 +128,30 @@ ADDRESSES = {"rpi3": "192.0.2.6", "vps": "192.0.2.2"}
 SIZES = {"rpi3": 123_456_789, "kubelab-vps": 2_345_678_901}
 
 
-def _listing(*services: str, sentinel: bool = True) -> str:
-    lines = ["snapshot abc12345 of [/opt/node-backup/staging] at 2026-09-26 00:00:00 filtered by [/opt/node-backup/staging]:"]
-    lines += [f"{STAGING}/{s}" for s in services]
+def _entry(kind: str, path: str) -> str:
+    # The shape restic 0.18.1 prints for one entry of `ls --json`, measured on a
+    # scratch repository: `name`, `type`, `path` first, then the metadata.
+    name = path.rsplit("/", 1)[-1]
+    return json.dumps(
+        {"name": name, "type": kind, "path": path, "uid": 0, "gid": 0, "mode": 2147484141,
+         "permissions": "drwxr-xr-x" if kind == "dir" else "-rw-r--r--",
+         "mtime": SNAPSHOT_TIME, "message_type": "node", "struct_type": "node"},
+        separators=(",", ":"),
+    )
+
+
+def _listing(*services: str, sentinel: bool = True, files: tuple[str, ...] = ()) -> str:
+    """What `restic ls --json latest <staging>` prints: the snapshot, then one line per entry.
+
+    `files` are names present as regular files, not directories.
+    """
+    snapshot = {"time": SNAPSHOT_TIME, "paths": [STAGING], "id": "abc", "short_id": "abc12345",
+                "message_type": "snapshot", "struct_type": "snapshot"}
+    lines = [json.dumps(snapshot, separators=(",", ":")), _entry("dir", STAGING)]
+    lines += [_entry("dir", f"{STAGING}/{s}") for s in services]
+    lines += [_entry("file", f"{STAGING}/{f}") for f in files]
     if sentinel:
-        lines.append(f"{STAGING}/.capture-complete")
+        lines.append(_entry("file", f"{STAGING}/.capture-complete"))
     return "\n".join(lines) + "\n"
 
 
@@ -206,11 +233,13 @@ def test_a_healthy_fleet_reports_every_node_and_a_healthy_fleet(fleet) -> None:
 
 def test_the_probe_lists_one_directory_not_the_whole_tree(fleet) -> None:
     # A recursive `ls` took 92 s on the Beelink (R3); the probe must not recurse.
+    # Judged by the calls, like the lock: the fake logs and refuses a recursive one.
     fake, _, env = fleet
-    _run(env)
-    assert "ls kubelab-vps" in (fake / "calls").read_text()
-    proc = subprocess.run(["grep", "-c", "--", "--recursive", str(PROBE)], capture_output=True, text=True)
-    assert proc.stdout.strip() == "0"
+    rc, _, (summary,) = _run(env)
+    calls = (fake / "calls").read_text().splitlines()
+    assert "ls kubelab-vps" in calls
+    assert not [c for c in calls if c.startswith("recursive ")], calls
+    assert rc == 0 and summary["healthy"] == 1
 
 
 def test_the_probe_never_takes_a_lock(fleet) -> None:
@@ -232,6 +261,9 @@ def test_the_probe_never_takes_a_lock(fleet) -> None:
     ("breakage", "field", "value"),
     [
         ("missing source", "missing", ["n8n"]),
+        # #1865: a plain listing prints a file and a directory alike.
+        ("source is a file", "missing", ["n8n"]),
+        ("source only as a longer name", "missing", ["n8n"]),
         ("no repository", "readable", 0),
         ("wrong password", "readable", 0),
         ("zero snapshots", "snapshots", 0),
@@ -249,6 +281,10 @@ def test_each_breakage_fails_its_node_and_the_fleet(fleet, breakage, field, valu
     vps = "kubelab-vps"
     if breakage == "missing source":
         (fake / f"{vps}.ls").write_text(_listing("authelia"))
+    elif breakage == "source is a file":
+        (fake / f"{vps}.ls").write_text(_listing("authelia", files=("n8n",)))
+    elif breakage == "source only as a longer name":
+        (fake / f"{vps}.ls").write_text(_listing("authelia", "n8n-old"))
     elif breakage == "no repository":
         (fake / f"{vps}.fail").write_text("Fatal: repository does not exist: unable to open config file\n")
     elif breakage == "wrong password":
