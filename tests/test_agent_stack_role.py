@@ -185,6 +185,20 @@ def test_the_role_runs_on_ace2_after_dev_node() -> None:
     assert roles.index("agent_stack") > roles.index("dev_node")
 
 
+def test_open_webui_reads_the_one_nan_key_pr_agent_uses() -> None:
+    """R1 (operator, 2026-10-04): one NaN key, read where it lives, never copied to a second path."""
+    from toolkit.features.secrets_manager import SECRET_CATALOG
+
+    key = "apps.services.automation.pr_agent.nan_api_key"
+    plays = yaml.safe_load((REPO / "infra/ansible/playbooks/provision-ace2.yml").read_text())
+    [stack] = [r for r in plays[1]["roles"] if r["role"].endswith("agent_stack")]
+    # Prod's vault: the key is registered `envs=("prod",)`, and `secrets` here is staging's.
+    assert stack["vars"]["agent_stack_nan_api_key"] == "{{ gitea_secrets." + key + " | default('') }}"
+    [spec] = [s for s in SECRET_CATALOG if s.key_path == key]
+    assert "open_webui" in spec.services, "a rotation must name every consumer, or ace2 keeps the old key"
+    assert not [s for s in SECRET_CATALOG if s.key_path.endswith(".nan_api_key") and s.key_path != key]
+
+
 def test_an_unconfigured_run_takes_a_previous_open_webui_down() -> None:
     """Removing the secret from SOPS must stop Open WebUI, not leave it serving."""
     [stop] = [t for t in _tasks() if t.get("name") == "Stop Open WebUI when it is not configured"]

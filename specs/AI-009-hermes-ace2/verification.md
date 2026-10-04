@@ -36,6 +36,14 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - **AC2, isolation**: as `hermes-kubelab`, `test -r` fails on the dev user's `~/.config/gh/hosts.yml`, `~/.ssh` and `~/.kube`, and on `/var/run/docker.sock`. The dev user's home is mode `750`. `sudo -l -U hermes-kubelab` reads "is not allowed to run sudo".
 - **Subordinate ids**: `hermes-kubelab:524288:65536` in both files, next to `manu:100000:65536`. The first pass's overlap assert looped over nothing (a folded YAML scalar kept `'\n'` literal, lesson-494). It now runs against `manu`'s line, after a positive control that requires the agent's own line.
 
+### PR 1b (#2058), prod Authelia, ace2, 2026-10-04
+
+- **AC4, provision**: `make provision NODE=ace2 ENV=staging TAGS=agent_stack` after Argo CD synced `e9def69a` to prod and Authelia restarted on the new config. First pass `changed=4`, rc 0; second pass `changed=0`.
+- **Break-glass**: the role's post-start check reads `breakglass@kubelab.live signs in as admin` on every pass.
+- **First OIDC login** (operator, from the tailnet): sign-in through Authelia succeeded, so Authelia accepts the client's `client_secret_basic`; a mismatched method fails `invalid_client`. The operator, in `admins`, landed as admin (Admin Panel present), so `groups` reached Open WebUI through UserInfo, the premise of `OAUTH_USERNAME_CLAIM=preferred_username`.
+- **No models**: `ENABLE_OPENAI_API` renders false with no NaN key in the vault, so the model list is empty. Settled by R1 below.
+- **Models, after R1** (`feat/ai009-webui-nan-key`): provision `changed=2` (env file, container), then `changed=0`. `GET /api/models` through a break-glass session lists 14: the 13 NaN models (chat, embedding, rerank, speech and image) plus Open WebUI's built-in `arena-model`.
+
 ## Decisions made during implementation
 
 Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
@@ -43,6 +51,8 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 - 2026-10-03, PR 1b (operator): tiers are `admins` → admin, `users` → user, anyone else refused; break-glass is a local `breakglass` account with the login form on for it alone; `ENABLE_PERSISTENT_CONFIG=false`, so the env file is the configuration of record.
 - 2026-10-03, PR 1b: the OIDC pair was minted on 2026-10-02, before ace2 is in `backup.sources`, which reverses AC7's order. Merging PR 1b is safe; provisioning Open WebUI for real use still waits for PR 6, because nothing it would hold is backed up until then.
 - 2026-10-03, PR 1b: access tiers in `make auth-review` and the Uptime Kuma monitor move to PR 1c. Both need the service running.
+- 2026-10-04 (operator): Open WebUI was provisioned for use before PR 6, on the condition that its chats are disposable until ace2 is in `backup.sources`.
+- 2026-10-04, R1 for Open WebUI (operator): it shares PR-Agent's NaN key, `apps.services.automation.pr_agent.nan_api_key`, read from prod's vault by the playbook, with no second copy. The cost is a shared rate limit: chat traffic and PR reviews draw on the same per-key quota. Hermes (PR 3) still needs its own R1 answer: share the same key, or mint a second one.
 
 ## Promotion candidates
 
