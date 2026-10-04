@@ -59,6 +59,29 @@ def verify_restic_cmd(
         raise typer.Exit(code=1)
 
 
+@app.command("mint-node-tokens")
+def mint_node_tokens_cmd(
+    env: Annotated[str, typer.Option("--env", "-e", help="Only prod: the node keys live in prod.enc.yaml")] = "prod",
+    node: Annotated[Optional[str], typer.Option("--node", "-n", help="One backup.sources node; default all")] = None,
+    rotate: Annotated[bool, typer.Option("--rotate", help="Replace existing pairs and revoke the old tokens")] = False,
+) -> None:
+    """Mint each node's own R2 token and restic password into SOPS (BACKUP-057).
+
+    Each token is Object Read & Write on `kubelab-backup-<node>` only. It is
+    verified by consequence before it is stored (it lists its own bucket and is
+    refused on another node's), and nothing is ever printed. Idempotent: an
+    existing pair is kept unless --rotate is given. A restic password is never
+    replaced, --rotate or not.
+    """
+    from toolkit.features.backup_node_credentials import SECRETS_ENV, mint_all
+
+    if env != SECRETS_ENV:
+        logger.error(f"The node keys live in {SECRETS_ENV}.enc.yaml; --env {env} is not supported.")
+        raise typer.Exit(code=1)
+    if not mint_all(node=node, rotate=rotate):
+        raise typer.Exit(code=1)
+
+
 @app.command("generate-password")
 def generate_password_cmd(
     env: Annotated[str, typer.Option("--env", "-e", help="SOPS file to write to")] = "common",

@@ -348,12 +348,32 @@ def github_pat_expiry(token: str, timeout: float = 15.0) -> datetime | None:
 
 
 def cloudflare_token_expiry(token: str, timeout: float = 15.0) -> datetime | None:
-    """Expiry of a Cloudflare API token, from its own verify endpoint."""
+    """Expiry of a Cloudflare user API token, from its own verify endpoint."""
+    return _cloudflare_verify_expiry("/user/tokens/verify", token, timeout)
+
+
+def cloudflare_account_token_expiry(token: str, timeout: float = 15.0) -> datetime | None:
+    """Expiry of a Cloudflare ACCOUNT API token.
+
+    The user verify endpoint answers 401 for an account token (measured
+    2026-10-03 against `cloudflare.r2_token_minter`), so this asks the account's
+    own, with the account id from the config SSOT.
+    """
+    import yaml
+
+    from toolkit.config.settings import PROJECT_ROOT
+
+    common = yaml.safe_load((PROJECT_ROOT / "infra" / "config" / "values" / "common.yaml").read_text())
+    account_id = common["backup"]["r2"]["account_id"]
+    return _cloudflare_verify_expiry(f"/accounts/{account_id}/tokens/verify", token, timeout)
+
+
+def _cloudflare_verify_expiry(path: str, token: str, timeout: float) -> datetime | None:
     import json
     import urllib.request
 
     req = urllib.request.Request(
-        "https://api.cloudflare.com/client/v4/user/tokens/verify",
+        f"https://api.cloudflare.com/client/v4{path}",
         headers={"Authorization": f"Bearer {token}"},
     )
     try:
@@ -375,6 +395,9 @@ PROVIDER_CHECKS = {
     "cloudflare.api_token": cloudflare_token_expiry,
     # A user token from My Profile, so the same verify endpoint answers for it.
     "cloudflare.r2_admin_token": cloudflare_token_expiry,
+    # An account token (Manage Account > Account API Tokens), so it is verified
+    # against the account rather than the user.
+    "cloudflare.r2_token_minter": cloudflare_account_token_expiry,
     "apps.services.automation.github_runner.token": github_pat_expiry,
     "apps.services.automation.dev_node.github_token": github_pat_expiry,
     # TOOL-035 (#1076). A fine-grained PAT with only repository permissions still
