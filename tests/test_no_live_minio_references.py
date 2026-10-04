@@ -54,16 +54,12 @@ def declares_itself_not_current(text: str) -> bool:
 
 
 def live_minio_references() -> list[str]:
-    tracked = (
-        subprocess.run(
-            ["git", "ls-files", "-z"],
-            cwd=REPO_ROOT,
-            check=True,
-            capture_output=True,
-        )
-        .stdout.decode()
-        .split("\0")
-    )
+    tracked = subprocess.run(
+        ["git", "ls-files", "-z"],
+        cwd=REPO_ROOT,
+        check=True,
+        capture_output=True,
+    ).stdout.decode().split("\0")
     offenders = []
     for rel in filter(None, tracked):
         if rel.startswith(EXEMPT_PREFIXES):

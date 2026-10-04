@@ -308,9 +308,7 @@ class TestTheCommandComparesEachRepositoryWithItsOwnEntry:
         }
     }
 
-    def _run(
-        self, monkeypatch: pytest.MonkeyPatch, live: dict[str, dict[str, Any]], *args: str
-    ) -> tuple[Any, list[str]]:
+    def _run(self, monkeypatch: pytest.MonkeyPatch, live: dict[str, dict[str, Any]], *args: str) -> tuple[Any, list[str]]:
         from typer.testing import CliRunner
 
         from toolkit.cli import tools as cli

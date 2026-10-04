@@ -108,9 +108,7 @@ def test_the_gitea_admin_email_is_the_superadmins() -> None:
     assert expr, "provision-bee.yml no longer sets gitea_admin_email"
 
     common = yaml.safe_load((REPO_ROOT / "infra/config/values/common.yaml").read_text())
-    rendered = (
-        jinja2.Environment(undefined=jinja2.StrictUndefined).from_string(expr).render(gitea_config=common).strip()
-    )
+    rendered = jinja2.Environment(undefined=jinja2.StrictUndefined).from_string(expr).render(gitea_config=common).strip()
     users = common["apps"]["services"]["security"]["authelia"]["users"]
     superadmin = next(u for u in users if u.get("identity") == "superadmin")
     assert rendered == superadmin["email"]

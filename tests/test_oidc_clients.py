@@ -102,9 +102,7 @@ class TestResolve:
             oidc_clients.resolve_clients(_values([client]), "prod")
 
     def test_only_http_and_https_are_schemes(self) -> None:
-        client = _grafana(
-            redirect={"domain": "apps.services.observability.grafana.domain", "scheme": "ftp", "path": "/cb"}
-        )
+        client = _grafana(redirect={"domain": "apps.services.observability.grafana.domain", "scheme": "ftp", "path": "/cb"})
 
         with pytest.raises(oidc_clients.OidcClientError, match="grafana.*scheme"):
             oidc_clients.resolve_clients(_values([client]), "prod")

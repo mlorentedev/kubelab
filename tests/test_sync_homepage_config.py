@@ -49,16 +49,10 @@ class TestBuildServiceTables:
     def test_open_webui_row_is_derived_from_its_ssot_block(self) -> None:
         # AI-009: tailnet-only, no route, so the URL is the declared scheme, host
         # and port, never a literal like Pollex's row.
-        webui = {
-            "image": "ghcr.io/open-webui/open-webui:v0.11.4",
-            "host": "ace2.example.internal",
-            "scheme": "http",
-            "default_port": 3080,
-        }
-        config = {
-            "global": {"base_domain": "kubelab.live"},
-            "apps": {"services": {"ai": {"open_webui": webui}}, "platform": {}},
-        }
+        webui = {"image": "ghcr.io/open-webui/open-webui:v0.11.4", "host": "ace2.example.internal",
+                 "scheme": "http", "default_port": 3080}
+        config = {"global": {"base_domain": "kubelab.live"}, "apps": {"services": {"ai": {"open_webui": webui}},
+                  "platform": {}}}
         _staging, _prod, shared = sync_homepage_config.build_service_tables(config)
         row = next(s for s in shared if s["name"] == "Open WebUI")
         assert row["url"] == "http://ace2.example.internal:3080"

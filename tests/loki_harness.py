@@ -102,9 +102,7 @@ class Loki:
             "streams": [
                 {
                     "stream": labels,
-                    "values": [
-                        [str(ts * 1_000_000_000), json.dumps(record, separators=(",", ":"))] for ts, record in lines
-                    ],
+                    "values": [[str(ts * 1_000_000_000), json.dumps(record, separators=(",", ":"))] for ts, record in lines],
                 }
             ]
         }
@@ -159,11 +157,9 @@ def run_loki() -> Iterator[Loki]:
     )  # fmt: skip
     container = started.stdout.strip()
     try:
-        port = (
-            subprocess.run(["docker", "port", container, "3100/tcp"], capture_output=True, text=True, check=True)
-            .stdout.split(":")[-1]
-            .strip()
-        )
+        port = subprocess.run(
+            ["docker", "port", container, "3100/tcp"], capture_output=True, text=True, check=True
+        ).stdout.split(":")[-1].strip()
         url = f"http://127.0.0.1:{port}"
         deadline = time.monotonic() + 90
         while True:
