@@ -1,7 +1,7 @@
 ---
 id: "WEB-010-interactive-cv"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: abandoned # draft | implementing | verifying | archived
 created: "2026-06-14"
 issue: "kubelab#611"
 tags: [spec, proposal]

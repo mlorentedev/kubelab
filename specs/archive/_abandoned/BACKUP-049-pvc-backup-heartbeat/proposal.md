@@ -1,7 +1,7 @@
 ---
 id: "BACKUP-049-pvc-backup-heartbeat"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: abandoned # draft | implementing | verifying | archived
 created: "2026-08-19"
 issue: "mlorentedev/kubelab#1171"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
