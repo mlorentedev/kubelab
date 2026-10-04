@@ -1,10 +1,12 @@
 ---
 id: "WEB-010-interactive-cv"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: abandoned # draft | implementing | verifying | archived | abandoned
 created: "2026-06-14"
 issue: "kubelab#611"
 tags: [spec, proposal]
+review: waived
+review_waived_reason: "abandoned before implementation: kubelab#611 is closed and the web app left this repository for its own (ADR-053); no task was started (0/21)."
 template_version: "1.0"
 ---
 
