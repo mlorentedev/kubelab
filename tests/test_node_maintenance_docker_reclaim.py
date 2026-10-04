@@ -130,6 +130,51 @@ def test_the_timer_script_runs_the_reclaim_between_the_two_prunes() -> None:
     )
 
 
+def _run_docker_section(tmp_path: Path, group_names: list[str], reclaim_rc: int) -> tuple[list[str], str]:
+    """Execute the rendered script's Docker section against logging stubs.
+
+    Text matching alone cannot tell a running invocation from a disabled one
+    (`if ! true || false && python3 ...` still contains the command), so this
+    runs the section and reads what was actually called, in order.
+    """
+    script = render_script(group_names)
+    section = script[script.index("# Docker cleanup") : script.index("# K3s cleanup")]
+    log = tmp_path / "calls.log"
+    for tool, rc in (("docker", 0), ("python3", reclaim_rc)):
+        stub = tmp_path / tool
+        stub.write_text(f'#!/bin/sh\necho "{tool} $*" >> {log}\nexit {rc}\n')
+        stub.chmod(0o755)
+    result = subprocess.run(
+        ["bash", "-c", f'set -euo pipefail\nFAILURES=""\n{section}\necho "FAILURES=$FAILURES"'],
+        env={**os.environ, "PATH": f"{tmp_path}{os.pathsep}{os.environ['PATH']}"},
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    return (log.read_text().splitlines() if log.exists() else []), result.stdout
+
+
+def test_the_timer_actually_calls_the_reclaim_in_order(tmp_path: Path) -> None:
+    calls, out = _run_docker_section(tmp_path, CI_HOST, reclaim_rc=0)
+    reclaim = [i for i, c in enumerate(calls) if c.startswith("python3 /opt/kubelab-docker-reclaim.py --apply")]
+    assert len(reclaim) == 1, calls
+    assert calls.index("docker container prune -f") < reclaim[0] < calls.index("docker image prune -af")
+    assert "FAILURES=\n" in out or out.rstrip().endswith("FAILURES=")
+
+
+def test_a_failed_reclaim_is_recorded_and_the_cleanup_goes_on(tmp_path: Path) -> None:
+    calls, out = _run_docker_section(tmp_path, CI_HOST, reclaim_rc=1)
+    assert "docker-reclaim" in out
+    assert "docker image prune -af" in calls, "a failed reclaim must not stop the rest of the cleanup"
+
+
+def test_a_node_without_the_reclaim_never_calls_it(tmp_path: Path) -> None:
+    calls, _ = _run_docker_section(tmp_path, GATEWAY, reclaim_rc=0)
+    assert not [c for c in calls if c.startswith("python3")]
+    assert "docker image prune -af" in calls
+
+
 def test_a_node_without_the_reclaim_renders_none() -> None:
     assert "--declaration" not in render_script(GATEWAY)
 
