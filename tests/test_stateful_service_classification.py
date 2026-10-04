@@ -31,8 +31,12 @@ gitea's staging twin while its classification stays meaningful.
 
 from __future__ import annotations
 
+import copy
+import os
 import pathlib
 import re
+import shutil
+import subprocess
 from typing import Any
 
 import pytest
@@ -258,3 +262,121 @@ def test_undecided_location_is_accepted_when_its_deferral_is_recorded() -> None:
     """`undecided` is legal — it is a decision, provided it names its ticket."""
     config = _fixture_config(location="undecided", **{DEFERRAL_KEY: "#972"})
     assert classification_problems(_FIXTURE_SERVICES, config) == []
+
+
+# --------------------------------------------------------------------------
+# The duplication clause (AC2, second half). Classification alone does not stop
+# a `singleton` from rendering in both environments, which is the fork ADR-061
+# exists to prevent. It could not land while two singletons' twins still
+# rendered in both overlays; both have since left K3s (gitea to the Beelink,
+# the object store retired by OPS-023), so the clause goes green on master.
+# --------------------------------------------------------------------------
+
+OVERLAYS = ("staging", "prod")
+
+
+def duplication_problems(
+    services: dict[str, list[str]], config: dict[str, Any], rendered: dict[str, set[str]]
+) -> list[str]:
+    """One problem per `singleton` service whose PVCs render in more than one overlay.
+
+    `rendered` maps overlay -> the PVC names it renders. Pure, like
+    `classification_problems`, so the controls below need no cluster and no kubectl.
+
+    Scope: state held in a PersistentVolumeClaim of these manifests, the same set the
+    classification half scans. A StatefulSet's `volumeClaimTemplates` is outside it
+    (#2062); state kept outside K8s (an external database, a node's disk) has no
+    overlay to be duplicated across.
+    """
+    problems = []
+    for service, pvcs in sorted(services.items()):
+        block = _service_block(config, service) or {}
+        if block.get("state_promotion") != "singleton":
+            continue
+        envs = sorted(env for env, names in rendered.items() if set(pvcs) & names)
+        if len(envs) > 1:
+            problems.append(
+                f"{service} is `state_promotion: singleton` but its PVCs render in {envs}: "
+                "a second live instance forks state that has no promotion path"
+            )
+    return problems
+
+
+@pytest.fixture(scope="module")
+def rendered_pvcs() -> dict[str, set[str]]:
+    if shutil.which("kubectl") is None:
+        # This file promises never to skip silently; in CI a missing binary is a failure.
+        if os.environ.get("CI"):
+            pytest.fail("kubectl not on PATH in CI: the duplication clause cannot run")
+        pytest.skip("kubectl not on PATH: the duplication clause was NOT checked")
+    rendered = {}
+    for env in OVERLAYS:
+        out = subprocess.run(
+            ["kubectl", "kustomize", str(REPO_ROOT / "infra/k8s/overlays" / env)],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+        rendered[env] = {
+            d["metadata"]["name"]
+            for d in yaml.safe_load_all(out)
+            if isinstance(d, dict) and d.get("kind") == "PersistentVolumeClaim"
+        }
+    return rendered
+
+
+def test_both_overlays_render_claims(rendered_pvcs: dict[str, set[str]]) -> None:
+    """An empty render would let the clause pass on nothing (lesson-416)."""
+    assert all(rendered_pvcs[env] for env in OVERLAYS), rendered_pvcs
+
+
+def test_rendered_claims_carry_their_manifest_names(rendered_pvcs: dict[str, set[str]]) -> None:
+    """The clause intersects manifest PVC names with rendered ones. A `namePrefix` or a
+    rename in an overlay would make that intersection empty, and the clause green forever."""
+    declared = {name for pvcs in _stateful_services().values() for name in pvcs}
+    for env in OVERLAYS:
+        assert rendered_pvcs[env] <= declared, (
+            f"{env} renders PVCs no manifest declares: {rendered_pvcs[env] - declared}"
+        )
+
+
+def test_no_singleton_renders_in_both_overlays(
+    common_config: dict[str, Any], rendered_pvcs: dict[str, set[str]]
+) -> None:
+    problems = duplication_problems(_stateful_services(), common_config, rendered_pvcs)
+    assert not problems, "\n".join(problems)
+
+
+def test_duplication_clause_goes_red_on_the_real_render(
+    common_config: dict[str, Any], rendered_pvcs: dict[str, set[str]]
+) -> None:
+    """No singleton renders today, which is the state ADR-061 asks for, so the green test
+    above never reaches the intersection on real data. This one does: postgres renders in
+    both overlays, and declared `singleton` it must fail."""
+    config = copy.deepcopy(common_config)
+    config["infra"]["postgres"]["state_promotion"] = "singleton"
+    problems = duplication_problems(_stateful_services(), config, rendered_pvcs)
+    assert [p.split(" is ", 1)[0] for p in problems] == ["postgres"], problems
+
+
+def test_duplication_clause_goes_red_on_a_singleton_in_both_overlays() -> None:
+    config = _fixture_config(state_promotion="singleton")
+    both = {"staging": {"widget-data"}, "prod": {"widget-data"}}
+    assert duplication_problems(_FIXTURE_SERVICES, config, both) == [
+        "widget is `state_promotion: singleton` but its PVCs render in ['prod', 'staging']: "
+        "a second live instance forks state that has no promotion path"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("promotion", "rendered"),
+    [
+        ("singleton", {"staging": set(), "prod": {"widget-data"}}),
+        ("dual", {"staging": {"widget-data"}, "prod": {"widget-data"}}),
+    ],
+)
+def test_duplication_clause_accepts_one_overlay_or_a_dual_service(
+    promotion: str, rendered: dict[str, set[str]]
+) -> None:
+    config = _fixture_config(state_promotion=promotion)
+    assert duplication_problems(_FIXTURE_SERVICES, config, rendered) == []
