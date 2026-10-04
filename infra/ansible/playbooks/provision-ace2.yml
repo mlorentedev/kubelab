@@ -270,8 +270,10 @@
         agent_stack_webui_admin_password: >-
           {{ gitea_secrets.apps.services.ai.open_webui.admin_password | default('') }}
         # R1 (operator, 2026-10-04): Open WebUI shares PR-Agent's NaN key, read
-        # from where it lives in prod's vault, never copied to a second path.
-        # The two share its rate limit. Empty means no model backend.
+        # from where it lives in prod's vault, with no second vault path. Its one
+        # other copy is the rendered env file on ace2, which only a re-provision
+        # refreshes (the key's rotate note says so). The two share its rate limit.
+        # Empty means no model backend.
         agent_stack_nan_api_key: "{{ gitea_secrets.apps.services.automation.pr_agent.nan_api_key | default('') }}"
         agent_stack_agent_user: "{{ config.apps.services.ai.hermes_kubelab.user }}"
         agent_stack_agent_probe_image: "{{ config.apps.services.ai.hermes_kubelab.probe.image }}"

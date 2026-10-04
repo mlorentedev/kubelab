@@ -109,7 +109,9 @@ def test_no_secret_reaches_the_compose_file(secret: str) -> None:
 
 
 def _env() -> dict[str, str]:
-    return dict(line.split("=", 1) for line in _render("webui.env.j2").splitlines() if line and not line.startswith("#"))
+    return dict(
+        line.split("=", 1) for line in _render("webui.env.j2").splitlines() if line and not line.startswith("#")
+    )
 
 
 def test_sso_signs_up_and_the_form_admits_only_the_seeded_break_glass_account() -> None:
@@ -186,7 +188,7 @@ def test_the_role_runs_on_ace2_after_dev_node() -> None:
 
 
 def test_open_webui_reads_the_one_nan_key_pr_agent_uses() -> None:
-    """R1 (operator, 2026-10-04): one NaN key, read where it lives, never copied to a second path."""
+    """R1 (operator, 2026-10-04): one NaN key in the vault, read where it lives; no second vault path."""
     from toolkit.features.secrets_manager import SECRET_CATALOG
 
     key = "apps.services.automation.pr_agent.nan_api_key"
@@ -196,7 +198,21 @@ def test_open_webui_reads_the_one_nan_key_pr_agent_uses() -> None:
     assert stack["vars"]["agent_stack_nan_api_key"] == "{{ gitea_secrets." + key + " | default('') }}"
     [spec] = [s for s in SECRET_CATALOG if s.key_path == key]
     assert "open_webui" in spec.services, "a rotation must name every consumer, or ace2 keeps the old key"
-    assert not [s for s in SECRET_CATALOG if s.key_path.endswith(".nan_api_key") and s.key_path != key]
+    # Key names are plaintext in SOPS, so the vault itself is read: an unregistered
+    # copy (the old `open_webui.nan_api_key` path) would escape the catalog and the audit.
+    copies = {
+        f"{store.name}:{path}"
+        for store in sorted((REPO / "infra/config/secrets").glob("*.enc.yaml"))
+        for path in _key_paths(yaml.safe_load(store.read_text()))
+        if path.endswith(".nan_api_key")
+    }
+    assert copies == {"prod.enc.yaml:" + key}, f"one NaN key, in prod's vault, and nowhere else: {sorted(copies)}"
+
+
+def _key_paths(node: object, prefix: str = "") -> list[str]:
+    if not isinstance(node, dict):
+        return [prefix]
+    return [p for k, v in node.items() if k != "sops" for p in _key_paths(v, f"{prefix}.{k}" if prefix else k)]
 
 
 def test_an_unconfigured_run_takes_a_previous_open_webui_down() -> None:
