@@ -220,7 +220,9 @@ def test_prune_script_carries_the_approved_retention_flags_verbatim():
     """The prune unit applies retention since BACKUP-057 Q6 (amended 2026-10-03)."""
     script = _render("node-backup-prune.sh.j2")
     d = _defaults()
-    assert d["node_backup_retention_flags"] == "--keep-within 31d --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --max-repack-size 0"
+    assert d["node_backup_retention_flags"] == (
+        "--keep-within 31d --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --max-repack-size 0"
+    )
     assert str(d["node_backup_retention_flags"]) in script
 
 
@@ -1079,7 +1081,7 @@ def test_the_schedule_arms_the_prune_and_reports_its_failures() -> None:
     play = _schedule_playbook()
     assert "node-backup-prune.timer" in play["vars"]["backup_timers"]
     commands = [
-        t.get("ansible.builtin.command", {}).get("cmd", "") if isinstance(t.get("ansible.builtin.command"), dict) else ""
+        t["ansible.builtin.command"].get("cmd", "") if isinstance(t.get("ansible.builtin.command"), dict) else ""
         for t in play["tasks"]
     ]
     assert any("node-backup-prune.service" in c and "journalctl" in c for c in commands), (

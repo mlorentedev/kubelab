@@ -61,7 +61,7 @@ if [ -e "$FAKE_DIR/stale-lock" ]; then
     unlock*) rm -f "$FAKE_DIR/stale-lock"; exit 0 ;;
     *--no-lock*) ;;
     *)
-      echo "unable to create lock in backend: repository is already locked exclusively by PID 1 on beelink by root (UID 0, GID 0)" >&2
+      echo "unable to create lock in backend: repository is already locked exclusively by PID 1" >&2
       exit 11 ;;
   esac
 fi
