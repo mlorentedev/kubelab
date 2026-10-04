@@ -1,5 +1,9 @@
 """Each node's token names its own bucket and nothing else (BACKUP-057 AC3).
 
+The watcher's read token is held to the same standard: it names the node
+buckets and nothing else, so it can never read the legacy shared bucket or
+any bucket added outside `backup.sources`.
+
 Distinct key pairs alone cannot show isolation: four pairs minted from one
 policy that spans every bucket, or the whole account, would all differ and all
 reach every history. So this asserts on the policy each mint requests from the
@@ -51,3 +55,14 @@ def test_an_account_wide_resource_is_never_requested() -> None:
         ]
         assert not any(key.startswith("com.cloudflare.api.account") for key in resources)
         assert not any(key.endswith("*") or "_*" in key for key in resources)
+
+
+def test_the_watcher_policy_names_exactly_the_node_buckets_read_only() -> None:
+    body = bnc.watcher_token_request(_nodes(), account_id="acct0123", read_group_id="pg-read")
+    assert len(body["policies"]) == 1
+    policy = body["policies"][0]
+    assert set(policy["resources"]) == {
+        f"com.cloudflare.edge.r2.bucket.acct0123_default_kubelab-backup-{node}" for node in _nodes()
+    }
+    assert set(policy["resources"].values()) == {"*"}
+    assert policy["permission_groups"] == [{"id": "pg-read"}]

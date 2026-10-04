@@ -143,11 +143,32 @@ class TestTheCatalogCoversEveryNode:
         paths = [path for node in nodes for path in _node_paths(node)]
         assert len(paths) == len(set(paths)) == 3 * len(nodes)
 
-    def test_the_node_keys_are_audited_in_prod(self) -> None:
+    def test_a_write_pair_is_audited_in_prod_and_a_password_in_both_envs(self) -> None:
         by_path = {spec.key_path: spec for spec in SECRET_CATALOG}
         for node in _nodes():
-            for path in _node_paths(node):
-                assert by_path[path].envs == ("prod",), path
+            assert by_path[bnc.access_key_path(node)].envs == ("prod",)
+            assert by_path[bnc.secret_key_path(node)].envs == ("prod",)
+            assert by_path[bnc.restic_password_path(node)].envs == ("staging", "prod")
+
+    def test_every_minted_key_lives_where_every_env_auditing_it_can_read_it(self) -> None:
+        """Staging decrypts common and staging, never prod. A key staging audits
+        that was written to prod.enc.yaml would be missing there, and silently."""
+        by_path = {spec.key_path: spec for spec in SECRET_CATALOG}
+        paths = [p for node in _nodes() for p in _node_paths(node)]
+        paths += [bnc.WATCHER_ACCESS_KEY_PATH, bnc.WATCHER_SECRET_KEY_PATH]
+        for path in paths:
+            expected = "common" if "staging" in by_path[path].envs else "prod"
+            assert bnc.sops_file_for(path) == expected, path
+
+    def test_the_watcher_pair_and_the_minter_are_registered(self) -> None:
+        by_path = {spec.key_path: spec for spec in SECRET_CATALOG}
+        assert by_path[bnc.WATCHER_ACCESS_KEY_PATH].envs == ("staging", "prod")
+        assert by_path[bnc.WATCHER_SECRET_KEY_PATH].envs == ("staging", "prod")
+        assert by_path[bnc.MINTER_KEY].envs == ("prod",)
+
+    def test_a_key_this_module_does_not_mint_has_no_file(self) -> None:
+        with pytest.raises(ValueError):
+            bnc.sops_file_for("backup.restic_password")
 
     def test_the_catalog_names_no_node_outside_backup_sources(self) -> None:
         declared = {
@@ -228,14 +249,14 @@ class TestMinting:
 class TestVerifiedByConsequence:
     def test_a_token_that_cannot_list_its_own_bucket_is_revoked_and_not_stored(self) -> None:
         store, http = FakeStore(), FakeHttp()
-        with pytest.raises(bnc.MintError, match="own bucket"):
+        with pytest.raises(bnc.MintError, match="which it was minted for"):
             _mint("vps", store, http, run=_scope_runner(own_ok=False))
         assert store.writes == []
         assert http.deletes() == ["tok-1"]
 
     def test_a_token_that_can_list_another_nodes_bucket_is_revoked_and_not_stored(self) -> None:
         store, http = FakeStore(), FakeHttp()
-        with pytest.raises(bnc.MintError, match="another node"):
+        with pytest.raises(bnc.MintError, match="must not reach"):
             _mint("vps", store, http, run=_scope_runner(other_ok=True))
         assert store.writes == []
         assert http.deletes() == ["tok-1"]
@@ -276,3 +297,57 @@ class TestResticPasswords:
     def test_rotate_does_not_reach_the_restic_password(self) -> None:
         """`mint_all(rotate=True)` rotates tokens. It has no path to a password."""
         assert "rotate" not in bnc.ensure_restic_password.__code__.co_varnames
+
+
+def _watcher_runner(legacy: str, legacy_ok: bool = False, legacy_error: str = "AccessDenied", unreadable: str = ""):
+    def run(argv: list[str], env: dict[str, str]) -> tuple[int, str, str]:
+        bucket = argv[argv.index("--bucket") + 1]
+        if bucket == legacy:
+            return (0, "{}", "") if legacy_ok else (254, "", f"An error occurred ({legacy_error})")
+        if bucket == unreadable:
+            return (254, "", "An error occurred (AccessDenied)")
+        return (0, "{}", "")
+
+    return run
+
+
+def _mint_watcher(store: FakeStore, http: FakeHttp, run, rotate: bool = False) -> str:
+    return bnc.mint_watcher(
+        _nodes(),
+        account_id=ACCOUNT,
+        endpoint=ENDPOINT,
+        legacy_bucket="kubelab-backups",
+        http=http,
+        store=store,
+        run=run,
+        rotate=rotate,
+        sleep=lambda _s: None,
+    )
+
+
+class TestTheWatcherToken:
+    def test_it_is_minted_read_only_on_every_node_bucket(self) -> None:
+        store, http = FakeStore(), FakeHttp()
+        assert _mint_watcher(store, http, _watcher_runner("kubelab-backups")) == "minted"
+        (body,) = http.posts()
+        assert body["policies"][0]["permission_groups"] == [{"id": READ_GROUP_ID}]
+        assert store.values[bnc.WATCHER_ACCESS_KEY_PATH] == "tok-1"
+
+    def test_a_token_that_reads_the_legacy_bucket_is_revoked(self) -> None:
+        store, http = FakeStore(), FakeHttp()
+        with pytest.raises(bnc.MintError, match="must not reach"):
+            _mint_watcher(store, http, _watcher_runner("kubelab-backups", legacy_ok=True))
+        assert store.writes == [] and http.deletes() == ["tok-1"]
+
+    def test_a_token_that_misses_one_node_bucket_is_revoked(self) -> None:
+        store, http = FakeStore(), FakeHttp()
+        missing = bnc.node_bucket(_nodes()[-1])
+        with pytest.raises(bnc.MintError, match=missing):
+            _mint_watcher(store, http, _watcher_runner("kubelab-backups", unreadable=missing))
+        assert store.writes == [] and http.deletes() == ["tok-1"]
+
+    def test_an_existing_pair_is_kept(self) -> None:
+        store = FakeStore({bnc.WATCHER_ACCESS_KEY_PATH: "tok-old", bnc.WATCHER_SECRET_KEY_PATH: "s-old"})
+        http = FakeHttp()
+        assert _mint_watcher(store, http, _watcher_runner("kubelab-backups")) == "kept"
+        assert http.calls == []

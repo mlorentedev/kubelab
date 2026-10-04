@@ -1,8 +1,9 @@
 """Per-node R2 credentials and restic passwords (BACKUP-057 PR 3, Q1).
 
 Each `backup.sources` node gets an Object Read & Write token scoped to its own
-bucket, `kubelab-backup-<node>`, and a restic password of its own. The token is
-minted through the Cloudflare API and its S3 pair goes straight into SOPS: no
+bucket, `kubelab-backup-<node>`, and a restic password of its own. The watcher
+gets one Object Read token naming every node bucket and nothing else. Tokens are
+minted through the Cloudflare API and their S3 pairs go straight into SOPS: no
 state file, so no second copy of the secret (Q1 rejected the Terraform route
 for exactly that reason).
 
@@ -11,8 +12,8 @@ value (Secret Access Key). The value is returned once, used in memory and never
 printed.
 
 A minted token is verified by consequence before anything is stored: it must
-list its own bucket and be refused on another node's. One that fails either is
-revoked, and nothing is written.
+list every bucket it was minted for, and get AccessDenied on one it must not
+reach. One that fails either is revoked, and nothing is written.
 
 Nothing reads these keys yet: the consumers switch to them in PR 4.
 """
@@ -32,23 +33,24 @@ from toolkit.features.r2_tfvars import node_bucket
 
 API = "https://api.cloudflare.com/client/v4"
 
-# The credential that mints. Creating an account token needs the
-# "Account API Tokens Write" permission, which a token that holds it can use to
-# create a token with ANY permission. Which token carries it is the operator's
-# decision (open on the BACKUP-057 PR 3 pull request); this is the one place
-# that names it.
-MINTER_KEY = "cloudflare.r2_admin_token"
+# The credential that mints. Creating an account token needs "Account API
+# Tokens: Edit", which a token holding it can use to create a token with ANY
+# permission, so it is a token of its own rather than a widened
+# `cloudflare.r2_admin_token` (operator decision, 2026-10-03).
+MINTER_KEY = "cloudflare.r2_token_minter"
 
-# The SOPS file the node keys are written to (proposal item 1).
+# The env whose merged config the mint reads, and the only --env it accepts.
 SECRETS_ENV = "prod"
 
 WRITE_GROUP = "Workers R2 Storage Bucket Item Write"
+READ_GROUP = "Workers R2 Storage Bucket Item Read"
+WATCHER_TOKEN_NAME = "kubelab-backup-watcher"
 # The node buckets set no jurisdiction (infra/terraform/r2/main.tf).
 JURISDICTION = "default"
 RESTIC_PASSWORD_BYTES = 48
 
 _TIMEOUT = 30
-# A new token can take a moment to reach R2; the own-bucket check retries.
+# A new token can take a moment to reach R2; the readable-bucket check retries.
 _SCOPE_ATTEMPTS = 4
 _SCOPE_DELAY_S = 5.0
 
@@ -79,23 +81,51 @@ def restic_password_path(node: str) -> str:
     return f"backup.nodes.{node}.restic_password"
 
 
+WATCHER_ACCESS_KEY_PATH = "backup.r2.watcher.access_key_id"
+WATCHER_SECRET_KEY_PATH = "backup.r2.watcher.secret_access_key"
+
+
+def sops_file_for(path: str) -> str:
+    """The SOPS file a minted key is written to.
+
+    A node's write pair is used by that node only, so it lives in prod. The
+    restic passwords and the watcher pair are also read by the watcher, which
+    runs in staging, so they live in common (operator decision, 2026-10-03).
+    """
+    if path.startswith("backup.r2.nodes."):
+        return "prod"
+    if path.startswith(("backup.nodes.", "backup.r2.watcher.")):
+        return "common"
+    raise ValueError(f"{path!r} is not a key this module mints")
+
+
 def bucket_resource(account_id: str, bucket: str) -> str:
     return f"com.cloudflare.edge.r2.bucket.{account_id}_{JURISDICTION}_{bucket}"
+
+
+def _token_body(name: str, buckets: list[str], *, account_id: str, group_id: str) -> dict[str, Any]:
+    return {
+        "name": name,
+        "policies": [
+            {
+                "effect": "allow",
+                "resources": {bucket_resource(account_id, b): "*" for b in buckets},
+                "permission_groups": [{"id": group_id}],
+            }
+        ],
+    }
 
 
 def token_request(node: str, *, account_id: str, write_group_id: str) -> dict[str, Any]:
     """The token policy for one node: Object Read & Write on its bucket, nothing else."""
     bucket = node_bucket(node)
-    return {
-        "name": bucket,
-        "policies": [
-            {
-                "effect": "allow",
-                "resources": {bucket_resource(account_id, bucket): "*"},
-                "permission_groups": [{"id": write_group_id}],
-            }
-        ],
-    }
+    return _token_body(bucket, [bucket], account_id=account_id, group_id=write_group_id)
+
+
+def watcher_token_request(nodes: list[str], *, account_id: str, read_group_id: str) -> dict[str, Any]:
+    """The watcher's policy: Object Read on every node bucket, nothing else."""
+    buckets = [node_bucket(n) for n in sorted(nodes)]
+    return _token_body(WATCHER_TOKEN_NAME, buckets, account_id=account_id, group_id=read_group_id)
 
 
 def cloudflare_http(token: str) -> HttpFn:
@@ -149,25 +179,72 @@ def _list(run: RunFn, endpoint: str, bucket: str, env: dict[str, str]) -> tuple[
 
 
 def _scope_error(
-    node: str, endpoint: str, other_bucket: str, env: dict[str, str], run: RunFn, sleep: Callable[[float], None]
+    label: str,
+    endpoint: str,
+    readable: list[str],
+    refused: str,
+    env: dict[str, str],
+    run: RunFn,
+    sleep: Callable[[float], None],
 ) -> Optional[str]:
     """Why the pair fails the by-consequence check, or None when it passes."""
-    own = node_bucket(node)
-    for attempt in range(_SCOPE_ATTEMPTS):
-        if _list(run, endpoint, own, env)[0] == 0:
-            break
-        if attempt + 1 < _SCOPE_ATTEMPTS:
-            sleep(_SCOPE_DELAY_S)
-    else:
-        return f"the token minted for {node} cannot list its own bucket {own}"
-    rc, err = _list(run, endpoint, other_bucket, env)
+    for bucket in readable:
+        for attempt in range(_SCOPE_ATTEMPTS):
+            if _list(run, endpoint, bucket, env)[0] == 0:
+                break
+            if attempt + 1 < _SCOPE_ATTEMPTS:
+                sleep(_SCOPE_DELAY_S)
+        else:
+            return f"the token minted for {label} cannot list {bucket}, which it was minted for"
+    rc, err = _list(run, endpoint, refused, env)
     if rc == 0:
-        return f"the token minted for {node} can list another node's bucket {other_bucket}"
+        return f"the token minted for {label} can list {refused}, which it must not reach"
     # Only a refusal proves the scope. A missing bucket or a network error also
     # fails the listing, and would pass a check that looked at the exit code alone.
     if "AccessDenied" not in err:
-        return f"listing another node's bucket {other_bucket} failed without AccessDenied, so the scope is unproven"
+        return f"listing {refused} failed without AccessDenied, so the scope of {label}'s token is unproven"
     return None
+
+
+def _mint_token(
+    label: str,
+    request: Callable[[], dict[str, Any]],
+    *,
+    paths: tuple[str, str],
+    readable: list[str],
+    refused: str,
+    account_id: str,
+    endpoint: str,
+    http: HttpFn,
+    store: Store,
+    run: RunFn,
+    rotate: bool,
+    sleep: Callable[[float], None],
+) -> str:
+    """Mint, verify and store one token's pair. Returns kept/minted/rotated."""
+    access_path, secret_path = paths
+    old_id = store.show(access_path)
+    if old_id and store.show(secret_path) and not rotate:
+        return "kept"
+
+    result = http("POST", f"/accounts/{account_id}/tokens", request())
+    key_id = str(result["id"])
+    secret = hashlib.sha256(str(result["value"]).encode()).hexdigest()
+
+    def revoke_new(reason: str) -> MintError:
+        http("DELETE", f"/accounts/{account_id}/tokens/{key_id}", None)
+        return MintError(f"{reason}; the new token was revoked and nothing was stored")
+
+    problem = _scope_error(label, endpoint, readable, refused, _s3_env(key_id, secret), run, sleep)
+    if problem:
+        raise revoke_new(problem)
+    if not store.write({access_path: key_id, secret_path: secret}):
+        raise revoke_new(f"writing {label}'s pair to SOPS failed")
+
+    if rotate and old_id:
+        http("DELETE", f"/accounts/{account_id}/tokens/{old_id}", None)
+        return "rotated"
+    return "minted"
 
 
 def mint_node(
@@ -183,31 +260,59 @@ def mint_node(
     sleep: Callable[[float], None] = time.sleep,
 ) -> str:
     """Mint `node`'s pair if absent, or replace it with `rotate`. Returns kept/minted/rotated."""
-    old_id = store.show(access_key_path(node))
-    if old_id and store.show(secret_key_path(node)) and not rotate:
-        return "kept"
 
-    group = permission_group_id(http, account_id, WRITE_GROUP)
-    result = http(
-        "POST", f"/accounts/{account_id}/tokens", token_request(node, account_id=account_id, write_group_id=group)
+    def request() -> dict[str, Any]:
+        group = permission_group_id(http, account_id, WRITE_GROUP)
+        return token_request(node, account_id=account_id, write_group_id=group)
+
+    return _mint_token(
+        node,
+        request,
+        paths=(access_key_path(node), secret_key_path(node)),
+        readable=[node_bucket(node)],
+        refused=other_bucket,
+        account_id=account_id,
+        endpoint=endpoint,
+        http=http,
+        store=store,
+        run=run,
+        rotate=rotate,
+        sleep=sleep,
     )
-    key_id = str(result["id"])
-    secret = hashlib.sha256(str(result["value"]).encode()).hexdigest()
 
-    def revoke_new(reason: str) -> MintError:
-        http("DELETE", f"/accounts/{account_id}/tokens/{key_id}", None)
-        return MintError(f"{reason}; the new token was revoked and nothing was stored")
 
-    problem = _scope_error(node, endpoint, other_bucket, _s3_env(key_id, secret), run, sleep)
-    if problem:
-        raise revoke_new(problem)
-    if not store.write({access_key_path(node): key_id, secret_key_path(node): secret}):
-        raise revoke_new(f"writing {node}'s pair to SOPS failed")
+def mint_watcher(
+    nodes: list[str],
+    *,
+    account_id: str,
+    endpoint: str,
+    legacy_bucket: str,
+    http: HttpFn,
+    store: Store,
+    run: RunFn,
+    rotate: bool = False,
+    sleep: Callable[[float], None] = time.sleep,
+) -> str:
+    """Mint the watcher's read pair: every node bucket, refused on the shared legacy bucket."""
 
-    if rotate and old_id:
-        http("DELETE", f"/accounts/{account_id}/tokens/{old_id}", None)
-        return "rotated"
-    return "minted"
+    def request() -> dict[str, Any]:
+        group = permission_group_id(http, account_id, READ_GROUP)
+        return watcher_token_request(nodes, account_id=account_id, read_group_id=group)
+
+    return _mint_token(
+        "the watcher",
+        request,
+        paths=(WATCHER_ACCESS_KEY_PATH, WATCHER_SECRET_KEY_PATH),
+        readable=[node_bucket(n) for n in sorted(nodes)],
+        refused=legacy_bucket,
+        account_id=account_id,
+        endpoint=endpoint,
+        http=http,
+        store=store,
+        run=run,
+        rotate=rotate,
+        sleep=sleep,
+    )
 
 
 def ensure_restic_password(node: str, store: Store) -> str:
@@ -220,25 +325,31 @@ def ensure_restic_password(node: str, store: Store) -> str:
 
 
 class SopsStore:
-    """The SOPS seam: reads the merged config, writes one batch to the node secrets file."""
+    """The SOPS seam: reads the merged config, writes each key to the file `sops_file_for` names."""
 
-    def __init__(self, env: str = SECRETS_ENV) -> None:
+    def __init__(self) -> None:
         from toolkit.config.constants import PATH_STRUCTURES
         from toolkit.features.configuration import ConfigurationManager
 
-        self._cm = ConfigurationManager(env)
-        self._file = self._cm.project_root / PATH_STRUCTURES.CONFIG_SECRETS_DIR / f"{env}.enc.yaml"
+        self._cm = ConfigurationManager(SECRETS_ENV)
+        self._dir = self._cm.project_root / PATH_STRUCTURES.CONFIG_SECRETS_DIR
 
     def show(self, path: str) -> Optional[str]:
         value = self._cm.get_secret_by_path(path)
         return str(value) if value else None
 
     def write(self, data: dict[str, str]) -> bool:
-        return bool(self._cm.batch_update_secrets(data, secret_file_path=self._file))
+        by_file: dict[str, dict[str, str]] = {}
+        for path, value in data.items():
+            by_file.setdefault(sops_file_for(path), {})[path] = value
+        return all(
+            self._cm.batch_update_secrets(batch, secret_file_path=self._dir / f"{name}.enc.yaml")
+            for name, batch in by_file.items()
+        )
 
 
 def mint_all(node: Optional[str] = None, rotate: bool = False) -> bool:
-    """Mint every node's pair and password, or one node's. True iff every node completed."""
+    """Mint every node's pair and password and the watcher's pair, or one node's. True iff all completed."""
     from toolkit.features.backup_destination import _default_run
 
     store = SopsStore()
@@ -256,24 +367,47 @@ def mint_all(node: Optional[str] = None, rotate: bool = False) -> bool:
         return False
     http = cloudflare_http(minter)
 
+    try:
+        account_id, endpoint, legacy = str(r2["account_id"]), str(r2["endpoint"]), str(r2["bucket"])
+    except KeyError as exc:
+        logger.error(f"backup.r2.{exc.args[0]} is missing from the config SSOT")
+        return False
+
     ok = True
     for name in [node] if node else nodes:
-        others = [n for n in nodes if n != name] or ["scratch-other"]
+        others = [n for n in nodes if n != name]
         try:
             token = mint_node(
                 name,
-                account_id=str(r2["account_id"]),
-                endpoint=str(r2["endpoint"]),
-                other_bucket=node_bucket(others[0]),
+                account_id=account_id,
+                endpoint=endpoint,
+                other_bucket=node_bucket(others[0]) if others else legacy,
                 http=http,
                 store=store,
                 run=_default_run,
                 rotate=rotate,
             )
             password = ensure_restic_password(name, store)
-        except (MintError, KeyError) as exc:
+        except MintError as exc:
             logger.error(f"{name}: {exc}")
             ok = False
             continue
         logger.success(f"{name}: token {token}, restic password {password}")
+
+    if node is None:
+        try:
+            token = mint_watcher(
+                nodes,
+                account_id=account_id,
+                endpoint=endpoint,
+                legacy_bucket=legacy,
+                http=http,
+                store=store,
+                run=_default_run,
+                rotate=rotate,
+            )
+        except MintError as exc:
+            logger.error(f"watcher: {exc}")
+            return False
+        logger.success(f"watcher: token {token}")
     return ok

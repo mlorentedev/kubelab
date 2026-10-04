@@ -26,7 +26,14 @@ from toolkit.config.constants import AUTHELIA_CONFIG, PATH_STRUCTURES, is_placeh
 from toolkit.config.settings import PROJECT_ROOT
 from toolkit.core.logging import logger
 from toolkit.core.sops import age_key_env
-from toolkit.features.backup_node_credentials import access_key_path, restic_password_path, secret_key_path
+from toolkit.features.backup_node_credentials import (
+    MINTER_KEY,
+    WATCHER_ACCESS_KEY_PATH,
+    WATCHER_SECRET_KEY_PATH,
+    access_key_path,
+    restic_password_path,
+    secret_key_path,
+)
 from toolkit.features.configuration import ConfigurationManager
 from toolkit.features.secret_expiry import Expiry
 
@@ -134,8 +141,9 @@ def _backup_node_specs(node: str) -> list[SecretSpec]:
 
     Minted by `toolkit backup mint-node-tokens`. The token is Object Read & Write
     on `kubelab-backup-<node>` only, so a node holding it cannot reach another
-    node's history. Written to prod.enc.yaml (proposal item 1) and audited under
-    prod. tests/test_backup_node_credentials.py fails when a `backup.sources`
+    node's history. The pair is written to prod.enc.yaml and audited under prod;
+    the password to common.enc.yaml and audited under both envs, because the
+    staging watcher reads it too (`sops_file_for`). tests/test_backup_node_credentials.py fails when a `backup.sources`
     node is missing here, or when one is listed that the SSOT no longer has.
     """
     return [
@@ -173,7 +181,7 @@ def _backup_node_specs(node: str) -> list[SecretSpec]:
                 "backup.restic_password. Escrow it in Bitwarden in the same pass."
             ),
             services=("backup", "r2-backup-watcher"),
-            envs=("prod",),
+            envs=("staging", "prod"),
         ),
     ]
 
@@ -1063,6 +1071,21 @@ SECRET_CATALOG: list[SecretSpec] = [
             "revoke the old one. Nothing deployed reads it."
         ),
     ),
+    # BACKUP-057 PR 3: mints the per-node and watcher R2 tokens. It holds Account
+    # API Tokens: Edit, which can create a token with any permission, so it is not
+    # folded into r2_admin_token. Created with a TTL; operator workstation only.
+    SecretSpec(
+        key_path=MINTER_KEY,
+        expiry=Expiry.PROVIDER,
+        description="Cloudflare account API token, Account API Tokens: Edit (mints the backup R2 tokens)",
+        kind=SecretKind.EXTERNAL,
+        services=("toolkit",),
+        envs=("prod",),
+        rotate_note=(
+            "Create a new account token (Account API Tokens: Edit, with a TTL) in the Cloudflare "
+            "dashboard, `toolkit secrets set` it in common, revoke the old one. Nothing deployed reads it."
+        ),
+    ),
     # Offsite backup destination (BACKUP-044 / #1056, ADR-049 D3). Stored in
     # common.enc.yaml because the pipeline spans prod (VPS) and homelab nodes, but
     # registered under `envs=("prod",)` — `envs` is the AUDIT dimension, not the
@@ -1158,6 +1181,31 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("r2-backup-watcher",),
         format_hint="R2 API token Secret Access Key; shown once, not recoverable",
         rotate_note="Rotated together with backup.r2.readonly_access_key_id — they are one credential.",
+        envs=("staging", "prod"),
+    ),
+    # BACKUP-057 PR 3: the watcher's read pair on the node buckets. It replaces
+    # the readonly pair above in PR 4; until then nothing reads it.
+    SecretSpec(
+        key_path=WATCHER_ACCESS_KEY_PATH,
+        expiry=Expiry.NEVER,
+        description="R2 access key id, Object Read on every kubelab-backup-<node> bucket only",
+        kind=SecretKind.EXTERNAL,
+        services=("r2-backup-watcher",),
+        format_hint="R2 API token id (not the token value)",
+        rotate_note=(
+            "`make backup-mint-node-tokens ENV=prod ROTATE=1` mints a new watcher token, verifies it, "
+            "stores it and revokes the old one; then `make apply-secrets` in staging and prod."
+        ),
+        envs=("staging", "prod"),
+    ),
+    SecretSpec(
+        key_path=WATCHER_SECRET_KEY_PATH,
+        expiry=Expiry.NEVER,
+        description="R2 secret access key, Object Read on every kubelab-backup-<node> bucket only",
+        kind=SecretKind.EXTERNAL,
+        services=("r2-backup-watcher",),
+        format_hint="SHA-256 of the R2 API token value; shown once, not recoverable",
+        rotate_note=f"Rotated together with {WATCHER_ACCESS_KEY_PATH}: they are one credential.",
         envs=("staging", "prod"),
     ),
     # BACKUP-057 PR 3: one pair and one password per backup.sources node. Nothing
