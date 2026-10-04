@@ -177,7 +177,9 @@ The writer re-encrypts the whole file, so the git diff spans every line. That is
   - **Fix.** The probe and `cat config` run with `--no-lock`; both only read. A fake-restic test that models a stale exclusive lock was red before the fix, and removing either `--no-lock` or the `unlock` turns it red again (lesson-521).
   - **After the fix**, against that same real lock, the ship logged `successfully removed 1 locks` and then `snapshot 627fad41 saved`.
 - **Prune facing a stale exclusive lock.** A lock was left by hand, outside systemd so nothing paged, by killing a `forget` once it held its lock. `PRUNE=1` then logged `successfully removed 1 locks`, applied the policy (20 snapshots kept) and finished.
-- Three `OnFailure` notifications fired during these tests: two from the killed prunes (`signal`) and one from the ship that failed before the fix.
+- Three `OnFailure` notifications fired during these tests: two from the killed prunes (`signal`) and one from the ship that failed before the fix. Each `kubelab-notify@<unit>.service` ran and exited 0 (journal, 06:29:21, 06:32:15, 06:32:24).
+- `make backup-schedule NODE=beelink ENV=prod` then reported `node-backup-prune.service failures in the last 7 days: 2`. Those are the two deliberate kills of 2026-10-04, not faults: AC3's seven-day window must start after them.
+- `--no-lock` keeps the probe's exit codes: `restic snapshots -q --no-lock` exits **10** on a prefix with no repository and **0** on beelink's, so the first-ship `init` path is unchanged.
 
 ## Test status
 

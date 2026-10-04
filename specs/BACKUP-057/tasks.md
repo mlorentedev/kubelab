@@ -88,10 +88,10 @@ The size decides whether R = 30 fits the free tier. It is measured by the watche
   - `k8s_secrets`: `r2-backup-watcher-secrets` carries the read-only pair plus one restic password per node, keyed by node. The watcher opens every repository (`snapshots`, `stats`), so it needs every password. A test fails if a node in `backup.sources` has no password entry.
 
   Expected: PASS, `make test` green.
-- [ ] [AC3] `forget --prune` runs in `node-backup-prune.service`, not in the ship (Q6, amended 2026-10-03). Failing tests first, in `tests/test_node_backup_prune_script.py` and `tests/test_node_backup_role.py`:
+- [x] [AC3] (✓ 2026-10-04, on beelink; the other three nodes after merge) `forget --prune` runs in `node-backup-prune.service`, not in the ship (Q6, amended 2026-10-03). Failing tests first, in `tests/test_node_backup_prune_script.py` and `tests/test_node_backup_role.py`:
   - the rendered prune script, run against a fake restic, unlocks stale locks, then runs `forget` with the retention flags, `--prune`, `--retry-lock` and the connection option, and exits with restic's code (0 passes, 3 fails);
   - it exits 0 without calling restic when the node has never shipped (no repository marker), so a boot-time `Persistent=` run before the first ship pages nothing;
-  - the ship script no longer runs `forget`, and runs `unlock` before `backup`;
+  - the ship script no longer runs `forget`, runs `unlock` before `backup`, and reads past a stale exclusive lock before it (`--no-lock` on the probe and `cat config`);
   - the prune unit carries `OnFailure=`, its own `TimeoutStartSec` from `node_backup_prune_timeout`, and the ship unit's memory cap; the ship units are `After=` it; the timer is daily and `Persistent=true`; `systemd-analyze verify` accepts every rendered unit;
   - `backup-schedule.yml` arms and disarms the prune timer with the others, and reports each node's prune-unit failures over the last seven days.
 
@@ -107,7 +107,7 @@ The size decides whether R = 30 fits the free tier. It is measured by the watche
   Tests mock restic and assert the order, and the stop when one source snapshot is missing even though the count and the oldest time match.
 - [ ] [AC4] Migrate all four nodes in **one sitting**: until a node's copy finishes, `kubelab-backups` holds its only copy, unlocked. Record per node the number of source snapshots and of matched copies in `verification.md`.
 - [ ] [AC1] [AC3] `toolkit backup isolation-probe --env prod` / `make backup-isolation-probe ENV=prod`. For every ordered pair of nodes, node A's credential must be refused on list and delete in node B's bucket. A direct delete of the youngest `data/` object in each bucket, with that node's own credential, must be refused. It exits non-zero if any request is **accepted**, and also if any bucket has no object under `data/`: an empty prefix has nothing to refuse a delete of, so it would report immutability it never measured. It therefore runs after each node's first ship to its bucket, never before. Unit tests mock the S3 client and assert that an accepted request fails the probe. This is what makes the check able to fail: today's shared bucket passes every other check.
-- [ ] [AC1] [AC3] Measured in prod, in this order: `make backup-node NODE=all ENV=prod` rc 0, then `make backup-isolation-probe ENV=prod` rc 0, and `make watcher-run ENV=prod` reports `healthy:4`. Then, seven days after the last node migrates, `make alerts` and the Grafana alert history `make backup-schedule NODE=all ENV=prod` reports no `node-backup-prune.service` failure on any node in that window, which is the half of AC3 that rc 0 cannot show (Q6). Record both in `verification.md`.
+- [ ] [AC1] [AC3] Measured in prod, in this order: `make backup-node NODE=all ENV=prod` rc 0, then `make backup-isolation-probe ENV=prod` rc 0, and `make watcher-run ENV=prod` reports `healthy:4`. Then, seven days after the last node migrates, `make backup-schedule NODE=all ENV=prod` reports no `node-backup-prune.service` failure on any node in that window, which is the half of AC3 that rc 0 cannot show (Q6). Record both in `verification.md`.
 
 ## PR 5 — close out
 
