@@ -36,9 +36,11 @@ provider "cloudflare" {
 }
 
 locals {
+  # Keyed by id so the list comes out in id order, which is how the API returns
+  # the rules. In prefix order every plan would show a reorder against state.
   lock_rules = [
-    for prefix in var.locked_prefixes : {
-      id      = "retain-${trimsuffix(prefix, "/")}"
+    for id, prefix in { for p in var.locked_prefixes : "retain-${trimsuffix(p, "/")}" => p } : {
+      id      = id
       enabled = true
       prefix  = prefix
       condition = {
