@@ -1,0 +1,18 @@
+# {{ ansible_managed }}
+# BACKUP-057 Q6 (amended 2026-10-03): retention in a unit of its own, with its
+# own bound and its own notification. See node_backup_prune_timeout.
+[Unit]
+Description=BACKUP-057 node-backup retention and prune ({{ inventory_hostname }})
+OnFailure=kubelab-notify@%n.service
+
+[Service]
+Type=oneshot
+Environment=HOME=/root
+ExecStart={{ node_backup_prune_script_path }}
+{% if node_backup_memory_max %}
+MemoryMax={{ node_backup_memory_max }}
+MemorySwapMax={{ node_backup_memory_swap_max }}
+{% endif %}
+TimeoutStartSec={{ node_backup_prune_timeout }}
+StandardOutput=journal
+StandardError=journal

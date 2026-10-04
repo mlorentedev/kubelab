@@ -27,6 +27,10 @@ After={{ node_backup_capture_service_name }}
 # says "capture did not COMPLETE; refusing to ship a partial backup" in the
 # log of the unit an operator is actually looking at.
 Wants={{ node_backup_capture_service_name }}
+# A ship queued while the daily prune runs waits for it rather than failing on
+# its exclusive lock (BACKUP-057 Q6). Ordering applies between queued jobs, and
+# the wait does not count against TimeoutStartSec.
+After={{ node_backup_prune_service_name }}
 
 [Service]
 Type=oneshot

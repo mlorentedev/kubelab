@@ -1,0 +1,39 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# BACKUP-057 Q6 (amended 2026-10-03) -- applies {{ inventory_hostname }}'s
+# retention to its R2 repository. Moved out of the ship: under the bucket lock
+# a refused DELETE holds restic in retries for about 15 minutes, past the ship's
+# timeout, so a prune there would turn a harmless refusal into a killed backup.
+#
+# The unit fails, and notifies, on restic's exit code alone. A refused pack
+# (unreferenced, left by an interrupted backup) exits 0: expected, harmless, and
+# bounded in storage by the r2-backup-size alert. A refused snapshot exits 3,
+# which cannot happen while --keep-within exceeds the lock's R, so it is a fault.
+set -euo pipefail
+
+# The ship writes this once a snapshot exists. Without it the repository may
+# not exist yet: Persistent=true fires this unit at boot, possibly before the
+# first ship, and that is not a fault worth a page.
+MARKER="{{ node_backup_r2_repository_id_file }}"
+if [ ! -e "$MARKER" ]; then
+    echo "node-backup-prune: this node has not shipped to r2 yet ($MARKER absent); nothing to prune"
+    exit 0
+fi
+
+# Credentials from root-owned files, never argv: same pattern as the ship.
+export RESTIC_PASSWORD="$(cat {{ node_backup_restic_password_file }})"
+export AWS_ACCESS_KEY_ID="$(cat {{ node_backup_r2_access_key_file }})"
+export AWS_SECRET_ACCESS_KEY="$(cat {{ node_backup_r2_secret_key_file }})"
+
+REPO="{{ node_backup_r2_repository }}"
+RESTIC="{{ node_backup_restic_install_path }} --repo $REPO --stuck-request-timeout {{ node_backup_stuck_request_timeout }}"
+
+# restic 0.19.1 never skips a stale lock when it takes a new one
+# (`checkForOtherLocks` does not test `Stale()`), so a prune killed mid-run
+# would block every later run. Plain `unlock` removes only stale locks: this
+# host's, from a process that no longer exists.
+$RESTIC unlock
+
+# --retry-lock outlasts the longest ship (TimeoutStartSec=600), so a prune that
+# starts mid-ship waits for it instead of failing on the lock.
+exec $RESTIC forget {{ node_backup_retention_flags }} --prune --retry-lock 10m -o s3.connections={{ node_backup_prune_connections }}
