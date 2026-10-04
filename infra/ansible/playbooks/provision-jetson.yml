@@ -62,12 +62,13 @@
       become: false
 
   tasks:
-    # -- DNS resilience (legacy raw) --
-    - name: Ensure vpn.kubelab.live in /etc/hosts
-      raw: >
-        grep -q '{{ config.networking.vps.public_ip }} {{ config.apps.services.core.headscale.domain }}' /etc/hosts
-        || echo '{{ config.networking.vps.public_ip }} {{ config.apps.services.core.headscale.domain }}' | sudo tee -a /etc/hosts > /dev/null
-      changed_when: false
+    # -- DNS resilience: the role's legacy (raw) branch, the one owner of this line (ANSIBLE-063) --
+    - name: Ensure critical infrastructure DNS in /etc/hosts
+      include_role:
+        name: ../roles/dns_resilience
+      vars:
+        headscale_ip: "{{ config.networking.vps.public_ip }}"
+        headscale_domain: "{{ config.apps.services.core.headscale.domain }}"
 
     # -- Tailscale health --
     - name: Check Tailscale status
