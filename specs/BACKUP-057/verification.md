@@ -126,6 +126,15 @@ The scratch Object Read & Write token itself still exists in Cloudflare. The buc
 
 **AC3's scratch measurement is complete.** The prod-bucket repeat of step 4 stays with the prod task.
 
+## AC2: the node buckets
+
+2026-10-03, from the main checkout, which holds the R2 state (operator decision: same home as the DNS root's).
+
+- The first `make tf-r2-plan` read `8 to add, 0 to change, 0 to destroy`: four buckets and four lock rules.
+- `make tf-r2-apply` created `kubelab-backup-{beelink,rpi3,rpi4,vps}` and their locks, returning `8 added, 0 changed, 0 destroyed`.
+- **The second plan was not clean.** It read `0 to add, 4 to change`, and the change was a reorder only. The API returns a bucket's lock rules sorted by `id`. The HCL listed them in the order `LOCKED_PREFIXES` renders them (`data/`, `snapshots/`, `keys/`, `config`). Every plan would have shown the same diff, so AC2's "no diff" could never hold. The scratch measurement never ran a second plan, which is why it did not see this.
+- Fix: `lock_rules` now iterates a map keyed by the rule id, so Terraform emits it in id order. Planned against the live state with the fix applied, the result is `No changes. Your infrastructure matches the configuration.` `test_the_lock_rules_are_ordered_by_id_as_the_api_returns_them` pins the shape.
+
 ## Test status
 
 - Test suite: `<command> -> <output / coverage %>`

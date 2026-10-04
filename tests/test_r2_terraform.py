@@ -188,9 +188,20 @@ class TestTheRootMatchesWhatIsRendered:
         """The rendered list is the one the lock applies only if the HCL has none
         of its own: a literal here would lock what the renderer's tests never see."""
         text = (ROOT / "main.tf").read_text(encoding="utf-8")
-        assert re.search(r"for\s+prefix\s+in\s+var\.locked_prefixes", text)
+        assert re.search(r"for\s+\w+\s+in\s+var\.locked_prefixes", text)
         for prefix in (*r2_tfvars.LOCKED_PREFIXES, "locks/", "index/"):
             assert f'"{prefix}"' not in text, f"main.tf hardcodes {prefix!r}"
+
+    def test_the_lock_rules_are_ordered_by_id_as_the_api_returns_them(self) -> None:
+        """The API answers with the rules sorted by `id`. A list in the rendered
+        prefix order (data/, snapshots/, keys/, config) then differs from state on
+        every plan, so AC2's "a second plan shows no diff" can never hold
+        (measured on the first apply, 2026-10-03). Iterating a map keyed by id
+        yields the lexical order Terraform guarantees for map keys."""
+        text = (ROOT / "main.tf").read_text(encoding="utf-8")
+        assert re.search(
+            r"for\s+id\s*,\s*prefix\s+in\s+\{\s*for\s+\w+\s+in\s+var\.locked_prefixes\s*:\s*\"retain-", text
+        ), "lock_rules must iterate a map keyed by the rule id, not the prefix list"
 
     def test_the_provider_is_pinned_to_v5(self) -> None:
         text = (ROOT / "main.tf").read_text(encoding="utf-8")
