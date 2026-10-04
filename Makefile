@@ -1078,11 +1078,12 @@ deploy:
 # path, so it also posts the AC9 coverage heartbeat.
 .PHONY: backup-node
 backup-node:
-	@test -n "$(NODE)" || (echo "Usage: make backup-node NODE=<a backup.sources node>|all [ENV=prod] [INTEGRITY=1] [CHECK=1]" && exit 1)
+	@test -n "$(NODE)" || (echo "Usage: make backup-node NODE=<a backup.sources node>|all [ENV=prod] [INTEGRITY=1|PRUNE=1] [CHECK=1]" && exit 1)
 	$(eval _ENV := $(or $(filter staging prod,$(ENV)),prod))
 	$(eval _CHECK := $(if $(CHECK),--check,))
 	$(eval _INTEGRITY := $(if $(INTEGRITY),--extra-vars "integrity=true",))
-	$(TOOLKIT) infra ansible run -p backup-node -e $(_ENV) -l $(NODE) $(_CHECK) $(_INTEGRITY)
+	$(eval _PRUNE := $(if $(filter 1,$(PRUNE)),--extra-vars "prune=true",))
+	$(TOOLKIT) infra ansible run -p backup-node -e $(_ENV) -l $(NODE) $(_CHECK) $(_INTEGRITY) $(_PRUNE)
 
 # Let ONE node start a new backup history (BACKUP-058). A node refuses to
 # re-initialise a repository it has shipped to, so a deleted or replaced
@@ -1125,7 +1126,7 @@ backup-schedule:
 backup:
 	$(eval _CHECK := $(if $(CHECK),--check,))
 	$(eval _ENV := $(or $(filter staging prod,$(ENV)),prod))
-	@$(TOOLKIT) infra ansible run -p backup -e $(_ENV) $(_CHECK)
+	@$(TOOLKIT) infra ansible run -p backup -e $(_ENV) $(if $(NODE),-l $(NODE)) $(_CHECK)
 
 # Bitácora board — the Stream field is derived from harness/board-streams.yaml (GOV-002)
 # Usage: make board-streams          (dry-run)
