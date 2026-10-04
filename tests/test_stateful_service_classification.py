@@ -31,6 +31,7 @@ gitea's staging twin while its classification stays meaningful.
 
 from __future__ import annotations
 
+import copy
 import os
 import pathlib
 import re
@@ -339,6 +340,18 @@ def test_no_singleton_renders_in_both_overlays(
 ) -> None:
     problems = duplication_problems(_stateful_services(), common_config, rendered_pvcs)
     assert not problems, "\n".join(problems)
+
+
+def test_duplication_clause_goes_red_on_the_real_render(
+    common_config: dict[str, Any], rendered_pvcs: dict[str, set[str]]
+) -> None:
+    """No singleton renders today, which is the state ADR-061 asks for, so the green test
+    above never reaches the intersection on real data. This one does: postgres renders in
+    both overlays, and declared `singleton` it must fail."""
+    config = copy.deepcopy(common_config)
+    config["infra"]["postgres"]["state_promotion"] = "singleton"
+    problems = duplication_problems(_stateful_services(), config, rendered_pvcs)
+    assert [p.split(" is ", 1)[0] for p in problems] == ["postgres"], problems
 
 
 def test_duplication_clause_goes_red_on_a_singleton_in_both_overlays() -> None:
