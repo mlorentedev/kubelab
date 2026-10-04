@@ -43,6 +43,15 @@ def _delegates_to_owner(task: dict[str, Any]) -> bool:
     return False
 
 
+WHOLE_FILE = ("template", "copy", "ansible.builtin.template", "ansible.builtin.copy")
+
+
+def _replaces_the_hosts_file(task: dict[str, Any]) -> bool:
+    """A task that renders the whole file writes every line in it, the Headscale one included,
+    whatever its source says, and overwrites the owner's block on each run."""
+    return any(isinstance(task.get(k), dict) and task[k].get("dest") == "/etc/hosts" for k in WHOLE_FILE)
+
+
 def _writers_of_the_headscale_line(root: pathlib.Path = ANSIBLE) -> list[str]:
     """Writers under `root`, as paths relative to it: role tasks and handlers, and playbooks."""
     found = []
@@ -54,7 +63,7 @@ def _writers_of_the_headscale_line(root: pathlib.Path = ANSIBLE) -> list[str]:
                 continue
             own = {k: v for k, v in task.items() if k not in ("block", "rescue", "always", "tasks")}
             text = str(own)
-            if "/etc/hosts" in text and any(m in text for m in HEADSCALE_MARKERS):
+            if _replaces_the_hosts_file(task) or ("/etc/hosts" in text and any(m in text for m in HEADSCALE_MARKERS)):
                 found.append(f"{path.relative_to(root)}: {task.get('name', '<unnamed>')}")
     return found
 
@@ -87,6 +96,7 @@ def test_the_scan_sees_a_second_writer(tmp_path: pathlib.Path) -> None:
         "roles/gateway/tasks/main.yml": writer,
         "roles/gateway/tasks/nested/dns.yaml": writer,
         "roles/gateway/handlers/main.yml": writer,
+        "roles/net/tasks/main.yml": [{"name": "Render hosts", "template": {"src": "hosts.j2", "dest": "/etc/hosts"}}],
         "playbooks/provision-x.yml": [{"hosts": "all", "tasks": [{"block": writer}]}],
         "playbooks/delegates.yml": delegations,
     }
