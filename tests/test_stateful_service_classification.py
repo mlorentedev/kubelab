@@ -282,6 +282,11 @@ def duplication_problems(
 
     `rendered` maps overlay -> the PVC names it renders. Pure, like
     `classification_problems`, so the controls below need no cluster and no kubectl.
+
+    Scope: state held in a PersistentVolumeClaim of these manifests, the same set the
+    classification half scans. A StatefulSet's `volumeClaimTemplates` is outside it
+    (#2062); state kept outside K8s (an external database, a node's disk) has no
+    overlay to be duplicated across.
     """
     problems = []
     for service, pvcs in sorted(services.items()):
