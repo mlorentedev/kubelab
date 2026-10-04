@@ -141,8 +141,9 @@ def _ci_residue_verdicts(node: NodeInfo) -> tuple[set[str], list[str]]:
         int(defaults["maintenance_docker_reclaim_min_age_hours"]),
         protected=docker_reclaim.protected_volumes(_COMMON["backup"]),
     )
-    # Created after the last run: the reaper has not had its chance yet.
-    overdue = [name for name in plan.volumes if next(v for v in volumes if v.name == name).created <= ran_at]
+    # The plan is computed AT the last run, so its age gate already leaves out
+    # anything created since: what it plans is exactly what that run should have taken.
+    overdue = list(plan.volumes)
     bounded = {v.name for v in volumes if docker_reclaim.is_candidate(v)} - set(overdue)
     return bounded, overdue
 
