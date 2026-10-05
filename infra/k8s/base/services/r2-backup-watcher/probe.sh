@@ -6,7 +6,8 @@
 #   readable  the repository opens (catches a revoked token, a wrong password,
 #             a missing repository);
 #   snapshots at least one exists;
-#   missing   every declared source is a directory in the newest snapshot;
+#   missing   every declared source is a directory in the newest snapshot, not
+#             a file of that name (#1865);
 #   sentinel  the snapshot holds the capture's success sentinel, which the node
 #             writes last and refuses to ship without -- checked here from the
 #             destination, so a regression of that guard is visible;
@@ -143,6 +144,13 @@ STAMPS
     printf '%s\n' "$newest"
 }
 
+# Whether `$listing` (one `ls --json` entry per line) holds an entry of type
+# $1 at exactly path $2. The closing `",` pins the whole path, so `n8n-old`
+# is not `n8n`; restic writes `type` and `path` into the same line.
+has_entry() {
+    printf '%s\n' "$listing" | grep -F "\"path\":\"$2\"," | grep -Fq "\"type\":\"$1\""
+}
+
 # First stderr line, stripped of what would break the JSON string.
 reason_from_stderr() {
     head -n 1 "$errfile" | tr -d '"\\' | cut -c1-160
@@ -185,12 +193,14 @@ while read -r node repo declared_id address port class services || [ -n "$node" 
 
     if [ "$readable" -eq 1 ] && [ "$snapshots" -gt 0 ]; then
         # The staging dir only, not the tree beneath it: a full listing of the
-        # Beelink's Gitea took 92 s (R3).
-        if listing="$(restic_read ls latest "$STAGING")"; then
+        # Beelink's Gitea took 92 s (R3). `--json`, because a plain listing
+        # prints a file and a directory alike, and a source counts only as a
+        # directory (#1865).
+        if listing="$(restic_read ls --json latest "$STAGING")"; then
             for service in $services; do
-                printf '%s\n' "$listing" | grep -Fxq "$STAGING/$service" || missing="$missing $service"
+                has_entry dir "$STAGING/$service" || missing="$missing $service"
             done
-            printf '%s\n' "$listing" | grep -Fxq "$STAGING/$SENTINEL_NAME" && sentinel=1
+            has_entry file "$STAGING/$SENTINEL_NAME" && sentinel=1
             [ -z "$missing" ] || reason="missing sources"
             [ "$sentinel" -eq 1 ] || reason="${reason:+$reason, }no capture sentinel"
         else
