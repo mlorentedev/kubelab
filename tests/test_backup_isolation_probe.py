@@ -248,6 +248,24 @@ def test_an_empty_data_prefix_fails_it_and_no_own_delete_is_tried() -> None:
     assert not [r for r in r2.requests if r[0] == "delete-object" and r[1:4:2] == (node_bucket("rpi4"), "rpi4-id")]
 
 
+def test_an_empty_fleet_fails_it_instead_of_passing_over_nothing() -> None:
+    r2 = R2()
+    assert (
+        bi.probe(
+            [],
+            declared=[],
+            endpoint=ENDPOINT,
+            secret=_secrets().get,
+            run=r2.run,
+            lock_rules=r2.lock_rules,
+            retention_s=R,
+            now=NOW,
+        )
+        is False
+    )
+    assert r2.requests == []
+
+
 def test_a_node_still_shipping_to_the_shared_bucket_fails_it() -> None:
     assert _probe(R2(), declared=NODES[:3]) is False
 

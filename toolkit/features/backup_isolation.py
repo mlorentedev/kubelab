@@ -36,6 +36,8 @@ from toolkit.features.backup_node_credentials import _s3_env, access_key_path, s
 from toolkit.features.r2_tfvars import node_bucket
 
 DENIED = "AccessDenied"
+# R2's answer to a delete under a lock rule, measured with an Object Read &
+# Write token in BACKUP-057's scratch bucket (verification.md, step 4).
 LOCKED = "ObjectLockedByBucketPolicy"
 # The token Terraform manages the buckets and their locks with; read-only use here.
 ADMIN_TOKEN_KEY = "cloudflare.r2_admin_token"
@@ -111,6 +113,10 @@ def probe(
     """True iff every request that must be refused was refused, for the right reason."""
     problems: list[str] = []
     refused = 0
+    if not nodes:
+        # As with an empty `data/`: no request sent is no isolation measured.
+        logger.error("backup.sources is empty, so there is no node to probe")
+        return False
     for node in nodes:
         if node not in declared:
             problems.append(f"{node} is not in backup.r2.own_bucket_nodes: it still ships to the shared bucket")
