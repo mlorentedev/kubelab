@@ -336,12 +336,16 @@ printf 'SNAPSHOT of %s\\n' "$3" > "$dest"
 """
 
 
-def _capture(tmp_path: Path, source: dict[str, object]) -> Path:
-    """Render the capture for one `path:` source at tmp_path/src, run it, return its staging dir."""
+def _capture(tmp_path: Path, source: dict[str, object], shims: dict[str, str] | None = None) -> Path:
+    """Render the capture for one `path:` source at tmp_path/src, run it, return its staging dir.
+
+    `shims` puts more fake commands on PATH, by name and script body.
+    """
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    (bin_dir / "sqlite3").write_text(FAKE_SQLITE3)
-    (bin_dir / "sqlite3").chmod(0o755)
+    for name, body in {"sqlite3": FAKE_SQLITE3, **(shims or {})}.items():
+        (bin_dir / name).write_text(body)
+        (bin_dir / name).chmod(0o755)
     staging = tmp_path / "staging"
     script = tmp_path / "capture.sh"
     script.write_text(
@@ -415,18 +419,37 @@ def test_a_nested_database_keeps_the_modes_of_the_directories_above_it(tmp_path:
     assert (staged / "a/b").stat().st_mode & 0o777 == 0o750
 
 
-def test_a_snapshot_keeps_its_source_database_s_owner_and_mode(tmp_path: Path) -> None:
-    """`.backup` creates the file as the capturing user with its own mode; a restore
-    puts back what was staged, so the staged file carries the source's."""
+def test_a_snapshot_keeps_its_source_database_s_mode(tmp_path: Path) -> None:
+    """`.backup` creates the file with its own mode; a restore puts back what was
+    staged, so the staged file carries the source's. Owner: the test below."""
     _tree(tmp_path, {"a/x.db": "RAW"})
     (tmp_path / "src/a/x.db").chmod(0o640)
     staged = _capture(tmp_path, {"sqlite": "a/x.db"})
     assert (staged / "a/x.db").stat().st_mode & 0o777 == 0o640
 
 
+def test_a_snapshot_and_the_directories_above_it_take_their_sources_owner(tmp_path: Path) -> None:
+    """The suite runs as one uid, so an owner read back from the staged tree would
+    match with or without the fix. A recording `chown` shows what the capture asks
+    for. Every other directory is made by `cp -a --parents`, which copies owner and
+    mode onto the ancestors it creates (measured as root, coreutils 9.7)."""
+    _tree(tmp_path, {"a/b/x.db": "RAW"})
+    log = tmp_path / "chown.log"
+    staged = _capture(tmp_path, {"sqlite": "a/b/x.db"}, shims={"chown": f'#!/bin/sh\necho "$@" >> "{log}"\n'})
+    assert log.read_text().splitlines() == [
+        f"--reference=a/b {staged}/a/b",
+        f"--reference=a {staged}/a",
+        f"--reference={tmp_path}/src/a/b/x.db {staged}/a/b/x.db",
+    ]
+
+
 def test_an_absolute_database_path_ends_the_directory_walk(tmp_path: Path) -> None:
     """`dirname` of an absolute path ends at `/`, never at `.`: the walk must stop
-    there, or a misdeclared source hangs the capture instead of failing it."""
+    there, or a misdeclared source hangs the capture instead of failing it.
+
+    This pins the loop's condition only. Run as one uid, the walk fails on its
+    first `chown` before it can spin, so the harness cannot show the hang.
+    """
     script = _render(
         "node-backup-capture.sh.j2",
         node_backup_sources={"svc": {"path": "/srv/x", "sqlite": "/abs/x.db"}},
