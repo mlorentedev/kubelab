@@ -71,6 +71,17 @@ agent_stack_rootless_packages:
 agent_stack_agent_probe_memory: 64m
 agent_stack_agent_probe_cpus: "0.5"
 
+# The agent's user is refused the tailnet on the host (lesson-525). The ranges
+# (agent_stack_tailnet_ranges) and the probe's two addresses
+# (agent_stack_egress_probe_refused/_open, one host's tailnet and public
+# address) come from the networking SSOT through the playbook.
+agent_stack_egress_table: "{{ agent_stack_dir }}/agent-egress.nft"
+# MagicDNS (100.100.100.100) sits inside the refused range, so the agent's
+# containers resolve through public resolvers only, the headscale role's pair.
+# Everything they need (NaN, Slack, GitHub, the prod issuer) is public DNS.
+agent_stack_hermes_dns_servers: ["1.1.1.1", "8.8.8.8"]
+agent_stack_egress_probe_port: 443
+
 # hermes-kubelab (ADR-068 D2, spec PR 3). `agent_stack_hermes` is the
 # apps.services.ai.hermes_kubelab map, set by the playbook.
 agent_stack_hermes_project: agent-stack-hermes

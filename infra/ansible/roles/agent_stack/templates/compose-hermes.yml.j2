@@ -29,8 +29,8 @@ services:
       - "127.0.0.1:{{ agent_stack_hermes.api_port }}:{{ agent_stack_hermes.api_port }}"
     mem_limit: {{ agent_stack_hermes.memory_limit }}
     cpus: {{ agent_stack_hermes.cpu_limit }}
-    # agent_stack_docker_dns_servers: MagicDNS first (see the role defaults).
+    # Public resolvers only: the agent's user is refused the tailnet, MagicDNS included.
     dns:
-{% for server in agent_stack_docker_dns_servers %}
+{% for server in agent_stack_hermes_dns_servers %}
       - {{ server }}
 {% endfor %}

@@ -1,0 +1,20 @@
+# Managed by Ansible (agent_stack). The agent's user never reaches the tailnet
+# as this node (spec AI-009 AC5, lesson-525). Every packet its rootless daemon
+# emits leaves from a process that user owns (slirp4netns), so this covers the
+# gateway, the sidecar and every sandbox at once.
+#
+# Its own table, loaded by agent-stack-egress.service. Declare-then-delete keeps
+# a reload idempotent and touches no other table: Docker's, ufw's and
+# Tailscale's rules live beside it. A reject in any base chain on the hook is
+# final, whatever another table's chain accepts.
+table inet agent_egress
+delete table inet agent_egress
+
+table inet agent_egress {
+  chain output {
+    type filter hook output priority filter; policy accept;
+{% for range in agent_stack_tailnet_ranges %}
+    meta skuid {{ _agent_stack_agent_uid }} {{ 'ip6' if ':' in range else 'ip' }} daddr {{ range }} reject with icmpx type admin-prohibited
+{% endfor %}
+  }
+}

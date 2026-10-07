@@ -1,0 +1,21 @@
+# Managed by Ansible (agent_stack). Loads the rule that keeps the agent's user
+# off the tailnet (agent-egress.nft). Not nftables.service: its config flushes
+# the whole ruleset.
+[Unit]
+Description=Keep the agent's user off the tailnet
+Before=user@{{ _agent_stack_agent_uid }}.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f {{ agent_stack_egress_table }}
+# A change is applied by reload, never restart: restarting this unit restarts
+# the user manager that requires it, and the agent's gateway with it. The file
+# replaces its table in one transaction, so no reload leaves a gap.
+ExecReload=/usr/sbin/nft -f {{ agent_stack_egress_table }}
+ExecStop=/usr/sbin/nft delete table inet agent_egress
+
+[Install]
+# Fail closed: the agent's user manager, and so its daemon, does not start
+# without the rule, and stops when the rule is removed.
+RequiredBy=user@{{ _agent_stack_agent_uid }}.service
