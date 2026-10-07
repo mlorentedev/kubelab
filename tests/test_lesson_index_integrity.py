@@ -54,9 +54,13 @@ def _rows(category: pathlib.Path) -> list[str]:
 
 
 def _stated_count(index: pathlib.Path) -> int:
-    match = _COUNT.search(index.read_text())
-    assert match, f"{index.relative_to(REPO_ROOT)} has no 'N lessons' summary line"
-    return int(match.group(1))
+    counts = _COUNT.findall(index.read_text())
+    assert counts, f"{index.relative_to(REPO_ROOT)} has no 'N lessons' summary line"
+    # A conflict resolved by keeping both sides keeps two summary lines, and
+    # `lessons-index --fix` then corrects both, so the count alone still agrees
+    # (lesson-537).
+    assert len(counts) == 1, f"{index.relative_to(REPO_ROOT)} states its count {len(counts)} times"
+    return int(counts[0])
 
 
 def test_there_are_categories_to_check() -> None:
