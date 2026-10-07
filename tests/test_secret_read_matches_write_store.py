@@ -1,10 +1,15 @@
-"""A secret written to one SOPS store must be read back from that same store.
+"""A secret must be read from the SOPS store that holds it.
 
-The Beelink is the only node in the fleet that holds TWO secret stores at once, and
-it holds them for a reason ADR-061 makes deliberate: Gitea's *environment identity*
-is prod while the node's `deploy_env` is staging. So `provision-bee.yml` builds
-`secrets` from `common + deploy_env` and `gitea_secrets` from
-`common + gitea_identity_env`, and which one a variable reads is a real choice.
+Two nodes hold TWO secret stores at once, for a reason ADR-061 makes deliberate:
+Gitea's *environment identity* is prod while the node's `deploy_env` is staging.
+So `provision-bee.yml` and `provision-ace2.yml` (ANSIBLE-037) each build `secrets`
+from `common + deploy_env` and `gitea_secrets` from `common + gitea_identity_env`,
+and which one a variable reads is a real choice. The tests below find every such
+playbook rather than naming these two.
+
+Two checks, because the nodes differ. On the Beelink a role writes secrets, so a
+read must match the store its write went to. On ace2 nothing writes: a read must
+use a store whose environment `SECRET_CATALOG` declares for that key (#1975).
 
 **Reading the wrong one does not fail.** It resolves to `''` through the
 `| default('', true)` every one of these reads carries, and an empty string is a
@@ -46,8 +51,11 @@ from pathlib import Path
 import pytest
 import yaml
 
+from toolkit.features.secrets_manager import SECRET_CATALOG
+
 REPO = Path(__file__).resolve().parents[1]
-PLAYBOOK = REPO / "infra/ansible/playbooks/provision-bee.yml"
+PLAYBOOKS = REPO / "infra/ansible/playbooks"
+PLAYBOOK = PLAYBOOKS / "provision-bee.yml"
 ROLE_TASKS = REPO / "infra/ansible/roles/beelink_services/tasks/main.yml"
 
 #: `toolkit secrets set <dotted.path> --env {{ <var> }}` — the write side.
@@ -194,4 +202,73 @@ def test_every_written_secret_is_read_back_somewhere(path: str) -> None:
         f"`{path}` is written by the role and dereferenced nowhere in {PLAYBOOK.name}. "
         "Either wire it into the play's `vars:` or stop minting it — an unread secret "
         "still gets re-minted, and for a Gitea token minting revokes the live one."
+    )
+
+
+# ── every playbook with more than one store, judged against SECRET_CATALOG (#1975) ──
+
+
+def _stores(play: dict) -> dict[str, str]:
+    """store fact -> the play variable naming its environment, by the same
+    decrypt-register-set_fact chain `_store_for_env_var` follows."""
+    tasks = (play.get("pre_tasks") or []) + (play.get("tasks") or [])
+    register_for_env: dict[str, str] = {}
+    for task in tasks:
+        command = task.get("command") or task.get("ansible.builtin.command")
+        if isinstance(command, str) and (found := DECRYPT.search(command)) and task.get("register"):
+            register_for_env[found.group(1)] = task["register"]
+    stores: dict[str, str] = {}
+    for task in tasks:
+        fact = task.get("set_fact") or task.get("ansible.builtin.set_fact")
+        if isinstance(fact, dict):
+            for store, expression in fact.items():
+                for env_var, register in register_for_env.items():
+                    if f"{register}.stdout" in str(expression):
+                        stores[store] = env_var
+    return stores
+
+
+def _multi_store_plays() -> list[tuple[str, dict, dict[str, str]]]:
+    found = []
+    for path in sorted(PLAYBOOKS.glob("*.yml")):
+        for play in yaml.safe_load(_text(path)) or []:
+            if len(stores := _stores(play)) >= 2:
+                found.append((path.name, play, stores))
+    return found
+
+
+def test_the_two_store_nodes_are_found() -> None:
+    """Anti-vacuity: the parametrised test below runs on what this finds."""
+    names = {name for name, _, _ in _multi_store_plays()}
+    assert {"provision-bee.yml", "provision-ace2.yml"} <= names, names
+
+
+@pytest.mark.parametrize(
+    ("playbook", "play", "stores"), _multi_store_plays(), ids=[name for name, _, _ in _multi_store_plays()]
+)
+def test_every_read_uses_a_store_whose_environment_needs_that_secret(
+    playbook: str, play: dict, stores: dict[str, str]
+) -> None:
+    """The environment is the play's declared value (`deploy_env: staging`), the one
+    the node is documented under. `make provision` passes `-e deploy_env=<ENV>`,
+    which overrides it, so a read from `secrets` must hold for the declared one."""
+    specs = {spec.key_path: spec for spec in SECRET_CATALOG}
+    declared = play.get("vars") or {}
+    reads = READ.findall(yaml.safe_dump(play, width=float("inf")))
+    wrong: list[str] = []
+    for store, path in sorted(set(reads)):
+        if store not in stores:
+            continue
+        env = declared.get(stores[store])
+        spec = specs.get(path)
+        if spec is None:
+            wrong.append(f"{store}.{path}: not in SECRET_CATALOG, so no environment can be checked")
+        elif env not in spec.envs:
+            wrong.append(f"{store}.{path}: `{store}` is {stores[store]}={env!r}, the catalog declares {spec.envs}")
+    assert reads, f"{playbook}: no store read found, so the parser stopped matching"
+    assert not wrong, (
+        f"{playbook} reads secrets from a store whose environment does not hold them:\n  "
+        + "\n  ".join(wrong)
+        + "\n\nThis does not raise: the read resolves to '' through `default('')`, and the "
+        "node is provisioned with an empty credential while the play reports failed=0."
     )
