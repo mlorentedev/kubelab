@@ -353,7 +353,7 @@ def apply_monitors(project_root: Path, *, check: bool = False, prune: bool = Fal
             names = ", ".join(f"'{m.get('name')}' (id={m['id']})" for m in to_delete)
             logger.error(
                 f"Refusing to delete {len(to_delete)} monitor(s) the seed does not declare: {names}. "
-                "Declare them in the seed, or re-run with PRUNE=1 to delete them and their history."
+                "Declare them in the seed, or re-run with --prune (PRUNE=1 via make) to delete them and their history."
             )
             raise SystemExit(1)
 
