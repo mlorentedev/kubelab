@@ -78,6 +78,28 @@ claim that is in neither `backup.sources.<node>` nor `backup.excluded.<node>`
 [SUCCESS] claims: all 8 live claims on 'vps' have a backup ruling
 ```
 
+## Proving isolation
+
+```bash
+make backup-isolation-probe ENV=prod
+```
+
+It sends the requests a stolen node credential would send, and fails on any that R2 accepts:
+
+- every node's own pair lists and deletes in every other node's bucket, and each request must be refused with `AccessDenied`;
+- each node's own pair deletes the youngest object under its bucket's `data/`, which the bucket lock must refuse with `ObjectLockedByBucketPolicy`.
+
+A refusal for any other reason (a network error, a missing bucket) fails the probe, because it proves nothing. An empty `data/` fails it too, because the lock has nothing to refuse. A node not yet in `backup.r2.own_bucket_nodes` fails it as well, since it still ships to the shared bucket. So the probe passes only after every node has been moved and has shipped once to its own bucket. Before the migration it fails, but its `N of 24 cross-node requests refused` line already measures the scope half.
+
+The cross delete names `data/kubelab-isolation-probe-<node>`, a key that no restic repository writes, so a broken scope cannot remove a pack. The own delete has to name a real pack, because a lock guards only what exists, so the probe first makes sure the delete can only be refused. It reads the bucket's lock rules with `cloudflare.r2_admin_token` and attempts nothing unless an enabled `data/` rule holds objects by age for at least `backup.r2.lock_retention_days`. It also attempts nothing when the youngest pack is less than a day from the end of that window, because past it the delete is allowed by design. Either case fails the probe and says why. A missing rule is restored with `make tf-r2-apply`.
+
+The delete can still be **accepted** if the rule reads correctly and R2 does not enforce it. Then the bucket is not locked, and the probe names the pack it removed:
+
+1. Re-apply the lock rule: `make tf-r2-apply`, and check that the plan restores it.
+2. The node's newest snapshot now lacks that pack. With the node's own pair and password, run `restic repair index`, then `restic repair snapshots --forget`, against `kubelab-backup-<node>`.
+3. Ship again: `make backup-node NODE=<node> ENV=prod`.
+4. Re-run the probe.
+
 ## R2 backup alert
 
 `obs015-r2-backup-health` reads the in-cluster watcher (BACKUP-055): a CronJob in

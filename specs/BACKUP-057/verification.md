@@ -183,6 +183,14 @@ The writer re-encrypts the whole file, so the git diff spans every line. That is
 - **Rollout after #2066 merged (2026-10-04).** `make backup ENV=prod CHECK=1` reported 6 changes on each of kubelab-vps, rpi3 and rpi4; its one ignored error is the timer start. The real run gave `changed=7` on those three and `changed=0` on beelink, and a re-run gave `changed=0` on all four. `make backup-node NODE=all ENV=prod PRUNE=1`, then the ship, each returned rc 0 on all four nodes. `make backup-schedule NODE=all ENV=prod` lists `node-backup-prune.timer` armed on all four (next run 2026-10-05 around 00:01-00:04 local) and reports 0 prune failures on the three new nodes (2 on beelink, from the kill tests).
 - `--no-lock` keeps the probe's exit codes: `restic snapshots -q --no-lock` exits **10** on a prefix with no repository and **0** on beelink's, so the first-ship `init` path is unchanged.
 
+## PR 4c: the isolation probe, before the migration
+
+2026-10-07, `make backup-isolation-probe ENV=prod` from the branch, with `own_bucket_nodes: []` and the four node buckets empty. Exit 1, as designed. Its eight failure lines were exactly the expected ones: four for nodes not declared, and four for buckets with nothing under `data/`. No cross-node request produced a failure line. So R2 refused all 24 cross requests (4 x 3 ordered pairs, list and delete, each with the minted node pairs) with `AccessDenied`. That is the scope half of AC3, measured live. The lock half waits for the sitting, because there is no pack yet for the lock to refuse a delete of.
+
+Seven mutations of `backup_isolation.py`. Six each turned a test red: accepting any refusal reason (cross), accepting any refusal reason (own), not failing on an empty prefix, taking the oldest pack instead of the youngest, deleting a real key across nodes, and skipping the declaration check. The seventh, dropping the `rc == 0` branches, is equivalent: an accepted request still fails as "not refused for the right reason".
+
+After the first PR-Agent pass the own delete moved behind two guards, so it is attempted only where it can only be refused. The bucket's lock rules are read with the admin token and must hold `data/` by age for at least R, and the youngest pack must be more than a day inside R. Re-run live on 2026-10-07: still `24 of 24 cross-node requests refused with AccessDenied`. The lock read passed on all four buckets, since each reached its listing and failed only on the empty `data/`. Eight more mutations, each red: the guard not skipping the delete, `enabled` ignored, R ignored, an API failure tolerated, no safety margin, no age check, and picking the youngest by string instead of by instant. A type check on `Age` was dropped as redundant, because only an `Age` condition carries `maxAgeSeconds`.
+
 ## Test status
 
 - Test suite: `<command> -> <output / coverage %>`
