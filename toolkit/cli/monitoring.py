@@ -305,7 +305,10 @@ def import_cmd() -> None:
 
 
 @app.command("apply")
-def apply_cmd() -> None:
+def apply_cmd(
+    check: bool = typer.Option(False, "--check", help="Print the sync plan and write nothing."),
+    prune: bool = typer.Option(False, "--prune", help="Delete live monitors the seed does not declare."),
+) -> None:
     """Declarative sync: apply monitors from seed JSON to Uptime Kuma.
 
     Converges the live instance onto the seed by UPSERTING. Monitors are matched
@@ -321,7 +324,7 @@ def apply_cmd() -> None:
     config-as-code file drifts from the instance it is supposed to describe.
     """
     settings = get_settings()
-    apply_monitors(settings.project_root)
+    apply_monitors(settings.project_root, check=check, prune=prune)
 
 
 @app.command("bootstrap")

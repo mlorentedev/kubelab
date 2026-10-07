@@ -276,7 +276,7 @@ def _assert_deleted(api: UptimeKumaApi, deleted_ids: list[int], timeout: float =
     logger.success(f"Deleted {len(deleted_ids)} monitor(s), confirmed gone")
 
 
-def apply_monitors(project_root: Path) -> None:
+def apply_monitors(project_root: Path, *, check: bool = False, prune: bool = False) -> None:
     """Declarative sync: converge the live instance onto the seed by upserting.
 
     The seed JSON is the source of truth. Monitors are matched by an immutable
@@ -288,6 +288,11 @@ def apply_monitors(project_root: Path) -> None:
     stay on the dashboard but never get the default notification attached —
     the always-on rpi3 prober watches several on-demand homelab targets, and
     those read DOWN correctly whenever the homelab is off (#912).
+
+    The plan is printed monitor by monitor before anything is written (MON-012,
+    #2078). `check` stops there. A plan that deletes is refused unless `prune` is
+    given: a monitor made by hand in the UI matches no seed entry, and deleting it
+    takes its uptime history, which no later apply can restore.
     """
     api, info = _connect(project_root)
 
@@ -315,23 +320,6 @@ def apply_monitors(project_root: Path) -> None:
         declares_push = any(m.get("type") == PUSH_MONITOR_TYPE for m in seed_monitors)
         seed_monitors = hydrate_push_tokens(seed_monitors, _get_push_tokens(project_root) if declares_push else {})
 
-        # Ensure tags exist (from SSOT tags.json)
-        tags_path = export_dir / TAGS_FILE
-        tag_id_map: dict[str, int] = {}
-        if tags_path.exists():
-            seed_tags = json.loads(tags_path.read_text())
-            existing_tags = {t["name"]: t["id"] for t in api.get_tags()}
-            for t in seed_tags:
-                if t["name"] in existing_tags:
-                    tag_id_map[t["name"]] = existing_tags[t["name"]]
-                else:
-                    try:
-                        result = api.add_tag(name=t["name"], color=t["color"])
-                        tag_id_map[t["name"]] = result["id"]
-                    except Exception:
-                        pass
-            logger.success(f"Tags ready: {len(tag_id_map)} ({', '.join(tag_id_map)})")
-
         # Get default notification ID for linking — read before the diff, since
         # the diff needs to know whether there is anything to converge toward.
         default_notif_ids = [n["id"] for n in api.get_notifications() if n.get("isDefault")]
@@ -351,6 +339,40 @@ def apply_monitors(project_root: Path) -> None:
             f"Sync plan: {len(to_create)} create, {len(to_edit)} edit, "
             f"{len(to_delete)} delete (live={len(live)}, seed={len(seed_monitors)})"
         )
+        for m in to_create:
+            logger.info(f"  create '{m.get('name')}' (key={m.get('key')})")
+        for m in to_edit:
+            logger.info(f"  edit   '{m.get('name')}' (id={m['id']})")
+        for m in to_delete:
+            logger.info(f"  delete '{m.get('name')}' (id={m['id']})")
+
+        if check:
+            logger.info("CHECK: nothing written")
+            return
+        if to_delete and not prune:
+            names = ", ".join(f"'{m.get('name')}' (id={m['id']})" for m in to_delete)
+            logger.error(
+                f"Refusing to delete {len(to_delete)} monitor(s) the seed does not declare: {names}. "
+                "Declare them in the seed, or re-run with PRUNE=1 to delete them and their history."
+            )
+            raise SystemExit(1)
+
+        # Ensure tags exist (from SSOT tags.json)
+        tags_path = export_dir / TAGS_FILE
+        tag_id_map: dict[str, int] = {}
+        if tags_path.exists():
+            seed_tags = json.loads(tags_path.read_text())
+            existing_tags = {t["name"]: t["id"] for t in api.get_tags()}
+            for t in seed_tags:
+                if t["name"] in existing_tags:
+                    tag_id_map[t["name"]] = existing_tags[t["name"]]
+                else:
+                    try:
+                        result = api.add_tag(name=t["name"], color=t["color"])
+                        tag_id_map[t["name"]] = result["id"]
+                    except Exception:
+                        pass
+            logger.success(f"Tags ready: {len(tag_id_map)} ({', '.join(tag_id_map)})")
 
         # Deletes only for monitors the seed dropped — never the whole set. The
         # previous implementation deleted all 31 and recreated them, discarding

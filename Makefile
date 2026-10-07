@@ -62,7 +62,7 @@ help:
 	@echo "Monitoring (Uptime Kuma):"
 	@echo "  make monitoring-export   Export monitors to JSON (config-as-code)"
 	@echo "  make monitoring-import   Import monitors from JSON seed"
-	@echo "  make monitoring-apply     Apply monitors from seed JSON (declarative sync)"
+	@echo "  make monitoring-apply     Apply monitors from seed JSON (CHECK=1 plan only, PRUNE=1 allow deletes)"
 	@echo "  make monitoring-bootstrap Bootstrap fresh Uptime Kuma (admin + import)"
 	@echo "  make monitoring-status   Check Uptime Kuma status on RPi3"
 	@echo ""
@@ -458,8 +458,8 @@ monitoring-import:
 	@$(TOOLKIT) monitoring import
 
 .PHONY: monitoring-apply
-monitoring-apply:
-	@$(TOOLKIT) monitoring apply
+monitoring-apply: ## Sync monitors from the seed (CHECK=1 prints the plan only, PRUNE=1 allows deletes)
+	@$(TOOLKIT) monitoring apply $(if $(CHECK),--check,) $(if $(PRUNE),--prune,)
 
 .PHONY: monitoring-bootstrap
 monitoring-bootstrap:
