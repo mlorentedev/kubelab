@@ -212,9 +212,9 @@ def test_every_written_secret_is_read_back_somewhere(path: str) -> None:
 # ── every playbook with more than one store, judged against what each store holds (#1975) ──
 
 
-def _holds(env: str, dotted: str) -> bool:
-    """Whether `common + env` carries the key, read from the committed SOPS files."""
-    for name in ("common", env):
+def _holds(layers: tuple[str, ...], dotted: str) -> bool:
+    """Whether any of the store's files carries the key, read from the committed SOPS files."""
+    for name in layers:
         node = yaml.safe_load((SECRETS / f"{name}.enc.yaml").read_text(encoding="utf-8"))
         for part in dotted.split("."):
             node = node.get(part) if isinstance(node, dict) else None
@@ -223,23 +223,48 @@ def _holds(env: str, dotted: str) -> bool:
     return False
 
 
+def _flat(tasks: list) -> list[dict]:
+    """Tasks with every `block`/`rescue`/`always` opened, so a chain built inside a
+    block is seen like an inline one."""
+    flat: list[dict] = []
+    for task in tasks or []:
+        flat.append(task)
+        for key in ("block", "rescue", "always"):
+            flat.extend(_flat(task.get(key) or []))
+    return flat
+
+
+COMMON = re.compile(r"sops -d\s+.*?/common\.enc\.yaml")
+
+
 def _stores(play: dict) -> dict[str, str]:
     """store fact -> the play variable naming its environment, by the same
     decrypt-register-set_fact chain `_store_for_env_var` follows."""
-    tasks = (play.get("pre_tasks") or []) + (play.get("tasks") or [])
+    return {store: env_var for store, (env_var, _) in _store_layers(play).items()}
+
+
+def _store_layers(play: dict) -> dict[str, tuple[str, bool]]:
+    """store fact -> (its environment variable, whether it also merges common)."""
+    tasks = _flat((play.get("pre_tasks") or []) + (play.get("tasks") or []) + (play.get("post_tasks") or []))
     register_for_env: dict[str, str] = {}
+    common_registers: set[str] = set()
     for task in tasks:
         command = task.get("command") or task.get("ansible.builtin.command")
-        if isinstance(command, str) and (found := DECRYPT.search(command)) and task.get("register"):
+        if not (isinstance(command, str) and task.get("register")):
+            continue
+        if found := DECRYPT.search(command):
             register_for_env[found.group(1)] = task["register"]
-    stores: dict[str, str] = {}
+        elif COMMON.search(command):
+            common_registers.add(task["register"])
+    stores: dict[str, tuple[str, bool]] = {}
     for task in tasks:
         fact = task.get("set_fact") or task.get("ansible.builtin.set_fact")
         if isinstance(fact, dict):
             for store, expression in fact.items():
                 for env_var, register in register_for_env.items():
                     if f"{register}.stdout" in str(expression):
-                        stores[store] = env_var
+                        merges_common = any(f"{r}.stdout" in str(expression) for r in common_registers)
+                        stores[store] = (env_var, merges_common)
     return stores
 
 
@@ -269,13 +294,16 @@ def test_every_read_uses_a_store_that_holds_that_secret(playbook: str, play: dic
     dumped = yaml.safe_dump(play, width=float("inf"))
     checked = sorted({(store, path) for store, path in READ.findall(dumped) if store in stores})
     assert checked, f"{playbook}: no read from {sorted(stores)} found, so the parser stopped matching"
+    layers = _store_layers(play)
     wrong: list[str] = []
     for store, path in checked:
-        env = declared.get(stores[store])
-        if not isinstance(env, str):
-            wrong.append(f"{store}.{path}: the play declares no `{stores[store]}` in its vars")
-        elif not _holds(env, path):
-            wrong.append(f"{store}.{path}: `{store}` is common + {env}, and neither file holds that key")
+        env_var, merges_common = layers[store]
+        env = declared.get(env_var)
+        files = (("common",) if merges_common else ()) + (env,) if isinstance(env, str) else ()
+        if not files:
+            wrong.append(f"{store}.{path}: the play declares no `{env_var}` in its vars")
+        elif not _holds(files, path):
+            wrong.append(f"{store}.{path}: `{store}` is {' + '.join(files)}, and none of them holds that key")
     assert not wrong, (
         f"{playbook} reads secrets from a store that does not hold them:\n  "
         + "\n  ".join(wrong)
