@@ -211,6 +211,20 @@
   when: node_backup_location == 'on-demand'
   notify: Reload systemd (node_backup)
 
+# BACKUP-052 moved the receipt and the marker out of /var/log. Every boot's
+# read-back clears both, so whatever is still at the old paths was already read,
+# or is from a boot whose read-back never ran. Removing it leaves no stale file
+# that a later revision could read as this node's outcome. Absence is the
+# benign reading: no shutdown sequence ran.
+- name: Remove the shutdown receipt and marker from their pre-BACKUP-052 paths
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /var/log/node-backup-shutdown.receipt
+    - /var/log/node-backup-shutdown.attempted
+  when: node_backup_location == 'on-demand'
+
 # Reload now rather than at end-of-play: the enable/start tasks below need
 # systemd to have already loaded whatever changed above, in this same run —
 # `systemctl start` (unlike `enable`) acts on the daemon's loaded definition,

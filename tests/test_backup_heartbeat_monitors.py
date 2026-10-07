@@ -459,3 +459,50 @@ def test_the_receipt_survives_the_capture_that_wipes_staging() -> None:
         f"the receipt lives under {staging}, which capture wipes on every run — the "
         f"boot capture would delete the evidence before reading it"
     )
+
+
+def _maintenance_swept_roots() -> list[str]:
+    """Every directory the maintenance script deletes from, by `find` or `rm -rf`."""
+    import re as _re
+
+    script = (REPO / "infra/ansible/roles/node_maintenance/templates/kubelab-maintenance.sh.j2").read_text(
+        encoding="utf-8"
+    )
+    roots = _re.findall(r"^\s*find\s+(/\S+)", script, _re.MULTILINE)
+    roots += [p.rstrip("/*") for p in _re.findall(r"^\s*rm\s+-rf\s+(/\S+)", script, _re.MULTILINE)]
+    return roots
+
+
+@pytest.mark.parametrize("key", ["node_backup_shutdown_receipt", "node_backup_shutdown_attempt_marker"])
+def test_the_shutdown_evidence_is_in_a_directory_the_role_owns(key: str) -> None:
+    """Absence is this control's signal, so nothing else may be able to cause it (BACKUP-052).
+
+    Both files used to live in /var/log and survived the maintenance cleanup
+    only because none of its patterns happened to match them. A new pattern, a
+    logrotate rule or a rename ending in `.log` would delete them, and a
+    deleted receipt reads exactly like a shutdown that did not ship. So they
+    live in the directory the role creates root-only, which no sweep names.
+    """
+    defaults = yaml.safe_load((REPO / "infra/ansible/roles/node_backup/defaults/main.yml").read_text())
+    path = str(defaults[key])
+    owned = str(defaults["node_backup_repository_id_dir"])
+    assert pathlib.PurePosixPath(path).parent == pathlib.PurePosixPath(owned), (
+        f"{key} is {path}, outside {owned}, the root-only directory the role creates"
+    )
+    roots = _maintenance_swept_roots()
+    assert "/var/log" in roots, "the sweep parser no longer sees the /var/log cleanup, so it proves nothing"
+    swept = [r for r in roots if path == r or path.startswith(r.rstrip("/") + "/")]
+    assert not swept, f"{key} is under {swept}, which the maintenance cleanup deletes from"
+
+
+def test_the_role_removes_the_evidence_left_at_the_old_paths() -> None:
+    """Ansible is additive: moving a path leaves the old file unless a task removes it (BACKUP-052)."""
+    tasks = yaml.safe_load((REPO / "infra/ansible/roles/node_backup/tasks/main.yml").read_text(encoding="utf-8"))
+    removed = {
+        item
+        for task in tasks
+        if isinstance(task, dict) and (task.get("file") or {}).get("state") == "absent"
+        for item in task.get("loop") or []
+    }
+    for old in ("/var/log/node-backup-shutdown.receipt", "/var/log/node-backup-shutdown.attempted"):
+        assert old in removed, f"{old} is never removed, so a stale file outlives the move"
