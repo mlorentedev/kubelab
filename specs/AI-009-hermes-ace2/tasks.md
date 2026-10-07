@@ -81,8 +81,8 @@ Inventoried 2026-10-01 against every surface an existing node-hosted service is 
 
 - [ ] [P] [AC9] Test: the bridge service is on the system daemon, bound to the Docker network only (no published port), with a read-only mount of a vault checkout owned by root and refreshed by the unit, never the agent's clone.
 - [ ] [AC9] `mcpo` (pinned) with two servers: a filesystem-read MCP over the vault checkout, and a Drive MCP with `drive.readonly`. Open WebUI tool servers point at it.
-- [ ] [AC9] Open WebUI RAG env: `RAG_EMBEDDING_ENGINE=openai`, `RAG_OPENAI_API_BASE_URL=https://api.nan.builders/v1`, `RAG_EMBEDDING_MODEL=qwen3-embedding`, `RAG_EXTERNAL_RERANKER_URL=https://api.nan.builders/v1/rerank`, vector store left at the default.
-- [ ] [AC9] Measure R5: one embedding call with `dimensions: 1024`; record the returned length.
+- [x] [AC9] Open WebUI RAG env: `RAG_EMBEDDING_ENGINE=openai`, `RAG_OPENAI_API_BASE_URL=https://api.nan.builders/v1`, `RAG_EMBEDDING_MODEL=qwen3-embedding`, `RAG_EXTERNAL_RERANKER_URL=https://api.nan.builders/v1/rerank`, vector store left at the default. ✓ 2026-10-07 (PR 5a; also `ENABLE_RAG_HYBRID_SEARCH=true`, without which v0.11.4 never calls the reranker; verification.md)
+- [x] [AC9] Measure R5: one embedding call with `dimensions: 1024`; record the returned length. ✓ 2026-10-07 (PR 5a: 1024 with it, 4096 without; verification.md)
 - [ ] [AC9] Live: upload a document, ask about it, see the citation and the NaN calls in the log.
 
 ### PR 6 — backup

@@ -1938,6 +1938,14 @@ apps:
         # ADR-068 D1: at most 1.5 GB per service, so the dev node keeps 4 GB free.
         memory_limit: 1536m
         cpu_limit: "2.0"
+        # Retrieval over uploaded documents (ADR-068 D5), on NaN's models and
+        # key, so no embedding model loads into the container. v0.11.4 sends no
+        # `dimensions`, so NaN returns 4096-wide vectors; Chroma takes any width.
+        # A batch of 16 was measured to answer (spec verification.md, PR 5a).
+        rag:
+          embedding_model: qwen3-embedding
+          embedding_batch_size: 16
+          reranking_model: rerank
       hermes_kubelab:
         # The agent (ADR-068 D2). Its sessions, memory and vault clone live only
         # on ace2, and a second instance would fork them.

@@ -58,7 +58,7 @@
   {
     "id": "AI-009-hermes-ace2-f9",
     "behavior": "Open WebUI embeds and reranks through NaN and the bridge mounts the vault read-only (AC9)",
-    "verification": "poetry run pytest --no-cov -q tests/test_agent_stack_role.py -k 'rag or bridge'",
+    "verification": "poetry run pytest --no-cov -q tests/test_open_webui_rag.py tests/test_agent_stack_role.py -k 'rag or bridge'",
     "state": "pending",
     "evidence": ""
   },
