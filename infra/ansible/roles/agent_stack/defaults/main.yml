@@ -12,7 +12,8 @@ agent_stack_webui_project: agent-stack-webui
 #   agent_stack_webui (the apps.services.ai.open_webui
 #   map), agent_stack_webui_oidc_client_id, agent_stack_oidc_issuer,
 #   agent_stack_webui_admin_email,
-#   agent_stack_agent_user, agent_stack_agent_probe_image, and
+#   agent_stack_agent_user, agent_stack_agent_probe_image,
+#   agent_stack_hermes (the apps.services.ai.hermes_kubelab map), and
 #   agent_stack_protected_paths (what the agent must fail to read).
 
 # Delivered from prod SOPS by the playbook. Empty means "not configured": the
@@ -51,6 +52,9 @@ agent_stack_agent_subid_count: 65536
 # system socket, which is root on the host. tests/test_agent_user_role.py fails
 # if anything in this role can render that one.
 agent_stack_agent_docker_host: "unix:///run/user/{{ _agent_stack_agent_uid }}/docker.sock"
+agent_stack_agent_daemon_env:
+  DOCKER_HOST: "{{ agent_stack_agent_docker_host }}"
+  XDG_RUNTIME_DIR: "/run/user/{{ _agent_stack_agent_uid }}"
 
 # Declared rather than left to docker-ce's Recommends: the setup tool ships in
 # docker-ce-rootless-extras, newuidmap/newgidmap in uidmap, and the user's
@@ -66,3 +70,28 @@ agent_stack_rootless_packages:
 
 agent_stack_agent_probe_memory: 64m
 agent_stack_agent_probe_cpus: "0.5"
+
+# hermes-kubelab (ADR-068 D2, spec PR 3). `agent_stack_hermes` is the
+# apps.services.ai.hermes_kubelab map, set by the playbook.
+agent_stack_hermes_project: agent-stack-hermes
+# Mounted at the same path inside the gateway: it computes the host side of
+# every sandbox mount from its own view of this directory.
+agent_stack_hermes_home: "{{ agent_stack_agent_home }}/data"
+# Beside the data directory, not in it: the gateway's container sees only the
+# data directory, so neither file is readable from inside it.
+agent_stack_hermes_env: "{{ agent_stack_agent_home }}/hermes.env"
+agent_stack_hermes_compose: "{{ agent_stack_agent_home }}/compose-hermes.yml"
+# Mounted read-only over the data directory's config.yaml. At every start the
+# image hands that file to its runtime user and runs a migration that may
+# rewrite it (v2026.9.24 stage2-hook.sh), so a file in the data directory would
+# be the agent's to edit, approvals included, and would drift from this role.
+agent_stack_hermes_config: "{{ agent_stack_agent_home }}/hermes-config.yaml"
+# The inference key is the only secret Hermes cannot start without. Missing, it
+# is not started, and a previous one is taken down.
+agent_stack_hermes_configured: "{{ agent_stack_nan_api_key | length > 0 }}"
+# The commands Hermes never runs. The file is the list; tests/test_hermes_config.py
+# proves each glob blocks what its rule names.
+agent_stack_deny_rules: "{{ (lookup('ansible.builtin.file', role_path ~ '/files/guardrails-denylist.yaml') | from_yaml).rules }}"
+# `hermes approvals test`: what the gateway would do with a command, without
+# running it (exit 3 for a deny, so the tasks read the verdict, not the code).
+_agent_stack_hermes_evaluate: [docker, exec, -u, hermes, hermes-kubelab, hermes, approvals, test, --env-type, docker, --json, "--"]

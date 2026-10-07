@@ -1,9 +1,10 @@
 # DNS, VPN mesh and host networking
 
-47 lessons, newest first. Back to [all categories](../_index.md).
+48 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 525 | [A container on a tailnet node reaches the tailnet as that node](lesson-525-a-container-on-a-tailnet-node-leaves-as-that-node.md) | 2026-10-06 |
 | 472 | [A CoreDNS regex rewrite without `answer auto` resolves on musl and fails on glibc](lesson-472-a-coredns-rewrite-without-answer-auto-resolves-on-musl-only.md) | 2026-09-27 |
 | 449 | [A declared public domain nothing serves becomes a ticket to publish it](lesson-449-a-declared-public-domain-nothing-serves-becomes-a-ticket-to-publish-it.md) | 2026-09-02 |
 | 393 | [A public apex name makes an IP allow-list block the legitimate users](lesson-393-a-public-apex-name-makes-an-ip-allowlist-block-the-legitimate-users.md) | 2026-08-24 |

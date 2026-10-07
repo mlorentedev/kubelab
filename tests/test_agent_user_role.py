@@ -20,6 +20,7 @@ PLAYBOOK = REPO / "infra/ansible/playbooks/provision-ace2.yml"
 COMMON = REPO / "infra/config/values/common.yaml"
 
 ROOTFUL_SOCKETS = ("/var/run/docker.sock", "/run/docker.sock")
+USER_SOCKET_MOUNT = "/run/user/{{ _agent_stack_agent_uid }}/docker.sock:/var/run/docker.sock"
 
 
 def _defaults() -> dict:
@@ -91,7 +92,11 @@ def test_no_file_in_the_role_can_render_the_rootful_socket() -> None:
     so a hardcoded socket there would bypass the default this test pins.
     """
     for path in [ROLE / "defaults/main.yml", *(ROLE / "templates").glob("*"), *(ROLE / "tasks").glob("*.yml")]:
-        text = path.read_text()
+        # One exemption, spelled out whole: the gateway's compose mounts the
+        # user's socket AT the rootful path inside its container, the one place
+        # the image looks for a socket to join the group of. The host side,
+        # the only side that decides which daemon answers, is the user's own.
+        text = path.read_text().replace(USER_SOCKET_MOUNT, "")
         for socket in ROOTFUL_SOCKETS:
             assert socket not in text, f"{path.relative_to(REPO)} names {socket}"
 

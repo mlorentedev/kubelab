@@ -1,0 +1,157 @@
+---
+# =============================================================================
+# hermes-kubelab (ADR-068 D2, spec AI-009 PR 3): the gateway on the agent's
+# rootless daemon, from agent_user.yml. Every docker call below runs as the
+# agent's user against its own socket.
+#
+# The last block is the measurement: the deny list is read back through the
+# running gateway's own evaluator. A config Hermes failed to load leaves the
+# list empty without stopping it (measured 2026-10-06 on v2026.9.24), and with
+# no host path in the sandbox that list is the only command guard it applies.
+# =============================================================================
+
+- name: Stop hermes-kubelab when it is not configured
+  when: not (agent_stack_hermes_configured | bool)
+  block:
+    - name: Look for a previously deployed hermes-kubelab
+      ansible.builtin.stat:
+        path: "{{ agent_stack_hermes_compose }}"
+      register: _agent_stack_hermes_prior
+
+    - name: Take the previous hermes-kubelab down
+      ansible.builtin.command: >-
+        docker compose -p {{ agent_stack_hermes_project }} -f {{ agent_stack_hermes_compose }} down
+      become_user: "{{ agent_stack_agent_user }}"
+      environment: "{{ agent_stack_agent_daemon_env }}"
+      when: _agent_stack_hermes_prior.stat.exists
+      register: _agent_stack_hermes_down
+      changed_when: "'Removed' in _agent_stack_hermes_down.stderr or 'Stopped' in _agent_stack_hermes_down.stderr"
+
+    # The secret-bearing env file must not outlive the service. The data stays.
+    - name: Remove the rendered hermes-kubelab files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ agent_stack_hermes_compose }}"
+        - "{{ agent_stack_hermes_env }}"
+
+- name: Deploy hermes-kubelab
+  when: agent_stack_hermes_configured | bool
+  block:
+    # The API key only Open WebUI needs to know, both on this node: generated
+    # here once, like Open WebUI's session key, so it never sits in SOPS.
+    - name: Generate the Hermes API key once
+      ansible.builtin.shell:
+        cmd: umask 077 && openssl rand -hex 32 > {{ agent_stack_dir }}/hermes-api-key
+        creates: "{{ agent_stack_dir }}/hermes-api-key"
+
+    - name: Read the Hermes API key
+      ansible.builtin.slurp:
+        src: "{{ agent_stack_dir }}/hermes-api-key"
+      register: _agent_stack_hermes_key_file
+      no_log: true
+
+    - name: Hold the API key for the env template
+      ansible.builtin.set_fact:
+        _agent_stack_hermes_api_key: "{{ _agent_stack_hermes_key_file.content | b64decode | trim }}"
+      no_log: true
+
+    # Created once and then left alone: the image hands the directory to its
+    # own runtime user at every start, so enforcing an owner here would undo
+    # that at every provision and report a change each time.
+    - name: Create the Hermes data directory
+      ansible.builtin.command:
+        cmd: install -d -o {{ agent_stack_agent_user }} -g {{ agent_stack_agent_user }} -m 0700 {{ agent_stack_hermes_home }}
+        creates: "{{ agent_stack_hermes_home }}"
+
+    - name: Render the hermes-kubelab env file
+      ansible.builtin.template:
+        src: hermes.env.j2
+        dest: "{{ agent_stack_hermes_env }}"
+        owner: "{{ agent_stack_agent_user }}"
+        group: "{{ agent_stack_agent_user }}"
+        mode: "0600"
+      register: _agent_stack_hermes_env_file
+      no_log: true
+
+    # Outside the data directory and mounted read-only (see the role defaults):
+    # the gateway reads it and can neither rewrite its approvals nor migrate it.
+    - name: Render the hermes-kubelab config
+      ansible.builtin.template:
+        src: hermes-config.yaml.j2
+        dest: "{{ agent_stack_hermes_config }}"
+        owner: "{{ agent_stack_agent_user }}"
+        group: "{{ agent_stack_agent_user }}"
+        mode: "0644"
+      register: _agent_stack_hermes_config
+
+    - name: Render the hermes-kubelab Compose project
+      ansible.builtin.template:
+        src: compose-hermes.yml.j2
+        dest: "{{ agent_stack_hermes_compose }}"
+        owner: "{{ agent_stack_agent_user }}"
+        group: "{{ agent_stack_agent_user }}"
+        mode: "0644"
+
+    - name: Pull the hermes-kubelab images
+      ansible.builtin.command: >-
+        docker {{ item }}
+      loop:
+        - compose -p {{ agent_stack_hermes_project }} -f {{ agent_stack_hermes_compose }} pull
+        # The sandbox image is pulled now rather than at the first command,
+        # which would otherwise wait on a multi-hundred-megabyte download.
+        - pull {{ agent_stack_hermes.sandbox.image }}
+      become_user: "{{ agent_stack_agent_user }}"
+      environment: "{{ agent_stack_agent_daemon_env }}"
+      register: _agent_stack_hermes_pull
+      changed_when: >-
+        'Pull complete' in _agent_stack_hermes_pull.stderr
+        or 'Downloaded newer image' in _agent_stack_hermes_pull.stdout
+
+    # Neither an env_file nor a mounted config is in Compose's spec hash.
+    - name: Start hermes-kubelab
+      ansible.builtin.command: >-
+        docker compose -p {{ agent_stack_hermes_project }} -f {{ agent_stack_hermes_compose }} up -d
+        {{ '--force-recreate' if (_agent_stack_hermes_env_file.changed or _agent_stack_hermes_config.changed) else '' }}
+      become_user: "{{ agent_stack_agent_user }}"
+      environment: "{{ agent_stack_agent_daemon_env }}"
+      register: _agent_stack_hermes_up
+      changed_when: "'Started' in _agent_stack_hermes_up.stderr or 'Created' in _agent_stack_hermes_up.stderr"
+
+    - name: Verify the Hermes API answers on loopback with its key
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ agent_stack_hermes.api_port }}/v1/models"
+        headers:
+          Authorization: "Bearer {{ _agent_stack_hermes_api_key }}"
+        status_code: 200
+        timeout: 10
+      register: _agent_stack_hermes_api
+      until: _agent_stack_hermes_api.status == 200
+      retries: 30
+      delay: 5
+      no_log: true
+
+    # One command each rule must refuse, and every command a rule lets through,
+    # read through the gateway's own evaluator as the gateway's own user.
+    - name: Evaluate a command each deny rule must refuse
+      ansible.builtin.command:
+        argv: "{{ _agent_stack_hermes_evaluate + item.split() }}"
+      become_user: "{{ agent_stack_agent_user }}"
+      environment: "{{ agent_stack_agent_daemon_env }}"
+      loop: "{{ agent_stack_deny_rules | map(attribute='blocks') | map('first') | list }}"
+      register: _agent_stack_hermes_refused
+      changed_when: false
+      failed_when: (_agent_stack_hermes_refused.stdout | from_json).verdict != 'user-deny'
+      check_mode: false
+
+    - name: Evaluate every command the deny rules let through
+      ansible.builtin.command:
+        argv: "{{ _agent_stack_hermes_evaluate + item.split() }}"
+      become_user: "{{ agent_stack_agent_user }}"
+      environment: "{{ agent_stack_agent_daemon_env }}"
+      loop: "{{ agent_stack_deny_rules | map(attribute='allows') | flatten }}"
+      register: _agent_stack_hermes_allowed
+      changed_when: false
+      failed_when: (_agent_stack_hermes_allowed.stdout | from_json).verdict != 'allow'
+      check_mode: false

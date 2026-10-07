@@ -1,0 +1,36 @@
+# {{ ansible_managed }}
+# hermes-kubelab on ace2 (ADR-068 D2, spec AI-009-hermes-ace2).
+#
+# On the AGENT's rootless daemon, never the system one: the socket mounted below
+# is root inside the agent's user namespace only, so the sandboxes the gateway
+# starts through it are too.
+services:
+  hermes:
+    image: {{ agent_stack_hermes.image }}
+    container_name: hermes-kubelab
+    restart: unless-stopped
+    command: ["gateway", "run"]
+    env_file:
+      - {{ agent_stack_hermes_env }}
+    environment:
+      HERMES_HOME: {{ agent_stack_hermes_home }}
+    # The image is its own init (s6-overlay must be PID 1), so no `init: true`.
+    volumes:
+      # The same path on both sides. The gateway computes the host side of every
+      # sandbox mount from its own view of HERMES_HOME, and the daemon resolves
+      # that path on the host, so a different path inside would mount nothing.
+      - {{ agent_stack_hermes_home }}:{{ agent_stack_hermes_home }}
+      # Read-only over the image's own copy, which it would hand to its runtime user.
+      - {{ agent_stack_hermes_config }}:{{ agent_stack_hermes_home }}/config.yaml:ro
+      # Where the image looks for a socket to join the group of.
+      - /run/user/{{ _agent_stack_agent_uid }}/docker.sock:/var/run/docker.sock
+    # Loopback only: Open WebUI reaches it from the host, nothing else does.
+    ports:
+      - "127.0.0.1:{{ agent_stack_hermes.api_port }}:{{ agent_stack_hermes.api_port }}"
+    mem_limit: {{ agent_stack_hermes.memory_limit }}
+    cpus: {{ agent_stack_hermes.cpu_limit }}
+    # agent_stack_docker_dns_servers: MagicDNS first (see the role defaults).
+    dns:
+{% for server in agent_stack_docker_dns_servers %}
+      - {{ server }}
+{% endfor %}
