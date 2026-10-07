@@ -30,6 +30,7 @@ import yaml
 from toolkit.features import backup_node_credentials as bnc
 from toolkit.features.backup_destination import (
     node_repository,
+    node_restic,
     node_secret_paths,
     own_bucket_nodes,
     render_watcher_targets,
@@ -270,3 +271,36 @@ def test_the_playbook_keeps_an_undeclared_node_on_the_shared_bucket() -> None:
         "node_backup_r2_access_key": "shared-access",
         "node_backup_r2_secret_key": "shared-secret",
     }
+
+
+# ── the drills and the coverage report: what they read R2 with ────────────────
+
+
+class _CM:
+    """Stands in for ConfigurationManager: records each SOPS path read, returns a value named after it."""
+
+    def __init__(self, config: dict[str, Any]) -> None:
+        self.config, self.asked = config, []
+
+    def get_merged_config(self) -> dict[str, Any]:
+        return self.config
+
+    def get_secret_by_path(self, path: str) -> str:
+        self.asked.append(path)
+        return f"value-of-{path}"
+
+
+def test_a_drill_reads_a_migrated_node_with_its_own_pair_and_password() -> None:
+    cm = _CM(MIGRATED)
+    repo, env = node_restic(cm, "rpi3")
+    assert repo == f"s3:{R2['endpoint']}/{node_bucket('rpi3')}"
+    assert set(cm.asked) == {access_key_path("rpi3"), secret_key_path("rpi3"), restic_password_path("rpi3")}
+    assert env["RESTIC_PASSWORD"] == f"value-of-{restic_password_path('rpi3')}"
+    assert env["AWS_ACCESS_KEY_ID"] == f"value-of-{access_key_path('rpi3')}"
+
+
+def test_a_drill_reads_an_undeclared_node_with_the_shared_secrets() -> None:
+    cm = _CM(COMMON)
+    repo, env = node_restic(cm, "vps")
+    assert repo == f"{R2['repo_prefix']}/kubelab-vps"
+    assert set(cm.asked) == set(SHARED_PATHS)
