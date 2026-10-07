@@ -97,7 +97,8 @@ groups:
             the bucket lock (BACKUP-057) keeps data for its retention window whatever
             `forget` decides. The fleet line's `stored_bytes` is every backup bucket listed
             at its root; each `r2_backup_node` line carries its node's prefix. `null` means
-            a listing failed: the watcher's `r2-size` init container logs why.
+            a listing failed: the reason is in the init container's stream,
+            `{container="r2-size"}`.
           runbook_url: https://github.com/mlorentedev/kubelab/blob/master/docs/runbooks/offsite-backup-restore.md#cost-and-quota
         data:
           - refId: A

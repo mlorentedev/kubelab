@@ -124,6 +124,7 @@ def test_it_sizes_each_bucket_once_and_each_node_prefix(fleet) -> None:
 def test_every_entry_records_how_long_its_listing_took(fleet) -> None:
     """The duration is AC3's evidence that the cost no longer follows the snapshot count."""
     _, entries = _run(fleet)
+    assert len(entries) == 3, entries
     for rest in entries.values():
         assert len(rest) == 2 and rest[1].isdigit(), rest
 
@@ -135,6 +136,7 @@ def test_it_reaches_r2_by_the_targets_endpoint_with_no_config_file(fleet) -> Non
     """
     fake = fleet[0]
     _run(fleet)
+    assert len(_calls(fake)) == 3, "no call, no option checked"
     for call in _calls(fake):
         assert "--json" in call and "--fast-list" in call, call
         remote = next(a for a in call.split() if a.startswith(":s3"))

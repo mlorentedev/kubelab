@@ -711,11 +711,12 @@ bucket is, so an unmeasured fleet is never read as a small one. A listing never
 fails the pod: `size.sh` always exits 0, so the health probe still runs. When it
 fires:
 
-1. Read the watcher's lines (`toolkit obs logs --env prod -q
-   '{container="r2-backup-watcher"}' --since 24h`). A `null` comes with a
-   `size unknown:` line naming the reason (the init container's own line, for
-   example an `AccessDenied`), and `size listing took Ns` says how long each
-   listing ran against `SIZE_TIMEOUT`.
+1. Read the watcher's lines, both containers (`toolkit obs logs --env prod -q
+   '{container=~"r2-backup-watcher|r2-size"}' --since 24h`). Loki labels a
+   container's logs with that container's name, so the reason a listing failed
+   (for example an `AccessDenied`) is in the `r2-size` stream, on a `size
+   unknown:` line; the probe's own stream only says the size is unknown. `size
+   listing took Ns` says how long each listing ran against `SIZE_TIMEOUT`.
 2. If the size is real, find the node that grew and check its retention ran
    (the first item below) before raising anything.
 

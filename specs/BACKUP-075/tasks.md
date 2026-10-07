@@ -33,7 +33,7 @@ created: "2026-10-06"
 
 - [x] [AC1] [AC2] Failing manifest tests: an init container named `r2-size` runs `r2-backup-watcher/size.sh` in the rclone image, with the same Secret, non-root, read-only root filesystem, no capabilities, writing to an emptyDir that the probe container mounts read-only. `activeDeadlineSeconds` and the call count are recomputed from both scripts. Expected: FAIL.
 - [x] [AC1] [AC2] Failing tests for `size.sh`, run under `sh` against a fake `rclone` on PATH (same idiom as `test_r2_backup_watcher_probe.py`): it sizes each distinct bucket root once and each node prefix once, writes one line per bucket and per node, and writes `null` for any call that fails or prints no `bytes`. Expected: FAIL.
-- [x] [AC1] [AC2] Write `size.sh` and add it to the probe ConfigMap; configure rclone by environment only (`RCLONE_CONFIG_R2_TYPE=s3`, `PROVIDER=Cloudflare`, `ENV_AUTH=true`, `ENDPOINT` from `backup.r2.endpoint`). Bucket and prefix come from each target's repository URL, so `targets.txt` keeps its format. Expected: PASS.
+- [x] [AC1] [AC2] Write `size.sh` and add it to the probe ConfigMap; configure rclone with no config file, by a connection-string remote (`:s3,provider=Cloudflare,env_auth=true,no_check_bucket=true,endpoint=...`) whose endpoint is parsed from each target's repository URL. Bucket and prefix come from each target's repository URL, so `targets.txt` keeps its format. Expected: PASS.
 
 ### Probe reads the sizes
 
