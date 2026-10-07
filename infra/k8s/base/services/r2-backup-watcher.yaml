@@ -86,10 +86,14 @@ spec:
             runAsNonRoot: true
             runAsUser: 65534
             runAsGroup: 65534
-          # BACKUP-075. size.sh always exits 0, so a failed listing can never
-          # keep the probe from running: it writes `null` and the probe reports
-          # the node unsized, never unhealthy. Only the S3 pair: listing needs
-          # no restic password.
+          # BACKUP-075. size.sh always exits 0, so a failed LISTING never keeps
+          # the probe from running: it writes `null` and the probe reports the
+          # node unsized, never unhealthy. The container itself can still fail
+          # (image pull, OOM): the pod then ends before the probe, prints no
+          # health line, and the health rule pages on no data once its 24h
+          # window empties, loud but late. `kubectl get pods` on the Job names
+          # the failed container. Only the S3 pair: listing needs no restic
+          # password.
           initContainers:
             - name: r2-size
               image: rclone/rclone

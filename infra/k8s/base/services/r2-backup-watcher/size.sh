@@ -17,10 +17,12 @@
 # packs, index and snapshot files are stored and billed too. A listing costs one
 # Class A call per 1 000 objects, whatever the history.
 #
-# It ALWAYS exits 0. An init container that fails stops the health probe from
-# running, so a sizing fault would silence the integrity alert. Every failure is
-# a `null` entry and a `size unknown:` line on stderr, never a zero, which would
-# read as "fits".
+# The script ALWAYS exits 0. An init container that fails stops the health probe
+# from running, so a listing fault would cost a health run. Every failure here
+# is a `null` entry and a `size unknown:` line on stderr, never a zero, which
+# would read as "fits". This covers the script only: a failure of the container
+# itself (image pull, OOM) still ends the pod before the probe; the manifest
+# says what pages then.
 set -u
 
 TARGETS="${WATCHER_TARGETS:-/etc/r2-backup-watcher/targets.txt}"
