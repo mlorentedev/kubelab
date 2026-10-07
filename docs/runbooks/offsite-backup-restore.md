@@ -158,42 +158,28 @@ reports an unhealthy node. Do not use `kubectl create job --from=cronjob/...`:
 that Job is owned by the CronJob, whose controller can prune a failed one,
 log included, before you read it.
 
-### Rotating the read-only token
+### Rotating the watcher's token
 
-The watcher's token is `kubelab-r2-watcher`. It is separate from the nodes' write
-token on purpose: it can list and read objects in `kubelab-backups` and nothing
-else, so a leak from the cluster cannot delete or rewrite a backup.
+The watcher reads R2 with `backup.r2.watcher.*` (BACKUP-057): Object Read on every
+`kubelab-backup-<node>` bucket and on `kubelab-backups`, nothing else. It is
+separate from the nodes' write tokens on purpose, so a leak from the cluster
+cannot delete or rewrite a backup. It is minted, not created by hand:
 
-1. Cloudflare dashboard → **R2 Object Storage** → **Manage API tokens** (top
-   right of the R2 overview) → **Create Account API token**.
-2. **Token name**: `kubelab-r2-watcher`.
-3. **Permissions**: **Object Read only**.
-4. **Specify bucket(s)**: **Apply to specific buckets only** → `kubelab-backups`.
-5. **TTL**: Forever. **Client IP Address Filtering**: leave empty (the cluster's
-   egress address is not stable).
-6. **Create API Token**. The page shows the **Access Key ID** and the **Secret
-   Access Key** once; keep the tab open for the next step.
-7. Store both halves, each from stdin so neither reaches shell history:
+```bash
+make backup-mint-node-tokens ENV=prod WATCHER=1 ROTATE=1
+make apply-secrets ENV=staging
+make apply-secrets ENV=prod
+make watcher-run NAME=r2-backup-watcher ENV=prod
+```
 
-   ```bash
-   toolkit secrets set backup.r2.readonly_access_key_id --env common --stdin
-   toolkit secrets set backup.r2.readonly_secret_access_key --env common --stdin
-   ```
+The mint verifies the new token by consequence before storing it. The token must
+list every backup bucket and be refused on `kubelab-vikunja-staging`. Only then does
+the mint revoke the old token. Four `"healthy":1` node lines and a fleet
+`"healthy":1` mean the cluster has it. The token can be re-minted, so it has no
+Bitwarden escrow: losing it loses no data.
 
-8. Push them to both clusters and re-check:
-
-   ```bash
-   make apply-secrets ENV=staging
-   make apply-secrets ENV=prod
-   ```
-
-   Then run the manual Job above in each. Four `"healthy":1` node lines and a
-   fleet `"healthy":1` mean the new token works.
-9. Only then delete the old token in the dashboard (same **Manage API tokens**
-   page → the old row → **Delete**).
-
-In the dashboard's own terms, this is the account token scope
-"Workers R2 Storage Bucket Item Read" on `kubelab-backups`.
+The pair `backup.r2.readonly_*`, made by hand in the dashboard, is read by nothing
+since BACKUP-057 PR 4a; PR 5 revokes it.
 
 ## On-demand backup stale
 
@@ -303,6 +289,52 @@ a PR, then `make sync-r2-watcher-targets`. Take the id from the watcher's
 `r2_backup_node` line (`repository_id`) or from the node's marker. Until that
 lands, the watcher reports the node `repository id changed` on purpose: accepting
 a new history is a reviewed change, not a side effect of a ship.
+
+## Moving a node into its own bucket
+
+BACKUP-057: each node ships to `kubelab-backup-<node>` with its own token and restic
+password, instead of to `kubelab-backups/<node>` with the shared ones. One node at a
+time, all four in one sitting: until a node's copy is verified, `kubelab-backups`
+holds its only copy, and that bucket has no lock.
+
+```bash
+make backup-migrate NODE=rpi3 ENV=prod CHECK=1   # lists the source; changes nothing
+make backup-migrate NODE=rpi3 ENV=prod
+```
+
+It stops at the first failure:
+
+1. **Copy.** It mints a temporary token, `kubelab-backup-migrate-<node>`: Object Read
+   on `kubelab-backups`, Object Read & Write on the node's bucket. `restic copy`
+   needs one because it reads source and destination with the same `AWS_*`, and
+   no standing pair reaches both. The token must list both buckets and be refused
+   on another node's before anything is copied. It is revoked once the copy is
+   compared, whatever happened, and it is never stored.
+2. **Compare.** Every source snapshot must have exactly one copy (its `original`).
+   A missing or doubled snapshot stops the migration, even when the counts match.
+3. **Declare.** It adds the node to `backup.r2.own_bucket_nodes` in `common.yaml`.
+4. **Deploy** (`backup`), then **re-initialise** (`backup-repo-reinit`). The deploy
+   comes first. A scheduled ship landing between them then refuses the new
+   repository and pages once, which is harmless. Re-initialising first would let it
+   record the old repository's id instead.
+5. **Ship once** (`backup-node`). The node records the copied repository's id.
+6. **Pin** that id in `backup.r2.repository_ids` and regenerate the watcher's
+   `targets.txt`.
+
+What to expect, and what to do:
+
+- **Commit** `common.yaml` and `targets.txt` in a PR when the sitting ends.
+- **Until that PR merges,** the prod watcher still reads `kubelab-backups/<node>`, which
+  has stopped growing. Its snapshot-age alert for the moved node fires on schedule.
+  That is the old target ageing, not a failed backup. The merge clears it.
+- **If a step fails after the declaration,** the node is declared and not pinned. Fix
+  the cause, then finish by hand: run the failed target and the ones after it
+  (`make backup ENV=prod`, `make backup-repo-reinit NODE=<node> DEST=r2 ENV=prod`,
+  `make backup-node NODE=<node> ENV=prod`). Then pin the id that
+  `restic cat config` reports, through the PR. Re-running `backup-migrate` refuses a
+  declared node.
+- **If the copy step fails,** re-run the migration: the copy resumes, and a
+  re-copy duplicates nothing.
 
 ## Backing up on demand
 
