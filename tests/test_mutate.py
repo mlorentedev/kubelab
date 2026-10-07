@@ -149,3 +149,15 @@ def test_an_empty_test_target_refuses_before_mutating(repo: Path, monkeypatch: p
     ran = []
     assert _cli(repo, monkeypatch, lambda *a: ran.append(a), test=test) == 2
     assert not ran
+
+
+def test_why_pytest_ran_nothing_reaches_the_operator(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A mistyped TEST is NO VERDICT; the cause is on pytest's stderr, not its stdout."""
+    from toolkit.cli import tools
+
+    said: list[str] = []
+    recorder = type("Recorder", (), {k: staticmethod(lambda m: said.append(str(m))) for k in ("info", "warning", "error")})
+    monkeypatch.setattr(tools, "logger", recorder)
+    code = _cli(repo, monkeypatch, lambda *a: mutate._PYTEST.get(a[-1](), mutate.Verdict.DID_NOT_RUN), test="does_not_exist.py")
+    assert code == mutate.Verdict.DID_NOT_RUN.exit_code
+    assert any("not found: does_not_exist.py" in line for line in said), said

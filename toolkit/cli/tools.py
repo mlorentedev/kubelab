@@ -370,6 +370,9 @@ def mutate_cmd(
         lines = result.stdout.strip().splitlines()
         for line in [ln for ln in lines if ln.startswith(("FAILED", "ERROR"))] + lines[-1:]:
             logger.info(line)
+        # pytest names why it ran nothing (a mistyped path, a usage error) on stderr.
+        for line in result.stderr.strip().splitlines()[-10:]:
+            logger.warning(line)
         return result.returncode
 
     if not shlex.split(test):
