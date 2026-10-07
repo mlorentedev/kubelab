@@ -91,6 +91,8 @@ class World:
         self.restic_env: dict[str, dict[str, str]] = {}
         self.fail: set[str] = set()
         self.values: list[tuple[str, ...]] = []
+        self.extra_vars: dict[str, dict[str, str]] = {}
+        self.regenerated: list[dict[str, Any]] = []
 
     def run(self, argv: list[str], env: dict[str, str]) -> tuple[int, str, str]:
         if argv[0] == "aws":
@@ -126,6 +128,7 @@ class World:
 
     def playbook(self, name: str, limit: str, extra_vars: dict[str, str]) -> bool:
         self.calls.append(f"ansible {name} {limit}")
+        self.extra_vars[name] = extra_vars
         return f"ansible {name}" not in self.fail
 
     def declare(self, node: str) -> None:
@@ -154,7 +157,7 @@ def _migrate(world: World, **kwargs: Any) -> bool:
         http=world.http,
         playbook=world.playbook,
         values=world,
-        regenerate=lambda config: world.calls.append("regenerate targets"),
+        regenerate=lambda config: (world.calls.append("regenerate targets"), world.regenerated.append(config)),
         sleep=lambda _s: None,
         **kwargs,
     )
@@ -179,6 +182,12 @@ def test_the_steps_run_in_order_and_the_token_dies_with_the_copy() -> None:
         "regenerate targets",
     ]
     assert ("pin", "rpi3", NEW_ID) in world.values
+    # The re-init clears R2's recorded id, not the Storage Box's.
+    assert world.extra_vars["backup-repo-reinit"] == {"dest": "r2"}
+    # The watcher targets are rendered from the moved node, not from the config as it was.
+    (rendered,) = world.regenerated
+    assert rendered["backup"]["r2"]["own_bucket_nodes"] == ["rpi3"]
+    assert rendered["backup"]["r2"]["repository_ids"]["rpi3"] == NEW_ID
 
 
 def test_a_missing_snapshot_stops_it_though_the_count_and_oldest_time_match() -> None:
@@ -195,6 +204,8 @@ def test_an_empty_source_is_not_a_verified_copy() -> None:
     assert _migrate(world) is False
     assert "DELETE token" in world.calls
     assert world.values == []
+    # The dry run predicts that refusal instead of reporting "0 snapshots would be copied".
+    assert _migrate(World([], []), check=True) is False
 
 
 @pytest.mark.parametrize("step", ["restic dst init", "restic dst copy", "restic src snapshots"])

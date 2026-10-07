@@ -285,6 +285,9 @@ def migrate(
         source = _snapshots(run, src, {**load_credentials(cm), "RESTIC_PASSWORD": str(src_password)})
         if source is None:
             return False
+        if not source:
+            logger.error(f"{src} lists no snapshots; the real run would refuse it")
+            return False
         logger.info(f"dry run: {len(source)} snapshots would be copied; nothing was minted, copied or deployed")
         return True
 
