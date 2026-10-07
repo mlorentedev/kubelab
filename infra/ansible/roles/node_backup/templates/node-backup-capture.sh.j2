@@ -177,9 +177,16 @@ capture_sqlite_{{ service }}
 
 # Everything else in the source directory, verbatim -- e.g. Headscale's
 # noise_private.key and derp_server_private.key, which are not databases but
-# are exactly as unrecoverable as one. Excludes the live db and its WAL/SHM
-# siblings: the db is already captured consistently above, and a raw copy of
-# its WAL segments belongs to a snapshot the copy cannot produce.
+# are exactly as unrecoverable as one. Leaves out the live db and its journals:
+# the db is already captured consistently above, and a raw `-wal` beside the
+# snapshot is replayed into it on open, a raw hot `-journal` rolled back into
+# it, either rewriting the snapshot with pages from another instant.
+#
+# Files and empty directories only, never a non-empty directory: `cp -a`
+# copies a directory whole, so listing `./gitea` copied the raw `gitea/gitea.db`
+# and its WAL over the snapshot staged above, whatever the filters said about
+# the file itself (#2111). `--parents` recreates the directories in between,
+# with their modes. Excluded paths are pruned, so nothing beneath them is read.
 #
 # `cd` first and match relative (./...) paths: `cp --parents` on an absolute
 # source path recreates the ENTIRE path under the destination
@@ -187,10 +194,11 @@ capture_sqlite_{{ service }}
 # verified against a scratch fixture. Relative paths preserve just the
 # source's internal structure, which is what a restore needs to reproduce.
 ( cd "$SRC_DIR_{{ service }}" && find . -mindepth 1 \
-    ! -path "./{{ src.sqlite }}" \
-    ! -path "./{{ src.sqlite }}-wal" \
-    ! -path "./{{ src.sqlite }}-shm" \
-    -exec cp -a --parents -t "$STAGING/{{ service }}" {} + )
+    \( -path "./{{ src.sqlite }}" \
+    -o -path "./{{ src.sqlite }}-wal" \
+    -o -path "./{{ src.sqlite }}-shm" \
+    -o -path "./{{ src.sqlite }}-journal" \) -prune \
+    -o \( ! -type d -o -empty \) -exec cp -a --parents -t "$STAGING/{{ service }}" {} + )
 {% endif %}
 {% endfor %}
 

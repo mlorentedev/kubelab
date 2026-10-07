@@ -22,7 +22,9 @@ The contract encoded here:
 
 from __future__ import annotations
 
+import os
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -249,10 +251,11 @@ def test_the_live_sqlite_db_is_snapshotted_with_backup_not_copied():
     assert ".dump" not in script, "`.dump` is a text export, not a consistent binary snapshot"
 
     # A plain `cp` of the live db defeats the entire point of using .backup —
-    # assert the generic copy step explicitly excludes it.
-    assert '! -path "./kuma.db"' in script
-    assert '! -path "./kuma.db-wal"' in script
-    assert '! -path "./kuma.db-shm"' in script
+    # assert the generic copy step prunes it and its journals. What the copy
+    # then stages is run, not read, in the tests after `_capture` below.
+    for suffix in ("", "-wal", "-shm", "-journal"):
+        assert f'-path "./kuma.db{suffix}"' in script
+    assert ") -prune" in script
 
 
 def test_the_snapshot_waits_out_a_contended_database_instead_of_failing():
@@ -313,6 +316,95 @@ def test_the_generic_copy_excludes_only_the_db_and_its_wal_shm_siblings():
 def test_capture_script_fails_closed_on_error():
     script = _render("node-backup-capture.sh.j2")
     assert "set -euo pipefail" in script
+
+
+# --- capture, run: what the staging directory actually holds ----------------
+#
+# The tests above read the rendered text. These run it, against a directory in
+# tmp_path, because the copy step's defect (#2111) was in what `find` and
+# `cp -a` do together, which no string assertion can see. `sqlite3` is a fake
+# that writes a marker where `.backup` would put the snapshot: what is under
+# test is whether anything overwrites it afterwards, not SQLite itself.
+
+FAKE_SQLITE3 = """#!/bin/sh
+# Called as: sqlite3 -cmd ".timeout N" <db> ".backup '<dest>'"
+dest=$(printf '%s' "$4" | sed "s/^.backup '\\(.*\\)'$/\\1/")
+printf 'SNAPSHOT of %s\\n' "$3" > "$dest"
+"""
+
+
+def _capture(tmp_path: Path, source: dict[str, object]) -> Path:
+    """Render the capture for one `path:` source at tmp_path/src, run it, return its staging dir."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "sqlite3").write_text(FAKE_SQLITE3)
+    (bin_dir / "sqlite3").chmod(0o755)
+    staging = tmp_path / "staging"
+    script = tmp_path / "capture.sh"
+    script.write_text(
+        _render(
+            "node-backup-capture.sh.j2",
+            node_backup_sources={"svc": {"path": str(tmp_path / "src"), **source}},
+            node_backup_location="always-on",
+            node_backup_staging_dir=str(staging),
+            node_backup_capture_sentinel=str(staging / ".capture-complete"),
+        )
+    )
+    env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"}
+    result = subprocess.run(["bash", str(script)], env=env, capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stderr
+    assert (staging / ".capture-complete").exists()
+    return staging / "svc"
+
+
+def _files(root: Path) -> dict[str, str]:
+    return {str(f.relative_to(root)): f.read_text() for f in sorted(root.rglob("*")) if f.is_file()}
+
+
+def _tree(tmp_path: Path, files: dict[str, str]) -> None:
+    for name, content in files.items():
+        (tmp_path / "src" / name).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / "src" / name).write_text(content)
+
+
+def test_a_database_in_a_subdirectory_keeps_its_snapshot(tmp_path: Path) -> None:
+    """beelink's Gitea is `gitea/gitea.db`: the copy listed `./gitea` and `cp -a`
+    copied it whole, raw database and WAL over the snapshot (#2111)."""
+    _tree(tmp_path, {"gitea/gitea.db": "RAW", "gitea/gitea.db-wal": "RAW WAL", "gitea/app.ini": "conf"})
+    staged = _capture(tmp_path, {"sqlite": "gitea/gitea.db"})
+    assert _files(staged) == {
+        "gitea/app.ini": "conf",
+        "gitea/gitea.db": f"SNAPSHOT of {tmp_path}/src/gitea/gitea.db\n",
+    }
+
+
+def test_no_journal_of_the_database_is_copied_raw(tmp_path: Path) -> None:
+    """A raw `-wal` beside the snapshot is replayed into it on open, and a raw hot
+    `-journal` is rolled back into it: either rewrites the consistent copy with
+    pages from another instant. Authelia's database is in rollback-journal mode."""
+    _tree(
+        tmp_path,
+        {"db.sqlite3": "RAW", "db.sqlite3-journal": "HOT", "db.sqlite3-wal": "WAL", "db.sqlite3-shm": "SHM"},
+    )
+    staged = _capture(tmp_path, {"sqlite": "db.sqlite3"})
+    assert set(_files(staged)) == {"db.sqlite3"}
+
+
+def test_the_staged_tree_keeps_its_directory_modes(tmp_path: Path) -> None:
+    """Directories are no longer copied as such; `--parents` recreates them, and must keep their modes."""
+    _tree(tmp_path, {"db": "RAW", "private/key": "secret", "private/nested/file": "x"})
+    (tmp_path / "src/private/nested").chmod(0o750)
+    (tmp_path / "src/private").chmod(0o700)
+    staged = _capture(tmp_path, {"sqlite": "db"})
+    assert (staged / "private").stat().st_mode & 0o777 == 0o700
+    assert (staged / "private/nested").stat().st_mode & 0o777 == 0o750
+
+
+def test_an_empty_directory_is_kept(tmp_path: Path) -> None:
+    """An empty directory is part of the tree a restore reproduces."""
+    _tree(tmp_path, {"db": "RAW"})
+    (tmp_path / "src/empty").mkdir()
+    assert (_capture(tmp_path, {"sqlite": "db"}) / "empty").is_dir()
 
 
 # --- ship: retention, the --check split, credentials -----------------------
