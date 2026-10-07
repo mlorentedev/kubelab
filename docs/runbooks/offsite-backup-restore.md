@@ -203,8 +203,8 @@ the watcher stopped (the health rule above is then paging too), or no node in
 
 ## R2 backup shrank
 
-`backup032-r2-backup-shrink` fires when a node's repository (`raw_bytes`) is less
-than half the size it was one probe earlier (operator decision, 2026-10-02).
+`backup032-r2-backup-shrink` fires when a node's repository (`stored_bytes`, every
+object under its prefix) is less than half the size it was one probe earlier (operator decision, 2026-10-02).
 Data does not halve by itself: a `forget`/`prune` that removed snapshots it should
 have kept, or a source that started capturing an empty directory, are the causes
 to rule out. Act before the next `forget` removes the older snapshots, which are
@@ -692,18 +692,30 @@ Measured again 2026-09-30, as stored bytes rather than source: **187 MB** across
 the four repositories (beelink 61, rpi3 53, rpi4 66, vps 7 MB), from `restic
 stats --mode raw-data` (BACKUP-057).
 
-The R2 watcher now reports that figure on every run: `raw_bytes` on each
-`r2_backup_node` line, and the sum on the `r2_backup_health` line. The Grafana
-rule `backup057-r2-backup-size` pages when the sum passes 80% of
+Since BACKUP-075 the R2 watcher measures what R2 **stores**, which is what it
+bills, by listing objects rather than with `restic stats`. `stats --mode
+raw-data` walked every snapshot's tree, so its cost followed the snapshot count:
+it passed its 600 s budget on the Beelink on 2026-10-04 and doubled on every
+other node in three days, while it counted only referenced blobs, not the
+unreferenced packs, index and snapshot files R2 also bills.
+
+The watcher's init container `r2-size` runs `size.sh` in the pinned rclone image
+(`backup.watcher.size_image`) and lists each bucket once at its root and each
+node's prefix. The probe then reports `stored_bytes`: the node's prefix on each
+`r2_backup_node` line, and the sum of the bucket roots on the `r2_backup_health`
+line, which includes anything outside a node's prefix. The Grafana rule
+`backup057-r2-backup-size` pages when that sum passes 80% of
 `backup.r2.free_tier_bytes` (`common.yaml`), **or when no size arrived for a
-day**. A `null` size means that node's `stats` failed, and the fleet sum is
-`null` whenever any node's is, so an unmeasured fleet is never read as a small
-one. When it fires:
+day**. A `null` means a listing failed, and the fleet is `null` whenever any
+bucket is, so an unmeasured fleet is never read as a small one. A listing never
+fails the pod: `size.sh` always exits 0, so the health probe still runs. When it
+fires:
 
 1. Read the watcher's lines (`toolkit obs logs --env prod -q
    '{container="r2-backup-watcher"}' --since 24h`). A `null` comes with a
-   `size unknown:` line naming the reason, and `stats took Ns` says how close
-   the call ran to `STATS_TIMEOUT`.
+   `size unknown:` line naming the reason (the init container's own line, for
+   example an `AccessDenied`), and `size listing took Ns` says how long each
+   listing ran against `SIZE_TIMEOUT`.
 2. If the size is real, find the node that grew and check its retention ran
    (the first item below) before raising anything.
 

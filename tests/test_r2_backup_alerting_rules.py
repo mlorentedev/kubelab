@@ -145,7 +145,7 @@ def test_the_size_rule_fires_at_eighty_percent_of_the_free_tier_declared_in_comm
     rule = _size_rule()
     loki = next(d for d in rule["data"] if d.get("datasourceUid") == "loki")["model"]["expr"]
     assert "metric=`r2_backup_health`" in loki, "the fleet line carries the sum; a node line would page on one node"
-    assert "unwrap raw_bytes" in loki
+    assert "unwrap stored_bytes" in loki
 
     threshold = next(d for d in rule["data"] if d["refId"] == rule["condition"])["model"]
     (condition,) = threshold["conditions"]
@@ -161,3 +161,23 @@ def test_an_unknown_size_alerts_rather_than_reading_as_fits() -> None:
     rule = _size_rule()
     assert rule["noDataState"] == "Alerting"
     assert rule["execErrState"] == "Alerting"
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        SERVICES_DIR / "r2-backup-watcher" / "probe.sh",
+        SERVICES_DIR / "r2-backup-watcher" / "size.sh",
+        SERVICES_DIR / "grafana-alerting" / "r2-backup-rules.yaml",
+        REPO_ROOT / "docs" / "runbooks" / "offsite-backup-restore.md",
+    ],
+    ids=lambda p: p.name,
+)
+def test_no_watcher_emitter_or_reader_still_says_raw_bytes(path: Path) -> None:
+    """BACKUP-075 renamed the size to `stored_bytes`, because it is no longer restic's raw data.
+
+    A rule left on `unwrap raw_bytes` would read nothing, and its `noDataState:
+    Alerting` would page on a fleet that is fine; a runbook left on the old name
+    sends the operator looking for a field no line carries.
+    """
+    assert "raw_bytes" not in path.read_text()

@@ -80,6 +80,7 @@ class Node:
     up: bool = True
     # Seconds between the newest snapshot and the probe; None is restic failing.
     age: int | None = 3600
+    # What size.sh wrote for the node's prefix; None is its listing failing.
     size: int | None = 1_000_000
 
 
@@ -93,6 +94,7 @@ def _probe(tmp_path: pathlib.Path, nodes: list[Node], now: int) -> list[dict]:
         (bin_dir / name).write_text(body)
         (bin_dir / name).chmod(0o755)
     rows = []
+    sizes = []
     for index, node in enumerate(nodes, start=1):
         address, repository_id = f"192.0.2.{index}", f"{index}" * 64
         rows.append(f"{node.name} {PREFIX}/{node.name} {repository_id} {address} 22 {node.cls} app")
@@ -105,18 +107,18 @@ def _probe(tmp_path: pathlib.Path, nodes: list[Node], now: int) -> list[dict]:
             (fake / f"{node.name}.snaps").write_text(
                 json.dumps([{"time": stamp.strftime("%Y-%m-%dT%H:%M:%SZ"), "id": "x", "short_id": "s"}])
             )
-        if node.size is None:
-            (fake / f"{node.name}.nostats").write_text("")
-        else:
-            (fake / f"{node.name}.size").write_text(str(node.size))
+        sizes.append(f"node {node.name} {'null' if node.size is None else node.size} 1\n")
         if not node.up:
             (fake / f"{address}.down").write_text("")
     targets = run / "targets.txt"
     targets.write_text("\n".join(rows) + "\n")
+    bucket = sum(node.size or 0 for node in nodes)
+    (run / "sizes.txt").write_text("".join(sizes) + f"bucket {PREFIX.rsplit('/', 1)[1]} {bucket} 1\n")
     env = {
         "PATH": f"{bin_dir}:{os.environ['PATH']}",
         "FAKE_DIR": str(fake),
         "WATCHER_TARGETS": str(targets),
+        "WATCHER_SIZES": str(run / "sizes.txt"),
         "STAGING_DIR": STAGING,
         "RESTIC_TIMEOUT": "2",
         "REACH_TIMEOUT": "1",
@@ -256,8 +258,8 @@ def test_a_restic_failure_is_the_health_rules_page_not_this_ones(case: Case) -> 
         (1_000_000, 400_000, True),
         (1_000_000, 700_000, False),
         (1_000_000, 2_000_000, False),
-        # `stats` failed this time: `null` is dropped, so the last size is the
-        # previous one and nothing shrank.
+        # The listing failed this time: `null` is dropped, so the last size is
+        # the previous one and nothing shrank.
         (1_000_000, None, False),
     ],
 )

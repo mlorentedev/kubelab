@@ -92,11 +92,12 @@ groups:
         execErrState: Alerting
         annotations:
           summary: >-
-            The node repositories in R2 hold more than 80% of the free tier's storage,
-            or the watcher has reported no size for a day. R2 bills overage with no hard
-            stop, and the bucket lock (BACKUP-057) keeps data for its retention window
-            whatever `forget` decides. Read the watcher's `r2_backup_node` lines: each
-            carries its node's `raw_bytes`, and `null` means that node's `stats` failed.
+            The backup buckets in R2 hold more than 80% of the free tier's storage, or the
+            watcher has reported no size for a day. R2 bills overage with no hard stop, and
+            the bucket lock (BACKUP-057) keeps data for its retention window whatever
+            `forget` decides. The fleet line's `stored_bytes` is every backup bucket listed
+            at its root; each `r2_backup_node` line carries its node's prefix. `null` means
+            a listing failed: the watcher's `r2-size` init container logs why.
           runbook_url: https://github.com/mlorentedev/kubelab/blob/master/docs/runbooks/offsite-backup-restore.md#cost-and-quota
         data:
           - refId: A
@@ -111,14 +112,15 @@ groups:
                 uid: loki
               editorMode: code
               queryType: range
-              # The fleet line: its sum is null unless every node was sized, so a
-              # partial run never reads as a smaller fleet.
+              # The fleet line: the sum of every bucket the watcher names, listed at
+              # its root (BACKUP-075), null unless every bucket was measured, so a
+              # partial run never reads as a smaller bill.
               expr: >-
                 last_over_time(
                   {container="r2-backup-watcher"}
                     | json
                     | metric=`r2_backup_health`
-                    | unwrap raw_bytes
+                    | unwrap stored_bytes
                   [24h]
                 ) by (namespace)
           - refId: B
@@ -276,23 +278,25 @@ groups:
               editorMode: code
               queryType: range
               # 9 h holds the current probe and the one before it (6 h apart).
-              # A `null` size is dropped by `unwrap`, so a failed `stats` keeps the
-              # last known size instead of reading as a drop. `backup_node`, not
+              # A `null` size is dropped by `unwrap`, so a failed listing keeps the
+              # last known size instead of reading as a drop. The size counts
+              # every object under the node's prefix, so a daily prune lowers it a
+              # little; with 30-day retention that is far from half. `backup_node`, not
               # `node`: see the freshness rule above (lesson-512).
               expr: >-
                 last_over_time(
                   {container="r2-backup-watcher"}
-                    | json backup_node="node", metric="metric", raw_bytes="raw_bytes"
+                    | json backup_node="node", metric="metric", stored_bytes="stored_bytes"
                     | metric=`r2_backup_node`
-                    | unwrap raw_bytes
+                    | unwrap stored_bytes
                   [9h]
                 ) by (backup_node)
                 /
                 first_over_time(
                   {container="r2-backup-watcher"}
-                    | json backup_node="node", metric="metric", raw_bytes="raw_bytes"
+                    | json backup_node="node", metric="metric", stored_bytes="stored_bytes"
                     | metric=`r2_backup_node`
-                    | unwrap raw_bytes
+                    | unwrap stored_bytes
                   [9h]
                 ) by (backup_node)
           - refId: B
