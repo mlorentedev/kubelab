@@ -1,9 +1,10 @@
 # Metrics, logs, dashboards and alerting
 
-26 lessons, newest first. Back to [all categories](../_index.md).
+27 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 531 | [A GraphQL API refuses with 200, so an HTTP retry never fires](lesson-531-a-graphql-api-refuses-with-200-so-an-http-retry-never-fires.md) | 2026-10-07 |
 | 512 | [A JSON field named like a stream label is renamed, and `by (<field>)` silently groups on the stream label instead](lesson-512-a-json-field-named-like-a-stream-label-is-renamed-and-the-grouping-moves.md) | 2026-10-02 |
 | 510 | [A throwaway Loki answers "no data" for lines older than 3 h, whatever the querier flags say](lesson-510-loki-answers-no-data-for-ranges-older-than-3h-it-never-flushed.md) | 2026-10-02 |
 | 509 | [A check inside the unit it guards cannot see the unit not running, and filtering on "is it up" turns "all off" into a page](lesson-509-a-check-inside-the-unit-cannot-see-the-unit-not-running.md) | 2026-10-02 |

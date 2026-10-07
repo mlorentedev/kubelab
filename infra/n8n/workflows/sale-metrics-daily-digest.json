@@ -141,13 +141,90 @@
     },
     {
       "parameters": {
-        "jsCode": "// Builds the Spanish digest email (HTML, with a plain-text fallback) from the three answers. A step\n// that failed is named in its own section instead of stopping the email: a digest that says\n// \"No disponible\" is better than no digest. Every value that comes from the data is escaped: the ids\n// and sources reach Analytics Engine from a public endpoint.\n// The sale's public host. Its SSOT is leaving-denver's src/leaving_denver/config.py (SITE_URL), not kubelab\n// config, and it cannot move while the sale runs: the printed flyers carry it in their QR code.\nconst SITE = 'https://leaving-denver.pages.dev';\nconst MIN_VIEWS = 5; // many views and no text taps: the price is the likely reason (make reprice)\nconst TOP_ROWS = 5;\nconst SOURCE_LABELS = {\n  flyer: 'Flyer', facebook: 'Facebook', craigslist: 'Craigslist', nextdoor: 'Nextdoor', offerup: 'OfferUp',\n  activebuilding: 'ActiveBuilding', carscom: 'Cars.com', instagram: 'Instagram', whatsapp: 'WhatsApp',\n  share: 'Compartido', other: 'Otros', direct: 'Directo',\n};\nconst EVENTS_DOWN = 'la consulta a Analytics Engine falló (ver la ejecución en n8n)';\nconst WEB_ERRORS = 'la consulta a Web Analytics devolvió errores (ver la ejecución en n8n)';\nconst WEB_EMPTY = 'la consulta a Web Analytics no devolvió datos (revisa el site tag y el token, ver el runbook)';\n\nconst rowsOf = name => {\n  const json = $(name).first().json;\n  return Array.isArray(json.data) ? json.data.map(r => ({ ...r, n: Number(r.n) || 0 })) : null;\n};\nconst recent = rowsOf('Events, last 24 h');\nconst sale = rowsOf('Events, whole sale');\nconst webJson = $('Web Analytics, last 24 h').first().json;\n\nconst esc = value => String(value).replace(/[&<>\"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' })[c]);\nconst humanize = id => {\n  const words = String(id).replace(/[-_]+/g, ' ').trim().slice(0, 80);\n  return words.charAt(0).toUpperCase() + words.slice(1);\n};\nconst plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;\nconst num = n => (n === null ? '—' : String(n));\nconst byCountThenName = (a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1);\nconst sum = (rows, event) => rows.filter(r => r.event === event).reduce((total, r) => total + r.n, 0);\n// A Map, not an object: an id such as `constructor` must be a key, not a property lookup.\nconst count = (counts, key, n) => counts.set(key, (counts.get(key) || 0) + n);\nconst tally = (rows, event, key) => {\n  const counts = new Map();\n  rows.filter(r => r.event === event && r[key]).forEach(r => count(counts, r[key], r.n));\n  return [...counts].sort(byCountThenName);\n};\nconst pairs = list => list.map(([name, n]) => `${name} ${n}`).join(' · ');\n\n// Web Analytics: GraphQL answers 200 with `errors`, sometimes beside partial data: do not print those figures.\nconst readWeb = () => {\n  if (Array.isArray(webJson.errors) && webJson.errors.length) return { down: WEB_ERRORS };\n  const groups = (((webJson.data || {}).viewer || {}).accounts || [])[0];\n  if (!groups) return { down: WEB_EMPTY };\n  const totals = Array.isArray(groups.totals) ? groups.totals[0] : null;\n  const counts = new Map();\n  (groups.referrers || []).forEach(g => count(counts, ((g.dimensions || {}).refererHost) || 'Directo', Number(g.count) || 0));\n  return {\n    visits: totals ? Number((totals.sum || {}).visits) || 0 : 0,\n    pages: totals ? Number(totals.count) || 0 : 0,\n    referrers: [...counts].sort(byCountThenName).slice(0, TOP_ROWS),\n  };\n};\nconst web = readWeb();\n\nconst topRows = rows => {\n  const views = new Map(tally(rows, 'view_item', 'item'));\n  const taps = new Map(tally(rows, 'text_tap', 'item'));\n  const items = [...new Set([...views.keys(), ...taps.keys()])]\n    .map(id => ({ id, views: views.get(id) || 0, taps: taps.get(id) || 0 }))\n    .sort((a, b) => b.views - a.views || b.taps - a.taps || (a.id < b.id ? -1 : 1))\n    .slice(0, TOP_ROWS)\n    .map(i => ({ label: humanize(i.id), url: `${SITE}/i/${encodeURIComponent(i.id)}/`, views: i.views, taps: i.taps }));\n  const packs = tally(rows, 'text_tap', 'bundle').slice(0, TOP_ROWS)\n    .map(([name, n]) => ({ label: `Pack: ${humanize(name)}`, url: null, views: null, taps: n }));\n  return [...items, ...packs];\n};\nconst sourceLabel = ([source, n]) => [SOURCE_LABELS.hasOwnProperty(source) ? SOURCE_LABELS[source] : humanize(source), n];\nconst sourcePairs = rows => tally(rows, 'visit', 'source').map(sourceLabel).sort(byCountThenName);\n\n// Plain-text and HTML renderings of one section's body, side by side so they cannot drift apart.\nconst FONT = \"-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif\";\nconst MONO = \"ui-monospace,SFMono-Regular,Menlo,Consolas,monospace\";\nconst INK = '#1f2937', MUTED = '#6b7280', LINE = '#e5e7eb', ACCENT = '#0f766e', ACCENT_BG = '#ecfdf5';\nconst muted = html => `<div style=\"font-size:13px;line-height:1.5;color:${MUTED}\">${html}</div>`;\nconst down = reason => ({ html: muted(`No disponible: ${esc(reason)}`), text: [`  No disponible: ${reason}`] });\nconst section = (title, body) => ({\n  html: `<tr><td style=\"padding:22px 24px 0\"><div style=\"font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:${MUTED};padding-bottom:8px\">${esc(title)}</div>${body.html}</td></tr>`,\n  text: ['', title, ...body.text],\n});\n\nconst tile = (label, value, small, accent) => {\n  const box = accent ? `background:${ACCENT_BG};border:1px solid ${ACCENT}` : `background:#f9fafb;border:1px solid ${LINE}`;\n  const color = accent ? ACCENT : INK;\n  return `<td width=\"33%\" valign=\"top\" style=\"${box};border-radius:8px;padding:12px 10px;text-align:center\">`\n    + `<div style=\"font-size:12px;color:${accent ? ACCENT : MUTED};font-weight:${accent ? 700 : 400}\">${esc(label)}</div>`\n    + `<div style=\"font-size:30px;line-height:1.2;font-weight:700;color:${color}\">${esc(value)}</div>`\n    + `<div style=\"font-size:12px;color:${MUTED}\">${esc(small)}</div></td>`;\n};\n\nconst recentSum = event => (recent ? sum(recent, event) : null);\nconst saleSum = event => (sale ? sum(sale, event) : null);\nconst visitsSmall = web.down ? 'No disponible' : plural(web.pages, 'página vista', 'páginas vistas');\nconst kpis = [\n  ['Visitas web', web.down ? null : web.visits, visitsSmall, false],\n  ['Fichas abiertas', recentSum('view_item'), `total: ${num(saleSum('view_item'))}`, false],\n  ['Mensajes', recentSum('text_tap'), `total: ${num(saleSum('text_tap'))}`, true],\n];\nconst kpiSection = {\n  html: `<tr><td style=\"padding:20px 18px 0\"><table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse:separate;border-spacing:6px 0\"><tr>`\n    + kpis.map(([label, value, small, accent]) => tile(label, num(value), small, accent)).join('') + '</tr></table></td></tr>',\n  text: ['', ...kpis.map(([label, value, small]) => `${label}: ${num(value)} (${small})`)],\n};\n\nconst cell = (n, extra = '') => `<td align=\"right\" style=\"padding:7px 0 7px 12px;border-bottom:1px solid ${LINE};font-size:14px;${n ? extra : `color:${MUTED};`}\">${n ? n : '–'}</td>`;\nconst headCell = (label, align) => `<td align=\"${align}\" style=\"padding:0 0 6px 12px;font-size:12px;color:${MUTED}\">${label}</td>`;\nconst itemsBody = () => {\n  if (!recent) return down(EVENTS_DOWN);\n  const rows = topRows(recent);\n  if (!rows.length) return { html: muted('Nadie abrió fichas ayer.'), text: ['  Nadie abrió fichas ayer.'] };\n  const html = `<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\"><tr><td style=\"padding:0 0 6px 0;font-size:12px;color:${MUTED}\">Artículo</td>${headCell('Vistas', 'right')}${headCell('Mensajes', 'right')}</tr>`\n    + rows.map(r => {\n      const name = esc(r.label);\n      const link = r.url ? `<a href=\"${esc(r.url)}\" style=\"color:${INK};text-decoration:none;border-bottom:1px dotted ${MUTED}\">${name}</a>` : name;\n      return `<tr><td style=\"padding:7px 0;border-bottom:1px solid ${LINE};font-size:14px;color:${INK}\">${link}</td>${cell(r.views)}${cell(r.taps, `color:${ACCENT};font-weight:700;`)}</tr>`;\n    }).join('') + '</table>';\n  const text = rows.map(r => `  - ${r.label}: ${[r.views === null ? null : plural(r.views, 'vista', 'vistas'), r.taps ? plural(r.taps, 'mensaje', 'mensajes') : null].filter(Boolean).join(', ')}`);\n  return { html, text };\n};\n\nconst sourcesBody = () => {\n  const line = (label, list, reason) => {\n    const content = reason ? `No disponible: ${reason}` : list;\n    return { html: `<div style=\"font-size:14px;line-height:1.7;color:${reason ? MUTED : INK}\"><span style=\"color:${MUTED}\">${label}:</span> ${esc(content)}</div>`, text: `  ${label}: ${content}` };\n  };\n  const lines = [];\n  if (!recent) lines.push(line('Enlaces', '', EVENTS_DOWN));\n  else if (sourcePairs(recent).length) lines.push(line('Enlaces', pairs(sourcePairs(recent))));\n  else lines.push({ html: muted('Sin visitas por enlace.'), text: '  Sin visitas por enlace.' });\n  lines.push(web.down ? line('Web Analytics', '', web.down) : line('Web Analytics', web.referrers.length ? pairs(web.referrers) : 'sin visitas'));\n  return { html: lines.map(l => l.html).join(''), text: lines.map(l => l.text) };\n};\n\nconst repriceBody = () => {\n  if (!sale) return down(EVENTS_DOWN);\n  const tapped = new Set(tally(sale, 'text_tap', 'item').map(([item]) => item));\n  const found = tally(sale, 'view_item', 'item').filter(([item, n]) => n >= MIN_VIEWS && !tapped.has(item));\n  if (!found.length) return null;\n  const hint = id => `make reprice ID=${id} PRICE=<usd>`;\n  const intro = 'Muchas vistas y ningún mensaje en toda la venta: quizá el precio es alto.';\n  return {\n    html: muted(esc(intro)) + found.map(([id, n]) => `<div style=\"padding:8px 0 0;font-size:14px;color:${INK}\">${esc(humanize(id))} <span style=\"color:${MUTED}\">· ${esc(plural(n, 'vista', 'vistas'))}, sin mensajes</span>`\n      + `<div style=\"font-family:${MONO};font-size:12px;color:${MUTED}\">${esc(hint(id))}</div></div>`).join(''),\n    text: [`  ${intro}`, ...found.flatMap(([id, n]) => [`  - ${humanize(id)}: ${plural(n, 'vista', 'vistas')}, sin mensajes`, `    ${hint(id)}`])],\n  };\n};\n\nconst totals = sale\n  ? `Toda la venta: ${plural(sum(sale, 'visit'), 'visita por enlace', 'visitas por enlace')} · ${plural(sum(sale, 'view_item'), 'ficha', 'fichas')} · ${plural(sum(sale, 'text_tap'), 'mensaje', 'mensajes')}.`\n  : 'Toda la venta: no disponible.';\nconst footer = `${totals} Se cuentan eventos, no personas.`;\n\nconst when = $now.setZone('America/Denver').setLocale('es');\nconst longDate = when.toFormat(\"cccc d 'de' LLLL\");\nconst title = 'Resumen de la venta';\n\nconst parts = [];\nconst visits = web.down ? (recent ? sum(recent, 'visit') : null) : web.visits;\nif (visits !== null) parts.push(plural(visits, 'visita', 'visitas'));\nif (recent) parts.push(plural(sum(recent, 'view_item'), 'ficha', 'fichas'), plural(sum(recent, 'text_tap'), 'mensaje', 'mensajes'));\nconst incomplete = parts.length > 0 && (!recent || !sale || web.down) ? ' (datos incompletos)' : '';\nconst subject = `Venta · ${when.toFormat('ccc d LLL')} — ${parts.length ? parts.join(', ') : 'sin datos'}${incomplete}`;\n\nconst sections = [\n  kpiSection,\n  section('Qué se mira (24 h)', itemsBody()),\n  section('De dónde llegan (24 h)', sourcesBody()),\n];\nconst reprice = repriceBody();\nif (reprice) sections.push(section('Revisar precio', reprice));\n\nconst capitalized = longDate.charAt(0).toUpperCase() + longDate.slice(1);\nconst html = `<!DOCTYPE html><html lang=\"es\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>${esc(subject)}</title></head>`\n  + `<body style=\"margin:0;padding:0;background:#f4f4f5\"><table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#f4f4f5\"><tr><td align=\"center\" style=\"padding:16px 8px\">`\n  + `<table role=\"presentation\" width=\"560\" cellpadding=\"0\" cellspacing=\"0\" style=\"width:100%;max-width:560px;background:#ffffff;border:1px solid ${LINE};border-radius:10px;font-family:${FONT};color:${INK}\">`\n  + `<tr><td style=\"padding:24px 24px 0\"><div style=\"font-size:22px;font-weight:700;color:${INK}\">${esc(title)}</div><div style=\"font-size:14px;color:${MUTED}\">${esc(capitalized)}</div></td></tr>`\n  + sections.map(s => s.html).join('')\n  + `<tr><td style=\"padding:22px 24px 20px\"><div style=\"border-top:1px solid ${LINE};padding-top:12px;font-size:12px;line-height:1.5;color:${MUTED}\">${esc(footer)}</div></td></tr>`\n  + '</table></td></tr></table></body></html>';\nconst text = [title, capitalized, ...sections.flatMap(s => s.text), '', footer].join('\\n');\nreturn [{ json: { subject, html, text } }];\n"
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "4e8a8101-3f85-5404-8dab-4845e931f92a",
+              "leftValue": "={{ (Array.isArray($json.errors) && $json.errors.length > 0) || !($json.data && $json.data.viewer) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Web Analytics failed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1350,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 60,
+        "unit": "seconds"
+      },
+      "name": "Wait a minute",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1570,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.cloudflare.com/client/v4/graphql",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Web Analytics query').first().json.graphql) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "Web Analytics, second try",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1790,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "c5000000-0000-4000-8000-000000000001",
+          "name": "cloudflare-analytics-read"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Builds the Spanish digest email (HTML, with a plain-text fallback) from the three answers. A step\n// that failed is named in its own section instead of stopping the email: a digest that says\n// \"No disponible\" is better than no digest. Every value that comes from the data is escaped: the ids\n// and sources reach Analytics Engine from a public endpoint.\n// The sale's public host. Its SSOT is leaving-denver's src/leaving_denver/config.py (SITE_URL), not kubelab\n// config, and it cannot move while the sale runs: the printed flyers carry it in their QR code.\nconst SITE = 'https://leaving-denver.pages.dev';\nconst MIN_VIEWS = 5; // many views and no text taps: the price is the likely reason (make reprice)\nconst TOP_ROWS = 5;\nconst SOURCE_LABELS = {\n  flyer: 'Flyer', facebook: 'Facebook', craigslist: 'Craigslist', nextdoor: 'Nextdoor', offerup: 'OfferUp',\n  activebuilding: 'ActiveBuilding', carscom: 'Cars.com', instagram: 'Instagram', whatsapp: 'WhatsApp',\n  share: 'Compartido', other: 'Otros', direct: 'Directo',\n};\nconst EVENTS_DOWN = 'la consulta a Analytics Engine falló (ver la ejecución en n8n)';\nconst WEB_ERRORS = 'la consulta a Web Analytics devolvió errores (ver la ejecución en n8n)';\nconst WEB_EMPTY = 'la consulta a Web Analytics no devolvió datos (revisa el site tag y el token, ver el runbook)';\n\nconst rowsOf = name => {\n  const json = $(name).first().json;\n  return Array.isArray(json.data) ? json.data.map(r => ({ ...r, n: Number(r.n) || 0 })) : null;\n};\nconst recent = rowsOf('Events, last 24 h');\nconst sale = rowsOf('Events, whole sale');\n// Cloudflare's GraphQL now and then answers the whole query with `serviceUnavailable` (\"try again later\"):\n// the workflow then waits a minute and asks once more, and the second answer is the one that counts.\nconst webNode = $('Web Analytics, second try').isExecuted ? 'Web Analytics, second try' : 'Web Analytics, last 24 h';\nconst webJson = $(webNode).first().json;\n\nconst esc = value => String(value).replace(/[&<>\"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' })[c]);\nconst humanize = id => {\n  const words = String(id).replace(/[-_]+/g, ' ').trim().slice(0, 80);\n  return words.charAt(0).toUpperCase() + words.slice(1);\n};\nconst plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;\nconst num = n => (n === null ? '—' : String(n));\nconst byCountThenName = (a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1);\nconst sum = (rows, event) => rows.filter(r => r.event === event).reduce((total, r) => total + r.n, 0);\n// A Map, not an object: an id such as `constructor` must be a key, not a property lookup.\nconst count = (counts, key, n) => counts.set(key, (counts.get(key) || 0) + n);\nconst tally = (rows, event, key) => {\n  const counts = new Map();\n  rows.filter(r => r.event === event && r[key]).forEach(r => count(counts, r[key], r.n));\n  return [...counts].sort(byCountThenName);\n};\nconst pairs = list => list.map(([name, n]) => `${name} ${n}`).join(' · ');\n\n// Web Analytics: GraphQL answers 200 with `errors`, sometimes beside partial data: do not print those figures.\nconst readWeb = () => {\n  if (Array.isArray(webJson.errors) && webJson.errors.length) return { down: WEB_ERRORS };\n  const groups = (((webJson.data || {}).viewer || {}).accounts || [])[0];\n  if (!groups) return { down: WEB_EMPTY };\n  const totals = Array.isArray(groups.totals) ? groups.totals[0] : null;\n  const counts = new Map();\n  (groups.referrers || []).forEach(g => count(counts, ((g.dimensions || {}).refererHost) || 'Directo', Number(g.count) || 0));\n  return {\n    visits: totals ? Number((totals.sum || {}).visits) || 0 : 0,\n    pages: totals ? Number(totals.count) || 0 : 0,\n    referrers: [...counts].sort(byCountThenName).slice(0, TOP_ROWS),\n  };\n};\nconst web = readWeb();\n\nconst topRows = rows => {\n  const views = new Map(tally(rows, 'view_item', 'item'));\n  const taps = new Map(tally(rows, 'text_tap', 'item'));\n  const items = [...new Set([...views.keys(), ...taps.keys()])]\n    .map(id => ({ id, views: views.get(id) || 0, taps: taps.get(id) || 0 }))\n    .sort((a, b) => b.views - a.views || b.taps - a.taps || (a.id < b.id ? -1 : 1))\n    .slice(0, TOP_ROWS)\n    .map(i => ({ label: humanize(i.id), url: `${SITE}/i/${encodeURIComponent(i.id)}/`, views: i.views, taps: i.taps }));\n  const packs = tally(rows, 'text_tap', 'bundle').slice(0, TOP_ROWS)\n    .map(([name, n]) => ({ label: `Pack: ${humanize(name)}`, url: null, views: null, taps: n }));\n  return [...items, ...packs];\n};\nconst sourceLabel = ([source, n]) => [SOURCE_LABELS.hasOwnProperty(source) ? SOURCE_LABELS[source] : humanize(source), n];\nconst sourcePairs = rows => tally(rows, 'visit', 'source').map(sourceLabel).sort(byCountThenName);\n\n// Plain-text and HTML renderings of one section's body, side by side so they cannot drift apart.\nconst FONT = \"-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif\";\nconst MONO = \"ui-monospace,SFMono-Regular,Menlo,Consolas,monospace\";\nconst INK = '#1f2937', MUTED = '#6b7280', LINE = '#e5e7eb', ACCENT = '#0f766e', ACCENT_BG = '#ecfdf5';\nconst muted = html => `<div style=\"font-size:13px;line-height:1.5;color:${MUTED}\">${html}</div>`;\nconst down = reason => ({ html: muted(`No disponible: ${esc(reason)}`), text: [`  No disponible: ${reason}`] });\nconst section = (title, body) => ({\n  html: `<tr><td style=\"padding:22px 24px 0\"><div style=\"font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:${MUTED};padding-bottom:8px\">${esc(title)}</div>${body.html}</td></tr>`,\n  text: ['', title, ...body.text],\n});\n\nconst tile = (label, value, small, accent) => {\n  const box = accent ? `background:${ACCENT_BG};border:1px solid ${ACCENT}` : `background:#f9fafb;border:1px solid ${LINE}`;\n  const color = accent ? ACCENT : INK;\n  return `<td width=\"33%\" valign=\"top\" style=\"${box};border-radius:8px;padding:12px 10px;text-align:center\">`\n    + `<div style=\"font-size:12px;color:${accent ? ACCENT : MUTED};font-weight:${accent ? 700 : 400}\">${esc(label)}</div>`\n    + `<div style=\"font-size:30px;line-height:1.2;font-weight:700;color:${color}\">${esc(value)}</div>`\n    + `<div style=\"font-size:12px;color:${MUTED}\">${esc(small)}</div></td>`;\n};\n\nconst recentSum = event => (recent ? sum(recent, event) : null);\nconst saleSum = event => (sale ? sum(sale, event) : null);\nconst visitsSmall = web.down ? 'No disponible' : plural(web.pages, 'página vista', 'páginas vistas');\nconst kpis = [\n  ['Visitas web', web.down ? null : web.visits, visitsSmall, false],\n  ['Fichas abiertas', recentSum('view_item'), `total: ${num(saleSum('view_item'))}`, false],\n  ['Mensajes', recentSum('text_tap'), `total: ${num(saleSum('text_tap'))}`, true],\n];\nconst kpiSection = {\n  html: `<tr><td style=\"padding:20px 18px 0\"><table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse:separate;border-spacing:6px 0\"><tr>`\n    + kpis.map(([label, value, small, accent]) => tile(label, num(value), small, accent)).join('') + '</tr></table></td></tr>',\n  text: ['', ...kpis.map(([label, value, small]) => `${label}: ${num(value)} (${small})`)],\n};\n\nconst cell = (n, extra = '') => `<td align=\"right\" style=\"padding:7px 0 7px 12px;border-bottom:1px solid ${LINE};font-size:14px;${n ? extra : `color:${MUTED};`}\">${n ? n : '–'}</td>`;\nconst headCell = (label, align) => `<td align=\"${align}\" style=\"padding:0 0 6px 12px;font-size:12px;color:${MUTED}\">${label}</td>`;\nconst itemsBody = () => {\n  if (!recent) return down(EVENTS_DOWN);\n  const rows = topRows(recent);\n  if (!rows.length) return { html: muted('Nadie abrió fichas ayer.'), text: ['  Nadie abrió fichas ayer.'] };\n  const html = `<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\"><tr><td style=\"padding:0 0 6px 0;font-size:12px;color:${MUTED}\">Artículo</td>${headCell('Vistas', 'right')}${headCell('Mensajes', 'right')}</tr>`\n    + rows.map(r => {\n      const name = esc(r.label);\n      const link = r.url ? `<a href=\"${esc(r.url)}\" style=\"color:${INK};text-decoration:none;border-bottom:1px dotted ${MUTED}\">${name}</a>` : name;\n      return `<tr><td style=\"padding:7px 0;border-bottom:1px solid ${LINE};font-size:14px;color:${INK}\">${link}</td>${cell(r.views)}${cell(r.taps, `color:${ACCENT};font-weight:700;`)}</tr>`;\n    }).join('') + '</table>';\n  const text = rows.map(r => `  - ${r.label}: ${[r.views === null ? null : plural(r.views, 'vista', 'vistas'), r.taps ? plural(r.taps, 'mensaje', 'mensajes') : null].filter(Boolean).join(', ')}`);\n  return { html, text };\n};\n\nconst sourcesBody = () => {\n  const line = (label, list, reason) => {\n    const content = reason ? `No disponible: ${reason}` : list;\n    return { html: `<div style=\"font-size:14px;line-height:1.7;color:${reason ? MUTED : INK}\"><span style=\"color:${MUTED}\">${label}:</span> ${esc(content)}</div>`, text: `  ${label}: ${content}` };\n  };\n  const lines = [];\n  if (!recent) lines.push(line('Enlaces', '', EVENTS_DOWN));\n  else if (sourcePairs(recent).length) lines.push(line('Enlaces', pairs(sourcePairs(recent))));\n  else lines.push({ html: muted('Sin visitas por enlace.'), text: '  Sin visitas por enlace.' });\n  lines.push(web.down ? line('Web Analytics', '', web.down) : line('Web Analytics', web.referrers.length ? pairs(web.referrers) : 'sin visitas'));\n  return { html: lines.map(l => l.html).join(''), text: lines.map(l => l.text) };\n};\n\nconst repriceBody = () => {\n  if (!sale) return down(EVENTS_DOWN);\n  const tapped = new Set(tally(sale, 'text_tap', 'item').map(([item]) => item));\n  const found = tally(sale, 'view_item', 'item').filter(([item, n]) => n >= MIN_VIEWS && !tapped.has(item));\n  if (!found.length) return null;\n  const hint = id => `make reprice ID=${id} PRICE=<usd>`;\n  const intro = 'Muchas vistas y ningún mensaje en toda la venta: quizá el precio es alto.';\n  return {\n    html: muted(esc(intro)) + found.map(([id, n]) => `<div style=\"padding:8px 0 0;font-size:14px;color:${INK}\">${esc(humanize(id))} <span style=\"color:${MUTED}\">· ${esc(plural(n, 'vista', 'vistas'))}, sin mensajes</span>`\n      + `<div style=\"font-family:${MONO};font-size:12px;color:${MUTED}\">${esc(hint(id))}</div></div>`).join(''),\n    text: [`  ${intro}`, ...found.flatMap(([id, n]) => [`  - ${humanize(id)}: ${plural(n, 'vista', 'vistas')}, sin mensajes`, `    ${hint(id)}`])],\n  };\n};\n\nconst totals = sale\n  ? `Toda la venta: ${plural(sum(sale, 'visit'), 'visita por enlace', 'visitas por enlace')} · ${plural(sum(sale, 'view_item'), 'ficha', 'fichas')} · ${plural(sum(sale, 'text_tap'), 'mensaje', 'mensajes')}.`\n  : 'Toda la venta: no disponible.';\nconst footer = `${totals} Se cuentan eventos, no personas.`;\n\nconst when = $now.setZone('America/Denver').setLocale('es');\nconst longDate = when.toFormat(\"cccc d 'de' LLLL\");\nconst title = 'Resumen de la venta';\n\nconst parts = [];\nconst visits = web.down ? (recent ? sum(recent, 'visit') : null) : web.visits;\nif (visits !== null) parts.push(plural(visits, 'visita', 'visitas'));\nif (recent) parts.push(plural(sum(recent, 'view_item'), 'ficha', 'fichas'), plural(sum(recent, 'text_tap'), 'mensaje', 'mensajes'));\nconst incomplete = parts.length > 0 && (!recent || !sale || web.down) ? ' (datos incompletos)' : '';\nconst subject = `Venta · ${when.toFormat('ccc d LLL')} — ${parts.length ? parts.join(', ') : 'sin datos'}${incomplete}`;\n\nconst sections = [\n  kpiSection,\n  section('Qué se mira (24 h)', itemsBody()),\n  section('De dónde llegan (24 h)', sourcesBody()),\n];\nconst reprice = repriceBody();\nif (reprice) sections.push(section('Revisar precio', reprice));\n\nconst capitalized = longDate.charAt(0).toUpperCase() + longDate.slice(1);\nconst html = `<!DOCTYPE html><html lang=\"es\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>${esc(subject)}</title></head>`\n  + `<body style=\"margin:0;padding:0;background:#f4f4f5\"><table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#f4f4f5\"><tr><td align=\"center\" style=\"padding:16px 8px\">`\n  + `<table role=\"presentation\" width=\"560\" cellpadding=\"0\" cellspacing=\"0\" style=\"width:100%;max-width:560px;background:#ffffff;border:1px solid ${LINE};border-radius:10px;font-family:${FONT};color:${INK}\">`\n  + `<tr><td style=\"padding:24px 24px 0\"><div style=\"font-size:22px;font-weight:700;color:${INK}\">${esc(title)}</div><div style=\"font-size:14px;color:${MUTED}\">${esc(capitalized)}</div></td></tr>`\n  + sections.map(s => s.html).join('')\n  + `<tr><td style=\"padding:22px 24px 20px\"><div style=\"border-top:1px solid ${LINE};padding-top:12px;font-size:12px;line-height:1.5;color:${MUTED}\">${esc(footer)}</div></td></tr>`\n  + '</table></td></tr></table></body></html>';\nconst text = [title, capitalized, ...sections.flatMap(s => s.text), '', footer].join('\\n');\nreturn [{ json: { subject, html, text } }];\n"
       },
       "name": "Write the digest",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1350,
+        2010,
         300
       ]
     },
@@ -165,7 +242,7 @@
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2.1,
       "position": [
-        1570,
+        2230,
         300
       ],
       "credentials": {
@@ -225,7 +302,7 @@
       "main": [
         [
           {
-            "node": "Write the digest",
+            "node": "Web Analytics failed?",
             "type": "main",
             "index": 0
           }
@@ -237,6 +314,46 @@
         [
           {
             "node": "Email the digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Web Analytics failed?": {
+      "main": [
+        [
+          {
+            "node": "Wait a minute",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Write the digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait a minute": {
+      "main": [
+        [
+          {
+            "node": "Web Analytics, second try",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Web Analytics, second try": {
+      "main": [
+        [
+          {
+            "node": "Write the digest",
             "type": "main",
             "index": 0
           }
