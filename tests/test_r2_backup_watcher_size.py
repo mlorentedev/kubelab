@@ -121,6 +121,27 @@ def test_it_sizes_each_bucket_once_and_each_node_prefix(fleet) -> None:
     assert sorted(listed) == sorted(["kubelab-backups", "kubelab-backups/rpi3", "kubelab-backups/kubelab-vps"])
 
 
+def test_two_buckets_are_each_listed_once_at_their_root(fleet) -> None:
+    """BACKUP-057 PR 4 gives each node its own bucket: each root is listed, none twice."""
+    fake, _, env, _ = fleet
+    targets = pathlib.Path(env["WATCHER_TARGETS"])
+    targets.write_text(
+        targets.read_text()
+        + f"\nrpi4 s3:https://{HOST}/kubelab-backup-rpi4/rpi4 {'3' * 64} 192.0.2.10 22 on-demand pihole\n"
+    )
+    (fake / "kubelab-backup-rpi4.bytes").write_text("5000\n")
+    (fake / "kubelab-backup-rpi4_rpi4.bytes").write_text("4000\n")
+    proc, entries = _run(fleet)
+    assert proc.returncode == 0, proc.stderr
+    assert entries[("bucket", "kubelab-backups")][0] == str(BUCKET_BYTES)
+    assert entries[("bucket", "kubelab-backup-rpi4")][0] == "5000"
+    assert entries[("node", "rpi4")][0] == "4000"
+    listed = [c.split()[1] for c in _calls(fake)]
+    assert sorted(listed) == sorted(
+        ["kubelab-backups", "kubelab-backups/rpi3", "kubelab-backups/kubelab-vps", "kubelab-backup-rpi4", "kubelab-backup-rpi4/rpi4"]
+    )
+
+
 def test_every_entry_records_how_long_its_listing_took(fleet) -> None:
     """The duration is AC3's evidence that the cost no longer follows the snapshot count."""
     _, entries = _run(fleet)

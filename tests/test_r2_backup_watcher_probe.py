@@ -446,6 +446,40 @@ def test_an_unmeasured_bucket_makes_the_fleet_size_null(fleet, value) -> None:
     assert summary["stored_bytes"] is None
 
 
+# BACKUP-057 PR 4 gives each node its own bucket: the fleet then sums several.
+OTHER_BUCKET = "kubelab-backup-vps"
+OTHER_BUCKET_BYTES = 777_000_001
+
+
+def _split_buckets(targets: pathlib.Path) -> None:
+    """Move vps into a bucket of its own, keeping its repository name for the fake."""
+    text = targets.read_text().replace(f"{PREFIX}/kubelab-vps", f"{PREFIX.rsplit('/', 1)[0]}/{OTHER_BUCKET}/kubelab-vps")
+    targets.write_text(text)
+
+
+def test_the_fleet_sums_every_bucket_once(fleet) -> None:
+    """Two buckets: the fleet is both roots added, not the last one read, nor one per node."""
+    _, targets, env = fleet
+    _split_buckets(targets)
+    _write_sizes(env, _sizes(**{f"bucket__{OTHER_BUCKET}": str(OTHER_BUCKET_BYTES)}))
+    rc, _, (summary,) = _run(env)
+    assert rc == 0 and summary["healthy"] == 1
+    assert summary["stored_bytes"] == BUCKET_BYTES + OTHER_BUCKET_BYTES
+
+
+@pytest.mark.parametrize("unmeasured", ["kubelab-backups", OTHER_BUCKET])
+def test_either_unmeasured_bucket_makes_a_two_bucket_fleet_null(fleet, unmeasured) -> None:
+    """Whichever bucket is missing, first or last, the fleet never reports a partial sum."""
+    _, targets, env = fleet
+    _split_buckets(targets)
+    sizes = {f"bucket__{OTHER_BUCKET}": str(OTHER_BUCKET_BYTES)}
+    sizes[f"bucket__{unmeasured}"] = "null"
+    _write_sizes(env, _sizes(**sizes))
+    rc, _, (summary,) = _run(env)
+    assert rc == 0 and summary["healthy"] == 1
+    assert summary["stored_bytes"] is None
+
+
 def test_without_a_sizes_file_every_size_is_null_and_named(fleet) -> None:
     """The init container failed to write: nothing is sized, nothing turns unhealthy."""
     _, _, env = fleet
