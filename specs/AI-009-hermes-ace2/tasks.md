@@ -13,7 +13,7 @@ created: "2026-09-30"
 
 - [ ] Spec PR merged (`docs/ai-009-spec`) after ADR-068 (#1967)
 - [x] Prerequisite **task 0**: #1300 merged, and a second `make provision NODE=ace2 ENV=staging TAGS=dev_node` reports `changed=0` ✓ 2026-10-01 (#1971; first run `changed=2` from upstream dotfiles commits, second run `ok=57 changed=0`)
-- [ ] R1 and R2 answered by the operator before PR 3 and PR 4 merge (R1 answered for Open WebUI 2026-10-04: the PR-Agent key is shared; Hermes still open)
+- [ ] R1 and R2 answered by the operator before PR 3 and PR 4 merge (R1 answered for Open WebUI 2026-10-04 and for Hermes 2026-10-05: both share the PR-Agent key. R2: Slack minted 2026-10-05; the vault token at PR 4, Drive at PR 5)
 
 ## Implementation
 
@@ -58,15 +58,17 @@ Inventoried 2026-10-01 against every surface an existing node-hosted service is 
 
 ### PR 3 — hermes-kubelab (needs R1 and the Slack half of R2)
 
-- [ ] [P] [AC3] `tests/test_hermes_config.py`: render `hermes-config.yaml.j2` and assert the D2 keys; feed it every role input and assert none yields `approvals.mode: off`; assert the deny list contains every pattern of `files/guardrails-denylist.yaml`. Expected: FAIL.
-- [ ] [AC3] Template `hermes-config.yaml.j2`; copy the deny list from `80_agents/hermes-nan/guardrails-denylist.yaml` into `files/` with a header naming its origin.
-- [ ] [AC10] `SECRET_CATALOG` entries under `apps.services.ai.hermes_kubelab.*`: `nan_api_key` (or the shared-key path from R1), `api_server_key` (RANDOM), `slack_bot_token`, `github_token`. `.env` rendered into the user's data dir, `0600`, owned by `hermes-kubelab`.
+- [x] [P] [AC3] `tests/test_hermes_config.py`: render `hermes-config.yaml.j2` and assert the D2 keys; feed it every role input and assert none yields `approvals.mode: off`; assert the deny list contains every pattern of `files/guardrails-denylist.yaml`. Expected: FAIL. ✓ 2026-10-06 (each rule also carries commands it must block and allow, run through Hermes's own match, fnmatch over the whole command)
+- [x] [AC3] Template `hermes-config.yaml.j2`; copy the deny list from `80_agents/hermes-nan/guardrails-denylist.yaml` into `files/` with a header naming its origin. ✓ 2026-10-06 (converted: the vault's patterns are regex, and Hermes reads fnmatch globs, so a verbatim copy would block nothing)
+- [ ] [AC10] `SECRET_CATALOG` entries under `apps.services.ai.hermes_kubelab.*`: `nan_api_key` (or the shared-key path from R1), `api_server_key` (RANDOM), `slack_bot_token`, `github_token`. `.env` rendered into the user's data dir, `0600`, owned by `hermes-kubelab`. Partly ✓ 2026-10-06 (PR 3a): the NaN key is the shared one, with `hermes_kubelab` added to its consumers; `api_server_key` is generated on ace2 like Open WebUI's session key, because only Open WebUI on the same node needs it; the env file sits beside the data dir, not in it, so the gateway's container never sees it. Slack in PR 3c, GitHub in PR 4.
 - [ ] [AC2] `compose-hermes.yml.j2` run by the user's daemon: gateway (`gateway run`, `API_SERVER_ENABLED=true`, `API_SERVER_HOST=0.0.0.0` inside the container, published on `127.0.0.1:8642` only), and the tailscale sidecar (`TS_USERSPACE=true`, state in a volume).
 - [ ] [P] [AC5] Test on `policy.hujson.j2`: `tag:hermes` destinations contain nothing on ace2's address and no `:22`, `:6443`, `vps:8080`. Expected: PASS today (it guards the future).
 - [ ] [AC5] Preauth key for the sidecar created by the playbook on the VPS with `--tags tag:hermes` under the `agents` user (the existing `_headscale_preauth` task shape, not the infra user). Live: `headscale nodes list` shows the node and tag.
 - [ ] [AC4] Add Hermes as Open WebUI's second backend (`http://host.docker.internal:8642/v1`, key = `api_server_key`).
-- [ ] [AC2] First live step, the Hermes half of R3: one command run through the sandbox on the user's rootless socket. If it fails, PR 2's tasks move to Podman's socket before anything else in this PR.
-- [ ] [AC3] Live: one prompt that needs approval, left unanswered; the log shows the denial after 300 s. Record each refused tailnet destination (R7).
+- [x] [AC2] First live step, the Hermes half of R3: one command run through the sandbox on the user's rootless socket. If it fails, PR 2's tasks move to Podman's socket before anything else in this PR. ✓ 2026-10-06 (passed; see `verification.md`, PR 3a)
+- [ ] [AC3] Live: one prompt that needs approval, left unanswered; the log shows the denial after 300 s. Record each refused tailnet destination (R7). **Re-scoped 2026-10-06:** with no host path in the sandbox, v2026.9.24 skips every command guard for the docker backend except `approvals.deny` (`tools/approval.py`, `_should_skip_container_guards`), so no sandbox command ever prompts. The drill becomes: a deny-list command sent through Slack is refused, and a non-terminal action that does prompt (to be found in PR 3c) is left unanswered. Every provision already reads the deny list back through the running gateway.
+- [ ] [AC5] **PR 3b must close the gateway's own egress too.** Docker's egress from ace2 is not tailnet-free, contrary to R7's premise: from the agent's daemon a container reached the VPS's `:22` and `:6443`, both K3s APIs, Gitea and Open WebUI as ace2 (2026-10-06). PR 3a closes the sandbox (`docker_network: false`); the gateway still leaves as ace2 until it moves into the sidecar's network namespace, or its egress to `100.64.0.0/10` is dropped.
+- [ ] AI-011 (#2080): Hermes reads the fleet's channels and logs to detect issues. Filed 2026-10-05 inside this epic; it needs the Slack wiring of PR 3c and a read-only Grafana or Loki token (ADR-068 D3: a token is added when a job needs it).
 
 ### PR 4 — the vault zone and the jobs
 

@@ -1,9 +1,10 @@
 # Docker, Compose and image builds
 
-16 lessons, newest first. Back to [all categories](../_index.md).
+17 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 526 | [Hermes's docker backend applies only `approvals.deny`, and nothing fails when that list is empty](lesson-526-hermes-docker-backend-applies-only-the-deny-list.md) | 2026-10-06 |
 | 516 | [An empty `cache.dir` puts act_runner's cache in the container layer, while two documents said it was in the volume](lesson-516-an-empty-cache-dir-puts-act-runner-cache-in-the-container-layer.md) | 2026-10-02 |
 | 468 | [A healthcheck that needs a shell never passes on a distroless image, and blocks whatever waits on it](lesson-468-a-healthcheck-that-needs-a-shell-never-passes-on-a-distroless-image.md) | 2026-09-26 |
 | 437 | [A restart policy makes container uptime measure the host, not the container](lesson-437-a-restart-policy-makes-container-uptime-measure-the-host.md) | 2026-09-05 |

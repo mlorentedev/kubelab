@@ -23,7 +23,9 @@ SECRET_INPUTS = (
     "agent_stack_webui_admin_password",
     "agent_stack_nan_api_key",
     "_agent_stack_webui_secret_key",
+    "_agent_stack_hermes_api_key",
 )
+COMPOSE_FILES = ("compose-webui.yml.j2", "compose-hermes.yml.j2")
 CONFIGURED = "agent_stack_webui_configured | bool"
 
 
@@ -46,12 +48,39 @@ def _context() -> dict:
         "agent_stack_webui_admin_password": "admin-password-sentinel",
         "agent_stack_nan_api_key": "nan-key-sentinel",
         "_agent_stack_webui_secret_key": "session-key-sentinel",
+        "agent_stack_agent_user": common["apps"]["services"]["ai"]["hermes_kubelab"]["user"],
+        "agent_stack_hermes": common["apps"]["services"]["ai"]["hermes_kubelab"],
+        "agent_stack_deny_rules": yaml.safe_load((ROLE / "files/guardrails-denylist.yaml").read_text())["rules"],
+        "_agent_stack_agent_uid": 999,
+        "_agent_stack_hermes_api_key": "hermes-api-key-sentinel",
     }
 
 
 def _render(name: str) -> str:
     env = Environment(loader=FileSystemLoader(str(ROLE / "templates")), undefined=StrictUndefined)
-    return env.get_template(name).render(**_context())
+    return env.get_template(name).render(**_resolved(env))
+
+
+def _resolved(env: Environment) -> dict:
+    """The role's defaults are templates themselves, nested; Ansible resolves them
+    lazily, so here they are rendered until nothing changes. A default that only
+    Ansible can evaluate (a `lookup`) is left as written."""
+    context = _context()
+    for _ in range(5):
+        before = context
+        context = {k: _try_render(env, v, before) for k, v in before.items()}
+        if context == before:
+            return context
+    raise AssertionError("the role's defaults do not resolve")
+
+
+def _try_render(env: Environment, value: object, context: dict) -> object:
+    if not isinstance(value, str) or "{{" not in value:
+        return value
+    try:
+        return env.from_string(value).render(**context)
+    except Exception:  # noqa: BLE001 - Ansible-only filters and lookups
+        return value
 
 
 def _tasks() -> list[dict]:
@@ -78,8 +107,9 @@ def _bytes(limit: str) -> int:
     return int(limit[:-1]) * units[limit[-1]] if limit[-1] in units else int(limit)
 
 
-def test_every_service_is_memory_bounded_under_the_adr_limit() -> None:
-    compose = yaml.safe_load(_render("compose-webui.yml.j2"))
+@pytest.mark.parametrize("compose_file", COMPOSE_FILES)
+def test_every_service_is_memory_bounded_under_the_adr_limit(compose_file: str) -> None:
+    compose = yaml.safe_load(_render(compose_file))
     for name, service in compose["services"].items():
         assert "mem_limit" in service, f"{name} has no memory limit"
         assert _bytes(str(service["mem_limit"])) <= MAX_MEMORY_BYTES, f"{name} exceeds ADR-068 D1's 1.5 GB"
@@ -101,11 +131,12 @@ def test_the_env_file_is_private_and_never_logged() -> None:
     assert task.get("no_log") is True, "a diff of this file would print the OIDC secret"
 
 
+@pytest.mark.parametrize("compose_file", COMPOSE_FILES)
 @pytest.mark.parametrize("secret", SECRET_INPUTS)
-def test_no_secret_reaches_the_compose_file(secret: str) -> None:
-    source = (ROLE / "templates/compose-webui.yml.j2").read_text()
+def test_no_secret_reaches_the_compose_file(secret: str, compose_file: str) -> None:
+    source = (ROLE / "templates" / compose_file).read_text()
     assert secret not in source
-    assert _context()[secret] not in _render("compose-webui.yml.j2")
+    assert _context()[secret] not in _render(compose_file)
 
 
 def _env() -> dict[str, str]:
@@ -198,7 +229,8 @@ def test_open_webui_reads_the_one_nan_key_pr_agent_uses() -> None:
     # Prod's vault: the key is registered `envs=("prod",)`, and `secrets` here is staging's.
     assert stack["vars"]["agent_stack_nan_api_key"] == "{{ gitea_secrets." + key + " | default('') }}"
     [spec] = [s for s in SECRET_CATALOG if s.key_path == key]
-    assert "open_webui" in spec.services, "a rotation must name every consumer, or ace2 keeps the old key"
+    for consumer in ("open_webui", "hermes_kubelab"):
+        assert consumer in spec.services, "a rotation must name every consumer, or ace2 keeps the old key"
     # Key names are plaintext in SOPS, so the vault itself is read: an unregistered
     # copy (the old `open_webui.nan_api_key` path) would escape the catalog and the
     # audit. A second key that Hermes's R1 may mint is fine once it is registered;

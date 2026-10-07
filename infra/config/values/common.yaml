@@ -1947,6 +1947,26 @@ apps:
         # CPU limit, to prove the sandbox Hermes executes commands in can start.
         probe:
           image: busybox:1.37.0
+        # The gateway, run by the agent's own daemon. Pinned: the tag names the
+        # source the config keys and the approval semantics were read from.
+        image: nousresearch/hermes-agent:v2026.9.24
+        # ADR-068 D1: no single service on the dev node takes more than 1.5 GB.
+        memory_limit: 1536m
+        cpu_limit: 2
+        # The OpenAI-compatible API (ADR-068 D5), published on ace2's loopback
+        # only. Hermes's own default port.
+        api_port: 8642
+        # The container every command runs in (ADR-068 D2). A versioned tag:
+        # Hermes's default image is rebuilt daily under the same name.
+        sandbox:
+          image: python:3.13.16-trixie
+          cpus: 1
+          memory_mb: 1024
+        # ADR-068 D7: the key is PR-Agent's, so scheduled and delegated work runs
+        # on an unmetered model; only an interactive turn draws from a quota.
+        models:
+          default: deepseek-v4-flash
+          unmetered: qwen3.6
 
 # =============================================================================
 # Backup sources — the SSOT allow-list (BACKUP-044, #1092 AC3)

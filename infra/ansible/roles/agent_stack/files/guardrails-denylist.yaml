@@ -1,0 +1,98 @@
+# Commands hermes-kubelab never runs, whatever the approval mode (ADR-068 D2).
+#
+# Origin: 80_agents/hermes-nan/guardrails-denylist.yaml in the vault, confirmed
+# 2026-06-09 after the incident each rule cites. That file is regex; Hermes reads
+# `approvals.deny` as fnmatch globs matched against the WHOLE command,
+# lowercased (v2026.9.24, tools/approval_floors.py `_match_user_deny_rule`), so
+# a regex copied verbatim would match nothing. Each rule keeps its origin regex
+# and carries the globs that replace it, plus commands it must block and
+# commands it must let through. tests/test_hermes_config.py checks all three.
+#
+# Paths are ace2's: the NaN-era /persist and /opt/hermes do not exist here; the
+# agent's own state lives under its home.
+
+rules:
+  - why: removed sshd config, keys and the user in the 2026-06-09 incident
+    origin: 'dpkg .*(--purge|--force-depends)'
+    globs:
+      - '*dpkg *--purge*'
+      - '*dpkg *--force-depends*'
+    blocks:
+      - dpkg --purge openssh-server
+      - sudo dpkg -r --force-depends libc6
+    allows:
+      - dpkg -l openssh-server
+
+  - why: removing a system package can brick the agent
+    origin: 'apt(-get)? (remove|purge) .*(openssh|tailscale|cron|libc|systemd|python3|sftp)'
+    globs:
+      - '*apt* remove *openssh*'
+      - '*apt* purge *openssh*'
+      - '*apt* remove *tailscale*'
+      - '*apt* purge *tailscale*'
+      - '*apt* remove *cron*'
+      - '*apt* purge *cron*'
+      - '*apt* remove *libc*'
+      - '*apt* purge *libc*'
+      - '*apt* remove *systemd*'
+      - '*apt* purge *systemd*'
+      - '*apt* remove *python3*'
+      - '*apt* purge *python3*'
+      - '*apt* remove *sftp*'
+      - '*apt* purge *sftp*'
+    blocks:
+      - apt-get remove -y openssh-server
+      - apt purge tailscale
+      - sudo apt-get purge python3-minimal
+    allows:
+      - apt-get install -y jq
+      - apt remove cowsay
+
+  - why: irreversible deletion of the root, /etc, or the agent's own state
+    origin: 'rm -rf +(/|/etc|/persist|/opt/hermes|/hermes-home)([/ ]|$)'
+    globs:
+      - '*rm -rf /'
+      - '*rm -rf / *'
+      - '*rm -rf /etc'
+      - '*rm -rf /etc/*'
+      - '*rm -rf /etc *'
+      - '*rm -rf /var/lib/hermes-kubelab*'
+    blocks:
+      - rm -rf /
+      - sudo rm -rf /etc
+      - rm -rf /etc/ssh
+      - rm -rf /var/lib/hermes-kubelab/data
+    allows:
+      - rm -rf /tmp/build
+      - rm -rf ./etc
+    # The origin's paths are NaN's. Only the root and /etc carry over, so the
+    # origin regex is checked against these and no others.
+    origin_blocks:
+      - rm -rf /
+      - sudo rm -rf /etc
+      - rm -rf /etc/ssh
+
+  - why: a force-push on the shared vault destroys history
+    origin: 'git .*push .*--force'
+    globs:
+      - '*git *push *--force*'
+    blocks:
+      - git push --force origin main
+      - git -C /vault push origin main --force-with-lease
+    allows:
+      - git push origin feature
+
+  - why: breaks privilege separation or access
+    origin: '(useradd|userdel|usermod) .*(root|sshd)'
+    globs:
+      - '*useradd *root*'
+      - '*userdel *root*'
+      - '*usermod *root*'
+      - '*useradd *sshd*'
+      - '*userdel *sshd*'
+      - '*usermod *sshd*'
+    blocks:
+      - usermod -aG sudo root
+      - userdel sshd
+    allows:
+      - useradd -m builder

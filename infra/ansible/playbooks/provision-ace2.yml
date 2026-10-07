@@ -277,6 +277,7 @@
         agent_stack_nan_api_key: "{{ gitea_secrets.apps.services.automation.pr_agent.nan_api_key | default('') }}"
         agent_stack_agent_user: "{{ config.apps.services.ai.hermes_kubelab.user }}"
         agent_stack_agent_probe_image: "{{ config.apps.services.ai.hermes_kubelab.probe.image }}"
+        agent_stack_hermes: "{{ config.apps.services.ai.hermes_kubelab }}"
         # What the agent must fail to read (ADR-058 D3, spec AC2): the dev
         # user's credentials, and the system daemon's socket, which is root.
         agent_stack_dev_home: "/home/{{ config.networking.ssh_users.homelab }}"

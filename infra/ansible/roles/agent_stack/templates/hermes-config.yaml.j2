@@ -1,0 +1,50 @@
+# {{ ansible_managed }}
+# hermes-kubelab (ADR-068 D2, spec AI-009-hermes-ace2). Keys are those of
+# {{ agent_stack_hermes.image }}. Mounted read-only into the gateway. No secret
+# is written here: the keys it names live in the 0600 env file, which Compose
+# reads on the host.
+
+model:
+  provider: custom
+  base_url: {{ agent_stack_nan_api_base_url }}
+  key_env: NAN_API_KEY
+  default: {{ agent_stack_hermes.models.default }}
+
+terminal:
+  # Every command runs in a container on the agent's rootless daemon, never on
+  # ace2 itself (C13), and receives none of the gateway's environment.
+  backend: docker
+  docker_image: {{ agent_stack_hermes.sandbox.image }}
+  docker_forward_env: []
+  container_cpu: {{ agent_stack_hermes.sandbox.cpus }}
+  container_memory: {{ agent_stack_hermes.sandbox.memory_mb }}
+  # No network until the sandbox has its own tailnet identity (ADR-068 D2,
+  # `tag:hermes`). Through the rootless daemon it would leave as ace2, the
+  # admin's node: measured 2026-10-06, it opened the VPS's :22 and :6443.
+  docker_network: false
+
+approvals:
+  # Quoted: a bare `off` is YAML for false, which is how hermes-nan ended up
+  # with no approvals at all.
+  mode: "manual"
+  timeout: 300
+  # Nobody answers a scheduled job or an API call, so both deny rather than wait.
+  cron_mode: "deny"
+  unattended_mode: "deny"
+  # files/guardrails-denylist.yaml. With no host path mounted into the sandbox,
+  # v2026.9.24 skips every other command guard for the docker backend, the
+  # prompts above included; these globs are the one it still applies.
+  deny:
+{% for rule in agent_stack_deny_rules %}
+{% for glob in rule.globs %}
+    - '{{ glob }}'
+{% endfor %}
+{% endfor %}
+
+cron:
+  # Jobs missed while ace2 was off run once at power-on (ADR-068 D2).
+  catch_up_missed: true
+  model: {{ agent_stack_hermes.models.unmetered }}
+
+delegation:
+  model: {{ agent_stack_hermes.models.unmetered }}
