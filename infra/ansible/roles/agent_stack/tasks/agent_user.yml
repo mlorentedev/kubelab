@@ -213,6 +213,14 @@
 # its default network: the VPS's tailnet address is refused, and the same
 # port at its public address answers, so a refusal cannot come from a dead
 # network. Before the rule, both connected (2026-10-07).
+# `nc -z` fails the same on a dead path as on a refused one, so the tailnet
+# address is first proven reachable from the host, as root, outside the rule.
+- name: Prove the VPS's tailnet address answers outside the rule
+  ansible.builtin.wait_for:
+    host: "{{ agent_stack_egress_probe_refused }}"
+    port: "{{ agent_stack_egress_probe_port }}"
+    timeout: 30
+
 - name: Try the tailnet from a container of the agent's daemon
   ansible.builtin.command:
     cmd: >-
