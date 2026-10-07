@@ -164,6 +164,13 @@ def test_a_password_left_in_sops_after_its_node_left_is_compared_too() -> None:
     assert be.escrow_id("rpi4") in escrow.asked
 
 
+def test_a_source_without_a_password_in_sops_fails_it_and_is_named_as_sops() -> None:
+    # backup.sources is consulted, not only the SOPS key set: rpi4 has no password there.
+    escrow = Escrow()
+    assert be.check_fleet("prod", cm=_CM(NODES, ["beelink", "rpi3", "vps"]), run=escrow.run) is False
+    assert be.escrow_id("rpi4") not in escrow.asked
+
+
 def test_the_target_defaults_to_prod() -> None:
     recipe = (REPO / "Makefile").read_text().split("\nbackup-escrow-check:\n", 1)[1].split("\n\n", 1)[0]
     assert "backup escrow-check --env $(or $(filter staging prod,$(ENV)),prod)" in recipe
