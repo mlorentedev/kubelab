@@ -35,6 +35,7 @@ from toolkit.features.access_review import (
     Account,
     GiteaTiers,
     GrafanaTiers,
+    OpenWebUITiers,
     ReviewError,
     declared_tiers,
     idp_groups_drift,
@@ -166,6 +167,9 @@ def test_the_role_path_maps_each_tier(where: str, expr: str, groups: list[str], 
     [
         (GiteaTiers, {ADMIN: "admin", OPERATOR: "user", VIEWER: "user"}),
         (GrafanaTiers, {ADMIN: "Admin", OPERATOR: "Editor", VIEWER: "Viewer"}),
+        # A login with neither group is refused (OAUTH_ALLOWED_ROLES), and `pending` is
+        # the role with no access (v0.11.4 `VERIFIED_USER_ROLES = {'user', 'admin'}`).
+        (OpenWebUITiers, {ADMIN: "admin", OPERATOR: "user", VIEWER: "pending"}),
     ],
 )
 def test_each_app_maps_every_declared_tier(tiers: Any, expected: dict[str, str]) -> None:
@@ -375,9 +379,16 @@ LIVE_HASH = "$argon2id$v=19$m=65536,t=3,p=4$live-hash-must-not-leak"
 RENDERED_GROUPS = {"manu": ["admins", "users"], "operator": ["users"]}
 
 
-def _users_db(groups: dict[str, list[str]], password: str) -> str:
+def _users_db(groups: dict[str, list[str]], password: str, emails: dict[str, str] | None = None) -> str:
+    emails = emails or {}
     users = {
-        u: {"disabled": False, "displayname": u, "password": password, "email": f"{u}@example.com", "groups": g}
+        u: {
+            "disabled": False,
+            "displayname": u,
+            "password": password,
+            "email": emails.get(u, f"{u}@example.com"),
+            "groups": g,
+        }
         for u, g in groups.items()
     }
     return yaml.safe_dump({"users": users})
@@ -409,6 +420,20 @@ def test_idp_groups_drift_when_the_live_users_database_lags(live: dict[str, list
     drifts = [f for f in findings if f.status == "drift"]
     assert {f.user for f in drifts} == lagging
     assert all(f.service == "authelia" and "make apply-secrets ENV=staging" in f.detail for f in drifts)
+    _no_hash_in(findings)
+
+
+def test_idp_email_that_lags_holds_the_user_back() -> None:
+    """Open WebUI accounts are keyed to a login by the email the declaration renders.
+    Until `make apply-secrets` lands a moved email, the account holding it still
+    belongs to the old user, so a correction would hand one user's tier to another."""
+    live = _users_db(RENDERED_GROUPS, LIVE_HASH, {"operator": "old-operator@example.com"})
+    findings, stale = idp_groups_drift(_users_db(RENDERED_GROUPS, RENDERED_HASH), lambda: live, "prod")
+    assert stale == {"operator"}
+    [drift] = [f for f in findings if f.status == "drift"]
+    assert (drift.user, drift.service) == ("operator", "authelia")
+    assert "email" in drift.detail and "make apply-secrets ENV=prod" in drift.detail
+    assert "old-operator@example.com" not in repr(findings)
     _no_hash_in(findings)
 
 
@@ -617,6 +642,127 @@ def test_the_command_exits_1_on_every_finding_a_human_must_act_on(
     )
     result = CliRunner().invoke(app, ["review", "--env", "staging"])
     assert result.exit_code == exit_code, result.output
+
+
+# --------------------------------------------------------------------------- Open WebUI
+
+
+class ScriptedOpenWebUI:
+    """Open WebUI's sign-in and user API, answering by route and recording each call."""
+
+    def __init__(
+        self, users: list[dict[str, Any]], signin: tuple[int, Any] | None = None, update_status: int = 200
+    ) -> None:
+        self.users = users
+        self.signin = signin or (200, {"email": "breakglass@kubelab.live", "token": "tok"})
+        self.update_status = update_status
+        self.calls: list[tuple[str, str, Any, str]] = []
+
+    def __call__(self, method: str, url: str, body: Any, auth: str) -> tuple[int, Any]:
+        self.calls.append((method, url, body, auth))
+        if url.endswith("/api/v1/auths/signin"):
+            return self.signin
+        if url.endswith("/api/v1/users/all"):
+            return 200, {"users": self.users, "total": len(self.users)}
+        return self.update_status, {"id": url.split("/")[-2]}
+
+
+LOGINS = {"manu@mlorente.dev": "manu", "info@kubelab.live": "operator", "breakglass@kubelab.live": "breakglass"}
+WEBUI_USERS = [
+    {"id": "u1", "email": "Manu@mlorente.dev", "role": "admin"},
+    {"id": "u2", "email": "info@kubelab.live", "role": "user"},
+    {"id": "u0", "email": "breakglass@kubelab.live", "role": "admin"},
+    {"id": "u9", "email": "someone@else.test", "role": "user"},
+]
+
+
+def test_open_webui_signs_in_by_email_and_keys_each_account_by_its_authelia_login() -> None:
+    """Open WebUI holds no username: `name` is a display name its user can edit. The
+    email is the OIDC claim Authelia sends, so it is the key back to the declaration."""
+    app = ScriptedOpenWebUI(WEBUI_USERS)
+    accounts = {a.user: a for a in OpenWebUITiers(app, LOGINS).read("http://w", "breakglass@kubelab.live:pw")}
+
+    assert set(accounts) == {"manu", "operator", "breakglass", "someone@else.test"}
+    assert accounts["operator"].tier == "user" and accounts["operator"].ref == {"id": "u2"}
+    signin, listing = app.calls
+    assert signin[:3] == (
+        "POST",
+        "http://w/api/v1/auths/signin",
+        {"email": "breakglass@kubelab.live", "password": "pw"},
+    )
+    assert listing[:2] == ("GET", "http://w/api/v1/users/all") and listing[3] == "Bearer tok"
+
+
+def test_open_webui_edits_the_role_under_the_break_glass_session() -> None:
+    """v0.11.4 loads the user from its database on every request (`get_current_user`),
+    so the edited role reaches a session already open on its next request."""
+    app = ScriptedOpenWebUI(WEBUI_USERS)
+    tiers = OpenWebUITiers(app, LOGINS)
+    accounts = {a.user: a for a in tiers.read("http://w", "breakglass@kubelab.live:pw")}
+    assert tiers.set_tier("http://w", "breakglass@kubelab.live:pw", accounts["operator"], "pending")
+    assert app.calls[-1] == ("POST", "http://w/api/v1/users/u2/update", {"role": "pending"}, "Bearer tok")
+
+
+def test_open_webui_reports_a_refused_edit_as_unfixed() -> None:
+    """v0.11.4 takes `role` as any string (`UserUpdateForm`, `routers/users.py`), so
+    `pending` is accepted; a refusal (the primary-admin guard) must not read as fixed."""
+    app = ScriptedOpenWebUI(WEBUI_USERS, update_status=403)
+    tiers = OpenWebUITiers(app, LOGINS)
+    accounts = {a.user: a for a in tiers.read("http://w", "breakglass@kubelab.live:pw")}
+    assert not tiers.set_tier("http://w", "breakglass@kubelab.live:pw", accounts["operator"], "pending")
+
+
+@pytest.mark.parametrize(
+    "signin",
+    [
+        (401, {}),
+        (0, {}),
+        (200, {"email": "someone@else.test", "token": "tok"}),
+        (200, {"email": "breakglass@kubelab.live"}),
+        (200, ["not", "an", "object"]),
+    ],
+    ids=["refused", "unreachable", "another-account", "no-token", "not-an-object"],
+)
+def test_an_open_webui_sign_in_that_opens_no_break_glass_session_is_a_review_error(signin: tuple[int, Any]) -> None:
+    with pytest.raises(ReviewError, match="Open WebUI"):
+        OpenWebUITiers(ScriptedOpenWebUI(WEBUI_USERS, signin), LOGINS).read("http://w", "breakglass@kubelab.live:pw")
+
+
+def test_a_demoted_open_webui_account_is_fixed_as_pending_not_bounded() -> None:
+    """Gitea's shape, not Grafana's: the role edit is the correction, and the read-back proves it.
+    A later login with neither group is refused and leaves `pending` as it is."""
+    app = FakeApp(OpenWebUITiers, [Account("operator", "user", {"id": "u2"})])
+    [finding] = reconcile("open_webui", {"operator": VIEWER}, app, "http://x", "a:b", apply=True)
+    assert (finding.status, finding.live) == ("fixed", "pending")
+    assert app.edits == [("operator", "pending")]
+
+
+def test_review_env_signs_open_webui_in_by_email_with_the_rendered_logins(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The email to login map is the users database Authelia is given, plus the local
+    break-glass account, which belongs to no Authelia user (ADR-062 D4)."""
+    from toolkit.features import access_review, break_glass
+
+    _wire_review_env(monkeypatch, lambda env: _users_db(RENDERED_GROUPS, LIVE_HASH))
+    monkeypatch.setattr(access_review, "TIERS", {"open_webui": OpenWebUITiers})
+    decl = {"login": "breakglass", "email": "Breakglass@kubelab.live", "secret": "s"}
+    monkeypatch.setattr(break_glass, "declarations", lambda values: {"open_webui": decl})
+    seen: list[tuple[Any, str, str]] = []
+
+    def record(service: str, declared: Any, tiers: Any, base_url: str, auth: str, *rest: Any) -> list[Any]:
+        seen.append((tiers, auth, rest[1]))
+        return []
+
+    monkeypatch.setattr(access_review, "reconcile", record)
+    access_review.review_env("prod", REPO, apply=False, log=lambda line: None)
+
+    [(tiers, auth, protected)] = seen
+    assert isinstance(tiers, OpenWebUITiers)
+    assert auth == "Breakglass@kubelab.live:pw" and protected == "breakglass"
+    assert tiers.logins == {
+        "manu@example.com": "manu",
+        "operator@example.com": "operator",
+        "breakglass@kubelab.live": "breakglass",
+    }
 
 
 # --------------------------------------------------------------------------- how each account signs in

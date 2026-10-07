@@ -161,7 +161,7 @@
 
     - name: Verify Open WebUI answers on the Tailscale address
       ansible.builtin.uri:
-        url: "http://{{ tailscale_ip }}:{{ agent_stack_webui.default_port }}/health"
+        url: "{{ agent_stack_webui.scheme }}://{{ tailscale_ip }}:{{ agent_stack_webui.default_port }}{{ agent_stack_webui.health_path }}"
         status_code: 200
         timeout: 10
       register: _agent_stack_health
@@ -174,7 +174,7 @@
     # disagreeing, the state a break-glass path must never be found in.
     - name: Verify the break-glass account is the seeded admin
       ansible.builtin.uri:
-        url: "http://{{ tailscale_ip }}:{{ agent_stack_webui.default_port }}/api/v1/auths/signin"
+        url: "{{ agent_stack_webui.scheme }}://{{ tailscale_ip }}:{{ agent_stack_webui.default_port }}/api/v1/auths/signin"
         method: POST
         body_format: json
         body:

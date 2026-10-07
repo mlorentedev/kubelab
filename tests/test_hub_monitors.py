@@ -26,6 +26,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from toolkit.features.monitoring_diff import wants_notifications
+
 REPO = Path(__file__).resolve().parent.parent
 MONITORS = REPO / "infra/config/uptime-kuma/monitors.json"
 COMMON = REPO / "infra/config/values/common.yaml"
@@ -109,3 +111,29 @@ class TestTheAwsHubIsDormantNotDeleted:
 
     def test_its_hostname_matches_the_ssot(self) -> None:
         assert _by_key("infra-vpn-aws1-tailscale")["hostname"] == _networking()["aws"]["tailscale_ip"]
+
+
+class TestOpenWebUIIsWatched:
+    """ace2 is on-demand (ADR-028), so its monitor must be muted, not absent:
+    a sleeping homelab must not page at 3 AM, and a dead chat must still show."""
+
+    def _webui(self) -> dict:
+        return yaml.safe_load(COMMON.read_text())["apps"]["services"]["ai"]["open_webui"]
+
+    def test_the_url_is_the_declared_address_and_health_path(self) -> None:
+        """AI-010 (#2069) moves the address; this fails until the monitor follows."""
+        w = self._webui()
+        expected = f"{w['scheme']}://{w['host']}:{w['default_port']}{w['health_path']}"
+        assert _by_key("services-ai-open-webui")["url"] == expected
+
+    def test_it_is_addressed_by_magicdns_not_by_ip(self) -> None:
+        with pytest.raises(ValueError):
+            ipaddress.ip_address(self._webui()["host"])
+
+    def test_it_is_muted_as_on_demand(self) -> None:
+        """The tag alone mutes nothing: the apply path ignores the seed's
+        `notificationIDList` and attaches the default notification unless a tag
+        is in `muted_notification_tags`, so assert the decision itself."""
+        kuma = yaml.safe_load(COMMON.read_text())["apps"]["services"]["observability"]["uptime_kuma"]
+        muted = frozenset(kuma["muted_notification_tags"])
+        assert not wants_notifications(_by_key("services-ai-open-webui"), muted)
