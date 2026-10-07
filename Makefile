@@ -1888,6 +1888,17 @@ ENV ?= dev
 test:
 	@$(POETRY) run pytest
 
+# Prove a guard goes red against one mutation (#2104), instead of the hand-written
+# commit/mutate/checkout line that lost work when a hook refused the commit
+# (lesson-480). Refuses a dirty tree; restores the file from its own bytes.
+# FROM and TO reach the toolkit through the environment, so quotes need no
+# escaping; write a literal `$` as `$$`.
+#   make mutate FILE=toolkit/x.py FROM='> 0' TO='>= 0' TEST=tests/test_x.py
+# Exit 0 = the test went red, 1 = it stayed green, 2 = refused, 3 = no verdict.
+.PHONY: mutate
+mutate:
+	@$(TOOLKIT) tools mutate --file "$(FILE)" --test "$(TEST)"
+
 .PHONY: test-fast
 test-fast:
 	@$(POETRY) run pytest -m "not e2e and not infra and not integration"

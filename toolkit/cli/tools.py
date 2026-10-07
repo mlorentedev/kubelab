@@ -342,6 +342,52 @@ def review_attestation(
 
 
 # =============================================================================
+# MUTATION CHECK (#2104)
+# =============================================================================
+
+
+@app.command("mutate")
+def mutate_cmd(
+    file: Annotated[Path, typer.Option("--file", help="File to mutate, relative to the repository root")],
+    find: Annotated[str, typer.Option("--from", envvar="FROM", help="Text to replace; must occur exactly once")],
+    replace: Annotated[str, typer.Option("--to", envvar="TO", help="Text that replaces it")],
+    test: Annotated[str, typer.Option("--test", help="pytest node id(s) or file(s) expected to go red")],
+) -> None:
+    """Apply one replacement, run the test against it, restore the file.
+
+    Exit codes: 0 the test failed (the guard is red), 1 the test passed (the guard
+    misses the mutant), 2 refused before mutating, 3 the test did not run to a
+    verdict (a collection error is not the guard going red).
+    """
+    import shlex
+    import sys
+
+    from toolkit.features import mutate
+
+    def run_test() -> int:
+        cmd = [sys.executable, "-m", "pytest", "-q", "--no-cov", "-p", "no:cacheprovider", *shlex.split(test)]
+        result = subprocess.run(cmd, cwd=settings.project_root, capture_output=True, text=True, check=False)
+        lines = result.stdout.strip().splitlines()
+        for line in [ln for ln in lines if ln.startswith(("FAILED", "ERROR"))] + lines[-1:]:
+            logger.info(line)
+        return result.returncode
+
+    try:
+        verdict = mutate.run(settings.project_root, file, find, replace, run_test)
+    except mutate.Refused as exc:
+        logger.error(f"refused, nothing was mutated: {exc}")
+        raise typer.Exit(2) from exc
+
+    messages = {
+        mutate.Verdict.RED: "RED: the test failed against the mutant, so the guard catches it",
+        mutate.Verdict.GREEN: "GREEN: the test passed against the mutant, so the guard misses it",
+        mutate.Verdict.DID_NOT_RUN: "NO VERDICT: pytest did not run the test to a result",
+    }
+    (logger.success if verdict is mutate.Verdict.RED else logger.error)(f"{messages[verdict]}. {file} restored.")
+    raise typer.Exit(verdict.exit_code)
+
+
+# =============================================================================
 # LESSON INDEX COUNTERS (#1649)
 # =============================================================================
 
