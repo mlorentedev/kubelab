@@ -1,7 +1,7 @@
 ---
 id: "BACKUP-075"
 type: spec
-status: implementing # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-10-06"
 issue: "mlorentedev/kubelab#2077"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
@@ -54,3 +54,5 @@ The free-tier alert has been firing since 2026-10-06 00:19 UTC on no data, not o
 - Bitácora board: the GitHub issue / Project item tracking this spec (see the `issue:` frontmatter field)
 - Related spec: `specs/BACKUP-057/` (per-node buckets, Q3 retention, the overlap gate)
 - Lessons: lesson-490 (stats cost scales with trees), lesson-511 (refused deletes)
+
+<!-- archived 2026-10-07 — PR: https://github.com/mlorentedev/kubelab/pull/2081 -->
