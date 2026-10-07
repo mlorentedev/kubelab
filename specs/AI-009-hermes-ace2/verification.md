@@ -95,7 +95,7 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 
 - **Installed**: the first provision installed `/usr/local/libexec/agent-stack/vault-hooks/pre-commit` (`changed=2`, the directory and the hook), and the next run gave `changed=0`. Read back on ace2: both are `root 755`, so the agent's user cannot rewrite its own guard.
 - **Behaviour** is measured by `tests/test_hermes_vault_hook.py` against a real git repository, not on ace2: the clone it guards does not exist until the vault token lands (R2). Wiring `core.hooksPath` into that clone is part of the clone's own task.
-- **What it is not**: a guard against mistakes, not against the agent. `git commit --no-verify` skips it. The boundary that holds is the token's scope on the forge.
+- **What it is not**: a guard against mistakes, not against the agent. `git commit --no-verify` skips it. What holds against the agent has to be the vault token's own scope, decided with R2.
 
 ## Decisions made during implementation
 
