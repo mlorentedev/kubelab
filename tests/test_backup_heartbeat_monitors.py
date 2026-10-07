@@ -465,41 +465,56 @@ def test_the_receipt_survives_the_capture_that_wipes_staging() -> None:
 _MAINTENANCE_SCRIPT = REPO / "infra/ansible/roles/node_maintenance/templates/kubelab-maintenance.sh.j2"
 
 
-def _swept_roots(script: str) -> tuple[list[str], list[str]]:
-    """The directories a shell script deletes from by `find` or `rm`, and the lines it cannot read.
+_DELETERS = {"rm", "find", "xargs", "unlink", "shred", "-delete"}
+_CHAINS = {"&&", "||", "|", ";"}
 
-    Every root of a `find` counts, since `-delete` and `-exec rm` act below all
-    of them. `rm` counts in any flag form, with or without `--` or quotes. A
-    root that is not a literal absolute path (a variable, a relative path) is
-    returned as unreadable rather than skipped, so the guard fails closed on a
-    sweep it cannot see.
+
+def _swept_roots(script: str) -> tuple[list[str], list[str]]:
+    """The directories a shell script deletes from, and the lines it cannot read.
+
+    Only one form is read: a statement that starts with `find` or `rm`, with
+    literal absolute roots and nothing chained after it but `|| true`. Every
+    root of a `find` counts, since `-delete` and `-exec rm` act below all of
+    them, and `rm` counts in any flag form, with `--` or quotes. Any other line
+    that names a deleting command (`sudo find`, `xargs rm`, `cd /x && rm`, a
+    variable root) is returned as unreadable rather than skipped, so the guard
+    fails closed on a sweep it cannot see. Quoted text is one token, so an
+    `echo` that mentions `rm` is not a deletion.
     """
     import shlex
 
     roots: list[str] = []
     unreadable: list[str] = []
-    for line in script.splitlines():
-        words = line.strip().rstrip("\\").split(None, 1)
-        if not words or words[0] not in ("find", "rm"):
+    for statement in script.replace("\\\n", " ").splitlines():
+        line = statement.strip()
+        if line.startswith("#"):
             continue
         try:
-            tokens = shlex.split(words[1] if len(words) > 1 else "")
+            tokens = shlex.split(line)
         except ValueError:
-            unreadable.append(line.strip())
+            tokens = line.split()
+        if not _DELETERS & set(tokens):
+            continue
+        tail = tokens[:]
+        while tail and tail[-2:] == ["||", "true"]:
+            tail = tail[:-2]
+        tail = [t for t in tail if not (">" in t and t.lstrip("0123456789&").startswith(">"))]
+        execs = "-exec" in tail or "-execdir" in tail
+        chained = [t for t in tail if t in _CHAINS and not (t == ";" and execs)]
+        if not tail or tail[0] not in ("find", "rm") or chained:
+            unreadable.append(line)
             continue
         args: list[str] = []
-        for token in tokens:
-            if token in (";", "||", "&&", "|") or ">" in token:
+        for token in tail[1:]:
+            if tail[0] == "find" and token.startswith(("-", "(", "!")):
                 break
-            if words[0] == "find" and (token.startswith(("-", "(", "!")) or token == "\\("):
-                break
-            if words[0] == "rm" and token.startswith("-"):
+            if tail[0] == "rm" and token.startswith("-"):
                 continue
             args.append(token)
-        if not args or any(not a.startswith("/") or "$" in a for a in args):
-            unreadable.append(line.strip())
+        if not args or any(not arg.startswith("/") or "$" in arg for arg in args):
+            unreadable.append(line)
             continue
-        roots += [a.removesuffix("/*").rstrip("/") or "/" for a in args]
+        roots += [arg.removesuffix("/*").rstrip("/") or "/" for arg in args]
     return roots, unreadable
 
 
@@ -508,13 +523,29 @@ def test_the_sweep_parser_reads_every_form_and_refuses_what_it_cannot() -> None:
         "rm -fr /a/one\n"
         "rm -rf -- '/a/two'\n"
         "rm -r -f /a/three/*\n"
-        "find /b/one /b/two -type f -delete\n"
+        "find /b/one /b/two -type f -delete 2>/dev/null || true\n"
+        "find /b/three -maxdepth 1 \\(\\\n"
+        "    -name 'x.*' \\\n"
+        "\\) -delete 2>/dev/null || true\n"
+        "find /b/four -name y -exec truncate -s 0 {} \\; 2>/dev/null || true\n"
+        'echo "then: docker rm -f <name>"\n'
+        "# rm -rf /commented/out\n"
         'find "$DIR" -delete\n'
         "rm -rf $STAGING\n"
-        "rm -f relative.txt 2>/dev/null || true\n"
+        "sudo find /c/one -delete\n"
+        "ls /c/two | xargs rm -rf\n"
+        "cd /c/three && rm -f x\n"
+        "find /b/one -delete && rm -rf /c/four\n"
     )
-    assert roots == ["/a/one", "/a/two", "/a/three", "/b/one", "/b/two"]
-    assert unreadable == ['find "$DIR" -delete', "rm -rf $STAGING", "rm -f relative.txt 2>/dev/null || true"]
+    assert roots == ["/a/one", "/a/two", "/a/three", "/b/one", "/b/two", "/b/three", "/b/four"]
+    assert unreadable == [
+        'find "$DIR" -delete',
+        "rm -rf $STAGING",
+        "sudo find /c/one -delete",
+        "ls /c/two | xargs rm -rf",
+        "cd /c/three && rm -f x",
+        "find /b/one -delete && rm -rf /c/four",
+    ]
 
 
 def _maintenance_swept_roots() -> list[str]:
@@ -547,7 +578,7 @@ def test_the_shutdown_evidence_is_in_a_directory_the_role_owns(key: str) -> None
     assert not swept, f"{key} is under {swept}, which the maintenance cleanup deletes from"
 
 
-def test_the_role_moves_unread_evidence_from_the_old_paths_before_dropping_them() -> None:
+def test_the_role_moves_unread_evidence_from_the_old_paths_and_never_deletes_it() -> None:
     """A file still at an old path has not been read, so it is moved, not deleted (BACKUP-052).
 
     Ansible is additive, so the old files outlive the move unless a task handles
@@ -573,5 +604,12 @@ def test_the_role_moves_unread_evidence_from_the_old_paths_before_dropping_them(
     assert tasks[move]["args"] == {"creates": "{{ item.new }}", "removes": "{{ item.old }}"}
     assert str(defaults["node_backup_shutdown_receipt"]) not in olds
 
-    drop = index(lambda t: (t.get("file") or {}).get("state") == "absent" and set(t.get("loop") or []) == set(olds))
-    assert move < drop, "the old files are dropped before they are moved, so an unread one is lost"
+    # Nothing may delete them: no task can tell whether an old file was read.
+    deleting = [
+        t.get("name")
+        for t in tasks
+        if isinstance(t, dict)
+        and (t.get("file") or {}).get("state") == "absent"
+        and set(map(str, t.get("loop") or [(t.get("file") or {}).get("path")])) & set(olds)
+    ]
+    assert not deleting, f"{deleting} can delete a receipt no boot has read yet"
