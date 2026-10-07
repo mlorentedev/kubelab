@@ -126,6 +126,11 @@ def test_every_provision_proves_the_tailnet_refused_and_the_internet_open() -> N
     assert len(probes) == 3, "the VPS's tailnet address, this node's own published port, the internet control"
     local = [p for p in probes if "{{ tailscale_ip }} {{ agent_stack_webui.default_port }}" in p["ansible.builtin.command"]["cmd"]]
     assert len(local) == 1 and "rc == 0" in local[0]["failed_when"], "the DNAT case must be refused"
+    # nc fails the same on a closed port: the port must be proven open first,
+    # from outside the rule, or a refusal measures nothing.
+    control = [i for i, t in enumerate(tasks) if t.get("ansible.builtin.wait_for", {}).get("port") == "{{ agent_stack_webui.default_port }}"]
+    assert control and control[0] < tasks.index(local[0]), "no control proves the port open before the probe"
+    assert "become_user" not in tasks[control[0]], "the control must run outside the agent's uid"
     for probe in probes:
         assert probe.get("check_mode") is False and probe.get("changed_when") is False
         assert probe.get("become_user") == "{{ agent_stack_agent_user }}"

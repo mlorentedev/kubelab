@@ -228,8 +228,16 @@
   failed_when: _agent_stack_egress_refused.rc == 0
 
 # A port published on this node's own tailnet address is DNATed before the
-# filter hook, which a rule on `daddr` let through (2026-10-07). Open WebUI is
-# up by now: the role deploys it before this file.
+# filter hook, which a rule on `daddr` let through (2026-10-07). `nc -z` fails
+# the same on a closed port as on a refused one, so the port is first proven
+# open from the host, as root, which the rule does not cover.
+- name: Prove this node's own published port answers outside the rule
+  ansible.builtin.wait_for:
+    host: "{{ tailscale_ip }}"
+    port: "{{ agent_stack_webui.default_port }}"
+    timeout: 60
+  when: agent_stack_webui_configured | bool
+
 - name: Try this node's own published port from a container of the agent's daemon
   ansible.builtin.command:
     cmd: >-
