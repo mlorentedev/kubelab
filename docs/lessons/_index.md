@@ -15,7 +15,7 @@
 | [ci-automation](ci-automation/_index.md) | 41 | CI workflows, gates, GitHub |
 | [observability](observability/_index.md) | 27 | Metrics, logs, alerting |
 | [containers-docker](containers-docker/_index.md) | 17 | Docker, Compose, image builds |
-| [storage-backup](storage-backup/_index.md) | 28 | Backups, volumes, persistence |
+| [storage-backup](storage-backup/_index.md) | 29 | Backups, volumes, persistence |
 | [apps-web](apps-web/_index.md) | 7 | Application code (API, web) |
 
 New lessons: see [`_format.md`](_format.md) — one file per lesson, appended

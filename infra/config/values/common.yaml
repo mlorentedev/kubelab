@@ -2102,6 +2102,8 @@ backup:
     # then this line in a PR (runbook: offsite-backup-restore.md, "Repository
     # missing or replaced"). Values read 2026-09-30 (specs/BACKUP-058-*).
     repository_ids:
+      # Its first ship, 2026-10-07, born in its own bucket (spec AI-009 AC7).
+      ace2: 95c25ab7191cbade89c0d739abae0587f9a5c6535137883bc10144f5d096317f
       beelink: 69e70ca8307994ac6076171f9dd7ce7b6681de24ad7c941b5be76b29a51133fa
       rpi3: 5ccc440d50e7b601cad0d292d366a32347a63998eca91fb78d910c4081e6641d
       rpi4: a35c05eb848b35e6e8073d6d9df4feb16c8617caa46edb6ade46fe2c34cf9177

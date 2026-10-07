@@ -1,9 +1,10 @@
 # Backups, volumes and persistence
 
-28 lessons, newest first. Back to [all categories](../_index.md).
+29 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 535 | [An on-demand node ships its first backup the moment its timer is enabled](lesson-535-an-on-demand-node-ships-its-first-backup-the-moment-its-timer-is-enabled.md) | 2026-10-07 |
 | 533 | [A directory listed to `cp -a` is copied whole, past every filter on its files](lesson-533-a-directory-listed-to-cp-a-is-copied-whole-past-every-filter-on-its-files.md) | 2026-10-07 |
 | 529 | [`restic copy` reads both repositories with one S3 credential, so per-bucket tokens cannot copy between buckets](lesson-529-restic-copy-reads-both-repositories-with-one-s3-credential.md) | 2026-10-07 |
 | 524 | [Size a backup bucket by listing its objects, not by walking its snapshots](lesson-524-size-a-backup-bucket-by-listing-it-not-by-walking-its-snapshots.md) | 2026-10-07 |
