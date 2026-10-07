@@ -97,6 +97,10 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - **Behaviour** is measured by `tests/test_hermes_vault_hook.py` against a real git repository, not on ace2: the clone it guards does not exist until the vault token lands (R2). Wiring `core.hooksPath` into that clone is part of the clone's own task.
 - **What it is not**: a guard against mistakes, not against the agent. `git commit --no-verify` skips it. What holds against the agent has to be the vault token's own scope, decided with R2.
 
+### AC8, interim, ace2, 2026-10-07
+
+Measured with the stack idle (load 0.04), before PR 4 and PR 5 add the vault clone and the MCP bridge. AC8 is measured again at closing. `free -m`: 1787 MiB used of 11739, 9951 available, no swap used. `docker stats --no-stream`: `open-webui` 654.7 MiB of 1.5 GiB, `hermes-kubelab` 209.2 MiB of 1.5 GiB, `hermes-kubelab-tailscale` 19.0 MiB of 128 MiB, `glances` 107.1 MiB of 256 MiB.
+
 ## Decisions made during implementation
 
 Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
