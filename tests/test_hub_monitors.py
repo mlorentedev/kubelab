@@ -26,6 +26,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from toolkit.features.monitoring_diff import wants_notifications
+
 REPO = Path(__file__).resolve().parent.parent
 MONITORS = REPO / "infra/config/uptime-kuma/monitors.json"
 COMMON = REPO / "infra/config/values/common.yaml"
@@ -129,4 +131,9 @@ class TestOpenWebUIIsWatched:
             ipaddress.ip_address(self._webui()["host"])
 
     def test_it_is_muted_as_on_demand(self) -> None:
-        assert "on-demand" in _by_key("services-ai-open-webui")["tags"]
+        """The tag alone mutes nothing: the apply path ignores the seed's
+        `notificationIDList` and attaches the default notification unless a tag
+        is in `muted_notification_tags`, so assert the decision itself."""
+        kuma = yaml.safe_load(COMMON.read_text())["apps"]["services"]["observability"]["uptime_kuma"]
+        muted = frozenset(kuma["muted_notification_tags"])
+        assert not wants_notifications(_by_key("services-ai-open-webui"), muted)
