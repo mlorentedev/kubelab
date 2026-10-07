@@ -160,7 +160,7 @@ mkdir -p "$(dirname "$STAGING/{{ service }}/{{ src.sqlite }}")"
 # leaves them root 0755, wider than a 0700 source for the whole window and
 # after a restore, so each takes its source's owner and mode.
 ( cd "$SRC_DIR_{{ service }}" && dir=$(dirname "{{ src.sqlite }}") \
-    && while [ "$dir" != . ]; do \
+    && while [ "$dir" != . ] && [ "$dir" != / ]; do \
         chown --reference="$dir" "$STAGING/{{ service }}/$dir" \
             && chmod --reference="$dir" "$STAGING/{{ service }}/$dir" || exit 1; \
         dir=$(dirname "$dir"); \
@@ -171,6 +171,10 @@ capture_sqlite_{{ service }}() {
         if sqlite3 -cmd ".timeout 10000" \
                    "$SRC_DIR_{{ service }}/{{ src.sqlite }}" \
                    ".backup '$STAGING/{{ service }}/{{ src.sqlite }}'"; then
+            # `.backup` creates the file as root with its own mode; a restore puts
+            # back what was staged, so it carries the source database's instead.
+            chown --reference="$SRC_DIR_{{ service }}/{{ src.sqlite }}" "$STAGING/{{ service }}/{{ src.sqlite }}"
+            chmod --reference="$SRC_DIR_{{ service }}/{{ src.sqlite }}" "$STAGING/{{ service }}/{{ src.sqlite }}"
             [ "$attempt" -gt 1 ] && echo "{{ service }}: .backup succeeded on attempt ${attempt}"
             return 0
         fi

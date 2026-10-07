@@ -354,7 +354,8 @@ def _capture(tmp_path: Path, source: dict[str, object]) -> Path:
         )
     )
     env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"}
-    result = subprocess.run(["bash", str(script)], env=env, capture_output=True, text=True, check=False)
+    # A bound, so a capture that loops fails the test instead of hanging the suite.
+    result = subprocess.run(["bash", str(script)], env=env, capture_output=True, text=True, check=False, timeout=60)
     assert result.returncode == 0, result.stderr
     assert (staging / ".capture-complete").exists()
     return staging / "svc"
@@ -412,6 +413,28 @@ def test_a_nested_database_keeps_the_modes_of_the_directories_above_it(tmp_path:
     staged = _capture(tmp_path, {"sqlite": "a/b/x.db"})
     assert (staged / "a").stat().st_mode & 0o777 == 0o700
     assert (staged / "a/b").stat().st_mode & 0o777 == 0o750
+
+
+def test_a_snapshot_keeps_its_source_database_s_owner_and_mode(tmp_path: Path) -> None:
+    """`.backup` creates the file as the capturing user with its own mode; a restore
+    puts back what was staged, so the staged file carries the source's."""
+    _tree(tmp_path, {"a/x.db": "RAW"})
+    (tmp_path / "src/a/x.db").chmod(0o640)
+    staged = _capture(tmp_path, {"sqlite": "a/x.db"})
+    assert (staged / "a/x.db").stat().st_mode & 0o777 == 0o640
+
+
+def test_an_absolute_database_path_ends_the_directory_walk(tmp_path: Path) -> None:
+    """`dirname` of an absolute path ends at `/`, never at `.`: the walk must stop
+    there, or a misdeclared source hangs the capture instead of failing it."""
+    script = _render(
+        "node-backup-capture.sh.j2",
+        node_backup_sources={"svc": {"path": "/srv/x", "sqlite": "/abs/x.db"}},
+        node_backup_location="always-on",
+        node_backup_staging_dir="/staging",
+        node_backup_capture_sentinel="/staging/.capture-complete",
+    )
+    assert 'while [ "$dir" != . ] && [ "$dir" != / ]' in script
 
 
 def test_an_empty_directory_is_kept(tmp_path: Path) -> None:
