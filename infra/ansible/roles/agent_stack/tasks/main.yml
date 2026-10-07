@@ -149,8 +149,9 @@
                  and (_agent_stack_memory.stdout | trim | int)
                      != (agent_stack_webui.memory_limit | human_to_bytes)) }}
 
-    # An env_file change is invisible to Compose's spec hash, hence the explicit
-    # recreate when the env file changed.
+    # The recreate covers what `up -d` cannot see: a port binding or memory limit
+    # lost at create time. An env file's content IS in Compose's hash (measured
+    # 2026-10-07 on the agent's sidecar), so for it the flag is only redundant.
     - name: Start Open WebUI
       ansible.builtin.command: >-
         docker compose -p {{ agent_stack_webui_project }}
@@ -224,4 +225,8 @@
 # After the agent's user: Hermes runs on the daemon that file provisions and proves.
 - name: Provision hermes-kubelab on the agent's daemon
   ansible.builtin.import_tasks: hermes.yml
+  tags: [agent_stack]
+
+- name: Install the agent's vault zone hook
+  ansible.builtin.import_tasks: vault_zone.yml
   tags: [agent_stack]

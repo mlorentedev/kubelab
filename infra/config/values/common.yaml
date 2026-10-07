@@ -1954,6 +1954,9 @@ apps:
         # Its own Unix user on ace2: no sudo, no `docker` group (that group is
         # root on the host), and a rootless daemon inside the user's namespace.
         user: hermes-kubelab
+        # ADR-068 D4: the only vault path its clone may commit to, enforced by
+        # the pre-commit hook the role installs (spec AC6).
+        vault_zone: 80_agents/hermes-kubelab
         # Run through the agent's daemon at every provision, with a memory and a
         # CPU limit, to prove the sandbox Hermes executes commands in can start.
         probe:

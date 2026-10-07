@@ -1,0 +1,24 @@
+#!/bin/sh
+# {{ ansible_managed }}
+# The agent's vault clone commits only inside its own zone (ADR-068 D4, spec
+# AI-009 AC6). Every staged path counts, deletions included, and renames are
+# split so a move out of another zone is the deletion it is.
+#
+# Git judges the paths itself: excluding the zone by pathspec leaves exactly the
+# staged paths outside it, each quoted on one line whatever bytes it holds, so
+# the hook parses no path. Nothing stands between git and the assignment, so
+# `set -e` sees git fail and the commit is refused rather than let through.
+#
+# A hook its committer can skip is a guard against the agent's mistakes, as on
+# NaN, not a boundary: `--no-verify` or another hooksPath bypass it.
+set -eu
+
+zone='{{ agent_stack_vault_zone }}/'
+
+outside=$(git diff --cached --name-only --no-renames -- ":(top,exclude,literal)$zone")
+
+if [ -n "$outside" ]; then
+  echo "refused: this clone commits only under $zone. Outside it:" >&2
+  printf '%s\n' "$outside" | sed 's/^/  /' >&2
+  exit 1
+fi

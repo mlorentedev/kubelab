@@ -91,6 +91,12 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - **Query text in logs**: `ExternalReranker` logs each query at INFO, and v0.11.4 has only `GLOBAL_LOG_LEVEL` to change that. The text stays in ace2's local Docker logs; no shipper reads them.
 - **Found, ticketed**: v0.11.4 runs with `CORS_ALLOW_ORIGIN=*` and `allow_credentials=True` (it logs a warning at every start). #2109.
 
+### PR 4a (`feat/ai009-vault-zone-hook`), ace2, 2026-10-07
+
+- **Installed**: the first provision installed `/usr/local/libexec/agent-stack/vault-hooks/pre-commit` (`changed=2`, the directory and the hook), and the next run gave `changed=0`. Read back on ace2: both are `root 755`, so the agent's user cannot rewrite its own guard.
+- **Behaviour** is measured by `tests/test_hermes_vault_hook.py` against a real git repository, not on ace2: the clone it guards does not exist until the vault token lands (R2). Wiring `core.hooksPath` into that clone is part of the clone's own task.
+- **What it is not**: a guard against mistakes, not against the agent. `git commit --no-verify` skips it. What holds against the agent has to be the vault token's own scope, decided with R2.
+
 ## Decisions made during implementation
 
 Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.

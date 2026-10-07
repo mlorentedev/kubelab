@@ -85,8 +85,15 @@
   },
   {
     "id": "AI-009-hermes-ace2-f13",
-    "behavior": "The agent has its own tailnet identity: a userspace tailscale sidecar registered as tag:hermes with a single-use key minted under the agents user only when it has no state, its proxy unpublished and its node key outside the gateway's mounts, and every grant tag:hermes receives excludes ace2 and the control-plane ports (AC5, identity half). The live half is the provision's tag read-back and the ACL measurement in verification.md",
+    "behavior": "The agent has its own tailnet identity: a userspace tailscale sidecar registered as tag:hermes with a single-use key minted under the agents user only when the sidecar does not report Running, its proxy unpublished and its node key outside the gateway's mounts, and every grant tag:hermes receives excludes ace2 and the control-plane ports (AC5, identity half). The live half is the provision's tag read-back and the ACL measurement in verification.md",
     "verification": "poetry run pytest --no-cov -q tests/test_hermes_sidecar.py tests/test_headscale_role.py",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-009-hermes-ace2-f14",
+    "behavior": "The agent's vault clone commits only inside its zone: the pre-commit hook refuses any staged path outside apps.services.ai.hermes_kubelab.vault_zone, deletions and the source of a move included, and is installed root-owned outside the agent's home (AC6, hook half; the clone lands with the vault token)",
+    "verification": "poetry run pytest --no-cov -q tests/test_hermes_vault_hook.py",
     "state": "pending",
     "evidence": ""
   }
