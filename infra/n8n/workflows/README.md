@@ -166,8 +166,9 @@ flag means implicit TLS (port 465), and port 587 is STARTTLS (`secure: false`) a
 
 "Moving Sale - Daily Metrics Digest" (leaving-denver#225, its ADR-011): every day at 08:00
 America/Denver it reads the sale's first-party events (Workers Analytics Engine) and Cloudflare
-Web Analytics for the last 24 hours and the whole sale, and emails one plain-text digest with the
-repricing candidates. A failed query is named in the email rather than stopping it. **Prod only.**
+Web Analytics for the last 24 hours and the whole sale, and emails one Spanish digest (HTML with a
+plain-text fallback: subject, three headline tiles, the most-viewed items, where visitors come from, and
+the repricing candidates). A failed query is named in the email rather than stopping it. **Prod only.**
 Like every workflow here it is **live as soon as it is imported** (`publish:workflow`): the first
 email is the next 08:00 Denver, or run it once from the n8n UI.
 
