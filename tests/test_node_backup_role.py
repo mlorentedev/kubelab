@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import os
 import re
+import socket
 import subprocess
 from pathlib import Path
 
@@ -121,6 +122,9 @@ def _render(template: str, **overrides: object) -> str:
         loader=FileSystemLoader(str(TEMPLATES)),
         undefined=StrictUndefined,
         keep_trailing_newline=True,
+        # Ansible's template module renders with trim_blocks on; the scripts the
+        # capture tests run are rendered that way, as the node gets them.
+        trim_blocks=bool(ctx.pop("_trim_blocks", False)),
     )
     return env.get_template(template).render(**ctx)
 
@@ -213,7 +217,9 @@ def test_volume_mountpoints_are_resolved_before_the_capture_script_renders():
     tasks = yaml.safe_load((ROLE / "tasks/main.yml").read_text())
     names = [task.get("name", "") for task in tasks]
     resolve = next(i for i, task in enumerate(tasks) if task.get("register") == "node_backup_volume_inspect")
-    render = next(i for i, task in enumerate(tasks) if task.get("template", {}).get("src") == "node-backup-capture.sh.j2")
+    render = next(
+        i for i, task in enumerate(tasks) if task.get("template", {}).get("src") == "node-backup-capture.sh.j2"
+    )
     assert resolve < render, names
     task = tasks[resolve]
     assert task["command"]["argv"][:3] == ["docker", "volume", "inspect"]
@@ -351,6 +357,7 @@ def _capture(tmp_path: Path, source: dict[str, object], shims: dict[str, str] | 
     script.write_text(
         _render(
             "node-backup-capture.sh.j2",
+            _trim_blocks=True,
             node_backup_sources={"svc": {"path": str(tmp_path / "src"), **source}},
             node_backup_location="always-on",
             node_backup_staging_dir=str(staging),
@@ -396,6 +403,49 @@ def test_no_journal_of_the_database_is_copied_raw(tmp_path: Path) -> None:
     )
     staged = _capture(tmp_path, {"sqlite": "db.sqlite3"})
     assert set(_files(staged)) == {"db.sqlite3"}
+
+
+def test_a_source_may_declare_several_databases(tmp_path: Path) -> None:
+    """Hermes keeps six; each is snapshotted, and none of their journals is copied raw."""
+    _tree(
+        tmp_path,
+        {
+            "state.db": "RAW",
+            "state.db-wal": "RAW WAL",
+            "state.db-shm": "SHM",
+            "cron/executions.db": "RAW",
+            "vector_db/chroma.sqlite3": "RAW",
+            "vector_db/chroma.sqlite3-journal": "HOT JOURNAL",
+            "config.yaml": "conf",
+        },
+    )
+    staged = _capture(tmp_path, {"sqlite": ["state.db", "cron/executions.db", "vector_db/chroma.sqlite3"]})
+    src = tmp_path / "src"
+    assert _files(staged) == {
+        "config.yaml": "conf",
+        "cron/executions.db": f"SNAPSHOT of {src}/cron/executions.db\n",
+        "state.db": f"SNAPSHOT of {src}/state.db\n",
+        "vector_db/chroma.sqlite3": f"SNAPSHOT of {src}/vector_db/chroma.sqlite3\n",
+    }
+
+
+def test_an_excluded_path_is_not_copied(tmp_path: Path) -> None:
+    """Open WebUI's `cache/` is a gigabyte of re-downloadable models, ruled tier 3."""
+    _tree(
+        tmp_path, {"webui.db": "RAW", "cache/embedding/model.bin": "MODEL", "cache.txt": "kept", "uploads/a.pdf": "doc"}
+    )
+    (tmp_path / "src/empty").mkdir()
+    sock = socket.socket(socket.AF_UNIX)
+    sock.bind(str(tmp_path / "src/gateway.sock"))
+    try:
+        staged = _capture(
+            tmp_path, {"sqlite": "webui.db", "exclude": {"cache": {"reason": "models, re-downloaded", "tier": 3}}}
+        )
+    finally:
+        sock.close()
+    assert set(_files(staged)) == {"cache.txt", "uploads/a.pdf", "webui.db"}
+    assert not (staged / "cache").exists(), "the excluded directory itself must not be staged"
+    assert (staged / "empty").is_dir(), "an empty directory is part of the tree a restore reproduces"
 
 
 def test_the_staged_tree_keeps_its_directory_modes(tmp_path: Path) -> None:

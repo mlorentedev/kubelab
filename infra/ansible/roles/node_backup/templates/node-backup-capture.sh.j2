@@ -154,40 +154,46 @@ fi
 # timeout does not cover on every build. Three attempts over ~35s against a
 # capture that runs hourly -- a partial backup is refused downstream, so the
 # cost of trying again is strictly lower than the cost of not.
-mkdir -p "$(dirname "$STAGING/{{ service }}/{{ src.sqlite }}")"
+#
+# `sqlite` names one database or a list of them (Hermes keeps six in one
+# directory); each gets its own snapshot and its own failure line.
+{% set dbs = [src.sqlite] if src.sqlite is string else src.sqlite %}
+{% for db in dbs %}
+mkdir -p "$(dirname "$STAGING/{{ service }}/{{ db }}")"
 # A nested database's directories are created here, not by `cp --parents`
 # below, which never recreates a directory it finds already there. `mkdir -p`
 # leaves them root 0755, wider than a 0700 source for the whole window and
 # after a restore, so each takes its source's owner and mode.
-( cd "$SRC_DIR_{{ service }}" && dir=$(dirname "{{ src.sqlite }}") \
+( cd "$SRC_DIR_{{ service }}" && dir=$(dirname "{{ db }}") \
     && while [ "$dir" != . ] && [ "$dir" != / ]; do \
         chown --reference="$dir" "$STAGING/{{ service }}/$dir" \
             && chmod --reference="$dir" "$STAGING/{{ service }}/$dir" || exit 1; \
         dir=$(dirname "$dir"); \
     done )
-capture_sqlite_{{ service }}() {
+capture_sqlite_{{ service }}_{{ loop.index }}() {
     local attempt
     for attempt in 1 2 3; do
         if sqlite3 -cmd ".timeout 10000" \
-                   "$SRC_DIR_{{ service }}/{{ src.sqlite }}" \
-                   ".backup '$STAGING/{{ service }}/{{ src.sqlite }}'"; then
+                   "$SRC_DIR_{{ service }}/{{ db }}" \
+                   ".backup '$STAGING/{{ service }}/{{ db }}'"; then
             # `.backup` creates the file as root with its own mode; a restore puts
             # back what was staged, so it carries the source database's instead.
-            chown --reference="$SRC_DIR_{{ service }}/{{ src.sqlite }}" "$STAGING/{{ service }}/{{ src.sqlite }}"
-            chmod --reference="$SRC_DIR_{{ service }}/{{ src.sqlite }}" "$STAGING/{{ service }}/{{ src.sqlite }}"
-            [ "$attempt" -gt 1 ] && echo "{{ service }}: .backup succeeded on attempt ${attempt}"
+            chown --reference="$SRC_DIR_{{ service }}/{{ db }}" "$STAGING/{{ service }}/{{ db }}"
+            chmod --reference="$SRC_DIR_{{ service }}/{{ db }}" "$STAGING/{{ service }}/{{ db }}"
+            [ "$attempt" -gt 1 ] && echo "{{ service }}: .backup of {{ db }} succeeded on attempt ${attempt}"
             return 0
         fi
-        echo "{{ service }}: .backup attempt ${attempt}/3 failed (database contended); retrying" >&2
+        echo "{{ service }}: .backup of {{ db }} attempt ${attempt}/3 failed (database contended); retrying" >&2
         sleep $(( attempt * 5 ))
     done
     # Names the service. The bare sqlite3 error is "Error: database is locked"
     # and nothing else -- on a node with one source that is merely unhelpful,
     # on the VPS with three it leaves you guessing which one.
-    echo "node-backup-capture: {{ service }} ({{ src.sqlite }}): .backup failed 3 times -- database stayed locked" >&2
+    echo "node-backup-capture: {{ service }} ({{ db }}): .backup failed 3 times -- database stayed locked" >&2
     return 1
 }
-capture_sqlite_{{ service }}
+capture_sqlite_{{ service }}_{{ loop.index }}
+{% endfor %}
 
 # Everything else in the source directory, verbatim -- e.g. Headscale's
 # noise_private.key and derp_server_private.key, which are not databases but
@@ -207,11 +213,18 @@ capture_sqlite_{{ service }}
 # ($STAGING/{{ service }}/opt/gitea/data/...), not the source's own tree --
 # verified against a scratch fixture. Relative paths preserve just the
 # source's internal structure, which is what a restore needs to reproduce.
+#
+# `exclude` names paths ruled tier 3 under the source, each with its reason in
+# common.yaml (Open WebUI's re-downloadable model cache): pruned with the
+# databases, so nothing beneath them is read or staged.
+{% set pruned = [] %}
+{% for db in dbs %}{% for suffix in ['', '-wal', '-shm', '-journal'] %}{% set _ = pruned.append(db ~ suffix) %}{% endfor %}{% endfor %}
+{% for path in (src.exclude | default({})) %}{% set _ = pruned.append(path) %}{% endfor %}
+# One line on purpose: a loop across continuation lines renders differently
+# with and without Jinja's trim_blocks, and a blank line after a `\` ends the
+# command there.
 ( cd "$SRC_DIR_{{ service }}" && find . -mindepth 1 \
-    \( -path "./{{ src.sqlite }}" \
-    -o -path "./{{ src.sqlite }}-wal" \
-    -o -path "./{{ src.sqlite }}-shm" \
-    -o -path "./{{ src.sqlite }}-journal" \) -prune \
+    \( {% for path in pruned %}{% if not loop.first %} -o {% endif %}-path "./{{ path }}"{% endfor %} \) -prune \
     -o \( ! -type d -o -empty \) -exec cp -a --parents -t "$STAGING/{{ service }}" {} + )
 {% endif %}
 {% endfor %}

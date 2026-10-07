@@ -1,9 +1,10 @@
 # Ansible roles and node provisioning
 
-56 lessons, newest first. Back to [all categories](../_index.md).
+57 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 534 | [A template test that renders without `trim_blocks` is not testing what Ansible ships](lesson-534-a-template-test-that-renders-without-trim-blocks-is-not-testing-what-ansible-ships.md) | 2026-10-07 |
 | 530 | [An ignore rule for Ansible Vault files swallows a task file named `vault.yml`](lesson-530-an-ignore-rule-for-ansible-vault-files-swallows-a-task-file-named-vault-yml.md) | 2026-10-07 |
 | 519 | [A remote `~` is the home of whoever runs the task, so a role that uses one has a result per caller](lesson-519-a-remote-tilde-is-the-home-of-whoever-runs-the-task.md) | 2026-10-04 |
 | 506 | [A health check against `localhost` fails once the port binds to the tailnet, and only on the first provision after](lesson-506-a-health-check-against-localhost-fails-once-the-port-binds-to-the-tailnet.md) | 2026-10-02 |

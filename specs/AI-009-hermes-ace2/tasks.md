@@ -87,6 +87,7 @@ Inventoried 2026-10-01 against every surface an existing node-hosted service is 
 
 ### PR 6 — backup
 
+- [x] [AC7] The role can hold ace2's two sources (6a, measured on ace2 2026-10-07). Hermes keeps six WAL databases in one directory, so `sqlite` takes a list, each database with its own snapshot and failure line. Open WebUI's volume is 1.1 GB, of which `cache/` is 1.07 GB of re-downloadable models, so a source may `exclude` a path with a reason and `tier: 3`, the ruling `backup.excluded` asks of a whole volume. Rests on #2113 (#2111), which stopped a nested database being copied raw beside its snapshot. Live on beelink: `changed=1` then `changed=0`, snapshot d3f8edaa. ✓ 2026-10-07
 - [ ] [AC7] Check R6 (is BACKUP-057 merged?). Add `ace2` to `backup.sources` with the Hermes data dir and the Open WebUI volume (SQLite declared for both so `node_backup` snapshots them consistently). `tests/test_node_backup_role.py` and the derived inventory group follow.
 - [ ] [AC7] Live: `make backup-node NODE=ace2 ENV=staging`, then `restic ls latest` shows both paths.
 
