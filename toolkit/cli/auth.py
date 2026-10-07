@@ -169,10 +169,13 @@ def review_cmd(
         raise typer.Exit(1)
     findings = review_env(env, PROJECT_ROOT, apply, typer.echo)
     typer.echo(f"access review: {env}{' (applied)' if apply else ''}")
+    width = max((len(f.service) for f in findings), default=8)
     for f in findings:
         declared = f.declared if f.declared is not None else "-"
         detail = f"  {f.detail}" if f.detail else ""
-        typer.echo(f"  {f.service:<8} {f.user:<10} declared={declared:<7} live={f.live:<12} {f.status.upper()}{detail}")
+        typer.echo(
+            f"  {f.service:<{width}} {f.user:<10} declared={declared:<7} live={f.live:<12} {f.status.upper()}{detail}"
+        )
     blocking = [f for f in findings if f.status in ("drift", "undeclared", "failed", "refused")]
     if blocking:
         hint = "" if apply else " Re-run with --apply to set the declared tiers."

@@ -7,17 +7,18 @@
 
 A tier is a group in Authelia's users database. Each app maps it on its own:
 
-| Group | Argo CD | Grafana | Gitea |
-|---|---|---|---|
-| `admins` | `role:admin` | Admin | admin |
-| `users` | `role:operator` (read, sync, resource actions) | Editor | user |
-| anything else | `role:readonly` | Viewer | refused (Gitea requires `users`) |
+| Group | Argo CD | Grafana | Gitea | Open WebUI |
+|---|---|---|---|---|
+| `admins` | `role:admin` | Admin | admin | admin |
+| `users` | `role:operator` (read, sync, resource actions) | Editor | user | user |
+| anything else | `role:readonly` | Viewer | refused (Gitea requires `users`) | refused; the review sets `pending` |
 
 Membership is declared once, in `groups:` under
 `apps.services.security.authelia.users` in `infra/config/values/common.yaml`.
 What each group *grants* lives in each app: Argo CD's `policy.csv` in
 `infra/helm/argocd/values.yaml`, Grafana's role path in
-`infra/k8s/base/services/grafana-config/grafana.env`, Gitea's auth source flags.
+`infra/k8s/base/services/grafana-config/grafana.env`, Gitea's auth source flags,
+Open WebUI's `OAUTH_*` lines in the `agent_stack` role's `webui.env.j2`.
 
 ## Moving an account between tiers
 
@@ -47,6 +48,7 @@ What each group *grants* lives in each app: Argo CD's `policy.csv` in
    |---|---|---|
    | Gitea | `is_admin` in its database | Edited through the API. Takes effect at once. |
    | Grafana | Org role, written from `groups` at each OAuth login | The account's sessions are revoked. The role changes at its **next login**. |
+| Open WebUI | Role in its database, written from `groups` at each OAuth login | Edited through the API. Takes effect at once: every request reloads the user. A demotion out of both groups writes `pending`, which has no access. Reviewed in `ENV=prod` only, the Authelia it signs in against. |
    | Argo CD | Nothing stored. `groups` come from UserInfo | Nothing to edit. The change is seen within **1h**, the access token's lifespan (lesson-471). |
 
 ## Changing what a tier grants

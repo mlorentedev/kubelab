@@ -1930,6 +1930,8 @@ apps:
         scheme: http
         default_port: 3080
         container_port: 8080
+        # Read by the role's post-start probe and the Uptime Kuma monitor.
+        health_path: /health
         # ADR-068 D1: at most 1.5 GB per service, so the dev node keeps 4 GB free.
         memory_limit: 1536m
         cpu_limit: "2.0"

@@ -4,15 +4,16 @@ The tier is declared once, as group membership in `apps.services.security.authel
 (ADR-062 D2, amended by AUTH-011): `admins` administer, `users` operate, and anyone
 else only reads. Each app maps those three tiers onto its own roles, and applies
 that rule only when someone logs in, and keeps the result in its own database:
-Gitea's `is_admin`, Grafana's org role. So taking someone out of `admins` changes
+Gitea's `is_admin`, Grafana's org role, Open WebUI's role. So taking someone out of `admins` changes
 nothing in an app until they next log in there, and a session already open keeps
 the old privilege. A demotion is not done until the live tier matches.
 
 This reads the live tier of every account over the break-glass private path,
-compares it with the declaration, and with `apply` corrects the difference. Both
-apps check the stored privilege on every request, so a corrected value reaches a
+compares it with the declaration, and with `apply` corrects the difference. All
+three apps check the stored privilege on every request, so a corrected value reaches a
 session that is already open on its next request. How it is corrected differs:
-Gitea's `is_admin` is edited through its API, but Grafana's role cannot be. With
+Gitea's `is_admin` and Open WebUI's role are edited through their APIs, but
+Grafana's role cannot be. With
 OIDC as Grafana's only login, the role is written from `groups` at each login and
 the API refuses to change it (`ErrCannotChangeRoleForExternallySyncedUser`). So
 for Grafana, correcting means revoking the account's sessions: the next request
@@ -43,7 +44,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from toolkit.features.break_glass_rotation import Request, _http
+from toolkit.features.break_glass_rotation import Request, _http, _http_json
 
 #: The groups that grant the admin and operating tiers, as Grafana's role mapping,
 #: Argo CD's RBAC and Gitea's auth source spell them. `tests/test_access_review.py`
@@ -196,11 +197,64 @@ class GrafanaTiers:
         return status == 200
 
 
-TierReader = Callable[[], Any]
+class OpenWebUITiers:
+    """Open WebUI's role, which it loads from its database on every request (v0.11.4
+    `get_current_user`) and writes from `groups` at each OAuth login. Unlike Grafana,
+    its API edits an OAuth account's role, so this is Gitea's shape: edit, read back.
+
+    A login with neither group is refused (`OAUTH_ALLOWED_ROLES`) and leaves the stored
+    role as it was, so the declared VIEWER is `pending`, the role with no access
+    (`VERIFIED_USER_ROLES = {'user', 'admin'}`), and a login never undoes it.
+
+    It signs in by email and answers with a bearer token, and it keeps no username:
+    `name` is a display name its user can edit. Each account is keyed back to its
+    Authelia login by email, the claim Authelia sends (LOGINS); an email it does not
+    know is reported under the email itself, as `undeclared`.
+    """
+
+    signs_in_with = "email"
+    tier_map = {ADMIN: "admin", OPERATOR: "user", VIEWER: "pending"}
+
+    def __init__(self, request: Request = _http_json, logins: Mapping[str, str] | None = None) -> None:
+        self._request = request
+        self.logins = {email.lower(): login for email, login in (logins or {}).items()}
+        self._token = ""
+
+    def _sign_in(self, base_url: str, auth: str) -> str:
+        email, _, password = auth.partition(":")
+        body = {"email": email, "password": password}
+        status, answer = self._request("POST", f"{base_url}/api/v1/auths/signin", body, "")
+        answer = answer if isinstance(answer, dict) else {}
+        token = answer.get("token")
+        if status != 200 or str(answer.get("email", "")).lower() != email.lower() or not token:
+            raise ReviewError(f"Open WebUI opened no break-glass session (answered {status})")
+        return str(token)
+
+    def read(self, base_url: str, auth: str) -> list[Account]:
+        self._token = self._sign_in(base_url, auth)
+        # `/users/all` is unpaged: `Users.get_users` applies no limit when given none.
+        status, body = self._request("GET", f"{base_url}/api/v1/users/all", None, f"Bearer {self._token}")
+        users = body.get("users") if isinstance(body, dict) else None
+        if status != 200 or not isinstance(users, list):
+            raise ReviewError(f"Open WebUI answered {status} listing users")
+        return [
+            Account(self.logins.get(u["email"].lower(), u["email"]), u.get("role", ""), {"id": u["id"]}) for u in users
+        ]
+
+    def set_tier(self, base_url: str, auth: str, account: Account, tier: str) -> bool:
+        # `UserUpdateForm` takes every field as optional, so a body with only `role`
+        # changes nothing else. The first user (the break-glass account) is refused
+        # to anyone but itself, and the review never edits it anyway.
+        url = f"{base_url}/api/v1/users/{account.ref['id']}/update"
+        status, _ = self._request("POST", url, {"role": tier}, f"Bearer {self._token}")
+        return status == 200
+
+
+TierReader = Callable[..., Any]
 
 #: Apps that hold a tier in their own database. Each is reached with its declared
 #: break-glass account, over its break-glass private path.
-TIERS: dict[str, TierReader] = {"gitea": GiteaTiers, "grafana": GrafanaTiers}
+TIERS: dict[str, TierReader] = {"gitea": GiteaTiers, "grafana": GrafanaTiers, "open_webui": OpenWebUITiers}
 
 
 class ReviewError(RuntimeError):
@@ -350,6 +404,27 @@ def idp_groups_drift(rendered: str, read_live: Callable[[], str], env: str) -> t
     return findings, frozenset(f.user for f in findings if f.status == "drift")
 
 
+def _logins_by_email(text: str) -> dict[str, str]:
+    """Email -> username from the users database, reading nothing else (it holds hashes).
+
+    Unparseable means empty: `idp_groups_drift` already reports that database as
+    `failed`, and with no map every email-keyed account reads `undeclared`, which is
+    never edited."""
+    import yaml
+
+    try:
+        users = (yaml.safe_load(text or "") or {}).get("users")
+    except (yaml.YAMLError, AttributeError):
+        return {}
+    if not isinstance(users, dict):
+        return {}
+    return {
+        str(entry["email"]).lower(): str(user)
+        for user, entry in users.items()
+        if isinstance(entry, dict) and entry.get("email")
+    }
+
+
 def _rendered_users_database(env: str, project_root: Path) -> str:
     from toolkit.features.configuration import ConfigurationManager
     from toolkit.features.k8s_secrets import _build_users_database
@@ -464,16 +539,15 @@ def review_env(env: str, project_root: Path, apply: bool, log: Callable[[str], N
     from toolkit.features.oidc_clients import load_values
 
     values = load_values(env, project_root)
+    rendered = _rendered_users_database(env, project_root)
     # First, so a user whose groups lag is never "corrected" in an app below.
-    findings, stale = idp_groups_drift(
-        _rendered_users_database(env, project_root), lambda: _live_users_database(env), env
-    )
+    findings, stale = idp_groups_drift(rendered, lambda: _live_users_database(env), env)
     # With the IdP unread, no user is known not to lag, so a correction could be the
     # non-converging revoke this check exists to prevent: review the apps, fix nothing.
     if apply and any(f.status == "failed" for f in findings):
         log("  apply skipped: the groups Authelia serves could not be read, so no correction is made")
         apply = False
-    findings += _review_apps(env, project_root, values, apply, stale, log)
+    findings += _review_apps(env, project_root, values, apply, stale, log, _logins_by_email(rendered))
     findings += _argocd_findings(env, values)
     return findings
 
@@ -485,8 +559,12 @@ def _review_apps(
     apply: bool,
     stale: frozenset[str],
     log: Callable[[str], None],
+    logins_by_email: Mapping[str, str] | None = None,
 ) -> list[Finding]:
-    """Reconcile every app that has a break-glass secret in ENV, each over its own private path."""
+    """Reconcile every app that has a break-glass secret in ENV, each over its own private path.
+
+    An app that signs in by email (`signs_in_with`) is given the email to login map,
+    the break-glass account's own included, which belongs to no Authelia user."""
     from toolkit.features import break_glass as bg
     from toolkit.features.secrets_manager import SecretsManager
 
@@ -505,11 +583,16 @@ def _review_apps(
             continue
         file_env = bg.secret_file(decl["secret"], env, project_root / "infra" / "config" / "secrets")
         protected = bg.account_login(decl, values)
-        auth = f"{protected}:{manager.show_secret(file_env, decl['secret'])}"
+        if getattr(make, "signs_in_with", "login") == "email":
+            reader = make(logins={**(logins_by_email or {}), decl["email"]: protected})
+            sign_in = decl["email"]
+        else:
+            reader, sign_in = make(), protected
+        auth = f"{sign_in}:{manager.show_secret(file_env, decl['secret'])}"
         with bg.private_url(env, plan) as base_url:
             try:
                 findings += reconcile(
-                    service, declared, make(), base_url, auth, apply, protected, stale, apply_secrets_hint(env)
+                    service, declared, reader, base_url, auth, apply, protected, stale, apply_secrets_hint(env)
                 )
             except ReviewError as exc:
                 findings.append(Finding(service, "*", None, "unreadable", "failed", str(exc)))

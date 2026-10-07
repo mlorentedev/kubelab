@@ -837,6 +837,64 @@
     "expiryNotification": true
   },
   {
+    "key": "services-ai-open-webui",
+    "name": "Services · AI · Open WebUI",
+    "type": "http",
+    "url": "http://ace2.kubelab.internal:3080/health",
+    "hostname": null,
+    "port": null,
+    "interval": 120,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": [
+      "200-299"
+    ],
+    "description": "Open WebUI on ace2, tailnet-only (ADR-068). On-demand: muted while the homelab sleeps, still visible. SSOT: apps.services.ai.open_webui.{scheme,host,default_port,health_path}; AI-010 (#2069) changes that address, and tests/test_hub_monitors.py fails until this URL follows.",
+    "active": true,
+    "httpBodyEncoding": "json",
+    "maxredirects": 10,
+    "notificationIDList": [
+      1
+    ],
+    "parent": null,
+    "tags": [
+      "service",
+      "on-demand"
+    ]
+  },
+  {
+    "key": "services-leaving-denver",
+    "name": "Leaving Denver",
+    "type": "keyword",
+    "url": "https://leaving-denver.pages.dev/",
+    "hostname": null,
+    "port": null,
+    "interval": 300,
+    "maxretries": 3,
+    "method": "GET",
+    "keyword": "Denver Tech Center Relocation Sale",
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": [
+      "200-299"
+    ],
+    "description": "Moving-sale site on Cloudflare Pages (repo leaving-denver, docs/runbooks/ops.md). The keyword is the page title, so an error page or a Pages 5xx fails it. Declared here because apply removes any live monitor the seed lacks: the hand-made one was deleted that way on 2026-10-06.",
+    "active": true,
+    "httpBodyEncoding": null,
+    "maxredirects": 10,
+    "notificationIDList": [
+      1
+    ],
+    "parent": null,
+    "tags": [
+      "prod",
+      "service"
+    ]
+  },
+  {
     "key": "home-iot-smart-plug-co",
     "name": "Home · IoT · Smart Plug CO",
     "type": "ping",
