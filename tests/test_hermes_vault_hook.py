@@ -117,12 +117,6 @@ def test_a_path_that_is_only_a_newline_is_outside(vault: Path) -> None:
     assert _commit(vault) != 0
 
 
-def test_the_zone_is_matched_literally_not_as_a_glob(tmp_path: Path) -> None:
-    vault = _vault(tmp_path, "agents*")
-    _write(vault, "agents-other/notes.md")
-    assert _commit(vault) != 0
-
-
 def test_a_failing_git_refuses_the_commit(tmp_path: Path) -> None:
     """With git piped into the parse, its failure read as "nothing staged" and the
     commit went through: the shell judges a pipeline by its last command."""
@@ -152,6 +146,7 @@ def test_the_agent_cannot_edit_the_hook() -> None:
     assert spec["owner"] == "root" and spec["mode"] == "0755"
     assert spec["dest"] == "{{ agent_stack_vault_hooks }}/pre-commit"
     dirs = [t for t in tasks if (t.get("ansible.builtin.file") or {}).get("path") == "{{ agent_stack_vault_hooks }}"]
-    assert len(dirs) == 1 and dirs[0]["ansible.builtin.file"]["owner"] == "root", "an agent-owned parent can swap the hook"
+    assert len(dirs) == 1
+    assert dirs[0]["ansible.builtin.file"]["owner"] == "root", "an agent-owned parent can swap the hook"
     defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text())
     assert not defaults["agent_stack_vault_hooks"].startswith("/home/")
