@@ -55,7 +55,7 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 
 - [x] AC1 (four numeric node sizes and a numeric fleet, staging and prod) -> staging run 04:06Z and prod runs 06:07Z/06:10Z above (`features.json` f1: 5 numeric lines)
 - [x] AC2 (fleet = bucket roots, each once) -> `test_each_node_reports_its_prefix_and_the_fleet_its_buckets`, `test_it_sizes_each_bucket_once_and_each_node_prefix`
-- [x] AC3 (time does not follow snapshots) -> baseline and staging tables above; `test_each_node_logs_how_long_its_listing_took`
+- [x] AC3, in substance only (listing is 0-1 s against 31-601 s for `stats`; not shown independent of snapshot count, nor measured both ways in one sitting, see Known gaps) -> baseline and staging tables above; `test_each_node_logs_how_long_its_listing_took`
 - [x] AC4 (failures are null, never unhealthy, sizing exits 0) -> `test_an_unmeasured_bucket_makes_the_fleet_size_null`, `test_a_failed_node_listing_is_null_and_never_fails_the_pod`, `test_a_hung_listing_is_cut_off_and_null`, `test_without_a_sizes_file_every_size_is_null_and_named`
 - [x] AC5 (no `raw_bytes` reader left) -> `test_no_watcher_emitter_or_reader_still_says_raw_bytes`, `test_the_size_rule_fires_at_eighty_percent_of_the_free_tier_declared_in_common`
 
