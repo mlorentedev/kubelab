@@ -88,6 +88,22 @@ def test_an_entry_without_a_password_fails_it() -> None:
     assert _check(escrow) is False
 
 
+def test_an_output_format_it_cannot_read_is_not_reported_as_a_missing_password(
+    caplog: pytest.LogCaptureFixture, capsys: pytest.CaptureFixture[str]
+) -> None:
+    escrow = Escrow()
+    real = escrow.run
+
+    def reformatted(argv: list[str], env: dict[str, str]) -> tuple[int, str, str]:
+        rc, out, err = real(argv, env)
+        return rc, out.replace("len=", "length: "), err
+
+    assert be.check(NODES, secret=_sops().get, run=reformatted) is False
+    out = capsys.readouterr().out + caplog.text
+    assert "output format changed" in out
+    assert "MISSING in the escrow" not in out
+
+
 def test_an_unreadable_escrow_fails_it_and_says_so(capsys: pytest.CaptureFixture[str]) -> None:
     escrow = Escrow()
     escrow.fail[be.escrow_id("beelink")] = (1, "bw serve: vault is locked")

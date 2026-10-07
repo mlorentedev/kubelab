@@ -20,6 +20,9 @@ from toolkit.features.backup_node_credentials import restic_password_path
 ESCROW_PREFIX = "KUBELAB_RESTIC_PASSWORD"
 # The registry maps each entry's `password` field to the login's password.
 _PASSWORD_LINE = re.compile(r"^\s*data\.login\.password\s+len=\d+\s+([0-9a-f]{12})\s*$", re.MULTILINE)
+# Any fingerprinted field: its presence tells an entry without a password from
+# output this parser no longer understands.
+_FIELD_LINE = re.compile(r"^\s*data\.\S+\s+len=\d+\s+[0-9a-f]{12}\s*$", re.MULTILINE)
 
 
 def escrow_id(node: Optional[str]) -> str:
@@ -51,7 +54,13 @@ def check(nodes: list[str], *, secret: Callable[[str], Optional[str]], run: RunF
             ok = False
             continue
         match = _PASSWORD_LINE.search(out)
-        if not match:
+        if not match and not _FIELD_LINE.search(out):
+            logger.error(
+                f"{entry}: `dotf secrets probe` printed no fingerprinted field this check can read. "
+                "Has its output format changed? The escrow itself was not judged"
+            )
+            ok = False
+        elif not match:
             logger.error(f"{entry}: MISSING in the escrow, the entry holds no password")
             ok = False
         elif match.group(1) != fingerprint(str(value)):
