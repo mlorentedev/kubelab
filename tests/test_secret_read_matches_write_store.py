@@ -9,7 +9,11 @@ playbook rather than naming these two.
 
 Two checks, because the nodes differ. On the Beelink a role writes secrets, so a
 read must match the store its write went to. On ace2 nothing writes: a read must
-use a store whose environment `SECRET_CATALOG` declares for that key (#1975).
+use a store that holds the key, in `common.enc.yaml` or in that store's own env
+file (#1975). SOPS encrypts values, not key names, so this needs no decryption.
+`SecretSpec.envs` is not that answer: it says which environments must have a key,
+not which file holds it, and a key stored in common resolves from every store
+(ANSIBLE-033).
 
 **Reading the wrong one does not fail.** It resolves to `''` through the
 `| default('', true)` every one of these reads carries, and an empty string is a
@@ -51,10 +55,10 @@ from pathlib import Path
 import pytest
 import yaml
 
-from toolkit.features.secrets_manager import SECRET_CATALOG
 
 REPO = Path(__file__).resolve().parents[1]
 PLAYBOOKS = REPO / "infra/ansible/playbooks"
+SECRETS = REPO / "infra/config/secrets"
 PLAYBOOK = PLAYBOOKS / "provision-bee.yml"
 ROLE_TASKS = REPO / "infra/ansible/roles/beelink_services/tasks/main.yml"
 
@@ -205,7 +209,18 @@ def test_every_written_secret_is_read_back_somewhere(path: str) -> None:
     )
 
 
-# ── every playbook with more than one store, judged against SECRET_CATALOG (#1975) ──
+# ── every playbook with more than one store, judged against what each store holds (#1975) ──
+
+
+def _holds(env: str, dotted: str) -> bool:
+    """Whether `common + env` carries the key, read from the committed SOPS files."""
+    for name in ("common", env):
+        node = yaml.safe_load((SECRETS / f"{name}.enc.yaml").read_text(encoding="utf-8"))
+        for part in dotted.split("."):
+            node = node.get(part) if isinstance(node, dict) else None
+        if node is not None:
+            return True
+    return False
 
 
 def _stores(play: dict) -> dict[str, str]:
@@ -246,28 +261,23 @@ def test_the_two_store_nodes_are_found() -> None:
 @pytest.mark.parametrize(
     ("playbook", "play", "stores"), _multi_store_plays(), ids=[name for name, _, _ in _multi_store_plays()]
 )
-def test_every_read_uses_a_store_whose_environment_needs_that_secret(
-    playbook: str, play: dict, stores: dict[str, str]
-) -> None:
+def test_every_read_uses_a_store_that_holds_that_secret(playbook: str, play: dict, stores: dict[str, str]) -> None:
     """The environment is the play's declared value (`deploy_env: staging`), the one
     the node is documented under. `make provision` passes `-e deploy_env=<ENV>`,
     which overrides it, so a read from `secrets` must hold for the declared one."""
-    specs = {spec.key_path: spec for spec in SECRET_CATALOG}
     declared = play.get("vars") or {}
-    reads = READ.findall(yaml.safe_dump(play, width=float("inf")))
+    dumped = yaml.safe_dump(play, width=float("inf"))
+    checked = sorted({(store, path) for store, path in READ.findall(dumped) if store in stores})
+    assert checked, f"{playbook}: no read from {sorted(stores)} found, so the parser stopped matching"
     wrong: list[str] = []
-    for store, path in sorted(set(reads)):
-        if store not in stores:
-            continue
+    for store, path in checked:
         env = declared.get(stores[store])
-        spec = specs.get(path)
-        if spec is None:
-            wrong.append(f"{store}.{path}: not in SECRET_CATALOG, so no environment can be checked")
-        elif env not in spec.envs:
-            wrong.append(f"{store}.{path}: `{store}` is {stores[store]}={env!r}, the catalog declares {spec.envs}")
-    assert reads, f"{playbook}: no store read found, so the parser stopped matching"
+        if not isinstance(env, str):
+            wrong.append(f"{store}.{path}: the play declares no `{stores[store]}` in its vars")
+        elif not _holds(env, path):
+            wrong.append(f"{store}.{path}: `{store}` is common + {env}, and neither file holds that key")
     assert not wrong, (
-        f"{playbook} reads secrets from a store whose environment does not hold them:\n  "
+        f"{playbook} reads secrets from a store that does not hold them:\n  "
         + "\n  ".join(wrong)
         + "\n\nThis does not raise: the read resolves to '' through `default('')`, and the "
         "node is provisioned with an empty credential while the play reports failed=0."
