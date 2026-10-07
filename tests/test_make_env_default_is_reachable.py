@@ -140,6 +140,8 @@ ENV_TARGETS: dict[str, tuple[str, str]] = {
     "backup-verify-destination": ("--env", "prod"),
     "backup-verify-restic": ("--env", "prod"),
     "backup-coverage": ("--env", "prod"),
+    # Added with the target (BACKUP-057): the node passwords are prod SOPS.
+    "backup-escrow-check": ("--env", "prod"),
     # Added with the target (BACKUP-046): it reads prod data, so prod is the default.
     "backup-drill-postgres": ("--env", "prod"),
     "backup-drill-gitea": ("--env", "prod"),
