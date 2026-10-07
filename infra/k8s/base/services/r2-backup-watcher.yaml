@@ -1,7 +1,10 @@
 # r2-backup-watcher — the in-cluster reader of Cloudflare R2 backup health
 # (OBS-015, BACKUP-055).
 #
-# Every 6h a Job runs `r2-backup-watcher/probe.sh` in the pinned restic image,
+# Every 6h a Job first runs `r2-backup-watcher/size.sh` in the pinned rclone
+# image (init container `r2-size`, BACKUP-075), which sizes each bucket and node
+# prefix by listing R2's objects into an emptyDir. Then it runs
+# `r2-backup-watcher/probe.sh` in the pinned restic image,
 # with a READ-ONLY R2 token, against every node listed in `targets.txt`. It
 # prints one `r2_backup_node` line per node and one fleet `r2_backup_health`
 # line. Vector ships stdout to Loki (ADR-028), and the Grafana rule in
@@ -59,12 +62,12 @@ spec:
       # the rule's `last_over_time` keeps only the last, so a flaky pass could
       # overwrite a real failure. The next run is at most 6h away.
       backoffLimit: 0
-      # Floor, derived from the probe: nodes x (3 restic calls x RESTIC_TIMEOUT
-      # + STATS_TIMEOUT) = 4 x (3 x 60 + 600) = 3120s. The real run takes ~3 min,
-      # most of it the Beelink's `stats` (143s in staging, 2026-09-30); the
-      # deadline is sized for the worst case the probe allows, not the typical
-      # one. tests/test_r2_backup_watcher_manifest.py counts the calls.
-      activeDeadlineSeconds: 3600
+      # Floor, derived from both scripts: (buckets + nodes) x SIZE_TIMEOUT for the
+      # sizing step, then nodes x 3 restic calls x RESTIC_TIMEOUT for the probe =
+      # (1 + 4) x 120 + 4 x 3 x 60 = 1320s. Sized for the worst case the scripts
+      # allow, not the typical run. tests/test_r2_backup_watcher_manifest.py
+      # counts the calls.
+      activeDeadlineSeconds: 1800
       template:
         metadata:
           labels:
@@ -74,15 +77,60 @@ spec:
           restartPolicy: Never
           serviceAccountName: r2-backup-watcher
           automountServiceAccountToken: false
-          # Longer than the longest single call, STATS_TIMEOUT. Kubelet signals
-          # PID 1 only, and `sh` runs its trap once the running restic call
-          # returns. With less, a deadline kill during `stats` would SIGKILL the
-          # probe before its fleet line.
-          terminationGracePeriodSeconds: 660
+          # Longer than the longest single restic call, RESTIC_TIMEOUT. Kubelet
+          # signals PID 1 only, and `sh` runs its trap once the running restic
+          # call returns. With less, a deadline kill would SIGKILL the probe
+          # before its fleet line.
+          terminationGracePeriodSeconds: 90
           securityContext:
             runAsNonRoot: true
             runAsUser: 65534
             runAsGroup: 65534
+          # BACKUP-075. size.sh always exits 0, so a failed LISTING never keeps
+          # the probe from running: it writes `null` and the probe reports the
+          # node unsized, never unhealthy. The container itself can still fail
+          # (image pull, OOM): the pod then ends before the probe, prints no
+          # health line, and the health rule pages on no data once its 24h
+          # window empties, loud but late. `kubectl get pods` on the Job names
+          # the failed container. Only the S3 pair: listing needs no restic
+          # password.
+          initContainers:
+            - name: r2-size
+              image: rclone/rclone
+              command: ["/bin/sh", "/etc/r2-backup-watcher/size.sh"]
+              env:
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: r2-backup-watcher-secrets
+                      key: AWS_ACCESS_KEY_ID
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: r2-backup-watcher-secrets
+                      key: AWS_SECRET_ACCESS_KEY
+                # rclone looks for a config file under $HOME and finds none,
+                # which is right: the remote is defined on the command line.
+                - name: HOME
+                  value: /tmp
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              volumeMounts:
+                - name: probe
+                  mountPath: /etc/r2-backup-watcher
+                  readOnly: true
+                - name: sizes
+                  mountPath: /var/run/r2-sizes
+                - name: tmp
+                  mountPath: /tmp
+              resources:
+                requests:
+                  memory: 32Mi
+                limits:
+                  memory: 128Mi
           containers:
             - name: r2-backup-watcher
               image: restic/restic
@@ -106,6 +154,9 @@ spec:
                 # there is no cache directory to provide.
                 - name: tmp
                   mountPath: /tmp
+                - name: sizes
+                  mountPath: /var/run/r2-sizes
+                  readOnly: true
               resources:
                 requests:
                   memory: 64Mi
@@ -119,4 +170,6 @@ spec:
               configMap:
                 name: r2-backup-watcher-probe
             - name: tmp
+              emptyDir: {}
+            - name: sizes
               emptyDir: {}

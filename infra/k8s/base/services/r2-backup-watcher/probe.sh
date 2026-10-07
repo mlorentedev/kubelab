@@ -28,13 +28,14 @@
 #            so 0 there means the probe cannot see the fleet, and the node is
 #            reported unhealthy rather than every on-demand node reading "off".
 #
-# It also reports each repository's size (BACKUP-057 Q3), `restic stats --mode
-# raw-data`: the stored, compressed bytes of every blob the snapshots reference.
-# That is what the bucket lock multiplies, and what the free tier is billed on,
-# less index and snapshot files and packs not yet pruned. A size is never a
-# health check: `stats` failing leaves the node healthy and its size `null`,
-# never 0, which would read as "fits". The fleet sum is `null` unless every
-# node was sized, because a partial sum understates the fleet.
+# It also reports sizes (BACKUP-057 Q3, BACKUP-075) as `stored_bytes`, read from
+# the file size.sh wrote in the init container, by listing R2's objects: each
+# node's line carries its repository prefix, and the fleet line the sum of every
+# bucket the targets name, each listed once at its root. That is what R2 bills,
+# and what the bucket lock multiplies. A size is never a health check: a failed
+# listing leaves the node healthy and its size `null`, never 0, which would read
+# as "fits". The fleet size is `null` unless every bucket was measured, because
+# a partial sum understates the bill.
 #
 # Output is JSON lines for Vector -> Loki -> Grafana: one `r2_backup_node` per
 # node for the operator, then exactly one `r2_backup_health` for the rule. The
@@ -48,7 +49,7 @@ TARGETS="${WATCHER_TARGETS:-/etc/r2-backup-watcher/targets.txt}"
 STAGING="${STAGING_DIR:-/opt/node-backup/staging}"
 SENTINEL_NAME="${SENTINEL:-.capture-complete}"
 TIMEOUT="${RESTIC_TIMEOUT:-60}"
-STATS_TIMEOUT="${STATS_TIMEOUT:-600}"
+SIZES="${WATCHER_SIZES:-/var/run/r2-sizes/sizes.txt}"
 REACH_TIMEOUT="${REACH_TIMEOUT:-5}"
 # A path, so a test can stand in for it: a busybox shell built as a standalone
 # shell runs its own `nc` applet before anything on PATH.
@@ -56,8 +57,7 @@ NC="${NC:-nc}"
 
 nodes=0
 unhealthy=0
-fleet_bytes=0
-unsized=0
+buckets=""
 completed=0
 error=""
 finished=0
@@ -76,10 +76,22 @@ finish() {
         healthy=1
     fi
     fleet_size=null
-    if [ "$completed" -eq 1 ] && [ "$nodes" -gt 0 ] && [ "$unsized" -eq 0 ]; then
-        fleet_size="$fleet_bytes"
+    if [ "$completed" -eq 1 ] && [ -n "$buckets" ]; then
+        fleet_size=0
+        for bucket in $buckets; do
+            # shellcheck disable=SC2046 # the split into bytes and seconds is the point
+            set -- $(size_entry bucket "$bucket")
+            if [ $# -eq 2 ] && [ "$1" != null ]; then
+                fleet_size=$((fleet_size + $1))
+                echo "r2-backup-watcher: fleet: bucket $bucket listing took ${2}s" >&2
+            else
+                fleet_size=null
+                echo "r2-backup-watcher: fleet: bucket $bucket size unknown" >&2
+                break
+            fi
+        done
     fi
-    printf '{"metric":"r2_backup_health","namespace":"kubelab","nodes":%d,"unhealthy":%d,"healthy":%d,"raw_bytes":%s,"error":"%s"}\n' \
+    printf '{"metric":"r2_backup_health","namespace":"kubelab","nodes":%d,"unhealthy":%d,"healthy":%d,"stored_bytes":%s,"error":"%s"}\n' \
         "$nodes" "$unhealthy" "$healthy" "$fleet_size" "$error"
 }
 
@@ -105,10 +117,11 @@ restic_read() {
     timeout "$TIMEOUT" restic -r "$repo" --no-lock --no-cache "$@" 2>"$errfile"
 }
 
-# `stats --mode raw-data` walks every tree of every snapshot, so it needs a
-# budget of its own: the Beelink's Gitea tree outran RESTIC_TIMEOUT (2026-09-30).
-restic_stats() {
-    timeout "$STATS_TIMEOUT" restic -r "$repo" --no-lock --no-cache stats --mode raw-data --json 2>"$errfile"
+# `<bytes|null> <seconds>` that size.sh wrote for one bucket or node, or nothing
+# when it wrote none (the init container failed, or never reached that entry).
+size_entry() {
+    [ -r "$SIZES" ] || return 0
+    awk -v kind="$1" -v name="$2" '$1 == kind && $2 == name { print $3, $4; exit }' "$SIZES"
 }
 
 # The epoch of one restic `time`, or a failure when the stamp is not the shape
@@ -236,28 +249,21 @@ while read -r node repo declared_id address port class services || [ -n "$node" 
         reason="${reason:+$reason, }probe cannot reach an always-on node"
     fi
 
-    # After every health check, so a slow `stats` cannot starve them of the
-    # timeout. Its failure is logged, not judged.
-    if [ "$readable" -eq 1 ]; then
-        started="$(date +%s)"
-        # A `stats` that exits 0 leaves nothing on stderr, so a missing
-        # `total_size` names itself rather than logging an empty reason.
-        if stats="$(restic_stats)"; then
-            size="$(printf '%s\n' "$stats" | sed -n 's/^.*"total_size": *\([0-9][0-9]*\).*$/\1/p' | head -n 1)"
-            why="stats returned no total_size"
-        else
-            why="$(reason_from_stderr)"
-        fi
-        if [ -z "$size" ] || [ "$size" = null ]; then
-            size=null
-            echo "r2-backup-watcher: $node: size unknown: $why" >&2
-        fi
-        echo "r2-backup-watcher: $node: stats took $(($(date +%s) - started))s" >&2
-    fi
-    if [ "$size" = null ]; then
-        unsized=$((unsized + 1))
+    # Measured by size.sh, not here: listing R2's objects is bounded by their
+    # count, and walking the snapshots with `stats` was not (BACKUP-075).
+    bucket="${repo#*://}"
+    bucket="${bucket#*/}"
+    bucket="${bucket%%/*}"
+    case " $buckets " in *" $bucket "*) ;; *) buckets="${buckets:+$buckets }$bucket" ;; esac
+    # shellcheck disable=SC2046 # the split into bytes and seconds is the point
+    set -- $(size_entry node "$node")
+    if [ $# -ne 2 ]; then
+        echo "r2-backup-watcher: $node: size unknown: not measured" >&2
+    elif [ "$1" = null ]; then
+        echo "r2-backup-watcher: $node: size unknown: the listing failed, see the r2-size init container" >&2
     else
-        fleet_bytes=$((fleet_bytes + size))
+        size="$1"
+        echo "r2-backup-watcher: $node: size listing took ${2}s" >&2
     fi
 
     missing_json=""
@@ -272,7 +278,7 @@ while read -r node repo declared_id address port class services || [ -n "$node" 
         unhealthy=$((unhealthy + 1))
     fi
 
-    printf '{"metric":"r2_backup_node","namespace":"kubelab","node":"%s","class":"%s","readable":%d,"snapshots":%d,"missing":[%s],"sentinel":%d,"repository_id":"%s","newest_snapshot":%s,"snapshot_age_seconds":%s,"reachable":%d,"raw_bytes":%s,"healthy":%d,"reason":"%s"}\n' \
+    printf '{"metric":"r2_backup_node","namespace":"kubelab","node":"%s","class":"%s","readable":%d,"snapshots":%d,"missing":[%s],"sentinel":%d,"repository_id":"%s","newest_snapshot":%s,"snapshot_age_seconds":%s,"reachable":%d,"stored_bytes":%s,"healthy":%d,"reason":"%s"}\n' \
         "$node" "$class" "$readable" "$snapshots" "$missing_json" "$sentinel" "$repository_id" "$newest_snapshot" "$snapshot_age" "$reachable" "$size" "$healthy" "$reason"
 done <"$TARGETS"
 

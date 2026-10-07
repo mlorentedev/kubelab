@@ -84,7 +84,7 @@ The size decides whether R = 30 fits the free tier. It is measured by the watche
   - `backup.yml` (both plays) and `backup-repo-reinit.yml`: per-node vars;
   - the `node_backup` role defaults and ship script: the repository URL is `s3:<endpoint>/kubelab-backup-<node>`;
   - `backup_destination.repo_url` / `verify_*`: per-node bucket;
-  - `render_watcher_targets`: per-node bucket;
+  - `render_watcher_targets`: per-node bucket. Since BACKUP-075 the watcher sizes the fleet by listing every bucket the targets name at its root, so once a node's line names its own bucket, `kubelab-backups` drops out of the fleet size unless a target still names it, and the node-bucket token cannot read it anyway. Decide here, before the first node moves: keep the old read-only pair and a target on `kubelab-backups` until that bucket is deleted, or accept the blind spot against the gate in PR 2's size task (alert headroom larger than the frozen old copy);
   - `k8s_secrets`: `r2-backup-watcher-secrets` carries the read-only pair plus one restic password per node, keyed by node. The watcher opens every repository (`snapshots`, `stats`), so it needs every password. A test fails if a node in `backup.sources` has no password entry.
 
   Expected: PASS, `make test` green.
