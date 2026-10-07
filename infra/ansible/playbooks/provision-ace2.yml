@@ -289,6 +289,7 @@
         agent_stack_headscale_url: "https://{{ config.apps.services.core.headscale.domain }}"
         agent_stack_headscale_host: kubelab-vps
         agent_stack_headscale_agents_user_id: "{{ config.apps.services.core.headscale.agents_user_id }}"
+        agent_stack_vault_zone: "{{ config.apps.services.ai.hermes_kubelab.vault_zone }}"
         # What the agent must fail to read (ADR-058 D3, spec AC2): the dev
         # user's credentials, and the system daemon's socket, which is root.
         agent_stack_dev_home: "/home/{{ config.networking.ssh_users.homelab }}"

@@ -82,6 +82,10 @@ agent_stack_egress_table: "{{ agent_stack_dir }}/agent-egress.nft"
 agent_stack_hermes_dns_servers: ["1.1.1.1", "8.8.8.8"]
 agent_stack_egress_probe_port: 443
 
+# The hook the agent's vault clone commits through: root's, outside the agent's
+# home, whose directory the agent could otherwise rename (spec AC6).
+agent_stack_vault_hooks: /usr/local/libexec/agent-stack/vault-hooks
+
 # hermes-kubelab (ADR-068 D2, spec PR 3). `agent_stack_hermes` is the
 # apps.services.ai.hermes_kubelab map, set by the playbook.
 agent_stack_hermes_project: agent-stack-hermes

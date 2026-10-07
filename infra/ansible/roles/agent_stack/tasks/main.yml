@@ -225,3 +225,7 @@
 - name: Provision hermes-kubelab on the agent's daemon
   ansible.builtin.import_tasks: hermes.yml
   tags: [agent_stack]
+
+- name: Install the agent's vault zone hook
+  ansible.builtin.import_tasks: vault.yml
+  tags: [agent_stack]
