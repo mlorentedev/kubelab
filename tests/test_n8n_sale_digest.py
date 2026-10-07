@@ -65,14 +65,31 @@ const $now = new FakeNow(Date.parse(NOW_ISO));
 """.replace("NOW_ISO", json.dumps(NOW_ISO))
 
 
+def workflow() -> dict[str, Any]:
+    return json.loads(WORKFLOW_PATH.read_text(encoding="utf-8"))
+
+
+def workflow_node_names() -> list[str]:
+    return [n["name"] for n in workflow()["nodes"]]
+
+
 def run_digest(nodes: dict[str, Any], js: str | None = None, prelude: str = FAKE_NOW) -> dict[str, Any]:
-    """Run the Code node as n8n does: `$('<name>').first().json` reads each upstream answer."""
+    """Run the Code node as n8n does: `$('<name>').first().json` reads each upstream answer, and
+    `$('<name>').isExecuted` says whether a node on a branch ran. Like n8n, `$` refuses a name no node
+    in the workflow has, and `first()` refuses a node that did not run."""
     js = js if js is not None else node_js(WORKFLOW, DIGEST_NODE)
     script = f"""
     const NODES = {json.dumps(nodes)};
+    const WORKFLOW_NODES = new Set({json.dumps(workflow_node_names())});
     const $ = (name) => {{
-      if (!(name in NODES)) throw new Error('the node was not run: ' + name);
-      return {{ first: () => ({{ json: NODES[name] }}) }};
+      if (!WORKFLOW_NODES.has(name)) throw new Error('no node is named ' + name);
+      return {{
+        isExecuted: name in NODES,
+        first: () => {{
+          if (!(name in NODES)) throw new Error('the node was not run: ' + name);
+          return {{ json: NODES[name] }};
+        }},
+      }};
     }};
     {prelude}
     (async function () {{
@@ -482,3 +499,77 @@ class TestHtmlSafety:
         assert all(u.startswith(SITE + "/i/") for u in urls), urls
         assert not re.findall(r"https?://(?!leaving-denver\.pages\.dev/i/)[^\s\"'<]+", html), "an external reference"
         assert 'lang="es"' in html
+
+
+FIRST_WEB = "Web Analytics, last 24 h"
+WEB_CHECK = "Web Analytics failed?"
+WEB_WAIT = "Wait a minute"
+SECOND_WEB = "Web Analytics, second try"
+#: The answer Cloudflare gave the 2026-10-07 run: the whole query refused, `data` null.
+UNAVAILABLE = {
+    "data": None,
+    "errors": [
+        {"message": "unable to execute query, please try again later", "extensions": {"code": "serviceUnavailable"}}
+    ],
+}
+
+
+def targets(name: str) -> list[list[str]]:
+    """The nodes each output of `name` feeds, output by output."""
+    return [[link["node"] for link in out] for out in workflow()["connections"][name]["main"]]
+
+
+def failed(answer: Any) -> bool:
+    """Evaluate the IF node's REAL condition expression against one Web Analytics answer."""
+    check = next(n for n in workflow()["nodes"] if n["name"] == WEB_CHECK)
+    (condition,) = check["parameters"]["conditions"]["conditions"]
+    expression = re.fullmatch(r"=\{\{ (.+) \}\}", condition["leftValue"]).group(1)
+    script = f"const $json = {json.dumps(answer)}; console.log(JSON.stringify({expression}));"
+    out = json.loads(subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True).stdout)
+    assert isinstance(out, bool), "a strict boolean condition must see a boolean"
+    return out
+
+
+class TestWebAnalyticsIsAskedTwice:
+    """The first scheduled run (2026-10-07) printed "No disponible" for web visits: Cloudflare refused the
+    whole GraphQL query with `serviceUnavailable`, "try again later". A manual run four hours earlier had
+    answered. So a failed answer is asked for once more, a minute later, and that one counts."""
+
+    def test_a_refused_query_and_a_failed_request_are_failures_and_an_answer_is_not(self) -> None:
+        assert failed(UNAVAILABLE)
+        assert failed({"error": "ETIMEDOUT"})
+        assert failed({"data": {"viewer": None}, "errors": []})
+        partial = web_answer(14, 41, [])
+        partial["errors"] = [{"message": "internal error", "path": ["viewer", "accounts", 0, "referrers"]}]
+        assert failed(partial), "figures beside an error are not printed, so they are worth a second try"
+        assert failed(web_answer(14, 41, [])) is False
+        assert failed({"data": {"viewer": {"accounts": []}}}) is False, "an empty account is the digest's to explain"
+
+    def test_a_failure_waits_a_minute_then_asks_again_and_an_answer_goes_straight_on(self) -> None:
+        assert targets(FIRST_WEB) == [[WEB_CHECK]]
+        assert targets(WEB_CHECK) == [[WEB_WAIT], [DIGEST_NODE]], "IF output 0 is true (failed), 1 is false"
+        assert targets(WEB_WAIT) == [[SECOND_WEB]]
+        assert targets(SECOND_WEB) == [[DIGEST_NODE]]
+        wait = next(n for n in workflow()["nodes"] if n["name"] == WEB_WAIT)["parameters"]
+        # Under 65 s n8n keeps the execution in memory instead of parking it in the database.
+        assert wait == {"amount": 60, "unit": "seconds"}
+
+    def test_the_second_try_is_the_same_request(self) -> None:
+        by_name = {n["name"]: n for n in workflow()["nodes"]}
+        first, second = by_name[FIRST_WEB], by_name[SECOND_WEB]
+        for key in ("type", "typeVersion", "parameters", "credentials", "onError"):
+            assert first[key] == second[key], key
+
+    def test_the_second_answer_counts_when_there_is_one(self) -> None:
+        both = {**nodes(web=UNAVAILABLE), SECOND_WEB: web_answer(23, 60, [("facebook.com", 4)])}
+        out = run_digest(both)
+        assert out["subject"] == "Venta · mié 7 oct — 23 visitas, 8 fichas, 1 mensaje"
+        assert "facebook.com 4" in out["text"]
+
+    def test_a_second_failure_is_still_named(self) -> None:
+        out = run_digest({**nodes(web=UNAVAILABLE), SECOND_WEB: UNAVAILABLE})
+        assert "No disponible: la consulta a Web Analytics devolvió errores" in out["text"]
+        assert out["subject"].endswith("(datos incompletos)")
+
+    def test_without_a_second_try_the_first_answer_counts(self, digest: dict[str, Any]) -> None:
+        assert digest["subject"] == "Venta · mié 7 oct — 14 visitas, 8 fichas, 1 mensaje"

@@ -276,9 +276,10 @@ class TestSaleDigestWorkflow:
         import, which is the only way they reach a node here."""
         assert "$env" not in (REPO_ROOT / SALE_JSON).read_text()
 
-    def test_its_three_header_auth_nodes_share_one_credential_id(self) -> None:
+    def test_its_four_header_auth_nodes_share_one_credential_id(self) -> None:
+        """Two Analytics Engine queries, the Web Analytics query and its second try."""
         refs = [r for r in read_credential_refs(_sale_doc()) if r.type == "httpHeaderAuth"]
-        assert len(refs) == 3
+        assert len(refs) == 4
         assert len({r.id for r in refs}) == 1
         assert {r.name for r in refs} == {_sale_spec().credential_name}
 
