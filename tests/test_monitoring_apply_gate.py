@@ -9,6 +9,7 @@ drive `apply_monitors` against a fake instance that records every write.
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -135,3 +136,18 @@ def test_an_apply_with_nothing_to_delete_needs_no_prune(project) -> None:
     kuma = project([_monitor("keep"), _monitor("new")], [_monitor("keep", 1)])
     assert "sio:add" in kuma.writes
     assert not [w for w in kuma.writes if w.startswith("delete_monitor")]
+
+
+@pytest.mark.parametrize(
+    ("value", "flag"),
+    [("PRUNE=1", "--prune"), ("PRUNE=0", None), ("PRUNE=no", None), ("CHECK=1", "--check"), ("CHECK=0", None)],
+)
+def test_only_a_1_turns_a_make_flag_on(value: str, flag: str | None) -> None:
+    """`PRUNE=0`, written to be safe, must not delete every unseeded monitor."""
+    root = Path(__file__).resolve().parent.parent
+    out = subprocess.run(
+        ["make", "-n", "-C", str(root), "monitoring-apply", value], capture_output=True, text=True, check=True
+    ).stdout
+    line = next(text for text in out.splitlines() if "monitoring apply" in text)
+    passed = {arg for arg in line.split() if arg in {"--prune", "--check"}}
+    assert passed == ({flag} if flag else set())

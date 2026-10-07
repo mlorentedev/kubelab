@@ -459,7 +459,7 @@ monitoring-import:
 
 .PHONY: monitoring-apply
 monitoring-apply: ## Sync monitors from the seed (CHECK=1 prints the plan only, PRUNE=1 allows deletes)
-	@$(TOOLKIT) monitoring apply $(if $(CHECK),--check,) $(if $(PRUNE),--prune,)
+	@$(TOOLKIT) monitoring apply $(if $(filter 1,$(CHECK)),--check,) $(if $(filter 1,$(PRUNE)),--prune,)
 
 .PHONY: monitoring-bootstrap
 monitoring-bootstrap:
