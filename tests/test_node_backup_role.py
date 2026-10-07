@@ -133,8 +133,14 @@ def test_a_path_source_is_read_directly_with_no_docker_involved():
 
 
 def test_a_volume_source_is_rendered_from_the_mountpoint_the_role_resolved():
-    script = _render("node-backup-capture.sh.j2", node_backup_sources=VPS_SOURCES)
-    assert 'SRC_DIR_headscale="/var/lib/docker/volumes/headscale_headscale_data/_data"' in script
+    """The path comes from the role's map, not from Docker's default data-root."""
+    script = _render(
+        "node-backup-capture.sh.j2",
+        node_backup_sources=VPS_SOURCES,
+        node_backup_volume_paths={"headscale": "/srv/docker-root/volumes/headscale_headscale_data/_data"},
+    )
+    assert 'SRC_DIR_headscale="/srv/docker-root/volumes/headscale_headscale_data/_data"' in script
+    assert "/var/lib/docker" not in script
 
 
 def test_a_volume_whose_directory_is_gone_fails_the_capture_loudly():
@@ -145,14 +151,30 @@ def test_a_volume_whose_directory_is_gone_fails_the_capture_loudly():
 
 
 def _docker_invocations(script: str) -> list[str]:
-    """Non-comment lines that run the `docker` CLI.
+    """Non-comment lines that run the `docker` CLI, by bare name or absolute path.
 
+    The executable is `docker` followed by whitespace or the end of the line.
     `docker.service`, `docker.socket` and `/var/lib/docker/...` are names, not
     calls, and the word inside an echoed message is capitalised, so none of
     them matches.
     """
-    word = re.compile(r"(?<![\w./-])docker(?![\w./-])")
-    return [line for line in script.splitlines() if not line.lstrip().startswith("#") and word.search(line)]
+    call = re.compile(r"(?:^|[\s;|&(`'\"/])docker(?=\s|$)")
+    return [line for line in script.splitlines() if not line.lstrip().startswith("#") and call.search(line)]
+
+
+@pytest.mark.parametrize(
+    ("line", "is_call"),
+    [
+        ('m="$(docker volume inspect x)"', True),
+        ('m="$(/usr/bin/docker volume inspect x)"', True),
+        ("docker", True),
+        ('SRC="/var/lib/docker/volumes/x/_data"', False),
+        ("systemctl start docker.service", False),
+        ('echo "Docker volume x is gone"', False),
+    ],
+)
+def test_the_docker_call_detector(line: str, is_call: bool) -> None:
+    assert bool(_docker_invocations(line)) is is_call
 
 
 @pytest.mark.parametrize("location", ["on-demand", "always-on"])
