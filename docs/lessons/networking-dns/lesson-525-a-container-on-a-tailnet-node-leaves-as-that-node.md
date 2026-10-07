@@ -30,9 +30,11 @@ ace2. PR 3b must move it into the sidecar's network namespace or drop its egress
 to `100.64.0.0/10`.
 
 **Rule**: On a node that is a tailnet member, treat every container's egress as
-that node's tailnet identity. Give a workload a different identity by giving it
-a different network namespace (a userspace tailscale sidecar), or by dropping
-`100.64.0.0/10` from its egress, never by assuming Docker's network is outside
-the tailnet. Measure it with a TCP connect from the container itself.
+that node's tailnet identity, never assume Docker's network is outside the
+tailnet. There are two separate remedies. A different network namespace with a
+userspace tailscale sidecar gives the workload its own identity, which the ACL
+can then scope. Dropping `100.64.0.0/10` from its egress gives it no identity
+at all: it keeps the tailnet out of reach, but the ACL never sees it. Measure
+either one with a TCP connect from the container itself.
 
 **Tags**: `#tailscale` `#ai-009` `#acl`

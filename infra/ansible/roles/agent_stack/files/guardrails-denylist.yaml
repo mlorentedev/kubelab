@@ -50,21 +50,31 @@ rules:
 
   - why: irreversible deletion of the root, /etc, or the agent's own state
     origin: 'rm -rf +(/|/etc|/persist|/opt/hermes|/hermes-home)([/ ]|$)'
+    # `-*r*` is any flag run that recursion appears in, whatever its order or
+    # spelling: -rf, -fr, -r -f, -R (the command is lowercased), --recursive.
+    # The `*` before the path also absorbs repeated spaces.
     globs:
-      - '*rm -rf /'
-      - '*rm -rf / *'
-      - '*rm -rf /etc'
-      - '*rm -rf /etc/*'
-      - '*rm -rf /etc *'
-      - '*rm -rf /var/lib/hermes-kubelab*'
+      - '*rm *-*r* /'
+      - '*rm *-*r* / *'
+      - '*rm *-*r* /etc'
+      - '*rm *-*r* /etc/*'
+      - '*rm *-*r* /etc *'
+      - '*rm *-*r* /var/lib/hermes-kubelab*'
     blocks:
       - rm -rf /
       - sudo rm -rf /etc
       - rm -rf /etc/ssh
       - rm -rf /var/lib/hermes-kubelab/data
+      - rm -fr /etc
+      - rm -r -f /
+      - rm -rf  /etc
+      - rm --recursive --force /
+      - rm -R /var/lib/hermes-kubelab/data
+      - rm -f -r  /var/lib/hermes-kubelab
     allows:
       - rm -rf /tmp/build
       - rm -rf ./etc
+      - rm -f /var/lib/hermes-kubelab/data/workspace/out.log
     # The origin's paths are NaN's. Only the root and /etc carry over, so the
     # origin regex is checked against these and no others.
     origin_blocks:
