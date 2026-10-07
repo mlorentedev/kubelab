@@ -10,7 +10,8 @@ The contract encoded here:
   live SQLite database is snapshotted with ``sqlite3 .backup`` — never a
   plain ``cp`` of a file that is written to concurrently.
 - A ``path:`` source is read directly; a ``volume:`` source is resolved
-  through ``docker volume inspect`` at capture time, never assumed.
+  through ``docker volume inspect`` by the role at apply time, never assumed,
+  and the capture script itself never calls Docker (#1609).
 - The ship script carries the operator-approved retention flags verbatim,
   and only runs ``restic check`` when invoked with ``--check`` — that split
   is the whole reason Part 4 does not have to touch this script to add the
@@ -24,6 +25,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
 import yaml
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
@@ -102,6 +104,17 @@ def _render(template: str, **overrides: object) -> str:
         node_backup_location="on-demand",
     )
     ctx.update(overrides)
+    # What the role's `docker volume inspect` task registers on a node with
+    # Docker's default data-root. Derived from whichever sources the test
+    # passed, unless the test passes its own map.
+    ctx.setdefault(
+        "node_backup_volume_paths",
+        {
+            service: f"/var/lib/docker/volumes/{src['volume']}/_data"
+            for service, src in ctx["node_backup_sources"].items()  # type: ignore[union-attr]
+            if "volume" in src
+        },
+    )
     env = Environment(
         loader=FileSystemLoader(str(TEMPLATES)),
         undefined=StrictUndefined,
@@ -119,10 +132,61 @@ def test_a_path_source_is_read_directly_with_no_docker_involved():
     assert "docker volume inspect" not in script
 
 
-def test_a_volume_source_is_resolved_through_docker_volume_inspect():
+def test_a_volume_source_is_rendered_from_the_mountpoint_the_role_resolved():
     script = _render("node-backup-capture.sh.j2", node_backup_sources=VPS_SOURCES)
-    assert "docker volume inspect headscale_headscale_data" in script
-    assert "--format" in script and "Mountpoint" in script
+    assert 'SRC_DIR_headscale="/var/lib/docker/volumes/headscale_headscale_data/_data"' in script
+
+
+def test_a_volume_whose_directory_is_gone_fails_the_capture_loudly():
+    """A literal mountpoint outlives the volume; the script must notice."""
+    script = _render("node-backup-capture.sh.j2", node_backup_sources=VPS_SOURCES)
+    assert 'if [ ! -d "$SRC_DIR_headscale" ]; then' in script
+    assert "refusing to ship a backup that silently omits it" in script
+
+
+def _docker_invocations(script: str) -> list[str]:
+    """Non-comment lines that run the `docker` CLI.
+
+    `docker.service`, `docker.socket` and `/var/lib/docker/...` are names, not
+    calls, and the word inside an echoed message is capitalised, so none of
+    them matches.
+    """
+    word = re.compile(r"(?<![\w./-])docker(?![\w./-])")
+    return [line for line in script.splitlines() if not line.lstrip().startswith("#") and word.search(line)]
+
+
+@pytest.mark.parametrize("location", ["on-demand", "always-on"])
+def test_the_capture_script_never_asks_the_docker_daemon(location: str) -> None:
+    """#1609: on an on-demand node the capture unit runs Before=docker.service.
+
+    A `docker` call from the script wakes docker.socket, whose start job then
+    waits behind the capture that is waiting on it. Measured on rpi4 on
+    2026-10-07: the capture hung for its full 300s timeout, and dockerd,
+    Pi-hole and CoreDNS with it, starting in the second systemd killed it.
+    Checked on both classes so a later branch on `location` cannot put the
+    call back where it deadlocks.
+    """
+    sources = {**BEELINK_SOURCES, **VPS_SOURCES, **RPI3_SOURCES}
+    script = _render("node-backup-capture.sh.j2", node_backup_sources=sources, node_backup_location=location)
+    assert _docker_invocations(script) == []
+
+
+def test_volume_mountpoints_are_resolved_before_the_capture_script_renders():
+    """The apply-time resolution must run in check mode and report no change.
+
+    Without `check_mode: false`, `make backup CHECK=1` skips the command and
+    the template fails on an undefined map; without `changed_when: false` a
+    re-run can never show `changed=0`.
+    """
+    tasks = yaml.safe_load((ROLE / "tasks/main.yml").read_text())
+    names = [task.get("name", "") for task in tasks]
+    resolve = next(i for i, task in enumerate(tasks) if task.get("register") == "node_backup_volume_inspect")
+    render = next(i for i, task in enumerate(tasks) if task.get("template", {}).get("src") == "node-backup-capture.sh.j2")
+    assert resolve < render, names
+    task = tasks[resolve]
+    assert task["command"]["argv"][:3] == ["docker", "volume", "inspect"]
+    assert task["changed_when"] is False
+    assert task["check_mode"] is False
 
 
 def test_every_declared_source_produces_a_capture_block():

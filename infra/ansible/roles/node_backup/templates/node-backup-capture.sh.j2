@@ -117,7 +117,14 @@ if [ -z "$SRC_DIR_{{ service }}" ]; then
     exit 1
 fi
 {% else %}
-SRC_DIR_{{ service }}="$(docker volume inspect {{ src.volume }} --format '{{ '{{' }}.Mountpoint{{ '}}' }}')"
+# Docker volume `{{ src.volume }}`, resolved by the role at apply time and
+# never here: on an on-demand node this script runs before docker.service, and
+# asking the daemon from here deadlocks the boot (#1609, tasks/main.yml).
+SRC_DIR_{{ service }}="{{ node_backup_volume_paths[service] }}"
+if [ ! -d "$SRC_DIR_{{ service }}" ]; then
+    echo "node-backup-capture: {{ service }} (Docker volume {{ src.volume }}): $SRC_DIR_{{ service }} does not exist -- the volume was removed or Docker's data-root moved; re-run the role -- refusing to ship a backup that silently omits it" >&2
+    exit 1
+fi
 {% endif %}
 
 # Live SQLite snapshot: `.backup` is WAL-aware and produces a single

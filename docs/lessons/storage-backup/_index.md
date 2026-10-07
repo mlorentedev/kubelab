@@ -1,9 +1,10 @@
 # Backups, volumes and persistence
 
-24 lessons, newest first. Back to [all categories](../_index.md).
+25 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 523 | [A unit ordered `Before=docker.service` that calls the docker CLI deadlocks the boot until its own timeout](lesson-523-a-unit-ordered-before-docker-must-not-call-docker.md) | 2026-10-07 |
 | 521 | [An `unlock` placed before the write is too late if a read before it takes a lock](lesson-521-a-probe-that-locks-runs-before-the-unlock-meant-to-clear-it.md) | 2026-10-04 |
 | 511 | [restic reports a refused pack DELETE as success](lesson-511-restic-reports-a-refused-pack-delete-as-success.md) | 2026-10-02 |
 | 508 | [A volume name pinned in a template outlives the data it named](lesson-508-a-volume-name-pinned-in-a-template-outlives-the-data-it-named.md) | 2026-10-02 |

@@ -26,7 +26,7 @@ node_backup_capture_sentinel: "{{ node_backup_staging_dir }}/.capture-complete"
 # Per-host source map, passed by the playbook as
 # config.backup.sources[inventory_hostname]. Each entry is keyed by service
 # name and carries EITHER `path` (a bind mount) OR `volume` (a Docker volume,
-# resolved to a host path via `docker volume inspect` at capture time) plus a
+# resolved to a host path via `docker volume inspect` at APPLY time, #1609) plus a
 # `sqlite` key naming the live database to snapshot with `sqlite3 .backup`
 # rather than copied as a plain file.
 node_backup_sources: {}
@@ -175,22 +175,21 @@ node_backup_probe_timeout: 120
 # 600s because capture never talks to R2 -- it is a local copy, and on this
 # fleet it moves 29 MB in about a second.
 #
-# It was 120s, and that was measured too tight at the one moment it matters.
-# rpi4, 2026-08-23, first run of a cold boot: started 08:46:11, still running
-# at 08:48:11, `Failed with result 'timeout'`, killed with SIGTERM. The retry
-# two minutes later finished in ONE second. So the work is not slow and the
-# source is not hung -- the same copy that overran two minutes at boot took 1s
-# once the node had settled.
+# It was 120s, raised to 300s after rpi4 timed out on a cold boot
+# (2026-08-23: started 08:46:11, killed at 08:48:11; the retry two minutes
+# later took one second). That was put down to IO contention at boot, and it
+# was not: it was a deadlock (#1609). The script asked `docker volume inspect`
+# for its Pi-hole source while its unit was ordered Before=docker.service, so
+# docker.socket's start job waited for the capture that was waiting for it.
+# Measured 2026-10-07: dockerd started in the same second systemd killed the
+# capture, after the full 300s. Raising the timeout only made the outage
+# longer, because Pi-hole and CoreDNS on rpi4 stayed down for all of it.
 #
-# The cause is INFERRED, not measured: contention on a Pi that is bringing up
-# its whole userspace at once, on removable storage. Nobody has profiled the
-# boot IO, so do not treat 300s as a computed bound -- it is 300x the observed
-# work with room for a machine under load.
-#
-# The ceiling that keeps this honest is `Before=docker.service` on on-demand
-# nodes: whatever this value is, it is also the longest a wedged capture can
-# hold up dockerd at boot. Raising it further trades a false page for a slower
-# boot, and past some point the right answer stops being a bigger timeout.
+# The volume is now resolved at apply time, so nothing in the capture waits on
+# the daemon, and this value is only the ceiling for a capture that is really
+# wedged. That ceiling is also the longest such a capture can hold up dockerd
+# at boot on on-demand nodes. Lowering it is a separate decision, made once a
+# few boots have shown how long a capture really takes.
 node_backup_capture_timeout: "300s"
 
 # --- coverage heartbeat (BACKUP-044 AC9) ----------------------------------

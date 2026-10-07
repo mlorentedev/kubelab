@@ -65,6 +65,48 @@
     mode: "0600"
   no_log: true
 
+# A Docker volume's mountpoint is asked of the daemon HERE, at apply time, and
+# rendered into the capture script as a literal (#1609). The script cannot ask
+# at boot: on an on-demand node its unit is ordered Before=docker.service, so
+# the CLI's call wakes docker.socket, whose start job waits behind the capture
+# that is waiting on it. Nothing breaks the wait but TimeoutStartSec, and the
+# daemon, with every container on the node, stays down until it fires.
+#
+# A literal is safe for a volume where it is not for a PVC. A volume's
+# mountpoint derives from its name and the daemon's data-root, so a volume
+# recreated under the same name lands in the same directory, and a removed one
+# takes the directory with it, which the script refuses loudly. A PVC's path
+# embeds the claim's UID, so that one is still resolved at capture time.
+#
+# Runs in check mode too, so a dry run renders the script it would install.
+- name: Resolve each Docker-volume source to its mountpoint (#1609)
+  command:
+    argv:
+      - docker
+      - volume
+      - inspect
+      - --format
+      - "{% raw %}{{.Mountpoint}}{% endraw %}"
+      - "{{ item.value.volume }}"
+  loop: "{{ node_backup_sources | dict2items | selectattr('value.volume', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.key }}: {{ item.value.volume }}"
+  register: node_backup_volume_inspect
+  changed_when: false
+  check_mode: false
+
+- name: Map each Docker-volume source to its mountpoint
+  set_fact:
+    node_backup_volume_paths: >-
+      {{ dict(node_backup_volume_inspect.results | map(attribute='item.key')
+              | zip(node_backup_volume_inspect.results | map(attribute='stdout'))) }}
+
+- name: Refuse a mountpoint that is not an absolute path
+  assert:
+    that: node_backup_volume_paths.values() | reject('match', '^/') | list | length == 0
+    fail_msg: "docker volume inspect returned a non-absolute mountpoint: {{ node_backup_volume_paths }}"
+    quiet: true
+
 - name: Render capture script
   template:
     src: node-backup-capture.sh.j2

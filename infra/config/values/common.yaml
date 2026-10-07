@@ -1961,7 +1961,8 @@ apps:
 #
 #   path:    a filesystem path WE own (a bind mount). Stable, so it is literal.
 #   volume:  a Docker volume NAME. Docker owns its mountpoint (`data-root` is
-#            configurable), so the path is resolved with `docker volume inspect`.
+#            configurable), so the path is resolved with `docker volume inspect`,
+#            by the role at apply time: the boot capture runs before dockerd (#1609).
 #   pvc:     a Kubernetes claim. K3s owns the on-disk path and embeds the PVC's
 #            UUID in it, so a recreated claim silently invalidates any literal
 #            path. Resolved from namespace + claim at run time.
