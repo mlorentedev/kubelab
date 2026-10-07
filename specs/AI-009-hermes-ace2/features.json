@@ -75,5 +75,12 @@
     "verification": "sed -n '/^### Power-cycle drill/,/^##/p' specs/AI-009-hermes-ace2/verification.md | grep -q 'integrity_check' && sed -n '/^### Power-cycle drill/,/^##/p' specs/AI-009-hermes-ace2/verification.md | grep -q 'git fsck'",
     "state": "pending",
     "evidence": ""
+  },
+  {
+    "id": "AI-009-hermes-ace2-f12",
+    "behavior": "The agent's user is refused both tailnet ranges on ace2, judged on conntrack's original destination so a port DNATed on the node itself is refused too (AC5, egress half; lessons 525 and 527). The live half is the provision's three probes and the gateway measurement in verification.md",
+    "verification": "poetry run pytest --no-cov -q tests/test_agent_egress.py",
+    "state": "pending",
+    "evidence": ""
   }
 ]
