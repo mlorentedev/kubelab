@@ -34,3 +34,42 @@ services:
 {% for server in agent_stack_hermes_dns_servers %}
       - {{ server }}
 {% endfor %}
+
+  # The agent's tailnet identity (ADR-041): registered as `tag:hermes`, so the
+  # ACL decides what it reaches, never ace2's allow-all. Userspace: no TUN and
+  # no capability, and it routes nothing for the gateway. Only what a job sends
+  # through its proxy reaches the tailnet, and the host refuses the rest.
+  tailscale:
+    image: {{ agent_stack_hermes.sidecar.image }}
+    container_name: hermes-kubelab-tailscale
+    restart: unless-stopped
+    # The one-time preauth key, present only until the first registration.
+    env_file:
+      - {{ agent_stack_hermes_ts_env }}
+    environment:
+      TS_USERSPACE: "true"
+      TS_HOSTNAME: {{ agent_stack_hermes.sidecar.hostname }}
+      TS_STATE_DIR: /var/lib/tailscale
+      # The CLI's own default, so `tailscale status` works without a flag.
+      TS_SOCKET: /var/run/tailscale/tailscaled.sock
+      # Log in only without a state: a restart never needs the consumed key.
+      TS_AUTH_ONCE: "true"
+      TS_ACCEPT_DNS: "false"
+      # The tag comes from the key alone: `--advertise-tags` beside it fails
+      # registration (ADR-041 errata).
+      TS_EXTRA_ARGS: --login-server={{ agent_stack_headscale_url }}
+      # On the project network only, no `ports:`: the gateway reaches it,
+      # nothing outside the agent's daemon does.
+      TS_SOCKS5_SERVER: ":{{ agent_stack_hermes.sidecar.proxy_port }}"
+      TS_OUTBOUND_HTTP_PROXY_LISTEN: ":{{ agent_stack_hermes.sidecar.proxy_port }}"
+    volumes:
+      # Beside the data directory, not in it: the gateway does not see the node key.
+      - {{ agent_stack_hermes_ts_state }}:/var/lib/tailscale
+    mem_limit: {{ agent_stack_hermes.sidecar.memory_limit }}
+    cpus: {{ agent_stack_hermes.sidecar.cpu_limit }}
+    # Control and DERP are public names (vpn.kubelab.live resolves to the
+    # VPS's public address), and MagicDNS is inside the refused range.
+    dns:
+{% for server in agent_stack_hermes_dns_servers %}
+      - {{ server }}
+{% endfor %}

@@ -50,6 +50,7 @@ def _context() -> dict:
         "_agent_stack_webui_secret_key": "session-key-sentinel",
         "agent_stack_agent_user": common["apps"]["services"]["ai"]["hermes_kubelab"]["user"],
         "agent_stack_hermes": common["apps"]["services"]["ai"]["hermes_kubelab"],
+        "agent_stack_headscale_url": f"https://{common['apps']['services']['core']['headscale']['domain']}",
         "agent_stack_deny_rules": yaml.safe_load((ROLE / "files/guardrails-denylist.yaml").read_text())["rules"],
         "_agent_stack_agent_uid": 999,
         "_agent_stack_hermes_api_key": "hermes-api-key-sentinel",

@@ -71,6 +71,15 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - **Fail closed, measured**: `systemctl stop agent-stack-egress` left `user@999` and the rule both `inactive`, with no `agent_egress` table. `systemctl start user@999` brought the rule back (`active`, 2 rules) and the gateway with it: the Hermes API answered 200 about 10 s later, with no provision. The next provision reported `changed=0`.
 - **DNS**: the gateway was recreated with `HostConfig.Dns=[1.1.1.1 8.8.8.8]`, and a lookup took 0.02 s.
 
+### PR 3b-2 (`feat/ai009-hermes-sidecar`), prod Headscale, ace2, 2026-10-07
+
+- **Registration**: the first provision minted a single-use key with `--tags tag:hermes` under the `agents` user (id 4), and `tailscale/tailscale:v1.102.5` registered on Headscale 0.28.0 on its first try. `headscale nodes list` shows node 68, `hermes-kubelab`, `100.64.0.16`, tags `tag:hermes`, user `tagged-devices`. Headscale lists every tagged node under that pseudo-user, never under the user that minted the key.
+- **The uid rule does not break it.** The sidecar runs on the agent's daemon, so its traffic is uid 999's. It still reaches `Running`, because control, DERP and WireGuard endpoints all use public or LAN addresses, and `vpn.kubelab.live` resolves to the VPS's public address.
+- **ACL, read from the sidecar** with `tailscale nc`: the VPS's `:443` connected (rc 0). The VPS's `:22` and `:6443`, and ace2's `:3080` and `:22`, never answered (killed at 6 s). The sidecar uses 20 MiB of its 128 MiB.
+- **Idempotence**: `changed=7` to register, then `changed=1`, then `changed=0`. The `changed=1` was Compose recreating the sidecar after the env file was emptied. An env file's content is in Compose's hash, which the role's comment had said it was not. The role now recreates the sidecar in the run that registers it. The steady state then gave `changed=0` again.
+- **The mint gate** asks the running sidecar (`BackendState == Running`), no longer its state file. tailscaled writes that file at its first start, before any login, so a failed first registration would never have been retried (PR-Agent). The steady state was measured: the key is not minted, and the run gives `changed=0`. **Not yet measured live**: a registering run with the same-run recreate, and the re-login of a sidecar that reports `NeedsLogin`. Both need the node logged out or removed first, which waits on the operator.
+- **Stale tagged record found**: `hermes-nan` (node 22, `tag:hermes`, last seen 2026-07-22) still holds the tag with a key that never expires. Added to #1573.
+
 ## Decisions made during implementation
 
 Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
@@ -85,6 +94,7 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 - 2026-10-06, PR 3a: `approvals.mode: manual` prompts for nothing the sandbox runs, because v2026.9.24 skips command guards on an isolated docker backend. The deny list is the guard, and the provision proves it on the running gateway. AC3's drill is re-scoped in `tasks.md`.
 - 2026-10-06, PR 3a: the sandbox has no network until PR 3b gives it its own tailnet identity, because Docker's egress from ace2 reaches the tailnet as ace2 (measured above), which R7 assumed it did not.
 - 2026-10-07, PR 3b (operator): the agent's tailnet egress is closed on the host by uid, not by moving the gateway into the sidecar's namespace. A `TS_USERSPACE=true` sidecar has no TUN device, so a container sharing its namespace still reaches `100.64.0.0/10` through slirp4netns as ace2; only the sidecar's SOCKS5/HTTP proxy carries `tag:hermes`. The sidecar stays userspace (PR 3b-2), and a job that needs a tailnet destination goes through its proxy. Hermes's containers resolve through public resolvers only, since MagicDNS is inside the refused range.
+- 2026-10-07, PR 3b-2: the sidecar's state is a bind mount beside the data directory, not a named volume. The provision reads it to decide whether to mint a key, and the gateway's container cannot see the node key. Its preauth key lives in its own env file, emptied once the node is registered, so the gateway never receives it. Whether a job uses the proxy, and how, is left to PR 3c.
 - 2026-10-06, PR 1c (operator): the declared viewer tier is `pending`, Open WebUI's no-access role, so a demotion out of `users` removes access instead of leaving a `user`.
 - 2026-10-06, PR 1c: the role's post-start probe and the monitor read `apps.services.ai.open_webui.health_path`, and `tests/test_hub_monitors.py` ties the monitor URL to the SSOT, so AI-010 (#2069) cannot move the address without moving the monitor.
 

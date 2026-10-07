@@ -191,18 +191,34 @@ class TestPolicyHujsonContent:
         src = permissive[0]["src"]
         assert {"kubelab@", "manu@", "work@"} <= set(src), "existing users must keep allow-all (user@ form)"
 
+    @staticmethod
+    def _hermes_dst() -> list[str]:
+        """Every destination any rule grants a tag:hermes node: a rule that lists it
+        beside another source, or names every source, admits it as well."""
+        policy = _load_hujson(_render_policy())
+        groups = {name for name, members in policy.get("groups", {}).items() if "tag:hermes" in members}
+        admits = {"tag:hermes", "*"} | groups
+        return [d for a in policy["acls"] if admits & set(a["src"]) for d in a["dst"]]
+
     def test_hermes_egress_is_node_like_controlled(self) -> None:
-        acls = _load_hujson(_render_policy())["acls"]
-        hermes = [a for a in acls if a["src"] == ["tag:hermes"]]
-        assert hermes, "tag:hermes must have an egress rule"
-        assert set(hermes[0]["dst"]) == {"vps:443"}
+        assert set(self._hermes_dst()) == {"vps:443"}
 
     def test_crown_jewels_excluded_from_hermes(self) -> None:
-        acls = _load_hujson(_render_policy())["acls"]
-        hermes_dst = [d for a in acls if a["src"] == ["tag:hermes"] for d in a["dst"]]
         forbidden = (":8080", ":6443", ":22")  # Headscale CP, K3s API, peer SSH
-        for d in hermes_dst:
+        for d in self._hermes_dst():
             assert not d.endswith(forbidden), f"tag:hermes must not reach a control-plane port: {d}"
+
+    def test_hermes_reaches_nothing_on_the_node_it_runs_on(self) -> None:
+        """The sidecar runs on ace2 (AI-009). A grant to ace2 would give the agent
+        back, through the tailnet, the local services the host rule refuses it."""
+        ace2 = _net()["nodes"]["ace2"]["tailscale_ip"]
+        hosts = _load_hujson(_render_policy())["hosts"]
+        for d in self._hermes_dst():
+            host = d.rsplit(":", 1)[0]
+            # A tag, group or autogroup has members this file cannot see, ace2
+            # among them; only a declared alias or an address can be checked.
+            assert host in hosts or re.fullmatch(r"[\d.]+(/\d+)?", host), f"tag:hermes reaches an unresolvable {d}"
+            assert hosts.get(host, host) != ace2, f"tag:hermes must not reach ace2: {d}"
 
 
 # ── external probe + auto-revert gate (VPN-ACL-002) ─────────────────────────────
