@@ -148,5 +148,6 @@ def test_the_agent_cannot_edit_the_hook() -> None:
     dirs = [t for t in tasks if (t.get("ansible.builtin.file") or {}).get("path") == "{{ agent_stack_vault_hooks }}"]
     assert len(dirs) == 1
     assert dirs[0]["ansible.builtin.file"]["owner"] == "root", "an agent-owned parent can swap the hook"
+    assert dirs[0]["ansible.builtin.file"]["mode"] == "0755", "a parent others can write lets them unlink the hook"
     defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text())
     assert not defaults["agent_stack_vault_hooks"].startswith("/home/")
