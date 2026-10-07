@@ -88,5 +88,53 @@ def test_only_a_failing_test_counts_as_red(repo: Path, pytest_status: int, verdi
 
 
 def test_the_exit_codes_tell_the_three_outcomes_apart() -> None:
-    assert mutate.Verdict.RED.exit_code == 0
-    assert len({v.exit_code for v in mutate.Verdict}) == len(mutate.Verdict)
+    """The contract the Makefile documents; 2 is the refusal, outside the enum."""
+    assert {v: v.exit_code for v in mutate.Verdict} == {
+        mutate.Verdict.RED: 0,
+        mutate.Verdict.GREEN: 1,
+        mutate.Verdict.DID_NOT_RUN: 3,
+    }
+
+
+def test_a_file_that_cannot_be_read_refuses(repo: Path) -> None:
+    with pytest.raises(mutate.Refused):
+        mutate.run(repo, Path("missing.py"), "a", "b", lambda: 0)
+    (repo / "blob.bin").write_bytes(b"\xff\xfe")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "blob")
+    with pytest.raises(mutate.Refused):
+        mutate.run(repo, Path("blob.bin"), "a", "b", lambda: 0)
+
+
+def _cli(repo: Path, monkeypatch: pytest.MonkeyPatch, run) -> int:
+    from typer.testing import CliRunner
+
+    from toolkit.cli import tools
+
+    monkeypatch.setattr(tools.settings, "project_root", repo)
+    monkeypatch.setattr(mutate, "run", run)
+    args = ["mutate", "--file", "guard.py", "--from", "x > 0", "--to", "x >= 0", "--test", "t.py"]
+    return CliRunner().invoke(tools.app, args).exit_code
+
+
+@pytest.mark.parametrize("verdict", list(mutate.Verdict))
+def test_the_command_exits_with_the_verdict_it_reached(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, verdict: mutate.Verdict
+) -> None:
+    assert _cli(repo, monkeypatch, lambda *_: verdict) == verdict.exit_code
+
+
+def test_a_refusal_exits_2(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def refuse(*_):
+        raise mutate.Refused("dirty")
+
+    assert _cli(repo, monkeypatch, refuse) == 2
+
+
+def test_a_crash_is_no_verdict_never_green(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Python's own exit 1 for an uncaught exception is GREEN's code."""
+
+    def crash(*_):
+        raise RuntimeError("the test wrote something")
+
+    assert _cli(repo, monkeypatch, crash) == mutate.Verdict.DID_NOT_RUN.exit_code

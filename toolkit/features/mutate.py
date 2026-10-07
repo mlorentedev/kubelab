@@ -56,8 +56,11 @@ def run(repo: Path, file: Path, find: str, replace: str, run_test: Callable[[], 
         raise Refused(f"the working tree is not clean; commit first:\n{dirty}")
 
     path = repo / file
-    original = path.read_bytes()
-    text = original.decode()
+    try:
+        original = path.read_bytes()
+        text = original.decode()
+    except (OSError, UnicodeDecodeError) as exc:
+        raise Refused(f"{file}: cannot be read as text ({exc})") from exc
     if (count := text.count(find)) != 1:
         raise Refused(f"{file}: the text to replace matches {count} times; it must match exactly once")
 

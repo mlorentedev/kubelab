@@ -377,6 +377,11 @@ def mutate_cmd(
     except mutate.Refused as exc:
         logger.error(f"refused, nothing was mutated: {exc}")
         raise typer.Exit(2) from exc
+    except Exception as exc:
+        # Python exits 1 on an uncaught exception, which is GREEN's code: a crash
+        # would read as "the guard misses the mutant". No verdict was reached.
+        logger.error(f"NO VERDICT: the mutation check failed before a result ({exc!r})")
+        raise typer.Exit(mutate.Verdict.DID_NOT_RUN.exit_code) from exc
 
     messages = {
         mutate.Verdict.RED: "RED: the test failed against the mutant, so the guard catches it",
