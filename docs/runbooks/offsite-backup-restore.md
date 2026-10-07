@@ -702,7 +702,26 @@ secret tooling — that tooling is age-backed today, which is the trust root the
 disaster just destroyed.
 
 **If the escrow is missing or stale, there is no recovery.** Check it after every
-credential rotation.
+credential rotation, with Bitwarden unlocked:
+
+```bash
+make backup-escrow-check ENV=prod
+```
+
+It compares each restic password in SOPS (the shared one and each node's) with
+its escrow entry, `KUBELAB_RESTIC_PASSWORD[_<NODE>]`, by sha256[:12]
+fingerprint, and prints no value. The nodes are those in `backup.sources` plus any
+node SOPS still holds a password for. It exits non-zero on any of these, and the
+line it prints says which one, so read it before touching Bitwarden:
+
+| Line | Where the problem is |
+|---|---|
+| `STALE` | The escrow: re-escrow that password in this sitting |
+| `MISSING in the escrow` | The escrow has no password in the entry, or `dotf secrets probe` renamed `data.login.password`. Check the field name in the probe output before re-escrowing |
+| `the escrow is unreadable` | Bitwarden is locked or unreachable: `dotf secrets unlock` |
+| `output format changed` | `dotf secrets probe` printed something the check cannot parse; the escrow was not judged |
+| `MISSING in SOPS` | SOPS, not the escrow: the password the node needs is not there |
+| `backup.sources is empty` | The configuration: there is no fleet to check |
 
 ## Rotation — the ordering matters
 

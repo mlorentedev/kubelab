@@ -191,6 +191,10 @@ Seven mutations of `backup_isolation.py`. Six each turned a test red: accepting 
 
 After the first PR-Agent pass the own delete moved behind two guards, so it is attempted only where it can only be refused. The bucket's lock rules are read with the admin token and must hold `data/` by age for at least R, and the youngest pack must be more than a day inside R. Re-run live on 2026-10-07: still `24 of 24 cross-node requests refused with AccessDenied`. The lock read passed on all four buckets, since each reached its listing and failed only on the empty `data/`. Eight more mutations, each red: the guard not skipping the delete, `enabled` ignored, R ignored, an API failure tolerated, no safety margin, no age check, and picking the youngest by string instead of by instant. A type check on `Age` was dropped as redundant, because only an `Age` condition carries `maxAgeSeconds`.
 
+## The escrow check (AC5, ahead of PR 5)
+
+2026-10-07, run `make backup-escrow-check ENV=prod` with Bitwarden unlocked. Five of five matched: `KUBELAB_RESTIC_PASSWORD` and the four `KUBELAB_RESTIC_PASSWORD_<NODE>` entries against their SOPS values, by sha256[:12], printing no value. This repeats the hand comparison of 2026-10-03, now as a command. I ran five mutations of `backup_escrow.py`, and each turned a test red. One did so only after the test for a password missing from SOPS was made to assert that the escrow is never queried for it.
+
 ## Test status
 
 - Test suite: `<command> -> <output / coverage %>`
