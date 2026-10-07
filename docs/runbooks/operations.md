@@ -160,7 +160,8 @@ make deploy-apps              # apply Application manifests
 ## Monitoring: Uptime Kuma
 
 ```bash
-make monitoring-apply         # push monitor config (TLS expiry, health checks)
+make monitoring-apply CHECK=1 # print the sync plan, write nothing
+make monitoring-apply         # push monitor config; refuses a delete without PRUNE=1
 make monitoring-export        # export current config to repo
                               # NOTE: export never writes a push monitor's
                               # pushToken. SOPS owns it; the seed is public.

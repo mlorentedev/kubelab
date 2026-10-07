@@ -65,4 +65,14 @@ what the test said:
 `test -z "$(git status --porcelain)" && { mutate && test; rc=$?; restore || rc=1; exit $rc; }`
 (run it in a subshell, `( ... )`, so the `exit` ends only the experiment).
 
-**Tags**: `#git` `#pre-commit` `#mutation-testing` `#lesson-365` `#issue-1871` `#issue-1941`
+**Addendum (2026-10-07, MON-012, #2078)**: it recurred a third time, and a
+new way: the commit's output was redirected (`>/dev/null 2>&1`), so the
+`ruff format` refusal never showed. The `test -z ... && echo CLEAN` printed
+nothing, and nobody noticed the silence. A `;` ran the experiment and the
+restore anyway, and `git checkout HEAD -- toolkit/features/monitoring.py` reset
+the file to `master`. The implementation came back from the session transcript.
+Three recurrences by agents that knew the rule are the evidence lesson-365
+predicts. The fix is a mechanism, not a fourth reminder: #2104 (TOOL-100), a
+`make mutate` target that owns the order.
+
+**Tags**: `#git` `#pre-commit` `#mutation-testing` `#lesson-365` `#issue-1871` `#issue-1941` `#issue-2104`
