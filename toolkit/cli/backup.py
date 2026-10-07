@@ -317,3 +317,20 @@ def health_check_cmd(
 
     if not run_r2_backup_health_check(env=env, notify=notify, project_root=project_root):
         raise typer.Exit(code=1)
+
+
+@app.command("isolation-probe")
+def isolation_probe_cmd(
+    env: Annotated[str, typer.Option("--env", "-e", help="Only prod: the node buckets are prod's")],
+) -> None:
+    """Fail on any R2 request a stolen node credential should be refused (BACKUP-057).
+
+    Each node's pair lists and deletes in every other node's bucket, and must be
+    refused with AccessDenied; each node's own pair deletes the youngest pack in
+    its bucket, and must be refused by the lock. A refusal for any other reason,
+    an empty data/ prefix, or a node still on the shared bucket fails it too.
+    """
+    from toolkit.features.backup_isolation import probe_fleet
+
+    if not probe_fleet(env):
+        raise typer.Exit(code=1)

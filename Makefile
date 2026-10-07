@@ -1713,6 +1713,17 @@ sync-r2-watcher-targets:
 backup-coverage:
 	@$(TOOLKIT) backup coverage --env $(or $(filter staging prod,$(ENV)),prod)
 
+# Send the requests a stolen node credential would send, and fail on any R2
+# accepts (BACKUP-057 AC1, AC3): every node's pair against every other node's
+# bucket (list and delete, refused with AccessDenied), and each node's own pair
+# against the youngest pack in its bucket (refused by the lock). Fails on an
+# empty data/ too, so it runs after each node's first ship to its own bucket.
+# Prod only. Runbook: docs/runbooks/offsite-backup-restore.md.
+.PHONY: backup-isolation-probe
+backup-isolation-probe:
+	@test "$(ENV)" = prod || (echo "backup-isolation-probe needs ENV=prod, got '$(ENV)'" && exit 1)
+	@$(TOOLKIT) backup isolation-probe --env $(ENV)
+
 # Restore the newest Postgres dump from R2 into a scratch container on this
 # machine and check it is complete (BACKUP-046 AC5). Needs docker and the env's
 # kubeconfig; prints names and counts, never rows.
