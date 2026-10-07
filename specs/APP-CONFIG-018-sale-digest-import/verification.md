@@ -29,7 +29,7 @@ All tests are in `tests/test_n8n_shared_credentials.py` unless named, and run ag
 
 - **Shared credentials are a second registry, not fields on `N8nImportSpec`.** A credential that belongs to no workflow cannot live on a spec without the next spec re-declaring it, and removing the sale would take it along.
 - **`kubelab-smtp` is imported for the env whether or not a workflow uses it today**, so removing the last user never drops it. Prod only: staging has no email workflow, and widening it would make the automatic staging import in `deploy-k8s` depend on SMTP values.
-- **`secure` follows the port**, not `infra.smtp.secure` (lesson-527).
+- **`secure` follows the port**, not `infra.smtp.secure` (lesson-528).
 - **Sender is `infra.smtp.user`**, the only From the Gmail relay keeps.
 - **The recipient and site tag are SOPS values** under the sale's own block, with the token. The convention in `common.yaml` is plaintext for addresses (`infra.smtp.user`), but leaving-denver's runbook deliberately keeps these out of its public repository and this repository is public too. One block means one place to fill and one to delete.
 - **The resolver stopped logging values** and reports every absent path at once.
@@ -39,7 +39,7 @@ All tests are in `tests/test_n8n_shared_credentials.py` unless named, and run ag
 
 ## Promotion candidates
 
-- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/toolkit-tooling/lesson-527-a-setting-that-shares-a-name-across-two-systems-does-not-share-its-meaning.md
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/toolkit-tooling/lesson-528-a-setting-that-shares-a-name-across-two-systems-does-not-share-its-meaning.md
 - [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: the registry extends TOOL-009's importer and ADR-036's shared SMTP without reversing either; the rationale is in this file and the README.
 - [x] New pattern candidate for `00_meta/patterns/`? no: it does not yet recur in a second project.
 

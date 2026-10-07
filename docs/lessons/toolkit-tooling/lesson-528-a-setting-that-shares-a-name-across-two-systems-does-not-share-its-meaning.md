@@ -1,5 +1,5 @@
 ---
-id: lesson-527-a-setting-that-shares-a-name-across-two-systems-does-not-share-its-meaning
+id: lesson-528-a-setting-that-shares-a-name-across-two-systems-does-not-share-its-meaning
 type: lesson
 status: active
 created: "2026-10-07"
