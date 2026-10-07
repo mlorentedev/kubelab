@@ -103,13 +103,27 @@ fail() {
     exit 1
 }
 
-for var in RESTIC_PASSWORD AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
+for var in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
     eval "value=\${$var:-}"
     [ -n "$value" ] || fail "missing env $var"
 done
 [ -r "$TARGETS" ] || fail "targets file $TARGETS unreadable"
 
 errfile="$(mktemp)" || fail "cannot create a temp file"
+
+# Each node's repository opens with its own password (BACKUP-057): the Secret
+# carries RESTIC_PASSWORD_<NODE>, the node's own once it has moved to its own
+# bucket, the shared one before. A Secret applied before that carries only the
+# shared RESTIC_PASSWORD, so it stands in until BACKUP-057 PR 5 removes it.
+# Resolved per node, so one missing password costs one node, not the fleet.
+shared_password="${RESTIC_PASSWORD:-}"
+unset RESTIC_PASSWORD
+node_password_var() {
+    case "$1" in
+        '' | *[!a-z0-9_]*) return 1 ;;
+    esac
+    printf 'RESTIC_PASSWORD_%s' "$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')"
+}
 
 # Every restic call goes through here: never a lock (the token cannot write
 # one), never the cache (nothing to keep between Jobs), always a timeout.
@@ -185,7 +199,16 @@ while read -r node repo declared_id address port class services || [ -n "$node" 
     snapshot_age=null
     reachable=0
 
-    if out="$(restic_read snapshots --json --latest 1)"; then
+    password=""
+    if password_var="$(node_password_var "$node")"; then
+        eval "password=\${$password_var:-}"
+    fi
+    RESTIC_PASSWORD="${password:-$shared_password}"
+    export RESTIC_PASSWORD
+
+    if [ -z "$RESTIC_PASSWORD" ]; then
+        reason="unreadable: missing env ${password_var:-RESTIC_PASSWORD_<node>}"
+    elif out="$(restic_read snapshots --json --latest 1)"; then
         readable=1
         snapshots="$(printf '%s' "$out" | grep -o '"short_id"' | wc -l | tr -d ' ')"
         if [ "$snapshots" -gt 0 ]; then

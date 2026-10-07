@@ -187,6 +187,9 @@ def test_apply_secrets_dry_run_previews_the_restarts(monkeypatch) -> None:
     """The wiring: the preview must reach the restart step, in preview mode."""
 
     class CM:
+        def get_merged_config(self):
+            return {}
+
         def get_env_vars(self):
             return {"X": "1"}
 

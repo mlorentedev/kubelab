@@ -2042,6 +2042,14 @@ backup:
     # with the per-node repository name appended (one repository per node, so a
     # compromised node cannot rewrite another's history).
     repo_prefix: "s3:https://76967f5ede1ce50efce34d90b7e94958.r2.cloudflarestorage.com/kubelab-backups"
+    # The nodes already moved to a bucket of their own (BACKUP-057), named
+    # `kubelab-backup-<node>` and written with that node's own pair and restic
+    # password. A node joins only at the migration sitting, after its copy is
+    # verified, in the same change that updates its `repository_ids` entry.
+    # Every consumer resolves through this list (backup_destination.node_repository,
+    # backup.yml), so no other edit moves a node. Absent from it: the shared
+    # bucket above, with the shared pair and password.
+    own_bucket_nodes: []
     # Pinned static binary (BACKUP-044 Part 2), same idiom as k3s_version:
     # get_url + a checksum verified against upstream's own SHA256SUMS, not a
     # floating "latest" download. Arch is resolved per node at Ansible run

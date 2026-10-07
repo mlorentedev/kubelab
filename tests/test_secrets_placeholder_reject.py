@@ -59,6 +59,7 @@ class TestApplySecretsRefusesPlaceholders:
         fake_cm = mocker.Mock()
         # One mapped source (api-secrets BEEHIIV_API_KEY) still holds a placeholder.
         fake_cm.get_env_vars.return_value = {"APPS_PLATFORM_API_BEEHIIV_API_KEY": "REPLACE_WITH_SOPS_VALUE"}
+        fake_cm.get_merged_config.return_value = {}
         mocker.patch("toolkit.features.k8s_secrets.ConfigurationManager", return_value=fake_cm)
 
         ok = apply_secrets("staging", Path("."), dry_run=False)

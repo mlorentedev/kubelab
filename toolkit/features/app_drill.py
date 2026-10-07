@@ -490,7 +490,7 @@ def _restore_matches(app: App, data: Path, database: str, live: Rows, live_versi
 
 def drill_apps(env: str = "prod", project_root: Optional[Path] = None) -> bool:
     """Resolve every input from the SSOT and run the drill for Authelia and n8n."""
-    from toolkit.features.backup_destination import DestinationError, repo_url, repository_name, restic_context
+    from toolkit.features.backup_destination import DestinationError, node_restic
     from toolkit.features.configuration import ConfigurationManager
     from toolkit.features.k8s_kubeconfig import output_path
     from toolkit.features.postgres_drill import staging_dir
@@ -498,12 +498,6 @@ def drill_apps(env: str = "prod", project_root: Optional[Path] = None) -> bool:
     cm = ConfigurationManager(env, project_root)
     root = Path(project_root or cm.project_root)
     logger.section(f"authelia + n8n restore drill — newest capture in R2 into scratch containers ({env})")
-    try:
-        dest, restic_env = restic_context(cm)
-    except DestinationError as exc:
-        logger.error(str(exc))
-        return False
-
     merged = cm.get_merged_config()
     sources = (merged.get("backup", {}) or {}).get("sources", {}) or {}
     net = merged["networking"]
@@ -523,6 +517,12 @@ def drill_apps(env: str = "prod", project_root: Optional[Path] = None) -> bool:
             logger.error(f"drill: {service}: CANNOT CHECK — the SSOT does not declare {names}")
             ok = False
             continue
+        try:
+            repo, restic_env = node_restic(cm, "vps")
+        except DestinationError as exc:
+            logger.error(str(exc))
+            ok = False
+            continue
         key = cm.get_secret_by_path(app.key_path)
         if not key:
             logger.error(f"drill: {service}: CANNOT CHECK — {app.key_path} is not in SOPS for {env}")
@@ -532,7 +532,7 @@ def drill_apps(env: str = "prod", project_root: Optional[Path] = None) -> bool:
             run_drill(
                 app=app,
                 database=str(spec["sqlite"]),
-                repo=repo_url(dest, repository_name(cm, "vps")),
+                repo=repo,
                 restic_env=restic_env,
                 staging_dir=staging_dir(root),
                 key=str(key),

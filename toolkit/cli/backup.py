@@ -64,6 +64,9 @@ def mint_node_tokens_cmd(
     env: Annotated[str, typer.Option("--env", "-e", help="Only prod: the node keys live in prod.enc.yaml")] = "prod",
     node: Annotated[Optional[str], typer.Option("--node", "-n", help="One backup.sources node; default all")] = None,
     rotate: Annotated[bool, typer.Option("--rotate", help="Replace existing pairs and revoke the old tokens")] = False,
+    watcher_only: Annotated[
+        bool, typer.Option("--watcher-only", help="Only the watcher's read pair; no node token is touched")
+    ] = False,
 ) -> None:
     """Mint each node's own R2 token and restic password into SOPS (BACKUP-057).
 
@@ -78,7 +81,10 @@ def mint_node_tokens_cmd(
     if env != SECRETS_ENV:
         logger.error(f"The node keys live in {SECRETS_ENV}.enc.yaml; --env {env} is not supported.")
         raise typer.Exit(code=1)
-    if not mint_all(node=node, rotate=rotate):
+    if node and watcher_only:
+        logger.error("--node and --watcher-only name different tokens; pass one.")
+        raise typer.Exit(code=1)
+    if not mint_all(node=node, rotate=rotate, watcher_only=watcher_only):
         raise typer.Exit(code=1)
 
 

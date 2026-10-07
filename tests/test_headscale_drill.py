@@ -413,8 +413,7 @@ def test_the_drill_runs_the_image_volume_and_pool_the_ssot_declares(monkeypatch)
 
     # Hermetic: no value here is a secret, so nothing is decrypted.
     monkeypatch.setattr(ConfigurationManager, "_decrypt_sops", lambda self, path: {})
-    monkeypatch.setattr(backup_destination, "restic_context", lambda cm: ({}, {}))
-    monkeypatch.setattr(backup_destination, "repo_url", lambda dest, name: name)
+    monkeypatch.setattr(backup_destination, "node_restic", lambda cm, node: (node, {}))
     live = LiveState(nodes={}, users={}, hashes={})
 
     def fake_read_live(run, ssh_target, volume):

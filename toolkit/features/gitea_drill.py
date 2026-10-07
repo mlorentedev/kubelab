@@ -399,23 +399,22 @@ def resolve_inputs(env: str = "prod", project_root: Optional[Path] = None) -> Op
     None, after naming what is missing. Holds the restic credentials and the admin
     token: it travels to another host only on an ssh session's stdin (BACKUP-071).
     """
-    from toolkit.features.backup_destination import DestinationError, repo_url, repository_name, restic_context
+    from toolkit.features.backup_destination import DestinationError, node_restic
     from toolkit.features.configuration import ConfigurationManager
     from toolkit.features.postgres_drill import staging_dir
 
     cm = ConfigurationManager(env, project_root)
     root = Path(project_root or cm.project_root)
     merged = cm.get_merged_config()
-    try:
-        dest, restic_env = restic_context(cm)
-    except DestinationError as exc:
-        logger.error(str(exc))
-        return None
-
     sources = (merged.get("backup", {}) or {}).get("sources", {}) or {}
     nodes = [node for node, entries in sorted(sources.items()) if SERVICE in (entries or {})]
     if len(nodes) != 1:
         logger.error(f"drill: expected exactly one node with a '{SERVICE}' backup source, found {nodes}")
+        return None
+    try:
+        repo, restic_env = node_restic(cm, nodes[0])
+    except DestinationError as exc:
+        logger.error(str(exc))
         return None
 
     gitea = merged["apps"]["services"]["core"]["gitea"]
@@ -424,7 +423,7 @@ def resolve_inputs(env: str = "prod", project_root: Optional[Path] = None) -> Op
         logger.error(f"drill: CANNOT CHECK — apps.services.core.gitea.admin_token is missing from {env} SOPS")
         return None
     return {
-        "repo": repo_url(dest, repository_name(cm, nodes[0])),
+        "repo": repo,
         "restic_env": dict(restic_env),
         "staging_dir": staging_dir(root),
         "image": str(gitea["image"]),
