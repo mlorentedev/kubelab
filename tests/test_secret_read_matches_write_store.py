@@ -258,12 +258,15 @@ def _stores(play: dict) -> dict[str, str]:
     return {store: env_var for store, (env_var, _) in _store_layers(play).items()}
 
 
-def _store_layers(play: dict) -> dict[str, tuple[str, bool]]:
-    """store fact -> (its environment variable, whether it also merges common)."""
-    tasks = _flat((play.get("pre_tasks") or []) + (play.get("tasks") or []) + (play.get("post_tasks") or []))
+def _play_tasks(play: dict) -> list[dict]:
+    return _flat((play.get("pre_tasks") or []) + (play.get("tasks") or []) + (play.get("post_tasks") or []))
+
+
+def _decrypts(play: dict) -> tuple[dict[str, str], set[str]]:
+    """(env variable -> register of its per-env decrypt, registers of the common decrypt)."""
     register_for_env: dict[str, str] = {}
     common_registers: set[str] = set()
-    for task in tasks:
+    for task in _play_tasks(play):
         command = task.get("command") or task.get("ansible.builtin.command")
         if not (isinstance(command, str) and task.get("register")):
             continue
@@ -271,6 +274,13 @@ def _store_layers(play: dict) -> dict[str, tuple[str, bool]]:
             register_for_env[found.group(1)] = task["register"]
         elif COMMON.search(command):
             common_registers.add(task["register"])
+    return register_for_env, common_registers
+
+
+def _store_layers(play: dict) -> dict[str, tuple[str, bool]]:
+    """store fact -> (its environment variable, whether it also merges common)."""
+    tasks = _play_tasks(play)
+    register_for_env, common_registers = _decrypts(play)
     stores: dict[str, tuple[str, bool]] = {}
     for task in tasks:
         fact = task.get("set_fact") or task.get("ansible.builtin.set_fact")
@@ -296,6 +306,32 @@ def test_the_two_store_nodes_are_found() -> None:
     """Anti-vacuity: the parametrised test below runs on what this finds."""
     names = {name for name, _, _ in _multi_store_plays()}
     assert {"provision-bee.yml", "provision-ace2.yml"} <= names, names
+
+
+def test_every_per_env_decrypt_becomes_a_store() -> None:
+    """A play whose chain the parser cannot follow must fail, not drop out.
+
+    `_multi_store_plays` keeps only plays where two stores resolve, so a decrypt
+    whose register reaches its `set_fact` in a shape `_store_layers` does not read
+    would remove the play from the check above without a word. Every per-env
+    decrypt in every playbook must therefore end up in a store.
+    """
+    lost: list[str] = []
+    for path in sorted(PLAYBOOKS.glob("*.yml")):
+        for play in yaml.safe_load(_text(path)) or []:
+            built = {env_var for env_var, _ in _store_layers(play).values()}
+            lost.extend(f"{path.name}: `{{{{ {var} }}}}.enc.yaml`" for var in _decrypts(play)[0] if var not in built)
+    assert not lost, f"decrypted but never followed into a store: {lost}"
+
+
+def test_the_overridden_variable_is_one_the_stores_are_built_from() -> None:
+    """`_run_envs` reads the first `-e <var>={env}` in the toolkit. If that stopped
+    being the variable a store is built from, every store would be judged under its
+    declared env alone, and the extra-var override would go unchecked."""
+    overridden, envs = _run_envs()
+    built = {env_var for _, _, stores in _multi_store_plays() for env_var in stores.values()}
+    assert overridden in built, f"`make provision` overrides `{overridden}`, and the stores are built from {built}"
+    assert len(envs) >= 2, f"the provision target accepts only {envs} with a SOPS file"
 
 
 @pytest.mark.parametrize(
