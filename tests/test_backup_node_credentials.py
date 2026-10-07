@@ -318,7 +318,10 @@ class TestResticPasswords:
         store = FakeStore(held)
         r2 = {"account_id": ACCOUNT, "endpoint": ENDPOINT, "bucket": legacy}
         store._cm = MagicMock()
-        store._cm.get_merged_config.return_value = {"backup": {"sources": dict.fromkeys(nodes, {}), "r2": r2}}
+        store._cm.get_merged_config.return_value = {
+            "backup": {"sources": dict.fromkeys(nodes, {}), "r2": r2},
+            "apps": {"services": {"core": {"vikunja": {"storage": {"s3_bucket": OUTSIDE}}}}},
+        }
         http = FakeHttp()
         # The newest mint's token can list exactly the buckets its policy names.
         def run(argv: list[str], env: dict[str, str]) -> tuple[int, str, str]:
@@ -340,11 +343,14 @@ class TestResticPasswords:
         assert sorted(http.deletes()) == sorted([f"tok-old-{i}" for i in range(len(nodes))] + ["tok-old-w"])
 
 
-def _watcher_runner(legacy: str, legacy_ok: bool = False, legacy_error: str = "AccessDenied", unreadable: str = ""):
+OUTSIDE = "kubelab-vikunja-staging"
+
+
+def _watcher_runner(outside: str = OUTSIDE, outside_ok: bool = False, unreadable: str = ""):
     def run(argv: list[str], env: dict[str, str]) -> tuple[int, str, str]:
         bucket = argv[argv.index("--bucket") + 1]
-        if bucket == legacy:
-            return (0, "{}", "") if legacy_ok else (254, "", f"An error occurred ({legacy_error})")
+        if bucket == outside:
+            return (0, "{}", "") if outside_ok else (254, "", "An error occurred (AccessDenied)")
         if bucket == unreadable:
             return (254, "", "An error occurred (AccessDenied)")
         return (0, "{}", "")
@@ -358,6 +364,7 @@ def _mint_watcher(store: FakeStore, http: FakeHttp, run, rotate: bool = False) -
         account_id=ACCOUNT,
         endpoint=ENDPOINT,
         legacy_bucket="kubelab-backups",
+        refused_bucket=OUTSIDE,
         http=http,
         store=store,
         run=run,
@@ -367,30 +374,30 @@ def _mint_watcher(store: FakeStore, http: FakeHttp, run, rotate: bool = False) -
 
 
 class TestTheWatcherToken:
-    def test_it_is_minted_read_only_on_every_node_bucket(self) -> None:
+    def test_it_is_minted_read_only_on_every_backup_bucket(self) -> None:
         store, http = FakeStore(), FakeHttp()
-        assert _mint_watcher(store, http, _watcher_runner("kubelab-backups")) == "minted"
+        assert _mint_watcher(store, http, _watcher_runner()) == "minted"
         (body,) = http.posts()
         assert body["policies"][0]["permission_groups"] == [{"id": READ_GROUP_ID}]
         assert store.values[bnc.WATCHER_ACCESS_KEY_PATH] == "tok-1"
 
-    def test_a_token_that_reads_the_legacy_bucket_is_revoked(self) -> None:
+    def test_a_token_that_reads_a_bucket_outside_the_backups_is_revoked(self) -> None:
         store, http = FakeStore(), FakeHttp()
         with pytest.raises(bnc.MintError, match="must not reach"):
-            _mint_watcher(store, http, _watcher_runner("kubelab-backups", legacy_ok=True))
+            _mint_watcher(store, http, _watcher_runner(outside_ok=True))
         assert store.writes == [] and http.deletes() == ["tok-1"]
 
     def test_a_token_that_misses_one_node_bucket_is_revoked(self) -> None:
         store, http = FakeStore(), FakeHttp()
         missing = bnc.node_bucket(_nodes()[-1])
         with pytest.raises(bnc.MintError, match=missing):
-            _mint_watcher(store, http, _watcher_runner("kubelab-backups", unreadable=missing))
+            _mint_watcher(store, http, _watcher_runner(unreadable=missing))
         assert store.writes == [] and http.deletes() == ["tok-1"]
 
     def test_an_existing_pair_is_kept(self) -> None:
         store = FakeStore({bnc.WATCHER_ACCESS_KEY_PATH: "tok-old", bnc.WATCHER_SECRET_KEY_PATH: "s-old"})
         http = FakeHttp()
-        assert _mint_watcher(store, http, _watcher_runner("kubelab-backups")) == "kept"
+        assert _mint_watcher(store, http, _watcher_runner()) == "kept"
         assert http.calls == []
 
 

@@ -424,23 +424,22 @@ def resolve_inputs(env: str = "prod", project_root: Optional[Path] = None) -> Op
     None, after naming what is missing. Live is read here, over ssh and `sudo -n`
     on the VPS, so a host that runs the restore needs neither (BACKUP-071).
     """
-    from toolkit.features.backup_destination import DestinationError, repo_url, repository_name, restic_context
+    from toolkit.features.backup_destination import DestinationError, node_restic
     from toolkit.features.configuration import ConfigurationManager
     from toolkit.features.postgres_drill import staging_dir
 
     cm = ConfigurationManager(env, project_root)
     root = Path(project_root or cm.project_root)
-    try:
-        dest, restic_env = restic_context(cm)
-    except DestinationError as exc:
-        logger.error(str(exc))
-        return None
-
     merged = cm.get_merged_config()
     sources = (merged.get("backup", {}) or {}).get("sources", {}) or {}
     nodes = [node for node, entries in sorted(sources.items()) if SERVICE in (entries or {})]
     if len(nodes) != 1:
         logger.error(f"drill: expected one node capturing {SERVICE} in backup.sources, found {nodes or 'none'}")
+        return None
+    try:
+        repo, restic_env = node_restic(cm, nodes[0])
+    except DestinationError as exc:
+        logger.error(str(exc))
         return None
     net = merged["networking"]
     live = read_live(
@@ -451,7 +450,7 @@ def resolve_inputs(env: str = "prod", project_root: Optional[Path] = None) -> Op
     if live is None:
         return None
     return {
-        "repo": repo_url(dest, repository_name(cm, nodes[0])),
+        "repo": repo,
         "restic_env": dict(restic_env),
         "staging_dir": staging_dir(root),
         "image": str(merged["apps"]["services"]["core"]["headscale"]["image"]),

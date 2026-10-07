@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import dataclasses
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -36,6 +37,8 @@ class SecretMapping:
     # runs (proposal, "Out of scope: Staging").
     envs: tuple[str, ...] | None = None
 
+
+WATCHER_SECRET = "r2-backup-watcher-secrets"
 
 # ── Secret definitions (declarative) ──────────────────────────────────────────
 # Format: K8s Secret name → {secret_key: FLATTENED_ENV_VAR_NAME}
@@ -189,16 +192,17 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
         },
     ),
     # BACKUP-055: the in-cluster R2 watcher. restic reads the S3 credential from
-    # AWS_* and the repository password from RESTIC_PASSWORD. The READ-ONLY token,
-    # never the nodes' read-write one (tests/test_k8s_secrets_r2_watcher.py).
-    # No `optional_keys`: without any of the three every run reports the whole
-    # fleet unreadable, so the apply refuses instead.
+    # AWS_*: the watcher's own read pair (BACKUP-057), never a node's read-write
+    # one (tests/test_k8s_secrets_r2_watcher.py). Its restic passwords, one
+    # RESTIC_PASSWORD_<NODE> per node, follow `backup.r2.own_bucket_nodes`, so
+    # `_resolve_config_keys` adds them at apply time.
+    # No `optional_keys`: without any of them a run reports nodes unreadable,
+    # so the apply refuses instead.
     SecretMapping(
-        name="r2-backup-watcher-secrets",
+        name=WATCHER_SECRET,
         keys={
-            "AWS_ACCESS_KEY_ID": "BACKUP_R2_READONLY_ACCESS_KEY_ID",
-            "AWS_SECRET_ACCESS_KEY": "BACKUP_R2_READONLY_SECRET_ACCESS_KEY",
-            "RESTIC_PASSWORD": "BACKUP_RESTIC_PASSWORD",
+            "AWS_ACCESS_KEY_ID": "BACKUP_R2_WATCHER_ACCESS_KEY_ID",
+            "AWS_SECRET_ACCESS_KEY": "BACKUP_R2_WATCHER_SECRET_ACCESS_KEY",
         },
     ),
 ]
@@ -295,7 +299,9 @@ def apply_secrets(env: str, project_root: Path, dry_run: bool = False) -> bool:
     # prod-only mapping has no source values in a staging vault at all — that
     # is absence, not a placeholder — so it is filtered out here rather than
     # tripping either guard below.
-    applicable = _definitions_for_env(env, SECRET_DEFINITIONS)
+    applicable = [
+        _resolve_config_keys(m, cm.get_merged_config()) for m in _definitions_for_env(env, SECRET_DEFINITIONS)
+    ]
 
     # 2. Pre-deploy guard (TOOL-019 / C6): never push a placeholder value to a cluster.
     placeholder_hits = _placeholder_hits(applicable, env_vars)
@@ -358,6 +364,22 @@ def _placeholder_hits(applicable: list[SecretMapping], env_vars: dict[str, str])
 
 # Secret keys that resolve from the identity SSOT, checked before anything is applied.
 _IDENTITY_BACKED = {"grafana-admin": "admin-user"}
+
+
+def _resolve_config_keys(mapping: SecretMapping, config: dict[str, Any]) -> SecretMapping:
+    """A mapping whose source keys depend on the config, resolved against it.
+
+    Only the watcher has one: each node's restic password comes from that node's
+    own key once it is in `backup.r2.own_bucket_nodes`, and from the shared key
+    before (BACKUP-057 PR 4). Resolved into ordinary `keys`, so a missing one is
+    refused exactly as any other required key is.
+    """
+    if mapping.name != WATCHER_SECRET:
+        return mapping
+    from toolkit.features.backup_destination import watcher_password_paths
+
+    passwords = {k8s_key: path.upper().replace(".", "_") for k8s_key, path in watcher_password_paths(config).items()}
+    return dataclasses.replace(mapping, keys={**mapping.keys, **passwords})
 
 
 def _missing_identity(dynamic_literals: dict[str, dict[str, str]]) -> list[str]:

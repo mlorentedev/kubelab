@@ -37,7 +37,9 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 from toolkit.core.logging import logger
+from toolkit.features.backup_node_credentials import access_key_path, restic_password_path, secret_key_path
 from toolkit.features.configuration import ConfigurationManager
+from toolkit.features.r2_tfvars import node_bucket
 
 # SSOT paths. Changing a bucket or account means editing common.yaml, not this file.
 _CFG_ROOT = ("backup", "r2")
@@ -93,12 +95,14 @@ def load_destination(cm: ConfigurationManager) -> DestinationConfig:
     )
 
 
-def load_credentials(cm: ConfigurationManager) -> dict[str, str]:
-    """Read the S3 credentials from SOPS into an env mapping. Values are never logged."""
-    access = cm.get_secret_by_path(_ACCESS_KEY_SECRET)
-    secret = cm.get_secret_by_path(_SECRET_KEY_SECRET)
+def load_credentials(
+    cm: ConfigurationManager, access_path: str = _ACCESS_KEY_SECRET, secret_path: str = _SECRET_KEY_SECRET
+) -> dict[str, str]:
+    """Read an S3 pair from SOPS into an env mapping. Values are never logged."""
+    access = cm.get_secret_by_path(access_path)
+    secret = cm.get_secret_by_path(secret_path)
 
-    absent = [p for p, v in ((_ACCESS_KEY_SECRET, access), (_SECRET_KEY_SECRET, secret)) if not v]
+    absent = [p for p, v in ((access_path, access), (secret_path, secret)) if not v]
     if absent:
         raise DestinationError(
             f"Missing SOPS value(s): {', '.join(absent)}. "
@@ -396,6 +400,54 @@ def _reachability(config: dict[str, Any], node: str) -> list[str]:
     return [str(entry["tailscale_ip"]), str(port), str(entry["location"])]
 
 
+# ── per-node buckets (BACKUP-057 PR 4) ──────────────────────────────────────
+#
+# A node moves from the shared bucket to its own by being listed in
+# `backup.r2.own_bucket_nodes`, never by a merge: the list is edited at the
+# migration sitting, once that node's copy is verified. Every consumer below
+# asks these three functions, so no consumer can move a node on its own.
+
+
+def own_bucket_nodes(config: dict[str, Any]) -> frozenset[str]:
+    """The nodes already in a bucket of their own. Raises on a name that backs nothing up."""
+    backup = config.get("backup", {}) or {}
+    declared = (backup.get("r2", {}) or {}).get("own_bucket_nodes") or []
+    unknown = sorted(set(declared) - set(backup.get("sources", {}) or {}))
+    if unknown:
+        raise ValueError(f"backup.r2.own_bucket_nodes names {', '.join(unknown)}, which is not in backup.sources")
+    return frozenset(declared)
+
+
+def node_repository(config: dict[str, Any], node: str) -> str:
+    """The restic repository URL `node` ships to: its own bucket's root, or its prefix in the shared one."""
+    r2 = (config.get("backup", {}) or {}).get("r2", {}) or {}
+    if node in own_bucket_nodes(config):
+        return f"s3:{str(r2['endpoint']).rstrip('/')}/{node_bucket(node)}"
+    return f"{str(r2['repo_prefix']).rstrip('/')}/{_repository_name_in(config, node)}"
+
+
+def node_secret_paths(config: dict[str, Any], node: str) -> tuple[str, str, str]:
+    """SOPS paths of `node`'s access key, secret key and restic password."""
+    if node in own_bucket_nodes(config):
+        return access_key_path(node), secret_key_path(node), restic_password_path(node)
+    return _ACCESS_KEY_SECRET, _SECRET_KEY_SECRET, _RESTIC_PASSWORD_SECRET
+
+
+def watcher_password_paths(config: dict[str, Any]) -> dict[str, str]:
+    """The watcher Secret's restic passwords: one `RESTIC_PASSWORD_<NODE>` per node, by SOPS path.
+
+    A path, never a value: the Secret reads the node's own key, so rotating a
+    node's password reaches the watcher on the next `apply-secrets`.
+    """
+    sources = (config.get("backup", {}) or {}).get("sources", {}) or {}
+    paths = {}
+    for node in sorted(sources):
+        if not node.isidentifier():
+            raise ValueError(f"backup node {node!r} cannot name an environment variable")
+        paths[f"RESTIC_PASSWORD_{node.upper()}"] = node_secret_paths(config, node)[2]
+    return paths
+
+
 def render_watcher_targets(config: dict[str, Any]) -> str:
     """What the watcher must find in R2: per node, its repository, its id, where to
     knock, its class and its declared sources.
@@ -408,7 +460,6 @@ def render_watcher_targets(config: dict[str, Any]) -> str:
     # The full URL, not the bare name, so the R2 endpoint reaches the cluster
     # from the SSOT rather than as a second copy typed into the manifest.
     r2 = backup.get("r2", {}) or {}
-    prefix = str(r2.get("repo_prefix", "")).rstrip("/")
     # BACKUP-058: the id pins which history the node's repository must be. `-`
     # keeps the column fixed for a node with none declared, which the probe
     # reports unhealthy rather than trusting whatever repository answers.
@@ -417,7 +468,7 @@ def render_watcher_targets(config: dict[str, Any]) -> str:
         " ".join(
             [
                 node,
-                f"{prefix}/{_repository_name_in(config, node)}",
+                node_repository(config, node),
                 str(repository_ids.get(node) or "-"),
                 *_reachability(config, node),
                 *sorted(sources[node] or {}),
@@ -439,16 +490,23 @@ def write_watcher_targets(project_root: Path, config: dict[str, Any]) -> bool:
     return True
 
 
-def restic_context(cm: ConfigurationManager) -> tuple[DestinationConfig, dict[str, str]]:
-    """The destination and the env restic needs to read it. Values are never logged."""
-    dest = load_destination(cm)
-    credentials = load_credentials(cm)
-    password = cm.get_secret_by_path(_RESTIC_PASSWORD_SECRET)
+def node_restic(cm: ConfigurationManager, node: str) -> tuple[str, dict[str, str]]:
+    """One node's repository URL and the env restic needs to read it. Values are never logged.
+
+    Resolved through `node_repository` and `node_secret_paths`, so a node in its
+    own bucket is read with its own pair and password, never the shared ones.
+    """
+    config = cm.get_merged_config()
+    try:
+        repo = node_repository(config, node)
+        access, secret, password_path = node_secret_paths(config, node)
+    except (KeyError, ValueError) as exc:
+        raise DestinationError(f"backup.r2 cannot resolve {node}'s repository: {exc}") from exc
+    credentials = load_credentials(cm, access, secret)
+    password = cm.get_secret_by_path(password_path)
     if not password:
-        raise DestinationError(
-            f"Missing SOPS value at '{_RESTIC_PASSWORD_SECRET}' — generate it with `make backup-generate-password`."
-        )
-    return dest, {**credentials, "RESTIC_PASSWORD": str(password).strip()}
+        raise DestinationError(f"Missing SOPS value at '{password_path}' — {node}'s repository cannot be read.")
+    return repo, {**credentials, "RESTIC_PASSWORD": str(password).strip()}
 
 
 def cluster_node(config: dict[str, Any]) -> Optional[str]:
@@ -549,12 +607,6 @@ def coverage(
     cm = cm or ConfigurationManager(env, project_root)
     run = run or _default_run
 
-    try:
-        dest, renv = restic_context(cm)
-    except DestinationError as exc:
-        logger.error(str(exc))
-        return False
-
     declared = sorted((cm.get_merged_config().get("backup", {}) or {}).get("sources", {}) or {})
     if not declared:
         logger.error("No nodes declared in backup.sources — nothing to report on.")
@@ -570,7 +622,12 @@ def coverage(
 
     ok = True
     for node in declared:
-        repo = repo_url(dest, repository_name(cm, node))
+        try:
+            repo, renv = node_restic(cm, node)
+        except DestinationError as exc:
+            logger.error(f"{node:10} UNREADABLE — {exc}")
+            ok = False
+            continue
         rc, out, err = run(["restic", "-r", repo, "snapshots", "--json", "--latest", "1"], renv)
         if rc != 0:
             # A repository that does not exist and one that cannot be read are

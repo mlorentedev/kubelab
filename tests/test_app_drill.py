@@ -570,8 +570,7 @@ def test_the_drill_reads_the_files_keys_and_target_the_ssot_declares(monkeypatch
     # Hermetic: no SOPS is decrypted; the key lookup is recorded instead.
     monkeypatch.setattr(ConfigurationManager, "_decrypt_sops", lambda self, path: {})
     monkeypatch.setattr(ConfigurationManager, "get_secret_by_path", lambda self, p: asked.append(p) or "k")
-    monkeypatch.setattr(backup_destination, "restic_context", lambda cm: ({}, {}))
-    monkeypatch.setattr(backup_destination, "repo_url", lambda dest, name: name)
+    monkeypatch.setattr(backup_destination, "node_restic", lambda cm, node: (node, {}))
     monkeypatch.setattr(app_drill, "run_drill", lambda **kw: seen.append(kw) or True)
 
     assert app_drill.drill_apps(env="prod", project_root=repo)
@@ -607,8 +606,7 @@ def test_a_source_the_ssot_declares_incompletely_is_cannot_check(monkeypatch, ca
     monkeypatch.setattr(ConfigurationManager, "_decrypt_sops", lambda self, path: {})
     monkeypatch.setattr(ConfigurationManager, "get_merged_config", without)
     monkeypatch.setattr(ConfigurationManager, "get_secret_by_path", lambda self, p: "k")
-    monkeypatch.setattr(backup_destination, "restic_context", lambda cm: ({}, {}))
-    monkeypatch.setattr(backup_destination, "repo_url", lambda dest, name: name)
+    monkeypatch.setattr(backup_destination, "node_restic", lambda cm, node: (node, {}))
     monkeypatch.setattr(app_drill, "run_drill", lambda **kw: seen.append(kw["app"].service) or True)
 
     assert app_drill.drill_apps(env="prod", project_root=repo) is False

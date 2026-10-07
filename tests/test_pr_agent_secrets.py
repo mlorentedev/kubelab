@@ -137,6 +137,9 @@ class TestApplySecretsEnvScoping:
 
     def test_apply_secrets_never_attempts_a_prod_only_mapping_under_staging(self, monkeypatch) -> None:
         class CM:
+            def get_merged_config(self):
+                return {}
+
             def get_env_vars(self):
                 # A real staging vault: the pr-agent keys never exist here.
                 return {"X": "1"}
@@ -162,6 +165,9 @@ class TestApplySecretsEnvScoping:
 
     def test_apply_secrets_still_attempts_it_under_prod(self, monkeypatch) -> None:
         class CM:
+            def get_merged_config(self):
+                return {}
+
             def get_env_vars(self):
                 return {"MISSING": "value"}
 

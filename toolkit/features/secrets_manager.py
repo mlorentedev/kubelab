@@ -1226,12 +1226,15 @@ SECRET_CATALOG: list[SecretSpec] = [
     # the cluster must never hold anything that can `forget --prune`
     # (tests/test_k8s_secrets_r2_watcher.py). Throwaway by nature — losing it
     # loses no data — so it has no escrow copy.
+    # Read by nothing since BACKUP-057 PR 4, which moved the watcher onto
+    # backup.r2.watcher.*. The token stays live until PR 5 revokes it and
+    # deletes both keys, so the audit keeps them until then.
     SecretSpec(
         key_path="backup.r2.readonly_access_key_id",
         expiry=Expiry.NEVER,
-        description="Cloudflare R2 read-only access key id — the in-cluster backup watcher",
+        description="Cloudflare R2 read-only access key id — the backup watcher's until BACKUP-057 PR 4",
         kind=SecretKind.EXTERNAL,
-        services=("r2-backup-watcher",),
+        services=(),
         format_hint="R2 API token Access Key ID (Object Read only, kubelab-backups)",
         rotate_note=(
             "R2 > Manage R2 API Tokens: create a new account token, Object Read only, "
@@ -1244,19 +1247,19 @@ SECRET_CATALOG: list[SecretSpec] = [
     SecretSpec(
         key_path="backup.r2.readonly_secret_access_key",
         expiry=Expiry.NEVER,
-        description="Cloudflare R2 read-only secret access key — the in-cluster backup watcher",
+        description="Cloudflare R2 read-only secret access key — the backup watcher's until BACKUP-057 PR 4",
         kind=SecretKind.EXTERNAL,
-        services=("r2-backup-watcher",),
+        services=(),
         format_hint="R2 API token Secret Access Key; shown once, not recoverable",
         rotate_note="Rotated together with backup.r2.readonly_access_key_id — they are one credential.",
         envs=("staging", "prod"),
     ),
-    # BACKUP-057 PR 3: the watcher's read pair on the node buckets. It replaces
-    # the readonly pair above in PR 4; until then nothing reads it.
+    # BACKUP-057: the watcher's read pair, on every node bucket and the shared
+    # one. It replaced the readonly pair above in PR 4.
     SecretSpec(
         key_path=WATCHER_ACCESS_KEY_PATH,
         expiry=Expiry.NEVER,
-        description="R2 access key id, Object Read on every kubelab-backup-<node> bucket only",
+        description="R2 access key id, Object Read on every kubelab-backup-<node> bucket and kubelab-backups only",
         kind=SecretKind.EXTERNAL,
         services=("r2-backup-watcher",),
         format_hint="R2 API token id (not the token value)",
@@ -1269,7 +1272,7 @@ SECRET_CATALOG: list[SecretSpec] = [
     SecretSpec(
         key_path=WATCHER_SECRET_KEY_PATH,
         expiry=Expiry.NEVER,
-        description="R2 secret access key, Object Read on every kubelab-backup-<node> bucket only",
+        description="R2 secret access key, Object Read on every kubelab-backup-<node> bucket and kubelab-backups only",
         kind=SecretKind.EXTERNAL,
         services=("r2-backup-watcher",),
         format_hint="SHA-256 of the R2 API token value; shown once, not recoverable",

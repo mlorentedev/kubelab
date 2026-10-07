@@ -45,6 +45,8 @@ PREFIX = "s3:https://example.r2.cloudflarestorage.com/kubelab-backups"
 #                 `--recursive` one, logged as `recursive <repo>` (R3: 92 s on
 #                 the Beelink's Gitea)
 #   <repo>.id     the repository id `cat config --json` reports (BACKUP-058)
+#   <repo>.password  the only RESTIC_PASSWORD that opens it (BACKUP-057); any
+#                 other is refused as restic refuses it
 #   `stats` is refused: the probe no longer sizes anything (BACKUP-075), it
 #   reads the sizes file the init container wrote.
 # Any call without --no-lock is refused the way the read-only token refuses it
@@ -67,6 +69,9 @@ case " $ORIG_ARGS " in
      echo "unable to create lock in backend: client.PutObject: Access Denied" >&2; exit 1 ;;
 esac
 [ -f "$FAKE_DIR/$name.fail" ] && { cat "$FAKE_DIR/$name.fail" >&2; exit 1; }
+if [ -f "$FAKE_DIR/$name.password" ] && [ "$RESTIC_PASSWORD" != "$(cat "$FAKE_DIR/$name.password")" ]; then
+  echo "Fatal: wrong password or no key found" >&2; exit 12
+fi
 [ -f "$FAKE_DIR/$name.crash" ] && exit 137
 [ -f "$FAKE_DIR/$name.hang" ] && exec sleep 30
 if [ -f "$FAKE_DIR/$name.refuse" ]; then
@@ -334,7 +339,7 @@ def test_a_broken_node_is_not_masked_by_a_healthy_one_after_it(fleet) -> None:
     assert summary["healthy"] == 0
 
 
-@pytest.mark.parametrize("missing", ["RESTIC_PASSWORD", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"])
+@pytest.mark.parametrize("missing", ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"])
 def test_a_pod_without_its_secret_still_reports_unhealthy(fleet, missing) -> None:
     _, _, env = fleet
     env = {k: v for k, v in env.items() if k != missing}
@@ -342,6 +347,48 @@ def test_a_pod_without_its_secret_still_reports_unhealthy(fleet, missing) -> Non
     assert rc != 0
     assert summary["healthy"] == 0
     assert missing in summary["error"]
+
+
+def test_each_node_opens_with_its_own_password(fleet) -> None:
+    """BACKUP-057: a moved node's repository takes its own password, the rest the shared one."""
+    fake, _, env = fleet
+    (fake / "rpi3.password").write_text("rpi3-own")
+    (fake / "kubelab-vps.password").write_text("shared")
+    env = {**env, "RESTIC_PASSWORD_RPI3": "rpi3-own", "RESTIC_PASSWORD_VPS": "shared"}
+    del env["RESTIC_PASSWORD"]
+    rc, nodes, (summary,) = _run(env)
+    assert rc == 0 and summary["healthy"] == 1, nodes
+
+
+def test_a_node_given_another_nodes_password_is_unreadable(fleet) -> None:
+    fake, _, env = fleet
+    (fake / "rpi3.password").write_text("rpi3-own")
+    env = {**env, "RESTIC_PASSWORD_RPI3": "shared", "RESTIC_PASSWORD_VPS": "shared"}
+    rc, nodes, (summary,) = _run(env)
+    assert _node(nodes, "rpi3")["healthy"] == 0 and "wrong password" in _node(nodes, "rpi3")["reason"]
+    assert _node(nodes, "vps")["healthy"] == 1
+    assert summary["healthy"] == 0
+
+
+def test_a_missing_node_password_costs_that_node_only(fleet) -> None:
+    """With no shared fallback, the node whose password is absent is named; the others still run."""
+    _, _, env = fleet
+    env = {**env, "RESTIC_PASSWORD_VPS": "x"}
+    del env["RESTIC_PASSWORD"]
+    rc, nodes, (summary,) = _run(env)
+    assert _node(nodes, "rpi3")["healthy"] == 0
+    assert "RESTIC_PASSWORD_RPI3" in _node(nodes, "rpi3")["reason"]
+    assert _node(nodes, "vps")["healthy"] == 1
+    assert summary["healthy"] == 0
+
+
+def test_a_secret_from_before_per_node_passwords_still_opens_the_fleet(fleet) -> None:
+    """The shared RESTIC_PASSWORD stands in until PR 5, so the probe Argo syncs at merge
+    keeps working against a Secret `apply-secrets` has not rewritten yet."""
+    fake, _, env = fleet
+    (fake / "rpi3.password").write_text(env["RESTIC_PASSWORD"])
+    rc, nodes, (summary,) = _run(env)
+    assert rc == 0 and summary["healthy"] == 1, nodes
 
 
 def test_missing_targets_still_report_unhealthy(fleet) -> None:

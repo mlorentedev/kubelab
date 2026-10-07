@@ -314,19 +314,13 @@ def staging_dir(project_root: Path) -> str:
 
 def drill_postgres(env: str = "prod", project_root: Optional[Path] = None) -> bool:
     """Resolve every input from the SSOT and run the drill for each `pg_dumpall` source."""
-    from toolkit.features.backup_destination import DestinationError, repo_url, repository_name, restic_context
+    from toolkit.features.backup_destination import DestinationError, node_restic
     from toolkit.features.configuration import ConfigurationManager
     from toolkit.features.k8s_kubeconfig import output_path
 
     cm = ConfigurationManager(env, project_root)
     root = Path(project_root or cm.project_root)
     logger.section(f"postgres restore drill — newest dump in R2 into a scratch container ({env})")
-    try:
-        dest, restic_env = restic_context(cm)
-    except DestinationError as exc:
-        logger.error(str(exc))
-        return False
-
     sources = (cm.get_merged_config().get("backup", {}) or {}).get("sources", {}) or {}
     targets = [
         (node, service, spec)
@@ -341,9 +335,15 @@ def drill_postgres(env: str = "prod", project_root: Optional[Path] = None) -> bo
     ok = True
     for node, service, spec in targets:
         logger.info(f"drill: {node}/{service}")
+        try:
+            repo, restic_env = node_restic(cm, node)
+        except DestinationError as exc:
+            logger.error(str(exc))
+            ok = False
+            continue
         ok = (
             run_drill(
-                repo=repo_url(dest, repository_name(cm, node)),
+                repo=repo,
                 restic_env=restic_env,
                 dump_path=f"{staging_dir(root)}/{service}/pg_dumpall.sql",
                 source=spec,
