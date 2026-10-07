@@ -108,8 +108,9 @@ compares it with the declared groups; `APPLY=1` corrects drift.
 ## Backup and restore
 
 ace2 ships to its own bucket, `kubelab-backup-ace2`, with its own token and restic
-password (`backup.r2.nodes.ace2.*` and `backup.nodes.ace2.restic_password`, in prod
-SOPS). It was in its own bucket from the first snapshot, so it never had a copy in
+password. The token pair is `backup.r2.nodes.ace2.*` in `prod.enc.yaml`. The
+password is `backup.nodes.ace2.restic_password` in `common.enc.yaml`, so read it
+with `SECRETS_ENV=common`, not `prod`. It was in its own bucket from the first snapshot, so it never had a copy in
 the shared one (AI-009 AC7, #2115). The sources are declared in
 `backup.sources.ace2`:
 
