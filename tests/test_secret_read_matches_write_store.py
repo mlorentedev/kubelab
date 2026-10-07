@@ -262,13 +262,31 @@ def _play_tasks(play: dict) -> list[dict]:
     return _flat((play.get("pre_tasks") or []) + (play.get("tasks") or []) + (play.get("post_tasks") or []))
 
 
+#: Every module a playbook can run `sops -d` through, in its short and FQCN form.
+COMMAND_MODULES = ("command", "shell", "ansible.builtin.command", "ansible.builtin.shell")
+
+
+def _command(task: dict) -> str:
+    """The task's command line, whichever module and form it uses: a string, a
+    `cmd:`/`argv:` mapping, or a list. Empty for a task that runs no command."""
+    for module in COMMAND_MODULES:
+        value = task.get(module)
+        if isinstance(value, dict):
+            value = value.get("cmd") or value.get("argv")
+        if isinstance(value, list):
+            value = " ".join(map(str, value))
+        if isinstance(value, str):
+            return value
+    return ""
+
+
 def _decrypts(play: dict) -> tuple[dict[str, str], set[str]]:
     """(env variable -> register of its per-env decrypt, registers of the common decrypt)."""
     register_for_env: dict[str, str] = {}
     common_registers: set[str] = set()
     for task in _play_tasks(play):
-        command = task.get("command") or task.get("ansible.builtin.command")
-        if not (isinstance(command, str) and task.get("register")):
+        command = _command(task)
+        if not (command and task.get("register")):
             continue
         if found := DECRYPT.search(command):
             register_for_env[found.group(1)] = task["register"]
@@ -322,6 +340,25 @@ def test_every_per_env_decrypt_becomes_a_store() -> None:
             built = {env_var for env_var, _ in _store_layers(play).values()}
             lost.extend(f"{path.name}: `{{{{ {var} }}}}.enc.yaml`" for var in _decrypts(play)[0] if var not in built)
     assert not lost, f"decrypted but never followed into a store: {lost}"
+
+
+def test_every_sops_decrypt_in_a_playbook_is_recognised() -> None:
+    """The guard above follows the decrypts `_decrypts` recognises, so one it does
+    not recognise (another module, another form, no register) would leave the play
+    out of every check here and still pass. Any task that mentions `sops -d` must
+    therefore be one the parser reads as a common or a per-env decrypt."""
+    unread: list[str] = []
+    for path in sorted(PLAYBOOKS.glob("*.yml")):
+        for play in yaml.safe_load(_text(path)) or []:
+            for task in _play_tasks(play):
+                if any(key in task for key in ("block", "rescue", "always")):
+                    continue  # its children are in `_play_tasks` on their own
+                if "sops -d" not in yaml.safe_dump(task, width=float("inf")):
+                    continue
+                command = _command(task)
+                if not (task.get("register") and (DECRYPT.search(command) or COMMON.search(command))):
+                    unread.append(f"{path.name}: {task.get('name', '<unnamed>')}")
+    assert not unread, f"`sops -d` tasks the store parser does not read: {unread}"
 
 
 def test_the_overridden_variable_is_one_the_stores_are_built_from() -> None:
