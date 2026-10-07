@@ -25,6 +25,7 @@ from __future__ import annotations
 import copy as _copy
 import json
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Optional, Protocol
 
@@ -55,6 +56,10 @@ from toolkit.features.r2_tfvars import node_bucket
 TOKEN_PREFIX = "kubelab-backup-migrate-"
 # The shared runner stops a call at 60 s; copying a node's history takes minutes.
 COPY_TIMEOUT_S = 3600
+# The `finally` that revokes the token does not run on SIGKILL or power loss,
+# so the token also expires by itself. A copy that outlives it fails and is
+# re-run; restic copy skips what already arrived.
+TOKEN_LIFETIME_S = COPY_TIMEOUT_S + 3600
 # The line `pin` rewrites: the node's entry under `backup.r2.repository_ids`.
 PIN_LINE = r"^(      {node}:) [0-9a-f]{{64}}"
 # (playbook, limit, extra vars) -> success
@@ -70,11 +75,12 @@ class Values(Protocol):
 
 
 def migration_token_request(
-    node: str, *, legacy_bucket: str, account_id: str, read_group_id: str, write_group_id: str
+    node: str, *, legacy_bucket: str, account_id: str, read_group_id: str, write_group_id: str, expires_on: str
 ) -> dict[str, Any]:
-    """Object Read on the shared bucket and Object Read & Write on `node`'s, nothing else."""
+    """Object Read on the shared bucket and Object Read & Write on `node`'s, nothing else, until `expires_on`."""
     return {
         "name": f"{TOKEN_PREFIX}{node}",
+        "expires_on": expires_on,
         "policies": [
             {
                 "effect": "allow",
@@ -207,6 +213,7 @@ def _copy_under_token(
         account_id=account_id,
         read_group_id=permission_group_id(http, account_id, READ_GROUP),
         write_group_id=permission_group_id(http, account_id, WRITE_GROUP),
+        expires_on=(datetime.now(timezone.utc) + timedelta(seconds=TOKEN_LIFETIME_S)).strftime("%Y-%m-%dT%H:%M:%SZ"),
     )
     import hashlib
 
@@ -302,14 +309,13 @@ def migrate(
     if not source:
         logger.error(f"{src} lists no snapshots: there is no history to move; nothing was minted or copied")
         return False
-    if check:
-        logger.info(f"dry run: {len(source)} snapshots would be copied; nothing was minted, copied or deployed")
-        return True
-
     minter = cm.get_secret_by_path(MINTER_KEY)
     if not minter:
         logger.error(f"{MINTER_KEY} is absent from SOPS; the copy's token cannot be minted")
         return False
+    if check:
+        logger.info(f"dry run: {len(source)} snapshots would be copied; nothing was minted, copied or deployed")
+        return True
     refused = node_bucket(next(n for n in sorted(sources) if n != node))
     try:
         copied = _copy_under_token(

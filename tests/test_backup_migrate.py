@@ -12,6 +12,7 @@ import copy
 import json
 import pathlib
 import re
+from datetime import datetime, timezone
 from typing import Any
 
 import pytest
@@ -274,7 +275,12 @@ def test_the_copy_reads_with_the_shared_secrets_and_writes_with_the_nodes() -> N
 
 def test_the_temporary_token_reads_the_shared_bucket_and_writes_only_the_nodes() -> None:
     body = bm.migration_token_request(
-        "rpi3", legacy_bucket="kubelab-backups", account_id=ACCOUNT, read_group_id="g-read", write_group_id="g-write"
+        "rpi3",
+        legacy_bucket="kubelab-backups",
+        account_id=ACCOUNT,
+        read_group_id="g-read",
+        write_group_id="g-write",
+        expires_on="2026-10-07T14:00:00Z",
     )
     grants = {
         group["id"]: sorted(key.rsplit("_default_", 1)[1] for key in policy["resources"])
@@ -300,6 +306,25 @@ def test_a_token_that_reaches_another_nodes_bucket_is_revoked_before_any_copy() 
     # Only the pre-flight listing, made with the shared read-only pair, precedes the token.
     minted = world.calls.index("POST token")
     assert not [c for c in world.calls[minted:] if c.startswith("restic")]
+
+
+def test_the_temporary_token_expires_by_itself() -> None:
+    # The revoking `finally` does not run on SIGKILL or power loss.
+    world = World(SOURCE, COPIED)
+    start = datetime.now(timezone.utc)
+    assert _migrate(world) is True
+    expires = datetime.strptime(world.token_body["expires_on"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    lifetime = (expires - start).total_seconds()
+    assert bm.COPY_TIMEOUT_S <= lifetime <= bm.TOKEN_LIFETIME_S + 60
+
+
+@pytest.mark.parametrize("check", [False, True])
+def test_a_missing_minter_key_is_refused_by_the_dry_run_as_by_the_run(check: bool) -> None:
+    world = World(SOURCE, COPIED)
+    cm = _CM()
+    del cm.secrets[MINTER_KEY]
+    assert _migrate(world, cm=cm, check=check) is False
+    assert "POST token" not in world.calls
 
 
 def test_a_dry_run_lists_the_source_and_changes_nothing() -> None:
@@ -341,6 +366,7 @@ def test_the_values_file_keeps_its_comments(tmp_path: pathlib.Path) -> None:
         r"^(      rpi3: [0-9a-f]{64})$", r"\1  # pinned at the sitting", source, count=1, flags=re.MULTILINE
     )
     common.write_text(source)
+    before = yaml.safe_load(source)["backup"]["r2"].get("own_bucket_nodes") or []
     values = bm.ValuesFile(common)
 
     assert values.pinnable("rpi3")
@@ -350,10 +376,12 @@ def test_the_values_file_keeps_its_comments(tmp_path: pathlib.Path) -> None:
 
     text = common.read_text()
     loaded = yaml.safe_load(text)["backup"]["r2"]
-    assert loaded["own_bucket_nodes"] == ["rpi3"]
+    # Read from the tree, not hardcoded: the sitting moves the nodes one PR at a time.
+    expected = sorted({*before, "rpi3"})
+    assert loaded["own_bucket_nodes"] == expected
     assert loaded["repository_ids"]["rpi3"] == NEW_ID
     assert "# Pinned static binary (BACKUP-044 Part 2)" in text
-    assert "    own_bucket_nodes: [rpi3]  # moved nodes\n" in text
+    assert f"    own_bucket_nodes: [{', '.join(expected)}]  # moved nodes\n" in text
     assert f"      rpi3: {NEW_ID}  # pinned at the sitting\n" in text
     assert len(text.splitlines()) == len(source.splitlines())
 
