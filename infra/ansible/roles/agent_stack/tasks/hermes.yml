@@ -186,6 +186,7 @@
       until: >-
         _agent_stack_hermes_ts_status.rc == 0
         and (_agent_stack_hermes_ts_status.stdout | from_json).BackendState == 'Running'
+        or ansible_check_mode
       retries: 30
       delay: 2
       changed_when: false
@@ -194,6 +195,8 @@
         or (_agent_stack_hermes_ts_status.stdout | from_json).BackendState != 'Running'
         or 'tag:hermes' not in ((_agent_stack_hermes_ts_status.stdout | from_json).Self.Tags | default([]))
       check_mode: false
+      # A dry run of a fresh node has no sidecar to read.
+      ignore_errors: "{{ ansible_check_mode }}"
 
     # The key is consumed: the container keeps no use for it, and the file no copy.
     - name: Empty the sidecar's env file once it is registered
@@ -226,9 +229,12 @@
       until: >-
         _agent_stack_hermes_ts_rejoined.rc == 0
         and (_agent_stack_hermes_ts_rejoined.stdout | from_json).BackendState == 'Running'
+        or ansible_check_mode
       retries: 30
       delay: 2
       changed_when: false
+      check_mode: false
+      ignore_errors: "{{ ansible_check_mode }}"
       when: _agent_stack_hermes_ts_mint is changed
 
     # One command each rule must refuse, and every command a rule lets through,
