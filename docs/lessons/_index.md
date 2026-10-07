@@ -1,6 +1,6 @@
 # Lessons
 
-527 lessons, one file each. Newest: 2026-10-07. Open a category for its list.
+528 lessons, one file each. Newest: 2026-10-07. Open a category for its list.
 
 | Category | # | Scope |
 |---|---|---|
@@ -15,7 +15,7 @@
 | [ci-automation](ci-automation/_index.md) | 41 | CI workflows, gates, GitHub |
 | [observability](observability/_index.md) | 26 | Metrics, logs, alerting |
 | [containers-docker](containers-docker/_index.md) | 17 | Docker, Compose, image builds |
-| [storage-backup](storage-backup/_index.md) | 26 | Backups, volumes, persistence |
+| [storage-backup](storage-backup/_index.md) | 27 | Backups, volumes, persistence |
 | [apps-web](apps-web/_index.md) | 7 | Application code (API, web) |
 
 New lessons: see [`_format.md`](_format.md) — one file per lesson, appended
