@@ -2058,6 +2058,11 @@ backup:
   # `restic_version` is bumped with it, which is the coordination it forces.
   watcher:
     image: restic/restic:0.19.1
+    # BACKUP-075: the watcher's init container sizes R2 by listing objects,
+    # because restic 0.19.1 has nothing that lists objects with their sizes and
+    # `stats --mode raw-data` walks every snapshot's tree. Read-only, like the
+    # restic image above, with the same token.
+    size_image: rclone/rclone:1.75.1
     # BACKUP-032: the TCP port the watcher connects to on each node's Tailscale
     # IP, to tell "node off" from "node up and not shipping". sshd, because it is
     # the one port open on every node (base_system `firewall_allowed_ports`,

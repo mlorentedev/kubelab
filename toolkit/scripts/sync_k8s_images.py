@@ -43,6 +43,8 @@ IMAGE_SOURCES = [
     "infra.postgres.image",
     # BACKUP-055: the R2 watcher; its tag is tied to backup.r2.restic_version.
     "backup.watcher.image",
+    # BACKUP-075: the watcher's sizing step.
+    "backup.watcher.size_image",
 ]
 
 # Third-party images whose manifest lives ONLY in the prod overlay (TOOL-080's

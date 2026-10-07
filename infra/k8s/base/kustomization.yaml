@@ -107,6 +107,7 @@ configMapGenerator:
     namespace: kubelab
     files:
       - services/r2-backup-watcher/probe.sh
+      - services/r2-backup-watcher/size.sh
       - services/r2-backup-watcher/targets.txt
 
   - name: authelia-assets
@@ -218,6 +219,8 @@ images:
     newTag: 16-alpine
   - name: restic/restic
     newTag: 0.19.1
+  - name: rclone/rclone
+    newTag: 1.75.1
   - name: docker.io/mlorentedev/kubelab-errors
     newTag: 1.2.0
   # Custom apps web/api: per-env tags via `toolkit deployment promote` (overlays).

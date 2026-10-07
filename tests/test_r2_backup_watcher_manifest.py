@@ -26,6 +26,7 @@ from toolkit.features.k8s_secrets import SECRET_DEFINITIONS
 REPO = pathlib.Path(__file__).resolve().parent.parent
 WATCHER_DIR = REPO / "infra/k8s/base/services/r2-backup-watcher"
 PROBE = WATCHER_DIR / "probe.sh"
+SIZE = WATCHER_DIR / "size.sh"
 TARGETS = WATCHER_DIR / "targets.txt"
 COMMON = REPO / "infra/config/values/common.yaml"
 NODE_BACKUP_DEFAULTS = REPO / "infra/ansible/roles/node_backup/defaults/main.yml"
@@ -34,16 +35,25 @@ ENVIRONMENTS = ("staging", "prod")
 NAME = "r2-backup-watcher"
 
 
-def _probe_default(var: str) -> str:
-    """The value `probe.sh` falls back to for `$var`, e.g. `${STAGING_DIR:-...}`."""
-    match = re.search(rf"\$\{{{var}:-([^}}]*)\}}", PROBE.read_text())
-    assert match, f"probe.sh has no ${{{var}:-...}} default"
+def _probe_default(var: str, script: pathlib.Path = PROBE) -> str:
+    """The value a script falls back to for `$var`, e.g. `${STAGING_DIR:-...}`."""
+    match = re.search(rf"\$\{{{var}:-([^}}]*)\}}", script.read_text())
+    assert match, f"{script.name} has no ${{{var}:-...}} default"
     return match.group(1)
 
 
-def _target_nodes() -> int:
+def _targets() -> list[list[str]]:
     lines = TARGETS.read_text().splitlines()
-    return sum(1 for line in lines if line.strip() and not line.startswith("#"))
+    return [line.split() for line in lines if line.strip() and not line.startswith("#")]
+
+
+def _target_nodes() -> int:
+    return len(_targets())
+
+
+def _target_buckets() -> int:
+    """Distinct buckets in the repository URLs, `s3:https://<host>/<bucket>/<prefix>`."""
+    return len({fields[1].split("://", 1)[1].split("/")[1] for fields in _targets()})
 
 
 def _kustomize(env: str) -> list[dict]:
@@ -69,8 +79,9 @@ def rendered(request) -> dict:
     job = cronjob["spec"]["jobTemplate"]["spec"]
     pod = job["template"]["spec"]
     (container,) = pod["containers"]
+    (init,) = pod["initContainers"]
     configmaps = {d["metadata"]["name"]: d for d in docs if d["kind"] == "ConfigMap"}
-    return {"cronjob": cronjob, "job": job, "pod": pod, "container": container, "configmaps": configmaps}
+    return {"cronjob": cronjob, "job": job, "pod": pod, "container": container, "init": init, "configmaps": configmaps}
 
 
 def test_probe_reads_the_paths_the_nodes_write() -> None:
@@ -91,6 +102,56 @@ def test_probe_reads_the_paths_the_nodes_write() -> None:
 def test_runs_the_pinned_restic_image(rendered: dict) -> None:
     expected = yaml.safe_load(COMMON.read_text())["backup"]["watcher"]["image"]
     assert rendered["container"]["image"] == expected
+
+
+def test_sizes_with_the_pinned_rclone_image(rendered: dict) -> None:
+    """BACKUP-075: an exact tag from `common.yaml`, never a floating one."""
+    expected = yaml.safe_load(COMMON.read_text())["backup"]["watcher"]["size_image"]
+    assert re.fullmatch(r"rclone/rclone:\d+\.\d+\.\d+", expected), expected
+    assert rendered["init"]["name"] == "r2-size"
+    assert rendered["init"]["image"] == expected
+
+
+def test_the_sizing_step_gets_only_the_read_only_token(rendered: dict) -> None:
+    """Listing needs the S3 pair and nothing else: never the restic password."""
+    (mapping,) = [m for m in SECRET_DEFINITIONS if m.name.startswith(NAME)]
+    init = rendered["init"]
+    assert "envFrom" not in init
+    from_secret = {
+        e["name"]: e["valueFrom"]["secretKeyRef"] for e in init.get("env", []) if "valueFrom" in e
+    }
+    assert set(from_secret) == {"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"}
+    assert {ref["name"] for ref in from_secret.values()} == {mapping.name}
+    assert all(ref["key"] == name for name, ref in from_secret.items())
+
+
+def test_the_sizing_step_is_locked_down(rendered: dict) -> None:
+    context = rendered["init"]["securityContext"]
+    assert context["readOnlyRootFilesystem"] is True
+    assert context["allowPrivilegeEscalation"] is False
+    assert context["capabilities"]["drop"] == ["ALL"]
+
+
+def test_the_probe_reads_the_file_the_sizing_step_writes(rendered: dict) -> None:
+    """One emptyDir, written by the init container and mounted read-only by the probe, at the path both default to."""
+    sizes = _probe_default("WATCHER_SIZES")
+    assert _probe_default("WATCHER_SIZES", SIZE) == sizes
+    directory = str(pathlib.PurePosixPath(sizes).parent)
+    writer = {m["mountPath"]: m for m in rendered["init"]["volumeMounts"]}[directory]
+    reader = {m["mountPath"]: m for m in rendered["container"]["volumeMounts"]}[directory]
+    assert writer["name"] == reader["name"]
+    assert not writer.get("readOnly", False) and reader["readOnly"] is True
+    volume = next(v for v in rendered["pod"]["volumes"] if v["name"] == writer["name"])
+    assert "emptyDir" in volume
+
+
+def test_the_sizing_step_runs_the_committed_script(rendered: dict) -> None:
+    mount_dir = str(pathlib.PurePosixPath(_probe_default("WATCHER_TARGETS")).parent)
+    mounts = {m["mountPath"]: m["name"] for m in rendered["init"]["volumeMounts"]}
+    volume = next(v for v in rendered["pod"]["volumes"] if v["name"] == mounts[mount_dir])
+    configmap = rendered["configmaps"][volume["configMap"]["name"]]
+    assert configmap["data"]["size.sh"] == SIZE.read_text()
+    assert rendered["init"]["command"] + rendered["init"].get("args", []) == ["/bin/sh", f"{mount_dir}/size.sh"]
 
 
 def test_reads_the_read_only_secret(rendered: dict) -> None:
@@ -147,12 +208,15 @@ def test_lives_long_enough_to_report(rendered: dict) -> None:
     after 24h.
     """
     timeout = int(_probe_default("RESTIC_TIMEOUT"))
-    stats_timeout = int(_probe_default("STATS_TIMEOUT"))
+    size_timeout = int(_probe_default("SIZE_TIMEOUT", SIZE))
     calls = _restic_calls_per_node()
     assert calls >= 3, f"counted {calls} restic_read calls in probe.sh; the pattern is stale"
-    worst_case = _target_nodes() * (calls * timeout + stats_timeout)
+    assert len(re.findall(r"^\s*measure (?:bucket|node) ", SIZE.read_text(), re.M)) == 2, "size.sh's calls are stale"
+    # The init container runs first: one listing per bucket and one per node.
+    sizing = (_target_buckets() + _target_nodes()) * size_timeout
+    worst_case = sizing + _target_nodes() * calls * timeout
     assert rendered["job"]["activeDeadlineSeconds"] > worst_case
-    assert rendered["pod"]["terminationGracePeriodSeconds"] > max(timeout, stats_timeout)
+    assert rendered["pod"]["terminationGracePeriodSeconds"] > timeout
 
 
 def test_needs_no_cluster_api(rendered: dict) -> None:
