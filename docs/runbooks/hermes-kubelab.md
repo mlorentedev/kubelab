@@ -107,7 +107,37 @@ compares it with the declared groups; `APPLY=1` corrects drift.
 
 ## Backup and restore
 
-**Not covered yet.** ace2 is not in `backup.sources`, so Open WebUI's volume and
-the gateway's data have no off-node copy. Chats are disposable until AI-009 PR 6
-adds ace2 to the per-node bucket model (BACKUP-057). Losing the sidecar's state
-only costs a re-registration.
+ace2 ships to its own bucket, `kubelab-backup-ace2`, with its own token and restic
+password. The token pair is `backup.r2.nodes.ace2.*` in `prod.enc.yaml`. The
+password is `backup.nodes.ace2.restic_password` in `common.enc.yaml`, so read it
+with `SECRETS_ENV=common`, not `prod`. It was in its own bucket from the first snapshot, so it never had a copy in
+the shared one (AI-009 AC7, #2115). The sources are declared in
+`backup.sources.ace2`:
+
+- **open_webui**: the `open-webui-data` volume. `webui.db` and
+  `vector_db/chroma.sqlite3` are snapshotted with `sqlite3 .backup`. `cache/`
+  (the embedding and whisper models, 1.07 GB of 1.1 GB) is left out at tier 3.
+- **hermes**: `/var/lib/hermes-kubelab/data`, with its six databases snapshotted
+  the same way. `bin/` and `home/.cache` are left out at tier 3. The rendered env
+  files sit outside this path and are rebuilt from SOPS, so they are never in a
+  snapshot.
+
+Read-only checks, in this order:
+
+- **Is it shipping?** `make watcher-run NAME=r2-backup-watcher ENV=prod` names ace2
+  with its pinned repository and the age of its newest snapshot. ace2 is an
+  on-demand node, so a stale snapshot while the node is off is expected.
+- **Is the heartbeat arriving?** Each ship posts to the `ops-backup-node-ace2`
+  push monitor in Uptime Kuma.
+- **Ship now:** `make backup-node NODE=ace2 ENV=prod`.
+
+**Restore: not yet drilled for ace2.** Follow "Restoring — normal case" in
+[offsite-backup-restore.md](offsite-backup-restore.md), with ace2's own
+credentials and the repository from
+`infra/k8s/base/services/r2-backup-watcher/targets.txt`. Restore into a scratch
+directory, run `PRAGMA integrity_check` on every database listed above, and only
+then put the data back. Before you do, stop the service that owns it (see
+[Stop](#stop)). Expect the models in `cache/` to download again on the first
+query after the restore. Losing the sidecar's state costs only a re-registration
+(see [Re-register the sidecar](#re-register-the-sidecar)). Record the first drill
+here, with its timings.
