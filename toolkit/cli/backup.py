@@ -88,6 +88,27 @@ def mint_node_tokens_cmd(
         raise typer.Exit(code=1)
 
 
+@app.command("migrate")
+def migrate_cmd(
+    node: Annotated[str, typer.Option("--node", "-n", help="One backup.sources node")],
+    env: Annotated[str, typer.Option("--env", "-e", help="Only prod: the node buckets are prod's")],
+    check: Annotated[
+        bool, typer.Option("--check", help="List the source snapshots; mint, copy and deploy nothing")
+    ] = False,
+) -> None:
+    """Move one node's restic history into its own bucket (BACKUP-057 AC4).
+
+    Copies under a temporary token that is revoked when the copy is compared,
+    trusts the copy only when every source snapshot has exactly one copy, then
+    declares, deploys, re-initialises, ships and pins the node. Stops at the first
+    failure. Leaves common.yaml and targets.txt changed, to commit in a PR.
+    """
+    from toolkit.features.backup_migrate import migrate
+
+    if not migrate(node, env=env, check=check):
+        raise typer.Exit(code=1)
+
+
 @app.command("generate-password")
 def generate_password_cmd(
     env: Annotated[str, typer.Option("--env", "-e", help="SOPS file to write to")] = "common",
