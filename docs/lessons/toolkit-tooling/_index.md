@@ -1,9 +1,10 @@
 # The toolkit CLI, Make, Python and local tooling
 
-44 lessons, newest first. Back to [all categories](../_index.md).
+45 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 536 | [A platform.json conflict is never resolved by taking a side](lesson-536-a-platform-json-conflict-is-never-resolved-by-taking-a-side.md) | 2026-10-07 |
 | 528 | [A setting that shares a name across two systems does not share its meaning](lesson-528-a-setting-that-shares-a-name-across-two-systems-does-not-share-its-meaning.md) | 2026-10-07 |
 | 518 | [Poetry caches a release's file list forever, so a lock taken during the upload misses wheels for good](lesson-518-poetry-caches-a-release-file-list-taken-mid-upload-forever.md) | 2026-10-03 |
 | 514 | [Poetry asks the desktop keyring even when no private source exists, and a locked keyring hangs the install with no output](lesson-514-poetry-asks-the-desktop-keyring-even-with-no-private-source.md) | 2026-10-01 |
