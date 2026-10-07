@@ -21,7 +21,8 @@ created: "2026-10-06"
 
 ### Measure first (no code)
 
-- [ ] [AC3] In staging, with the watcher's read-only pair injected into the child process (never printed): time `rclone size --json --fast-list --s3-no-check-bucket` on `kubelab-backups/beelink` and on the bucket root, and `restic stats --mode raw-data` on the same repository. Record the three sizes, the three durations and the object counts in `verification.md`. **Gate:** the bucket-root listing must succeed with the read-only token; if it is refused, stop and take the scope question back to the operator.
+- [x] [AC3] Baseline from Loki, not an ad-hoc client: the prod watcher's `stats took` lines for the last 7 days, and each node's last `raw_bytes`. Recorded in `verification.md`. ✓ 2026-10-07
+- [ ] [AC3] The rclone side is measured by the first staging watcher run (task under *Roll out*), the way BACKUP-057 measured its sizes: staging reads the same four repositories. That run is also the gate for root listing: R2 tokens are scoped to buckets, not prefixes, so the read-only token's Object Read on `kubelab-backups` should list the root. If the run reports the bucket `null` with an access error, stop and take the scope question back to the operator.
 
 ### Image pin
 

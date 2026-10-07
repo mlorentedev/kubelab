@@ -5,6 +5,19 @@ created: "2026-10-06"
 
 # Verification - BACKUP-075
 
+## Baseline: `restic stats --mode raw-data` in prod (before)
+
+Read from Loki on 2026-10-07 (`toolkit obs logs --env prod`, the watcher's `stats took` lines, last 7 days):
+
+| Node | 2026-10-04 12:10 | 2026-10-07 01:15 | Last size (raw_bytes) |
+|---|---|---|---|
+| beelink | 600 s (killed) | 601 s (killed) | 142 747 230 (2026-10-04 00:07, last success) |
+| rpi3 | 17 s | 31 s | 151 630 989 |
+| rpi4 | 19 s | 35 s | 170 033 395 |
+| vps | 19 s | 36 s | 77 948 912 |
+
+Every node's `stats` roughly doubled in three days while its repository stayed in the 80-170 MB range: the cost follows the snapshot count (hourly ships), not the bytes (lesson-490). The Beelink only crossed the timeout first. Raising `STATS_TIMEOUT` would buy days, not a fix. The fleet is about 0.55 GB of the 10 GB free tier, so the alert has been firing on no data, not on size.
+
 ## Evidence
 
 Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
