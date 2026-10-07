@@ -80,6 +80,17 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - **The mint gate** asks the running sidecar (`BackendState == Running`), no longer its state file. tailscaled writes that file at its first start, before any login, so a failed first registration would never have been retried (PR-Agent). The steady state was measured: the key is not minted, and the run gives `changed=0`. **Not yet measured live**: a registering run with the same-run recreate, and the re-login of a sidecar that reports `NeedsLogin`. Both need the node logged out or removed first, which waits on the operator.
 - **Stale tagged record found**: `hermes-nan` (node 22, `tag:hermes`, last seen 2026-07-22) still holds the tag with a key that never expires. Added to #1573.
 
+### PR 5a (`feat/ai009-webui-rag`), NaN, ace2, 2026-10-07
+
+- **NaN answers Open WebUI's own client.** v0.11.4 embeds and reranks with `requests` (`retrieval/utils.py`, `retrieval/models/external.py`). Its default UA, `python-requests/2.34.2`, measured from inside the `open-webui` container, got 200 from NaN. The 403 (Cloudflare `error code: 1010`) found for R5 was Python urllib's UA, not this one.
+- **Shapes**: `/v1/models` lists `qwen3-embedding` and `rerank`. A batch of 16 inputs returns 16 vectors. `/v1/rerank` returns `results[].index` and `relevance_score`, the shape `ExternalReranker` parses.
+- **Width**: v0.11.4 sends no `dimensions`, so the vectors Open WebUI stores are 4096 wide. NaN honours the parameter (1024 with it, R5), but nothing here sends it. Chroma, the default store, takes any width. No `file` or `knowledge` rows existed before the switch, so no collection was embedded by the local MiniLM (384 wide), which a query would have failed on.
+- **The reranker needs hybrid search.** v0.11.4 calls it only when `rag.enable_hybrid_search` is on (`query_collection`, `retrieval/utils.py:714`). A config with the external reranker but no `ENABLE_RAG_HYBRID_SEARCH` would never call it. The spec's PR 5 line did not list that variable.
+- **Live**: provision `changed=2`, then `changed=0`. Inside the running container, with its own env, v0.11.4's `generate_openai_batch_embeddings` returned 2×4096 and `ExternalReranker.predict` scored "the sky is blue" 0.8883 and "grass is green" 0.0001 for "what colour is the sky". Memory went from 654.7 MiB to 639.2 MiB after the restart: no local model was loaded at start (`get_ef` returns `None` when the engine is set).
+- **Not yet measured**: an upload and a question through the UI with a citation (spec AC9, last PR 5 line). It needs a signed-in user, and the only local account is break-glass, whose every use pages the operator.
+- **Query text in logs**: `ExternalReranker` logs each query at INFO, and v0.11.4 has only `GLOBAL_LOG_LEVEL` to change that. The text stays in ace2's local Docker logs; no shipper reads them.
+- **Found, ticketed**: v0.11.4 runs with `CORS_ALLOW_ORIGIN=*` and `allow_credentials=True` (it logs a warning at every start). Ticket pending (GitHub returned 500 at creation).
+
 ## Decisions made during implementation
 
 Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
