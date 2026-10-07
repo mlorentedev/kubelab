@@ -106,14 +106,14 @@ def test_a_file_that_cannot_be_read_refuses(repo: Path) -> None:
         mutate.run(repo, Path("blob.bin"), "a", "b", lambda: 0)
 
 
-def _cli(repo: Path, monkeypatch: pytest.MonkeyPatch, run) -> int:
+def _cli(repo: Path, monkeypatch: pytest.MonkeyPatch, run, test: str = "t.py") -> int:
     from typer.testing import CliRunner
 
     from toolkit.cli import tools
 
     monkeypatch.setattr(tools.settings, "project_root", repo)
     monkeypatch.setattr(mutate, "run", run)
-    args = ["mutate", "--file", "guard.py", "--from", "x > 0", "--to", "x >= 0", "--test", "t.py"]
+    args = ["mutate", "--file", "guard.py", "--from", "x > 0", "--to", "x >= 0", "--test", test]
     return CliRunner().invoke(tools.app, args).exit_code
 
 
@@ -131,10 +131,21 @@ def test_a_refusal_exits_2(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert _cli(repo, monkeypatch, refuse) == 2
 
 
-def test_a_crash_is_no_verdict_never_green(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Python's own exit 1 for an uncaught exception is GREEN's code."""
+@pytest.mark.parametrize("stop", [RuntimeError("the test wrote something"), KeyboardInterrupt()])
+def test_a_crash_or_an_interrupt_is_no_verdict_never_green(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, stop: BaseException
+) -> None:
+    """Python's exit for an uncaught exception, and Click's for Ctrl-C, are both GREEN's 1."""
 
     def crash(*_):
-        raise RuntimeError("the test wrote something")
+        raise stop
 
     assert _cli(repo, monkeypatch, crash) == mutate.Verdict.DID_NOT_RUN.exit_code
+
+
+@pytest.mark.parametrize("test", ["", "   "])
+def test_an_empty_test_target_refuses_before_mutating(repo: Path, monkeypatch: pytest.MonkeyPatch, test: str) -> None:
+    """An empty target runs the whole suite, and the whole suite goes red against nearly anything."""
+    ran = []
+    assert _cli(repo, monkeypatch, lambda *a: ran.append(a), test=test) == 2
+    assert not ran

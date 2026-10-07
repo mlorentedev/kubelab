@@ -372,15 +372,22 @@ def mutate_cmd(
             logger.info(line)
         return result.returncode
 
+    if not shlex.split(test):
+        # An empty target runs the whole suite, which goes red against almost any
+        # mutation: a verdict about the wrong sample.
+        logger.error("refused, nothing was mutated: --test names no test (an empty TEST runs the whole suite)")
+        raise typer.Exit(2)
+
     try:
         verdict = mutate.run(settings.project_root, file, find, replace, run_test)
     except mutate.Refused as exc:
         logger.error(f"refused, nothing was mutated: {exc}")
         raise typer.Exit(2) from exc
-    except Exception as exc:
-        # Python exits 1 on an uncaught exception, which is GREEN's code: a crash
-        # would read as "the guard misses the mutant". No verdict was reached.
-        logger.error(f"NO VERDICT: the mutation check failed before a result ({exc!r})")
+    except (Exception, KeyboardInterrupt) as exc:
+        # Python exits 1 on an uncaught exception, and Click turns Ctrl-C into an
+        # exit 1 too: GREEN's code, so either would read as "the guard misses the
+        # mutant". The file is already restored; no verdict was reached.
+        logger.error(f"NO VERDICT: the mutation check stopped before a result ({exc!r})")
         raise typer.Exit(mutate.Verdict.DID_NOT_RUN.exit_code) from exc
 
     messages = {
