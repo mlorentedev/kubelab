@@ -118,7 +118,8 @@ class ValuesFile:
         import yaml
 
         text = self.path.read_text()
-        edited, count = re.subn(pattern, line, text, count=1, flags=re.MULTILINE)
+        # A trailing comment on the edited line is kept: only the value is replaced.
+        edited, count = re.subn(pattern + r"(\s+#.*)?$", line + r"\g<2>", text, count=1, flags=re.MULTILINE)
         if count != 1:
             raise ValueError(f"{self.path}: no line matches {pattern!r}")
         if not check(yaml.safe_load(edited)["backup"]["r2"]):
@@ -131,14 +132,14 @@ class ValuesFile:
         current = (yaml.safe_load(self.path.read_text())["backup"]["r2"].get("own_bucket_nodes")) or []
         nodes = sorted({*current, node})
         self._replace(
-            r"^(    own_bucket_nodes:) .*$",
+            r"^(    own_bucket_nodes:) [^#\n]*?",
             rf"\1 [{', '.join(nodes)}]",
             lambda r2: r2["own_bucket_nodes"] == nodes,
         )
 
     def pin(self, node: str, repository_id: str) -> None:
         self._replace(
-            rf"^(      {node}:) [0-9a-f]{{64}}$",
+            rf"^(      {node}:) [0-9a-f]{{64}}",
             rf"\1 {repository_id}",
             lambda r2: r2["repository_ids"][node] == repository_id,
         )
@@ -219,6 +220,10 @@ def _copy_under_token(
         source = _snapshots(run, src, {**s3, "RESTIC_PASSWORD": src_password})
         copied = _snapshots(run, dst, {**s3, "RESTIC_PASSWORD": dst_password})
         if source is None or copied is None:
+            return False
+        if not source:
+            # An empty comparison would report a verified copy that measured nothing.
+            logger.error(f"{src} lists no snapshots: there is no history to move, and nothing to verify a copy against")
             return False
         missing = unmatched_snapshots(source, copied)
         if missing:

@@ -11,7 +11,7 @@ from __future__ import annotations
 import copy
 import json
 import pathlib
-import shutil
+import re
 from typing import Any
 
 import pytest
@@ -190,6 +190,13 @@ def test_a_missing_snapshot_stops_it_though_the_count_and_oldest_time_match() ->
     assert not [c for c in world.calls if c.startswith(("declare", "ansible", "pin"))]
 
 
+def test_an_empty_source_is_not_a_verified_copy() -> None:
+    world = World([], [])
+    assert _migrate(world) is False
+    assert "DELETE token" in world.calls
+    assert world.values == []
+
+
 @pytest.mark.parametrize("step", ["restic dst init", "restic dst copy", "restic src snapshots"])
 def test_a_failed_restic_step_revokes_the_token_and_changes_nothing(step: str) -> None:
     world = World(SOURCE, COPIED)
@@ -280,7 +287,14 @@ def test_every_source_snapshot_needs_exactly_one_copy(copied: list[dict[str, Any
 
 def test_the_values_file_keeps_its_comments(tmp_path: pathlib.Path) -> None:
     common = tmp_path / "common.yaml"
-    shutil.copy(REPO / "infra/config/values/common.yaml", common)
+    source = (REPO / "infra/config/values/common.yaml").read_text()
+    # A trailing comment on each line the edit replaces, which a whole-line
+    # substitution would drop while the line count still matched.
+    source = re.sub(r"^(    own_bucket_nodes: .*)$", r"\1  # moved nodes", source, count=1, flags=re.MULTILINE)
+    source = re.sub(
+        r"^(      rpi3: [0-9a-f]{64})$", r"\1  # pinned at the sitting", source, count=1, flags=re.MULTILINE
+    )
+    common.write_text(source)
     values = bm.ValuesFile(common)
 
     values.declare("rpi3")
@@ -291,8 +305,9 @@ def test_the_values_file_keeps_its_comments(tmp_path: pathlib.Path) -> None:
     assert loaded["own_bucket_nodes"] == ["rpi3"]
     assert loaded["repository_ids"]["rpi3"] == NEW_ID
     assert "# Pinned static binary (BACKUP-044 Part 2)" in text
-    original = (REPO / "infra/config/values/common.yaml").read_text().splitlines()
-    assert len(text.splitlines()) == len(original)
+    assert "    own_bucket_nodes: [rpi3]  # moved nodes\n" in text
+    assert f"      rpi3: {NEW_ID}  # pinned at the sitting\n" in text
+    assert len(text.splitlines()) == len(source.splitlines())
 
 
 def test_the_make_target_is_one_node_prod_only_and_threads_the_dry_run() -> None:
