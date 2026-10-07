@@ -125,6 +125,16 @@ def test_the_env_file_is_private_and_emptied_after_registration() -> None:
     assert [names.index(n) for n in order] == sorted(names.index(n) for n in order)
 
 
+def test_a_new_key_recreates_the_sidecar_so_it_logs_in_again() -> None:
+    """`TS_AUTH_ONCE` does not block a re-login: containerboot (v1.102.5,
+    cmd/containerboot/main.go, `authLoop`) runs `tailscale up` with the key whenever
+    tailscaled starts in `NeedsLogin`, state or no state. It reads the key only at
+    start, though, so a freshly minted key must recreate the container."""
+    task = _task("Start hermes-kubelab")
+    assert "--force-recreate" in task["ansible.builtin.command"]
+    assert "_agent_stack_hermes_ts_env_file.changed" in task["ansible.builtin.command"]
+
+
 def test_every_provision_reads_the_tag_from_the_running_sidecar() -> None:
     task = _task("Verify the sidecar is on the tailnet as tag:hermes")
     assert "tailscale status --json" in task["ansible.builtin.command"]
