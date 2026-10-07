@@ -77,7 +77,7 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - **The uid rule does not break it.** The sidecar runs on the agent's daemon, so its traffic is uid 999's. It still reaches `Running`, because control, DERP and WireGuard endpoints all use public or LAN addresses, and `vpn.kubelab.live` resolves to the VPS's public address.
 - **ACL, read from the sidecar** with `tailscale nc`: the VPS's `:443` connected (rc 0). The VPS's `:22` and `:6443`, and ace2's `:3080` and `:22`, never answered (killed at 6 s). The sidecar uses 20 MiB of its 128 MiB.
 - **Idempotence**: `changed=7` to register, then `changed=1`, then `changed=0`. The `changed=1` was Compose recreating the sidecar after the env file was emptied. An env file's content is in Compose's hash, which the role's comment had said it was not. The role now recreates the sidecar in the run that registers it. The steady state then gave `changed=0` again.
-- **The mint gate** asks the running sidecar (`BackendState == Running`), no longer its state file. tailscaled writes that file at its first start, before any login, so a failed first registration would never have been retried (PR-Agent). The steady state was measured: the key is not minted, and the run gives `changed=0`. **Not yet measured live**: a registering run with the same-run recreate, and the re-login of a sidecar that reports `NeedsLogin`. Both need the node logged out or removed first, which waits on the operator.
+- **The mint gate** asks the running sidecar (`BackendState == Running`), no longer its state file. tailscaled writes that file at its first start, before any login, so a failed first registration would never have been retried (PR-Agent). The steady state was measured: the key is not minted, and the run gives `changed=0`. **Not yet measured live**: a registering run with the same-run recreate, and the re-login of a sidecar that reports `NeedsLogin`. Both need the node logged out or removed first, which waits on the operator. `TS_AUTH_ONCE` does not block the re-login: at the pinned v1.102.5, containerboot runs `tailscale up` with the key whenever tailscaled starts in `NeedsLogin`, state or no state (`cmd/containerboot/main.go`, `authLoop`). It reads the key only at start, so the role recreates the sidecar when a new key is rendered, and `tests/test_hermes_sidecar.py` pins that.
 - **Stale tagged record found**: `hermes-nan` (node 22, `tag:hermes`, last seen 2026-07-22) still holds the tag with a key that never expires. Added to #1573.
 
 ### PR 5a (`feat/ai009-webui-rag`), NaN, ace2, 2026-10-07
@@ -96,6 +96,10 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - **Installed**: the first provision installed `/usr/local/libexec/agent-stack/vault-hooks/pre-commit` (`changed=2`, the directory and the hook), and the next run gave `changed=0`. Read back on ace2: both are `root 755`, so the agent's user cannot rewrite its own guard.
 - **Behaviour** is measured by `tests/test_hermes_vault_hook.py` against a real git repository, not on ace2: the clone it guards does not exist until the vault token lands (R2). Wiring `core.hooksPath` into that clone is part of the clone's own task.
 - **What it is not**: a guard against mistakes, not against the agent. `git commit --no-verify` skips it. What holds against the agent has to be the vault token's own scope, decided with R2.
+
+### AC8, interim, ace2, 2026-10-07
+
+Measured with the stack idle (load 0.04), before PR 4 and PR 5 add the vault clone and the MCP bridge. AC8 is measured again at closing. `free -m`: 1787 MiB used of 11739, 9951 available, no swap used. `docker stats --no-stream`: `open-webui` 654.7 MiB of 1.5 GiB, `hermes-kubelab` 209.2 MiB of 1.5 GiB, `hermes-kubelab-tailscale` 19.0 MiB of 128 MiB, `glances` 107.1 MiB of 256 MiB.
 
 ## Decisions made during implementation
 

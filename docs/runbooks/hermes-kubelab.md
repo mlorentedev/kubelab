@@ -1,0 +1,113 @@
+---
+id: hermes-kubelab
+type: runbook
+status: active
+created: "2026-10-07"
+owner: manu
+---
+
+# Operate the agent stack on ace2 (Open WebUI and hermes-kubelab)
+
+> ace2 hosts the operator's agent tooling (ADR-068): Open WebUI, and the
+> `hermes-kubelab` gateway with its tailscale sidecar. Everything here goes
+> through `make provision NODE=ace2 ENV=prod TAGS=agent_stack` (role
+> `agent_stack`, spec `specs/AI-009-hermes-ace2/`). ace2 is on-demand: when it
+> is off, both services are off, and nothing pages.
+
+## What runs where
+
+| Piece | Runs as | Started by | Data |
+|---|---|---|---|
+| Open WebUI | system Docker | `agent-stack-webui.service` (waits for the Tailscale address) | volume `open-webui-data` |
+| hermes-kubelab gateway | uid `hermes-kubelab`, rootless Docker | the user's daemon (`loginctl enable-linger`), `restart: unless-stopped` | `/var/lib/hermes-kubelab/data` |
+| tailscale sidecar (`tag:hermes`) | same rootless daemon, userspace mode | same | `/var/lib/hermes-kubelab/tailscale` (node key) |
+| tailnet refusal for the agent's uid | root | `agent-stack-egress.service`, `RequiredBy=user@<uid>` | `/opt/agent-stack/agent-egress.nft` |
+
+Open WebUI is reached only at `http://ace2.kubelab.internal:3080` over the
+tailnet, with OIDC against prod Authelia. The gateway's API listens on
+`127.0.0.1:8642` on ace2 and nowhere else.
+
+## Start, or converge after any change
+
+```bash
+make provision NODE=ace2 ENV=prod TAGS=agent_stack
+```
+
+A second run must report `changed=0`. The role verifies, on every run:
+Open WebUI answers on the Tailscale address, the break-glass account is the
+seeded admin, the agent's uid cannot open a tailnet connection (the VPS and
+ace2's own published port), the gateway answers, and the sidecar reports
+`Running` with `tag:hermes`. Any of these failing fails the play.
+
+`CHECK=1` runs it in check mode and changes nothing.
+
+## Stop
+
+- **Open WebUI**: `sudo systemctl stop agent-stack-webui.service`. A provision
+  starts it again.
+- **hermes-kubelab, everything the agent runs**: `sudo systemctl stop
+  agent-stack-egress.service`. The agent's user manager requires that unit, so
+  systemd stops `user@<uid>.service` with it, and the rootless daemon and every
+  container on it go down. This is the kill switch: it removes the agent and
+  the rule that confines it together, never one without the other. *Not yet
+  measured live*: whether lingering starts the user manager again before the
+  next provision.
+
+## Re-register the sidecar
+
+Needed when the sidecar reports anything but `Running` (for example after its
+Headscale node was deleted or expired).
+
+1. A provision mints a new single-use, one-hour key under the `agents` user
+   whenever `tailscale status` in the sidecar does not say `Running`, so in most
+   cases step 3 alone is enough. The key is written to
+   `/var/lib/hermes-kubelab/hermes-tailscale.env`, consumed at login, and the
+   file is emptied and the sidecar recreated in the same run.
+2. If the node must be replaced, not just logged in again, the operator removes
+   the old node on Headscale (`headscale nodes list`, then `nodes delete -i
+   <id>`) and the state directory on ace2. This is a deliberate, destructive
+   step and the role never does it.
+3. `make provision NODE=ace2 ENV=prod TAGS=agent_stack`.
+4. Confirm with `headscale nodes list`: the node is listed under
+   `tagged-devices` with `tag:hermes`.
+
+*Not yet measured live*: the registering run with its same-run recreate, and
+the re-login of a sidecar that reports `NeedsLogin` (spec `verification.md`,
+PR 3b-2).
+
+## Rotate
+
+- **Open WebUI break-glass password**: `toolkit secrets rotate --group
+  break-glass --env prod`. It changes the password in Open WebUI's database and
+  in SOPS together. Never rotate it with a single-key `secrets set`.
+- **Open WebUI OIDC client secret**: a single-key `toolkit secrets set` for
+  `apps.services.security.authelia.oidc_client_secret_open_webui` in
+  `prod.enc.yaml`, then its `_hash`, then `make sync-oidc-hashes`. Commit and
+  merge the regenerated `oidc-clients.yml` before or right after applying it:
+  prod Argo CD runs `selfHeal`, and an uncommitted rotation is reverted. Then
+  provision ace2. Never `make credentials-generate`.
+- **NaN API key**: shared with PR-Agent (R1). Rotating it is a PR-Agent
+  rotation; provision ace2 afterwards.
+- **Gateway API key and Open WebUI session key**: generated on ace2, not in
+  SOPS (`/opt/agent-stack/hermes-api-key`, `/opt/agent-stack/webui-secret-key`).
+  Delete the file and provision; a new session key signs every Open WebUI user
+  out.
+- **Sidecar node key**: see "Re-register the sidecar".
+
+## When Authelia is down
+
+`make break-glass SVC=open_webui ENV=prod` reaches Open WebUI at its declared
+tailnet address with the local `breakglass` account. See
+[break-glass](break-glass.md).
+
+## Access review
+
+`make auth-review ENV=prod` reads each Open WebUI account's live role and
+compares it with the declared groups; `APPLY=1` corrects drift.
+
+## Backup and restore
+
+**Not covered yet.** ace2 is not in `backup.sources`, so Open WebUI's volume and
+the gateway's data have no off-node copy. Chats are disposable until AI-009 PR 6
+adds ace2 to the per-node bucket model (BACKUP-057). Losing the sidecar's state
+only costs a re-registration.
