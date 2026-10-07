@@ -212,6 +212,21 @@ def test_every_written_secret_is_read_back_somewhere(path: str) -> None:
 # ── every playbook with more than one store, judged against what each store holds (#1975) ──
 
 
+def _run_envs() -> tuple[str, tuple[str, ...]]:
+    """The play variable `make provision` overrides, and the environments it can set.
+
+    `toolkit infra ansible run` passes `-e <var>={env}`, and the Makefile's
+    `provision` target filters ENV to a fixed set. An extra-var beats the play's
+    `vars:`, so a store built from that variable must hold its keys under every
+    environment the target accepts that has a SOPS file, not only the declared one.
+    """
+    var = re.search(r"-e (\w+)=\{env\}", (REPO / "toolkit/cli/infra.py").read_text(encoding="utf-8"))
+    target = re.search(r"^provision:.*?\$\(filter ([\w ]+),\$\(ENV\)\)", (REPO / "Makefile").read_text(), re.M | re.S)
+    assert var and target, "the provision path changed: re-derive what it overrides"
+    envs = tuple(e for e in target.group(1).split() if (SECRETS / f"{e}.enc.yaml").exists())
+    return var.group(1), envs
+
+
 def _holds(layers: tuple[str, ...], dotted: str) -> bool:
     """Whether any of the store's files carries the key, read from the committed SOPS files."""
     for name in layers:
@@ -287,23 +302,28 @@ def test_the_two_store_nodes_are_found() -> None:
     ("playbook", "play", "stores"), _multi_store_plays(), ids=[name for name, _, _ in _multi_store_plays()]
 )
 def test_every_read_uses_a_store_that_holds_that_secret(playbook: str, play: dict, stores: dict[str, str]) -> None:
-    """The environment is the play's declared value (`deploy_env: staging`), the one
-    the node is documented under. `make provision` passes `-e deploy_env=<ENV>`,
-    which overrides it, so a read from `secrets` must hold for the declared one."""
+    """A store is judged under every environment it can be built from: the play's
+    declared value, and, for the variable `make provision` overrides with ENV
+    (`deploy_env`), every environment that target accepts. `gitea_identity_env` is
+    never overridden, so only its declared value counts."""
     declared = play.get("vars") or {}
     dumped = yaml.safe_dump(play, width=float("inf"))
     checked = sorted({(store, path) for store, path in READ.findall(dumped) if store in stores})
     assert checked, f"{playbook}: no read from {sorted(stores)} found, so the parser stopped matching"
     layers = _store_layers(play)
+    overridden, run_envs = _run_envs()
     wrong: list[str] = []
     for store, path in checked:
         env_var, merges_common = layers[store]
         env = declared.get(env_var)
-        files = (("common",) if merges_common else ()) + (env,) if isinstance(env, str) else ()
-        if not files:
+        if not isinstance(env, str):
             wrong.append(f"{store}.{path}: the play declares no `{env_var}` in its vars")
-        elif not _holds(files, path):
-            wrong.append(f"{store}.{path}: `{store}` is {' + '.join(files)}, and none of them holds that key")
+            continue
+        for candidate in sorted({env, *run_envs}) if env_var == overridden else [env]:
+            files = (("common",) if merges_common else ()) + (candidate,)
+            if not _holds(files, path):
+                built = " + ".join(files)
+                wrong.append(f"{store}.{path}: with {env_var}={candidate}, `{store}` is {built}, and none holds it")
     assert not wrong, (
         f"{playbook} reads secrets from a store that does not hold them:\n  "
         + "\n  ".join(wrong)
