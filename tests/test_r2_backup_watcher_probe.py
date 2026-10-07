@@ -45,9 +45,8 @@ PREFIX = "s3:https://example.r2.cloudflarestorage.com/kubelab-backups"
 #                 `--recursive` one, logged as `recursive <repo>` (R3: 92 s on
 #                 the Beelink's Gitea)
 #   <repo>.id     the repository id `cat config --json` reports (BACKUP-058)
-#   <repo>.size   the `total_size` `stats --mode raw-data --json` reports
-#   <repo>.nostats `stats` alone fails, the rest of the repository reads fine
-#   <repo>.nototal `stats` exits 0 and its JSON has no `total_size`
+#   `stats` is refused: the probe no longer sizes anything (BACKUP-075), it
+#   reads the sizes file the init container wrote.
 # Any call without --no-lock is refused the way the read-only token refuses it
 # (PutObject AccessDenied on the lock) and logged as `locked <repo>`.
 FAKE_RESTIC = r"""#!/bin/sh
@@ -87,12 +86,7 @@ case "$cmd" in
     case " $ORIG_ARGS " in *" --json "*) ;; *) echo "plain ls cannot tell a file from a directory" >&2; exit 2 ;; esac
     cat "$FAKE_DIR/$name.ls" ;;
   cat) printf '{"version":2,"id":"%s","chunker_polynomial":"3dea92648f6e83"}\n' "$(cat "$FAKE_DIR/$name.id")" ;;
-  stats)
-    [ -f "$FAKE_DIR/$name.nostats" ] && { echo "Load(<index/0a1b>) failed: timeout" >&2; exit 1; }
-    [ -f "$FAKE_DIR/$name.nototal" ] && { echo '{"total_blob_count":42,"snapshots_count":3}'; exit 0; }
-    case " $ORIG_ARGS " in *" --mode raw-data "*) ;; *) echo "wrong stats mode: $ORIG_ARGS" >&2; exit 2 ;; esac
-    printf '{"total_size":%s,"total_uncompressed_size":%s,"compression_ratio":1.9,"total_blob_count":42,"snapshots_count":3}\n' \
-      "$(cat "$FAKE_DIR/$name.size")" "$(( $(cat "$FAKE_DIR/$name.size") * 2 ))" ;;
+  stats) echo "stats walks every tree; the probe reads sizes.txt instead" >&2; exit 2 ;;
 esac
 """
 
@@ -123,9 +117,20 @@ NOW = SNAPSHOT_EPOCH + 6 * 3600
 # Where the probe knocks (BACKUP-032). Documentation addresses (RFC 5737): the
 # fake `nc` answers for them from files, and nothing real is ever contacted.
 ADDRESSES = {"rpi3": "192.0.2.6", "vps": "192.0.2.2"}
-# What `stats --mode raw-data` reports as `total_size`: the stored, compressed
-# bytes of every blob the snapshots reference (BACKUP-057 Q3).
-SIZES = {"rpi3": 123_456_789, "kubelab-vps": 2_345_678_901}
+# What size.sh wrote (BACKUP-075): the bytes stored under each node's prefix,
+# keyed by the targets' node name, and the bucket's root, which is larger than
+# their sum: it holds objects outside any node prefix, and R2 bills those too.
+SIZES = {"rpi3": 123_456_789, "vps": 2_345_678_901}
+BUCKET_BYTES = sum(SIZES.values()) + 1_000_000
+
+
+def _sizes(**overrides: str) -> str:
+    """The sizes file, one `<kind> <name> <bytes|null> <seconds>` per line."""
+    entries = {("bucket", "kubelab-backups"): str(BUCKET_BYTES), **{("node", n): str(b) for n, b in SIZES.items()}}
+    for key, value in overrides.items():
+        kind, name = key.split("__")
+        entries[(kind, name)] = value
+    return "".join(f"{kind} {name} {value} 3\n" for (kind, name), value in entries.items() if value != "absent")
 
 
 def _entry(kind: str, path: str) -> str:
@@ -181,13 +186,15 @@ def fleet(tmp_path: pathlib.Path, request):
     )
     for name, repository_id in IDS.items():
         (fake / f"{name}.id").write_text(f"{repository_id}\n")
-        (fake / f"{name}.size").write_text(f"{SIZES[name]}\n")
     (fake / "rpi3.ls").write_text(_listing("uptime_kuma"))
     (fake / "kubelab-vps.ls").write_text(_listing("authelia", "n8n"))
+    sizes = tmp_path / "sizes.txt"
+    sizes.write_text(_sizes())
     env = {
         "PATH": f"{bin_dir}:{os.environ['PATH']}",
         "FAKE_DIR": str(fake),
         "WATCHER_TARGETS": str(targets),
+        "WATCHER_SIZES": str(sizes),
         "STAGING_DIR": STAGING,
         "SENTINEL": ".capture-complete",
         "RESTIC_TIMEOUT": "2",
@@ -384,58 +391,81 @@ def test_a_rejected_credential_is_named_in_the_nodes_reason(fleet) -> None:
     assert _node(nodes, "rpi3")["healthy"] == 1
 
 
-def test_each_node_and_the_fleet_report_their_raw_size(fleet) -> None:
-    """The size decides whether a retention window fits the free tier (BACKUP-057 Q3).
+def _write_sizes(env: dict[str, str], text: str) -> None:
+    pathlib.Path(env["WATCHER_SIZES"]).write_text(text)
 
-    It is measured on every run, not once: the bucket lock keeps data R days
-    past what `forget` would have removed, so the number the decision rests
-    on has to keep being checked after the decision.
+
+def test_each_node_reports_its_prefix_and_the_fleet_its_buckets(fleet) -> None:
+    """The fleet's size is what R2 bills: every bucket the targets name, at its root (BACKUP-075).
+
+    Both nodes share one bucket, so a fleet that summed the bucket per node, or
+    summed the node prefixes, would read twice the bucket or miss the objects
+    outside any prefix. Measured on every run: the bucket lock keeps data R days
+    past what `forget` would have removed (BACKUP-057 Q3).
     """
     _, _, env = fleet
     rc, nodes, (summary,) = _run(env)
     assert rc == 0
-    assert _node(nodes, "rpi3")["raw_bytes"] == SIZES["rpi3"]
-    assert _node(nodes, "vps")["raw_bytes"] == SIZES["kubelab-vps"]
-    assert summary["raw_bytes"] == sum(SIZES.values())
+    assert _node(nodes, "rpi3")["stored_bytes"] == SIZES["rpi3"]
+    assert _node(nodes, "vps")["stored_bytes"] == SIZES["vps"]
+    assert summary["stored_bytes"] == BUCKET_BYTES
 
 
-def test_an_unknown_size_is_null_and_never_fails_a_healthy_node(fleet) -> None:
-    """`stats` failing says nothing about whether the backup is restorable.
+def test_the_probe_never_walks_the_snapshots_to_size_them(fleet) -> None:
+    """`stats --mode raw-data` cost follows the snapshot count; it outran 600 s on the Beelink."""
+    fake, _, env = fleet
+    rc, _, (summary,) = _run(env)
+    calls = (fake / "calls").read_text().splitlines()
+    assert not [c for c in calls if c.startswith("stats ")], calls
+    assert rc == 0 and summary["healthy"] == 1
+
+
+def test_an_unknown_node_size_is_null_and_never_fails_a_healthy_node(fleet) -> None:
+    """A listing failing says nothing about whether the backup is restorable.
 
     So the node stays healthy, and its size is `null` rather than 0: a zero
-    would read as "fits" to the size rule and to the retention gate. One
-    unknown node makes the fleet sum unknown too, for the same reason.
+    would read as "fits". The fleet is sized by its buckets, so it stays known.
     """
-    fake, _, env = fleet
-    (fake / "kubelab-vps.nostats").write_text("")
+    _, _, env = fleet
+    _write_sizes(env, _sizes(node__vps="null"))
     rc, nodes, (summary,) = _run(env)
     vps = _node(nodes, "vps")
     assert rc == 0 and vps["healthy"] == 1 and summary["healthy"] == 1
-    assert vps["raw_bytes"] is None
-    assert _node(nodes, "rpi3")["raw_bytes"] == SIZES["rpi3"]
-    assert summary["raw_bytes"] is None
+    assert vps["stored_bytes"] is None
+    assert _node(nodes, "rpi3")["stored_bytes"] == SIZES["rpi3"]
+    assert summary["stored_bytes"] == BUCKET_BYTES
 
 
-@pytest.mark.parametrize(
-    ("marker", "reason"),
-    [("nostats", "Load(<index/0a1b>) failed: timeout"), ("nototal", "stats returned no total_size")],
-)
-def test_an_unknown_size_names_its_reason(fleet, marker, reason) -> None:
-    """A `null` comes with a `size unknown:` line naming why, including when `stats` itself succeeded."""
-    fake, _, env = fleet
-    (fake / f"kubelab-vps.{marker}").write_text("")
+@pytest.mark.parametrize("value", ["null", "absent"])
+def test_an_unmeasured_bucket_makes_the_fleet_size_null(fleet, value) -> None:
+    """A partial sum understates the bill, which is the one error the size rule must not make."""
+    _, _, env = fleet
+    _write_sizes(env, _sizes(**{"bucket__kubelab-backups": value}))
+    rc, _, (summary,) = _run(env)
+    assert rc == 0 and summary["healthy"] == 1
+    assert summary["stored_bytes"] is None
+
+
+def test_without_a_sizes_file_every_size_is_null_and_named(fleet) -> None:
+    """The init container failed to write: nothing is sized, nothing turns unhealthy."""
+    _, _, env = fleet
+    pathlib.Path(env["WATCHER_SIZES"]).unlink()
     shell = env.get("PROBE_SHELL", "sh").split()
     proc = subprocess.run([*shell, str(PROBE)], env=env, capture_output=True, text=True, timeout=60)
+    records = [json.loads(line) for line in proc.stdout.splitlines() if line.strip()]
     assert proc.returncode == 0
-    assert f"r2-backup-watcher: vps: size unknown: {reason}\n" in proc.stderr
+    assert all(r["stored_bytes"] is None for r in records)
+    assert all(r["healthy"] == 1 for r in records)
+    assert "r2-backup-watcher: vps: size unknown: not measured\n" in proc.stderr
 
 
-def test_an_unreadable_node_has_no_size(fleet) -> None:
-    fake, _, env = fleet
-    (fake / "kubelab-vps.fail").write_text("Fatal: wrong password or no key found\n")
-    _, nodes, (summary,) = _run(env)
-    assert _node(nodes, "vps")["raw_bytes"] is None
-    assert summary["raw_bytes"] is None
+def test_each_node_logs_how_long_its_listing_took(fleet) -> None:
+    """AC3's evidence: the duration no longer grows with the snapshot count."""
+    _, _, env = fleet
+    shell = env.get("PROBE_SHELL", "sh").split()
+    proc = subprocess.run([*shell, str(PROBE)], env=env, capture_output=True, text=True, timeout=60)
+    assert "r2-backup-watcher: vps: size listing took 3s\n" in proc.stderr
+    assert "r2-backup-watcher: fleet: bucket kubelab-backups listing took 3s\n" in proc.stderr
 
 
 def test_a_probe_that_stops_early_reports_no_fleet_size(fleet) -> None:
@@ -451,7 +481,7 @@ def test_a_probe_that_stops_early_reports_no_fleet_size(fleet) -> None:
     out, _ = proc.communicate(timeout=20)
     (summary,) = [json.loads(line) for line in out.splitlines() if '"r2_backup_health"' in line]
     assert summary["healthy"] == 0
-    assert summary["raw_bytes"] is None
+    assert summary["stored_bytes"] is None
 
 
 # --- BACKUP-032: snapshot age, reachability and class -----------------------
