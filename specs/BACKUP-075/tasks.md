@@ -25,7 +25,7 @@ created: "2026-10-06"
 
 ### Image pin
 
-- [ ] [P] [AC1] Failing test: the rclone image is pinned in `common.yaml` (`backup.watcher.size_image` (name pending operator approval), exact tag) and the kustomization `images:` entry matches it, the way `tests/test_r2_backup_watcher_manifest.py` already pins restic. Expected: FAIL.
+- [ ] [P] [AC1] Failing test: the rclone image is pinned in `common.yaml` (`backup.watcher.size_image`, exact tag) and the kustomization `images:` entry matches it, the way `tests/test_r2_backup_watcher_manifest.py` already pins restic. Expected: FAIL.
 - [ ] [AC1] Add the pin in `common.yaml`, the `images:` entry in `infra/k8s/base/kustomization.yaml`, and whatever `sync_k8s_images.py` needs. Expected: PASS.
 
 ### Init container and sizes file
