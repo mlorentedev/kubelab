@@ -132,7 +132,7 @@ The size decides whether R = 30 fits the free tier. It is measured by the watche
 
   The test fails on today's runbook.
 - [ ] Remove what PR 4a kept for the transition, once every node is in `own_bucket_nodes`:
-  - the probe's fallback to the shared `RESTIC_PASSWORD` (`probe.sh`, `test_a_secret_from_before_per_node_passwords_still_opens_the_fleet`). It exists because Argo CD syncs the probe at merge while `apply-secrets` rewrites the Secret by hand later;
+  - the shared `RESTIC_PASSWORD`, in both directions: the probe's fallback to it (`probe.sh`, `test_a_secret_from_before_per_node_passwords_still_opens_the_fleet`) and its key in the watcher Secret (`k8s_secrets.py`, `test_the_secret_carries_exactly_what_restic_reads`). Argo CD syncs the probe at merge, while `apply-secrets` rewrites the Secret by hand, and the two land in either order;
   - the shared branch of `node_secret_paths`, `node_repository` and `backup.yml`, with `own_bucket_nodes` itself once no node can be outside it;
   - the read-only pair `backup.r2.readonly_*`: revoke the token in Cloudflare, delete both keys from SOPS and both `SECRET_CATALOG` entries (read by nothing since PR 4a).
 - [ ] [AC5] `make backup-escrow-check`. For every restic password in SOPS (`backup.restic_password` and each `backup.nodes.<n>.restic_password`), it compares that value's hash with the hash of its `dotf` Bitwarden entry (`KUBELAB_RESTIC_PASSWORD[_<NODE>]`). No value is printed. It exits non-zero on a missing or stale entry.

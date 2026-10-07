@@ -323,8 +323,25 @@ class TestResticPasswords:
         (body,) = http.posts()
         assert body["name"] == bnc.WATCHER_TOKEN_NAME
 
+    def test_a_node_and_watcher_only_together_are_refused(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The pair means nothing to mint; it used to return True having changed nothing."""
+        nodes = _nodes()
+        store, http = _held_fleet(monkeypatch, nodes)
 
-OUTSIDE = "kubelab-vikunja-staging"
+        assert bnc.mint_all(node=nodes[0], rotate=True, watcher_only=True) is False
+        assert http.posts() == [] and store.writes == []
+
+    def test_one_node_mints_without_the_watchers_refusal_bucket(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Only the watcher's mint proves a refusal, so only it needs the outside bucket."""
+        nodes = _nodes()
+        store, http = _held_fleet(monkeypatch, nodes)
+        del store._cm.get_merged_config.return_value["apps"]
+
+        assert bnc.mint_all(node=nodes[0], rotate=True) is True
+        assert [body["name"] for body in http.posts()] == [bnc.node_bucket(nodes[0])]
+
+
+OUTSIDE ="kubelab-vikunja-staging"
 
 
 def _held_fleet(monkeypatch: pytest.MonkeyPatch, nodes: list[str]) -> tuple[FakeStore, FakeHttp]:

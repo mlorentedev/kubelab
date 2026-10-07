@@ -393,6 +393,9 @@ def mint_all(node: Optional[str] = None, rotate: bool = False, watcher_only: boo
     if node is not None and node not in nodes:
         logger.error(f"{node!r} is not a backup.sources node ({', '.join(nodes)})")
         return False
+    if node is not None and watcher_only:
+        logger.error("a node and watcher_only name nothing to mint together")
+        return False
 
     minter = store.show(MINTER_KEY)
     if not minter:
@@ -405,8 +408,10 @@ def mint_all(node: Optional[str] = None, rotate: bool = False, watcher_only: boo
     except KeyError as exc:
         logger.error(f"backup.r2.{exc.args[0]} is missing from the config SSOT")
         return False
-    outside = _bucket_outside_backups(config)
-    if not outside:
+    # Only the watcher's mint proves a refusal; a single node's mint must not
+    # depend on a bucket it never reads.
+    outside = _bucket_outside_backups(config) if node is None else ""
+    if node is None and not outside:
         logger.error(f"{OUTSIDE_BUCKET_KEY} is missing from the config SSOT; the watcher's scope cannot be proven")
         return False
 

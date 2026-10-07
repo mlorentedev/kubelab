@@ -203,6 +203,10 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
         keys={
             "AWS_ACCESS_KEY_ID": "BACKUP_R2_WATCHER_ACCESS_KEY_ID",
             "AWS_SECRET_ACCESS_KEY": "BACKUP_R2_WATCHER_SECRET_ACCESS_KEY",
+            # Until BACKUP-057 PR 5: the probe before PR 4a refuses to start
+            # without it, and this apply and Argo CD's probe sync land in
+            # either order. The current probe reads it only as a fallback.
+            "RESTIC_PASSWORD": "BACKUP_RESTIC_PASSWORD",
         },
     ),
 ]

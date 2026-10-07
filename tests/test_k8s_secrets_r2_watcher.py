@@ -42,10 +42,16 @@ def _spec(key_path: str):
 
 
 def test_the_secret_carries_exactly_what_restic_reads() -> None:
-    """Before any node moves: the watcher pair, and the shared password once per node."""
+    """Before any node moves: the watcher pair, and the shared password once per node.
+
+    The shared `RESTIC_PASSWORD` stays until BACKUP-057 PR 5. The probe before
+    PR 4a refuses to start without it, and `apply-secrets` and Argo CD's sync of
+    the probe happen in either order, so dropping it would fail the whole fleet.
+    """
     assert _mapping().keys == {
         "AWS_ACCESS_KEY_ID": "BACKUP_R2_WATCHER_ACCESS_KEY_ID",
         "AWS_SECRET_ACCESS_KEY": "BACKUP_R2_WATCHER_SECRET_ACCESS_KEY",
+        "RESTIC_PASSWORD": "BACKUP_RESTIC_PASSWORD",
         **{f"RESTIC_PASSWORD_{node.upper()}": "BACKUP_RESTIC_PASSWORD" for node in NODES},
     }
     assert not _mapping().optional_keys

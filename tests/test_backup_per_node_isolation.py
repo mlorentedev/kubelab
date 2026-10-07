@@ -223,6 +223,13 @@ def _regex_replace(value: str, pattern: str, replacement: str = "") -> str:
     return re.sub(pattern, replacement, value)
 
 
+def _put(tree: dict[str, Any], dotted: str, value: str) -> None:
+    *parents, leaf = dotted.split(".")
+    for key in parents:
+        tree = tree.setdefault(key, {})
+    tree[leaf] = value
+
+
 def _role_vars(config: dict[str, Any], inventory_hostname: str) -> dict[str, str]:
     """Render backup.yml's credential vars for one host, the way Ansible would."""
     play = yaml.safe_load((REPO / "infra/ansible/playbooks/backup.yml").read_text())[0]
@@ -230,14 +237,16 @@ def _role_vars(config: dict[str, Any], inventory_hostname: str) -> dict[str, str
     env = jinja2.Environment(undefined=jinja2.StrictUndefined)
     env.filters["regex_replace"] = _regex_replace
     env.filters["bool"] = lambda value: str(value).strip().lower() in ("true", "yes", "1")
-    pairs = {n: {"access_key_id": f"{n}-access", "secret_access_key": f"{n}-secret"} for n in NODES}
-    secrets = {
-        "backup": {
-            "restic_password": "fixture-shared",
-            "r2": {"access_key_id": "shared-access", "secret_access_key": "shared-secret", "nodes": pairs},
-            "nodes": {n: {"restic_password": f"fixture-{n}"} for n in NODES},
-        }
-    }
+    # Built from the toolkit's own key paths, so a key the toolkit moves is a
+    # key the playbook no longer finds, and this test goes red.
+    secrets: dict[str, Any] = {}
+    _put(secrets, "backup.restic_password", "fixture-shared")
+    _put(secrets, "backup.r2.access_key_id", "shared-access")
+    _put(secrets, "backup.r2.secret_access_key", "shared-secret")
+    for n in NODES:
+        _put(secrets, access_key_path(n), f"{n}-access")
+        _put(secrets, secret_key_path(n), f"{n}-secret")
+        _put(secrets, restic_password_path(n), f"fixture-{n}")
     context: dict[str, Any] = {"config": config, "secrets": secrets, "inventory_hostname": inventory_hostname}
     for name in ("node_short_name", "node_own_bucket"):
         # Rendered to a string, as Ansible may hand it over: the role vars must survive "False".
