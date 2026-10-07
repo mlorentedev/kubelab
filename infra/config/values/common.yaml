@@ -1374,8 +1374,11 @@ apps:
         image: headscale/headscale:v0.28.0
         domain: vpn.kubelab.live
         # Headscale v0.28 CLI uses numeric user IDs (not names)
-        # Users: 1=manu (personal), 2=kubelab (infra nodes), 3=work (Windows PCs)
+        # Users: 1=manu (personal), 2=kubelab (infra nodes), 3=work (Windows PCs),
+        # 4=agents (ADR-041: owns the preauth keys of tagged agent nodes, which
+        # Headscale then lists under `tagged-devices`, not under this user)
         infra_user_id: 2
+        agents_user_id: 4
         enable_auth: false
         auth_level: bypass
         default_port: 8080
@@ -1962,6 +1965,17 @@ apps:
           image: python:3.13.16-trixie
           cpus: 1
           memory_mb: 1024
+        # The agent's own tailnet identity (ADR-041, `tag:hermes`), a tailscale
+        # container on the agent's daemon. Userspace mode: no TUN device, so it
+        # routes nothing by itself; what goes through its SOCKS5/HTTP proxy
+        # carries the tag, and the host refuses the tailnet to everything else
+        # the agent runs (lesson-525).
+        sidecar:
+          image: tailscale/tailscale:v1.102.5
+          hostname: hermes-kubelab
+          proxy_port: 1055
+          memory_limit: 128m
+          cpu_limit: 0.5
         # ADR-068 D7: the key is PR-Agent's, so scheduled and delegated work runs
         # on an unmetered model; only an interactive turn draws from a quota.
         models:

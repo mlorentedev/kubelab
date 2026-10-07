@@ -35,6 +35,7 @@
       loop:
         - "{{ agent_stack_hermes_compose }}"
         - "{{ agent_stack_hermes_env }}"
+        - "{{ agent_stack_hermes_ts_env }}"
 
 - name: Deploy hermes-kubelab
   when: agent_stack_hermes_configured | bool
@@ -86,6 +87,45 @@
         mode: "0644"
       register: _agent_stack_hermes_config
 
+    # The sidecar's state is its node key. With one, it rejoins on its own and
+    # no key is minted; without one, a key is minted for this registration only.
+    - name: Create the tailscale sidecar's state directory
+      ansible.builtin.file:
+        path: "{{ agent_stack_hermes_ts_state }}"
+        state: directory
+        owner: "{{ agent_stack_agent_user }}"
+        group: "{{ agent_stack_agent_user }}"
+        mode: "0700"
+
+    - name: Look for the tailscale sidecar's node state
+      ansible.builtin.stat:
+        path: "{{ agent_stack_hermes_ts_state }}/tailscaled.state"
+      register: _agent_stack_hermes_ts_registered
+
+    # Under the `agents` user, which owns `tag:hermes` (ADR-041). Single use and
+    # one hour, so a key that outlives the registration opens nothing.
+    - name: Mint the sidecar's preauth key on Headscale
+      ansible.builtin.command: >-
+        docker exec headscale headscale preauthkeys create
+        --user {{ agent_stack_headscale_agents_user_id }} --tags tag:hermes --expiration 1h
+      delegate_to: "{{ agent_stack_headscale_host }}"
+      become: false
+      when: not _agent_stack_hermes_ts_registered.stat.exists
+      register: _agent_stack_hermes_ts_mint
+      no_log: true
+
+    - name: Render the tailscale sidecar's env file
+      ansible.builtin.template:
+        src: hermes-tailscale.env.j2
+        dest: "{{ agent_stack_hermes_ts_env }}"
+        owner: "{{ agent_stack_agent_user }}"
+        group: "{{ agent_stack_agent_user }}"
+        mode: "0600"
+      vars:
+        _agent_stack_hermes_ts_key: "{{ _agent_stack_hermes_ts_mint.stdout | default('') | trim }}"
+      register: _agent_stack_hermes_ts_env_file
+      no_log: true
+
     - name: Render the hermes-kubelab Compose project
       ansible.builtin.template:
         src: compose-hermes.yml.j2
@@ -113,7 +153,8 @@
     - name: Start hermes-kubelab
       ansible.builtin.command: >-
         docker compose -p {{ agent_stack_hermes_project }} -f {{ agent_stack_hermes_compose }} up -d
-        {{ '--force-recreate' if (_agent_stack_hermes_env_file.changed or _agent_stack_hermes_config.changed) else '' }}
+        {{ '--force-recreate' if (_agent_stack_hermes_env_file.changed or _agent_stack_hermes_config.changed
+                                  or _agent_stack_hermes_ts_env_file.changed) else '' }}
       become_user: "{{ agent_stack_agent_user }}"
       environment: "{{ agent_stack_agent_daemon_env }}"
       register: _agent_stack_hermes_up
@@ -130,6 +171,39 @@
       until: _agent_stack_hermes_api.status == 200
       retries: 30
       delay: 5
+      no_log: true
+
+    # Read from the sidecar itself: the tag is what the ACL matches, and a node
+    # that registered without it would be matched by nothing, or by a user rule.
+    - name: Verify the sidecar is on the tailnet as tag:hermes
+      ansible.builtin.command: >-
+        docker exec hermes-kubelab-tailscale tailscale status --json --peers=false
+      become_user: "{{ agent_stack_agent_user }}"
+      environment: "{{ agent_stack_agent_daemon_env }}"
+      register: _agent_stack_hermes_ts_status
+      until: >-
+        _agent_stack_hermes_ts_status.rc == 0
+        and (_agent_stack_hermes_ts_status.stdout | from_json).BackendState == 'Running'
+      retries: 30
+      delay: 2
+      changed_when: false
+      failed_when: >-
+        _agent_stack_hermes_ts_status.rc != 0
+        or (_agent_stack_hermes_ts_status.stdout | from_json).BackendState != 'Running'
+        or 'tag:hermes' not in ((_agent_stack_hermes_ts_status.stdout | from_json).Self.Tags | default([]))
+      check_mode: false
+
+    # The key is consumed: the container keeps no use for it, and the file no copy.
+    - name: Empty the sidecar's env file once it is registered
+      ansible.builtin.template:
+        src: hermes-tailscale.env.j2
+        dest: "{{ agent_stack_hermes_ts_env }}"
+        owner: "{{ agent_stack_agent_user }}"
+        group: "{{ agent_stack_agent_user }}"
+        mode: "0600"
+      vars:
+        _agent_stack_hermes_ts_key: ""
+      when: _agent_stack_hermes_ts_mint is changed
       no_log: true
 
     # One command each rule must refuse, and every command a rule lets through,

@@ -97,6 +97,13 @@ agent_stack_hermes_compose: "{{ agent_stack_agent_home }}/compose-hermes.yml"
 # rewrite it (v2026.9.24 stage2-hook.sh), so a file in the data directory would
 # be the agent's to edit, approvals included, and would drift from this role.
 agent_stack_hermes_config: "{{ agent_stack_agent_home }}/hermes-config.yaml"
+# The tailscale sidecar's (spec PR 3b-2). Its state is the node key: beside the
+# data directory, so the gateway's container does not see it. The env file
+# holds the one-time preauth key until the first registration, then nothing.
+agent_stack_hermes_ts_state: "{{ agent_stack_agent_home }}/tailscale"
+agent_stack_hermes_ts_env: "{{ agent_stack_agent_home }}/hermes-tailscale.env"
+# Inputs set by the playbook: agent_stack_headscale_url, agent_stack_headscale_host
+# (the inventory host that runs Headscale) and agent_stack_headscale_agents_user_id.
 # The inference key is the only secret Hermes cannot start without. Missing, it
 # is not started, and a previous one is taken down.
 agent_stack_hermes_configured: "{{ agent_stack_nan_api_key | length > 0 }}"
