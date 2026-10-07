@@ -189,6 +189,8 @@ The writer re-encrypts the whole file, so the git diff spans every line. That is
 
 Seven mutations of `backup_isolation.py`. Six each turned a test red: accepting any refusal reason (cross), accepting any refusal reason (own), not failing on an empty prefix, taking the oldest pack instead of the youngest, deleting a real key across nodes, and skipping the declaration check. The seventh, dropping the `rc == 0` branches, is equivalent: an accepted request still fails as "not refused for the right reason".
 
+After the first PR-Agent pass the own delete moved behind two guards, so it is attempted only where it can only be refused. The bucket's lock rules are read with the admin token and must hold `data/` by age for at least R, and the youngest pack must be more than a day inside R. Re-run live on 2026-10-07: still `24 of 24 cross-node requests refused with AccessDenied`. The lock read passed on all four buckets, since each reached its listing and failed only on the empty `data/`. Eight more mutations, each red: the guard not skipping the delete, `enabled` ignored, R ignored, an API failure tolerated, no safety margin, no age check, and picking the youngest by string instead of by instant. A type check on `Age` was dropped as redundant, because only an `Age` condition carries `maxAgeSeconds`.
+
 ## Test status
 
 - Test suite: `<command> -> <output / coverage %>`
