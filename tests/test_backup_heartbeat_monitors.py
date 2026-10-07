@@ -30,6 +30,7 @@ import os
 import pathlib
 import shutil
 import subprocess
+from typing import Any
 
 import pytest
 import yaml
@@ -461,15 +462,65 @@ def test_the_receipt_survives_the_capture_that_wipes_staging() -> None:
     )
 
 
-def _maintenance_swept_roots() -> list[str]:
-    """Every directory the maintenance script deletes from, by `find` or `rm -rf`."""
-    import re as _re
+_MAINTENANCE_SCRIPT = REPO / "infra/ansible/roles/node_maintenance/templates/kubelab-maintenance.sh.j2"
 
-    script = (REPO / "infra/ansible/roles/node_maintenance/templates/kubelab-maintenance.sh.j2").read_text(
-        encoding="utf-8"
+
+def _swept_roots(script: str) -> tuple[list[str], list[str]]:
+    """The directories a shell script deletes from by `find` or `rm`, and the lines it cannot read.
+
+    Every root of a `find` counts, since `-delete` and `-exec rm` act below all
+    of them. `rm` counts in any flag form, with or without `--` or quotes. A
+    root that is not a literal absolute path (a variable, a relative path) is
+    returned as unreadable rather than skipped, so the guard fails closed on a
+    sweep it cannot see.
+    """
+    import shlex
+
+    roots: list[str] = []
+    unreadable: list[str] = []
+    for line in script.splitlines():
+        words = line.strip().rstrip("\\").split(None, 1)
+        if not words or words[0] not in ("find", "rm"):
+            continue
+        try:
+            tokens = shlex.split(words[1] if len(words) > 1 else "")
+        except ValueError:
+            unreadable.append(line.strip())
+            continue
+        args: list[str] = []
+        for token in tokens:
+            if token in (";", "||", "&&", "|") or ">" in token:
+                break
+            if words[0] == "find" and (token.startswith(("-", "(", "!")) or token == "\\("):
+                break
+            if words[0] == "rm" and token.startswith("-"):
+                continue
+            args.append(token)
+        if not args or any(not a.startswith("/") or "$" in a for a in args):
+            unreadable.append(line.strip())
+            continue
+        roots += [a.removesuffix("/*").rstrip("/") or "/" for a in args]
+    return roots, unreadable
+
+
+def test_the_sweep_parser_reads_every_form_and_refuses_what_it_cannot() -> None:
+    roots, unreadable = _swept_roots(
+        "rm -fr /a/one\n"
+        "rm -rf -- '/a/two'\n"
+        "rm -r -f /a/three/*\n"
+        "find /b/one /b/two -type f -delete\n"
+        'find "$DIR" -delete\n'
+        "rm -rf $STAGING\n"
+        "rm -f relative.txt 2>/dev/null || true\n"
     )
-    roots = _re.findall(r"^\s*find\s+(/\S+)", script, _re.MULTILINE)
-    roots += [p.rstrip("/*") for p in _re.findall(r"^\s*rm\s+-rf\s+(/\S+)", script, _re.MULTILINE)]
+    assert roots == ["/a/one", "/a/two", "/a/three", "/b/one", "/b/two"]
+    assert unreadable == ['find "$DIR" -delete', "rm -rf $STAGING", "rm -f relative.txt 2>/dev/null || true"]
+
+
+def _maintenance_swept_roots() -> list[str]:
+    """Every directory the maintenance script deletes from; fails on a root it cannot read."""
+    roots, unreadable = _swept_roots(_MAINTENANCE_SCRIPT.read_text(encoding="utf-8"))
+    assert not unreadable, f"the maintenance script deletes from roots this guard cannot read: {unreadable}"
     return roots
 
 
@@ -490,19 +541,37 @@ def test_the_shutdown_evidence_is_in_a_directory_the_role_owns(key: str) -> None
         f"{key} is {path}, outside {owned}, the root-only directory the role creates"
     )
     roots = _maintenance_swept_roots()
-    assert "/var/log" in roots, "the sweep parser no longer sees the /var/log cleanup, so it proves nothing"
+    # Every root the script names today, so a parser that stopped seeing one fails here.
+    assert {"/var/log", "/tmp", "/var/tmp", "/var/lib/apt/lists"} <= set(roots), roots
     swept = [r for r in roots if path == r or path.startswith(r.rstrip("/") + "/")]
     assert not swept, f"{key} is under {swept}, which the maintenance cleanup deletes from"
 
 
-def test_the_role_removes_the_evidence_left_at_the_old_paths() -> None:
-    """Ansible is additive: moving a path leaves the old file unless a task removes it (BACKUP-052)."""
+def test_the_role_moves_unread_evidence_from_the_old_paths_before_dropping_them() -> None:
+    """A file still at an old path has not been read, so it is moved, not deleted (BACKUP-052).
+
+    Ansible is additive, so the old files outlive the move unless a task handles
+    them. Deleting an unread marker would report "ran and did not ship" as the
+    benign "no shutdown sequence ran".
+    """
     tasks = yaml.safe_load((REPO / "infra/ansible/roles/node_backup/tasks/main.yml").read_text(encoding="utf-8"))
-    removed = {
-        item
-        for task in tasks
-        if isinstance(task, dict) and (task.get("file") or {}).get("state") == "absent"
-        for item in task.get("loop") or []
+    defaults = yaml.safe_load((REPO / "infra/ansible/roles/node_backup/defaults/main.yml").read_text())
+    olds = ["/var/log/node-backup-shutdown.receipt", "/var/log/node-backup-shutdown.attempted"]
+
+    def index(predicate: Any) -> int:
+        hits = [n for n, t in enumerate(tasks) if isinstance(t, dict) and predicate(t)]
+        assert len(hits) == 1, hits
+        return hits[0]
+
+    move = index(lambda t: str(t.get("command", "")).startswith("mv "))
+    moved = {(i["old"], i["new"]) for i in tasks[move]["loop"]}
+    assert moved == {
+        (olds[0], "{{ node_backup_shutdown_receipt }}"),
+        (olds[1], "{{ node_backup_shutdown_attempt_marker }}"),
     }
-    for old in ("/var/log/node-backup-shutdown.receipt", "/var/log/node-backup-shutdown.attempted"):
-        assert old in removed, f"{old} is never removed, so a stale file outlives the move"
+    # `creates` keeps a newer file at the new path; `removes` makes the re-run changed=0.
+    assert tasks[move]["args"] == {"creates": "{{ item.new }}", "removes": "{{ item.old }}"}
+    assert str(defaults["node_backup_shutdown_receipt"]) not in olds
+
+    drop = index(lambda t: (t.get("file") or {}).get("state") == "absent" and set(t.get("loop") or []) == set(olds))
+    assert move < drop, "the old files are dropped before they are moved, so an unread one is lost"

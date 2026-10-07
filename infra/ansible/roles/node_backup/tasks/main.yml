@@ -212,11 +212,23 @@
   notify: Reload systemd (node_backup)
 
 # BACKUP-052 moved the receipt and the marker out of /var/log. Every boot's
-# read-back clears both, so whatever is still at the old paths was already read,
-# or is from a boot whose read-back never ran. Removing it leaves no stale file
-# that a later revision could read as this node's outcome. Absence is the
-# benign reading: no shutdown sequence ran.
-- name: Remove the shutdown receipt and marker from their pre-BACKUP-052 paths
+# read-back clears both after reading them, so a file still at an old path has
+# NOT been read: a shutdown wrote it and no boot capture has looked yet.
+# Deleting it would turn "ran and did not ship" into the benign "no shutdown
+# sequence ran", so it is moved to where the next read-back looks. Only into an
+# empty slot: a file already at the new path was written by a shutdown that ran
+# this revision, so it is newer, and the old one is then dropped below.
+- name: Move an unread shutdown receipt or marker to its BACKUP-052 path
+  command: mv "{{ item.old }}" "{{ item.new }}"
+  args:
+    creates: "{{ item.new }}"
+    removes: "{{ item.old }}"
+  loop:
+    - { old: /var/log/node-backup-shutdown.receipt, new: "{{ node_backup_shutdown_receipt }}" }
+    - { old: /var/log/node-backup-shutdown.attempted, new: "{{ node_backup_shutdown_attempt_marker }}" }
+  when: node_backup_location == 'on-demand'
+
+- name: Drop a pre-BACKUP-052 file that a newer one at the new path supersedes
   file:
     path: "{{ item }}"
     state: absent
