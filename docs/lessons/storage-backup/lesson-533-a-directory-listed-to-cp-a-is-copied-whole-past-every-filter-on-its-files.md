@@ -28,7 +28,10 @@ while adding a source whose databases are nested (`cron/executions.db`).
 **Solution**: prune the declared paths and copy only non-directories and empty
 directories (`\( -path ... \) -prune -o \( ! -type d -o -empty \) -exec cp -a --parents`).
 `--parents` with `-a` recreates the directories in between with their modes (measured
-700 and 750 kept). The pruned set gained `-journal`: a raw hot journal beside the
+700 and 750 kept), but only the ones it creates. A nested database's directories already
+exist by then, made by the snapshot step's `mkdir -p` as root 0755, so `cp` leaves them
+alone. That step now copies each one's owner and mode from the source (`chown`/`chmod
+--reference`), and a test covers a directory that holds nothing but the database. The pruned set gained `-journal`: a raw hot journal beside the
 snapshot is rolled back into it on open. The new tests render the script and run it
 against a tree in `tmp_path`, with a fake `sqlite3` that writes a marker where the
 snapshot goes, and assert what the staging directory holds.
