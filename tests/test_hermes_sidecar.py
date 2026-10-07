@@ -85,11 +85,16 @@ def test_the_key_is_minted_once_single_use_and_tagged() -> None:
     assert "--user {{ agent_stack_headscale_agents_user_id }}" in cmd
     assert "--reusable" not in cmd
     assert "--expiration 1h" in cmd
-    assert task["when"] == "not _agent_stack_hermes_ts_registered.stat.exists"
+    assert task["when"] == "not (_agent_stack_hermes_ts_on_tailnet | bool)"
     assert task["delegate_to"] == "{{ agent_stack_headscale_host }}"
     assert task.get("no_log") is True, "the key is the command's output"
-    stat = _task("Look for the tailscale sidecar's node state")
-    assert stat["ansible.builtin.stat"]["path"] == "{{ agent_stack_hermes_ts_state }}/tailscaled.state"
+    # The gate is the sidecar's own answer, never its state file: tailscaled writes
+    # that at its first start, so a failed first login would never be retried.
+    ask = _task("Ask the sidecar whether it is on the tailnet")
+    assert "tailscale status --json" in ask["ansible.builtin.command"]
+    hold = _task("Hold whether the sidecar is on the tailnet")
+    assert "BackendState == 'Running'" in hold["ansible.builtin.set_fact"]["_agent_stack_hermes_ts_on_tailnet"]
+    assert not [t for t in _tasks() if "tailscaled.state" in str(t.get("ansible.builtin.stat", ""))]
 
 
 def test_the_key_is_minted_under_the_agents_user() -> None:

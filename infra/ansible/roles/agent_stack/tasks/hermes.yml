@@ -87,8 +87,10 @@
         mode: "0644"
       register: _agent_stack_hermes_config
 
-    # The sidecar's state is its node key. With one, it rejoins on its own and
-    # no key is minted; without one, a key is minted for this registration only.
+    # The sidecar rejoins from its state on its own, so a key is minted only when
+    # it is not on the tailnet now. Asked of the sidecar, not read from its state
+    # file: tailscaled writes that file at its first start, before any login, so
+    # a first registration that failed would leave a file and never be retried.
     - name: Create the tailscale sidecar's state directory
       ansible.builtin.file:
         path: "{{ agent_stack_hermes_ts_state }}"
@@ -97,10 +99,29 @@
         group: "{{ agent_stack_agent_user }}"
         mode: "0700"
 
-    - name: Look for the tailscale sidecar's node state
-      ansible.builtin.stat:
-        path: "{{ agent_stack_hermes_ts_state }}/tailscaled.state"
-      register: _agent_stack_hermes_ts_registered
+    # No container (a first deploy) fails at once; a starting one is waited for.
+    - name: Ask the sidecar whether it is on the tailnet
+      ansible.builtin.command: >-
+        docker exec hermes-kubelab-tailscale tailscale status --json --peers=false
+      become_user: "{{ agent_stack_agent_user }}"
+      environment: "{{ agent_stack_agent_daemon_env }}"
+      register: _agent_stack_hermes_ts_before
+      until: >-
+        _agent_stack_hermes_ts_before.rc != 0
+        or (_agent_stack_hermes_ts_before.stdout | from_json).BackendState not in ['NoState', 'Starting']
+        or ansible_check_mode
+      retries: 15
+      delay: 2
+      changed_when: false
+      failed_when: false
+      check_mode: false
+      ignore_errors: "{{ ansible_check_mode }}"
+
+    - name: Hold whether the sidecar is on the tailnet
+      ansible.builtin.set_fact:
+        _agent_stack_hermes_ts_on_tailnet: >-
+          {{ _agent_stack_hermes_ts_before.rc == 0
+             and (_agent_stack_hermes_ts_before.stdout | from_json).BackendState == 'Running' }}
 
     # Under the `agents` user, which owns `tag:hermes` (ADR-041). Single use and
     # one hour, so a key that outlives the registration opens nothing.
@@ -110,7 +131,7 @@
         --user {{ agent_stack_headscale_agents_user_id }} --tags tag:hermes --expiration 1h
       delegate_to: "{{ agent_stack_headscale_host }}"
       become: false
-      when: not _agent_stack_hermes_ts_registered.stat.exists
+      when: not (_agent_stack_hermes_ts_on_tailnet | bool)
       register: _agent_stack_hermes_ts_mint
       no_log: true
 

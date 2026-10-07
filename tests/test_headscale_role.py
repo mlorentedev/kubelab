@@ -195,8 +195,10 @@ class TestPolicyHujsonContent:
     def _hermes_dst() -> list[str]:
         """Every destination any rule grants a tag:hermes node: a rule that lists it
         beside another source, or names every source, admits it as well."""
-        acls = _load_hujson(_render_policy())["acls"]
-        return [d for a in acls if "tag:hermes" in a["src"] or "*" in a["src"] for d in a["dst"]]
+        policy = _load_hujson(_render_policy())
+        groups = {name for name, members in policy.get("groups", {}).items() if "tag:hermes" in members}
+        admits = {"tag:hermes", "*"} | groups
+        return [d for a in policy["acls"] if admits & set(a["src"]) for d in a["dst"]]
 
     def test_hermes_egress_is_node_like_controlled(self) -> None:
         assert set(self._hermes_dst()) == {"vps:443"}
@@ -213,7 +215,9 @@ class TestPolicyHujsonContent:
         hosts = _load_hujson(_render_policy())["hosts"]
         for d in self._hermes_dst():
             host = d.rsplit(":", 1)[0]
-            assert host != "*", f"tag:hermes must not reach every host: {d}"
+            # A tag, group or autogroup has members this file cannot see, ace2
+            # among them; only a declared alias or an address can be checked.
+            assert host in hosts or re.fullmatch(r"[\d.]+(/\d+)?", host), f"tag:hermes reaches an unresolvable {d}"
             assert hosts.get(host, host) != ace2, f"tag:hermes must not reach ace2: {d}"
 
 
