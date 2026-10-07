@@ -15,6 +15,7 @@ import pathlib
 
 import yaml
 
+from toolkit.features.backup_destination import node_secret_paths
 from toolkit.features.backup_node_credentials import access_key_path, secret_key_path
 from toolkit.features.k8s_secrets import SECRET_DEFINITIONS, _apply_single_secret, _resolve_config_keys
 from toolkit.features.secrets_manager import SECRET_CATALOG, SecretKind
@@ -33,6 +34,12 @@ def _env_var(path: str) -> str:
     return path.upper().replace(".", "_")
 
 
+# Each node's password as the Secret reads it: its own once it is in its own
+# bucket, the shared one before.
+PASSWORDS = {node: _env_var(node_secret_paths(COMMON, node)[2]) for node in NODES}
+_ENV |= {var: f"not-a-real-value-fixture-{var.lower()}" for var in PASSWORDS.values()}
+
+
 def _mapping():
     return _resolve_config_keys(next(m for m in SECRET_DEFINITIONS if m.name == "r2-backup-watcher-secrets"), COMMON)
 
@@ -42,7 +49,7 @@ def _spec(key_path: str):
 
 
 def test_the_secret_carries_exactly_what_restic_reads() -> None:
-    """Before any node moves: the watcher pair, and the shared password once per node.
+    """The watcher pair, and each node's password: the shared one until the node moves.
 
     The shared `RESTIC_PASSWORD` stays until BACKUP-057 PR 5. The probe before
     PR 4a refuses to start without it, and `apply-secrets` and Argo CD's sync of
@@ -52,7 +59,7 @@ def test_the_secret_carries_exactly_what_restic_reads() -> None:
         "AWS_ACCESS_KEY_ID": "BACKUP_R2_WATCHER_ACCESS_KEY_ID",
         "AWS_SECRET_ACCESS_KEY": "BACKUP_R2_WATCHER_SECRET_ACCESS_KEY",
         "RESTIC_PASSWORD": "BACKUP_RESTIC_PASSWORD",
-        **{f"RESTIC_PASSWORD_{node.upper()}": "BACKUP_RESTIC_PASSWORD" for node in NODES},
+        **{f"RESTIC_PASSWORD_{node.upper()}": PASSWORDS[node] for node in NODES},
     }
     assert not _mapping().optional_keys
 

@@ -144,6 +144,11 @@ def test_every_declared_sqlite_source_is_accounted_for() -> None:
         "vps/crowdsec_db",  # was `delete` (measured 2026-10-01 from the file
         #                     header, bytes 18-19 = 1,1; the image ships no
         #                     sqlite3); now declares WAL (test_crowdsec_declares_wal).
+        "ace2/hermes",  # all six WAL by the application's default (2026-10-07)
+        "ace2/open_webui",  # webui.db WAL by default; vector_db/chroma.sqlite3 is
+        #                     `delete` (2026-10-07) and Open WebUI exposes no
+        #                     setting for it, so like Authelia it rests on the
+        #                     capture's timeout+retry.
     }
     # n8n and authelia are Kubernetes PVCs, declared under `vps` because that is
     # the host whose backup unit captures them — the key is the node, not the

@@ -121,13 +121,17 @@ def test_the_watcher_policy_names_exactly_the_backup_buckets_read_only() -> None
 
 
 def test_the_live_declaration_lists_no_node_until_the_migration_sitting() -> None:
-    """PR 4a changes nothing live: every node stays in the shared bucket until its copy is verified."""
-    assert own_bucket_nodes(COMMON) == frozenset()
+    """Every node with a copy in the shared bucket stays there until that copy is verified.
+
+    ace2 is the exception by birth, not by migration: its first ship went to its
+    own bucket (spec AI-009 AC7), so it never had a shared copy to verify.
+    """
+    assert own_bucket_nodes(COMMON) == frozenset({"ace2"})
 
 
 def test_a_declared_node_that_backs_nothing_up_is_refused() -> None:
-    with pytest.raises(ValueError, match="ace2"):
-        own_bucket_nodes(_declared(["ace2"]))
+    with pytest.raises(ValueError, match="phantom"):
+        own_bucket_nodes(_declared(["phantom"]))
 
 
 # ── backup_destination: the repository and the secrets each node uses ─────────

@@ -17,11 +17,11 @@ from __future__ import annotations
 
 import pathlib
 
+import pytest
 import yaml
 
-import pytest
-
-from toolkit.features.backup_destination import WATCHER_TARGETS_PATH, render_watcher_targets
+from toolkit.features.backup_destination import WATCHER_TARGETS_PATH, own_bucket_nodes, render_watcher_targets
+from toolkit.features.r2_tfvars import node_bucket
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 COMMON = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
@@ -57,9 +57,14 @@ def test_the_vps_targets_its_real_repository() -> None:
 
 
 def test_every_repository_is_a_restic_s3_url_in_the_backup_bucket() -> None:
+    """In the shared bucket, or at the root of the node's own once it is there."""
+    own = own_bucket_nodes(COMMON)
     for node, row in _rows(render_watcher_targets(COMMON)).items():
         assert row[0].startswith("s3:https://"), node
-        assert f"/{COMMON['backup']['r2']['bucket']}/" in row[0], node
+        if node in own:
+            assert row[0].endswith(f"/{node_bucket(node)}"), node
+        else:
+            assert f"/{COMMON['backup']['r2']['bucket']}/" in row[0], node
 
 
 def test_a_new_source_changes_the_render() -> None:

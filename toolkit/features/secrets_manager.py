@@ -529,6 +529,20 @@ SECRET_CATALOG: list[SecretSpec] = [
     # AUDIT dimension — which environment must HAVE this secret — not the file it
     # sits in (ANSIBLE-033).
     SecretSpec(
+        key_path="apps.services.observability.uptime_kuma.push_tokens.ops_backup_node_ace2",
+        description="Uptime Kuma push token for ace2's node-path backup heartbeat (on-demand)",
+        kind=SecretKind.RANDOM_TOKEN,
+        services=("uptime-kuma", "node-backup"),
+        format_hint="opaque URL-safe token; the push endpoint's only credential",
+        rotate_note=(
+            "Rotate here, then `make monitoring-apply` so Kuma expects the new token, then "
+            "re-run `make backup ENV=prod` so ace2 sends it. Order matters: the node keeps "
+            "posting the old token until it is re-provisioned, and Kuma answers 404 — which "
+            "reads as a missed heartbeat and pages after the 6h window."
+        ),
+        envs=("prod",),
+    ),
+    SecretSpec(
         key_path="apps.services.observability.uptime_kuma.push_tokens.ops_backup_node_beelink",
         description="Uptime Kuma push token for beelink's node-path backup heartbeat (on-demand)",
         kind=SecretKind.RANDOM_TOKEN,
@@ -1281,6 +1295,7 @@ SECRET_CATALOG: list[SecretSpec] = [
     ),
     # BACKUP-057 PR 3: one pair and one password per backup.sources node. Nothing
     # reads them until PR 4 moves each consumer onto its node's own bucket.
+    *_backup_node_specs("ace2"),
     *_backup_node_specs("beelink"),
     *_backup_node_specs("rpi3"),
     *_backup_node_specs("rpi4"),

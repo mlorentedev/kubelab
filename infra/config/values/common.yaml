@@ -2069,12 +2069,14 @@ backup:
     repo_prefix: "s3:https://76967f5ede1ce50efce34d90b7e94958.r2.cloudflarestorage.com/kubelab-backups"
     # The nodes already moved to a bucket of their own (BACKUP-057), named
     # `kubelab-backup-<node>` and written with that node's own pair and restic
-    # password. A node joins only at the migration sitting, after its copy is
-    # verified, in the same change that updates its `repository_ids` entry.
+    # password. An existing node joins only at the migration sitting, after its
+    # copy is verified, in the same change that updates its `repository_ids`
+    # entry. A new node is born here instead (ace2, 2026-10-07): it never had a
+    # copy in the shared bucket, so there is nothing to migrate.
     # Every consumer resolves through this list (backup_destination.node_repository,
     # backup.yml), so no other edit moves a node. Absent from it: the shared
     # bucket above, with the shared pair and password.
-    own_bucket_nodes: []
+    own_bucket_nodes: [ace2]
     # Pinned static binary (BACKUP-044 Part 2), same idiom as k3s_version:
     # get_url + a checksum verified against upstream's own SHA256SUMS, not a
     # floating "latest" download. Arch is resolved per node at Ansible run
@@ -2217,6 +2219,39 @@ backup:
         tier: 3
 
   sources:
+    # ace2's agent tooling (ADR-068, spec AI-009 AC7), measured 2026-10-07. The
+    # node is on-demand, so it ships when it is up, like the Beelink. Both paths
+    # are the agent_stack role's own (tests/test_ace2_backup_sources.py).
+    ace2:
+      open_webui:
+        volume: open-webui-data
+        # webui.db is WAL; Chroma's file is `delete` mode, which `.backup` takes
+        # as consistently (tests/test_sqlite_sources_are_wal.py).
+        sqlite: [webui.db, vector_db/chroma.sqlite3]
+        exclude:
+          cache:
+            reason: "embedding and whisper models (1.07 GB of the volume's 1.1 GB), downloaded again on first use"
+            tier: 3
+      hermes:
+        path: /var/lib/hermes-kubelab/data
+        # The data directory's `.env` is Hermes's own tool settings (11 keys, no
+        # credential, read 2026-10-07); the role's secrets live beside it, in
+        # hermes.env, and are rebuilt from SOPS.
+        sqlite:
+          - state.db
+          - kanban.db
+          - shared-state.db
+          - response_store.db
+          - runs_idempotency.db
+          - cron/executions.db
+        exclude:
+          bin:
+            reason: "the tirith release binary (38 MB), restorable from upstream"
+            tier: 3
+          home/.cache:
+            reason: "package and tool caches (26 MB), rebuilt on use"
+            tier: 3
+
     beelink:
       gitea:
         # Bind mount, NOT a Docker volume: `docker volume ls` on this node
