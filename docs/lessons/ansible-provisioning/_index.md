@@ -1,9 +1,10 @@
 # Ansible roles and node provisioning
 
-55 lessons, newest first. Back to [all categories](../_index.md).
+56 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 530 | [An ignore rule for Ansible Vault files swallows a task file named `vault.yml`](lesson-530-an-ignore-rule-for-ansible-vault-files-swallows-a-task-file-named-vault-yml.md) | 2026-10-07 |
 | 519 | [A remote `~` is the home of whoever runs the task, so a role that uses one has a result per caller](lesson-519-a-remote-tilde-is-the-home-of-whoever-runs-the-task.md) | 2026-10-04 |
 | 506 | [A health check against `localhost` fails once the port binds to the tailnet, and only on the first provision after](lesson-506-a-health-check-against-localhost-fails-once-the-port-binds-to-the-tailnet.md) | 2026-10-02 |
 | 497 | [A folded YAML scalar keeps `'\n'` as two characters, so a guard built on it can loop over nothing](lesson-497-a-folded-yaml-scalar-keeps-backslash-n-so-a-guard-can-loop-over-nothing.md) | 2026-10-01 |

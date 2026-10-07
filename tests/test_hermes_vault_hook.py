@@ -105,7 +105,7 @@ def test_the_zone_comes_from_the_ssot() -> None:
 
 
 def test_the_agent_cannot_edit_the_hook() -> None:
-    tasks = yaml.safe_load((ROLE / "tasks/vault.yml").read_text())
+    tasks = yaml.safe_load((ROLE / "tasks/vault_zone.yml").read_text())
     renders = [t for t in tasks if (t.get("ansible.builtin.template") or {}).get("src") == "pre-commit-zone.sh.j2"]
     assert len(renders) == 1
     spec = renders[0]["ansible.builtin.template"]

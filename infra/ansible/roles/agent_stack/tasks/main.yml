@@ -228,5 +228,5 @@
   tags: [agent_stack]
 
 - name: Install the agent's vault zone hook
-  ansible.builtin.import_tasks: vault.yml
+  ansible.builtin.import_tasks: vault_zone.yml
   tags: [agent_stack]

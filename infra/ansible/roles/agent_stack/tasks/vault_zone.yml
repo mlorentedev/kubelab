@@ -1,0 +1,23 @@
+---
+# =============================================================================
+# The agent's vault zone (ADR-068 D4, spec AI-009 AC6). The hook its clone
+# commits through, owned by root outside the agent's home, so the agent can
+# neither edit nor replace it. The clone itself, and `core.hooksPath` on it,
+# land with the vault token (spec PR 4).
+# =============================================================================
+
+- name: Create the vault hooks directory
+  ansible.builtin.file:
+    path: "{{ agent_stack_vault_hooks }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the vault zone hook
+  ansible.builtin.template:
+    src: pre-commit-zone.sh.j2
+    dest: "{{ agent_stack_vault_hooks }}/pre-commit"
+    owner: root
+    group: root
+    mode: "0755"
