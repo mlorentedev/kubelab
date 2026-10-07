@@ -1,5 +1,5 @@
 ---
-id: lesson-531-a-wildcard-cors-origin-with-credentials-echoes-every-origin-and-internal-is-one-site
+id: lesson-532-a-wildcard-cors-origin-with-credentials-echoes-every-origin-and-internal-is-one-site
 type: lesson
 status: active
 created: "2026-10-07"
