@@ -4,34 +4,34 @@
     "behavior": "AC1: every watcher run logs a numeric stored_bytes for all four nodes and for the fleet line",
     "verification": "make watcher-run NAME=r2-backup-watcher ENV=prod 2>&1 | grep -c '\"stored_bytes\":[0-9]' | grep -qx 5",
     "state": "pending",
-    "evidence": ""
+    "evidence": "2026-10-07T06:10Z prod: 5 lines with numeric stored_bytes (4 nodes + fleet); earlier run 06:07Z Job 52 s, fleet 720 329 698, all healthy:1; staging 04:06Z idem"
   },
   {
     "id": "BACKUP-075-f2",
     "behavior": "AC2: the fleet stored_bytes is the sum of each named bucket's root, each bucket once",
     "verification": "poetry run pytest --no-cov -q tests/test_r2_backup_watcher_size.py::test_it_sizes_each_bucket_once_and_each_node_prefix tests/test_r2_backup_watcher_probe.py::test_each_node_reports_its_prefix_and_the_fleet_its_buckets",
     "state": "pending",
-    "evidence": ""
+    "evidence": "2026-10-07 on master bb0e0e86: 4 passed"
   },
   {
     "id": "BACKUP-075-f3",
     "behavior": "AC3: the probe never walks snapshots to size them, and logs each listing's duration",
     "verification": "poetry run pytest --no-cov -q tests/test_r2_backup_watcher_probe.py::test_the_probe_never_walks_the_snapshots_to_size_them tests/test_r2_backup_watcher_probe.py::test_each_node_logs_how_long_its_listing_took",
     "state": "pending",
-    "evidence": ""
+    "evidence": "2026-10-07 on master bb0e0e86: 4 passed; mutation adding a stats call to probe.sh failed it under sh and busybox sh"
   },
   {
     "id": "BACKUP-075-f4",
     "behavior": "AC4: a failed listing is null for what it measures, never unhealthy, and the sizing step always exits 0",
     "verification": "poetry run pytest --no-cov -q tests/test_r2_backup_watcher_size.py tests/test_r2_backup_watcher_probe.py -k 'null or hung or sizes_file or credentials or unreadable_targets'",
     "state": "pending",
-    "evidence": ""
+    "evidence": "2026-10-07 on master bb0e0e86: 26 passed"
   },
   {
     "id": "BACKUP-075-f5",
     "behavior": "AC5: no emitter or reader of the watcher still says raw_bytes",
     "verification": "poetry run pytest --no-cov -q tests/test_r2_backup_alerting_rules.py",
     "state": "pending",
-    "evidence": ""
+    "evidence": "2026-10-07 on master bb0e0e86: 10 passed"
   }
 ]
