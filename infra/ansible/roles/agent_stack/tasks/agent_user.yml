@@ -227,6 +227,24 @@
   check_mode: false
   failed_when: _agent_stack_egress_refused.rc == 0
 
+# A port published on this node's own tailnet address is DNATed before the
+# filter hook, which a rule on `daddr` let through (2026-10-07). Open WebUI is
+# up by now: the role deploys it before this file.
+- name: Try this node's own published port from a container of the agent's daemon
+  ansible.builtin.command:
+    cmd: >-
+      docker run --rm {{ agent_stack_agent_probe_image }}
+      nc -z -w 3 {{ tailscale_ip }} {{ agent_stack_webui.default_port }}
+  become_user: "{{ agent_stack_agent_user }}"
+  environment:
+    DOCKER_HOST: "{{ agent_stack_agent_docker_host }}"
+    XDG_RUNTIME_DIR: "/run/user/{{ _agent_stack_agent_uid }}"
+  register: _agent_stack_egress_refused_local
+  changed_when: false
+  check_mode: false
+  failed_when: _agent_stack_egress_refused_local.rc == 0
+  when: agent_stack_webui_configured | bool
+
 - name: Try the internet from a container of the agent's daemon
   ansible.builtin.command:
     cmd: >-

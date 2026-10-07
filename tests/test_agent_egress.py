@@ -64,8 +64,18 @@ def _rules(table: str) -> list[str]:
 
 def test_both_tailnet_ranges_are_refused_to_the_agents_uid() -> None:
     rules = _rules(_render(TABLE))
-    assert any(f"meta skuid {UID} ip daddr {RANGES[0]}" in r and "reject" in r for r in rules), rules
-    assert any(f"meta skuid {UID} ip6 daddr {RANGES[1]}" in r and "reject" in r for r in rules), rules
+    assert any(f"meta skuid {UID} ct original ip daddr {RANGES[0]}" in r and "reject" in r for r in rules), rules
+    assert any(f"meta skuid {UID} ct original ip6 daddr {RANGES[1]}" in r and "reject" in r for r in rules), rules
+
+
+def test_the_rule_judges_the_destination_before_nat() -> None:
+    """A port another daemon publishes on this node's tailnet address is DNATed in
+    nat OUTPUT (priority -100), before a filter chain at priority 0 runs, so a plain
+    `daddr` sees the container's address and lets it through. Measured on ace2
+    2026-10-07: Open WebUI at ace2:3080 answered the agent's gateway under a
+    `daddr` rule. conntrack's original tuple is the address the agent asked for."""
+    for rule in _rules(_render(TABLE)):
+        assert "ct original" in rule, rule
 
 
 def test_the_rule_matches_the_uid_number_not_the_name() -> None:
@@ -112,8 +122,10 @@ def test_the_rule_is_loaded_before_the_agents_user_manager_is_started() -> None:
 
 def test_every_provision_proves_the_tailnet_refused_and_the_internet_open() -> None:
     tasks = _agent_tasks()
-    probes = [t for t in tasks if "agent_stack_egress_probe" in str(t.get("ansible.builtin.command", ""))]
-    assert len(probes) == 2, "one probe toward the tailnet, one control toward the internet"
+    probes = [t for t in tasks if "nc -z" in str(t.get("ansible.builtin.command", ""))]
+    assert len(probes) == 3, "the VPS's tailnet address, this node's own published port, the internet control"
+    local = [p for p in probes if "{{ tailscale_ip }} {{ agent_stack_webui.default_port }}" in p["ansible.builtin.command"]["cmd"]]
+    assert len(local) == 1 and "rc == 0" in local[0]["failed_when"], "the DNAT case must be refused"
     for probe in probes:
         assert probe.get("check_mode") is False and probe.get("changed_when") is False
         assert probe.get("become_user") == "{{ agent_stack_agent_user }}"
