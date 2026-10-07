@@ -1701,6 +1701,7 @@ backup-migrate:
 	@test -n "$(NODE)" || (echo "Usage: make backup-migrate NODE=<node> ENV=prod [CHECK=1]" && exit 1)
 	@test "$(NODE)" != "all" || (echo "backup-migrate takes exactly one node, never NODE=all" && exit 1)
 	@test "$(ENV)" = prod || (echo "backup-migrate needs ENV=prod, got '$(ENV)'" && exit 1)
+	@test -z "$(CHECK)" -o "$(CHECK)" = 1 || (echo "CHECK takes 1 or nothing, got '$(CHECK)'" && exit 1)
 	@$(TOOLKIT) backup migrate --node $(NODE) --env $(ENV) $(if $(CHECK),--check)
 
 # One level above backup-verify-destination: that one proves the BUCKET works,

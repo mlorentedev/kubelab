@@ -300,3 +300,16 @@ def test_the_make_target_is_one_node_prod_only_and_threads_the_dry_run() -> None
     assert '"$(ENV)" = prod' in recipe
     assert '"$(NODE)" != "all"' in recipe
     assert "$(if $(CHECK),--check)" in recipe
+    # Any other value is refused: CHECK=0 must not read as a dry run, and CHECK=yes
+    # must not read as the real one.
+    assert """test -z "$(CHECK)" -o "$(CHECK)" = 1 ||""" in recipe
+
+
+@pytest.mark.parametrize(("check", "refused"), [("0", True), ("yes", True), ("1", False), ("", False)])
+def test_the_make_target_refuses_an_ambiguous_check(check: str, refused: bool) -> None:
+    import subprocess
+
+    recipe = (REPO / "Makefile").read_text().split("\nbackup-migrate:\n", 1)[1].split("\n\n", 1)[0]
+    guard = next(line for line in recipe.splitlines() if "CHECK takes" in line).strip().lstrip("@")
+    proc = subprocess.run(["sh", "-c", guard.replace("$(CHECK)", check)], capture_output=True, check=False)
+    assert (proc.returncode != 0) is refused

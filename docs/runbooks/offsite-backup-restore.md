@@ -330,9 +330,11 @@ What to expect, and what to do:
 - **If a step fails after the declaration,** the node is declared and not pinned. Fix
   the cause, then finish by hand: run the failed target and the ones after it
   (`make backup ENV=prod`, `make backup-repo-reinit NODE=<node> DEST=r2 ENV=prod`,
-  `make backup-node NODE=<node> ENV=prod`). Then pin the id that
-  `restic cat config` reports, through the PR. Re-running `backup-migrate` refuses a
-  declared node.
+  `make backup-node NODE=<node> ENV=prod`). Then finish step 6 too: pin the id
+  that `restic cat config` reports in `backup.r2.repository_ids`, run
+  `make sync-r2-watcher-targets`, and commit both files in the PR. Without the
+  regeneration, the watcher keeps reading the old prefix. Re-running
+  `backup-migrate` refuses a declared node.
 - **If the copy step fails,** re-run the migration: the copy resumes, and a
   re-copy duplicates nothing.
 
