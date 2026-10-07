@@ -27,13 +27,16 @@ which tailnet identity its packets carry. Only ace1's LAN address timed out.
 (`terminal.docker_network: false`). Measured afterwards: `NetworkMode=none`,
 and `connect_ex` to the VPS's `:22` returned 101. The gateway still leaves as
 ace2. PR 3b must move it into the sidecar's network namespace or drop its egress
-to `100.64.0.0/10`.
+to `100.64.0.0/10`. It dropped it: on 2026-10-07 an nftables rule on the agent's
+uid refused both tailnet ranges to everything its daemon runs. Its first
+version missed a port DNATed on ace2 itself (lesson-527).
 
 **Rule**: On a node that is a tailnet member, treat every container's egress as
 that node's tailnet identity, never assume Docker's network is outside the
-tailnet. There are two separate remedies. A different network namespace with a
-userspace tailscale sidecar gives the workload its own identity, which the ACL
-can then scope. Dropping `100.64.0.0/10` from its egress gives it no identity
+tailnet. There are two separate remedies. A tailscale sidecar gives the
+workload its own identity, which the ACL can then scope: in kernel mode by
+sharing its network namespace, in userspace mode (`TS_USERSPACE=true`, no TUN
+device) only for what goes through its SOCKS5 or HTTP proxy. Dropping `100.64.0.0/10` from its egress gives it no identity
 at all: it keeps the tailnet out of reach, but the ACL never sees it. Measure
 either one with a TCP connect from the container itself.
 

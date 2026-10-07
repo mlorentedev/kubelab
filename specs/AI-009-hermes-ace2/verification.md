@@ -67,7 +67,9 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - **Rule**: table `inet agent_egress`, `meta skuid 999 ct original ip daddr 100.64.0.0/10 reject` and the same for `fd7a:115c:a1e0::/48`, loaded by `agent-stack-egress.service`, which `user@999.service` requires (`systemctl list-dependencies --reverse`).
 - **The DNAT gap** (lesson-527): with a plain `daddr` rule, every tailnet destination was refused except ace2's own Open WebUI at `100.64.0.5:3080`, which the system daemon DNATs before the filter hook. With `ct original`, it is refused too.
 - **After**, `connect_ex` from the gateway container `hermes-kubelab`: the VPS's `:22`, `:443` and `:6443`, ace1's `:6443`, the Beelink's `:443`, ace2's `:3080` and MagicDNS `:53` all return 11 (timeout: slirp4netns does not relay the ICMP reject). The VPS's public `:443` returns 0. `api.nan.builders` resolves through the public resolvers. The Hermes API answers 200 on `127.0.0.1:8642`.
-- **Provision**: `changed=6` then `changed=0` (prod config), then `changed=2` for the NAT fix, `changed=0`, and `changed=0` with `ENV=staging`: the two render the same role. The three probes run at every provision.
+- **Provision**: `changed=6` then `changed=0` (prod config), then `changed=2` for the NAT fix, `changed=0`, and `changed=0` with `ENV=staging`: the two render the same role. The three probes run at every provision; the one on ace2's own published port runs only when Open WebUI is configured.
+- **Fail closed, measured**: `systemctl stop agent-stack-egress` left `user@999` and the rule both `inactive`, with no `agent_egress` table. `systemctl start user@999` brought the rule back (`active`, 2 rules) and the gateway with it: the Hermes API answered 200 about 10 s later, with no provision. The next provision reported `changed=0`.
+- **DNS**: the gateway was recreated with `HostConfig.Dns=[1.1.1.1 8.8.8.8]`, and a lookup took 0.02 s.
 
 ## Decisions made during implementation
 
