@@ -10,6 +10,11 @@ tags: [kubelab, process-method, git, mutation-testing, pre-commit]
 
 # A WIP commit that a hook refused turns the safe restore back into the destructive one
 
+> **Use `make mutate` (#2104) instead of the procedure below.** It refuses a
+> dirty tree, keeps the file's bytes in memory and writes them back in a
+> `finally`, so the restore never depends on a commit having landed. It exits 0
+> only when the test failed against the mutant.
+
 **Context**: APP-CONFIG-016 (#1871). The n8n probe had just gone green, and a
 mutation was needed to show that its description check could fail. The
 procedure from lesson-365 was followed: commit, mutate, `git checkout HEAD --`.
