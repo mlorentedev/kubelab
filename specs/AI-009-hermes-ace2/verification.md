@@ -61,6 +61,16 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - **The image takes `config.yaml`**: after the first start, `$HERMES_HOME/config.yaml` was `534287:534287 640` (the image's user through the subuid map), and a migration may rewrite it. The config is now rendered beside the data dir and mounted read-only over that path; the gateway logs `[config-migrate] ERROR: Read-only file system` and continues.
 - **R7, the sandbox's tailnet reach**: from the agent's daemon, before the change, a container's TCP connects to the VPS's `:22` and `:6443`, ace1's `:6443`, the Beelink's `:3000` and ace2's `:3080` all opened; `1.1.1.1:443` opened; ace1's LAN address timed out. After `docker_network: false`, the sandbox Hermes started was `NetworkMode=none` and `connect_ex` to the VPS's `:22` returned 101 (network unreachable).
 
+### PR 3b-1 (`feat/ai009-hermes-egress`), ace2, 2026-10-07
+
+- **Before**: from a busybox container of the agent's daemon, `nc -z` to the VPS's tailnet `:443` and to its public `:443` both returned 0.
+- **Rule**: table `inet agent_egress`, `meta skuid 999 ct original ip daddr 100.64.0.0/10 reject` and the same for `fd7a:115c:a1e0::/48`, loaded by `agent-stack-egress.service`, which `user@999.service` requires (`systemctl list-dependencies --reverse`).
+- **The DNAT gap** (lesson-527): with a plain `daddr` rule, every tailnet destination was refused except ace2's own Open WebUI at `100.64.0.5:3080`, which the system daemon DNATs before the filter hook. With `ct original`, it is refused too.
+- **After**, `connect_ex` from the gateway container `hermes-kubelab`: the VPS's `:22`, `:443` and `:6443`, ace1's `:6443`, the Beelink's `:443`, ace2's `:3080` and MagicDNS `:53` all return 11 (timeout: slirp4netns does not relay the ICMP reject). The VPS's public `:443` returns 0. `api.nan.builders` resolves through the public resolvers. The Hermes API answers 200 on `127.0.0.1:8642`.
+- **Provision**: `changed=6` then `changed=0` (prod config), then `changed=2` for the NAT fix, `changed=0`, and `changed=0` with `ENV=staging`: the two render the same role. The three probes run at every provision; the one on ace2's own published port runs only when Open WebUI is configured.
+- **Fail closed, measured**: `systemctl stop agent-stack-egress` left `user@999` and the rule both `inactive`, with no `agent_egress` table. `systemctl start user@999` brought the rule back (`active`, 2 rules) and the gateway with it: the Hermes API answered 200 about 10 s later, with no provision. The next provision reported `changed=0`.
+- **DNS**: the gateway was recreated with `HostConfig.Dns=[1.1.1.1 8.8.8.8]`, and a lookup took 0.02 s.
+
 ## Decisions made during implementation
 
 Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
@@ -74,6 +84,7 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 - 2026-10-06, PR 3a: the sandbox image is `python:3.13.16-trixie`, not Hermes's default `nikolaik/python-nodejs:python3.11-nodejs20`, because that image is rebuilt daily under the same tag and cannot be pinned by tag (Renovate's coverage test reads tags only).
 - 2026-10-06, PR 3a: `approvals.mode: manual` prompts for nothing the sandbox runs, because v2026.9.24 skips command guards on an isolated docker backend. The deny list is the guard, and the provision proves it on the running gateway. AC3's drill is re-scoped in `tasks.md`.
 - 2026-10-06, PR 3a: the sandbox has no network until PR 3b gives it its own tailnet identity, because Docker's egress from ace2 reaches the tailnet as ace2 (measured above), which R7 assumed it did not.
+- 2026-10-07, PR 3b (operator): the agent's tailnet egress is closed on the host by uid, not by moving the gateway into the sidecar's namespace. A `TS_USERSPACE=true` sidecar has no TUN device, so a container sharing its namespace still reaches `100.64.0.0/10` through slirp4netns as ace2; only the sidecar's SOCKS5/HTTP proxy carries `tag:hermes`. The sidecar stays userspace (PR 3b-2), and a job that needs a tailnet destination goes through its proxy. Hermes's containers resolve through public resolvers only, since MagicDNS is inside the refused range.
 - 2026-10-06, PR 1c (operator): the declared viewer tier is `pending`, Open WebUI's no-access role, so a demotion out of `users` removes access instead of leaving a `user`.
 - 2026-10-06, PR 1c: the role's post-start probe and the monitor read `apps.services.ai.open_webui.health_path`, and `tests/test_hub_monitors.py` ties the monitor URL to the SSOT, so AI-010 (#2069) cannot move the address without moving the monitor.
 

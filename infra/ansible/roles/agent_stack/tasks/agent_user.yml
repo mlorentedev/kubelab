@@ -31,6 +31,42 @@
   ansible.builtin.set_fact:
     _agent_stack_agent_uid: "{{ _agent_stack_agent.uid }}"
 
+# On a tailnet node a container leaves as the node (lesson-525), so the agent's
+# user is refused the tailnet on the host, before its manager starts anything.
+- name: Render the rule that keeps the agent off the tailnet
+  ansible.builtin.template:
+    src: agent-egress.nft.j2
+    dest: "{{ agent_stack_egress_table }}"
+    owner: root
+    group: root
+    mode: "0644"
+  register: _agent_stack_egress_table
+
+- name: Render the unit that loads it
+  ansible.builtin.template:
+    src: agent-stack-egress.service.j2
+    dest: /etc/systemd/system/agent-stack-egress.service
+    owner: root
+    group: root
+    mode: "0644"
+  register: _agent_stack_egress_unit
+
+- name: Load the rule before the agent's user manager
+  ansible.builtin.systemd:
+    name: agent-stack-egress.service
+    enabled: true
+    state: started
+    daemon_reload: "{{ _agent_stack_egress_unit is changed }}"
+
+# Reload, never restart: the user manager requires this unit, so a restart
+# would take the agent's gateway down with it. Right after a first start the
+# reload loads the same table again, which is harmless.
+- name: Apply a changed rule in place
+  ansible.builtin.systemd:
+    name: agent-stack-egress.service
+    state: reloaded
+  when: _agent_stack_egress_table is changed or _agent_stack_egress_unit is changed
+
 - name: Keep the agent's home private
   ansible.builtin.file:
     path: "{{ agent_stack_agent_home }}"
@@ -172,6 +208,63 @@
       The user's cgroup lacks the cpu or memory controller: systemd delegates
       them through user@.service.
     success_msg: The agent's daemon enforces memory and CPU limits.
+
+# The rule is proven from where it matters, a container of the agent's daemon on
+# its default network: the VPS's tailnet address is refused, and the same
+# port at its public address answers, so a refusal cannot come from a dead
+# network. Before the rule, both connected (2026-10-07).
+- name: Try the tailnet from a container of the agent's daemon
+  ansible.builtin.command:
+    cmd: >-
+      docker run --rm {{ agent_stack_agent_probe_image }}
+      nc -z -w 3 {{ agent_stack_egress_probe_refused }} {{ agent_stack_egress_probe_port }}
+  become_user: "{{ agent_stack_agent_user }}"
+  environment:
+    DOCKER_HOST: "{{ agent_stack_agent_docker_host }}"
+    XDG_RUNTIME_DIR: "/run/user/{{ _agent_stack_agent_uid }}"
+  register: _agent_stack_egress_refused
+  changed_when: false
+  check_mode: false
+  failed_when: _agent_stack_egress_refused.rc == 0
+
+# A port published on this node's own tailnet address is DNATed before the
+# filter hook, which a rule on `daddr` let through (2026-10-07). `nc -z` fails
+# the same on a closed port as on a refused one, so the port is first proven
+# open from the host, as root, which the rule does not cover.
+- name: Prove this node's own published port answers outside the rule
+  ansible.builtin.wait_for:
+    host: "{{ tailscale_ip }}"
+    port: "{{ agent_stack_webui.default_port }}"
+    timeout: 60
+  when: agent_stack_webui_configured | bool
+
+- name: Try this node's own published port from a container of the agent's daemon
+  ansible.builtin.command:
+    cmd: >-
+      docker run --rm {{ agent_stack_agent_probe_image }}
+      nc -z -w 3 {{ tailscale_ip }} {{ agent_stack_webui.default_port }}
+  become_user: "{{ agent_stack_agent_user }}"
+  environment:
+    DOCKER_HOST: "{{ agent_stack_agent_docker_host }}"
+    XDG_RUNTIME_DIR: "/run/user/{{ _agent_stack_agent_uid }}"
+  register: _agent_stack_egress_refused_local
+  changed_when: false
+  check_mode: false
+  failed_when: _agent_stack_egress_refused_local.rc == 0
+  when: agent_stack_webui_configured | bool
+
+- name: Try the internet from a container of the agent's daemon
+  ansible.builtin.command:
+    cmd: >-
+      docker run --rm {{ agent_stack_agent_probe_image }}
+      nc -z -w 3 {{ agent_stack_egress_probe_open }} {{ agent_stack_egress_probe_port }}
+  become_user: "{{ agent_stack_agent_user }}"
+  environment:
+    DOCKER_HOST: "{{ agent_stack_agent_docker_host }}"
+    XDG_RUNTIME_DIR: "/run/user/{{ _agent_stack_agent_uid }}"
+  register: _agent_stack_egress_open
+  changed_when: false
+  check_mode: false
 
 # The protection is the dev user's home mode, not this list: a home with no
 # permission for others hides every file in it. The list is the evidence.

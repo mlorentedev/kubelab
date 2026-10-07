@@ -277,6 +277,13 @@
         agent_stack_nan_api_key: "{{ gitea_secrets.apps.services.automation.pr_agent.nan_api_key | default('') }}"
         agent_stack_agent_user: "{{ config.apps.services.ai.hermes_kubelab.user }}"
         agent_stack_agent_probe_image: "{{ config.apps.services.ai.hermes_kubelab.probe.image }}"
+        # The agent never reaches the tailnet as ace2 (lesson-525): both
+        # tailnet ranges are refused to its user, proven against the VPS.
+        agent_stack_tailnet_ranges:
+          - "{{ config.networking.tailscale_cidr }}"
+          - "{{ config.networking.ipv6_prefix }}"
+        agent_stack_egress_probe_refused: "{{ config.networking.vps.tailscale_ip }}"
+        agent_stack_egress_probe_open: "{{ config.networking.vps.public_ip }}"
         agent_stack_hermes: "{{ config.apps.services.ai.hermes_kubelab }}"
         # What the agent must fail to read (ADR-058 D3, spec AC2): the dev
         # user's credentials, and the system daemon's socket, which is root.

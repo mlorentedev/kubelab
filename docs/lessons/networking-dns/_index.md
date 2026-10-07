@@ -1,9 +1,10 @@
 # DNS, VPN mesh and host networking
 
-48 lessons, newest first. Back to [all categories](../_index.md).
+49 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 527 | [An output filter on `daddr` misses a port that Docker publishes on the same host](lesson-527-a-filter-on-daddr-misses-a-port-published-on-the-same-host.md) | 2026-10-07 |
 | 525 | [A container on a tailnet node reaches the tailnet as that node](lesson-525-a-container-on-a-tailnet-node-leaves-as-that-node.md) | 2026-10-06 |
 | 472 | [A CoreDNS regex rewrite without `answer auto` resolves on musl and fails on glibc](lesson-472-a-coredns-rewrite-without-answer-auto-resolves-on-musl-only.md) | 2026-09-27 |
 | 449 | [A declared public domain nothing serves becomes a ticket to publish it](lesson-449-a-declared-public-domain-nothing-serves-becomes-a-ticket-to-publish-it.md) | 2026-09-02 |
