@@ -211,6 +211,25 @@
   when: node_backup_location == 'on-demand'
   notify: Reload systemd (node_backup)
 
+# BACKUP-052 moved the receipt and the marker out of /var/log. Every boot's
+# read-back clears both after reading them, so a file still at an old path has
+# NOT been read: a shutdown wrote it and no boot capture has looked yet.
+# Deleting it would turn "ran and did not ship" into the benign "no shutdown
+# sequence ran", so it is moved to where the next read-back looks. Only into an
+# empty slot: a file already at the new path was written by a shutdown that ran
+# this revision, so it is newer. The old one is then left where it is, read by
+# nothing, rather than deleted: no task here can tell whether it was read, and
+# an orphan file costs less than lost evidence.
+- name: Move an unread shutdown receipt or marker to its BACKUP-052 path
+  command: mv "{{ item.old }}" "{{ item.new }}"
+  args:
+    creates: "{{ item.new }}"
+    removes: "{{ item.old }}"
+  loop:
+    - { old: /var/log/node-backup-shutdown.receipt, new: "{{ node_backup_shutdown_receipt }}" }
+    - { old: /var/log/node-backup-shutdown.attempted, new: "{{ node_backup_shutdown_attempt_marker }}" }
+  when: node_backup_location == 'on-demand'
+
 # Reload now rather than at end-of-play: the enable/start tasks below need
 # systemd to have already loaded whatever changed above, in this same run —
 # `systemctl start` (unlike `enable`) acts on the daemon's loaded definition,

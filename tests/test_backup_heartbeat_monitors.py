@@ -30,6 +30,7 @@ import os
 import pathlib
 import shutil
 import subprocess
+from typing import Any
 
 import pytest
 import yaml
@@ -459,3 +460,172 @@ def test_the_receipt_survives_the_capture_that_wipes_staging() -> None:
         f"the receipt lives under {staging}, which capture wipes on every run — the "
         f"boot capture would delete the evidence before reading it"
     )
+
+
+_MAINTENANCE_SCRIPT = REPO / "infra/ansible/roles/node_maintenance/templates/kubelab-maintenance.sh.j2"
+
+
+_DELETERS = {"rm", "find", "xargs", "unlink", "shred", "-delete", "truncate", "rsync", "dd", "mv"}
+_CHAINS = {"&&", "||", "|", ";"}
+
+
+def _swept_roots(script: str) -> tuple[list[str], list[str]]:
+    """The directories a shell script deletes from, and the lines it cannot read.
+
+    Only one form is read: a statement that starts with `find` or `rm`, with
+    literal absolute roots and nothing chained after it but `|| true`. Every
+    root of a `find` counts, since `-delete` and `-exec rm` act below all of
+    them, and `rm` counts in any flag form, with `--` or quotes. Any other line
+    that names a command in `_DELETERS` (`sudo find`, `xargs rm`, `cd /x && rm`,
+    a bare `truncate`, a variable or glob root) is returned as unreadable rather
+    than skipped, so the guard fails closed on a sweep it cannot see. A
+    destroyer outside that set (`sed -i`, a redirect) is not seen; the set names
+    what the guard enforces. Quoted text is one token, so an `echo` that
+    mentions `rm` is not a deletion.
+    """
+    import shlex
+
+    roots: list[str] = []
+    unreadable: list[str] = []
+    for statement in script.replace("\\\n", " ").splitlines():
+        line = statement.strip()
+        if line.startswith("#"):
+            continue
+        try:
+            tokens = shlex.split(line)
+        except ValueError:
+            tokens = line.split()
+        if not _DELETERS & set(tokens):
+            continue
+        tail = tokens[:]
+        while tail and tail[-2:] == ["||", "true"]:
+            tail = tail[:-2]
+        tail = [t for t in tail if not (">" in t and t.lstrip("0123456789&").startswith(">"))]
+        execs = "-exec" in tail or "-execdir" in tail
+        chained = [t for t in tail if t in _CHAINS and not (t == ";" and execs)]
+        if not tail or tail[0] not in ("find", "rm") or chained:
+            unreadable.append(line)
+            continue
+        args: list[str] = []
+        for token in tail[1:]:
+            if tail[0] == "find" and token.startswith(("-", "(", "!")):
+                break
+            if tail[0] == "rm" and token.startswith("-"):
+                continue
+            args.append(token)
+        args = [arg.removesuffix("/*") for arg in args]
+        # A glob anywhere else expands to paths no prefix comparison can see.
+        if not args or any(not a.startswith("/") or "$" in a or any(c in a for c in "*?[") for a in args):
+            unreadable.append(line)
+            continue
+        roots += [arg.rstrip("/") or "/" for arg in args]
+    return roots, unreadable
+
+
+def test_the_sweep_parser_reads_every_form_and_refuses_what_it_cannot() -> None:
+    roots, unreadable = _swept_roots(
+        "rm -fr /a/one\n"
+        "rm -rf -- '/a/two'\n"
+        "rm -r -f /a/three/*\n"
+        "find /b/one /b/two -type f -delete 2>/dev/null || true\n"
+        "find /b/three -maxdepth 1 \\(\\\n"
+        "    -name 'x.*' \\\n"
+        "\\) -delete 2>/dev/null || true\n"
+        "find /b/four -name y -exec truncate -s 0 {} \\; 2>/dev/null || true\n"
+        'echo "then: docker rm -f <name>"\n'
+        "# rm -rf /commented/out\n"
+        'find "$DIR" -delete\n'
+        "rm -rf $STAGING\n"
+        "sudo find /c/one -delete\n"
+        "ls /c/two | xargs rm -rf\n"
+        "cd /c/three && rm -f x\n"
+        "find /b/one -delete && rm -rf /c/four\n"
+        "rm -f /c/five/*.receipt\n"
+        "find /c/*/six -delete\n"
+        "truncate -s 0 /c/seven\n"
+        "rsync -a --delete /empty/ /c/eight/\n"
+    )
+    assert roots == ["/a/one", "/a/two", "/a/three", "/b/one", "/b/two", "/b/three", "/b/four"]
+    assert unreadable == [
+        'find "$DIR" -delete',
+        "rm -rf $STAGING",
+        "sudo find /c/one -delete",
+        "ls /c/two | xargs rm -rf",
+        "cd /c/three && rm -f x",
+        "find /b/one -delete && rm -rf /c/four",
+        "rm -f /c/five/*.receipt",
+        "find /c/*/six -delete",
+        "truncate -s 0 /c/seven",
+        "rsync -a --delete /empty/ /c/eight/",
+    ]
+
+
+def _maintenance_swept_roots() -> list[str]:
+    """Every directory the maintenance script deletes from; fails on a root it cannot read."""
+    roots, unreadable = _swept_roots(_MAINTENANCE_SCRIPT.read_text(encoding="utf-8"))
+    assert not unreadable, f"the maintenance script deletes from roots this guard cannot read: {unreadable}"
+    return roots
+
+
+@pytest.mark.parametrize("key", ["node_backup_shutdown_receipt", "node_backup_shutdown_attempt_marker"])
+def test_the_shutdown_evidence_is_in_a_directory_the_role_owns(key: str) -> None:
+    """Absence is this control's signal, so nothing else may be able to cause it (BACKUP-052).
+
+    Both files used to live in /var/log and survived the maintenance cleanup
+    only because none of its patterns happened to match them. A new pattern, a
+    logrotate rule or a rename ending in `.log` would delete them, and a
+    deleted receipt reads exactly like a shutdown that did not ship. So they
+    live in the directory the role creates root-only, which no sweep names.
+    """
+    defaults = yaml.safe_load((REPO / "infra/ansible/roles/node_backup/defaults/main.yml").read_text())
+    path = str(defaults[key])
+    owned = str(defaults["node_backup_repository_id_dir"])
+    assert pathlib.PurePosixPath(path).parent == pathlib.PurePosixPath(owned), (
+        f"{key} is {path}, outside {owned}, the root-only directory the role creates"
+    )
+    roots = _maintenance_swept_roots()
+    # Every root the script names today, so a parser that stopped seeing one fails here.
+    assert {"/var/log", "/tmp", "/var/tmp", "/var/lib/apt/lists"} <= set(roots), roots
+    swept = [r for r in roots if path == r or path.startswith(r.rstrip("/") + "/")]
+    assert not swept, f"{key} is under {swept}, which the maintenance cleanup deletes from"
+
+
+def test_the_role_moves_unread_evidence_from_the_old_paths_and_never_deletes_it() -> None:
+    """A file still at an old path has not been read, so it is moved, not deleted (BACKUP-052).
+
+    Ansible is additive, so the old files outlive the move unless a task handles
+    them. Deleting an unread marker would report "ran and did not ship" as the
+    benign "no shutdown sequence ran".
+    """
+    tasks = yaml.safe_load((REPO / "infra/ansible/roles/node_backup/tasks/main.yml").read_text(encoding="utf-8"))
+    defaults = yaml.safe_load((REPO / "infra/ansible/roles/node_backup/defaults/main.yml").read_text())
+    olds = ["/var/log/node-backup-shutdown.receipt", "/var/log/node-backup-shutdown.attempted"]
+
+    def index(predicate: Any) -> int:
+        hits = [n for n, t in enumerate(tasks) if isinstance(t, dict) and predicate(t)]
+        assert len(hits) == 1, hits
+        return hits[0]
+
+    move = index(lambda t: str(t.get("command", "")).startswith("mv "))
+    moved = {(i["old"], i["new"]) for i in tasks[move]["loop"]}
+    assert moved == {
+        (olds[0], "{{ node_backup_shutdown_receipt }}"),
+        (olds[1], "{{ node_backup_shutdown_attempt_marker }}"),
+    }
+    # `creates` keeps a newer file at the new path; `removes` makes the re-run changed=0.
+    assert tasks[move]["args"] == {"creates": "{{ item.new }}", "removes": "{{ item.old }}"}
+    assert str(defaults["node_backup_shutdown_receipt"]) not in olds
+
+    # Nothing else may name them, whatever the module or loop shape: no task can
+    # tell whether an old file was read, so the move is the only one allowed.
+    naming = [
+        t.get("name")
+        for n, t in enumerate(tasks)
+        if n != move and isinstance(t, dict) and any(old in yaml.safe_dump(t) for old in olds)
+    ]
+    assert not naming, f"{naming} names a receipt path no boot has read yet; only the move may"
+
+    # Every reader and writer takes the path from defaults, so the moved file is the one read.
+    templates = REPO / "infra/ansible/roles/node_backup/templates"
+    hardcoded = [p.name for p in sorted(templates.iterdir()) if any(old in p.read_text() for old in olds)]
+    assert not hardcoded, f"{hardcoded} hardcode an old receipt path instead of the defaults"

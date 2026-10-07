@@ -112,10 +112,17 @@ node_backup_prune_timer_name: node-backup-prune.timer
 #     same pass and retires one as it adds one. Identity changes; totals do not.
 #
 # So the run writes its own receipt, on the same disk it just captured from, and
-# the next boot reads it back. `/var/log` rather than the staging dir: capture
-# `rm -rf`s staging at the top of every run, which would delete the evidence of
-# the previous one before anyone could look at it.
-node_backup_shutdown_receipt: /var/log/node-backup-shutdown.receipt
+# the next boot reads it back. Not the staging dir: capture `rm -rf`s staging
+# at the top of every run, which would delete the evidence of the previous one
+# before anyone could look at it.
+#
+# And not /var/log, where it lived until BACKUP-052: it survived the
+# maintenance cleanup only because none of that sweep's patterns happened to
+# match it, and a deleted receipt reads exactly like a shutdown that did not
+# ship. So it sits in the root-only directory this role creates, which no sweep
+# names (tests/test_backup_heartbeat_monitors.py checks both). Same directory
+# for the attempt marker below, for the same reason.
+node_backup_shutdown_receipt: /var/lib/node-backup/node-backup-shutdown.receipt
 
 # Written by the shutdown unit's ExecStop as its FIRST action, before capture
 # and ship run. It exists to tell two absences apart, because on this fleet
@@ -137,7 +144,7 @@ node_backup_shutdown_receipt: /var/log/node-backup-shutdown.receipt
 # A deliberate `reboot`/`shutdown` over SSH DOES run ExecStop, so the unit is
 # not dead code and the failure case above is reachable. That is why this is a
 # marker rather than deleting the shutdown path outright.
-node_backup_shutdown_attempt_marker: /var/log/node-backup-shutdown.attempted
+node_backup_shutdown_attempt_marker: /var/lib/node-backup/node-backup-shutdown.attempted
 
 # Tmpfs, so the kernel clears it at every boot and nothing has to remember to.
 # It scopes the receipt read-back to the FIRST capture after boot.
