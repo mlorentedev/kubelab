@@ -315,7 +315,8 @@ def test_the_temporary_token_expires_by_itself() -> None:
     assert _migrate(world) is True
     expires = datetime.strptime(world.token_body["expires_on"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
     lifetime = (expires - start).total_seconds()
-    assert bm.COPY_TIMEOUT_S <= lifetime <= bm.TOKEN_LIFETIME_S + 60
+    # Long enough for one copy, and no standing credential: hours, never days.
+    assert bm.COPY_TIMEOUT_S <= lifetime <= 2 * bm.COPY_TIMEOUT_S + 60
 
 
 @pytest.mark.parametrize("check", [False, True])
