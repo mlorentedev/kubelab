@@ -43,11 +43,11 @@ The free-tier alert has been firing since 2026-10-06 00:19 UTC on no data, not o
 
 ## Acceptance criteria
 
-- [ ] **AC1**: Every watcher run logs a numeric `stored_bytes` for all four nodes and for the fleet line, in staging and prod (`make watcher-run`).
-- [ ] **AC2**: The fleet `stored_bytes` is the sum of each named bucket's root size, each bucket once; a test with two nodes in one bucket and an object outside any prefix proves the bucket is counted once and the stray object is counted.
-- [ ] **AC3**: Measurement time does not grow with snapshot count: one repository is sized both ways (rclone and `stats --mode raw-data`) and both are timed, with the gap recorded in `verification.md`, and the per-node timing line stays in the probe's log.
-- [ ] **AC4**: A listing that fails gives the entry it measures `stored_bytes: null` (a node prefix: that node; a bucket: the fleet line), a fleet whose buckets were not all measured is `null`, and no size ever changes `healthy`. The sizing step always exits 0, so a failed listing can never stop the health probe from running. The tests run both scripts with fake clients, no R2 in CI.
-- [ ] **AC5**: No consumer still reads `raw_bytes`: the Grafana rules, the runbook and the tests read `stored_bytes`, and a test fails if `raw_bytes` reappears in the watcher's emitters or readers.
+- [x] **AC1**: Every watcher run logs a numeric `stored_bytes` for all four nodes and for the fleet line, in staging and prod (`make watcher-run`).
+- [x] **AC2**: The fleet `stored_bytes` is the sum of each named bucket's root size, each bucket once; a test with two nodes in one bucket and an object outside any prefix proves the bucket is counted once and the stray object is counted.
+- [x] **AC3**: Measurement time does not grow with snapshot count: one repository is sized both ways (rclone and `stats --mode raw-data`) and both are timed, with the gap recorded in `verification.md`, and the per-node timing line stays in the probe's log.
+- [x] **AC4**: A listing that fails gives the entry it measures `stored_bytes: null` (a node prefix: that node; a bucket: the fleet line), a fleet whose buckets were not all measured is `null`, and no size ever changes `healthy`. The sizing step always exits 0, so a failed listing can never stop the health probe from running. The tests run both scripts with fake clients, no R2 in CI.
+- [x] **AC5**: No consumer still reads `raw_bytes`: the Grafana rules, the runbook and the tests read `stored_bytes`, and a test fails if `raw_bytes` reappears in the watcher's emitters or readers.
 
 ## References
 

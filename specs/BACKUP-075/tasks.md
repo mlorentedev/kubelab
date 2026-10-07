@@ -48,18 +48,18 @@ created: "2026-10-06"
 ### Roll out
 
 - [x] [AC1] (✓ 2026-10-07, by repointing staging's Argo CD app at the branch instead of a worktree deploy) `make deploy-k8s ENV=staging`, then `make watcher-run NAME=r2-backup-watcher ENV=staging` at once: four numeric node sizes and a numeric fleet sum. Record in `verification.md`.
-- [ ] [AC1] After merge and Argo CD sync, `make watcher-run NAME=r2-backup-watcher ENV=prod` at once (the rename empties the rule windows until a run lands), then confirm the free-tier alert resolves. Record in `verification.md`.
+- [x] [AC1] After merge and Argo CD sync, `make watcher-run NAME=r2-backup-watcher ENV=prod` at once (the rename empties the rule windows until a run lands), then confirm the free-tier alert resolves. Record in `verification.md`.
 
 ## Closing
 
-- [ ] Every acceptance criterion from `proposal.md` is covered by at least one test
-- [ ] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command
-- [ ] `make test-fast` passes
-- [ ] `make lint` passes
-- [ ] No unrelated changes in the diff
-- [ ] `verification.md` filled in
-- [ ] Lesson if the measurement shows something non-obvious (next free number: 524)
-- [ ] PR opened as a draft referencing this spec folder, `## Knowledge` section, `Closes #2077`
+- [x] Every acceptance criterion from `proposal.md` is covered by at least one test
+- [x] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command
+- [x] `make test-fast` passes
+- [x] `make lint` passes
+- [x] No unrelated changes in the diff
+- [x] `verification.md` filled in
+- [x] Lesson if the measurement shows something non-obvious (next free number: 524)
+- [x] PR opened as a draft referencing this spec folder, `## Knowledge` section, `Closes #2077`
 
 ## Machine-readable features
 
