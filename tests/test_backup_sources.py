@@ -64,6 +64,40 @@ COVERED_NODES = {"beelink", "rpi3", "rpi4", "vps"}
 SOURCE_TYPES = {"path", "volume", "pvc"}
 
 
+# A file under a source is rendered inside both quote styles of the capture
+# script (`".backup '$STAGING/<db>'"`), so a quote, `$` or space in it is a broken
+# or injected command, not an odd name.
+_FILE_UNDER_SOURCE = re.compile(r"[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*")
+
+
+def _file_rules(entry: dict[str, Any]) -> list[str]:
+    """What is wrong with an entry's `sqlite` and `exclude`, both paths under the source."""
+    bad: list[str] = []
+    dbs = entry.get("sqlite")
+    if dbs is not None:
+        listed = [dbs] if isinstance(dbs, str) else dbs
+        if not isinstance(listed, list) or not listed or len(set(map(str, listed))) != len(listed):
+            bad.append(f"sqlite must be one path or a non-empty list of distinct paths: {dbs!r}")
+            listed = []
+    else:
+        listed = []
+    excluded = entry.get("exclude") or {}
+    if not isinstance(excluded, dict):
+        return [*bad, f"exclude must map each path to its ruling: {excluded!r}"]
+    for path in [*listed, *excluded]:
+        text = str(path)
+        if not _FILE_UNDER_SOURCE.fullmatch(text) or ".." in text.split("/"):
+            bad.append(f"{text!r} is not a plain relative path under the source")
+    for path, ruling in excluded.items():
+        if path in listed:
+            bad.append(f"{path!r} is declared as a database and excluded")
+        # The same ruling backup.excluded asks of a whole volume: only tier 3,
+        # rebuilt from upstream, may be left out, and the reason is written down.
+        if not isinstance(ruling, dict) or ruling.get("tier") != 3 or not str(ruling.get("reason") or "").strip():
+            bad.append(f"exclude.{path} needs a reason and tier: 3, got {ruling!r}")
+    return bad
+
+
 class TestBackupSources:
     """The allow-list: complete, well-formed, and naming things we control.
 
@@ -125,6 +159,15 @@ class TestBackupSources:
                 if "pvc" in entry and set(entry["pvc"]) != {"namespace", "claim"}:
                     bad.append(f"{node}.{name} pvc needs exactly namespace+claim: {entry['pvc']!r}")
         assert not bad, f"malformed sources: {bad}"
+
+    def test_databases_and_exclusions_are_plain_paths_under_the_source(self, sources: dict[str, Any]) -> None:
+        bad = [
+            f"{node}.{name}: {problem}"
+            for node, entries in sources.items()
+            for name, entry in entries.items()
+            for problem in _file_rules(entry)
+        ]
+        assert not bad, bad
 
     def test_service_keys_are_shell_identifiers(self, sources: dict[str, Any]) -> None:
         """A service key becomes a bash VARIABLE NAME, so its charset is not cosmetic.
@@ -290,3 +333,29 @@ class TestPvcSources:
                     if not re.fullmatch(r"[a-z0-9]([-a-z0-9]*[a-z0-9])?", str(value)):
                         bad.append(f"{node}.{name}: pg_dumpall.{key} {value!r} is not a Kubernetes name")
         assert not bad, bad
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        {"sqlite": []},
+        {"sqlite": ["a.db", "a.db"]},
+        {"sqlite": "/abs/a.db"},
+        {"sqlite": "../a.db"},
+        {"sqlite": "it's.db"},
+        {"sqlite": ["a.db", "b c.db"]},
+        {"exclude": ["cache"]},
+        {"exclude": {"cache": {"reason": "models", "tier": 2}}},
+        {"exclude": {"cache": {"tier": 3}}},
+        {"exclude": {"$HOME": {"reason": "x", "tier": 3}}},
+        {"sqlite": "webui.db", "exclude": {"webui.db": {"reason": "x", "tier": 3}}},
+    ],
+)
+def test_a_malformed_file_declaration_is_refused(entry: dict[str, Any]) -> None:
+    assert _file_rules(entry)
+
+
+def test_a_well_formed_file_declaration_passes() -> None:
+    entry = {"sqlite": ["state.db", "cron/executions.db"], "exclude": {"cache": {"reason": "models", "tier": 3}}}
+    assert _file_rules(entry) == []
+    assert _file_rules({"sqlite": "gitea/gitea.db"}) == []

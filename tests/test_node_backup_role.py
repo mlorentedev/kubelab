@@ -217,7 +217,9 @@ def test_volume_mountpoints_are_resolved_before_the_capture_script_renders():
     tasks = yaml.safe_load((ROLE / "tasks/main.yml").read_text())
     names = [task.get("name", "") for task in tasks]
     resolve = next(i for i, task in enumerate(tasks) if task.get("register") == "node_backup_volume_inspect")
-    render = next(i for i, task in enumerate(tasks) if task.get("template", {}).get("src") == "node-backup-capture.sh.j2")
+    render = next(
+        i for i, task in enumerate(tasks) if task.get("template", {}).get("src") == "node-backup-capture.sh.j2"
+    )
     assert resolve < render, names
     task = tasks[resolve]
     assert task["command"]["argv"][:3] == ["docker", "volume", "inspect"]
@@ -429,7 +431,9 @@ def test_a_source_may_declare_several_databases(tmp_path: Path) -> None:
 
 def test_an_excluded_path_is_not_copied(tmp_path: Path) -> None:
     """Open WebUI's `cache/` is a gigabyte of re-downloadable models, ruled tier 3."""
-    _tree(tmp_path, {"webui.db": "RAW", "cache/embedding/model.bin": "MODEL", "cache.txt": "kept", "uploads/a.pdf": "doc"})
+    _tree(
+        tmp_path, {"webui.db": "RAW", "cache/embedding/model.bin": "MODEL", "cache.txt": "kept", "uploads/a.pdf": "doc"}
+    )
     (tmp_path / "src/empty").mkdir()
     sock = socket.socket(socket.AF_UNIX)
     sock.bind(str(tmp_path / "src/gateway.sock"))
