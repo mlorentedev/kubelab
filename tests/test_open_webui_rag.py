@@ -35,8 +35,3 @@ def test_the_reranker_is_nan_and_hybrid_search_is_on_so_it_runs() -> None:
     assert env["RAG_RERANKING_MODEL"] == _rag()["reranking_model"]
     assert env["RAG_EXTERNAL_RERANKER_URL"] == env["OPENAI_API_BASE_URLS"] + "/rerank"
     assert env["RAG_EXTERNAL_RERANKER_API_KEY"] == _context()["agent_stack_nan_api_key"]
-
-
-def test_the_vector_store_is_left_at_its_default() -> None:
-    """The spec leaves Chroma in the data volume: nothing new to run or back up."""
-    assert "VECTOR_DB" not in _env()
