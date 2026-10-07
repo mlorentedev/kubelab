@@ -134,11 +134,17 @@ def test_the_rule_is_loaded_before_the_agents_user_manager_is_started() -> None:
     assert load < names.index("Start the agent's user manager")
 
 
-def _assert_controlled(tasks: list[dict], probe: dict, host: str) -> None:
-    """A refusal measures something only if the same address answered just before,
-    from outside the rule (as root): nc fails the same on a dead path."""
-    controls = [i for i, t in enumerate(tasks) if t.get("ansible.builtin.wait_for", {}).get("host") == host]
-    assert controls and controls[0] < tasks.index(probe), f"no control proves {host} reachable before the probe"
+def _assert_controlled(tasks: list[dict], probe: dict) -> None:
+    """A refusal measures something only if the same address and port answered just
+    before, from outside the rule (as root): nc fails the same on a dead path."""
+    host, port = re.search(r"nc -z -w \d+ (\{\{ \w+ \}\}) (\{\{ [\w.]+ \}\})", probe["ansible.builtin.command"]["cmd"]).groups()
+    controls = [
+        i
+        for i, t in enumerate(tasks)
+        if t.get("ansible.builtin.wait_for", {}).get("host") == host
+        and t["ansible.builtin.wait_for"].get("port") == port
+    ]
+    assert controls and controls[0] < tasks.index(probe), f"no control proves {host}:{port} open before the probe"
     assert "become_user" not in tasks[controls[0]], "the control must run outside the agent's uid"
 
 
@@ -150,10 +156,10 @@ def test_every_provision_proves_the_tailnet_refused_and_the_internet_open() -> N
     assert len(local) == 1 and "rc == 0" in local[0]["failed_when"], "the DNAT case must be refused"
     remote = [p for p in probes if "agent_stack_egress_probe_refused" in p["ansible.builtin.command"]["cmd"]]
     assert len(remote) == 1
-    _assert_controlled(tasks, remote[0], "{{ agent_stack_egress_probe_refused }}")
+    _assert_controlled(tasks, remote[0])
     # nc fails the same on a closed port: the port must be proven open first,
     # from outside the rule, or a refusal measures nothing.
-    _assert_controlled(tasks, local[0], "{{ tailscale_ip }}")
+    _assert_controlled(tasks, local[0])
     for probe in probes:
         assert probe.get("check_mode") is False and probe.get("changed_when") is False
         assert probe.get("become_user") == "{{ agent_stack_agent_user }}"
