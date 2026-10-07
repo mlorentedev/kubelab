@@ -72,8 +72,8 @@ Inventoried 2026-10-01 against every surface an existing node-hosted service is 
 
 ### PR 4 — the vault zone and the jobs
 
-- [ ] [P] [AC6] `tests/test_hermes_vault_hook.py`: run `files/pre-commit-zone.sh` in a temporary git repo against a staged change under `80_agents/hermes-kubelab/` (exit 0) and under `10_projects/` (exit 1). Expected: FAIL.
-- [ ] [AC6] The hook; the vault clone task (HTTPS with the vault token, `git config core.hooksPath`); the unit's `ExecStartPre` script that removes `.git/index.lock` only when `pgrep -u hermes-kubelab -x git` finds nothing, then `git pull --ff-only`.
+- [x] [P] [AC6] `tests/test_hermes_vault_hook.py`: run `files/pre-commit-zone.sh` in a temporary git repo against a staged change under `80_agents/hermes-kubelab/` (exit 0) and under `10_projects/` (exit 1). Expected: FAIL. ✓ 2026-10-07 (a template, `pre-commit-zone.sh.j2`, with the zone from `apps.services.ai.hermes_kubelab.vault_zone`; also refuses a deletion outside, a move into the zone, and a sibling sharing the prefix)
+- [ ] [AC6] The hook; the vault clone task (HTTPS with the vault token, `git config core.hooksPath`); the unit's `ExecStartPre` script that removes `.git/index.lock` only when `pgrep -u hermes-kubelab -x git` finds nothing, then `git pull --ff-only`. Partly ✓ 2026-10-07: the hook is installed root-owned at `/usr/local/libexec/agent-stack/vault-hooks`, outside the agent's home, whose directory the agent could rename. The clone, `core.hooksPath` and `ExecStartPre` wait on the vault token (R2).
 - [ ] [AC6] Seed `80_agents/hermes-kubelab/` in the vault from the portable parts of `80_agents/hermes-nan/` (cronjobs adapted to ace2, guardrails, backup policy), through hive, not by the agent.
 - [ ] [AC6] Live: one scheduled job's commit lands under the zone.
 

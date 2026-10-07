@@ -17,9 +17,8 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 REPO = Path(__file__).resolve().parent.parent
 ROLE = REPO / "infra/ansible/roles/agent_stack"
-ZONE = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())["apps"]["services"]["ai"]["hermes_kubelab"][
-    "vault_zone"
-]
+COMMON = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
+ZONE = COMMON["apps"]["services"]["ai"]["hermes_kubelab"]["vault_zone"]
 
 
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -32,7 +31,8 @@ def vault(tmp_path: Path) -> Path:
     hooks.mkdir()
     env = Environment(loader=FileSystemLoader(str(ROLE / "templates")), undefined=StrictUndefined)
     hook = hooks / "pre-commit"
-    hook.write_text(env.get_template("pre-commit-zone.sh.j2").render(ansible_managed="managed", agent_stack_vault_zone=ZONE))
+    template = env.get_template("pre-commit-zone.sh.j2")
+    hook.write_text(template.render(ansible_managed="managed", agent_stack_vault_zone=ZONE))
     hook.chmod(0o755)
     repo = tmp_path / "vault"
     repo.mkdir()
