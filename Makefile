@@ -1683,11 +1683,12 @@ backup-verify-destination:
 
 # Mints each backup.sources node its own R2 token (Object Read & Write on
 # kubelab-backup-<node> only) and restic password, straight into prod SOPS
-# (BACKUP-057 PR 3). NODE= limits it to one node; ROTATE=1 replaces existing
-# tokens and revokes the old ones. Restic passwords are never replaced.
+# (BACKUP-057 PR 3). NODE= limits it to one node, WATCHER=1 to the watcher's
+# read pair; ROTATE=1 replaces existing tokens and revokes the old ones. Restic
+# passwords are never replaced.
 .PHONY: backup-mint-node-tokens
 backup-mint-node-tokens:
-	@$(TOOLKIT) backup mint-node-tokens --env $(or $(filter staging prod,$(ENV)),prod) $(if $(NODE),--node $(NODE)) $(if $(filter 1,$(ROTATE)),--rotate)
+	@$(TOOLKIT) backup mint-node-tokens --env $(or $(filter staging prod,$(ENV)),prod) $(if $(NODE),--node $(NODE)) $(if $(filter 1,$(ROTATE)),--rotate) $(if $(filter 1,$(WATCHER)),--watcher-only)
 
 # One level above backup-verify-destination: that one proves the BUCKET works,
 # this one proves RESTIC works in it. Runs the full lifecycle (init, backup,

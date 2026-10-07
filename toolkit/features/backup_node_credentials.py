@@ -376,8 +376,13 @@ class SopsStore:
         return bool(self._cm.batch_update_secrets(data, secret_file_path=self._dir / f"{files.pop()}.enc.yaml"))
 
 
-def mint_all(node: Optional[str] = None, rotate: bool = False) -> bool:
-    """Mint every node's pair and password and the watcher's pair, or one node's. True iff all completed."""
+def mint_all(node: Optional[str] = None, rotate: bool = False, watcher_only: bool = False) -> bool:
+    """Mint every node's pair and password and the watcher's pair, one node's, or the watcher's only.
+
+    True iff all completed. `watcher_only` exists so a change to the watcher's
+    scope (BACKUP-057 PR 4 added the shared bucket) rotates that pair without
+    rotating four node tokens with it.
+    """
     from toolkit.features.backup_destination import _default_run
 
     store = SopsStore()
@@ -406,7 +411,7 @@ def mint_all(node: Optional[str] = None, rotate: bool = False) -> bool:
         return False
 
     ok = True
-    for name in [node] if node else nodes:
+    for name in [] if watcher_only else [node] if node else nodes:
         others = [n for n in nodes if n != name]
         try:
             token = mint_node(

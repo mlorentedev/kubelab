@@ -302,37 +302,8 @@ class TestResticPasswords:
         Driven end to end, with SOPS, the API and the aws CLI faked: the token
         pairs are replaced and the old tokens revoked, while no write carries a
         password path and each stored password is the one that was there."""
-        from toolkit.features import backup_destination
-
         nodes = _nodes()
-        legacy = "kubelab-backups"
-        held = {bnc.MINTER_KEY: "minter"}
-        for i, node in enumerate(nodes):
-            held |= {
-                bnc.access_key_path(node): f"tok-old-{i}",
-                bnc.secret_key_path(node): f"s-old-{i}",
-                bnc.restic_password_path(node): f"keep-{node}",
-            }
-        held |= {bnc.WATCHER_ACCESS_KEY_PATH: "tok-old-w", bnc.WATCHER_SECRET_KEY_PATH: "s-old-w"}
-
-        store = FakeStore(held)
-        r2 = {"account_id": ACCOUNT, "endpoint": ENDPOINT, "bucket": legacy}
-        store._cm = MagicMock()
-        store._cm.get_merged_config.return_value = {
-            "backup": {"sources": dict.fromkeys(nodes, {}), "r2": r2},
-            "apps": {"services": {"core": {"vikunja": {"storage": {"s3_bucket": OUTSIDE}}}}},
-        }
-        http = FakeHttp()
-        # The newest mint's token can list exactly the buckets its policy names.
-        def run(argv: list[str], env: dict[str, str]) -> tuple[int, str, str]:
-            body = http.posts()[-1]
-            buckets = {key.rsplit("_default_", 1)[1] for key in body["policies"][0]["resources"]}
-            bucket = argv[argv.index("--bucket") + 1]
-            return (0, "{}", "") if bucket in buckets else (254, "", "An error occurred (AccessDenied)")
-
-        monkeypatch.setattr(bnc, "SopsStore", lambda: store)
-        monkeypatch.setattr(bnc, "cloudflare_http", lambda _token: http)
-        monkeypatch.setattr(backup_destination, "_default_run", run)
+        store, http = _held_fleet(monkeypatch, nodes)
 
         assert bnc.mint_all(rotate=True) is True
         passwords = {bnc.restic_password_path(node) for node in nodes}
@@ -342,8 +313,54 @@ class TestResticPasswords:
         }
         assert sorted(http.deletes()) == sorted([f"tok-old-{i}" for i in range(len(nodes))] + ["tok-old-w"])
 
+    def test_watcher_only_rotates_the_watcher_and_no_node_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        nodes = _nodes()
+        store, http = _held_fleet(monkeypatch, nodes)
+
+        assert bnc.mint_all(rotate=True, watcher_only=True) is True
+        assert http.deletes() == ["tok-old-w"]
+        assert [set(batch) for batch in store.writes] == [{bnc.WATCHER_ACCESS_KEY_PATH, bnc.WATCHER_SECRET_KEY_PATH}]
+        (body,) = http.posts()
+        assert body["name"] == bnc.WATCHER_TOKEN_NAME
+
 
 OUTSIDE = "kubelab-vikunja-staging"
+
+
+def _held_fleet(monkeypatch: pytest.MonkeyPatch, nodes: list[str]) -> tuple[FakeStore, FakeHttp]:
+    """Every node and the watcher already minted, with SOPS, the API and the aws CLI faked."""
+    from toolkit.features import backup_destination
+
+    legacy = "kubelab-backups"
+    held = {bnc.MINTER_KEY: "minter"}
+    for i, node in enumerate(nodes):
+        held |= {
+            bnc.access_key_path(node): f"tok-old-{i}",
+            bnc.secret_key_path(node): f"s-old-{i}",
+            bnc.restic_password_path(node): f"keep-{node}",
+        }
+    held |= {bnc.WATCHER_ACCESS_KEY_PATH: "tok-old-w", bnc.WATCHER_SECRET_KEY_PATH: "s-old-w"}
+
+    store = FakeStore(held)
+    r2 = {"account_id": ACCOUNT, "endpoint": ENDPOINT, "bucket": legacy}
+    store._cm = MagicMock()
+    store._cm.get_merged_config.return_value = {
+        "backup": {"sources": dict.fromkeys(nodes, {}), "r2": r2},
+        "apps": {"services": {"core": {"vikunja": {"storage": {"s3_bucket": OUTSIDE}}}}},
+    }
+    http = FakeHttp()
+
+    # The newest mint's token can list exactly the buckets its policy names.
+    def run(argv: list[str], env: dict[str, str]) -> tuple[int, str, str]:
+        body = http.posts()[-1]
+        buckets = {key.rsplit("_default_", 1)[1] for key in body["policies"][0]["resources"]}
+        bucket = argv[argv.index("--bucket") + 1]
+        return (0, "{}", "") if bucket in buckets else (254, "", "An error occurred (AccessDenied)")
+
+    monkeypatch.setattr(bnc, "SopsStore", lambda: store)
+    monkeypatch.setattr(bnc, "cloudflare_http", lambda _token: http)
+    monkeypatch.setattr(backup_destination, "_default_run", run)
+    return store, http
 
 
 def _watcher_runner(outside: str = OUTSIDE, outside_ok: bool = False, unreadable: str = ""):
@@ -414,6 +431,20 @@ def test_only_rotate_1_rotates(rotate: str, expected: bool) -> None:
     ).stdout
     line = next(ln for ln in out.splitlines() if "mint-node-tokens" in ln)
     assert ("--rotate" in line) is expected, line
+
+
+@pytest.mark.parametrize(("watcher", "expected"), [("", False), ("0", False), ("1", True)])
+def test_only_watcher_1_limits_the_mint_to_the_watcher(watcher: str, expected: bool) -> None:
+    import subprocess
+
+    out = subprocess.run(
+        ["make", "-n", "-C", str(REPO), "backup-mint-node-tokens", "ENV=prod", f"WATCHER={watcher}"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    line = next(ln for ln in out.splitlines() if "mint-node-tokens" in ln)
+    assert ("--watcher-only" in line) is expected, line
 
 
 class TestTheSopsStore:

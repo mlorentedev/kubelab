@@ -86,8 +86,8 @@ The size decides whether R = 30 fits the free tier. It is measured by the watche
 > - The watcher reads one password per node (`RESTIC_PASSWORD_<NODE>`). The Secret supplies the node's own password once it is in its own bucket and the shared one before that, so the probe never needs to know the layout.
 > - PR 4 is split: **4a** the declaration and consumers; **4b** `backup-migrate` and the isolation probe; then the sitting.
 
-- [ ] [AC1] Failing tests in a new `tests/test_backup_per_node_isolation.py`, one per consumer: `backup.yml`, `backup_destination.repo_url`, `render_watcher_targets` and the watcher Secret. Each consumer must give every node a bucket, key pair and restic password that no other node gets. They live in their own file so that one run covers them all, with no `-k` filter. The watcher is the one declared exception, by design (proposal *What* §4): its single pair spans every node bucket. For it the test asserts the opposite of the rule: the pair is distinct from every node's pair, the mint command declares it Object Read only, and each restic password it carries comes from that node's own SOPS key, never from a copy. Expected: FAIL.
-- [ ] [AC1] Change the consumers:
+- [x] [AC1] (✓ 2026-10-07, PR 4a: the file already held PR 3's mint tests, kept beside the consumer ones; eight mutations each turned a test red) Failing tests in a new `tests/test_backup_per_node_isolation.py`, one per consumer: `backup.yml`, `backup_destination.repo_url`, `render_watcher_targets` and the watcher Secret. Each consumer must give every node a bucket, key pair and restic password that no other node gets. They live in their own file so that one run covers them all, with no `-k` filter. The watcher is the one declared exception, by design (proposal *What* §4): its single pair spans every node bucket. For it the test asserts the opposite of the rule: the pair is distinct from every node's pair, the mint command declares it Object Read only, and each restic password it carries comes from that node's own SOPS key, never from a copy. Expected: FAIL.
+- [x] [AC1] (✓ 2026-10-07, PR 4a. Resolved through `backup_destination.own_bucket_nodes` / `node_repository` / `node_secret_paths` / `node_restic`, which the drills and the coverage report now use too. `backup-repo-reinit.yml` needed nothing: it reads no credential. The role defaults are unchanged, `backup.yml` passes the full repository URL. Decided: the old read-only pair is retired, the watcher pair is re-minted to read `kubelab-backups` too, `make backup-mint-node-tokens ENV=prod WATCHER=1 ROTATE=1`) Change the consumers:
   - `backup.yml` (both plays) and `backup-repo-reinit.yml`: per-node vars;
   - the `node_backup` role defaults and ship script: the repository URL is `s3:<endpoint>/kubelab-backup-<node>`;
   - `backup_destination.repo_url` / `verify_*`: per-node bucket;
@@ -131,6 +131,10 @@ The size decides whether R = 30 fits the free tier. It is measured by the watche
   - it no longer claims a single shared bucket.
 
   The test fails on today's runbook.
+- [ ] Remove what PR 4a kept for the transition, once every node is in `own_bucket_nodes`:
+  - the probe's fallback to the shared `RESTIC_PASSWORD` (`probe.sh`, `test_a_secret_from_before_per_node_passwords_still_opens_the_fleet`). It exists because Argo CD syncs the probe at merge while `apply-secrets` rewrites the Secret by hand later;
+  - the shared branch of `node_secret_paths`, `node_repository` and `backup.yml`, with `own_bucket_nodes` itself once no node can be outside it;
+  - the read-only pair `backup.r2.readonly_*`: revoke the token in Cloudflare, delete both keys from SOPS and both `SECRET_CATALOG` entries (read by nothing since PR 4a).
 - [ ] After AC4 has been verified on all four nodes **and** one weekly `check` has passed on every new bucket: delete `kubelab-backups` and its token, and remove `backup.r2.bucket` / `backup.r2.access_key_id` from `common.yaml` and SOPS. This is its own PR if the weekly check lands after PR 5.
 
 ## Closing

@@ -1264,7 +1264,7 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("r2-backup-watcher",),
         format_hint="R2 API token id (not the token value)",
         rotate_note=(
-            "`make backup-mint-node-tokens ENV=prod ROTATE=1` mints a new watcher token, verifies it, "
+            "`make backup-mint-node-tokens ENV=prod WATCHER=1 ROTATE=1` mints a new watcher token, verifies it, "
             "stores it and revokes the old one; then `make apply-secrets` in staging and prod."
         ),
         envs=("staging", "prod"),
