@@ -56,12 +56,13 @@ def _missing_lock(lock_rules: Callable[[str], list[dict[str, Any]]], bucket: str
         rules = lock_rules(bucket)
     except Exception as exc:  # noqa: BLE001 - any failure leaves the lock unread
         return f"its lock rules could not be read ({exc})"
+    # Only an `Age` condition carries maxAgeSeconds, so this also requires the
+    # type Terraform declares; `Indefinite` or `Date` reads as missing.
     for rule in rules:
         condition = rule.get("condition") or {}
         if (
             rule.get("enabled")
             and rule.get("prefix") == "data/"
-            and condition.get("type") == "Age"
             and int(condition.get("maxAgeSeconds") or 0) >= retention_s
         ):
             return ""

@@ -225,11 +225,11 @@ def test_a_newest_pack_well_inside_r_is_tried() -> None:
 
 
 def test_youngest_is_ordered_by_time_not_by_string() -> None:
-    # Two spellings of the same instant scheme: a string max would pick the "Z" one.
+    # 04:00+02:00 is 02:00 UTC: it sorts last as a string and is the older pack.
     r2 = R2()
     r2.objects[node_bucket("rpi4")] = [
-        {"Key": "data/rpi4-older", "LastModified": "2026-10-07T03:00:00Z"},
-        {"Key": "data/rpi4-newer", "LastModified": "2026-10-07T04:00:00+00:00"},
+        {"Key": "data/rpi4-older", "LastModified": "2026-10-07T04:00:00+02:00"},
+        {"Key": "data/rpi4-newer", "LastModified": "2026-10-07T03:00:00Z"},
     ]
     assert _probe(r2) is True
     assert [r[2] for r in _own_deletes(r2, "rpi4")] == ["data/rpi4-newer"]
