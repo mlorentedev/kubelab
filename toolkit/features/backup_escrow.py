@@ -61,7 +61,13 @@ def check(nodes: list[str], *, secret: Callable[[str], Optional[str]], run: RunF
             )
             ok = False
         elif not match:
-            logger.error(f"{entry}: MISSING in the escrow, the entry holds no password")
+            # Other fields parsed, so the format guard above cannot tell an
+            # empty entry from a renamed field. Name both.
+            logger.error(
+                f"{entry}: MISSING in the escrow, no data.login.password field. Either the entry "
+                "holds no password (re-escrow it), or `dotf secrets probe` renamed the field "
+                "(update this check, not the escrow)"
+            )
             ok = False
         elif match.group(1) != fingerprint(str(value)):
             logger.error(f"{entry}: STALE, the escrow does not hold {path}. Re-escrow it in this sitting")

@@ -717,7 +717,7 @@ line it prints says which one, so read it before touching Bitwarden:
 | Line | Where the problem is |
 |---|---|
 | `STALE` | The escrow: re-escrow that password in this sitting |
-| `MISSING in the escrow` | The escrow: the entry has no password |
+| `MISSING in the escrow` | The escrow has no password in the entry, or `dotf secrets probe` renamed `data.login.password`. Check the field name in the probe output before re-escrowing |
 | `the escrow is unreadable` | Bitwarden is locked or unreachable: `dotf secrets unlock` |
 | `output format changed` | `dotf secrets probe` printed something the check cannot parse; the escrow was not judged |
 | `MISSING in SOPS` | SOPS, not the escrow: the password the node needs is not there |

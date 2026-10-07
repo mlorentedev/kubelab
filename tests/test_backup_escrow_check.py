@@ -104,6 +104,25 @@ def test_an_output_format_it_cannot_read_is_not_reported_as_a_missing_password(
     assert "MISSING in the escrow" not in out
 
 
+def test_a_renamed_password_field_is_not_diagnosed_as_an_empty_entry_alone(
+    caplog: pytest.LogCaptureFixture, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Other fields still match the column format, so the format guard cannot
+    # fire; the message must name both causes or it sends the operator to
+    # re-escrow a healthy entry.
+    escrow = Escrow()
+    real = escrow.run
+
+    def renamed(argv: list[str], env: dict[str, str]) -> tuple[int, str, str]:
+        rc, out, err = real(argv, env)
+        return rc, out.replace("data.login.password", "data.login.secret"), err
+
+    assert be.check(NODES, secret=_sops().get, run=renamed) is False
+    out = capsys.readouterr().out + caplog.text
+    assert "data.login.password" in out
+    assert "renamed" in out
+
+
 def test_an_unreadable_escrow_fails_it_and_says_so(capsys: pytest.CaptureFixture[str]) -> None:
     escrow = Escrow()
     escrow.fail[be.escrow_id("beelink")] = (1, "bw serve: vault is locked")
