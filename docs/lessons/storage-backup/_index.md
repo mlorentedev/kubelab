@@ -1,9 +1,10 @@
 # Backups, volumes and persistence
 
-26 lessons, newest first. Back to [all categories](../_index.md).
+27 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 529 | [`restic copy` reads both repositories with one S3 credential, so per-bucket tokens cannot copy between buckets](lesson-529-restic-copy-reads-both-repositories-with-one-s3-credential.md) | 2026-10-07 |
 | 524 | [Size a backup bucket by listing its objects, not by walking its snapshots](lesson-524-size-a-backup-bucket-by-listing-it-not-by-walking-its-snapshots.md) | 2026-10-07 |
 | 523 | [A unit ordered `Before=docker.service` that calls the docker CLI deadlocks the boot until its own timeout](lesson-523-a-unit-ordered-before-docker-must-not-call-docker.md) | 2026-10-07 |
 | 521 | [An `unlock` placed before the write is too late if a read before it takes a lock](lesson-521-a-probe-that-locks-runs-before-the-unlock-meant-to-clear-it.md) | 2026-10-04 |
