@@ -1738,6 +1738,15 @@ backup-isolation-probe:
 	@test "$(ENV)" = prod || (echo "backup-isolation-probe needs ENV=prod, got '$(ENV)'" && exit 1)
 	@$(TOOLKIT) backup isolation-probe --env $(ENV)
 
+# Compare every restic password in SOPS with its Bitwarden escrow entry, by
+# sha256[:12] fingerprint (BACKUP-057 AC5). The escrow is the one copy that
+# survives losing the age key, and nothing else reads it, so a rotation that
+# skipped it is otherwise found on the day it is needed. Needs Bitwarden
+# unlocked (`dotf secrets unlock`). Prints no value.
+.PHONY: backup-escrow-check
+backup-escrow-check:
+	@$(TOOLKIT) backup escrow-check --env $(or $(filter staging prod,$(ENV)),prod)
+
 # Restore the newest Postgres dump from R2 into a scratch container on this
 # machine and check it is complete (BACKUP-046 AC5). Needs docker and the env's
 # kubeconfig; prints names and counts, never rows.

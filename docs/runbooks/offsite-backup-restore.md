@@ -702,7 +702,16 @@ secret tooling — that tooling is age-backed today, which is the trust root the
 disaster just destroyed.
 
 **If the escrow is missing or stale, there is no recovery.** Check it after every
-credential rotation.
+credential rotation, with Bitwarden unlocked:
+
+```bash
+make backup-escrow-check ENV=prod
+```
+
+It compares each restic password in SOPS (the shared one and each node's) with
+its escrow entry, `KUBELAB_RESTIC_PASSWORD[_<NODE>]`, by sha256[:12]
+fingerprint, and prints no value. It exits non-zero on a stale or missing
+entry, or when the escrow cannot be read.
 
 ## Rotation — the ordering matters
 

@@ -355,3 +355,19 @@ def isolation_probe_cmd(
 
     if not probe_fleet(env):
         raise typer.Exit(code=1)
+
+
+@app.command("escrow-check")
+def escrow_check_cmd(
+    env: Annotated[str, typer.Option("--env", "-e", help="Environment whose SOPS passwords are compared")] = "prod",
+) -> None:
+    """Compare each restic password in SOPS with its Bitwarden escrow entry (BACKUP-057).
+
+    By sha256[:12] fingerprint, through `dotf secrets probe`: no value is read
+    into this process from Bitwarden, and none is printed. Fails on a stale or
+    missing entry, a password missing from SOPS, or an unreadable escrow.
+    """
+    from toolkit.features.backup_escrow import check_fleet
+
+    if not check_fleet(env):
+        raise typer.Exit(code=1)
