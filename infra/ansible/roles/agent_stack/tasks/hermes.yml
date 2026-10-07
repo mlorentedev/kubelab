@@ -149,7 +149,9 @@
         'Pull complete' in _agent_stack_hermes_pull.stderr
         or 'Downloaded newer image' in _agent_stack_hermes_pull.stdout
 
-    # Neither an env_file nor a mounted config is in Compose's spec hash.
+    # A mounted config is not in Compose's spec hash. An env_file's content is
+    # (measured 2026-10-07: emptying the sidecar's recreated it at the next `up`),
+    # so the flag is only certain for the config, and harmless for the rest.
     - name: Start hermes-kubelab
       ansible.builtin.command: >-
         docker compose -p {{ agent_stack_hermes_project }} -f {{ agent_stack_hermes_compose }} up -d
@@ -205,6 +207,29 @@
         _agent_stack_hermes_ts_key: ""
       when: _agent_stack_hermes_ts_mint is changed
       no_log: true
+
+    # Now, not at the next provision: the emptied file changes the sidecar's
+    # Compose hash, and its state lets it rejoin without the key.
+    - name: Recreate the sidecar without its consumed key
+      ansible.builtin.command: >-
+        docker compose -p {{ agent_stack_hermes_project }} -f {{ agent_stack_hermes_compose }} up -d tailscale
+      become_user: "{{ agent_stack_agent_user }}"
+      environment: "{{ agent_stack_agent_daemon_env }}"
+      when: _agent_stack_hermes_ts_mint is changed
+
+    - name: Verify the sidecar rejoined from its state alone
+      ansible.builtin.command: >-
+        docker exec hermes-kubelab-tailscale tailscale status --json --peers=false
+      become_user: "{{ agent_stack_agent_user }}"
+      environment: "{{ agent_stack_agent_daemon_env }}"
+      register: _agent_stack_hermes_ts_rejoined
+      until: >-
+        _agent_stack_hermes_ts_rejoined.rc == 0
+        and (_agent_stack_hermes_ts_rejoined.stdout | from_json).BackendState == 'Running'
+      retries: 30
+      delay: 2
+      changed_when: false
+      when: _agent_stack_hermes_ts_mint is changed
 
     # One command each rule must refuse, and every command a rule lets through,
     # read through the gateway's own evaluator as the gateway's own user.
