@@ -120,7 +120,7 @@ def test_the_watcher_policy_names_exactly_the_backup_buckets_read_only() -> None
 # ── the declaration ───────────────────────────────────────────────────────────
 
 
-def test_the_live_declaration_lists_no_node_until_the_migration_sitting() -> None:
+def test_before_the_migration_sitting_only_a_node_born_in_its_own_bucket_is_listed() -> None:
     """Every node with a copy in the shared bucket stays there until that copy is verified.
 
     ace2 is the exception by birth, not by migration: its first ship went to its
