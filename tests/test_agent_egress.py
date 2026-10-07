@@ -111,26 +111,58 @@ def test_the_unit_is_its_own_and_comes_before_the_agents_user_manager() -> None:
     # not start, and stopping the rule stops them.
     assert f"RequiredBy=user@{UID}.service" in unit
     assert "RemainAfterExit=yes" in unit
+    # The one line that could flush the node: it loads this table's file and
+    # nothing else, and stopping deletes this table and nothing else.
+    lines = {k: v for k, _, v in (line.partition("=") for line in unit.splitlines() if "=" in line)}
+    load = "/usr/sbin/nft -f {{ agent_stack_dir }}/agent-egress.nft"
+    assert lines["ExecStart"] == load and lines["ExecReload"] == load
+    assert lines["ExecStop"] == "/usr/sbin/nft delete table inet agent_egress"
 
 
 def test_the_rule_is_loaded_before_the_agents_user_manager_is_started() -> None:
-    names = [t.get("name", "") for t in _agent_tasks()]
-    load = next(i for i, t in enumerate(_agent_tasks()) if "agent-stack-egress" in str(t.get("ansible.builtin.systemd", "")))
-    start = names.index("Start the agent's user manager")
-    assert load < start
+    tasks = _agent_tasks()
+    names = [t.get("name", "") for t in tasks]
+    (load,) = [
+        i
+        for i, t in enumerate(tasks)
+        if t.get("ansible.builtin.systemd", {}).get("name") == "agent-stack-egress.service"
+        and t["ansible.builtin.systemd"].get("state") == "started"
+    ]
+    # `enabled` is what writes the RequiredBy link: without it the agent's
+    # manager starts at boot with no rule, which is the hole this closes.
+    assert tasks[load]["ansible.builtin.systemd"].get("enabled") is True
+    assert load < names.index("Start the agent's user manager")
+
+
+def _assert_controlled(tasks: list[dict], probe: dict) -> None:
+    """A refusal measures something only if the same address and port answered just
+    before, from outside the rule (as root): nc fails the same on a dead path."""
+    target = re.search(r"nc -z -w \d+ (\{\{ \w+ \}\}) (\{\{ [\w.]+ \}\})", probe["ansible.builtin.command"]["cmd"])
+    assert target, "every probe names its host and port as role variables"
+    host, port = target.groups()
+    controls = [
+        i
+        for i, t in enumerate(tasks)
+        if t.get("ansible.builtin.wait_for", {}).get("host") == host
+        and t["ansible.builtin.wait_for"].get("port") == port
+    ]
+    assert controls and controls[0] < tasks.index(probe), f"no control proves {host}:{port} open before the probe"
+    assert "become_user" not in tasks[controls[0]], "the control must run outside the agent's uid"
 
 
 def test_every_provision_proves_the_tailnet_refused_and_the_internet_open() -> None:
     tasks = _agent_tasks()
     probes = [t for t in tasks if "nc -z" in str(t.get("ansible.builtin.command", ""))]
     assert len(probes) == 3, "the VPS's tailnet address, this node's own published port, the internet control"
-    local = [p for p in probes if "{{ tailscale_ip }} {{ agent_stack_webui.default_port }}" in p["ansible.builtin.command"]["cmd"]]
+    own_port = "{{ tailscale_ip }} {{ agent_stack_webui.default_port }}"
+    local = [p for p in probes if own_port in p["ansible.builtin.command"]["cmd"]]
     assert len(local) == 1 and "rc == 0" in local[0]["failed_when"], "the DNAT case must be refused"
+    remote = [p for p in probes if "agent_stack_egress_probe_refused" in p["ansible.builtin.command"]["cmd"]]
+    assert len(remote) == 1
+    _assert_controlled(tasks, remote[0])
     # nc fails the same on a closed port: the port must be proven open first,
     # from outside the rule, or a refusal measures nothing.
-    control = [i for i, t in enumerate(tasks) if t.get("ansible.builtin.wait_for", {}).get("port") == "{{ agent_stack_webui.default_port }}"]
-    assert control and control[0] < tasks.index(local[0]), "no control proves the port open before the probe"
-    assert "become_user" not in tasks[control[0]], "the control must run outside the agent's uid"
+    _assert_controlled(tasks, local[0])
     for probe in probes:
         assert probe.get("check_mode") is False and probe.get("changed_when") is False
         assert probe.get("become_user") == "{{ agent_stack_agent_user }}"
