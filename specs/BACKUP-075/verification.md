@@ -18,13 +18,32 @@ Read from Loki on 2026-10-07 (`toolkit obs logs --env prod`, the watcher's `stat
 
 Every node's `stats` roughly doubled in three days while its repository stayed in the 80-170 MB range: the cost follows the snapshot count (hourly ships), not the bytes (lesson-490). The Beelink only crossed the timeout first. Raising `STATS_TIMEOUT` would buy days, not a fix. The fleet is about 0.55 GB of the 10 GB free tier, so the alert has been firing on no data, not on size.
 
+## After: object listing in staging
+
+`make watcher-run NAME=r2-backup-watcher ENV=staging` on 2026-10-07 04:06Z, with staging's Argo CD app pointed at `feat/backup-075-r2-bucket-size` (`make argo-set-revision`). The staging watcher reads the same four R2 repositories as prod (one `targets.txt` in the base), with the same read-only token. The Job succeeded in **36 s**, all four nodes `healthy:1`.
+
+| Node | `stored_bytes` (listing) | Listing took | Last `raw_bytes` (`stats`) |
+|---|---|---|---|
+| beelink | 256 097 048 | 1 s | 142 747 230 (2026-10-04) |
+| rpi3 | 161 660 767 | 0 s | 151 630 989 |
+| rpi4 | 197 792 899 | 1 s | 170 033 395 |
+| vps | 84 141 753 | 0 s | 77 948 912 |
+| **bucket `kubelab-backups`** | **699 692 467** | 0 s | (no bucket figure existed) |
+
+- The read-only token lists the bucket root: R2 tokens are scoped to buckets, not prefixes. The gate in `tasks.md` passed.
+- The bucket root equals the sum of the four prefixes to the byte: today nothing in the bucket lies outside a node's repository.
+- The Beelink stores 1.8x what `raw-data` reported: the unreferenced packs, index and snapshot files the old measure left out, and R2 bills. The fleet is 0.70 GB of the 10 GB free tier.
+- Each listing took 0-1 s against 31-601 s for `stats` on the same repositories. A listing's cost follows the object count, not the snapshot count.
+
 ## Evidence
 
 Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
 
-- [ ] Criterion 1 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 2 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 3 -> commit `<hash>` / test `<name>`
+- [ ] AC1 (four numeric node sizes and a numeric fleet, staging and prod) -> staging run above; prod run after merge
+- [ ] AC2 (fleet = bucket roots, each once) -> `test_each_node_reports_its_prefix_and_the_fleet_its_buckets`, `test_it_sizes_each_bucket_once_and_each_node_prefix`
+- [ ] AC3 (time does not follow snapshots) -> baseline and staging tables above; `test_each_node_logs_how_long_its_listing_took`
+- [ ] AC4 (failures are null, never unhealthy, sizing exits 0) -> `test_an_unmeasured_bucket_makes_the_fleet_size_null`, `test_a_failed_node_listing_is_null_and_never_fails_the_pod`, `test_a_hung_listing_is_cut_off_and_null`, `test_without_a_sizes_file_every_size_is_null_and_named`
+- [ ] AC5 (no `raw_bytes` reader left) -> `test_no_watcher_emitter_or_reader_still_says_raw_bytes`, `test_the_size_rule_fires_at_eighty_percent_of_the_free_tier_declared_in_common`
 
 ## Test status
 

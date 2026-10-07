@@ -22,32 +22,32 @@ created: "2026-10-06"
 ### Measure first (no code)
 
 - [x] [AC3] Baseline from Loki, not an ad-hoc client: the prod watcher's `stats took` lines for the last 7 days, and each node's last `raw_bytes`. Recorded in `verification.md`. ✓ 2026-10-07
-- [ ] [AC3] The rclone side is measured by the first staging watcher run (task under *Roll out*), the way BACKUP-057 measured its sizes: staging reads the same four repositories. That run is also the gate for root listing: R2 tokens are scoped to buckets, not prefixes, so the read-only token's Object Read on `kubelab-backups` should list the root. If the run reports the bucket `null` with an access error, stop and take the scope question back to the operator.
+- [x] [AC3] The rclone side is measured by the first staging watcher run (task under *Roll out*), the way BACKUP-057 measured its sizes: staging reads the same four repositories. That run is also the gate for root listing: R2 tokens are scoped to buckets, not prefixes, so the read-only token's Object Read on `kubelab-backups` should list the root. If the run reports the bucket `null` with an access error, stop and take the scope question back to the operator.
 
 ### Image pin
 
-- [ ] [P] [AC1] Failing test: the rclone image is pinned in `common.yaml` (`backup.watcher.size_image`, exact tag) and the kustomization `images:` entry matches it, the way `tests/test_r2_backup_watcher_manifest.py` already pins restic. Expected: FAIL.
-- [ ] [AC1] Add the pin in `common.yaml`, the `images:` entry in `infra/k8s/base/kustomization.yaml`, and whatever `sync_k8s_images.py` needs. Expected: PASS.
+- [x] [P] [AC1] Failing test: the rclone image is pinned in `common.yaml` (`backup.watcher.size_image`, exact tag) and the kustomization `images:` entry matches it, the way `tests/test_r2_backup_watcher_manifest.py` already pins restic. Expected: FAIL.
+- [x] [AC1] Add the pin in `common.yaml`, the `images:` entry in `infra/k8s/base/kustomization.yaml`, and whatever `sync_k8s_images.py` needs. Expected: PASS.
 
 ### Init container and sizes file
 
-- [ ] [AC1] [AC2] Failing manifest tests: an init container named `r2-size` runs `r2-backup-watcher/size.sh` in the rclone image, with the same Secret, non-root, read-only root filesystem, no capabilities, writing to an emptyDir that the probe container mounts read-only. `activeDeadlineSeconds` and the call count are recomputed from both scripts. Expected: FAIL.
-- [ ] [AC1] [AC2] Failing tests for `size.sh`, run under `sh` against a fake `rclone` on PATH (same idiom as `test_r2_backup_watcher_probe.py`): it sizes each distinct bucket root once and each node prefix once, writes one line per bucket and per node, and writes `null` for any call that fails or prints no `bytes`. Expected: FAIL.
-- [ ] [AC1] [AC2] Write `size.sh` and add it to the probe ConfigMap; configure rclone by environment only (`RCLONE_CONFIG_R2_TYPE=s3`, `PROVIDER=Cloudflare`, `ENV_AUTH=true`, `ENDPOINT` from `backup.r2.endpoint`). Bucket and prefix come from each target's repository URL, so `targets.txt` keeps its format. Expected: PASS.
+- [x] [AC1] [AC2] Failing manifest tests: an init container named `r2-size` runs `r2-backup-watcher/size.sh` in the rclone image, with the same Secret, non-root, read-only root filesystem, no capabilities, writing to an emptyDir that the probe container mounts read-only. `activeDeadlineSeconds` and the call count are recomputed from both scripts. Expected: FAIL.
+- [x] [AC1] [AC2] Failing tests for `size.sh`, run under `sh` against a fake `rclone` on PATH (same idiom as `test_r2_backup_watcher_probe.py`): it sizes each distinct bucket root once and each node prefix once, writes one line per bucket and per node, and writes `null` for any call that fails or prints no `bytes`. Expected: FAIL.
+- [x] [AC1] [AC2] Write `size.sh` and add it to the probe ConfigMap; configure rclone by environment only (`RCLONE_CONFIG_R2_TYPE=s3`, `PROVIDER=Cloudflare`, `ENV_AUTH=true`, `ENDPOINT` from `backup.r2.endpoint`). Bucket and prefix come from each target's repository URL, so `targets.txt` keeps its format. Expected: PASS.
 
 ### Probe reads the sizes
 
-- [ ] [AC1] [AC2] [AC4] Failing probe tests: each node line carries `stored_bytes` from the sizes file; the fleet line's `stored_bytes` is the sum of bucket roots, each bucket once, and includes an object outside any prefix; a missing or `null` entry makes that node and the fleet `null`, and never changes `healthy`. Expected: FAIL.
-- [ ] [AC1] [AC2] [AC4] `probe.sh`: drop `restic_stats` and `STATS_TIMEOUT`, read the sizes file, emit `stored_bytes`; keep the per-node timing line, now reporting the listing's duration from the sizes file. Shrink `terminationGracePeriodSeconds` to the new longest call. Expected: PASS.
+- [x] [AC1] [AC2] [AC4] Failing probe tests: each node line carries `stored_bytes` from the sizes file; the fleet line's `stored_bytes` is the sum of bucket roots, each bucket once, and includes an object outside any prefix; a missing or `null` entry makes that node and the fleet `null`, and never changes `healthy`. Expected: FAIL.
+- [x] [AC1] [AC2] [AC4] `probe.sh`: drop `restic_stats` and `STATS_TIMEOUT`, read the sizes file, emit `stored_bytes`; keep the per-node timing line, now reporting the listing's duration from the sizes file. Shrink `terminationGracePeriodSeconds` to the new longest call. Expected: PASS.
 
 ### Rename the readers
 
-- [ ] [AC5] Failing tests: `test_r2_backup_alerting_rules.py` and `test_r2_backup_freshness_rule.py` expect `unwrap stored_bytes` in the size and shrink rules, and a new assertion fails if `raw_bytes` appears in the watcher, its rules or the runbook. Expected: FAIL.
-- [ ] [AC5] `grafana-alerting/r2-backup-rules.yaml` (both rules, their comments and summaries) and `docs/runbooks/offsite-backup-restore.md#cost-and-quota` read `stored_bytes` and say what it measures. Expected: PASS.
+- [x] [AC5] Failing tests: `test_r2_backup_alerting_rules.py` and `test_r2_backup_freshness_rule.py` expect `unwrap stored_bytes` in the size and shrink rules, and a new assertion fails if `raw_bytes` appears in the watcher, its rules or the runbook. Expected: FAIL.
+- [x] [AC5] `grafana-alerting/r2-backup-rules.yaml` (both rules, their comments and summaries) and `docs/runbooks/offsite-backup-restore.md#cost-and-quota` read `stored_bytes` and say what it measures. Expected: PASS.
 
 ### Roll out
 
-- [ ] [AC1] `make deploy-k8s ENV=staging`, then `make watcher-run NAME=r2-backup-watcher ENV=staging` at once: four numeric node sizes and a numeric fleet sum. Record in `verification.md`.
+- [x] [AC1] (✓ 2026-10-07, by repointing staging's Argo CD app at the branch instead of a worktree deploy) `make deploy-k8s ENV=staging`, then `make watcher-run NAME=r2-backup-watcher ENV=staging` at once: four numeric node sizes and a numeric fleet sum. Record in `verification.md`.
 - [ ] [AC1] After merge and Argo CD sync, `make watcher-run NAME=r2-backup-watcher ENV=prod` at once (the rename empties the rule windows until a run lands), then confirm the free-tier alert resolves. Record in `verification.md`.
 
 ## Closing
