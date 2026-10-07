@@ -150,6 +150,14 @@ class TestSubject:
     def test_it_says_the_numbers_in_spanish(self, digest: dict[str, Any]) -> None:
         assert digest["subject"] == "Venta · mié 7 oct — 14 visitas, 8 fichas, 1 mensaje"
 
+    def test_the_date_is_denver_s_even_when_utc_is_already_the_next_day(self) -> None:
+        """A run from the n8n UI at 22:00 in Denver is 04:00 the next day in UTC."""
+        late = FAKE_NOW.replace(json.dumps(NOW_ISO), json.dumps("2026-10-08T04:00:00.000Z"))
+        assert late != FAKE_NOW
+        email = run_digest(nodes(), prelude=late)
+        assert email["subject"].startswith("Venta · mié 7 oct — ")
+        assert "Miércoles 7 de octubre" in visible(email["html"])
+
     def test_singular_and_plural_agree_with_the_count(self) -> None:
         one = run_digest(
             nodes(
@@ -188,10 +196,17 @@ class TestEmailNodeConsumesTheOutput:
             assert match, f"{field} is not a plain `$json.<key>` mapping: {params[field]!r}"
             assert digest[match.group(1)].strip(), f"{field} maps to an empty value"
 
-    def test_the_other_nodes_are_unchanged_in_what_the_digest_reads(self) -> None:
-        js = node_js(WORKFLOW, DIGEST_NODE)
-        for name in ("Events, last 24 h", "Events, whole sale", "Web Analytics, last 24 h"):
-            assert f"'{name}'" in js
+    def test_the_digest_reads_only_nodes_that_exist_upstream_of_it(self, digest: dict[str, Any]) -> None:
+        """`$('<name>')` on a renamed or missing node fails only when n8n runs it, at 08:00. The
+        stand-in `$` throws on a name it was not given, so the `digest` fixture running at all proves
+        the code reads nothing outside `nodes()`; here those names must be real nodes, each one read."""
+        workflow = json.loads(WORKFLOW_PATH.read_text(encoding="utf-8"))
+        upstream = {n["name"] for n in workflow["nodes"]} - {DIGEST_NODE, EMAIL_NODE}
+        assert set(nodes()) <= upstream
+        for name in nodes():
+            without = {k: v for k, v in nodes().items() if k != name}
+            with pytest.raises(subprocess.CalledProcessError):
+                run_digest(without)
 
 
 class TestHeaderAndKpis:
