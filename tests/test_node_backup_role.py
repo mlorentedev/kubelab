@@ -156,10 +156,16 @@ def _docker_invocations(script: str) -> list[str]:
     The executable is `docker` followed by whitespace or the end of the line.
     `docker.service`, `docker.socket` and `/var/lib/docker/...` are names, not
     calls, and the word inside an echoed message is capitalised, so none of
-    them matches.
+    them matches. A blocking `systemctl start docker` from the capture is the
+    same cycle by another route, so the detector catches that too.
     """
     call = re.compile(r"(?:^|[\s;|&(`'\"/])docker(?=\s|$)")
-    return [line for line in script.splitlines() if not line.lstrip().startswith("#") and call.search(line)]
+    start = re.compile(r"\bsystemctl\b.*\b(?:start|restart|reload|try-restart|reload-or-restart)\b.*\bdocker\b")
+    return [
+        line
+        for line in script.splitlines()
+        if not line.lstrip().startswith("#") and (call.search(line) or start.search(line))
+    ]
 
 
 @pytest.mark.parametrize(
@@ -169,7 +175,9 @@ def _docker_invocations(script: str) -> list[str]:
         ('m="$(/usr/bin/docker volume inspect x)"', True),
         ("docker", True),
         ('SRC="/var/lib/docker/volumes/x/_data"', False),
-        ("systemctl start docker.service", False),
+        ("systemctl start docker.service", True),
+        ("systemctl restart docker", True),
+        ("systemctl is-active docker.service", False),
         ('echo "Docker volume x is gone"', False),
     ],
 )
@@ -209,6 +217,14 @@ def test_volume_mountpoints_are_resolved_before_the_capture_script_renders():
     assert task["command"]["argv"][:3] == ["docker", "volume", "inspect"]
     assert task["changed_when"] is False
     assert task["check_mode"] is False
+    # Judged by an assert that names the source, which must sit between the
+    # resolution and the render.
+    judge = next(
+        i
+        for i, task in enumerate(tasks)
+        if task.get("loop") == "{{ node_backup_volume_inspect.results }}" and "assert" in task
+    )
+    assert resolve < judge < render, names
 
 
 def test_every_declared_source_produces_a_capture_block():

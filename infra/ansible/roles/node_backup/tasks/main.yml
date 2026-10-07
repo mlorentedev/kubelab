@@ -94,18 +94,33 @@
   register: node_backup_volume_inspect
   changed_when: false
   check_mode: false
+  # Judged by the assert below, which names the source and Docker's answer,
+  # instead of a raw `No such volume` in the middle of the run.
+  failed_when: false
+
+# Fails the apply, before anything is rendered, when a declared volume does
+# not exist or the daemon is down. Rendering a script that would refuse at
+# every capture is worse than refusing here, where the operator is watching.
+- name: Refuse a volume source Docker cannot resolve
+  assert:
+    that:
+      - item.rc == 0
+      - item.stdout is match('^/')
+    fail_msg: >-
+      {{ item.item.key }}: Docker volume {{ item.item.value.volume }} did not
+      resolve to a mountpoint (rc={{ item.rc }}, stdout={{ item.stdout | to_json }},
+      stderr={{ item.stderr | to_json }}). The volume does not exist yet or the daemon
+      is down; start the service that owns it, then re-run `make backup`.
+    quiet: true
+  loop: "{{ node_backup_volume_inspect.results }}"
+  loop_control:
+    label: "{{ item.item.key }}"
 
 - name: Map each Docker-volume source to its mountpoint
   set_fact:
     node_backup_volume_paths: >-
       {{ dict(node_backup_volume_inspect.results | map(attribute='item.key')
               | zip(node_backup_volume_inspect.results | map(attribute='stdout'))) }}
-
-- name: Refuse a mountpoint that is not an absolute path
-  assert:
-    that: node_backup_volume_paths.values() | reject('match', '^/') | list | length == 0
-    fail_msg: "docker volume inspect returned a non-absolute mountpoint: {{ node_backup_volume_paths }}"
-    quiet: true
 
 - name: Render capture script
   template:
