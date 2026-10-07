@@ -89,7 +89,7 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - **Live**: provision `changed=2`, then `changed=0`. Inside the running container, with its own env, v0.11.4's `generate_openai_batch_embeddings` returned 2×4096 and `ExternalReranker.predict` scored "the sky is blue" 0.8883 and "grass is green" 0.0001 for "what colour is the sky". Memory went from 654.7 MiB to 639.2 MiB after the restart: no local model was loaded at start (`get_ef` returns `None` when the engine is set).
 - **Not yet measured**: an upload and a question through the UI with a citation (spec AC9, last PR 5 line). It needs a signed-in user, and the only local account is break-glass, whose every use pages the operator.
 - **Query text in logs**: `ExternalReranker` logs each query at INFO, and v0.11.4 has only `GLOBAL_LOG_LEVEL` to change that. The text stays in ace2's local Docker logs; no shipper reads them.
-- **Found, ticketed**: v0.11.4 runs with `CORS_ALLOW_ORIGIN=*` and `allow_credentials=True` (it logs a warning at every start). Ticket pending (GitHub returned 500 at creation).
+- **Found, ticketed**: v0.11.4 runs with `CORS_ALLOW_ORIGIN=*` and `allow_credentials=True` (it logs a warning at every start). #2109.
 
 ## Decisions made during implementation
 
