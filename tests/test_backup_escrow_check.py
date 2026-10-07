@@ -12,8 +12,10 @@ from __future__ import annotations
 
 import hashlib
 import pathlib
+from typing import Any
 
 import pytest
+import yaml
 
 from toolkit.features import backup_escrow as be
 from toolkit.features.backup_node_credentials import restic_password_path
@@ -100,6 +102,50 @@ def test_a_password_missing_from_sops_fails_it() -> None:
     assert _check(escrow, sops) is False
     # Said as what it is, not as a stale escrow compared against nothing.
     assert be.escrow_id("rpi3") not in escrow.asked
+
+
+class _CM:
+    """The merged config check_fleet reads: values plus SOPS, here with fixture passwords."""
+
+    def __init__(self, sources: list[str], in_sops: list[str]) -> None:
+        self.config = {
+            "backup": {
+                "restic_password": "fixture-shared",
+                "sources": {n: {} for n in sources},
+                "nodes": {n: {"restic_password": f"fixture-{n}", "r2": {}} for n in in_sops},
+            }
+        }
+
+    def get_merged_config(self) -> dict[str, Any]:
+        return self.config
+
+    def get_secret_by_path(self, path: str) -> str | None:
+        node: Any = self.config
+        for key in path.split("."):
+            node = node.get(key) if isinstance(node, dict) else None
+        return node if isinstance(node, str) else None
+
+
+def test_the_fleet_is_the_committed_backup_sources() -> None:
+    committed = sorted(yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())["backup"]["sources"])
+    escrow = Escrow()
+    for n in committed:
+        escrow.values.setdefault(be.escrow_id(n), f"fixture-{n}")
+    assert be.check_fleet("prod", cm=_CM(committed, committed), run=escrow.run) is True
+    assert sorted(escrow.asked) == sorted([be.escrow_id(None), *(be.escrow_id(n) for n in committed)])
+
+
+def test_an_empty_fleet_fails_it_instead_of_comparing_only_the_shared_password() -> None:
+    escrow = Escrow()
+    assert be.check_fleet("prod", cm=_CM([], NODES), run=escrow.run) is False
+    assert escrow.asked == []
+
+
+def test_a_password_left_in_sops_after_its_node_left_is_compared_too() -> None:
+    escrow = Escrow()
+    escrow.values[be.escrow_id("rpi4")] = "fixture-rpi4-before-rotation"
+    assert be.check_fleet("prod", cm=_CM(["beelink", "rpi3", "vps"], NODES), run=escrow.run) is False
+    assert be.escrow_id("rpi4") in escrow.asked
 
 
 def test_the_target_defaults_to_prod() -> None:

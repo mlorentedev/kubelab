@@ -63,7 +63,7 @@ def check(nodes: list[str], *, secret: Callable[[str], Optional[str]], run: RunF
 
 
 def check_fleet(env: str, *, cm: object = None, run: Optional[RunFn] = None) -> bool:
-    """`check` over `backup.sources`, with the passwords from SOPS."""
+    """`check` over `backup.sources` and every node SOPS holds a password for."""
     logger.section("backup escrow check")
     if cm is None:
         from toolkit.features.configuration import ConfigurationManager
@@ -72,5 +72,16 @@ def check_fleet(env: str, *, cm: object = None, run: Optional[RunFn] = None) -> 
     from toolkit.features.backup_destination import _default_run
 
     config = cm.get_merged_config()  # type: ignore[attr-defined]
-    nodes = sorted((config.get("backup", {}) or {}).get("sources", {}) or {})
+    backup = config.get("backup", {}) or {}
+    sources = set(backup.get("sources", {}) or {})
+    if not sources:
+        logger.error("backup.sources is empty, so no node's escrow would be compared")
+        return False
+    # A password left in SOPS after its node left backup.sources still opens
+    # that node's history, so its escrow is compared too. Names only: the
+    # merged config holds the values, and none is read here.
+    in_sops = {n for n, v in (backup.get("nodes", {}) or {}).items() if isinstance(v, dict) and "restic_password" in v}
+    for orphan in sorted(in_sops - sources):
+        logger.warning(f"{orphan} has a restic password in SOPS but is not in backup.sources; comparing it too")
+    nodes = sorted(sources | in_sops)
     return check(nodes, secret=cm.get_secret_by_path, run=run or _default_run)  # type: ignore[attr-defined]
