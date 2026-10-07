@@ -566,9 +566,11 @@ class TestWebAnalyticsIsAskedTwice:
         assert out["subject"] == "Venta · mié 7 oct — 23 visitas, 8 fichas, 1 mensaje"
         assert "facebook.com 4" in out["text"]
 
-    def test_a_second_failure_is_still_named(self) -> None:
-        out = run_digest({**nodes(web=UNAVAILABLE), SECOND_WEB: UNAVAILABLE})
-        assert "No disponible: la consulta a Web Analytics devolvió errores" in out["text"]
+    def test_when_both_fail_the_second_failure_is_the_one_named(self) -> None:
+        """The two failures read differently, so this fails if the first answer is the one read."""
+        out = run_digest({**nodes(web=UNAVAILABLE), SECOND_WEB: {"error": "401 unauthorized"}})
+        assert "No disponible: la consulta a Web Analytics no devolvió datos" in out["text"]
+        assert "devolvió errores" not in out["text"]
         assert out["subject"].endswith("(datos incompletos)")
 
     def test_without_a_second_try_the_first_answer_counts(self, digest: dict[str, Any]) -> None:
