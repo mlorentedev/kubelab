@@ -29,7 +29,7 @@ import pytest
 import yaml
 
 from toolkit.features.configuration import ConfigurationManager
-from toolkit.features.n8n_import import N8N_IMPORT_CATALOG, import_n8n_workflow
+from toolkit.features.n8n_import import N8N_IMPORT_CATALOG, N8N_SHARED_CREDENTIALS, import_n8n_workflow
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -86,7 +86,7 @@ def test_one_run_restarts_n8n_once_after_every_publish() -> None:
     assert _import(kubectl) is True
     restarts = kubectl.of("rollout restart")
     publishes = kubectl.of("publish:workflow")
-    assert len(publishes) == len(N8N_IMPORT_CATALOG)
+    assert len(publishes) == len([s for s in N8N_IMPORT_CATALOG if "staging" in s.envs])
     assert len(restarts) == 1, f"{len(restarts)} restarts in one run"
     assert restarts[0] > max(publishes), "the restart must follow the last publish"
 
@@ -121,6 +121,7 @@ def test_the_pod_selector_mirrors_the_deployment() -> None:
     labels = deployment["spec"]["selector"]["matchLabels"]
     expected = ",".join(f"{k}={v}" for k, v in labels.items())
     assert {spec.pod_selector for spec in N8N_IMPORT_CATALOG} == {expected}
+    assert {cred.pod_selector for cred in N8N_SHARED_CREDENTIALS} == {expected}
 
 
 def test_a_failed_exec_reports_why_the_container_last_died(capsys: pytest.CaptureFixture[str]) -> None:

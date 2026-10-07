@@ -128,3 +128,80 @@ creating. An issue whose title carries no `AREA-NNN` key reaches no board.
 - **Envelope**: Alertmanager alert object or `{ service, alert_name, severity, query, thread_ts }`.
 - **Diagnostic Engine**: Fingerprints tracebacks, correlates with SRE runbooks, and classifies OOMKilled, Connection Refused, and Timeout signatures.
 - **Import**: `make import-n8n ENV=staging` (idempotent upsert).
+
+---
+
+## Sending email from a workflow — `kubelab-smtp`
+
+Email goes through one shared n8n **SMTP** credential, `kubelab-smtp`, declared in
+`N8N_SHARED_CREDENTIALS` (`toolkit/features/n8n_import.py`) and rendered at import from the
+relay the API and Authelia already use (`infra.smtp.host`, `.port`, `.user`, `.pass`; ADR-036).
+It belongs to no workflow: it is imported once per run however many reference it, and removing a
+workflow never removes it. Today it is imported in **prod** only; widen `envs` on the registry
+entry when a staging workflow needs it.
+
+To send an email from a new workflow:
+
+1. Put an **Email Send** node in the JSON and reference the credential by id and name, nothing else:
+
+   ```json
+   "credentials": { "smtp": { "id": "c9000000-0000-4000-8000-000000000001", "name": "kubelab-smtp" } }
+   ```
+
+2. Set `fromEmail` to the token `RESOLVE_KUBELAB_SMTP_FROM`. It resolves to `infra.smtp.user`, the
+   relay's own account. That is the **default sender convention**, and the only one the relay allows:
+   Gmail rewrites any other From to the authenticated account.
+3. Add the catalog entry. A workflow whose only credential is this one needs just its path and envs:
+   `N8nImportSpec(workflow_path=Path("infra/n8n/workflows/<name>.json"), envs=frozenset({"prod"}))`.
+4. `make import-n8n ENV=prod`. The import refuses the workflow if a node references a credential
+   nothing in the run imports, or references `kubelab-smtp` under another id.
+
+`secure` on the credential is derived from the port, not copied from `infra.smtp.secure`: n8n's
+flag means implicit TLS (port 465), and port 587 is STARTTLS (`secure: false`) although
+`infra.smtp.secure` is `true` for the API.
+
+---
+
+## `sale-metrics-daily-digest.json` — leaving-denver sale digest (APP-CONFIG-018)
+
+"Moving Sale - Daily Metrics Digest" (leaving-denver#225, its ADR-011): every day at 08:00
+America/Denver it reads the sale's first-party events (Workers Analytics Engine) and Cloudflare
+Web Analytics for the last 24 hours and the whole sale, and emails one plain-text digest with the
+repricing candidates. A failed query is named in the email rather than stopping it. **Prod only.**
+Like every workflow here it is **live as soon as it is imported** (`publish:workflow`): the first
+email is the next 08:00 Denver, or run it once from the n8n UI.
+
+It carries nothing in the repository that is not public, and reads nothing from `$env` (n8n 2
+blocks it, and a changed value would go stale silently). Everything is filled at import:
+
+| What | Where it comes from |
+|---|---|
+| Header Auth credential `cloudflare-analytics-read` (`Authorization: Bearer <token>`) | SOPS `apps.services.automation.n8n.sale_digest.analytics_token`, a Cloudflare token with **Account \| Account Analytics \| Read** |
+| Recipient (`RESOLVE_SALE_DIGEST_TO`) | SOPS `apps.services.automation.n8n.sale_digest.recipient` |
+| Web Analytics site tag (`RESOLVE_SALE_DIGEST_SITE_TAG`) | SOPS `apps.services.automation.n8n.sale_digest.site_tag` |
+| Sender (`RESOLVE_KUBELAB_SMTP_FROM`) and the SMTP credential | `infra.smtp.*`, through the shared `kubelab-smtp` above |
+
+The Cloudflare account id is inline in the JSON: it is an identifier, not a credential. If one of
+the three `sale_digest` values is absent the import fails that workflow, before any `kubectl`,
+naming the path. The values are never printed.
+
+Set them with `toolkit secrets set <path> --env prod --stdin` (see `docs/runbooks/sops-and-secrets.md`),
+then `make import-n8n ENV=prod`. The token is minted in the Cloudflare dashboard (My Profile > API Tokens
+> Create Custom Token, permission Account | Account Analytics | Read, this account only, TTL ending
+2026-11-15). `toolkit secrets check-expiry` asks Cloudflare when it dies.
+
+### Removing the sale (2026-11-09 and after)
+
+1. Delete the `sale-metrics-daily-digest.json` entry from `N8N_IMPORT_CATALOG` and the file.
+2. Delete the three `apps.services.automation.n8n.sale_digest.*` entries from `SECRET_CATALOG`
+   (`toolkit/features/secrets_manager.py`), their `PROVIDER_CHECKS` line in
+   `toolkit/features/secret_expiry.py`, and the `RESOLVE_SALE_DIGEST_*` lines in `PLACEHOLDER_SSOT`.
+   Then remove the SOPS block with `toolkit secrets unset apps.services.automation.n8n.sale_digest --env prod`
+   and revoke the Cloudflare token.
+3. The import never deletes. In n8n, delete the workflow `Moving Sale - Daily Metrics Digest` (id
+   `d5000000-0000-4000-8000-000000000001`) and the Header Auth credential `cloudflare-analytics-read`
+   (id `c5000000-0000-4000-8000-000000000001`). Both are reproducible from git, so deleting them is
+   safe.
+4. **Leave `kubelab-smtp` alone.** It is shared, and it stays in the registry, in n8n and in the
+   import. `tests/test_n8n_shared_credentials.py::TestSharedLifecycle` fails if removing the sale
+   would take it with it.

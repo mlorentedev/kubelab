@@ -398,6 +398,8 @@ PROVIDER_CHECKS = {
     # An account token (Manage Account > Account API Tokens), so it is verified
     # against the account rather than the user.
     "cloudflare.r2_token_minter": cloudflare_account_token_expiry,
+    # A user token from My Profile (the sale digest's read-only analytics token).
+    "apps.services.automation.n8n.sale_digest.analytics_token": cloudflare_token_expiry,
     "apps.services.automation.github_runner.token": github_pat_expiry,
     "apps.services.automation.dev_node.github_token": github_pat_expiry,
     # TOOL-035 (#1076). A fine-grained PAT with only repository permissions still

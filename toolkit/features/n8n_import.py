@@ -19,6 +19,12 @@ Idempotency: both ids are SSOT-ed inside the workflow JSON — the root `id`
 (workflow upsert + `update:workflow --id`) and the node's `httpHeaderAuth.id`
 (credential link + credential upsert). Re-running is an upsert, not a duplicate;
 deleting the workflow in n8n and re-running restores it identically.
+
+Shared credentials (APP-CONFIG-018): a credential that belongs to no workflow, such
+as the SMTP relay every email-sending workflow uses, is declared once in
+`N8N_SHARED_CREDENTIALS` and rendered from the SSOT that already feeds the API and
+Authelia. It is upserted once per run however many workflows reference it, and
+dropping a workflow from the catalog never drops it.
 """
 
 from __future__ import annotations
@@ -38,6 +44,7 @@ from toolkit.features.k8s_kubeconfig import output_path
 # byte-for-byte against `data.value`; the Bearer scheme (RFC 6750) is the contract
 # every source must send (`Authorization: Bearer <secret>`).
 _CREDENTIAL_TYPE = "httpHeaderAuth"
+_SMTP_TYPE = "smtp"
 _HEADER_NAME = "Authorization"
 _AUTH_SCHEME = "Bearer"
 
@@ -46,6 +53,10 @@ _DEPLOYMENT = "deploy/n8n"
 # Mirrors `spec.selector.matchLabels` of the Deployment in
 # `infra/k8s/base/services/n8n.yaml` (asserted by tests/test_n8n_import_restart.py).
 _POD_SELECTOR = "app.kubernetes.io/name=n8n"
+
+#: Implicit TLS. Every other SMTP port is plaintext or STARTTLS, which n8n (like
+#: nodemailer) calls `secure: false`.
+_SMTP_IMPLICIT_TLS_PORT = 465
 
 
 @dataclass(frozen=True)
@@ -60,11 +71,14 @@ class N8nImportSpec:
     workflow_path: Path
     """Workflow JSON path RELATIVE to project_root (the git-versioned source)."""
 
-    secret_key_path: str
-    """SOPS dotted path for the Header Auth secret (e.g. `apps.….webhook_secret`)."""
+    secret_key_path: str = ""
+    """SOPS dotted path for the workflow's own Header Auth secret (e.g.
+    `apps.….webhook_secret`). Empty when the workflow has none, as for one whose
+    only credential is a shared one (e.g. `kubelab-smtp`)."""
 
-    credential_name: str
-    """n8n credential name referenced by the workflow node (e.g. `notify-webhook`)."""
+    credential_name: str = ""
+    """n8n name of that Header Auth credential, as the workflow node references it
+    (e.g. `notify-webhook`)."""
 
     envs: frozenset[str] = field(default_factory=lambda: frozenset({"staging"}))
     """Envs where this import applies. NOTIFY-001 MVP is staging-only."""
@@ -79,6 +93,60 @@ class N8nImportSpec:
     """Label selector for the Deployment's pods. Every exec targets one of them by
     name, never `deployment`, because kubectl may resolve a Deployment to a pod
     that is not Ready (#1863)."""
+
+
+@dataclass(frozen=True)
+class SharedCredential:
+    """A credential no single workflow owns, imported once per run for its envs.
+
+    Workflows reference it from a node by `{id, name}`, exactly as they reference
+    their own; the importer refuses a workflow whose reference disagrees with this
+    declaration. It is imported whether or not a workflow uses it today, so
+    removing the last user (the sale, on 2026-11-09) leaves it in place for the
+    next one.
+    """
+
+    credential_id: str
+    """Fixed id: what a node's `credentials.<type>.id` must carry. Never changes."""
+
+    name: str
+    """n8n credential name, neutral on purpose (never a product's)."""
+
+    type: str
+    """n8n credential type; `smtp` is the only one rendered today."""
+
+    envs: frozenset[str]
+    """Envs where it is imported."""
+
+    namespace: str = _NAMESPACE
+    deployment: str = _DEPLOYMENT
+    pod_selector: str = _POD_SELECTOR
+
+
+# Workflows call this one by `credentials.smtp = {id, name}`. The sender is
+# `infra.smtp.user`, not a free choice: the relay is Gmail, which rewrites any
+# other From to the authenticated account (placeholder RESOLVE_KUBELAB_SMTP_FROM).
+KUBELAB_SMTP = SharedCredential(
+    credential_id="c9000000-0000-4000-8000-000000000001",
+    name="kubelab-smtp",
+    type=_SMTP_TYPE,
+    envs=frozenset({"prod"}),
+)
+
+N8N_SHARED_CREDENTIALS: list[SharedCredential] = [KUBELAB_SMTP]
+
+# The `infra.smtp.*` values `kubelab-smtp` is rendered from (ADR-036): the same
+# relay the API and Authelia use, so there is no second copy to drift.
+_SMTP_PATHS = {
+    "host": "infra.smtp.host",
+    "port": "infra.smtp.port",
+    "user": "infra.smtp.user",
+    "password": "infra.smtp.pass",
+}
+
+
+#: Anything that names the n8n Deployment an exec runs against.
+_Target = N8nImportSpec | SharedCredential
 
 
 # ── Registry ──────────────────────────────────────────────────────────────────
@@ -109,6 +177,17 @@ N8N_IMPORT_CATALOG: list[N8nImportSpec] = [
         credential_name="agent-dispatcher-webhook",
         envs=frozenset({"staging", "prod"}),
     ),
+    # APP-CONFIG-018, leaving-denver#225. The sale ends 2026-11-09. REMOVING IT is this
+    # entry, the JSON, and the `sale_digest` SOPS block and its SECRET_CATALOG entries
+    # (README: "Removing the sale"). `kubelab-smtp` below is not the sale's and stays.
+    N8nImportSpec(
+        workflow_path=Path("infra/n8n/workflows/sale-metrics-daily-digest.json"),
+        # Account | Account Analytics | Read. The recipient and the site tag sit beside
+        # it in `sale_digest` (see PLACEHOLDER_SSOT).
+        secret_key_path="apps.services.automation.n8n.sale_digest.analytics_token",
+        credential_name="cloudflare-analytics-read",
+        envs=frozenset({"prod"}),
+    ),
 ]
 
 
@@ -137,6 +216,11 @@ N8N_IMPORT_CATALOG: list[N8nImportSpec] = [
 #: not by name, inside any file this runs over.
 PLACEHOLDER_SSOT: dict[str, str] = {
     "RESOLVE_VIKUNJA_DEFAULT_PROJECT": "apps.services.core.vikunja.default_project",
+    # The From of any workflow sending through `kubelab-smtp`: the relay's own account.
+    "RESOLVE_KUBELAB_SMTP_FROM": "infra.smtp.user",
+    # The sale digest's own values; SOPS-resident, hence never logged below.
+    "RESOLVE_SALE_DIGEST_TO": "apps.services.automation.n8n.sale_digest.recipient",
+    "RESOLVE_SALE_DIGEST_SITE_TAG": "apps.services.automation.n8n.sale_digest.site_tag",
 }
 
 _PLACEHOLDER_RE = re.compile(r"RESOLVE_[A-Z0-9_]+")
@@ -168,20 +252,30 @@ def resolve_placeholders(text: str, cm: ConfigurationManager) -> str:
         )
 
     config = cm.get_merged_config()
+    values: dict[str, str] = {}
+    absent: list[str] = []
     for token in sorted(found):
         path = PLACEHOLDER_SSOT[token]
         node: Any = config
         for part in path.split("."):
             node = node.get(part) if isinstance(node, dict) else None
         value = "" if node is None else str(node).strip()
-        if not value:
-            raise PlaceholderError(
-                f"placeholder {token} maps to `{path}`, which is absent or empty in the "
-                f"merged config. It is required rather than defaulted: a workflow that "
-                f"substitutes an empty value fails in production and names no cause."
-            )
+        if value:
+            values[token] = value
+        else:
+            absent.append(f"{token} -> `{path}`")
+    if absent:
+        raise PlaceholderError(
+            f"placeholder(s) {'; '.join(absent)} map to a path that is absent or empty in the "
+            f"merged config. Each is required rather than defaulted: a workflow that "
+            f"substitutes an empty value fails in production and names no cause."
+        )
+
+    for token, value in values.items():
         text = text.replace(token, value)
-        logger.info(f"  Resolved {token} -> {value!r} (from {path})")
+        # The path, never the value: a placeholder may map to a SOPS-resident value
+        # (the sale digest's recipient), and the log is a terminal and a transcript.
+        logger.info(f"  Resolved {token} (from {PLACEHOLDER_SSOT[token]})")
 
     return text
 
@@ -197,15 +291,63 @@ def render_credential(credential_id: str, credential_name: str, secret: str) -> 
     `--separate`) consumes. `json.dumps` escapes the secret correctly even if it
     carries quotes/backslashes (a textual template would not).
     """
-    payload = [
-        {
-            "id": credential_id,
-            "name": credential_name,
-            "type": _CREDENTIAL_TYPE,
-            "data": {"name": _HEADER_NAME, "value": f"{_AUTH_SCHEME} {secret}"},
-        }
-    ]
-    return json.dumps(payload, indent=2)
+    return _dump([_header_auth_entry(credential_id, credential_name, secret)])
+
+
+def render_smtp_credential(credential_id: str, name: str, host: str, port: int, user: str, password: str) -> str:
+    """Build the `import:credentials` file for an n8n `smtp` credential (pure function).
+
+    Field names are those of n8n's `Smtp.credentials.ts` (2.12.3, the pinned image).
+    `secure` is n8n's own, i.e. nodemailer's: true means implicit TLS, which only port
+    465 speaks. Port 587 is STARTTLS and needs `secure: false`. It is therefore derived
+    from the port, never copied from `infra.smtp.secure`, which means "require TLS" to
+    the API and Authelia and is true for 587.
+    """
+    entry = {
+        "id": credential_id,
+        "name": name,
+        "type": _SMTP_TYPE,
+        "data": {
+            "user": user,
+            "password": password,
+            "host": host,
+            "port": port,
+            "secure": port == _SMTP_IMPLICIT_TLS_PORT,
+            "disableStartTls": False,
+        },
+    }
+    return _dump([entry])
+
+
+def _header_auth_entry(credential_id: str, credential_name: str, secret: str) -> dict[str, Any]:
+    return {
+        "id": credential_id,
+        "name": credential_name,
+        "type": _CREDENTIAL_TYPE,
+        "data": {"name": _HEADER_NAME, "value": f"{_AUTH_SCHEME} {secret}"},
+    }
+
+
+def _dump(entries: list[dict[str, Any]]) -> str:
+    return json.dumps(entries, indent=2)
+
+
+@dataclass(frozen=True)
+class CredentialRef:
+    """One `credentials.<type>` reference on a workflow node."""
+
+    type: str
+    id: str
+    name: str
+
+
+def read_credential_refs(workflow: dict[str, Any]) -> list[CredentialRef]:
+    """Every credential reference on every node, in node order."""
+    refs = []
+    for node in workflow.get("nodes", []):
+        for cred_type, cred in (node.get("credentials") or {}).items():
+            refs.append(CredentialRef(cred_type, str((cred or {}).get("id", "")), str((cred or {}).get("name", ""))))
+    return refs
 
 
 def read_workflow_ids(workflow: dict[str, Any]) -> tuple[str, str | None]:
@@ -214,17 +356,18 @@ def read_workflow_ids(workflow: dict[str, Any]) -> tuple[str, str | None]:
     Both ids are the single source of truth — fixed in the committed JSON so
     import is an idempotent upsert. If no node carries httpHeaderAuth credentials,
     returns (workflow_id, None) for workflows verifying signatures internally.
+    Several nodes may share one Header Auth credential (the sale digest has three);
+    two that disagree on its id are refused, because only one of them would ever
+    exist in n8n.
     """
     workflow_id = workflow.get("id")
     if not workflow_id:
         raise ValueError("workflow JSON has no root 'id' — required for idempotent upsert (TOOL-009)")
 
-    for node in workflow.get("nodes", []):
-        cred = (node.get("credentials") or {}).get(_CREDENTIAL_TYPE)
-        if cred and cred.get("id"):
-            return str(workflow_id), str(cred["id"])
-
-    return str(workflow_id), None
+    ids = {r.id for r in read_credential_refs(workflow) if r.type == _CREDENTIAL_TYPE and r.id}
+    if len(ids) > 1:
+        raise ValueError(f"httpHeaderAuth nodes disagree on the credential id {sorted(ids)}; only one can exist in n8n")
+    return str(workflow_id), (ids.pop() if ids else None)
 
 
 def _kubeconfig_for(env: str) -> str:
@@ -253,8 +396,8 @@ def import_n8n_workflow(env: str, project_root: Path, dry_run: bool = False) -> 
 
     Returns True iff every applicable workflow imported + activated (or all were
     out of scope for `env`, a successful no-op). Fails loudly (returns False, no
-    `kubectl`) if a precondition is unmet — missing SOPS secret, unreadable
-    workflow, or absent ids.
+    `kubectl` for the item concerned) if a precondition is unmet — missing SOPS
+    secret, unreadable workflow, absent ids, or a credential nothing imports.
     """
     logger.section(f"n8n workflow import — {env.upper()}")
 
@@ -265,8 +408,11 @@ def import_n8n_workflow(env: str, project_root: Path, dry_run: bool = False) -> 
 
     cm = ConfigurationManager(env, project_root)
 
-    landed = [spec for spec in applicable if _process_spec(spec, env, project_root, cm, dry_run)]
-    all_ok = len(landed) == len(applicable)
+    # Shared credentials first and once: a workflow that references one is imported
+    # only if it landed, and the rest never depend on it.
+    shared_ok = _import_shared_credentials(env, cm, dry_run)
+    landed = [spec for spec in applicable if _process_spec(spec, env, project_root, cm, dry_run, shared_ok)]
+    all_ok = len(landed) == len(applicable) and all(shared_ok.values())
 
     # Restart ONCE, after every workflow is in. The CLI writes to SQLite, but the
     # running process caches workflows + the webhook registry in memory (same class
@@ -290,15 +436,91 @@ def import_n8n_workflow(env: str, project_root: Path, dry_run: bool = False) -> 
 # ── Internals ─────────────────────────────────────────────────────────────────
 
 
+def _import_shared_credentials(env: str, cm: ConfigurationManager, dry_run: bool) -> dict[str, bool]:
+    """Import every shared credential of `env`, once, in one `import:credentials`.
+
+    Returns `{credential_id: imported}`. One whose SOPS values are absent is not
+    rendered, and so not imported: the failure names the missing path, and a
+    workflow that references it is held back in `_process_spec`.
+    """
+    result: dict[str, bool] = {}
+    rendered: list[tuple[SharedCredential, dict[str, Any]]] = []
+    for cred in (c for c in N8N_SHARED_CREDENTIALS if env in c.envs):
+        entry = _render_shared(cred, cm)
+        result[cred.credential_id] = entry is not None
+        if entry is not None:
+            rendered.append((cred, entry))
+    if not rendered:
+        return result
+
+    names = ", ".join(f"'{c.name}'" for c, _ in rendered)
+    if dry_run:
+        logger.info(f"[DRY-RUN] Would import shared credential(s) {names} (cluster not touched)")
+        return result
+    logger.info(f"Importing shared credential(s) {names}")
+    # Same namespace and pod for all of them, by construction: they are one n8n.
+    payload = _dump([entry for _, entry in rendered])
+    if not _exec_stdin_import(env, rendered[0][0], "import:credentials", "n8n-cred", payload):
+        logger.error(f"  Shared credential import failed ({names}) — workflows that use it are held back")
+        for cred, _ in rendered:
+            result[cred.credential_id] = False
+    return result
+
+
+def _render_shared(cred: SharedCredential, cm: ConfigurationManager) -> dict[str, Any] | None:
+    """The `import:credentials` entry for `cred`, or None (logged) if a value is absent."""
+    if cred.type != _SMTP_TYPE:
+        logger.error(f"  Shared credential '{cred.name}' has type '{cred.type}', which this importer cannot render")
+        return None
+    values: dict[str, str | None] = {key: cm.get_secret_by_path(path) for key, path in _SMTP_PATHS.items()}
+    missing = [_SMTP_PATHS[key] for key, value in values.items() if not value]
+    if missing:
+        logger.error(f"  Missing SOPS value at {', '.join(repr(p) for p in missing)} — cannot import '{cred.name}'")
+        return None
+    try:
+        port = int(str(values["port"]))
+    except ValueError:
+        logger.error(f"  '{_SMTP_PATHS['port']}' is not a port number — cannot import '{cred.name}'")
+        return None
+    rendered = render_smtp_credential(
+        cred.credential_id, cred.name, str(values["host"]), port, str(values["user"]), str(values["password"])
+    )
+    entry: dict[str, Any] = json.loads(rendered)[0]
+    return entry
+
+
+def _unimported_references(
+    refs: list[CredentialRef], spec: N8nImportSpec, env: str, shared_ok: dict[str, bool]
+) -> list[str]:
+    """Why each credential reference on the workflow would not exist in n8n, if it would not.
+
+    A reference is met by the spec's own Header Auth credential, or by a shared
+    credential of this env that imported, under the same id and name. Anything else
+    imports without complaint and fails at the workflow's first execution.
+    """
+    shared = {c.credential_id: c for c in N8N_SHARED_CREDENTIALS if env in c.envs and c.type == _SMTP_TYPE}
+    problems = []
+    for ref in refs:
+        if ref.type == _CREDENTIAL_TYPE and spec.secret_key_path and ref.name == spec.credential_name:
+            continue
+        cred = shared.get(ref.id)
+        if cred is None or (cred.type, cred.name) != (ref.type, ref.name):
+            problems.append(f"{ref.type} credential '{ref.name}' (id {ref.id}) is not imported by anything in {env}")
+        elif not shared_ok.get(cred.credential_id):
+            problems.append(f"shared credential '{cred.name}' did not import")
+    return problems
+
+
 def _process_spec(
     spec: N8nImportSpec,
     env: str,
     project_root: Path,
     cm: ConfigurationManager,
     dry_run: bool,
+    shared_ok: dict[str, bool],
 ) -> bool:
     """Import + activate a single workflow. Returns True on success."""
-    logger.info(f"Processing workflow: {spec.workflow_path.name} (credential={spec.credential_name})")
+    logger.info(f"Processing workflow: {spec.workflow_path.name} (credential={spec.credential_name or 'none'})")
 
     workflow_full = project_root / spec.workflow_path
     if not workflow_full.is_file():
@@ -329,6 +551,12 @@ def _process_spec(
         logger.error(f"  {exc}")
         return False
 
+    problems = _unimported_references(read_credential_refs(workflow_doc), spec, env, shared_ok)
+    if problems:
+        for problem in problems:
+            logger.error(f"  {problem} — workflow not imported")
+        return False
+
     credential_json = None
     if credential_id and spec.secret_key_path:
         secret = cm.get_secret_by_path(spec.secret_key_path)
@@ -356,7 +584,7 @@ def _process_spec(
         return False
 
     # 3. Publish (no API key needed). n8n deprecated `update:workflow --active`
-    #    in favour of `publish:workflow --id` — we use the current command.
+    #    in favour of `publish:workflow` — we use the current command.
     if not _exec_publish(env, spec, workflow_id):
         logger.error(f"  Publish failed for workflow id={workflow_id}")
         return False
@@ -366,7 +594,7 @@ def _process_spec(
     return True
 
 
-def _exec_stdin_import(env: str, spec: N8nImportSpec, subcommand: str, prefix: str, payload: str) -> bool:
+def _exec_stdin_import(env: str, spec: _Target, subcommand: str, prefix: str, payload: str) -> bool:
     """`kubectl exec -i … -- sh -c <script>` with `payload` on stdin.
 
     The payload (credential JSON or workflow JSON) reaches the pod via stdin only,
@@ -380,7 +608,7 @@ def _exec_publish(env: str, spec: N8nImportSpec, workflow_id: str) -> bool:
     return _exec(env, spec, "publish:workflow", ["n8n", "publish:workflow", f"--id={workflow_id}"])
 
 
-def _exec(env: str, spec: N8nImportSpec, what: str, argv: list[str], stdin: str | None = None) -> bool:
+def _exec(env: str, spec: _Target, what: str, argv: list[str], stdin: str | None = None) -> bool:
     """Run `argv` in a live n8n pod, named, retrying once on a freshly resolved one.
 
     A liveness-probe restart (see #1009 — n8n gets CPU-throttled under its 1-core
@@ -415,7 +643,7 @@ def _live_pod(pods: list[dict[str, Any]] | None) -> str | None:
     return next((p["metadata"]["name"] for p in pods or [] if _is_live(p)), None)
 
 
-def _pod_record(env: str, spec: N8nImportSpec, name: str) -> str:
+def _pod_record(env: str, spec: _Target, name: str) -> str:
     """What the pod says about itself after a failed exec.
 
     A container killed mid-exec (OOM, liveness) and a real import error both
@@ -435,7 +663,7 @@ def _pod_record(env: str, spec: N8nImportSpec, name: str) -> str:
     return ", ".join(parts) or "no container status"
 
 
-def _list_pods(env: str, spec: N8nImportSpec) -> list[dict[str, Any]] | None:
+def _list_pods(env: str, spec: _Target) -> list[dict[str, Any]] | None:
     cmd = [
         "kubectl",
         "get",
@@ -503,7 +731,7 @@ def _run(cmd: list[str], stdin: str | None = None, label: str | None = None) -> 
         return False
 
 
-def _wait_rollout_ready(env: str, spec: N8nImportSpec, timeout: str = "60s") -> bool:
+def _wait_rollout_ready(env: str, spec: _Target, timeout: str = "60s") -> bool:
     """Block until `spec.deployment` reports its rollout Ready, or `timeout` elapses."""
     cmd = [
         "kubectl",

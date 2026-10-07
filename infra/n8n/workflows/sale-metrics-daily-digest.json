@@ -1,0 +1,246 @@
+{
+  "id": "d5000000-0000-4000-8000-000000000001",
+  "name": "Moving Sale - Daily Metrics Digest",
+  "active": true,
+  "settings": {
+    "timezone": "America/Denver",
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "description": "APP-CONFIG-018 (leaving-denver#225): daily email of the moving sale metrics. Prod only; the sale ends 2026-11-09 (README: Removing the sale)."
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * *"
+            }
+          ]
+        }
+      },
+      "name": "Every day at 8 AM Denver",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// The Web Analytics query for the last 24 hours. The site tag is the `token` of Cloudflare's\n// beacon (public, but account-specific); the import fills it in from SOPS, so it is not in the repository.\nconst until = $now.toUTC();\nconst since = until.minus({ hours: 24 });\nconst window = { datetime_geq: since.toISO(), datetime_leq: until.toISO() };\nconst query = `query($account: String!, $site: String!, $since: Time!, $until: Time!) {\n  viewer { accounts(filter: { accountTag: $account }) {\n    totals: rumPageloadEventsAdaptiveGroups(limit: 1,\n      filter: { siteTag: $site, datetime_geq: $since, datetime_leq: $until }) { count sum { visits } }\n    referrers: rumPageloadEventsAdaptiveGroups(limit: 10, orderBy: [count_DESC],\n      filter: { siteTag: $site, datetime_geq: $since, datetime_leq: $until }) { count dimensions { refererHost } }\n  } }\n}`;\nreturn [{ json: { graphql: { query, variables: {\n  account: '76967f5ede1ce50efce34d90b7e94958', site: 'RESOLVE_SALE_DIGEST_SITE_TAG',\n  since: window.datetime_geq, until: window.datetime_leq } } } }];\n"
+      },
+      "name": "Web Analytics query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        470,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.cloudflare.com/client/v4/accounts/76967f5ede1ce50efce34d90b7e94958/analytics_engine/sql",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "text/plain",
+        "body": "SELECT blob1 AS event, blob2 AS source, blob3 AS item, blob4 AS bundle, SUM(_sample_interval) AS n FROM leaving_denver_sale_events WHERE timestamp > NOW() - INTERVAL '1' DAY GROUP BY event, source, item, bundle ORDER BY n DESC LIMIT 500 FORMAT JSON",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "Events, last 24 h",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        690,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "c5000000-0000-4000-8000-000000000001",
+          "name": "cloudflare-analytics-read"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.cloudflare.com/client/v4/accounts/76967f5ede1ce50efce34d90b7e94958/analytics_engine/sql",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "text/plain",
+        "body": "SELECT blob1 AS event, blob2 AS source, blob3 AS item, blob4 AS bundle, SUM(_sample_interval) AS n FROM leaving_denver_sale_events GROUP BY event, source, item, bundle ORDER BY n DESC LIMIT 500 FORMAT JSON",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "Events, whole sale",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        910,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "c5000000-0000-4000-8000-000000000001",
+          "name": "cloudflare-analytics-read"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.cloudflare.com/client/v4/graphql",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Web Analytics query').first().json.graphql) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "Web Analytics, last 24 h",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1130,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "c5000000-0000-4000-8000-000000000001",
+          "name": "cloudflare-analytics-read"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Builds the email from the three answers. A step that failed is named in the email instead of\n// stopping it: a digest that says \"unavailable\" is better than no digest.\nconst rowsOf = name => {\n  const json = $(name).first().json;\n  return Array.isArray(json.data) ? json.data.map(r => ({ ...r, n: Number(r.n) })) : null;\n};\nconst recent = rowsOf('Events, last 24 h');\nconst sale = rowsOf('Events, whole sale');\nconst web = $('Web Analytics, last 24 h').first().json;\n\nconst sum = (rows, keep) => rows.filter(keep).reduce((total, r) => total + r.n, 0);\nconst tally = (rows, event, key) => {\n  const counts = {};\n  rows.filter(r => r.event === event && r[key]).forEach(r => { counts[r[key]] = (counts[r[key]] || 0) + r.n; });\n  return Object.entries(counts).sort((a, b) => b[1] - a[1]);\n};\nconst list = pairs => (pairs.length ? pairs.map(([name, n]) => `${name} ${n}`).join(', ') : 'none');\n\nconst block = (title, rows) => {\n  if (!rows) return `${title}\\n  unavailable: the Analytics Engine query failed (see the n8n execution)`;\n  return [\n    title,\n    `  Visits from a tracked link, by source: ${list(tally(rows, 'visit', 'source'))}`,\n    `  Text taps: ${sum(rows, r => r.event === 'text_tap')} (by item: ${list(tally(rows, 'text_tap', 'item'))}; by bundle: ${list(tally(rows, 'text_tap', 'bundle'))})`,\n    `  Text taps, by source: ${list(tally(rows, 'text_tap', 'source'))}`,\n    `  Item views, by item: ${list(tally(rows, 'view_item', 'item').slice(0, 10))}`,\n  ].join('\\n');\n};\n\n// Many views and no text taps: the price is the likely reason (make reprice).\nconst MIN_VIEWS = 5;\nconst candidates = () => {\n  if (!sale) return 'unavailable';\n  const tapped = new Set(tally(sale, 'text_tap', 'item').map(([item]) => item));\n  const found = tally(sale, 'view_item', 'item').filter(([item, n]) => n >= MIN_VIEWS && !tapped.has(item));\n  return list(found);\n};\n\nconst groups = (((web.data || {}).viewer || {}).accounts || [])[0];\nlet site = 'Cloudflare Web Analytics, last 24 h\\n  unavailable: the query returned no data (check the site tag and the token, see the runbook)';\nif (Array.isArray(web.errors) && web.errors.length) {\n  // GraphQL answers 200 with `errors`, sometimes beside partial data: do not print those figures.\n  site = 'Cloudflare Web Analytics, last 24 h\\n  unavailable: the GraphQL query returned errors (see the n8n execution)';\n} else if (groups && Array.isArray(groups.totals) && groups.totals.length) {\n  const totals = groups.totals[0];\n  const referrers = (groups.referrers || []).map(g => [g.dimensions.refererHost || 'direct', g.count]);\n  site = [\n    'Cloudflare Web Analytics, last 24 h',\n    `  Page views: ${totals.count}, visits: ${(totals.sum || {}).visits}`,\n    `  Top referrers: ${list(referrers)}`,\n  ].join('\\n');\n} else if (groups) {\n  site = 'Cloudflare Web Analytics, last 24 h\\n  no page views recorded';\n}\n\nconst day = $now.setZone('America/Denver').toFormat('yyyy-LL-dd');\nconst text = [\n  block('LAST 24 HOURS', recent),\n  '',\n  block('WHOLE SALE, SO FAR', sale),\n  '',\n  site,\n  '',\n  `Repricing candidates (at least ${MIN_VIEWS} views, no text taps): ${candidates()}`,\n  'Items with many views and zero text taps are repricing candidates: make reprice ID=<item> PRICE=<usd>.',\n  'Counts are events, not people: nothing identifies a visitor.',\n].join('\\n');\nreturn [{ json: { subject: `Moving sale — daily metrics ${day}`, text } }];\n"
+      },
+      "name": "Write the digest",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1350,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "RESOLVE_KUBELAB_SMTP_FROM",
+        "toEmail": "RESOLVE_SALE_DIGEST_TO",
+        "subject": "={{ $json.subject }}",
+        "emailFormat": "text",
+        "text": "={{ $json.text }}",
+        "options": {}
+      },
+      "name": "Email the digest",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1570,
+        300
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "c9000000-0000-4000-8000-000000000001",
+          "name": "kubelab-smtp"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every day at 8 AM Denver": {
+      "main": [
+        [
+          {
+            "node": "Web Analytics query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Web Analytics query": {
+      "main": [
+        [
+          {
+            "node": "Events, last 24 h",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Events, last 24 h": {
+      "main": [
+        [
+          {
+            "node": "Events, whole sale",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Events, whole sale": {
+      "main": [
+        [
+          {
+            "node": "Web Analytics, last 24 h",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Web Analytics, last 24 h": {
+      "main": [
+        [
+          {
+            "node": "Write the digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write the digest": {
+      "main": [
+        [
+          {
+            "node": "Email the digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
