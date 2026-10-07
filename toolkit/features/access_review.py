@@ -390,18 +390,28 @@ def idp_groups_drift(rendered: str, read_live: Callable[[], str], env: str) -> t
     password hash in ENV is absent from both and never a false drift.
     """
     try:
+        live_text = read_live()
         want = _groups_by_user(rendered, "rendered")
-        have = _groups_by_user(read_live(), f"live {env}")
+        have = _groups_by_user(live_text, f"live {env}")
     except ReviewError as exc:
         return [Finding("authelia", "*", None, "unreadable", "failed", str(exc))], frozenset()
     hint = f"the live users database lags the declaration: run `make apply-secrets ENV={env}`"
+    # Open WebUI keys an account to its login by the rendered email, so a moved
+    # email holds the user back as a group change does. The address is not shown.
+    want_mail, have_mail = _logins_by_email(rendered), _logins_by_email(live_text)
+    moved = {user for user in want.keys() & have.keys() if _email_of(user, want_mail) != _email_of(user, have_mail)}
     findings = []
     for user in sorted(want.keys() | have.keys()):
         declared = ",".join(want[user]) or "-" if user in want else "(absent)"
         live = ",".join(have[user]) or "-" if user in have else "(absent)"
-        same = user in want and user in have and want[user] == have[user]
-        findings.append(Finding("authelia", user, declared, live, "ok" if same else "drift", "" if same else hint))
+        same = user in want and user in have and want[user] == have[user] and user not in moved
+        detail = "" if same else (f"its email differs; {hint}" if user in moved else hint)
+        findings.append(Finding("authelia", user, declared, live, "ok" if same else "drift", detail))
     return findings, frozenset(f.user for f in findings if f.status == "drift")
+
+
+def _email_of(user: str, logins: Mapping[str, str]) -> str | None:
+    return next((email for email, login in logins.items() if login == user), None)
 
 
 def _logins_by_email(text: str) -> dict[str, str]:

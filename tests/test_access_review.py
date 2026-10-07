@@ -379,9 +379,16 @@ LIVE_HASH = "$argon2id$v=19$m=65536,t=3,p=4$live-hash-must-not-leak"
 RENDERED_GROUPS = {"manu": ["admins", "users"], "operator": ["users"]}
 
 
-def _users_db(groups: dict[str, list[str]], password: str) -> str:
+def _users_db(groups: dict[str, list[str]], password: str, emails: dict[str, str] | None = None) -> str:
+    emails = emails or {}
     users = {
-        u: {"disabled": False, "displayname": u, "password": password, "email": f"{u}@example.com", "groups": g}
+        u: {
+            "disabled": False,
+            "displayname": u,
+            "password": password,
+            "email": emails.get(u, f"{u}@example.com"),
+            "groups": g,
+        }
         for u, g in groups.items()
     }
     return yaml.safe_dump({"users": users})
@@ -413,6 +420,20 @@ def test_idp_groups_drift_when_the_live_users_database_lags(live: dict[str, list
     drifts = [f for f in findings if f.status == "drift"]
     assert {f.user for f in drifts} == lagging
     assert all(f.service == "authelia" and "make apply-secrets ENV=staging" in f.detail for f in drifts)
+    _no_hash_in(findings)
+
+
+def test_idp_email_that_lags_holds_the_user_back() -> None:
+    """Open WebUI accounts are keyed to a login by the email the declaration renders.
+    Until `make apply-secrets` lands a moved email, the account holding it still
+    belongs to the old user, so a correction would hand one user's tier to another."""
+    live = _users_db(RENDERED_GROUPS, LIVE_HASH, {"operator": "old-operator@example.com"})
+    findings, stale = idp_groups_drift(_users_db(RENDERED_GROUPS, RENDERED_HASH), lambda: live, "prod")
+    assert stale == {"operator"}
+    [drift] = [f for f in findings if f.status == "drift"]
+    assert (drift.user, drift.service) == ("operator", "authelia")
+    assert "email" in drift.detail and "make apply-secrets ENV=prod" in drift.detail
+    assert "old-operator@example.com" not in repr(findings)
     _no_hash_in(findings)
 
 
@@ -629,9 +650,12 @@ def test_the_command_exits_1_on_every_finding_a_human_must_act_on(
 class ScriptedOpenWebUI:
     """Open WebUI's sign-in and user API, answering by route and recording each call."""
 
-    def __init__(self, users: list[dict[str, Any]], signin: tuple[int, Any] | None = None) -> None:
+    def __init__(
+        self, users: list[dict[str, Any]], signin: tuple[int, Any] | None = None, update_status: int = 200
+    ) -> None:
         self.users = users
         self.signin = signin or (200, {"email": "breakglass@kubelab.live", "token": "tok"})
+        self.update_status = update_status
         self.calls: list[tuple[str, str, Any, str]] = []
 
     def __call__(self, method: str, url: str, body: Any, auth: str) -> tuple[int, Any]:
@@ -640,7 +664,7 @@ class ScriptedOpenWebUI:
             return self.signin
         if url.endswith("/api/v1/users/all"):
             return 200, {"users": self.users, "total": len(self.users)}
-        return 200, {"id": url.split("/")[-2]}
+        return self.update_status, {"id": url.split("/")[-2]}
 
 
 LOGINS = {"manu@mlorente.dev": "manu", "info@kubelab.live": "operator", "breakglass@kubelab.live": "breakglass"}
@@ -677,6 +701,15 @@ def test_open_webui_edits_the_role_under_the_break_glass_session() -> None:
     accounts = {a.user: a for a in tiers.read("http://w", "breakglass@kubelab.live:pw")}
     assert tiers.set_tier("http://w", "breakglass@kubelab.live:pw", accounts["operator"], "pending")
     assert app.calls[-1] == ("POST", "http://w/api/v1/users/u2/update", {"role": "pending"}, "Bearer tok")
+
+
+def test_open_webui_reports_a_refused_edit_as_unfixed() -> None:
+    """v0.11.4 takes `role` as any string (`UserUpdateForm`, `routers/users.py`), so
+    `pending` is accepted; a refusal (the primary-admin guard) must not read as fixed."""
+    app = ScriptedOpenWebUI(WEBUI_USERS, update_status=403)
+    tiers = OpenWebUITiers(app, LOGINS)
+    accounts = {a.user: a for a in tiers.read("http://w", "breakglass@kubelab.live:pw")}
+    assert not tiers.set_tier("http://w", "breakglass@kubelab.live:pw", accounts["operator"], "pending")
 
 
 @pytest.mark.parametrize(
