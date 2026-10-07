@@ -34,6 +34,7 @@ All tests are in `tests/test_n8n_shared_credentials.py` unless named, and run ag
 - **The recipient and site tag are SOPS values** under the sale's own block, with the token. The convention in `common.yaml` is plaintext for addresses (`infra.smtp.user`), but leaving-denver's runbook deliberately keeps these out of its public repository and this repository is public too. One block means one place to fill and one to delete.
 - **The resolver stopped logging values** and reports every absent path at once.
 - **Started over the WIP limit** (25 active specs, limit 10) with the reason recorded in `proposal.md`: the sale has a hard end date and none of the 25 is this change's to abandon.
+- **Preflight is per workflow, not per run (AC2).** A workflow missing a value fails before any `kubectl` for it, but the other workflows still import first. Holding all of them until the digest is configured would let a sale value block the alerting path (`notify-router`) after a PVC wipe, and the run's existing contract is that one failed workflow does not stop the rest. pr-agent flagged this against the issue's first wording; the issue and the proposal now say what the code does.
 - The workflow is `active: true` like its siblings: `publish:workflow` runs unconditionally, so the flag is cosmetic.
 
 ## Promotion candidates

@@ -196,8 +196,8 @@ then `make import-n8n ENV=prod`. The token is minted in the Cloudflare dashboard
 2. Delete the three `apps.services.automation.n8n.sale_digest.*` entries from `SECRET_CATALOG`
    (`toolkit/features/secrets_manager.py`), their `PROVIDER_CHECKS` line in
    `toolkit/features/secret_expiry.py`, and the `RESOLVE_SALE_DIGEST_*` lines in `PLACEHOLDER_SSOT`.
-   Then drop the `sale_digest` block from `prod.enc.yaml` (`sops infra/config/secrets/prod.enc.yaml`) and revoke the
-   Cloudflare token.
+   Then remove the SOPS block with `toolkit secrets unset apps.services.automation.n8n.sale_digest --env prod`
+   and revoke the Cloudflare token.
 3. The import never deletes. In n8n, delete the workflow `Moving Sale - Daily Metrics Digest` (id
    `d5000000-0000-4000-8000-000000000001`) and the Header Auth credential `cloudflare-analytics-read`
    (id `c5000000-0000-4000-8000-000000000001`). Both are reproducible from git, so deleting them is

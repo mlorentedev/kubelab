@@ -26,6 +26,8 @@ import copy
 import json
 import re
 import subprocess
+import sys
+import textwrap
 from pathlib import Path
 from typing import Any
 
@@ -518,8 +520,27 @@ class TestRegistries:
                     spec.pod_selector,
                 )
 
-    def test_the_shared_credentials_are_a_constant_that_reads_no_config_at_import(self) -> None:
-        assert all(isinstance(c.credential_id, str) and c.credential_id for c in N8N_SHARED_CREDENTIALS)
+    def test_importing_the_module_reads_no_config(self) -> None:
+        """Both registries are module constants. A fresh interpreter, so no earlier test has
+        already imported the module; building a `ConfigurationManager` at import (a registry
+        derived from SSOT, say) would make `--help` decrypt SOPS (TOOL-097)."""
+        script = textwrap.dedent(
+            """
+            import toolkit.features.configuration as c
+
+            def refuse(*a, **k):
+                raise AssertionError("ConfigurationManager built at import")
+
+            c.ConfigurationManager.__init__ = refuse
+            import toolkit.features.n8n_import as m
+            assert m.N8N_SHARED_CREDENTIALS and m.N8N_IMPORT_CATALOG
+            print("imported")
+            """
+        )
+        done = subprocess.run(
+            [sys.executable, "-c", script], cwd=REPO_ROOT, capture_output=True, text=True, timeout=120
+        )
+        assert done.returncode == 0 and "imported" in done.stdout, done.stderr[-2000:]
 
 
 class TestReadme:
