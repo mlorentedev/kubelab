@@ -271,3 +271,13 @@ def test_the_container_resolves_through_magicdns_first() -> None:
     dns = compose["services"]["open-webui"]["dns"]
     assert dns == _context()["agent_stack_docker_dns_servers"]
     assert dns[0] == "100.100.100.100", dns
+
+
+def test_only_open_webuis_own_origin_may_read_it_with_credentials() -> None:
+    """v0.11.4 defaults `CORS_ALLOW_ORIGIN` to `*` and passes it to Starlette with
+    `allow_credentials=True`, which echoes any origin back on a request with a cookie,
+    and socket.io accepts the upgrade from any origin (#2109, measured live). `.internal`
+    is on no public suffix list, so every `*.kubelab.internal` host is the same site."""
+    env = _env()
+    assert env["CORS_ALLOW_ORIGIN"] == env["WEBUI_URL"], "the origin users and break-glass both reach"
+    assert "*" not in env["CORS_ALLOW_ORIGIN"]
