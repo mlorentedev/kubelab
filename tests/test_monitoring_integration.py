@@ -228,12 +228,12 @@ def apply_seed(kuma_url, monkeypatch, tmp_path):
     Hands it a fresh client each time, since it disconnects what it is given.
     """
 
-    def _apply(seed: list[dict]) -> None:
+    def _apply(seed: list[dict], *, prune: bool = False) -> None:
         export_dir = tmp_path / monitoring.EXPORT_DIR
         export_dir.mkdir(parents=True, exist_ok=True)
         (export_dir / monitoring.MONITORS_FILE).write_text(json.dumps(seed))
         monkeypatch.setattr(monitoring, "_connect", lambda _root: (_client(kuma_url), {"url": kuma_url}))
-        monitoring.apply_monitors(tmp_path)
+        monitoring.apply_monitors(tmp_path, prune=prune)
 
     return _apply
 
@@ -382,7 +382,11 @@ class TestApplyAgainstARealInstance:
         before = {m["name"] for m in live()}
 
         removed = seed.pop()
-        apply_seed(seed)
+        with pytest.raises(SystemExit):
+            apply_seed(seed)
+        assert {m["name"] for m in live()} == before, "without PRUNE=1 a delete is refused before any write"
+
+        apply_seed(seed, prune=True)
 
         after = {m["name"] for m in live()}
         assert before - after == {removed["name"]}, "exactly the dropped monitor, nothing else"
