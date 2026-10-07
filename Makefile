@@ -1731,7 +1731,7 @@ backup-coverage:
 # accepts (BACKUP-057 AC1, AC3): every node's pair against every other node's
 # bucket (list and delete, refused with AccessDenied), and each node's own pair
 # against the youngest pack in its bucket (refused by the lock). Fails on an
-# empty data/ too, so it runs after each node's first ship to its own bucket.
+# empty data/ too, so it passes only once every node has shipped to its own bucket.
 # Prod only. Runbook: docs/runbooks/offsite-backup-restore.md.
 .PHONY: backup-isolation-probe
 backup-isolation-probe:
