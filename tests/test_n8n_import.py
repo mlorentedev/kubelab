@@ -11,6 +11,7 @@ import pytest
 from toolkit.features.configuration import ConfigurationManager
 from toolkit.features.n8n_import import (
     N8N_IMPORT_CATALOG,
+    PLACEHOLDER_SSOT,
     PlaceholderError,
     import_n8n_workflow,
     read_workflow_ids,
@@ -27,6 +28,7 @@ def test_n8n_import_catalog_contains_expected_workflows() -> None:
         "multi-forge-sync.json",
         "slack-task-capture.json",
         "agent-dispatcher.json",
+        "sale-metrics-daily-digest.json",
     }
     catalog_names = {s.workflow_path.name for s in N8N_IMPORT_CATALOG}
     assert expected.issubset(catalog_names), f"Missing workflows in catalog: {expected - catalog_names}"
@@ -41,7 +43,7 @@ def test_read_workflow_ids_on_all_catalog_workflows() -> None:
 
         workflow_id, credential_id = read_workflow_ids(data)
         assert workflow_id, f"Workflow {spec.workflow_path.name} must have a valid root id"
-        if spec.workflow_path.name in {"notify-router.json", "agent-dispatcher.json"}:
+        if spec.workflow_path.name in {"notify-router.json", "agent-dispatcher.json", "sale-metrics-daily-digest.json"}:
             assert credential_id is not None, f"Workflow {spec.workflow_path.name} must have a credential id"
         else:
             # multi-forge and slack handle authentication via code node (HMAC)
@@ -105,6 +107,18 @@ class TestPlaceholderResolution:
         answers a correct-looking 422 that names no cause."""
         with pytest.raises(PlaceholderError, match="absent or empty"):
             resolve_placeholders("z = 'RESOLVE_VIKUNJA_DEFAULT_PROJECT';", self._cm(config))
+
+    def test_every_absent_path_is_named_at_once(self) -> None:
+        """The sale digest needs two SOPS values for its placeholders. Naming only the
+        first sends the operator round the import once per missing value."""
+        text = "a = 'RESOLVE_SALE_DIGEST_TO'; b = 'RESOLVE_SALE_DIGEST_SITE_TAG'; c = 'RESOLVE_KUBELAB_SMTP_FROM';"
+        config = {"infra": {"smtp": {"user": "relay@example.test"}}}
+        with pytest.raises(PlaceholderError) as raised:
+            resolve_placeholders(text, self._cm(config))
+        message = str(raised.value)
+        assert PLACEHOLDER_SSOT["RESOLVE_SALE_DIGEST_TO"] in message
+        assert PLACEHOLDER_SSOT["RESOLVE_SALE_DIGEST_SITE_TAG"] in message
+        assert PLACEHOLDER_SSOT["RESOLVE_KUBELAB_SMTP_FROM"] not in message, "a path that resolves is not a finding"
 
 
 def test_import_n8n_workflow_dry_run() -> None:

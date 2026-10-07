@@ -889,6 +889,41 @@ SECRET_CATALOG: list[SecretSpec] = [
         # Dev runs no Vikunja, and no dev workload reads this value.
         envs=("staging", "prod"),
     ),
+    # APP-CONFIG-018 (leaving-denver#225): the sale's daily digest. The whole
+    # `sale_digest` block goes on 2026-11-09 (infra/n8n/workflows/README.md,
+    # "Removing the sale"): these three entries, its SOPS keys, the catalog line.
+    # Prod only, like the workflow: it reads prod's Analytics Engine dataset.
+    SecretSpec(
+        key_path="apps.services.automation.n8n.sale_digest.analytics_token",
+        description="Cloudflare token, Account | Account Analytics | Read (the sale digest's analytics queries)",
+        kind=SecretKind.EXTERNAL,
+        expiry=Expiry.PROVIDER,
+        services=("n8n",),
+        rotate_note=(
+            "Mint a new token (My Profile > API Tokens), `toolkit secrets set` it, `make import-n8n ENV=prod`, "
+            "revoke the old one. Created with a TTL ending 2026-11-15, after the sale."
+        ),
+        envs=("prod",),
+    ),
+    SecretSpec(
+        key_path="apps.services.automation.n8n.sale_digest.recipient",
+        description="Address that receives the sale's daily metrics digest (not in a public repository)",
+        kind=SecretKind.EXTERNAL,
+        expiry=Expiry.NEVER,
+        services=("n8n",),
+        rotate_note="`toolkit secrets set` it, then `make import-n8n ENV=prod`: read at import, not at run time.",
+        value_pattern=r"[^@\s]+@[^@\s]+\.[^@\s]+",
+        envs=("prod",),
+    ),
+    SecretSpec(
+        key_path="apps.services.automation.n8n.sale_digest.site_tag",
+        description="Cloudflare Web Analytics site tag of the sale site (the `token` of its beacon)",
+        kind=SecretKind.EXTERNAL,
+        expiry=Expiry.NEVER,
+        services=("n8n",),
+        rotate_note="Read it from the live page's beacon, `toolkit secrets set` it, then `make import-n8n ENV=prod`.",
+        envs=("prod",),
+    ),
     SecretSpec(
         key_path="apps.services.automation.n8n.forge_webhook_secret",
         description="Shared HMAC secret for GitHub and Gitea webhooks to n8n",

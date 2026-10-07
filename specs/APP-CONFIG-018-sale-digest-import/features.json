@@ -1,0 +1,51 @@
+[
+  {
+    "id": "APP-CONFIG-018-sale-digest-import-f1",
+    "behavior": "AC1: a prod import creates the digest's Header Auth credential and kubelab-smtp before the workflow, once each; staging imports neither",
+    "verification": "poetry run pytest --no-cov -q tests/test_n8n_shared_credentials.py -k 'credentials_land_before or staging_imports_neither or cloudflare_credential_is_a_bearer'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "APP-CONFIG-018-sale-digest-import-f2",
+    "behavior": "AC2: an absent Cloudflare token, recipient, site tag or SMTP value fails that workflow closed naming the SOPS path, and no secret reaches the output",
+    "verification": "poetry run pytest --no-cov -q tests/test_n8n_shared_credentials.py -k 'FailsClosed or nothing_secret_reaches or secrets_travel_on_stdin' && poetry run pytest --no-cov -q tests/test_n8n_import.py -k 'absent_path'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "APP-CONFIG-018-sale-digest-import-f3",
+    "behavior": "AC3: a workflow referencing a credential the run does not import is refused, and so is one whose Header Auth nodes disagree on the id",
+    "verification": "poetry run pytest --no-cov -q tests/test_n8n_shared_credentials.py -k 'nothing_imports or wrong_id or disagree'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "APP-CONFIG-018-sale-digest-import-f4",
+    "behavior": "AC4: the kubelab-smtp payload matches n8n 2.12.3's smtp credential and derives secure from the port",
+    "verification": "poetry run pytest --no-cov -q tests/test_n8n_shared_credentials.py -k TestSmtpCredentialShape",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "APP-CONFIG-018-sale-digest-import-f5",
+    "behavior": "AC5: with the sale removed from the catalog a prod run still imports kubelab-smtp and never mentions the Cloudflare credential; two workflows sharing it import it once",
+    "verification": "poetry run pytest --no-cov -q tests/test_n8n_shared_credentials.py -k TestSharedLifecycle",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "APP-CONFIG-018-sale-digest-import-f6",
+    "behavior": "AC6: every new SOPS path is in SECRET_CATALOG and every placeholder in a catalog workflow is mapped",
+    "verification": "poetry run pytest --no-cov -q tests/test_n8n_shared_credentials.py -k 'TestRegistries or every_placeholder' && poetry run pytest --no-cov -q tests/test_secret_expiry.py tests/test_secrets_orphan_audit.py",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "APP-CONFIG-018-sale-digest-import-f7",
+    "behavior": "AC7: the README documents the digest, how a workflow sends email, and the removal steps",
+    "verification": "poetry run pytest --no-cov -q tests/test_n8n_shared_credentials.py -k TestReadme",
+    "state": "pending",
+    "evidence": ""
+  }
+]

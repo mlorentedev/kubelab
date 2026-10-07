@@ -1,9 +1,10 @@
 # The toolkit CLI, Make, Python and local tooling
 
-43 lessons, newest first. Back to [all categories](../_index.md).
+44 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 527 | [A setting that shares a name across two systems does not share its meaning](lesson-527-a-setting-that-shares-a-name-across-two-systems-does-not-share-its-meaning.md) | 2026-10-07 |
 | 518 | [Poetry caches a release's file list forever, so a lock taken during the upload misses wheels for good](lesson-518-poetry-caches-a-release-file-list-taken-mid-upload-forever.md) | 2026-10-03 |
 | 514 | [Poetry asks the desktop keyring even when no private source exists, and a locked keyring hangs the install with no output](lesson-514-poetry-asks-the-desktop-keyring-even-with-no-private-source.md) | 2026-10-01 |
 | 504 | [A settings object built at import makes every command a secrets read](lesson-504-a-settings-object-built-at-import-makes-every-command-a-secrets-read.md) | 2026-10-01 |
