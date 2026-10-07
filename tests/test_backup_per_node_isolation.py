@@ -233,9 +233,9 @@ def _role_vars(config: dict[str, Any], inventory_hostname: str) -> dict[str, str
     pairs = {n: {"access_key_id": f"{n}-access", "secret_access_key": f"{n}-secret"} for n in NODES}
     secrets = {
         "backup": {
-            "restic_password": "shared-password",
+            "restic_password": "fixture-shared",
             "r2": {"access_key_id": "shared-access", "secret_access_key": "shared-secret", "nodes": pairs},
-            "nodes": {n: {"restic_password": f"{n}-password"} for n in NODES},
+            "nodes": {n: {"restic_password": f"fixture-{n}"} for n in NODES},
         }
     }
     context: dict[str, Any] = {"config": config, "secrets": secrets, "inventory_hostname": inventory_hostname}
@@ -258,7 +258,7 @@ def test_the_playbook_gives_every_migrated_node_its_own_bucket_pair_and_password
     rendered = {node: _role_vars(MIGRATED, host) for node, host in HOSTS.items()}
     for node, values in rendered.items():
         assert values["node_backup_r2_repository"] == f"s3:{R2['endpoint']}/{NODE_BUCKET_PREFIX}{node}", node
-        assert values["node_backup_restic_password"] == f"{node}-password", node
+        assert values["node_backup_restic_password"] == f"fixture-{node}", node
         assert values["node_backup_r2_access_key"] == f"{node}-access", node
         assert values["node_backup_r2_secret_key"] == f"{node}-secret", node
 
@@ -267,7 +267,7 @@ def test_the_playbook_keeps_an_undeclared_node_on_the_shared_bucket() -> None:
     values = _role_vars(_declared(["rpi3"]), "kubelab-vps")
     assert values == {
         "node_backup_r2_repository": f"{R2['repo_prefix']}/kubelab-vps",
-        "node_backup_restic_password": "shared-password",
+        "node_backup_restic_password": "fixture-shared",
         "node_backup_r2_access_key": "shared-access",
         "node_backup_r2_secret_key": "shared-secret",
     }

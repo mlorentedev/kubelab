@@ -352,9 +352,9 @@ def test_a_pod_without_its_secret_still_reports_unhealthy(fleet, missing) -> Non
 def test_each_node_opens_with_its_own_password(fleet) -> None:
     """BACKUP-057: a moved node's repository takes its own password, the rest the shared one."""
     fake, _, env = fleet
-    (fake / "rpi3.password").write_text("rpi3-own")
-    (fake / "kubelab-vps.password").write_text("shared")
-    env = {**env, "RESTIC_PASSWORD_RPI3": "rpi3-own", "RESTIC_PASSWORD_VPS": "shared"}
+    (fake / "rpi3.password").write_text("fixture-rpi3")
+    (fake / "kubelab-vps.password").write_text("fixture-shared")
+    env = {**env, "RESTIC_PASSWORD_RPI3": "fixture-rpi3", "RESTIC_PASSWORD_VPS": "fixture-shared"}
     del env["RESTIC_PASSWORD"]
     rc, nodes, (summary,) = _run(env)
     assert rc == 0 and summary["healthy"] == 1, nodes
@@ -362,8 +362,8 @@ def test_each_node_opens_with_its_own_password(fleet) -> None:
 
 def test_a_node_given_another_nodes_password_is_unreadable(fleet) -> None:
     fake, _, env = fleet
-    (fake / "rpi3.password").write_text("rpi3-own")
-    env = {**env, "RESTIC_PASSWORD_RPI3": "shared", "RESTIC_PASSWORD_VPS": "shared"}
+    (fake / "rpi3.password").write_text("fixture-rpi3")
+    env = {**env, "RESTIC_PASSWORD_RPI3": "fixture-shared", "RESTIC_PASSWORD_VPS": "fixture-shared"}
     rc, nodes, (summary,) = _run(env)
     assert _node(nodes, "rpi3")["healthy"] == 0 and "wrong password" in _node(nodes, "rpi3")["reason"]
     assert _node(nodes, "vps")["healthy"] == 1
