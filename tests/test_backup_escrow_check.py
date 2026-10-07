@@ -206,3 +206,12 @@ def test_no_value_reaches_the_output(
     out = capsys.readouterr()
     text = caplog.text + out.out + out.err
     assert not [v for v in [*_sops().values(), "fixture-other"] if v in text]
+
+
+def test_the_fleet_follows_backup_sources_not_a_fixed_list() -> None:
+    # A node outside NODES: a check that enumerated a constant instead of the
+    # config would never ask for it.
+    escrow = Escrow()
+    escrow.values[be.escrow_id("jet1")] = "fixture-jet1"
+    assert be.check_fleet("prod", cm=_CM([*NODES, "jet1"], [*NODES, "jet1"]), run=escrow.run) is True
+    assert be.escrow_id("jet1") in escrow.asked
