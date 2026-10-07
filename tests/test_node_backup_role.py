@@ -255,6 +255,9 @@ def test_the_live_sqlite_db_is_snapshotted_with_backup_not_copied():
     # then stages is run, not read, in the tests after `_capture` below.
     for suffix in ("", "-wal", "-shm", "-journal"):
         assert f'-path "./kuma.db{suffix}"' in script
+        # The pre-#2111 form named the same paths behind `!`, which still copied
+        # a directory holding them whole.
+        assert f'! -path "./kuma.db{suffix}"' not in script
     assert ") -prune" in script
 
 
@@ -398,6 +401,17 @@ def test_the_staged_tree_keeps_its_directory_modes(tmp_path: Path) -> None:
     staged = _capture(tmp_path, {"sqlite": "db"})
     assert (staged / "private").stat().st_mode & 0o777 == 0o700
     assert (staged / "private/nested").stat().st_mode & 0o777 == 0o750
+
+
+def test_a_nested_database_keeps_the_modes_of_the_directories_above_it(tmp_path: Path) -> None:
+    """The snapshot step creates these, not `cp --parents`: `a/b` holds nothing but
+    the database, so no copied file would ever carry its mode across."""
+    _tree(tmp_path, {"a/b/x.db": "RAW", "a/conf": "x"})
+    (tmp_path / "src/a/b").chmod(0o750)
+    (tmp_path / "src/a").chmod(0o700)
+    staged = _capture(tmp_path, {"sqlite": "a/b/x.db"})
+    assert (staged / "a").stat().st_mode & 0o777 == 0o700
+    assert (staged / "a/b").stat().st_mode & 0o777 == 0o750
 
 
 def test_an_empty_directory_is_kept(tmp_path: Path) -> None:

@@ -155,6 +155,16 @@ fi
 # capture that runs hourly -- a partial backup is refused downstream, so the
 # cost of trying again is strictly lower than the cost of not.
 mkdir -p "$(dirname "$STAGING/{{ service }}/{{ src.sqlite }}")"
+# A nested database's directories are created here, not by `cp --parents`
+# below, which never recreates a directory it finds already there. `mkdir -p`
+# leaves them root 0755, wider than a 0700 source for the whole window and
+# after a restore, so each takes its source's owner and mode.
+( cd "$SRC_DIR_{{ service }}" && dir=$(dirname "{{ src.sqlite }}") \
+    && while [ "$dir" != . ]; do \
+        chown --reference="$dir" "$STAGING/{{ service }}/$dir" \
+            && chmod --reference="$dir" "$STAGING/{{ service }}/$dir" || exit 1; \
+        dir=$(dirname "$dir"); \
+    done )
 capture_sqlite_{{ service }}() {
     local attempt
     for attempt in 1 2 3; do
