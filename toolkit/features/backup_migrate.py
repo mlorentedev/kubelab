@@ -55,11 +55,15 @@ from toolkit.features.r2_tfvars import node_bucket
 TOKEN_PREFIX = "kubelab-backup-migrate-"
 # The shared runner stops a call at 60 s; copying a node's history takes minutes.
 COPY_TIMEOUT_S = 3600
+# The line `pin` rewrites: the node's entry under `backup.r2.repository_ids`.
+PIN_LINE = r"^(      {node}:) [0-9a-f]{{64}}"
 # (playbook, limit, extra vars) -> success
 PlaybookFn = Callable[[str, str, dict[str, str]], bool]
 
 
 class Values(Protocol):
+    def pinnable(self, node: str) -> bool: ...
+
     def declare(self, node: str) -> None: ...
 
     def pin(self, node: str, repository_id: str) -> None: ...
@@ -126,6 +130,12 @@ class ValuesFile:
             raise ValueError(f"{self.path}: the edit did not produce the expected value")
         self.path.write_text(edited)
 
+    def pinnable(self, node: str) -> bool:
+        """Whether `pin` will find the node's line, so a run that cannot finish never starts."""
+        import re
+
+        return re.search(PIN_LINE.format(node=node), self.path.read_text(), flags=re.MULTILINE) is not None
+
     def declare(self, node: str) -> None:
         import yaml
 
@@ -139,7 +149,7 @@ class ValuesFile:
 
     def pin(self, node: str, repository_id: str) -> None:
         self._replace(
-            rf"^(      {node}:) [0-9a-f]{{64}}",
+            PIN_LINE.format(node=node),
             rf"\1 {repository_id}",
             lambda r2: r2["repository_ids"][node] == repository_id,
         )
@@ -280,14 +290,19 @@ def migrate(
         return False
     host = _repository_name_in(config, node)
     logger.info(f"{src} -> {dst}")
-
+    # Everything that can refuse the run is asked before anything is minted or
+    # written, and the dry run asks exactly the same questions.
+    values = values or ValuesFile(cm.project_root / "infra/config/values/common.yaml")
+    if not values.pinnable(node):
+        logger.error(f"backup.r2.repository_ids has no 64-hex entry for {node}, so its new id could not be pinned")
+        return False
+    source = _snapshots(run, src, {**load_credentials(cm), "RESTIC_PASSWORD": str(src_password)})
+    if source is None:
+        return False
+    if not source:
+        logger.error(f"{src} lists no snapshots: there is no history to move; nothing was minted or copied")
+        return False
     if check:
-        source = _snapshots(run, src, {**load_credentials(cm), "RESTIC_PASSWORD": str(src_password)})
-        if source is None:
-            return False
-        if not source:
-            logger.error(f"{src} lists no snapshots; the real run would refuse it")
-            return False
         logger.info(f"dry run: {len(source)} snapshots would be copied; nothing was minted, copied or deployed")
         return True
 
@@ -315,7 +330,6 @@ def migrate(
     if not copied:
         return False
 
-    values = values or ValuesFile(cm.project_root / "infra/config/values/common.yaml")
     playbook = playbook or _default_playbook
     values.declare(node)
     for name, extra in (("backup", {}), ("backup-repo-reinit", {"dest": "r2"}), ("backup-node", {})):

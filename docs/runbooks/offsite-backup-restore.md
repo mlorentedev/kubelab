@@ -298,7 +298,7 @@ time, all four in one sitting: until a node's copy is verified, `kubelab-backups
 holds its only copy, and that bucket has no lock.
 
 ```bash
-make backup-migrate NODE=rpi3 ENV=prod CHECK=1   # lists the source; changes nothing
+make backup-migrate NODE=rpi3 ENV=prod CHECK=1   # lists the source and finds the pin line; changes nothing
 make backup-migrate NODE=rpi3 ENV=prod
 ```
 

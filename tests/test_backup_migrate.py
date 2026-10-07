@@ -93,6 +93,9 @@ class World:
         self.values: list[tuple[str, ...]] = []
         self.extra_vars: dict[str, dict[str, str]] = {}
         self.regenerated: list[dict[str, Any]] = []
+        self.unpinnable: set[str] = set()
+        # What the source lists after the copy, when it differs from before it.
+        self.source_after: list[dict[str, Any]] | None = None
 
     def run(self, argv: list[str], env: dict[str, str]) -> tuple[int, str, str]:
         if argv[0] == "aws":
@@ -109,7 +112,11 @@ class World:
         if step in self.fail:
             return 1, "", f"{verb} failed"
         if verb == "snapshots":
-            return 0, json.dumps(self.source if side == "src" else self.copied), ""
+            if side == "dst":
+                return 0, json.dumps(self.copied), ""
+            listed_before = self.calls.count(step) > 1
+            after = self.source_after if listed_before and self.source_after is not None else self.source
+            return 0, json.dumps(after), ""
         if verb == "cat":
             return 0, json.dumps({"version": 2, "id": NEW_ID}), ""
         return 0, "", ""
@@ -130,6 +137,9 @@ class World:
         self.calls.append(f"ansible {name} {limit}")
         self.extra_vars[name] = extra_vars
         return f"ansible {name}" not in self.fail
+
+    def pinnable(self, node: str) -> bool:
+        return node not in self.unpinnable
 
     def declare(self, node: str) -> None:
         self.calls.append(f"declare {node}")
@@ -167,6 +177,7 @@ def test_the_steps_run_in_order_and_the_token_dies_with_the_copy() -> None:
     world = World(SOURCE, COPIED)
     assert _migrate(world) is True
     assert [c for c in world.calls if not c.startswith("aws")] == [
+        "restic src snapshots",
         "POST token",
         "restic dst init",
         "restic dst copy",
@@ -199,16 +210,38 @@ def test_a_missing_snapshot_stops_it_though_the_count_and_oldest_time_match() ->
     assert not [c for c in world.calls if c.startswith(("declare", "ansible", "pin"))]
 
 
-def test_an_empty_source_is_not_a_verified_copy() -> None:
+@pytest.mark.parametrize("check", [False, True])
+def test_an_empty_source_is_refused_before_anything_is_minted(check: bool) -> None:
+    # The dry run predicts the run's refusal instead of reporting "0 snapshots would be copied".
     world = World([], [])
+    assert _migrate(world, check=check) is False
+    assert world.calls == ["restic src snapshots"]
+
+
+def test_a_source_emptied_during_the_copy_is_not_a_verified_copy() -> None:
+    world = World(SOURCE, [])
+    world.source_after = []
     assert _migrate(world) is False
     assert "DELETE token" in world.calls
     assert world.values == []
-    # The dry run predicts that refusal instead of reporting "0 snapshots would be copied".
-    assert _migrate(World([], []), check=True) is False
 
 
-@pytest.mark.parametrize("step", ["restic dst init", "restic dst copy", "restic src snapshots"])
+@pytest.mark.parametrize("check", [False, True])
+def test_a_node_whose_id_cannot_be_pinned_is_refused_before_anything_runs(check: bool) -> None:
+    world = World(SOURCE, COPIED)
+    world.unpinnable.add("rpi3")
+    assert _migrate(world, check=check) is False
+    assert world.calls == []
+
+
+def test_an_unreadable_source_mints_nothing() -> None:
+    world = World(SOURCE, COPIED)
+    world.fail.add("restic src snapshots")
+    assert _migrate(world) is False
+    assert world.calls == ["restic src snapshots"]
+
+
+@pytest.mark.parametrize("step", ["restic dst init", "restic dst copy", "restic dst snapshots"])
 def test_a_failed_restic_step_revokes_the_token_and_changes_nothing(step: str) -> None:
     world = World(SOURCE, COPIED)
     world.fail.add(step)
@@ -264,7 +297,9 @@ def test_a_token_that_reaches_another_nodes_bucket_is_revoked_before_any_copy() 
     world.run = too_wide  # type: ignore[method-assign]
     assert _migrate(world) is False
     assert "DELETE token" in world.calls
-    assert not [c for c in world.calls if c.startswith("restic")]
+    # Only the pre-flight listing, made with the shared read-only pair, precedes the token.
+    minted = world.calls.index("POST token")
+    assert not [c for c in world.calls[minted:] if c.startswith("restic")]
 
 
 def test_a_dry_run_lists_the_source_and_changes_nothing() -> None:
@@ -308,6 +343,8 @@ def test_the_values_file_keeps_its_comments(tmp_path: pathlib.Path) -> None:
     common.write_text(source)
     values = bm.ValuesFile(common)
 
+    assert values.pinnable("rpi3")
+    assert not values.pinnable("jetson")
     values.declare("rpi3")
     values.pin("rpi3", NEW_ID)
 
