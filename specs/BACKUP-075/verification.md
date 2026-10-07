@@ -32,7 +32,7 @@ Every node's `stats` roughly doubled in three days while its repository stayed i
 
 - The read-only token lists the bucket root: R2 tokens are scoped to buckets, not prefixes. The gate in `tasks.md` passed.
 - The bucket root equals the sum of the four prefixes to the byte: today nothing in the bucket lies outside a node's repository.
-- The Beelink stores 1.8x what `raw-data` reported: the unreferenced packs, index and snapshot files the old measure left out, and R2 bills. The fleet is 0.70 GB of the 10 GB free tier.
+- The Beelink's listing reads 1.8x its last `raw-data` figure. The two were taken three days apart (`stats` last succeeded on 2026-10-04), so growth and the unreferenced packs, index and snapshot files the old measure left out both contribute, and this run does not separate them. The fleet is 0.70 GB of the 10 GB free tier.
 - Each listing took 0-1 s against 31-601 s for `stats` on the same repositories. A listing's cost follows the object count, not the snapshot count.
 
 ## After: prod (#2081 merged as bb0e0e86)
@@ -64,6 +64,13 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - Test suite: `make test-fast` -> 3855 passed, 16 skipped, 2 xfailed (rebased branch, 2026-10-07)
 - Manual smoke test: `make watcher-run` in staging (04:06Z) and prod (06:07Z, 06:10Z); listing timings and sizes above
 - No regressions in existing test suite: yes
+
+## Known gaps (adversarial review, 2026-10-07)
+
+- **AC3 holds in substance, not in its strict form.** The `stats` baseline (Loki) and the listing timings were taken hours apart, not on the same repository in one sitting, and the Beelink was never sized both ways because `stats` was already killed there. A listing's cost follows the object count, and objects grow with snapshots, though far more slowly than a tree walk: the claim is "orders of magnitude cheaper", 0-1 s against 31-601 s, not "independent of history". `size.sh` does not record rclone's object `count`, so headroom is judged by the logged duration.
+- **The init container's memory is unmeasured.** `--fast-list` holds the bucket's listing in memory under a 128Mi limit. An OOM ends the pod before the probe, and the health rule pages on no data after its 24 h window (documented in the manifest). Today's bucket lists in under 1 s.
+- **Buckets are deduplicated by name, not by host and name.** That only matters if two endpoints ever share a bucket name; there is one endpoint today.
+- **Two-bucket fleets** were untested at merge. Added after review (854d5382): `test_the_fleet_sums_every_bucket_once`, `test_either_unmeasured_bucket_makes_a_two_bucket_fleet_null`, `test_two_buckets_are_each_listed_once_at_their_root`. Each turned red under its mutation: the fleet taking the last bucket instead of the sum, a null bucket skipped instead of nulling the fleet, and the bucket dedup removed.
 
 ## Decisions made during implementation
 
