@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import json
 import pathlib
+from datetime import datetime, timezone
+from typing import Any
 
 import pytest
 
@@ -22,6 +24,8 @@ REPO = pathlib.Path(__file__).resolve().parents[1]
 ENDPOINT = "https://acct.r2.cloudflarestorage.com"
 NODES = ["beelink", "rpi3", "rpi4", "vps"]
 DENIED = "An error occurred (AccessDenied) when calling the {op} operation: Access Denied"
+R = 30 * 86400
+NOW = datetime(2026, 10, 7, 12, 0, tzinfo=timezone.utc)
 LOCKED = (
     "An error occurred (ObjectLockedByBucketPolicy) when calling the DeleteObject operation: "
     "The object is locked by the bucket policy."
@@ -45,6 +49,25 @@ class R2:
         self.requests: list[tuple[str, str, str, str]] = []  # (op, bucket, key, key id)
         self.deleted: list[tuple[str, str]] = []
         self.override: dict[tuple[str, str, str], tuple[int, str, str]] = {}
+        # What the lock API reports per bucket: Terraform's four rules, or an exception to raise.
+        self.rules: dict[str, Any] = {
+            b: [
+                {
+                    "id": f"retain-{p.strip('/') or p}",
+                    "prefix": p,
+                    "enabled": True,
+                    "condition": {"type": "Age", "maxAgeSeconds": R},
+                }
+                for p in ("config", "data/", "keys/", "snapshots/")
+            ]
+            for b in self.objects
+        }
+
+    def lock_rules(self, bucket: str) -> list[dict[str, Any]]:
+        rules = self.rules[bucket]
+        if isinstance(rules, Exception):
+            raise rules
+        return list(rules)
 
     def run(self, argv: list[str], env: dict[str, str]) -> tuple[int, str, str]:
         assert argv[:3] == ["aws", "--endpoint-url", ENDPOINT]
@@ -79,6 +102,9 @@ def _probe(r2: R2, declared: list[str] | None = None, secrets: dict[str, str] | 
         endpoint=ENDPOINT,
         secret=(secrets if secrets is not None else _secrets()).get,
         run=r2.run,
+        lock_rules=r2.lock_rules,
+        retention_s=R,
+        now=NOW,
     )
 
 
@@ -142,6 +168,71 @@ def test_an_unlocked_bucket_fails_it() -> None:
     r2.locked.discard(node_bucket("rpi3"))
     assert _probe(r2) is False
     assert r2.deleted == [(node_bucket("rpi3"), "data/rpi3-a")]
+
+
+def _own_deletes(r2: R2, node: str) -> list[tuple[str, str, str, str]]:
+    return [r for r in r2.requests if r[0] == "delete-object" and r[1] == node_bucket(node) and r[3] == f"{node}-id"]
+
+
+def _rule(r2: R2, node: str, prefix: str) -> dict[str, Any]:
+    return next(r for r in r2.rules[node_bucket(node)] if r["prefix"] == prefix)
+
+
+@pytest.mark.parametrize(
+    "breakage",
+    [
+        "no data/ rule",
+        "data/ rule disabled",
+        "data/ rule shorter than R",
+        "data/ rule not by age",
+        "lock API unreachable",
+    ],
+)
+def test_a_lock_the_api_cannot_show_fails_it_and_nothing_is_deleted(breakage: str) -> None:
+    # The own delete is safe only behind the lock. A probe that tried it with
+    # the rule missing would destroy the pack it set out to protect.
+    r2 = R2()
+    r2.locked.discard(node_bucket("rpi3"))  # what R2 would enforce with the rule gone
+    if breakage == "no data/ rule":
+        r2.rules[node_bucket("rpi3")] = [r for r in r2.rules[node_bucket("rpi3")] if r["prefix"] != "data/"]
+    elif breakage == "data/ rule disabled":
+        _rule(r2, "rpi3", "data/")["enabled"] = False
+    elif breakage == "data/ rule shorter than R":
+        _rule(r2, "rpi3", "data/")["condition"]["maxAgeSeconds"] = R - 1
+    elif breakage == "data/ rule not by age":
+        _rule(r2, "rpi3", "data/")["condition"] = {"type": "Indefinite"}
+    else:
+        r2.rules[node_bucket("rpi3")] = RuntimeError("GET /lock failed: timed out")
+    assert _probe(r2) is False
+    assert _own_deletes(r2, "rpi3") == []
+    assert r2.deleted == []
+
+
+def test_a_newest_pack_near_the_end_of_r_fails_it_and_nothing_is_deleted() -> None:
+    # Past R the lock lets the delete through by design, so it would prove
+    # nothing and lose the pack.
+    r2 = R2()
+    r2.objects[node_bucket("vps")] = [{"Key": "data/vps-old", "LastModified": "2026-09-08T11:00:00+00:00"}]
+    assert _probe(r2) is False
+    assert _own_deletes(r2, "vps") == []
+
+
+def test_a_newest_pack_well_inside_r_is_tried() -> None:
+    r2 = R2()
+    r2.objects[node_bucket("vps")] = [{"Key": "data/vps-ok", "LastModified": "2026-09-08T13:00:00Z"}]
+    assert _probe(r2) is True
+    assert [r[2] for r in _own_deletes(r2, "vps")] == ["data/vps-ok"]
+
+
+def test_youngest_is_ordered_by_time_not_by_string() -> None:
+    # Two spellings of the same instant scheme: a string max would pick the "Z" one.
+    r2 = R2()
+    r2.objects[node_bucket("rpi4")] = [
+        {"Key": "data/rpi4-older", "LastModified": "2026-10-07T03:00:00Z"},
+        {"Key": "data/rpi4-newer", "LastModified": "2026-10-07T04:00:00+00:00"},
+    ]
+    assert _probe(r2) is True
+    assert [r[2] for r in _own_deletes(r2, "rpi4")] == ["data/rpi4-newer"]
 
 
 def test_an_own_delete_refused_for_another_reason_proves_no_lock() -> None:
