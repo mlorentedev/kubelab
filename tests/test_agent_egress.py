@@ -137,7 +137,9 @@ def test_the_rule_is_loaded_before_the_agents_user_manager_is_started() -> None:
 def _assert_controlled(tasks: list[dict], probe: dict) -> None:
     """A refusal measures something only if the same address and port answered just
     before, from outside the rule (as root): nc fails the same on a dead path."""
-    host, port = re.search(r"nc -z -w \d+ (\{\{ \w+ \}\}) (\{\{ [\w.]+ \}\})", probe["ansible.builtin.command"]["cmd"]).groups()
+    target = re.search(r"nc -z -w \d+ (\{\{ \w+ \}\}) (\{\{ [\w.]+ \}\})", probe["ansible.builtin.command"]["cmd"])
+    assert target, "every probe names its host and port as role variables"
+    host, port = target.groups()
     controls = [
         i
         for i, t in enumerate(tasks)
@@ -152,7 +154,8 @@ def test_every_provision_proves_the_tailnet_refused_and_the_internet_open() -> N
     tasks = _agent_tasks()
     probes = [t for t in tasks if "nc -z" in str(t.get("ansible.builtin.command", ""))]
     assert len(probes) == 3, "the VPS's tailnet address, this node's own published port, the internet control"
-    local = [p for p in probes if "{{ tailscale_ip }} {{ agent_stack_webui.default_port }}" in p["ansible.builtin.command"]["cmd"]]
+    own_port = "{{ tailscale_ip }} {{ agent_stack_webui.default_port }}"
+    local = [p for p in probes if own_port in p["ansible.builtin.command"]["cmd"]]
     assert len(local) == 1 and "rc == 0" in local[0]["failed_when"], "the DNAT case must be refused"
     remote = [p for p in probes if "agent_stack_egress_probe_refused" in p["ansible.builtin.command"]["cmd"]]
     assert len(remote) == 1
