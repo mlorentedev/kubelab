@@ -923,6 +923,34 @@
     ]
   },
   {
+    "key": "ops-backup-node-ace2",
+    "name": "Ops · Backup · ace2 node-path",
+    "type": "push",
+    "url": "https://",
+    "hostname": null,
+    "port": null,
+    "interval": 21600,
+    "maxretries": 0,
+    "method": "GET",
+    "keyword": null,
+    "ignoreTls": false,
+    "upsideDown": false,
+    "accepted_statuscodes": [
+      "200-299"
+    ],
+    "description": "BACKUP-044 AC9, spec AI-009 AC7. ace2 posts here as the LAST step of a successful node-backup ship, so silence means no backup completed. Window is 6h, which is #452's ratified Tier 1 RPO rather than a margin over the 4h schedule — it fires when the GUARANTEE is at risk, and a cadence change has to confront the RPO instead of a recomputed number. maxretries 0: a retry would only delay DOWN past the boundary the interval was chosen to mark. Tagged `on-demand`, which is in muted_notification_tags: this node is powered off most of the week, so DOWN is the coverage view working rather than an incident. Visible, never paging.",
+    "active": true,
+    "httpBodyEncoding": null,
+    "maxredirects": 10,
+    "notificationIDList": [],
+    "parent": null,
+    "tags": [
+      "backup",
+      "prod",
+      "on-demand"
+    ]
+  },
+  {
     "key": "ops-backup-node-beelink",
     "name": "Ops · Backup · beelink node-path",
     "type": "push",

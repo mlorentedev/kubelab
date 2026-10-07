@@ -1,6 +1,6 @@
 # Lessons
 
-533 lessons, one file each. Newest: 2026-10-07. Open a category for its list.
+535 lessons, one file each. Newest: 2026-10-07. Open a category for its list.
 
 | Category | # | Scope |
 |---|---|---|
@@ -10,12 +10,12 @@
 | [ansible-provisioning](ansible-provisioning/_index.md) | 57 | Roles, playbooks, IaC, node setup |
 | [process-method](process-method/_index.md) | 73 | Specs, reviews, how work is run |
 | [edge-tls](edge-tls/_index.md) | 27 | Traefik, TLS, the request path |
-| [toolkit-tooling](toolkit-tooling/_index.md) | 44 | Toolkit CLI, Make, Python, tests |
+| [toolkit-tooling](toolkit-tooling/_index.md) | 45 | Toolkit CLI, Make, Python, tests |
 | [gitops-delivery](gitops-delivery/_index.md) | 32 | Argo CD, releases, promotion |
 | [ci-automation](ci-automation/_index.md) | 41 | CI workflows, gates, GitHub |
 | [observability](observability/_index.md) | 27 | Metrics, logs, alerting |
 | [containers-docker](containers-docker/_index.md) | 17 | Docker, Compose, image builds |
-| [storage-backup](storage-backup/_index.md) | 28 | Backups, volumes, persistence |
+| [storage-backup](storage-backup/_index.md) | 29 | Backups, volumes, persistence |
 | [apps-web](apps-web/_index.md) | 7 | Application code (API, web) |
 
 New lessons: see [`_format.md`](_format.md) — one file per lesson, appended
