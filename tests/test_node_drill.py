@@ -318,7 +318,7 @@ def test_the_make_target_passes_node_and_env_through_and_refuses_an_empty_node()
     ok = dry("NODE=ace2", "ENV=prod")
     assert ok.returncode == 0, ok.stderr
     assert "backup drill-node --node ace2 --env prod" in ok.stdout
-    # A staging typo must not run against the wrong repository silently.
+    # ENV passes through when it names an env; anything else falls back to prod, as in the sibling drills.
     assert "--env staging" in dry("NODE=ace2", "ENV=staging").stdout
     # Really run, not `-n`: the guard is the recipe's first line and exits before the toolkit starts.
     refused = subprocess.run(["make", "backup-drill-node", "ENV=prod"], cwd=REPO, capture_output=True, text=True)
