@@ -2076,7 +2076,7 @@ backup:
     # Every consumer resolves through this list (backup_destination.node_repository,
     # backup.yml), so no other edit moves a node. Absent from it: the shared
     # bucket above, with the shared pair and password.
-    own_bucket_nodes: [ace2]
+    own_bucket_nodes: [ace2, vps]
     # Pinned static binary (BACKUP-044 Part 2), same idiom as k3s_version:
     # get_url + a checksum verified against upstream's own SHA256SUMS, not a
     # floating "latest" download. Arch is resolved per node at Ansible run
@@ -2107,7 +2107,7 @@ backup:
       beelink: 69e70ca8307994ac6076171f9dd7ce7b6681de24ad7c941b5be76b29a51133fa
       rpi3: 5ccc440d50e7b601cad0d292d366a32347a63998eca91fb78d910c4081e6641d
       rpi4: a35c05eb848b35e6e8073d6d9df4feb16c8617caa46edb6ade46fe2c34cf9177
-      vps: 2e9148a2db7f0881caba395c2d8f1308d9ef71f48cc8c1acfb950d40c9878409
+      vps: e587049086e52ff89294ced8dcd05b1e60cce62debae29dde5310196e051880c
   # The in-cluster R2 watcher (BACKUP-055): reads every node's repository with a
   # read-only token and reports readable / non-empty / complete / whole-capture.
   # Its tag must equal `r2.restic_version` so the reader is never newer than the
