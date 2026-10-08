@@ -1,0 +1,114 @@
+#!/bin/sh
+# {{ ansible_managed }}
+# The agent's vault sync (ADR-068 D4 as amended 2026-10-08, spec AI-009 AC6).
+# Run by {{ agent_stack_vault_sync_unit }}.service as the agent's user. The
+# agent only writes files: its sandbox sees this clone read-only and its zone
+# writable. This script is the one writer of the clone's history.
+#
+# Each run: fetch, fast-forward, commit the zone, push. It never rebases. A run
+# that died between commit and push leaves commits that touch only the zone;
+# the next run takes them back into the working tree and commits them again on
+# the new tip, which cannot conflict because the zone has one writer. Anything
+# else (a change outside the zone, upstream touching a file the agent changed)
+# fails the unit, and its OnFailure pages the operator.
+#
+# Exit 75 means the remote moved while this run pushed: not a failure, the next
+# run commits on the new tip. The unit counts it as success.
+set -eu
+
+clone='{{ agent_stack_vault_clone }}'
+zone='{{ agent_stack_vault_zone }}'
+remote='{{ agent_stack_hermes.vault_sync.remote }}'
+branch='{{ agent_stack_hermes.vault_sync.branch }}'
+upstream="origin/$branch"
+# Everything outside the zone, by pathspec, as the pre-commit hook judges it.
+outside=":(top,exclude,literal)$zone/"
+
+export GIT_TERMINAL_PROMPT=0
+
+# All the configuration that matters is passed here, none of it read from the
+# clone: the credential helper, the root-owned hooks, the declared identity.
+vgit() {
+  git -c credential.helper= -c 'credential.helper={{ agent_stack_vault_libexec }}/vault-credential' \
+      -c 'core.hooksPath={{ agent_stack_vault_hooks }}' \
+      -c 'user.name={{ agent_stack_hermes.vault_sync.author_name }}' \
+      -c 'user.email={{ agent_stack_hermes.vault_sync.author_email }}' \
+      -c commit.gpgsign=false "$@"
+}
+
+fail() {
+  echo "vault-sync: $*" >&2
+  exit 1
+}
+
+if [ ! -d "$clone/.git" ]; then
+  vgit clone --quiet --branch "$branch" "$remote" "$clone"
+fi
+cd "$clone"
+
+# Only this unit writes the clone's .git (the sandbox mounts it read-only, and
+# systemd never runs two of this unit at once), so a lock is a run that died.
+# A git of this user working in the clone is the one case to leave it for the
+# next run. By its working directory, not its name: under rootless Docker every
+# git the agent runs in its sandbox is a git of this user too, and that one
+# sees the clone only as its own mount, never at this path.
+git_in_clone() {
+  for pid in $(pgrep -u "$(id -u)" -x git); do
+    case "$(readlink "/proc/$pid/cwd" 2>/dev/null)" in
+      "$clone" | "$clone"/*) return 0 ;;
+    esac
+  done
+  return 1
+}
+
+if [ -e .git/index.lock ]; then
+  if git_in_clone; then
+    echo "vault-sync: index.lock held while a git process runs; next run" >&2
+    exit 75
+  fi
+  rm -f .git/index.lock
+  echo "vault-sync: removed a stale index.lock"
+fi
+
+vgit fetch --quiet origin "$branch"
+
+dirty=$(vgit status --porcelain --untracked-files=all -- "$outside")
+[ -z "$dirty" ] || fail "changes outside $zone/ in the clone:
+$dirty"
+
+base=$(vgit merge-base HEAD "$upstream")
+if [ "$(vgit rev-parse HEAD)" != "$base" ]; then
+  stray=$(vgit diff --name-only --no-renames "$base" HEAD -- "$outside")
+  [ -z "$stray" ] || fail "unpushed commits touch paths outside $zone/:
+$stray"
+  # Mixed: the zone's changes stay in the working tree, to be committed again.
+  vgit reset --quiet "$base"
+fi
+
+vgit merge --ff-only --quiet "$upstream" \
+  || fail "cannot fast-forward to $upstream: upstream changed a file the agent changed under $zone/"
+
+# The sandbox's mount point. Git keeps no empty directory, so it is made here.
+mkdir -p "$zone"
+vgit add --all -- ":(top,literal)$zone/"
+if ! vgit diff --cached --quiet; then
+  vgit commit --quiet -m "chore($zone): sync from hermes-kubelab"
+fi
+
+[ -n "$(vgit rev-list "$upstream..HEAD")" ] || exit 0
+
+# The push is the boundary too, not only the commit: the hook can be skipped,
+# this check cannot. The steps above already make it hold; it is here so that an
+# edit to them cannot push outside the zone.
+stray=$(vgit diff --name-only --no-renames "$upstream" HEAD -- "$outside")
+[ -z "$stray" ] || fail "refusing to push paths outside $zone/:
+$stray"
+
+if ! vgit push --quiet origin "HEAD:$branch"; then
+  vgit fetch --quiet origin "$branch"
+  if ! vgit merge-base --is-ancestor "$upstream" HEAD; then
+    echo "vault-sync: $upstream moved during the push; next run" >&2
+    exit 75
+  fi
+  fail "push to $upstream refused"
+fi

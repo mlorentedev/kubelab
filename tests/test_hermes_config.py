@@ -15,9 +15,8 @@ from pathlib import Path
 
 import pytest
 import yaml
-from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
-from tests.test_agent_stack_role import _template_task, _tasks
+from tests.test_agent_stack_role import _tasks, _template_task
 
 REPO = Path(__file__).resolve().parent.parent
 ROLE = REPO / "infra/ansible/roles/agent_stack"
@@ -27,9 +26,9 @@ RULES = yaml.safe_load(DENYLIST.read_text())["rules"]
 
 
 def _render(name: str, **overrides: object) -> str:
-    from tests.test_agent_stack_role import _resolved
+    from tests.test_agent_stack_role import _environment, _resolved
 
-    env = Environment(loader=FileSystemLoader(str(ROLE / "templates")), undefined=StrictUndefined)
+    env = _environment()
     return env.get_template(name).render(**{**_resolved(env), **overrides})
 
 
@@ -209,9 +208,13 @@ def test_every_provision_reads_the_deny_list_back_through_the_running_gateway() 
     defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text())
     evaluate = defaults["_agent_stack_hermes_evaluate"]
     assert evaluate[:6] == ["docker", "exec", "-u", "hermes", "hermes-kubelab", "hermes"]
-    assert evaluate[6:] == ["approvals", "test", "--env-type", "docker", "--json", "--"]
+    # The env type follows the mount: test_hermes_vault_sync proves which one.
+    assert evaluate[6:] == ["approvals", "test", "--env-type", "{{ _agent_stack_hermes_env_type }}", "--json", "--"]
     checks = {t["name"]: t for t in _tasks() if "_agent_stack_hermes_evaluate" in str(t.get("ansible.builtin.command"))}
     refused = checks["Evaluate a command each deny rule must refuse"]
-    assert "'user-deny'" in refused["failed_when"]
+    assert "_agent_stack_hermes_refused_verdicts" in refused["failed_when"]
     allowed = checks["Evaluate every command the deny rules let through"]
-    assert "'allow'" in allowed["failed_when"]
+    assert "_agent_stack_hermes_passed_verdicts" in allowed["failed_when"]
+    # A refusal is never read as a pass, nor a pass as a refusal.
+    assert defaults["_agent_stack_hermes_refused_verdicts"] == ["user-deny", "hardline-deny"]
+    assert defaults["_agent_stack_hermes_passed_verdicts"] == ["allow", "ask-approval"]

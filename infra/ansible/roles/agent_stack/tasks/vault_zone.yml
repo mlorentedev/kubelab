@@ -1,18 +1,22 @@
 ---
 # =============================================================================
-# The agent's vault zone (ADR-068 D4, spec AI-009 AC6). The hook its clone
-# commits through, owned by root outside the agent's home, so the agent can
-# neither edit nor replace it. The clone itself, and `core.hooksPath` on it,
-# land with the vault token (spec PR 4).
+# The agent's vault zone (ADR-068 D4 as amended 2026-10-08, spec AI-009 AC6).
+# The agent writes files and nothing else: its sandbox mounts the clone
+# read-only and the zone writable (hermes-config.yaml.j2). The sync unit, as the
+# agent's user, commits the zone through the root-owned hook and pushes it with
+# a token only systemd reads.
 # =============================================================================
 
-- name: Create the vault hooks directory
+- name: Create the directories of the vault sync and its hooks
   ansible.builtin.file:
-    path: "{{ agent_stack_vault_hooks }}"
+    path: "{{ item }}"
     state: directory
     owner: root
     group: root
     mode: "0755"
+  loop:
+    - "{{ agent_stack_vault_libexec }}"
+    - "{{ agent_stack_vault_hooks }}"
 
 - name: Install the vault zone hook
   ansible.builtin.template:
@@ -21,3 +25,93 @@
     owner: root
     group: root
     mode: "0755"
+
+# Root's, outside the agent's home, like the hook: nothing of the agent's user
+# can replace what the unit runs.
+- name: Install the vault sync and its credential helper
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ agent_stack_vault_libexec }}/{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - {src: vault-sync.sh.j2, dest: vault-sync}
+    - {src: vault-credential.sh.j2, dest: vault-credential}
+
+- name: Stop the vault sync when the token is not configured
+  when: not (agent_stack_vault_configured | bool)
+  block:
+    - name: Look for a previously installed vault sync timer
+      ansible.builtin.stat:
+        path: "/etc/systemd/system/{{ agent_stack_vault_sync_unit }}.timer"
+      register: _agent_stack_vault_prior
+
+    - name: Disable the vault sync timer
+      ansible.builtin.systemd:
+        name: "{{ agent_stack_vault_sync_unit }}.timer"
+        enabled: false
+        state: stopped
+      when: _agent_stack_vault_prior.stat.exists and not ansible_check_mode
+
+    # The token must not outlive the sync. The clone stays: it is the zone's
+    # unpushed work, if any.
+    - name: Remove the vault token
+      ansible.builtin.file:
+        path: "{{ agent_stack_vault_token_file }}"
+        state: absent
+
+- name: Deploy the vault sync
+  when: agent_stack_vault_configured | bool
+  block:
+    - name: Write the vault token for systemd to hand over
+      ansible.builtin.copy:
+        content: "{{ agent_stack_vault_token }}\n"
+        dest: "{{ agent_stack_vault_token_file }}"
+        owner: root
+        group: root
+        mode: "0600"
+      no_log: true
+
+    # Empty and the agent's, so the unit's ReadWritePaths exists before the
+    # first clone, which git makes into an empty directory without complaint.
+    - name: Create the vault clone's directory
+      ansible.builtin.file:
+        path: "{{ agent_stack_vault_clone }}"
+        state: directory
+        owner: "{{ agent_stack_agent_user }}"
+        group: "{{ agent_stack_agent_user }}"
+        mode: "0700"
+
+    - name: Install the vault sync units
+      ansible.builtin.template:
+        src: "vault-sync.{{ item }}.j2"
+        dest: "/etc/systemd/system/{{ agent_stack_vault_sync_unit }}.{{ item }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop: [service, timer]
+
+    # The run is the measurement: the first one clones, every one proves the
+    # token, the hook and the push path. Not a change: the units are.
+    - name: Run the vault sync once
+      ansible.builtin.systemd:
+        name: "{{ agent_stack_vault_sync_unit }}.service"
+        state: started
+        daemon_reload: true
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: Verify the clone holds the zone the sandbox mounts
+      ansible.builtin.stat:
+        path: "{{ agent_stack_vault_clone }}/{{ agent_stack_vault_zone }}"
+      register: _agent_stack_vault_zone_dir
+      failed_when: not (_agent_stack_vault_zone_dir.stat.isdir | default(false))
+      when: not ansible_check_mode
+
+    - name: Enable the vault sync timer
+      ansible.builtin.systemd:
+        name: "{{ agent_stack_vault_sync_unit }}.timer"
+        enabled: true
+        state: started
+      when: not ansible_check_mode

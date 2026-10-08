@@ -22,6 +22,7 @@ owner: manu
 | hermes-kubelab gateway | uid `hermes-kubelab`, rootless Docker | the user's daemon (`loginctl enable-linger`), `restart: unless-stopped` | `/var/lib/hermes-kubelab/data` |
 | tailscale sidecar (`tag:hermes`) | same rootless daemon, userspace mode | same | `/var/lib/hermes-kubelab/tailscale` (node key) |
 | tailnet refusal for the agent's uid | root | `agent-stack-egress.service`, `RequiredBy=user@<uid>` | `/opt/agent-stack/agent-egress.nft` |
+| vault sync (ADR-068 D4, amended) | uid `hermes-kubelab`, token from systemd | `hermes-kubelab-vault-sync.timer`: 2 min after boot, then every 15 min | clone `/var/lib/hermes-kubelab/vault`; token `/opt/agent-stack/vault-token` (root, 0600) |
 
 Open WebUI is reached only at `http://ace2.kubelab.internal:3080` over the
 tailnet, with OIDC against prod Authelia. The gateway's API listens on
@@ -52,6 +53,33 @@ ace2's own published port), the gateway answers, and the sidecar reports
   the rule that confines it together, never one without the other. *Not yet
   measured live*: whether lingering starts the user manager again before the
   next provision.
+
+## The vault zone
+
+The agent writes files; it never commits. Its sandbox sees the vault clone
+read-only at `/vault` and only `/vault/80_agents/hermes-kubelab/` writable.
+`hermes-kubelab-vault-sync.service` commits that zone as `hermes-kubelab` and
+pushes it. A failed run pages through `kubelab-notify@`.
+
+- **Is it syncing?** `journalctl -u hermes-kubelab-vault-sync -n 20` on ace2,
+  and `git -C ~/Projects/knowledge log --author=hermes-kubelab -3` on any
+  checkout after a pull.
+- **Run it now**: `sudo systemctl start hermes-kubelab-vault-sync.service`.
+- **It failed.** The journal names the reason, and none is fixed by retrying:
+  - *changes outside the zone in the clone*, or *unpushed commits touch paths
+    outside*: something other than the sandbox wrote to the clone. Read the
+    paths it lists before touching anything.
+  - *cannot fast-forward*: someone else changed a file under the zone that the
+    agent also changed. The zone has one writer by design (C14); move the other
+    change out of the zone, then run the sync.
+  - *push refused*: the token. See "Rotate".
+  An exit 75 is not a failure: the remote moved during the push, and the next
+  run commits on the new tip.
+- **Before seeding a job into the zone**, check each command it runs:
+  `docker exec -u hermes hermes-kubelab hermes approvals test --env-type local
+  -- <cmd>`, as the agent's user against its daemon. With the vault mounted,
+  `ask-approval` means a scheduled job is refused under `cron_mode: deny`
+  (lesson-540).
 
 ## Re-register the sidecar
 
@@ -93,6 +121,11 @@ PR 3b-2).
   Delete the file and provision; a new session key signs every Open WebUI user
   out.
 - **Sidecar node key**: see "Re-register the sidecar".
+- **Vault token** (`apps.services.ai.hermes_kubelab.github_token`, prod): mint a
+  fine-grained token for `mlorentedev/knowledge` (Contents: read and write),
+  `toolkit secrets set ... --stdin`, provision ace2 (it rewrites
+  `/opt/agent-stack/vault-token` and runs the sync once, which proves the new
+  token by pushing), then revoke the old one on GitHub.
 
 ## When Authelia is down
 

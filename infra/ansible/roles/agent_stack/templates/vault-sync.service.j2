@@ -1,0 +1,28 @@
+# {{ ansible_managed }}
+# The agent's vault sync (ADR-068 D4 as amended 2026-10-08). Plumbing, not an
+# agent job: it moves what the agent wrote, and runs no model.
+[Unit]
+Description=hermes-kubelab vault sync
+Wants=network-online.target
+After=network-online.target
+OnFailure=kubelab-notify@%n.service
+
+[Service]
+Type=oneshot
+User={{ agent_stack_agent_user }}
+Group={{ agent_stack_agent_user }}
+# Root's file, read by systemd and handed over in a directory only this run sees.
+LoadCredential=vault-token:{{ agent_stack_vault_token_file }}
+# No git configuration from the agent's home or the system: the script passes
+# all of it, so nothing the agent's user could write changes what runs.
+Environment=GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+ExecStart={{ agent_stack_vault_libexec }}/vault-sync
+# The remote moved during the push: the next run commits on its tip.
+SuccessExitStatus=75
+TimeoutStartSec=10min
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths={{ agent_stack_vault_clone }}
+StandardOutput=journal
+StandardError=journal
