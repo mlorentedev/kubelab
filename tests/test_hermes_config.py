@@ -15,9 +15,8 @@ from pathlib import Path
 
 import pytest
 import yaml
-from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
-from tests.test_agent_stack_role import _template_task, _tasks
+from tests.test_agent_stack_role import _tasks, _template_task
 
 REPO = Path(__file__).resolve().parent.parent
 ROLE = REPO / "infra/ansible/roles/agent_stack"
@@ -27,9 +26,7 @@ RULES = yaml.safe_load(DENYLIST.read_text())["rules"]
 
 
 def _render(name: str, **overrides: object) -> str:
-    from tests.test_agent_stack_role import _resolved
-
-    from tests.test_agent_stack_role import _environment
+    from tests.test_agent_stack_role import _environment, _resolved
 
     env = _environment()
     return env.get_template(name).render(**{**_resolved(env), **overrides})

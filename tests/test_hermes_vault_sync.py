@@ -37,9 +37,7 @@ def _render(name: str, **overrides: object) -> str:
 
 
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ["git", "-C", str(repo), *args], capture_output=True, text=True, check=False, env=_git_env()
-    )
+    return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, check=False, env=_git_env())
 
 
 def _git_env() -> dict[str, str]:
@@ -231,9 +229,7 @@ def test_a_remote_that_moved_during_the_push_is_left_to_the_next_run(synced: Vau
     # Lands `side` on the branch and refuses this push, as a writer winning the race would.
     hook = synced.remote / "hooks/pre-receive"
     hook.write_text(
-        "#!/bin/sh\n"
-        f"env -i PATH=\"$PATH\" git --git-dir=\"$PWD\" update-ref refs/heads/{BRANCH} refs/heads/side\n"
-        "exit 1\n"
+        f'#!/bin/sh\nenv -i PATH="$PATH" git --git-dir="$PWD" update-ref refs/heads/{BRANCH} refs/heads/side\nexit 1\n'
     )
     hook.chmod(0o755)
     _write(synced.clone, f"{ZONE}/notes.md", "ours\n")
@@ -242,9 +238,10 @@ def test_a_remote_that_moved_during_the_push_is_left_to_the_next_run(synced: Vau
     assert synced.sync().returncode == 0
     head = synced.head()
     assert synced.files(head) == [f"{ZONE}/notes.md"]
-    assert _git(synced.remote, "rev-parse", f"{head}^").stdout.strip() == _git(
-        synced.remote, "rev-parse", "side"
-    ).stdout.strip()
+    assert (
+        _git(synced.remote, "rev-parse", f"{head}^").stdout.strip()
+        == _git(synced.remote, "rev-parse", "side").stdout.strip()
+    )
 
 
 def test_a_refused_push_with_the_remote_unmoved_fails(synced: Vault) -> None:
