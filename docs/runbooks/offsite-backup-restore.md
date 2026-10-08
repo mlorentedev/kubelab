@@ -626,6 +626,24 @@ Bring the app back by closing the window from the workstation,
 Keep `/root/<svc>-data.broken-*` until the app is confirmed whole, then delete it and
 `/tmp/<svc>-restore`: both hold encrypted secrets, and n8n's `config` holds its key.
 
+### A node's files and SQLite databases
+
+For a node whose `backup.sources` entry is directories plus SQLite databases
+(ace2 today), there is one drill for the whole declaration rather than one per
+application:
+
+```bash
+make backup-drill-node NODE=<node> ENV=prod
+```
+
+It reads the node's repository and credentials the same way the node does: its own
+bucket if the node is in `own_bucket_nodes`, otherwise the shared one. It restores the
+newest snapshot into a scratch directory. Each source must restore at least one file,
+every declared database must pass `PRAGMA integrity_check`, and every declared
+`exclude` must be absent. A `pg_dumpall` source is skipped by name; `drill-postgres`
+covers it. It checks the restore against the declaration, not against live, so a file
+the declaration does not name is counted but not compared.
+
 ### Taking an app offline for a restore
 
 A prod Deployment cannot be stopped by scaling it by hand: Argo CD runs `selfHeal: true`

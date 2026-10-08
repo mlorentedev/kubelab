@@ -131,13 +131,22 @@ Read-only checks, in this order:
   push monitor in Uptime Kuma.
 - **Ship now:** `make backup-node NODE=ace2 ENV=prod`.
 
-**Restore: not yet drilled for ace2.** Follow "Restoring — normal case" in
+**Check that a restore works:** `make backup-drill-node NODE=ace2 ENV=prod`. It
+restores the newest snapshot from ace2's own repository into a scratch directory
+on this machine. It passes only if each source restored files, every database
+listed above answers `ok` to `PRAGMA integrity_check`, and every excluded path is
+absent. It prints names, counts and timings, and removes the restore on every
+exit path. First run, 2026-10-08, snapshot `dfcd8b1c`: both sources whole,
+hermes 387 files (4.1 MB) with its six databases, open_webui 2 files (0.9 MB)
+with its two, `bin`, `home/.cache` and `cache` absent. It restored in 6 s,
+10 s end to end.
+
+**To put the data back**, follow "Restoring — normal case" in
 [offsite-backup-restore.md](offsite-backup-restore.md), with ace2's own
 credentials and the repository from
-`infra/k8s/base/services/r2-backup-watcher/targets.txt`. Restore into a scratch
-directory, run `PRAGMA integrity_check` on every database listed above, and only
-then put the data back. Before you do, stop the service that owns it (see
+`infra/k8s/base/services/r2-backup-watcher/targets.txt`. Run the drill first,
+and stop the service that owns the data before you replace it (see
 [Stop](#stop)). Expect the models in `cache/` to download again on the first
 query after the restore. Losing the sidecar's state costs only a re-registration
-(see [Re-register the sidecar](#re-register-the-sidecar)). Record the first drill
-here, with its timings.
+(see [Re-register the sidecar](#re-register-the-sidecar)). Putting the data back
+over a live node has not been done yet.
