@@ -283,19 +283,25 @@ node_backup_prune_connections: 20
 # raise t when a repository nears ~400 packs, not when memory moves.
 node_backup_check_read_data_groups: 1
 
-# RPi3 memory ceiling (Part 0 / R-B: measured floor 16-24M against restic's
-# baseline footprint, before any real repository existed -- read as >5x
-# headroom at the time). MemorySwapMax=0 is deliberate, not decoration -- the
-# node has ~900MB swap and a restic that swaps thrashes the monitoring of
-# record instead of failing cleanly. Enforceable only because ANSIBLE-040
-# (#1101) put the memory cgroup controller on the RPi3; nodes that never
-# needed the fix simply do not set this default.
+# RPi3 memory ceiling: 128M, set by playbooks/backup.yml for rpi3 only.
+# MemorySwapMax=0 is deliberate, not decoration -- the node has ~900MB swap
+# and a restic that swaps thrashes the monitoring of record instead of
+# failing cleanly. Enforceable only because ANSIBLE-040 (#1101) put the memory
+# cgroup controller on the RPi3; nodes that never needed the fix simply do not
+# set this default.
 #
-# Measured against a real (if still small) repository (2026-08-21, first
-# deploy): ship peaked at 90M, ~1.4x margin, not >5x. Flagged for the
-# operator, not acted on here -- a grown rpi3 repository pushing past this
-# cap gets restic OOM-killed on the monitoring-of-record node. See
-# verification.md's Part 4 evidence section.
+# Margin is ~1.46x, not the >5x first claimed (Part 0 measured 16-24M before
+# any repository existed). Measured against the real repository: ship peaked
+# at 87.7M over the 14 days to 2026-10-07 (90M on the 2026-08-21 first
+# deploy), the weekly check at 78-83M. restic's peak grows with the
+# repository, so this margin shrinks over time.
+#
+# Decision (#1204, 2026-10-08): keep the cap and treat an OOM kill as a backup
+# failure, not something to prevent. The kill fails the unit and OnFailure pages
+# through kubelab-notify@ (OnFailure= read live on the rpi3 unit, 2026-10-08). Raising
+# the cap would trade that clean failure for the thrashing the cap exists to
+# stop. Revisit when a page names an OOM kill, or when the ship's MemoryPeak
+# on the rpi3 passes ~110M.
 node_backup_memory_max: ""
 node_backup_memory_swap_max: "0"
 
