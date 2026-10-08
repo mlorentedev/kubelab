@@ -408,4 +408,6 @@ PROVIDER_CHECKS = {
     # a checker that silently cannot read its own credential is the failure this
     # whole module exists to prevent.
     "apps.services.core.gitea.github_migration_token": github_pat_expiry,
+    # hermes-kubelab's vault token: fine-grained, Contents on the vault repository only.
+    "apps.services.ai.hermes_kubelab.github_token": github_pat_expiry,
 }

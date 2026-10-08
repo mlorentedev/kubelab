@@ -995,6 +995,53 @@ SECRET_CATALOG: list[SecretSpec] = [
         ),
         envs=("prod",),
     ),
+    # AI-009 PR 4 (ADR-068 D3): the one credential hermes-kubelab holds for the
+    # vault. Its own clone pushes with it; the zone hook, not the token, limits
+    # where it writes, so the token's reach is the whole vault repository.
+    SecretSpec(
+        key_path="apps.services.ai.hermes_kubelab.github_token",
+        description="GitHub fine-grained token, Contents read and write on the vault repository only (hermes-kubelab)",
+        kind=SecretKind.EXTERNAL,
+        expiry=Expiry.PROVIDER,
+        services=("hermes_kubelab",),
+        rotate_note=(
+            "Mint a new fine-grained token (Settings > Developer settings > Fine-grained tokens), "
+            "repository access `mlorentedev/knowledge` only, Contents: Read and write. "
+            "`toolkit secrets set apps.services.ai.hermes_kubelab.github_token --env prod --stdin`, "
+            "then `make provision NODE=ace2 ENV=prod TAGS=agent_stack`, then revoke the old one."
+        ),
+        envs=("prod",),
+    ),
+    # AI-009 R2, minted 2026-10-05 and stored with #2079 without an entry here, so
+    # `secrets audit` has named them orphans since. Hermes's Slack gateway runs in
+    # Socket Mode, which needs both: the bot token to act, the app token to connect.
+    SecretSpec(
+        key_path="apps.services.ai.hermes_kubelab.slack_bot_token",
+        description="Slack bot token of the hermes-kubelab app (posts and reads as the bot)",
+        kind=SecretKind.EXTERNAL,
+        format_hint="xoxb-…",
+        # Long-lived: only an app with token rotation turned on gets expiring (`xoxe.`) tokens.
+        expiry=Expiry.NEVER,
+        services=("hermes_kubelab",),
+        rotate_note=(
+            "Reinstall the app (OAuth & Permissions) to reissue it, `toolkit secrets set` it, re-provision ace2."
+        ),
+        envs=("prod",),
+    ),
+    SecretSpec(
+        key_path="apps.services.ai.hermes_kubelab.slack_app_token",
+        description="Slack app-level token of the hermes-kubelab app, scope connections:write (Socket Mode)",
+        kind=SecretKind.EXTERNAL,
+        format_hint="xapp-…",
+        # Long-lived: only an app with token rotation turned on gets expiring (`xoxe.`) tokens.
+        expiry=Expiry.NEVER,
+        services=("hermes_kubelab",),
+        rotate_note=(
+            "Basic Information > App-Level Tokens: generate a new one, `toolkit secrets set` it, "
+            "re-provision ace2, revoke the old one."
+        ),
+        envs=("prod",),
+    ),
     # =========================================================================
     # Argo CD (hub management plane — common.enc.yaml)  [TOOL-023 / audit D64]
     # =========================================================================
