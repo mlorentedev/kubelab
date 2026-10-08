@@ -309,7 +309,9 @@ It stops at the first failure:
    needs one because it reads source and destination with the same `AWS_*`, and
    no standing pair reaches both. The token must list both buckets and be refused
    on another node's before anything is copied. It is revoked once the copy is
-   compared, whatever happened, and it is never stored.
+   compared, whatever happened, and it is never stored. The copy runs with
+   `--no-lock`: restic locks the source too, and this token cannot write there
+   (lesson-538). The comparison in step 2 is what catches a prune that ran mid-copy.
 2. **Compare.** Every source snapshot must have exactly one copy (its `original`).
    A missing or doubled snapshot stops the migration, even when the counts match.
 3. **Declare.** It adds the node to `backup.r2.own_bucket_nodes` in `common.yaml`.
@@ -327,6 +329,9 @@ What to expect, and what to do:
 - **Until that PR merges,** the prod watcher still reads `kubelab-backups/<node>`, which
   has stopped growing. Its snapshot-age alert for the moved node fires on schedule.
   That is the old target ageing, not a failed backup. The merge clears it.
+- **Until that PR merges, do not deploy `node_backup` from master** (`make backup`,
+  `make provision`). Master does not declare the node, so the deploy points it back at
+  `kubelab-backups` with the shared secrets, and the next ship lands there.
 - **If a step fails after the declaration,** the node is declared and not pinned. Fix
   the cause, then finish by hand: run the failed target and the ones after it
   (`make backup ENV=prod`, `make backup-repo-reinit NODE=<node> DEST=r2 ENV=prod`,
