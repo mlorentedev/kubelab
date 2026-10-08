@@ -18,7 +18,7 @@ The unit tests passed because their fake restic modelled the order of the steps 
 
 Reproduced locally with restic 0.18.1: a source repository whose `locks/` directory is read-only fails the same way, and `--no-lock` copies every snapshot.
 
-**Solution**: The copy runs as `restic copy --from-repo <src> --no-lock` (#2122). The test fake now refuses any command that opens the source without `--no-lock` under the temporary token, so the real constraint is modelled; without the fix, 7 tests fail. Without the source lock, a prune on the node could drop a pack mid-copy. The copy then fails, or the per-snapshot comparison finds the gap, and a re-run resumes.
+**Solution**: The copy runs as `restic copy --from-repo <src> --no-lock` (#2121). The test fake now refuses any command that opens the source without `--no-lock` under the temporary token, so the real constraint is modelled; without the fix, 7 tests fail. Without the source lock, a prune on the node could drop a pack mid-copy. The copy then fails, or the per-snapshot comparison finds the gap, and a re-run resumes.
 
 **Rule**: A read-only credential is read-only only for commands that do not lock. Before handing restic, or any tool with advisory locks, a credential that cannot write, list which repositories each command locks. Make the test fake refuse what the real credential refuses. A fake that accepts every call under every token tests the call order and nothing about permissions.
 
