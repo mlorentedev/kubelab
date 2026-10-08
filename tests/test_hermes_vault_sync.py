@@ -212,6 +212,23 @@ def test_an_unpushed_commit_outside_the_zone_fails_and_pushes_nothing(synced: Va
     assert synced.head() == before
 
 
+def test_the_push_refuses_outside_the_zone_even_without_the_recovery_step(synced: Vault) -> None:
+    """The last check stands alone: with the step that takes unpushed commits
+    back edited out of the script, a stray commit still never reaches the remote."""
+    script = synced.script.read_text()
+    begin = script.index('if [ "$(vgit rev-parse HEAD)" != "$base" ]; then')
+    end = script.index("fi\n", begin) + len("fi\n")
+    synced.script.write_text(script[:begin] + script[end:])
+    before = synced.head()
+    _write(synced.clone, "10_projects/kubelab/roadmap.md", "ours\n")
+    _git(synced.clone, "add", "-A")
+    _git(synced.clone, "-c", "user.name=x", "-c", "user.email=x@x", "commit", "-q", "--no-verify", "-m", "stray")
+    result = synced.sync()
+    assert result.returncode == 1
+    assert "refusing to push" in result.stderr
+    assert synced.head() == before
+
+
 def test_upstream_changing_a_file_the_agent_changed_fails_instead_of_merging(synced: Vault) -> None:
     _write(synced.other, f"{ZONE}/notes.md", "theirs\n")
     theirs = synced.other_commit("theirs")
