@@ -147,6 +147,8 @@ ENV_TARGETS: dict[str, tuple[str, str]] = {
     "backup-drill-gitea": ("--env", "prod"),
     "backup-drill-headscale": ("--env", "prod"),
     "backup-drill-apps": ("--env", "prod"),
+    # Added with the target (BACKUP-076): it reads a node's prod repository.
+    "backup-drill-node": ("--env", "prod"),
     # Added with the target (BACKUP-070): the window exists for prod restores.
     "restore-window": ("--env", "prod"),
     # Added with the target (BACKUP-057): the node keys live in prod SOPS only.

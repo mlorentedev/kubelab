@@ -128,3 +128,22 @@ def test_waiting_stops_when_the_server_answers_and_gives_up_at_the_deadline() ->
     answers = iter([False, False, True])
     assert wait_until(lambda: next(answers), timeout=50, sleep=lambda s: None, clock=lambda: next(now))
     assert not wait_until(lambda: False, timeout=3, sleep=lambda s: None, clock=lambda: next(now))
+
+
+def test_a_scratch_without_a_container_never_calls_docker_and_is_clean_once_the_data_is_gone() -> None:
+    def no_docker(argv, *, env=None):
+        raise AssertionError(f"a directory-only drill ran {argv[0]}")
+
+    with scratch(no_docker, "nodedrill", holds="a node's files", container=False) as box:
+        (box.workdir / "webui.db").write_text("rows")
+    assert box.clean and not box.workdir.exists()
+
+
+def test_a_scratch_without_a_container_is_not_clean_when_the_data_stays(capsys) -> None:
+    def no_docker(argv, *, env=None):
+        raise AssertionError(f"a directory-only drill ran {argv[0]}")
+
+    with scratch(no_docker, "nodedrill", holds="a node's files", wipe=lambda workdir: False, container=False) as box:
+        pass
+    assert not box.clean
+    assert "it holds a node's files, delete it now" in _out(capsys)

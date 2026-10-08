@@ -1778,6 +1778,17 @@ backup-drill-apps:
 backup-drill-gitea:
 	@$(TOOLKIT) backup drill-gitea --env $(or $(filter staging prod,$(ENV)),prod)$(if $(HOST), --host $(HOST))
 
+# Restore a node's newest capture from its own repository into a scratch
+# directory on this machine and check every source `backup.sources.<node>`
+# declares: it restored files, each SQLite database passes integrity_check, and
+# each excluded path stayed out (BACKUP-076). Needs the env's SOPS keys, not
+# docker; prints declared names, counts, sizes and timings, never content.
+# Usage: make backup-drill-node NODE=ace2 ENV=prod
+.PHONY: backup-drill-node
+backup-drill-node:
+	@test -n "$(NODE)" || (echo "Usage: make backup-drill-node NODE=<node> ENV=staging|prod" && exit 1)
+	@$(TOOLKIT) backup drill-node --node $(NODE) --env $(or $(filter staging prod,$(ENV)),prod)
+
 # Stop one app and pause its env's Argo CD auto-sync, so its data can be
 # replaced without Argo CD bringing it back (BACKUP-070). END=1 restores the
 # sync policy declared in git, syncs, and waits for the app. While a window is

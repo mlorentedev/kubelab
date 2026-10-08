@@ -173,21 +173,25 @@ def scratch(
     *,
     holds: str,
     wipe: Optional[Callable[[Path], bool]] = None,
+    container: bool = True,
 ) -> Iterator[Scratch]:
     """A scratch directory and container name, both removed however the drill ends.
 
     A drill that passed but left its container or its restored data behind has
     not passed: the caller returns `ok and box.clean`. `holds` names what the
     directory holds, for the message that asks for it to be deleted by hand.
+    `container=False` is for a drill that only restores files: it never starts
+    one, so docker is not asked about it (and need not be installed).
     """
     box = Scratch(Path(tempfile.mkdtemp(prefix=f"{prefix}-")), f"{prefix}-{secrets.token_hex(4)}")
     try:
         yield box
     finally:
         # Unconditional: `docker run -d` can create the container and still fail.
-        removed = False
+        removed = not container
         try:
-            removed = remove_scratch_container(run, box.name)
+            if container:
+                removed = remove_scratch_container(run, box.name)
         finally:
             wiped = (wipe or _rmtree)(box.workdir)
             if not wiped:
