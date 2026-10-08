@@ -839,6 +839,23 @@ class GiteaBasicAuthClient(GiteaClient):
         """Open an issue (TOOL-078), as the same authoring identity as `create_pull`."""
         return dict(self._request("POST", f"/repos/{owner}/{name}/issues", json=dict(payload)))
 
+    def count_tracker_items(self, owner: str, name: str) -> int:
+        """Issues plus pull requests in every state: what deleting the repository destroys (#2133).
+
+        Gitea's `empty` describes git only. An issue lives in the database, so a
+        repository with no commits can still hold a tracker, and `drop-empty` must
+        count it before deleting. `teledyne/openkm-brain` had 2 on 2026-10-08.
+
+        ON THIS CLASS because listing issues needs `read:issue`, which `admin_token`
+        does not hold (403 `required=[read:issue]`, 2026-09-02), and the only caller
+        is `drop-empty`, which already needs this credential for the delete. Not
+        `open_issues_count` from `GET /repos`: that counts open items only.
+        """
+        return sum(
+            sum(1 for _ in self._paginate(f"/repos/{owner}/{name}/issues?state=all&type={kind}"))
+            for kind in ("issues", "pulls")
+        )
+
     def list_actions_secret_names(self, owner: str, name: str) -> set[str] | None:
         """The NAMES of a repository's Actions secrets (TOOL-062). None for an absent repository.
 

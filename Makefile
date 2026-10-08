@@ -495,14 +495,15 @@ gitea-rotate-token:
 # Plan only. `APPLY=1` deletes ONE empty, DECLARED repository — the shells PR1
 # created, which block `POST /repos/migrate` (Gitea answers 409 rather than
 # filling an existing repo). Refuses a repository with content, an undeclared one,
-# and one whose emptiness Gitea did not report. This is NOT a deletion path for
-# the reconciler: it goes through the superadmin's basic-auth session, because
+# one whose emptiness Gitea did not report, and one still holding issues or pull
+# requests unless `DISCARD=` names their live count (#2133). This is NOT a
+# deletion path for the reconciler: it goes through the superadmin's basic-auth session, because
 # granting either long-lived token `write:repository` would make deletion a
 # standing capability (TOOL-035, #1076).
 .PHONY: gitea-drop-empty
 gitea-drop-empty:
-	@test -n "$(REPO)" || (echo "Usage: make gitea-drop-empty REPO=owner/name [ENV=prod] [APPLY=1]" && exit 1)
-	@$(TOOLKIT) services gitea drop-empty --repo $(REPO) --env $(or $(filter staging prod,$(ENV)),prod) $(if $(APPLY),--apply,)
+	@test -n "$(REPO)" || (echo "Usage: make gitea-drop-empty REPO=owner/name [ENV=prod] [APPLY=1] [DISCARD=<issues+pulls count>]" && exit 1)
+	@$(TOOLKIT) services gitea drop-empty --repo $(REPO) --env $(or $(filter staging prod,$(ENV)),prod) $(if $(APPLY),--apply,) $(if $(DISCARD),--discard-tracker-items $(DISCARD),)
 
 # Run git against the forge with the operator credential injected into the child
 # process. No workstation holds a credential for gitea.kubelab.live, and the three

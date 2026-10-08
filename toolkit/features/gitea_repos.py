@@ -1295,7 +1295,14 @@ class DropDecision:
     reason: str | None = None
 
 
-def plan_drop(full_name: str, repo: Mapping[str, Any] | None, declared: set[str]) -> DropDecision:
+def plan_drop(
+    full_name: str,
+    repo: Mapping[str, Any] | None,
+    declared: set[str],
+    *,
+    tracker_items: int | None,
+    discard_tracker_items: int | None = None,
+) -> DropDecision:
     """Decide whether an EMPTY DECLARED repository may be removed. Pure -- no network.
 
     WHY THIS DOES NOT REOPEN #1076'S DELETION QUESTION. The reconciler still cannot
@@ -1305,8 +1312,8 @@ def plan_drop(full_name: str, repo: Mapping[str, Any] | None, declared: set[str]
     shells, and `POST /repos/migrate` answers 409 rather than filling one, so the
     shells block the migration they were declared for.
 
-    THREE REFUSALS, and the order is deliberate -- each answers a different
-    question, and the first two would be wrong to skip even if the third held:
+    FOUR REFUSALS, and the order is deliberate -- each answers a different
+    question, and the earlier ones would be wrong to skip even if a later one held:
 
     - **Malformed target.** `owner/name` or nothing. A typo must not become a URL.
     - **Not declared.** A stray survives, always. Emptiness does not make someone
@@ -1317,6 +1324,14 @@ def plan_drop(full_name: str, repo: Mapping[str, Any] | None, declared: set[str]
       reports `size: 22` -- the git directory itself -- measured on all three
       shells 2026-09-02. An absent `empty` key is "I do not know", refused rather
       than defaulted, because defaulting it to True deletes on a missing value.
+    - **Issues or pull requests, or their count unknown** (#2133). `empty` is about
+      GIT, and the tracker lives outside it: `teledyne/openkm-brain` read
+      `empty: True` on 2026-10-08 while holding two issues, one a fixture
+      APP-CONFIG-015 replays. `tracker_items` counts both kinds in every state;
+      None means it was not read and is refused like a missing `empty`. The
+      operator may discard them only by passing `discard_tracker_items` equal to
+      the live count -- a number, not a switch, so an approval given against one
+      reading cannot delete more than was seen.
 
     None of these guards the CREDENTIAL, which is the point worth remembering: the
     superadmin's basic-auth session can delete any repository on the instance, and
@@ -1349,6 +1364,21 @@ def plan_drop(full_name: str, repo: Mapping[str, Any] | None, declared: set[str]
             False,
             f"{full_name} is not empty (size={repo.get('size', '?')}). This command removes the "
             f"shells PR1 created, never a repository with content.",
+        )
+
+    if tracker_items is None:
+        return DropDecision(
+            False,
+            f"the caller did not count {full_name}'s issues and pull requests. An empty git "
+            f"repository can still hold them, so an unread count is refused, not assumed zero.",
+        )
+
+    if tracker_items and discard_tracker_items != tracker_items:
+        return DropDecision(
+            False,
+            f"{full_name} has no git content but holds {tracker_items} issue(s) and pull request(s), "
+            f"which the delete removes with it. To discard them, pass the live count: "
+            f"--discard-tracker-items {tracker_items} (`DISCARD={tracker_items}` through make).",
         )
 
     return DropDecision(True)

@@ -700,24 +700,34 @@ def gitea_drop_empty(
     repo: Annotated[str, typer.Option("--repo", help="Target as `owner/name`")],
     env: Annotated[str, typer.Option("--env", "-e", help="Environment holding the forge credentials")] = "prod",
     apply: Annotated[bool, typer.Option("--apply", help="Actually delete. Without it, plan only.")] = False,
+    discard_tracker_items: Annotated[
+        int | None,
+        typer.Option(
+            "--discard-tracker-items",
+            help="Delete despite this many issues and pull requests. Must equal the live count.",
+        ),
+    ] = None,
 ) -> None:
     """Remove an EMPTY DECLARED repository, so a migration can create it in its place.
 
     NOT A DELETION PATH FOR THE RECONCILER. `make gitea-reconcile` still cannot
     remove anything — `ReconcilePlan` has no field a deletion could travel in, and
     a test asserts that over `dataclasses.fields`. This is a separate command with
-    its own object, its own credential and three refusals in front of it.
+    its own object, its own credential and four refusals in front of it.
 
     It exists because PR1 created the declared repositories as empty shells and
     Gitea's `POST /repos/migrate` answers 409 when the target already exists — it
     creates a repository, it does not fill one. The shells therefore block the
     migration they were declared for, and something has to remove them once.
 
-    Reads with the least-privileged credential that can answer and deletes with the
-    one Gitea will accept: the admin TOKEN is refused `DELETE` with
-    `required=[write:repository]`, and widening it would buy a standing delete
-    capability on the reconciler's credential. `GiteaBasicAuthClient` grants nothing
-    durable — see `gitea_client.GiteaBasicAuthClient.delete_repo`.
+    Reads the repository with the least-privileged credential that can answer, and
+    counts its issues and deletes it with the one Gitea will accept: the admin TOKEN
+    lacks `read:issue` and is refused `DELETE` with `required=[write:repository]`,
+    and widening it would buy a standing delete capability on the reconciler's
+    credential. `GiteaBasicAuthClient` grants nothing durable — see
+    `gitea_client.GiteaBasicAuthClient.delete_repo`. So the plan needs the admin
+    password too: an empty repository can still hold a tracker (#2133), and a plan
+    that cannot count it cannot say what the delete would destroy.
     """
     from toolkit.features.gitea_client import GiteaBasicAuthClient, GiteaError
     from toolkit.features.gitea_repos import declared_full_names, load_declaration, plan_drop, split_full_name
@@ -727,23 +737,44 @@ def gitea_drop_empty(
     gitea = merged["apps"]["services"]["core"]["gitea"]
     declared = declared_full_names(load_declaration(merged))
 
+    admin_password = gitea.get("admin_password")
+    if not admin_password:
+        logger.error(
+            f"missing apps.services.core.gitea.admin_password in {env} SOPS — counting issues and "
+            f"the delete both refuse the admin token, so there is no token fallback. Re-provision the Beelink."
+        )
+        raise typer.Exit(1)
+    client = GiteaBasicAuthClient(base_url, merged["apps"]["auth"]["identities"]["superadmin"], str(admin_password))
+
+    tracker_items: int | None = None
     try:
         # The SAME parser the planner uses. Splitting here independently is what
         # made a malformed target die on "not enough values to unpack" instead of
         # on the refusal written for it.
         owner, name = split_full_name(repo)
         current = admin.get_repo(owner, name)
-        decision = plan_drop(full_name=repo, repo=current, declared=declared)
+        if current is not None:
+            tracker_items = client.count_tracker_items(owner, name)
+        decision = plan_drop(
+            full_name=repo,
+            repo=current,
+            declared=declared,
+            tracker_items=tracker_items,
+            discard_tracker_items=discard_tracker_items,
+        )
     except ValueError as exc:
         logger.error(str(exc))
         raise typer.Exit(1) from exc
     except GiteaError as exc:
-        logger.error(f"could not read {repo} from {base_url}: {exc}")
+        hint = " (a 401 here usually means the SOPS admin password has drifted — re-provision the Beelink)"
+        logger.error(f"could not read {repo} from {base_url}{hint if exc.status_code == 401 else ''}: {exc}")
         raise typer.Exit(1) from exc
 
     console.print(f"\n[bold]Gitea drop-empty[/bold] — {base_url} ({env})\n")
     if current is not None:
-        console.print(f"  {repo}  empty={current.get('empty')}  size={current.get('size')}")
+        console.print(
+            f"  {repo}  empty={current.get('empty')}  size={current.get('size')}  issues+pulls={tracker_items}"
+        )
 
     if not decision.may_drop:
         # Deliberately exit 0 on "already absent" and non-zero on a refusal: the
@@ -757,15 +788,6 @@ def gitea_drop_empty(
         console.print("\n[dim]plan only — re-run with --apply to delete[/dim]")
         return
 
-    admin_password = gitea.get("admin_password")
-    if not admin_password:
-        logger.error(
-            f"missing apps.services.core.gitea.admin_password in {env} SOPS — the delete endpoint "
-            f"refuses bearer tokens, so there is no token fallback. Re-provision the Beelink."
-        )
-        raise typer.Exit(1)
-
-    client = GiteaBasicAuthClient(base_url, merged["apps"]["auth"]["identities"]["superadmin"], str(admin_password))
     try:
         deleted = client.delete_repo(owner, name)
     except GiteaError as exc:
