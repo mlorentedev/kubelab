@@ -50,3 +50,7 @@ passing unit test show what was written, not what is applied. Before porting a
 pattern list between tools, check which matcher the target uses.
 
 **Tags**: `#hermes` `#ai-009` `#approvals`
+
+**Update 2026-10-08**: Point 1 describes a sandbox with no host path. Since
+AI-009 PR 4 the vault is mounted, and Hermes applies every guard again; see
+lesson-540 for what that changes in the read-back.
