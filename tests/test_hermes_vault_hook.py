@@ -145,7 +145,18 @@ def test_the_agent_cannot_edit_the_hook() -> None:
     spec = renders[0]["ansible.builtin.template"]
     assert spec["owner"] == "root" and spec["mode"] == "0755"
     assert spec["dest"] == "{{ agent_stack_vault_hooks }}/pre-commit"
-    dirs = [t for t in tasks if (t.get("ansible.builtin.file") or {}).get("path") == "{{ agent_stack_vault_hooks }}"]
+    hooks = "{{ agent_stack_vault_hooks }}"
+    dirs = [
+        t
+        for t in tasks
+        if (t.get("ansible.builtin.file") or {}).get("state") == "directory"
+        and hooks
+        in (
+            [t["ansible.builtin.file"]["path"]]
+            if t["ansible.builtin.file"]["path"] != "{{ item }}"
+            else t.get("loop", [])
+        )
+    ]
     assert len(dirs) == 1
     assert dirs[0]["ansible.builtin.file"]["owner"] == "root", "an agent-owned parent can swap the hook"
     assert dirs[0]["ansible.builtin.file"]["mode"] == "0755", "a parent others can write lets them unlink the hook"
