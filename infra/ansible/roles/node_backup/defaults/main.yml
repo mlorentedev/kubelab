@@ -293,19 +293,21 @@ node_backup_check_read_data_groups: 1
 # Margin is ~1.46x, not the >5x first claimed (Part 0 measured 16-24M before
 # any repository existed). Measured against the real repository: ship peaked
 # at 87.7M over the 14 days to 2026-10-07 (90M on the 2026-08-21 first
-# deploy), the weekly check at 78-83M. restic's peak grows with the
+# deploy), the weekly check at 78-83M. Source: the "memory peak" line systemd
+# logs for each node-backup-ship run in the rpi3 journal; the check's figure is
+# in specs/archive/BACKUP-063/verification.md. restic's peak grows with the
 # repository, so this margin shrinks over time.
 #
 # Decision (#1204, 2026-10-08): keep the cap and treat an OOM kill as a backup
-# failure, not something to prevent. Two paths turn the kill into a failed
-# unit, and OnFailure= then pages through kubelab-notify@: OOMPolicy=stop (the
-# service default) fails the unit with result 'oom-kill' whichever process the
-# kernel kills, and the ship script's `set -euo pipefail` exits on restic's
-# 137. Read live on the rpi3 2026-10-08 (systemd 257); no OOM kill has been
-# observed, so this is the wiring, not a measured page. Raising the cap would
-# trade that clean failure for the thrashing the cap exists to stop. Revisit
-# when a page names an OOM kill, or when the ship's MemoryPeak on the rpi3
-# passes ~110M.
+# failure, not something to prevent. OOMPolicy=stop (the service default) fails
+# the unit with result 'oom-kill' whichever process the kernel kills, and the
+# ship script's `set -euo pipefail` exits on restic's 137. Measured on the rpi3
+# 2026-10-08 (systemd 257): a transient unit with MemoryMax=16M ended
+# "Failed with result 'oom-kill'". OnFailure= then pages through
+# kubelab-notify@, the same path that paged rpi4's capture timeout on
+# 2026-10-07. Raising the cap would trade that clean failure for the thrashing
+# the cap exists to stop. Revisit when a page names an OOM kill, or when the
+# ship's MemoryPeak on the rpi3 passes ~110M.
 node_backup_memory_max: ""
 node_backup_memory_swap_max: "0"
 
