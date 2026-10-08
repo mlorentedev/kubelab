@@ -1,9 +1,10 @@
 # Backups, volumes and persistence
 
-29 lessons, newest first. Back to [all categories](../_index.md).
+30 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 538 | [`restic copy` writes a lock into the source repository, so a read-only source credential fails unless the copy runs with `--no-lock`](lesson-538-restic-copy-locks-the-source-so-a-read-only-source-credential-needs-no-lock.md) | 2026-10-08 |
 | 535 | [An on-demand node ships its first backup the moment its timer is enabled](lesson-535-an-on-demand-node-ships-its-first-backup-the-moment-its-timer-is-enabled.md) | 2026-10-07 |
 | 533 | [A directory listed to `cp -a` is copied whole, past every filter on its files](lesson-533-a-directory-listed-to-cp-a-is-copied-whole-past-every-filter-on-its-files.md) | 2026-10-07 |
 | 529 | [`restic copy` reads both repositories with one S3 credential, so per-bucket tokens cannot copy between buckets](lesson-529-restic-copy-reads-both-repositories-with-one-s3-credential.md) | 2026-10-07 |
