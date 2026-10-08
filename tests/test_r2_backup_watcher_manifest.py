@@ -56,6 +56,17 @@ def _target_buckets() -> int:
     return len({fields[1].split("://", 1)[1].split("/")[1] for fields in _targets()})
 
 
+def _target_listings() -> int:
+    """`rclone size` calls size.sh makes: one per bucket, plus one per node whose repository is below its root.
+
+    A repository at its bucket's root reuses the bucket's listing (#2123). This
+    count assumes that reuse; `test_a_repository_at_its_bucket_root_is_listed_once`
+    in test_r2_backup_watcher_size.py goes red if size.sh stops doing it.
+    """
+    below_root = sum(1 for fields in _targets() if len(fields[1].split("://", 1)[1].split("/")) > 2)
+    return _target_buckets() + below_root
+
+
 def _kustomize(env: str) -> list[dict]:
     """Render an overlay, or skip loudly: a skip means CANNOT CHECK, never a pass."""
     if shutil.which("kubectl") is None:
@@ -212,8 +223,8 @@ def test_lives_long_enough_to_report(rendered: dict) -> None:
     calls = _restic_calls_per_node()
     assert calls >= 3, f"counted {calls} restic_read calls in probe.sh; the pattern is stale"
     assert len(re.findall(r"^\s*measure (?:bucket|node) ", SIZE.read_text(), re.M)) == 2, "size.sh's calls are stale"
-    # The init container runs first: one listing per bucket and one per node.
-    sizing = (_target_buckets() + _target_nodes()) * size_timeout
+    # The init container runs first: one listing per bucket, plus one per node below its bucket's root.
+    sizing = _target_listings() * size_timeout
     worst_case = sizing + _target_nodes() * calls * timeout
     assert rendered["job"]["activeDeadlineSeconds"] > worst_case
     assert rendered["pod"]["terminationGracePeriodSeconds"] > timeout

@@ -62,12 +62,14 @@ spec:
       # the rule's `last_over_time` keeps only the last, so a flaky pass could
       # overwrite a real failure. The next run is at most 6h away.
       backoffLimit: 0
-      # Floor, derived from both scripts: (buckets + nodes) x SIZE_TIMEOUT for the
-      # sizing step, then nodes x 3 restic calls x RESTIC_TIMEOUT for the probe =
-      # (5 + 5) x 120 + 5 x 3 x 60 = 2100s, one bucket per node since BACKUP-057's
-      # migration sitting. Sized for the worst case the scripts allow, not the
-      # typical run. tests/test_r2_backup_watcher_manifest.py counts the calls.
-      activeDeadlineSeconds: 2400
+      # Floor, derived from both scripts: listings x SIZE_TIMEOUT for the sizing
+      # step (one per bucket, plus one per node below its bucket's root), then
+      # nodes x 3 restic calls x RESTIC_TIMEOUT for the probe = 5 x 120 +
+      # 5 x 3 x 60 = 1500s, every node at the root of its own bucket since
+      # BACKUP-057's migration sitting (#2123). Sized for the worst case the
+      # scripts allow, not the typical run.
+      # tests/test_r2_backup_watcher_manifest.py counts the calls.
+      activeDeadlineSeconds: 1800
       template:
         metadata:
           labels:
