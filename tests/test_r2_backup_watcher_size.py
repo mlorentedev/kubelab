@@ -142,6 +142,36 @@ def test_two_buckets_are_each_listed_once_at_their_root(fleet) -> None:
     )
 
 
+def _add_root_node(fleet, marker: str = "bytes", content: str = "7000\n") -> pathlib.Path:
+    """A node whose repository is the root of its own bucket, as every node is since BACKUP-057's sitting."""
+    fake, _, env, _ = fleet
+    targets = pathlib.Path(env["WATCHER_TARGETS"])
+    targets.write_text(
+        targets.read_text() + f"\nace2 s3:https://{HOST}/kubelab-backup-ace2 {'4' * 64} 192.0.2.5 22 on-demand hermes\n"
+    )
+    (fake / f"kubelab-backup-ace2.{marker}").write_text(content)
+    return fake
+
+
+def test_a_repository_at_its_bucket_root_is_listed_once(fleet) -> None:
+    """#2123: the bucket listing and the node listing cover the same objects, so one serves both."""
+    fake = _add_root_node(fleet)
+    proc, entries = _run(fleet)
+    assert proc.returncode == 0, proc.stderr
+    assert entries[("bucket", "kubelab-backup-ace2")][0] == "7000"
+    assert entries[("node", "ace2")] == entries[("bucket", "kubelab-backup-ace2")]
+    listed = [c.split()[1] for c in _calls(fake)]
+    assert listed.count("kubelab-backup-ace2") == 1, listed
+
+
+def test_a_failed_root_listing_is_null_for_the_node_too(fleet) -> None:
+    _add_root_node(fleet, "fail", "AccessDenied: Access Denied\n")
+    proc, entries = _run(fleet)
+    assert proc.returncode == 0
+    assert entries[("bucket", "kubelab-backup-ace2")][0] == "null"
+    assert entries[("node", "ace2")][0] == "null"
+
+
 def test_every_entry_records_how_long_its_listing_took(fleet) -> None:
     """The duration is AC3's evidence that the cost no longer follows the snapshot count."""
     _, entries = _run(fleet)

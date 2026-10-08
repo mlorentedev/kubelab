@@ -9,7 +9,10 @@
 #                                          including anything outside a node's
 #                                          prefix. The fleet line sums these.
 #   node <node> <bytes|null> <seconds>     each node's repository prefix. The
-#                                          shrink rule reads these.
+#                                          shrink rule reads these. A repository
+#                                          at its bucket's root reuses that
+#                                          bucket's entry rather than being
+#                                          listed a second time.
 #
 # Not `restic stats --mode raw-data`, which this replaced: that walks every tree
 # of every snapshot, so its cost follows the snapshot count (the Beelink passed
@@ -81,7 +84,15 @@ while read -r node repo _ || [ -n "$node" ]; do
             measure bucket "$bucket" "$host" "$bucket" </dev/null
             ;;
     esac
-    measure node "$node" "$host" "$path" </dev/null
+    if [ "$path" = "$bucket" ]; then
+        # A repository at its bucket's root (every node since BACKUP-057's
+        # sitting): the bucket listing covered exactly these objects, so the
+        # node line reuses it instead of listing them again (#2123).
+        root="$(grep "^bucket $bucket " "$tmp" | head -n 1)"
+        echo "node $node ${root#"bucket $bucket "}" >>"$tmp"
+    else
+        measure node "$node" "$host" "$path" </dev/null
+    fi
 done <"$TARGETS"
 
 rm -f "$errfile"
