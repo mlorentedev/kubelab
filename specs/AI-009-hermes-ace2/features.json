@@ -96,5 +96,12 @@
     "verification": "poetry run pytest --no-cov -q tests/test_hermes_vault_hook.py",
     "state": "pending",
     "evidence": ""
+  },
+  {
+    "id": "AI-009-hermes-ace2-f15",
+    "behavior": "The agent's zone reaches the vault only through the host: the sandbox mounts the clone read-only and the zone writable, and the sync unit (as the agent's user, token from systemd) fast-forwards, commits the zone through the hook, refuses to push any path outside it, re-commits a dead run's zone-only commits on the new tip, and never rebases (AC6, ADR-068 D4 amendment)",
+    "verification": "poetry run pytest --no-cov -q tests/test_hermes_vault_sync.py",
+    "state": "pending",
+    "evidence": ""
   }
 ]
