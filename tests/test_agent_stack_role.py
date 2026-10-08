@@ -50,6 +50,7 @@ def _context() -> dict:
         "_agent_stack_webui_secret_key": "session-key-sentinel",
         "agent_stack_agent_user": common["apps"]["services"]["ai"]["hermes_kubelab"]["user"],
         "agent_stack_hermes": common["apps"]["services"]["ai"]["hermes_kubelab"],
+        "agent_stack_vault_zone": common["apps"]["services"]["ai"]["hermes_kubelab"]["vault_zone"],
         "agent_stack_headscale_url": f"https://{common['apps']['services']['core']['headscale']['domain']}",
         "agent_stack_deny_rules": yaml.safe_load((ROLE / "files/guardrails-denylist.yaml").read_text())["rules"],
         "_agent_stack_agent_uid": 999,
@@ -57,8 +58,15 @@ def _context() -> dict:
     }
 
 
-def _render(name: str) -> str:
+def _environment() -> Environment:
     env = Environment(loader=FileSystemLoader(str(ROLE / "templates")), undefined=StrictUndefined)
+    # Ansible's: a rendered default is a string, and "False" is truthy to Jinja.
+    env.filters["bool"] = lambda value: str(value).strip().lower() in ("true", "yes", "on", "1")
+    return env
+
+
+def _render(name: str) -> str:
+    env = _environment()
     return env.get_template(name).render(**_resolved(env))
 
 

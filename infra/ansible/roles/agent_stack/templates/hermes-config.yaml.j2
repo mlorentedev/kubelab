@@ -22,6 +22,15 @@ terminal:
   # `tag:hermes`). Through the rootless daemon it would leave as ace2, the
   # admin's node: measured 2026-10-06, it opened the VPS's :22 and :6443.
   docker_network: false
+{% if agent_stack_vault_configured | bool %}
+  # The vault (ADR-068 D4 as amended 2026-10-08): read-only, and the agent's
+  # zone writable inside it. The sync unit commits and pushes; the sandbox has
+  # no token and no network. A host path here turns Hermes's command guards
+  # back on for the docker backend, approvals included.
+  docker_volumes:
+    - '{{ agent_stack_vault_clone }}:{{ agent_stack_hermes.vault_sync.mount }}:ro'
+    - '{{ agent_stack_vault_clone }}/{{ agent_stack_vault_zone }}:{{ agent_stack_hermes.vault_sync.mount }}/{{ agent_stack_vault_zone }}:rw'
+{% endif %}
 
 approvals:
   # Quoted: a bare `off` is YAML for false, which is how hermes-nan ended up
@@ -33,7 +42,8 @@ approvals:
   unattended_mode: "deny"
   # files/guardrails-denylist.yaml. With no host path mounted into the sandbox,
   # v2026.9.24 skips every other command guard for the docker backend, the
-  # prompts above included; these globs are the one it still applies.
+  # prompts above included, and these globs are the one it still applies. With
+  # the vault mounted, they apply after Hermes's own hardline floor.
   deny:
 {% for rule in agent_stack_deny_rules %}
 {% for glob in rule.globs %}

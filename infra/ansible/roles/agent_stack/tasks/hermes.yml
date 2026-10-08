@@ -6,8 +6,8 @@
 #
 # The last block is the measurement: the deny list is read back through the
 # running gateway's own evaluator. A config Hermes failed to load leaves the
-# list empty without stopping it (measured 2026-10-06 on v2026.9.24), and with
-# no host path in the sandbox that list is the only command guard it applies.
+# list empty without stopping it (measured 2026-10-06 on v2026.9.24). Without
+# the vault mounted, that list is the only command guard it applies.
 # =============================================================================
 
 - name: Stop hermes-kubelab when it is not configured
@@ -183,6 +183,21 @@
       register: _agent_stack_hermes_up
       changed_when: "'Started' in _agent_stack_hermes_up.stderr or 'Created' in _agent_stack_hermes_up.stderr"
 
+    # A persistent sandbox is reused by its labels alone, whatever mounts it was
+    # created with (v2026.9.24 `_attach_existing_container`), so a changed
+    # config reaches commands only once the old one is gone. After the gateway
+    # is recreated: a sandbox it starts from now on is made from the new config.
+    - name: Remove the sandboxes made from the previous config
+      ansible.builtin.shell:
+        cmd: >-
+          ids=$(docker ps -aq --filter label=hermes-agent=1);
+          if [ -n "$ids" ]; then docker rm -f $ids; fi
+      become_user: "{{ agent_stack_agent_user }}"
+      environment: "{{ agent_stack_agent_daemon_env }}"
+      when: _agent_stack_hermes_config.changed
+      register: _agent_stack_hermes_sandboxes
+      changed_when: _agent_stack_hermes_sandboxes.stdout | length > 0
+
     - name: Verify the Hermes API answers on loopback with its key
       ansible.builtin.uri:
         url: "http://127.0.0.1:{{ agent_stack_hermes.api_port }}/v1/models"
@@ -268,7 +283,7 @@
       loop: "{{ agent_stack_deny_rules | map(attribute='blocks') | map('first') | list }}"
       register: _agent_stack_hermes_refused
       changed_when: false
-      failed_when: (_agent_stack_hermes_refused.stdout | from_json).verdict != 'user-deny'
+      failed_when: (_agent_stack_hermes_refused.stdout | from_json).verdict not in _agent_stack_hermes_refused_verdicts
       check_mode: false
 
     - name: Evaluate every command the deny rules let through
@@ -279,5 +294,5 @@
       loop: "{{ agent_stack_deny_rules | map(attribute='allows') | flatten }}"
       register: _agent_stack_hermes_allowed
       changed_when: false
-      failed_when: (_agent_stack_hermes_allowed.stdout | from_json).verdict != 'allow'
+      failed_when: (_agent_stack_hermes_allowed.stdout | from_json).verdict not in _agent_stack_hermes_passed_verdicts
       check_mode: false

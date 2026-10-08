@@ -1957,6 +1957,19 @@ apps:
         # ADR-068 D4: the only vault path its clone may commit to, enforced by
         # the pre-commit hook the role installs (spec AC6).
         vault_zone: 80_agents/hermes-kubelab
+        # ADR-068 D4 (amended 2026-10-08): the host commits and pushes the zone,
+        # never the agent. The sandbox sees the clone read-only at `mount` and
+        # only the zone writable; a unit running as the agent's user commits the
+        # zone and pushes it every `interval`, with the vault token only it reads.
+        vault_sync:
+          remote: https://github.com/mlorentedev/knowledge.git
+          branch: master
+          interval: 15min
+          mount: /vault
+          # The writer C14 names: the zone's commits read as the agent's, not
+          # the operator's, the way hermes-nan's read `hermes-nan@nan-server`.
+          author_name: hermes-kubelab
+          author_email: hermes-kubelab@ace2
         # Run through the agent's daemon at every provision, with a memory and a
         # CPU limit, to prove the sandbox Hermes executes commands in can start.
         probe:

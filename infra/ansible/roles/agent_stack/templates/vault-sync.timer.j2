@@ -1,0 +1,12 @@
+# {{ ansible_managed }}
+# ADR-068 D2: soon after boot (which also clears a lock a power cut left, AC11)
+# and every interval after it.
+[Unit]
+Description=hermes-kubelab vault sync, every {{ agent_stack_hermes.vault_sync.interval }}
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec={{ agent_stack_hermes.vault_sync.interval }}
+
+[Install]
+WantedBy=timers.target

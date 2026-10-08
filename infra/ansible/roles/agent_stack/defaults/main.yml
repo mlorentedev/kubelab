@@ -86,6 +86,18 @@ agent_stack_egress_probe_port: 443
 # home, whose directory the agent could otherwise rename (spec AC6).
 agent_stack_vault_hooks: /usr/local/libexec/agent-stack/vault-hooks
 
+# The vault clone and its sync (ADR-068 D4 as amended 2026-10-08). The clone is
+# beside the data directory, not in it, so the gateway's container never sees
+# `.git`; the sandbox sees it read-only and the zone writable. The token is
+# root's file, handed to the sync unit by systemd (LoadCredential), so no
+# process of the agent's user can read it from disk.
+agent_stack_vault_token: ""
+agent_stack_vault_configured: "{{ agent_stack_vault_token | length > 0 }}"
+agent_stack_vault_clone: "{{ agent_stack_agent_home }}/vault"
+agent_stack_vault_token_file: "{{ agent_stack_dir }}/vault-token"
+agent_stack_vault_libexec: /usr/local/libexec/agent-stack
+agent_stack_vault_sync_unit: hermes-kubelab-vault-sync
+
 # hermes-kubelab (ADR-068 D2, spec PR 3). `agent_stack_hermes` is the
 # apps.services.ai.hermes_kubelab map, set by the playbook.
 agent_stack_hermes_project: agent-stack-hermes
@@ -116,4 +128,12 @@ agent_stack_hermes_configured: "{{ agent_stack_nan_api_key | length > 0 }}"
 agent_stack_deny_rules: "{{ (lookup('ansible.builtin.file', role_path ~ '/files/guardrails-denylist.yaml') | from_yaml).rules }}"
 # `hermes approvals test`: what the gateway would do with a command, without
 # running it (exit 3 for a deny, so the tasks read the verdict, not the code).
-_agent_stack_hermes_evaluate: [docker, exec, -u, hermes, hermes-kubelab, hermes, approvals, test, --env-type, docker, --json, "--"]
+# The evaluator models a docker sandbox with no host path, which skips every
+# guard but the deny list. With the vault mounted the runtime applies them all,
+# the path the evaluator takes for `local` (v2026.9.24 `_should_skip_container_guards`).
+_agent_stack_hermes_env_type: "{{ 'local' if agent_stack_vault_configured | bool else 'docker' }}"
+_agent_stack_hermes_evaluate: [docker, exec, -u, hermes, hermes-kubelab, hermes, approvals, test, --env-type, "{{ _agent_stack_hermes_env_type }}", --json, "--"]
+# What each verdict means for a deny rule: refused by it or by Hermes's own
+# floor, or let through, possibly to a prompt that a scheduled job then denies.
+_agent_stack_hermes_refused_verdicts: [user-deny, hardline-deny]
+_agent_stack_hermes_passed_verdicts: [allow, ask-approval]
