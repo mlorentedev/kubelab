@@ -564,8 +564,21 @@ def gitea_reconcile(
     console.print(f"\n[bold]Gitea reconcile[/bold] — {base_url} ({env})\n")
     console.print(format_plan(plan))
 
+    def fail_on_unfilled_migrations() -> None:
+        # A non-zero exit, unlike visibility drift: drift is a disclosure choice the
+        # operator may have made, while a declared migration that never filled its
+        # repository is the declaration not holding. Reported, never repaired here --
+        # the repair deletes, and `gitea-drop-empty` carries the refusals for that.
+        if plan.unfilled_migrations:
+            logger.error(
+                f"{len(plan.unfilled_migrations)} declared migration(s) never filled their repository "
+                "(listed above with the repair). The forge does not match the declaration (#2133)."
+            )
+            raise typer.Exit(1)
+
     if plan.is_noop:
         report_ownership()
+        fail_on_unfilled_migrations()
         # Drift does not make the plan non-idempotent -- nothing here would act on
         # it -- but it must not be reported as a match either. "Nothing to create"
         # is the honest claim; "forge matches the declaration" was not, and was
@@ -586,6 +599,7 @@ def gitea_reconcile(
     if not apply:
         console.print("\n[dim]plan only — re-run with --apply to create[/dim]")
         report_ownership()
+        fail_on_unfilled_migrations()
         return
 
     # Read only when a migration is actually planned. Its absence is a hard error
@@ -691,6 +705,7 @@ def gitea_reconcile(
     # Reported by review on #1562.
     report_ownership()
 
+    fail_on_unfilled_migrations()
     if not report.ok:
         raise typer.Exit(1)
 

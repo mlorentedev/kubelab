@@ -535,6 +535,11 @@ class ReconcilePlan:
     undeclared_orgs: tuple[str, ...] = ()
     undeclared_repos: tuple[str, ...] = ()
     visibility_drift: tuple[VisibilityDrift, ...] = ()
+    # Declared with a source, present, and git-empty: a migration that never filled
+    # its repository (#2133). Reported and never acted on, like `visibility_drift` --
+    # the repair deletes the shell, and this reconciler cannot delete. The CLI turns
+    # it into a failing exit instead.
+    unfilled_migrations: tuple[DeclaredRepo, ...] = ()
 
     @property
     def is_noop(self) -> bool:
@@ -811,6 +816,22 @@ def plan_reconcile(
         if f"{org}/{spec.name}" in existing_repos and existing_repos[f"{org}/{spec.name}"] != spec.private
     )
 
+    # PRESENCE IS NOT ARRIVAL. A repository that exists appears in neither list
+    # above, which is right for a migration that happened and wrong for a shell
+    # that blocked one: `POST /repos/migrate` answers 409 on an existing target, so
+    # a shell created before the migration ran leaves the declared move permanently
+    # undone while every list here is empty. `teledyne/openkm-brain` read "forge
+    # matches the declaration" from 2026-09-02 to 2026-10-08 holding no code (#2133).
+    # Only for repositories WITH a source: one declared without `migrate_from` is
+    # created empty on purpose, and its first push is future work, not a defect.
+    # `is True`, not truthiness: an absent `empty` is not evidence of emptiness.
+    unfilled_migrations = tuple(
+        DeclaredRepo(org=org, name=spec.name, private=spec.private, migrate_from=spec.migrate_from)
+        for org, specs in sorted(declared.items())
+        for spec in sorted(specs, key=lambda s: s.name)
+        if spec.migrate_from and (existing_repo_settings[f"{org}/{spec.name}"] or {}).get("empty") is True
+    )
+
     return ReconcilePlan(
         orgs_to_create=orgs_to_create,
         repos_to_create=repos_to_create,
@@ -823,6 +844,7 @@ def plan_reconcile(
         undeclared_orgs=undeclared_orgs,
         undeclared_repos=undeclared_repos,
         visibility_drift=visibility_drift,
+        unfilled_migrations=unfilled_migrations,
     )
 
 
@@ -1214,6 +1236,13 @@ def format_plan(plan: ReconcilePlan) -> str:
         want = "private" if drift.declared_private else "public"
         got = "private" if drift.live_private else "public"
         lines.append(f"  ! repo {drift.full_name}   declared {want}, forge has it {got} — reported, not changed")
+    for unfilled in plan.unfilled_migrations:
+        full_name = f"{unfilled.org}/{unfilled.name}"
+        lines.append(
+            f"  ! repo {full_name}   declared to migrate from {unfilled.migrate_from}, but the forge "
+            f"holds it EMPTY — the migration never ran. Repair: `make gitea-drop-empty REPO={full_name}`, "
+            f"then `make gitea-reconcile APPLY=1`"
+        )
     if not lines:
         return "  (nothing to do — forge matches the declaration)"
     return "\n".join(lines)
