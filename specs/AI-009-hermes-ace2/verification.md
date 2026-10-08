@@ -103,7 +103,8 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - **Unit**: `Result=success`, exit 0; timer armed every 15 min. `/opt/agent-stack/vault-token` is `root root -rw-------`. The clone's `.git/config` holds no `credential` line (0 matches).
 - **Mounts** (a container on the agent's daemon with the sandbox's exact arguments: Hermes's cap set, `--network=none`, `no-new-privileges`, and the two `-v` strings from the rendered config, which Hermes passes verbatim): it runs as uid 0 in its namespace; a write under `/vault/80_agents/hermes-kubelab/` succeeds and lands on ace2 as `hermes-kubelab:hermes-kubelab 644`; `touch /vault/10_projects/probe` and `touch /vault/.git/probe` fail with `Read-only file system`. Docker's nested read-only parent and writable child hold under rootless.
 - **Push**: the next sync pushed the probe as `bfc90b28`, author `hermes-kubelab <hermes-kubelab@ace2>`, one file, under the zone. The sandbox then removed it and the sync pushed the deletion as `457acf70`. The zone's directory stayed on ace2, as the sandbox's mount point.
-- **Not yet measured**: a commit from a scheduled job (needs the seeded zone); a failure paging through `kubelab-notify@` on ace2.
+- **Failure page**: `make maintain-notify-test NODE=ace2 ENV=prod EXTRA='notify_test_unit=hermes-kubelab-vault-sync.service'` started the notifier with the sync unit as its instance, as `OnFailure=kubelab-notify@%n.service` does: `Result=success, ExecMainStatus=0`, so prod n8n answered 2xx and the message was sent.
+- **Not yet measured**: a commit from a scheduled job (needs the seeded zone).
 
 ### AC8, interim, ace2, 2026-10-07
 
@@ -129,6 +130,8 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 
 - 2026-10-08, PR 4b (operator): the agent writes files and the host commits and pushes (ADR-068 D4 amendment). The token is root's, handed to the sync unit by systemd. The zone's commits carry the identity `hermes-kubelab`, declared in `common.yaml`.
 - 2026-10-08, PR 4b: the notifier pairing guard was relaxed from equal tags to the directional rule its hazards need (a consumer's tags within the notifier's, node_maintenance equal to it, every notifier tag selecting a consumer). Equality would have made `TAGS=maintenance` deploy the agent stack.
+
+- 2026-10-08, **open for the operator, blocks PR 3c (AC4)**: tasks.md names `http://host.docker.internal:8642/v1` as Hermes's address for Open WebUI, and that cannot work. Measured on ace2: rootlesskit listens on `127.0.0.1:8642`, and `host.docker.internal` is the host's bridge address, never its loopback. Every way through widens the API past loopback, which `compose-hermes.yml.j2` and `test_the_api_is_published_on_loopback_only` declare as the posture: (a) publish on `docker0` (172.17.0.1) with `host-gateway` in Open WebUI, reachable from every container on the system daemon, and racing `docker.service` for the address at boot; (b) publish on the gateway of Open WebUI's own compose network, a subnet fixed in the SSOT, reachable from that network and still from any container the host routes; (c) a transport that is not a TCP port, such as a unix socket shared into Open WebUI's container. The API key guards all three. A second decision sits behind it: which Open WebUI tier may drive the agent (ADR-062 tiers, Open WebUI's per-model access).
 
 ## Promotion candidates
 
