@@ -191,6 +191,33 @@ Seven mutations of `backup_isolation.py`. Six each turned a test red: accepting 
 
 After the first PR-Agent pass the own delete moved behind two guards, so it is attempted only where it can only be refused. The bucket's lock rules are read with the admin token and must hold `data/` by age for at least R, and the youngest pack must be more than a day inside R. Re-run live on 2026-10-07: still `24 of 24 cross-node requests refused with AccessDenied`. The lock read passed on all four buckets, since each reached its listing and failed only on the empty `data/`. Eight more mutations, each red: the guard not skipping the delete, `enabled` ignored, R ignored, an API failure tolerated, no safety margin, no age check, and picking the youngest by string instead of by instant. A type check on `Age` was dropped as redundant, because only an `Age` condition carries `maxAgeSeconds`.
 
+## The migration sitting (AC4)
+
+2026-10-08, 01:55Z to 02:25Z, one sitting, `make backup-migrate NODE=<n> ENV=prod` from `chore/backup-057-own-buckets`, which stacks on #2121.
+
+The first vps run failed at the copy and changed nothing. `restic copy` locks the source too, and the temporary token is read-only on `kubelab-backups`. The step stopped before the declaration, and the token was revoked. The fix is #2121 (`--no-lock` on the copy) and lesson-538. The re-run reused the `config` and `keys` that the first `init` had written.
+
+| Node | Source snapshots (dry run) | Matched copies, one each | Repository pinned |
+|---|---|---|---|
+| vps | 39 | 39 | `e5870490…` |
+| rpi3 | 40 | 40 | see `common.yaml` |
+| rpi4 | 52 | 52 | see `common.yaml` |
+| beelink | 61 | 61 | see `common.yaml` |
+
+Each node then ran declare, `backup`, `backup-repo-reinit` and `backup-node`, with rc 0 throughout, and had its pin and `targets.txt` regenerated. `own_bucket_nodes` is now `[ace2, beelink, rpi3, rpi4, vps]`. ace2 was born in its own bucket (#2115) and needed no copy.
+
+After the last node's first ship, `make backup-isolation-probe ENV=prod` returned rc 0:
+- `40 of 40 cross-node requests refused with AccessDenied` (5 nodes x 4 other buckets, list and delete);
+- `every cross-node request and all 5 own deletes were refused`: each node's own delete of its youngest pack was refused by the lock.
+
+This is the prod repeat of scratch step 4, on every bucket.
+
+`toolkit backup escrow-check --env prod` (run from the dotfiles checkout, see dotfiles#2153): 6 of 6 match: the shared password plus ace2, beelink, rpi3, rpi4 and vps.
+
+Still open in the AC1/AC3 task:
+- `make watcher-run ENV=prod`, after the sitting PR merges and the watcher reads the new `targets.txt`;
+- the seven-day prune window, which starts 2026-10-08.
+
 ## The escrow check (AC5, ahead of PR 5)
 
 2026-10-07, run `make backup-escrow-check ENV=prod` with Bitwarden unlocked. Five of five matched: `KUBELAB_RESTIC_PASSWORD` and the four `KUBELAB_RESTIC_PASSWORD_<NODE>` entries against their SOPS values, by sha256[:12], printing no value. This repeats the hand comparison of 2026-10-03, now as a command. I ran five mutations of `backup_escrow.py`, and each turned a test red. One did so only after the test for a password missing from SOPS was made to assert that the escrow is never queried for it.
