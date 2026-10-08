@@ -556,6 +556,16 @@ def test_the_notifier_and_its_consumers_are_selected_together(playbook: Path):
     Found by a `--check` run against the VPS, not by reading a diff: the role
     carried a `notify` tag of its own and `TAGS=notify` selected exactly the
     unsafe subset.
+
+    The hazards are directional, so the rule is too. A consumer's tags are a
+    subset of the notifier's: it never runs without the template it names.
+    `node_maintenance` and the notifier share every tag, both ways. And each of
+    the notifier's tags selects a consumer. Equality was stronger than that and
+    stopped being satisfiable once a consumer had a tag of its own: on ace2,
+    `agent_stack`'s vault sync pages through the notifier, and equality would
+    have made `TAGS=maintenance` deploy the whole agent stack. Instead
+    `TAGS=agent_stack` also runs the notifier and the install-only maintenance
+    timers, which is correct and cheap.
     """
     consumers = {c: _role_tags(playbook, c) for c in _notifier_consumers()}
     present = {c: tags for c, tags in consumers.items() if tags is not None}
@@ -575,11 +585,23 @@ def test_the_notifier_and_its_consumers_are_selected_together(playbook: Path):
         f"nothing names it."
     )
     for consumer, tags in present.items():
-        assert notify == tags, (
-            f"{playbook.stem}: node_notify has {sorted(notify)!r} and {consumer} "
-            f"{sorted(tags)!r}. Any tag in one and not the other selects half a "
-            f"pairing, and the half that runs alone leaves the node silent."
+        assert tags <= notify, (
+            f"{playbook.stem}: {consumer} has {sorted(tags - notify)!r}, which "
+            f"node_notify lacks. That tag runs the consumer without the template "
+            f"its units name, and the node is silent at the next failure."
         )
+    maintenance = present.get("node_maintenance")
+    if maintenance is not None:
+        assert maintenance == notify, (
+            f"{playbook.stem}: node_notify has {sorted(notify)!r} and "
+            f"node_maintenance {sorted(maintenance)!r}. node_notify removes the "
+            f"unit node_maintenance re-templates, so neither may run alone."
+        )
+    unnamed = {tag for tag in notify if not any(tag in tags for tags in present.values())}
+    assert not unnamed, (
+        f"{playbook.stem}: node_notify's {sorted(unnamed)!r} selects no consumer, "
+        f"so it installs a notifier nothing names."
+    )
 
 
 def test_the_delivery_test_can_name_the_unit_it_simulates() -> None:

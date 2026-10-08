@@ -318,7 +318,9 @@
       # here. Sharing node_maintenance's tag makes the unsafe scoping
       # unreachable rather than merely documented, which is the difference
       # between a rule and a comment. Asserted in tests/test_node_notify_role.py.
-      tags: [maintenance]
+      # `agent_stack` too: its vault sync pages through this notifier, so
+      # `TAGS=agent_stack` must install it (and node_maintenance with it).
+      tags: [maintenance, agent_stack]
 
     # ANSIBLE-035: install-only (maintenance_run_cleanup: false) — cleanup
     # runs on the timer's own weekly schedule, not synchronously on every
@@ -327,6 +329,6 @@
     # language caches, agent workspace resets — ANSIBLE-030/#858): this is
     # node-generic disk hygiene, that is dev-workload hygiene.
     - role: ../roles/node_maintenance
-      tags: [maintenance]
+      tags: [maintenance, agent_stack]
       vars:
         maintenance_run_cleanup: false
