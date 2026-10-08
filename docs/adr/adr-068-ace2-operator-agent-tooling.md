@@ -20,6 +20,8 @@ Accepted, 2026-09-30. The operator chose this option during an architecture sess
 - the 2026-08-09 amendment of [ADR-028](adr-028-operational-topology.md);
 - [ADR-043](adr-043-unified-knowledge-memory-plane.md): where Open WebUI runs, its RAG policy, and Hermes's vault authority.
 
+Amended 2026-10-08 (D2 schedule, D3 delivery, D4 writer), by the operator during AI-009 PR 4: see [the amendment](#amendment-2026-10-08-the-host-commits-the-agents-zone).
+
 It is consistent with [ADR-060](adr-060-strands-agents-reference-only.md) ("no free always-on slot"), because nothing here takes an always-on slot. It does not amend [ADR-042](adr-042-reference-architecture.md) C11b: NaN's model API stays the inference provider for operator tooling.
 
 ## Context
@@ -86,7 +88,7 @@ Each service has a hard memory limit. The starting point is 1.5 GB per service, 
 - **Identity on the host.** `hermes-kubelab` runs under its own Unix user, with no sudo, on a rootless container runtime (rootless Docker or Podman), so the Docker socket it drives is not root on ace2. It cannot read any staging credential that ADR-058 D3 allows on ace2 (C2). Whether Hermes's docker backend works against a rootless socket is not yet measured: the implementation spec measures it before the role is written, with Podman's socket as the fallback. If neither works, this decision reopens rather than falling back to the root socket. Open WebUI and the MCP bridge run on the system daemon instead, because an agent that could reach their containers could read every chat and their credentials.
 - **Execution.** `terminal.backend: docker` with `docker_forward_env: []`. Commands run in a sandbox container with CPU and memory limits, never on the host (C13).
 - **Approval.** `approvals.mode: manual` with `timeout: 300`, which fails closed. The `deny:` list carries over the patterns in `80_agents/hermes-nan/guardrails-denylist.yaml`. Prompts arrive in the messaging channel, which is the human-approval channel ADR-058 D3 asks for. `approvals.mode: off`, how it ran on NaN, is not allowed.
-- **Schedule.** Hermes's in-process cron runs the jobs, with `cron.catch_up_missed: true`. There are no systemd timers for agent jobs. The `ExecStartPre` in the units only removes a stale `.git/index.lock` when no git process is running, then fast-forwards (`git pull --ff-only`). It never rebases automatically.
+- **Schedule.** Hermes's in-process cron runs the jobs, with `cron.catch_up_missed: true`. There are no systemd timers for agent jobs. The `ExecStartPre` in the units only removes a stale `.git/index.lock` when no git process is running, then fast-forwards (`git pull --ff-only`). It never rebases automatically. *(Amended 2026-10-08: the vault sync timer does this instead; it is plumbing, not an agent job.)*
 - **Network identity.** The instance joins the tailnet as its own node with a preauth key carrying `tag:hermes` (ADR-041), through a userspace tailscale sidecar. It never uses ace2's node identity, which is the admin's and matches every allow rule. The existing `tag:hermes` ACL rows were written for a NaN pod. The destination set for ace2 starts closed and is enumerated in the implementation spec as jobs need it; today's jobs reach only the internet (NaN, GitHub, Slack, Google Drive).
 - **Channel.** Slack `#agent-fleet`, per the ADR-044 addendum that retired the Telegram single sink.
 
@@ -105,9 +107,21 @@ The operator mints them, they live in SOPS, and the Ansible role renders them in
 
 ### D4. Vault: own clone, own zone, git as the bus
 
-`hermes-kubelab` keeps its own clone of the vault, reads everything, and writes only inside its own zone (`80_agents/hermes-kubelab/`), seeded from the portable parts of `80_agents/hermes-nan/` (cron jobs, guardrails, backup policy). A pre-commit hook enforces that, as it did on NaN. This is the ADR-022 inbox pattern. It refines ADR-043's "Hermes read-only on the vault" to "read-only outside its own zone"; multi-writer git stays closed (C14).
+`hermes-kubelab` keeps its own clone of the vault, reads everything, and writes only inside its own zone (`80_agents/hermes-kubelab/`), seeded from the portable parts of `80_agents/hermes-nan/` (cron jobs, guardrails, backup policy). A pre-commit hook enforces that, as it did on NaN. *(Amended 2026-10-08: the agent no longer commits; the mount is the boundary and the hook a second check.)* This is the ADR-022 inbox pattern. It refines ADR-043's "Hermes read-only on the vault" to "read-only outside its own zone"; multi-writer git stays closed (C14).
 
 The shared writable `/opt/vault`, which #1933 proposed for all agents and Open WebUI, is **rejected**. Interactive coding agents keep their own checkouts, and a handoff becomes visible to Hermes on its next pull. That is git's latency, not a network hop.
+
+### Amendment 2026-10-08: the host commits the agent's zone
+
+D4 as written gave the agent the clone and relied on a pre-commit hook. A hook its committer can skip (`--no-verify`, another `core.hooksPath`) is a guard against mistakes, not a boundary, and a clone the agent pushes from needs the vault token inside the sandbox. The operator chose instead:
+
+- **The agent only writes files.** Its sandbox mounts the clone read-only at `/vault` and the zone writable inside it (`terminal.docker_volumes`). It holds no token and still has no network. What it cannot write, it cannot commit.
+- **The host commits and pushes.** A system unit, `hermes-kubelab-vault-sync`, runs as the agent's user every 15 minutes and two minutes after boot: fetch, fast-forward, commit the zone through the root-owned hook, push. Before pushing it checks that every unpushed path is inside the zone, so the push is a boundary too. The zone's commits carry their own identity, `hermes-kubelab`, as hermes-nan's did (C14).
+- **It never rebases.** A run that died between commit and push leaves commits that touch only the zone; the next run takes them back into the working tree and commits them again on the new tip, which cannot conflict because the zone has one writer. Anything else (a change outside the zone, upstream touching a file the agent changed) fails the unit, and `OnFailure` pages the operator.
+- **The vault token is root's** (D3 amended for this one credential): written 0600 by root and handed to the unit by systemd (`LoadCredential`), read by a credential helper. It is not in the instance's environment, the remote URL or the clone's config.
+- **Schedule** (D2 amended): the timer is the ExecStartPre D2 describes, moved to where it also runs while Hermes is up. It runs no model and decides nothing, so "no systemd timers for agent jobs" still holds.
+
+One consequence was not in D2: a host path in the sandbox turns Hermes's own command guards back on for the docker backend (the hardline floor, the dangerous-pattern prompts, `cron_mode: deny`). A scheduled job whose command Hermes flags is now refused, not run. That is the AC3 drill measurable again, and a check every seeded job has to pass (lesson-540).
 
 ### D5. Open WebUI on ace2, with Hermes as a backend
 
