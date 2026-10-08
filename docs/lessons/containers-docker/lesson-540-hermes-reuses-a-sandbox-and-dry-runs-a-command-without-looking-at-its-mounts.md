@@ -44,4 +44,12 @@ check which inputs of the real decision the dry run receives. A mount that
 changes the decision and is absent from the dry run makes the dry run answer
 a different question.
 
+**Corollary (PR-Agent on #2130)**: the sandbox's processes are processes of
+the agent's user on the host, because rootless Docker maps the container's root
+to that uid. Anything on the host that judges "a process of this user" sees the
+agent's sandbox too. The vault sync's stale-lock guard first asked whether any
+`git` of the user was running, which a git inside the sandbox would answer yes,
+skipping every sync while it ran. It now asks for a git whose working directory
+is the clone (`/proc/<pid>/cwd`), a path the sandbox never sees.
+
 **Tags**: `#hermes` `#ai-009` `#approvals` `#sandbox`
