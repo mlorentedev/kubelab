@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
@@ -88,10 +89,11 @@ class Vault:
         self.script.chmod(0o755)
         # pgrep would see every git of this user on the machine running the tests.
         self.bin.mkdir()
-        self.pgrep(found=False)
+        self.pgrep()
 
-    def pgrep(self, *, found: bool) -> None:
-        (self.bin / "pgrep").write_text(f"#!/bin/sh\nexit {0 if found else 1}\n")
+    def pgrep(self, *pids: int) -> None:
+        lines = "".join(f"echo {pid}\n" for pid in pids)
+        (self.bin / "pgrep").write_text(f"#!/bin/sh\n{lines}exit {0 if pids else 1}\n")
         (self.bin / "pgrep").chmod(0o755)
 
     def sync(self) -> subprocess.CompletedProcess[str]:
@@ -182,11 +184,39 @@ def test_a_stale_index_lock_is_removed(synced: Vault) -> None:
     assert synced.files(synced.head()) == [f"{ZONE}/notes.md"]
 
 
-def test_a_lock_is_left_while_a_git_of_this_user_runs(synced: Vault) -> None:
+@pytest.fixture
+def process_in() -> Iterator[Callable[[Path], int]]:
+    """A live process whose working directory is the given path, as a git's would be."""
+    started: list[subprocess.Popen[bytes]] = []
+
+    def start(cwd: Path) -> int:
+        started.append(subprocess.Popen(["sleep", "60"], cwd=cwd))
+        return started[-1].pid
+
+    yield start
+    for process in started:
+        process.kill()
+        process.wait()
+
+
+def test_a_lock_is_left_while_a_git_of_this_user_works_in_the_clone(
+    synced: Vault, process_in: Callable[[Path], int]
+) -> None:
     (synced.clone / ".git/index.lock").touch()
-    synced.pgrep(found=True)
+    synced.pgrep(process_in(synced.clone / ZONE))
     assert synced.sync().returncode == 75
     assert (synced.clone / ".git/index.lock").exists()
+
+
+def test_a_git_of_this_user_elsewhere_does_not_hold_the_lock(
+    synced: Vault, process_in: Callable[[Path], int], tmp_path: Path
+) -> None:
+    """The sandbox's git runs as this user under rootless Docker, outside the clone."""
+    (synced.clone / ".git/index.lock").touch()
+    synced.pgrep(process_in(tmp_path))
+    _write(synced.clone, f"{ZONE}/notes.md", "ours\n")
+    assert synced.sync().returncode == 0
+    assert synced.files(synced.head()) == [f"{ZONE}/notes.md"]
 
 
 # --------------------------------------------------------------------------- the boundary

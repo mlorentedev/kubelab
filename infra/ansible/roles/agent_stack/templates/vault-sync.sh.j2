@@ -48,9 +48,21 @@ cd "$clone"
 
 # Only this unit writes the clone's .git (the sandbox mounts it read-only, and
 # systemd never runs two of this unit at once), so a lock is a run that died.
-# A git process of this user is the one case to leave it for the next run.
+# A git of this user working in the clone is the one case to leave it for the
+# next run. By its working directory, not its name: under rootless Docker every
+# git the agent runs in its sandbox is a git of this user too, and that one
+# sees the clone only as its own mount, never at this path.
+git_in_clone() {
+  for pid in $(pgrep -u "$(id -u)" -x git); do
+    case "$(readlink "/proc/$pid/cwd" 2>/dev/null)" in
+      "$clone" | "$clone"/*) return 0 ;;
+    esac
+  done
+  return 1
+}
+
 if [ -e .git/index.lock ]; then
-  if pgrep -u "$(id -u)" -x git >/dev/null; then
+  if git_in_clone; then
     echo "vault-sync: index.lock held while a git process runs; next run" >&2
     exit 75
   fi

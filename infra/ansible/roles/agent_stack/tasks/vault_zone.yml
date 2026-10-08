@@ -7,13 +7,16 @@
 # a token only systemd reads.
 # =============================================================================
 
-- name: Create the vault hooks directory
+- name: Create the directories of the vault sync and its hooks
   ansible.builtin.file:
-    path: "{{ agent_stack_vault_hooks }}"
+    path: "{{ item }}"
     state: directory
     owner: root
     group: root
     mode: "0755"
+  loop:
+    - "{{ agent_stack_vault_libexec }}"
+    - "{{ agent_stack_vault_hooks }}"
 
 - name: Install the vault zone hook
   ansible.builtin.template:
