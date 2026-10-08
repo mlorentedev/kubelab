@@ -505,6 +505,12 @@ def test_the_real_declaration_matches_adr_065():
     # went missing would silently turn a migration back into an empty shell -- the
     # exact regression this shape was introduced to end -- and nothing else would
     # look wrong, because creating a declared repository is a legitimate outcome.
+    #
+    # It stays after the GitHub copy is deleted (#1922, #2133): from then on it is
+    # PROVENANCE, not a live remote. A repository lost from Gitea then plans a
+    # migration from a source that no longer exists and fails loudly, where a
+    # removed source would plan a create and bring it back as an empty shell. The
+    # restore path is the R2 backup (docs/runbooks/gitea-retire-github-copy.md).
     assert all(s.migrate_from for specs in declared.values() for s in specs), (
         "a declared repository lost its `migrate_from`. All three named by ADR-065 are migrations; "
         "without a source the reconciler would create an empty shell, which `POST /repos/migrate` "
