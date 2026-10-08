@@ -263,6 +263,26 @@ def drill_apps_cmd(
         raise typer.Exit(code=1)
 
 
+@app.command("drill-node")
+def drill_node_cmd(
+    node: Annotated[str, typer.Option("--node", "-n", help="A node in backup.sources")],
+    env: Annotated[str, typer.Option("--env", "-e", help="Environment whose merged config is used")] = "prod",
+    project_root: Annotated[Optional[Path], typer.Option("--project-root", help="Repo root")] = None,
+) -> None:
+    """Restore a node's newest capture from its own repository and check every declared source (BACKUP-076).
+
+    Passes when each source restored at least one file, every declared SQLite
+    database passes `PRAGMA integrity_check`, and every declared `exclude` path
+    is absent. Restores into a scratch directory, never a live path. Prints
+    declared names, counts, sizes and timings only, and removes the directory on
+    every exit path.
+    """
+    from toolkit.features.node_drill import drill_node
+
+    if not drill_node(node=node, env=env, project_root=project_root):
+        raise typer.Exit(code=1)
+
+
 @app.command("restore-window")
 def restore_window_cmd(
     deployment: Annotated[str, typer.Option("--app", help="Deployment whose data is being restored, e.g. n8n")],
