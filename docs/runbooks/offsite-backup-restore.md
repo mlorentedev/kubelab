@@ -329,16 +329,18 @@ What to expect, and what to do:
 - **Until that PR merges,** the prod watcher still reads `kubelab-backups/<node>`, which
   has stopped growing. Its snapshot-age alert for the moved node fires on schedule.
   That is the old target ageing, not a failed backup.
-- **After the merge, run `make apply-secrets ENV=prod`.** Argo CD syncs the new
+- **Until that PR merges, do not deploy `node_backup` from master** (`make backup`,
+  `make provision`). Master does not declare the node, so the deploy points it back at
+  `kubelab-backups` with the shared secrets, and the next ship lands there.
+- **After the merge, run `make apply-secrets ENV=prod`** from a clean checkout of
+  the merged `master`: it renders from the working tree, so a stale branch renders
+  the old declaration. Argo CD syncs the new
   `targets.txt`, but the watcher's Secret is not in git: it picks each node's
   `RESTIC_PASSWORD_<NODE>` from the declaration only when `apply-secrets` renders it.
   Until then the watcher opens the new bucket with the shared password and reports
   `wrong password or no key found` (lesson-539). `DRY_RUN=1` first should show only
   `r2-backup-watcher-secrets` as `configured`. Then `make watcher-run
   NAME=r2-backup-watcher ENV=prod` reports every node healthy.
-- **Until that PR merges, do not deploy `node_backup` from master** (`make backup`,
-  `make provision`). Master does not declare the node, so the deploy points it back at
-  `kubelab-backups` with the shared secrets, and the next ship lands there.
 - **If a step fails after the declaration,** the node is declared and not pinned. Fix
   the cause, then finish by hand: run the failed target and the ones after it
   (`make backup ENV=prod`, `make backup-repo-reinit NODE=<node> DEST=r2 ENV=prod`,
