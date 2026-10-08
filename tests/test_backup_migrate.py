@@ -112,6 +112,13 @@ class World:
         self.restic_env[step] = env
         if step in self.fail:
             return 1, "", f"{verb} failed"
+        # The temporary token can only read the shared bucket, so restic cannot
+        # write a lock there: any command that opens the source without
+        # --no-lock fails as R2 failed it live. `init --from-repo` only reads
+        # the source's config and takes no lock.
+        reads_source = side == "src" or "--from-repo" in argv
+        if env.get("AWS_ACCESS_KEY_ID") == "tmp-id" and reads_source and verb != "init" and "--no-lock" not in argv:
+            return 1, "", "unable to create lock in backend: client.PutObject: Access Denied"
         if verb == "snapshots":
             if side == "dst":
                 return 0, json.dumps(self.copied), ""
@@ -258,6 +265,17 @@ def test_a_failed_playbook_stops_before_the_pin(playbook: str) -> None:
     assert _migrate(world) is False
     assert world.calls[-1] == f"ansible {playbook} rpi3"
     assert not any(v[0] == "pin" for v in world.values)
+
+
+def test_the_copy_takes_no_lock_on_the_source_its_token_cannot_write() -> None:
+    """The token reads the shared bucket and cannot write to it, so a source lock is refused.
+
+    Measured on the first live run (vps, 2026-10-08): `restic copy` locks the
+    source as well as the destination, and the PutObject of that lock was denied.
+    """
+    world = World(SOURCE, COPIED)
+    assert _migrate(world) is True
+    assert "restic dst copy" in world.calls
 
 
 def test_the_copy_reads_with_the_shared_secrets_and_writes_with_the_nodes() -> None:
