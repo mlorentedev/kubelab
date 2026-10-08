@@ -2076,7 +2076,7 @@ backup:
     # Every consumer resolves through this list (backup_destination.node_repository,
     # backup.yml), so no other edit moves a node. Absent from it: the shared
     # bucket above, with the shared pair and password.
-    own_bucket_nodes: [ace2, rpi3, rpi4, vps]
+    own_bucket_nodes: [ace2, beelink, rpi3, rpi4, vps]
     # Pinned static binary (BACKUP-044 Part 2), same idiom as k3s_version:
     # get_url + a checksum verified against upstream's own SHA256SUMS, not a
     # floating "latest" download. Arch is resolved per node at Ansible run
@@ -2104,7 +2104,7 @@ backup:
     repository_ids:
       # Its first ship, 2026-10-07, born in its own bucket (spec AI-009 AC7).
       ace2: 95c25ab7191cbade89c0d739abae0587f9a5c6535137883bc10144f5d096317f
-      beelink: 69e70ca8307994ac6076171f9dd7ce7b6681de24ad7c941b5be76b29a51133fa
+      beelink: 4fd3ca500ed89e2e32e592fae592bcef4391e26d5bc3ed8cf3e1031798ec68f7
       rpi3: 169b48b4912f05a70117327b600d2c6da5de17de12f7f9aa99d083f769a8131d
       rpi4: 53c75d81b0ef2a6b0f71edac778b43ba63e679427417d32332fbcc1b075b8844
       vps: e587049086e52ff89294ced8dcd05b1e60cce62debae29dde5310196e051880c
