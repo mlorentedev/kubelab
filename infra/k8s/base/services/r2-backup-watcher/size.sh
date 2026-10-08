@@ -88,7 +88,13 @@ while read -r node repo _ || [ -n "$node" ]; do
         # A repository at its bucket's root (every node since BACKUP-057's
         # sitting): the bucket listing covered exactly these objects, so the
         # node line reuses it instead of listing them again (#2123).
+        # No bucket line means the write of it failed; list the node itself
+        # rather than emit an entry with no size.
         root="$(grep "^bucket $bucket " "$tmp" | head -n 1)"
+    else
+        root=""
+    fi
+    if [ -n "$root" ]; then
         echo "node $node ${root#"bucket $bucket "}" >>"$tmp"
     else
         measure node "$node" "$host" "$path" </dev/null
