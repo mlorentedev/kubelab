@@ -64,10 +64,10 @@ spec:
       backoffLimit: 0
       # Floor, derived from both scripts: (buckets + nodes) x SIZE_TIMEOUT for the
       # sizing step, then nodes x 3 restic calls x RESTIC_TIMEOUT for the probe =
-      # (1 + 4) x 120 + 4 x 3 x 60 = 1320s. Sized for the worst case the scripts
-      # allow, not the typical run. tests/test_r2_backup_watcher_manifest.py
-      # counts the calls.
-      activeDeadlineSeconds: 1800
+      # (5 + 5) x 120 + 5 x 3 x 60 = 2100s, one bucket per node since BACKUP-057's
+      # migration sitting. Sized for the worst case the scripts allow, not the
+      # typical run. tests/test_r2_backup_watcher_manifest.py counts the calls.
+      activeDeadlineSeconds: 2400
       template:
         metadata:
           labels:

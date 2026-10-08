@@ -53,7 +53,11 @@ def test_every_declared_node_and_source_is_a_target() -> None:
 
 
 def test_the_vps_targets_its_real_repository() -> None:
-    assert _rows(render_watcher_targets(COMMON))["vps"][0] == COMMON["backup"]["r2"]["repo_prefix"] + "/kubelab-vps"
+    """Its shared-bucket prefix is `kubelab-vps`, not its key; its own bucket is keyed."""
+    undeclared = yaml.safe_load(yaml.safe_dump(COMMON))
+    undeclared["backup"]["r2"]["own_bucket_nodes"] = []
+    assert _rows(render_watcher_targets(undeclared))["vps"][0] == COMMON["backup"]["r2"]["repo_prefix"] + "/kubelab-vps"
+    assert _rows(render_watcher_targets(COMMON))["vps"][0].endswith(f"/{node_bucket('vps')}")
 
 
 def test_every_repository_is_a_restic_s3_url_in_the_backup_bucket() -> None:

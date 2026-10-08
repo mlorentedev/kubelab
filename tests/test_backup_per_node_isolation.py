@@ -120,13 +120,14 @@ def test_the_watcher_policy_names_exactly_the_backup_buckets_read_only() -> None
 # ── the declaration ───────────────────────────────────────────────────────────
 
 
-def test_before_the_migration_sitting_only_a_node_born_in_its_own_bucket_is_listed() -> None:
-    """Every node with a copy in the shared bucket stays there until that copy is verified.
+def test_after_the_migration_sitting_every_node_is_in_its_own_bucket() -> None:
+    """AC4: each node was declared only once its copy was verified, and all were.
 
-    ace2 is the exception by birth, not by migration: its first ship went to its
-    own bucket (spec AI-009 AC7), so it never had a shared copy to verify.
+    ace2 got there by birth (spec AI-009 AC7); the other four by `make
+    backup-migrate`, each declaration committed after its comparison passed.
+    A node added to `backup.sources` later must be born declared, as ace2 was.
     """
-    assert own_bucket_nodes(COMMON) == frozenset({"ace2"})
+    assert own_bucket_nodes(COMMON) == frozenset(NODES)
 
 
 def test_a_declared_node_that_backs_nothing_up_is_refused() -> None:
@@ -147,8 +148,9 @@ def test_every_migrated_node_has_a_bucket_of_its_own() -> None:
 
 def test_an_undeclared_node_keeps_its_shared_repository() -> None:
     """The VPS is the node whose repository name differs from its key: `kubelab-vps`."""
-    assert node_repository(COMMON, "vps") == f"{R2['repo_prefix']}/kubelab-vps"
-    assert node_repository(COMMON, "rpi3") == f"{R2['repo_prefix']}/rpi3"
+    undeclared = _declared([])
+    assert node_repository(undeclared, "vps") == f"{R2['repo_prefix']}/kubelab-vps"
+    assert node_repository(undeclared, "rpi3") == f"{R2['repo_prefix']}/rpi3"
 
 
 def test_every_migrated_node_reads_its_own_pair_and_password() -> None:
@@ -313,7 +315,7 @@ def test_a_drill_reads_a_migrated_node_with_its_own_pair_and_password() -> None:
 
 
 def test_a_drill_reads_an_undeclared_node_with_the_shared_secrets() -> None:
-    cm = _CM(COMMON)
+    cm = _CM(_declared([]))
     repo, env = node_restic(cm, "vps")
     assert repo == f"{R2['repo_prefix']}/kubelab-vps"
     assert set(cm.asked) == set(SHARED_PATHS)
