@@ -2100,7 +2100,9 @@ backup:
     # Changing an entry means accepting a new history, which is a reviewed
     # decision: `make backup-repo-reinit NODE=<node> DEST=r2 ENV=<env>`, one ship,
     # then this line in a PR (runbook: offsite-backup-restore.md, "Repository
-    # missing or replaced"). Values read 2026-09-30 (specs/BACKUP-058-*).
+    # missing or replaced"). Values read live: ace2 on 2026-10-07 (AI-009), the
+    # other four on 2026-10-08 at BACKUP-057's migration sitting
+    # (specs/BACKUP-057/verification.md).
     repository_ids:
       # Its first ship, 2026-10-07, born in its own bucket (spec AI-009 AC7).
       ace2: 95c25ab7191cbade89c0d739abae0587f9a5c6535137883bc10144f5d096317f
