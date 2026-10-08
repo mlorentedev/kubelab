@@ -230,9 +230,12 @@ def _copy_under_token(
         if rc != 0 and "already" not in err.lower():
             logger.error(f"init of {dst} failed: {err.strip()}")
             return False
-        rc, _, err = run(["restic", "-r", dst, "copy", "--from-repo", src], copy_env)
+        # `copy` locks the source too, and this token cannot write there. Without
+        # the lock, a prune on the node could drop a pack mid-copy: the copy then
+        # fails or the comparison below misses a snapshot, and a re-run resumes.
+        rc, _, err = run(["restic", "-r", dst, "copy", "--from-repo", src, "--no-lock"], copy_env)
         if rc != 0:
-            logger.error(f"copy into {dst} failed: {err.strip()}")
+            logger.error(f"copy from {src} into {dst} failed: {err.strip()}")
             return False
         source = _snapshots(run, src, {**s3, "RESTIC_PASSWORD": src_password})
         copied = _snapshots(run, dst, {**s3, "RESTIC_PASSWORD": dst_password})
