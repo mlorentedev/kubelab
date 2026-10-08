@@ -297,11 +297,15 @@ node_backup_check_read_data_groups: 1
 # repository, so this margin shrinks over time.
 #
 # Decision (#1204, 2026-10-08): keep the cap and treat an OOM kill as a backup
-# failure, not something to prevent. The kill fails the unit and OnFailure pages
-# through kubelab-notify@ (OnFailure= read live on the rpi3 unit, 2026-10-08). Raising
-# the cap would trade that clean failure for the thrashing the cap exists to
-# stop. Revisit when a page names an OOM kill, or when the ship's MemoryPeak
-# on the rpi3 passes ~110M.
+# failure, not something to prevent. Two paths turn the kill into a failed
+# unit, and OnFailure= then pages through kubelab-notify@: OOMPolicy=stop (the
+# service default) fails the unit with result 'oom-kill' whichever process the
+# kernel kills, and the ship script's `set -euo pipefail` exits on restic's
+# 137. Read live on the rpi3 2026-10-08 (systemd 257); no OOM kill has been
+# observed, so this is the wiring, not a measured page. Raising the cap would
+# trade that clean failure for the thrashing the cap exists to stop. Revisit
+# when a page names an OOM kill, or when the ship's MemoryPeak on the rpi3
+# passes ~110M.
 node_backup_memory_max: ""
 node_backup_memory_swap_max: "0"
 
