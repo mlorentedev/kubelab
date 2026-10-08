@@ -234,6 +234,7 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 
 - `raw-data` was kept over summing blob lengths from the index files, which would be bounded by index size rather than tree size. At 143 s the Beelink fits a dedicated timeout, and the spec's method needed no amendment. Revisit if `stats took` passes half of `STATS_TIMEOUT`: the probe logs the figure on every run.
 - The Job deadline assumed 2 restic calls per node; the probe has made 3 since BACKUP-058, so the worst case (720 s) already exceeded the 600 s deadline while the test passed. The test now counts the calls in `probe.sh`.
+- The sitting raised the watcher's bucket count from 2 to 5, so `size.sh` lists 5 buckets plus 5 node paths and the worst case went from 1740 s to 2100 s, past the 1800 s deadline. The deadline is now 2400 s. With one bucket per node, the bucket listing and the node listing cover the same objects, so the sizing step lists everything twice; collapsing that is a separate change because the alert reads both line kinds.
 
 ## Promotion candidates
 
