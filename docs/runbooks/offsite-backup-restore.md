@@ -328,7 +328,14 @@ What to expect, and what to do:
 - **Commit** `common.yaml` and `targets.txt` in a PR when the sitting ends.
 - **Until that PR merges,** the prod watcher still reads `kubelab-backups/<node>`, which
   has stopped growing. Its snapshot-age alert for the moved node fires on schedule.
-  That is the old target ageing, not a failed backup. The merge clears it.
+  That is the old target ageing, not a failed backup.
+- **After the merge, run `make apply-secrets ENV=prod`.** Argo CD syncs the new
+  `targets.txt`, but the watcher's Secret is not in git: it picks each node's
+  `RESTIC_PASSWORD_<NODE>` from the declaration only when `apply-secrets` renders it.
+  Until then the watcher opens the new bucket with the shared password and reports
+  `wrong password or no key found` (lesson-539). `DRY_RUN=1` first should show only
+  `r2-backup-watcher-secrets` as `configured`. Then `make watcher-run
+  NAME=r2-backup-watcher ENV=prod` reports every node healthy.
 - **Until that PR merges, do not deploy `node_backup` from master** (`make backup`,
   `make provision`). Master does not declare the node, so the deploy points it back at
   `kubelab-backups` with the shared secrets, and the next ship lands there.

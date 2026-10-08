@@ -214,9 +214,9 @@ This is the prod repeat of scratch step 4, on every bucket.
 
 `toolkit backup escrow-check --env prod` (run from the dotfiles checkout, see dotfiles#2153): 6 of 6 match: the shared password plus ace2, beelink, rpi3, rpi4 and vps.
 
-Still open in the AC1/AC3 task:
-- `make watcher-run ENV=prod`, after the sitting PR merges and the watcher reads the new `targets.txt`;
-- the seven-day prune window, which starts 2026-10-08.
+After #2122 merged (eb3d0ccb), the first `make watcher-run NAME=r2-backup-watcher ENV=prod` reached all five buckets, but it read only ace2. The other four answered `Fatal: wrong password or no key found`. The watcher Secret still held the shared restic password for them, because `apply-secrets` had last rendered it before they were declared, and a merge does not re-render a Secret (lesson-539). `make apply-secrets ENV=prod DRY_RUN=1` from a clean master checkout listed `r2-backup-watcher-secrets` as the only change, with no restart. After the apply, the re-run reported `{"nodes":5,"unhealthy":0,"stored_bytes":934382299}`, and every node was `readable`, with `sentinel:1` and no missing source.
+
+Still open in the AC1/AC3 task: the seven-day prune window, which starts 2026-10-08.
 
 ## The escrow check (AC5, ahead of PR 5)
 
