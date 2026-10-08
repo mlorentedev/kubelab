@@ -18,7 +18,7 @@ The Hermes agent that ran on NaN is retired. Its jobs (vault apply and capture, 
 
 ## What
 
-After this spec, `make provision NODE=ace2 ENV=staging` produces:
+After this spec, `make provision NODE=ace2 ENV=prod` produces:
 
 1. **An agent runtime the agent cannot escape to the host.**
    - A Unix user `hermes-kubelab` with no sudo and no access to the dev user's home, which holds the staging credentials ADR-058 D3 allows (`gh`, the Gitea SSH key, kubeconfigs).
@@ -74,7 +74,7 @@ Items marked **BLOCKING** must be resolved before the PR that depends on them is
 
 ## Acceptance criteria
 
-- [ ] **AC1. The node converges.** Two consecutive `make provision NODE=ace2 ENV=staging` runs: the second reports `changed=0` for every task of the new role, shown with the per-task result lines.
+- [ ] **AC1. The node converges.** Two consecutive `make provision NODE=ace2 ENV=prod` runs: the second reports `changed=0` for every task of the new role, shown with the per-task result lines.
 - [ ] **AC2. The agent cannot reach the host or the dev user's credentials.**
   - `sudo -l -U hermes-kubelab` lists no rule.
   - As `hermes-kubelab`, reading the dev user's `~/.config/gh/hosts.yml`, Gitea key and `~/.kube` fails with `Permission denied`.

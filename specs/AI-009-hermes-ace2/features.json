@@ -2,7 +2,7 @@
   {
     "id": "AI-009-hermes-ace2-f1",
     "behavior": "Second consecutive ace2 provision reports changed=0, failed=0 and unreachable=0 (AC1); the per-task result lines AC1 asks for are recorded in verification.md, which a recap cannot show",
-    "verification": "make provision NODE=ace2 ENV=staging TAGS=agent_stack 2>&1 | grep -E 'ace2 +: ok=[0-9]+ +changed=0 +unreachable=0 +failed=0 '",
+    "verification": "make provision NODE=ace2 ENV=prod TAGS=agent_stack 2>&1 | grep -E 'ace2 +: ok=[0-9]+ +changed=0 +unreachable=0 +failed=0 '",
     "state": "pending",
     "evidence": ""
   },
