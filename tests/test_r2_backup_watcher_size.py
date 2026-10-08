@@ -165,11 +165,12 @@ def test_a_repository_at_its_bucket_root_is_listed_once(fleet) -> None:
 
 
 def test_a_failed_root_listing_is_null_for_the_node_too(fleet) -> None:
-    _add_root_node(fleet, "fail", "AccessDenied: Access Denied\n")
+    fake = _add_root_node(fleet, "fail", "AccessDenied: Access Denied\n")
     proc, entries = _run(fleet)
     assert proc.returncode == 0
     assert entries[("bucket", "kubelab-backup-ace2")][0] == "null"
     assert entries[("node", "ace2")][0] == "null"
+    assert [c.split()[1] for c in _calls(fake)].count("kubelab-backup-ace2") == 1
 
 
 def test_every_entry_records_how_long_its_listing_took(fleet) -> None:
