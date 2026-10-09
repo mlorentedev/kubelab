@@ -25,9 +25,12 @@ from Settings → Repositories → Deleted repositories; after that it is gone.
 One repository at a time, in this order, because each is less settled than the one before:
 
 1. `personal/resume`: already archived on GitHub, and complete in Gitea.
-2. `teledyne/fae-brain`: needs the fast-forward below, and the operator's call on its GitHub-only
-   CI (`eval.yml`) and Dependabot.
-3. `teledyne/openkm-brain`: Gitea holds no code yet (#2133). Blocked until it is re-migrated.
+2. `teledyne/fae-brain`: fast-forwarded 2026-10-08. `eval.yml` runs on Gitea with
+   `NAN_API_KEY` delivered through TOOL-062, and the GitHub Projects workflows are removed.
+3. `teledyne/openkm-brain`: re-migrated 2026-10-08 (#2133). Its GitHub Projects workflows were
+   removed and its security audit made Linux-only (Gitea PR #36). The audit is still red on
+   vulnerable locked dependencies, which is pre-existing and tracked in Gitea #37. That does not
+   block the retirement: the failure travels with the repository.
 
 ## Gate 1: the reconciler is green
 
@@ -68,9 +71,9 @@ A `MISSING` line is history the delete would lose. If it is a branch GitHub move
 Gitea, fast-forward it (next section) and run the gate again. `GATE 2 NOT MEASURED` means
 nothing was compared (a typo in `$R`, or GitHub unreachable): it is not a pass.
 
-Measured 2026-10-08: `resume` prints nothing (44 tags, every branch). `fae-brain` prints
-`MISSING refs/heads/main`: GitHub is 8 commits ahead (4 Dependabot merges, #43 to #46) and 0
-behind. `openkm-brain` holds no refs in Gitea at all.
+Measured 2026-10-09: prints nothing for all three (`resume` 45 GitHub refs, `fae-brain` 13,
+`openkm-brain` 2). On 2026-10-08 `fae-brain` printed `MISSING refs/heads/main`: GitHub was 8
+commits ahead (4 Dependabot merges, #43 to #46), and the fast-forward below closed it.
 
 ## Fast-forward a branch GitHub moved
 
@@ -106,13 +109,13 @@ Any GitHub item opened after the migration exists only on GitHub. Decide each on
 a Dependabot pull request whose commits arrived through the fast-forward can be let go, and
 anything a human wrote cannot.
 
-Measured 2026-10-08:
+Measured 2026-10-09:
 
 | Repository | GitHub issues / PRs | Gitea issues / PRs | Gap |
 |---|---|---|---|
 | `personal/resume` | 93 / 165 | 154 / 276 | none |
-| `teledyne/fae-brain` | 16 / 30 | 16 / 26 | 4 Dependabot PRs (#43 to #46), commits covered by the fast-forward |
-| `teledyne/openkm-brain` | 18 / 17 | 2 / 0 (native) | everything: blocked on #2133 |
+| `teledyne/fae-brain` | 16 / 30 | 16 / 27 | 4 Dependabot PRs (#43 to #46), commits covered by the fast-forward |
+| `teledyne/openkm-brain` | 18 / 17 | 19 / 18 | none (re-migrated, plus #36 and #37 opened on Gitea) |
 
 ## Gate 4: nothing outside the repository depends on the GitHub copy
 
@@ -129,8 +132,8 @@ Gitea does not is one whose job stops existing with the delete. Measured 2026-10
 | Repository | GitHub Actions secrets | In Gitea |
 |---|---|---|
 | `personal/resume` | 4 × `GDRIVE_*`, `RELEASE_PLEASE_TOKEN` | the 4 `GDRIVE_*` (TOOL-062) |
-| `teledyne/fae-brain` | `BITACORA_PAT`, `NAN_API_KEY`, `RELEASE_TOKEN` | none |
-| `teledyne/openkm-brain` | `BITACORA_PAT` | none |
+| `teledyne/fae-brain` | `BITACORA_PAT`, `NAN_API_KEY`, `RELEASE_TOKEN` | `NAN_API_KEY` (TOOL-062). `BITACORA_PAT` fed the removed Projects workflows; no workflow reads `RELEASE_TOKEN` |
+| `teledyne/openkm-brain` | `BITACORA_PAT` | none needed: it fed the removed Projects workflows |
 
 No hooks, deploy keys or Pages on any of the three. Outside the repository, the dotfiles repo
 names two of them: `secrets/registry.yaml` lists `ci:mlorentedev/fae-brain` and
