@@ -322,3 +322,63 @@ def test_native_is_a_required_argument_so_no_caller_can_forget_it() -> None:
     permissive answer by default."""
     with pytest.raises(TypeError):
         plan_drop(full_name="a/b", repo={"empty": True}, declared={"a/b"}, tracker_items=0)  # type: ignore[call-arg]
+
+
+@pytest.mark.parametrize("native", [True, False], ids=["native", "migration"])
+def test_the_command_refuses_a_native_repository_end_to_end(monkeypatch: pytest.MonkeyPatch, native: bool) -> None:
+    """The required argument stops a caller OMITTING the set, not passing an empty one.
+    This runs the real command against a declaration, so the CLI has to derive the
+    set from it: an empty, shell-like native repository must survive `--apply`."""
+    from typer.testing import CliRunner
+
+    import toolkit.cli.services as cli
+    import toolkit.features.gitea_client as gitea_client
+    import toolkit.features.gitea_repos as repos
+
+    deleted: list[tuple[str, str]] = []
+
+    class _Admin:
+        def get_repo(self, owner: str, name: str) -> dict[str, object]:
+            return {"empty": True, "size": 22}
+
+    class _Basic:
+        def __init__(self, *_a: object) -> None:
+            pass
+
+        def count_tracker_items(self, owner: str, name: str) -> int:
+            return 0
+
+        def delete_repo(self, owner: str, name: str) -> bool:
+            deleted.append((owner, name))
+            return True
+
+    class _Config:
+        def __init__(self, *_a: object, **_k: object) -> None:
+            pass
+
+        def get_merged_config(self) -> dict[str, object]:
+            return {
+                "apps": {
+                    "auth": {"identities": {"superadmin": "admin"}},
+                    "services": {"core": {"gitea": {"admin_password": "unused"}}},
+                }
+            }
+
+    spec = (
+        repos.RepoSpec("imagesensortool", native=True)
+        if native
+        else repos.RepoSpec("imagesensortool", migrate_from="github:mlorentedev/imagesensortool")
+    )
+    monkeypatch.setattr(cli, "_gitea_clients", lambda env: (_Admin(), None, "bot", "https://forge.invalid"))
+    monkeypatch.setattr(cli, "ConfigurationManager", _Config)
+    monkeypatch.setattr(gitea_client, "GiteaBasicAuthClient", _Basic)
+    monkeypatch.setattr(repos, "load_declaration", lambda merged: {"personal": [spec]})
+
+    result = CliRunner().invoke(cli.app, ["gitea", "drop-empty", "--repo", "personal/imagesensortool", "--apply"])
+
+    if native:
+        assert result.exit_code == 1, result.output
+        assert deleted == []
+    else:
+        assert result.exit_code == 0, result.output
+        assert deleted == [("personal", "imagesensortool")]

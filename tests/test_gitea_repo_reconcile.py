@@ -1951,12 +1951,16 @@ _UNFILLED = DeclaredRepo(
     ],
 )
 @pytest.mark.parametrize("unfilled", [(_UNFILLED,), ()], ids=["unfilled", "filled"])
+# Both reported-never-acted-on fields: an unfilled migration, and a native repository
+# absent from the forge (#2133). Same endings, same exit.
+@pytest.mark.parametrize("field", ["unfilled_migrations", "absent_native_repos"])
 def test_every_exit_path_fails_on_an_unfilled_migration_and_only_on_one(
     monkeypatch: pytest.MonkeyPatch,
     path: str,
     work: dict[str, tuple[str, ...]],
     args: tuple[str, ...],
     unfilled: tuple[DeclaredRepo, ...],
+    field: str,
 ) -> None:
     """Each of the command's three endings checks the report, so deleting any one
     call site turns its row red here rather than passing a prod run silently."""
@@ -1965,7 +1969,7 @@ def test_every_exit_path_fails_on_an_unfilled_migration_and_only_on_one(
     import toolkit.cli.services as cli
     import toolkit.features.gitea_repos as repos
 
-    plan = ReconcilePlan(unfilled_migrations=unfilled, **work)
+    plan = ReconcilePlan(**{field: unfilled}, **work)  # type: ignore[arg-type]
 
     class _Config:
         def __init__(self, *_a: object, **_k: object) -> None:
@@ -2068,35 +2072,3 @@ def test_a_present_native_repository_is_neither_created_nor_reported() -> None:
     )
     assert plan.absent_native_repos == ()
     assert plan.repos_to_create == ()
-
-
-@pytest.mark.parametrize("native_absent", [True, False], ids=["absent", "present"])
-def test_the_cli_fails_on_an_absent_native_repository(monkeypatch: pytest.MonkeyPatch, native_absent: bool) -> None:
-    from typer.testing import CliRunner
-
-    import toolkit.cli.services as cli
-    import toolkit.features.gitea_repos as repos
-
-    absent = (DeclaredRepo(org="personal", name="imagesensortool", private=False),) if native_absent else ()
-    plan = ReconcilePlan(absent_native_repos=absent)
-
-    class _Config:
-        def __init__(self, *_a: object, **_k: object) -> None:
-            pass
-
-        def get_merged_config(self) -> dict[str, object]:
-            return {"apps": {"auth": {"identities": {}}}}
-
-    monkeypatch.setattr(cli, "_gitea_clients", lambda env: (_NoForgeAdmin(), None, "bot", "https://forge.invalid"))
-    monkeypatch.setattr(cli, "ConfigurationManager", _Config)
-    monkeypatch.setattr(cli, "_report_machine_ownership", lambda *a, **k: None)
-    monkeypatch.setattr(
-        repos, "load_declaration", lambda merged: {"personal": [RepoSpec("imagesensortool", native=True)]}
-    )
-    monkeypatch.setattr(repos, "load_settings", lambda merged: None)
-    monkeypatch.setattr(repos, "load_webhooks", lambda merged: ())
-    monkeypatch.setattr(repos, "plan_reconcile", lambda *a, **k: plan)
-
-    result = CliRunner().invoke(cli.app, ["gitea", "reconcile"])
-
-    assert result.exit_code == (1 if native_absent else 0), result.output
