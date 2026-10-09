@@ -13,7 +13,8 @@ once, by hand, at rollout. Nothing would have noticed a regression.
   tailnet address.
 
 The refusal is Traefik's, so it is asserted even with ace2 powered off. The
-other two need Open WebUI to answer.
+other two need Open WebUI to answer, and ace2 is on-demand (ADR-028): they skip
+while it is off, so they catch a regression only in a run taken with ace2 up.
 """
 
 from __future__ import annotations
