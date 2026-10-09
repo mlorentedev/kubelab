@@ -1,0 +1,36 @@
+#!/bin/sh
+# {{ ansible_managed }}
+# The read-only vault the MCP bridge serves Open WebUI (ADR-068 D5 and D6, spec
+# AI-009 AC9). Run by {{ agent_stack_vault_mirror_unit }}.service as root.
+#
+# It reads the vault's remote, never the agent's clone: the agent writes its
+# clone's zone, so a tool reading that clone would serve the agent's unpushed
+# words as the vault. The unit makes the agent's home inaccessible to this run.
+#
+# Each run fetches the branch's tip, one commit deep, and checks it out over the
+# tree, discarding anything else there. It never commits. The history lives
+# beside the tree, not in it, so the bridge mounts notes and nothing more.
+set -eu
+
+gitdir='{{ agent_stack_vault_mirror }}/git'
+tree='{{ agent_stack_vault_mirror }}/tree'
+remote='{{ agent_stack_hermes.vault_sync.remote }}'
+branch='{{ agent_stack_hermes.vault_sync.branch }}'
+
+export GIT_TERMINAL_PROMPT=0
+
+# No hooks run and no reflog keeps a replaced tip alive; the token comes from
+# the credential systemd hands this run, never from a URL or the repository.
+mgit() {
+  git --git-dir="$gitdir" --work-tree="$tree" \
+      -c credential.helper= -c 'credential.helper={{ agent_stack_vault_libexec }}/vault-credential' \
+      -c core.hooksPath=/dev/null -c core.logAllRefUpdates=false -c gc.pruneExpire=now "$@"
+}
+
+[ -d "$gitdir" ] || git init --quiet --bare "$gitdir"
+mkdir -p "$tree"
+
+mgit fetch --quiet --depth 1 --no-tags "$remote" "$branch"
+mgit checkout --quiet --force --detach FETCH_HEAD
+mgit clean --quiet -ffdx
+mgit gc --auto --quiet
