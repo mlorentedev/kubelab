@@ -98,6 +98,12 @@ agent_stack_vault_token_file: "{{ agent_stack_dir }}/vault-token"
 agent_stack_vault_libexec: /usr/local/libexec/agent-stack
 agent_stack_vault_sync_unit: hermes-kubelab-vault-sync
 
+# The read-only vault the MCP bridge serves Open WebUI (spec AI-009 AC9): root's,
+# in the root-only stack directory, refreshed from the remote by its own unit and
+# never from the agent's clone. `git` holds the history, `tree` the notes.
+agent_stack_vault_mirror: "{{ agent_stack_dir }}/vault-mirror"
+agent_stack_vault_mirror_unit: agent-stack-vault-mirror
+
 # hermes-kubelab (ADR-068 D2, spec PR 3). `agent_stack_hermes` is the
 # apps.services.ai.hermes_kubelab map, set by the playbook.
 agent_stack_hermes_project: agent-stack-hermes

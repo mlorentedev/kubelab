@@ -274,6 +274,11 @@
   ansible.builtin.import_tasks: vault_zone.yml
   tags: [agent_stack]
 
+# After the sync: both read the vault with its token, from the same directory.
+- name: Provision Open WebUI's read-only vault mirror
+  ansible.builtin.import_tasks: vault_mirror.yml
+  tags: [agent_stack]
+
 # After the agent's user: Hermes runs on the daemon that file provisions and proves.
 - name: Provision hermes-kubelab on the agent's daemon
   ansible.builtin.import_tasks: hermes.yml

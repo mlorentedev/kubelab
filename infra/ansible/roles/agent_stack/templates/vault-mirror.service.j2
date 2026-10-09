@@ -1,0 +1,26 @@
+# {{ ansible_managed }}
+# Open WebUI's read-only vault (ADR-068 D5 and D6, spec AI-009 AC9): the tree
+# the MCP bridge mounts, refreshed from the vault's remote.
+[Unit]
+Description=Open WebUI's read-only vault mirror
+Wants=network-online.target
+After=network-online.target
+OnFailure=kubelab-notify@%n.service
+
+[Service]
+Type=oneshot
+# Root's, so nothing of the agent's user can change what the bridge serves.
+# The agent's home, where its own clone lives, is not even visible to this run.
+InaccessiblePaths={{ agent_stack_agent_home }}
+LoadCredential=vault-token:{{ agent_stack_vault_token_file }}
+Environment=GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+ExecStart={{ agent_stack_vault_libexec }}/vault-mirror
+# The bridge runs as a non-root user and reads the tree.
+UMask=0022
+TimeoutStartSec=10min
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths={{ agent_stack_vault_mirror }}
+StandardOutput=journal
+StandardError=journal

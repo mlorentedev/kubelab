@@ -1,0 +1,74 @@
+---
+# =============================================================================
+# Open WebUI's read-only vault (ADR-068 D5 and D6, spec AI-009 AC9). Root owns
+# it and its unit refreshes it from the vault's remote with the token the sync
+# uses; the MCP bridge mounts its tree read-only.
+# =============================================================================
+
+- name: Stop the vault mirror when the token is not configured
+  when: not (agent_stack_vault_configured | bool)
+  block:
+    - name: Look for a previously installed vault mirror timer
+      ansible.builtin.stat:
+        path: "/etc/systemd/system/{{ agent_stack_vault_mirror_unit }}.timer"
+      register: _agent_stack_mirror_prior
+
+    # The tree stays: it is the vault as last read, and holds no credential.
+    - name: Disable the vault mirror timer
+      ansible.builtin.systemd:
+        name: "{{ agent_stack_vault_mirror_unit }}.timer"
+        enabled: false
+        state: stopped
+      when: _agent_stack_mirror_prior.stat.exists and not ansible_check_mode
+
+- name: Deploy the vault mirror
+  when: agent_stack_vault_configured | bool
+  block:
+    - name: Create the vault mirror's directory
+      ansible.builtin.file:
+        path: "{{ agent_stack_vault_mirror }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install the vault mirror script
+      ansible.builtin.template:
+        src: vault-mirror.sh.j2
+        dest: "{{ agent_stack_vault_libexec }}/vault-mirror"
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install the vault mirror units
+      ansible.builtin.template:
+        src: "vault-mirror.{{ item }}.j2"
+        dest: "/etc/systemd/system/{{ agent_stack_vault_mirror_unit }}.{{ item }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop: [service, timer]
+
+    # The run is the measurement: it proves the token, the fetch and the
+    # checkout. Not a change: the units are.
+    - name: Run the vault mirror once
+      ansible.builtin.systemd:
+        name: "{{ agent_stack_vault_mirror_unit }}.service"
+        state: started
+        daemon_reload: true
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: Verify the vault mirror holds the agent's zone
+      ansible.builtin.stat:
+        path: "{{ agent_stack_vault_mirror }}/tree/{{ agent_stack_vault_zone }}"
+      register: _agent_stack_mirror_zone
+      failed_when: not (_agent_stack_mirror_zone.stat.isdir | default(false))
+      when: not ansible_check_mode
+
+    - name: Enable the vault mirror timer
+      ansible.builtin.systemd:
+        name: "{{ agent_stack_vault_mirror_unit }}.timer"
+        enabled: true
+        state: started
+      when: not ansible_check_mode

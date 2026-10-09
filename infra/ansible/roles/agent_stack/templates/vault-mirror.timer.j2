@@ -1,0 +1,11 @@
+# {{ ansible_managed }}
+# Soon after boot, and at the vault sync's interval after it.
+[Unit]
+Description=Open WebUI's read-only vault mirror, every {{ agent_stack_hermes.vault_sync.interval }}
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec={{ agent_stack_hermes.vault_sync.interval }}
+
+[Install]
+WantedBy=timers.target
