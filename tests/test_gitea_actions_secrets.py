@@ -49,6 +49,9 @@ EXPECTED_DELIVERED = {
     (f"{PREFIX}.gdrive_oauth_client_secret", RESUME),
     (f"{PREFIX}.gdrive_oauth_refresh_token", RESUME),
     (f"{PREFIX}.gdrive_folder_id", RESUME),
+    # fae-brain's eval workflow calls the NaN API with the one NAN_API_KEY the
+    # operator holds, so it reuses PR-Agent's copy rather than a second one (#2133).
+    ("apps.services.automation.pr_agent.nan_api_key", "teledyne/fae-brain"),
 }
 
 
@@ -321,21 +324,25 @@ def test_a_missing_repository_lists_as_none_not_as_empty() -> None:
 # --- the command --------------------------------------------------------------
 
 LEAVES = ("gdrive_oauth_client_id", "gdrive_oauth_client_secret", "gdrive_oauth_refresh_token", "gdrive_folder_id")
+# fae-brain's one delivered secret. Always valued below, so the tests about
+# resume's four read as they did before it was declared.
+NAN = "NAN_API_KEY"
 
 
 def _merged(**values: str) -> dict[str, Any]:
-    """A prod config holding the forge credential and whichever GDRIVE values are given."""
+    """A prod config holding the forge credential, the NaN key and whichever GDRIVE values are given."""
     resume = dict(values)
     return {
         "apps": {
             "services": {
+                "automation": {"pr_agent": {"nan_api_key": f"{VALUE}-nan"}},
                 "core": {
                     "gitea": {
                         "domain": "gitea.example.invalid",
                         "admin_password": "pw",
                         "actions_secrets": {"personal": {"resume": resume}},
                     }
-                }
+                },
             },
             "auth": {"identities": {"superadmin": "manu"}},
         }
@@ -369,30 +376,33 @@ def test_plan_only_writes_nothing_and_never_prints_a_value(monkeypatch: pytest.M
     result = _invoke(monkeypatch, _merged(**{leaf: VALUE for leaf in LEAVES}), forge)
     assert result.exit_code == 0, result.output
     assert forge.puts == []
-    assert result.output.count("(create, from") == 4
+    assert result.output.count("(create, from") == len(LEAVES) + 1
     assert VALUE not in result.output
 
 
-def test_apply_writes_all_four_and_a_second_run_has_nothing_to_do(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_apply_writes_every_target_to_its_own_repository_and_a_second_run_has_nothing_to_do(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     config = _merged(**{leaf: f"{VALUE}-{leaf}" for leaf in LEAVES})
     forge = _CliForge()
     result = _invoke(monkeypatch, config, forge, "--apply")
     assert result.exit_code == 0, result.output
-    assert sorted(p[2] for p in forge.puts) == sorted(leaf.upper() for leaf in LEAVES)
-    assert all(p[:2] == ("personal", "resume") for p in forge.puts)
+    assert sorted(p[:3] for p in forge.puts) == sorted(
+        [("personal", "resume", leaf.upper()) for leaf in LEAVES] + [("teledyne", "fae-brain", NAN)]
+    )
     assert VALUE not in result.output
 
-    second = _CliForge(live={leaf.upper() for leaf in LEAVES})
+    second = _CliForge(live={leaf.upper() for leaf in LEAVES} | {NAN})
     rerun = _invoke(monkeypatch, config, second, "--apply")
     assert rerun.exit_code == 0, rerun.output
     assert second.puts == [], "changed=0 on re-run"
 
 
 def test_force_re_pushes_what_the_forge_already_has(monkeypatch: pytest.MonkeyPatch) -> None:
-    forge = _CliForge(live={leaf.upper() for leaf in LEAVES})
+    forge = _CliForge(live={leaf.upper() for leaf in LEAVES} | {NAN})
     result = _invoke(monkeypatch, _merged(**{leaf: VALUE for leaf in LEAVES}), forge, "--apply", "--force")
     assert result.exit_code == 0, result.output
-    assert len(forge.puts) == 4
+    assert len(forge.puts) == len(LEAVES) + 1
 
 
 def test_a_missing_value_is_named_never_written_and_fails_the_run(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -402,7 +412,7 @@ def test_a_missing_value_is_named_never_written_and_fails_the_run(monkeypatch: p
     assert result.exit_code == 1
     assert "GDRIVE_OAUTH_REFRESH_TOKEN" in result.output
     assert "GDRIVE_OAUTH_REFRESH_TOKEN" not in {p[2] for p in forge.puts}
-    assert len(forge.puts) == 3, "the secrets that do have a source still land"
+    assert len(forge.puts) == 4, "resume's three valued secrets and fae-brain's one still land"
 
 
 def test_plan_only_also_fails_when_a_value_is_missing(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -421,7 +431,7 @@ def test_a_placeholder_is_not_a_value(monkeypatch: pytest.MonkeyPatch) -> None:
     forge = _CliForge()
     result = _invoke(monkeypatch, _merged(**{leaf: placeholder for leaf in LEAVES}), forge, "--apply")
     assert result.exit_code == 1
-    assert forge.puts == []
+    assert [p for p in forge.puts if p[:2] == ("personal", "resume")] == []
 
 
 # --- review of #1816 ------------------------------------------------------------

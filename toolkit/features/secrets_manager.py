@@ -984,16 +984,20 @@ SECRET_CATALOG: list[SecretSpec] = [
         expiry=Expiry.NEVER,
         # Open WebUI and hermes-kubelab on ace2 read this same key (AI-009 R1,
         # 2026-10-04 and 2026-10-06) and share its rate limit (ADR-068 D7).
-        services=("pr-agent", "open_webui", "hermes_kubelab"),
+        # teledyne/fae-brain's eval workflow reads it as `secrets.NAN_API_KEY` (#2133):
+        # the same key its GitHub copy held, delivered by TOOL-062 instead.
+        services=("pr-agent", "open_webui", "hermes_kubelab", "gitea_actions"),
         rotate_note=(
             "Two copies of one credential (proposal, Risks): `NAN_API_KEY` rotates every 90 days "
             "in the dotfiles registry and this SOPS copy does not follow on its own. Re-copy with "
             "`make secrets-copy-nan-key` (Bitwarden unlocked), then `make apply-secrets ENV=prod` and "
-            "`make provision NODE=ace2 ENV=prod TAGS=agent_stack` (Open WebUI and hermes-kubelab). If the copies "
+            "`make provision NODE=ace2 ENV=prod TAGS=agent_stack` (Open WebUI and hermes-kubelab), and "
+            "`toolkit services gitea actions-secrets --apply --force` (fae-brain's eval). If the copies "
             "drift, NaN returns 401 and the silence detector (AC8) catches it -- that is the "
             "backstop, not the fix."
         ),
         envs=("prod",),
+        forge_actions=("teledyne/fae-brain",),
     ),
     # AI-009 PR 4 (ADR-068 D3): the one credential hermes-kubelab holds for the
     # vault. Its own clone pushes with it; the zone hook, not the token, limits
