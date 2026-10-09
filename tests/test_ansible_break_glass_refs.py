@@ -81,3 +81,17 @@ def test_a_hyphenated_name_is_never_read_by_attribute() -> None:
     must be read by subscript."""
     for path in _files():
         assert not re.search(r"authelia\.break_glass\.[\w]+-", path.read_text()), path
+
+
+def test_no_read_of_the_declaration_escapes_the_pattern() -> None:
+    """An aliased or variable read (`bg = ...break_glass`, `break_glass[name]`)
+    would vanish from the scan rather than fail it, so every occurrence must be
+    one the pattern resolves."""
+    escaped = []
+    for path in _files():
+        text = path.read_text()
+        resolved = {m.start() for m in REF.finditer(text)}
+        for at in re.finditer(r"authelia\.break_glass\b", text):
+            if at.start() not in resolved:
+                escaped.append(f"{path.relative_to(REPO)}:{text.count(chr(10), 0, at.start()) + 1}")
+    assert not escaped, f"reads the guard cannot resolve: {escaped}"
