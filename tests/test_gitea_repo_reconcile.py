@@ -1951,8 +1951,8 @@ _UNFILLED = DeclaredRepo(
     ],
 )
 @pytest.mark.parametrize("unfilled", [(_UNFILLED,), ()], ids=["unfilled", "filled"])
-# Both reported-never-acted-on fields: an unfilled migration, and a native repository
-# absent from the forge (#2133). Same endings, same exit.
+# Every reported-never-acted-on field: an unfilled migration, and a native repository
+# absent from the forge or held empty (#2133, #2141). Same endings, same exit.
 @pytest.mark.parametrize("field", ["unfilled_migrations", "absent_native_repos", "emptied_native_repos"])
 def test_every_exit_path_fails_on_an_unfilled_migration_and_only_on_one(
     monkeypatch: pytest.MonkeyPatch,
