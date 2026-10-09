@@ -116,6 +116,17 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - **Provision**: three runs from the branch, `changed=7` (the network, the recreate, the ufw rule), then `changed=2` (the boot unit, added after the first measurement), then `changed=0`.
 - **Tier** (operator, browser, 2026-10-08): the model's visibility matches the decision, listed for an admin and absent for a `users` login.
 
+### Power-cycle drill (AC11), ace2, 2026-10-08
+
+The operator rebooted ace2 remotely with the stack running, after both peer sessions confirmed they were not using it. Booted at 04:16:27 CEST. Every read below is read-only.
+
+- **Order**: `agent-stack-hermes-bind.service` logged `172.30.250.1 is up on br-open-webui after 0s` and exited at monotonic 13.52 s. `user@999.service` went active at 13.70 s, after it. `Result=success`.
+- **Units**: `agent-stack-egress`, `agent-stack-webui`, `agent-stack-hermes-bind` and `user@999` are active. `systemctl --failed` is empty. The vault sync ran 2 min after boot with `Result=success`, exit 0, and the next run is armed. The `node-backup-*` timers are armed.
+- **Ports**: `rootlesskit` holds `172.30.250.1:8642` and `dockerd` holds `100.64.0.5:3080`. `open-webui` is `healthy`, and `hermes-kubelab` is up on `172.30.250.1:8642->8642/tcp`.
+- **Backend**: from inside `open-webui`, with its own env, `/v1/models` lists `hermes-agent`, and one chat completion answered.
+- **Clone**: `git fsck` on `/var/lib/hermes-kubelab/vault` as the agent's user: exit 0, no output.
+- **Databases**: `PRAGMA integrity_check` opened read-only (`mode=ro`) returns `ok` for Open WebUI's `webui.db` and for Hermes's `state.db`, `shared-state.db`, `kanban.db`, `response_store.db`, `runs_idempotency.db` and `cron/executions.db`.
+
 ### AC8, interim, ace2, 2026-10-07
 
 Measured with the stack idle (load 0.04), before PR 4 and PR 5 add the vault clone and the MCP bridge. AC8 is measured again at closing. `free -m`: 1787 MiB used of 11739, 9951 available, no swap used. `docker stats --no-stream`: `open-webui` 654.7 MiB of 1.5 GiB, `hermes-kubelab` 209.2 MiB of 1.5 GiB, `hermes-kubelab-tailscale` 19.0 MiB of 128 MiB, `glances` 107.1 MiB of 256 MiB.
