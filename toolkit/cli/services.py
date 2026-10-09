@@ -524,6 +524,16 @@ def gitea_reconcile(
             for org, specs in declared.items()
             for spec in specs
         }
+        # Whether each held repository's git has a ref, read from git itself: the
+        # `empty` flag in the bodies above is a database column that stays `false`
+        # after a repository loses its refs on disk (#2144). Only repositories the
+        # forge holds, because there is nothing to probe for one about to be made.
+        existing_repo_refs = {
+            f"{org}/{spec.name}": admin.has_refs(org, spec.name)
+            for org, specs in declared.items()
+            for spec in specs
+            if f"{org}/{spec.name}" in existing_repos
+        }
         # Read with the ADMIN token, unlike every webhook WRITE, which needs the
         # superadmin's password. Measured 2026-09-04 on both repositories: the admin
         # token's `read:repository` reaches this listing while its lack of
@@ -560,6 +570,7 @@ def gitea_reconcile(
         declared_webhooks,
         reviewer=str(reviewer) if reviewer else None,
         existing_review_teams=existing_review_teams,
+        existing_repo_refs=existing_repo_refs,
     )
     console.print(f"\n[bold]Gitea reconcile[/bold] — {base_url} ({env})\n")
     console.print(format_plan(plan))
@@ -588,9 +599,21 @@ def gitea_reconcile(
             )
             raise typer.Exit(1)
 
+    def fail_on_lost_content() -> None:
+        # A repository that held content and lost its refs (#2144). The flag that the
+        # two checks above read still says "not empty", so only git tells; the repair
+        # is the same R2 restore as a native repository's.
+        if plan.lost_content_repos:
+            logger.error(
+                f"{len(plan.lost_content_repos)} declared repository/ies present with no refs in git "
+                "(listed above with the restore). Their content is gone from the forge (#2144)."
+            )
+            raise typer.Exit(1)
+
     if plan.is_noop:
         report_ownership()
         fail_on_absent_native_repos()
+        fail_on_lost_content()
         fail_on_unfilled_migrations()
         # Drift does not make the plan non-idempotent -- nothing here would act on
         # it -- but it must not be reported as a match either. "Nothing to create"
@@ -613,6 +636,7 @@ def gitea_reconcile(
         console.print("\n[dim]plan only — re-run with --apply to create[/dim]")
         report_ownership()
         fail_on_absent_native_repos()
+        fail_on_lost_content()
         fail_on_unfilled_migrations()
         return
 
@@ -720,6 +744,7 @@ def gitea_reconcile(
     report_ownership()
 
     fail_on_absent_native_repos()
+    fail_on_lost_content()
     fail_on_unfilled_migrations()
     if not report.ok:
         raise typer.Exit(1)
