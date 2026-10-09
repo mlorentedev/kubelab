@@ -557,6 +557,12 @@ class ReconcilePlan:
     # for a repository whose only other copy is the backup. Reported with the same
     # restore, and kept out of `is_noop` for the same reason (#2141 review).
     emptied_native_repos: tuple[DeclaredRepo, ...] = ()
+    # Declared, present, Gitea's `empty` flag false, and NO REFS in git: a repository
+    # that held content and lost it, e.g. a partial restore (#2144). Its own field
+    # because its repair differs from both above: `drop-empty` refuses it (the flag
+    # says not empty) and a re-migration has no source once the GitHub copy is
+    # retired, so the answer is the R2 restore. Kept out of `is_noop` likewise.
+    lost_content_repos: tuple[DeclaredRepo, ...] = ()
 
     @property
     def is_noop(self) -> bool:
@@ -618,6 +624,7 @@ def plan_reconcile(
     *,
     reviewer: str | None = None,
     existing_review_teams: Mapping[str, tuple[Mapping[str, Any] | None, Sequence[str]]] | None = None,
+    existing_repo_refs: Mapping[str, bool],
 ) -> ReconcilePlan:
     """Compare the declaration against the forge. Pure -- no network, no side effects.
 
@@ -668,6 +675,12 @@ def plan_reconcile(
     grant belongs to the organization, not to the act of creating something in it,
     so a forge where every declared repository already exists still has teams to
     repair. See `team_needs_convergence`.
+
+    `existing_repo_refs` maps every declared repository the forge HOLDS to whether
+    its git has at least one ref (`GiteaClient.has_refs`). Required, keyword-only and
+    indexed, for the reason given above: Gitea's `empty` flag stays `false` after a
+    repository loses its refs on disk (#2144), so the content checks need a reading
+    of git, and an optional reading is one a caller can forget.
 
     `existing_repo_settings` maps `"org/name"` to the live `GET /repos/{o}/{r}`
     body for EVERY DECLARED repository, or to None when the forge does not hold it
@@ -854,6 +867,12 @@ def plan_reconcile(
     # Only for repositories WITH a source: one declared without `migrate_from` is
     # created empty on purpose, and its first push is future work, not a defect.
     # `is True`, not truthiness: an absent `empty` is not evidence of emptiness.
+    #
+    # THE FLAG IS NOT ENOUGH ON ITS OWN (#2144). `empty` is a database column written
+    # at push time; a repository whose refs were lost on disk keeps answering
+    # `empty: false` (measured on 1.25.5), so the two fields above read the flag --
+    # which is right for a never-filled shell -- and `lost_content_repos` below reads
+    # git for the repository that held content and lost it.
     unfilled_migrations = tuple(
         DeclaredRepo(org=org, name=spec.name, private=spec.private, migrate_from=spec.migrate_from)
         for org, specs in sorted(declared.items())
@@ -874,6 +893,19 @@ def plan_reconcile(
         and (existing_repo_settings[f"{org}/{spec.name}"] or {}).get("empty") is True
     )
 
+    # Indexed, never `.get`: the refs mapping must cover every declared repository the
+    # forge holds, and a missing key is the loud failure -- the same contract as
+    # `existing_repo_settings`. A repository whose flag already says empty is reported
+    # above and not again here.
+    lost_content_repos = tuple(
+        DeclaredRepo(org=org, name=spec.name, private=spec.private, migrate_from=spec.migrate_from)
+        for org, specs in sorted(declared.items())
+        for spec in sorted(specs, key=lambda s: s.name)
+        if f"{org}/{spec.name}" in existing_repos
+        and (existing_repo_settings[f"{org}/{spec.name}"] or {}).get("empty") is not True
+        and not existing_repo_refs[f"{org}/{spec.name}"]
+    )
+
     return ReconcilePlan(
         orgs_to_create=orgs_to_create,
         repos_to_create=repos_to_create,
@@ -889,6 +921,7 @@ def plan_reconcile(
         unfilled_migrations=unfilled_migrations,
         absent_native_repos=absent_native_repos,
         emptied_native_repos=emptied_native_repos,
+        lost_content_repos=lost_content_repos,
     )
 
 
@@ -1310,6 +1343,11 @@ def format_plan(plan: ReconcilePlan) -> str:
         lines.append(
             f"  ! repo {emptied.org}/{emptied.name}   declared native, but the forge holds it EMPTY — its "
             f"content is gone or not yet restored. Restore: docs/runbooks/offsite-backup-restore.md"
+        )
+    for lost in plan.lost_content_repos:
+        lines.append(
+            f"  ! repo {lost.org}/{lost.name}   present, but its git holds NO REFS (Gitea's `empty` flag "
+            f"still says otherwise) — its content was lost. Restore: docs/runbooks/offsite-backup-restore.md"
         )
     if not lines:
         return "  (nothing to do — forge matches the declaration)"

@@ -97,6 +97,8 @@ SCOPE_BY_METHOD: dict[str, frozenset[str]] = {
     # commit". Repository content, so `read:repository`, which the token already has.
     "list_branches": frozenset({"read:repository"}),
     "commit_exists": frozenset({"read:repository"}),
+    # The reconcile's content probe (#2144): git refs are repository content.
+    "has_refs": frozenset({"read:repository"}),
     # Writes.
     "create_org": frozenset({"write:organization"}),
     "create_repo": frozenset({"write:organization"}),
@@ -141,6 +143,8 @@ ADMIN_METHODS: tuple[str, ...] = (
     # (BACKUP-040), so its reads enter the derivation like every other.
     "list_branches",
     "commit_exists",
+    # The reconcile reads refs alongside `empty` (#2144), with this token.
+    "has_refs",
 )
 
 
@@ -598,6 +602,22 @@ class GiteaClient:
                 return False
             raise
         return True
+
+    def has_refs(self, owner: str, name: str) -> bool:
+        """Whether the repository's git holds at least one ref, read from git rather than the database.
+
+        Not `empty` from `get_repo`: that is a column Gitea writes at push time, and a
+        repository whose refs were lost on disk keeps answering `empty: false`
+        (measured on 1.25.5, #2144). `/git/refs` answers 404 for zero refs, so 404 is
+        an answer; any other failure raises, because "could not look" is not "nothing there".
+        """
+        try:
+            refs = self._request("GET", f"/repos/{owner}/{name}/git/refs")
+        except GiteaError as exc:
+            if exc.status_code == 404:
+                return False
+            raise
+        return bool(refs)
 
 
 class GiteaBasicAuthClient(GiteaClient):

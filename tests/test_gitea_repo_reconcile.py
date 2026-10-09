@@ -24,6 +24,7 @@ the acceptance criterion, and it is asserted here rather than left to review.
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
@@ -163,6 +164,30 @@ def converged_hook() -> dict[str, object]:
     }
 
 
+class _RefsEverywhere(dict[str, bool]):
+    """Every repository the forge holds has refs. The content probe (#2144) is not what
+    these tests are about, so they get the converged answer for any key; the probe's
+    own behaviour lives in `tests/test_gitea_ref_probe.py`."""
+
+    def __missing__(self, key: str) -> bool:
+        return True
+
+
+ALL_REFS_PRESENT = _RefsEverywhere()
+
+
+def refs_matching(settings: Mapping[str, Mapping[str, object] | None]) -> dict[str, bool]:
+    """Refs consistent with each body's `empty` flag: a never-pushed shell has none.
+
+    A fixture that sets `empty: True` and answers "has refs" describes a repository
+    that cannot exist, and passes only while no check reads both (#2146 review)."""
+    refs = _RefsEverywhere()
+    for full_name, body in settings.items():
+        if body and body.get("empty") is True:
+            refs[full_name] = False
+    return refs
+
+
 def hooks_for(declared: object) -> dict[str, list[dict[str, object]] | None]:
     """Every declared repository, already carrying a converged hook.
 
@@ -285,6 +310,7 @@ def test_an_empty_forge_migrates_every_declared_repository():
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks=hooks_for(DECLARED),
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
 
     assert set(plan.orgs_to_create) == {"teledyne", "personal", "kubelab"}
@@ -311,6 +337,7 @@ def test_a_repository_with_no_source_is_still_created_empty():
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks=hooks_for({"kubelab": [RepoSpec("brand-new")]}),
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
     assert plan.repos_to_migrate == ()
     assert {(r.org, r.name) for r in plan.repos_to_create} == {("kubelab", "brand-new")}
@@ -333,6 +360,7 @@ def test_an_existing_repository_is_never_re_migrated():
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks=hooks_for(DECLARED),
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
     assert plan.repos_to_migrate == ()
     assert plan.repos_to_create == ()
@@ -354,6 +382,7 @@ def test_a_declared_but_empty_org_is_still_created():
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks=hooks_for({"kubelab": []}),
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
     assert plan.orgs_to_create == ("kubelab",)
 
@@ -372,6 +401,7 @@ def test_a_second_run_creates_nothing():
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks=hooks_for(DECLARED),
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
 
     assert plan.orgs_to_create == ()
@@ -388,6 +418,7 @@ def test_an_undeclared_repository_is_reported():
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks=hooks_for(DECLARED),
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
     assert plan.undeclared_repos == ("personal/something-nobody-declared",)
 
@@ -402,6 +433,7 @@ def test_an_undeclared_organization_is_reported():
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks=hooks_for(DECLARED),
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
     assert plan.undeclared_orgs == ("made-in-the-ui",)
 
@@ -459,6 +491,7 @@ def test_planning_never_reports_a_declared_org_as_undeclared(declared: dict[str,
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks=hooks_for(declared),
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
     assert plan.undeclared_orgs == ()
 
@@ -478,6 +511,7 @@ def test_declared_repos_carry_private_by_default():
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks=hooks_for({"personal": [RepoSpec("resume")]}),
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
     assert plan.repos_to_create == (DeclaredRepo(org="personal", name="resume", private=True),)
 
@@ -561,6 +595,7 @@ def test_a_repository_living_at_a_different_visibility_is_reported():
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks=hooks_for({"personal": [RepoSpec("resume", private=True)]}),
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
     assert plan.visibility_drift == (
         VisibilityDrift(org="personal", name="resume", declared_private=True, live_private=False),
@@ -584,6 +619,7 @@ def test_drift_is_reported_in_both_directions():
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks=hooks_for({"personal": [RepoSpec("resume", private=False)]}),
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
     assert [(d.full_name, d.declared_private, d.live_private) for d in plan.visibility_drift] == [
         ("personal/resume", False, True)
@@ -602,6 +638,7 @@ def test_a_matching_repository_is_not_reported_as_drift():
             declared_settings=DECLARED_SETTINGS,
             existing_repo_hooks=hooks_for({"personal": [RepoSpec("resume", private=private)]}),
             declared_webhooks=N8N_HOOK_ONLY,
+            existing_repo_refs=ALL_REFS_PRESENT,
         )
         assert plan.visibility_drift == (), f"agreement at private={private} was reported as drift"
 
@@ -621,6 +658,7 @@ def test_a_repository_that_does_not_exist_yet_is_not_drift():
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks=hooks_for({"personal": [RepoSpec("resume", private=False)]}),
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
     assert plan.visibility_drift == ()
     assert plan.repos_to_create == (DeclaredRepo(org="personal", name="resume", private=False),)
@@ -642,6 +680,7 @@ def test_drift_does_not_make_the_plan_non_idempotent():
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks=hooks_for({"personal": [RepoSpec("resume", private=True)]}),
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
     assert plan.visibility_drift, "fixture must actually drift or this asserts nothing"
     assert plan.is_noop
@@ -686,6 +725,7 @@ def test_the_declaration_and_the_forge_are_compared_on_every_declared_repo():
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks=hooks_for(declared),
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
 
     compared = {d.full_name for d in plan.visibility_drift} | {
@@ -742,6 +782,7 @@ def test_a_forge_with_nothing_to_create_still_plans_a_team_repair() -> None:
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks=hooks_for(declared),
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
 
     assert plan.repos_to_create == () and plan.repos_to_migrate == () and plan.orgs_to_create == ()
@@ -767,6 +808,7 @@ def test_a_team_is_planned_for_a_declared_org_that_receives_no_repository() -> N
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks=hooks_for({"kubelab": []}),
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
 
     assert plan.teams_to_converge == ("kubelab",)
@@ -783,6 +825,7 @@ def test_converged_teams_leave_the_plan_a_noop() -> None:
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks=hooks_for(DECLARED),
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
 
     assert plan.teams_to_converge == ()
@@ -817,6 +860,7 @@ def test_every_field_the_grant_sends_is_compared(broken: dict[str, object]) -> N
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks=hooks_for(declared),
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
 
     assert plan.teams_to_converge == ("personal",), f"a team with {broken} was reported as converged"
@@ -839,6 +883,7 @@ def test_a_declared_org_missing_from_the_team_reading_is_a_loud_failure() -> Non
             declared_settings=DECLARED_SETTINGS,
             existing_repo_hooks=hooks_for(DECLARED),
             declared_webhooks=N8N_HOOK_ONLY,
+            existing_repo_refs=ALL_REFS_PRESENT,
         )
 
 
@@ -860,6 +905,7 @@ def test_the_plan_compares_a_team_for_every_declared_organization() -> None:
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks=hooks_for(DECLARED),
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
 
     assert set(plan.teams_to_converge) == set(DECLARED), (
@@ -960,6 +1006,7 @@ def test_a_migrated_repository_is_scheduled_for_configuration() -> None:
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks=hooks_for(declared),
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
 
     assert [change.full_name for change in plan.repos_to_configure] == ["personal/resume"]
@@ -985,6 +1032,7 @@ def test_a_repository_this_run_creates_is_scheduled_in_the_same_run() -> None:
         # hooks either, and the fixture should not describe a state that cannot exist.
         existing_repo_hooks={"personal/brand-new": None},
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
 
     assert [change.full_name for change in plan.repos_to_configure] == ["personal/brand-new"]
@@ -1004,6 +1052,7 @@ def test_a_converged_repository_schedules_nothing() -> None:
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks=hooks_for(declared),
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
 
     assert plan.repos_to_configure == ()
@@ -1046,6 +1095,7 @@ def test_a_declared_repository_missing_from_the_settings_reading_is_a_loud_failu
             declared_settings=DECLARED_SETTINGS,
             existing_repo_hooks=hooks_for(declared),
             declared_webhooks=N8N_HOOK_ONLY,
+            existing_repo_refs=ALL_REFS_PRESENT,
         )
 
 
@@ -1067,6 +1117,7 @@ def test_the_plan_names_the_fields_that_will_change() -> None:
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks=hooks_for(declared),
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
     rendered = format_plan(plan)
 
@@ -1091,6 +1142,7 @@ def test_a_new_repository_is_summarised_rather_than_diffed() -> None:
         # hooks either, and the fixture should not describe a state that cannot exist.
         existing_repo_hooks={"personal/brand-new": None},
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
     rendered = format_plan(plan)
 
@@ -1302,6 +1354,7 @@ def test_a_repository_with_no_webhook_is_scheduled() -> None:
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks={"personal/resume": []},
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
 
     assert [change.full_name for change in plan.repos_to_hook] == ["personal/resume"]
@@ -1322,6 +1375,7 @@ def test_a_repository_this_run_creates_gets_a_webhook_in_the_same_run() -> None:
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks={"personal/brand-new": None},
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
 
     assert [change.full_name for change in plan.repos_to_hook] == ["personal/brand-new"]
@@ -1346,6 +1400,7 @@ def test_a_foreign_hook_is_neither_adopted_nor_reported_as_drift() -> None:
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks={"personal/resume": [foreign]},
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
 
     assert plan.repos_to_hook[0].absent is True, "ours is absent; the foreign one is not ours"
@@ -1374,6 +1429,7 @@ def test_a_converged_webhook_schedules_nothing() -> None:
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks=hooks_for(declared),
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
 
     assert plan.repos_to_hook == ()
@@ -1397,6 +1453,7 @@ def test_a_drifted_webhook_makes_the_plan_non_idempotent() -> None:
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks={"personal/resume": [{**converged_hook(), "active": False}]},
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
 
     assert not plan.is_noop
@@ -1416,6 +1473,7 @@ def test_a_declared_repository_missing_from_the_hook_reading_is_a_loud_failure()
             declared_settings=DECLARED_SETTINGS,
             existing_repo_hooks={"personal/resume": [converged_hook()]},
             declared_webhooks=N8N_HOOK_ONLY,
+            existing_repo_refs=ALL_REFS_PRESENT,
         )
 
 
@@ -1680,6 +1738,7 @@ def test_the_plan_names_an_events_surplus_distinctly() -> None:
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks={"personal/resume": [widened]},
         declared_webhooks=(HookDeclaration(spec=PR_AGENT_WEBHOOK, secret_key="x", event_comparison="equality"),),
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
     rendered = format_plan(plan)
 
@@ -1698,6 +1757,7 @@ def test_a_repository_with_no_hooks_is_scheduled_for_every_declared_webhook() ->
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks={"personal/resume": []},
         declared_webhooks=DECLARED_WEBHOOKS,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
 
     assert [change.url for change in plan.repos_to_hook] == [hook.spec.url for hook in DECLARED_WEBHOOKS]
@@ -1718,6 +1778,7 @@ def test_a_repository_converged_on_every_declared_hook_is_a_noop() -> None:
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks={"personal/resume": live_hooks},
         declared_webhooks=TWO_HOOKS,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
 
     assert plan.repos_to_hook == ()
@@ -1739,6 +1800,7 @@ def test_a_widened_pr_agent_hook_is_planned_while_n8n_stays_converged() -> None:
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks={"personal/resume": [converged_hook(), widened]},
         declared_webhooks=TWO_HOOKS,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
 
     assert not plan.is_noop
@@ -1761,6 +1823,7 @@ def test_the_plan_names_the_event_that_is_missing() -> None:
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks={"personal/resume": [live]},
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
     rendered = format_plan(plan)
 
@@ -1782,6 +1845,7 @@ def test_a_new_hook_is_summarised_with_its_destination() -> None:
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks={"personal/resume": []},
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
     rendered = format_plan(plan)
 
@@ -1805,6 +1869,7 @@ def _present_with_openkm_empty() -> ReconcilePlan:
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks=hooks_for(DECLARED),
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=refs_matching(settings),
     )
 
 
@@ -1845,15 +1910,17 @@ def test_an_empty_repository_with_no_source_is_not_an_unfilled_migration() -> No
     so reporting it would turn every new repository into a permanent failure.
     """
     declared = {"kubelab": [RepoSpec("fresh")]}
+    settings = {"kubelab/fresh": {**converged_body(), "empty": True}}
     plan = plan_reconcile(
         declared,
         existing_orgs={"kubelab"},
         existing_repos={"kubelab/fresh": True},
         existing_teams=converged_for(declared),
-        existing_repo_settings={"kubelab/fresh": {**converged_body(), "empty": True}},
+        existing_repo_settings=settings,
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks=hooks_for(declared),
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=refs_matching(settings),
     )
 
     assert plan.unfilled_migrations == ()
@@ -1871,6 +1938,7 @@ def test_a_migration_target_with_content_is_not_reported() -> None:
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks=hooks_for(DECLARED),
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
 
     assert plan.unfilled_migrations == ()
@@ -1894,6 +1962,7 @@ def test_a_migration_target_that_does_not_exist_yet_is_planned_not_reported() ->
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks={**hooks_for(DECLARED), "teledyne/openkm-brain": None},
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
 
     assert plan.unfilled_migrations == ()
@@ -1918,6 +1987,7 @@ def test_a_stale_settings_body_for_an_absent_repository_is_planned_not_reported(
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks={**hooks_for(DECLARED), "teledyne/openkm-brain": None},
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=refs_matching(settings),
     )
 
     assert [f"{r.org}/{r.name}" for r in plan.repos_to_migrate] == ["teledyne/openkm-brain"]
@@ -1953,7 +2023,9 @@ _UNFILLED = DeclaredRepo(
 @pytest.mark.parametrize("unfilled", [(_UNFILLED,), ()], ids=["unfilled", "filled"])
 # Every reported-never-acted-on field: an unfilled migration, and a native repository
 # absent from the forge or held empty (#2133, #2141). Same endings, same exit.
-@pytest.mark.parametrize("field", ["unfilled_migrations", "absent_native_repos", "emptied_native_repos"])
+@pytest.mark.parametrize(
+    "field", ["unfilled_migrations", "absent_native_repos", "emptied_native_repos", "lost_content_repos"]
+)
 def test_every_exit_path_fails_on_an_unfilled_migration_and_only_on_one(
     monkeypatch: pytest.MonkeyPatch,
     path: str,
@@ -2033,6 +2105,7 @@ def _plan_with_native_absent() -> ReconcilePlan:
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks={**hooks_for(declared), "personal/imagesensortool": None},
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
 
 
@@ -2069,6 +2142,7 @@ def test_a_present_native_repository_is_neither_created_nor_reported() -> None:
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks=hooks_for(declared),
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=ALL_REFS_PRESENT,
     )
     assert plan.absent_native_repos == ()
     assert plan.repos_to_create == ()
@@ -2092,6 +2166,7 @@ def _plan_with_native_present(*, empty: bool) -> ReconcilePlan:
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks=hooks_for(declared),
         declared_webhooks=N8N_HOOK_ONLY,
+        existing_repo_refs=refs_matching(settings),
     )
 
 

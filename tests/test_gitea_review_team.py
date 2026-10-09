@@ -24,6 +24,7 @@ from typing import Any
 import pytest
 
 from tests.test_gitea_repo_reconcile import (
+    ALL_REFS_PRESENT,
     DECLARED,
     DECLARED_SETTINGS,
     N8N_HOOK_ONLY,
@@ -73,7 +74,7 @@ def _plan(**overrides: Any) -> Any:
         "declared_webhooks": N8N_HOOK_ONLY,
     }
     kwargs.update(overrides)
-    return plan_reconcile(DECLARED, **kwargs)
+    return plan_reconcile(DECLARED, **kwargs, existing_repo_refs=ALL_REFS_PRESENT)
 
 
 # --------------------------------------------------------------------------- the grant
