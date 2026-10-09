@@ -19,13 +19,18 @@ REPO = Path(__file__).resolve().parent.parent
 ANSIBLE = REPO / "infra/ansible"
 COMMON = REPO / "infra/config/values/common.yaml"
 
-# `authelia.break_glass.name`, or by subscript, then the field read from it. A
-# registered result named `*_break_glass` is not one, and a call (`.get(`) is
-# not a name.
+# `authelia.break_glass.name`, by subscript, or by `.get('name'`, then the field
+# read from it. A registered result named `*_break_glass` is not one, and a
+# method name is not an entry: `.get(` names its entry in its argument.
 REF = re.compile(
-    r"""authelia\.break_glass(?:\.([A-Za-z_]\w*)(?![\w(])|\[\s*['"]([^'"]+)['"]\s*\])"""
+    r"""authelia\.break_glass(?:\.(?!get\()([A-Za-z_]\w*)(?![\w(])|\[\s*['"]([^'"]+)['"]\s*\]"""
+    r"""|\.get\(\s*['"]([^'"]+)['"][^)]*\))"""
     r"""(?:\.([A-Za-z_]\w*)(?![\w(]))?"""
 )
+
+
+def _entry(match: re.Match[str]) -> tuple[str, str | None]:
+    return match.group(1) or match.group(2) or match.group(3), match.group(4)
 
 
 def _declared() -> dict:
@@ -41,7 +46,7 @@ def _references() -> list[tuple[Path, str, str | None]]:
     found = []
     for path in _files():
         for match in REF.finditer(path.read_text()):
-            found.append((path.relative_to(REPO), match.group(1) or match.group(2), match.group(3)))
+            found.append((path.relative_to(REPO), *_entry(match)))
     return found
 
 
@@ -51,11 +56,12 @@ def test_the_scan_finds_the_reference_it_exists_for() -> None:
 
 def test_the_pattern_reads_both_forms_and_skips_what_is_not_a_name() -> None:
     def read(text: str) -> list[tuple[str, str | None]]:
-        return [(m.group(1) or m.group(2), m.group(3)) for m in REF.finditer(text)]
+        return [_entry(m) for m in REF.finditer(text)]
 
     assert read("authelia.break_glass.gitea.login") == [("gitea", "login")]
     assert read("authelia.break_glass['open-webui'].email") == [("open-webui", "email")]
-    assert read("authelia.break_glass.get('open-webui', {})") == []
+    # The stale key in the form that fails silently is still read, and checked.
+    assert read("authelia.break_glass.get('open_webui', {}).email") == [("open_webui", "email")]
     assert read("authelia.break_glass['open-webui'].get('email')") == [("open-webui", None)]
     assert read("_agent_stack_webui_break_glass.status") == []
 
