@@ -19,7 +19,9 @@ def test_embeddings_come_from_nan_so_no_local_model_loads() -> None:
     container at start (`get_ef`, routers/retrieval.py), and ace2 has 1.5 GB per service."""
     env = _env()
     assert env["RAG_EMBEDDING_ENGINE"] == "openai"
-    assert env["RAG_OPENAI_API_BASE_URL"] == env["OPENAI_API_BASE_URLS"], "one inference provider, one URL"
+    # NaN is the first chat backend; Hermes, the second, serves no embeddings.
+    assert env["RAG_OPENAI_API_BASE_URL"] == _context()["agent_stack_nan_api_base_url"]
+    assert env["OPENAI_API_BASE_URLS"].split(";")[0] == env["RAG_OPENAI_API_BASE_URL"]
     assert env["RAG_OPENAI_API_KEY"] == _context()["agent_stack_nan_api_key"]
     assert env["RAG_EMBEDDING_MODEL"] == _rag()["embedding_model"]
     assert env["RAG_EMBEDDING_BATCH_SIZE"] == str(_rag()["embedding_batch_size"])
@@ -33,5 +35,5 @@ def test_the_reranker_is_nan_and_hybrid_search_is_on_so_it_runs() -> None:
     assert env["ENABLE_RAG_HYBRID_SEARCH"] == "true"
     assert env["RAG_RERANKING_ENGINE"] == "external"
     assert env["RAG_RERANKING_MODEL"] == _rag()["reranking_model"]
-    assert env["RAG_EXTERNAL_RERANKER_URL"] == env["OPENAI_API_BASE_URLS"] + "/rerank"
+    assert env["RAG_EXTERNAL_RERANKER_URL"] == _context()["agent_stack_nan_api_base_url"] + "/rerank"
     assert env["RAG_EXTERNAL_RERANKER_API_KEY"] == _context()["agent_stack_nan_api_key"]

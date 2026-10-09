@@ -10,6 +10,46 @@
 # the vault mounted, that list is the only command guard it applies.
 # =============================================================================
 
+# Before the gateway starts, so a first provision orders the next boot too.
+- name: Install the unit that waits for Open WebUI's bridge
+  when: agent_stack_hermes_configured | bool and agent_stack_webui_configured | bool
+  block:
+    - name: Render the bridge wait unit
+      ansible.builtin.template:
+        src: agent-stack-hermes-bind.service.j2
+        dest: /etc/systemd/system/agent-stack-hermes-bind.service
+        owner: root
+        group: root
+        mode: "0644"
+      register: _agent_stack_hermes_bind_unit
+
+    # Enabled, not started: it orders the boot, and now the address exists.
+    - name: Enable the bridge wait unit at boot
+      ansible.builtin.systemd:
+        name: agent-stack-hermes-bind.service
+        enabled: true
+        daemon_reload: "{{ _agent_stack_hermes_bind_unit is changed }}"
+      when: not ansible_check_mode
+
+# A unit left waiting on a bridge nobody creates would delay the agent's manager
+# by its whole timeout at every boot.
+- name: Remove the unit that waits for Open WebUI's bridge
+  when: not (agent_stack_hermes_configured | bool and agent_stack_webui_configured | bool)
+  block:
+    - name: Disable the bridge wait unit
+      ansible.builtin.systemd:
+        name: agent-stack-hermes-bind.service
+        enabled: false
+      register: _agent_stack_hermes_bind_disabled
+      failed_when: >-
+        _agent_stack_hermes_bind_disabled is failed
+        and 'Could not find' not in (_agent_stack_hermes_bind_disabled.msg | default(''))
+
+    - name: Delete the bridge wait unit
+      ansible.builtin.file:
+        path: /etc/systemd/system/agent-stack-hermes-bind.service
+        state: absent
+
 - name: Stop hermes-kubelab when it is not configured
   when: not (agent_stack_hermes_configured | bool)
   block:
@@ -162,6 +202,27 @@
         'Pull complete' in _agent_stack_hermes_pull.stderr
         or 'Downloaded newer image' in _agent_stack_hermes_pull.stdout
 
+    # Same check as Open WebUI's: a binding is fixed at create time, so a gateway
+    # created before the bridge had its address runs with no port, and an
+    # unchanged spec hash keeps `up -d` off it.
+    - name: Read the Hermes port bindings requested vs the ones in effect
+      ansible.builtin.command: >-
+        docker inspect hermes-kubelab
+        --format '{% raw %}{{len .HostConfig.PortBindings}}:{{len .NetworkSettings.Ports}}{% endraw %}'
+      become_user: "{{ agent_stack_agent_user }}"
+      environment: "{{ agent_stack_agent_daemon_env }}"
+      register: _agent_stack_hermes_ports
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Hold whether the gateway runs unbound
+      ansible.builtin.set_fact:
+        _agent_stack_hermes_unbound: >-
+          {{ _agent_stack_hermes_ports.rc == 0
+             and (_agent_stack_hermes_ports.stdout | trim).split(':')[0] | int > 0
+             and (_agent_stack_hermes_ports.stdout | trim).split(':')[1] | int == 0 }}
+
     # A mounted config is not in Compose's spec hash. An env_file's content is
     # (measured 2026-10-07: emptying the sidecar's recreated it at the next `up`),
     # so the flag is only certain for the config, and harmless for the rest.
@@ -169,7 +230,8 @@
       ansible.builtin.command: >-
         docker compose -p {{ agent_stack_hermes_project }} -f {{ agent_stack_hermes_compose }} up -d
         {{ '--force-recreate' if (_agent_stack_hermes_env_file.changed or _agent_stack_hermes_config.changed
-                                  or _agent_stack_hermes_ts_env_file.changed) else '' }}
+                                  or _agent_stack_hermes_ts_env_file.changed
+                                  or _agent_stack_hermes_unbound | bool) else '' }}
       become_user: "{{ agent_stack_agent_user }}"
       environment: "{{ agent_stack_agent_daemon_env }}"
       register: _agent_stack_hermes_up

@@ -128,3 +128,44 @@ def test_a_container_on_another_network_is_refused_which_is_what_makes_ufw_the_c
     assert "--network" not in cmd
     assert "{{ agent_stack_webui_bridge.gateway }} {{ agent_stack_hermes.api_port }}" in cmd
     assert task["failed_when"] == "_agent_stack_hermes_other_network.rc == 0"
+
+
+# --------------------------------------------------------------------------- the boot order
+
+
+def _unit() -> str:
+    return _render("agent-stack-hermes-bind.service.j2")
+
+
+def test_the_agents_manager_starts_only_once_the_bridge_has_its_address() -> None:
+    """The bridge is the system daemon's and Hermes publishes from the agent's user
+    manager: at boot the second can start first and find no address to bind."""
+    uid = _context()["_agent_stack_agent_uid"]
+    unit = _unit()
+    assert f"Before=user@{uid}.service" in unit
+    assert "After=docker.service" in unit
+    assert f"wait-for-tailscale-addr.sh {BRIDGE['gateway']} {BRIDGE['name']}" in unit
+
+
+def test_a_missing_bridge_delays_the_agent_but_does_not_keep_it_down() -> None:
+    """Availability, not containment: without the address the bind fails closed,
+    so the egress rule's RequiredBy= would only cost the agent its other work."""
+    uid = _context()["_agent_stack_agent_uid"]
+    unit = _unit()
+    assert f"WantedBy=user@{uid}.service" in unit
+    assert "RequiredBy=" not in unit
+
+
+def test_the_boot_unit_exists_exactly_while_hermes_publishes_on_the_bridge() -> None:
+    gate = "agent_stack_hermes_configured | bool and agent_stack_webui_configured | bool"
+    assert _named("Install the unit that waits for Open WebUI's bridge")["when"] == gate
+    assert _named("Remove the unit that waits for Open WebUI's bridge")["when"] == f"not ({gate})"
+
+
+def test_a_hermes_container_left_unbound_is_recreated() -> None:
+    """A port binding is fixed at create time: a gateway created before the address
+    existed runs with no port, and an unchanged spec hash keeps `up -d` off it."""
+    probe = _named("Read the Hermes port bindings requested vs the ones in effect")
+    assert "hermes-kubelab" in probe["ansible.builtin.command"]
+    start = _named("Start hermes-kubelab")["ansible.builtin.command"]
+    assert "_agent_stack_hermes_unbound" in start
