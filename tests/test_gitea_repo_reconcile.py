@@ -43,6 +43,7 @@ from toolkit.features.gitea_repos import (
     actor_for_org_creation,
     actor_for_repo_creation,
     find_declared_hook,
+    format_plan,
     load_declaration,
     load_settings,
     load_webhook,
@@ -504,6 +505,12 @@ def test_the_real_declaration_matches_adr_065():
     # went missing would silently turn a migration back into an empty shell -- the
     # exact regression this shape was introduced to end -- and nothing else would
     # look wrong, because creating a declared repository is a legitimate outcome.
+    #
+    # It stays after the GitHub copy is deleted (#1922, #2133): from then on it is
+    # PROVENANCE, not a live remote. A repository lost from Gitea then plans a
+    # migration from a source that no longer exists and fails loudly, where a
+    # removed source would plan a create and bring it back as an empty shell. The
+    # restore path is the R2 backup (docs/runbooks/gitea-retire-github-copy.md).
     assert all(s.migrate_from for specs in declared.values() for s in specs), (
         "a declared repository lost its `migrate_from`. All three named by ADR-065 are migrations; "
         "without a source the reconciler would create an empty shell, which `POST /repos/migrate` "
@@ -1778,3 +1785,202 @@ def test_a_new_hook_is_summarised_with_its_destination() -> None:
 
     assert f"+ hook personal/resume   -> {DECLARED_WEBHOOK.url}" in rendered
     assert "None ->" not in rendered
+
+
+# --- a migration that never filled its repository (#2133) ---------------------
+
+
+def _present_with_openkm_empty() -> ReconcilePlan:
+    """Today's prod, transcribed: every declared repository present, openkm-brain a git-empty shell."""
+    settings = settings_for(DECLARED)
+    settings["teledyne/openkm-brain"] = {**converged_body(), "empty": True, "size": 22}
+    return plan_reconcile(
+        DECLARED,
+        existing_orgs=set(DECLARED),
+        existing_repos={"teledyne/fae-brain": False, "teledyne/openkm-brain": False, "personal/resume": False},
+        existing_teams=converged_for(DECLARED),
+        existing_repo_settings=settings,
+        declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks=hooks_for(DECLARED),
+        declared_webhooks=N8N_HOOK_ONLY,
+    )
+
+
+def test_a_present_but_empty_migration_target_is_reported() -> None:
+    """Presence is not arrival. Measured on prod 2026-10-08 (#2133).
+
+    `teledyne/openkm-brain` was declared with a source, existed as PR1's shell, and
+    so planned neither a create nor a migration: `make gitea-reconcile` printed
+    "forge matches the declaration" for five weeks over a repository holding no
+    code, while its 18 issues and 17 pull requests lived only on GitHub.
+    """
+    plan = _present_with_openkm_empty()
+
+    assert [f"{r.org}/{r.name}" for r in plan.unfilled_migrations] == ["teledyne/openkm-brain"]
+    rendered = format_plan(plan)
+    assert "teledyne/openkm-brain" in rendered and "gitea-drop-empty" in rendered
+    assert "forge matches the declaration" not in rendered
+
+
+def test_an_unfilled_migration_is_reported_not_acted_on() -> None:
+    """The repair deletes a repository, which this reconciler never does (#1076).
+
+    So the plan stays a no-op -- `execute` has nothing to do -- and the CLI is what
+    turns the report into a failing exit. The repair is `make gitea-drop-empty`,
+    whose own refusals stand between the report and the delete.
+    """
+    plan = _present_with_openkm_empty()
+
+    assert [f"{r.org}/{r.name}" for r in plan.unfilled_migrations] == ["teledyne/openkm-brain"]
+    assert plan.is_noop
+    assert plan.repos_to_migrate == ()
+
+
+def test_an_empty_repository_with_no_source_is_not_an_unfilled_migration() -> None:
+    """A declared repository WITHOUT `migrate_from` is created empty on purpose.
+
+    Its first push is somebody's future work, not a migration that went missing,
+    so reporting it would turn every new repository into a permanent failure.
+    """
+    declared = {"kubelab": [RepoSpec("fresh")]}
+    plan = plan_reconcile(
+        declared,
+        existing_orgs={"kubelab"},
+        existing_repos={"kubelab/fresh": True},
+        existing_teams=converged_for(declared),
+        existing_repo_settings={"kubelab/fresh": {**converged_body(), "empty": True}},
+        declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks=hooks_for(declared),
+        declared_webhooks=N8N_HOOK_ONLY,
+    )
+
+    assert plan.unfilled_migrations == ()
+
+
+def test_a_migration_target_with_content_is_not_reported() -> None:
+    """The converged case: a migrated repository reads `empty: False`."""
+    settings = {name: {**body, "empty": False} for name, body in settings_for(DECLARED).items() if body}
+    plan = plan_reconcile(
+        DECLARED,
+        existing_orgs=set(DECLARED),
+        existing_repos={"teledyne/fae-brain": False, "teledyne/openkm-brain": False, "personal/resume": False},
+        existing_teams=converged_for(DECLARED),
+        existing_repo_settings=settings,
+        declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks=hooks_for(DECLARED),
+        declared_webhooks=N8N_HOOK_ONLY,
+    )
+
+    assert plan.unfilled_migrations == ()
+
+
+def test_a_migration_target_that_does_not_exist_yet_is_planned_not_reported() -> None:
+    """Absent is `repos_to_migrate`'s case; `unfilled_migrations` is only about present repositories.
+
+    The caller reads `existing_repo_settings` for EVERY declared repository and
+    passes None for an absent one (the contract `plan_reconcile` documents), so
+    the lookup never misses a key; a None body is not evidence of emptiness.
+    """
+    settings = settings_for(DECLARED)
+    settings["teledyne/openkm-brain"] = None
+    plan = plan_reconcile(
+        DECLARED,
+        existing_orgs=set(DECLARED),
+        existing_repos={"teledyne/fae-brain": False, "personal/resume": False},
+        existing_teams=converged_for(DECLARED),
+        existing_repo_settings=settings,
+        declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks={**hooks_for(DECLARED), "teledyne/openkm-brain": None},
+        declared_webhooks=N8N_HOOK_ONLY,
+    )
+
+    assert plan.unfilled_migrations == ()
+    assert [f"{r.org}/{r.name}" for r in plan.repos_to_migrate] == ["teledyne/openkm-brain"]
+
+
+def test_a_stale_settings_body_for_an_absent_repository_is_planned_not_reported() -> None:
+    """Presence is read from `existing_repos`, never inferred from a settings body.
+
+    A body left behind for a repository the forge no longer lists would otherwise put
+    it in `repos_to_migrate` AND `unfilled_migrations`, and the run that migrates it
+    would then fail on its own pre-execution plan (#2134 review).
+    """
+    settings = settings_for(DECLARED)
+    settings["teledyne/openkm-brain"] = {**(settings["teledyne/openkm-brain"] or {}), "empty": True}
+    plan = plan_reconcile(
+        DECLARED,
+        existing_orgs=set(DECLARED),
+        existing_repos={"teledyne/fae-brain": False, "personal/resume": False},
+        existing_teams=converged_for(DECLARED),
+        existing_repo_settings=settings,
+        declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks={**hooks_for(DECLARED), "teledyne/openkm-brain": None},
+        declared_webhooks=N8N_HOOK_ONLY,
+    )
+
+    assert [f"{r.org}/{r.name}" for r in plan.repos_to_migrate] == ["teledyne/openkm-brain"]
+    assert plan.unfilled_migrations == ()
+
+
+# --- the CLI turns the report into a failing exit (#2134 review) --------------
+
+
+class _NoForgeAdmin:
+    """A forge with nothing on it: every read the reconcile prelude makes answers empty."""
+
+    def list_orgs(self) -> set[str]:
+        return set()
+
+    def list_repos(self) -> set[str]:
+        return set()
+
+
+_UNFILLED = DeclaredRepo(
+    org="teledyne", name="openkm-brain", private=True, migrate_from="github:mlorentedev/openkm-brain"
+)
+
+
+@pytest.mark.parametrize(
+    ("path", "work", "args"),
+    [
+        ("nothing to do", {}, ()),
+        ("plan only", {"orgs_to_create": ("teledyne",)}, ()),
+        ("after --apply", {"orgs_to_create": ("teledyne",)}, ("--apply",)),
+    ],
+)
+@pytest.mark.parametrize("unfilled", [(_UNFILLED,), ()], ids=["unfilled", "filled"])
+def test_every_exit_path_fails_on_an_unfilled_migration_and_only_on_one(
+    monkeypatch: pytest.MonkeyPatch,
+    path: str,
+    work: dict[str, tuple[str, ...]],
+    args: tuple[str, ...],
+    unfilled: tuple[DeclaredRepo, ...],
+) -> None:
+    """Each of the command's three endings checks the report, so deleting any one
+    call site turns its row red here rather than passing a prod run silently."""
+    from typer.testing import CliRunner
+
+    import toolkit.cli.services as cli
+    import toolkit.features.gitea_repos as repos
+
+    plan = ReconcilePlan(unfilled_migrations=unfilled, **work)
+
+    class _Config:
+        def __init__(self, *_a: object, **_k: object) -> None:
+            pass
+
+        def get_merged_config(self) -> dict[str, object]:
+            return {"apps": {"auth": {"identities": {}}}}
+
+    monkeypatch.setattr(cli, "_gitea_clients", lambda env: (_NoForgeAdmin(), None, "bot", "https://forge.invalid"))
+    monkeypatch.setattr(cli, "ConfigurationManager", _Config)
+    monkeypatch.setattr(cli, "_report_machine_ownership", lambda *a, **k: None)
+    monkeypatch.setattr(repos, "load_declaration", lambda merged: {"teledyne": [RepoSpec("openkm-brain")]})
+    monkeypatch.setattr(repos, "load_settings", lambda merged: None)
+    monkeypatch.setattr(repos, "load_webhooks", lambda merged: ())
+    monkeypatch.setattr(repos, "plan_reconcile", lambda *a, **k: plan)
+    monkeypatch.setattr(repos, "execute", lambda *a, **k: repos.ExecutionReport())
+
+    result = CliRunner().invoke(cli.app, ["gitea", "reconcile", *args])
+
+    assert result.exit_code == (1 if unfilled else 0), f"{path}: {result.output}"

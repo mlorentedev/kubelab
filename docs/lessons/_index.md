@@ -1,6 +1,6 @@
 # Lessons
 
-539 lessons, one file each. Newest: 2026-10-08. Open a category for its list.
+540 lessons, one file each. Newest: 2026-10-08. Open a category for its list.
 
 | Category | # | Scope |
 |---|---|---|
@@ -10,7 +10,7 @@
 | [ansible-provisioning](ansible-provisioning/_index.md) | 57 | Roles, playbooks, IaC, node setup |
 | [process-method](process-method/_index.md) | 73 | Specs, reviews, how work is run |
 | [edge-tls](edge-tls/_index.md) | 27 | Traefik, TLS, the request path |
-| [toolkit-tooling](toolkit-tooling/_index.md) | 46 | Toolkit CLI, Make, Python, tests |
+| [toolkit-tooling](toolkit-tooling/_index.md) | 47 | Toolkit CLI, Make, Python, tests |
 | [gitops-delivery](gitops-delivery/_index.md) | 32 | Argo CD, releases, promotion |
 | [ci-automation](ci-automation/_index.md) | 41 | CI workflows, gates, GitHub |
 | [observability](observability/_index.md) | 27 | Metrics, logs, alerting |

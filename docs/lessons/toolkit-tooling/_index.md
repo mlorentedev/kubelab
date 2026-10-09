@@ -1,9 +1,10 @@
 # The toolkit CLI, Make, Python and local tooling
 
-46 lessons, newest first. Back to [all categories](../_index.md).
+47 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 541 | [A reconciler that tests presence reads an unfilled migration as converged](lesson-541-a-reconciler-that-tests-presence-reads-an-unfilled-migration-as-converged.md) | 2026-10-08 |
 | 537 | [Keeping both sides of a conflict also keeps both copies of a line that must exist once](lesson-537-keeping-both-sides-of-a-conflict-also-keeps-both-copies-of-a-line-that-must-exist-once.md) | 2026-10-07 |
 | 536 | [A platform.json conflict is never resolved by taking a side](lesson-536-a-platform-json-conflict-is-never-resolved-by-taking-a-side.md) | 2026-10-07 |
 | 528 | [A setting that shares a name across two systems does not share its meaning](lesson-528-a-setting-that-shares-a-name-across-two-systems-does-not-share-its-meaning.md) | 2026-10-07 |

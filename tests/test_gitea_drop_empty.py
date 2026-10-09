@@ -43,6 +43,7 @@ from toolkit.features.gitea_repos import DropDecision, plan_drop
 def test_an_empty_declared_repository_may_be_dropped() -> None:
     """The one case this command exists for."""
     decision = plan_drop(
+        tracker_items=0,
         full_name="personal/resume",
         repo={"empty": True, "size": 22},
         declared={"personal/resume"},
@@ -59,6 +60,7 @@ def test_a_repository_with_content_is_refused() -> None:
     anything. This one holds for every caller.
     """
     decision = plan_drop(
+        tracker_items=0,
         full_name="personal/resume",
         repo={"empty": False, "size": 4102},
         declared={"personal/resume"},
@@ -76,6 +78,7 @@ def test_an_undeclared_repository_is_refused_even_when_empty() -> None:
     does not make it ours to delete.
     """
     decision = plan_drop(
+        tracker_items=0,
         full_name="personal/somebody-elses-thing",
         repo={"empty": True, "size": 0},
         declared={"personal/resume"},
@@ -90,7 +93,7 @@ def test_an_absent_repository_is_already_converged() -> None:
     Same contract as `revoke_token`'s 404 handling. A command that fails on its
     second run is not an operation, it is a script.
     """
-    decision = plan_drop(full_name="personal/resume", repo=None, declared={"personal/resume"})
+    decision = plan_drop(tracker_items=0, full_name="personal/resume", repo=None, declared={"personal/resume"})
     assert not decision.may_drop
     assert "already absent" in (decision.reason or "")
 
@@ -104,9 +107,9 @@ def test_emptiness_is_read_from_the_field_gitea_sets_not_inferred_from_size() ->
     a guard written as `size < 100` would eventually accept a tiny real repository
     (not harmless). `empty` is the field Gitea maintains for this question.
     """
-    assert plan_drop(full_name="a/b", repo={"empty": True, "size": 22}, declared={"a/b"}).may_drop
+    assert plan_drop(tracker_items=0, full_name="a/b", repo={"empty": True, "size": 22}, declared={"a/b"}).may_drop
 
-    tiny_but_real = plan_drop(full_name="a/b", repo={"empty": False, "size": 22}, declared={"a/b"})
+    tiny_but_real = plan_drop(tracker_items=0, full_name="a/b", repo={"empty": False, "size": 22}, declared={"a/b"})
     assert not tiny_but_real.may_drop
 
 
@@ -117,7 +120,7 @@ def test_a_missing_empty_field_is_refused_rather_than_assumed() -> None:
     question was not answered, and defaulting it to True would delete on the
     strength of a missing value.
     """
-    decision = plan_drop(full_name="a/b", repo={"size": 22}, declared={"a/b"})
+    decision = plan_drop(tracker_items=0, full_name="a/b", repo={"size": 22}, declared={"a/b"})
     assert not decision.may_drop
     assert "did not report" in (decision.reason or "")
 
@@ -131,7 +134,7 @@ def test_a_malformed_target_is_refused(full_name: str) -> None:
     the API at all.
     """
     with pytest.raises(ValueError):
-        plan_drop(full_name=full_name, repo={"empty": True}, declared={full_name})
+        plan_drop(tracker_items=0, full_name=full_name, repo={"empty": True}, declared={full_name})
 
 
 def test_the_decision_carries_no_capability() -> None:
@@ -171,3 +174,100 @@ def test_the_declared_set_is_produced_by_one_function_not_by_each_caller() -> No
     }
     assert declared_full_names(declaration) == {"personal/resume"}
     assert all("RepoSpec" not in name for name in declared_full_names(declaration))
+
+
+# --- #2133: an empty GIT repository is not an empty REPOSITORY ------------------
+
+
+def test_an_empty_repository_with_issues_is_refused() -> None:
+    """#2133: `empty` is about git, and issues live outside it.
+
+    `teledyne/openkm-brain` read `empty: True` on 2026-10-08 while holding two
+    issues with comments, one of them a fixture APP-CONFIG-015 replays. The old
+    guard would have deleted both, because the only content it knew of was git.
+    """
+    decision = plan_drop(
+        full_name="teledyne/openkm-brain",
+        repo={"empty": True, "size": 22},
+        declared={"teledyne/openkm-brain"},
+        tracker_items=2,
+    )
+    assert not decision.may_drop
+    assert "2 issue" in (decision.reason or "")
+
+
+def test_an_unknown_tracker_count_is_refused() -> None:
+    """None means the count was not read, which is not zero."""
+    decision = plan_drop(full_name="a/b", repo={"empty": True}, declared={"a/b"}, tracker_items=None)
+    assert not decision.may_drop
+    assert "did not count" in (decision.reason or "")
+
+
+def test_the_operator_may_discard_issues_only_by_naming_their_exact_count() -> None:
+    """The override is a count, not a switch, so a stale approval cannot delete more than was seen."""
+
+    def drop(discard: int | None):
+        return plan_drop(
+            full_name="a/b", repo={"empty": True}, declared={"a/b"}, tracker_items=2, discard_tracker_items=discard
+        )
+
+    assert drop(2).may_drop
+    assert not drop(1).may_drop
+    assert not drop(3).may_drop
+    assert "2" in (drop(1).reason or "")
+
+
+def test_the_discard_count_cannot_unlock_a_repository_with_git_content() -> None:
+    decision = plan_drop(
+        full_name="a/b", repo={"empty": False}, declared={"a/b"}, tracker_items=2, discard_tracker_items=2
+    )
+    assert not decision.may_drop
+
+
+# --- the count the decision depends on ------------------------------------------
+
+
+class _Response:
+    def __init__(self, status: int, payload: object) -> None:
+        self.status_code = status
+        self.ok = 200 <= status < 300
+        self._payload = payload
+        self.content = b"x"
+        self.text = str(payload)
+
+    def json(self) -> object:
+        return self._payload
+
+
+class _Session:
+    """Answers by the `type=` filter, so a client that asks for one kind only is visible."""
+
+    def __init__(self, issues: int, pulls: int) -> None:
+        self.by_type = {
+            "issues": [{"number": n} for n in range(issues)],
+            "pulls": [{"number": n} for n in range(pulls)],
+        }
+        self.urls: list[str] = []
+
+    def request(self, method: str, url: str, **_kwargs: object) -> _Response:
+        self.urls.append(url)
+        kind = url.split("type=")[1].split("&")[0]
+        return _Response(200, self.by_type[kind])
+
+
+def test_the_count_includes_closed_issues_and_pull_requests() -> None:
+    """A closed issue is deleted with the repository as surely as an open one.
+
+    `GET /repos/{o}/{r}` carries `open_issues_count` and `open_pr_counter`, which is
+    why it is tempting and why it is wrong: both are OPEN counts, so a repository
+    whose history is all closed would read as holding nothing.
+    """
+    from toolkit.features.gitea_client import GiteaBasicAuthClient
+
+    client = GiteaBasicAuthClient("https://gitea.example.invalid", "manu", "pw")
+    session = _Session(issues=2, pulls=3)
+    client.session = session  # type: ignore[assignment]
+
+    assert client.count_tracker_items("teledyne", "openkm-brain") == 5
+    assert all("state=all" in url for url in session.urls)
+    assert {url.split("type=")[1].split("&")[0] for url in session.urls} == {"issues", "pulls"}

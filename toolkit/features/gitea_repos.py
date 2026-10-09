@@ -535,6 +535,11 @@ class ReconcilePlan:
     undeclared_orgs: tuple[str, ...] = ()
     undeclared_repos: tuple[str, ...] = ()
     visibility_drift: tuple[VisibilityDrift, ...] = ()
+    # Declared with a source, present, and git-empty: a migration that never filled
+    # its repository (#2133). Reported and never acted on, like `visibility_drift` --
+    # the repair deletes the shell, and this reconciler cannot delete. The CLI turns
+    # it into a failing exit instead.
+    unfilled_migrations: tuple[DeclaredRepo, ...] = ()
 
     @property
     def is_noop(self) -> bool:
@@ -811,6 +816,24 @@ def plan_reconcile(
         if f"{org}/{spec.name}" in existing_repos and existing_repos[f"{org}/{spec.name}"] != spec.private
     )
 
+    # PRESENCE IS NOT ARRIVAL. A repository that exists appears in neither list
+    # above, which is right for a migration that happened and wrong for a shell
+    # that blocked one: `POST /repos/migrate` answers 409 on an existing target, so
+    # a shell created before the migration ran leaves the declared move permanently
+    # undone while every list here is empty. `teledyne/openkm-brain` read "forge
+    # matches the declaration" from 2026-09-02 to 2026-10-08 holding no code (#2133).
+    # Only for repositories WITH a source: one declared without `migrate_from` is
+    # created empty on purpose, and its first push is future work, not a defect.
+    # `is True`, not truthiness: an absent `empty` is not evidence of emptiness.
+    unfilled_migrations = tuple(
+        DeclaredRepo(org=org, name=spec.name, private=spec.private, migrate_from=spec.migrate_from)
+        for org, specs in sorted(declared.items())
+        for spec in sorted(specs, key=lambda s: s.name)
+        if spec.migrate_from
+        and f"{org}/{spec.name}" in existing_repos
+        and (existing_repo_settings[f"{org}/{spec.name}"] or {}).get("empty") is True
+    )
+
     return ReconcilePlan(
         orgs_to_create=orgs_to_create,
         repos_to_create=repos_to_create,
@@ -823,6 +846,7 @@ def plan_reconcile(
         undeclared_orgs=undeclared_orgs,
         undeclared_repos=undeclared_repos,
         visibility_drift=visibility_drift,
+        unfilled_migrations=unfilled_migrations,
     )
 
 
@@ -1214,6 +1238,13 @@ def format_plan(plan: ReconcilePlan) -> str:
         want = "private" if drift.declared_private else "public"
         got = "private" if drift.live_private else "public"
         lines.append(f"  ! repo {drift.full_name}   declared {want}, forge has it {got} — reported, not changed")
+    for unfilled in plan.unfilled_migrations:
+        full_name = f"{unfilled.org}/{unfilled.name}"
+        lines.append(
+            f"  ! repo {full_name}   declared to migrate from {unfilled.migrate_from}, but the forge "
+            f"holds it EMPTY — the migration never ran. Repair: `make gitea-drop-empty REPO={full_name}`, "
+            f"then `make gitea-reconcile APPLY=1`"
+        )
     if not lines:
         return "  (nothing to do — forge matches the declaration)"
     return "\n".join(lines)
@@ -1295,7 +1326,14 @@ class DropDecision:
     reason: str | None = None
 
 
-def plan_drop(full_name: str, repo: Mapping[str, Any] | None, declared: set[str]) -> DropDecision:
+def plan_drop(
+    full_name: str,
+    repo: Mapping[str, Any] | None,
+    declared: set[str],
+    *,
+    tracker_items: int | None,
+    discard_tracker_items: int | None = None,
+) -> DropDecision:
     """Decide whether an EMPTY DECLARED repository may be removed. Pure -- no network.
 
     WHY THIS DOES NOT REOPEN #1076'S DELETION QUESTION. The reconciler still cannot
@@ -1305,8 +1343,8 @@ def plan_drop(full_name: str, repo: Mapping[str, Any] | None, declared: set[str]
     shells, and `POST /repos/migrate` answers 409 rather than filling one, so the
     shells block the migration they were declared for.
 
-    THREE REFUSALS, and the order is deliberate -- each answers a different
-    question, and the first two would be wrong to skip even if the third held:
+    FOUR REFUSALS, and the order is deliberate -- each answers a different
+    question, and the earlier ones would be wrong to skip even if a later one held:
 
     - **Malformed target.** `owner/name` or nothing. A typo must not become a URL.
     - **Not declared.** A stray survives, always. Emptiness does not make someone
@@ -1317,6 +1355,18 @@ def plan_drop(full_name: str, repo: Mapping[str, Any] | None, declared: set[str]
       reports `size: 22` -- the git directory itself -- measured on all three
       shells 2026-09-02. An absent `empty` key is "I do not know", refused rather
       than defaulted, because defaulting it to True deletes on a missing value.
+    - **Issues or pull requests, or their count unknown** (#2133). `empty` is about
+      GIT, and the tracker lives outside it: `teledyne/openkm-brain` read
+      `empty: True` on 2026-10-08 while holding two issues, one a fixture
+      APP-CONFIG-015 replays. `tracker_items` counts both kinds in every state;
+      None means it was not read and is refused like a missing `empty`. The
+      operator may discard them only by passing `discard_tracker_items` equal to
+      the live count -- a number, not a switch, so an approval given against one
+      reading is refused by a later reading that differs. It is not a lock: an
+      item created between the count and the delete goes with the repository.
+      Gitea has no conditional delete, and this forge's only writers are the
+      operator and its machine identities, so the window is accepted rather than
+      closed (#2134 review).
 
     None of these guards the CREDENTIAL, which is the point worth remembering: the
     superadmin's basic-auth session can delete any repository on the instance, and
@@ -1349,6 +1399,21 @@ def plan_drop(full_name: str, repo: Mapping[str, Any] | None, declared: set[str]
             False,
             f"{full_name} is not empty (size={repo.get('size', '?')}). This command removes the "
             f"shells PR1 created, never a repository with content.",
+        )
+
+    if tracker_items is None:
+        return DropDecision(
+            False,
+            f"the caller did not count {full_name}'s issues and pull requests. An empty git "
+            f"repository can still hold them, so an unread count is refused, not assumed zero.",
+        )
+
+    if tracker_items and discard_tracker_items != tracker_items:
+        return DropDecision(
+            False,
+            f"{full_name} has no git content but holds {tracker_items} issue(s) and pull request(s), "
+            f"which the delete removes with it. To discard them, pass the live count: "
+            f"--discard-tracker-items {tracker_items} (`DISCARD={tracker_items}` through make).",
         )
 
     return DropDecision(True)
