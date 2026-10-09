@@ -24,6 +24,7 @@ the acceptance criterion, and it is asserted here rather than left to review.
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
@@ -173,6 +174,18 @@ class _RefsEverywhere(dict[str, bool]):
 
 
 ALL_REFS_PRESENT = _RefsEverywhere()
+
+
+def refs_matching(settings: Mapping[str, Mapping[str, object] | None]) -> dict[str, bool]:
+    """Refs consistent with each body's `empty` flag: a never-pushed shell has none.
+
+    A fixture that sets `empty: True` and answers "has refs" describes a repository
+    that cannot exist, and passes only while no check reads both (#2146 review)."""
+    refs = _RefsEverywhere()
+    for full_name, body in settings.items():
+        if body and body.get("empty") is True:
+            refs[full_name] = False
+    return refs
 
 
 def hooks_for(declared: object) -> dict[str, list[dict[str, object]] | None]:
@@ -1856,7 +1869,7 @@ def _present_with_openkm_empty() -> ReconcilePlan:
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks=hooks_for(DECLARED),
         declared_webhooks=N8N_HOOK_ONLY,
-        existing_repo_refs=ALL_REFS_PRESENT,
+        existing_repo_refs=refs_matching(settings),
     )
 
 
@@ -1897,16 +1910,17 @@ def test_an_empty_repository_with_no_source_is_not_an_unfilled_migration() -> No
     so reporting it would turn every new repository into a permanent failure.
     """
     declared = {"kubelab": [RepoSpec("fresh")]}
+    settings = {"kubelab/fresh": {**converged_body(), "empty": True}}
     plan = plan_reconcile(
         declared,
         existing_orgs={"kubelab"},
         existing_repos={"kubelab/fresh": True},
         existing_teams=converged_for(declared),
-        existing_repo_settings={"kubelab/fresh": {**converged_body(), "empty": True}},
+        existing_repo_settings=settings,
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks=hooks_for(declared),
         declared_webhooks=N8N_HOOK_ONLY,
-        existing_repo_refs=ALL_REFS_PRESENT,
+        existing_repo_refs=refs_matching(settings),
     )
 
     assert plan.unfilled_migrations == ()
