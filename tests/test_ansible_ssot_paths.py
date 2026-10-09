@@ -41,7 +41,8 @@ REPO = Path(__file__).resolve().parent.parent
 ANSIBLE = REPO / "infra/ansible"
 VALUES = REPO / "infra/config/values"
 SECRETS = REPO / "infra/config/secrets"
-ENVS = ("dev", "staging", "prod")
+# Every `deploy_env` a playbook runs with: `provision-gcp1.yml` runs as `hub`.
+ENVS = ("dev", "staging", "prod", "hub")
 
 CONFIG_ROOTS = ("config", "gitea_config")
 SECRET_ROOTS = ("secrets", "gitea_secrets")
@@ -146,7 +147,11 @@ def _load(path: Path) -> dict:
 
 def _trees(root: str) -> list[dict]:
     if root in SECRET_ROOTS:
-        return [_merge(_load(SECRETS / "common.enc.yaml"), _load(SECRETS / f"{env}.enc.yaml")) for env in ENVS]
+        common = _load(SECRETS / "common.enc.yaml")
+        # An env with no SOPS file of its own (the hub) reads common's alone.
+        return [common] + [
+            _merge(common, _load(SECRETS / f"{env}.enc.yaml")) for env in ENVS if (SECRETS / f"{env}.enc.yaml").exists()
+        ]
     return [_merge(_load(VALUES / "common.yaml"), _load(VALUES / f"{env}.yaml")) for env in ENVS]
 
 
