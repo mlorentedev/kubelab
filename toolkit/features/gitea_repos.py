@@ -1360,7 +1360,11 @@ def plan_drop(
       None means it was not read and is refused like a missing `empty`. The
       operator may discard them only by passing `discard_tracker_items` equal to
       the live count -- a number, not a switch, so an approval given against one
-      reading cannot delete more than was seen.
+      reading is refused by a later reading that differs. It is not a lock: an
+      item created between the count and the delete goes with the repository.
+      Gitea has no conditional delete, and this forge's only writers are the
+      operator and its machine identities, so the window is accepted rather than
+      closed (#2134 review).
 
     None of these guards the CREDENTIAL, which is the point worth remembering: the
     superadmin's basic-auth session can delete any repository on the instance, and

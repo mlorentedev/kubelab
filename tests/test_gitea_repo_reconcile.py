@@ -1871,3 +1871,27 @@ def test_a_migration_target_with_content_is_not_reported() -> None:
     )
 
     assert plan.unfilled_migrations == ()
+
+
+def test_a_migration_target_that_does_not_exist_yet_is_planned_not_reported() -> None:
+    """Absent is `repos_to_migrate`'s case; `unfilled_migrations` is only about present repositories.
+
+    The caller reads `existing_repo_settings` for EVERY declared repository and
+    passes None for an absent one (the contract `plan_reconcile` documents), so
+    the lookup never misses a key; a None body is not evidence of emptiness.
+    """
+    settings = settings_for(DECLARED)
+    settings["teledyne/openkm-brain"] = None
+    plan = plan_reconcile(
+        DECLARED,
+        existing_orgs=set(DECLARED),
+        existing_repos={"teledyne/fae-brain": False, "personal/resume": False},
+        existing_teams=converged_for(DECLARED),
+        existing_repo_settings=settings,
+        declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks={**hooks_for(DECLARED), "teledyne/openkm-brain": None},
+        declared_webhooks=N8N_HOOK_ONLY,
+    )
+
+    assert plan.unfilled_migrations == ()
+    assert [f"{r.org}/{r.name}" for r in plan.repos_to_migrate] == ["teledyne/openkm-brain"]

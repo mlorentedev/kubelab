@@ -50,9 +50,14 @@ a loss.
 S=$(mktemp -d)
 R=<name>; O=<gitea-org>
 make gitea-git ARGS="clone --quiet --mirror https://gitea.kubelab.live/$O/$R.git $S/$R.git"
-git ls-remote --heads --tags https://github.com/mlorentedev/$R.git | while read -r sha ref; do
-  git -C "$S/$R.git" cat-file -e "$sha^{commit}" 2>/dev/null || echo "MISSING $ref $sha"
-done    # must print nothing
+# An annotated tag is listed twice, as its tag object and peeled (`^{}`) to its
+# commit. Only the commit is compared, so a re-created tag object is not a loss.
+git ls-remote --heads --tags https://github.com/mlorentedev/$R.git \
+  | awk '{ if (sub(/\^\{\}$/, "", $2)) peeled[$2] = $1; else ref[$2] = $1 }
+         END { for (r in ref) print ((r in peeled) ? peeled[r] : ref[r]), r }' \
+  | while read -r sha ref; do
+      git -C "$S/$R.git" cat-file -e "$sha^{commit}" 2>/dev/null || echo "MISSING $ref $sha"
+    done    # must print nothing
 ```
 
 A `MISSING` line is history the delete would lose. If it is a branch GitHub moved ahead of
