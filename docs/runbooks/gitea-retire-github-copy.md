@@ -51,7 +51,7 @@ S=$(mktemp -d)
 R=<name>; O=<gitea-org>
 make gitea-git ARGS="clone --quiet --mirror https://gitea.kubelab.live/$O/$R.git $S/$R.git"
 # Read GitHub's refs first and refuse an empty answer: a failed or empty
-# ls-remote would make the loop below print nothing, which reads as a pass.
+# ls-remote leaves the loop below silent, which reads as a pass.
 refs=$(git ls-remote --heads --tags https://github.com/mlorentedev/$R.git) && [ -n "$refs" ] \
   || { echo "GATE 2 NOT MEASURED: no refs read from GitHub"; false; }
 # An annotated tag is listed twice, as its tag object and peeled (`^{}`) to its
