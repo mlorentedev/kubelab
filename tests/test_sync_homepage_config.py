@@ -47,15 +47,15 @@ class TestBuildServiceTables:
         assert all(s["version"] == "2.12.3" for s in n8n_entries)
 
     def test_open_webui_row_is_derived_from_its_ssot_block(self) -> None:
-        # AI-009: tailnet-only, no route, so the URL is the declared scheme, host
-        # and port, never a literal like Pollex's row.
+        # AI-009: the link is the public name, the health probe ace2's own
+        # address, both from the SSOT, never a literal like Pollex's row.
         webui = {"image": "ghcr.io/open-webui/open-webui:v0.11.4", "host": "ace2.example.internal",
-                 "scheme": "http", "default_port": 3080}
+                 "scheme": "http", "default_port": 3080, "domain": "chat.example.test", "health_path": "/health"}
         config = {"global": {"base_domain": "kubelab.live"}, "apps": {"services": {"ai": {"open_webui": webui}},
                   "platform": {}}}
         _staging, _prod, shared = sync_homepage_config.build_service_tables(config)
         row = next(s for s in shared if s["name"] == "Open WebUI")
-        assert row["url"] == "http://ace2.example.internal:3080"
+        assert row["url"] == "https://chat.example.test"
         assert row["health"] == "http://ace2.example.internal:3080/health"
         assert row["version"] == "0.11.4"
         assert row["category"] == "AI"

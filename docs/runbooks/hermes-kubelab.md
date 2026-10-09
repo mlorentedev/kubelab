@@ -140,8 +140,9 @@ PR 3b-2).
 
 ## When Authelia is down
 
-`make break-glass SVC=open_webui ENV=prod` reaches Open WebUI at its declared
-tailnet address with the local `breakglass` account. See
+`make break-glass SVC=open-webui ENV=prod` reaches Open WebUI on ace2's own
+tailnet address, derived from the route's EndpointSlice, with the local
+`breakglass` account. The public name refuses that password. See
 [break-glass](break-glass.md).
 
 ## Access review

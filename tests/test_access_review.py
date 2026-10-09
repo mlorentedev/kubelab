@@ -732,7 +732,7 @@ def test_a_demoted_open_webui_account_is_fixed_as_pending_not_bounded() -> None:
     """Gitea's shape, not Grafana's: the role edit is the correction, and the read-back proves it.
     A later login with neither group is refused and leaves `pending` as it is."""
     app = FakeApp(OpenWebUITiers, [Account("operator", "user", {"id": "u2"})])
-    [finding] = reconcile("open_webui", {"operator": VIEWER}, app, "http://x", "a:b", apply=True)
+    [finding] = reconcile("open-webui", {"operator": VIEWER}, app, "http://x", "a:b", apply=True)
     assert (finding.status, finding.live) == ("fixed", "pending")
     assert app.edits == [("operator", "pending")]
 
@@ -743,9 +743,9 @@ def test_review_env_signs_open_webui_in_by_email_with_the_rendered_logins(monkey
     from toolkit.features import access_review, break_glass
 
     _wire_review_env(monkeypatch, lambda env: _users_db(RENDERED_GROUPS, LIVE_HASH))
-    monkeypatch.setattr(access_review, "TIERS", {"open_webui": OpenWebUITiers})
+    monkeypatch.setattr(access_review, "TIERS", {"open-webui": OpenWebUITiers})
     decl = {"login": "breakglass", "email": "Breakglass@kubelab.live", "secret": "s"}
-    monkeypatch.setattr(break_glass, "declarations", lambda values: {"open_webui": decl})
+    monkeypatch.setattr(break_glass, "declarations", lambda values: {"open-webui": decl})
     seen: list[tuple[Any, str, str]] = []
 
     def record(service: str, declared: Any, tiers: Any, base_url: str, auth: str, *rest: Any) -> list[Any]:

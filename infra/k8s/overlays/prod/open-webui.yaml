@@ -1,0 +1,117 @@
+---
+# Open WebUI — external service on ace2, the on-demand developer node (ADR-068
+# D5, amended by #2135). The workload runs in Docker Compose on ace2
+# (`roles/agent_stack`), bound to ace2's Tailscale address. Only its ROUTE lives
+# here: prod Traefik terminates TLS for chat.kubelab.live and forwards over the
+# tailnet, the shape of gitea.yaml.
+#
+# The backend is on-demand, so a 502 through the error-pages middleware is the
+# CORRECT response while ace2 is off, not an incident (`on_demand_backend` in
+# tests/e2e/expectations.py).
+#
+# Sign-in is Open WebUI's own OIDC against Authelia, not a ForwardAuth: a
+# perimeter on top would break the API calls the page makes after login. The
+# password endpoint is refused here, so the break-glass account works only on
+# ace2's own address, which break_glass.py derives from the EndpointSlice below.
+apiVersion: v1
+kind: Service
+metadata:
+  name: open-webui
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: open-webui
+    app.kubernetes.io/component: ai
+    app.kubernetes.io/part-of: kubelab
+    kubelab.live/location: external
+  annotations:
+    kubelab.live/host: ace2
+    kubelab.live/description: "Open WebUI on the ace2 developer node (100.64.0.5), on-demand"
+spec:
+  ports:
+    - name: http
+      port: 3080
+      targetPort: 3080
+      protocol: TCP
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: open-webui-external
+  namespace: kubelab
+  labels:
+    kubernetes.io/service-name: open-webui
+    app.kubernetes.io/name: open-webui
+    app.kubernetes.io/component: ai
+    app.kubernetes.io/part-of: kubelab
+addressType: IPv4
+ports:
+  # apps.services.ai.open_webui.default_port
+  - name: http
+    port: 3080
+    protocol: TCP
+endpoints:
+  # networking.nodes.ace2.tailscale_ip — Open WebUI publishes on that address
+  # only, so the always-on VPS reaches it over the tailnet.
+  - addresses:
+      - "100.64.0.5"
+    conditions:
+      ready: true
+---
+# Refuses every request: no client address is loopback once it reaches Traefik.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: deny-all
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: traefik
+    app.kubernetes.io/component: edge
+    app.kubernetes.io/part-of: kubelab
+spec:
+  ipAllowList:
+    sourceRange:
+      - 127.0.0.1/32
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: open-webui
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: open-webui
+    app.kubernetes.io/component: ai
+    app.kubernetes.io/part-of: kubelab
+    kubelab.live/location: external
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    # apps.services.ai.open_webui.domain in common.yaml.
+    - match: Host(`chat.kubelab.live`)
+      kind: Rule
+      middlewares:
+        - name: secure-headers
+          namespace: kubelab
+        - name: rate-limit
+          namespace: kubelab
+        - name: crowdsec-bouncer
+          namespace: kubelab
+        - name: error-pages
+          namespace: kubelab
+      services:
+        - name: open-webui
+          port: 3080
+    # The break-glass password endpoint (lesson-520): it takes passwords whatever
+    # the login form shows, so the public name never forwards it.
+    - match: Host(`chat.kubelab.live`) && PathPrefix(`/api/v1/auths/signin`)
+      kind: Rule
+      middlewares:
+        - name: secure-headers
+          namespace: kubelab
+        - name: deny-all
+          namespace: kubelab
+      services:
+        - name: open-webui
+          port: 3080
+  tls:
+    certResolver: letsencrypt

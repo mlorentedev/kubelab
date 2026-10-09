@@ -250,7 +250,7 @@ class OpenWebUIAdminPassword:
 RECONCILERS: dict[str, Callable[[], PasswordReconciler]] = {
     "grafana": GrafanaAdminPassword,
     "gitea": GiteaAdminPassword,
-    "open_webui": OpenWebUIAdminPassword,
+    "open-webui": OpenWebUIAdminPassword,
 }
 
 

@@ -462,16 +462,17 @@ def build_service_tables(
             "Edge AI · on-demand",
         ),
     ]
-    # AI-009 (ADR-068): tailnet-only on ace2, with no route, so the address is
-    # the declared scheme, host and port. Absent from the SSOT, absent here.
+    # AI-009 (ADR-068): the link is the public name people use (#2135); the
+    # health probe reads ace2 directly over the tailnet, so a dead route and a
+    # dead node read apart. Absent from the SSOT, absent here.
     open_webui = services.get("ai", {}).get("open_webui", {})
     if open_webui:
-        webui_url = f"{open_webui['scheme']}://{open_webui['host']}:{open_webui['default_port']}"
+        direct = f"{open_webui['scheme']}://{open_webui['host']}:{open_webui['default_port']}"
         shared.append(
             _svc(
                 "Open WebUI",
-                webui_url,
-                f"{webui_url}/health",
+                f"https://{open_webui['domain']}",
+                f"{direct}{open_webui['health_path']}",
                 "Authelia (OIDC)",
                 "AI",
                 "ace2",

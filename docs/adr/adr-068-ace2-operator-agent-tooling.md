@@ -21,6 +21,7 @@ Accepted, 2026-09-30. The operator chose this option during an architecture sess
 - [ADR-043](adr-043-unified-knowledge-memory-plane.md): where Open WebUI runs, its RAG policy, and Hermes's vault authority.
 
 Amended 2026-10-08 (D2 schedule, D3 delivery, D4 writer), by the operator during AI-009 PR 4: see [the amendment](#amendment-2026-10-08-the-host-commits-the-agents-zone).
+Amended 2026-10-08 (D5 access), by the operator: see [the amendment](#amendment-2026-10-08-open-webui-gets-a-public-name).
 
 It is consistent with [ADR-060](adr-060-strands-agents-reference-only.md) ("no free always-on slot"), because nothing here takes an always-on slot. It does not amend [ADR-042](adr-042-reference-architecture.md) C11b: NaN's model API stays the inference provider for operator tooling.
 
@@ -131,7 +132,7 @@ Open WebUI runs in the D1 stack. Its backends are:
 - the Hermes API (`:8642`), so chatting with Hermes is chatting with the agent and its tools;
 - NaN's models directly, for plain chat.
 
-Its database is SQLite in WAL mode on a persistent volume. Users sign in through its own OIDC client on prod Authelia (ADR-062 human class), which is always-on, and reach it directly on ace2 over the tailnet. It is deliberately **not** put behind the `dev.kubelab.live` route: that route is served by staging Traefik on ace1, so it would make the chat depend on a second on-demand host, which is the reason O2 was rejected. It would also add ForwardAuth on top of OIDC.
+Its database is SQLite in WAL mode on a persistent volume. Users sign in through its own OIDC client on prod Authelia (ADR-062 human class), which is always-on, and reach it directly on ace2 over the tailnet. *(Amended 2026-10-08: and at `chat.kubelab.live`, see below.)* It is deliberately **not** put behind the `dev.kubelab.live` route: that route is served by staging Traefik on ace1, so it would make the chat depend on a second on-demand host, which is the reason O2 was rejected. It would also add ForwardAuth on top of OIDC.
 
 Knowledge, until the ADR-043 plane exists:
 
@@ -142,6 +143,14 @@ Knowledge, until the ADR-043 plane exists:
 The vector store is ours, never NaN's (C12). The index is derived, so replacing the embedding provider costs a full re-embed, not data.
 
 One measurement belongs to the implementation spec: pgvector's HNSW and IVFFlat indexes accept at most 2000 dimensions (`vector`) or 4000 (`halfvec`), and `qwen3-embedding` returns 4096. Whether NaN honours a `dimensions` parameter decides between a reduced dimension, exact search without an index, or another embedding model.
+
+#### Amendment 2026-10-08: Open WebUI gets a public name
+
+The operator wants to use the chat like a hosted one, from any device, which the tailnet-only path did not allow (#2135). Open WebUI is now served at `chat.kubelab.live` by prod Traefik on the always-on VPS. Traefik forwards to ace2 over the tailnet, the way Gitea reaches the Beelink. This keeps the reason `dev.kubelab.live` was rejected out: there is no staging Traefik in the path, so the only on-demand host is ace2 itself. While ace2 is off, the name answers the error page.
+
+- **Sign-in** is still Open WebUI's own OIDC client on prod Authelia, with no ForwardAuth on top. The client's one redirect moves to the public name. Its policy stays `one_factor`, like Gitea's, Grafana's and Argo CD's; moving the fleet to 2FA would be its own decision.
+- **The break-glass password** never crosses the public name. The route refuses `/api/v1/auths/signin`, which takes passwords whatever the form shows (lesson-520). The `breakglass` account works only on ace2's own tailnet address, which `break_glass.py` derives from the route's EndpointSlice. Its declaration is renamed `open-webui`, after the route.
+- **Uptime Kuma** keeps probing ace2 directly, so a dead route and a dead node read apart.
 
 ### D6. Google Drive through MCP, never a mount
 
