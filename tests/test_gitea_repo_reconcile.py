@@ -1953,7 +1953,7 @@ _UNFILLED = DeclaredRepo(
 @pytest.mark.parametrize("unfilled", [(_UNFILLED,), ()], ids=["unfilled", "filled"])
 # Both reported-never-acted-on fields: an unfilled migration, and a native repository
 # absent from the forge (#2133). Same endings, same exit.
-@pytest.mark.parametrize("field", ["unfilled_migrations", "absent_native_repos"])
+@pytest.mark.parametrize("field", ["unfilled_migrations", "absent_native_repos", "emptied_native_repos"])
 def test_every_exit_path_fails_on_an_unfilled_migration_and_only_on_one(
     monkeypatch: pytest.MonkeyPatch,
     path: str,
@@ -2072,3 +2072,40 @@ def test_a_present_native_repository_is_neither_created_nor_reported() -> None:
     )
     assert plan.absent_native_repos == ()
     assert plan.repos_to_create == ()
+
+
+def _plan_with_native_present(*, empty: bool) -> ReconcilePlan:
+    declared = {**DECLARED, "personal": [*DECLARED["personal"], RepoSpec("imagesensortool", native=True)]}
+    settings = settings_for(declared)
+    settings["personal/imagesensortool"] = {**converged_body(), "empty": empty}
+    return plan_reconcile(
+        declared,
+        existing_orgs=set(declared),
+        existing_repos={
+            "teledyne/fae-brain": False,
+            "teledyne/openkm-brain": False,
+            "personal/resume": False,
+            "personal/imagesensortool": False,
+        },
+        existing_teams=converged_for(declared),
+        existing_repo_settings=settings,
+        declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks=hooks_for(declared),
+        declared_webhooks=N8N_HOOK_ONLY,
+    )
+
+
+def test_a_native_repository_the_forge_holds_empty_is_reported_not_converged() -> None:
+    """Present but git-empty is the content-gone state of #2133, for a repository whose only
+    other copy is the backup. Found by review on #2141: it read as converged and exited 0."""
+    plan = _plan_with_native_present(empty=True)
+
+    assert [f"{r.org}/{r.name}" for r in plan.emptied_native_repos] == ["personal/imagesensortool"]
+    assert plan.absent_native_repos == ()
+    assert plan.is_noop, "reported, never acted on: it must not keep the plan from being a no-op"
+    printed = format_plan(plan)
+    assert "personal/imagesensortool" in printed and "offsite-backup-restore.md" in printed
+
+
+def test_a_native_repository_with_content_is_not_reported() -> None:
+    assert _plan_with_native_present(empty=False).emptied_native_repos == ()

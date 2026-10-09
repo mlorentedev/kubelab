@@ -580,10 +580,11 @@ def gitea_reconcile(
         # Same exit as above, for the repository the reconciler must never create: its
         # content exists only in Gitea, so a create would be an empty shell that reads
         # as repaired. The repair is a restore from R2, which is an operator decision.
-        if plan.absent_native_repos:
+        lost = len(plan.absent_native_repos) + len(plan.emptied_native_repos)
+        if lost:
             logger.error(
-                f"{len(plan.absent_native_repos)} native repository/ies absent from the forge (listed "
-                "above with the restore). Not created: their only copy is the backup (ADR-065)."
+                f"{lost} native repository/ies absent from the forge or held empty (listed above with "
+                "the restore). Never created or filled here: their only copy is the backup (ADR-065 D5)."
             )
             raise typer.Exit(1)
 
