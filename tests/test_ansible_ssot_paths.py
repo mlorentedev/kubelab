@@ -17,8 +17,11 @@ the SOPS files' key names, which are plaintext, so nothing is decrypted.
 - A path must exist in at least one env's merged tree. A key only prod
   declares is read only by prod's playbooks, and a rename removes the path
   from every env, which is the defect.
-- A read guarded by `| default(...)`, `is defined` or `.get(` may lack its
-  last segment, but its parent must exist, so a renamed parent still fails.
+- A guarded read (`| default(...)`, `is defined`, `.get(`) must resolve too,
+  because a renamed key it guards does not fail: it renders the default, and
+  the provision goes on with an empty token. A guarded secret may instead name
+  a `SECRET_CATALOG` entry not minted yet. A key absent from every env on
+  purpose is declared in `ABSENT_BY_DESIGN`, with its reason.
 - A chain stops at a subscript by variable (`nodes[item]`) or a method call,
   and only its literal prefix is checked.
 """
@@ -57,6 +60,15 @@ SEGMENT = re.compile(
     r"""|\.get\(\s*['"]([^'"]+)['"]"""  # .get('name' ...), optional
 )
 GUARDED = re.compile(r"\s*(\|\s*(default|d)\b|is\s+(not\s+)?defined\b)")
+
+# Guarded reads of keys no env declares, on purpose. Each is an override knob
+# whose default is the real value.
+ABSENT_BY_DESIGN = {
+    # The toolkit's loader derives it from `apps.contact.email`
+    # (`configuration.py`); a playbook reads the raw values, so it falls back
+    # to the same key.
+    "config.edge.traefik.acme_email",
+}
 
 
 @dataclass(frozen=True)
@@ -149,13 +161,27 @@ def resolves(tree: Any, segments: tuple[str, ...]) -> bool:
     return True
 
 
+def _catalogued(segments: tuple[str, ...]) -> bool:
+    from toolkit.features.secrets_manager import SECRET_CATALOG
+
+    return any(tuple(spec.key_path.split("."))[: len(segments)] == segments for spec in SECRET_CATALOG)
+
+
+def _key(read: Read) -> str:
+    return f"{read.root}.{'.'.join(read.segments)}"
+
+
 def unresolved(reads: list[Read]) -> list[str]:
     trees = {root: _trees(root) for root in CONFIG_ROOTS + SECRET_ROOTS}
     missing = []
     for read in reads:
-        required = read.segments[:-1] if read.optional else read.segments
-        if not any(resolves(tree, required) for tree in trees[read.root]):
-            missing.append(str(read))
+        if any(resolves(tree, read.segments) for tree in trees[read.root]):
+            continue
+        if read.optional and (
+            _key(read) in ABSENT_BY_DESIGN or (read.root in SECRET_ROOTS and _catalogued(read.segments))
+        ):
+            continue
+        missing.append(str(read))
     return missing
 
 
@@ -204,8 +230,12 @@ def test_a_renamed_path_is_reported_and_a_guarded_leaf_is_not() -> None:
     assert unresolved(read(" config.apps.services.security.authelia.break_glass['open_webui'].email ")) == [
         "fixture: config.apps.services.security.authelia.break_glass.open_webui.email"
     ]
-    assert unresolved(read(" config.edge.traefik.no_such_leaf | default('x') ")) == []
-    assert unresolved(read(" config.edge.no_such_parent.leaf | default('x') ")) != []
+    # A guard does not excuse a rename: it would render the default.
+    assert unresolved(read(" secrets.apps.services.core.gitea.review_token | default('') ")) != []
+    assert unresolved(read(" config.edge.traefik.no_such_leaf | default('x') ")) != []
+    assert unresolved(read(" config.edge.traefik.acme_email | default('x') ")) == []
+    # Declared absent is not a licence to read it unguarded.
+    assert unresolved(read(" config.edge.traefik.acme_email ")) != []
     assert unresolved(read(" secrets.apps.services.ai.hermes_kubelab.slack_bot_tokn ")) != []
 
 
@@ -234,3 +264,13 @@ def test_a_hyphenated_key_is_never_read_by_attribute(reads: list[Read]) -> None:
     """`x.open-webui` parses as a subtraction, so the read stops at `x`."""
     offending = [str(r) for r in reads if r.hyphen_attr]
     assert not offending, offending
+
+
+def test_each_declared_absence_is_still_read_and_still_absent(reads: list[Read]) -> None:
+    """An exemption nobody reads, or for a key some env now declares, is stale."""
+    read_keys = {_key(r) for r in reads if r.optional}
+    trees = _trees("config")
+    for key in ABSENT_BY_DESIGN:
+        assert key in read_keys, f"{key} is exempt but nothing reads it"
+        segments = tuple(key.split(".")[1:])
+        assert not any(resolves(tree, segments) for tree in trees), f"{key} is declared now; drop the exemption"
