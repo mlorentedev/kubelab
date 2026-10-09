@@ -293,6 +293,9 @@ def test_every_ssot_path_ansible_reads_exists(reads: list[Read]) -> None:
 
 def test_a_hyphenated_key_is_never_read_by_attribute(reads: list[Read]) -> None:
     """`x.open-webui` parses as a subtraction, so the read stops at `x`."""
+    # The flag is the extractor's; pin it, or a regression to False passes here.
+    assert next(reads_in(" config.apps.break_glass.open-webui.email ")).hyphen_attr
+    assert not next(reads_in(" config.apps.break_glass['open-webui'].email ")).hyphen_attr
     offending = [str(r) for r in reads if r.hyphen_attr]
     assert not offending, offending
 
