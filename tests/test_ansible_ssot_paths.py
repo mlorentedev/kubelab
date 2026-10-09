@@ -158,9 +158,9 @@ def _trees(root: str) -> list[dict]:
 def resolves(tree: Any, segments: tuple[str, ...]) -> bool:
     node = tree
     for segment in segments:
-        if not isinstance(node, dict):
-            return True  # a string or list: the literal path ends here
-        if segment not in node:
+        # A scalar, a list or a null with segments left is a broken read, not
+        # the end of the path: Jinja cannot take a named key from it either.
+        if not isinstance(node, dict) or segment not in node:
             return False
         node = node[segment]
     return True
@@ -242,6 +242,15 @@ def test_a_renamed_path_is_reported_and_a_guarded_leaf_is_not() -> None:
     # Declared absent is not a licence to read it unguarded.
     assert unresolved(read(" config.edge.traefik.acme_email ")) != []
     assert unresolved(read(" secrets.apps.services.ai.hermes_kubelab.slack_bot_tokn ")) != []
+    # Past a leaf: the parent kept its name and became a string.
+    assert unresolved(read(" secrets.apps.services.ai.hermes_kubelab.slack_bot_token.value ")) != []
+
+
+def test_a_path_through_a_scalar_does_not_resolve() -> None:
+    assert not resolves({"break_glass": "see runbook"}, ("break_glass", "open-webui", "email"))
+    assert not resolves({"a": None}, ("a", "b"))
+    assert not resolves({"a": [1]}, ("a", "b"))
+    assert resolves({"a": {"b": "x"}}, ("a", "b"))
 
 
 # --------------------------------------------------------------------------- the repository
