@@ -114,7 +114,7 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - **Backend**: from inside `open-webui`, with its own env, `GET http://172.30.250.1:8642/v1/models` with the second key lists `hermes-agent`. Open WebUI's old `agent-stack-webui_default` network was already gone after the recreate.
 - **Boot order**: `agent-stack-hermes-bind.service` enabled, `WantedBy=user@999.service`. The reboot itself is the AC11 drill.
 - **Provision**: three runs from the branch, `changed=7` (the network, the recreate, the ufw rule), then `changed=2` (the boot unit, added after the first measurement), then `changed=0`.
-- **Not yet measured**: the model in Open WebUI's list for an admin, and its absence for a `users` login. Both need a browser login.
+- **Tier** (operator, browser, 2026-10-08): the model's visibility matches the decision, listed for an admin and absent for a `users` login.
 
 ### AC8, interim, ace2, 2026-10-07
 
