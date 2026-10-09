@@ -50,9 +50,13 @@ a loss.
 S=$(mktemp -d)
 R=<name>; O=<gitea-org>
 make gitea-git ARGS="clone --quiet --mirror https://gitea.kubelab.live/$O/$R.git $S/$R.git"
+# Read GitHub's refs first and refuse an empty answer: a failed or empty
+# ls-remote would make the loop below print nothing, which reads as a pass.
+refs=$(git ls-remote --heads --tags https://github.com/mlorentedev/$R.git) && [ -n "$refs" ] \
+  || { echo "GATE 2 NOT MEASURED: no refs read from GitHub"; false; }
 # An annotated tag is listed twice, as its tag object and peeled (`^{}`) to its
 # commit. Only the commit is compared, so a re-created tag object is not a loss.
-git ls-remote --heads --tags https://github.com/mlorentedev/$R.git \
+printf '%s\n' "$refs" \
   | awk '{ if (sub(/\^\{\}$/, "", $2)) peeled[$2] = $1; else ref[$2] = $1 }
          END { for (r in ref) print ((r in peeled) ? peeled[r] : ref[r]), r }' \
   | while read -r sha ref; do
@@ -61,7 +65,8 @@ git ls-remote --heads --tags https://github.com/mlorentedev/$R.git \
 ```
 
 A `MISSING` line is history the delete would lose. If it is a branch GitHub moved ahead of
-Gitea, fast-forward it (next section) and run the gate again.
+Gitea, fast-forward it (next section) and run the gate again. `GATE 2 NOT MEASURED` means
+nothing was compared (a typo in `$R`, or GitHub unreachable): it is not a pass.
 
 Measured 2026-10-08: `resume` prints nothing (44 tags, every branch). `fae-brain` prints
 `MISSING refs/heads/main`: GitHub is 8 commits ahead (4 Dependabot merges, #43 to #46) and 0

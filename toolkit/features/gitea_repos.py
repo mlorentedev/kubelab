@@ -829,7 +829,9 @@ def plan_reconcile(
         DeclaredRepo(org=org, name=spec.name, private=spec.private, migrate_from=spec.migrate_from)
         for org, specs in sorted(declared.items())
         for spec in sorted(specs, key=lambda s: s.name)
-        if spec.migrate_from and (existing_repo_settings[f"{org}/{spec.name}"] or {}).get("empty") is True
+        if spec.migrate_from
+        and f"{org}/{spec.name}" in existing_repos
+        and (existing_repo_settings[f"{org}/{spec.name}"] or {}).get("empty") is True
     )
 
     return ReconcilePlan(

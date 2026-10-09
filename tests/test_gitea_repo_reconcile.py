@@ -1831,6 +1831,7 @@ def test_an_unfilled_migration_is_reported_not_acted_on() -> None:
     """
     plan = _present_with_openkm_empty()
 
+    assert [f"{r.org}/{r.name}" for r in plan.unfilled_migrations] == ["teledyne/openkm-brain"]
     assert plan.is_noop
     assert plan.repos_to_migrate == ()
 
@@ -1895,3 +1896,91 @@ def test_a_migration_target_that_does_not_exist_yet_is_planned_not_reported() ->
 
     assert plan.unfilled_migrations == ()
     assert [f"{r.org}/{r.name}" for r in plan.repos_to_migrate] == ["teledyne/openkm-brain"]
+
+
+def test_a_stale_settings_body_for_an_absent_repository_is_planned_not_reported() -> None:
+    """Presence is read from `existing_repos`, never inferred from a settings body.
+
+    A body left behind for a repository the forge no longer lists would otherwise put
+    it in `repos_to_migrate` AND `unfilled_migrations`, and the run that migrates it
+    would then fail on its own pre-execution plan (#2134 review).
+    """
+    settings = settings_for(DECLARED)
+    settings["teledyne/openkm-brain"] = {**(settings["teledyne/openkm-brain"] or {}), "empty": True}
+    plan = plan_reconcile(
+        DECLARED,
+        existing_orgs=set(DECLARED),
+        existing_repos={"teledyne/fae-brain": False, "personal/resume": False},
+        existing_teams=converged_for(DECLARED),
+        existing_repo_settings=settings,
+        declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks={**hooks_for(DECLARED), "teledyne/openkm-brain": None},
+        declared_webhooks=N8N_HOOK_ONLY,
+    )
+
+    assert [f"{r.org}/{r.name}" for r in plan.repos_to_migrate] == ["teledyne/openkm-brain"]
+    assert plan.unfilled_migrations == ()
+
+
+# --- the CLI turns the report into a failing exit (#2134 review) --------------
+
+
+class _NoForgeAdmin:
+    """A forge with nothing on it: every read the reconcile prelude makes answers empty."""
+
+    def list_orgs(self) -> set[str]:
+        return set()
+
+    def list_repos(self) -> set[str]:
+        return set()
+
+
+_UNFILLED = DeclaredRepo(
+    org="teledyne", name="openkm-brain", private=True, migrate_from="github:mlorentedev/openkm-brain"
+)
+
+
+@pytest.mark.parametrize(
+    ("path", "work", "args"),
+    [
+        ("nothing to do", {}, ()),
+        ("plan only", {"orgs_to_create": ("teledyne",)}, ()),
+        ("after --apply", {"orgs_to_create": ("teledyne",)}, ("--apply",)),
+    ],
+)
+@pytest.mark.parametrize("unfilled", [(_UNFILLED,), ()], ids=["unfilled", "filled"])
+def test_every_exit_path_fails_on_an_unfilled_migration_and_only_on_one(
+    monkeypatch: pytest.MonkeyPatch,
+    path: str,
+    work: dict[str, tuple[str, ...]],
+    args: tuple[str, ...],
+    unfilled: tuple[DeclaredRepo, ...],
+) -> None:
+    """Each of the command's three endings checks the report, so deleting any one
+    call site turns its row red here rather than passing a prod run silently."""
+    from typer.testing import CliRunner
+
+    import toolkit.cli.services as cli
+    import toolkit.features.gitea_repos as repos
+
+    plan = ReconcilePlan(unfilled_migrations=unfilled, **work)
+
+    class _Config:
+        def __init__(self, *_a: object, **_k: object) -> None:
+            pass
+
+        def get_merged_config(self) -> dict[str, object]:
+            return {"apps": {"auth": {"identities": {}}}}
+
+    monkeypatch.setattr(cli, "_gitea_clients", lambda env: (_NoForgeAdmin(), None, "bot", "https://forge.invalid"))
+    monkeypatch.setattr(cli, "ConfigurationManager", _Config)
+    monkeypatch.setattr(cli, "_report_machine_ownership", lambda *a, **k: None)
+    monkeypatch.setattr(repos, "load_declaration", lambda merged: {"teledyne": [RepoSpec("openkm-brain")]})
+    monkeypatch.setattr(repos, "load_settings", lambda merged: None)
+    monkeypatch.setattr(repos, "load_webhooks", lambda merged: ())
+    monkeypatch.setattr(repos, "plan_reconcile", lambda *a, **k: plan)
+    monkeypatch.setattr(repos, "execute", lambda *a, **k: repos.ExecutionReport())
+
+    result = CliRunner().invoke(cli.app, ["gitea", "reconcile", *args])
+
+    assert result.exit_code == (1 if unfilled else 0), f"{path}: {result.output}"
