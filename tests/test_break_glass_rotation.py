@@ -296,7 +296,7 @@ class TestOpenWebUI:
 
 
 def test_a_local_account_target_carries_its_email() -> None:
-    decls = {"open_webui": {"login": "breakglass", "email": "bg@x.test", "secret": "k"}}
+    decls = {"open-webui": {"login": "breakglass", "email": "bg@x.test", "secret": "k"}}
     [target] = rot.targets(decls, {})
     assert (target.login, target.email) == ("breakglass", "bg@x.test")
 
@@ -312,7 +312,7 @@ def test_a_service_on_a_powered_off_node_is_skipped_not_reported_as_drift(
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         closed = sock.getsockname()[1]  # nothing listens once the socket closes
-    monkeypatch.setattr(rot, "targets", lambda decls, values: [rot.Target("open_webui", "breakglass", "k", "bg@x")])
+    monkeypatch.setattr(rot, "targets", lambda decls, values: [rot.Target("open-webui", "breakglass", "k", "bg@x")])
     monkeypatch.setattr(bg, "declarations", lambda values: {})
     monkeypatch.setattr(bg, "resolve", lambda env, s, root: ({}, None, bg.Direct(url=f"http://127.0.0.1:{closed}")))
     monkeypatch.setattr(bg, "secret_file", lambda key, env, d: (_ for _ in ()).throw(AssertionError("no SOPS read")))
@@ -321,4 +321,4 @@ def test_a_service_on_a_powered_off_node_is_skipped_not_reported_as_drift(
 
     lines: list[str] = []
     assert rot.rotate_break_glass("prod", tmp_path, lines.append) == []
-    assert any("open_webui: skipped" in line and "not reachable" in line for line in lines)
+    assert any("open-webui: skipped" in line and "not reachable" in line for line in lines)

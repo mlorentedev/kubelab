@@ -195,6 +195,13 @@ EXPECTATIONS: dict[str, ServiceExpectation] = {
         # powered on" are now different statements. See TestOnDemandBackend.
         on_demand_backend="beelink",
     ),
+    "open_webui": ServiceExpectation(
+        # Its own OIDC login, not a ForwardAuth: anonymous /health answers 200.
+        # Prod only, the one Authelia that registers its client (#2135).
+        skip_in_envs=("dev", "staging"),
+        # ace2 is the operator's on-demand developer node (ADR-068 D1).
+        on_demand_backend="ace2",
+    ),
     "n8n": ServiceExpectation(
         health_status=(200, 302),
         auth_protected=False,  # n8n 2.x has built-in auth; Authelia policy=bypass (OIDC is enterprise-only)

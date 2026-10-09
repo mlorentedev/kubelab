@@ -25,8 +25,11 @@ owner: manu
 | bridge wait before the agent's manager | root | `agent-stack-hermes-bind.service`, `WantedBy=user@<uid>` | none |
 | vault sync (ADR-068 D4, amended) | uid `hermes-kubelab`, token from systemd | `hermes-kubelab-vault-sync.timer`: 2 min after boot, then every 15 min | clone `/var/lib/hermes-kubelab/vault`; token `/opt/agent-stack/vault-token` (root, 0600) |
 
-Open WebUI is reached only at `http://ace2.kubelab.internal:3080` over the
-tailnet, with OIDC against prod Authelia. The gateway's API listens on
+Open WebUI is reached at `https://chat.kubelab.live`, with OIDC against prod
+Authelia (ADR-068, amendment 2026-10-08). Prod Traefik terminates TLS and
+forwards over the tailnet to `ace2:3080`, and refuses the password form at
+`/api/v1/auths/signin`. The tailnet address `http://ace2.kubelab.internal:3080`
+still answers, and break-glass uses it. The gateway's API listens on
 `172.30.250.1:8642`, the gateway of Open WebUI's bridge `br-open-webui`
 (`networking.nodes.ace2.webui_bridge`), and ufw admits that bridge's subnet
 alone. Open WebUI lists Hermes as its second backend, after NaN, visible to
@@ -140,8 +143,9 @@ PR 3b-2).
 
 ## When Authelia is down
 
-`make break-glass SVC=open_webui ENV=prod` reaches Open WebUI at its declared
-tailnet address with the local `breakglass` account. See
+`make break-glass SVC=open-webui ENV=prod` reaches Open WebUI on ace2's own
+tailnet address, derived from the route's EndpointSlice, with the local
+`breakglass` account. The public name refuses that password. See
 [break-glass](break-glass.md).
 
 ## Access review

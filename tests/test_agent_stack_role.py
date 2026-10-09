@@ -218,10 +218,12 @@ def test_the_seeded_account_is_proved_to_be_the_admin_after_every_start() -> Non
     assert "admin" in str(check["failed_when"])
 
 
-def test_the_redirect_uri_matches_the_declared_scheme_host_and_port() -> None:
+def test_the_redirect_uri_is_the_public_name_the_client_registers() -> None:
+    """Behind Traefik, Open WebUI sees plain HTTP and would build an `http://`
+    redirect that Authelia refuses, so the one registered URI is set (#2135)."""
     webui = _context()["agent_stack_webui"]
     env = _env()
-    base = f"{webui['scheme']}://{webui['host']}:{webui['default_port']}"
+    base = f"https://{webui['domain']}"
     assert env["WEBUI_URL"] == base
     assert env["OPENID_REDIRECT_URI"] == f"{base}/oauth/oidc/callback"
 
@@ -291,6 +293,9 @@ def test_only_open_webuis_own_origin_may_read_it_with_credentials() -> None:
     `allow_credentials=True`, which echoes any origin back on a request with a cookie,
     and socket.io accepts the upgrade from any origin (#2109, measured live). `.internal`
     is on no public suffix list, so every `*.kubelab.internal` host is the same site."""
+    webui = _context()["agent_stack_webui"]
     env = _env()
-    assert env["CORS_ALLOW_ORIGIN"] == env["WEBUI_URL"], "the origin users and break-glass both reach"
+    direct = f"{webui['scheme']}://{webui['host']}:{webui['default_port']}"
+    # People at the public name, break-glass at ace2's own address (#2135).
+    assert env["CORS_ALLOW_ORIGIN"].split(";") == [env["WEBUI_URL"], direct]
     assert "*" not in env["CORS_ALLOW_ORIGIN"]

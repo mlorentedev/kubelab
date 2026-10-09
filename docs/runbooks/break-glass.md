@@ -76,7 +76,9 @@ The web form is not relied on. For credential repair, see
 ### Open WebUI
 
 `breakglass@kubelab.live` with its local password, over the tailnet at
-`http://ace2.kubelab.internal:3080`. Open WebUI signs in by email, so that is the
+`http://ace2.kubelab.internal:3080` (`make break-glass SVC=open-webui ENV=prod`, the
+address derived from the route's EndpointSlice). Never at `chat.kubelab.live`: the public
+route refuses `/api/v1/auths/signin` (#2135). Open WebUI signs in by email, so that is the
 user. The form is always on and admits only this account: nobody can sign up through it,
 and SSO users never get a password. It is seeded on an empty database by
 `WEBUI_ADMIN_EMAIL`, and each provision proves it still signs in as admin. ace2 is

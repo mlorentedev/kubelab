@@ -254,7 +254,7 @@ TierReader = Callable[..., Any]
 
 #: Apps that hold a tier in their own database. Each is reached with its declared
 #: break-glass account, over its break-glass private path.
-TIERS: dict[str, TierReader] = {"gitea": GiteaTiers, "grafana": GrafanaTiers, "open_webui": OpenWebUITiers}
+TIERS: dict[str, TierReader] = {"gitea": GiteaTiers, "grafana": GrafanaTiers, "open-webui": OpenWebUITiers}
 
 
 class ReviewError(RuntimeError):

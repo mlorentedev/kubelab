@@ -1764,17 +1764,15 @@ apps:
           token_endpoint_auth_method: client_secret_basic
           authorization_policy: one_factor
           consent_mode: implicit
-        # Prod only: Open WebUI on ace2 trusts prod Authelia (ADR-068), and no route
-        # serves it. It is reached at ace2's MagicDNS name on its own port, so the
-        # redirect declares both (AI-009 R8), and break_glass.py reaches it there.
-        # client_secret_basic is authlib's default; the first login measures it.
+        # Prod only: Open WebUI on ace2 trusts prod Authelia (ADR-068). People sign
+        # in at its public name, routed by prod Traefik to ace2 over the tailnet
+        # (#2135), so break_glass.py derives it from that route like Gitea's.
+        # client_secret_basic is authlib's default, measured at the first login.
         - client_id: open-webui-oidc
           client_name: Open WebUI
           envs: [prod]
           redirect:
-            domain: apps.services.ai.open_webui.host
-            scheme: http
-            port: apps.services.ai.open_webui.default_port
+            domain: apps.services.ai.open_webui.domain
             path: /oauth/oidc/callback
           scopes: [openid, profile, email, groups]
           token_endpoint_auth_method: client_secret_basic
@@ -1879,13 +1877,15 @@ apps:
             # `argocd --core` or kubectl against the hub. The local admin account
             # is not a break-glass path; it is disabled by design (ADR-062 D4).
             cluster: hub
-          open_webui:
+          open-webui:
             # A local account of nobody, the Grafana shape (#951). The login form
             # stays on for it: `ENABLE_LOGIN_FORM=false` only hides the form, and
             # `/api/v1/auths/signin` keeps taking passwords either way (v0.11.4,
             # lesson-520). `WEBUI_ADMIN_EMAIL` seeds it on an empty database, before
             # the first request, so no visitor can sign up as the first admin. Open
-            # WebUI signs in by email, which is why rotation uses it.
+            # WebUI signs in by email, which is why rotation uses it. The public
+            # route refuses that endpoint (#2135), so the password works only on
+            # the path derived from the route's EndpointSlice: ace2, over the tailnet.
             login: breakglass
             email: breakglass@kubelab.live
             secret: apps.services.ai.open_webui.admin_password
@@ -1941,9 +1941,12 @@ apps:
         state_promotion: singleton
         location: on-demand
         image: ghcr.io/open-webui/open-webui:v0.11.4
-        # Plain HTTP on the tailnet, at ace2's MagicDNS name (spec R8): the
-        # transport is WireGuard, and TLS here would need a Cloudflare DNS-01
-        # token on the node that hosts an agent. No route, record or Traefik.
+        # The public name people use (#2135, ADR-068 D5 amended): prod Traefik
+        # terminates TLS and forwards to ace2 over the tailnet. While ace2 is
+        # off, it answers the error page.
+        domain: chat.kubelab.live
+        # Plain HTTP on the tailnet, at ace2's MagicDNS name (spec R8): what the
+        # route forwards to, and what break-glass and Uptime Kuma reach directly.
         # MagicDNS names a node by its Headscale given-name, which for ace2 is
         # `networking.nodes.ace2.hostname` (resolved 2026-10-01 → 100.64.0.5).
         host: ace2.kubelab.internal
