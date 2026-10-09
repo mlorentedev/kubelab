@@ -30,6 +30,10 @@
 # in one role, because every role that publishes on a Tailscale address needs it
 # and a second copy would drift.
 #
+# The interface is an argument because the same race has a second shape: the
+# agent_stack role waits for a Docker bridge's gateway, which the agent's rootless
+# daemon publishes on and the system daemon creates (agent-stack-hermes-bind).
+#
 # Waiting on tailscaled.service is not enough: the unit being active does not
 # mean the address is on the interface yet. This waits for the address itself.
 

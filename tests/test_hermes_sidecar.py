@@ -134,14 +134,19 @@ def test_a_new_key_recreates_the_sidecar_so_it_logs_in_again() -> None:
 
     from jinja2 import Environment, StrictUndefined
 
-    command = Environment(undefined=StrictUndefined).from_string(_task("Start hermes-kubelab")["ansible.builtin.command"])
+    env = Environment(undefined=StrictUndefined)
+    env.filters["bool"] = lambda value: value if isinstance(value, bool) else str(value).lower() in ("true", "yes", "1")
+    command = env.from_string(_task("Start hermes-kubelab")["ansible.builtin.command"])
     registers = ("_agent_stack_hermes_env_file", "_agent_stack_hermes_config", "_agent_stack_hermes_ts_env_file")
-    for changed in product((False, True), repeat=len(registers)):
+    # The fourth input is a fact, and set_fact hands it over as a string.
+    for *changed, unbound in product((False, True), repeat=len(registers) + 1):
         context = {name: {"changed": flag} for name, flag in zip(registers, changed, strict=True)}
-        rendered = command.render(agent_stack_hermes_project="p", agent_stack_hermes_compose="c", **context)
-        # Recreated exactly when an input changed: always would break `changed=0`,
-        # and never would leave a new key unread.
-        assert ("--force-recreate" in rendered) == any(changed), (dict(zip(registers, changed, strict=True)), rendered)
+        rendered = command.render(
+            agent_stack_hermes_project="p", agent_stack_hermes_compose="c", _agent_stack_hermes_unbound=str(unbound), **context
+        )
+        # Recreated exactly when an input changed or the port is lost: always
+        # would break `changed=0`, and never would leave a new key unread.
+        assert ("--force-recreate" in rendered) == (any(changed) or unbound), (changed, unbound, rendered)
 
 
 def test_every_provision_reads_the_tag_from_the_running_sidecar() -> None:

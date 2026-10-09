@@ -2,7 +2,8 @@
 # =============================================================================
 # hermes-kubelab (ADR-068 D2, spec AI-009 PR 3): the gateway on the agent's
 # rootless daemon, from agent_user.yml. Every docker call below runs as the
-# agent's user against its own socket.
+# agent's user against its own socket, except the two probes of the API's
+# firewall, which run where Open WebUI does: on the system daemon.
 #
 # The last block is the measurement: the deny list is read back through the
 # running gateway's own evaluator. A config Hermes failed to load leaves the
