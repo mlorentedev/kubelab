@@ -145,14 +145,19 @@ def _load(path: Path) -> dict:
     return yaml.safe_load(path.read_text()) or {}
 
 
+# `gitea_config` and `gitea_secrets` are the prod trees whatever env the play
+# runs in (the forge is prod's), so they resolve against prod alone.
+PROD_ONLY_ROOTS = ("gitea_config", "gitea_secrets")
+
+
 def _trees(root: str) -> list[dict]:
+    envs = ("prod",) if root in PROD_ONLY_ROOTS else ENVS
     if root in SECRET_ROOTS:
         common = _load(SECRETS / "common.enc.yaml")
         # An env with no SOPS file of its own (the hub) reads common's alone.
-        return [common] + [
-            _merge(common, _load(SECRETS / f"{env}.enc.yaml")) for env in ENVS if (SECRETS / f"{env}.enc.yaml").exists()
-        ]
-    return [_merge(_load(VALUES / "common.yaml"), _load(VALUES / f"{env}.yaml")) for env in ENVS]
+        files = [SECRETS / f"{env}.enc.yaml" for env in envs]
+        return [_merge(common, _load(f)) if f.exists() else common for f in files]
+    return [_merge(_load(VALUES / "common.yaml"), _load(VALUES / f"{env}.yaml")) for env in envs]
 
 
 def resolves(tree: Any, segments: tuple[str, ...]) -> bool:
@@ -246,6 +251,20 @@ def test_a_renamed_path_is_reported_and_a_guarded_leaf_is_not() -> None:
     assert unresolved(read(" secrets.apps.services.ai.hermes_kubelab.slack_bot_token.value ")) != []
 
 
+def test_the_forge_roots_resolve_against_prod_only() -> None:
+    """A key only staging declares does not exist for a prod-only root."""
+    staging_only = [
+        k
+        for k in _load(VALUES / "staging.yaml").get("apps", {})
+        if k not in _load(VALUES / "prod.yaml").get("apps", {})
+    ]
+    assert len(_trees("gitea_config")) == 1 and len(_trees("gitea_secrets")) == 1
+    assert len(_trees("config")) == len(ENVS)
+    for key in staging_only:
+        if key not in _load(VALUES / "common.yaml").get("apps", {}):
+            assert not resolves(_trees("gitea_config")[0], ("apps", key))
+
+
 def test_a_path_through_a_scalar_does_not_resolve() -> None:
     assert not resolves({"break_glass": "see runbook"}, ("break_glass", "open-webui", "email"))
     assert not resolves({"a": None}, ("a", "b"))
@@ -283,8 +302,8 @@ def test_a_hyphenated_key_is_never_read_by_attribute(reads: list[Read]) -> None:
 def test_each_declared_absence_is_still_read_and_still_absent(reads: list[Read]) -> None:
     """An exemption nobody reads, or for a key some env now declares, is stale."""
     read_keys = {_key(r) for r in reads if r.optional}
-    trees = _trees("config")
     for key in ABSENT_BY_DESIGN:
         assert key in read_keys, f"{key} is exempt but nothing reads it"
-        segments = tuple(key.split(".")[1:])
-        assert not any(resolves(tree, segments) for tree in trees), f"{key} is declared now; drop the exemption"
+        root, *segments = key.split(".")
+        trees = _trees(root)
+        assert not any(resolves(tree, tuple(segments)) for tree in trees), f"{key} is declared now; drop the exemption"
