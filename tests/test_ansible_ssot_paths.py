@@ -241,7 +241,7 @@ def test_a_renamed_path_is_reported_and_a_guarded_leaf_is_not() -> None:
         "fixture: config.apps.services.security.authelia.break_glass.open_webui.email"
     ]
     # A guard does not excuse a rename: it would render the default.
-    assert unresolved(read(" secrets.apps.services.core.gitea.review_token | default('') ")) != []
+    assert unresolved(read(" secrets.apps.services.core.gitea.renamed_tokn | default('') ")) != []
     assert unresolved(read(" config.edge.traefik.no_such_leaf | default('x') ")) != []
     assert unresolved(read(" config.edge.traefik.acme_email | default('x') ")) == []
     # Declared absent is not a licence to read it unguarded.
@@ -252,17 +252,15 @@ def test_a_renamed_path_is_reported_and_a_guarded_leaf_is_not() -> None:
 
 
 def test_the_forge_roots_resolve_against_prod_only() -> None:
-    """A key only staging declares does not exist for a prod-only root."""
-    staging_only = [
-        k
-        for k in _load(VALUES / "staging.yaml").get("apps", {})
-        if k not in _load(VALUES / "prod.yaml").get("apps", {})
-    ]
-    assert len(_trees("gitea_config")) == 1 and len(_trees("gitea_secrets")) == 1
+    """The forge roots read prod's tree and no other env's: compared by identity,
+    because a count passes for any single env."""
+    prod = _merge(_load(VALUES / "common.yaml"), _load(VALUES / "prod.yaml"))
+    staging = _merge(_load(VALUES / "common.yaml"), _load(VALUES / "staging.yaml"))
+    assert prod != staging, "the two envs merge to the same tree, so this test proves nothing"
+    assert _trees("gitea_config") == [prod]
+    prod_secrets = _merge(_load(SECRETS / "common.enc.yaml"), _load(SECRETS / "prod.enc.yaml"))
+    assert _trees("gitea_secrets") == [prod_secrets]
     assert len(_trees("config")) == len(ENVS)
-    for key in staging_only:
-        if key not in _load(VALUES / "common.yaml").get("apps", {}):
-            assert not resolves(_trees("gitea_config")[0], ("apps", key))
 
 
 def test_a_path_through_a_scalar_does_not_resolve() -> None:
