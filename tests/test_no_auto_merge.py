@@ -7,9 +7,13 @@ asserted by a test rather than by inspection, because inspection is what a
 one-line `--auto` in a workflow slips past.
 
 The scan covers every file that can act on the forge -- workflows, composite
-actions, the Makefile, the toolkit, scripts and the harness -- and reads code,
-not comments: several workflows explain in a comment why `allow_auto_merge`
-stays false, and that sentence must not trip the guard.
+actions, the Makefile, the toolkit, scripts and the harness. Whole-line
+comments are skipped: several workflows explain in a comment why
+`allow_auto_merge` stays false, and that sentence must not trip the guard. A
+trailing comment on a code line is NOT stripped, on purpose: `#` also appears
+inside strings and URLs, and cutting there could hide a real `--auto`. The cost
+is a spurious red on a line like `gh pr merge --squash  # no --auto`, which fails
+closed and is fixed by moving the remark onto its own line.
 """
 
 from __future__ import annotations
@@ -31,20 +35,26 @@ ENABLERS: dict[str, re.Pattern[str]] = {
     "automerge action": re.compile(r"uses:\s*\S*(automerge|auto-merge)\S*", re.IGNORECASE),
 }
 
-SCANNED_GLOBS = (
+# Surfaces that exist today: each must match at least one file, or the guard
+# would pass over an empty sample after a rename or a move.
+REQUIRED_GLOBS = (
     ".github/workflows/*.yml",
-    ".github/workflows/*.yaml",
-    ".github/actions/**/*.yml",
-    ".github/actions/**/*.yaml",
     "Makefile",
     "toolkit/**/*.py",
     "scripts/**/*",
     "harness/**/*.json",
 )
+# Surfaces scanned when present. The repository has no composite actions yet.
+OPTIONAL_GLOBS = (
+    ".github/workflows/*.yaml",
+    ".github/actions/**/*.yml",
+    ".github/actions/**/*.yaml",
+)
+SCANNED_GLOBS = REQUIRED_GLOBS + OPTIONAL_GLOBS
 
 
 def _comment_free(line: str) -> str:
-    """The code part of a line: `#` starts a comment in YAML, Make, shell and Python."""
+    """The line, or nothing when the whole line is a `#` comment (YAML, Make, shell, Python)."""
     return "" if line.lstrip().startswith("#") else line
 
 
@@ -59,10 +69,10 @@ def find_enablers(text: str) -> list[str]:
     return [name for name, pattern in ENABLERS.items() if pattern.search(code)]
 
 
-def test_the_scan_reaches_the_workflows() -> None:
-    """A glob that matched nothing would make the guard below pass vacuously."""
-    workflows = [p for p in _scanned_files() if p.parent.name == "workflows"]
-    assert len(workflows) > 5
+@pytest.mark.parametrize("pattern", REQUIRED_GLOBS)
+def test_every_required_surface_is_reached(pattern: str) -> None:
+    """A glob that matched nothing would make the guard below pass vacuously for it."""
+    assert any(p.is_file() for p in ROOT.glob(pattern)), f"{pattern} matched no file"
 
 
 def test_nothing_enables_auto_merge() -> None:
