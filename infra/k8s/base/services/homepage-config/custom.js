@@ -598,7 +598,7 @@ var KUBELAB_SERVICES_SHARED = [
   },
   {
     "name": "Open WebUI",
-    "url": "http://ace2.kubelab.internal:3080",
+    "url": "https://chat.kubelab.live",
     "health": "http://ace2.kubelab.internal:3080/health",
     "auth": "Authelia (OIDC)",
     "category": "AI",
@@ -1028,7 +1028,7 @@ var KUBELAB_SERVICES_SHARED = [
     var main = document.querySelector("main") || document.querySelector("#page_container") || document.body;
     var footer = document.createElement("div");
     footer.id = "kubelab-footer";
-    footer.textContent = "KubeLab IDP · config 1b46cf57";
+    footer.textContent = "KubeLab IDP · config f034c0ec";
     main.appendChild(footer);
   }
   setTimeout(addFooter, 2000);
