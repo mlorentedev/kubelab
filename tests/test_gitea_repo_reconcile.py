@@ -1987,7 +1987,7 @@ def test_a_stale_settings_body_for_an_absent_repository_is_planned_not_reported(
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks={**hooks_for(DECLARED), "teledyne/openkm-brain": None},
         declared_webhooks=N8N_HOOK_ONLY,
-        existing_repo_refs=ALL_REFS_PRESENT,
+        existing_repo_refs=refs_matching(settings),
     )
 
     assert [f"{r.org}/{r.name}" for r in plan.repos_to_migrate] == ["teledyne/openkm-brain"]
@@ -2166,7 +2166,7 @@ def _plan_with_native_present(*, empty: bool) -> ReconcilePlan:
         declared_settings=DECLARED_SETTINGS,
         existing_repo_hooks=hooks_for(declared),
         declared_webhooks=N8N_HOOK_ONLY,
-        existing_repo_refs=ALL_REFS_PRESENT,
+        existing_repo_refs=refs_matching(settings),
     )
 
 
