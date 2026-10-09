@@ -28,11 +28,10 @@ on:
   # reviewer we run ourselves and the verdict would be computed seconds after
   # the PR opens and never revised.
   #
-  # NOTE: `pr-agent` does not exist yet — it arrives with TOOL-021 Part 2. Until
-  # then this trigger is inert, and it is declared now rather than later only
-  # because the two must land close together; a reviewer whose output the gate
-  # never re-reads would be called unreviewed on every PR it reviewed. If Part 2
-  # is abandoned, delete this trigger rather than leaving it to look active.
+  # `pr-agent` (TOOL-021 Part 2) is the reviewer this re-reads: a reviewer whose
+  # output the gate never re-reads would be called unreviewed on every PR it
+  # reviewed. If `pr-agent.yml` is ever removed, delete this trigger with it
+  # rather than leaving it to look active.
   workflow_run:
     workflows: [pr-agent]
     types: [completed]
