@@ -1,9 +1,10 @@
 # Docker, Compose and image builds
 
-18 lessons, newest first. Back to [all categories](../_index.md).
+19 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 542 | [ufw does govern a port published by a rootless daemon](lesson-542-ufw-does-govern-a-port-published-by-a-rootless-daemon.md) | 2026-10-08 |
 | 540 | [Hermes reuses a sandbox and dry-runs a command without looking at its mounts](lesson-540-hermes-reuses-a-sandbox-and-dry-runs-a-command-without-looking-at-its-mounts.md) | 2026-10-08 |
 | 526 | [Hermes's docker backend applies only `approvals.deny`, and nothing fails when that list is empty](lesson-526-hermes-docker-backend-applies-only-the-deny-list.md) | 2026-10-06 |
 | 516 | [An empty `cache.dir` puts act_runner's cache in the container layer, while two documents said it was in the volume](lesson-516-an-empty-cache-dir-puts-act-runner-cache-in-the-container-layer.md) | 2026-10-02 |

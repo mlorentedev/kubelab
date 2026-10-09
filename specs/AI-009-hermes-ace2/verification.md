@@ -107,6 +107,15 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - **From master after the merge** (af2fdc99, #2130): `make provision NODE=ace2 ENV=prod TAGS=agent_stack` gave `changed=1`, the sync script replaced by the review's fix (a lock is held only by a git whose working directory is the clone), and the role's run of the sync succeeded. The next run: `changed=0`.
 - **Not yet measured**: a commit from a scheduled job (needs the seeded zone).
 
+### AC4, Hermes behind Open WebUI (`feat/ai009-webui-hermes`), ace2, 2026-10-08
+
+- **Listener**: `ss -ltnp` shows `172.30.250.1:8642` held by `rootlesskit` (pid 1129), in the host's namespace.
+- **ufw is the control**: the provision's probe from a container on `docker0` was refused, and the kernel logged `[UFW BLOCK] IN=docker0 ... SRC=172.17.0.2 DST=172.30.250.1 ... DPT=8642 ... SYN`. The probe on `open-webui` connected through `172.30.250.1 8642/tcp on br-open-webui ALLOW 172.30.250.0/24`. The API read-back answered first, so the refusal cannot come from a dead listener (lesson-542).
+- **Backend**: from inside `open-webui`, with its own env, `GET http://172.30.250.1:8642/v1/models` with the second key lists `hermes-agent`. Open WebUI's old `agent-stack-webui_default` network was already gone after the recreate.
+- **Boot order**: `agent-stack-hermes-bind.service` enabled, `WantedBy=user@999.service`. The reboot itself is the AC11 drill.
+- **Provision**: three runs from the branch, `changed=7` (the network, the recreate, the ufw rule), then `changed=2` (the boot unit, added after the first measurement), then `changed=0`.
+- **Not yet measured**: the model in Open WebUI's list for an admin, and its absence for a `users` login. Both need a browser login.
+
 ### AC8, interim, ace2, 2026-10-07
 
 Measured with the stack idle (load 0.04), before PR 4 and PR 5 add the vault clone and the MCP bridge. AC8 is measured again at closing. `free -m`: 1787 MiB used of 11739, 9951 available, no swap used. `docker stats --no-stream`: `open-webui` 654.7 MiB of 1.5 GiB, `hermes-kubelab` 209.2 MiB of 1.5 GiB, `hermes-kubelab-tailscale` 19.0 MiB of 128 MiB, `glances` 107.1 MiB of 256 MiB.

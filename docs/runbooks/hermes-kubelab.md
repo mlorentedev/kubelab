@@ -22,11 +22,22 @@ owner: manu
 | hermes-kubelab gateway | uid `hermes-kubelab`, rootless Docker | the user's daemon (`loginctl enable-linger`), `restart: unless-stopped` | `/var/lib/hermes-kubelab/data` |
 | tailscale sidecar (`tag:hermes`) | same rootless daemon, userspace mode | same | `/var/lib/hermes-kubelab/tailscale` (node key) |
 | tailnet refusal for the agent's uid | root | `agent-stack-egress.service`, `RequiredBy=user@<uid>` | `/opt/agent-stack/agent-egress.nft` |
+| bridge wait before the agent's manager | root | `agent-stack-hermes-bind.service`, `WantedBy=user@<uid>` | none |
 | vault sync (ADR-068 D4, amended) | uid `hermes-kubelab`, token from systemd | `hermes-kubelab-vault-sync.timer`: 2 min after boot, then every 15 min | clone `/var/lib/hermes-kubelab/vault`; token `/opt/agent-stack/vault-token` (root, 0600) |
 
 Open WebUI is reached only at `http://ace2.kubelab.internal:3080` over the
 tailnet, with OIDC against prod Authelia. The gateway's API listens on
-`127.0.0.1:8642` on ace2 and nowhere else.
+`172.30.250.1:8642`, the gateway of Open WebUI's bridge `br-open-webui`
+(`networking.nodes.ace2.webui_bridge`), and ufw admits that bridge's subnet
+alone. Open WebUI lists Hermes as its second backend, after NaN, visible to
+admins only. Without Open WebUI the API falls back to `127.0.0.1:8642`.
+
+At boot, `agent-stack-hermes-bind.service` holds the agent's user manager
+until the bridge has its address (`WantedBy=user@<uid>`, so a missing bridge
+delays the agent by up to 120 s and no more). To check the firewall by hand:
+`sudo ufw status | grep 8642` shows the one allow rule, and a refused attempt
+from another network logs `[UFW BLOCK] ... DPT=8642` in `journalctl -k`
+(lesson-542). Every provision runs both probes.
 
 ## Start, or converge after any change
 
