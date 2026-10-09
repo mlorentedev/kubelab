@@ -496,12 +496,14 @@ def test_the_real_declaration_matches_adr_065():
     declared = load_declaration(yaml.safe_load(common_yaml.read_text()))
 
     assert {org: [s.name for s in specs] for org, specs in declared.items()} == {
-        "teledyne": ["fae-brain", "openkm-brain"],
-        "personal": ["resume"],
+        "teledyne": ["fae-brain", "openkm-brain", "projects-toolkit"],
+        "personal": ["resume", "imagesensortool"],
         "kubelab": [],
     }, "the declaration drifted from ADR-065's table — change the ADR or change the declaration"
 
-    # Every declared repository is a MOVE off GitHub, not new work. A source that
+    # Every declared repository holds content, so none may be one the reconciler would
+    # create empty: each is either a MOVE off GitHub or born in Gitea (`origin:
+    # native`, ADR-065 D5), and both refuse the create. A source that
     # went missing would silently turn a migration back into an empty shell -- the
     # exact regression this shape was introduced to end -- and nothing else would
     # look wrong, because creating a declared repository is a legitimate outcome.
@@ -511,10 +513,10 @@ def test_the_real_declaration_matches_adr_065():
     # migration from a source that no longer exists and fails loudly, where a
     # removed source would plan a create and bring it back as an empty shell. The
     # restore path is the R2 backup (docs/runbooks/gitea-retire-github-copy.md).
-    assert all(s.migrate_from for specs in declared.values() for s in specs), (
-        "a declared repository lost its `migrate_from`. All three named by ADR-065 are migrations; "
-        "without a source the reconciler would create an empty shell, which `POST /repos/migrate` "
-        "then refuses with 409 -- the state this whole shape exists to prevent."
+    assert all(s.migrate_from or s.native for specs in declared.values() for s in specs), (
+        "a declared repository has neither `migrate_from` nor `origin: native`. Every one named by "
+        "ADR-065 holds content; without either the reconciler would create an empty shell, which "
+        "`POST /repos/migrate` then refuses with 409 -- the state this whole shape exists to prevent."
     )
 
 
@@ -1984,3 +1986,117 @@ def test_every_exit_path_fails_on_an_unfilled_migration_and_only_on_one(
     result = CliRunner().invoke(cli.app, ["gitea", "reconcile", *args])
 
     assert result.exit_code == (1 if unfilled else 0), f"{path}: {result.output}"
+
+
+# --- native repositories: content that lives only in Gitea (#2133) -------------
+
+
+def _org_doc(**entry: object) -> dict[str, object]:
+    return {"apps": {"services": {"core": {"gitea": {"organizations": {"personal": {"repositories": [entry]}}}}}}}
+
+
+def test_origin_native_is_read_into_the_spec() -> None:
+    declared = load_declaration(_org_doc(name="imagesensortool", origin="native", private=False))
+    assert declared == {"personal": [RepoSpec("imagesensortool", private=False, native=True)]}
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        {"name": "x", "origin": "native", "migrate_from": "github:mlorentedev/x"},
+        {"name": "x", "origin": "github"},
+    ],
+    ids=["native-with-a-source", "unknown-origin"],
+)
+def test_an_origin_the_reconciler_cannot_act_on_is_refused_at_load(entry: dict[str, object]) -> None:
+    """A native repository has no source by definition, and `native` is the only origin
+    there is to declare: anything else would be read as a create and could come back
+    as an empty shell."""
+    with pytest.raises(ValueError, match="origin"):
+        load_declaration(_org_doc(**entry))
+
+
+def _plan_with_native_absent() -> ReconcilePlan:
+    declared = {**DECLARED, "personal": [*DECLARED["personal"], RepoSpec("imagesensortool", native=True)]}
+    settings = settings_for(declared)
+    settings["personal/imagesensortool"] = None
+    return plan_reconcile(
+        declared,
+        existing_orgs=set(declared),
+        existing_repos={"teledyne/fae-brain": False, "teledyne/openkm-brain": False, "personal/resume": False},
+        existing_teams=converged_for(declared),
+        existing_repo_settings=settings,
+        declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks={**hooks_for(declared), "personal/imagesensortool": None},
+        declared_webhooks=N8N_HOOK_ONLY,
+    )
+
+
+def test_an_absent_native_repository_is_never_created_only_reported() -> None:
+    """Its content lives only in Gitea, so creating it would bring it back EMPTY and
+    read as repaired. The answer is the R2 backup, which this reconciler cannot run."""
+    plan = _plan_with_native_absent()
+
+    assert plan.repos_to_create == ()
+    assert plan.repos_to_migrate == ()
+    assert [f"{r.org}/{r.name}" for r in plan.absent_native_repos] == ["personal/imagesensortool"]
+    assert plan.is_noop, "reported, never acted on: it must not keep the plan from being a no-op"
+
+
+def test_the_plan_names_the_restore_for_an_absent_native_repository() -> None:
+    printed = format_plan(_plan_with_native_absent())
+    assert "personal/imagesensortool" in printed
+    assert "offsite-backup-restore.md" in printed
+
+
+def test_a_present_native_repository_is_neither_created_nor_reported() -> None:
+    declared = {**DECLARED, "personal": [*DECLARED["personal"], RepoSpec("imagesensortool", native=True)]}
+    plan = plan_reconcile(
+        declared,
+        existing_orgs=set(declared),
+        existing_repos={
+            "teledyne/fae-brain": False,
+            "teledyne/openkm-brain": False,
+            "personal/resume": False,
+            "personal/imagesensortool": False,
+        },
+        existing_teams=converged_for(declared),
+        existing_repo_settings=settings_for(declared),
+        declared_settings=DECLARED_SETTINGS,
+        existing_repo_hooks=hooks_for(declared),
+        declared_webhooks=N8N_HOOK_ONLY,
+    )
+    assert plan.absent_native_repos == ()
+    assert plan.repos_to_create == ()
+
+
+@pytest.mark.parametrize("native_absent", [True, False], ids=["absent", "present"])
+def test_the_cli_fails_on_an_absent_native_repository(monkeypatch: pytest.MonkeyPatch, native_absent: bool) -> None:
+    from typer.testing import CliRunner
+
+    import toolkit.cli.services as cli
+    import toolkit.features.gitea_repos as repos
+
+    absent = (DeclaredRepo(org="personal", name="imagesensortool", private=False),) if native_absent else ()
+    plan = ReconcilePlan(absent_native_repos=absent)
+
+    class _Config:
+        def __init__(self, *_a: object, **_k: object) -> None:
+            pass
+
+        def get_merged_config(self) -> dict[str, object]:
+            return {"apps": {"auth": {"identities": {}}}}
+
+    monkeypatch.setattr(cli, "_gitea_clients", lambda env: (_NoForgeAdmin(), None, "bot", "https://forge.invalid"))
+    monkeypatch.setattr(cli, "ConfigurationManager", _Config)
+    monkeypatch.setattr(cli, "_report_machine_ownership", lambda *a, **k: None)
+    monkeypatch.setattr(
+        repos, "load_declaration", lambda merged: {"personal": [RepoSpec("imagesensortool", native=True)]}
+    )
+    monkeypatch.setattr(repos, "load_settings", lambda merged: None)
+    monkeypatch.setattr(repos, "load_webhooks", lambda merged: ())
+    monkeypatch.setattr(repos, "plan_reconcile", lambda *a, **k: plan)
+
+    result = CliRunner().invoke(cli.app, ["gitea", "reconcile"])
+
+    assert result.exit_code == (1 if native_absent else 0), result.output

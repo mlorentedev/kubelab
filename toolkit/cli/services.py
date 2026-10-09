@@ -576,8 +576,20 @@ def gitea_reconcile(
             )
             raise typer.Exit(1)
 
+    def fail_on_absent_native_repos() -> None:
+        # Same exit as above, for the repository the reconciler must never create: its
+        # content exists only in Gitea, so a create would be an empty shell that reads
+        # as repaired. The repair is a restore from R2, which is an operator decision.
+        if plan.absent_native_repos:
+            logger.error(
+                f"{len(plan.absent_native_repos)} native repository/ies absent from the forge (listed "
+                "above with the restore). Not created: their only copy is the backup (ADR-065)."
+            )
+            raise typer.Exit(1)
+
     if plan.is_noop:
         report_ownership()
+        fail_on_absent_native_repos()
         fail_on_unfilled_migrations()
         # Drift does not make the plan non-idempotent -- nothing here would act on
         # it -- but it must not be reported as a match either. "Nothing to create"
@@ -599,6 +611,7 @@ def gitea_reconcile(
     if not apply:
         console.print("\n[dim]plan only — re-run with --apply to create[/dim]")
         report_ownership()
+        fail_on_absent_native_repos()
         fail_on_unfilled_migrations()
         return
 
@@ -705,6 +718,7 @@ def gitea_reconcile(
     # Reported by review on #1562.
     report_ownership()
 
+    fail_on_absent_native_repos()
     fail_on_unfilled_migrations()
     if not report.ok:
         raise typer.Exit(1)
@@ -745,12 +759,19 @@ def gitea_drop_empty(
     that cannot count it cannot say what the delete would destroy.
     """
     from toolkit.features.gitea_client import GiteaBasicAuthClient, GiteaError
-    from toolkit.features.gitea_repos import declared_full_names, load_declaration, plan_drop, split_full_name
+    from toolkit.features.gitea_repos import (
+        declared_full_names,
+        load_declaration,
+        native_full_names,
+        plan_drop,
+        split_full_name,
+    )
 
     admin, _bot, _bot_username, base_url = _gitea_clients(env)
     merged = ConfigurationManager(env, get_settings().project_root).get_merged_config()
     gitea = merged["apps"]["services"]["core"]["gitea"]
-    declared = declared_full_names(load_declaration(merged))
+    declaration = load_declaration(merged)
+    declared = declared_full_names(declaration)
 
     admin_password = gitea.get("admin_password")
     if not admin_password:
@@ -774,6 +795,7 @@ def gitea_drop_empty(
             full_name=repo,
             repo=current,
             declared=declared,
+            native=native_full_names(declaration),
             tracker_items=tracker_items,
             discard_tracker_items=discard_tracker_items,
         )

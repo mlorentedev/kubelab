@@ -17,7 +17,7 @@ owner: manu
 
 ## Status
 
-Accepted — 2026-08-26. Tracks [#1076](https://github.com/mlorentedev/kubelab/issues/1076) (TOOL-035), sequenced by [#1077](https://github.com/mlorentedev/kubelab/issues/1077) (IDP-034).
+Accepted — 2026-08-26. Amended 2026-10-08 (D5, [#2133](https://github.com/mlorentedev/kubelab/issues/2133)). Tracks [#1076](https://github.com/mlorentedev/kubelab/issues/1076) (TOOL-035), sequenced by [#1077](https://github.com/mlorentedev/kubelab/issues/1077) (IDP-034).
 
 Extends [ADR-061](adr-061-stateful-service-placement.md), which decides *what Gitea is for* (private repositories only, Argo CD keeps reconciling from GitHub) but not how repositories are arranged inside it. Extends [ADR-062](adr-062-platform-identity-model.md), whose identity tiers this maps onto rather than duplicating.
 
@@ -71,10 +71,12 @@ This maps onto ADR-062's tiers without inventing a second model:
 ### D2 — Organizations are split by provenance, not by topic
 
 ```
-teledyne/    fae-brain   openkm-brain
-personal/    resume
+teledyne/    fae-brain   openkm-brain   projects-toolkit
+personal/    resume      imagesensortool
 kubelab/     — reserved for future platform projects
 ```
+
+`projects-toolkit` and `imagesensortool` joined on 2026-10-08 (D5). Both were born in Gitea rather than moved to it.
 
 Provenance means *who owns the content*, and choosing that axis gives the organization a second job for free: **the org is the backup and retention class.** When the offsite tier lands ([ADR-049](adr-049-edge-object-storage-placement-doctrine.md) D3, sequenced in #1090/#596), "what gets copied to R2" is answered by reading the namespace rather than by maintaining a list — and a third party's material never inherits a personal repository's retention policy by accident.
 
@@ -95,6 +97,23 @@ The corollary binds the reconciler: it reports organizations and repositories th
 This is deliberately distinguished from the mirror architecture rejected above: a permanent dual-canonical arrangement was rejected, while retaining the source until a cutover is proven is a rollback plan. The distinction is *duration and intent*, and conflating them would either block the pilot needlessly or smuggle the rejected architecture back in permanently.
 
 The question the cutover must answer, and this ADR does not: **what must be true before the GitHub copy of a moved repository is retired?**
+
+### D5 — A repository born in Gitea is declared `origin: native`, and never created by the reconciler
+
+*Amendment, 2026-10-08 (#2133).* D1–D4 assumed every repository arrives from GitHub. Two did not: `projects-toolkit` and `imagesensortool` were created in the forge and exist nowhere else. They sat outside the declaration, reported as strays every run, because the declaration had two shapes and neither fitted: `migrate_from` names a source they do not have, and a bare entry means *new work, create it*.
+
+The bare entry is the dangerous one. A repository with content that goes missing from the forge would be re-created **empty** by the next `--apply`. The run would go green and the declaration would read as satisfied. #2133 measured exactly that state on `openkm-brain`, the shell that sat where a migration should have been.
+
+So a third shape, `origin: native`:
+
+- **Present:** reconciled like any other repository, with settings, webhooks and visibility drift.
+- **Absent:** never created. The plan names the repository and the restore (`docs/runbooks/offsite-backup-restore.md`), and the run exits 1. Its only other copy is the R2 backup of `/opt/gitea/data`, and a restore is a decision for the operator, not a side effect of reconciling.
+- **Never dropped:** `gitea-drop-empty` refuses it. That command clears shells that block a migration, and a native repository has none to block.
+- **`origin: native` with `migrate_from`, or any other origin, is refused at load.** A repository has one provenance.
+
+A bare entry keeps its meaning: new work, created empty. Once it holds work, it is switched to `origin: native`. The same applies after a moved repository's GitHub copy is retired: `migrate_from` stays as provenance (`docs/runbooks/gitea-retire-github-copy.md`). If such a repository is lost, the migration fails loudly against a source that no longer exists. It is never re-created empty.
+
+That runbook also answers the question D4 left open: what must be true before a moved repository's GitHub copy is retired.
 
 ## Consequences
 
