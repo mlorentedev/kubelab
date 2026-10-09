@@ -184,7 +184,8 @@ def test_the_role_installs_runs_and_enables_the_mirror() -> None:
     assert owned and owned[0]["ansible.builtin.file"]["owner"] == "root"
 
 
-def test_the_run_is_proved_by_a_file_in_the_tree() -> None:
+def test_the_run_is_proved_by_the_commit_it_checked_out() -> None:
     [proof] = [t for t in _mirror_tasks() if t["name"].startswith("Verify the vault mirror")]
-    assert proof["ansible.builtin.stat"]["path"].startswith("{{ agent_stack_vault_mirror }}/tree/")
-    assert "failed_when" in proof
+    argv = proof["ansible.builtin.command"]["argv"]
+    assert argv[:3] == ["git", "--git-dir", "{{ agent_stack_vault_mirror }}/git"] and "HEAD" in argv
+    assert "stdout_lines" in proof["failed_when"], "an empty checkout fails the provision"
