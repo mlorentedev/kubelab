@@ -61,14 +61,16 @@
 
     # The run checked out a commit with something in it. Not a path of the
     # vault's: this role does not know what the vault holds (the agent's zone
-    # exists only once something was written to it).
+    # exists only once something was written to it). A dry run reads the
+    # mirror as it stands; on a node it never reached there is none to read.
     - name: Verify the vault mirror checked out a commit
       ansible.builtin.command:
         argv: [git, --git-dir, "{{ agent_stack_vault_mirror }}/git", ls-tree, --name-only, HEAD]
       register: _agent_stack_mirror_head
       changed_when: false
       failed_when: _agent_stack_mirror_head.rc != 0 or not _agent_stack_mirror_head.stdout_lines
-      when: not ansible_check_mode
+      check_mode: false
+      ignore_errors: "{{ ansible_check_mode }}"
 
     - name: Enable the vault mirror timer
       ansible.builtin.systemd:

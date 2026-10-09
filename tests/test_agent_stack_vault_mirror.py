@@ -189,3 +189,6 @@ def test_the_run_is_proved_by_the_commit_it_checked_out() -> None:
     argv = proof["ansible.builtin.command"]["argv"]
     assert argv[:3] == ["git", "--git-dir", "{{ agent_stack_vault_mirror }}/git"] and "HEAD" in argv
     assert "stdout_lines" in proof["failed_when"], "an empty checkout fails the provision"
+    # A dry run reads the live mirror, and a node the run never reached does not fail it.
+    assert proof["check_mode"] is False and "when" not in proof
+    assert proof["ignore_errors"] == "{{ ansible_check_mode }}"
