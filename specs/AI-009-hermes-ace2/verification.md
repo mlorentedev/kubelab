@@ -127,6 +127,16 @@ The operator rebooted ace2 remotely with the stack running, after both peer sess
 - **Clone**: `git fsck` on `/var/lib/hermes-kubelab/vault` as the agent's user: exit 0, no output.
 - **Databases**: `PRAGMA integrity_check` opened read-only (`mode=ro`) returns `ok` for Open WebUI's `webui.db` and for Hermes's `state.db`, `shared-state.db`, `kanban.db`, `response_store.db`, `runs_idempotency.db` and `cron/executions.db`.
 
+### Public endpoint (#2142, #2135), prod, 2026-10-08
+
+Rolled out after the merge in the order the PR stated, with one break. The first provision from master failed: `provision-ace2.yml` still read the renamed `break_glass.open_webui`. Until #2145 ran from its branch (`changed=2`, the env file and Open WebUI's recreate), SSO was refused. DNS was applied from the main checkout: the plan showed one create. The create timed out at 30 s but landed, so the record was untainted rather than replaced (lesson-543). The plan then read `No changes`.
+
+- **Route**: `https://chat.kubelab.live/` answers 200 with a verified certificate. The prod e2e suite, filtered to Open WebUI (`-k open_webui`): 5 passed.
+- **Password form**: `POST /api/v1/auths/signin` on the public name answers 403.
+- **OIDC**: `/oauth/oidc/login` redirects to Authelia with `redirect_uri=https://chat.kubelab.live/oauth/oidc/callback`. Authelia answers with its login flow (`flow=openid_connect`), not a redirect error.
+- **CORS**: `Origin: https://chat.kubelab.live` and `Origin: http://ace2.kubelab.internal:3080` are each echoed in `access-control-allow-origin`, and a foreign origin gets none. So Open WebUI parses the two `;`-separated origins.
+- **Not yet run**: an interactive login off the tailnet with the tier check, the error page with ace2 off, and `make break-glass SVC=open-webui` (every use pages the operator channel). All three are the operator's.
+
 ### AC8, interim, ace2, 2026-10-07
 
 Measured with the stack idle (load 0.04), before PR 4 and PR 5 add the vault clone and the MCP bridge. AC8 is measured again at closing. `free -m`: 1787 MiB used of 11739, 9951 available, no swap used. `docker stats --no-stream`: `open-webui` 654.7 MiB of 1.5 GiB, `hermes-kubelab` 209.2 MiB of 1.5 GiB, `hermes-kubelab-tailscale` 19.0 MiB of 128 MiB, `glances` 107.1 MiB of 256 MiB.
