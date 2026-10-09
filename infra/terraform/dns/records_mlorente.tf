@@ -10,6 +10,10 @@ resource "cloudflare_record" "mlorente_root" {
   ttl             = var.dns_ttl
   proxied         = false
   allow_overwrite = true
+  timeouts {
+    create = "2m"
+    update = "2m"
+  }
 }
 
 # staging.mlorente.dev: resolved via Headscale split DNS → RPi4 CoreDNS → ace1
@@ -29,4 +33,8 @@ resource "cloudflare_record" "mlorente_svc" {
   ttl             = each.value.proxied ? 1 : var.dns_ttl
   proxied         = each.value.proxied
   allow_overwrite = true
+  timeouts {
+    create = "2m"
+    update = "2m"
+  }
 }

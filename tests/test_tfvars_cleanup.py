@@ -47,6 +47,26 @@ RENDERING_TARGETS = {
 }
 
 
+def _expand_calls(recipe: str, makefile: str) -> str:
+    """Expand `$(call NAME,a,b)` from its `define NAME` block, as make does.
+
+    Stripping it as any other `$(...)` would delete the whole body of a target
+    that runs terraform through a macro (TF-013's `_tf_guarded_apply`), and the
+    tests below would then measure an empty recipe.
+    """
+
+    def expand(match: re.Match[str]) -> str:
+        name, *args = match.group(1).split(",")
+        body = re.search(rf"^define {re.escape(name)}\n(.*?)^endef", makefile, re.M | re.S)
+        assert body, f"$(call {name}) has no define block"
+        out = body.group(1).rstrip("\n")
+        for i in range(1, 10):
+            out = out.replace(f"$({i})", args[i - 1] if i <= len(args) else "")
+        return out
+
+    return re.sub(r"\$\(call ([^()]*)\)", expand, recipe)
+
+
 def _recipe(target: str) -> str:
     """The target's recipe as shell source, with Make syntax resolved."""
     text = MAKEFILE.read_text(encoding="utf-8")
@@ -58,7 +78,7 @@ def _recipe(target: str) -> str:
     assert m, f"target {target!r} not found in the Makefile, or it has no recipe"
 
     lines = []
-    for raw in m.group(1).splitlines():
+    for raw in _expand_calls(m.group(1), text).splitlines():
         line = raw.lstrip("\t")
         if line.startswith("@"):
             line = line[1:]
@@ -114,6 +134,10 @@ def _run(
     rc = 1 if terraform_fails else 0
     (bin_dir / "terraform").write_text(f'#!/bin/sh\necho "terraform $*" >&2\nexit {rc}\n')
     (bin_dir / "terraform").chmod(0o755)
+    # What remains of `$(TOOLKIT) infra terraform plan-guard -` once Make's
+    # expansions are stripped: a guard that passes the (empty) plan.
+    (bin_dir / "infra").write_text("#!/bin/sh\ncat >/dev/null\nexit 0\n")
+    (bin_dir / "infra").chmod(0o755)
 
     shell = _recipe(target)
     # The renderer line becomes a stub that creates the file inside the temp

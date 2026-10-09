@@ -2169,6 +2169,42 @@ def tf_validate() -> None:
         raise typer.Exit(1) from None
 
 
+@terraform_app.command("plan-guard")
+def tf_plan_guard(
+    plan_json: Annotated[str, typer.Argument(help="`terraform show -json <plan>` output, or - for stdin")] = "-",
+    allow_destroy: Annotated[
+        bool, typer.Option("--allow-destroy", help="Let every delete and replace through")
+    ] = False,
+    allow: Annotated[
+        list[str] | None, typer.Option("--allow", help="An address that may be deleted or replaced")
+    ] = None,
+) -> None:
+    """Refuse a saved plan that deletes or replaces anything not allowed (TF-013).
+
+    The plan's JSON carries input variables, so it is read from stdin and never
+    printed; only addresses and actions reach the output.
+    """
+    import json
+    import sys
+
+    from toolkit.features.terraform_plan_guard import refused, summary
+
+    text = sys.stdin.read() if plan_json == "-" else Path(plan_json).read_text()
+    plan = json.loads(text)
+    counts = summary(plan)
+    logger.info(f"Plan: {counts['create']} to add, {counts['update']} to change, {counts['delete']} to destroy.")
+    blocked = refused(plan, allow_destroy=allow_destroy, allowed=frozenset(allow or ()))
+    if not blocked:
+        return
+    for change in blocked:
+        logger.error(f"refused: {change.describe()}")
+    if any(c.reason == "replace_because_tainted" for c in blocked):
+        logger.info("A tainted resource may already exist (lesson-543). Check it, then:")
+        logger.info("  make tf-untaint ROOT=<root> RES='<address>'")
+    logger.info("To delete on purpose, re-run with ALLOW_DESTROY=1.")
+    raise typer.Exit(1)
+
+
 # =============================================================================
 # GENERAL INFRA COMMANDS
 # =============================================================================

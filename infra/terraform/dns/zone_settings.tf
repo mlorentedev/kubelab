@@ -59,6 +59,10 @@ resource "cloudflare_record" "kubelab_caa_letsencrypt" {
     tag   = "issue"
     value = "letsencrypt.org"
   }
+  timeouts {
+    create = "2m"
+    update = "2m"
+  }
 }
 
 resource "cloudflare_record" "kubelab_caa_digicert" {
@@ -71,6 +75,10 @@ resource "cloudflare_record" "kubelab_caa_digicert" {
     flags = "0"
     tag   = "issue"
     value = "digicert.com"
+  }
+  timeouts {
+    create = "2m"
+    update = "2m"
   }
 }
 
@@ -85,6 +93,10 @@ resource "cloudflare_record" "kubelab_caa_google" {
     tag   = "issue"
     value = "pki.goog"
   }
+  timeouts {
+    create = "2m"
+    update = "2m"
+  }
 }
 
 resource "cloudflare_record" "mlorente_caa_letsencrypt" {
@@ -97,6 +109,10 @@ resource "cloudflare_record" "mlorente_caa_letsencrypt" {
     flags = "0"
     tag   = "issue"
     value = "letsencrypt.org"
+  }
+  timeouts {
+    create = "2m"
+    update = "2m"
   }
 }
 
@@ -111,6 +127,10 @@ resource "cloudflare_record" "mlorente_caa_digicert" {
     tag   = "issue"
     value = "digicert.com"
   }
+  timeouts {
+    create = "2m"
+    update = "2m"
+  }
 }
 
 resource "cloudflare_record" "mlorente_caa_google" {
@@ -123,5 +143,9 @@ resource "cloudflare_record" "mlorente_caa_google" {
     flags = "0"
     tag   = "issue"
     value = "pki.goog"
+  }
+  timeouts {
+    create = "2m"
+    update = "2m"
   }
 }
