@@ -1510,7 +1510,7 @@ define _tf_guarded_apply
 ( _p=$$(mktemp -d) && trap 'rm -rf "$$_p"' EXIT && \
 	terraform init -input=false >/dev/null && \
 	terraform plan -input=false -out="$$_p/plan" -var-file=$(1) $(2) && \
-	terraform show -json "$$_p/plan" | $(TOOLKIT) infra terraform plan-guard - $(if $(ALLOW_DESTROY),--allow-destroy) && \
+	terraform show -json "$$_p/plan" | $(TOOLKIT) infra terraform plan-guard - $(if $(filter 1,$(ALLOW_DESTROY)),--allow-destroy) && \
 	terraform apply -input=false "$$_p/plan" )
 endef
 

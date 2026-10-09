@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -121,7 +122,22 @@ def test_the_guarded_apply_runs_the_plan_it_checked_and_removes_it() -> None:
     assert 'terraform show -json "$$_p/plan" | $(TOOLKIT) infra terraform plan-guard -' in body
     assert 'terraform apply -input=false "$$_p/plan"' in body
     assert "trap 'rm -rf \"$$_p\"' EXIT" in body
-    assert "$(if $(ALLOW_DESTROY),--allow-destroy)" in body
+    assert "$(if $(filter 1,$(ALLOW_DESTROY)),--allow-destroy)" in body
+
+
+@pytest.mark.parametrize(("value", "opens"), [("1", True), ("", False), ("0", False), ("false", False)])
+def test_only_allow_destroy_1_opens_the_guard(value: str, opens: bool) -> None:
+    """Make's `$(if)` is true for any non-empty string, so `ALLOW_DESTROY=0` must not count."""
+    body = re.search(r"^define _tf_guarded_apply\n(.*?)^endef", MAKEFILE, re.M | re.S).group(1)
+    flag = re.search(r"\$\(if .*?ALLOW_DESTROY.*?--allow-destroy\)", body).group(0)
+    out = subprocess.run(
+        ["make", "-s", "-f", "-", "show", f"ALLOW_DESTROY={value}"],
+        input=f"show:\n\t@echo '{flag}'\n",
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    assert (out == "--allow-destroy") is opens, out
 
 
 def test_only_the_named_replace_and_the_test_fixture_keep_auto_approve() -> None:
