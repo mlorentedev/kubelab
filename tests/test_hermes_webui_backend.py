@@ -11,6 +11,7 @@ provision by having a container on another network refused.
 from __future__ import annotations
 
 import ipaddress
+import re
 
 import yaml
 
@@ -43,6 +44,16 @@ def _named(name: str) -> dict:
 # --------------------------------------------------------------------------- the network
 
 
+def _docker0_cidr() -> str:
+    """docker0's range, read from the daemon.json the docker role writes: that file,
+    not a copy, is what the system daemon uses (moving it to `networking.*` is #2136)."""
+    tasks = yaml.safe_load((ROLE.parent / "docker/tasks/main.yml").read_text())
+    [daemon] = [t for t in tasks if t.get("name") == "Configure Docker daemon"]
+    [cidr] = re.findall(r'"fixed-cidr": "([^"]+)"', daemon["copy"]["content"])
+    return cidr
+
+
+
 def test_the_bridge_is_private_and_clear_of_every_declared_range() -> None:
     subnet = ipaddress.ip_network(BRIDGE["subnet"])
     common = yaml.safe_load(COMMON.read_text())["networking"]
@@ -50,7 +61,7 @@ def test_the_bridge_is_private_and_clear_of_every_declared_range() -> None:
     assert ipaddress.ip_address(BRIDGE["gateway"]) in subnet
     # The system daemon's own bridge, the LAN, and the tailnet the agent is refused:
     # an address in that last one would make the egress rule drop Hermes's replies.
-    for taken in ("172.17.0.0/16", common["lan_cidr"], common["tailscale_cidr"]):
+    for taken in (_docker0_cidr(), common["lan_cidr"], common["tailscale_cidr"]):
         assert not subnet.overlaps(ipaddress.ip_network(taken)), f"{subnet} overlaps {taken}"
     assert len(BRIDGE["name"]) <= 15, "a Linux interface name is at most 15 characters"
 
@@ -169,3 +180,12 @@ def test_a_hermes_container_left_unbound_is_recreated() -> None:
     assert "hermes-kubelab" in probe["ansible.builtin.command"]
     start = _named("Start hermes-kubelab")["ansible.builtin.command"]
     assert "_agent_stack_hermes_unbound" in start
+
+
+def test_the_rule_is_closed_when_hermes_is_not_configured() -> None:
+    """The same rule as the one opened, comment included, and a rule that was never
+    opened is not a failure: a host without the inference key never had it."""
+    close = _named("Close the Hermes API to Open WebUI's network")
+    opened = _named("Admit Open WebUI's network to the Hermes API")["community.general.ufw"]
+    assert close["community.general.ufw"] == {**opened, "delete": True}
+    assert "non-existent" in close["failed_when"]

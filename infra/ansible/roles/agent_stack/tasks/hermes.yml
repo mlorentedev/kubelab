@@ -78,6 +78,8 @@
         - "{{ agent_stack_hermes_env }}"
         - "{{ agent_stack_hermes_ts_env }}"
 
+    # The same rule as the one opened, comment included. A host that never ran
+    # Hermes never had it, and ufw refuses to delete a rule it does not hold.
     - name: Close the Hermes API to Open WebUI's network
       community.general.ufw:
         rule: allow
@@ -86,7 +88,12 @@
         to_ip: "{{ agent_stack_webui_bridge.gateway }}"
         to_port: "{{ agent_stack_hermes.api_port }}"
         proto: tcp
+        comment: hermes-kubelab API from Open WebUI
         delete: true
+      register: _agent_stack_hermes_rule_closed
+      failed_when: >-
+        _agent_stack_hermes_rule_closed is failed
+        and 'non-existent' not in (_agent_stack_hermes_rule_closed.msg | default('') ~ _agent_stack_hermes_rule_closed.stdout | default(''))
 
 - name: Deploy hermes-kubelab
   when: agent_stack_hermes_configured | bool
