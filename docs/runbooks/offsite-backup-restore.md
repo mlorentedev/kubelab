@@ -509,8 +509,9 @@ Keep `data.broken-*` until you have. Pushes made after the snapshot are lost on
 the server; anyone who still has them in a clone pushes them again.
 
 **One repository missing, the rest fine.** This is what `make gitea-reconcile`
-reports for a repository declared `origin: native` that is absent from the forge
-(ADR-065 D5). The reconciler never re-creates such a repository, because it would
+reports for a repository declared `origin: native` that is absent from the forge,
+or present but empty (ADR-065 D5). For an empty one, skip creating it below and push
+straight into it. The reconciler never re-creates such a repository, because it would
 come back empty and read as repaired. Do not restore all of `/data` for one
 repository: that rolls back every other repository too. Restore its bare
 repository into scratch, then push it into a new empty repository:

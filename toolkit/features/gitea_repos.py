@@ -553,6 +553,10 @@ class ReconcilePlan:
     # lives only in Gitea, so a create would be an empty shell -- and reported with the
     # restore instead. Not part of `is_noop`, for the same reason as the field above.
     absent_native_repos: tuple[DeclaredRepo, ...] = ()
+    # Declared `origin: native`, present, and git-empty: the content-gone state of #2133
+    # for a repository whose only other copy is the backup. Reported with the same
+    # restore, and kept out of `is_noop` for the same reason (#2141 review).
+    emptied_native_repos: tuple[DeclaredRepo, ...] = ()
 
     @property
     def is_noop(self) -> bool:
@@ -859,6 +863,17 @@ def plan_reconcile(
         and (existing_repo_settings[f"{org}/{spec.name}"] or {}).get("empty") is True
     )
 
+    # A native repository is declared once it holds work (`RepoSpec`), so empty means
+    # lost -- or a restore that has not landed yet, which is still not converged.
+    emptied_native_repos = tuple(
+        DeclaredRepo(org=org, name=spec.name, private=spec.private)
+        for org, specs in sorted(declared.items())
+        for spec in sorted(specs, key=lambda s: s.name)
+        if spec.native
+        and f"{org}/{spec.name}" in existing_repos
+        and (existing_repo_settings[f"{org}/{spec.name}"] or {}).get("empty") is True
+    )
+
     return ReconcilePlan(
         orgs_to_create=orgs_to_create,
         repos_to_create=repos_to_create,
@@ -873,6 +888,7 @@ def plan_reconcile(
         visibility_drift=visibility_drift,
         unfilled_migrations=unfilled_migrations,
         absent_native_repos=absent_native_repos,
+        emptied_native_repos=emptied_native_repos,
     )
 
 
@@ -1289,6 +1305,11 @@ def format_plan(plan: ReconcilePlan) -> str:
         lines.append(
             f"  ! repo {absent.org}/{absent.name}   declared native, but ABSENT from the forge — not created: "
             f"its only other copy is the R2 backup. Restore: docs/runbooks/offsite-backup-restore.md"
+        )
+    for emptied in plan.emptied_native_repos:
+        lines.append(
+            f"  ! repo {emptied.org}/{emptied.name}   declared native, but the forge holds it EMPTY — its "
+            f"content is gone or not yet restored. Restore: docs/runbooks/offsite-backup-restore.md"
         )
     if not lines:
         return "  (nothing to do — forge matches the declaration)"

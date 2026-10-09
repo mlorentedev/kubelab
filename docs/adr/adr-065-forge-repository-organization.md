@@ -107,6 +107,7 @@ The bare entry is the dangerous one. A repository with content that goes missing
 So a third shape, `origin: native`:
 
 - **Present:** reconciled like any other repository, with settings, webhooks and visibility drift.
+- **Present but git-empty:** reported like an absent one, with the restore, and exits 1. A native repository is declared once it holds work, so empty means the content is gone, or a restore that has not landed yet (#2141 review).
 - **Absent:** never created. The plan names the repository and the restore (`docs/runbooks/offsite-backup-restore.md`), and the run exits 1. Its only other copy is the R2 backup of `/opt/gitea/data`, and a restore is a decision for the operator, not a side effect of reconciling.
 - **Never dropped:** `gitea-drop-empty` refuses it. That command clears shells that block a migration, and a native repository has none to block.
 - **`origin: native` with `migrate_from`, or any other origin, is refused at load.** A repository has one provenance.
