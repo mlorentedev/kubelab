@@ -43,6 +43,7 @@ from toolkit.features.gitea_repos import DropDecision, plan_drop
 def test_an_empty_declared_repository_may_be_dropped() -> None:
     """The one case this command exists for."""
     decision = plan_drop(
+        native=set(),
         tracker_items=0,
         full_name="personal/resume",
         repo={"empty": True, "size": 22},
@@ -60,6 +61,7 @@ def test_a_repository_with_content_is_refused() -> None:
     anything. This one holds for every caller.
     """
     decision = plan_drop(
+        native=set(),
         tracker_items=0,
         full_name="personal/resume",
         repo={"empty": False, "size": 4102},
@@ -78,6 +80,7 @@ def test_an_undeclared_repository_is_refused_even_when_empty() -> None:
     does not make it ours to delete.
     """
     decision = plan_drop(
+        native=set(),
         tracker_items=0,
         full_name="personal/somebody-elses-thing",
         repo={"empty": True, "size": 0},
@@ -93,7 +96,9 @@ def test_an_absent_repository_is_already_converged() -> None:
     Same contract as `revoke_token`'s 404 handling. A command that fails on its
     second run is not an operation, it is a script.
     """
-    decision = plan_drop(tracker_items=0, full_name="personal/resume", repo=None, declared={"personal/resume"})
+    decision = plan_drop(
+        native=set(), tracker_items=0, full_name="personal/resume", repo=None, declared={"personal/resume"}
+    )
     assert not decision.may_drop
     assert "already absent" in (decision.reason or "")
 
@@ -107,9 +112,13 @@ def test_emptiness_is_read_from_the_field_gitea_sets_not_inferred_from_size() ->
     a guard written as `size < 100` would eventually accept a tiny real repository
     (not harmless). `empty` is the field Gitea maintains for this question.
     """
-    assert plan_drop(tracker_items=0, full_name="a/b", repo={"empty": True, "size": 22}, declared={"a/b"}).may_drop
+    assert plan_drop(
+        native=set(), tracker_items=0, full_name="a/b", repo={"empty": True, "size": 22}, declared={"a/b"}
+    ).may_drop
 
-    tiny_but_real = plan_drop(tracker_items=0, full_name="a/b", repo={"empty": False, "size": 22}, declared={"a/b"})
+    tiny_but_real = plan_drop(
+        native=set(), tracker_items=0, full_name="a/b", repo={"empty": False, "size": 22}, declared={"a/b"}
+    )
     assert not tiny_but_real.may_drop
 
 
@@ -120,7 +129,7 @@ def test_a_missing_empty_field_is_refused_rather_than_assumed() -> None:
     question was not answered, and defaulting it to True would delete on the
     strength of a missing value.
     """
-    decision = plan_drop(tracker_items=0, full_name="a/b", repo={"size": 22}, declared={"a/b"})
+    decision = plan_drop(native=set(), tracker_items=0, full_name="a/b", repo={"size": 22}, declared={"a/b"})
     assert not decision.may_drop
     assert "did not report" in (decision.reason or "")
 
@@ -134,7 +143,7 @@ def test_a_malformed_target_is_refused(full_name: str) -> None:
     the API at all.
     """
     with pytest.raises(ValueError):
-        plan_drop(tracker_items=0, full_name=full_name, repo={"empty": True}, declared={full_name})
+        plan_drop(native=set(), tracker_items=0, full_name=full_name, repo={"empty": True}, declared={full_name})
 
 
 def test_the_decision_carries_no_capability() -> None:
@@ -187,6 +196,7 @@ def test_an_empty_repository_with_issues_is_refused() -> None:
     guard would have deleted both, because the only content it knew of was git.
     """
     decision = plan_drop(
+        native=set(),
         full_name="teledyne/openkm-brain",
         repo={"empty": True, "size": 22},
         declared={"teledyne/openkm-brain"},
@@ -198,7 +208,7 @@ def test_an_empty_repository_with_issues_is_refused() -> None:
 
 def test_an_unknown_tracker_count_is_refused() -> None:
     """None means the count was not read, which is not zero."""
-    decision = plan_drop(full_name="a/b", repo={"empty": True}, declared={"a/b"}, tracker_items=None)
+    decision = plan_drop(native=set(), full_name="a/b", repo={"empty": True}, declared={"a/b"}, tracker_items=None)
     assert not decision.may_drop
     assert "did not count" in (decision.reason or "")
 
@@ -208,7 +218,12 @@ def test_the_operator_may_discard_issues_only_by_naming_their_exact_count() -> N
 
     def drop(discard: int | None):
         return plan_drop(
-            full_name="a/b", repo={"empty": True}, declared={"a/b"}, tracker_items=2, discard_tracker_items=discard
+            native=set(),
+            full_name="a/b",
+            repo={"empty": True},
+            declared={"a/b"},
+            tracker_items=2,
+            discard_tracker_items=discard,
         )
 
     assert drop(2).may_drop
@@ -219,7 +234,7 @@ def test_the_operator_may_discard_issues_only_by_naming_their_exact_count() -> N
 
 def test_the_discard_count_cannot_unlock_a_repository_with_git_content() -> None:
     decision = plan_drop(
-        full_name="a/b", repo={"empty": False}, declared={"a/b"}, tracker_items=2, discard_tracker_items=2
+        native=set(), full_name="a/b", repo={"empty": False}, declared={"a/b"}, tracker_items=2, discard_tracker_items=2
     )
     assert not decision.may_drop
 
@@ -271,3 +286,99 @@ def test_the_count_includes_closed_issues_and_pull_requests() -> None:
     assert client.count_tracker_items("teledyne", "openkm-brain") == 5
     assert all("state=all" in url for url in session.urls)
     assert {url.split("type=")[1].split("&")[0] for url in session.urls} == {"issues", "pulls"}
+
+
+# --- #2133: a native repository is never dropped -------------------------------
+
+
+def test_a_native_repository_is_refused_even_when_empty() -> None:
+    """This command clears shells that block a MIGRATION. A native repository has no
+    source to migrate from, so dropping it buys nothing and leaves the reconciler
+    reporting it absent with only a restore to answer -- and an empty native one may
+    be new work about to be pushed. Declared native means kept."""
+    decision = plan_drop(
+        full_name="personal/imagesensortool",
+        repo={"empty": True, "size": 22},
+        declared={"personal/imagesensortool"},
+        native={"personal/imagesensortool"},
+        tracker_items=0,
+    )
+    assert not decision.may_drop
+    assert "native" in (decision.reason or "")
+
+
+def test_the_native_set_is_produced_by_one_function() -> None:
+    from toolkit.features.gitea_repos import RepoSpec, native_full_names
+
+    declaration = {
+        "personal": [RepoSpec("resume", migrate_from="github:mlorentedev/resume"), RepoSpec("ist", native=True)],
+        "kubelab": [],
+    }
+    assert native_full_names(declaration) == {"personal/ist"}
+
+
+def test_native_is_a_required_argument_so_no_caller_can_forget_it() -> None:
+    """The refusal guards a delete, so a caller that omits the set must not get the
+    permissive answer by default."""
+    with pytest.raises(TypeError):
+        plan_drop(full_name="a/b", repo={"empty": True}, declared={"a/b"}, tracker_items=0)  # type: ignore[call-arg]
+
+
+@pytest.mark.parametrize("native", [True, False], ids=["native", "migration"])
+def test_the_command_refuses_a_native_repository_end_to_end(monkeypatch: pytest.MonkeyPatch, native: bool) -> None:
+    """The required argument stops a caller OMITTING the set, not passing an empty one.
+    This runs the real command against a declaration, so the CLI has to derive the
+    set from it: an empty, shell-like native repository must survive `--apply`."""
+    from typer.testing import CliRunner
+
+    import toolkit.cli.services as cli
+    import toolkit.features.gitea_client as gitea_client
+    import toolkit.features.gitea_repos as repos
+
+    deleted: list[tuple[str, str]] = []
+
+    class _Admin:
+        def get_repo(self, owner: str, name: str) -> dict[str, object]:
+            return {"empty": True, "size": 22}
+
+    class _Basic:
+        def __init__(self, *_a: object) -> None:
+            pass
+
+        def count_tracker_items(self, owner: str, name: str) -> int:
+            return 0
+
+        def delete_repo(self, owner: str, name: str) -> bool:
+            deleted.append((owner, name))
+            return True
+
+    class _Config:
+        def __init__(self, *_a: object, **_k: object) -> None:
+            pass
+
+        def get_merged_config(self) -> dict[str, object]:
+            return {
+                "apps": {
+                    "auth": {"identities": {"superadmin": "admin"}},
+                    "services": {"core": {"gitea": {"admin_password": "unused"}}},
+                }
+            }
+
+    spec = (
+        repos.RepoSpec("imagesensortool", native=True)
+        if native
+        else repos.RepoSpec("imagesensortool", migrate_from="github:mlorentedev/imagesensortool")
+    )
+    monkeypatch.setattr(cli, "_gitea_clients", lambda env: (_Admin(), None, "bot", "https://forge.invalid"))
+    monkeypatch.setattr(cli, "ConfigurationManager", _Config)
+    monkeypatch.setattr(gitea_client, "GiteaBasicAuthClient", _Basic)
+    monkeypatch.setattr(repos, "load_declaration", lambda merged: {"personal": [spec]})
+
+    result = CliRunner().invoke(cli.app, ["gitea", "drop-empty", "--repo", "personal/imagesensortool", "--apply"])
+
+    if native:
+        assert result.exit_code == 1, result.output
+        assert deleted == []
+    else:
+        assert result.exit_code == 0, result.output
+        assert deleted == [("personal", "imagesensortool")]

@@ -508,6 +508,32 @@ listed, and `git fsck` clean on a fresh clone of the one you care most about.
 Keep `data.broken-*` until you have. Pushes made after the snapshot are lost on
 the server; anyone who still has them in a clone pushes them again.
 
+**One repository missing, the rest fine.** This is what `make gitea-reconcile`
+reports for a repository declared `origin: native` that is absent from the forge
+(ADR-065 D5). The reconciler never re-creates such a repository, because it would
+come back empty and read as repaired. Do not restore all of `/data` for one
+repository: that rolls back every other repository too. Restore its bare
+repository into scratch, then push it into a new empty repository:
+
+```bash
+# On the Beelink, restic environment loaded. <org>/<name> as the plan printed it.
+sudo -E restic -r "$REPO" restore <snapshot-id> \
+  --include "/opt/node-backup/staging/gitea/git/repositories/<org>/<name>.git" \
+  --target /tmp/repo-restore
+sudo git -C "/tmp/repo-restore/opt/node-backup/staging/gitea/git/repositories/<org>/<name>.git" fsck --full
+```
+
+Create the empty repository as the superadmin, in the web UI under `<org>`, with
+the declared visibility. Then copy the restored bare repository to the
+workstation and push every ref from it:
+`make gitea-git ARGS="-C <restored>.git push --mirror https://gitea.kubelab.live/<org>/<name>.git"`.
+Finish with `make gitea-reconcile APPLY=1`, which applies the declared settings and
+webhooks. A re-run should report nothing to do.
+
+This brings back the git content only. Issues and pull requests live in `gitea.db`
+together with every other repository's. Recovering them means the full restore
+above, or reading them out of a scratch copy of the database, the way the drill does.
+
 ### Headscale
 
 The VPS capture stages the `headscale_headscale_data` volume at

@@ -1308,10 +1308,18 @@ apps:
             - name: openkm-brain
               migrate_from: github:mlorentedev/openkm-brain
               private: false
+            # Born in Gitea: no source anywhere else, so an absent one is reported with
+            # the R2 restore, never created empty (ADR-065 D5, #2133).
+            - name: projects-toolkit
+              origin: native
+              private: true
           personal:
             repositories:
             - name: resume
               migrate_from: github:mlorentedev/resume
+              private: false
+            - name: imagesensortool
+              origin: native
               private: false
           kubelab:
             repositories: []

@@ -45,7 +45,7 @@ from __future__ import annotations
 
 import enum
 from dataclasses import dataclass, field, fields
-from typing import TYPE_CHECKING, Any, Iterable, Mapping, Sequence
+from typing import TYPE_CHECKING, AbstractSet, Any, Iterable, Mapping, Sequence
 
 from toolkit.features.gitea_client import TEAM_UNITS
 
@@ -76,11 +76,20 @@ class RepoSpec:
     Optional, and its absence means something specific: a repository that starts
     life in Gitea has nowhere to come from, so requiring the field would force a
     fictional source on the next new repository.
+
+    `native` (declared as `origin: native`) is the third case, and it is what a
+    repository becomes once it holds work that exists nowhere else: born in Gitea,
+    no source to migrate from, and its only recovery path the R2 backup. Such a
+    repository is NEVER created. Absent, it would come back as an empty shell that
+    reads as repaired -- the state #2133 was about -- so the reconciler reports it
+    with the restore instead. A brand-new repository is declared without either
+    field, created, and switched to `origin: native` once it holds work.
     """
 
     name: str
     migrate_from: str | None = None
     private: bool = True
+    native: bool = False
 
 
 @dataclass(frozen=True)
@@ -540,6 +549,10 @@ class ReconcilePlan:
     # the repair deletes the shell, and this reconciler cannot delete. The CLI turns
     # it into a failing exit instead.
     unfilled_migrations: tuple[DeclaredRepo, ...] = ()
+    # Declared `origin: native` and absent from the forge. Never created -- its content
+    # lives only in Gitea, so a create would be an empty shell -- and reported with the
+    # restore instead. Not part of `is_noop`, for the same reason as the field above.
+    absent_native_repos: tuple[DeclaredRepo, ...] = ()
 
     @property
     def is_noop(self) -> bool:
@@ -714,7 +727,13 @@ def plan_reconcile(
     )
 
     repos_to_create = tuple(
-        DeclaredRepo(org=org, name=spec.name, private=spec.private) for org, spec in missing if not spec.migrate_from
+        DeclaredRepo(org=org, name=spec.name, private=spec.private)
+        for org, spec in missing
+        if not spec.migrate_from and not spec.native
+    )
+
+    absent_native_repos = tuple(
+        DeclaredRepo(org=org, name=spec.name, private=spec.private) for org, spec in missing if spec.native
     )
 
     repos_to_migrate = tuple(
@@ -752,6 +771,10 @@ def plan_reconcile(
     # lesson-424's shape read backwards: a convergence step scoped to the existing
     # set never reaches what the same run creates. `existing_repo_settings` holds
     # None for those, and `settings_needs_convergence` reads None as short.
+    #
+    # Except an absent NATIVE repository: nothing creates it, so there is nothing to
+    # configure or hook, and planning for it would make an unactionable plan non-noop.
+    not_created = {f"{r.org}/{r.name}" for r in absent_native_repos}
     repos_to_configure = tuple(
         change
         for change in (
@@ -763,6 +786,7 @@ def plan_reconcile(
             )
             for org, specs in sorted(declared.items())
             for spec in sorted(specs, key=lambda s: s.name)
+            if f"{org}/{spec.name}" not in not_created
         )
         if change.changes
     )
@@ -790,6 +814,7 @@ def plan_reconcile(
             )
             for org, specs in sorted(declared.items())
             for spec in sorted(specs, key=lambda s: s.name)
+            if f"{org}/{spec.name}" not in not_created
             for hook in declared_webhooks
         )
         if change.changes
@@ -847,6 +872,7 @@ def plan_reconcile(
         undeclared_repos=undeclared_repos,
         visibility_drift=visibility_drift,
         unfilled_migrations=unfilled_migrations,
+        absent_native_repos=absent_native_repos,
     )
 
 
@@ -883,11 +909,20 @@ def load_declaration(common: Mapping[str, Any]) -> dict[str, list[RepoSpec]]:
                     f"comes from can only create it empty, and Gitea then refuses to migrate into "
                     f"it with 409."
                 )
+            origin = entry.get("origin")
+            if origin not in (None, "native") or (origin == "native" and entry.get("migrate_from")):
+                raise ValueError(
+                    f"`{org}.repositories` entry {entry.get('name')!r} declares origin={origin!r}"
+                    f"{' with a migrate_from' if entry.get('migrate_from') else ''}. The only origin is "
+                    f"`native`, a repository born in Gitea, and it has no source by definition. A repository "
+                    f"moved from elsewhere says so with `migrate_from:` alone."
+                )
             specs.append(
                 RepoSpec(
                     name=str(entry["name"]),
                     migrate_from=entry.get("migrate_from"),
                     private=bool(entry.get("private", True)),
+                    native=origin == "native",
                 )
             )
         declaration[org] = specs
@@ -1151,6 +1186,11 @@ def declared_full_names(declaration: Mapping[str, Iterable[RepoSpec]]) -> set[st
     return {f"{org}/{spec.name}" for org, specs in declaration.items() for spec in specs}
 
 
+def native_full_names(declaration: Mapping[str, Iterable[RepoSpec]]) -> set[str]:
+    """The declared repositories marked `origin: native`, same shape and same reason as above."""
+    return {f"{org}/{spec.name}" for org, specs in declaration.items() for spec in specs if spec.native}
+
+
 def format_plan(plan: ReconcilePlan) -> str:
     """Human-readable plan, including the strays.
 
@@ -1245,6 +1285,11 @@ def format_plan(plan: ReconcilePlan) -> str:
             f"holds it EMPTY — the migration never ran. Repair: `make gitea-drop-empty REPO={full_name}`, "
             f"then `make gitea-reconcile APPLY=1`"
         )
+    for absent in plan.absent_native_repos:
+        lines.append(
+            f"  ! repo {absent.org}/{absent.name}   declared native, but ABSENT from the forge — not created: "
+            f"its only other copy is the R2 backup. Restore: docs/runbooks/offsite-backup-restore.md"
+        )
     if not lines:
         return "  (nothing to do — forge matches the declaration)"
     return "\n".join(lines)
@@ -1331,6 +1376,7 @@ def plan_drop(
     repo: Mapping[str, Any] | None,
     declared: set[str],
     *,
+    native: AbstractSet[str],
     tracker_items: int | None,
     discard_tracker_items: int | None = None,
 ) -> DropDecision:
@@ -1343,13 +1389,17 @@ def plan_drop(
     shells, and `POST /repos/migrate` answers 409 rather than filling one, so the
     shells block the migration they were declared for.
 
-    FOUR REFUSALS, and the order is deliberate -- each answers a different
+    FIVE REFUSALS, and the order is deliberate -- each answers a different
     question, and the earlier ones would be wrong to skip even if a later one held:
 
     - **Malformed target.** `owner/name` or nothing. A typo must not become a URL.
     - **Not declared.** A stray survives, always. Emptiness does not make someone
       else's repository ours to remove (ADR-065 D3), and a stray is precisely the
       object whose removal needs a human who knows what it was.
+    - **Native** (#2133). This command clears shells that block a migration, and a
+      native repository has none to block. Its only other copy is the R2 backup, so
+      a drop leaves nothing but a restore. `native` is required, not defaulted: the
+      refusal guards a delete, and a forgotten argument must not mean "allowed".
     - **Not empty, or emptiness unknown.** `empty` is the field Gitea maintains for
       this; `size` is not a proxy for it. A freshly created empty repository
       reports `size: 22` -- the git directory itself -- measured on all three
@@ -1385,6 +1435,13 @@ def plan_drop(
             f"{full_name} is not declared in `apps.services.core.gitea.organizations`. Undeclared "
             f"repositories are reported and never removed (#1076, ADR-065 D3) — being empty does "
             f"not change that. Declare it first if it really is ours.",
+        )
+
+    if full_name in native:
+        return DropDecision(
+            False,
+            f"{full_name} is declared `origin: native`: born in Gitea, with no source to migrate "
+            f"from. This command removes shells that block a migration, and there is none to block.",
         )
 
     if "empty" not in repo:
