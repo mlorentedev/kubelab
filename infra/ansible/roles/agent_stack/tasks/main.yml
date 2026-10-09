@@ -39,6 +39,31 @@
   no_log: true
   tags: [agent_stack]
 
+# The API key only Open WebUI needs to know, both on this node: generated here
+# once, like the session key above, so it never sits in SOPS. Before Open WebUI:
+# its env file carries the key to Hermes (spec AI-009 AC4).
+- name: Generate the Hermes API key once
+  ansible.builtin.shell:
+    cmd: umask 077 && openssl rand -hex 32 > {{ agent_stack_dir }}/hermes-api-key
+    creates: "{{ agent_stack_dir }}/hermes-api-key"
+  when: agent_stack_hermes_configured | bool
+  tags: [agent_stack]
+
+- name: Read the Hermes API key
+  ansible.builtin.slurp:
+    src: "{{ agent_stack_dir }}/hermes-api-key"
+  register: _agent_stack_hermes_key_file
+  when: agent_stack_hermes_configured | bool
+  no_log: true
+  tags: [agent_stack]
+
+- name: Hold the API key for the env templates
+  ansible.builtin.set_fact:
+    _agent_stack_hermes_api_key: "{{ _agent_stack_hermes_key_file.content | b64decode | trim }}"
+  when: agent_stack_hermes_configured | bool
+  no_log: true
+  tags: [agent_stack]
+
 # Without OIDC, Open WebUI's first visitor creates the admin account, and the
 # tailnet includes the `work@` bridge identities, which the policy allows to
 # reach every node (ADR-041 rule 1). So "not configured" means not started, never
@@ -138,6 +163,17 @@
       failed_when: false
       check_mode: false
 
+    # Hermes is reached on this bridge's gateway: a container left on the old
+    # Compose default network would answer health checks and never reach it.
+    - name: Read the networks the container is attached to
+      ansible.builtin.command: >-
+        docker inspect open-webui
+        --format '{% raw %}{{range $name, $_ := .NetworkSettings.Networks}}{{$name}} {{end}}{% endraw %}'
+      register: _agent_stack_networks
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
     - name: Decide whether the container must be recreated
       ansible.builtin.set_fact:
         _agent_stack_recreate: >-
@@ -147,7 +183,9 @@
                  and (_agent_stack_ports.stdout | trim).split(':')[1] | int == 0)
              or (_agent_stack_memory.rc == 0
                  and (_agent_stack_memory.stdout | trim | int)
-                     != (agent_stack_webui.memory_limit | human_to_bytes)) }}
+                     != (agent_stack_webui.memory_limit | human_to_bytes))
+             or (_agent_stack_networks.rc == 0
+                 and agent_stack_webui_bridge.network not in _agent_stack_networks.stdout.split()) }}
 
     # The recreate covers what `up -d` cannot see: a port binding or memory limit
     # lost at create time. An env file's content IS in Compose's hash (measured
@@ -159,6 +197,15 @@
         {{ '--force-recreate' if _agent_stack_recreate | bool else '' }}
       register: _agent_stack_up
       changed_when: "'Started' in _agent_stack_up.stderr or 'Created' in _agent_stack_up.stderr"
+
+    # Compose's default network until the bridge was declared (spec AI-009 AC4).
+    - name: Remove Open WebUI's previous network
+      ansible.builtin.command: docker network rm {{ agent_stack_webui_project }}_default
+      register: _agent_stack_old_network
+      changed_when: _agent_stack_old_network.rc == 0
+      failed_when: >-
+        _agent_stack_old_network.rc != 0
+        and 'not found' not in _agent_stack_old_network.stderr
 
     - name: Verify Open WebUI answers on the Tailscale address
       ansible.builtin.uri:

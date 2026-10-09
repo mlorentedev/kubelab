@@ -26,6 +26,18 @@ services:
       - {{ server }}
 {% endfor %}
 
+# Declared, not Compose's default: Hermes publishes its API on this bridge's
+# gateway, and ufw admits this subnet alone to it (spec AI-009 AC4).
+networks:
+  default:
+    name: {{ agent_stack_webui_bridge.network }}
+    driver_opts:
+      com.docker.network.bridge.name: {{ agent_stack_webui_bridge.name }}
+    ipam:
+      config:
+        - subnet: {{ agent_stack_webui_bridge.subnet }}
+          gateway: {{ agent_stack_webui_bridge.gateway }}
+
 volumes:
   open-webui-data:
     name: open-webui-data

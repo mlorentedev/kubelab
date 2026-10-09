@@ -55,6 +55,7 @@ def _context() -> dict:
         "agent_stack_deny_rules": yaml.safe_load((ROLE / "files/guardrails-denylist.yaml").read_text())["rules"],
         "_agent_stack_agent_uid": 999,
         "_agent_stack_hermes_api_key": "hermes-api-key-sentinel",
+        "agent_stack_webui_bridge": common["networking"]["nodes"]["ace2"]["webui_bridge"],
     }
 
 
@@ -70,16 +71,20 @@ def _render(name: str) -> str:
     return env.get_template(name).render(**_resolved(env))
 
 
-def _resolved(env: Environment) -> dict:
+def _resolved(env: Environment, **overrides: object) -> dict:
     """The role's defaults are templates themselves, nested; Ansible resolves them
-    lazily, so here they are rendered until nothing changes. A default that only
-    Ansible can evaluate (a `lookup`) is left as written."""
-    context = _context()
-    for _ in range(5):
-        before = context
-        context = {k: _try_render(env, v, before) for k, v in before.items()}
-        if context == before:
+    lazily, so here each one is rendered from its template against the values of
+    the previous pass until nothing changes. Rendering from the template, not from
+    the previous result, is what lets a value that depends on another default see
+    it resolved. A default that only Ansible can evaluate (a `lookup`) is left as
+    written. `overrides` replace inputs before anything resolves, as extra vars do."""
+    raw = {**_context(), **overrides}
+    context = raw
+    for _ in range(8):
+        rendered = {k: _try_render(env, v, context) for k, v in raw.items()}
+        if rendered == context:
             return context
+        context = rendered
     raise AssertionError("the role's defaults do not resolve")
 
 
