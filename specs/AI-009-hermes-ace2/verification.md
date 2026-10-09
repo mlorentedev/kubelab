@@ -107,6 +107,26 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - **From master after the merge** (af2fdc99, #2130): `make provision NODE=ace2 ENV=prod TAGS=agent_stack` gave `changed=1`, the sync script replaced by the review's fix (a lock is held only by a git whose working directory is the clone), and the role's run of the sync succeeded. The next run: `changed=0`.
 - **Not yet measured**: a commit from a scheduled job (needs the seeded zone).
 
+### AC4, Hermes behind Open WebUI (`feat/ai009-webui-hermes`), ace2, 2026-10-08
+
+- **Listener**: `ss -ltnp` shows `172.30.250.1:8642` held by `rootlesskit` (pid 1129), in the host's namespace.
+- **ufw is the control**: the provision's probe from a container on `docker0` was refused, and the kernel logged `[UFW BLOCK] IN=docker0 ... SRC=172.17.0.2 DST=172.30.250.1 ... DPT=8642 ... SYN`. The probe on `open-webui` connected through `172.30.250.1 8642/tcp on br-open-webui ALLOW 172.30.250.0/24`. The API read-back answered first, so the refusal cannot come from a dead listener (lesson-542).
+- **Backend**: from inside `open-webui`, with its own env, `GET http://172.30.250.1:8642/v1/models` with the second key lists `hermes-agent`. Open WebUI's old `agent-stack-webui_default` network was already gone after the recreate.
+- **Boot order**: `agent-stack-hermes-bind.service` enabled, `WantedBy=user@999.service`. The reboot itself is the AC11 drill.
+- **Provision**: three runs from the branch, `changed=7` (the network, the recreate, the ufw rule), then `changed=2` (the boot unit, added after the first measurement), then `changed=0`.
+- **Tier** (operator, browser, 2026-10-08): the model's visibility matches the decision, listed for an admin and absent for a `users` login.
+
+### Power-cycle drill (AC11), ace2, 2026-10-08
+
+The operator rebooted ace2 remotely with the stack running, after both peer sessions confirmed they were not using it. Booted at 04:16:27 CEST. Every read below is read-only.
+
+- **Order**: `agent-stack-hermes-bind.service` logged `172.30.250.1 is up on br-open-webui after 0s` and exited at monotonic 13.52 s. `user@999.service` went active at 13.70 s, after it. `Result=success`.
+- **Units**: `agent-stack-egress`, `agent-stack-webui`, `agent-stack-hermes-bind` and `user@999` are active. `systemctl --failed` is empty. The vault sync ran 2 min after boot with `Result=success`, exit 0, and the next run is armed. The `node-backup-*` timers are armed.
+- **Ports**: `rootlesskit` holds `172.30.250.1:8642` and `dockerd` holds `100.64.0.5:3080`. `open-webui` is `healthy`, and `hermes-kubelab` is up on `172.30.250.1:8642->8642/tcp`.
+- **Backend**: from inside `open-webui`, with its own env, `/v1/models` lists `hermes-agent`, and one chat completion answered.
+- **Clone**: `git fsck` on `/var/lib/hermes-kubelab/vault` as the agent's user: exit 0, no output.
+- **Databases**: `PRAGMA integrity_check` opened read-only (`mode=ro`) returns `ok` for Open WebUI's `webui.db` and for Hermes's `state.db`, `shared-state.db`, `kanban.db`, `response_store.db`, `runs_idempotency.db` and `cron/executions.db`.
+
 ### AC8, interim, ace2, 2026-10-07
 
 Measured with the stack idle (load 0.04), before PR 4 and PR 5 add the vault clone and the MCP bridge. AC8 is measured again at closing. `free -m`: 1787 MiB used of 11739, 9951 available, no swap used. `docker stats --no-stream`: `open-webui` 654.7 MiB of 1.5 GiB, `hermes-kubelab` 209.2 MiB of 1.5 GiB, `hermes-kubelab-tailscale` 19.0 MiB of 128 MiB, `glances` 107.1 MiB of 256 MiB.
@@ -133,6 +153,9 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 - 2026-10-08, PR 4b: the notifier pairing guard was relaxed from equal tags to the directional rule its hazards need (a consumer's tags within the notifier's, node_maintenance equal to it, every notifier tag selecting a consumer). Equality would have made `TAGS=maintenance` deploy the agent stack.
 
 - 2026-10-08, **open for the operator, blocks PR 3c (AC4)**: tasks.md names `http://host.docker.internal:8642/v1` as Hermes's address for Open WebUI, and that cannot work. Measured on ace2: rootlesskit listens on `127.0.0.1:8642`, and `host.docker.internal` is the host's bridge address, never its loopback. Every way through widens the API past loopback, which `compose-hermes.yml.j2` and `test_the_api_is_published_on_loopback_only` declare as the posture: (a) publish on `docker0` (172.17.0.1) with `host-gateway` in Open WebUI, reachable from every container on the system daemon, and racing `docker.service` for the address at boot; (b) publish on the gateway of Open WebUI's own compose network, a subnet fixed in the SSOT, reachable from that network and still from any container the host routes; (c) a transport that is not a TCP port, such as a unix socket shared into Open WebUI's container. The API key guards all three. A second decision sits behind it: which Open WebUI tier may drive the agent (ADR-062 tiers, Open WebUI's per-model access).
+
+- 2026-10-08, **operator decision, closes the AC4 entry above**: Open WebUI reaches Hermes on the host's address in Open WebUI's own compose network, a bridge whose name, subnet and gateway are declared in `networking.nodes.ace2`. A ufw rule admits that subnet, on that bridge, to that address and port, and nothing else. This rests on one claim to measure first: the agent's daemon publishes through rootlesskit's userspace listener in the host's network namespace, so its traffic crosses INPUT, where ufw applies, unlike the system daemon's DNAT. If a container on another bridge connects, the design stops and goes back to the operator. Unix socket: rejected, neither side supports it (Hermes v2026.9.24 binds only `web.TCPSite`, `gateway/platforms/tcp_site.py:29-57`; Open WebUI v0.11.4 builds its sessions on `aiohttp.TCPConnector`, `utils/session_pool.py:70`). Tier: admins only, by granting nothing. Open WebUI shows a model with no record to admins alone and refuses chat to it for everyone else (`utils/models.py:572-575`, `utils/access_control/__init__.py:361-410`), and `admins` maps to its admin role (`OAUTH_ADMIN_ROLES=admins`).
+- 2026-10-08, **operator decision**: Open WebUI gets a public endpoint behind Authelia, so it is usable like a hosted chat from any device. Routed by prod Traefik on the VPS, which is always on, over the tailnet to ace2. ace2 stays on-demand (it is the operator's development node), and the endpoint answers with the error page while it is off. Login is Authelia OIDC alone, with no ForwardAuth on top. This amends ADR-068 D5, which kept it tailnet-only. The name is proposed as `chat.kubelab.live` and is to be confirmed when that PR starts.
 
 ## Promotion candidates
 

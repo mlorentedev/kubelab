@@ -285,6 +285,8 @@
         agent_stack_egress_probe_refused: "{{ config.networking.vps.tailscale_ip }}"
         agent_stack_egress_probe_open: "{{ config.networking.vps.public_ip }}"
         agent_stack_hermes: "{{ config.apps.services.ai.hermes_kubelab }}"
+        # Where Open WebUI reaches Hermes, and the one subnet ufw admits to it.
+        agent_stack_webui_bridge: "{{ config.networking.nodes.ace2.webui_bridge }}"
         # Where the sidecar registers, and who mints its key (ADR-041).
         agent_stack_headscale_url: "https://{{ config.apps.services.core.headscale.domain }}"
         agent_stack_headscale_host: kubelab-vps

@@ -123,6 +123,12 @@ agent_stack_hermes_ts_env: "{{ agent_stack_agent_home }}/hermes-tailscale.env"
 # The inference key is the only secret Hermes cannot start without. Missing, it
 # is not started, and a previous one is taken down.
 agent_stack_hermes_configured: "{{ agent_stack_nan_api_key | length > 0 }}"
+# Where Hermes publishes its API (spec AI-009 AC4). On the host's address in Open
+# WebUI's network when Open WebUI runs, which a ufw rule opens to that network
+# alone; on loopback otherwise, where no such address exists to bind.
+# agent_stack_webui_bridge (`networking.nodes.ace2.webui_bridge`) is passed in.
+_agent_stack_hermes_bind: >-
+  {{ agent_stack_webui_bridge.gateway if agent_stack_webui_configured | bool else '127.0.0.1' }}
 # The commands Hermes never runs. The file is the list; tests/test_hermes_config.py
 # proves each glob blocks what its rule names.
 agent_stack_deny_rules: "{{ (lookup('ansible.builtin.file', role_path ~ '/files/guardrails-denylist.yaml') | from_yaml).rules }}"

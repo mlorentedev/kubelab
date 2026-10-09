@@ -2,13 +2,54 @@
 # =============================================================================
 # hermes-kubelab (ADR-068 D2, spec AI-009 PR 3): the gateway on the agent's
 # rootless daemon, from agent_user.yml. Every docker call below runs as the
-# agent's user against its own socket.
+# agent's user against its own socket, except the two probes of the API's
+# firewall, which run where Open WebUI does: on the system daemon.
 #
 # The last block is the measurement: the deny list is read back through the
 # running gateway's own evaluator. A config Hermes failed to load leaves the
 # list empty without stopping it (measured 2026-10-06 on v2026.9.24). Without
 # the vault mounted, that list is the only command guard it applies.
 # =============================================================================
+
+# Before the gateway starts, so a first provision orders the next boot too.
+- name: Install the unit that waits for Open WebUI's bridge
+  when: agent_stack_hermes_configured | bool and agent_stack_webui_configured | bool
+  block:
+    - name: Render the bridge wait unit
+      ansible.builtin.template:
+        src: agent-stack-hermes-bind.service.j2
+        dest: /etc/systemd/system/agent-stack-hermes-bind.service
+        owner: root
+        group: root
+        mode: "0644"
+      register: _agent_stack_hermes_bind_unit
+
+    # Enabled, not started: it orders the boot, and now the address exists.
+    - name: Enable the bridge wait unit at boot
+      ansible.builtin.systemd:
+        name: agent-stack-hermes-bind.service
+        enabled: true
+        daemon_reload: "{{ _agent_stack_hermes_bind_unit is changed }}"
+      when: not ansible_check_mode
+
+# A unit left waiting on a bridge nobody creates would delay the agent's manager
+# by its whole timeout at every boot.
+- name: Remove the unit that waits for Open WebUI's bridge
+  when: not (agent_stack_hermes_configured | bool and agent_stack_webui_configured | bool)
+  block:
+    - name: Disable the bridge wait unit
+      ansible.builtin.systemd:
+        name: agent-stack-hermes-bind.service
+        enabled: false
+      register: _agent_stack_hermes_bind_disabled
+      failed_when: >-
+        _agent_stack_hermes_bind_disabled is failed
+        and 'Could not find' not in (_agent_stack_hermes_bind_disabled.msg | default(''))
+
+    - name: Delete the bridge wait unit
+      ansible.builtin.file:
+        path: /etc/systemd/system/agent-stack-hermes-bind.service
+        state: absent
 
 - name: Stop hermes-kubelab when it is not configured
   when: not (agent_stack_hermes_configured | bool)
@@ -37,27 +78,26 @@
         - "{{ agent_stack_hermes_env }}"
         - "{{ agent_stack_hermes_ts_env }}"
 
+    # The same rule as the one opened, comment included. A host that never ran
+    # Hermes never had it, and ufw refuses to delete a rule it does not hold.
+    - name: Close the Hermes API to Open WebUI's network
+      community.general.ufw:
+        rule: allow
+        interface_in: "{{ agent_stack_webui_bridge.name }}"
+        from_ip: "{{ agent_stack_webui_bridge.subnet }}"
+        to_ip: "{{ agent_stack_webui_bridge.gateway }}"
+        to_port: "{{ agent_stack_hermes.api_port }}"
+        proto: tcp
+        comment: hermes-kubelab API from Open WebUI
+        delete: true
+      register: _agent_stack_hermes_rule_closed
+      failed_when: >-
+        _agent_stack_hermes_rule_closed is failed
+        and 'non-existent' not in (_agent_stack_hermes_rule_closed.msg | default('') ~ _agent_stack_hermes_rule_closed.stdout | default(''))
+
 - name: Deploy hermes-kubelab
   when: agent_stack_hermes_configured | bool
   block:
-    # The API key only Open WebUI needs to know, both on this node: generated
-    # here once, like Open WebUI's session key, so it never sits in SOPS.
-    - name: Generate the Hermes API key once
-      ansible.builtin.shell:
-        cmd: umask 077 && openssl rand -hex 32 > {{ agent_stack_dir }}/hermes-api-key
-        creates: "{{ agent_stack_dir }}/hermes-api-key"
-
-    - name: Read the Hermes API key
-      ansible.builtin.slurp:
-        src: "{{ agent_stack_dir }}/hermes-api-key"
-      register: _agent_stack_hermes_key_file
-      no_log: true
-
-    - name: Hold the API key for the env template
-      ansible.builtin.set_fact:
-        _agent_stack_hermes_api_key: "{{ _agent_stack_hermes_key_file.content | b64decode | trim }}"
-      no_log: true
-
     # Created once and then left alone: the image hands the directory to its
     # own runtime user at every start, so enforcing an owner here would undo
     # that at every provision and report a change each time.
@@ -170,6 +210,27 @@
         'Pull complete' in _agent_stack_hermes_pull.stderr
         or 'Downloaded newer image' in _agent_stack_hermes_pull.stdout
 
+    # Same check as Open WebUI's: a binding is fixed at create time, so a gateway
+    # created before the bridge had its address runs with no port, and an
+    # unchanged spec hash keeps `up -d` off it.
+    - name: Read the Hermes port bindings requested vs the ones in effect
+      ansible.builtin.command: >-
+        docker inspect hermes-kubelab
+        --format '{% raw %}{{len .HostConfig.PortBindings}}:{{len .NetworkSettings.Ports}}{% endraw %}'
+      become_user: "{{ agent_stack_agent_user }}"
+      environment: "{{ agent_stack_agent_daemon_env }}"
+      register: _agent_stack_hermes_ports
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Hold whether the gateway runs unbound
+      ansible.builtin.set_fact:
+        _agent_stack_hermes_unbound: >-
+          {{ _agent_stack_hermes_ports.rc == 0
+             and (_agent_stack_hermes_ports.stdout | trim).split(':')[0] | int > 0
+             and (_agent_stack_hermes_ports.stdout | trim).split(':')[1] | int == 0 }}
+
     # A mounted config is not in Compose's spec hash. An env_file's content is
     # (measured 2026-10-07: emptying the sidecar's recreated it at the next `up`),
     # so the flag is only certain for the config, and harmless for the rest.
@@ -177,7 +238,8 @@
       ansible.builtin.command: >-
         docker compose -p {{ agent_stack_hermes_project }} -f {{ agent_stack_hermes_compose }} up -d
         {{ '--force-recreate' if (_agent_stack_hermes_env_file.changed or _agent_stack_hermes_config.changed
-                                  or _agent_stack_hermes_ts_env_file.changed) else '' }}
+                                  or _agent_stack_hermes_ts_env_file.changed
+                                  or _agent_stack_hermes_unbound | bool) else '' }}
       become_user: "{{ agent_stack_agent_user }}"
       environment: "{{ agent_stack_agent_daemon_env }}"
       register: _agent_stack_hermes_up
@@ -198,9 +260,9 @@
       register: _agent_stack_hermes_sandboxes
       changed_when: _agent_stack_hermes_sandboxes.stdout | length > 0
 
-    - name: Verify the Hermes API answers on loopback with its key
+    - name: Verify the Hermes API answers with its key
       ansible.builtin.uri:
-        url: "http://127.0.0.1:{{ agent_stack_hermes.api_port }}/v1/models"
+        url: "http://{{ _agent_stack_hermes_bind }}:{{ agent_stack_hermes.api_port }}/v1/models"
         headers:
           Authorization: "Bearer {{ _agent_stack_hermes_api_key }}"
         status_code: 200
@@ -213,6 +275,47 @@
 
     # Read from the sidecar itself: the tag is what the ACL matches, and a node
     # that registered without it would be matched by nothing, or by a user rule.
+    # Open WebUI reaches the API at this host's address on its own bridge (spec
+    # AI-009 AC4). The agent's daemon publishes through rootlesskit's listener in
+    # the host's namespace, so that traffic crosses INPUT, where ufw denies by
+    # default: this rule is the one network admitted, and the probe after the
+    # next one proves the deny holds for every other.
+    - name: Admit Open WebUI's network to the Hermes API
+      community.general.ufw:
+        rule: allow
+        interface_in: "{{ agent_stack_webui_bridge.name }}"
+        from_ip: "{{ agent_stack_webui_bridge.subnet }}"
+        to_ip: "{{ agent_stack_webui_bridge.gateway }}"
+        to_port: "{{ agent_stack_hermes.api_port }}"
+        proto: tcp
+        comment: hermes-kubelab API from Open WebUI
+      when: agent_stack_webui_configured | bool
+
+    # Containers of the system daemon, where Open WebUI runs: root's socket.
+    - name: Reach the Hermes API from Open WebUI's network
+      ansible.builtin.command:
+        cmd: >-
+          docker run --rm --network {{ agent_stack_webui_bridge.network }} {{ agent_stack_agent_probe_image }}
+          nc -z -w 3 {{ agent_stack_webui_bridge.gateway }} {{ agent_stack_hermes.api_port }}
+      register: _agent_stack_hermes_webui_network
+      changed_when: false
+      check_mode: false
+      when: agent_stack_webui_configured | bool
+
+    # The same address and port from another network: refused only if ufw, not
+    # the bind, is what stands between them. The read-back above proved the
+    # listener up, so a refusal here cannot come from a dead API.
+    - name: Try the Hermes API from the system daemon's default network
+      ansible.builtin.command:
+        cmd: >-
+          docker run --rm {{ agent_stack_agent_probe_image }}
+          nc -z -w 3 {{ agent_stack_webui_bridge.gateway }} {{ agent_stack_hermes.api_port }}
+      register: _agent_stack_hermes_other_network
+      changed_when: false
+      check_mode: false
+      failed_when: "_agent_stack_hermes_other_network.rc == 0"
+      when: agent_stack_webui_configured | bool
+
     - name: Verify the sidecar is on the tailnet as tag:hermes
       ansible.builtin.command: >-
         docker exec hermes-kubelab-tailscale tailscale status --json --peers=false

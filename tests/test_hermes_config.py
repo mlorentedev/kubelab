@@ -158,11 +158,6 @@ def test_the_data_directory_has_the_same_path_on_both_sides() -> None:
     assert f"{home}:{home}" in gateway["volumes"]
 
 
-def test_the_api_is_published_on_loopback_only() -> None:
-    ports = _gateway()["ports"]
-    assert ports and all(str(p).startswith("127.0.0.1:") for p in ports), ports
-
-
 def test_the_env_file_is_private_never_logged_and_outside_the_container() -> None:
     task = _template_task("hermes.env.j2")
     spec = task["ansible.builtin.template"]

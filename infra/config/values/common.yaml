@@ -327,6 +327,15 @@ networking:
       lan_ip: "172.16.1.5"
       lan_interface: "enp1s0"
       ansible_groups: ["compute_nodes", "docker_hosts", "minipc"]  # ADR-058 D1: dev-node
+      # Open WebUI's compose network on the system daemon (spec AI-009 AC4).
+      # Hermes publishes its API on the host's address in it (`gateway`), and a
+      # ufw rule admits this subnet alone. Private, and clear of 172.17.0.0/16
+      # (Docker's fixed-cidr), the LAN and the tailnet the agent is refused.
+      webui_bridge:
+        network: open-webui
+        name: br-open-webui
+        subnet: "172.30.250.0/24"
+        gateway: "172.30.250.1"
       dashboard:
         order: 5
         icon: mdi-server
