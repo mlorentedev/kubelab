@@ -101,7 +101,8 @@ make tf-dns-plan
 3. Apply:
 ```bash
 make tf-dns-apply
-# Runs with -auto-approve — the plan above is the real review gate
+# Saves a fresh plan, refuses it if it deletes or replaces anything (TF-013),
+# then applies that same file without a prompt. Creates and updates go through.
 ```
 
 4. Verify:
@@ -164,9 +165,9 @@ make tf-dns-plan
 # Expected: "Plan: 0 to add, 0 to change, 1 to destroy."
 # Verify it's destroying the correct record
 ```
-3. Apply:
+3. Apply, saying the delete is meant (the guard refuses it otherwise):
 ```bash
-make tf-dns-apply
+make tf-dns-apply ALLOW_DESTROY=1
 ```
 
 **Warning:** Removing a DNS record makes the service unreachable. Ensure the service is already decommissioned.
@@ -334,6 +335,24 @@ make tf-dns-plan   # Should work without manual token setup — pulls from SOPS 
 ```
 
 ## Disaster Recovery
+
+### An apply was refused, or a create timed out
+
+`tf-dns-apply`, `tf-gcp-apply` and `tf-aws-apply` refuse a plan that deletes or
+replaces anything unless `ALLOW_DESTROY=1` is set (TF-013). The refusal names
+each address and why Terraform planned it. If the reason is
+`replace_because_tainted`, the resource usually exists already: a create that
+outlived its timeout and still landed (lesson-543). Check the record by its
+consequence (`dig +short <name> @1.1.1.1`), then clear the taint. That touches
+the state only:
+
+```bash
+make tf-untaint ROOT=dns RES='cloudflare_record.kubelab_svc["chat"]'
+make tf-dns-plan   # expect "No changes"
+```
+
+Re-running the apply with `ALLOW_DESTROY=1` instead deletes the live record
+and creates it again.
 
 ### Recover state (tfstate lost, records intact)
 

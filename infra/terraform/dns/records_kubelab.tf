@@ -10,6 +10,13 @@ resource "cloudflare_record" "kubelab_root" {
   ttl             = 1
   proxied         = true
   allow_overwrite = true
+  # The provider's default is 30s, and a create that outlives it can still land:
+  # Terraform then taints a record that exists (lesson-543, TF-013). Every
+  # cloudflare_record in this root carries the same block.
+  timeouts {
+    create = "2m"
+    update = "2m"
+  }
 }
 
 resource "cloudflare_record" "kubelab_www" {
@@ -20,6 +27,10 @@ resource "cloudflare_record" "kubelab_www" {
   ttl             = 1
   proxied         = true
   allow_overwrite = true
+  timeouts {
+    create = "2m"
+    update = "2m"
+  }
 }
 
 # -----------------------------------------------------------------------------
@@ -36,4 +47,8 @@ resource "cloudflare_record" "kubelab_svc" {
   ttl             = each.value.proxied ? 1 : var.dns_ttl
   proxied         = each.value.proxied
   allow_overwrite = true
+  timeouts {
+    create = "2m"
+    update = "2m"
+  }
 }

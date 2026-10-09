@@ -25,7 +25,9 @@ to and created it again, risking the same timeout halfway through.
 **Solution**: Check the record by its consequence (it resolves), then clear the
 taint, which touches only the state:
 `terraform untaint 'cloudflare_record.kubelab_svc["chat"]'` in
-`infra/terraform/dns`. The next `make tf-dns-plan` read `No changes`.
+`infra/terraform/dns`. The next `make tf-dns-plan` read `No changes`. Since TF-013
+(#2147) that is `make tf-untaint ROOT=dns RES=<address>`, and `tf-dns-apply`
+refuses a replace unless `ALLOW_DESTROY=1`.
 
 **Rule**: When a provider create fails on a timeout, do not re-apply. Check
 whether the object exists first. If it exists and matches the config, untaint

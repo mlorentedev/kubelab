@@ -1218,8 +1218,7 @@ tf-aws-plan:
 
 tf-aws-apply:
 	@$(POETRY) run toolkit infra terraform aws-tfvars
-	@cd infra/terraform/aws && terraform init -input=false >/dev/null && \
-		terraform apply -auto-approve -var-file=aws.tfvars; \
+	@cd infra/terraform/aws && $(call _tf_guarded_apply,aws.tfvars); \
 		_exit=$$?; rm -f aws.tfvars; \
 		echo "✓ aws.tfvars cleaned (secrets in SOPS only)"; exit $$_exit
 
@@ -1362,8 +1361,7 @@ tf-gcp-plan:
 
 tf-gcp-apply:
 	@$(TOOLKIT) infra terraform gcp-tfvars
-	@cd infra/terraform/gcp && terraform init -input=false >/dev/null && \
-		terraform apply -auto-approve -var-file=gcp.tfvars; \
+	@cd infra/terraform/gcp && $(call _tf_guarded_apply,gcp.tfvars); \
 		_exit=$$?; rm -f gcp.tfvars; exit $$_exit
 
 tf-gcp-destroy:
@@ -1499,6 +1497,31 @@ test-vps-firewall-live:
 		export HCLOUD_TOKEN && \
 		$(POETRY) run pytest tests/test_vps_cloud_firewall_is_attached.py -m infra -v --no-cov
 
+# TF-013: the path every unattended apply takes. It saves the plan, refuses
+# one that deletes or replaces anything (ALLOW_DESTROY=1 lets it through), then
+# applies that same file, so what was checked is what runs. The plan holds the
+# input variables, token included: it lives in a mktemp directory removed on
+# every exit (a subshell, so the trap fires when the apply ends), and its JSON
+# is piped to the guard and never written. Run it from the root's directory.
+# aws1-replace and the killswitch test keep -auto-approve: they ask for their
+# replace or destroy by name.
+# $(1): var file. $(2): extra plan arguments.
+define _tf_guarded_apply
+( _p=$$(mktemp -d) && trap 'rm -rf "$$_p"' EXIT && \
+	terraform init -input=false >/dev/null && \
+	terraform plan -input=false -out="$$_p/plan" -var-file=$(1) $(2) && \
+	terraform show -json "$$_p/plan" | $(TOOLKIT) infra terraform plan-guard - $(if $(filter 1,$(ALLOW_DESTROY)),--allow-destroy) && \
+	terraform apply -input=false "$$_p/plan" )
+endef
+
+# State only: clear the taint on a resource that exists and matches the config,
+# which a create that timed out but landed leaves behind (lesson-543). Applying
+# instead would delete it and create it again.
+.PHONY: tf-untaint
+tf-untaint:
+	@test -n "$(ROOT)" -a -n "$(RES)" || { echo "usage: make tf-untaint ROOT=<dns|gcp|aws|...> RES='<address>'"; exit 2; }
+	@cd infra/terraform/$(ROOT) && terraform init -input=false >/dev/null && terraform untaint '$(RES)'
+
 .PHONY: tf-dns-plan tf-dns-apply
 tf-dns-plan:
 	@TF_VAR_cloudflare_api_token=$$($(POETRY) run toolkit secrets show cloudflare.api_token --env common 2>/dev/null | tail -1) && \
@@ -1509,8 +1532,7 @@ tf-dns-plan:
 tf-dns-apply:
 	@TF_VAR_cloudflare_api_token=$$($(POETRY) run toolkit secrets show cloudflare.api_token --env common 2>/dev/null | tail -1) && \
 		export TF_VAR_cloudflare_api_token && \
-		cd infra/terraform/dns && terraform init -input=false >/dev/null && \
-		terraform apply -auto-approve -var-file=dns.tfvars
+		cd infra/terraform/dns && $(call _tf_guarded_apply,dns.tfvars)
 
 # sync-homepage regenerates config files from SSOT. Deployment happens via
 # `make deploy-k8s` — configMapGenerator hash suffix auto-triggers rolling update.
