@@ -102,7 +102,9 @@ class TestResolve:
             oidc_clients.resolve_clients(_values([client]), "prod")
 
     def test_only_http_and_https_are_schemes(self) -> None:
-        client = _grafana(redirect={"domain": "apps.services.observability.grafana.domain", "scheme": "ftp", "path": "/cb"})
+        client = _grafana(
+            redirect={"domain": "apps.services.observability.grafana.domain", "scheme": "ftp", "path": "/cb"}
+        )
 
         with pytest.raises(oidc_clients.OidcClientError, match="grafana.*scheme"):
             oidc_clients.resolve_clients(_values([client]), "prod")
@@ -110,6 +112,27 @@ class TestResolve:
     def test_an_unknown_env_fails(self) -> None:
         with pytest.raises(oidc_clients.OidcClientError, match="grafana"):
             oidc_clients.resolve_clients(_values([_grafana(envs=["prdo"])]), "prod")
+
+    def test_an_unknown_token_endpoint_auth_method_fails(self) -> None:
+        """A misspelt method renders and deploys, then fails at token exchange as
+        that client's bug. Refused here, where the declaration is (SSOT-017 review)."""
+        with pytest.raises(oidc_clients.OidcClientError, match="grafana.*token_endpoint_auth_method"):
+            oidc_clients.resolve_clients(_values([_grafana(token_endpoint_auth_method="basic")]), "prod")
+
+    def test_a_client_id_declared_twice_fails(self) -> None:
+        """Even when the two copies target different envs: one id is one client."""
+        clients = [_grafana(envs=["prod"]), _grafana(envs=["staging"])]
+
+        with pytest.raises(oidc_clients.OidcClientError, match="grafana.*more than once"):
+            oidc_clients.resolve_clients(_values(clients), "prod")
+
+    @pytest.mark.parametrize("key", ["domain", "path"])
+    def test_a_redirect_without_domain_or_path_fails_naming_the_client(self, key: str) -> None:
+        client = _grafana()
+        del client["redirect"][key]
+
+        with pytest.raises(oidc_clients.OidcClientError, match=rf"grafana.*{key}"):
+            oidc_clients.resolve_clients(_values([client]), "prod")
 
 
 class TestDigestKey:
