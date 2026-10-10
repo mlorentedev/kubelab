@@ -429,6 +429,15 @@ R5's authenticated check of 2026-08-12 (above) had also found staging MinIO with
 
 **Proposed, 2026-10-10, for the operator and the archive review:** treat AC4 for staging MinIO as superseded. AC4 exists to stop a deletion that loses data, and here the deletion's premise changed under it. OPS-023 removed MinIO from both environments rather than retiring a twin. Its only writer had been failing since 2026-08-25, and the data it would have held is in R2 through `node_backup`. AC4 stays `partial` until that decision is written down, and it is not reworded to read as met.
 
+## Adversarial review findings
+
+`review.md`, PASS WITH GAPS, by `agy/gemini-3.1-pro-high` on 2026-10-10.
+
+| Finding | Disposition |
+|---|---|
+| AC4 for staging MinIO was not met before OPS-023 removed it | Accepted as a recorded gap, not reworded as met. AC4 stays `partial`, and f5 is `partial`. The proposed supersession in "PR 3 superseded by OPS-023" is the operator's decision, and the archive PR asks for it. |
+| `classification_problems` has cyclomatic complexity 11, above the bar of 10 | Fixed in `4fca806c`. The promotion, location and deferral checks are separate helpers, the largest at 4, with the messages unchanged. `tests/test_stateful_service_classification.py`: 20 passed. |
+
 ## Test status
 
 - `poetry run pytest tests/test_stateful_service_classification.py tests/test_k8s_generator_configmap_env.py`: 28 passed, on master `f1c952a8` (2026-10-10).
