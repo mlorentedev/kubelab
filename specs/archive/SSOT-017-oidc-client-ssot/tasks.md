@@ -63,7 +63,7 @@ created: "2026-09-22"
 - [x] `make test` green, lint green, no unrelated changes in the diff. 4453 passed on master `1488e3a5`. ✓ 2026-10-10
 - [x] `verification.md` filled in. ✓ 2026-10-10
 - [x] PR #1780 merges with **`Refs #1332`, never `Closes`**. The spec gate refuses a PR that closes a spec's issue without archiving it, and archiving needs AC5-prod, which can only be measured after merge, because Argo CD syncs prod from master. Record the `--force-no-gate` scaffold and the reason. Merged as `c4976141` with `Refs #1332`. #1332 was closed later anyway, before the prod evidence existed, which is why the archive PR cannot carry `Closes #1332`. ✓ 2026-10-10
-- [x] Follow-up docs PR after the prod logins: prod AC5 evidence, then the adversarial review (`review.md`), then `/spec archive`. It carries `Closes #1332`. Done as the #2034 archive PR, with the prod logins that are not recorded handed to #2154. ✓ 2026-10-10
+- [x] Follow-up docs PR after the prod logins: prod AC5 evidence, then the adversarial review (`review.md`), then `/spec archive`. It carries `Closes #1332`. Done as the #2034 archive PR (#2182), which carries `Refs #1332` instead: #1332 was closed on 2026-09-23, before the prod evidence existed. The prod logins that are not recorded are #2154. ✓ 2026-10-10
 - [x] Independent adversarial review (`review.md`) before `/spec archive`. ✓ 2026-10-10
 
 ## Machine-readable features

@@ -22,7 +22,8 @@ The SSOT on 2026-10-10 declares five clients: grafana (dev, staging, prod), gite
 
 ## Test status
 
-- `make test` on master `1488e3a5` (2026-10-10): 4453 passed, 16 skipped, 162 deselected, 2 xfailed.
+- `make test` on the archive branch at `7ba1170f` (2026-10-10), with the review's three fixes: 4471 passed, 16 skipped, 162 deselected, 2 xfailed. This is the run for the closing item.
+- `make test` on master `1488e3a5` (2026-10-10), the already-merged implementation, as evidence for AC1–AC4: 4453 passed, 16 skipped, 162 deselected, 2 xfailed. Tests that peers merged in between account for the difference.
 - The five automated feature checks in `features.json`: each passed (counts above).
 - Argo CD on 2026-10-10 (read-only): `kubelab-staging` and `kubelab-prod` both track `master`, Synced. The staging repoint to the branch for AC5 was undone.
 
@@ -79,6 +80,8 @@ The remaining errors (`jwt_secret`, `/config/assets`) are secrets and assets tha
 | 3 | Minor | A `redirect` without `domain` or `path` raised a bare `KeyError`. | Fixed. `_validate` raises `OidcClientError` naming the client and the missing key. Test: `test_a_redirect_without_domain_or_path_fails_naming_the_client`. |
 
 The review's last recommendation, the prod logins of AC5, is #2154 (Evidence table above).
+
+`tasks.md` was corrected after the review, on 2026-10-10. The closing item for the follow-up docs PR said that PR carries `Closes #1332`, and it carries `Refs #1332`, as PR-Agent found on #2182. Only that annotation changed, and no task definition did. The review's digest predates the correction.
 
 ## Promotion candidates
 
