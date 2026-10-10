@@ -81,7 +81,8 @@ cached build and reports no change.
   sync runs as the same uid from a system unit, so it is bound to the rule too
   (lesson-552). The service has `Requisite=`, so it refuses to start without
   the rule, and `PartOf=`, so a run in flight stops with it. The timer has
-  `PartOf=` too. Measured
+  `PartOf=` too. A run stopped this way counts as success
+  (`SuccessExitStatus=SIGTERM`), so the kill does not page. Measured
   2026-10-10: after the stop, no process of the uid was left at 180 s.
   Lingering did not restart the user manager in ~15 min. The timer, the rule
   and the manager were all `inactive`, and nothing paged. The agent's zone

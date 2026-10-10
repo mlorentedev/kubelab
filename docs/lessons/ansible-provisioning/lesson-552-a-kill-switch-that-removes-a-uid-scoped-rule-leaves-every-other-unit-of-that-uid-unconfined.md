@@ -44,7 +44,9 @@ calling a stop a kill switch, list every unit that runs as that uid: user
 units, system units with `User=`, timers, and paths. Bind each one to the rule
 with `Requisite=`, which refuses, and never with `Requires=`, which restarts.
 `Requisite=` only gates a start, so a run already in flight needs `PartOf=` the
-rule as well, which stops it with the rule.
+rule as well, which stops it with the rule. A oneshot stopped mid-start ends
+in result `signal`, which is a failure that pages, so add
+`SuccessExitStatus=SIGTERM`. A timeout keeps its own result and still pages.
 A refused start is still a failure to `OnFailure=`, so whatever starts that
 unit (a timer or a path) needs `PartOf=` the rule too.
 
