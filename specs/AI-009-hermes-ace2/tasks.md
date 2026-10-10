@@ -96,7 +96,7 @@ Inventoried 2026-10-01 against every surface an existing node-hosted service is 
 ## Closing
 
 - [ ] Every acceptance criterion is covered by a test or a recorded live measurement
-- [ ] Every acceptance criterion has a `features.json` entry with a non-vacuous verification command (2026-10-10: six commands selected no test, because their `-k` selectors named tests that had been renamed or never existed. Fixed so that each one collects tests (f2 14, f4 42, f5 4, f7 3, f8 2, f9 30, f10 28). The guard across specs is #2180)
+- [ ] Every acceptance criterion has a `features.json` entry with a non-vacuous verification command (2026-10-10: six commands selected no test, because their `-k` selectors named tests that had been renamed or never existed. Fixed so that each one collects tests (f2 14, f4 42, f5 4, f7 3, f8 2, f10 28). f9 was never vacuous; it was widened to the vault mirror and the bridge (30). The guard across specs is #2180)
 - [ ] `make test` and `make lint` pass
 - [ ] AC8 measured with the stack idle: `free -m` on ace2
 - [x] [AC11] Power-cycle drill once PR 4 lands (the vault clone and both databases exist): reboot ace2 with the stack running, then record unit state, `git fsck` on the clone and `PRAGMA integrity_check` on both databases under `### Power-cycle drill` in `verification.md` ✓ 2026-10-08 (verification.md, `### Power-cycle drill (AC11)`)
