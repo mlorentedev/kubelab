@@ -7,11 +7,57 @@ created: "2026-08-19"
 
 ## Evidence
 
-Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
+Mapped 2026-10-10 against master `41f21b99`, for DEBT-019 (#2034) and #2171. Every row is a real PR or a named test.
 
-- [ ] Criterion 1 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 2 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 3 -> commit `<hash>` / test `<name>`
+| AC | Status | Evidence |
+|---|---|---|
+| AC1: a notice-only PR is red, on a real PR | met | #1166 (2026-08-19): CodeRabbit and Codex both posted quota notices and the status read `failure — not reviewed, and not declared as such` ("Live behaviour" below). |
+| AC2: a reviewed PR is green, a PR with no output is red | met | #1165 flipped from `declined` to `attested` when CodeRabbit filed a review. The Phase 0 backtest counts 3 `pending` PRs, the no-output state, and `pending` exits 1. |
+| AC3: content, not login, decides | met | See "AC3" below: CodeRabbit's own comments, same login, give opposite verdicts. Test: `test_the_same_account_is_declined_or_attested_by_what_it_wrote`. |
+| AC4: a PR-Agent comment review attests from GraphQL or REST | met, amended | See "AC4" below. Tests: `test_login_spelling_does_not_change_the_verdict`, `test_the_gate_reads_its_payload_from_gh_pr_view_only`. |
+| AC5: a reviewer change is a config edit | met | #1192 (`c143da97`) changed CodeRabbit's markers and touched only `harness/review-attestation.json` and its test. `test_no_reviewer_is_named_in_the_module` keeps it that way. |
+| AC6: PR-Agent posts inline comments with `NAN_API_KEY` alone | AC6-PENDING | See "AC6" below. |
+| AC7: credential material never reaches the endpoint | met | #2094 (2026-10-07) changed only `infra/config/secrets/prod.enc.yaml`. Run 37589208861 skipped the PR-Agent step and ran "Declare unreviewed — diff is entirely excluded". Test: `test_credential_material_is_excluded_from_the_model_call`. |
+| AC8: a release PR is neither reviewed nor left pending | met | #1680 (2026-09-05): the status read `exempt from review` at 21:05:54Z, and the PR-Agent run on its head was `skipped`. CodeRabbit reviewed it later, so it ended `attested`; attestation outranks exemption by design. |
+| AC9: the reviewer's own failure is red | met | See "AC9" below: #2178, both failures injected. |
+| AC10: the gate is required, so an unreviewed PR is BLOCKED | met | See "AC10" below: #2178, with every other required check green. |
+| AC11: nothing enables auto-merge, by test | met | #2152 (`5b520047`). |
+
+### AC3 — one account, opposite verdicts
+
+Fixture `tests/fixtures/review_attestation/coderabbitai-same-account.json` is cut from CodeRabbit's real comments. #2057 holds a rate-limit notice only. #2098 holds one persistent comment with the same notice, which CodeRabbit later edited to carry its review. Each payload has the same login and `authorAssociation`. The first classifies `declined` and the second `attested`. The test was red against its mutant. The fixture's `orgId` and `scope` URL parameters are redacted, because the original carried a token-shaped value.
+
+Replayed across 80 merged PRs, classifying on CodeRabbit's output alone: 40 declined, 28 attested, 8 disclosed, 2 pending, 2 exempt. One login, and the verdict follows what it wrote.
+
+### AC4 — amended: the gate reads GraphQL only
+
+The criterion asks for the verdict to hold "whether the payload came from GraphQL or REST". The gate never receives a REST payload. Its only input is `gh pr view --json ... comments,reviews ...`, which is GraphQL, and a test now pins that (`test_the_gate_reads_its_payload_from_gh_pr_view_only`, red against its mutant). The REST spelling still reaches the classifier through fixtures and through the publish check in `pr-agent.yml`, which reads REST and matches `github-actions[bot]`. Login folding makes both spellings one reviewer (`test_login_spelling_does_not_change_the_verdict`). So the criterion is amended to: the verdict does not depend on the API's login spelling, and the gate's payload source is pinned.
+
+### AC6 — inline comments
+
+AC6-PENDING
+
+`fallback_models` is no longer `[]`. #1202 (`f0fffef3`, ticket #1203) added `openai/deepseek-v4-flash` as the single fallback. It calls the same NaN endpoint with the same `NAN_API_KEY`, so the sole-credential half of AC6 holds.
+
+### AC9 — the reviewer's own failure, injected
+
+#2178 was a throwaway PR (closed unmerged, branch deleted) that broke the reviewer in two pushes.
+
+1. **Unreachable endpoint**, `130264f8`. `OPENAI__API_BASE` pointed at `api.nan.builders.invalid`. RFC 6761 reserves `.invalid`, so the name never resolves, and the host keeps the substring the streaming test reads. Run 38043052626:
+   - both models were tried, and each returned `litellm.InternalServerError: ... Connection error.`;
+   - PR-Agent logged `Failed to review PR: Failed to generate prediction with any model of ['openai/mimo-v2.6-flash', 'openai/deepseek-v4-flash']`, then `Tool reported success but recorded a failure; failing the action`;
+   - steps `PR-Agent` and `Fail if no review was published` both concluded `failure`;
+   - `review-attestation` read `failure — not reviewed, and not declared as such`.
+2. **Invalid credential**, `c9794628`. The endpoint was restored and `OPENAI__KEY` set to a placeholder. AC9-B-PENDING
+
+### AC10 — BLOCKED, isolated to the attestation
+
+Branch protection on `master`, read live 2026-10-10:
+- required contexts: `Validate`, `Detect Changes`, `review-attestation`, `Tests`, not strict;
+- `required_pull_request_reviews` is present with `required_approving_review_count: 0`, so no approval rule can block a merge;
+- `enforce_admins: true`.
+
+#2178 at `130264f8`, 10:07:23Z: `Validate`, `Detect Changes` and `Tests` passed and `review-attestation` failed. `mergeable: MERGEABLE`, `mergeStateStatus: BLOCKED`. The attestation is the only required check that is not green, so it alone blocks the merge. CONTRAST-PENDING
 
 ## Phase 0 — backtest, before the gate governs anything
 
@@ -88,9 +134,9 @@ A proposed mitigation was considered and rejected: a final step guarded by `if: 
 
 ## Test status
 
-- Test suite: `<command> -> <output / coverage %>`
-- Manual smoke test: what was exercised, what was observed
-- No regressions in existing test suite: yes / no (if no, document)
+- `make test` on the archive branch: TEST-STATUS-PENDING
+- `tests/test_review_attestation.py`: 43 passed. The two tests added for AC3 and AC4 were each red against their mutant.
+- Live: the gate has judged every PR since #1162 (2026-08-18). The demonstrations above are on real PRs.
 
 ## Decisions made during implementation
 
