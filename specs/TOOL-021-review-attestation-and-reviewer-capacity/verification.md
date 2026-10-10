@@ -161,6 +161,16 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 - **The inert upstream setting was replaced, not reimplemented.** `ignore_pr_source_branches` is loaded and never consulted on the Action path; the job-level `if:` is the same intent at the layer that runs. A test asserts the setting is not re-added, so the `if:` does not later read as redundant.
 - **Public-repo hardening with no upstream counterpart.** The slash-command path is restricted by author association. **A first draft said upstream "did not need it — its repo is private". That was wrong: measured 2026-08-19, upstream is public too.** The unrestricted condition was a live exposure there, not a difference in context, and reporting it produced a fix on their side. The correction matters more than the fix: I inferred a condition's safety from a repository property I never checked, inside a port whose whole discipline is measuring rather than assuming.
 
+## Adversarial review findings
+
+`review.md` (PASS WITH GAPS, `agy/gemini-3.1-pro-high`, against `1f2de30d`). Each finding was checked against the code before it was disposed.
+
+| Finding | Disposition |
+|---|---|
+| AC6 inline half unmet (Minor, REAL) | Ticketed: #2193, as the AC6 row above records. |
+| `_norm` folds a missing login to `""` (Minor, THEORETICAL) | Declined, safe direction. A review with no login is read as `"?"` (`classify`), which matches neither the author nor a declared reviewer. A comment with no login folds to `""`: no declared login is empty, and when the author is also `""` the `c_login != author` clause refuses it. So an absent login can only fail to attest, which leaves the gate red, never green. |
+| `exempt_signature` misses files on paginated PRs (Minor, THEORETICAL) | Declined, safe direction. The workflow reads `files` through `gh pr view --json` (`review-attestation.yml:292`), and GraphQL returns at most the first 100. A truncated set therefore holds 100 paths, while the largest declared signature holds 5 (`harness/review-attestation.json`). Exact set equality cannot match, so truncation refuses an exemption rather than granting one. The property depends on every signature staying under 100 files, which none is near. |
+
 ## Promotion candidates
 
 Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.
