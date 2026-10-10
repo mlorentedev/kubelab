@@ -83,10 +83,15 @@ Emitters send a JSON payload with the following contract:
 ## 4. Operational Testing Procedures
 
 ### A. End-to-End Smoke Test (`notify-smoke`)
-Verifies authenticated delivery and unauthenticated rejection:
+Verifies authenticated delivery and that the webhook refuses both a missing and a wrong secret:
 ```bash
 make notify-smoke ENV=staging
 ```
+Four probes against `https://n8n.staging.kubelab.live/webhook/notify`: `page` and `log` with the
+SOPS secret expect 200, and a POST with no `Authorization` header and one with a wrong `Bearer`
+value expect 403. The wrong value is random per run and never printed. A 200 says n8n routed the
+envelope and Apprise accepted it; confirm the messages landed in `#alerts` and `#ops-log`, because
+nothing reads the channels back.
 
 ### B. In-Cluster Grafana Contact Point Probe
 Simulates a live alert from Grafana to Apprise:
