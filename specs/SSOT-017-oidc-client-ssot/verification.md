@@ -68,6 +68,18 @@ The remaining errors (`jwt_secret`, `/config/assets`) are secrets and assets tha
 
 `/spec check` on 2026-09-22 (agent judgment, deterministic path): **PASS**. AC1 through AC6 are each covered by `[AC<n>]`-tagged Implementation tasks, and there are no orphan tasks.
 
+## Adversarial review findings
+
+`review.md` (2026-10-10, agy/gemini-3.1-pro-high, against `74fe86cb`): **PASS WITH GAPS**, three findings, all fixed in the archive PR with a test each. Each test was red against a mutant that removed its guard (`make mutate`, 2026-10-10).
+
+| # | Severity | Finding | Disposition |
+|---|----------|---------|-------------|
+| 1 | Major | `token_endpoint_auth_method` checked for presence only, so a typo renders and fails at token exchange. | Fixed. `_validate` refuses any value outside `TOKEN_ENDPOINT_AUTH_METHODS` (the three a confidential client can use with the `client_secret` this generator renders). Test: `test_an_unknown_token_endpoint_auth_method_fails`. |
+| 2 | Major | A duplicated `client_id` renders twice. | Fixed. `_validate_all` refuses a repeated id across every declared client, even when the copies target different envs. Test: `test_a_client_id_declared_twice_fails`. |
+| 3 | Minor | A `redirect` without `domain` or `path` raised a bare `KeyError`. | Fixed. `_validate` raises `OidcClientError` naming the client and the missing key. Test: `test_a_redirect_without_domain_or_path_fails_naming_the_client`. |
+
+The review's last recommendation, the prod logins of AC5, is #2154 (Evidence table above).
+
 ## Promotion candidates
 
 Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.
