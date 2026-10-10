@@ -384,6 +384,15 @@ class TestProdRun:
             assert sentinel not in out
 
 
+    def test_a_short_credential_secret_is_masked_too(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Short strings are spared elsewhere, so a 4-character password must not be."""
+        short = "Zq9w"
+        vault = _deep_update(_vault(), {"infra": {"smtp": {"pass": short}}})
+        _run(vault=vault, kubectl=_Kubectl(fail_kind="credentials", echo=True), monkeypatch=monkeypatch)
+        assert short not in capsys.readouterr().out
+
 class TestFailsClosed:
     @pytest.mark.parametrize("name", ["token", "recipient", "site_tag"])
     def test_a_missing_sale_value_fails_the_digest_naming_the_path(

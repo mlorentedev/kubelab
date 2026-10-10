@@ -741,11 +741,13 @@ _MASK_MIN_LEN = 6
 
 
 def _mask_payload(text: str, stdin: str | None) -> str:
-    """`text` with every string value of the JSON in `stdin` replaced by a marker.
+    """`text` with the string values of the JSON in `stdin` replaced by a marker.
 
-    Values under `_MASK_MIN_LEN` characters are left alone: a workflow carries
-    short strings ("main", "=") that would shred the message if masked, and no
-    credential in the catalog is that short.
+    Under a `data` key, where a credential carries its secrets, every value is
+    masked whatever its length. Elsewhere values under `_MASK_MIN_LEN` characters
+    are left alone: a workflow carries short strings ("main", "=") that would
+    shred the message if masked. The mask is a floor, not a guarantee: a message
+    that quotes only a fragment of a value is not matched.
     """
     if not stdin:
         return text
@@ -754,14 +756,14 @@ def _mask_payload(text: str, stdin: str | None) -> str:
     except ValueError:
         return text.replace(stdin, "[payload]")
     values: list[str] = []
-    stack: list[Any] = [payload]
+    stack: list[tuple[Any, bool]] = [(payload, False)]
     while stack:
-        node = stack.pop()
+        node, secret = stack.pop()
         if isinstance(node, dict):
-            stack.extend(node.values())
+            stack.extend((v, secret or k == "data") for k, v in node.items())
         elif isinstance(node, list):
-            stack.extend(node)
-        elif isinstance(node, str) and len(node) >= _MASK_MIN_LEN:
+            stack.extend((v, secret) for v in node)
+        elif isinstance(node, str) and node and (secret or len(node) >= _MASK_MIN_LEN):
             # Echoed raw, a value appears JSON-escaped (a query with quotes or newlines).
             values += [node, json.dumps(node)[1:-1]]
     for value in sorted(values, key=len, reverse=True):
