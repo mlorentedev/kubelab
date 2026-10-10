@@ -30,8 +30,10 @@ All tests are in `tests/test_gitea_actions_secrets.py`.
   `test_a_failed_write_is_recorded_per_secret_and_the_rest_still_run` (report repr),
   `test_the_value_travels_in_the_body_only`, and the `VALUE not in result.output` checks in every
   CLI test.
-- [ ] AC7, by effect: **pending.** It needs the three OAuth values in SOPS (operator) and resume's
-  `publish-drive` preflight (resume#272). This PR does not close #1626 for that reason.
+- [x] AC7, by effect: resume's `publish-drive` run 96 (dispatched 2026-09-30) reports all 4 inputs
+  configured in its preflight, and each of the three uploads returns HTTP 200. The Drive folder lists
+  `cv-manuel-lorente-alman-{altacv,ats,awesome}-2026-09-30.pdf`, created at 03:21 UTC. Recorded in
+  #1936, after the operator restored the three OAuth values and ran `actions-secrets --apply`.
 
 ## Test status
 
@@ -67,9 +69,9 @@ All tests are in `tests/test_gitea_actions_secrets.py`.
 
 Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.
 
-- [ ] Lesson for the repo's `docs/lessons/`? No. The silent-empty-secret shape is already the ticket's content, and the incident behind it is resume's (its L-042).
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? No. It follows the existing delivery pattern (`sync_to_secret_manager`); no new decision class.
-- [ ] New pattern candidate for `00_meta/patterns/`? No. It is kubelab-specific tooling.
+- [x] Lesson for the repo's `docs/lessons/`? no: The silent-empty-secret shape is already the ticket's content, and the incident behind it is resume's (its L-042).
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: It follows the existing delivery pattern (`sync_to_secret_manager`); no new decision class.
+- [x] New pattern candidate for `00_meta/patterns/`? no: It is kubelab-specific tooling.
 
 ## Archive checklist
 
