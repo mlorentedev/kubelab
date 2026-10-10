@@ -143,7 +143,13 @@ next steps below were done.
 
 ## Adversarial review findings
 
-Filled after `dotf spec review NOTIFY-001`.
+`review.md` (2026-10-10, PASS WITH GAPS, no Blocker). Each finding's disposition:
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Major: the router's domain branches (`vault`, `deploy`, `agent`) are executed by no test; the smoke sends only `page` and `log` | Fixed in this PR: `tests/test_n8n_notify_router.py` runs the committed Code node in node over 16 envelopes, and asserts that every tag it can emit over a domain-by-severity grid is a tag `_SLACK_ROUTES` routes, since Apprise drops an unrouted tag while n8n still answers 200. `make mutate` renaming the `vault` tag went red. |
+| 2 | Minor: no probe for a malformed header (`Basic <token>`, `Bearer` with no value) | Declined: n8n's Header Auth compares the whole header value with `Bearer <secret>`, so a malformed header is one more wrong value on the same path the wrong-secret probe takes. A probe per malformation would measure n8n's string comparison, not this fabric. |
+| 3 | Minor: `toolkit infra n8n smoke` defaults `verify_tls` to off in every env | Fixed in this PR: the default is on in prod and off in staging, as `n8n probe` already does; `test_the_cli_verifies_tls_in_prod_unless_told_otherwise` covers the four cases, and `make mutate` dropping the prod default went red. |
 
 ## Promotion candidates
 
