@@ -82,6 +82,14 @@ Second archive review (agy/gemini-3.1-pro-high, 2026-10-10, PASS WITH GAPS, `rev
 |---|---|---|
 | Minor, THEORETICAL: `deliveries()` counts over `kubectl logs --tail=300`, a sliding window, so once Apprise has logged more than 300 lines a new delivery can leave the count flat and the smoke fails on a delivered notification. | **Ticketed as #2197 (OBS-034).** Real, latent, and it fails closed: the smoke never passes on a missed delivery. Staging Apprise holds 92 lines and 15 deliveries (2026-10-10), so the tail is not saturated. The code dates from #976, and changing the smoke after this review would need another live run and another review for a failure that cannot occur yet. | `toolkit/features/alert_smoke.py`, `deliveries()`. |
 
+PR review (CodeRabbit on #2196, after the archive):
+
+| Finding | Disposition | Evidence |
+|---|---|---|
+| Major: `firing_domains` read every instance of the rule, so a pending probe instance counted as fired while another domain fired. | **Applied.** Only instances whose state starts with `Alerting` count. | `TestFiringDomains::test_a_pending_instance_names_none_while_another_fires`, red before the fix and red against `make mutate` removing the filter. A third `make alert-smoke ENV=staging` on 2026-10-10 passed all five stages with the filter, so the live instance state is `Alerting`. |
+| Trivial: the root-URL test only checked that staging and prod differ, so two wrong but different URLs would pass. | **Applied, derived rather than typed.** Each environment's `GF_SERVER_ROOT_URL` must be `https://` plus a host its rendered `grafana` IngressRoute serves. | `test_the_external_url_is_the_host_grafana_is_served_on`, red against `make mutate` pointing prod's root URL at another host, which the old inequality test passes. |
+| Two wording fixes in lesson-554: bound the master-history claim, and give the dry run as an invocable command. | **Applied.** | lesson-554. |
+
 Side effect: `rules.yaml` feeds the hashed `grafana-alerting` ConfigMap, so the comment-only change rolls Grafana in both environments on merge.
 
 ## Promotion candidates
