@@ -181,7 +181,7 @@ Before archiving, flag what (if anything) should be promoted to the vault. If al
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/TOOL-021-review-attestation-and-reviewer-capacity/` -> `specs/archive/TOOL-021-review-attestation-and-reviewer-capacity/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/TOOL-021-review-attestation-and-reviewer-capacity/` -> `specs/archive/TOOL-021-review-attestation-and-reviewer-capacity/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] Promotions above executed (if any)
