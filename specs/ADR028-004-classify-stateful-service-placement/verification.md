@@ -16,7 +16,7 @@ Mapped 2026-10-10 against master `f1c952a8`, for DEBT-019 (#2034).
 | AC1: the ADR classifies all eight services on both axes | met | ADR-061, #1039 (`b81ba7c1`), with amendment notes in ADR-028 and ADR-037. f1 exits 0. |
 | AC2: one SSOT, a static gate, the failure demonstrated | met | `state_promotion` and `location` in `common.yaml`; `tests/test_stateful_service_classification.py`, #1035 (`f3d9ffd6`) and #2060 (`5cccd7ef`). Red/green transcripts in "AC2" below. f2: 28 passed. |
 | AC3: both overlays render, staging e2e green | met | Gitea moved by #1058 (`7b2879b8`) and #1062 (`b92debff`); MinIO left by #1788 (`6abdea1b`). On 2026-10-10 staging rendered 97 objects and prod 108, with no `minio` or `gitea-data` reference. `make test-e2e ENV=staging` returned 68 passed, 21 skipped, with staging Argo CD on `targetRevision: master`, synced at `f1c952a8`. |
-| AC4: emptiness evidence before each deletion | partial | Prod and staging Gitea captured before deletion ("AC4" below). Staging MinIO was never captured; see "PR 3 superseded by OPS-023" for the proposed supersession. |
+| AC4: emptiness evidence before each deletion | partial: met for Gitea, superseded for staging MinIO | Prod and staging Gitea captured before deletion ("AC4" below). Staging MinIO was never captured. The second archive review accepted its supersession on 2026-10-10 ("PR 3 superseded by OPS-023"); f5 stays `partial`. |
 
 ## R1 — Beelink headroom (measured 2026-08-11/12)
 
@@ -389,6 +389,19 @@ $ git diff --stat -- infra/config/values/common.yaml
 
 The failure names the service and the missing field rather than reporting a bare count, which is what `tasks.md` asked for.
 
+**Re-run recipe since gitea's retirement (2026-10-10).** The transcript above mutates gitea, which has had no PVC in any overlay since #1062, so that exact step now stays green. The current recipe mutates grafana, captured on 2026-10-10 with `make mutate`:
+
+```
+$ make mutate FILE=infra/config/values/common.yaml \
+    FROM="<the grafana comment line and its state_promotion line>" \
+    TO='# ADR028-004: dashboards promote as ConfigMaps.' \
+    TEST=tests/test_stateful_service_classification.py::test_every_stateful_service_declares_a_classification
+FAILED tests/test_stateful_service_classification.py::test_every_stateful_service_declares_a_classification
+1 failed
+RED: the test failed against the mutant, so the guard catches it.
+infra/config/values/common.yaml restored.
+```
+
 Method note: the edit was restored from a copied backup, deliberately **not** with `git checkout -- infra/config/values/common.yaml`. That command is what #1034 was about, and reaching for it during an experiment is how this session destroyed its own uncommitted work once already. `git diff --stat` is included above as the proof of no residue.
 
 ## AC2 (second half) — The duplication clause (captured 2026-10-04)
@@ -427,6 +440,8 @@ Every AC3 task of PR 3 is ticked with that pointer.
 
 R5's authenticated check of 2026-08-12 (above) had also found staging MinIO without a consumer. Whether this stands in for AC4, with f5 narrowed to the two Gitea markers and the reason recorded, or AC4 stays unmet, is for the archive review to decide. It is not decided here.
 
+**Decided, 2026-10-10, by the second archive review** (`review.md`, Findings, AC4): the supersession is accepted. AC4's substance, no PVC deleted without prior proof that it was empty, holds through R5's check of 2026-08-12, which predates the deletion. Its marker form does not hold for this one instance, so f5 stays `partial` and AC4 is not reworded as met. The operator can overrule this on the archive PR.
+
 **Proposed, 2026-10-10, for the operator and the archive review:** treat AC4 for staging MinIO as superseded. AC4 exists to stop a deletion that loses data, and here the deletion's premise changed under it. OPS-023 removed MinIO from both environments rather than retiring a twin. Its only writer had been failing since 2026-08-25, and the data it would have held is in R2 through `node_backup`. AC4 stays `partial` until that decision is written down, and it is not reworded to read as met.
 
 ## Adversarial review findings
@@ -437,6 +452,16 @@ R5's authenticated check of 2026-08-12 (above) had also found staging MinIO with
 |---|---|
 | AC4 for staging MinIO was not met before OPS-023 removed it | Accepted as a recorded gap, not reworded as met. AC4 stays `partial`, and f5 is `partial`. The proposed supersession in "PR 3 superseded by OPS-023" is the operator's decision, and the archive PR asks for it. |
 | `classification_problems` has cyclomatic complexity 11, above the bar of 10 | Fixed in `4fca806c`. The promotion, location and deferral checks are separate helpers, the largest at 4, with the messages unchanged. `tests/test_stateful_service_classification.py`: 20 passed. |
+
+Second round: `review.md`, PASS WITH GAPS, by `nan/mimo-v2.6-flash` on 2026-10-10, against `6974af9b`.
+
+| Finding | Disposition |
+|---|---|
+| Staging MinIO's AC4 capture was never taken | Supersession accepted by this review; recorded in "PR 3 superseded by OPS-023". f5 stays `partial`. |
+| The AC2 transcript mutates gitea, which no longer has a PVC, so it re-runs green | Applied: the grafana re-run recipe is recorded beside the transcript in "AC2", reproduced red with `make mutate`. |
+| `rendered_pvcs` skips the duplication clause when `kubectl` is absent outside CI | Declined: CI fails closed when `kubectl` is missing, and CI is the enforcement point. The local skip names its reason. |
+| `features.json` f2 names `_PLACEMENT_SUFFIXES`; the symbols are `_PROMOTION_SUFFIX` and `_LOCATION_SUFFIX` in `toolkit/features/generator_k8s.py` | Recorded here, because the contract set is closed after review. The guard exists and `tests/test_k8s_generator_configmap_env.py` covers it. |
+| ADR-061 D3's n8n condition (git plus `n8n import` as the only write path) is prose, not a test | Already tracked by #501 and #688 (APP-CONFIG-003); no duplicate filed. |
 
 ## Test status
 
