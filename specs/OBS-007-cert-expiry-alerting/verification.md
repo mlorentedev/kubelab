@@ -7,7 +7,7 @@ created: "2026-08-09"
 
 ## Evidence
 
-Mapped 2026-10-10 for DEBT-019 (#2034), against master `2b57e640` plus this branch. The implementation landed in #958 (`d81f4288`); the runbook and the first verification record landed in #976 (`eceb2ce1`).
+Mapped 2026-10-10 for DEBT-019 (#2034), against master `cec4f424` plus this branch. The implementation landed in #958 (`d81f4288`); the runbook and the first verification record landed in #976 (`eceb2ce1`).
 
 | AC | Status | Evidence |
 |---|---|---|
@@ -22,7 +22,7 @@ Mapped 2026-10-10 for DEBT-019 (#2034), against master `2b57e640` plus this bran
 
 The first run of this audit failed. Grafana has been OIDC-only since 2026-09-24, so the smoke's anonymous read of `/api/prometheus/grafana/api/v1/rules` answered 401. `rule_state` read the HTML as `unreadable`, and the smoke induced the failure anyway, then timed out waiting for a state it could not see. Its teardown still ran: the probe route read NotFound afterwards.
 
-Fixed in `d30d2337`. The read now authenticates inside the pod with the admin the pod already holds (`GF_SECURITY_ADMIN_USER`/`_PASSWORD` from the `grafana-admin` Secret), so no credential crosses kubectl's argv or this process. An unreadable state now aborts before anything is induced. Both behaviors are in `TestRuleStateRead`, red first.
+Fixed in `c8a29939`. The read now authenticates inside the pod with the admin the pod already holds (`GF_SECURITY_ADMIN_USER`/`_PASSWORD` from the `grafana-admin` Secret), so no credential crosses kubectl's argv or this process. An unreadable state now aborts before anything is induced. Both behaviors are in `TestRuleStateRead`, red first.
 
 ### Transcript: the second run, 2026-10-10, final code
 
@@ -43,7 +43,7 @@ Fixed in `d30d2337`. The read now authenticates inside the pod with the admin th
 exit 0
 ```
 
-The first run of the day (fix `d30d2337`, before the domain stage) passed the same four stages. Afterwards `obs007-induced-failure` read NotFound.
+The first run of the day (fix `c8a29939`, before the domain stage) passed the same four stages. Afterwards `obs007-induced-failure` read NotFound.
 
 ### Mutations, each from a clean commit with `make mutate`
 
