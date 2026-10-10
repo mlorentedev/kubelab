@@ -13,10 +13,14 @@ key = os.environ.pop("MCP_BRIDGE_API_KEY")
 port = os.environ["MCP_BRIDGE_PORT"]
 app(
     args=[
-        "--config", "/opt/mcp-bridge/config.json",
-        "--host", "0.0.0.0",
-        "--port", port,
-        "--api-key", key,
+        "--config",
+        "/opt/mcp-bridge/config.json",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        port,
+        "--api-key",
+        key,
         # Without it the OpenAPI spec and the docs answer without the key.
         "--strict-auth",
     ],

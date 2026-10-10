@@ -128,7 +128,9 @@ def test_the_launcher_keeps_the_key_out_of_argv_and_guards_every_endpoint() -> N
     launcher = (BRIDGE / "launch.py").read_text()
     assert 'os.environ.pop("MCP_BRIDGE_API_KEY")' in launcher
     assert "--strict-auth" in launcher, "the spec and the docs need the key too"
-    assert re.search(r'^ENTRYPOINT \["python", "/opt/mcp-bridge/launch.py"\]$', (BRIDGE / "Dockerfile").read_text(), re.M)
+    assert re.search(
+        r'^ENTRYPOINT \["python", "/opt/mcp-bridge/launch.py"\]$', (BRIDGE / "Dockerfile").read_text(), re.M
+    )
 
 
 def test_only_the_read_tools_are_served() -> None:
