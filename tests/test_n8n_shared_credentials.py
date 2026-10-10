@@ -52,7 +52,6 @@ SALE_JSON = "infra/n8n/workflows/sale-metrics-daily-digest.json"
 SALE_PATHS = {
     "token": "apps.services.automation.n8n.sale_digest.analytics_token",
     "recipient": "apps.services.automation.n8n.sale_digest.recipient",
-    "site_tag": "apps.services.automation.n8n.sale_digest.site_tag",
 }
 SMTP_PATHS = {
     "host": "infra.smtp.host",
@@ -64,11 +63,10 @@ SMTP_PATHS = {
 # Sentinels: distinctive enough that a leak into the output is a plain substring hit.
 TOKEN = "CF-TOKEN-SENTINEL-4417"
 RECIPIENT = "recipient-sentinel@example.test"
-SITE_TAG = "SITETAG-SENTINEL-9051"
 SMTP_PASS = "SMTP-PASS-SENTINEL-2263"
 SMTP_USER = "relay-sentinel@example.test"
 NOTIFY_HEADER = "NOTIFY-HEADER-SENTINEL-7730"
-SENTINELS = (TOKEN, RECIPIENT, SITE_TAG, SMTP_PASS, SMTP_USER, NOTIFY_HEADER)
+SENTINELS = (TOKEN, RECIPIENT, SMTP_PASS, SMTP_USER, NOTIFY_HEADER)
 
 
 # ── Fakes ─────────────────────────────────────────────────────────────────────
@@ -84,7 +82,7 @@ def _vault() -> dict[str, Any]:
                 "automation": {
                     "notify": {"webhook_secret": NOTIFY_HEADER},
                     "n8n": {
-                        "sale_digest": {"analytics_token": TOKEN, "recipient": RECIPIENT, "site_tag": SITE_TAG},
+                        "sale_digest": {"analytics_token": TOKEN, "recipient": RECIPIENT},
                     },
                 }
             }
@@ -281,10 +279,10 @@ class TestSaleDigestWorkflow:
         import, which is the only way they reach a node here."""
         assert "$env" not in (REPO_ROOT / SALE_JSON).read_text()
 
-    def test_its_four_header_auth_nodes_share_one_credential_id(self) -> None:
-        """Two Analytics Engine queries, the Web Analytics query and its second try."""
+    def test_its_two_header_auth_nodes_share_one_credential_id(self) -> None:
+        """The two Analytics Engine queries: the last 24 hours and the whole sale."""
         refs = [r for r in read_credential_refs(_sale_doc()) if r.type == "httpHeaderAuth"]
-        assert len(refs) == 4
+        assert len(refs) == 2
         assert len({r.id for r in refs}) == 1
         assert {r.name for r in refs} == {_sale_spec().credential_name}
 
@@ -306,15 +304,13 @@ class TestSaleDigestWorkflow:
 
     def test_the_sender_is_the_relay_account_the_recipient_a_sale_secret(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Gmail rewrites any From that is not the authenticated account, so the
-        sender is `infra.smtp.user`. The recipient and site tag are the sale's own."""
+        sender is `infra.smtp.user`. The recipient is the sale's own."""
         ok, kubectl = _run(monkeypatch=monkeypatch)
         assert ok
         digest = next(w for w in kubectl.workflows() if w["name"] == _sale_doc()["name"])
         mail = next(n for n in digest["nodes"] if n["type"] == "n8n-nodes-base.emailSend")
         assert mail["parameters"]["fromEmail"] == SMTP_USER
         assert mail["parameters"]["toEmail"] == RECIPIENT
-        query = next(n for n in digest["nodes"] if n["name"] == "Web Analytics query")
-        assert SITE_TAG in query["parameters"]["jsCode"]
         assert "RESOLVE_" not in json.dumps(digest)
 
 
@@ -362,8 +358,8 @@ class TestProdRun:
     def test_nothing_secret_reaches_the_output(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        """The resolver used to log every value it substituted; the recipient and
-        the site tag are SOPS-resident, so that put them on the terminal."""
+        """The resolver used to log every value it substituted; the recipient is
+        SOPS-resident, so that put them on the terminal."""
         ok, _ = _run(monkeypatch=monkeypatch)
         assert ok
         out = capsys.readouterr().out
@@ -394,7 +390,7 @@ class TestProdRun:
         assert short not in capsys.readouterr().out
 
 class TestFailsClosed:
-    @pytest.mark.parametrize("name", ["token", "recipient", "site_tag"])
+    @pytest.mark.parametrize("name", ["token", "recipient"])
     def test_a_missing_sale_value_fails_the_digest_naming_the_path(
         self, name: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
@@ -518,7 +514,7 @@ class TestSharedLifecycle:
             assert "sale" not in cred.name and "denver" not in cred.name
 
     def test_the_sale_owns_every_sale_value_and_the_shared_credential_owns_none_of_them(self) -> None:
-        """What the 2026-11-09 removal deletes is one block: the three paths below,
+        """What the 2026-11-09 removal deletes is one block: the two paths below,
         and nothing the shared credential reads."""
         smtp_reads = set(SMTP_PATHS.values())
         assert smtp_reads.isdisjoint(SALE_PATHS.values())
@@ -531,6 +527,16 @@ class TestRegistries:
         for path in SALE_PATHS.values():
             assert path in by_key, f"{path} has no SECRET_CATALOG entry: `secrets audit` cannot see it"
             assert by_key[path].envs == ("prod",)
+
+    def test_the_sale_asks_the_vault_for_exactly_its_two_values(self) -> None:
+        """The Web Analytics site tag went with the Web Analytics query (2026-10-10): a registry entry
+        or a placeholder left behind would make `secrets audit` and the import ask for a value nothing
+        reads."""
+        sale_prefix = "apps.services.automation.n8n.sale_digest."
+        registered = {s.key_path for s in SECRET_CATALOG if s.key_path.startswith(sale_prefix)}
+        assert registered == set(SALE_PATHS.values())
+        assert {p for p in PLACEHOLDER_SSOT.values() if p.startswith(sale_prefix)} == {SALE_PATHS["recipient"]}
+        assert not [t for t in PLACEHOLDER_SSOT if "SITE_TAG" in t]
 
     def test_the_cloudflare_token_declares_that_a_provider_expires_it(self) -> None:
         from toolkit.features.secret_expiry import Expiry

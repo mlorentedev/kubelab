@@ -182,7 +182,7 @@ N8N_IMPORT_CATALOG: list[N8nImportSpec] = [
     # (README: "Removing the sale"). `kubelab-smtp` below is not the sale's and stays.
     N8nImportSpec(
         workflow_path=Path("infra/n8n/workflows/sale-metrics-daily-digest.json"),
-        # Account | Account Analytics | Read. The recipient and the site tag sit beside
+        # Account | Account Analytics | Read. The recipient sits beside
         # it in `sale_digest` (see PLACEHOLDER_SSOT).
         secret_key_path="apps.services.automation.n8n.sale_digest.analytics_token",
         credential_name="cloudflare-analytics-read",
@@ -220,7 +220,6 @@ PLACEHOLDER_SSOT: dict[str, str] = {
     "RESOLVE_KUBELAB_SMTP_FROM": "infra.smtp.user",
     # The sale digest's own values; SOPS-resident, hence never logged below.
     "RESOLVE_SALE_DIGEST_TO": "apps.services.automation.n8n.sale_digest.recipient",
-    "RESOLVE_SALE_DIGEST_SITE_TAG": "apps.services.automation.n8n.sale_digest.site_tag",
 }
 
 _PLACEHOLDER_RE = re.compile(r"RESOLVE_[A-Z0-9_]+")

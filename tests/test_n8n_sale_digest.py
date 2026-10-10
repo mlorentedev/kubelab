@@ -2,7 +2,7 @@
 
 The first version arrived as English plain text: a wall of `name N` pairs. This runs the REAL
 `jsCode` of the "Write the digest" node, committed in the workflow JSON, on fixture answers shaped
-like the three upstream nodes' output, and asserts on what the email node CONSUMES: the `subject`,
+like the two upstream Events nodes' output, and asserts on what the email node CONSUMES: the `subject`,
 `html` and `text` fields the node maps, not that the JSON parses.
 
 Two things the fixtures take from the real system rather than assuming:
@@ -113,21 +113,6 @@ def answer(*rows: dict[str, str]) -> dict[str, Any]:
     return {"data": list(rows)}
 
 
-def web_answer(visits: int, views: int, referrers: list[tuple[str, int]]) -> dict[str, Any]:
-    return {
-        "data": {
-            "viewer": {
-                "accounts": [
-                    {
-                        "totals": [{"count": views, "sum": {"visits": visits}}],
-                        "referrers": [{"count": n, "dimensions": {"refererHost": host}} for host, n in referrers],
-                    }
-                ]
-            }
-        }
-    }
-
-
 RECENT_ROWS = (
     row("visit", 9, source="flyer"),
     row("visit", 1, source="share"),
@@ -140,13 +125,10 @@ RECENT_ROWS = (
 SALE_ROWS = (*RECENT_ROWS, row("view_item", 6, item="onn-43-4k-tv"), row("view_item", 5, item="convertible-desk"))
 
 
-def nodes(recent: Any = None, sale: Any = None, web: Any = None) -> dict[str, Any]:
+def nodes(recent: Any = None, sale: Any = None) -> dict[str, Any]:
     return {
         "Events, last 24 h": answer(*RECENT_ROWS) if recent is None else recent,
         "Events, whole sale": answer(*SALE_ROWS) if sale is None else sale,
-        "Web Analytics, last 24 h": (
-            web_answer(14, 41, [("", 10), ("facebook.com", 2), ("l.instagram.com", 1)]) if web is None else web
-        ),
     }
 
 
@@ -165,7 +147,7 @@ def digest() -> dict[str, Any]:
 
 class TestSubject:
     def test_it_says_the_numbers_in_spanish(self, digest: dict[str, Any]) -> None:
-        assert digest["subject"] == "Venta · mié 7 oct — 14 visitas, 8 fichas, 1 mensaje"
+        assert digest["subject"] == "Venta · mié 7 oct — 10 visitas, 8 fichas, 1 mensaje"
 
     def test_the_date_is_denver_s_even_when_utc_is_already_the_next_day(self) -> None:
         """A run from the n8n UI at 22:00 in Denver is 04:00 the next day in UTC."""
@@ -178,25 +160,24 @@ class TestSubject:
     def test_singular_and_plural_agree_with_the_count(self) -> None:
         one = run_digest(
             nodes(
-                recent=answer(row("view_item", 1, item="sofa"), row("text_tap", 1, item="sofa")),
-                web=web_answer(1, 1, []),
+                recent=answer(
+                    row("visit", 1, source="flyer"), row("view_item", 1, item="sofa"), row("text_tap", 1, item="sofa")
+                )
             )
         )
         assert one["subject"] == "Venta · mié 7 oct — 1 visita, 1 ficha, 1 mensaje"
-        none = run_digest(nodes(recent=answer(), web=web_answer(0, 0, [])))
+        none = run_digest(nodes(recent=answer()))
         assert none["subject"] == "Venta · mié 7 oct — 0 visitas, 0 fichas, 0 mensajes"
-
-    def test_visits_fall_back_to_the_tracked_links_when_web_analytics_fails(self) -> None:
-        subject = run_digest(nodes(web={"errors": [{"message": "denied"}]}))["subject"]
-        assert subject == "Venta · mié 7 oct — 10 visitas, 8 fichas, 1 mensaje (datos incompletos)"
 
     def test_a_failed_event_query_leaves_out_what_it_would_have_counted(self) -> None:
         subject = run_digest(nodes(recent={"success": False, "errors": [{"code": 10000}]}))["subject"]
-        assert subject == "Venta · mié 7 oct — 14 visitas (datos incompletos)"
+        assert subject == "Venta · mié 7 oct — sin datos"
+        subject = run_digest(nodes(sale={"success": False, "errors": [{"code": 10000}]}))["subject"]
+        assert subject == "Venta · mié 7 oct — 10 visitas, 8 fichas, 1 mensaje (datos incompletos)"
 
     def test_everything_failing_still_gives_a_subject(self) -> None:
         failed = {"success": False}
-        subject = run_digest(nodes(recent=failed, sale=failed, web={"error": "timeout"}))["subject"]
+        subject = run_digest(nodes(recent=failed, sale=failed))["subject"]
         assert subject == "Venta · mié 7 oct — sin datos"
 
 
@@ -232,10 +213,8 @@ class TestHeaderAndKpis:
         assert "Miércoles 7 de octubre" in visible(digest["html"])
 
     def test_the_three_tiles_carry_their_numbers_in_order(self, digest: dict[str, Any]) -> None:
-        # whole sale: 8 + 6 + 5 = 19 views, 1 tap
-        assert "Visitas web 14 41 páginas vistas Fichas abiertas 8 total: 19 Mensajes 1 total: 1" in visible(
-            digest["html"]
-        )
+        # whole sale: 10 + 0 visits, 8 + 6 + 5 = 19 views, 1 tap
+        assert "Visitas 10 total: 10 Fichas abiertas 8 total: 19 Mensajes 1 total: 1" in visible(digest["html"])
 
     def test_the_messages_tile_stands_out_and_the_others_do_not(self, digest: dict[str, Any]) -> None:
         html = digest["html"]
@@ -243,12 +222,12 @@ class TestHeaderAndKpis:
         assert accents, "no accent colour"
         tile = re.search(r"<td[^>]*>(?:(?!</td>).)*Mensajes(?:(?!</td>).)*</td>", html, re.S)
         assert tile and "#0f766e" in tile.group(0), "the Mensajes tile is not the accented one"
-        visits_tile = re.search(r"<td[^>]*>(?:(?!</td>).)*Visitas web(?:(?!</td>).)*</td>", html, re.S)
+        visits_tile = re.search(r"<td[^>]*>(?:(?!</td>).)*Visitas(?:(?!</td>).)*</td>", html, re.S)
         assert visits_tile and "#0f766e" not in visits_tile.group(0)
 
     def test_the_text_fallback_says_the_same(self, digest: dict[str, Any]) -> None:
         text = digest["text"]
-        assert "Visitas web: 14 (41 páginas vistas)" in text
+        assert "Visitas: 10 (total: 10)" in text
         assert "Fichas abiertas: 8 (total: 19)" in text
         assert "Mensajes: 1 (total: 1)" in text
         assert "Miércoles 7 de octubre" in text
@@ -329,10 +308,6 @@ class TestSources:
         )
         assert "Flyer 3 · Facebook 2 · Compartido 1" in out["text"]
 
-    def test_web_analytics_referrers_and_an_empty_host_reads_directo(self, digest: dict[str, Any]) -> None:
-        assert "Directo 10 · facebook.com 2 · l.instagram.com 1" in digest["text"]
-        assert "Directo 10 · facebook.com 2 · l.instagram.com 1" in visible(digest["html"])
-
     def test_no_tracked_visits_says_so_without_failing(self) -> None:
         out = run_digest(nodes(recent=answer(row("view_item", 1, item="a"))))
         assert "Sin visitas por enlace" in out["text"]
@@ -385,8 +360,7 @@ class TestFailSoft:
         out = run_digest(nodes(recent=self.EVENTS_FAILED))
         text = out["text"]
         assert "No disponible: la consulta a Analytics Engine falló (ver la ejecución en n8n)" in text
-        assert "Directo 10 · facebook.com 2" in text, "Web Analytics still reported"
-        assert "Visitas web: 14" in text
+        assert "Visitas: — (total: 10)" in text
         assert "Fichas abiertas: — (total: 19)" in text
         assert "make reprice ID=onn-43-4k-tv" in text, "the whole-sale section is independent"
         assert "No disponible" in visible(out["html"])
@@ -402,29 +376,6 @@ class TestFailSoft:
         assert "Fichas abiertas: 8 (total: —)" in text
         assert "Sofa sleeper: 3 vistas" in text
 
-    def test_a_web_analytics_error_hides_even_the_partial_data_beside_it(self) -> None:
-        """GraphQL answers 200 with `errors`, sometimes beside partial data: those figures are not printed."""
-        web = web_answer(777, 888, [("partial.example", 5)])
-        web["errors"] = [{"message": "internal error"}]
-        out = run_digest(nodes(web=web))
-        for rendered in (out["text"], out["html"], out["subject"]):
-            assert "777" not in rendered and "888" not in rendered and "partial.example" not in rendered
-        assert "No disponible: la consulta a Web Analytics devolvió errores (ver la ejecución en n8n)" in out["text"]
-        assert "Fichas abiertas: 8" in out["text"], "the event sections survive"
-
-    def test_web_analytics_answering_with_no_data_points_at_the_site_tag_and_the_token(self) -> None:
-        out = run_digest(nodes(web={"error": "401 unauthorized"}))
-        reason = "la consulta a Web Analytics no devolvió datos (revisa el site tag y el token, ver el runbook)"
-        assert f"No disponible: {reason}" in out["text"]
-        assert "Visitas web: — (No disponible)" in out["text"]
-
-    def test_a_site_with_no_page_views_is_zero_not_a_failure(self) -> None:
-        web = {"data": {"viewer": {"accounts": [{"totals": [], "referrers": []}]}}}
-        out = run_digest(nodes(web=web))
-        assert "Visitas web: 0 (0 páginas vistas)" in out["text"]
-        assert "No disponible: la consulta a Web" not in out["text"]
-        assert "datos incompletos" not in out["subject"]
-
     def test_an_unreadable_count_is_zero_not_nan(self) -> None:
         out = run_digest(
             nodes(recent=answer({"event": "view_item", "source": "", "item": "x", "bundle": "", "n": "oops"}))
@@ -437,7 +388,6 @@ class TestFailSoft:
 
 HOSTILE_ITEM = "<script>alert(1)</script>"
 HOSTILE_SOURCE = '"><img src=x onerror=alert(2)>'
-HOSTILE_HOST = "evil.example/<b onmouseover=alert(3)>"
 HOSTILE_BUNDLE = "<svg onload=alert(4)>"
 
 
@@ -449,19 +399,17 @@ def hostile() -> dict[str, Any]:
         row("text_tap", 1, bundle=HOSTILE_BUNDLE),
     )
     sale = answer(row("view_item", 9, item=HOSTILE_ITEM))
-    web = web_answer(3, 4, [(HOSTILE_HOST, 3)])
-    return run_digest(nodes(recent=recent, sale=sale, web=web))
+    return run_digest(nodes(recent=recent, sale=sale))
 
 
 class TestHtmlSafety:
     def test_every_value_that_comes_from_data_is_escaped(self, hostile: dict[str, Any]) -> None:
         html = hostile["html"]
-        for raw in ("<script", "<img", "<svg", "<b onmouseover", '"><img'):
+        for raw in ("<script", "<img", "<svg", '"><img'):
             assert raw not in html, f"{raw!r} reached the HTML unescaped"
         assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
         assert "&quot;&gt;&lt;img src=x onerror=alert(2)&gt;" in html
         assert "&lt;svg onload=alert(4)&gt;" in html
-        assert "evil.example/&lt;b onmouseover=alert(3)&gt;" in html
 
     def test_an_id_in_a_link_is_percent_encoded_and_cannot_break_out_of_the_attribute(
         self, hostile: dict[str, Any]
@@ -501,80 +449,40 @@ class TestHtmlSafety:
         assert 'lang="es"' in html
 
 
-FIRST_WEB = "Web Analytics, last 24 h"
-WEB_CHECK = "Web Analytics failed?"
-WEB_WAIT = "Wait a minute"
-SECOND_WEB = "Web Analytics, second try"
-#: The answer Cloudflare gave the 2026-10-07 run: the whole query refused, `data` null.
-UNAVAILABLE = {
-    "data": None,
-    "errors": [
-        {"message": "unable to execute query, please try again later", "extensions": {"code": "serviceUnavailable"}}
-    ],
-}
-
-
 def targets(name: str) -> list[list[str]]:
     """The nodes each output of `name` feeds, output by output."""
     return [[link["node"] for link in out] for out in workflow()["connections"][name]["main"]]
 
 
-def failed(answer: Any) -> bool:
-    """Evaluate the IF node's REAL condition expression against one Web Analytics answer."""
-    check = next(n for n in workflow()["nodes"] if n["name"] == WEB_CHECK)
-    (condition,) = check["parameters"]["conditions"]["conditions"]
-    expression = re.fullmatch(r"=\{\{ (.+) \}\}", condition["leftValue"]).group(1)
-    script = f"const $json = {json.dumps(answer)}; console.log(JSON.stringify({expression}));"
-    out = json.loads(subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True).stdout)
-    assert isinstance(out, bool), "a strict boolean condition must see a boolean"
-    return out
+class TestWorkflowShape:
+    """Owner decision 2026-10-10: the digest no longer queries Cloudflare Web Analytics. Its site tag
+    returned zero page loads for a week, and the first-party Events queries already give visits by
+    source and item taps, which is what the owner reads."""
 
+    def test_the_chain_is_trigger_events_events_digest_email(self) -> None:
+        trigger = next(n["name"] for n in workflow()["nodes"] if n["type"] == "n8n-nodes-base.scheduleTrigger")
+        chain = [trigger]
+        while chain[-1] != EMAIL_NODE:
+            (nxt,) = targets(chain[-1])[0]
+            chain.append(nxt)
+        assert chain == [trigger, "Events, last 24 h", "Events, whole sale", DIGEST_NODE, EMAIL_NODE]
+        assert [n["name"] for n in workflow()["nodes"]] == chain, (
+            "a node outside the chain would never run, or run twice"
+        )
+        assert EMAIL_NODE not in workflow()["connections"], "the email is the end of the chain"
 
-class TestWebAnalyticsIsAskedTwice:
-    """The first scheduled run (2026-10-07) printed "No disponible" for web visits: Cloudflare refused the
-    whole GraphQL query with `serviceUnavailable`, "try again later". A manual run four hours earlier had
-    answered. So a failed answer is asked for once more, a minute later, and that one counts."""
+    def test_nothing_in_the_workflow_mentions_web_analytics(self) -> None:
+        """Node names, code and parameters alike: a leftover query would ask Cloudflare for a site tag the
+        import no longer fills, and fail at 08:00 instead of at the import."""
+        text = WORKFLOW_PATH.read_text(encoding="utf-8")
+        for forbidden in ("web analytics", "rumpageload", "sitetag", "site_tag", "site tag"):
+            assert forbidden not in text.lower(), forbidden
 
-    def test_a_refused_query_and_a_failed_request_are_failures_and_an_answer_is_not(self) -> None:
-        assert failed(UNAVAILABLE)
-        assert failed({"error": "ETIMEDOUT"})
-        assert failed({"data": {"viewer": None}, "errors": []})
-        partial = web_answer(14, 41, [])
-        partial["errors"] = [{"message": "internal error", "path": ["viewer", "accounts", 0, "referrers"]}]
-        assert failed(partial), "figures beside an error are not printed, so they are worth a second try"
-        assert failed(web_answer(14, 41, [])) is False
-        assert failed({"data": {"viewer": {"accounts": []}}}) is False, "an empty account is the digest's to explain"
-
-    def test_a_failure_waits_a_minute_then_asks_again_and_an_answer_goes_straight_on(self) -> None:
-        assert targets(FIRST_WEB) == [[WEB_CHECK]]
-        assert targets(WEB_CHECK) == [[WEB_WAIT], [DIGEST_NODE]], "IF output 0 is true (failed), 1 is false"
-        assert targets(WEB_WAIT) == [[SECOND_WEB]]
-        assert targets(SECOND_WEB) == [[DIGEST_NODE]]
-        wait = next(n for n in workflow()["nodes"] if n["name"] == WEB_WAIT)["parameters"]
-        # Under 65 s n8n keeps the execution in memory instead of parking it in the database.
-        assert wait == {"amount": 60, "unit": "seconds"}
-
-    def test_the_second_try_is_the_same_request(self) -> None:
-        by_name = {n["name"]: n for n in workflow()["nodes"]}
-        first, second = by_name[FIRST_WEB], by_name[SECOND_WEB]
-        for key in ("type", "typeVersion", "parameters", "credentials", "onError"):
-            assert first[key] == second[key], key
-
-    def test_the_second_answer_counts_when_there_is_one(self) -> None:
-        both = {**nodes(web=UNAVAILABLE), SECOND_WEB: web_answer(23, 60, [("facebook.com", 4)])}
-        out = run_digest(both)
-        assert out["subject"] == "Venta · mié 7 oct — 23 visitas, 8 fichas, 1 mensaje"
-        assert "facebook.com 4" in out["text"]
-
-    def test_when_both_fail_the_second_failure_is_the_one_named(self) -> None:
-        """The two failures read differently, so this fails if the first answer is the one read."""
-        out = run_digest({**nodes(web=UNAVAILABLE), SECOND_WEB: {"error": "401 unauthorized"}})
-        assert "No disponible: la consulta a Web Analytics no devolvió datos" in out["text"]
-        assert "devolvió errores" not in out["text"]
-        assert out["subject"].endswith("(datos incompletos)")
-
-    def test_without_a_second_try_the_first_answer_counts(self, digest: dict[str, Any]) -> None:
-        assert digest["subject"] == "Venta · mié 7 oct — 14 visitas, 8 fichas, 1 mensaje"
+    def test_the_digest_code_asks_only_for_the_two_events_answers(self) -> None:
+        js = node_js(WORKFLOW, DIGEST_NODE)
+        assert "$(" not in js.replace("$(name)", ""), "the code reads a node other than through rowsOf"
+        assert sorted(re.findall(r"rowsOf\('([^']+)'\)", js)) == ["Events, last 24 h", "Events, whole sale"]
+        assert "serviceUnavailable" not in js and "isExecuted" not in js
 
 
 class TestSchedule:
