@@ -9,9 +9,14 @@ created: "2026-08-11"
 
 Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
 
-- [ ] Criterion 1 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 2 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 3 -> commit `<hash>` / test `<name>`
+Mapped 2026-10-10 against master `f1c952a8`, for DEBT-019 (#2034).
+
+| AC | Status | Evidence |
+|---|---|---|
+| AC1: the ADR classifies all eight services on both axes | met | ADR-061, #1039 (`b81ba7c1`), with amendment notes in ADR-028 and ADR-037. f1 exits 0. |
+| AC2: one SSOT, a static gate, the failure demonstrated | met | `state_promotion` and `location` in `common.yaml`; `tests/test_stateful_service_classification.py`, #1035 (`f3d9ffd6`) and #2060 (`5cccd7ef`). Red/green transcripts in "AC2" below. f2: 28 passed. |
+| AC3: both overlays render, staging e2e green | met | Gitea moved by #1058 (`7b2879b8`) and #1062 (`b92debff`); MinIO left by #1788 (`6abdea1b`). On 2026-10-10 staging rendered 97 objects and prod 108, with no `minio` or `gitea-data` reference. `make test-e2e ENV=staging` returned 68 passed, 21 skipped, with staging Argo CD on `targetRevision: master`, synced at `f1c952a8`. |
+| AC4: emptiness evidence before each deletion | partial | Prod and staging Gitea captured before deletion ("AC4" below). Staging MinIO was never captured; see "PR 3 superseded by OPS-023" for the proposed supersession. |
 
 ## R1 — Beelink headroom (measured 2026-08-11/12)
 
@@ -415,33 +420,38 @@ PR 3 never ran. MinIO left K3s entirely under OPS-023:
 
 Every AC3 task of PR 3 is ticked with that pointer.
 
-**AC4 for staging MinIO is open, and cannot be satisfied as written.** No `AC4-EVIDENCE staging/minio pre-deletion` capture was taken before #1788 deleted the PVC, and none can be taken now. `features.json` f5 therefore stays red on that marker. What #1788 recorded in its place:
+**AC4 for staging MinIO is open, and cannot be satisfied as written.** No `AC4-EVIDENCE staging/minio pre-deletion` capture was taken before #1788 deleted the PVC, and none can be taken now. `features.json` f5 does not check that marker any more: it matched the prose of this paragraph, so it passed without a capture. Since 2026-10-10 f5 checks the two Gitea markers by their headings and is recorded `partial`. What #1788 recorded in its place:
 
 - the prod `pvc-backup` CronJob, MinIO's only writer, had failed every night since 2026-08-25;
 - the data it would have held (Authelia, n8n) has been in R2 via `node_backup` since #1236.
 
 R5's authenticated check of 2026-08-12 (above) had also found staging MinIO without a consumer. Whether this stands in for AC4, with f5 narrowed to the two Gitea markers and the reason recorded, or AC4 stays unmet, is for the archive review to decide. It is not decided here.
 
+**Proposed, 2026-10-10, for the operator and the archive review:** treat AC4 for staging MinIO as superseded. AC4 exists to stop a deletion that loses data, and here the deletion's premise changed under it. OPS-023 removed MinIO from both environments rather than retiring a twin. Its only writer had been failing since 2026-08-25, and the data it would have held is in R2 through `node_backup`. AC4 stays `partial` until that decision is written down, and it is not reworded to read as met.
+
 ## Test status
 
-- Test suite: `<command> -> <output / coverage %>`
-- Manual smoke test: what was exercised, what was observed
-- No regressions in existing test suite: yes / no (if no, document)
+- `poetry run pytest tests/test_stateful_service_classification.py tests/test_k8s_generator_configmap_env.py`: 28 passed, on master `f1c952a8` (2026-10-10).
+- `make test-e2e ENV=staging`: 68 passed, 21 skipped (2026-10-10). Staging served master `f1c952a8`.
+- `make lint`: exit 0. `mypy toolkit`: no issues in 125 source files.
+- No regressions: each implementation PR merged with its required `Tests` check green.
 
 ## Decisions made during implementation
 
 Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
 
--
--
+- Gitea retired before MinIO, the reverse of the planned order, decided by the operator on 2026-08-14 so that Gitea moved while it was still empty (see the deviation note in `tasks.md`). The duplication clause moved to PR 3 as a result, and landed in #2060 once OPS-023 had removed MinIO.
+- PR 3 never ran: OPS-023 retired MinIO from both environments (#1788, #1880).
+- f5 narrowed on 2026-10-10 from three markers to two, because its third marker could only ever be satisfied by prose.
+- Known gap after archive: the placement gate does not read StatefulSet `volumeClaimTemplates` (#2062, open). It is not an acceptance criterion here.
 
 ## Promotion candidates
 
 Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.
 
-- [ ] Lesson for the repo's `docs/lessons.md`? <yes / no - one line of what>
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? <yes / no - one line of what>
-- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes / no - one line>
+- [x] Lesson for the repo's `docs/lessons/`? no new one: the lessons this spec produced were written as it went (the duplication clause's empty-render guard cites lesson-416), and the vacuous f5 is the failure that `features.json`'s own notes already describe.
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? yes, already done: ADR-061.
+- [x] New pattern candidate for `00_meta/patterns/`? no: state promotion and location are axes of this fleet's placement, not a cross-project practice.
 
 ## Archive checklist
 
