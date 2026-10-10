@@ -37,17 +37,17 @@ created: "2026-05-31"
 
 - [x] Create Headscale user `agents` on the VPS (id 4); mint a `tag:hermes` preauth key (one-time, 72h, non-ephemeral) ✓
 - [x] Join from the agent host: `tailscale up --login-server=https://vpn.kubelab.live --authkey=<KEY> --accept-routes=false` ✓ — **NB: NOT `--advertise-tags`** (the key carries the tag; advertise requires the user to own the tag). hermes = node 22, `100.64.0.9`, renamed `hermes-nan`.
-- [ ] Record assigned IP in `networking.nodes` SSOT — **deferred to VPN-ACL-008** (do not record until the entrypoint makes hermes durably up; identity itself persists on `/persist`)
-- [ ] Provision hermes's per-service scoped credential (toolkit + SOPS) — C6 zero-trust — **follow-up (fresh session)**: needs target-service + mechanism decided
+- [~] Record assigned IP in `networking.nodes` SSOT — **superseded 2026-10-10**: hermes-nan was retired on 2026-09-30. `tag:hermes`'s current holder, `hermes-kubelab`, is declared in `apps.services.ai.hermes_kubelab` (AI-009), and #589 closes with this archive. Was: **deferred to VPN-ACL-008** (do not record until the entrypoint makes hermes durably up; identity itself persists on `/persist`)
+- [~] Provision hermes's per-service scoped credential (toolkit + SOPS) — C6 zero-trust — **not done; handed to #590 on 2026-10-10**, re-scoped there to `hermes-kubelab` — **follow-up (fresh session)**: needs target-service + mechanism decided
 - [x] Verify SSH + tag + **segmentation** ✓ — `ssh hermes-nan` works (admin→:22, AC4a); `headscale nodes list` shows `tag:hermes`; egress proven in prod: `vps:443` reachable, `vps:8080`/`ace1:6443` **dropped** (per-port deny). Own-credential service auth = the C6 follow-up.
 
 ## Closing
 
-- [ ] Every acceptance criterion in `proposal.md` covered by a test or documented smoke check
-- [ ] `headscale policy check` green in CI; existing test suite has no regressions
-- [ ] No unrelated changes in the diff (no scope creep into VPN-ACL-004/005/006)
-- [ ] `verification.md` filled in
-- [ ] PR opened referencing this spec folder
+- [x] Every acceptance criterion in `proposal.md` covered by a test or documented smoke check. AC3's restore is covered statically only (#2184), and AC4's C6 half by nothing (#590). ✓ 2026-10-10
+- [x] `headscale policy check` green in CI; existing test suite has no regressions. ✓ 2026-10-10 (verification.md, Test status)
+- [x] No unrelated changes in the diff (no scope creep into VPN-ACL-004/005/006). #235 changed the role, the policy template, the probe and their tests; #586, #587 and #248 are still open. ✓ 2026-10-10
+- [x] `verification.md` filled in. ✓ 2026-10-10
+- [x] PR opened referencing this spec folder: #235. ✓ 2026-10-10
 
 ## Machine-readable features
 
