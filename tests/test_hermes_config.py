@@ -32,8 +32,19 @@ def _render(name: str, **overrides: object) -> str:
     return env.get_template(name).render(**{**_resolved(env), **overrides})
 
 
+class _StrictLoader(yaml.SafeLoader):
+    """`safe_load` keeps the last of two equal keys without a word, so a section
+    the template renders twice would pass on whichever copy PyYAML kept."""
+
+    def construct_mapping(self, node: yaml.MappingNode, deep: bool = False) -> dict:
+        keys = [self.construct_object(key, deep=deep) for key, _ in node.value]
+        duplicates = {key for key in keys if keys.count(key) > 1}
+        assert not duplicates, f"rendered twice: {duplicates}"
+        return super().construct_mapping(node, deep=deep)
+
+
 def _config(**overrides: object) -> dict:
-    return yaml.safe_load(_render("hermes-config.yaml.j2", **overrides))
+    return yaml.load(_render("hermes-config.yaml.j2", **overrides), Loader=_StrictLoader)  # noqa: S506
 
 
 def _blocked(command: str, globs: list[str]) -> bool:
@@ -213,3 +224,89 @@ def test_every_provision_reads_the_deny_list_back_through_the_running_gateway() 
     # A refusal is never read as a pass, nor a pass as a refusal.
     assert defaults["_agent_stack_hermes_refused_verdicts"] == ["user-deny", "hardline-deny"]
     assert defaults["_agent_stack_hermes_passed_verdicts"] == ["allow", "ask-approval"]
+
+
+# --------------------------------------------------------------------------- the ported harness
+
+HERMES = yaml.safe_load(COMMON.read_text())["apps"]["services"]["ai"]["hermes_kubelab"]
+PORTED = HERMES["agent_config"]
+# What the role decides, so the SSOT's ported keys cannot reach it (spec AI-012).
+ROLE_OWNED = {
+    ("approvals",),
+    ("terminal",),
+    ("slack",),
+    ("unauthorized_dm_behavior",),
+    ("model", "provider"),
+    ("model", "base_url"),
+    ("model", "key_env"),
+    ("model", "default"),
+    ("cron", "model"),
+    ("delegation", "model"),
+}
+
+
+def _leaves(tree: dict, path: tuple[str, ...] = ()) -> list[tuple[tuple[str, ...], object]]:
+    return [
+        leaf
+        for key, value in tree.items()
+        for leaf in (_leaves(value, (*path, key)) if isinstance(value, dict) else [((*path, key), value)])
+    ]
+
+
+def _at(tree: dict, path: tuple[str, ...]) -> object:
+    for key in path:
+        tree = tree[key]
+    return tree
+
+
+@pytest.mark.parametrize(("path", "value"), _leaves(PORTED), ids=[".".join(path) for path, _ in _leaves(PORTED)])
+def test_every_ported_key_renders_with_its_declared_value(path: tuple[str, ...], value: object) -> None:
+    assert _at(_config(), path) == value
+
+
+def test_the_ported_keys_cannot_reach_what_the_role_decides() -> None:
+    leaked = [path for path, _ in _leaves(PORTED) if any(path[: len(owned)] == owned for owned in ROLE_OWNED)]
+    assert not leaked, leaked
+
+
+@pytest.mark.parametrize(
+    "ported",
+    [
+        {"approvals": {"mode": "off"}},
+        {"model": {"provider": "openrouter"}},
+        {"cron": {"model": "metered"}},
+        {"delegation": {"model": "metered"}},
+    ],
+    ids=["approvals", "provider", "cron-model", "delegation-model"],
+)
+def test_a_role_owned_key_in_the_ssot_does_not_override_the_role(ported: dict) -> None:
+    """The guard above reads the SSOT as it is; this one proves the template
+    would not obey the SSOT if someone put such a key there anyway."""
+    config = _config(agent_stack_hermes={**HERMES, "agent_config": {**PORTED, **ported}})
+    assert config["approvals"]["mode"] == "manual"
+    assert config["model"]["provider"] == "custom"
+    assert config["cron"]["model"] == HERMES["models"]["unmetered"]
+    assert config["delegation"]["model"] == HERMES["models"]["unmetered"]
+
+
+def test_a_scan_that_cannot_run_blocks_rather_than_allows() -> None:
+    """v2026.9.24 defaults to fail-open; hermes-nan ran it closed (HERMES-012)."""
+    assert _config()["security"]["tirith_fail_open"] is False
+
+
+def test_every_provision_asks_the_running_scanner_for_both_verdicts() -> None:
+    """`hermes approvals test` does not model the scanner (v2026.9.24: a homograph
+    URL reads `allow` there, and `block` from the scanner itself). Fail-closed,
+    a scanner that cannot run refuses the plain command too, so the pair tells
+    a working scanner from a missing one, which the config alone cannot."""
+    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text())
+    probe = defaults["_agent_stack_hermes_scan"]
+    assert probe[:5] == ["docker", "exec", "-u", "hermes", "hermes-kubelab"]
+    assert "check_command_security" in probe[-1]
+    allowed, blocked = defaults["_agent_stack_hermes_scan_allows"], defaults["_agent_stack_hermes_scan_blocks"]
+    assert allowed.isascii() and not blocked.isascii(), "the block is a homograph, not a pattern the evaluator knows"
+    [task] = [t for t in _tasks() if "_agent_stack_hermes_scan" in str(t.get("ansible.builtin.command"))]
+    assert "== 'allow'" in task["until"] and "== 'block'" in task["until"]
+    # The first start installs the scanner in the background.
+    assert task["retries"] * task["delay"] >= 60
+    assert task["changed_when"] is False

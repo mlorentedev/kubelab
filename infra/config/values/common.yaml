@@ -2033,6 +2033,61 @@ apps:
         models:
           default: deepseek-v4-flash
           unmetered: qwen3.6
+        # Hermes config keys ported from hermes-nan's `config-desired.yaml` (spec
+        # AI-012 AC1), in Hermes's own layout. The role renders every leaf; keys
+        # equal to the image's defaults are pinned here so an image bump cannot
+        # move them. What the role owns (approvals, the sandbox, the provider,
+        # Slack, the cron and delegation models) is not accepted here, and
+        # `verification.md` gives the reason for each key left out.
+        agent_config:
+          security:
+            tirith_enabled: true # pre-exec content scan of every command
+            # Fail closed: a scan that cannot run is a prompt interactively and
+            # a refusal for a scheduled job, never a silent allow.
+            tirith_fail_open: false
+            tirith_timeout: 5
+            redact_secrets: true # keys and tokens in tool output and logs
+          privacy:
+            redact_pii: true # hash user and chat IDs before they reach the model
+          skills:
+            guard_agent_created: true # scan the agent's own skill writes
+          display:
+            file_mutation_verifier: true # catch a file write that did not land
+          code_execution:
+            mode: project
+            timeout: 300
+          model:
+            # deepseek-v4-flash's window, the model NaN ran with.
+            context_length: 1000000
+          agent:
+            # The image defaults to no cap, because a cap truncated turns
+            # silently; NaN capped at 120 so a looping turn ends.
+            max_turns: 120
+            api_max_retries: 3
+            reasoning_effort: high
+          compression:
+            enabled: true
+            # The compression model's window is 256k: 0.25 of 1M compresses
+            # before the live context exceeds it.
+            threshold: 0.25
+            target_ratio: 0.2
+            protect_last_n: 40
+            protect_first_n: 5
+            hygiene_hard_message_limit: 800
+          tool_output:
+            max_bytes: 100000
+            max_lines: 4000
+          tool_loop_guardrails:
+            hard_stop_after:
+              same_tool_failure: 12
+          sessions:
+            retention_days: 180
+          checkpoints:
+            enabled: true
+          delegation:
+            reasoning_effort: high
+            max_iterations: 80
+            max_concurrent_children: 5
         # The Slack gateway (spec AI-009 PR 3c), Socket Mode with the two tokens
         # in prod's vault. Member and channel IDs are plaintext, not secrets.
         slack:

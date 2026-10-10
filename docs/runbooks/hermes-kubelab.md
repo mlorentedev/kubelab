@@ -116,7 +116,10 @@ pushes it. A failed run pages through `kubelab-notify@`.
   `docker exec -u hermes hermes-kubelab hermes approvals test --env-type local
   -- <cmd>`, as the agent's user against its daemon. With the vault mounted,
   `ask-approval` means a scheduled job is refused under `cron_mode: deny`
-  (lesson-540).
+  (lesson-540). That evaluator does not run the command scanner (Tirith), which
+  is fail-closed: ask it with the provision's own probe,
+  `_agent_stack_hermes_scan` in the role's defaults, followed by the command
+  (lesson-555).
 
 ## Re-register the sidecar
 
