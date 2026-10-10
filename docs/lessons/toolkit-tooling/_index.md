@@ -1,9 +1,10 @@
 # The toolkit CLI, Make, Python and local tooling
 
-49 lessons, newest first. Back to [all categories](../_index.md).
+50 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 547 | [A fail-closed check behind an `if` on its own input fails open when that input is empty](lesson-547-a-fail-closed-check-behind-an-if-on-its-own-input-fails-open-when-that-input-is-empty.md) | 2026-10-10 |
 | 545 | [A fake that answers nothing cannot test what the code prints of the answer](lesson-545-a-fake-that-answers-nothing-cannot-test-what-the-code-prints-of-the-answer.md) | 2026-10-10 |
 | 544 | [Gitea's `empty` flag is written at push time and never re-read from git](lesson-544-giteas-empty-flag-is-written-at-push-time-and-never-re-read-from-git.md) | 2026-10-09 |
 | 541 | [A reconciler that tests presence reads an unfilled migration as converged](lesson-541-a-reconciler-that-tests-presence-reads-an-unfilled-migration-as-converged.md) | 2026-10-08 |
