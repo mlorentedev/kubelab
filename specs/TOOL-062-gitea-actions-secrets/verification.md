@@ -65,11 +65,21 @@ All tests are in `tests/test_gitea_actions_secrets.py`.
 - **Placeholder values count as missing.** A `CHANGEME` would pass the workflow's empty-input
   guard and then fail at the provider's API, which does not say which input was wrong.
 
+## Adversarial review findings
+
+`review.md` (2026-10-10, FAIL on one Blocker). Each finding's disposition:
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Blocker: a forge error carrying the value JSON-escaped passes `str.replace(value, ...)` and prints it | Fixed in #2166: `_redact` replaces the verbatim, JSON, Go-JSON (`\u0026`) and repr forms; `test_a_forge_error_that_echoes_an_escaped_value_is_redacted` runs all five, and `make mutate` went red with only the verbatim form. |
+| 2 | Major: live secrets are listed only on repositories the catalog names, so an undeclared secret on any other repository is never reported (AC5) | Declined for this spec, ticketed as #2165 (TOOL-105). The proposal scopes the comparison per declared repository ("For each repository the plan compares three things: the declared names, the live names..."), and AC1 is written for `personal/resume`. The gap is real at forge scale and needs its own enumeration and report shape, which #2165 states. The test the review cites passes `targets=()` with a live repository, a state the CLI cannot produce; it pins the planner, not the CLI's reach. |
+| 3 | Minor: the redaction test asserted against `repr(report)`, which escapes the string again | Fixed in #2166: the assertion reads the recorded message itself. |
+
 ## Promotion candidates
 
 Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.
 
-- [x] Lesson for the repo's `docs/lessons/`? no: The silent-empty-secret shape is already the ticket's content, and the incident behind it is resume's (its L-042).
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/toolkit-tooling/lesson-545-a-fake-that-answers-nothing-cannot-test-what-the-code-prints-of-the-answer.md (the escaped-echo recurrence from finding 1, amended in #2166). The silent-empty-secret shape itself is the ticket's content, and its incident is resume's (its L-042).
 - [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: It follows the existing delivery pattern (`sync_to_secret_manager`); no new decision class.
 - [x] New pattern candidate for `00_meta/patterns/`? no: It is kubelab-specific tooling.
 
