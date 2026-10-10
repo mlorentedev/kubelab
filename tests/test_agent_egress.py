@@ -30,6 +30,7 @@ UNIT = ROLE / "templates/agent-stack-egress.service.j2"
 
 UID = "998"
 RANGES = ["100.64.0.0/10", "fd7a:115c:a1e0::/48"]
+PRIVATE = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "172.80.0.0/12"]
 
 
 def _render(path: Path, **extra: object) -> str:
@@ -37,6 +38,7 @@ def _render(path: Path, **extra: object) -> str:
     context = {
         "_agent_stack_agent_uid": UID,
         "agent_stack_tailnet_ranges": RANGES,
+        "agent_stack_private_ranges": PRIVATE,
         "agent_stack_egress_table": "{{ agent_stack_dir }}/agent-egress.nft",
         **extra,
     }
@@ -64,8 +66,42 @@ def _rules(table: str) -> list[str]:
 
 def test_both_tailnet_ranges_are_refused_to_the_agents_uid() -> None:
     rules = _rules(_render(TABLE))
-    assert any(f"meta skuid {UID} ct original ip daddr {RANGES[0]}" in r and "reject" in r for r in rules), rules
-    assert any(f"meta skuid {UID} ct original ip6 daddr {RANGES[1]}" in r and "reject" in r for r in rules), rules
+    assert all(r.startswith(f"meta skuid {UID} ") and r.endswith("reject with icmpx type admin-prohibited") for r in rules)
+    assert any(f"ct original ip daddr {RANGES[0]}" in r for r in rules), rules
+    assert any(f"ct original ip6 daddr {RANGES[1]}" in r for r in rules), rules
+    # The tailnet is in both lists; one rule each.
+    assert len(rules) == len(set(rules)), rules
+
+
+def test_every_private_range_is_refused_to_the_agents_uid() -> None:
+    """The homelab LAN, docker0, Open WebUI's network and the system daemon's
+    address pool are this node's, not the agent's (#2161). Measured on ace2
+    2026-10-10 before this rule: the agent's user opened rpi4:80, Beelink's and
+    ace2's own sshd, and Open WebUI's backend by its container address."""
+    rules = _rules(_render(TABLE))
+    for cidr in PRIVATE:
+        assert any(f"ct original ip daddr {cidr}" in r and "reject" in r for r in rules), cidr
+
+
+def test_the_agent_may_still_answer_a_connection_it_did_not_open() -> None:
+    """Hermes publishes on Open WebUI's bridge gateway through rootlesskit, a
+    process of the agent's user (lesson-542). A reply to Open WebUI's request has
+    that gateway, a private address, as its original destination: a rule on the
+    destination alone would drop every answer. Only new connections are refused."""
+    for rule in _rules(_render(TABLE)):
+        assert "ct state new" in rule, rule
+
+
+def test_the_private_ranges_come_from_the_ssot() -> None:
+    assert _role_vars()["agent_stack_private_ranges"] == (
+        "{{ config.networking.trusted_cidrs + [docker_address_pool_base] }}"
+    )
+    net = yaml.safe_load(COMMON.read_text())["networking"]
+    pool = yaml.safe_load((REPO / "infra/ansible/roles/docker/defaults/main.yml").read_text())
+    assert net["trusted_cidrs"] + [pool["docker_address_pool_base"]] == PRIVATE
+    # Every RFC 1918 block, so the LAN, docker0 and every user bridge are in.
+    for block in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"):
+        assert block in net["trusted_cidrs"]
 
 
 def test_the_rule_judges_the_destination_before_nat() -> None:
@@ -153,7 +189,10 @@ def _assert_controlled(tasks: list[dict], probe: dict) -> None:
 def test_every_provision_proves_the_tailnet_refused_and_the_internet_open() -> None:
     tasks = _agent_tasks()
     probes = [t for t in tasks if "nc -z" in str(t.get("ansible.builtin.command", ""))]
-    assert len(probes) == 3, "the VPS's tailnet address, this node's own published port, the internet control"
+    assert len(probes) == 5, (
+        "the VPS's tailnet address, this node's own published port, its LAN address, "
+        "Open WebUI's container address, the internet control"
+    )
     own_port = "{{ tailscale_ip }} {{ agent_stack_webui.default_port }}"
     local = [p for p in probes if own_port in p["ansible.builtin.command"]["cmd"]]
     assert len(local) == 1 and "rc == 0" in local[0]["failed_when"], "the DNAT case must be refused"
@@ -167,7 +206,14 @@ def test_every_provision_proves_the_tailnet_refused_and_the_internet_open() -> N
         assert probe.get("check_mode") is False and probe.get("changed_when") is False
         assert probe.get("become_user") == "{{ agent_stack_agent_user }}"
         assert "--network none" not in probe["ansible.builtin.command"]["cmd"]
+    lan = [p for p in probes if "agent_stack_egress_probe_lan" in p["ansible.builtin.command"]["cmd"]]
+    container = [p for p in probes if "_agent_stack_webui_address" in p["ansible.builtin.command"]["cmd"]]
+    assert len(lan) == 1 and len(container) == 1
+    for probe in (lan[0], container[0]):
+        assert "rc == 0" in probe["failed_when"]
+        _assert_controlled(tasks, probe)
     role_vars = _role_vars()
+    assert role_vars["agent_stack_egress_probe_lan"] == "{{ config.networking.nodes.ace2.lan_ip }}"
     assert role_vars["agent_stack_egress_probe_refused"] == "{{ config.networking.vps.tailscale_ip }}"
     assert role_vars["agent_stack_egress_probe_open"] == "{{ config.networking.vps.public_ip }}"
 

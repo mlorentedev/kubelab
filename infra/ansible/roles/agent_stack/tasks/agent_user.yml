@@ -261,6 +261,66 @@
   failed_when: _agent_stack_egress_refused_local.rc == 0
   when: agent_stack_webui_configured | bool
 
+# The private ranges (#2161), proven on two targets that exist whenever this
+# node is up: its own sshd at its LAN address, and Open WebUI's backend at its
+# container address on the system daemon. Each is first proven open as root.
+- name: Prove this node's LAN address answers outside the rule
+  ansible.builtin.wait_for:
+    host: "{{ agent_stack_egress_probe_lan }}"
+    port: "{{ ssh_port }}"
+    timeout: 30
+
+- name: Try this node's LAN address from a container of the agent's daemon
+  ansible.builtin.command:
+    cmd: >-
+      docker run --rm {{ agent_stack_agent_probe_image }}
+      nc -z -w 3 {{ agent_stack_egress_probe_lan }} {{ ssh_port }}
+  become_user: "{{ agent_stack_agent_user }}"
+  environment:
+    DOCKER_HOST: "{{ agent_stack_agent_docker_host }}"
+    XDG_RUNTIME_DIR: "/run/user/{{ _agent_stack_agent_uid }}"
+  register: _agent_stack_egress_refused_lan
+  changed_when: false
+  check_mode: false
+  failed_when: _agent_stack_egress_refused_lan.rc == 0
+
+- name: Read Open WebUI's container address
+  ansible.builtin.command: >-
+    docker inspect open-webui
+    --format '{% raw %}{{(index .NetworkSettings.Networks "{% endraw %}{{ agent_stack_webui_bridge.network }}{% raw %}").IPAddress}}{% endraw %}'
+  register: _agent_stack_webui_inspect
+  changed_when: false
+  check_mode: false
+  ignore_errors: "{{ ansible_check_mode }}"
+  when: agent_stack_webui_configured | bool
+
+- name: Hold Open WebUI's container address
+  ansible.builtin.set_fact:
+    _agent_stack_webui_address: "{{ _agent_stack_webui_inspect.stdout | trim }}"
+  when: agent_stack_webui_configured | bool and _agent_stack_webui_inspect.rc | default(1) == 0
+
+- name: Prove Open WebUI's container address answers outside the rule
+  ansible.builtin.wait_for:
+    host: "{{ _agent_stack_webui_address }}"
+    port: "{{ agent_stack_webui.container_port }}"
+    timeout: 60
+  when: _agent_stack_webui_address is defined
+
+- name: Try Open WebUI's container address from a container of the agent's daemon
+  ansible.builtin.command:
+    cmd: >-
+      docker run --rm {{ agent_stack_agent_probe_image }}
+      nc -z -w 3 {{ _agent_stack_webui_address }} {{ agent_stack_webui.container_port }}
+  become_user: "{{ agent_stack_agent_user }}"
+  environment:
+    DOCKER_HOST: "{{ agent_stack_agent_docker_host }}"
+    XDG_RUNTIME_DIR: "/run/user/{{ _agent_stack_agent_uid }}"
+  register: _agent_stack_egress_refused_webui
+  changed_when: false
+  check_mode: false
+  failed_when: _agent_stack_egress_refused_webui.rc == 0
+  when: _agent_stack_webui_address is defined
+
 - name: Try the internet from a container of the agent's daemon
   ansible.builtin.command:
     cmd: >-

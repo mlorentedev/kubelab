@@ -21,7 +21,7 @@ owner: manu
 | Open WebUI | system Docker | `agent-stack-webui.service` (waits for the Tailscale address) | volume `open-webui-data` |
 | hermes-kubelab gateway | uid `hermes-kubelab`, rootless Docker | the user's daemon (`loginctl enable-linger`), `restart: unless-stopped` | `/var/lib/hermes-kubelab/data` |
 | tailscale sidecar (`tag:hermes`) | same rootless daemon, userspace mode | same | `/var/lib/hermes-kubelab/tailscale` (node key) |
-| tailnet refusal for the agent's uid | root | `agent-stack-egress.service`, `RequiredBy=user@<uid>` | `/opt/agent-stack/agent-egress.nft` |
+| tailnet and private-network refusal for the agent's uid (new connections only, #2161) | root | `agent-stack-egress.service`, `RequiredBy=user@<uid>` | `/opt/agent-stack/agent-egress.nft` |
 | bridge wait before the agent's manager | root | `agent-stack-hermes-bind.service`, `WantedBy=user@<uid>` | none |
 | vault sync (ADR-068 D4, amended) | uid `hermes-kubelab`, token from systemd | `hermes-kubelab-vault-sync.timer`: 2 min after boot, then every 15 min | clone `/var/lib/hermes-kubelab/vault`; token `/opt/agent-stack/vault-token` (root, 0600) |
 | vault mirror (spec AI-009 AC9) | root, token from systemd, the agent's home inaccessible | `agent-stack-vault-mirror.timer`, at the sync's interval | `/opt/agent-stack/vault-mirror` (`git/` history, `tree/` notes) |

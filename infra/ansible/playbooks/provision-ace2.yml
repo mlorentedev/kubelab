@@ -282,6 +282,10 @@
         agent_stack_tailnet_ranges:
           - "{{ config.networking.tailscale_cidr }}"
           - "{{ config.networking.ipv6_prefix }}"
+        # Nor this node's private networks (#2161): the LAN, docker0, Open WebUI's
+        # bridge and the Docker address pool, which is not RFC 1918 until #2136.
+        agent_stack_private_ranges: "{{ config.networking.trusted_cidrs + [docker_address_pool_base] }}"
+        agent_stack_egress_probe_lan: "{{ config.networking.nodes.ace2.lan_ip }}"
         agent_stack_egress_probe_refused: "{{ config.networking.vps.tailscale_ip }}"
         agent_stack_egress_probe_open: "{{ config.networking.vps.public_ip }}"
         agent_stack_hermes: "{{ config.apps.services.ai.hermes_kubelab }}"
