@@ -449,8 +449,8 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 
 Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.
 
-- [x] Lesson for the repo's `docs/lessons/`? no new one: the lessons this spec produced were written as it went (the duplication clause's empty-render guard cites lesson-416), and the vacuous f5 is the failure that `features.json`'s own notes already describe.
-- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? yes, already done: ADR-061.
+- [x] Lesson for the repo's `docs/lessons/`? no: the lessons this spec produced were written as it went (the duplication clause's empty-render guard cites lesson-416), and the vacuous f5 is the failure that `features.json`'s own notes already describe.
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? yes: docs/adr/adr-061-stateful-service-placement.md
 - [x] New pattern candidate for `00_meta/patterns/`? no: state promotion and location are axes of this fleet's placement, not a cross-project practice.
 
 ## Archive checklist
