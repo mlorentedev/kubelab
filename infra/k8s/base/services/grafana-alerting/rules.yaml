@@ -22,10 +22,15 @@ groups:
       - uid: obs007-acme-failure
         title: ACME certificate failure
         condition: C
-        # Must hold across two evaluations. Traefik retries transient CA errors
-        # on its own, and a rule that pages on the first blip trains people to
-        # ignore it. Five weeks of silent failure is the problem being solved
-        # here, not five minutes of latency.
+        # One logged failure pages, by design, and `for: 5m` does not filter it:
+        # the 10-minute window keeps a single line visible to two evaluations.
+        # A logged ACME failure is not a blip. Traefik writes one line per
+        # failed attempt and does not retry within the window: three induced
+        # failures on staging (2026-10-10, 12:24, 12:48 and 13:15 UTC) wrote one
+        # line each while the route stayed up for more than ten minutes. A
+        # 5-minute window would therefore never page on a real failure. This
+        # `for:` adds five minutes of latency and nothing else. Five weeks of
+        # silent failure is the problem being solved here, not five minutes.
         for: 5m
         # A query that matches nothing returns NO SERIES, not zero: `sum by` over
         # an empty selection produces an empty vector. So the healthy state is

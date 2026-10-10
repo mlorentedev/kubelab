@@ -68,6 +68,16 @@ The first run of the day (fix `c8a29939`, before the domain stage) passed the sa
 - **AC4 is checked in Grafana, not in Telegram.** The smoke reads the firing instance's labels, which is what the body template prints. Reading Telegram back would need a bot credential in the smoke for no extra coverage of this repo's code. The environment half is static per overlay, so a render test owns it.
 - **AC3 archives on its 2026-08-10 measurement**, which was a direct evaluation at an instant with a heartbeat in range, not a wait. The repeatable check is new code outside this spec's shape, so it is #2195 rather than an unreviewed addition here.
 
+## Review dispositions
+
+First archive review (agy/gemini-3.1-pro-high, 2026-10-10, FAIL, `reviewed_sha` 4a7d5e96):
+
+| Finding | Disposition | Evidence |
+|---|---|---|
+| Blocker, THEORETICAL: the `[10m]` window at a 5m interval lets a single failure line satisfy `for: 5m`, which contradicts the rule's "first blip" comment. Proposed fix: `[5m]`, plus a test that one failure does not page. | **Comment fixed, code fix declined.** The contradiction was real, and the wrong half was the `for:` comment, not the window. The `interval` comment already said a single failure satisfies `for: 5m` by design. The `for:` comment now says the same and gives the measurement. | Traefik writes one line per failed attempt and does not retry within the window. Three induced failures on staging wrote one line each (2026-10-10 12:24, 12:48 and 13:15 UTC, read from Loki), while the route stayed up for more than ten minutes. With `[5m]` a lone line is in one evaluation's window only, so `for: 5m` could never hold: a real failure would never page, and `make alert-smoke` would fail. The proposed test would assert the opposite of what was measured. |
+
+Side effect: `rules.yaml` feeds the hashed `grafana-alerting` ConfigMap, so the comment-only change rolls Grafana in both environments on merge.
+
 ## Promotion candidates
 
 Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.
