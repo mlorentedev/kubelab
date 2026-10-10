@@ -1,7 +1,7 @@
 ---
 id: "ADR028-004-classify-stateful-service-placement"
 type: spec
-status: implementing # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-08-11"
 issue: "mlorentedev/kubelab#988"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
@@ -72,3 +72,5 @@ Deliberately absent: anything asserting the ephemeral restore-from-prod-backup t
 - Precedent for the rejected Argo-CD-from-Gitea option: `docs/adr/adr-015-*` (Headscale outside K3s) and the VPS-uses-public-IP rule in `CLAUDE.md` — the same circular-dependency doctrine, third instance.
 - Related tickets: #507 (headline already done, remainder redistributed), #264 (Helm charts), #503 (mirror/org/webhook config), #479 + #487 (gate *using* these services with real data, not deciding their placement).
 - Vault: `10_projects/kubelab/research/2026-08-10-fronts-inventory-and-lane-split.md` — how this front was scoped, and the stale-`context.md` correction it rests on.
+
+<!-- archived 2026-10-10 — PR: https://github.com/mlorentedev/kubelab/pull/2186 -->

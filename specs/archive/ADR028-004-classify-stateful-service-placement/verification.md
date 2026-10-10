@@ -489,7 +489,7 @@ Before archiving, flag what (if anything) should be promoted to the vault. If al
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/ADR028-004-classify-stateful-service-placement/` -> `specs/archive/ADR028-004-classify-stateful-service-placement/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/ADR028-004-classify-stateful-service-placement/` -> `specs/archive/ADR028-004-classify-stateful-service-placement/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] Promotions above executed (if any)
