@@ -7,7 +7,10 @@ Wants=network-online.target
 # It runs as the agent's uid, which the egress rule confines (#2161). Stopping
 # that rule is the kill switch, so with the rule down this unit refuses to
 # start. Requisite, never Requires: pulling the rule up would undo the kill.
+# PartOf stops a run already in flight. The next run recovers what it left: a
+# stale index.lock, or commits that were never pushed.
 Requisite=agent-stack-egress.service
+PartOf=agent-stack-egress.service
 After=network-online.target agent-stack-egress.service
 OnFailure=kubelab-notify@%n.service
 

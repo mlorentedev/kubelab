@@ -80,7 +80,8 @@ cached build and reports no change.
   the rule that confines it together, never one without the other. The vault
   sync runs as the same uid from a system unit, so it is bound to the rule too
   (lesson-552). The service has `Requisite=`, so it refuses to start without
-  the rule, and the timer has `PartOf=`, so it stops with the rule. Measured
+  the rule, and `PartOf=`, so a run in flight stops with it. The timer has
+  `PartOf=` too. Measured
   2026-10-10: after the stop, no process of the uid was left at 180 s.
   Lingering did not restart the user manager in ~15 min. The timer, the rule
   and the manager were all `inactive`, and nothing paged. The agent's zone

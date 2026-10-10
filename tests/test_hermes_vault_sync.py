@@ -355,6 +355,8 @@ def test_the_kill_switch_stops_the_sync_and_never_restarts_the_rule() -> None:
     rule = Path(egress["ansible.builtin.template"]["dest"]).name
     unit = _unit("vault-sync.service.j2")
     assert unit.get("Requisite") == [rule]
+    # Requisite gates starts only: a run in flight at the kill stops with the rule.
+    assert unit.get("PartOf") == [rule]
     assert rule in " ".join(unit["After"]).split()
     for pulls in ("Requires", "BindsTo", "Wants"):
         assert rule not in " ".join(unit.get(pulls, [])).split(), pulls

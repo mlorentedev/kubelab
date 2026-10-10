@@ -29,7 +29,8 @@ the next start fail with result `dependency`. That failure still triggers
 would have paged.
 
 **Solution**: The service gets `Requisite=agent-stack-egress.service` with a
-matching `After=`. Requisite refuses the start while the rule is down, and
+matching `After=`, and `PartOf=` so a run in flight stops too. The script
+already recovers from a run that died midway. Requisite refuses the start while the rule is down, and
 never pulls the rule up again. `Requires=` or `BindsTo=` would undo the kill.
 The timer gets `PartOf=agent-stack-egress.service`, so stopping the rule stops
 the timer, and no refused firing pages. Drill: kill, then the timer, the rule
@@ -42,6 +43,8 @@ back (`changed=3`), and the next run reports `changed=0`. Mutants that swap
 calling a stop a kill switch, list every unit that runs as that uid: user
 units, system units with `User=`, timers, and paths. Bind each one to the rule
 with `Requisite=`, which refuses, and never with `Requires=`, which restarts.
+`Requisite=` only gates a start, so a run already in flight needs `PartOf=` the
+rule as well, which stops it with the rule.
 A refused start is still a failure to `OnFailure=`, so whatever starts that
 unit (a timer or a path) needs `PartOf=` the rule too.
 
