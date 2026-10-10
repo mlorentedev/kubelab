@@ -1,7 +1,7 @@
 ---
 id: "TOOL-021-review-attestation-and-reviewer-capacity"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-08-19"
 issue: "mlorentedev/kubelab#1140"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
@@ -87,3 +87,5 @@ The upstream moved tonight. Port from dotfiles `main` at **2bac1c5**, not from t
 - Upstream implementations to port, not to invent: dotfiles `GUARD-002-review-attestation` (#906) and `TOOL-013-pr-agent-reviewer` (#786), both merged to `main`. The ordering here is theirs and is deliberate — their attestation registry records that building the gate first is what stops a replacement reviewer inheriting the blind spot.
 - `docs/lessons/ci-automation/lesson-348-*` — the closing-keyword findings from the same investigation; unrelated mechanism, same "the tool answered exactly what was asked, and the question was wrong" family.
 - Related: #1157 (CI-GATE-013), adjacent and out of scope.
+
+<!-- archived 2026-10-10 — PR: https://github.com/mlorentedev/kubelab/pull/2192 -->

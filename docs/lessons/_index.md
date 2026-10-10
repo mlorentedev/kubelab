@@ -1,6 +1,6 @@
 # Lessons
 
-551 lessons, one file each. Newest: 2026-10-10. Open a category for its list.
+552 lessons, one file each. Newest: 2026-10-10. Open a category for its list.
 
 | Category | # | Scope |
 |---|---|---|
@@ -12,7 +12,7 @@
 | [edge-tls](edge-tls/_index.md) | 27 | Traefik, TLS, the request path |
 | [toolkit-tooling](toolkit-tooling/_index.md) | 50 | Toolkit CLI, Make, Python, tests |
 | [gitops-delivery](gitops-delivery/_index.md) | 32 | Argo CD, releases, promotion |
-| [ci-automation](ci-automation/_index.md) | 41 | CI workflows, gates, GitHub |
+| [ci-automation](ci-automation/_index.md) | 42 | CI workflows, gates, GitHub |
 | [observability](observability/_index.md) | 27 | Metrics, logs, alerting |
 | [containers-docker](containers-docker/_index.md) | 20 | Docker, Compose, image builds |
 | [storage-backup](storage-backup/_index.md) | 31 | Backups, volumes, persistence |
