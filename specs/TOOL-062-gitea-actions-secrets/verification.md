@@ -37,7 +37,7 @@ All tests are in `tests/test_gitea_actions_secrets.py`.
 
 ## Test status
 
-- `pytest tests/test_gitea_actions_secrets.py`: 35 passed after the review fixes (32 before); 40 after #2166 (2026-10-10), which added the five escaped-echo cases.
+- `pytest tests/test_gitea_actions_secrets.py`: 35 passed after the review fixes (32 before); 40 after #2166 (2026-10-10), which added the five escaped-echo cases; 41 with the CLI-row test from review round 2.
 - Secrets and Gitea subset (`-k "secret or gitea or catalog or expiry"`): 554 passed.
 - Full suite: `pytest -q --no-cov`: 2587 passed, 15 skipped, 155 deselected (4m10s).
 - `ruff check`, `ruff format --check` and `mypy` on the four changed modules and the test file: clean.
@@ -74,6 +74,16 @@ All tests are in `tests/test_gitea_actions_secrets.py`.
 | 1 | Blocker: a forge error carrying the value JSON-escaped passes `str.replace(value, ...)` and prints it | Fixed in #2166: `_redact` replaces the verbatim, JSON, Go-JSON (`\u0026`) and repr forms; `test_a_forge_error_that_echoes_an_escaped_value_is_redacted` runs all five, and `make mutate` went red with only the verbatim form. |
 | 2 | Major: live secrets are listed only on repositories the catalog names, so an undeclared secret on any other repository is never reported (AC5) | Declined for this spec, ticketed as #2165 (TOOL-105). The proposal scopes the comparison per declared repository ("For each repository the plan compares three things: the declared names, the live names..."), and AC1 is written for `personal/resume`. The gap is real at forge scale and needs its own enumeration and report shape, which #2165 states. The test the review cites passes `targets=()` with a live repository, a state the CLI cannot produce; it pins the planner, not the CLI's reach. |
 | 3 | Minor: the redaction test asserted against `repr(report)`, which escapes the string again | Fixed in #2166: the assertion reads the recorded message itself. |
+
+`review.md` (round 2, 2026-10-10, PASS-WITH-GAPS, no Blocker or Major). Each finding's disposition:
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Minor: "mypy ... and the test file: clean" did not reproduce; the test fakes named `put_actions_secret`'s parameters differently from the `SecretWriter` protocol | Fixed in the archive PR: the three fakes take `(owner, name, secret_name, value)`, and `mypy tests/test_gitea_actions_secrets.py` reports no issues. |
+| 2 | Minor: the formatted "not declared in the catalog" row was asserted by no test | Fixed in the archive PR: `test_an_undeclared_live_secret_is_printed_and_left_alone_by_the_cli` runs the CLI with a hand-set secret on both declared repositories; `make mutate` dropping the row went red. |
+| 3 | Minor: the `gitea_actions_secrets` CLI command is about 77 lines, over the 40-line rule | Ticketed: #2173 (TOOL-107). |
+| 4 | Question: AC5 read per declared repository or forge-wide | Unchanged from round 1, row 2: read per declared repository, as the proposal scopes it; the forge-wide report is #2165 (TOOL-105). |
+| 5 | Minor, SPECULATIVE: `_redact` is a floor (base64, URL encoding, a value split by a line wrap would still leak) | Declined: the docstring says so, and none of those encodings appears in a Gitea error body. |
 
 ## Promotion candidates
 
