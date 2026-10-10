@@ -32,6 +32,13 @@ unauthenticated, _ = call("/openapi.json", key=None)
 status, spec = call("/openapi.json")
 paths = sorted(p.strip("/") for p in (spec or {}).get("paths", {}))
 listed, listing = call("/list_directory", {"path": "/vault"})
+# mcpo answers with the tool's text, one `[FILE] name` or `[DIR] name` line per
+# entry and "" for an empty directory (measured, v0.0.20). Any other shape is
+# -1, so a change in the format fails the check instead of passing it.
+if isinstance(listing, str):
+    entries = sum(1 for line in listing.splitlines() if line.startswith(("[FILE] ", "[DIR] ")))
+else:
+    entries = -1
 print(
     json.dumps(
         {
@@ -39,7 +46,7 @@ print(
             "spec": status,
             "tools": paths,
             "listing": listed,
-            "entries": len(str(listing or "").splitlines()),
+            "entries": entries,
         }
     )
 )

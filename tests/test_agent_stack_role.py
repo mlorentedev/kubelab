@@ -310,3 +310,9 @@ def test_every_generated_key_survives_a_fresh_nodes_dry_run() -> None:
     assert len(reads) >= 3
     for task in reads:
         assert task.get("ignore_errors") == "{{ ansible_check_mode }}", task["name"]
+    # And what holds each key reads an absent `content` as empty, or the template fails.
+    registers = {t["register"] for t in reads}
+    holds = [t for t in _tasks() if "ansible.builtin.set_fact" in t and any(r in str(t) for r in registers)]
+    assert len(holds) == len(reads)
+    for task in holds:
+        assert ".content | default('') | b64decode" in str(task["ansible.builtin.set_fact"]), task["name"]
