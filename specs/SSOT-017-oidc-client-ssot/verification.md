@@ -84,7 +84,7 @@ The review's last recommendation, the prod logins of AC5, is #2154 (Evidence tab
 
 Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.
 
-- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/identity-secrets/lesson-550-authelia-merges-config-files-but-a-list-lives-in-exactly-one-of-them.md
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/identity-secrets/lesson-551-authelia-merges-config-files-but-a-list-lives-in-exactly-one-of-them.md
 - [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: ADR-040 §1 already decided it; its amendment records the stored-digest deviation (R7).
 - [x] New pattern candidate for `00_meta/patterns/`? no: it is specific to this repo's Authelia; the general rule is in the lesson.
 

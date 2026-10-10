@@ -1,5 +1,5 @@
 ---
-id: lesson-550-authelia-merges-config-files-but-a-list-lives-in-exactly-one-of-them
+id: lesson-551-authelia-merges-config-files-but-a-list-lives-in-exactly-one-of-them
 type: lesson
 status: active
 created: "2026-09-22"
