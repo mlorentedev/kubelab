@@ -287,7 +287,7 @@
 - name: Read Open WebUI's container address
   ansible.builtin.command: >-
     docker inspect open-webui
-    --format '{% raw %}{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}{% endraw %}'
+    --format '{% raw %}{{(index .NetworkSettings.Networks "{% endraw %}{{ agent_stack_webui_bridge.network }}{% raw %}").IPAddress}}{% endraw %}'
   register: _agent_stack_webui_inspect
   changed_when: false
   check_mode: false
