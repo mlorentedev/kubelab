@@ -114,6 +114,42 @@ class TestGuardrails:
         assert "not provisioned" in result.detail
 
 
+class TestRuleStateRead:
+    """Grafana is OIDC-only since 2026-09-24, so an anonymous read of its rules
+    answers 401 and the smoke saw `unreadable` on every poll: it could never
+    observe `firing`, and timed out after inducing a real failure."""
+
+    def test_reads_as_the_admin_the_pod_already_holds(self) -> None:
+        calls: list[list[str]] = []
+
+        def fake_kubectl(args: list[str], stdin: str | None = None) -> subprocess.CompletedProcess:
+            calls.append(args)
+            return _proc(json.dumps({"data": {"groups": []}}))
+
+        smoke.run_alert_smoke("staging", kubectl=fake_kubectl)
+
+        read = " ".join(next(c for c in calls if "exec" in c))
+        assert "Authorization: Basic" in read
+        assert "$GF_SECURITY_ADMIN_USER:$GF_SECURITY_ADMIN_PASSWORD" in read, (
+            "the credential must be expanded inside the pod, never passed through kubectl's argv"
+        )
+
+    def test_an_unreadable_state_aborts_before_inducing_anything(self) -> None:
+        """Otherwise a refused read costs a real ACME failure and a 35-minute
+        timeout that names the wrong cause."""
+        calls: list[list[str]] = []
+
+        def fake_kubectl(args: list[str], stdin: str | None = None) -> subprocess.CompletedProcess:
+            calls.append(args)
+            return _proc("401 Unauthorized")
+
+        result = smoke.run_alert_smoke("staging", kubectl=fake_kubectl, sleep=lambda _: None, now=_fake_clock())
+
+        assert not result.ok
+        assert "unreadable" in result.detail
+        assert not [c for c in calls if c[0] == "apply"], "a failure was induced that the smoke cannot observe"
+
+
 class TestTeardownAlwaysRuns:
     """The induced failure must never outlive the run."""
 

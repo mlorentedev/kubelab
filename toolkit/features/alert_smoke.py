@@ -52,6 +52,16 @@ FIRING_TIMEOUT_S = 900
 RESOLVE_TIMEOUT_S = 1200
 POLL_INTERVAL_S = 30
 
+#: Grafana is OIDC-only (since 2026-09-24), so an anonymous read of its rules
+#: answers 401. The pod already holds the admin from the `grafana-admin` Secret in
+#: its own environment, and the header is built inside the pod: no credential
+#: crosses kubectl's argv or this process. `tr` because base64 may wrap.
+RULES_READ = (
+    'wget -qO- --header "Authorization: Basic '
+    '$(printf %s "$GF_SECURITY_ADMIN_USER:$GF_SECURITY_ADMIN_PASSWORD" | base64 | tr -d "\\n")" '
+    "http://localhost:3000/api/prometheus/grafana/api/v1/rules"
+)
+
 PROBE_MANIFEST = f"""
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
@@ -190,9 +200,9 @@ def run_alert_smoke(
                 "kubelab",
                 "deploy/grafana",
                 "--",
-                "wget",
-                "-qO-",
-                "http://localhost:3000/api/prometheus/grafana/api/v1/rules",
+                "sh",
+                "-c",
+                RULES_READ,
             ],
             None,
         )
@@ -205,6 +215,12 @@ def run_alert_smoke(
             f"deploy the alerting ConfigMap first (make deploy-k8s ENV={env})."
         )
         return SmokeResult(False, False, False, False, detail="rule not provisioned")
+    if initial == "unreadable":
+        logger.error(
+            f"Grafana in {env} did not answer the rule-state read with JSON, so the smoke "
+            f"could not observe the rule. Nothing was induced."
+        )
+        return SmokeResult(False, False, False, False, detail="rule state unreadable")
     logger.info(f"Baseline: rule={initial}  apprise deliveries={baseline}")
 
     fired = notified = resolved = resolve_notified = False
