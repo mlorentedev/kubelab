@@ -45,4 +45,4 @@ with `Requisite=`, which refuses, and never with `Requires=`, which restarts.
 A refused start is still a failure to `OnFailure=`, so whatever starts that
 unit (a timer or a path) needs `PartOf=` the rule too.
 
-**Tags**: `#systemd` `#kill-switch` `#ai-009` `#pr-NNNN`
+**Tags**: `#systemd` `#kill-switch` `#ai-009` `#pr-2185`
