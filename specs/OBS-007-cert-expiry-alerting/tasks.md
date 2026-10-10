@@ -79,18 +79,18 @@ created: "2026-08-09"
 
   **Ticked for the rendering and scheduler halves only.** The direct `/api/v1/provisioning` proof in prod is NOT done and is blocked by **#951** — prod's Grafana refuses the admin username its Secret declares, so the endpoint returns 401 and the infra test skips there naming that ticket rather than reporting a false pass. Evidence available today is the rendered ConfigMap in the cluster plus the scheduler's own logs showing `rule_uid=obs007-acme-failure` evaluating; that is real but indirect.
 
-- [!] [AC1] Read prod's `/api/v1/provisioning/{contact-points,alert-rules}` directly and confirm both are present. **BLOCKED on #951.** Deliberately left open rather than folded into the tick above: the two are different evidence, and merging them would let a blocked check disappear behind a completed one.
+- [x] [AC1] Read prod's `/api/v1/provisioning/{contact-points,alert-rules}` directly and confirm both are present. ✓ 2026-10-10. #951 closed; `make test-infra ENV=prod` reads both endpoints as the declared admin and `tests/infra/test_grafana_alerting.py` passed 9/9 (71 passed overall). Was **BLOCKED on #951.** Deliberately left open rather than folded into the tick above: the two are different evidence, and merging them would let a blocked check disappear behind a completed one.
 
 ## Closing
 
 - [x] Record in `docs/runbooks/` what a firing alert looks like and what to do about it. An alert whose recipient does not know the next step is a notification, not an alert. ✓ 2026-08-10 — `docs/runbooks/acme-alerting.md`. Written because the rule's `runbook_url` annotation already promised the page existed. Carries the four known causes with their fixes, the recovery check (wait for the resolved message; do not assume), and the induced-failure procedure so the alert can be re-tested by anyone. States that an empty `Domain` field is expected rather than a bug.
-- [ ] Every acceptance criterion from `proposal.md` is covered by at least one test
-- [~] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command. **File written 2026-08-10 with all six records; three are not yet non-vacuous.** f1/f2/f6 carry real commands (`make test-infra`, `make alert-smoke`, `make test`). f3/f4/f5 carry a sentinel that **exits non-zero on purpose**, so they can never be marked passing before a real check exists — an earlier revision used a command that exited 0 with a note calling it vacuous, which the harness would have honoured as a pass, because it judges by exit code and not by notes. Closing them means a toolkit command that queries Loki and a Telegram read-back.
-- [ ] `make test-infra ENV=staging` and `ENV=prod` green
-- [ ] Type checks pass (`make type`)
-- [ ] Lint passes (`make lint`)
-- [ ] No unrelated changes in the diff (no scope creep)
-- [ ] `verification.md` filled in
+- [x] Every acceptance criterion from `proposal.md` is covered by at least one test ✓ 2026-10-10. AC3 is the exception: it is covered by a recorded measurement (2026-08-10), and its repeatable check is #2195. See `verification.md`.
+- [x] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command. ✓ 2026-10-10. f4 and f5 now run `make alert-smoke`, which checks the domain label and the resolved half as their own stages. f3 keeps its failing sentinel, is `partial`, and names #2195. The 2026-08-10 note follows. **File written 2026-08-10 with all six records; three are not yet non-vacuous.** f1/f2/f6 carry real commands (`make test-infra`, `make alert-smoke`, `make test`). f3/f4/f5 carry a sentinel that **exits non-zero on purpose**, so they can never be marked passing before a real check exists — an earlier revision used a command that exited 0 with a note calling it vacuous, which the harness would have honoured as a pass, because it judges by exit code and not by notes. Closing them means a toolkit command that queries Loki and a Telegram read-back.
+- [~] `make test-infra ENV=staging` and `ENV=prod` green. 2026-10-10: prod is green (71 passed). Staging's alerting module passed 9/9, but the run failed on two unrelated checks, both ticketed: #2194 (Failed watcher pods outliving a fixed Secret) and #2061 (orphaned staging Gitea route).
+- [x] Type checks pass (`make type`) ✓ 2026-10-10, mypy clean on `toolkit/features/alert_smoke.py`
+- [x] Lint passes (`make lint`) ✓ 2026-10-10, ruff check and format clean on the changed files
+- [x] No unrelated changes in the diff (no scope creep) ✓ 2026-10-10. lesson-554 is the one exception: it records a finding of this audit and is named in `verification.md`.
+- [x] `verification.md` filled in ✓ 2026-10-10
 - [ ] PR opened referencing this spec folder
 
 ## Machine-readable features
