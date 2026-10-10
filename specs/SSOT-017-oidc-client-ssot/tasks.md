@@ -45,25 +45,26 @@ created: "2026-09-22"
   - delete `toolkit/scripts/sync_oidc_hashes.py` and replace `tests/test_sync_oidc_hashes.py` with the generator's tests;
   - `--check` reports drift when a stored digest changed but the file was not regenerated. That last point is shown red first. ✓ 2026-09-22
 - [x] [AC1] Re-grep for consumers of every removed or renamed id (`kubelab-oidc`, `grafana-oidc`, `minio-oidc`) and of staging `argocd` before the first apply (R5). Record the result. ✓ 2026-09-22
-- [ ] [AC5] Staging validation:
+- [x] [AC5] Staging validation (done 2026-09-23, `verification.md`; the repoint back to `master` read live on 2026-10-10):
   - repoint the staging Application `targetRevision` to the branch (R3, lesson-256);
   - `make deploy-k8s ENV=staging`;
   - SSO login to grafana, minio and vikunja-oidc on staging;
   - an authorization request with `client_id=argocd` against staging Authelia returns an OIDC client error, while the same request against prod redirects to login. The discovery document does not list clients, so it cannot show this;
   - repoint to `master` after merge.
 - [ ] [AC5] Prod: after merge, Argo CD syncs prod. SSO login to grafana, minio, gitea, argocd and vikunja-oidc. Measure vikunja-oidc's token auth method from Authelia's logs or a token exchange, and correct its "unverified" comment. If any login fails, revert the merge, never patch by hand (R2).
+  Partial ✓ 2026-10-10: vikunja-oidc's method was measured in staging and the comment removed; prod grafana and gitea measured read-only on 2026-10-09; prod argocd and vikunja-oidc have no recorded login and are kubelab#2154 (AUTH-016); minio was retired by OPS-023 (#1788) and left the SSOT.
 
 ## Closing
 
 - [x] Amendment note in ADR-040 §1: the target state is built, and it reads stored digests, not recomputed ones (R7). ✓ 2026-09-22
 - [x] CLAUDE.md gotchas that name `sync-oidc-hashes` as the writer of `configuration.yml` are updated. So is the "rotating is not landing" note: the command now writes `oidc-clients.yml`. ✓ 2026-09-22
 - [x] File a ticket: the Argo CD Helm values hardcode `argo.kubelab.live` instead of reading `argocd.domain` (R6). Filed as #1782 (SSOT-027), widened to every consumer-side literal `client_id`. ✓ 2026-09-22
-- [ ] Every acceptance criterion is covered by at least one test or recorded measurement, with a matching `features.json` entry.
-- [ ] `make test` green, lint green, no unrelated changes in the diff.
-- [ ] `verification.md` filled in.
-- [ ] PR #1780 merges with **`Refs #1332`, never `Closes`**. The spec gate refuses a PR that closes a spec's issue without archiving it, and archiving needs AC5-prod, which can only be measured after merge, because Argo CD syncs prod from master. Record the `--force-no-gate` scaffold and the reason.
-- [ ] Follow-up docs PR after the prod logins: prod AC5 evidence, then the adversarial review (`review.md`), then `/spec archive`. It carries `Closes #1332`.
-- [ ] Independent adversarial review (`review.md`) before `/spec archive`.
+- [x] Every acceptance criterion is covered by at least one test or recorded measurement, with a matching `features.json` entry. AC5's prod half is ticketed (#2154). ✓ 2026-10-10
+- [x] `make test` green, lint green, no unrelated changes in the diff. 4453 passed on master `1488e3a5`. ✓ 2026-10-10
+- [x] `verification.md` filled in. ✓ 2026-10-10
+- [x] PR #1780 merges with **`Refs #1332`, never `Closes`**. The spec gate refuses a PR that closes a spec's issue without archiving it, and archiving needs AC5-prod, which can only be measured after merge, because Argo CD syncs prod from master. Record the `--force-no-gate` scaffold and the reason. Merged as `c4976141` with `Refs #1332`. #1332 was closed later anyway, before the prod evidence existed, which is why the archive PR cannot carry `Closes #1332`. ✓ 2026-10-10
+- [x] Follow-up docs PR after the prod logins: prod AC5 evidence, then the adversarial review (`review.md`), then `/spec archive`. It carries `Closes #1332`. Done as the #2034 archive PR, with the prod logins that are not recorded handed to #2154. ✓ 2026-10-10
+- [x] Independent adversarial review (`review.md`) before `/spec archive`. ✓ 2026-10-10
 
 ## Machine-readable features
 

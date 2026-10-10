@@ -7,17 +7,24 @@ created: "2026-09-22"
 
 ## Evidence
 
-Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
+Implementation merged in #1780 (`c4976141`, 2026-09-23). Every automated check below was re-run on master `1488e3a5` on 2026-10-10 for the archive.
 
-- [ ] Criterion 1 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 2 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 3 -> commit `<hash>` / test `<name>`
+| AC | Proof | Status |
+|---|---|---|
+| AC1 | `tests/test_oidc_clients.py::test_oidc_clients_match_ssot[staging,prod]`: 2 passed. Shown red against a hand edit (argocd `post` changed to `basic`) and against a generator hardcoding the auth method; see the mutation proof below. | Met |
+| AC2 | `test_authelia_config_split[staging,prod]`: 2 passed. Authelia loading the second file proven by consequence with `authelia validate-config` (below), and by staging mounting `authelia-config-fh52f2hd2f`, the hash rendered locally. | Met |
+| AC3 | `toolkit/scripts/sync_oidc_hashes.py` is absent; `test_oidc_check_detects_stale_digest`: 1 passed. | Met |
+| AC4 | `test_a_missing_required_field_fails_naming_the_client[token_endpoint_auth_method,authorization_policy]`: 2 passed. | Met |
+| AC5 | Staging, 2026-09-23 (below): grafana and vikunja-oidc logged in by the operator; minio registered (authorization probe) with SSO login impossible upstream, #1784; argocd refused in staging as intended. vikunja-oidc measured as `client_secret_basic` and its "UNVERIFIED" note removed from `common.yaml`. Prod: grafana and gitea measured read-only on 2026-10-09 (#2154). Prod argocd and vikunja-oidc have no recorded login: ticketed as #2154 (AUTH-016). minio left the SSOT when OPS-023 retired MinIO (#1788), so no prod login applies to it. | Partial: prod argocd and vikunja-oidc are #2154 |
+| AC6 | `test_oidc_single_resolver_same_client_set` and `test_oidc_single_resolver_no_private_digest_derivation`: 2 passed. | Met |
+
+The SSOT on 2026-10-10 declares five clients: grafana (dev, staging, prod), gitea (prod), argocd (prod), vikunja-oidc (staging, prod) and open-webui-oidc (prod). open-webui-oidc came later, with AI-009 (#1976), through the generator this spec built.
 
 ## Test status
 
-- Test suite: `<command> -> <output / coverage %>`
-- Manual smoke test: what was exercised, what was observed
-- No regressions in existing test suite: yes / no (if no, document)
+- `make test` on master `1488e3a5` (2026-10-10): 4453 passed, 16 skipped, 162 deselected, 2 xfailed.
+- The five automated feature checks in `features.json`: each passed (counts above).
+- Argo CD on 2026-10-10 (read-only): `kubelab-staging` and `kubelab-prod` both track `master`, Synced. The staging repoint to the branch for AC5 was undone.
 
 ## Decisions made during implementation
 
@@ -65,13 +72,13 @@ The remaining errors (`jwt_secret`, `/config/assets`) are secrets and assets tha
 
 Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.
 
-- [ ] Lesson for the repo's `docs/lessons/`? <yes / no - one line of what>
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? <yes / no - one line of what>
-- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes / no - one line>
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/identity-secrets/lesson-550-authelia-merges-config-files-but-a-list-lives-in-exactly-one-of-them.md
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: ADR-040 §1 already decided it; its amendment records the stored-digest deviation (R7).
+- [x] New pattern candidate for `00_meta/patterns/`? no: it is specific to this repo's Authelia; the general rule is in the lesson.
 
 ## Archive checklist
 
 - [ ] `proposal.md` frontmatter set to `status: archived`
 - [ ] Folder moved: `specs/SSOT-017-oidc-client-ssot/` -> `specs/archive/SSOT-017-oidc-client-ssot/`
-- [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018): #1332 closed 2026-09-23; the open prod half is #2154.
+- [x] Promotions above executed (if any)
