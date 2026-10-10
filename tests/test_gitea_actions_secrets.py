@@ -227,10 +227,10 @@ class _FakeForge:
         self.calls: list[tuple[str, str, str, str]] = []
         self.fail_on = fail_on or set()
 
-    def put_actions_secret(self, owner: str, repo: str, name: str, value: str) -> None:
-        if name in self.fail_on:
-            raise RuntimeError(f"Gitea API PUT /repos/{owner}/{repo}/actions/secrets/{name} -> 500")
-        self.calls.append((owner, repo, name, value))
+    def put_actions_secret(self, owner: str, name: str, secret_name: str, value: str) -> None:
+        if secret_name in self.fail_on:
+            raise RuntimeError(f"Gitea API PUT /repos/{owner}/{name}/actions/secrets/{secret_name} -> 500")
+        self.calls.append((owner, name, secret_name, value))
 
 
 def test_execute_writes_exactly_the_planned_secrets_with_their_values() -> None:
@@ -400,6 +400,19 @@ def test_apply_writes_every_target_to_its_own_repository_and_a_second_run_has_no
     assert second.puts == [], "changed=0 on re-run"
 
 
+def test_an_undeclared_live_secret_is_printed_and_left_alone_by_the_cli(monkeypatch: pytest.MonkeyPatch) -> None:
+    """AC5 end to end: the planner test pins the tuple, this pins the row the operator reads."""
+    forge = _CliForge(live={leaf.upper() for leaf in LEAVES} | {NAN, "HAND_SET_TOKEN"})
+    result = _invoke(monkeypatch, _merged(**{leaf: VALUE for leaf in LEAVES}), forge, "--apply")
+    assert result.exit_code == 0, result.output
+    rows = [line for line in result.output.splitlines() if "HAND_SET_TOKEN" in line]
+    assert rows, result.output
+    # One row per repository the catalog names; Rich wraps the tail at the terminal width.
+    assert {row.split()[1] for row in rows} == {RESUME, "teledyne/fae-brain"}
+    assert all("not declared in the catalog" in row for row in rows)
+    assert forge.puts == []
+
+
 def test_force_re_pushes_what_the_forge_already_has(monkeypatch: pytest.MonkeyPatch) -> None:
     forge = _CliForge(live={leaf.upper() for leaf in LEAVES} | {NAN})
     result = _invoke(monkeypatch, _merged(**{leaf: VALUE for leaf in LEAVES}), forge, "--apply", "--force")
@@ -453,7 +466,7 @@ def test_execute_refuses_a_value_that_is_empty_at_write_time() -> None:
 
 def test_a_forge_error_that_echoes_the_value_is_redacted_in_the_report() -> None:
     class _EchoingForge(_FakeForge):
-        def put_actions_secret(self, owner: str, repo: str, name: str, value: str) -> None:
+        def put_actions_secret(self, owner: str, name: str, secret_name: str, value: str) -> None:
             raise RuntimeError(f"422 invalid data {value!r}")
 
     target = _t("gdrive_oauth_refresh_token")
@@ -492,7 +505,7 @@ _ESCAPABLE = 'line-one\n"quoted" & <tag> \\ caf\u00e9'
 )
 def test_a_forge_error_that_echoes_an_escaped_value_is_redacted(echo: Callable[[str], str]) -> None:
     class _EscapingForge(_FakeForge):
-        def put_actions_secret(self, owner: str, repo: str, name: str, value: str) -> None:
+        def put_actions_secret(self, owner: str, name: str, secret_name: str, value: str) -> None:
             raise RuntimeError(f'422 {{"message": "invalid data {echo(value)}"}}')
 
     target = _t("gdrive_oauth_refresh_token")

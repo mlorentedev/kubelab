@@ -39,37 +39,37 @@ created: "2026-06-16"
       (`render: {RESOLVE_RPI4_TAILSCALE_IP: rpi4.kubelab.internal}`, `optional: true`). Define the
       vendored layout `infra/k8s/cluster/<name>/manifest.yaml`. Verification: `toolkit config validate`
       passes; SSOT parses; the 3 expected names present.
-- [ ] **T2: render primitive** — `render_and_apply(manifest, render_map, kubeconfig, *, optional,
+- [x] **T2: render primitive** — `render_and_apply(manifest, render_map, kubeconfig, *, optional,
       server_side)` in the toolkit: resolve each `RESOLVE_*` via MagicDNS, substitute in-memory,
       `--dry-run=server`, then apply. Verification: unit tests cover substitution, skip-if-optional-
       unresolvable, dry-run-before-apply, stable order; `make test` green.
-- [ ] **T3: cluster_bootstrap loop** — replace `_get_traefik_config_path()` (DEAD CODE — target file
+- [x] **T3: cluster_bootstrap loop** — replace `_get_traefik_config_path()` (DEAD CODE — target file
       removed in ADR-020 Ph3, HelmChartConfig now Ansible-managed) in `infra.py` `k8s_deploy` step 3
       *and* `k8s_dry_run` with a loop over `cluster_bootstrap` via the render primitive, per-operator
       logging, stable order. Verification: unit test asserts the loop applies every declared entry; no
       `_get_traefik_config_path` left (grep clean); `make test` green.
-- [ ] **T4: migrate 3 call-sites** — move coredns/rpi4 (`Makefile:473`), uptime-kuma/rpi3
+- [x] **T4: migrate 3 call-sites** — move coredns/rpi4 (`Makefile:473`), uptime-kuma/rpi3
       (`Makefile:469`), argocd/aws1 (`Makefile:432`) off inline `dig | sed | kubectl` onto the render
       primitive. coredns is applied via the `cluster_bootstrap` loop (T3); rpi3/aws1 EndpointSlices via
       a small toolkit command each. Verification: no `RESOLVE_*`-substitution shell remains in the
       Makefile (grep clean); `deploy-external` / `_deploy-argocd-helm` call the toolkit.
-- [ ] **T5: vendor agent-sandbox** — vendor the pinned `v0.5.0rc1` manifest at
+- [x] **T5: vendor agent-sandbox** — vendor the pinned `v0.5.0rc1` manifest at
       `infra/k8s/cluster/agent-sandbox/manifest.yaml` (CRD `agents.x-k8s.io/v1beta1` + controller +
       RBAC + `agent-sandbox-system` namespace). Verification: `kubectl apply --dry-run=server` accepts
       it on the staging cluster.
-- [ ] **T6: sync automation** — `make sync-operators` (toolkit) refreshes vendored manifests for
+- [x] **T6: sync automation** — `make sync-operators` (toolkit) refreshes vendored manifests for
       `cluster_bootstrap` entries that have a `version` (config entries like coredns are skipped).
       Verification: bumping the version in `common.yaml` + running the target updates the vendored file
       deterministically.
-- [ ] **T7: doc-drift + premise fix** — correct CLAUDE.md (coredns "applied via deploy-k8s"),
+- [x] **T7: doc-drift + premise fix** — correct CLAUDE.md (coredns "applied via deploy-k8s"),
       `docs/lessons.md:1545`, and the `coredns-custom.yaml` header to match reality after T3/T4
       (coredns now in the `deploy-k8s` bootstrap loop). ADR-047 + this spec already reflect the
       corrected premise. Verification: grep shows no remaining "applied via make deploy-k8s" claim that
       contradicts code.
-- [ ] **T8: deploy to staging** — `make deploy-k8s ENV=staging`; agent-sandbox controller Ready in
+- [x] **T8: deploy to staging** — `make deploy-k8s ENV=staging`; agent-sandbox controller Ready in
       `agent-sandbox-system`, `sandboxes.agents.x-k8s.io` (v1beta1) served. Verification: `kubectl get
       crd sandboxes.agents.x-k8s.io` + controller rollout complete.
-- [ ] **T9: validate iris SDD-034c** — in the iris repo:
+- [ ] **T9 (blocked on mlorentedev/iris#30, see verification.md): validate iris SDD-034c** — in the iris repo:
       `KUBECONFIG=~/.kube/kubelab-staging-config go test ./internal/runtime/k8s/ -run TestK8sConformance
       -v`. Verification: conformance passes (Start/Stop/Status/Exec + sidecar) against the real cluster.
 
@@ -79,7 +79,7 @@ T1 (schema) → T2 (primitive the loop/sites consume) → T3 (loop + delete dead
 T9 (downstream iris validation, the original goal).
 
 ## Closing
-- [ ] `features.json` entries all have non-vacuous verification commands (pass-state set by harness, not agent)
-- [ ] `verification.md` filled in
-- [ ] No Argo CD RBAC widened (ADR-047 D1 invariant holds)
-- [ ] PR opened referencing this spec + ADR-047; iris SDD-034c open thread closed
+- [x] `features.json` entries all have non-vacuous verification commands (f2 corrected 2026-10-10) (pass-state set by harness, not agent)
+- [x] `verification.md` filled in ✓ 2026-10-10
+- [x] No Argo CD RBAC widened (ADR-047 D1 invariant holds)
+- [x] PR opened referencing this spec + ADR-047 ✓ 2026-06-18 (#676); the iris SDD-034c thread stays open on iris#30
