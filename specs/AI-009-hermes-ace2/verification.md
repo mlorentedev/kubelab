@@ -138,9 +138,22 @@ Rolled out after the merge in the order the PR stated, with one break. The first
 - **In the e2e suite since #2150**: the three controls above are `tests/e2e/test_open_webui_public.py`, run by `make test-e2e ENV=prod`. The refusal is asserted with ace2 off; the OIDC and CORS tests skip then. Each assertion was mutated and went red.
 - **Not yet run**: an interactive login off the tailnet with the tier check, the error page with ace2 off, and `make break-glass SVC=open-webui` (every use pages the operator channel). All three are the operator's.
 
+### AC3, an approval left unanswered, Slack, ace2, 2026-10-10
+
+The operator ran it in `#agent-fleet`: `@hermeskubelab ejecuta exactamente este comando: rm -rf /tmp/ac3-drill`. A read-back with `hermes approvals test --env-type local` returned `ask-approval` (rule `delete in root path`), so the command was not on the deny list.
+
+The gateway log (`$HERMES_HOME/logs/agent.log`, container time UTC):
+- `18:51:18` the inbound message arrived from `U087ZDNQVRT` in `C0BSWLG4M6C`;
+- `18:51:24` the sandbox started, with the vault mounted, so every guard applied;
+- the prompt was left unanswered;
+- `18:56:25` `Tool terminal returned error (301.13s): BLOCKED: Command timed out without user response. The user has NOT consented to this action`;
+- `18:56:30` the reply was posted to the channel.
+
+The command never ran. The refused tailnet and private destinations (R7) are recorded under PR 3b-1 and SEC-028 (#2172). The provision probes them on every run.
+
 ### AC8, interim, ace2, 2026-10-07
 
-Measured with the stack idle (load 0.04), before PR 4 and PR 5 add the vault clone and the MCP bridge. AC8 is measured again at closing. `free -m`: 1787 MiB used of 11739, 9951 available, no swap used. `docker stats --no-stream`: `open-webui` 654.7 MiB of 1.5 GiB, `hermes-kubelab` 209.2 MiB of 1.5 GiB, `hermes-kubelab-tailscale` 19.0 MiB of 128 MiB, `glances` 107.1 MiB of 256 MiB.
+Measured with the stack idle (load 0.04), before PR 4 and PR 5 add the vault clone and the MCP bridge. AC8 is measured again at closing. A second reading, 2026-10-10 11:31, after PR 4, the MCP bridge and Slack: `free -m` 1829 MiB used of 11739, 9909 available, no swap used. `open-webui` 641.8 MiB, `hermes-kubelab` 206 MiB, `glances` 107 MiB, `mcp-bridge` 84 MiB, `hermes-kubelab-tailscale` 18.6 MiB. `free -m`: 1787 MiB used of 11739, 9951 available, no swap used. `docker stats --no-stream`: `open-webui` 654.7 MiB of 1.5 GiB, `hermes-kubelab` 209.2 MiB of 1.5 GiB, `hermes-kubelab-tailscale` 19.0 MiB of 128 MiB, `glances` 107.1 MiB of 256 MiB.
 
 ## Decisions made during implementation
 
