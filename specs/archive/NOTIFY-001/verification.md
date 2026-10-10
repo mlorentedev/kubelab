@@ -114,7 +114,7 @@ smoke ticked green on 2026-06-16 sent only a POST with no header, which a gate t
 header's presence refuses too. The fourth probe is new in this change: a random `Bearer` value per
 run, never printed. `tests/test_notify_smoke.py` runs the smoke against a fake webhook that accepts
 any header value and expects it to fail, and `make mutate` went red when the wrong probe was made to
-send the real secret. Lesson-549 records it.
+send the real secret. Lesson-550 records it.
 
 ## Evidence — criterion #3 (2026-10-10)
 
