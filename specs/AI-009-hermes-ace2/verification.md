@@ -153,7 +153,9 @@ The command never ran. The refused tailnet and private destinations (R7) are rec
 
 ### AC8, interim, ace2, 2026-10-07
 
-Measured with the stack idle (load 0.04), before PR 4 and PR 5 add the vault clone and the MCP bridge. AC8 is measured again at closing. A second reading, 2026-10-10 11:31, after PR 4, the MCP bridge and Slack: `free -m` 1829 MiB used of 11739, 9909 available, no swap used. `open-webui` 641.8 MiB, `hermes-kubelab` 206 MiB, `glances` 107 MiB, `mcp-bridge` 84 MiB, `hermes-kubelab-tailscale` 18.6 MiB. `free -m`: 1787 MiB used of 11739, 9951 available, no swap used. `docker stats --no-stream`: `open-webui` 654.7 MiB of 1.5 GiB, `hermes-kubelab` 209.2 MiB of 1.5 GiB, `hermes-kubelab-tailscale` 19.0 MiB of 128 MiB, `glances` 107.1 MiB of 256 MiB.
+Measured with the stack idle (load 0.04), before PR 4 and PR 5 add the vault clone and the MCP bridge. AC8 is measured again at closing. 2026-10-07: `free -m`: 1787 MiB used of 11739, 9951 available, no swap used. `docker stats --no-stream`: `open-webui` 654.7 MiB of 1.5 GiB, `hermes-kubelab` 209.2 MiB of 1.5 GiB, `hermes-kubelab-tailscale` 19.0 MiB of 128 MiB, `glances` 107.1 MiB of 256 MiB.
+
+Second reading, 2026-10-10 11:31, after PR 4, the MCP bridge and Slack, stack idle. `free -m`: 1829 MiB used of 11739, 9909 available, no swap used. `docker stats --no-stream`: `open-webui` 641.8 MiB, `hermes-kubelab` 206 MiB, `glances` 107 MiB, `mcp-bridge` 84 MiB, `hermes-kubelab-tailscale` 18.6 MiB.
 
 ## Decisions made during implementation
 

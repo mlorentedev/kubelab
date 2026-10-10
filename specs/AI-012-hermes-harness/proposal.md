@@ -41,7 +41,7 @@ After this spec, `make provision NODE=ace2 ENV=prod` also produces the following
 3. **Identity.**
    - `SOUL.md` is rendered by the role and mounted read-only over the data directory's copy, like `config.yaml`, so the agent cannot rewrite its persona.
    - The persona's public part (role, style, operating principles, language rules, adapted from `hermes-nan/SOUL.md` and `AGENTS.md`) lives in the role.
-   - The private part (the operator profile from `hermes-nan/USER.md`) is read on the node from the root-owned vault mirror at provision time. It never enters the public repository.
+   - The private part (the operator profile from `hermes-nan/USER.md`) is joined to the persona on the node, from the root-owned vault mirror, at provision time, without passing through the controller. It never enters the public repository.
 4. **Declared jobs, reconciled by name.**
    - The jobs are declared in `common.yaml`: name, schedule, mode (agent or script), model, delivery and skills.
    - A role task reconciles the gateway's jobs against that declaration through `hermes cron`: it creates missing jobs, replaces changed ones and removes declared-then-dropped ones. It never touches a job it did not create. It is idempotent and `CHECK=1`-safe.

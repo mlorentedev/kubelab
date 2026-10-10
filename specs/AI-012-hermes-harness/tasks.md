@@ -35,7 +35,7 @@ One PR per block, in this order. Each block starts with the failing test.
 
 ### PR 3: identity (AC3)
 
-- [ ] [AC3] Test: `SOUL.md` renders from the role and is mounted `:ro` over `<data>/SOUL.md`. The private profile is read from the vault mirror on the node (`slurp`), never from the controller.
+- [ ] [AC3] Test: `SOUL.md` renders from the role and is mounted `:ro` over `<data>/SOUL.md`. The private profile is joined on the node with `ansible.builtin.assemble` (`remote_src: true`): the public template is rendered to a fragment beside the mirror's profile, so the profile's content never passes through the controller. No `slurp`, and no diff output.
 - [ ] [AC3] Adapt the persona from `hermes-nan/SOUL.md` and `AGENTS.md`, without NaN, Telegram or pod references.
 - [ ] [AC3] Live: an edit to `SOUL.md` from inside the gateway fails, and the next turn's context lists the role's file.
 
