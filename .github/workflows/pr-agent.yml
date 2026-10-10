@@ -401,7 +401,7 @@ jobs:
           # NaN is OpenAI-compatible, so LiteLLM reaches it through the OpenAI
           # transport with the base URL swapped. The `openai/` prefix on the model
           # id in `.pr_agent.toml` is for the same reason; nothing talks to OpenAI.
-          OPENAI__KEY: ${{ secrets.NAN_API_KEY }}
+          OPENAI__KEY: "injected-invalid-credential"
           OPENAI__API_BASE: https://api.nan.builders/v1
           # PR-Agent loads .pr_agent.toml from the default branch, so the PR that changes
           # the model there reviews with the old one until merge; the workflow file is
