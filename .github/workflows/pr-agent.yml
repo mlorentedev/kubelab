@@ -412,7 +412,7 @@ jobs:
           # the model there reviews with the old one until merge; on a `pull_request`
           # run the workflow file is read from the PR head, so the model travels here
           # too. Keep the two in step. A slash command (`issue_comment`) runs the
-          # default branch's copy of this file instead (lesson-552).
+          # default branch's copy of this file instead (lesson-553).
           CONFIG__MODEL: openai/mimo-v2.6-flash
           CONFIG__RETRY_SAME_MODEL_ON_TIMEOUT: "false"
           CONFIG__NUM_RETRIES: "0"

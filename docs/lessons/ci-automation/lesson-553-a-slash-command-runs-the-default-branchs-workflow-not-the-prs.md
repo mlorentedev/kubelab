@@ -1,5 +1,5 @@
 ---
-id: lesson-552-a-slash-command-runs-the-default-branchs-workflow-not-the-prs
+id: lesson-553-a-slash-command-runs-the-default-branchs-workflow-not-the-prs
 type: lesson
 status: active
 created: "2026-10-10"

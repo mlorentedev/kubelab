@@ -48,7 +48,7 @@ AC6-PENDING
    - PR-Agent logged `Failed to review PR: Failed to generate prediction with any model of ['openai/mimo-v2.6-flash', 'openai/deepseek-v4-flash']`, then `Tool reported success but recorded a failure; failing the action`;
    - steps `PR-Agent` and `Fail if no review was published` both concluded `failure`;
    - `review-attestation` read `failure — not reviewed, and not declared as such`.
-2. **Invalid credential**, on #2183 at `b0b1c7d6`, a second throwaway (closed unmerged, branch deleted). #2178's own run for this push was evicted from the shared review queue (#2179), and a `/review` re-run reviews with master's workflow and key, so it proves nothing about the PR's (lesson-552). #2183 set only `OPENAI__KEY` to a placeholder and was reviewed by its `pull_request` run, 38045178907:
+2. **Invalid credential**, on #2183 at `b0b1c7d6`, a second throwaway (closed unmerged, branch deleted). #2178's own run for this push was evicted from the shared review queue (#2179), and a `/review` re-run reviews with master's workflow and key, so it proves nothing about the PR's (lesson-553). #2183 set only `OPENAI__KEY` to a placeholder and was reviewed by its `pull_request` run, 38045178907:
    - both models were tried, and each returned `litellm.AuthenticationError: AuthenticationError: OpenAIException - Invalid API key.`;
    - PR-Agent logged `Failed to review PR: Failed to generate prediction with any model of ['openai/mimo-v2.6-flash', 'openai/deepseek-v4-flash']`, then `Tool reported success but recorded a failure; failing the action`;
    - steps `PR-Agent` and `Fail if no review was published` both concluded `failure`;
@@ -160,9 +160,9 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 
 Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.
 
-- [ ] Lesson for the repo's `docs/lessons/`? <yes / no - one line of what>
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? <yes / no - one line of what>
-- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes / no - one line>
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/ci-automation/lesson-553-a-slash-command-runs-the-default-branchs-workflow-not-the-prs.md
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: the reviewer registry is configuration (`harness/review-attestation.json`), and the decision to attest from content is recorded in this spec and in CLAUDE.md's two-gates gotcha.
+- [x] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. no: which event reads which copy of a workflow is GitHub's documented behaviour, recorded in lesson-553; a pattern adds nothing until a second project needs it.
 
 ## Archive checklist
 
