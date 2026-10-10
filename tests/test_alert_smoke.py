@@ -9,6 +9,7 @@ No cluster needed — `kubectl` is injected.
 
 from __future__ import annotations
 
+import itertools
 import json
 import subprocess
 
@@ -83,6 +84,56 @@ class TestRuleState:
 
     def test_unreadable_response_is_not_silently_healthy(self) -> None:
         assert smoke.rule_state("<html>502</html>") == "unreadable"
+
+
+def _firing(domain: str | None) -> str:
+    """The Prometheus-compatible rules answer while the rule fires, one instance."""
+    labels = {"alertname": smoke.RULE_TITLE}
+    if domain is not None:
+        labels["domain"] = domain
+    rule = {"name": smoke.RULE_TITLE, "state": "firing", "alerts": [{"state": "Alerting", "labels": labels}]}
+    other = {"name": "Something else", "state": "firing", "alerts": [{"labels": {"domain": "other.example"}}]}
+    return json.dumps({"data": {"groups": [{"rules": [other, rule]}]}})
+
+
+class TestFiringDomains:
+    """AC4's domain half, read from the instance Grafana is firing."""
+
+    def test_reads_the_domain_label_of_the_named_rule_only(self) -> None:
+        assert smoke.firing_domains(_firing(smoke.PROBE_HOST)) == {smoke.PROBE_HOST}
+
+    def test_an_instance_without_a_domain_names_none(self) -> None:
+        assert smoke.firing_domains(_firing(None)) == set()
+
+    def test_an_unreadable_answer_names_none(self) -> None:
+        assert smoke.firing_domains("<html>401</html>") == set()
+
+
+class TestTheAlertNamesTheInducedDomain:
+    def _run(self, firing_json: str) -> smoke.SmokeResult:
+        states = iter([_rules("inactive"), firing_json])
+
+        def fake_kubectl(args: list[str], stdin: str | None = None) -> subprocess.CompletedProcess:
+            if "exec" in args:
+                return _proc(next(states, _rules("inactive")))
+            return _proc()
+
+        # A clock that advances one second per read, so each wait polls at least
+        # once; `_fake_clock` races past every deadline before the first poll.
+        ticks = itertools.count()
+        return smoke.run_alert_smoke(
+            "staging", kubectl=fake_kubectl, sleep=lambda _: None, now=lambda: float(next(ticks))
+        )
+
+    def test_a_firing_instance_labelled_with_the_probe_host_counts(self) -> None:
+        assert self._run(_firing(smoke.PROBE_HOST)).named_domain
+
+    def test_a_firing_instance_without_the_domain_fails_the_smoke(self) -> None:
+        """The rule can fire and still send a message nobody can act on."""
+        result = self._run(_firing(None))
+        assert result.fired
+        assert not result.named_domain
+        assert not result.ok
 
 
 class TestGuardrails:

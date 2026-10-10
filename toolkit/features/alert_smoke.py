@@ -100,10 +100,13 @@ class SmokeResult:
     resolved: bool
     resolve_notified: bool
     detail: str = ""
+    #: The firing instance carried the induced host as its `domain` label, which
+    #: is what the message body prints (AC4). False unless the rule fired.
+    named_domain: bool = False
 
     @property
     def ok(self) -> bool:
-        return self.fired and self.notified and self.resolved and self.resolve_notified
+        return self.fired and self.named_domain and self.notified and self.resolved and self.resolve_notified
 
 
 def strip_ansi(text: str) -> str:
@@ -152,6 +155,28 @@ def rule_state(rules_json: str, title: str = RULE_TITLE) -> str:
     return "absent"
 
 
+def firing_domains(rules_json: str, title: str = RULE_TITLE) -> set[str]:
+    """The `domain` label of every instance the named rule is firing.
+
+    The payload template prints `.Labels.domain`, so this is the domain the
+    recipient reads, taken from Grafana rather than from the Telegram message.
+    """
+    import json
+
+    try:
+        data = json.loads(rules_json)
+    except (ValueError, TypeError):
+        return set()
+    return {
+        alert["labels"]["domain"]
+        for group in data.get("data", {}).get("groups", [])
+        for rule in group.get("rules", [])
+        if rule.get("name") == title
+        for alert in rule.get("alerts") or []
+        if (alert.get("labels") or {}).get("domain")
+    }
+
+
 def _default_kubectl(env: str) -> KubectlFn:
     kubeconfig = str(output_path(env))
 
@@ -192,6 +217,10 @@ def run_alert_smoke(
     def deliveries() -> int:
         return count_deliveries(kubectl(["logs", "-n", "kubelab", "deploy/apprise", "--tail=300"], None).stdout)
 
+    #: The last rules answer, so the domain is read from the same instance that
+    #: was observed firing.
+    last_rules = [""]
+
     def state() -> str:
         result = kubectl(
             [
@@ -206,6 +235,7 @@ def run_alert_smoke(
             ],
             None,
         )
+        last_rules[0] = result.stdout
         return rule_state(result.stdout)
 
     baseline = deliveries()
@@ -223,7 +253,7 @@ def run_alert_smoke(
         return SmokeResult(False, False, False, False, detail="rule state unreadable")
     logger.info(f"Baseline: rule={initial}  apprise deliveries={baseline}")
 
-    fired = notified = resolved = resolve_notified = False
+    fired = notified = resolved = resolve_notified = named = False
     try:
         logger.info(f"Inducing an ACME failure: {PROBE_HOST}")
         applied = kubectl(["apply", "-f", "-"], PROBE_MANIFEST)
@@ -233,6 +263,7 @@ def run_alert_smoke(
 
         fired = _await(lambda: state() == "firing", FIRING_TIMEOUT_S, "rule to fire", sleep=sleep, now=now)
         if fired:
+            named = PROBE_HOST in firing_domains(last_rules[0])
             notified = _await(lambda: deliveries() > baseline, 120, "the firing notification", sleep=sleep, now=now)
     finally:
         # Always remove the induced failure, including on timeout or Ctrl-C.
@@ -249,7 +280,7 @@ def run_alert_smoke(
                 lambda: deliveries() > after_firing, 120, "the resolved notification", sleep=sleep, now=now
             )
 
-    result = SmokeResult(fired, notified, resolved, resolve_notified)
+    result = SmokeResult(fired, notified, resolved, resolve_notified, named_domain=named)
     _report(result)
     return result
 
@@ -277,6 +308,7 @@ def _report(result: SmokeResult) -> None:
     """State each stage separately — a single pass/fail hides which link broke."""
     for label, value in (
         ("rule fired on a real failure", result.fired),
+        (f"firing instance named {PROBE_HOST}", result.named_domain),
         ("firing notification delivered", result.notified),
         ("rule cleared after teardown", result.resolved),
         ("resolved notification delivered", result.resolve_notified),
