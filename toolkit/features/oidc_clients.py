@@ -36,6 +36,11 @@ REQUIRED_FIELDS = (
     "consent_mode",
 )
 
+#: The methods a confidential client authenticates with using the `client_secret`
+#: this generator renders. `private_key_jwt` needs a JWKS and `none` a public
+#: client, neither of which this schema declares (Authelia 4.39 OIDC client docs).
+TOKEN_ENDPOINT_AUTH_METHODS = ("client_secret_basic", "client_secret_post", "client_secret_jwt")
+
 #: Fields a client may declare and Authelia's default covers when it does not.
 #: `access_token_signed_response_alg` other than `none` issues RFC 9068 JWT access
 #: tokens; the `grafana` client needs it so Grafana stops logging opaque ones (SEC-021).
@@ -84,6 +89,25 @@ def _validate(client: dict[str, Any]) -> None:
     unknown = [env for env in client["envs"] if env not in KNOWN_ENVS]
     if unknown or not client["envs"]:
         raise OidcClientError(f"OIDC client '{name}' declares invalid envs {client['envs']!r}")
+    method = client["token_endpoint_auth_method"]
+    if method not in TOKEN_ENDPOINT_AUTH_METHODS:
+        raise OidcClientError(
+            f"OIDC client '{name}': token_endpoint_auth_method '{method}' is not one of {TOKEN_ENDPOINT_AUTH_METHODS}"
+        )
+    absent = [key for key in ("domain", "path") if key not in client["redirect"]]
+    if absent:
+        raise OidcClientError(f"OIDC client '{name}': redirect is missing {', '.join(absent)}")
+
+
+def _validate_all(clients: list[dict[str, Any]]) -> None:
+    """Every declared client, in every env: a duplicate id is an error even when
+    the two copies target different envs, because one id is one registration."""
+    seen: set[str] = set()
+    for client in clients:
+        _validate(client)
+        if client["client_id"] in seen:
+            raise OidcClientError(f"OIDC client '{client['client_id']}' is declared more than once")
+        seen.add(client["client_id"])
 
 
 _SCHEMES = ("https", "http")
@@ -113,8 +137,9 @@ def _redirect_uri(values: dict[str, Any], client_id: str, redirect: dict[str, An
 def resolve_clients(values: dict[str, Any], env: str) -> list[dict[str, Any]]:
     """The clients registered in `env`, in Authelia's shape, without `client_secret`."""
     resolved = []
-    for client in declared_clients(values):
-        _validate(client)
+    clients = declared_clients(values)
+    _validate_all(clients)
+    for client in clients:
         if env not in client["envs"]:
             continue
         redirect = client["redirect"]

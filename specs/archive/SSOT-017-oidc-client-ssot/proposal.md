@@ -1,7 +1,7 @@
 ---
 id: "SSOT-017-oidc-client-ssot"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-09-22"
 issue: "#1332"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal, authelia, oidc, ssot]
@@ -93,3 +93,5 @@ This spec is leg 1 of #1775 (IDP-040). The identity work needs a client list tha
 - lesson-404: hash-suffixed ConfigMaps; lesson-256 and #1083: the staging validation window.
 - Authelia multi-file configuration: <https://www.authelia.com/configuration/methods/files>.
 - Scaffolded with `dotf spec init --force-no-gate`: GraphQL was secondary-rate-limited, and #1332 was verified OPEN via REST (`gh api repos/mlorentedev/kubelab/issues/1332`).
+
+<!-- archived 2026-10-10 — PR: https://github.com/mlorentedev/kubelab/pull/2182 -->

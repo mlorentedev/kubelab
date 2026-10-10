@@ -1,6 +1,6 @@
 # Identity, auth and secret material
 
-77 lessons, newest first. Back to [all categories](../_index.md).
+78 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
@@ -22,6 +22,7 @@
 | 456 | [A session cookie on a parent domain shadows a same-named cookie in a child environment, so login succeeds and access is anonymous](lesson-456-a-parent-domain-cookie-shadows-a-same-named-cookie-in-a-child-environment.md) | 2026-09-24 |
 | 517 | [A per-env copy of a common secret wins the merge, and every check that compares a pair with itself passes](lesson-517-a-per-env-copy-of-a-common-secret-wins-the-merge-and-every-pair-check-passes.md) | 2026-09-23 |
 | 454 | [A SOPS file conflict is resolved by re-setting the key on upstream's file, never by merging the text](lesson-454-a-sops-conflict-is-resolved-by-re-setting-the-key-not-by-merging-text.md) | 2026-09-23 |
+| 551 | [Authelia merges config files, but a list lives in exactly one of them](lesson-551-authelia-merges-config-files-but-a-list-lives-in-exactly-one-of-them.md) | 2026-09-22 |
 | 425 | [A capability probe can stop at the first authorization layer and report the whole answer](lesson-425-a-capability-probe-can-stop-at-the-first-authorization-layer.md) | 2026-09-04 |
 | 421 | [A secret read from the wrong SOPS store resolves to `''`, so a presence gate on it is open forever](lesson-421-secret-written-to-one-sops-store-read-from-another.md) | 2026-09-02 |
 | 415 | [To learn whether a credential *may* do something, ask it to do something already done](lesson-415-discriminate-a-refusal-by-asking-for-something-that-already-exists.md) | 2026-09-02 |
