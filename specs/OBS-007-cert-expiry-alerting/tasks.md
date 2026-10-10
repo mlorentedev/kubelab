@@ -91,7 +91,7 @@ created: "2026-08-09"
 - [x] Lint passes (`make lint`) ✓ 2026-10-10, ruff check and format clean on the changed files
 - [x] No unrelated changes in the diff (no scope creep) ✓ 2026-10-10. lesson-554 is the one exception: it records a finding of this audit and is named in `verification.md`.
 - [x] `verification.md` filled in ✓ 2026-10-10
-- [ ] PR opened referencing this spec folder
+- [x] PR opened referencing this spec folder ✓ 2026-10-10 (#2196)
 
 ## Machine-readable features
 
