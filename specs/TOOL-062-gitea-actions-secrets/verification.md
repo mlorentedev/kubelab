@@ -37,7 +37,7 @@ All tests are in `tests/test_gitea_actions_secrets.py`.
 
 ## Test status
 
-- `pytest tests/test_gitea_actions_secrets.py`: 35 passed after the review fixes (32 before).
+- `pytest tests/test_gitea_actions_secrets.py`: 35 passed after the review fixes (32 before); 40 after #2166 (2026-10-10), which added the five escaped-echo cases.
 - Secrets and Gitea subset (`-k "secret or gitea or catalog or expiry"`): 554 passed.
 - Full suite: `pytest -q --no-cov`: 2587 passed, 15 skipped, 155 deselected (4m10s).
 - `ruff check`, `ruff format --check` and `mypy` on the four changed modules and the test file: clean.
