@@ -1,0 +1,79 @@
+[
+  {
+    "id": "AI-012-hermes-harness-f1",
+    "behavior": "AC1: Every applicable config-desired.yaml key is rendered and tested",
+    "verification": "echo 'not implemented' && exit 1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-012-hermes-harness-f2",
+    "behavior": "AC2: A turn completes on the Anthropic fallback when NaN is unreachable",
+    "verification": "echo 'not implemented' && exit 1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-012-hermes-harness-f3",
+    "behavior": "AC3: SOUL.md is the role's, read-only to the gateway; the operator profile never enters the repository",
+    "verification": "echo 'not implemented' && exit 1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-012-hermes-harness-f4",
+    "behavior": "AC4: Declared jobs and gateway jobs match by name, idempotently, without touching jobs the role did not create",
+    "verification": "echo 'not implemented' && exit 1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-012-hermes-harness-f5",
+    "behavior": "AC5: A scheduled job's commit lands under the zone and a digest reaches #agent-fleet",
+    "verification": "echo 'not implemented' && exit 1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-012-hermes-harness-f6",
+    "behavior": "AC6: The curator turns a RECURRENCE verdict into a proposal under hermes-kubelab/proposals/",
+    "verification": "echo 'not implemented' && exit 1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-012-hermes-harness-f7",
+    "behavior": "AC7: The research jobs run with BrightData and deliver to Slack",
+    "verification": "echo 'not implemented' && exit 1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-012-hermes-harness-f8",
+    "behavior": "AC8: AI-011's four criteria (#2080)",
+    "verification": "echo 'not implemented' && exit 1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-012-hermes-harness-f9",
+    "behavior": "AC9: Declared skills install from the mirror, a missing SKILL.md fails, managed skills are read-only",
+    "verification": "echo 'not implemented' && exit 1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-012-hermes-harness-f10",
+    "behavior": "AC10: The agent and Open WebUI read the repository's docs/ read-only",
+    "verification": "echo 'not implemented' && exit 1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-012-hermes-harness-f11",
+    "behavior": "AC11: Every NaN artifact is marked ported, superseded or retired",
+    "verification": "echo 'not implemented' && exit 1",
+    "state": "pending",
+    "evidence": ""
+  }
+]
