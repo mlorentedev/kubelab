@@ -1,7 +1,7 @@
 ---
 id: "NOTIFY-001"
 type: spec
-status: draft
+status: archived
 created: "2026-06-14"
 issue: "mlorentedev/knowledge#90"
 tags: [spec, proposal, notifications, n8n, apprise, kubelab]
@@ -70,3 +70,5 @@ Staging-first MVP. Concrete outputs the system produces:
 - Existing: `infra/k8s/base/services/n8n.yaml` (IngressRoute template), `infra/k8s/base/services/redis.yaml`,
   `.github/workflows/ci-publish.yml` (GH Actions→n8n pattern), SOPS `infra/config/secrets/staging.enc.yaml`
 - Lesson: vault `kubelab/90-lessons.md` — "converge the brain, specialize the egress"
+
+<!-- archived 2026-10-10 — PR: https://github.com/mlorentedev/kubelab/pull/2177 -->
