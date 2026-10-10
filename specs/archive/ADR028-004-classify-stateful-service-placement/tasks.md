@@ -63,7 +63,7 @@ MinIO's own destination stays out of scope (see `proposal.md` Out of scope, and 
 
 **Superseded 2026-10-04.** MinIO left K3s entirely, both overlays, under OPS-023: #1788 (`6abdea1b`, 2026-09-24) removed it from Kubernetes and #1880 (`30a90cf6`) retired its SSOT and secrets. Every AC3 task below was done by that route rather than by this PR; each is ticked with that pointer. The AC4 task is NOT: no `AC4-EVIDENCE staging/minio pre-deletion` capture was taken before #1788 ran, and one cannot be taken now. #1788 recorded instead that MinIO's only writer had failed since 2026-08-25 and that its data had been in R2 since #1236. Whether that stands in for AC4 is the archive review's decision (see `verification.md`, "PR 3 superseded by OPS-023").
 
-- [ ] [AC4] Re-verify staging MinIO emptiness (authenticated check, same method as R5) immediately before the deletion sub-task runs, unconditionally — do not rely on the 2026-08-12 evidence in `verification.md` from memory, however recent it looks. Capture the fresh output there, **prefixed with the literal marker line `AC4-EVIDENCE staging/minio pre-deletion`** — `features.json` f5 greps for that exact string, because a bare mention of "minio" somewhere in the file proves neither which instance was checked nor that the check preceded the deletion.
+- [~] [AC4] Re-verify staging MinIO emptiness (authenticated check, same method as R5) immediately before the deletion sub-task runs, unconditionally — do not rely on the 2026-08-12 evidence in `verification.md` from memory, however recent it looks. Capture the fresh output there, **prefixed with the literal marker line `AC4-EVIDENCE staging/minio pre-deletion`** — `features.json` f5 greps for that exact string, because a bare mention of "minio" somewhere in the file proves neither which instance was checked nor that the check preceded the deletion. **Not done, and cannot be now** (2026-10-10): #1788 removed MinIO from both overlays under OPS-023 before any capture was taken. The proposed supersession and what #1788 recorded in its place are in `verification.md`, 'PR 3 superseded by OPS-023'; `features.json` f5 is `partial` for this reason.
 - [x] [AC3] *(Superseded 2026-10-04: done by OPS-023, #1788/#1880.)* Move `minio-config`, `minio-api`, `minio-console` out of `base/kustomization.yaml` into `overlays/prod/` as first-class resources; remove their three entries from `overlays/prod/patches.yaml` (they're no longer patching a base resource — they *are* the resource now).
 - [x] [AC3] *(Superseded 2026-10-04: done by OPS-023, #1788/#1880.)* `tests/e2e/expectations.py` — add `skip_in_envs=("staging",)` to the `minio` entry.
 - [x] [AC3] *(Superseded 2026-10-04: done by OPS-023, #1788/#1880.)* `SECRET_CATALOG` — MinIO's `envs` stays `("dev","staging","prod")` only if something *else* still needs it in staging (check before narrowing; ANSIBLE-033's failure mode is narrowing an `envs` tuple to no longer match any real consumer, which makes the secret vanish from every future audit silently).
@@ -92,15 +92,17 @@ The larger of the two retirements — moves both instances, not just staging's. 
 
 ## Closing
 
-- [ ] Every acceptance criterion from `proposal.md` is covered by at least one test or captured verification output
-- [ ] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command
-- [ ] Type checks pass
-- [ ] Lint passes
-- [ ] No unrelated changes in the diff (no scope creep) — MinIO's own migration, n8n workflow promotion generally, Helm packaging (#264/#503), and `base/` → `platform/` restructuring all stay out per `proposal.md`'s Out of scope
-- [ ] `verification.md` filled in for PRs 3 and 4's AC4 evidence
-- [ ] PR opened referencing this spec folder, for each of PR 1-4 above
+- [x] Every acceptance criterion from `proposal.md` is covered by at least one test or captured verification output. AC1 by f1, AC2 by f2 and its red/green transcripts, AC3 by f3/f4 (staging e2e 68 passed on 2026-10-10), AC4 by the two Gitea captures. The exception is staging MinIO's AC4 capture, which does not exist (see PR 3). ✓ 2026-10-10
+- [x] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command. f5 was vacuous: its MinIO marker matched a prose sentence in `verification.md`. It is narrowed to the two Gitea markers and anchored to their headings, and a renamed marker turns it red. ✓ 2026-10-10
+- [x] Type checks pass. `mypy toolkit` on master `f1c952a8`: no issues in 125 source files. ✓ 2026-10-10
+- [x] Lint passes. `make lint` on master `f1c952a8`: exit 0. ✓ 2026-10-10
+- [x] No unrelated changes in the diff (no scope creep) — MinIO's own migration, n8n workflow promotion generally, Helm packaging (#264/#503), and `base/` → `platform/` restructuring all stay out per `proposal.md`'s Out of scope. Each implementation PR above changed only its own task's files; MinIO's removal came from OPS-023, outside this spec. ✓ 2026-10-10
+- [~] `verification.md` filled in for PRs 3 and 4's AC4 evidence. PR 4's two Gitea captures are there. PR 3 never ran, so its capture does not exist (see the PR 3 section above).
+- [x] PR opened referencing this spec folder, for each of PR 1-4 above: PR 1 is #1039, PR 2 is #1035 with the duplication clause in #2060, PR 3 was superseded by #1788 (OPS-023), and PR 4 is #1058 and #1062. ✓ 2026-10-10
 
 ## Machine-readable features
+
+**Superseded by the sibling `features.json`, noted 2026-10-10.** The draft below is kept because this file froze when the spec went `implementing`, and it no longer matches the contract: its f1 counts anonymous table rows, which `features.json`'s notes explain was rejected, and it has no f5. Read `features.json`.
 
 This spec emits a sibling `features.json` (alongside this file) following [[pattern-feature-list-as-primitive]]. The JSON is the harness-facing contract: each acceptance criterion maps to ≥1 feature with `id`, `behavior`, `verification` (executable command), `state` (lifecycle), and `evidence` (harness-captured output).
 
