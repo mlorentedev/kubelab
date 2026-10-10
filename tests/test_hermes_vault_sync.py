@@ -339,7 +339,7 @@ def test_the_unit_runs_as_the_agent_and_takes_the_token_from_systemd() -> None:
     assert unit["User"] == [context["agent_stack_agent_user"]]
     assert unit["LoadCredential"] == [f"vault-token:{context['agent_stack_vault_token_file']}"]
     assert unit["OnFailure"] == ["kubelab-notify@%n.service"]
-    assert unit["SuccessExitStatus"] == ["75"]
+    assert "75" in unit["SuccessExitStatus"]
     assert "GIT_CONFIG_GLOBAL=/dev/null" in unit["Environment"][0]
     assert unit["ReadWritePaths"] == [context["agent_stack_vault_clone"]]
 
@@ -357,6 +357,8 @@ def test_the_kill_switch_stops_the_sync_and_never_restarts_the_rule() -> None:
     assert unit.get("Requisite") == [rule]
     # Requisite gates starts only: a run in flight at the kill stops with the rule.
     assert unit.get("PartOf") == [rule]
+    # That stop ends the run on SIGTERM, which would otherwise page through OnFailure.
+    assert "SIGTERM" in unit["SuccessExitStatus"]
     assert rule in " ".join(unit["After"]).split()
     for pulls in ("Requires", "BindsTo", "Wants"):
         assert rule not in " ".join(unit.get(pulls, [])).split(), pulls

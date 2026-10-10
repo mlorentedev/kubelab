@@ -26,6 +26,10 @@ Environment=GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 ExecStart={{ agent_stack_vault_libexec }}/vault-sync
 # The remote moved during the push: the next run commits on its tip.
 SuccessExitStatus=75
+# A run stopped by the kill switch (PartOf) ends on SIGTERM. That is the
+# operator's stop, not a failure to page (measured 2026-10-10). A run that
+# times out keeps the result `timeout` and still pages.
+SuccessExitStatus=SIGTERM
 TimeoutStartSec=10min
 NoNewPrivileges=yes
 PrivateTmp=yes
