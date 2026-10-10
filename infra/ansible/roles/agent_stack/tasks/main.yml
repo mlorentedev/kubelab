@@ -64,6 +64,30 @@
   no_log: true
   tags: [agent_stack]
 
+# The MCP bridge's key, the same way: only Open WebUI sends it and only the
+# bridge checks it, both on this node (spec AI-009 AC9).
+- name: Generate the MCP bridge key once
+  ansible.builtin.shell:
+    cmd: umask 077 && openssl rand -hex 32 > {{ agent_stack_dir }}/mcp-bridge-key
+    creates: "{{ agent_stack_dir }}/mcp-bridge-key"
+  when: agent_stack_mcp_bridge_configured | bool
+  tags: [agent_stack]
+
+- name: Read the MCP bridge key
+  ansible.builtin.slurp:
+    src: "{{ agent_stack_dir }}/mcp-bridge-key"
+  register: _agent_stack_mcp_bridge_key_file
+  when: agent_stack_mcp_bridge_configured | bool
+  no_log: true
+  tags: [agent_stack]
+
+- name: Hold the MCP bridge key for the env templates
+  ansible.builtin.set_fact:
+    _agent_stack_mcp_bridge_key: "{{ _agent_stack_mcp_bridge_key_file.content | b64decode | trim }}"
+  when: agent_stack_mcp_bridge_configured | bool
+  no_log: true
+  tags: [agent_stack]
+
 # Without OIDC, Open WebUI's first visitor creates the admin account, and the
 # tailnet includes the `work@` bridge identities, which the policy allows to
 # reach every node (ADR-041 rule 1). So "not configured" means not started, never
@@ -110,7 +134,19 @@
       ansible.builtin.file:
         path: "{{ agent_stack_dir }}/{{ item }}"
         state: absent
-      loop: [compose-webui.yml, webui.env]
+      loop: [compose-webui.yml, webui.env, mcp-bridge.env]
+
+# The bridge leaves with the vault. `up --remove-orphans` below stops its
+# container; this takes the key's env file and the build context with it.
+- name: Remove the MCP bridge's files when it is not configured
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ agent_stack_dir }}/mcp-bridge.env"
+    - "{{ agent_stack_mcp_bridge_dir }}"
+  when: not (agent_stack_mcp_bridge_configured | bool)
+  tags: [agent_stack]
 
 - name: Deploy Open WebUI
   when: agent_stack_webui_configured | bool
@@ -137,12 +173,67 @@
         mode: "0644"
       register: _agent_stack_compose
 
+    # Before the project starts: Docker would create a missing bind source as
+    # an empty directory, and the mirror is filled after Open WebUI is up.
+    - name: Create the vault mirror's tree for the MCP bridge
+      ansible.builtin.file:
+        path: "{{ agent_stack_vault_mirror }}/{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      loop: ["", tree]
+      when: agent_stack_mcp_bridge_configured | bool
+
+    - name: Install the MCP bridge's build context
+      ansible.builtin.copy:
+        src: mcp-bridge/
+        dest: "{{ agent_stack_mcp_bridge_dir }}/"
+        owner: root
+        group: root
+        mode: "0644"
+        directory_mode: "0755"
+      when: agent_stack_mcp_bridge_configured | bool
+
+    - name: Render the MCP bridge env file
+      ansible.builtin.template:
+        src: mcp-bridge.env.j2
+        dest: "{{ agent_stack_dir }}/mcp-bridge.env"
+        owner: root
+        group: root
+        mode: "0600"
+      when: agent_stack_mcp_bridge_configured | bool
+      no_log: true
+
     - name: Pull the Open WebUI image
       ansible.builtin.command: >-
         docker compose -p {{ agent_stack_webui_project }}
         -f {{ agent_stack_dir }}/compose-webui.yml pull
       register: _agent_stack_pull
       changed_when: "'Pull complete' in _agent_stack_pull.stderr or 'Downloaded' in _agent_stack_pull.stderr"
+
+    # Built from the context above. The image ID is the measurement: a cached
+    # build of an unchanged context gives the same one, so a rerun is no change.
+    - name: Read the MCP bridge image in use
+      ansible.builtin.command: docker image inspect {{ agent_stack_mcp_bridge_image }} --format '{% raw %}{{.Id}}{% endraw %}'
+      register: _agent_stack_bridge_before
+      changed_when: false
+      failed_when: false
+      check_mode: false
+      when: agent_stack_mcp_bridge_configured | bool
+
+    - name: Build the MCP bridge image
+      ansible.builtin.command: >-
+        docker compose -p {{ agent_stack_webui_project }}
+        -f {{ agent_stack_dir }}/compose-webui.yml build mcp-bridge
+      when: agent_stack_mcp_bridge_configured | bool
+      changed_when: false
+
+    - name: Read the MCP bridge image built
+      ansible.builtin.command: docker image inspect {{ agent_stack_mcp_bridge_image }} --format '{% raw %}{{.Id}}{% endraw %}'
+      register: _agent_stack_bridge_after
+      changed_when: _agent_stack_bridge_after.stdout != _agent_stack_bridge_before.stdout
+      when: agent_stack_mcp_bridge_configured | bool and not ansible_check_mode
 
     # Same two checks as the glances role, for the same reasons: a port binding
     # and a memory limit are fixed at create time, and `up -d` with an unchanged
@@ -193,7 +284,7 @@
     - name: Start Open WebUI
       ansible.builtin.command: >-
         docker compose -p {{ agent_stack_webui_project }}
-        -f {{ agent_stack_dir }}/compose-webui.yml up -d
+        -f {{ agent_stack_dir }}/compose-webui.yml up -d --remove-orphans
         {{ '--force-recreate' if _agent_stack_recreate | bool else '' }}
       register: _agent_stack_up
       changed_when: "'Started' in _agent_stack_up.stderr or 'Created' in _agent_stack_up.stderr"
@@ -277,6 +368,11 @@
 # After the sync: both read the vault with its token, from the same directory.
 - name: Provision Open WebUI's read-only vault mirror
   ansible.builtin.import_tasks: vault_mirror.yml
+  tags: [agent_stack]
+
+# After the mirror: the probes read the vault through the bridge.
+- name: Verify Open WebUI's MCP bridge
+  ansible.builtin.import_tasks: mcp_bridge.yml
   tags: [agent_stack]
 
 # After the agent's user: Hermes runs on the daemon that file provisions and proves.

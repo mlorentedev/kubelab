@@ -1,0 +1,7 @@
+{
+  "name": "kubelab-mcp-bridge",
+  "private": true,
+  "dependencies": {
+    "@modelcontextprotocol/server-filesystem": "2026.8.31"
+  }
+}

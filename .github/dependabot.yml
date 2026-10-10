@@ -61,6 +61,34 @@ updates:
           - "minor"
           - "patch"
 
+  # ---- MCP bridge on ace2 (agent_stack role, spec AI-009 AC9) ----
+  # Built on the node, so nothing in CI builds it: these PRs are the only
+  # signal that mcpo's `main` digest or the filesystem server moved. Runtime
+  # deps both, so "fix".
+  - package-ecosystem: "docker"
+    directory: "/infra/ansible/roles/agent_stack/files/mcp-bridge"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 2
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "fix"
+      include: "scope"
+  - package-ecosystem: "npm"
+    directory: "/infra/ansible/roles/agent_stack/files/mcp-bridge"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 2
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "fix"
+      include: "scope"
+
   # ---- GitHub Actions ----
   - package-ecosystem: "github-actions"
     directory: "/"

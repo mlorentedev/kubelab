@@ -25,6 +25,36 @@ services:
 {% for server in agent_stack_docker_dns_servers %}
       - {{ server }}
 {% endfor %}
+{% if agent_stack_mcp_bridge_configured | bool %}
+
+  # The vault, read-only, as an OpenAPI tool server (spec AI-009 AC9). No port:
+  # Open WebUI reaches it by service name on this project's network. It reads the
+  # root-owned mirror, never the agent's clone, and serves no write tool.
+  mcp-bridge:
+    build:
+      context: {{ agent_stack_mcp_bridge_dir }}
+    image: {{ agent_stack_mcp_bridge_image }}
+    # Built here: there is no registry that holds this tag.
+    pull_policy: never
+    container_name: mcp-bridge
+    restart: unless-stopped
+    env_file:
+      - {{ agent_stack_dir }}/mcp-bridge.env
+    environment:
+      MCP_BRIDGE_PORT: "{{ agent_stack_webui.mcp_bridge.container_port }}"
+    volumes:
+      - {{ agent_stack_vault_mirror }}/tree:/vault:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    user: "65534:65534"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: {{ agent_stack_webui.mcp_bridge.memory_limit }}
+    cpus: {{ agent_stack_webui.mcp_bridge.cpu_limit }}
+{% endif %}
 
 # Declared, not Compose's default: Hermes publishes its API on this bridge's
 # gateway, and ufw admits this subnet alone to it (spec AI-009 AC4).
