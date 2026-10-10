@@ -575,3 +575,16 @@ class TestWebAnalyticsIsAskedTwice:
 
     def test_without_a_second_try_the_first_answer_counts(self, digest: dict[str, Any]) -> None:
         assert digest["subject"] == "Venta · mié 7 oct — 14 visitas, 8 fichas, 1 mensaje"
+
+
+class TestSchedule:
+    """The README promises 08:00 America/Denver. The cron alone says 08:00 in the
+    instance's zone, and the n8n Deployment sets none, so a UI re-export that
+    drops `settings.timezone` would move the email to 02:00 Denver."""
+
+    def test_it_runs_daily_at_eight_in_denver(self) -> None:
+        doc = json.loads(WORKFLOW_PATH.read_text(encoding="utf-8"))
+        triggers = [n for n in doc["nodes"] if n["type"] == "n8n-nodes-base.scheduleTrigger"]
+        assert len(triggers) == 1
+        assert triggers[0]["parameters"]["rule"]["interval"] == [{"field": "cronExpression", "expression": "0 8 * * *"}]
+        assert doc["settings"]["timezone"] == "America/Denver"
