@@ -8,7 +8,8 @@ Contract under test (resolved against infra/n8n/workflows/README.md + repo SSOT)
   - The webhook entry point is `POST https://<n8n-domain>/webhook/notify`, body
     `{domain, severity, title, body, source}`.
   - Auth is n8n Header Auth: `Authorization: Bearer <webhook_secret>` (RFC 6750).
-    A POST WITHOUT the header is rejected (HTTP 403 — criterion #4).
+    A POST without the header, or with a wrong secret, is rejected (HTTP 403 —
+    criterion #4).
   - A 200 from the webhook means n8n routed the envelope and apprise accepted it.
 """
 
@@ -42,13 +43,17 @@ def _cm(secret: str | None = _SECRET, domain: str | None = _DOMAIN) -> MagicMock
 
 
 def _post(behavior) -> MagicMock:
-    """post(url, envelope, headers) -> status code, chosen by `behavior(has_auth)`."""
+    """post(url, envelope, headers) -> status code, chosen by `behavior(authorized)`.
+
+    `authorized` is True only for the exact `Bearer <secret>`, as n8n's Header Auth
+    compares the value, not the header's presence.
+    """
     calls: list[tuple] = []
 
     def post(url: str, envelope: dict, headers: dict) -> int:
-        has_auth = "Authorization" in headers
+        authorized = headers.get("Authorization") == f"Bearer {_SECRET}"
         calls.append((url, envelope, headers))
-        return behavior(has_auth)
+        return behavior(authorized)
 
     mock = MagicMock(side_effect=post)
     mock.calls = calls
@@ -88,35 +93,58 @@ def test_resolve_service_domain_raises_when_absent() -> None:
 
 
 def test_all_probes_pass_returns_true_and_uses_bearer() -> None:
-    post = _post(lambda has_auth: 200 if has_auth else 403)
+    post = _post(lambda authorized: 200 if authorized else 403)
     assert run_notify_smoke("staging", cm=_cm(), post=post) is True
-    # Three probes fired (page, log, unauthenticated reject)
-    assert len(post.calls) == 3
-    # Authenticated probes carry `Bearer <secret>`, targeting the webhook URL
-    auth_calls = [c for c in post.calls if "Authorization" in c[2]]
-    assert auth_calls and all(c[2]["Authorization"] == f"Bearer {_SECRET}" for c in auth_calls)
+    # Four probes fired: page, log, no header, wrong secret
+    assert len(post.calls) == 4
+    sent = [c[2].get("Authorization") for c in post.calls]
+    assert sent.count(f"Bearer {_SECRET}") == 2
+    assert None in sent
+    wrong = [a for a in sent if a not in (None, f"Bearer {_SECRET}")]
+    assert len(wrong) == 1 and wrong[0].startswith("Bearer ")
     assert all(c[0] == webhook_url(_DOMAIN) for c in post.calls)
+
+
+def test_a_webhook_that_only_checks_the_header_is_present_fails() -> None:
+    # Accepts any Authorization value: a wrong secret gets 200 -> criterion #4 fails.
+    def presence_only(url: str, envelope: dict, headers: dict) -> int:
+        return 200 if "Authorization" in headers else 403
+
+    assert run_notify_smoke("staging", cm=_cm(), post=presence_only) is False
+
+
+def test_the_wrong_secret_is_never_printed_and_never_the_real_one(capsys: pytest.CaptureFixture[str]) -> None:
+    post = _post(lambda authorized: 200 if authorized else 403)
+    run_notify_smoke("staging", cm=_cm(), post=post)
+    wrong = [
+        c[2]["Authorization"]
+        for c in post.calls
+        if c[2].get("Authorization", f"Bearer {_SECRET}") != f"Bearer {_SECRET}"
+    ]
+    assert wrong and _SECRET not in wrong[0]
+    out = capsys.readouterr()
+    assert wrong[0].removeprefix("Bearer ") not in out.out + out.err
 
 
 def test_auth_not_rejected_returns_false() -> None:
     # Webhook accepts even an unauthenticated POST (200) -> criterion #4 fails.
-    post = _post(lambda has_auth: 200)
+    post = _post(lambda authorized: 200)
     assert run_notify_smoke("staging", cm=_cm(), post=post) is False
 
 
 def test_delivery_failure_returns_false() -> None:
     # Authenticated POST gets a non-200 (n8n/apprise rejected) -> smoke fails.
-    post = _post(lambda has_auth: 500 if has_auth else 403)
+    post = _post(lambda authorized: 500 if authorized else 403)
     assert run_notify_smoke("staging", cm=_cm(), post=post) is False
 
 
 def test_missing_secret_fails_without_posting() -> None:
-    post = _post(lambda has_auth: 200)
+    post = _post(lambda authorized: 200)
     assert run_notify_smoke("staging", cm=_cm(secret=None), post=post) is False
     assert post.calls == []
 
 
 def test_missing_n8n_domain_fails_without_posting() -> None:
-    post = _post(lambda has_auth: 200)
+    post = _post(lambda authorized: 200)
     assert run_notify_smoke("staging", cm=_cm(domain=None), post=post) is False
     assert post.calls == []
