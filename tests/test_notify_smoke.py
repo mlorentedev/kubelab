@@ -148,3 +148,34 @@ def test_missing_n8n_domain_fails_without_posting() -> None:
     post = _post(lambda authorized: 200)
     assert run_notify_smoke("staging", cm=_cm(domain=None), post=post) is False
     assert post.calls == []
+
+
+# ── CLI ───────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("args", "expected"),
+    [
+        (["--env", "prod"], True),
+        (["--env", "staging"], False),
+        (["--env", "prod", "--no-verify-tls"], False),
+        (["--env", "staging", "--verify-tls"], True),
+    ],
+)
+def test_the_cli_verifies_tls_in_prod_unless_told_otherwise(args: list[str], expected: bool) -> None:
+    # Staging's webhook presents an untrusted cert (VPN-only); prod's is public ACME,
+    # so a default that skipped verification there would accept a broken cert silently.
+    from unittest.mock import patch
+
+    from typer.testing import CliRunner
+
+    from toolkit.cli.infra import app
+
+    with (
+        patch("toolkit.cli.infra.validate_environment_config"),
+        patch("toolkit.features.notify_smoke.run_notify_smoke", return_value=True) as smoke,
+    ):
+        result = CliRunner().invoke(app, ["n8n", "smoke", *args])
+
+    assert result.exit_code == 0, result.output
+    assert smoke.call_args.kwargs["verify_tls"] is expected
