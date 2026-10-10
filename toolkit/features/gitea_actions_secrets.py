@@ -31,6 +31,7 @@ the job can a secret be checked by consequence (#1626, design comment).
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from typing import Any, Callable, Collection, Iterable, Mapping, Protocol
 
@@ -187,6 +188,23 @@ class ActionsSecretsReport:
     failed: list[tuple[SecretTarget, str]] = field(default_factory=list)
 
 
+def _redact(text: str, value: str) -> str:
+    """Replace every encoding of `value` an error body is likely to carry.
+
+    A forge that echoes the value rarely echoes it verbatim: Gitea answers in JSON,
+    which escapes quotes, backslashes and newlines, and Go's encoder also writes
+    & < > as \\u0026 \\u003c \\u003e. A Python repr is the last likely form. This is a
+    floor, not a guarantee -- an encoding not listed here would still leak.
+    """
+    utf8 = json.dumps(value, ensure_ascii=False)[1:-1]
+    go = utf8.replace("&", "\\u0026").replace("<", "\\u003c").replace(">", "\\u003e")
+    forms = {value, json.dumps(value)[1:-1], utf8, go, repr(value)[1:-1]}
+    # Longest first, so a form containing a shorter one is replaced whole.
+    for form in sorted(forms, key=len, reverse=True):
+        text = text.replace(form, "<redacted>")
+    return text
+
+
 def execute_actions_secrets(
     plan: ActionsSecretsPlan,
     forge: SecretWriter,
@@ -212,7 +230,7 @@ def execute_actions_secrets(
             # Redacted at the source rather than trusted: the message is the forge's
             # own response text, and nothing guarantees an error body never echoes
             # the `data` it was sent. The report is printed; the value must not be.
-            report.failed.append((target, str(exc).replace(value, "<redacted>")))
+            report.failed.append((target, _redact(str(exc), value)))
             continue
         report.written.append(target)
     return report

@@ -18,6 +18,8 @@ itself cannot confirm any of them:
 
 from __future__ import annotations
 
+import json
+from collections.abc import Callable
 from typing import Any
 
 import pytest
@@ -458,8 +460,47 @@ def test_a_forge_error_that_echoes_the_value_is_redacted_in_the_report() -> None
     plan = plan_actions_secrets((target,), live={RESUME: set()}, valued={target.key_path})
     report = execute_actions_secrets(plan, _EchoingForge(), lambda _k: VALUE)
     assert [t for t, _ in report.failed] == [target]
-    assert VALUE not in repr(report)
-    assert "<redacted>" in report.failed[0][1]
+    # The message itself, not repr(report): repr escapes the string again, so a value
+    # with a quote or a newline would be absent from the repr even when it leaked.
+    message = report.failed[0][1]
+    assert VALUE not in message
+    assert "<redacted>" in message
+
+
+# A value carrying the characters an encoder rewrites. Go's encoding/json, which is
+# what Gitea answers with, also escapes & < > as \u0026 \u003c \u003e.
+_ESCAPABLE = 'line-one\n"quoted" & <tag> \\ caf\u00e9'
+
+
+@pytest.mark.parametrize(
+    "echo",
+    [
+        pytest.param(lambda v: v, id="verbatim"),
+        pytest.param(lambda v: json.dumps(v)[1:-1], id="json-ascii"),
+        pytest.param(lambda v: json.dumps(v, ensure_ascii=False)[1:-1], id="json-utf8"),
+        pytest.param(
+            lambda v: (
+                json.dumps(v, ensure_ascii=False)[1:-1]
+                .replace("&", "\\u0026")
+                .replace("<", "\\u003c")
+                .replace(">", "\\u003e")
+            ),
+            id="go-json",
+        ),
+        pytest.param(lambda v: repr(v)[1:-1], id="python-repr"),
+    ],
+)
+def test_a_forge_error_that_echoes_an_escaped_value_is_redacted(echo: Callable[[str], str]) -> None:
+    class _EscapingForge(_FakeForge):
+        def put_actions_secret(self, owner: str, repo: str, name: str, value: str) -> None:
+            raise RuntimeError(f'422 {{"message": "invalid data {echo(value)}"}}')
+
+    target = _t("gdrive_oauth_refresh_token")
+    plan = plan_actions_secrets((target,), live={RESUME: set()}, valued={target.key_path})
+    report = execute_actions_secrets(plan, _EscapingForge(), lambda _k: _ESCAPABLE)
+    message = report.failed[0][1]
+    assert echo(_ESCAPABLE) not in message
+    assert "<redacted>" in message
 
 
 def test_a_repository_the_forge_cannot_list_is_reported_not_a_crash(monkeypatch: pytest.MonkeyPatch) -> None:
