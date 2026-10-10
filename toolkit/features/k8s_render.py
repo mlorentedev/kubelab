@@ -147,16 +147,17 @@ def render_and_apply(
         logger.error(f"[{entry.name}] manifest not found: {manifest_path}")
         return False
 
-    text = manifest_path.read_text()
-    if entry.render:
-        try:
-            text = render_text(text, entry.render, resolver=resolver)
-        except RenderError as exc:
-            if entry.optional:
-                logger.warning(f"[{entry.name}] skipped (optional): {exc}")
-                return True
-            logger.error(f"[{entry.name}] render failed: {exc}")
-            return False
+    # Rendered even with no `render:` map: an empty map makes any placeholder left
+    # in the manifest an unmapped one, so a forgotten map fails closed instead of
+    # handing kubectl the literal `RESOLVE_*` string.
+    try:
+        text = render_text(manifest_path.read_text(), entry.render, resolver=resolver)
+    except RenderError as exc:
+        if entry.optional:
+            logger.warning(f"[{entry.name}] skipped (optional): {exc}")
+            return True
+        logger.error(f"[{entry.name}] render failed: {exc}")
+        return False
 
     # Always client-validate first; only apply if validation passes.
     if not _kubectl_apply(text, kubeconfig, entry.name, dry_run=True, runner=runner):

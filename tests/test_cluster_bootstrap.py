@@ -64,3 +64,36 @@ def test_a_bootstrap_manifest_is_never_a_kustomize_resource(entry: BootstrapEntr
         if r == manifest or (r.is_dir() and not (r / "kustomization.yaml").exists() and manifest.is_relative_to(r))
     ]
     assert not hits, f"{entry.name} is applied by cluster_bootstrap and must not be a Kustomize resource: {hits}"
+
+
+@pytest.mark.parametrize("dry_run", [False, True])
+def test_the_loop_applies_every_entry_in_declared_order(monkeypatch: pytest.MonkeyPatch, dry_run: bool) -> None:
+    """`k8s deploy`, `k8s dry-run` and `k8s bootstrap` all run this loop over the SSOT."""
+    from toolkit.cli import infra
+
+    seen: list[tuple[str, bool]] = []
+
+    def _record(entry: BootstrapEntry, **kwargs: object) -> bool:
+        seen.append((entry.name, bool(kwargs["dry_run"])))
+        return True
+
+    monkeypatch.setattr(infra, "render_and_apply", _record)
+    assert infra._apply_cluster_bootstrap("/kc", dry_run=dry_run) is True
+    assert seen == [(e.name, dry_run) for e in _load_cluster_bootstrap()]
+
+
+def test_the_loop_stops_at_the_first_hard_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A later entry may depend on an earlier one (a CRD before its objects), so nothing after a failure runs."""
+    from toolkit.cli import infra
+
+    entries = [e.name for e in _load_cluster_bootstrap()]
+    assert len(entries) >= 2, "the fail-fast check needs an entry after the failing one"
+    seen: list[str] = []
+
+    def _fail_first(entry: BootstrapEntry, **_kwargs: object) -> bool:
+        seen.append(entry.name)
+        return entry.name != entries[0]
+
+    monkeypatch.setattr(infra, "render_and_apply", _fail_first)
+    assert infra._apply_cluster_bootstrap("/kc", dry_run=False) is False
+    assert seen == entries[:1]

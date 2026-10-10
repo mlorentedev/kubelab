@@ -1143,8 +1143,9 @@ def k8s_dry_run(
         logger.error(f"Overlay directory not found: {overlay_dir}")
         raise typer.Exit(1)
 
-    # Dry-run the cluster-wide bootstrap layer (ADR-047 / TOOL-009). Server-side
-    # dry-run validates each rendered manifest against the live API.
+    # Dry-run the cluster-wide bootstrap layer (ADR-047 / TOOL-009). Each manifest is
+    # rendered and then validated client-side: a server dry-run cannot validate an
+    # object whose namespace the same manifest creates (see `_kubectl_apply`).
     if not _apply_cluster_bootstrap(kubeconfig, dry_run=True):
         raise typer.Exit(1)
 
