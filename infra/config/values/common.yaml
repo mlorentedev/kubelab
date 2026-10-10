@@ -2033,6 +2033,19 @@ apps:
         models:
           default: deepseek-v4-flash
           unmetered: qwen3.6
+        # The Slack gateway (spec AI-009 PR 3c), Socket Mode with the two tokens
+        # in prod's vault. Member and channel IDs are plaintext, not secrets.
+        slack:
+          # The only Slack users the agent obeys: Hermes denies everyone else, and
+          # with this list empty the role starts no Slack at all, because Hermes
+          # would fall back to pairing codes (state, not IaC).
+          allowed_users:
+            - U087ZDNQVRT # the operator
+          # Where scheduled jobs deliver, and the only channel it answers in; a
+          # 1:1 DM from an allowed user is always answered.
+          home_channel:
+            id: C0BSWLG4M6C
+            name: agent-fleet
 
 # =============================================================================
 # Backup sources — the SSOT allow-list (BACKUP-044, #1092 AC3)

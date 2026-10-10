@@ -51,6 +51,16 @@ approvals:
 {% endfor %}
 {% endfor %}
 
+# A DM from anyone the allowlist does not name is dropped. The default answers
+# it with a pairing code, and an approved code is a grant held in the gateway's
+# state, outside this file.
+unauthorized_dm_behavior: "ignore"
+
+slack:
+  unauthorized_dm_behavior: "ignore"
+  # In the home channel, a top-level message must @mention the bot.
+  require_mention: true
+
 cron:
   # Jobs missed while ace2 was off run once at power-on (ADR-068 D2).
   catch_up_missed: true

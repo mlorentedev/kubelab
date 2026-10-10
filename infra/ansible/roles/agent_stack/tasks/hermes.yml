@@ -273,6 +273,22 @@
       delay: 5
       no_log: true
 
+    # Socket Mode connects whether or not the bot is in the home channel, so this
+    # proves the tokens and the connection, not delivery (see the runbook).
+    - name: Verify the gateway is connected to Slack
+      ansible.builtin.uri:
+        url: "http://{{ _agent_stack_hermes_bind }}:{{ agent_stack_hermes.api_port }}/health/detailed"
+        headers:
+          Authorization: "Bearer {{ _agent_stack_hermes_api_key }}"
+        status_code: 200
+        timeout: 10
+      register: _agent_stack_hermes_health
+      until: ((_agent_stack_hermes_health.json | default({})).get('platforms', {}).get('slack', {})).get('state') == 'connected'
+      retries: 24
+      delay: 5
+      when: agent_stack_slack_configured | bool
+      no_log: true
+
     # Read from the sidecar itself: the tag is what the ACL matches, and a node
     # that registered without it would be matched by nothing, or by a user rule.
     # Open WebUI reaches the API at this host's address on its own bridge (spec

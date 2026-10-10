@@ -300,6 +300,10 @@
         # only by the sync unit, through systemd's credential, never by the
         # agent. Empty means no clone and no mount.
         agent_stack_vault_token: "{{ gitea_secrets.apps.services.ai.hermes_kubelab.github_token | default('') }}"
+        # The Slack gateway's two tokens (AI-009 R2), from prod's vault. Either
+        # missing, or no allowlist in the SSOT, means no Slack.
+        agent_stack_slack_bot_token: "{{ gitea_secrets.apps.services.ai.hermes_kubelab.slack_bot_token | default('') }}"
+        agent_stack_slack_app_token: "{{ gitea_secrets.apps.services.ai.hermes_kubelab.slack_app_token | default('') }}"
         # What the agent must fail to read (ADR-058 D3, spec AC2): the dev
         # user's credentials, and the system daemon's socket, which is root.
         agent_stack_dev_home: "/home/{{ config.networking.ssh_users.homelab }}"
