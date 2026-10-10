@@ -9,7 +9,7 @@
   {
     "id": "AI-009-hermes-ace2-f2",
     "behavior": "hermes-kubelab has no sudo, cannot read the dev user's credentials, and drives a rootless socket (AC2)",
-    "verification": "poetry run pytest --no-cov -q tests/test_agent_stack_role.py -k 'rootless or sudo'",
+    "verification": "poetry run pytest --no-cov -q tests/test_agent_user_role.py",
     "state": "pending",
     "evidence": ""
   },
@@ -22,15 +22,15 @@
   },
   {
     "id": "AI-009-hermes-ace2-f4",
-    "behavior": "Open WebUI is bound to the Tailscale address only and has a valid OIDC client (AC4)",
-    "verification": "poetry run pytest --no-cov -q tests/test_agent_stack_role.py -k tailscale_bind && poetry run pytest --no-cov -q tests/test_oidc_clients.py",
+    "behavior": "Open WebUI listens on the tailnet, is public only through prod Traefik with Authelia OIDC tiers, and reaches Hermes on its own bridge (AC4, as amended 2026-10-08)",
+    "verification": "poetry run pytest --no-cov -q tests/test_agent_stack_role.py::test_the_port_is_published_on_the_tailscale_address_only tests/test_agent_stack_role.py::test_tiers_come_from_authelia_groups_and_anyone_else_is_refused tests/test_open_webui_public_route.py tests/test_hermes_webui_backend.py tests/test_oidc_clients.py",
     "state": "pending",
     "evidence": ""
   },
   {
     "id": "AI-009-hermes-ace2-f5",
     "behavior": "The policy grants tag:hermes nothing on ace2 and no :22, :6443 or vps:8080 (AC5, static half). It passes on master today and guards a regression; the live half, the distinct hermes-kubelab node in headscale nodes list, is PR 3's recorded measurement",
-    "verification": "poetry run pytest --no-cov -q tests/test_agent_stack_role.py -k hermes_policy",
+    "verification": "poetry run pytest --no-cov -q tests/test_headscale_role.py -k hermes",
     "state": "pending",
     "evidence": ""
   },
@@ -44,28 +44,28 @@
   {
     "id": "AI-009-hermes-ace2-f7",
     "behavior": "ace2's backup snapshot lists the Hermes state and the Open WebUI database (AC7)",
-    "verification": "poetry run pytest --no-cov -q tests/test_node_backup_role.py -k ace2",
+    "verification": "poetry run pytest --no-cov -q tests/test_ace2_backup_sources.py",
     "state": "pending",
     "evidence": ""
   },
   {
     "id": "AI-009-hermes-ace2-f8",
     "behavior": "Every agent_stack service has a memory limit of at most 1.5 GB (AC8)",
-    "verification": "poetry run pytest --no-cov -q tests/test_agent_stack_role.py -k memory_limit",
+    "verification": "poetry run pytest --no-cov -q tests/test_agent_stack_role.py -k memory_bounded",
     "state": "pending",
     "evidence": ""
   },
   {
     "id": "AI-009-hermes-ace2-f9",
-    "behavior": "Open WebUI embeds and reranks through NaN and the bridge mounts the vault read-only (AC9)",
-    "verification": "poetry run pytest --no-cov -q tests/test_open_webui_rag.py tests/test_agent_stack_role.py -k 'rag or bridge'",
+    "behavior": "Open WebUI embeds and reranks through NaN, and the bridge serves the root-owned vault mirror read-only (AC9)",
+    "verification": "poetry run pytest --no-cov -q tests/test_open_webui_rag.py tests/test_agent_stack_vault_mirror.py tests/test_agent_stack_mcp_bridge.py",
     "state": "pending",
     "evidence": ""
   },
   {
     "id": "AI-009-hermes-ace2-f10",
-    "behavior": "Every stack credential is a SECRET_CATALOG entry and rendered env files are 0600 (AC10)",
-    "verification": "poetry run pytest --no-cov -q tests/test_agent_stack_role.py -k env_mode",
+    "behavior": "Every credential reaches its service through a 0600 env file that is never logged and never reaches a Compose file or the agent's container, Slack's included (AC10)",
+    "verification": "poetry run pytest --no-cov -q tests/test_agent_stack_role.py::test_the_env_file_is_private_and_never_logged tests/test_agent_stack_role.py::test_no_secret_reaches_the_compose_file tests/test_hermes_config.py::test_the_env_file_is_private_never_logged_and_outside_the_container tests/test_hermes_slack.py",
     "state": "pending",
     "evidence": ""
   },
