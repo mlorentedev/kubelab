@@ -21,7 +21,7 @@ created: "2026-05-29"
 
 **One deliberate deviation from §1's wording.** §1 says rendering "computes each client's argon2 hash from the SOPS plaintext inline". argon2 is salted, so recomputing on every render yields a new digest each time, every render becomes a diff, and a drift gate can never be green. The generator therefore reads the digest already **stored** in SOPS (`oidc_client_secret_<id>_hash`, produced when the secret is minted). §1's intent holds: one pass, one writer, and no path-drift class. Minting the stored digest from the client list, rather than from a hardcoded sequence, is #1777.
 
-**Amended, not superseded**: §2 (consumer-side verification) and §3 (rotation) are unchanged. See `specs/SSOT-017-oidc-client-ssot/`.
+**Amended, not superseded**: §2 (consumer-side verification) and §3 (rotation) are unchanged. See `specs/archive/SSOT-017-oidc-client-ssot/`.
 
 ## Status
 
