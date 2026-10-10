@@ -133,10 +133,13 @@ class _Cm:
 class _Kubectl:
     """Records every exec'd import: its kind, and the JSON piped on stdin."""
 
-    def __init__(self, fail_kind: str | None = None) -> None:
+    def __init__(self, fail_kind: str | None = None, echo: bool = False) -> None:
         self.calls: list[list[str]] = []
         self.imports: list[tuple[str, Any]] = []
         self.fail_kind = fail_kind
+        # The real fake returns empty stdout, so it cannot see a CLI that repeats
+        # its input. `echo` makes every exec answer with the payload it was fed.
+        self.echo = echo
 
     def __call__(self, cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
         self.calls.append(cmd)
@@ -149,9 +152,11 @@ class _Kubectl:
         if cmd[1] == "exec" and "sh" in cmd:
             script = cmd[-1]
             kind = "credentials" if "import:credentials" in script else "workflow"
+            fed = kwargs["input"] if self.echo else ""
             if kind == self.fail_kind:
-                raise subprocess.CalledProcessError(1, cmd, stderr="import failed")
+                raise subprocess.CalledProcessError(1, cmd, stderr=f"import failed: {fed}")
             self.imports.append((kind, json.loads(kwargs["input"])))
+            return subprocess.CompletedProcess(cmd, 0, stdout=fed, stderr="")
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
     def credentials(self) -> list[dict[str, Any]]:
@@ -366,6 +371,27 @@ class TestProdRun:
             assert sentinel not in out
         assert "RESOLVE_SALE_DIGEST_TO" in out, "the log should still name what it resolved"
 
+    @pytest.mark.parametrize("fail_kind", [None, "credentials", "workflow"], ids=["success", "fails-cred", "fails-wf"])
+    def test_a_cli_that_repeats_its_input_does_not_put_a_secret_on_the_terminal(
+        self, fail_kind: str | None, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """The payload travels on stdin, and the importer logs what the pod prints:
+        stdout on success, stderr on failure. A CLI that echoes its input would carry
+        every secret in the payload to the terminal through either one."""
+        _run(kubectl=_Kubectl(fail_kind=fail_kind, echo=True), monkeypatch=monkeypatch)
+        out = capsys.readouterr().out
+        for sentinel in SENTINELS:
+            assert sentinel not in out
+
+
+    def test_a_short_credential_secret_is_masked_too(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Short strings are spared elsewhere, so a 4-character password must not be."""
+        short = "Zq9w"
+        vault = _deep_update(_vault(), {"infra": {"smtp": {"pass": short}}})
+        _run(vault=vault, kubectl=_Kubectl(fail_kind="credentials", echo=True), monkeypatch=monkeypatch)
+        assert short not in capsys.readouterr().out
 
 class TestFailsClosed:
     @pytest.mark.parametrize("name", ["token", "recipient", "site_tag"])

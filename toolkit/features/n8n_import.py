@@ -720,15 +720,55 @@ def _restart_n8n(env: str, spec: N8nImportSpec) -> bool:
 
 
 def _run(cmd: list[str], stdin: str | None = None, label: str | None = None) -> bool:
-    """Run a kubectl command; return True on success, log stderr on failure."""
+    """Run a kubectl command; return True on success, log stderr on failure.
+
+    What the pod prints is masked against `stdin` first: an import's stdin is a
+    payload carrying SOPS values, and a CLI that repeats its input would otherwise
+    put them on the terminal through either stream.
+    """
     try:
         result = subprocess.run(cmd, input=stdin, capture_output=True, text=True, check=True)
         if result.stdout.strip():
-            logger.info(f"  {result.stdout.strip()}")
+            logger.info(f"  {_mask_payload(result.stdout.strip(), stdin)}")
         return True
     except subprocess.CalledProcessError as exc:
-        logger.error(f"  {label or ' '.join(cmd[:6])} … failed: {(exc.stderr or str(exc)).strip()}")
+        detail = _mask_payload((exc.stderr or str(exc)).strip(), stdin)
+        logger.error(f"  {label or ' '.join(cmd[:6])} … failed: {detail}")
         return False
+
+
+_MASK_MIN_LEN = 6
+
+
+def _mask_payload(text: str, stdin: str | None) -> str:
+    """`text` with the string values of the JSON in `stdin` replaced by a marker.
+
+    Under a `data` key, where a credential carries its secrets, every value is
+    masked whatever its length. Elsewhere values under `_MASK_MIN_LEN` characters
+    are left alone: a workflow carries short strings ("main", "=") that would
+    shred the message if masked. The mask is a floor, not a guarantee: a message
+    that quotes only a fragment of a value is not matched.
+    """
+    if not stdin:
+        return text
+    try:
+        payload = json.loads(stdin)
+    except ValueError:
+        return text.replace(stdin, "[payload]")
+    values: list[str] = []
+    stack: list[tuple[Any, bool]] = [(payload, False)]
+    while stack:
+        node, secret = stack.pop()
+        if isinstance(node, dict):
+            stack.extend((v, secret or k == "data") for k, v in node.items())
+        elif isinstance(node, list):
+            stack.extend((v, secret) for v in node)
+        elif isinstance(node, str) and node and (secret or len(node) >= _MASK_MIN_LEN):
+            # Echoed raw, a value appears JSON-escaped (a query with quotes or newlines).
+            values += [node, json.dumps(node)[1:-1]]
+    for value in sorted(values, key=len, reverse=True):
+        text = text.replace(value, "[redacted]")
+    return text
 
 
 def _wait_rollout_ready(env: str, spec: _Target, timeout: str = "60s") -> bool:

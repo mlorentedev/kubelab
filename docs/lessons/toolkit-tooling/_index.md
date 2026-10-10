@@ -1,9 +1,10 @@
 # The toolkit CLI, Make, Python and local tooling
 
-48 lessons, newest first. Back to [all categories](../_index.md).
+49 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 545 | [A fake that answers nothing cannot test what the code prints of the answer](lesson-545-a-fake-that-answers-nothing-cannot-test-what-the-code-prints-of-the-answer.md) | 2026-10-10 |
 | 544 | [Gitea's `empty` flag is written at push time and never re-read from git](lesson-544-giteas-empty-flag-is-written-at-push-time-and-never-re-read-from-git.md) | 2026-10-09 |
 | 541 | [A reconciler that tests presence reads an unfilled migration as converged](lesson-541-a-reconciler-that-tests-presence-reads-an-unfilled-migration-as-converged.md) | 2026-10-08 |
 | 537 | [Keeping both sides of a conflict also keeps both copies of a line that must exist once](lesson-537-keeping-both-sides-of-a-conflict-also-keeps-both-copies-of-a-line-that-must-exist-once.md) | 2026-10-07 |
