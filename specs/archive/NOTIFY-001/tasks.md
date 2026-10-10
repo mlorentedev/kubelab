@@ -11,7 +11,7 @@ created: "2026-06-14"
 
 - [x] Branch created: `feat/notification-routing-fabric`
 - [x] De-risking checks resolved (Hermes script-curl; n8n route has no Authelia)
-- [ ] `proposal.md` reviewed; **resolve the OPEN webhook-authn item (shared secret) before exposing**
+- [x] `proposal.md` reviewed; **resolve the OPEN webhook-authn item (shared secret) before exposing** — resolved by n8n Header Auth (`notify-webhook` credential from SOPS); a missing and a wrong secret both get 403 (`make notify-smoke`, 2026-10-10). ✓ 2026-10-10
 
 ## Implementation
 
@@ -33,11 +33,17 @@ created: "2026-06-14"
 - [x] **Routing table** — in-workflow Code map ✓ 2026-06-14: `severity` → `{tag,type}` (page→page/failure,
       log→log/info, notice→log until phase-2 digest #95, unknown→fail-safe log). Full `{domain,severity}`
       multi-domain table deferred to phase 3 (per the source audit; see NOTIFY-005..007).
-- [ ] **hermes-nan migration** — edit `watchdog`/`backup-fail` scripts (vault `00_meta/agents/scripts/`)
-      to `curl` the envelope; set their cron `--deliver local`; deploy via the apply loop (NOT by hand)
-- [ ] **Smoke** — force watchdog-down + backup-fail → confirm each lands in the right Telegram channel
+- [x] ~~**hermes-nan migration**~~ — superseded, not done. hermes-nan was retired (AI-009 `proposal.md`, ADR-068),
+      so there is no script to migrate. `backup-fail` has a successor through the fabric: `node_backup`'s
+      `OnFailure=kubelab-notify@%n.service` → prod `/webhook/notify` (ANSIBLE-035). `watchdog-down` has none:
+      kubelab#2175 (AI-013). ✓ 2026-10-10
+- [x] **Smoke** — backup-fail: rpi4's `node-backup-capture` timeout on 2026-10-07 reached Slack through the
+      fleet path (`verification.md`, criterion #3). watchdog-down: no successor, kubelab#2175. Channel moved
+      from Telegram to Slack (ADR-044, NOTIFY-002 addendum). ✓ 2026-10-10
 
 ## Checkpoint — 2026-06-14 (mid criterion #2, UNCOMMITTED, NOT deployed)
+
+> Historical. Superseded by the closure on 2026-10-10; kept as the record of how the work ran.
 
 > Resume here. IaC for Option B is scaffolded but not committed/applied; the n8n workflow
 > and the SOPS values are not done yet. Nothing is half-written — render is clean
@@ -72,6 +78,8 @@ hand-author + import, no `$env` needed; real multi-branch Switch arrives with ph
 
 ## Checkpoint 2 — 2026-06-14 (committed + rebased + workflow authored)
 
+> Historical. Superseded by the closure on 2026-10-10; kept as the record of how the work ran.
+
 > Resume here. The WIP from Checkpoint 1 is now **committed** and the branch is **rebased
 > onto master** (was 12 behind, now 0). The n8n workflow is authored + validated in the repo.
 > Everything remaining is **operator-gated** (Telegram channels, n8n UI, staging deploy).
@@ -101,7 +109,7 @@ hand-author + import, no `$env` needed; real multi-branch Switch arrives with ph
 
 ## Closing
 
-- [ ] All acceptance criteria green on staging
-- [ ] `verification.md` filled with evidence (curl output, n8n execution logs, Telegram screenshots)
-- [ ] Defer-list held: no NOTICE digest, no prod promotion, no other sources crept in
-- [ ] PR opened (kubelab) + hermes change committed to vault; NOTIFY-001 ticked on the bitácora board
+- [x] All acceptance criteria green on staging — #1, #2, #4 measured 2026-10-10; #3 dispositioned (half met by the fleet path, half kubelab#2175). ✓ 2026-10-10
+- [x] `verification.md` filled with evidence (smoke output, operator confirmation in Slack) ✓ 2026-10-10
+- [x] Defer-list held: no NOTICE digest, no prod promotion, no other sources crept in. (Prod promotion and the Slack egress came later, under NOTIFY-002 and their own changes.) ✓ 2026-10-10
+- [x] PR opened (kubelab); no hermes change, hermes-nan is retired; knowledge#90 is closed ✓ 2026-10-10

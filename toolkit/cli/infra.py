@@ -631,19 +631,19 @@ def n8n_import(
 def n8n_smoke(
     env: Annotated[str, typer.Option("--env", "-e", help="Target environment")],
     verify_tls: Annotated[
-        bool,
+        bool | None,
         typer.Option(
             "--verify-tls/--no-verify-tls",
-            help="Verify the webhook TLS cert (off by default: staging is VPN-only, self-signed)",
+            help="Verify the webhook TLS cert (default: on in prod, off in staging, which is VPN-only)",
         ),
-    ] = False,
+    ] = None,
 ) -> None:
     """Smoke-test the notification fabric end to end (NOTIFY-001).
 
     POSTs page + log envelopes to the real n8n webhook with the Bearer secret from
-    SOPS and asserts each is accepted (HTTP 200), plus that an unauthenticated POST
-    is rejected (HTTP 403). A 200 means n8n routed it and apprise accepted delivery
-    — confirm the messages landed in Telegram. Staging-only today.
+    SOPS and asserts each is accepted (HTTP 200), plus that a POST with no secret
+    and one with a wrong secret are rejected (HTTP 403). A 200 means n8n routed it
+    and apprise accepted delivery — confirm the messages landed in Slack.
     """
     if env == "dev":
         logger.info("Dev environment uses Docker Compose, not K8s")
@@ -653,7 +653,7 @@ def n8n_smoke(
 
     from toolkit.features.notify_smoke import run_notify_smoke
 
-    if not run_notify_smoke(env, settings.project_root, verify_tls=verify_tls):
+    if not run_notify_smoke(env, settings.project_root, verify_tls=env == "prod" if verify_tls is None else verify_tls):
         raise typer.Exit(1)
 
 

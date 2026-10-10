@@ -1,9 +1,10 @@
 # Identity, auth and secret material
 
-76 lessons, newest first. Back to [all categories](../_index.md).
+77 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 550 | [An auth smoke that only omits the credential cannot tell a value check from a presence check](lesson-550-an-auth-smoke-that-only-omits-the-credential-cannot-tell-a-value-check-from-a-presence-check.md) | 2026-10-10 |
 | 549 | [A chat approval can widen what the config allows, until the gateway restarts](lesson-549-a-chat-approval-can-widen-what-the-config-allows-until-the-gateway-restarts.md) | 2026-10-10 |
 | 532 | [A wildcard CORS origin with credentials echoes every origin, and `.internal` is one site](lesson-532-a-wildcard-cors-origin-with-credentials-echoes-every-origin-and-internal-is-one-site.md) | 2026-10-07 |
 | 520 | [Open WebUI's `ENABLE_LOGIN_FORM=false` hides the form; the password endpoint stays open](lesson-520-open-webui-login-form-flag-hides-the-form-only.md) | 2026-10-03 |
