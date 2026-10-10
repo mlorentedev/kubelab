@@ -60,7 +60,7 @@ created: "2026-09-22"
 - [x] CLAUDE.md gotchas that name `sync-oidc-hashes` as the writer of `configuration.yml` are updated. So is the "rotating is not landing" note: the command now writes `oidc-clients.yml`. ✓ 2026-09-22
 - [x] File a ticket: the Argo CD Helm values hardcode `argo.kubelab.live` instead of reading `argocd.domain` (R6). Filed as #1782 (SSOT-027), widened to every consumer-side literal `client_id`. ✓ 2026-09-22
 - [x] Every acceptance criterion is covered by at least one test or recorded measurement, with a matching `features.json` entry. AC5's prod half is ticketed (#2154). ✓ 2026-10-10
-- [x] `make test` green, lint green, no unrelated changes in the diff. 4453 passed on master `1488e3a5`. ✓ 2026-10-10
+- [x] `make test` green, lint green, no unrelated changes in the diff. 4471 passed on the archive branch at `7ba1170f`, with the review's fixes. ✓ 2026-10-10
 - [x] `verification.md` filled in. ✓ 2026-10-10
 - [x] PR #1780 merges with **`Refs #1332`, never `Closes`**. The spec gate refuses a PR that closes a spec's issue without archiving it, and archiving needs AC5-prod, which can only be measured after merge, because Argo CD syncs prod from master. Record the `--force-no-gate` scaffold and the reason. Merged as `c4976141` with `Refs #1332`. #1332 was closed later anyway, before the prod evidence existed, which is why the archive PR cannot carry `Closes #1332`. ✓ 2026-10-10
 - [x] Follow-up docs PR after the prod logins: prod AC5 evidence, then the adversarial review (`review.md`), then `/spec archive`. It carries `Closes #1332`. Done as the #2034 archive PR (#2182), which carries `Refs #1332` instead: #1332 was closed on 2026-09-23, before the prod evidence existed. The prod logins that are not recorded are #2154. ✓ 2026-10-10

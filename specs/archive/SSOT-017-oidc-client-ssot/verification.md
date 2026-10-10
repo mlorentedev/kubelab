@@ -81,7 +81,7 @@ The remaining errors (`jwt_secret`, `/config/assets`) are secrets and assets tha
 
 The review's last recommendation, the prod logins of AC5, is #2154 (Evidence table above).
 
-`tasks.md` was corrected after the review, on 2026-10-10. The closing item for the follow-up docs PR said that PR carries `Closes #1332`, and it carries `Refs #1332`, as PR-Agent found on #2182. Only that annotation changed, and no task definition did. The review's digest predates the correction.
+`tasks.md` was corrected after the review, on 2026-10-10, in two annotations PR-Agent found on #2182. The closing item for the follow-up docs PR said that PR carries `Closes #1332`, and it carries `Refs #1332`. The `make test` item cited the master run, which does not contain this PR's fixes, and now cites the branch run. No task definition changed. The review's digest predates the correction.
 
 ## Promotion candidates
 
