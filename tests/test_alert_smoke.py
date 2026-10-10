@@ -12,8 +12,6 @@ from __future__ import annotations
 import json
 import subprocess
 
-import pytest
-
 from toolkit.features import alert_smoke as smoke
 
 #: A real Traefik failure line, verbatim from prod on 2026-08-09, ANSI intact.
