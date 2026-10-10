@@ -67,7 +67,7 @@ All tests are in `tests/test_gitea_actions_secrets.py`.
 
 ## Adversarial review findings
 
-`review.md` (2026-10-10, FAIL on one Blocker). Each finding's disposition:
+`review-round1.md` (2026-10-10, FAIL on one Blocker). Each finding's disposition:
 
 | # | Finding | Disposition |
 |---|---|---|
