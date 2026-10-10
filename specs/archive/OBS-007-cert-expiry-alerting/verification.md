@@ -90,6 +90,14 @@ PR review (CodeRabbit on #2196, after the archive):
 | Trivial: the root-URL test only checked that staging and prod differ, so two wrong but different URLs would pass. | **Applied, derived rather than typed.** Each environment's `GF_SERVER_ROOT_URL` must be `https://` plus a host its rendered `grafana` IngressRoute serves. | `test_the_external_url_is_the_host_grafana_is_served_on`, red against `make mutate` pointing prod's root URL at another host, which the old inequality test passes. |
 | Two wording fixes in lesson-554: bound the master-history claim, and give the dry run as an invocable command. | **Applied.** | lesson-554. |
 
+PR review (PR-Agent on #2196, 2026-10-10T15:03Z):
+
+| Finding | Disposition | Evidence |
+|---|---|---|
+| REAL: `assert not result.ok` in the missing-domain test was vacuous. The harness never reported a delivery, so `ok` was false whatever `named_domain` said. | **Applied.** Each Apprise read in the harness now reports one more delivery, the positive case asserts `ok`, and the negative case fails on the domain alone. | `make mutate` dropping `self.named_domain` from `ok`: RED. |
+| THEORETICAL: the resolve poll took any state other than `firing` as cleared, so an unreadable answer during the wait would pass the stage. It fails open. | **Applied.** Cleared means Grafana reads the rule `inactive`, the state the baseline reports. | `test_an_unreadable_state_after_firing_is_not_a_cleared_rule`, red before the fix and against `make mutate` restoring `!= "firing"`. A fourth `make alert-smoke ENV=staging` on 2026-10-10 passed all five stages. |
+| THEORETICAL: the `features.json` bullet in `tasks.md` contradicts itself on f4 and f5. | **Declined.** The bullet states the current answer first and then marks the rest as "the 2026-08-10 note". It is the history of an archived contract, which is edited only for factual corrections. | `tasks.md`, closing section. |
+
 Side effect: `rules.yaml` feeds the hashed `grafana-alerting` ConfigMap, so the comment-only change rolls Grafana in both environments on merge.
 
 ## Promotion candidates
