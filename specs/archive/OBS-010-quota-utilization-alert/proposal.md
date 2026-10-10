@@ -1,7 +1,7 @@
 ---
 id: "OBS-010-quota-utilization-alert"
 type: spec
-status: verifying # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-08-14"
 issue: "kubelab#918"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
@@ -58,3 +58,5 @@ Three observable changes:
 - Bitácora board: **kubelab#918** (see the `issue:` frontmatter field)
 - **kubelab#811 (IDP-031)** — the ResourceQuota this spec alerts on. Live in prod, verified 2026-08-14 (see IDP-031 verification.md).
 - **kubelab#799 (OBS-007)** — the alerting delivery path (Grafana contact points, notification policies, Apprise tiers) this spec reuses rather than rebuilds.
+
+<!-- archived 2026-10-10 — PR: https://github.com/mlorentedev/kubelab/pull/2164 -->

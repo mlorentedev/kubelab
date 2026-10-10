@@ -368,6 +368,9 @@ class TestKubeSystemGovernance:
     def test_no_unbounded_containers_after_restart(self, require_vpn: None, require_kubeconfig: None, env: str) -> None:
         """Every Running kube-system container carries a memory limit, and none are BestEffort.
 
+        initContainers count too: the LimitRange defaults them as well, and AC3
+        says zero containers.
+
         Only covers currently-`Running` pods: completed `helm-install-*` Job pods
         predate the LimitRange and are terminal, not steady-state — they are not
         the failure mode this spec addresses and will not be recreated unless a
@@ -387,7 +390,7 @@ class TestKubeSystemGovernance:
         unbounded = [
             f"{p['metadata']['name']}/{c['name']}"
             for p in running
-            for c in p["spec"].get("containers", [])
+            for c in p["spec"].get("containers", []) + p["spec"].get("initContainers", [])
             if "memory" not in c.get("resources", {}).get("limits", {})
         ]
         assert not unbounded, f"Running kube-system containers with no memory limit: {unbounded}"

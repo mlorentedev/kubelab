@@ -1,7 +1,7 @@
 ---
 id: "OBS-009-kube-system-limitrange"
 type: spec
-status: verifying # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-08-13"
 issue: "kubelab#924"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
@@ -61,3 +61,5 @@ Three observable changes:
 - `k3s-io/k3s` `pkg/cloudprovider/servicelb.go` — source-verified 2026-08-13: no `Resources` field on the generated `svclb` DaemonSet container spec, no annotation covers it.
 - `infra/ansible/roles/k3s_server/templates/traefik-helmconfig.yaml.j2` — the SSOT home for Traefik's own explicit `resources`, out of scope here, tracked as **kubelab#1052 (OBS-011)**.
 - ADR-047 / TOOL-009 — the `cluster_bootstrap` SSOT this spec's manifest is applied through.
+
+<!-- archived 2026-10-10 — PR: https://github.com/mlorentedev/kubelab/pull/2164 -->
