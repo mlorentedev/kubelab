@@ -90,7 +90,7 @@ Before archiving, flag what (if anything) should be promoted to the vault. If al
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/SSOT-017-oidc-client-ssot/` -> `specs/archive/SSOT-017-oidc-client-ssot/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/SSOT-017-oidc-client-ssot/` -> `specs/archive/SSOT-017-oidc-client-ssot/`
 - [x] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018): #1332 closed 2026-09-23; the open prod half is #2154.
 - [x] Promotions above executed (if any)
