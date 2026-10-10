@@ -160,6 +160,10 @@ def firing_domains(rules_json: str, title: str = RULE_TITLE) -> set[str]:
 
     The payload template prints `.Labels.domain`, so this is the domain the
     recipient reads, taken from Grafana rather than from the Telegram message.
+
+    The rule's own state is `firing` when ANY instance fires, so each instance
+    is filtered on its own state. Grafana reports it as `Alerting`, followed by
+    a reason in parentheses when there is one.
     """
     import json
 
@@ -173,7 +177,7 @@ def firing_domains(rules_json: str, title: str = RULE_TITLE) -> set[str]:
         for rule in group.get("rules", [])
         if rule.get("name") == title
         for alert in rule.get("alerts") or []
-        if (alert.get("labels") or {}).get("domain")
+        if str(alert.get("state", "")).startswith("Alerting") and (alert.get("labels") or {}).get("domain")
     }
 
 

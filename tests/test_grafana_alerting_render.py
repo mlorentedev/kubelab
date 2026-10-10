@@ -23,6 +23,7 @@ observable: if the prod merge ever stops taking effect, prod renders
 from __future__ import annotations
 
 import pathlib
+import re
 import shutil
 import subprocess
 
@@ -194,6 +195,17 @@ def _rendered_root_url(env: str) -> str:
     return urls.pop()
 
 
+def _rendered_grafana_hosts(env: str) -> set[str]:
+    """Hosts the rendered `grafana` IngressRoute serves, so the expected root URL is derived, not typed."""
+    return {
+        host
+        for d in _kustomize(f"infra/k8s/overlays/{env}")
+        if d.get("kind") == "IngressRoute" and d["metadata"]["name"] == "grafana"
+        for route in d["spec"]["routes"]
+        for host in re.findall(r"Host\(`([^`]+)`\)", route["match"])
+    }
+
+
 class TestRenderedPayloadNamesDomainAndEnvironment:
     """OBS-007 / AC4: the message alone says which domain failed and where.
 
@@ -211,6 +223,17 @@ class TestRenderedPayloadNamesDomainAndEnvironment:
 
         assert "{{ .Labels.domain }}" in body, f"The {env} payload no longer names the affected domain."
         assert "{{ .ExternalURL }}" in body, f"The {env} payload no longer names its environment."
+
+    @pytest.mark.parametrize("env", sorted(EXPECTED_RECEIVER))
+    def test_the_external_url_is_the_host_grafana_is_served_on(self, env: str) -> None:
+        hosts = _rendered_grafana_hosts(env)
+        root = _rendered_root_url(env)
+
+        assert hosts, f"No rendered `grafana` IngressRoute in {env} to derive the expected root URL from."
+        assert root in {f"https://{h}" for h in hosts}, (
+            f"{env} renders GF_SERVER_ROOT_URL={root!r}, but Grafana is served on {sorted(hosts)}. "
+            f"The alert body's link would point somewhere Grafana is not."
+        )
 
     def test_each_environment_renders_its_own_external_url(self) -> None:
         staging = _rendered_root_url("staging")

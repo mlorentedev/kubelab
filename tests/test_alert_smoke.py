@@ -108,6 +108,30 @@ class TestFiringDomains:
     def test_an_unreadable_answer_names_none(self) -> None:
         assert smoke.firing_domains("<html>401</html>") == set()
 
+    def test_a_pending_instance_names_none_while_another_fires(self) -> None:
+        # The rule reads `firing` because another domain fires. The probe's own
+        # instance is still pending, so it has not been observed firing.
+        rule = {
+            "name": smoke.RULE_TITLE,
+            "state": "firing",
+            "alerts": [
+                {"state": "Alerting", "labels": {"domain": "other.example"}},
+                {"state": "Pending", "labels": {"domain": smoke.PROBE_HOST}},
+            ],
+        }
+        answer = json.dumps({"data": {"groups": [{"rules": [rule]}]}})
+        assert smoke.firing_domains(answer) == {"other.example"}
+
+    def test_an_alerting_instance_with_a_state_reason_counts(self) -> None:
+        # Grafana appends the reason to the instance state: `Alerting (Error)`.
+        rule = {
+            "name": smoke.RULE_TITLE,
+            "state": "firing",
+            "alerts": [{"state": "Alerting (Error)", "labels": {"domain": smoke.PROBE_HOST}}],
+        }
+        answer = json.dumps({"data": {"groups": [{"rules": [rule]}]}})
+        assert smoke.firing_domains(answer) == {smoke.PROBE_HOST}
+
 
 class TestTheAlertNamesTheInducedDomain:
     def _run(self, firing_json: str) -> smoke.SmokeResult:
