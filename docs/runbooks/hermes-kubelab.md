@@ -130,6 +130,33 @@ Headscale node was deleted or expired).
 the re-login of a sidecar that reports `NeedsLogin` (spec `verification.md`,
 PR 3b-2).
 
+## Slack
+
+The gateway connects to Slack in Socket Mode as `@hermeskubelab`, with no
+inbound port. Both tokens come from prod's vault
+(`apps.services.ai.hermes_kubelab.slack_{bot,app}_token`). The allowlist and
+the home channel come from `apps.services.ai.hermes_kubelab.slack` in
+`common.yaml`. With either token missing, or with `allowed_users` empty, the
+role starts no Slack at all.
+
+- **Who it obeys**: the members in `allowed_users`, and only in the home
+  channel (`#agent-fleet`) or a 1:1 DM. In the channel, a top-level message
+  must @mention the bot. A DM from anyone else is dropped: no pairing code is
+  sent, because an approved code is a grant held in the gateway's state.
+- **Add a user**: append the member ID (Profile > ⋮ > Copy member ID), then
+  provision ace2.
+- **Proven at every provision**: `GET /health/detailed` reports
+  `platforms.slack.state: connected`. That proves the tokens and the
+  connection, not delivery: Socket Mode connects whether or not the bot is in
+  the channel. Once per channel, the operator runs
+  `/invite @hermeskubelab` in `#agent-fleet`. Without it, scheduled jobs
+  cannot post there.
+- **Approvals in chat widen the posture until the next recreate** (lesson-549).
+  **Always** approves a pattern in memory only, because the config is
+  read-only. `/yolo` turns prompts off for one session, and the deny list
+  still applies. A provision that changes the config recreates the gateway, and
+  that restores the declared posture.
+
 ## Rotate
 
 - **Open WebUI break-glass password**: `toolkit secrets rotate --group
@@ -148,6 +175,11 @@ PR 3b-2).
   Delete the file and provision; a new session key signs every Open WebUI user
   out.
 - **Sidecar node key**: see "Re-register the sidecar".
+- **Slack tokens** (`slack_bot_token`, `slack_app_token`, prod): reissue the
+  token in the Slack app (OAuth & Permissions for the bot token, Basic
+  Information > App-Level Tokens for the app token), `toolkit secrets set ...
+  --stdin`, provision ace2 (the env file changes, so the gateway is recreated,
+  and the probe proves the connection), then revoke the old app token.
 - **Vault token** (`apps.services.ai.hermes_kubelab.github_token`, prod): mint a
   fine-grained token for `mlorentedev/knowledge` (Contents: read and write),
   `toolkit secrets set ... --stdin`, provision ace2 (it rewrites

@@ -138,6 +138,17 @@ agent_stack_hermes_ts_env: "{{ agent_stack_agent_home }}/hermes-tailscale.env"
 # The inference key is the only secret Hermes cannot start without. Missing, it
 # is not started, and a previous one is taken down.
 agent_stack_hermes_configured: "{{ agent_stack_nan_api_key | length > 0 }}"
+# The Slack gateway (spec AI-009 PR 3c): Socket Mode needs both tokens, from
+# prod's vault. With no allowlist Hermes would answer an unknown user with a
+# pairing code, so an empty `agent_stack_hermes.slack.allowed_users` means no
+# Slack, never an open one.
+agent_stack_slack_bot_token: ""
+agent_stack_slack_app_token: ""
+agent_stack_slack_configured: >-
+  {{ agent_stack_hermes_configured | bool
+     and agent_stack_slack_bot_token | length > 0
+     and agent_stack_slack_app_token | length > 0
+     and (agent_stack_hermes.slack.allowed_users | default([])) | length > 0 }}
 # Where Hermes publishes its API (spec AI-009 AC4). On the host's address in Open
 # WebUI's network when Open WebUI runs, which a ufw rule opens to that network
 # alone; on loopback otherwise, where no such address exists to bind.
