@@ -1,7 +1,7 @@
 ---
 id: "TOOL-062-gitea-actions-secrets"
 type: spec
-status: implementing # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-09-23"
 issue: "mlorentedev/kubelab#1626"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal, gitea, forge, secrets, actions, migration]
@@ -96,3 +96,5 @@ reproducible.
 - resume#271 (parity epic) and resume#272 (the first consumer).
 - The pattern mirrored: `toolkit/features/gcp_secret_sync.py` and `sync_to_secret_manager`.
 - The reconciler's conventions: TOOL-035 (`specs/TOOL-035-gitea-repository-reconciliation/`).
+
+<!-- archived 2026-10-10 — PR: https://github.com/mlorentedev/kubelab/pull/2174 -->
