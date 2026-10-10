@@ -24,6 +24,8 @@ owner: manu
 | tailnet refusal for the agent's uid | root | `agent-stack-egress.service`, `RequiredBy=user@<uid>` | `/opt/agent-stack/agent-egress.nft` |
 | bridge wait before the agent's manager | root | `agent-stack-hermes-bind.service`, `WantedBy=user@<uid>` | none |
 | vault sync (ADR-068 D4, amended) | uid `hermes-kubelab`, token from systemd | `hermes-kubelab-vault-sync.timer`: 2 min after boot, then every 15 min | clone `/var/lib/hermes-kubelab/vault`; token `/opt/agent-stack/vault-token` (root, 0600) |
+| vault mirror (spec AI-009 AC9) | root, token from systemd, the agent's home inaccessible | `agent-stack-vault-mirror.timer`, at the sync's interval | `/opt/agent-stack/vault-mirror` (`git/` history, `tree/` notes) |
+| MCP bridge (mcpo, the vault read-only) | system Docker, uid 65534, read-only root, no published port | Open WebUI's Compose project | none; mounts `vault-mirror/tree` read-only, key in `/opt/agent-stack/mcp-bridge.env` (0600) |
 
 Open WebUI is reached at `https://chat.kubelab.live`, with OIDC against prod
 Authelia (ADR-068, amendment 2026-10-08). Prod Traefik terminates TLS and
@@ -53,6 +55,17 @@ Open WebUI answers on the Tailscale address, the break-glass account is the
 seeded admin, the agent's uid cannot open a tailnet connection (the VPS and
 ace2's own published port), the gateway answers, and the sidecar reports
 `Running` with `tag:hermes`. Any of these failing fails the play.
+
+It also verifies the MCP bridge from inside Open WebUI's container, with the
+key Open WebUI holds: 401 without the key, no write tool in its spec, a
+non-empty `/vault` listing, and `server:vault` in the break-glass admin's tool
+list.
+
+The bridge's image is built here, not in CI, from
+`roles/agent_stack/files/mcp-bridge/`. A merged Dependabot PR on that
+directory (mcpo's digest, or the filesystem server's lockfile) changes nothing
+on ace2 until the next provision, which rebuilds it; an unchanged context is a
+cached build and reports no change.
 
 `CHECK=1` runs it in check mode and changes nothing.
 
