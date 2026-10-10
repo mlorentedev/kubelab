@@ -183,8 +183,9 @@ blocks it, and a changed value would go stale silently). Everything is filled at
 | Sender (`RESOLVE_KUBELAB_SMTP_FROM`) and the SMTP credential | `infra.smtp.*`, through the shared `kubelab-smtp` above |
 
 The Cloudflare account id is inline in the JSON: it is an identifier, not a credential. If one of
-the three `sale_digest` values is absent the import fails that workflow, before any `kubectl`,
-naming the path. The values are never printed.
+the three `sale_digest` values is absent the import fails that workflow, before any `kubectl`
+call for it, naming the path. The shared `kubelab-smtp` credential and the other workflows still
+import. The values are never printed.
 
 Set them with `toolkit secrets set <path> --env prod --stdin` (see `docs/runbooks/sops-and-secrets.md`),
 then `make import-n8n ENV=prod`. The token is minted in the Cloudflare dashboard (My Profile > API Tokens

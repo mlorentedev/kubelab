@@ -1,7 +1,7 @@
 ---
 id: "APP-CONFIG-018-sale-digest-import"
 type: spec
-status: verifying # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-10-07"
 issue: "mlorentedev/kubelab#2088"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
@@ -58,3 +58,5 @@ leaving-denver's daily sale-metrics digest (mlorentedev/leaving-denver#225) is n
 - Bitácora: mlorentedev/kubelab#2088; leaving-denver#225
 - ADR-036 (shared infra SMTP), ADR-035 (secret injection), TOOL-009 (import), `docs/runbooks/secrets-reference.md`
 - leaving-denver: `docs/runbooks/kubelab-integration.md` section 3, `docs/runbooks/ops.md` "Sale metrics", ADR-011
+
+<!-- archived 2026-10-10 — PR: https://github.com/mlorentedev/kubelab/pull/2160 -->

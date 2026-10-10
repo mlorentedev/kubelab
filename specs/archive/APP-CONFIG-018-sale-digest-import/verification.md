@@ -20,10 +20,23 @@ All tests are in `tests/test_n8n_shared_credentials.py` unless named, and run ag
 ## Test status
 
 - Mutation check of the new tests: 14 mutants of `toolkit/features/n8n_import.py` (secure always true, shared imported twice, shared in staging, SMTP missing-value check removed, reference check removed, resolver logs values, Header Auth disagree check removed, token check removed, shared gating removed, shared never imported, shared imported only when the sale is in the catalog, wrong From path, wrong password path), all killed. One survived on the first pass for the wrong reason (the held-back test failed on the workflow's own `smtp` key, not the credential) and was fixed.
-- Whole unit suite (`pytest -m "not e2e and not infra and not integration"`): 3934 passed, 16 skipped, 2 xfailed, before the last two additions; the touched files re-run afterwards: 129 passed.
+- Whole unit suite (`pytest -m "not e2e and not infra and not integration"`): 3934 passed, 16 skipped, 2 xfailed, before the last two additions; the touched files re-run afterwards: 129 passed. Re-run by the adversarial review on 2026-10-09: 4343 passed, 16 skipped, 2 xfailed.
 - `make lint`: clean. `mypy toolkit/`: no issues in 119 source files.
-- Real-config smoke, no cluster: `toolkit infra n8n import --env prod --dry-run` renders `kubelab-smtp` from the real prod SOPS, and fails the digest closed naming both absent placeholder paths (the `sale_digest` block is not in SOPS yet). No `kubectl` was run.
-- Not run: `make import-n8n ENV=prod` (the owner's step; the cluster is unreachable from here).
+- Real-config smoke, no cluster: `toolkit infra n8n import --env prod --dry-run` renders `kubelab-smtp` from the real prod SOPS, and fails the digest closed naming both absent placeholder paths (the `sale_digest` block was not in SOPS at the time; the owner set it in #2094). No `kubectl` was run.
+- Not run: `make import-n8n ENV=prod` (the owner's step; the cluster is unreachable from here). The scheduled run delivered in prod on 2026-10-07 (lesson-531).
+
+## Adversarial review findings
+
+`review.md` (2026-10-09, PASS, no Blocker or Major). Each finding's disposition:
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | README said an absent sale value fails "before any `kubectl`"; the shared credential and the other workflows import first | Fixed in the README, which now says "before any `kubectl` call for it" and names what still imports. AC2 says "for it" and holds as written. `proposal.md` item 5 carries the same absolute wording the README did, and is left as written because the review was signed against the contract files; this row is the correction of record. |
+| 2 | Nothing pins the cron or `settings.timezone` | Fixed in #2159: `TestSchedule` |
+| 3 | `_process_spec` (81 lines) and `resolve_placeholders` (48) are over the 40-line rule | Ticketed: #2157 (TOOL-104) |
+| 4 | Two stale evidence lines in this file | Fixed above |
+| 5 | An env with a shared credential and no workflow returns before importing it | Ticketed: #2158 (TOOL-103) |
+| 6 | `_run` prints the pod's output for a command fed the credential payload | Real, not a question: a fake that echoes its input leaked on all three paths. Fixed in #2159 (`_mask_payload`, lesson-545) |
 
 ## Decisions made during implementation
 
@@ -45,7 +58,7 @@ All tests are in `tests/test_n8n_shared_credentials.py` unless named, and run ag
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/APP-CONFIG-018-sale-digest-import/` -> `specs/archive/APP-CONFIG-018-sale-digest-import/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/APP-CONFIG-018-sale-digest-import/` -> `specs/archive/APP-CONFIG-018-sale-digest-import/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] Promotions above executed (if any)
