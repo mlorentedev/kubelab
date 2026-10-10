@@ -145,7 +145,7 @@ A proposed mitigation was considered and rejected: a final step guarded by `if: 
 
 ## Test status
 
-- `make test` on the archive branch: TEST-STATUS-PENDING
+- `make test` on the archive branch at `c8fddd63` (2026-10-10): 4497 passed, 16 skipped, 2 xfailed, exit 0.
 - `tests/test_review_attestation.py`: 43 passed. The two tests added for AC3 and AC4 were each red against their mutant.
 - Live: the gate has judged every PR since #1162 (2026-08-18). The demonstrations above are on real PRs.
 
