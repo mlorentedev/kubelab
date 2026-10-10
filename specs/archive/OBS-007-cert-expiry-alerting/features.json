@@ -1,0 +1,50 @@
+[
+  {
+    "id": "OBS-007-cert-expiry-alerting-f1",
+    "behavior": "Grafana's provisioning API returns the Apprise contact point and the ACME alert rule, and both survive a rollout restart because they come from a ConfigMap rather than Grafana's database.",
+    "verification": "make test-infra ENV=prod",
+    "state": "passing",
+    "evidence": "2026-10-10: `make test-infra ENV=prod` 71 passed, 1 skipped, exit 0; tests/infra/test_grafana_alerting.py 9/9. Staging: the same module 9/9 in a run that exited 2 on two unrelated, ticketed checks (#2194, #2061).",
+    "notes": "Covers AC1. The verification is prod's run, because staging's suite is red on two unrelated checks (#2194, #2061) while its alerting module is green. #951, which blocked prod, is closed. Restart survival was measured 2026-08-10."
+  },
+  {
+    "id": "OBS-007-cert-expiry-alerting-f2",
+    "behavior": "A deliberately induced ACME failure in staging drives the rule to Alerting and delivers a message through Apprise within the evaluation interval plus the pending period.",
+    "verification": "make alert-smoke ENV=staging",
+    "state": "passing",
+    "evidence": "2026-10-10: `make alert-smoke ENV=staging` exit 0, twice. The final-code run reported all five stages ok (transcript in verification.md).",
+    "notes": "Covers AC2. Runs the real loop: induces the failure, waits for firing, confirms Apprise delivered, tears the route down, confirms the rule cleared and a resolved notification arrived. Refuses prod and exits non-zero there. Takes 10-20 minutes and mutates a live cluster, so it is not a CI check -- but it is repeatable and it cleans up in a finally block. Replaces an earlier entry whose command could not run at all: `kubectl apply -f <markdown>#fragment` is not a thing, and it never deleted the induced route."
+  },
+  {
+    "id": "OBS-007-cert-expiry-alerting-f3",
+    "behavior": "The rule does not fire on the periodic 'Testing certificate renew...' heartbeat, nor on 'Starting provider *acme.Provider', which staging logs on every Traefik boot.",
+    "verification": "sh -c 'echo \"NO AUTOMATED CHECK EXISTS FOR THIS CRITERION YET\" >&2; exit 1'",
+    "state": "partial",
+    "evidence": "2026-08-10: alert expression evaluated one minute after a known heartbeat; heartbeats in window 1, result empty (tasks.md, Phase 3).",
+    "notes": "Covers AC3. Verified by hand on 2026-08-10: the alert expression was evaluated at an instant one minute after a known heartbeat, so the heartbeat is provably inside the [10m] range, and the result was empty. **The command deliberately FAILS.** An earlier revision used `python3 -c 'sys.exit(0)'` with a note calling it vacuous -- but the harness judges by exit code, not by notes, so that would have let this be marked passing without checking anything. A sentinel that exits non-zero cannot. Closing it for real means a toolkit command that queries Loki. Archived as partial: the measurement stands, and the repeatable check is #2195 (OBS-033)."
+  },
+  {
+    "id": "OBS-007-cert-expiry-alerting-f4",
+    "behavior": "The alert payload names the affected domain and the environment it came from, so the recipient can act without opening Grafana.",
+    "verification": "make alert-smoke ENV=staging",
+    "state": "passing",
+    "evidence": "2026-10-10: `firing instance named obs007-induced-failure.kubelab.local: ok`, exit 0. The environment half is tests/test_grafana_alerting_render.py::TestRenderedPayloadNamesDomainAndEnvironment under `make test` (4510 passed); each assertion was red against its mutant.",
+    "notes": "Covers AC4. The smoke requires the firing instance's `domain` label to equal the induced host, which is what the body prints via `.Labels.domain`. The environment comes from `.ExternalURL`, and a render test pins it per overlay. Neither reads the Telegram body; the operator confirmed that body on 2026-08-10. An empty domain on an unrecognised failure shape is expected, not a defect."
+  },
+  {
+    "id": "OBS-007-cert-expiry-alerting-f5",
+    "behavior": "Removing the induced failure returns the rule to Normal and delivers a resolved notification, so the rule recovers rather than latching.",
+    "verification": "make alert-smoke ENV=staging",
+    "state": "passing",
+    "evidence": "2026-10-10: `rule cleared after teardown: ok` and `resolved notification delivered: ok`, exit 0, on both runs.",
+    "notes": "Covers AC5. The smoke reports clearing and the resolved delivery as their own stages, so a rule that fires and never clears fails it by name. First measured 2026-08-10: inactive 05:18:08, resolved 05:18:30."
+  },
+  {
+    "id": "OBS-007-cert-expiry-alerting-f6",
+    "behavior": "kubectl kustomize renders the archive tier for staging and the push tier for prod, asserted against the rendered output rather than the patch file.",
+    "verification": "make test",
+    "state": "passing",
+    "evidence": "2026-10-10: `make test` 4510 passed, 16 skipped, 2 xfailed, exit 0.",
+    "notes": "Covers AC6, via tests/test_grafana_alerting_render.py. The only entry here with a genuinely self-contained command. Reading the render rather than the patch is the whole point: #927 was a patch that looked correct, changed nothing, and went unnoticed for months."
+  }
+]

@@ -1,7 +1,7 @@
 ---
 id: "OBS-007-cert-expiry-alerting"
 type: spec
-status: implementing # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-08-09"
 issue: "kubelab#799"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
@@ -82,3 +82,5 @@ Two findings that shrink the work, both measured today rather than assumed:
 - Sibling pattern to copy: `infra/k8s/base/services/grafana-dashboards/` — `configMapGenerator` with `files:`, hash-suffixed for rolling updates.
 - **#918 / OBS-010** — the next consumer of this fabric; a reason to build it as code rather than by hand.
 - Measurement method: Loki queried through the Grafana pod (`wget` is absent from the Loki image), `container="traefik"`, prod cluster, 2026-08-09.
+
+<!-- archived 2026-10-10 — PR: https://github.com/mlorentedev/kubelab/pull/2196 -->

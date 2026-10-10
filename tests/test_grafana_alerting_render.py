@@ -23,6 +23,7 @@ observable: if the prod merge ever stops taking effect, prod renders
 from __future__ import annotations
 
 import pathlib
+import re
 import shutil
 import subprocess
 
@@ -180,4 +181,65 @@ class TestRenderedAlertTier:
             f"Both environments render the same receiver {staging!r}, so the prod "
             f"overlay changed nothing. The base default is the staging value, so "
             f"this is what a no-op merge looks like."
+        )
+
+
+def _rendered_root_url(env: str) -> str:
+    """`GF_SERVER_ROOT_URL` as rendered, which Grafana exposes as `.ExternalURL`."""
+    urls = {
+        d["data"]["GF_SERVER_ROOT_URL"]
+        for d in _kustomize(f"infra/k8s/overlays/{env}")
+        if d.get("kind") == "ConfigMap" and "GF_SERVER_ROOT_URL" in (d.get("data") or {})
+    }
+    assert len(urls) == 1, f"Expected one rendered GF_SERVER_ROOT_URL in {env}, found {sorted(urls)}"
+    return urls.pop()
+
+
+def _rendered_grafana_hosts(env: str) -> set[str]:
+    """Hosts the rendered `grafana` IngressRoute serves, so the expected root URL is derived, not typed."""
+    return {
+        host
+        for d in _kustomize(f"infra/k8s/overlays/{env}")
+        if d.get("kind") == "IngressRoute" and d["metadata"]["name"] == "grafana"
+        for route in d["spec"]["routes"]
+        for host in re.findall(r"Host\(`([^`]+)`\)", route["match"])
+    }
+
+
+class TestRenderedPayloadNamesDomainAndEnvironment:
+    """OBS-007 / AC4: the message alone says which domain failed and where.
+
+    The domain comes from the firing instance's `domain` label, which
+    `make alert-smoke` checks live. The environment comes from `.ExternalURL`,
+    which carries no environment name of its own: it names the environment
+    only because each overlay renders a different root URL. Both halves are
+    read from the render.
+    """
+
+    @pytest.mark.parametrize("env", sorted(EXPECTED_RECEIVER))
+    def test_body_carries_the_domain_label_and_the_external_url(self, env: str) -> None:
+        templates = yaml.safe_load(_alerting_configmap(env)["data"]["templates.yaml"])
+        body = next(t["template"] for t in templates["templates"] if t["name"] == "apprise-body")
+
+        assert "{{ .Labels.domain }}" in body, f"The {env} payload no longer names the affected domain."
+        assert "{{ .ExternalURL }}" in body, f"The {env} payload no longer names its environment."
+
+    @pytest.mark.parametrize("env", sorted(EXPECTED_RECEIVER))
+    def test_the_external_url_is_the_host_grafana_is_served_on(self, env: str) -> None:
+        hosts = _rendered_grafana_hosts(env)
+        root = _rendered_root_url(env)
+
+        assert hosts, f"No rendered `grafana` IngressRoute in {env} to derive the expected root URL from."
+        assert root in {f"https://{h}" for h in hosts}, (
+            f"{env} renders GF_SERVER_ROOT_URL={root!r}, but Grafana is served on {sorted(hosts)}. "
+            f"The alert body's link would point somewhere Grafana is not."
+        )
+
+    def test_each_environment_renders_its_own_external_url(self) -> None:
+        staging = _rendered_root_url("staging")
+        prod = _rendered_root_url("prod")
+
+        assert staging != prod, (
+            f"Both environments render GF_SERVER_ROOT_URL={staging!r}, so `.ExternalURL` "
+            f"in the alert body no longer tells a staging alert from a prod one."
         )

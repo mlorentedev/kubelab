@@ -1,9 +1,10 @@
 # Argo CD, releases and image promotion
 
-32 lessons, newest first. Back to [all categories](../_index.md).
+33 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 554 | [A staging Secret applied from a branch outlives its merge, because Argo CD reverts the branch's manifests but never its Secrets](lesson-554-a-staging-secret-applied-from-a-branch-outlives-its-merge.md) | 2026-10-10 |
 | 501 | [Re-enabling Argo CD auto-sync starts a sync by itself, and an explicit one sent after it can overwrite it](lesson-501-re-enabling-argo-cd-auto-sync-starts-a-sync-an-explicit-one-can-overwrite.md) | 2026-10-01 |
 | 479 | [A deploy step that imports from the worktree it runs in reverts every other lane's state on shared staging](lesson-479-a-deploy-that-imports-from-its-worktree-reverts-other-lanes-on-shared-staging.md) | 2026-09-26 |
 | 475 | [Repointing a shared preview slot without reading it first clobbers another lane](lesson-475-repointing-a-shared-preview-slot-without-reading-it-clobbers-another-lane.md) | 2026-09-25 |

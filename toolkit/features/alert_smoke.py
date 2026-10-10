@@ -52,6 +52,16 @@ FIRING_TIMEOUT_S = 900
 RESOLVE_TIMEOUT_S = 1200
 POLL_INTERVAL_S = 30
 
+#: Grafana is OIDC-only (since 2026-09-24), so an anonymous read of its rules
+#: answers 401. The pod already holds the admin from the `grafana-admin` Secret in
+#: its own environment, and the header is built inside the pod: no credential
+#: crosses kubectl's argv or this process. `tr` because base64 may wrap.
+RULES_READ = (
+    'wget -qO- --header "Authorization: Basic '
+    '$(printf %s "$GF_SECURITY_ADMIN_USER:$GF_SECURITY_ADMIN_PASSWORD" | base64 | tr -d "\\n")" '
+    "http://localhost:3000/api/prometheus/grafana/api/v1/rules"
+)
+
 PROBE_MANIFEST = f"""
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
@@ -90,10 +100,13 @@ class SmokeResult:
     resolved: bool
     resolve_notified: bool
     detail: str = ""
+    #: The firing instance carried the induced host as its `domain` label, which
+    #: is what the message body prints (AC4). False unless the rule fired.
+    named_domain: bool = False
 
     @property
     def ok(self) -> bool:
-        return self.fired and self.notified and self.resolved and self.resolve_notified
+        return self.fired and self.named_domain and self.notified and self.resolved and self.resolve_notified
 
 
 def strip_ansi(text: str) -> str:
@@ -142,6 +155,32 @@ def rule_state(rules_json: str, title: str = RULE_TITLE) -> str:
     return "absent"
 
 
+def firing_domains(rules_json: str, title: str = RULE_TITLE) -> set[str]:
+    """The `domain` label of every instance the named rule is firing.
+
+    The payload template prints `.Labels.domain`, so this is the domain the
+    recipient reads, taken from Grafana rather than from the Telegram message.
+
+    The rule's own state is `firing` when ANY instance fires, so each instance
+    is filtered on its own state. Grafana reports it as `Alerting`, followed by
+    a reason in parentheses when there is one.
+    """
+    import json
+
+    try:
+        data = json.loads(rules_json)
+    except (ValueError, TypeError):
+        return set()
+    return {
+        alert["labels"]["domain"]
+        for group in data.get("data", {}).get("groups", [])
+        for rule in group.get("rules", [])
+        if rule.get("name") == title
+        for alert in rule.get("alerts") or []
+        if str(alert.get("state", "")).startswith("Alerting") and (alert.get("labels") or {}).get("domain")
+    }
+
+
 def _default_kubectl(env: str) -> KubectlFn:
     kubeconfig = str(output_path(env))
 
@@ -182,6 +221,10 @@ def run_alert_smoke(
     def deliveries() -> int:
         return count_deliveries(kubectl(["logs", "-n", "kubelab", "deploy/apprise", "--tail=300"], None).stdout)
 
+    #: The last rules answer, so the domain is read from the same instance that
+    #: was observed firing.
+    last_rules = [""]
+
     def state() -> str:
         result = kubectl(
             [
@@ -190,12 +233,13 @@ def run_alert_smoke(
                 "kubelab",
                 "deploy/grafana",
                 "--",
-                "wget",
-                "-qO-",
-                "http://localhost:3000/api/prometheus/grafana/api/v1/rules",
+                "sh",
+                "-c",
+                RULES_READ,
             ],
             None,
         )
+        last_rules[0] = result.stdout
         return rule_state(result.stdout)
 
     baseline = deliveries()
@@ -205,9 +249,15 @@ def run_alert_smoke(
             f"deploy the alerting ConfigMap first (make deploy-k8s ENV={env})."
         )
         return SmokeResult(False, False, False, False, detail="rule not provisioned")
+    if initial == "unreadable":
+        logger.error(
+            f"Grafana in {env} did not answer the rule-state read with JSON, so the smoke "
+            f"could not observe the rule. Nothing was induced."
+        )
+        return SmokeResult(False, False, False, False, detail="rule state unreadable")
     logger.info(f"Baseline: rule={initial}  apprise deliveries={baseline}")
 
-    fired = notified = resolved = resolve_notified = False
+    fired = notified = resolved = resolve_notified = named = False
     try:
         logger.info(f"Inducing an ACME failure: {PROBE_HOST}")
         applied = kubectl(["apply", "-f", "-"], PROBE_MANIFEST)
@@ -217,6 +267,7 @@ def run_alert_smoke(
 
         fired = _await(lambda: state() == "firing", FIRING_TIMEOUT_S, "rule to fire", sleep=sleep, now=now)
         if fired:
+            named = PROBE_HOST in firing_domains(last_rules[0])
             notified = _await(lambda: deliveries() > baseline, 120, "the firing notification", sleep=sleep, now=now)
     finally:
         # Always remove the induced failure, including on timeout or Ctrl-C.
@@ -227,13 +278,15 @@ def run_alert_smoke(
 
     if fired:
         after_firing = deliveries()
-        resolved = _await(lambda: state() != "firing", RESOLVE_TIMEOUT_S, "rule to clear", sleep=sleep, now=now)
+        # Cleared means Grafana says `inactive`. Anything else, an unreadable
+        # answer included, says nothing about the rule, so it is not a pass.
+        resolved = _await(lambda: state() == "inactive", RESOLVE_TIMEOUT_S, "rule to clear", sleep=sleep, now=now)
         if resolved:
             resolve_notified = _await(
                 lambda: deliveries() > after_firing, 120, "the resolved notification", sleep=sleep, now=now
             )
 
-    result = SmokeResult(fired, notified, resolved, resolve_notified)
+    result = SmokeResult(fired, notified, resolved, resolve_notified, named_domain=named)
     _report(result)
     return result
 
@@ -261,6 +314,7 @@ def _report(result: SmokeResult) -> None:
     """State each stage separately — a single pass/fail hides which link broke."""
     for label, value in (
         ("rule fired on a real failure", result.fired),
+        (f"firing instance named {PROBE_HOST}", result.named_domain),
         ("firing notification delivered", result.notified),
         ("rule cleared after teardown", result.resolved),
         ("resolved notification delivered", result.resolve_notified),

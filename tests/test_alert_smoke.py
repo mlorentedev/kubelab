@@ -9,10 +9,9 @@ No cluster needed — `kubectl` is injected.
 
 from __future__ import annotations
 
+import itertools
 import json
 import subprocess
-
-import pytest
 
 from toolkit.features import alert_smoke as smoke
 
@@ -87,6 +86,94 @@ class TestRuleState:
         assert smoke.rule_state("<html>502</html>") == "unreadable"
 
 
+def _firing(domain: str | None) -> str:
+    """The Prometheus-compatible rules answer while the rule fires, one instance."""
+    labels = {"alertname": smoke.RULE_TITLE}
+    if domain is not None:
+        labels["domain"] = domain
+    rule = {"name": smoke.RULE_TITLE, "state": "firing", "alerts": [{"state": "Alerting", "labels": labels}]}
+    other = {"name": "Something else", "state": "firing", "alerts": [{"labels": {"domain": "other.example"}}]}
+    return json.dumps({"data": {"groups": [{"rules": [other, rule]}]}})
+
+
+class TestFiringDomains:
+    """AC4's domain half, read from the instance Grafana is firing."""
+
+    def test_reads_the_domain_label_of_the_named_rule_only(self) -> None:
+        assert smoke.firing_domains(_firing(smoke.PROBE_HOST)) == {smoke.PROBE_HOST}
+
+    def test_an_instance_without_a_domain_names_none(self) -> None:
+        assert smoke.firing_domains(_firing(None)) == set()
+
+    def test_an_unreadable_answer_names_none(self) -> None:
+        assert smoke.firing_domains("<html>401</html>") == set()
+
+    def test_a_pending_instance_names_none_while_another_fires(self) -> None:
+        # The rule reads `firing` because another domain fires. The probe's own
+        # instance is still pending, so it has not been observed firing.
+        rule = {
+            "name": smoke.RULE_TITLE,
+            "state": "firing",
+            "alerts": [
+                {"state": "Alerting", "labels": {"domain": "other.example"}},
+                {"state": "Pending", "labels": {"domain": smoke.PROBE_HOST}},
+            ],
+        }
+        answer = json.dumps({"data": {"groups": [{"rules": [rule]}]}})
+        assert smoke.firing_domains(answer) == {"other.example"}
+
+    def test_an_alerting_instance_with_a_state_reason_counts(self) -> None:
+        # Grafana appends the reason to the instance state: `Alerting (Error)`.
+        rule = {
+            "name": smoke.RULE_TITLE,
+            "state": "firing",
+            "alerts": [{"state": "Alerting (Error)", "labels": {"domain": smoke.PROBE_HOST}}],
+        }
+        answer = json.dumps({"data": {"groups": [{"rules": [rule]}]}})
+        assert smoke.firing_domains(answer) == {smoke.PROBE_HOST}
+
+
+class TestTheAlertNamesTheInducedDomain:
+    def _run(self, firing_json: str, after_firing: str | None = None) -> smoke.SmokeResult:
+        states = iter([_rules("inactive"), firing_json])
+        # Every Apprise read reports one more delivery, so both notification
+        # stages pass and `ok` turns on the stage under test alone.
+        delivered = itertools.count()
+
+        def fake_kubectl(args: list[str], stdin: str | None = None) -> subprocess.CompletedProcess:
+            if "exec" in args:
+                return _proc(next(states, after_firing if after_firing is not None else _rules("inactive")))
+            if "logs" in args:
+                return _proc("Delivered Notification\n" * next(delivered))
+            return _proc()
+
+        # A clock that advances one second per read, so each wait polls at least
+        # once; `_fake_clock` races past every deadline before the first poll.
+        ticks = itertools.count()
+        return smoke.run_alert_smoke(
+            "staging", kubectl=fake_kubectl, sleep=lambda _: None, now=lambda: float(next(ticks))
+        )
+
+    def test_a_firing_instance_labelled_with_the_probe_host_counts(self) -> None:
+        result = self._run(_firing(smoke.PROBE_HOST))
+        assert result.named_domain
+        assert result.ok, "every stage passed in this harness, so the smoke must pass"
+
+    def test_an_unreadable_state_after_firing_is_not_a_cleared_rule(self) -> None:
+        """A failed read while waiting to resolve says nothing about the rule."""
+        result = self._run(_firing(smoke.PROBE_HOST), after_firing="<html>401</html>")
+        assert result.fired
+        assert not result.resolved
+        assert not result.ok
+
+    def test_a_firing_instance_without_the_domain_fails_the_smoke(self) -> None:
+        """The rule can fire and still send a message nobody can act on."""
+        result = self._run(_firing(None))
+        assert result.fired
+        assert not result.named_domain
+        assert not result.ok
+
+
 class TestGuardrails:
     def test_refuses_prod(self) -> None:
         """Prod routes to the page tier. Refused, not merely discouraged."""
@@ -112,6 +199,42 @@ class TestGuardrails:
 
         assert not result.ok
         assert "not provisioned" in result.detail
+
+
+class TestRuleStateRead:
+    """Grafana is OIDC-only since 2026-09-24, so an anonymous read of its rules
+    answers 401 and the smoke saw `unreadable` on every poll: it could never
+    observe `firing`, and timed out after inducing a real failure."""
+
+    def test_reads_as_the_admin_the_pod_already_holds(self) -> None:
+        calls: list[list[str]] = []
+
+        def fake_kubectl(args: list[str], stdin: str | None = None) -> subprocess.CompletedProcess:
+            calls.append(args)
+            return _proc(json.dumps({"data": {"groups": []}}))
+
+        smoke.run_alert_smoke("staging", kubectl=fake_kubectl)
+
+        read = " ".join(next(c for c in calls if "exec" in c))
+        assert "Authorization: Basic" in read
+        assert "$GF_SECURITY_ADMIN_USER:$GF_SECURITY_ADMIN_PASSWORD" in read, (
+            "the credential must be expanded inside the pod, never passed through kubectl's argv"
+        )
+
+    def test_an_unreadable_state_aborts_before_inducing_anything(self) -> None:
+        """Otherwise a refused read costs a real ACME failure and a 35-minute
+        timeout that names the wrong cause."""
+        calls: list[list[str]] = []
+
+        def fake_kubectl(args: list[str], stdin: str | None = None) -> subprocess.CompletedProcess:
+            calls.append(args)
+            return _proc("401 Unauthorized")
+
+        result = smoke.run_alert_smoke("staging", kubectl=fake_kubectl, sleep=lambda _: None, now=_fake_clock())
+
+        assert not result.ok
+        assert "unreadable" in result.detail
+        assert not [c for c in calls if c[0] == "apply"], "a failure was induced that the smoke cannot observe"
 
 
 class TestTeardownAlwaysRuns:
