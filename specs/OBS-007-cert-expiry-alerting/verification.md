@@ -76,6 +76,12 @@ First archive review (agy/gemini-3.1-pro-high, 2026-10-10, FAIL, `reviewed_sha` 
 |---|---|---|
 | Blocker, THEORETICAL: the `[10m]` window at a 5m interval lets a single failure line satisfy `for: 5m`, which contradicts the rule's "first blip" comment. Proposed fix: `[5m]`, plus a test that one failure does not page. | **Comment fixed, code fix declined.** The contradiction was real, and the wrong half was the `for:` comment, not the window. The `interval` comment already said a single failure satisfies `for: 5m` by design. The `for:` comment now says the same and gives the measurement. | Traefik writes one line per failed attempt and does not retry within the window. Three induced failures on staging wrote one line each (2026-10-10 12:24, 12:48 and 13:15 UTC, read from Loki), while the route stayed up for more than ten minutes. With `[5m]` a lone line is in one evaluation's window only, so `for: 5m` could never hold: a real failure would never page, and `make alert-smoke` would fail. The proposed test would assert the opposite of what was measured. |
 
+Second archive review (agy/gemini-3.1-pro-high, 2026-10-10, PASS WITH GAPS, `reviewed_sha` 8b62b208):
+
+| Finding | Disposition | Evidence |
+|---|---|---|
+| Minor, THEORETICAL: `deliveries()` counts over `kubectl logs --tail=300`, a sliding window, so once Apprise has logged more than 300 lines a new delivery can leave the count flat and the smoke fails on a delivered notification. | **Ticketed as #2197 (OBS-034).** Real, latent, and it fails closed: the smoke never passes on a missed delivery. Staging Apprise holds 92 lines and 15 deliveries (2026-10-10), so the tail is not saturated. The code dates from #976, and changing the smoke after this review would need another live run and another review for a failure that cannot occur yet. | `toolkit/features/alert_smoke.py`, `deliveries()`. |
+
 Side effect: `rules.yaml` feeds the hashed `grafana-alerting` ConfigMap, so the comment-only change rolls Grafana in both environments on merge.
 
 ## Promotion candidates
