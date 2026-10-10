@@ -344,6 +344,27 @@ def test_the_unit_runs_as_the_agent_and_takes_the_token_from_systemd() -> None:
     assert unit["ReadWritePaths"] == [context["agent_stack_vault_clone"]]
 
 
+def test_the_kill_switch_stops_the_sync_and_never_restarts_the_rule() -> None:
+    """The egress rule is scoped to the agent's uid (#2161), and this unit runs as
+    that uid. Stopping the rule is the kill switch, so the sync must not run
+    without it. `Requisite=` refuses the start while the rule is down.
+    `Requires=` or `BindsTo=` would start the rule again and undo the kill."""
+    egress = next(
+        t for t in _tasks() if t.get("ansible.builtin.template", {}).get("src") == "agent-stack-egress.service.j2"
+    )
+    rule = Path(egress["ansible.builtin.template"]["dest"]).name
+    unit = _unit("vault-sync.service.j2")
+    assert unit.get("Requisite") == [rule]
+    assert rule in " ".join(unit["After"]).split()
+    for pulls in ("Requires", "BindsTo", "Wants"):
+        assert rule not in " ".join(unit.get(pulls, [])).split(), pulls
+    # A refused start still triggers OnFailure, so the timer stops with the rule.
+    timer = _unit("vault-sync.timer.j2")
+    assert timer.get("PartOf") == [rule]
+    for pulls in ("Requires", "BindsTo", "Wants", "Requisite"):
+        assert rule not in " ".join(timer.get(pulls, [])).split(), pulls
+
+
 def test_the_timer_runs_at_boot_and_at_the_declared_interval() -> None:
     timer = _unit("vault-sync.timer.j2")
     assert timer["OnUnitActiveSec"] == [SYNC["interval"]]

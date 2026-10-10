@@ -77,9 +77,17 @@ cached build and reports no change.
   agent-stack-egress.service`. The agent's user manager requires that unit, so
   systemd stops `user@<uid>.service` with it, and the rootless daemon and every
   container on it go down. This is the kill switch: it removes the agent and
-  the rule that confines it together, never one without the other. *Not yet
-  measured live*: whether lingering starts the user manager again before the
-  next provision.
+  the rule that confines it together, never one without the other. The vault
+  sync runs as the same uid from a system unit, so it is bound to the rule too
+  (lesson-552). The service has `Requisite=`, so it refuses to start without
+  the rule, and the timer has `PartOf=`, so it stops with the rule. Measured
+  2026-10-10: after the stop, no process of the uid was left at 180 s.
+  Lingering did not restart the user manager in ~15 min. The timer, the rule
+  and the manager were all `inactive`, and nothing paged. The agent's zone
+  writes from before the stop wait until the restart, and then push.
+- **Start again after a kill**: `make provision NODE=ace2 ENV=prod
+  TAGS=agent_stack`. It loads the rule, starts the user manager and enables
+  the sync timer again (measured: `changed=3`, then `changed=0`).
 
 ## The vault zone
 

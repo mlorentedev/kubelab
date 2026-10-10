@@ -4,7 +4,11 @@
 [Unit]
 Description=hermes-kubelab vault sync
 Wants=network-online.target
-After=network-online.target
+# It runs as the agent's uid, which the egress rule confines (#2161). Stopping
+# that rule is the kill switch, so with the rule down this unit refuses to
+# start. Requisite, never Requires: pulling the rule up would undo the kill.
+Requisite=agent-stack-egress.service
+After=network-online.target agent-stack-egress.service
 OnFailure=kubelab-notify@%n.service
 
 [Service]
