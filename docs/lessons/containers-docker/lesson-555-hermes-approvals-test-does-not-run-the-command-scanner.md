@@ -26,8 +26,8 @@ The config alone does not show it: the key reads `false` either way.
 verdicts: a plain command must be `allow` and the homograph must be `block`.
 Measured on ace2: with `TIRITH_BIN=/nonexistent` the plain command reads
 `block`, `tirith spawn failed (fail-closed)`, so the pair tells a working
-scanner from a missing one. The task retries for 60 s, because the first start
-downloads the binary to `$HERMES_HOME/bin` in the background.
+scanner from a missing one. The task retries twelve times, 5 s apart, because the
+first start downloads the binary to `$HERMES_HOME/bin` in the background.
 
 **Rule**: A dry-run tool proves only the guards it models. Before you build a
 probe on one, feed it an input that only the guard you care about catches. If

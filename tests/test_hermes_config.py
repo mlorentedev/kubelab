@@ -240,7 +240,7 @@ ROLE_OWNED = {
     ("model", "base_url"),
     ("model", "key_env"),
     ("model", "default"),
-    ("cron", "model"),
+    ("cron",),
     ("delegation", "model"),
 }
 
@@ -289,8 +289,9 @@ def test_a_role_owned_key_in_the_ssot_does_not_override_the_role(ported: dict) -
     assert config["delegation"]["model"] == HERMES["models"]["unmetered"]
 
 
-def test_a_scan_that_cannot_run_blocks_rather_than_allows() -> None:
-    """v2026.9.24 defaults to fail-open; hermes-nan ran it closed (HERMES-012)."""
+def test_the_scanner_is_configured_fail_closed() -> None:
+    """The setting only: v2026.9.24 defaults to fail-open, and hermes-nan ran it
+    closed (HERMES-012). The behaviour is the provision's probe, below."""
     assert _config()["security"]["tirith_fail_open"] is False
 
 

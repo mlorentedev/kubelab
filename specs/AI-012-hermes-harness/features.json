@@ -2,7 +2,7 @@
   {
     "id": "AI-012-hermes-harness-f1",
     "behavior": "AC1: Every applicable config-desired.yaml key is rendered and tested",
-    "verification": "poetry run pytest --no-cov -q tests/test_hermes_config.py -k 'ported or role_owned or scanner or scan_that'",
+    "verification": "poetry run pytest --no-cov -q tests/test_hermes_config.py -k 'ported or role_owned or scanner'",
     "state": "passing",
     "evidence": "2026-10-10: tests green; ace2 provision changed=3 then changed=0; load_config() reads the ported keys back; the scanner allows ls and blocks a homograph."
   },
