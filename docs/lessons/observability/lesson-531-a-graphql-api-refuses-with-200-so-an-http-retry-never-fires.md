@@ -10,6 +10,8 @@ tags: [kubelab, observability, n8n, cloudflare, graphql, retry]
 
 # A GraphQL API refuses with 200, so an HTTP retry never fires
 
+**Superseded (2026-10-10)**: the digest no longer queries Web Analytics, so the retry and its tests are gone. The lesson on GraphQL answering 200 with an error still holds for any future GraphQL client.
+
 **Context**: The first scheduled run of the moving-sale digest (`sale-metrics-daily-digest`,
 APP-CONFIG-018) arrived on 2026-10-07 with "Visitas web: No disponible". A manual run at 07:56
 the same morning had answered.

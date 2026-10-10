@@ -165,10 +165,14 @@ flag means implicit TLS (port 465), and port 587 is STARTTLS (`secure: false`) a
 ## `sale-metrics-daily-digest.json` — leaving-denver sale digest (APP-CONFIG-018)
 
 "Moving Sale - Daily Metrics Digest" (leaving-denver#225, its ADR-011): every day at 08:00
-America/Denver it reads the sale's first-party events (Workers Analytics Engine) and Cloudflare
-Web Analytics for the last 24 hours and the whole sale, and emails one Spanish digest (HTML with a
-plain-text fallback: subject, three headline tiles, the most-viewed items, where visitors come from, and
-the repricing candidates). A failed query is named in the email rather than stopping it. **Prod only.**
+America/Denver it reads the sale's first-party events (Workers Analytics Engine) for the last 24 hours
+and the whole sale, and emails one Spanish digest (HTML with a plain-text fallback: subject, three
+headline tiles, the most-viewed items, visits by source, and the repricing candidates). A failed
+query is named in the email rather than stopping it. **Prod only.**
+
+It no longer queries Cloudflare Web Analytics (owner decision 2026-10-10): the site tag returned zero
+page loads for a week, and the Events data already gives visits by source and item taps.
+
 Like every workflow here it is **live as soon as it is imported** (`publish:workflow`): the first
 email is the next 08:00 Denver, or run it once from the n8n UI.
 
@@ -179,11 +183,10 @@ blocks it, and a changed value would go stale silently). Everything is filled at
 |---|---|
 | Header Auth credential `cloudflare-analytics-read` (`Authorization: Bearer <token>`) | SOPS `apps.services.automation.n8n.sale_digest.analytics_token`, a Cloudflare token with **Account \| Account Analytics \| Read** |
 | Recipient (`RESOLVE_SALE_DIGEST_TO`) | SOPS `apps.services.automation.n8n.sale_digest.recipient` |
-| Web Analytics site tag (`RESOLVE_SALE_DIGEST_SITE_TAG`) | SOPS `apps.services.automation.n8n.sale_digest.site_tag` |
 | Sender (`RESOLVE_KUBELAB_SMTP_FROM`) and the SMTP credential | `infra.smtp.*`, through the shared `kubelab-smtp` above |
 
 The Cloudflare account id is inline in the JSON: it is an identifier, not a credential. If one of
-the three `sale_digest` values is absent the import fails that workflow, before any `kubectl`
+the two `sale_digest` values is absent the import fails that workflow, before any `kubectl`
 call for it, naming the path. The shared `kubelab-smtp` credential and the other workflows still
 import. The values are never printed.
 
@@ -192,10 +195,20 @@ then `make import-n8n ENV=prod`. The token is minted in the Cloudflare dashboard
 > Create Custom Token, permission Account | Account Analytics | Read, this account only, TTL ending
 2026-11-15). `toolkit secrets check-expiry` asks Cloudflare when it dies.
 
+### Dropping Web Analytics from a deployed digest (2026-10-10)
+
+After the change merges, run `make import-n8n ENV=prod`: the import updates the workflow in place
+(same id), so the five Web Analytics nodes disappear from n8n. The SOPS key
+`apps.services.automation.n8n.sale_digest.site_tag` is no longer registered, so `toolkit secrets
+audit` reports it as an unbaselined orphan until it is removed. `toolkit secrets unset` takes a leaf
+path, so remove just that key (the token and the recipient stay):
+
+    toolkit secrets unset apps.services.automation.n8n.sale_digest.site_tag --env prod
+
 ### Removing the sale (2026-11-09 and after)
 
 1. Delete the `sale-metrics-daily-digest.json` entry from `N8N_IMPORT_CATALOG` and the file.
-2. Delete the three `apps.services.automation.n8n.sale_digest.*` entries from `SECRET_CATALOG`
+2. Delete the two `apps.services.automation.n8n.sale_digest.*` entries from `SECRET_CATALOG`
    (`toolkit/features/secrets_manager.py`), their `PROVIDER_CHECKS` line in
    `toolkit/features/secret_expiry.py`, and the `RESOLVE_SALE_DIGEST_*` lines in `PLACEHOLDER_SSOT`.
    Then remove the SOPS block with `toolkit secrets unset apps.services.automation.n8n.sale_digest --env prod`

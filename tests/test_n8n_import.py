@@ -109,15 +109,15 @@ class TestPlaceholderResolution:
             resolve_placeholders("z = 'RESOLVE_VIKUNJA_DEFAULT_PROJECT';", self._cm(config))
 
     def test_every_absent_path_is_named_at_once(self) -> None:
-        """The sale digest needs two SOPS values for its placeholders. Naming only the
+        """A workflow can carry several placeholders whose paths are absent. Naming only the
         first sends the operator round the import once per missing value."""
-        text = "a = 'RESOLVE_SALE_DIGEST_TO'; b = 'RESOLVE_SALE_DIGEST_SITE_TAG'; c = 'RESOLVE_KUBELAB_SMTP_FROM';"
+        text = "a = 'RESOLVE_SALE_DIGEST_TO'; b = 'RESOLVE_VIKUNJA_DEFAULT_PROJECT'; c = 'RESOLVE_KUBELAB_SMTP_FROM';"
         config = {"infra": {"smtp": {"user": "relay@example.test"}}}
         with pytest.raises(PlaceholderError) as raised:
             resolve_placeholders(text, self._cm(config))
         message = str(raised.value)
         assert PLACEHOLDER_SSOT["RESOLVE_SALE_DIGEST_TO"] in message
-        assert PLACEHOLDER_SSOT["RESOLVE_SALE_DIGEST_SITE_TAG"] in message
+        assert PLACEHOLDER_SSOT["RESOLVE_VIKUNJA_DEFAULT_PROJECT"] in message
         assert PLACEHOLDER_SSOT["RESOLVE_KUBELAB_SMTP_FROM"] not in message, "a path that resolves is not a finding"
 
 
