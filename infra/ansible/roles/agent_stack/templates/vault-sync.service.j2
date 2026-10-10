@@ -4,7 +4,14 @@
 [Unit]
 Description=hermes-kubelab vault sync
 Wants=network-online.target
-After=network-online.target
+# It runs as the agent's uid, which the egress rule confines (#2161). Stopping
+# that rule is the kill switch, so with the rule down this unit refuses to
+# start. Requisite, never Requires: pulling the rule up would undo the kill.
+# PartOf stops a run already in flight. The next run recovers what it left: a
+# stale index.lock, or commits that were never pushed.
+Requisite=agent-stack-egress.service
+PartOf=agent-stack-egress.service
+After=network-online.target agent-stack-egress.service
 OnFailure=kubelab-notify@%n.service
 
 [Service]
@@ -19,6 +26,10 @@ Environment=GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 ExecStart={{ agent_stack_vault_libexec }}/vault-sync
 # The remote moved during the push: the next run commits on its tip.
 SuccessExitStatus=75
+# A run stopped by the kill switch (PartOf) ends on SIGTERM. That is the
+# operator's stop, not a failure to page (measured 2026-10-10). A run that
+# times out keeps the result `timeout` and still pages.
+SuccessExitStatus=SIGTERM
 TimeoutStartSec=10min
 NoNewPrivileges=yes
 PrivateTmp=yes

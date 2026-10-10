@@ -3,6 +3,10 @@
 # and every interval after it.
 [Unit]
 Description=hermes-kubelab vault sync, every {{ agent_stack_hermes.vault_sync.interval }}
+# Stopped with the egress rule, the kill switch: otherwise every firing would
+# be refused by the service's Requisite and page (measured 2026-10-10). A
+# provision starts both again.
+PartOf=agent-stack-egress.service
 
 [Timer]
 OnBootSec=2min
