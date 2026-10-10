@@ -17,10 +17,13 @@ created: "2026-06-14"
 
 - Cluster: staging spoke `ace1` (k3s v1.34.4+k3s1), namespace `kubelab`, via Tailscale
   (`~/.kube/kubelab-staging-config` → `https://100.64.0.11:6443`).
-- Deploy mechanism: direct `kubectl apply` of the Apprise objects. Staging is a mutable test bed
-  (ADR-037; the ArgoCD `kubelab-staging` app runs `selfHeal: false`), so a feature-branch service is
-  applied directly rather than merged to `master` first. ArgoCD will show the resource OutOfSync
-  until the branch merges — expected, harmless.
+- Deploy mechanism, as it was done on 2026-06-14 and **not to be copied**: a direct `kubectl apply` of
+  the Apprise objects from the feature branch. That path is superseded twice over. Instead of raw kubectl,
+  a deploy goes through `make deploy-k8s ENV=staging`, which applies as Argo CD's service account
+  (TOOL-029). And a worktree apply lasts only until the next commit lands on `master`, whatever
+  `selfHeal` says (lesson-330, #1083), so a branch is previewed by repointing the staging
+  Application (`make argo-set-revision`, lesson-256). The 2026-10-10 re-measurement ran against
+  Apprise as deployed from `master` by Argo CD.
 
 ## Acceptance criteria
 

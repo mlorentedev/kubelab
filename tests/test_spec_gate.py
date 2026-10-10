@@ -338,8 +338,9 @@ def test_the_real_specs_tree_resolves_end_to_end() -> None:
     for a cross-repo reference just as it does for a missing field, and the gate
     is equally unable to act on either.
 
-    Two specs legitimately track `mlorentedev/knowledge`, and they are named
-    rather than counted: a third appearing means someone pointed a kubelab spec
+    One spec legitimately tracks `mlorentedev/knowledge` (NOTIFY-001 did too,
+    until it archived), and it is named rather than counted: a second appearing
+    means someone pointed a kubelab spec
     at the wrong tracker, which reads as "declared" everywhere else and is
     invisible to the gate here. The fixture suite cannot catch this — it is a
     property of what is committed, not of the parser.
@@ -356,7 +357,7 @@ def test_the_real_specs_tree_resolves_end_to_end() -> None:
         for f in folders
         if (f / "proposal.md").is_file() and spec_gate.spec_issue(f / "proposal.md", REPO) is None
     }
-    assert cross_repo == {"NOTIFY-001", "TOOL-009-cluster-operator-bootstrap"}, (
+    assert cross_repo == {"TOOL-009-cluster-operator-bootstrap"}, (
         f"the set of specs tracked outside {REPO} changed: {sorted(cross_repo)!r}. "
         "A kubelab spec pointed at another repo's tracker looks declared to every "
         "other check and cannot be resolved by this gate."

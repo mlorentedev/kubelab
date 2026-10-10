@@ -14,6 +14,7 @@ The set of routed tags is read from `_SLACK_ROUTES`, not copied here.
 from __future__ import annotations
 
 import itertools
+import re
 import shutil
 from typing import Any
 
@@ -63,10 +64,18 @@ def test_a_resolved_event_is_never_sent_as_a_failure() -> None:
     assert out["type"] == "info"
 
 
+def _literals(field: str) -> set[str]:
+    # Every value the router compares this field against, read from its source,
+    # so a branch added to notify-router.json is in the grid without editing it.
+    return set(re.findall(rf"\b{field} === '([^']*)'", ROUTER_JS))
+
+
 def test_every_tag_the_router_emits_is_a_tag_apprise_routes() -> None:
     routed = {tag for tag, *_ in _SLACK_ROUTES}
-    domains = ["", "ops", "vault", "deploy", "deployment", "gitops", "agent", "agents", "hermes", "status"]
-    severities = ["", "page", "critical", "error", "warning", "notice", "log", "resolved"]
+    domains, severities = _literals("domain"), _literals("severity")
+    assert {"vault", "deploy", "agent"} <= domains and {"page", "resolved"} <= severities
+    domains |= {"", "made-up"}
+    severities |= {"", "made-up"}
     emitted = {
         _route({"domain": d, "severity": s, "title": "t", "body": "b"})["tag"]
         for d, s in itertools.product(domains, severities)

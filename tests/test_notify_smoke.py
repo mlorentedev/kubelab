@@ -122,8 +122,10 @@ def test_the_wrong_secret_is_never_printed_and_never_the_real_one(capsys: pytest
         if c[2].get("Authorization", f"Bearer {_SECRET}") != f"Bearer {_SECRET}"
     ]
     assert wrong and _SECRET not in wrong[0]
-    out = capsys.readouterr()
-    assert wrong[0].removeprefix("Bearer ") not in out.out + out.err
+    printed = "".join(capsys.readouterr())
+    # The log is captured at all (a probe line is in it), so its absence below measures something.
+    assert "wrong secret reject: HTTP 403" in printed
+    assert wrong[0].removeprefix("Bearer ") not in printed
 
 
 def test_auth_not_rejected_returns_false() -> None:
