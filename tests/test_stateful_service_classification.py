@@ -127,6 +127,41 @@ def _service_block(config: dict[str, Any], service: str) -> dict[str, Any] | Non
     return shared if isinstance(shared, dict) else None
 
 
+def _promotion_problems(block: dict[str, Any]) -> list[str]:
+    promotion = block.get("state_promotion")
+    if promotion is None:
+        return ["missing `state_promotion`"]
+    if promotion not in STATE_PROMOTION_VALUES:
+        return [f"`state_promotion: {promotion}` is not one of {sorted(STATE_PROMOTION_VALUES)}"]
+    return []
+
+
+def _deferral_problems(block: dict[str, Any]) -> list[str]:
+    deferral = block.get(DEFERRAL_KEY)
+    if not deferral:
+        return [
+            f"`location: undecided` without `{DEFERRAL_KEY}` — a deferral must name the ticket that owns the decision"
+        ]
+    if not (isinstance(deferral, str) and TICKET_REFERENCE.fullmatch(deferral)):
+        return [
+            f"`{DEFERRAL_KEY}: {deferral!r}` is not a ticket "
+            "reference (expected the form `#972`) — a deferral nobody "
+            "can chase is not a recorded decision"
+        ]
+    return []
+
+
+def _location_problems(block: dict[str, Any]) -> list[str]:
+    location = block.get("location")
+    if location is None:
+        return ["missing `location`"]
+    if location not in LOCATION_VALUES:
+        return [f"`location: {location}` is not one of {sorted(LOCATION_VALUES)}"]
+    if location == "undecided":
+        return _deferral_problems(block)
+    return []
+
+
 def classification_problems(services: dict[str, list[str]], config: dict[str, Any]) -> list[str]:
     """Return one human-readable problem per violation; empty means compliant.
 
@@ -140,32 +175,7 @@ def classification_problems(services: dict[str, list[str]], config: dict[str, An
         if block is None:
             problems.append(f"{where}: no config block found in common.yaml")
             continue
-
-        promotion = block.get("state_promotion")
-        location = block.get("location")
-
-        if promotion is None:
-            problems.append(f"{where}: missing `state_promotion`")
-        elif promotion not in STATE_PROMOTION_VALUES:
-            problems.append(f"{where}: `state_promotion: {promotion}` is not one of {sorted(STATE_PROMOTION_VALUES)}")
-
-        if location is None:
-            problems.append(f"{where}: missing `location`")
-        elif location not in LOCATION_VALUES:
-            problems.append(f"{where}: `location: {location}` is not one of {sorted(LOCATION_VALUES)}")
-        elif location == "undecided":
-            deferral = block.get(DEFERRAL_KEY)
-            if not deferral:
-                problems.append(
-                    f"{where}: `location: undecided` without `{DEFERRAL_KEY}` — a "
-                    "deferral must name the ticket that owns the decision"
-                )
-            elif not (isinstance(deferral, str) and TICKET_REFERENCE.fullmatch(deferral)):
-                problems.append(
-                    f"{where}: `{DEFERRAL_KEY}: {deferral!r}` is not a ticket "
-                    "reference (expected the form `#972`) — a deferral nobody "
-                    "can chase is not a recorded decision"
-                )
+        problems += [f"{where}: {p}" for p in _promotion_problems(block) + _location_problems(block)]
     return problems
 
 
