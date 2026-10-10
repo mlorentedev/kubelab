@@ -75,6 +75,8 @@ RoleBinding      quota-watcher            sync=Synced
 
 **What is missing, stated plainly: no direct read of the provisioning API in prod.** `/api/v1/provisioning/alert-rules` returns `401` with the credentials in the `grafana-admin` Secret — which is **#951 (AUTH-002)** exactly: "its local admin username drifts from the Secret". The task text anticipated that this skip would apply here as it already does to OBS-007's prod tests, and it does; it is cited, not re-diagnosed. So prod's AC2 rests on the chain above (the rules are on disk in the running pod and were read without error by the provisioner) rather than on the API confirmation staging has. That is weaker, and it is recorded as weaker. It closes when #951 does, and #1013 (AUTH-004) is the change that fixes the underlying drift.
 
+**Closed 2026-10-10.** #951 is closed, and the provisioning API now answers in prod. `make test-infra ENV=prod` from master: 71 passed, 1 skipped (`test_local_dns_entries`, unrelated). `TestQuotaUtilizationRules` reads `/api/v1/provisioning/alert-rules` and passes in prod: `test_both_rules_are_provisioned`, `test_rules_treat_no_data_as_a_problem`, `test_rules_persist_through_a_routine_surge`, `test_query_uses_last_not_max_over_time`. The emitter's tests (`TestQuotaWatcherRBAC`, `TestQuotaWatcherEmitter`) pass in prod in the same run. Prod's AC2 now rests on the API read, the same evidence staging has.
+
 **Deviation from the task text, stated rather than glossed.** The task prescribed `make register-spoke ENV=prod` *then* `make deploy-k8s ENV=prod`. Only the first ran. `deploy-k8s` carries an interactive production confirmation (`toolkit/features/validation.py:62`) with no bypass flag — correct by design — and it proved unnecessary: with the grant in place, Argo CD's own automated sync applied the manifests. That is the stronger evidence of the two, since it exercises the GitOps path this spec actually depends on rather than a workstation apply.
 
 **One unrelated resource kept prod `OutOfSync` afterwards; resolved on the operator's explicit call.** Exactly one of prod's 91 resources was out of sync: `PersistentVolumeClaim gitea-data`, a leftover of the ADR-061 Gitea cutover which Argo wanted to prune and could not. Three `Succeeded` backup Job pods created *before* the cutover (`2026-08-13T03:00`, `2026-08-14T00:22`, `2026-08-14T03:00`) still referenced the claim, and the `kubernetes.io/pvc-protection` finalizer blocks deletion while any pod does. `overlays/prod/backup.yaml` was already correct — it no longer mounts `gitea-data` (see its own comment) — so this was historical pod residue, not manifest drift.
@@ -90,6 +92,15 @@ Two observations recorded while doing it, neither belonging to this spec:
 
 - **AUTH-002 (#951) prod-test skip** applies here identically to how it already affects OBS-007's prod tests. Cited per the task, not re-diagnosed.
 
+## Adversarial review findings
+
+`review.md` (2026-10-10, PASS, two Minor, both THEORETICAL). Each finding's disposition:
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | A dimension missing from the `ResourceQuota` makes `hard` null, and the emitter crashes dividing by zero | Declined: the crash stops the log lines, which fires both rules through `noDataState: Alerting`, the failure path AC4 proved live. The quota declares both dimensions, and removing one is a reviewed change to `governance/resourcequota.yaml`. |
+| 2 | `to_mi` does not parse a quantity in scientific notation | Declined for the same reason: an unparsed value crashes the emitter, which alerts through no-data. A wrong number cannot pass silently. |
+
 ## Decisions made during implementation
 
 Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
@@ -104,13 +115,13 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 
 Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.
 
-- [ ] Lesson for the repo's `docs/lessons.md`? <yes / no - one line of what>
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? <yes / no - one line of what>
-- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes / no - one line>
+- [x] Lesson for the repo's `docs/lessons.md`? yes: docs/lessons/observability/lesson-326-max-over-time-remembers-a-spike-long-after-th.md
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: the rules extend OBS-007's alert delivery and IDP-031's quota; no decision is reversed.
+- [x] New pattern candidate for `00_meta/patterns/`? no: it does not yet recur in a second project.
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/<feature-id>/` -> `specs/archive/<feature-id>/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/<feature-id>/` -> `specs/archive/<feature-id>/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] Promotions above executed (if any)

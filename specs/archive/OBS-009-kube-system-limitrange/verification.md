@@ -25,6 +25,18 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - `make test-infra ENV=prod` -> 27 passed, 6 skipped (pre-existing), 0 failed, 2026-08-14 (Part 3) — includes all 3 `TestKubeSystemGovernance` cases; run on a branch forked fresh from `origin/master` post-merge, so this single run is also the prod evidence cited in IDP-031's verification.md
 - Prod smoke test (Part 3), 2026-08-14: `make bootstrap-k8s ENV=prod` applied the LimitRange; prod's svclb DaemonSet suffix (`svclb-traefik-416bf32a`) differs from staging's (`ca274381`), confirming the dynamic-name risk documented in proposal.md is real rather than a staging artifact. Restarted `traefik`/`local-path-provisioner`/`metrics-server` via `make restart-service`, and the DaemonSet via `kubectl rollout restart` (no toolkit target covers DaemonSets — deployments only). Post-restart: 0 unbounded Running containers, 0 BestEffort Running pods, verified via `kubectl get pods -n kube-system -o json`.
 - No regressions in existing test suite: yes
+- Re-verified 2026-10-10 from master: `make test-infra ENV=prod` -> 71 passed, 1 skipped (`test_local_dns_entries`, unrelated); all three `TestKubeSystemGovernance` cases pass in prod.
+
+## Adversarial review findings
+
+`review.md` (2026-10-10, PASS-WITH-GAPS, one Major, no Blocker). Each finding's disposition:
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 (Major) | Nothing guards the invariant that the manifest is never a Kustomize resource; the reviewer listed it in the base and the full suite passed | Fixed in the archive PR: `test_a_bootstrap_manifest_is_never_a_kustomize_resource` in `tests/test_cluster_bootstrap.py`, parametrized over every `cluster_bootstrap` entry, plus `test_the_kustomize_scan_reaches_the_base` so it cannot pass over nothing. `make mutate` listing the file, and separately its `governance` directory, in the base `resources:`: both red. |
+| 2 | A kube-system container requesting more than 384Mi with no limit would be rejected at admission, and no test sees a Pending workload | Ticketed: #2163 (OBS-032). Re-measured by the review on 2026-10-10: no such container in either cluster. |
+| 3 | `test_no_unbounded_containers_after_restart` ignored `initContainers` | Fixed in the archive PR: the test reads `initContainers` too. Passes against prod and staging on 2026-10-10 (there are none today). |
+| Q | 384Mi was sized from Traefik at rest, never under load | Tracked by #1052 (OBS-020, Traefik's explicit `resources`), which the proposal already names. |
 
 ## Decisions made during implementation
 
@@ -39,13 +51,13 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 
 Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.
 
-- [ ] Lesson for the repo's `docs/lessons.md`? <yes / no - one line of what>
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? <yes / no - one line of what>
-- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes / no - one line>
+- [x] Lesson for the repo's `docs/lessons.md`? no: the two corrections recorded above (metrics-server missing from the plan, the svclb suffix) are the measure-don't-trust-the-list shape that lesson-305 and lesson-003 already record for IDP-031.
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: the LimitRange extends IDP-031's namespace governance to kube-system through the existing `cluster_bootstrap` layer (ADR-047); no decision is reversed.
+- [x] New pattern candidate for `00_meta/patterns/`? no: kube-system governance is specific to this K3s fleet.
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/<feature-id>/` -> `specs/archive/<feature-id>/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/<feature-id>/` -> `specs/archive/<feature-id>/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] Promotions above executed (if any)
