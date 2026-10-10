@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "vault": {
+      "command": "/opt/mcp-bridge/node_modules/.bin/mcp-server-filesystem",
+      "args": [
+        "/vault"
+      ],
+      "disabledTools": [
+        "write_file",
+        "edit_file",
+        "create_directory",
+        "move_file"
+      ]
+    }
+  }
+}

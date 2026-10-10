@@ -1,0 +1,85 @@
+---
+# =============================================================================
+# The MCP bridge, measured from Open WebUI's side (spec AI-009 AC9). After the
+# mirror is filled, so an empty listing means the bridge reads nothing, not that
+# there was nothing yet to read.
+# =============================================================================
+
+- name: Verify the MCP bridge
+  when: agent_stack_mcp_bridge_configured | bool
+  block:
+    # Inside Open WebUI's container, with the key Open WebUI was given: the
+    # bridge publishes no port, and the key never leaves the container.
+    - name: Probe the bridge from Open WebUI's container
+      ansible.builtin.command:
+        argv: [docker, exec, -i, open-webui, python3, "-"]
+        stdin: "{{ lookup('ansible.builtin.file', 'mcp-bridge-probe.py') }}"
+      register: _agent_stack_bridge_probe
+      changed_when: false
+      until: >-
+        ansible_check_mode
+        or (_agent_stack_bridge_probe.rc == 0
+            and (_agent_stack_bridge_probe.stdout | from_json).spec == 200)
+      retries: 12
+      delay: 5
+      check_mode: false
+      ignore_errors: "{{ ansible_check_mode }}"
+
+    - name: Read the probe
+      ansible.builtin.set_fact:
+        _agent_stack_bridge: "{{ _agent_stack_bridge_probe.stdout | from_json }}"
+      when: _agent_stack_bridge_probe.rc == 0
+
+    - name: Verify the bridge refuses a request without the key
+      ansible.builtin.assert:
+        that: _agent_stack_bridge.unauthenticated == 401
+        fail_msg: "the bridge answered {{ _agent_stack_bridge.unauthenticated }} to a request without the key"
+        quiet: true
+      when: _agent_stack_bridge is defined
+
+    # mcpo creates no endpoint for a disabled tool; this reads its own spec.
+    - name: Verify the bridge serves no write tool
+      ansible.builtin.assert:
+        that: _agent_stack_bridge.tools | select('in', ['write_file', 'edit_file', 'create_directory', 'move_file']) | list == []
+        fail_msg: "the bridge serves {{ _agent_stack_bridge.tools }}"
+        quiet: true
+      when: _agent_stack_bridge is defined
+
+    - name: Verify the bridge's user reads the mirror
+      ansible.builtin.assert:
+        that: _agent_stack_bridge.listing == 200 and _agent_stack_bridge.entries > 0
+        fail_msg: "list_directory /vault answered {{ _agent_stack_bridge.listing }} with {{ _agent_stack_bridge.entries }} entries"
+        quiet: true
+      when: _agent_stack_bridge is defined
+
+    # What an admin's chat offers. v0.11.4 fetches each connection's spec on
+    # this call, so a bridge Open WebUI cannot reach is missing from the list.
+    - name: Sign in as the break-glass admin to read the tool list
+      ansible.builtin.uri:
+        url: "{{ agent_stack_webui.scheme }}://{{ tailscale_ip }}:{{ agent_stack_webui.default_port }}/api/v1/auths/signin"
+        method: POST
+        body_format: json
+        body:
+          email: "{{ agent_stack_webui_admin_email }}"
+          password: "{{ agent_stack_webui_admin_password }}"
+        timeout: 10
+      register: _agent_stack_admin_session
+      no_log: true
+      when: not ansible_check_mode
+
+    - name: Read the tools Open WebUI offers its admins
+      ansible.builtin.uri:
+        url: "{{ agent_stack_webui.scheme }}://{{ tailscale_ip }}:{{ agent_stack_webui.default_port }}/api/v1/tools/"
+        headers:
+          Authorization: "Bearer {{ _agent_stack_admin_session.json.token }}"
+        timeout: 30
+      register: _agent_stack_tools
+      no_log: true
+      when: not ansible_check_mode
+
+    - name: Verify Open WebUI lists the vault tool
+      ansible.builtin.assert:
+        that: "'server:vault' in _agent_stack_tools.json | map(attribute='id') | list"
+        fail_msg: "Open WebUI lists {{ _agent_stack_tools.json | map(attribute='id') | list }}"
+        success_msg: "Open WebUI lists the vault tool; the bridge serves {{ _agent_stack_bridge.tools | length }} read tools"
+      when: not ansible_check_mode

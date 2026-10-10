@@ -104,6 +104,14 @@ agent_stack_vault_sync_unit: hermes-kubelab-vault-sync
 agent_stack_vault_mirror: "{{ agent_stack_dir }}/vault-mirror"
 agent_stack_vault_mirror_unit: agent-stack-vault-mirror
 
+# The MCP bridge in front of that mirror (spec AI-009 AC9), in Open WebUI's
+# Compose project: it runs exactly when both Open WebUI and the vault do. Its
+# build context is root's, and the image tag exists only on this node.
+agent_stack_mcp_bridge_configured: >-
+  {{ agent_stack_webui_configured | bool and agent_stack_vault_configured | bool }}
+agent_stack_mcp_bridge_dir: "{{ agent_stack_dir }}/mcp-bridge"
+agent_stack_mcp_bridge_image: kubelab/mcp-bridge:local
+
 # hermes-kubelab (ADR-068 D2, spec PR 3). `agent_stack_hermes` is the
 # apps.services.ai.hermes_kubelab map, set by the playbook.
 agent_stack_hermes_project: agent-stack-hermes

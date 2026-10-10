@@ -24,6 +24,7 @@ SECRET_INPUTS = (
     "agent_stack_nan_api_key",
     "_agent_stack_webui_secret_key",
     "_agent_stack_hermes_api_key",
+    "_agent_stack_mcp_bridge_key",
 )
 COMPOSE_FILES = ("compose-webui.yml.j2", "compose-hermes.yml.j2")
 CONFIGURED = "agent_stack_webui_configured | bool"
@@ -55,6 +56,7 @@ def _context() -> dict:
         "agent_stack_deny_rules": yaml.safe_load((ROLE / "files/guardrails-denylist.yaml").read_text())["rules"],
         "_agent_stack_agent_uid": 999,
         "_agent_stack_hermes_api_key": "hermes-api-key-sentinel",
+        "_agent_stack_mcp_bridge_key": "mcp-bridge-key-sentinel",
         "agent_stack_webui_bridge": common["networking"]["nodes"]["ace2"]["webui_bridge"],
     }
 
@@ -299,3 +301,18 @@ def test_only_open_webuis_own_origin_may_read_it_with_credentials() -> None:
     # People at the public name, break-glass at ace2's own address (#2135).
     assert env["CORS_ALLOW_ORIGIN"].split(";") == [env["WEBUI_URL"], direct]
     assert "*" not in env["CORS_ALLOW_ORIGIN"]
+
+
+def test_every_generated_key_survives_a_fresh_nodes_dry_run() -> None:
+    """A dry run skips the `openssl` that writes each key, so on a node that never
+    had one there is nothing to slurp. The read must not fail the dry run."""
+    reads = [t for t in _tasks() if "ansible.builtin.slurp" in t and "key" in t["ansible.builtin.slurp"]["src"]]
+    assert len(reads) >= 3
+    for task in reads:
+        assert task.get("ignore_errors") == "{{ ansible_check_mode }}", task["name"]
+    # And what holds each key reads an absent `content` as empty, or the template fails.
+    registers = {t["register"] for t in reads}
+    holds = [t for t in _tasks() if "ansible.builtin.set_fact" in t and any(r in str(t) for r in registers)]
+    assert len(holds) == len(reads)
+    for task in holds:
+        assert ".content | default('') | b64decode" in str(task["ansible.builtin.set_fact"]), task["name"]

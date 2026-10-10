@@ -1966,6 +1966,14 @@ apps:
           embedding_model: qwen3-embedding
           embedding_batch_size: 16
           reranking_model: rerank
+        # The MCP bridge that serves Open WebUI the vault, read-only (spec AI-009
+        # AC9): mcpo in front of the filesystem MCP server, on Open WebUI's
+        # network and no other, built on ace2 by the agent_stack role. The base
+        # image and the server are pinned in the role's files/mcp-bridge.
+        mcp_bridge:
+          container_port: 8000
+          memory_limit: 256m
+          cpu_limit: "0.5"
       hermes_kubelab:
         # The agent (ADR-068 D2). Its sessions, memory and vault clone live only
         # on ace2, and a second instance would fork them.
