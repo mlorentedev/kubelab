@@ -23,8 +23,8 @@
   {
     "id": "VPNACL-001-f4",
     "behavior": "hermes is SSH-reachable over VPN, carries tag:hermes, and authenticates to a target service with its own scoped credential",
-    "verification": "poetry run pytest tests/test_headscale_role.py -k test_hermes_egress_is_node_like_controlled",
+    "verification": "poetry run pytest tests/test_headscale_role.py -k test_tag_hermes_owned_by_registering_user",
     "state": "partial",
-    "evidence": "passed, 2026-10-10, master `f1c952a8`. SSH and tag proven for hermes-nan on 2026-05-31, retired 2026-09-30; tag:hermes now on hermes-kubelab (AI-009). The own scoped credential was never provisioned (#590)."
+    "evidence": "passed, 2026-10-10. The policy half: tag:hermes is declared and owned by agents@, so a node registered with it carries it. SSH and tag proven live for hermes-nan on 2026-05-31, retired 2026-09-30; tag:hermes is now on hermes-kubelab (AI-009). No test covers the SSH or own-credential claims: the credential was never provisioned (#590)."
   }
 ]

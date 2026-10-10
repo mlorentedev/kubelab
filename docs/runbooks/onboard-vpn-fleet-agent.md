@@ -49,7 +49,9 @@ owner: manu
    docker exec headscale headscale nodes list        # <agent> present, Tags = tag:<agent>
    toolkit infra headscale probe                      # preserved flows still hold
    ```
-   Then confirm the agent reaches an allowed service **with its own credential**, and is reachable only by admin on `:22`.
+   Then confirm the agent reaches an allowed service **with its own credential**.
+   Do not expect "reachable only by admin on `:22`" yet: under the permissive-first policy every user reaches every port
+   of a tagged agent. That clause of ADR-041 lands with the least-privilege iteration (#586, #2189).
 
 ## Gotchas (hard-won)
 

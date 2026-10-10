@@ -13,8 +13,8 @@ Mapped 2026-10-10 against master `f1c952a8`, for DEBT-019 (#2034). The original 
 |---|---|---|
 | AC1: policy-path parameter, mounted file, reload not restart | met | #235 (`10966ba5`, 2026-06-01). `headscale_policy_path` in the role's defaults; the handler is `docker kill --signal=HUP headscale`. `TestPolicyPathParameterized`, `TestReloadHandler` and `TestPolicyFileDeploy` in `tests/test_headscale_role.py` (28 passed, 2026-10-10). |
 | AC2: `headscale policy check` as a CI gate | met | `8b4e4a4d`. The step "Validate Headscale ACL policy" in `.github/workflows/check-config-drift.yml` runs `toolkit infra headscale policy-check` on PRs, pushes and nightly. `make check-headscale-policy`: "Policy is valid" (2026-10-10). |
-| AC3: preserved flows after reload; a broken policy auto-reverts | partial | Flows: `toolkit infra headscale probe` 7/7 against the live mesh on 2026-05-31, with 9 nodes online. Auto-revert: proven statically only (`TestAutoRevert`). The restore of a previous policy has never run live, which #2184 (VPN-ACL-011) tracks. |
-| AC4: hermes SSH-reachable, tagged, own scoped credential | partial, partly superseded | SSH and `tag:hermes` were proven for hermes-nan on 2026-05-31. hermes-nan was retired on 2026-09-30, so the SSH half has no subject. `tag:hermes` is now held by `hermes-kubelab` (AI-009, node 68), whose egress was measured on 2026-10-07: `vps:443` only. The own-credential (C6) half was never done and is handed to #590. |
+| AC3: preserved flows after reload; a broken policy auto-reverts | partial, ticketed (#2184) | Flows: `toolkit infra headscale probe` 7/7 against the live mesh on 2026-05-31, with 9 nodes online. Auto-revert: proven statically only (`TestAutoRevert`). The restore of a previous policy has never run live, which #2184 (VPN-ACL-011) tracks. |
+| AC4: hermes SSH-reachable, tagged, own scoped credential | partial, ticketed (#590) | SSH and `tag:hermes` were proven for hermes-nan on 2026-05-31. hermes-nan was retired on 2026-09-30, so the SSH half has no subject. `tag:hermes` is now held by `hermes-kubelab` (AI-009, node 68), whose egress was measured on 2026-10-07: `vps:443` only. The own-credential (C6) half was never done and is handed to #590. |
 
 ### Correction, 2026-10-10
 
@@ -36,17 +36,17 @@ The AC3 line below said "auto-revert exercised for real". It was not. The first 
 
 ## Adversarial review findings
 
-`review.md`, **FAIL**, by `nan/mimo-v2.6-flash` on 2026-10-10, against `04d538e0`. The spec is not archived. Its contract pass (`proposal.md`, `tasks.md`, `features.json`) waits on the operator decisions below, then a new review.
+Round 1: `review-round1.md`, **FAIL**, by `nan/mimo-v2.6-flash` on 2026-10-10, against `04d538e0`. The operator decided F1, F3 and the archive on 2026-10-10: correct the contract to the live posture, keep both unmet halves ticketed, archive after a passing round 2. The contract pass made these edits, and round 2 reviews them.
 
 | Finding | Disposition |
 |---|---|
-| F1 (Major, reproduced): the proposal and ADR-041 §3 say `tag:hermes` is reachable only by admin on `:22`; the rendered policy admits every port to all three user identities | Ticketed as #2189 (VPN-ACL-012). Headscale's policy is allow-only, so the clause cannot be written beside the user `*:*` baseline: it was never implementable under permissive-first. No escalation today, since all three identities already reach everything; it becomes one when #586 narrows user egress, so the two land together. Operator decision: correct the contract, or implement through #586. No policy was changed or probed for this disposition. |
+| F1 (Major, reproduced): the proposal and ADR-041 §3 say `tag:hermes` is reachable only by admin on `:22`; the rendered policy admits every port to all three user identities | Ticketed as #2189 (VPN-ACL-012). Headscale's policy is allow-only, so the clause cannot be written beside the user `*:*` baseline: it was never implementable under permissive-first. No escalation today, since all three identities already reach everything; it becomes one when #586 narrows user egress, so the two land together. Operator decision (2026-10-10): the clause stays the target and is delivered through #586. `proposal.md` carries a dated note under the decision, ADR-041 an amendment to §3, and `onboard-vpn-fleet-agent.md` step 5 no longer tells the reader to expect it. No policy was changed or probed for this disposition. |
 | F2 (Major): the auto-revert restore has never run | Already ticketed: #2184 (VPN-ACL-011, renumbered from VPN-ACL-010, which #591 holds). AC3 stays `partial`. |
-| F3 (Major): AC4's own-credential half was never delivered, and its SSH half has no live subject | Already ticketed: #590. Operator decision for the contract pass: amend AC4 to the superseded subject, or deliver through #590. AC4 stays `partial`. |
+| F3 (Major): AC4's own-credential half was never delivered, and its SSH half has no live subject | Already ticketed: #590. Operator decision (2026-10-10): AC4 names its live subject, `hermes-kubelab`, with the retired `hermes-nan` recorded beside it. This is a factual correction, not a supersession: the criterion stays unmet and ticketed under #590, and its checkbox stays unticked. |
 | F4 (Major, theoretical): a policy rejected on reload deploys green, and the CI and deploy host builders have no parity test | Ticketed as #2190 (VPN-ACL-013). |
-| F5 (Minor): `features.json` f4's command runs an egress test, not the row's SSH or credential claims | Awaits the contract pass. f4 has no test to map to while hermes-nan is gone, which is the defect class of #2180. |
+| F5 (Minor): `features.json` f4's command runs an egress test, not the row's SSH or credential claims | Fixed: f4 runs `test_tag_hermes_owned_by_registering_user`, the policy half of its "carries tag:hermes" claim, and its evidence states that nothing tests the SSH or credential claims (#590). |
 | F6 (Minor): the `rpi4 route` and intra-K3s probe flows are optional, so their regression would not trigger a revert | Declined: rpi4 is on-demand (ADR-028). A required route probe would fail every VPS deploy while the homelab is off, which is the reason `test_optional_broken_flow_is_logged_not_fatal` pins. |
-| F7 (Minor): the AC checkboxes in `proposal.md` are unticked | Awaits the contract pass. AC3 and AC4 are not met, so they stay unticked. |
+| F7 (Minor): the AC checkboxes in `proposal.md` are unticked | Fixed: AC1 and AC2 are ticked. AC3 and AC4 stay unticked, each with its ticket beside it. |
 
 ## Decisions made during implementation
 
