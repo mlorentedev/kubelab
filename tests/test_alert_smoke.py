@@ -134,12 +134,17 @@ class TestFiringDomains:
 
 
 class TestTheAlertNamesTheInducedDomain:
-    def _run(self, firing_json: str) -> smoke.SmokeResult:
+    def _run(self, firing_json: str, after_firing: str | None = None) -> smoke.SmokeResult:
         states = iter([_rules("inactive"), firing_json])
+        # Every Apprise read reports one more delivery, so both notification
+        # stages pass and `ok` turns on the stage under test alone.
+        delivered = itertools.count()
 
         def fake_kubectl(args: list[str], stdin: str | None = None) -> subprocess.CompletedProcess:
             if "exec" in args:
-                return _proc(next(states, _rules("inactive")))
+                return _proc(next(states, after_firing if after_firing is not None else _rules("inactive")))
+            if "logs" in args:
+                return _proc("Delivered Notification\n" * next(delivered))
             return _proc()
 
         # A clock that advances one second per read, so each wait polls at least
@@ -150,7 +155,16 @@ class TestTheAlertNamesTheInducedDomain:
         )
 
     def test_a_firing_instance_labelled_with_the_probe_host_counts(self) -> None:
-        assert self._run(_firing(smoke.PROBE_HOST)).named_domain
+        result = self._run(_firing(smoke.PROBE_HOST))
+        assert result.named_domain
+        assert result.ok, "every stage passed in this harness, so the smoke must pass"
+
+    def test_an_unreadable_state_after_firing_is_not_a_cleared_rule(self) -> None:
+        """A failed read while waiting to resolve says nothing about the rule."""
+        result = self._run(_firing(smoke.PROBE_HOST), after_firing="<html>401</html>")
+        assert result.fired
+        assert not result.resolved
+        assert not result.ok
 
     def test_a_firing_instance_without_the_domain_fails_the_smoke(self) -> None:
         """The rule can fire and still send a message nobody can act on."""

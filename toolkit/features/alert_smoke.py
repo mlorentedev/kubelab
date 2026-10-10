@@ -278,7 +278,9 @@ def run_alert_smoke(
 
     if fired:
         after_firing = deliveries()
-        resolved = _await(lambda: state() != "firing", RESOLVE_TIMEOUT_S, "rule to clear", sleep=sleep, now=now)
+        # Cleared means Grafana says `inactive`. Anything else, an unreadable
+        # answer included, says nothing about the rule, so it is not a pass.
+        resolved = _await(lambda: state() == "inactive", RESOLVE_TIMEOUT_S, "rule to clear", sleep=sleep, now=now)
         if resolved:
             resolve_notified = _await(
                 lambda: deliveries() > after_firing, 120, "the resolved notification", sleep=sleep, now=now
