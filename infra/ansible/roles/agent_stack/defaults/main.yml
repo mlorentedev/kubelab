@@ -31,6 +31,9 @@ agent_stack_webui_configured: >-
   {{ agent_stack_webui_oidc_client_secret | length > 0
      and agent_stack_webui_admin_password | length > 0 }}
 agent_stack_nan_api_key: ""
+# The fallback model's key (spec AI-012 AC2), from prod's vault. Empty means no
+# fallback: an entry Hermes cannot authenticate would only add a failure.
+agent_stack_anthropic_api_key: ""
 agent_stack_nan_api_base_url: https://api.nan.builders/v1
 
 # The container's resolvers, the rpi3_services form of `docker_dns_servers`:

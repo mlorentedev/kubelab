@@ -2079,6 +2079,10 @@ apps:
         models:
           default: deepseek-v4-flash
           unmetered: qwen3.6
+          # Spec AI-012 AC2: an interactive session moves to it when NaN fails,
+          # on Anthropic's key, in a workspace capped at 20 USD a month. Pinned
+          # scheduled and delegated work never does.
+          fallback: claude-haiku-5-5
         # Hermes config keys ported from hermes-nan's `config-desired.yaml` (spec
         # AI-012 AC1), in Hermes's own layout. The role renders every leaf; keys
         # equal to the image's defaults are pinned here so an image bump cannot

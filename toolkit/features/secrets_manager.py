@@ -1037,6 +1037,21 @@ SECRET_CATALOG: list[SecretSpec] = [
         ),
         envs=("prod",),
     ),
+    # Spec AI-012 AC2: the fallback model's key, in the Anthropic workspace
+    # `hermes-kubelab`, whose spend limit (20 USD a month) is set in the console.
+    SecretSpec(
+        key_path="apps.services.ai.hermes_kubelab.anthropic_api_key",
+        description="Anthropic API key of the hermes-kubelab workspace (the fallback model)",
+        kind=SecretKind.EXTERNAL,
+        format_hint="sk-ant-…",
+        expiry=Expiry.NEVER,
+        services=("hermes_kubelab",),
+        rotate_note=(
+            "Console > Settings > API keys: create one in the hermes-kubelab workspace, `toolkit secrets set` it, "
+            "re-provision ace2, then disable the old one."
+        ),
+        envs=("prod",),
+    ),
     # =========================================================================
     # Argo CD (hub management plane — common.enc.yaml)  [TOOL-023 / audit D64]
     # =========================================================================
