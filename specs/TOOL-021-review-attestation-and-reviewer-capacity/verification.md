@@ -19,7 +19,7 @@ Mapped 2026-10-10 against master `41f21b99`, for DEBT-019 (#2034) and #2171. Eve
 | AC6: PR-Agent posts inline comments with `NAN_API_KEY` alone | AC6-PENDING | See "AC6" below. |
 | AC7: credential material never reaches the endpoint | met | #2094 (2026-10-07) changed only `infra/config/secrets/prod.enc.yaml`. Run 37589208861 skipped the PR-Agent step and ran "Declare unreviewed — diff is entirely excluded". Test: `test_credential_material_is_excluded_from_the_model_call`. |
 | AC8: a release PR is neither reviewed nor left pending | met | #1680 (2026-09-05): the status read `exempt from review` at 21:05:54Z, and the PR-Agent run on its head was `skipped`. CodeRabbit reviewed it later, so it ended `attested`; attestation outranks exemption by design. |
-| AC9: the reviewer's own failure is red | met | See "AC9" below: #2178, both failures injected. |
+| AC9: the reviewer's own failure is red | met | See "AC9" below: #2178 (unreachable endpoint) and #2183 (invalid credential). |
 | AC10: the gate is required, so an unreviewed PR is BLOCKED | met | See "AC10" below: #2178, with every other required check green. |
 | AC11: nothing enables auto-merge, by test | met | #2152 (`5b520047`). |
 
@@ -48,7 +48,13 @@ AC6-PENDING
    - PR-Agent logged `Failed to review PR: Failed to generate prediction with any model of ['openai/mimo-v2.6-flash', 'openai/deepseek-v4-flash']`, then `Tool reported success but recorded a failure; failing the action`;
    - steps `PR-Agent` and `Fail if no review was published` both concluded `failure`;
    - `review-attestation` read `failure — not reviewed, and not declared as such`.
-2. **Invalid credential**, `c9794628`. The endpoint was restored and `OPENAI__KEY` set to a placeholder. AC9-B-PENDING
+2. **Invalid credential**, on #2183 at `b0b1c7d6`, a second throwaway (closed unmerged, branch deleted). #2178's own run for this push was evicted from the shared review queue (#2179), and a `/review` re-run reviews with master's workflow and key, so it proves nothing about the PR's (lesson-552). #2183 set only `OPENAI__KEY` to a placeholder and was reviewed by its `pull_request` run, 38045178907:
+   - both models were tried, and each returned `litellm.AuthenticationError: AuthenticationError: OpenAIException - Invalid API key.`;
+   - PR-Agent logged `Failed to review PR: Failed to generate prediction with any model of ['openai/mimo-v2.6-flash', 'openai/deepseek-v4-flash']`, then `Tool reported success but recorded a failure; failing the action`;
+   - steps `PR-Agent` and `Fail if no review was published` both concluded `failure`;
+   - `review-attestation` read `failure — not reviewed, and not declared as such` at 10:52:55Z, while `Validate`, `Detect Changes` and `Tests` passed, and the PR was `MERGEABLE` and `BLOCKED`.
+
+The authentication error is what tells this half from the first: the endpoint answered and refused the key.
 
 ### AC10 — BLOCKED, isolated to the attestation
 
@@ -57,7 +63,9 @@ Branch protection on `master`, read live 2026-10-10:
 - `required_pull_request_reviews` is present with `required_approving_review_count: 0`, so no approval rule can block a merge;
 - `enforce_admins: true`.
 
-#2178 at `130264f8`, 10:07:23Z: `Validate`, `Detect Changes` and `Tests` passed and `review-attestation` failed. `mergeable: MERGEABLE`, `mergeStateStatus: BLOCKED`. The attestation is the only required check that is not green, so it alone blocks the merge. CONTRAST-PENDING
+#2178 at `130264f8`, 10:07:23Z: `Validate`, `Detect Changes` and `Tests` passed and `review-attestation` failed. `mergeable: MERGEABLE`, `mergeStateStatus: BLOCKED`. The attestation is the only required check that is not green, so it alone blocks the merge.
+
+The contrast is #2177 at `5618e9d2`: the same four required contexts all passed, `review-attestation` read `success`, and it merged as `f1c952a8` at 10:34:59Z. Of the required checks, only the attestation differs between the two PRs.
 
 ## Phase 0 — backtest, before the gate governs anything
 
