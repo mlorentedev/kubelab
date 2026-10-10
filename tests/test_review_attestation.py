@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import re
 
 import pytest
 
@@ -473,3 +474,49 @@ def test_the_clean_verdict_marker_is_declared_not_hardcoded(registry: dict) -> N
     protects, applied to what counts as a review rather than to who reviews."""
     entry = next(r for r in registry["reviewers"] if r["login"] == "coderabbitai")
     assert "No actionable comments were generated in the recent review" in entry["review_markers"]
+
+
+# --------------------------------------------------------------------------- #
+# AC3 and AC4, against what production actually sends
+# --------------------------------------------------------------------------- #
+
+SAME_ACCOUNT_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "review_attestation" / "coderabbitai-same-account.json"
+
+
+def test_the_same_account_is_declined_or_attested_by_what_it_wrote(registry: dict) -> None:
+    """AC3: one login, two verdicts, decided by the comment's content.
+
+    Both bodies are CodeRabbit's real comments: #2057 carries only the
+    rate-limit notice; on #2098 the same persistent comment carries the notice
+    and, edited in later, the review. A login-keyed gate would give both the
+    same verdict.
+    """
+    fx = json.loads(SAME_ACCOUNT_FIXTURE.read_text(encoding="utf-8"))
+    notice, both = fx["notice_only"], fx["notice_then_review"]
+    assert notice["login"] == both["login"]
+
+    declined = classify(pr(comments=[comment(notice["login"], notice["body"])]), registry)
+    attested = classify(pr(comments=[comment(both["login"], both["body"])]), registry)
+
+    assert declined.state == "declined"
+    assert attested.state == "attested"
+
+
+def test_the_gate_reads_its_payload_from_gh_pr_view_only() -> None:
+    """AC4: the payload's shape is GraphQL's, so a REST shape never reaches `classify`.
+
+    The one API-dependent difference that does reach it is the `[bot]` suffix
+    on a login, covered by `test_login_spelling_does_not_change_the_verdict`.
+    A switch of the fetch to REST would change `author` to `user` and drop
+    `authorAssociation`, and the gate would read every review as nobody's, so
+    the command and its field list are pinned here.
+    """
+    workflow = (REPO_ROOT / ".github" / "workflows" / "review-attestation.yml").read_text(encoding="utf-8")
+    assert re.search(
+        r'gh pr view "\$NUMBER" \\\s*\n'
+        r"\s*--json number,state,labels,body,comments,reviews,author,files \\\s*\n"
+        r"\s*> pr-payload\.json",
+        workflow,
+    ), "the payload step no longer fetches the GraphQL shape classify() reads"
+    assert workflow.count("pr-payload.json") >= 2
+    assert "--payload-file pr-payload.json" in workflow
