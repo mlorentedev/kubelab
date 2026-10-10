@@ -3,12 +3,23 @@
 # {{ agent_stack_hermes.image }}. Mounted read-only into the gateway. No secret
 # is written here: the keys it names live in the 0600 env file, which Compose
 # reads on the host.
+{#
+  The keys ported from hermes-nan (spec AI-012 AC1), declared in the SSOT. The
+  sections this file decides are rendered by hand below and take from it only
+  the keys the role does not own; every other section is rendered as declared.
+  JSON is YAML, so `tojson` writes each value as the SSOT typed it.
+#}
+{% set ported = agent_stack_hermes.agent_config %}
+{% set role_sections = ['approvals', 'terminal', 'slack', 'unauthorized_dm_behavior', 'cron', 'model', 'delegation'] %}
 
 model:
   provider: custom
   base_url: {{ agent_stack_nan_api_base_url }}
   key_env: NAN_API_KEY
   default: {{ agent_stack_hermes.models.default }}
+{% for key, value in (ported.model | default({})).items() if key not in ['provider', 'base_url', 'key_env', 'default'] %}
+  {{ key }}: {{ value | tojson }}
+{% endfor %}
 
 terminal:
   # Every command runs in a container on the agent's rootless daemon, never on
@@ -68,3 +79,12 @@ cron:
 
 delegation:
   model: {{ agent_stack_hermes.models.unmetered }}
+{% for key, value in (ported.delegation | default({})).items() if key != 'model' %}
+  {{ key }}: {{ value | tojson }}
+{% endfor %}
+
+# The rest of the ported harness, as `apps.services.ai.hermes_kubelab.agent_config`
+# declares it.
+{% for section, value in ported.items() if section not in role_sections %}
+{{ section }}: {{ value | tojson }}
+{% endfor %}

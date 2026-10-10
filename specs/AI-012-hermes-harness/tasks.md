@@ -23,9 +23,9 @@ One PR per block, in this order. Each block starts with the failing test.
 
 ### PR 1: config parity (AC1)
 
-- [ ] [P] [AC1] `tests/test_hermes_config.py`: assert each applicable `config-desired.yaml` key renders with its declared value. Read the declarations from `common.yaml`, not literals. Expected: FAIL.
-- [ ] [AC1] Declare the values under `apps.services.ai.hermes_kubelab.agent_config` (name to be confirmed with the operator) and render them in `hermes-config.yaml.j2`. Check tirith's presence in the image before rendering `security.tirith_*`.
-- [ ] [AC1] Live: provision `changed=1`, then `0`. `hermes config show` inside the gateway reads every key back.
+- [x] [P] [AC1] `tests/test_hermes_config.py`: assert each applicable `config-desired.yaml` key renders with its declared value. Read the declarations from `common.yaml`, not literals. Expected: FAIL. ✓ 2026-10-10
+- [x] [AC1] Declare the values under `apps.services.ai.hermes_kubelab.agent_config` (name to be confirmed with the operator) and render them in `hermes-config.yaml.j2`. Check tirith's presence in the image before rendering `security.tirith_*`. ✓ 2026-10-10
+- [x] [AC1] Live: provision `changed=1`, then `0`. `hermes config show` inside the gateway reads every key back. ✓ 2026-10-10
 
 ### PR 2: fallback (AC2, needs R1)
 

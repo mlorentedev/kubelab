@@ -1,9 +1,10 @@
 # Docker, Compose and image builds
 
-20 lessons, newest first. Back to [all categories](../_index.md).
+21 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 555 | [`hermes approvals test` does not run the command scanner](lesson-555-hermes-approvals-test-does-not-run-the-command-scanner.md) | 2026-10-10 |
 | 546 | [mcpo takes its API key only on the command line, where every user on the host can read it](lesson-546-mcpo-takes-its-api-key-only-on-the-command-line.md) | 2026-10-10 |
 | 542 | [ufw does govern a port published by a rootless daemon](lesson-542-ufw-does-govern-a-port-published-by-a-rootless-daemon.md) | 2026-10-08 |
 | 540 | [Hermes reuses a sandbox and dry-runs a command without looking at its mounts](lesson-540-hermes-reuses-a-sandbox-and-dry-runs-a-command-without-looking-at-its-mounts.md) | 2026-10-08 |

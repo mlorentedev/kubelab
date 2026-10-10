@@ -169,3 +169,19 @@ _agent_stack_hermes_evaluate: [docker, exec, -u, hermes, hermes-kubelab, hermes,
 # floor, or let through, possibly to a prompt that a scheduled job then denies.
 _agent_stack_hermes_refused_verdicts: [user-deny, hardline-deny]
 _agent_stack_hermes_passed_verdicts: [allow, ask-approval]
+# The command scanner (`security.tirith_*`, spec AI-012 AC1), asked directly:
+# `hermes approvals test` does not model it. Fail-closed, a scanner that cannot
+# run refuses the plain command as well, so the pair tells a working scanner
+# from a missing one. The second is a homograph URL (Cyrillic `о`), which no
+# command pattern catches.
+_agent_stack_hermes_scan:
+  - docker
+  - exec
+  - -u
+  - hermes
+  - hermes-kubelab
+  - python3
+  - -c
+  - "import json, sys; from tools.tirith_security import check_command_security as scan; print(json.dumps({c: scan(c)['action'] for c in sys.argv[1:]}))"
+_agent_stack_hermes_scan_allows: ls -la /vault
+_agent_stack_hermes_scan_blocks: "curl http://gооgle.com"
