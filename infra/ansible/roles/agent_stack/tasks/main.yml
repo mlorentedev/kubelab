@@ -30,12 +30,15 @@
   ansible.builtin.slurp:
     src: "{{ agent_stack_dir }}/webui-secret-key"
   register: _agent_stack_key_file
+  # A dry run generates nothing, so on a node that never had the key there
+  # is none to read: the templates then render an empty one, a change.
+  ignore_errors: "{{ ansible_check_mode }}"
   no_log: true
   tags: [agent_stack]
 
 - name: Hold the session key for the env template
   ansible.builtin.set_fact:
-    _agent_stack_webui_secret_key: "{{ _agent_stack_key_file.content | b64decode | trim }}"
+    _agent_stack_webui_secret_key: "{{ _agent_stack_key_file.content | default('') | b64decode | trim }}"
   no_log: true
   tags: [agent_stack]
 
@@ -53,13 +56,16 @@
   ansible.builtin.slurp:
     src: "{{ agent_stack_dir }}/hermes-api-key"
   register: _agent_stack_hermes_key_file
+  # A dry run generates nothing, so on a node that never had the key there
+  # is none to read: the templates then render an empty one, a change.
+  ignore_errors: "{{ ansible_check_mode }}"
   when: agent_stack_hermes_configured | bool
   no_log: true
   tags: [agent_stack]
 
 - name: Hold the API key for the env templates
   ansible.builtin.set_fact:
-    _agent_stack_hermes_api_key: "{{ _agent_stack_hermes_key_file.content | b64decode | trim }}"
+    _agent_stack_hermes_api_key: "{{ _agent_stack_hermes_key_file.content | default('') | b64decode | trim }}"
   when: agent_stack_hermes_configured | bool
   no_log: true
   tags: [agent_stack]
@@ -77,13 +83,16 @@
   ansible.builtin.slurp:
     src: "{{ agent_stack_dir }}/mcp-bridge-key"
   register: _agent_stack_mcp_bridge_key_file
+  # A dry run generates nothing, so on a node that never had the key there
+  # is none to read: the templates then render an empty one, a change.
+  ignore_errors: "{{ ansible_check_mode }}"
   when: agent_stack_mcp_bridge_configured | bool
   no_log: true
   tags: [agent_stack]
 
 - name: Hold the MCP bridge key for the env templates
   ansible.builtin.set_fact:
-    _agent_stack_mcp_bridge_key: "{{ _agent_stack_mcp_bridge_key_file.content | b64decode | trim }}"
+    _agent_stack_mcp_bridge_key: "{{ _agent_stack_mcp_bridge_key_file.content | default('') | b64decode | trim }}"
   when: agent_stack_mcp_bridge_configured | bool
   no_log: true
   tags: [agent_stack]

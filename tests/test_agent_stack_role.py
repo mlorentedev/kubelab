@@ -301,3 +301,12 @@ def test_only_open_webuis_own_origin_may_read_it_with_credentials() -> None:
     # People at the public name, break-glass at ace2's own address (#2135).
     assert env["CORS_ALLOW_ORIGIN"].split(";") == [env["WEBUI_URL"], direct]
     assert "*" not in env["CORS_ALLOW_ORIGIN"]
+
+
+def test_every_generated_key_survives_a_fresh_nodes_dry_run() -> None:
+    """A dry run skips the `openssl` that writes each key, so on a node that never
+    had one there is nothing to slurp. The read must not fail the dry run."""
+    reads = [t for t in _tasks() if "ansible.builtin.slurp" in t and "key" in t["ansible.builtin.slurp"]["src"]]
+    assert len(reads) >= 3
+    for task in reads:
+        assert task.get("ignore_errors") == "{{ ansible_check_mode }}", task["name"]
