@@ -233,6 +233,28 @@ class TestRenderAndApply:
         assert ok is True
         assert runner.call_count == 2
 
+    @pytest.mark.parametrize(("optional", "expected"), [(False, False), (True, True)])
+    def test_a_placeholder_with_no_render_map_is_never_applied(
+        self, tmp_path: Path, optional: bool, expected: bool
+    ) -> None:
+        """An entry that forgot its `render:` map still fails closed (TOOL-009 review).
+
+        Without the map nothing would substitute the placeholder, and kubectl would
+        receive the literal `RESOLVE_*` string as an address.
+        """
+        _write(tmp_path, "data:\n  forward: RESOLVE_RPI4_TAILSCALE_IP\n")
+        runner = _ok("dry ok", "applied")
+        ok = render_and_apply(
+            BootstrapEntry.from_dict(
+                {"name": "coredns-custom", "namespace": "kube-system", "manifest": "m.yaml", "optional": optional}
+            ),
+            kubeconfig="/kc",
+            project_root=tmp_path,
+            runner=runner,
+        )
+        assert ok is expected
+        assert runner.call_count == 0
+
 
 # ── resolve_magicdns (dig wrapper) ──────────────────────────────────────────────
 

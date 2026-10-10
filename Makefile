@@ -717,8 +717,8 @@ watch-argocd:
 # `make deploy-k8s ENV=x`:
 #   - coredns-custom (RPi4 hairpin DNS, MagicDNS-rendered) → the cluster_bootstrap layer.
 #   - external EndpointSlices (pihole / uptime-kuma) → the Kustomize base.
-# The aws1 (argocd) EndpointSlice render moved to `toolkit infra k8s render-apply`
-# inside `_deploy-argocd-helm`. No more inline dig|sed|kubectl in this Makefile.
+# The hub's (argocd) EndpointSlice render is `make argocd-repoint`, which calls
+# `toolkit infra k8s render-apply`. No more inline dig|sed|kubectl in this Makefile.
 
 # Recover Argo CD from failed Helm upgrade (pending-upgrade state)
 # Usage: make recover-argocd
