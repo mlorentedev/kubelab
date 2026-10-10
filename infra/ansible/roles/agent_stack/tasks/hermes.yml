@@ -415,3 +415,22 @@
       changed_when: false
       failed_when: (_agent_stack_hermes_allowed.stdout | from_json).verdict not in _agent_stack_hermes_passed_verdicts
       check_mode: false
+
+    - name: Ask the command scanner for a verdict it must allow and one it must block
+      ansible.builtin.command:
+        argv: "{{ _agent_stack_hermes_scan + [_agent_stack_hermes_scan_allows, _agent_stack_hermes_scan_blocks] }}"
+      become_user: "{{ agent_stack_agent_user }}"
+      environment: "{{ agent_stack_agent_daemon_env }}"
+      register: _agent_stack_hermes_scanned
+      # The first start downloads the scanner in the background; until it lands,
+      # fail-closed refuses both.
+      until: >-
+        _agent_stack_hermes_scanned.rc == 0
+        and (_agent_stack_hermes_scanned.stdout | from_json)[_agent_stack_hermes_scan_allows] == 'allow'
+        and (_agent_stack_hermes_scanned.stdout | from_json)[_agent_stack_hermes_scan_blocks] == 'block'
+        or ansible_check_mode
+      retries: 12
+      delay: 5
+      changed_when: false
+      check_mode: false
+      ignore_errors: "{{ ansible_check_mode }}"

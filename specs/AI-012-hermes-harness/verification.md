@@ -9,9 +9,44 @@ created: "2026-10-10"
 
 Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
 
-- [ ] Criterion 1 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 2 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 3 -> commit `<hash>` / test `<name>`
+- [x] AC1 -> PR 1 (`feat/ai012-config-parity`). Tests in `tests/test_hermes_config.py`:
+  - `test_every_ported_key_renders_with_its_declared_value`, one case per leaf of `agent_config`;
+  - `test_the_ported_keys_cannot_reach_what_the_role_decides`;
+  - `test_a_role_owned_key_in_the_ssot_does_not_override_the_role`;
+  - `test_every_provision_asks_the_running_scanner_for_both_verdicts`.
+
+  `_config()` now loads with a loader that refuses duplicate keys, because `safe_load` keeps the last of two silently.
+- [ ] AC2 to AC11: pending.
+
+### AC1, live on ace2, 2026-10-10
+
+- The provision from the branch gave `changed=3`: the config, the gateway restart and the sandbox sweep. A second run gave `changed=0`.
+- Hermes's own `load_config()` inside the gateway reads the ported values back, for example:
+  - `security.tirith_fail_open False`, `privacy.redact_pii True`;
+  - `agent.max_turns 120`, `model.context_length 1000000`;
+  - `compression.threshold 0.25`, `sessions.retention_days 180`;
+  - `tool_loop_guardrails.hard_stop_after.same_tool_failure 12`.
+- The scanner resolves to `$HERMES_HOME/bin/tirith` (PATH, then that directory). `check_command_security` gives:
+  - `ls -la /vault`: `allow`;
+  - a homograph URL: `block`;
+  - a pipe to `sh`: `block`.
+- With `TIRITH_BIN=/nonexistent`, `ls -la /vault` gives `block`, with the summary `tirith spawn failed (fail-closed)`. So the provision's probe tells a working scanner from a missing one.
+- `hermes approvals test` does not model the scanner: the same homograph reads `allow` there. That is why the probe calls the scanner directly.
+
+### AC1, keys left out
+
+| `config-desired.yaml` key | Reason |
+|---|---|
+| `approvals.mode: off` | ADR-068 D2: approvals are manual and fail closed. `off` is how hermes-nan ran with no approvals at all |
+| `terminal.backend: local` | ADR-068 D2: every command runs in the docker sandbox, never on ace2 |
+| `updates.pre_update_backup`, `updates.backup_keep` | They guard `hermes update`, which a container does not run. The image is pinned in `common.yaml` and changes through a PR. The data directory is in restic (AI-009 PR 6) |
+| `delegation.model` | Already rendered from `models.unmetered` (ADR-068 D7) |
+| `fallback_providers` | PR 2, Anthropic Haiku in place of OpenRouter |
+| `mcp_servers.brightdata` | PR 7 |
+
+Two limits remain, and neither is in AC1's scope:
+- The scanner binary lives in the data directory, which the gateway's process can write. The sandbox, where commands run, does not mount that directory.
+- The scanner's circuit breaker fails open after repeated crashes, whatever `tirith_fail_open` says (`tools/tirith_security.py`, issue #41400 upstream).
 
 ## Test status
 
