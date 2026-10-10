@@ -7,7 +7,20 @@ created: "2026-05-31"
 
 ## Evidence
 
-Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, observed behavior). Filled during implementation.
+Mapped 2026-10-10 against master `f1c952a8`, for DEBT-019 (#2034). The original 2026-05-31 notes follow the table, corrected where they overclaimed.
+
+| AC | Status | Evidence |
+|---|---|---|
+| AC1: policy-path parameter, mounted file, reload not restart | met | #235 (`10966ba5`, 2026-06-01). `headscale_policy_path` in the role's defaults; the handler is `docker kill --signal=HUP headscale`. `TestPolicyPathParameterized`, `TestReloadHandler` and `TestPolicyFileDeploy` in `tests/test_headscale_role.py` (28 passed, 2026-10-10). |
+| AC2: `headscale policy check` as a CI gate | met | `8b4e4a4d`. The step "Validate Headscale ACL policy" in `.github/workflows/check-config-drift.yml` runs `toolkit infra headscale policy-check` on PRs, pushes and nightly. `make check-headscale-policy`: "Policy is valid" (2026-10-10). |
+| AC3: preserved flows after reload; a broken policy auto-reverts | partial | Flows: `toolkit infra headscale probe` 7/7 against the live mesh on 2026-05-31, with 9 nodes online. Auto-revert: proven statically only (`TestAutoRevert`). The restore of a previous policy has never run live, which #2184 tracks. |
+| AC4: hermes SSH-reachable, tagged, own scoped credential | partial, partly superseded | SSH and `tag:hermes` were proven for hermes-nan on 2026-05-31. hermes-nan was retired on 2026-09-30, so the SSH half has no subject. `tag:hermes` is now held by `hermes-kubelab` (AI-009, node 68), whose egress was measured on 2026-10-07: `vps:443` only. The own-credential (C6) half was never done and is handed to #590. |
+
+### Correction, 2026-10-10
+
+The AC3 line below said "auto-revert exercised for real". It was not. The first activation's probe failed in the propagation window, and the rescue ran with no `.prev` to restore, so it took the branch that `73cfeab7` added: it left the permissive baseline in place and failed loudly. The restore path did not run. #2184 is the drill that would prove it.
+
+### Original notes (2026-05-31)
 
 - [x] AC1 (role policy-path param + reload-on-change) -> render/static-YAML test `tests/test_headscale_role.py` (7 tests green); reload is SIGHUP `docker kill --signal=HUP headscale` (NOT restart), policy path SEPARATE from config.yaml restart path. On-VPS reload exercised in VPN-ACL-002 (dormant until then: default `headscale_policy_path: ""`). _(commit pending)_
 - [x] AC2 (`headscale policy check` CI gate) -> `make check-headscale-policy` → "Policy is valid" (real v0.28 binary via Docker); CI gate in `check-config-drift.yml` (prod) via `toolkit infra headscale policy-check`. _(commit 8b4e4a4/2681f19)_
@@ -16,9 +29,10 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 
 ## Test status
 
-- Test suite: `<command> -> <output>`
-- Manual smoke test: probe of preserved flows post-reload; deliberately-broken-policy auto-revert exercised
-- No regressions in existing test suite: yes / no
+- `poetry run pytest tests/test_headscale_role.py`: 28 passed (2026-10-10, master `f1c952a8`).
+- `make check-headscale-policy`: "Policy is valid" (2026-10-10).
+- Manual smoke test: probe of preserved flows after reload, 7/7 (2026-05-31). The deliberately broken policy was not exercised; see the correction above and #2184.
+- No regressions: #235 merged with `Validate` and both `Drift` checks green. #235's checks did not include `Tests`; the role's tests ran green on master on 2026-10-10 (above).
 
 ## Decisions made during implementation
 
@@ -30,9 +44,9 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 
 ## Promotion candidates
 
-- [ ] Lesson for `90-lessons.md`? <likely yes — permissive-first + external-probe rollout on a single Headscale control plane without the v0.29 tests block>
-- [ ] ADR-worthy decision? <no — ADR-041 already covers the model>
-- [ ] New pattern candidate for `00_meta/patterns/`? <maybe — "deny-by-default rollout on a single control plane via permissive-first + external probe + auto-revert" if it recurs>
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/networking-dns/lesson-275-headscale-policy-check-is-syntax-only-until-v.md
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: ADR-041 already decides the model, and this spec implemented it.
+- [x] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. no: the permissive-first rollout has only happened once, on one control plane, and lesson-275 records it.
 
 ## Archive checklist
 
