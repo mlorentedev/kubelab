@@ -410,6 +410,38 @@ def test_the_reviewable_check_is_not_always_and_fails_closed() -> None:
     assert "always()" not in str(step.get("if", ""))
 
 
+def test_an_improve_comment_reaches_the_reviewer() -> None:
+    """`/improve` is the only way suggestions run, because `auto_improve` is off
+    (#1180). Its comment has to pass the reviewable check, since PR-Agent is
+    gated on that check's output: from #1528 until #2187 the check admitted
+    `/review` alone, and `/improve` skipped every step and reported success."""
+    condition = " ".join(str(_reviewer_step("Determine whether the diff has anything to review")["if"]).split())
+    assert "contains(github.event.comment.body, '/improve')" in condition
+
+
+@pytest.mark.parametrize(
+    "name", ["Fail if no review was published", "Declare unreviewed", "Clear a stale unreviewed-merge declaration"]
+)
+def test_an_improve_comment_never_touches_the_attestation(name: str) -> None:
+    """A `/improve` run publishes suggestions, never a review, so the steps that
+    decide or declare the review stay on `/review`: admitting `/improve` there
+    would fail a reviewed PR red, or declare it unreviewed.
+
+    The condition is evaluated, not searched for a token: since #2187 the
+    reviewable check answers for `/improve` too, so a step that keys on its
+    output alone would run on an `/improve` comment without naming it."""
+    condition = str(_reviewer_step(name)["if"])
+    for reviewable in ("true", "false"):
+        steps = {"reviewable": {"outputs": {"any": reviewable}}, "credential": {"outcome": "success"}}
+        improve = _comment_run(body="/improve", association="MEMBER")
+        review = _comment_run(body="/review", association="MEMBER")
+        assert not _evaluate(condition, improve, steps), f"runs on `/improve` with reviewable={reviewable}"
+        if _evaluate(condition, review, steps):
+            break
+    else:
+        pytest.fail("the step runs on no `/review` comment either: the fixture no longer exercises its if:")
+
+
 def test_pr_agent_only_runs_when_something_is_reviewable() -> None:
     step = _reviewer_step("PR-Agent")
     assert step.get("if") == "steps.reviewable.outputs.any == 'true'"
@@ -961,19 +993,32 @@ def _ctx(value: object) -> object:
     return _Ctx({k: _ctx(v) for k, v in value.items()}) if isinstance(value, dict) else value
 
 
-def _evaluate(expression: str, github: dict) -> object:
+def _to_python_operators(code: str) -> str:
+    """Rewrite the operators and literals of an expression fragment that holds no
+    string literal. String literals are kept apart, so `== 'true'` compares with
+    the string Actions compares with, not with Python's `True`."""
+    code = code.replace("&&", " and ").replace("||", " or ")
+    code = re.sub(r"!(?!=)", " not ", code)
+    return re.sub(r"\bfalse\b", "False", re.sub(r"\btrue\b", "True", code))
+
+
+def _evaluate(expression: str, github: dict, steps: dict | None = None) -> object:
     """Evaluate a GitHub Actions expression over `github`, the way Actions does.
 
     The subset this workflow uses maps onto Python with the same value
     semantics: `&&` and `||` return an operand, not a boolean, and '', 0, null
-    and false are the falsy values in both languages.
+    and false are the falsy values in both languages. `steps` is the step
+    context a step-level `if:` reads; `always()` is true for a step that is
+    reached at all.
     """
-    python = expression.strip().removeprefix("${{").removesuffix("}}")
-    python = python.replace("&&", " and ").replace("||", " or ")
-    python = re.sub(r"!(?!=)", " not ", python)
-    python = re.sub(r"\bfalse\b", "False", re.sub(r"\btrue\b", "True", python))
+    python = "".join(
+        part if part.startswith("'") else _to_python_operators(part)
+        for part in re.split(r"('[^']*')", expression.strip().removeprefix("${{").removesuffix("}}"))
+    )
     names = {
         "github": _ctx(github),
+        "steps": _ctx(steps or {}),
+        "always": lambda: True,
         "format": lambda template, *args: re.sub(r"\{(\d+)\}", lambda m: str(args[int(m.group(1))]), template),
         "startsWith": lambda text, prefix: str(text or "").lower().startswith(prefix.lower()),
         "contains": lambda haystack, needle: needle in (haystack or ""),
