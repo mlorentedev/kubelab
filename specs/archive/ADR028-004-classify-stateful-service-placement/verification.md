@@ -463,6 +463,8 @@ Second round: `review.md`, PASS WITH GAPS, by `nan/mimo-v2.6-flash` on 2026-10-1
 | `features.json` f2 names `_PLACEMENT_SUFFIXES`; the symbols are `_PROMOTION_SUFFIX` and `_LOCATION_SUFFIX` in `toolkit/features/generator_k8s.py` | Recorded here, because the contract set is closed after review. The guard exists and `tests/test_k8s_generator_configmap_env.py` covers it. |
 | ADR-061 D3's n8n condition (git plus `n8n import` as the only write path) is prose, not a test | Already tracked by #501 and #688 (APP-CONFIG-003); no duplicate filed. |
 
+**Amendment after review, 2026-10-10 (PR #2186's PR-Agent review).** `features.json` f5's command grepped `specs/ADR028-004-.../verification.md`, a path the archive moved, so it would have exited 1 on any re-run. It now reads `specs/archive/ADR028-004-.../verification.md`, the form SSOT-017's archived contract already uses. The path is the only change. At the new path the command exits 0, and exits 1 with `staging/gitea` renamed. This is the one edit to the contract set after the second review signed it.
+
 ## Test status
 
 - `poetry run pytest tests/test_stateful_service_classification.py tests/test_k8s_generator_configmap_env.py`: 28 passed, on master `f1c952a8` (2026-10-10).
