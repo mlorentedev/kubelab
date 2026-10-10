@@ -410,6 +410,26 @@ def test_the_reviewable_check_is_not_always_and_fails_closed() -> None:
     assert "always()" not in str(step.get("if", ""))
 
 
+def test_an_improve_comment_reaches_the_reviewer() -> None:
+    """`/improve` is the only way suggestions run, because `auto_improve` is off
+    (#1180). Its comment has to pass the reviewable check, since PR-Agent is
+    gated on that check's output: from #1528 until #2187 the check admitted
+    `/review` alone, and `/improve` skipped every step and reported success."""
+    condition = " ".join(str(_reviewer_step("Determine whether the diff has anything to review")["if"]).split())
+    assert "contains(github.event.comment.body, '/improve')" in condition
+
+
+@pytest.mark.parametrize(
+    "name", ["Fail if no review was published", "Declare unreviewed", "Clear a stale unreviewed-merge declaration"]
+)
+def test_an_improve_comment_never_touches_the_attestation(name: str) -> None:
+    """A `/improve` run publishes suggestions, never a review, so the steps that
+    decide or declare the review stay on `/review`: admitting `/improve` there
+    would fail a reviewed PR red, or declare it unreviewed."""
+    condition = str(_reviewer_step(name)["if"])
+    assert "/improve" not in condition
+
+
 def test_pr_agent_only_runs_when_something_is_reviewable() -> None:
     step = _reviewer_step("PR-Agent")
     assert step.get("if") == "steps.reviewable.outputs.any == 'true'"

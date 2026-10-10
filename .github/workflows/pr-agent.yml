@@ -284,12 +284,17 @@ jobs:
       # step detects that case ahead of time so the job can skip PR-Agent
       # and the guard, and declare unreviewed instead of failing red for a
       # reason neither of the guard's own error messages name.
+      # `/improve` must pass this check too: PR-Agent is gated on its output,
+      # and with `/review` alone here a `/improve` comment skipped every step
+      # and reported success (#2187). The attestation steps below stay on
+      # `/review`, since a `/improve` run publishes suggestions, never a review.
       - name: Determine whether the diff has anything to review
         id: reviewable
         if: >
           github.event_name == 'pull_request'
             || (github.event_name == 'issue_comment'
-                && contains(github.event.comment.body, '/review'))
+                && (contains(github.event.comment.body, '/review')
+                    || contains(github.event.comment.body, '/improve')))
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
@@ -442,8 +447,9 @@ jobs:
           # PR-Agent published `## PR Code Suggestions` and NO review at all
           # while reporting success — the improve call consumed the inference
           # slot the review needed. The review is the output this repository's
-          # attestation gate depends on; suggestions are optional and remain
-          # available on demand with an explicit `/improve`.
+          # attestation gate depends on; suggestions are optional and are
+          # available on demand with an explicit `/improve` (dead from #1528
+          # until #2187 restored it; the `reviewable` step admits it).
           github_action_config.auto_improve: "false"
 
       # PR-Agent reports SUCCESS when it starts and finishes, not when it
