@@ -183,5 +183,5 @@ Before archiving, flag what (if anything) should be promoted to the vault. If al
 
 - [x] `proposal.md` frontmatter set to `status: archived`
 - [x] Folder moved: `specs/TOOL-021-review-attestation-and-reviewer-capacity/` -> `specs/archive/TOOL-021-review-attestation-and-reviewer-capacity/`
-- [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
+- [x] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018) ✓ 2026-10-10 — #1140 is Done on the board, closed as not planned by the operator on 2026-09-07 (see tasks.md Closing). The remaining evidence went to #2171, which stays open on AC6 until #2193.
 - [x] Promotions above executed (if any)
