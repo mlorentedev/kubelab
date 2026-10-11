@@ -84,7 +84,7 @@ cat /etc/hosts | grep localhost
 
 ```bash
 # Add local development hostnames
-echo "127.0.0.1 api.localhost web.localhost blog.localhost" | sudo tee -a /etc/hosts
+echo "127.0.0.1 api.localhost web.localhost" | sudo tee -a /etc/hosts
 ```
 
 ### Prevention

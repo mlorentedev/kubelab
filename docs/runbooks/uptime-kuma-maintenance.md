@@ -31,7 +31,7 @@ backup JSON for the live list):
   for the 20 HTTPS monitors registered in OPS-005.
 - `vpn.kubelab.live` reachability (public-IP path, not Tailscale, per
   bootstrap rule — see CLAUDE.md gotcha #20).
-- Argo CD hub on aws1 (`argocd.kubelab.live`).
+- Argo CD hub on gcp1 (`argo.kubelab.live`, ADR-063).
 
 Staging is **not** monitored from rpi3 — staging is VPN-only and rpi3
 should not depend on Tailscale being up to do its job. Staging

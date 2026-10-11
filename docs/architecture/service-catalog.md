@@ -24,9 +24,8 @@ owner: manu
 
 | Service | Staging Node | Prod Node | Domain | Health Check |
 | --- | --- | --- | --- | --- |
-| Web (Astro) | Acemagic | VPS | `web.staging.kubelab.live` / `mlorente.dev` | `/` |
+| Web (Astro) | Acemagic | VPS | `staging.mlorente.dev` / `mlorente.dev` | `/` |
 | API (Go) | Acemagic | VPS | `api.staging.kubelab.live` / `api.kubelab.live` | `/health` |
-| Blog (Jekyll) | Acemagic | VPS | `blog.staging.kubelab.live` / `blog.kubelab.live` | `/` |
 
 ## Security
 
@@ -82,15 +81,13 @@ owner: manu
 
 | Service | Dev | Staging | Prod |
 |---------|-----|---------|------|
-| Web | `mlorente.test` | `web.staging.kubelab.live` | `mlorente.dev` |
+| Web | `mlorente.test` | `staging.mlorente.dev` | `mlorente.dev` |
 | API | `api.kubelab.test` | `api.staging.kubelab.live` | `api.kubelab.live` |
-| Blog | `blog.kubelab.test` (Jekyll) | `blog.staging.kubelab.live` | `blog.kubelab.live` |
 | Traefik | `traefik.kubelab.test` | `traefik.staging.kubelab.live` | `traefik.kubelab.live` |
 | Authelia | `auth.kubelab.test` | `auth.staging.kubelab.live` | `auth.kubelab.live` |
 | Grafana | `grafana.kubelab.test` | `grafana.staging.kubelab.live` | `grafana.kubelab.live` |
 | Loki | `loki.kubelab.test` | `loki.staging.kubelab.live` | internal only (in-cluster `loki:3100`) |
-| Portainer | `portainer.kubelab.test` | `portainer.staging.kubelab.live` | — |
-| Gitea | `gitea.kubelab.test` | `gitea.staging.kubelab.live` | `gitea.kubelab.live` |
+| Gitea | `gitea.kubelab.test` | — (Beelink serves the one forge, ADR-061) | `gitea.kubelab.live` |
 | n8n | `n8n.kubelab.test` | `n8n.staging.kubelab.live` | `n8n.kubelab.live` |
 | Uptime Kuma | `status.kubelab.test` | `status.staging.kubelab.live` | `status.kubelab.live` |
 | CrowdSec | `crowdsec.kubelab.test` | internal only (ClusterIP, no IngressRoute) | internal only (ClusterIP, no IngressRoute) |

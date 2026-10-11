@@ -38,7 +38,7 @@ docker exec -it grafana grafana-cli admin reset-admin-password newpassword
 
 #### Prevention
 
-- Store Grafana credentials in Vaultwarden
+- Store Grafana credentials in the password manager
 - Document default credentials in secure location
 
 ### Dashboards Not Loading

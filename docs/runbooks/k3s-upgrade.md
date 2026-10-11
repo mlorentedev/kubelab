@@ -266,8 +266,8 @@ kubectl get pods -A | grep -vE 'Running|Completed'
 #    → https://argo.kubelab.live   (or: argocd app list)
 
 # 4. Smoke an ingress + TLS (spokes only — hub has no Traefik)
-curl -sI https://web.staging.kubelab.live | head -1     # expect 200
-curl -vk https://web.staging.kubelab.live 2>&1 | grep -E 'subject|issuer'
+curl -sI https://staging.mlorente.dev | head -1     # expect 200
+curl -vk https://staging.mlorente.dev 2>&1 | grep -E 'subject|issuer'
 ```
 
 For staging, finish with `make test-e2e ENV=staging`.

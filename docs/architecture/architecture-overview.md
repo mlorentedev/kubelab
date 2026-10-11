@@ -50,7 +50,7 @@ future-static-sites      → Each static site in its own repo
 | Environment | Personal site | Platform services |
 |-------------|--------------|-------------------|
 | Local dev | `mlorente.test` | `*.kubelab.test` |
-| Staging | `web.staging.kubelab.live` | `*.staging.kubelab.live` |
+| Staging | `staging.mlorente.dev` | `*.staging.kubelab.live` |
 | Production | `mlorente.dev` | `*.kubelab.live` |
 
 ## Hardware Allocation

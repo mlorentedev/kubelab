@@ -8,7 +8,7 @@
 | [kubernetes](kubernetes/_index.md) | 56 | Cluster, workloads, manifests |
 | [networking-dns](networking-dns/_index.md) | 53 | DNS, VPN mesh, host networking |
 | [ansible-provisioning](ansible-provisioning/_index.md) | 58 | Roles, playbooks, IaC, node setup |
-| [process-method](process-method/_index.md) | 73 | Specs, reviews, how work is run |
+| [process-method](process-method/_index.md) | 74 | Specs, reviews, how work is run |
 | [edge-tls](edge-tls/_index.md) | 27 | Traefik, TLS, the request path |
 | [toolkit-tooling](toolkit-tooling/_index.md) | 50 | Toolkit CLI, Make, Python, tests |
 | [gitops-delivery](gitops-delivery/_index.md) | 33 | Argo CD, releases, promotion |

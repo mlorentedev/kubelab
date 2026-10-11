@@ -51,11 +51,9 @@ After `make setup-local-dns`, these domains resolve to `127.0.0.1`.
 |--------|---------|------|
 | `mlorente.test` | Personal website (web) | — |
 | `api.kubelab.test` | Go API | — |
-| `blog.kubelab.test` | Jekyll blog | — |
 | `traefik.kubelab.test` | Traefik dashboard | Authelia |
 | `grafana.kubelab.test` | Grafana | Authelia |
 | `auth.kubelab.test` | Authelia SSO | — |
-| `portainer.kubelab.test` | Portainer (Docker UI) | Portainer own |
 | `gitea.kubelab.test` | Gitea (Git server) | Gitea own |
 | `n8n.kubelab.test` | n8n (workflow automation) | n8n own |
 | `status.kubelab.test` | Uptime Kuma | — |
@@ -67,9 +65,6 @@ After `make setup-local-dns`, these domains resolve to `127.0.0.1`.
 ## First-Run Service Setup
 
 Some services require a one-time manual setup after first start:
-
-### Portainer
-Visit `https://portainer.kubelab.test` → set admin password in the welcome screen (must be done within 5 minutes of first start, or restart the container).
 
 ### Gitea
 On first start, the `GITEA_ADMIN_*` env vars only work if no DB exists yet. If the volume was pre-existing:
@@ -89,8 +84,8 @@ Visit `https://n8n.kubelab.test` → create owner account on first login. The en
 
 ```bash
 make up-dev
-# Starts: blog, api, web, nginx, portainer, gitea, n8n, uptime, loki,
-#         grafana, authelia, crowdsec, github-runner, traefik
+# Starts: api, errors, gitea, n8n, uptime, loki, grafana, authelia,
+#         crowdsec, github-runner, traefik (the up-dev target is the list)
 ```
 
 ### Start individual services
@@ -125,7 +120,7 @@ toolkit services down grafana
 ## Build Images
 
 ```bash
-# Build all custom apps (blog, api, web)
+# Build the dev images (api, errors)
 make build-dev
 
 # Build individual app
@@ -183,7 +178,6 @@ docker ps --filter "health=unhealthy" --format "{{.Names}}"
 # HTTP smoke tests
 curl -sk https://mlorente.test | head -1
 curl -sk https://api.kubelab.test/health
-curl -sk https://blog.kubelab.test | head -1
 curl -sk https://traefik.kubelab.test/dashboard/ | head -1
 ```
 

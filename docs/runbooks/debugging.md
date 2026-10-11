@@ -100,8 +100,8 @@ Staging uses `*.staging.kubelab.live` and is accessed via WireGuard.
 
 ```bash
 # Verify staging DNS (requires WireGuard connection)
-nslookup mlorente.staging.kubelab.live
-curl -f https://mlorente.staging.kubelab.live
+nslookup staging.mlorente.dev
+curl -f https://staging.mlorente.dev
 ```
 
 ## Verification
@@ -116,7 +116,6 @@ curl -f https://api.kubelab.test/health
 # Production
 curl -f https://mlorente.dev
 curl -f https://api.kubelab.live/health
-curl -f https://blog.kubelab.live
 ```
 
 ## Rollback

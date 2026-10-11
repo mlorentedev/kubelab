@@ -44,9 +44,8 @@ kubectl --kubeconfig ~/.kube/kubelab-config -n kubelab get events --sort-by='.la
 tk services health --env staging
 
 # Manual verification of each endpoint
-curl -sf https://web.staging.kubelab.live -o /dev/null -w "%{http_code}\n"
+curl -sf https://staging.mlorente.dev -o /dev/null -w "%{http_code}\n"
 curl -sf https://api.staging.kubelab.live/health -o /dev/null -w "%{http_code}\n"
-curl -sf https://blog.staging.kubelab.live -o /dev/null -w "%{http_code}\n"
 curl -sf https://auth.staging.kubelab.live/api/health -o /dev/null -w "%{http_code}\n"
 curl -sf https://grafana.staging.kubelab.live/api/health -o /dev/null -w "%{http_code}\n"
 ```

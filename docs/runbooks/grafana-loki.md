@@ -95,10 +95,10 @@ Set time range to "Last 1 hour" in Grafana.
 {pod=~"api.*"} |~ "status=(5\\d{2})"
 ```
 
-#### "What's the blog doing?"
+#### "What's the web doing?"
 
 ```logql
-{pod=~"blog.*"} != "GET /health"
+{pod=~"web.*"} != "GET /health"
 ```
 
 #### "Show Traefik access logs for a specific domain"
