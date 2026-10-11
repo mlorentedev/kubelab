@@ -297,7 +297,8 @@ jobs:
         if: steps.pr.outputs.skip != 'true'
         run: |
           set +e
-          out="$(poetry run toolkit tools review-attestation --payload-file pr-payload.json 2>&1)"
+          state_file="$RUNNER_TEMP/attestation-state"
+          out="$(poetry run toolkit tools review-attestation --payload-file pr-payload.json --state-file "$state_file" 2>&1)"
           code=$?
           set -e
           printf '%s\n' "$out"
@@ -309,7 +310,18 @@ jobs:
           # The STATE, not only the code. `attested` and `disclosed` both exit 0
           # and mean opposite things about whether anyone read this PR; the
           # published status used to flatten them into "a review happened".
-          state_word="$(printf '%s\n' "$out" | grep -oE '\b(attested|exempt|disclosed|declined|pending)\b' | tail -n 1)"
+          # Read from the file the classifier writes, never scraped from its
+          # log: the log names the reviewer that declined, so the last state
+          # word in it was `declined` on a disclosed PR (#2208).
+          state_word="$(cat "$state_file" 2>/dev/null || true)"
+          # A zero exit without a readable zero-exit state is a handoff that
+          # failed, not a pass: say "could not tell" rather than guess one.
+          if [ "$code" = "0" ]; then
+            case "$state_word" in
+              attested|disclosed|exempt) ;;
+              *) code=2 ;;
+            esac
+          fi
           {
             echo "code=$code"
             echo "state_word=${state_word:-unknown}"
@@ -340,7 +352,8 @@ jobs:
             state="success"; description="NOT reviewed — unreviewed merge declared"
           elif [ "$CODE" = "0" ] && [ "$STATE_WORD" = "exempt" ]; then
             state="success"; description="exempt from review"
-          elif [ "$CODE" = "0" ]; then state="success"; description="a review happened"
+          elif [ "$CODE" = "0" ] && [ "$STATE_WORD" = "attested" ]; then
+            state="success"; description="a review happened"
           elif [ "$CODE" = "1" ]; then state="failure"; description="not reviewed, and not declared as such"
           else state="error"; description="could not determine whether this PR was reviewed"
           fi
