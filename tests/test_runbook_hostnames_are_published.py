@@ -1,4 +1,4 @@
-"""Every hostname a runbook tells you to try is one something serves.
+"""Every hostname a runbook tells you to try is published or routed.
 
 The blog was killed on 2026-03-15 and its name stayed in seven runbooks, with
 `curl -f https://blog.kubelab.live` as a verification step, until 2026-10-11.
@@ -7,8 +7,11 @@ Staging web moved to `staging.mlorente.dev` and six steps kept probing
 reason unrelated to what it checks, which is the worst moment to learn the doc
 is stale.
 
-Prod names are published in `infra/terraform/dns/services.json` (the apex and
-`www` are resources of their own). Staging names cannot be checked against DNS:
+Prod names, in `kubelab.live` and `mlorente.dev`, must be records in
+`infra/terraform/dns/services.json` (each apex and `www` are resources of their
+own; the staging zones in `networking.staging_zones` resolve over the VPN). A
+record proves publication, not that a service answers: one that outlives its
+service is a stale record, and removing it is part of the retirement. Staging names cannot be checked against DNS:
 the staging zone answers every `*.staging.kubelab.live` with a wildcard, so the
 truth is what the manifests route. Any mention of a name under `infra/k8s/base`
 or the staging overlay counts as routed, a loose match chosen so the guard never
@@ -23,6 +26,8 @@ import json
 import re
 from pathlib import Path
 
+import yaml
+
 REPO = Path(__file__).resolve().parent.parent
 DOCS = [REPO / "docs/runbooks", REPO / "docs/troubleshooting", REPO / "docs/architecture"]
 
@@ -31,6 +36,7 @@ NOT_CURRENT = {
     "docs/architecture/dash-001-homepage-cockpit.md": "dated snapshot of the cockpit's first inventory",
     "docs/architecture/components/kubelab-console.md": "design doc for a product with no code yet",
     "docs/architecture/diagram.md": "#825, still draws OpenClaw, PicoClaw and Prometheus",
+    "docs/architecture/infra/dns-cloudflare.md": "historical zone export of 2025-08-30",
 }
 
 # Names used as placeholders in examples, never meant to resolve.
@@ -43,10 +49,16 @@ KNOWN_STALE = {
     "jetson": "#964, Headscale extra_records, retirement tracked there",
 }
 
-# A backslash is an edge too: Mermaid labels write `\ntasks.kubelab.live`.
-_EDGE = r"(?<![A-Za-z0-9.\\-])"
+_EDGE = r"(?<![A-Za-z0-9.-])"
 PROD = re.compile(_EDGE + r"([a-z0-9-]+)\.kubelab\.live\b")
 STAGING = re.compile(_EDGE + r"([a-z0-9-]+)\.staging\.kubelab\.live\b")
+PERSONAL = re.compile(_EDGE + r"([a-z0-9-]+)\.mlorente\.dev\b")
+
+
+def _unescape(text: str) -> str:
+    """Mermaid labels break lines with a literal `\\n`, which would otherwise glue
+    its `n` to the name that follows and hide it from the edge match."""
+    return text.replace("\\n", "\n")
 
 
 def _docs() -> dict[str, str]:
@@ -55,7 +67,7 @@ def _docs() -> dict[str, str]:
         for path in root.rglob("*.md"):
             rel = str(path.relative_to(REPO))
             if rel not in NOT_CURRENT:
-                texts[rel] = path.read_text()
+                texts[rel] = _unescape(path.read_text())
     return texts
 
 
@@ -67,9 +79,14 @@ def _mentioned(pattern: re.Pattern[str]) -> dict[str, set[str]]:
     return found
 
 
-def _published() -> set[str]:
+def _published(zone: str = "kubelab") -> set[str]:
     records = json.loads((REPO / "infra/terraform/dns/services.json").read_text())
-    return {r["name"] for r in records if r.get("zone") == "kubelab"} | {"www"}
+    return {r["name"] for r in records if r.get("zone") == zone} | {"www"}
+
+
+def _staging_labels() -> set[str]:
+    common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
+    return {zone.split(".")[0] for zone in common["networking"]["staging_zones"]}
 
 
 def _routed_in_staging() -> set[str]:
@@ -81,7 +98,7 @@ def _routed_in_staging() -> set[str]:
 
 
 def test_every_prod_name_in_the_docs_is_published() -> None:
-    allowed = _published() | PLACEHOLDERS | set(KNOWN_STALE) | {"staging"}
+    allowed = _published() | PLACEHOLDERS | set(KNOWN_STALE) | _staging_labels()
     unpublished = {n: sorted(p) for n, p in _mentioned(PROD).items() if n not in allowed}
     assert not unpublished, (
         f"docs name prod hosts nothing publishes: {unpublished}. Fix the doc, or "
@@ -96,6 +113,17 @@ def test_every_staging_name_in_the_docs_is_routed() -> None:
         f"docs name staging hosts no manifest routes: {unrouted}. The wildcard "
         "resolves them anyway, so the step fails at Traefik, not at DNS."
     )
+
+
+def test_every_personal_site_name_in_the_docs_is_published() -> None:
+    allowed = _published("mlorente") | PLACEHOLDERS | _staging_labels()
+    unpublished = {n: sorted(p) for n, p in _mentioned(PERSONAL).items() if n not in allowed}
+    assert not unpublished, f"docs name mlorente.dev hosts nothing publishes: {unpublished}"
+
+
+def test_a_mermaid_line_break_does_not_hide_the_name_after_it() -> None:
+    assert PROD.findall("A[Ingress\\nblog.kubelab.live]") == ["nblog"]
+    assert PROD.findall(_unescape("A[Ingress\\nblog.kubelab.live]")) == ["blog"]
 
 
 def test_known_stale_entries_are_still_stale() -> None:
