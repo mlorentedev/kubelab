@@ -314,6 +314,14 @@ jobs:
           # log: the log names the reviewer that declined, so the last state
           # word in it was `declined` on a disclosed PR (#2208).
           state_word="$(cat "$state_file" 2>/dev/null || true)"
+          # A zero exit without a readable zero-exit state is a handoff that
+          # failed, not a pass: say "could not tell" rather than guess one.
+          if [ "$code" = "0" ]; then
+            case "$state_word" in
+              attested|disclosed|exempt) ;;
+              *) code=2 ;;
+            esac
+          fi
           {
             echo "code=$code"
             echo "state_word=${state_word:-unknown}"
@@ -344,7 +352,8 @@ jobs:
             state="success"; description="NOT reviewed — unreviewed merge declared"
           elif [ "$CODE" = "0" ] && [ "$STATE_WORD" = "exempt" ]; then
             state="success"; description="exempt from review"
-          elif [ "$CODE" = "0" ]; then state="success"; description="a review happened"
+          elif [ "$CODE" = "0" ] && [ "$STATE_WORD" = "attested" ]; then
+            state="success"; description="a review happened"
           elif [ "$CODE" = "1" ]; then state="failure"; description="not reviewed, and not declared as such"
           else state="error"; description="could not determine whether this PR was reviewed"
           fi

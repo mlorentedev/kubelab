@@ -335,7 +335,13 @@ def review_attestation(
         raise typer.Exit(2) from exc
 
     if state_file is not None:
-        state_file.write_text(f"{verdict.state}\n", encoding="utf-8")
+        try:
+            state_file.write_text(f"{verdict.state}\n", encoding="utf-8")
+        except OSError as exc:
+            # The caller reads the state from this file. A verdict it cannot read
+            # is no verdict, and exit 1 would claim one ("not reviewed").
+            logger.error(f"review attestation: cannot write the state file: {exc}")
+            raise typer.Exit(2) from exc
 
     if verdict.ok:
         logger.success(f"{verdict.state} — {verdict.detail}")
