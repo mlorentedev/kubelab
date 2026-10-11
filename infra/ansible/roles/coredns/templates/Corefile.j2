@@ -44,18 +44,19 @@
 {{ base_domain }} {
     hosts {
         # Bare-metal services: individual Tailscale IPs
-        {{ node_ips.rpi3 }} {{ service_domains.status }}
         {{ node_ips.jetson }} {{ service_domains.jetson | default('jetson.' + base_domain) }}
-        # K3s prod services: VPS Tailscale IP
+        # Every prod record Cloudflare publishes (infra/terraform/dns/services.json),
+        # at the same target over the tailnet: the VPS unless the record names a
+        # node. Rendered from that list, never kept by hand: a hand list sent
+        # status.kubelab.live to rpi3, where nothing serves 443 (#2212). LAN
+        # clients arrive from 100.64.0.0/10, which Authelia and CrowdSec trust.
         {{ node_ips.vps }} {{ base_domain }}
-        {{ node_ips.vps }} api.{{ base_domain }}
-        {{ node_ips.vps }} web.{{ base_domain }}
-        {{ node_ips.vps }} blog.{{ base_domain }}
-        {{ node_ips.vps }} auth.{{ base_domain }}
-        {{ node_ips.vps }} grafana.{{ base_domain }}
-        {{ node_ips.vps }} loki.{{ base_domain }}
-        {{ node_ips.vps }} gitea.{{ base_domain }}
-        {{ node_ips.vps }} n8n.{{ base_domain }}
+        {{ node_ips.vps }} www.{{ base_domain }}
+{% for record in coredns_public_records
+      if record.zone == 'kubelab' and 'prod' in record.environments
+      and (record.name ~ '.' ~ base_domain) != service_domains.vpn %}
+        {{ node_ips[record.target] if record.target is defined else node_ips.vps }} {{ record.name }}.{{ base_domain }}
+{% endfor %}
         # Headscale MUST use public IP — bootstrap dependency
         {{ vps_public_ip }} {{ service_domains.vpn }}
         fallthrough

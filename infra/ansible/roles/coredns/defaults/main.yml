@@ -50,6 +50,10 @@ node_ips:
   rpi4: "{{ common.networking.nodes.rpi4.tailscale_ip }}"
   beelink: "{{ common.networking.nodes.beelink.tailscale_ip }}"
   jetson: "{{ common.networking.nodes.jetson.tailscale_ip }}"
+# The public DNS records, the list Cloudflare publishes (infra/terraform/dns).
+# The LAN prod zone is rendered from it, so a record cannot point one way in
+# public DNS and another on the LAN (#2212).
+coredns_public_records: "{{ lookup('file', role_path ~ '/../../../terraform/dns/services.json') | from_json }}"
 service_domains:
   vpn: "{{ common.apps.services.core.headscale.domain }}"
   status: "{{ common.apps.services.observability.uptime_kuma.domain }}"

@@ -171,18 +171,15 @@ staging.kubelab.live {
 kubelab.live {
     hosts {
         # Bare-metal services: individual Tailscale IPs
-        100.64.0.6 status.kubelab.live       # RPi3
         100.64.0.8 jetson.kubelab.live       # Jetson Nano
-        # K3s prod services: VPS Tailscale IP
+        # One line per prod record in infra/terraform/dns/services.json, rendered
+        # by the role (#2212): the VPS Tailscale IP unless the record names a node.
         100.64.0.2 kubelab.live
+        100.64.0.2 www.kubelab.live
         100.64.0.2 api.kubelab.live
-        100.64.0.2 web.kubelab.live
-        100.64.0.2 blog.kubelab.live
-        100.64.0.2 auth.kubelab.live
-        100.64.0.2 grafana.kubelab.live
-        100.64.0.2 loki.kubelab.live
-        100.64.0.2 gitea.kubelab.live
-        100.64.0.2 n8n.kubelab.live
+        100.64.0.2 status.kubelab.live       # Uptime Kuma, behind prod Traefik
+        ...                                  # every other record in services.json
+        100.64.0.11 pihole.kubelab.live      # "target": "ace1"
         # Headscale MUST use public IP — bootstrap dependency (nodes need VPN to reach Tailscale IPs)
         # networking.vps.public_ip (common.yaml)
         162.55.57.175 vpn.kubelab.live
