@@ -22,7 +22,11 @@ had credit. Hermes v2026.9.24 picks the auth style from the key's prefix:
 Bearer token with Claude Code's identity headers, and the API refused it with a
 billing message. The same key with `x-api-key` returned 200, from the
 workstation and from inside the gateway container. Upstream `main` keeps the
-same check. No setting selects the auth style for `api.anthropic.com`.
+same check. The refusal depends on the account: where the Claude Code identity
+has credit to draw on (a subscription's API credit, say), the same request
+succeeds and bills under that identity with no error, which is how upstream
+#133856 was first reported. Both outcomes are the same defect, and the silent
+one is worse. No setting selects the auth style for `api.anthropic.com`.
 
 **Solution**: None in config. Upstream tracks it as NousResearch/hermes-agent
 #133856 (P1), with fix PRs open. The fallback PR stays a draft (#2204) until a

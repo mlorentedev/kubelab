@@ -53,7 +53,9 @@ from another network logs `[UFW BLOCK] ... DPT=8642` in `journalctl -k`
   answer. The Anthropic Haiku fallback (spec AI-012 AC2) is built in draft
   #2204. It waits on a Hermes bug: the console issues keys prefixed
   `sk-ant-usr`, and Hermes sends them as OAuth tokens, which the API refuses
-  with "credit balance too low" (lesson-557, upstream
+  with "credit balance too low" on this account (lesson-557; where the
+account's Claude Code identity has credit, the call succeeds and bills under
+that identity instead; upstream
   NousResearch/hermes-agent#133856). The key lives in a non-Default console
   workspace with a 20 USD monthly limit. It sits in `prod.enc.yaml` on #2204's
   branch only.
@@ -68,7 +70,9 @@ from another network logs `[UFW BLOCK] ... DPT=8642` in `journalctl -k`
      hermes-kubelab hermes chat -q "Reply with the single word: pong"`, run
      as the agent's user against its rootless daemon. Expect `Model fallback:
      ... using claude-haiku-5-5 via anthropic` and the answer `pong`.
-  4. Record the output in AI-012's `verification.md`, then mark #2204 ready.
+  4. Record the output in AI-012's `verification.md`, set feature f2's
+     `verification` to `poetry run pytest --no-cov -q tests/test_hermes_fallback.py`
+     and its state to `passing`, then mark #2204 ready.
 
 ## Start, or converge after any change
 
