@@ -49,7 +49,9 @@ KNOWN_STALE = {
     "jetson": "#964, Headscale extra_records, retirement tracked there",
 }
 
-_EDGE = r"(?<![A-Za-z0-9.-])"
+# A dot is not an edge-breaker: in `hub.argocd.kubelab.live` the label checked is
+# `argocd`, the one the zone would have to publish.
+_EDGE = r"(?<![A-Za-z0-9-])"
 PROD = re.compile(_EDGE + r"([a-z0-9-]+)\.kubelab\.live\b")
 STAGING = re.compile(_EDGE + r"([a-z0-9-]+)\.staging\.kubelab\.live\b")
 PERSONAL = re.compile(_EDGE + r"([a-z0-9-]+)\.mlorente\.dev\b")
@@ -89,12 +91,16 @@ def _staging_labels() -> set[str]:
     return {zone.split(".")[0] for zone in common["networking"]["staging_zones"]}
 
 
-def _routed_in_staging() -> set[str]:
-    names: set[str] = set()
+def _staging_manifests() -> str:
+    texts = []
     for root in (REPO / "infra/k8s/base", REPO / "infra/k8s/overlays/staging"):
-        for path in root.rglob("*.yaml"):
-            names |= set(STAGING.findall(path.read_text()))
-    return names
+        for pattern in ("*.yaml", "*.yml"):
+            texts += [path.read_text() for path in root.rglob(pattern)]
+    return "\n".join(texts)
+
+
+def _routed_in_staging() -> set[str]:
+    return set(STAGING.findall(_staging_manifests()))
 
 
 def test_every_prod_name_in_the_docs_is_published() -> None:
@@ -116,7 +122,11 @@ def test_every_staging_name_in_the_docs_is_routed() -> None:
 
 
 def test_every_personal_site_name_in_the_docs_is_published() -> None:
-    allowed = _published("mlorente") | PLACEHOLDERS | _staging_labels()
+    # A staging zone apex (`staging.mlorente.dev`) is VPN-only, so it is no record:
+    # it counts when a staging manifest routes it, like any other staging name.
+    routed = _staging_manifests()
+    apexes = {label for label in _staging_labels() if f"{label}.mlorente.dev" in routed}
+    allowed = _published("mlorente") | PLACEHOLDERS | apexes
     unpublished = {n: sorted(p) for n, p in _mentioned(PERSONAL).items() if n not in allowed}
     assert not unpublished, f"docs name mlorente.dev hosts nothing publishes: {unpublished}"
 
@@ -124,6 +134,11 @@ def test_every_personal_site_name_in_the_docs_is_published() -> None:
 def test_a_mermaid_line_break_does_not_hide_the_name_after_it() -> None:
     assert PROD.findall("A[Ingress\\nblog.kubelab.live]") == ["nblog"]
     assert PROD.findall(_unescape("A[Ingress\\nblog.kubelab.live]")) == ["blog"]
+
+
+def test_a_nested_name_is_checked_by_its_nearest_label() -> None:
+    assert PROD.findall("https://hub.argocd.kubelab.live") == ["argocd"]
+    assert STAGING.findall("a.b.staging.kubelab.live") == ["b"]
 
 
 def test_known_stale_entries_are_still_stale() -> None:
