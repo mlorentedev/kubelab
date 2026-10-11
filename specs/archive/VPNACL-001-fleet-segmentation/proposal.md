@@ -1,7 +1,7 @@
 ---
 id: "VPNACL-001-fleet-segmentation"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-05-31"
 issue: "kubelab#1154"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
@@ -35,6 +35,7 @@ After this PR:
 ## Risks / open questions
 
 - **[RESOLVED 2026-05-31 — operator decision]** `dst` matrix for `tag:hermes` = **"node-like, controlled"**. `hermes` (src) may reach only the shared service surface — Gitea (`vps:443`), Ollama (`ace2:11434`), MinIO (`beelink:9000`) — and is reachable **only by admin on `:22`** (`dst: tag:hermes:22`, via `acls` since kubelab uses sshd). **Explicitly excluded** (no rule grants them): the Headscale control plane (`vps:8080`), the K3s API (`vps:6443`, `ace1:6443`), and outbound SSH to peer nodes. Exact host:ports are pinned from the `networking` SSOT when authoring `policy.hujson` (VPN-ACL-002); the service set is adjustable once hermes's concrete workload is known.
+  - *Note 2026-10-10 (archive review round 1, F1): the inbound half of this decision is not live. The permissive-first rule (`kubelab@`, `manu@`, `work@` → `*:*`) admits every port of `tag:hermes` to all three users, and Headscale's policy is allow-only, so "admin on `:22` only" cannot be written beside that rule. It is the target, delivered with the least-privilege iteration that narrows user egress (#586), and ticketed as #2189.*
   - *Note 2026-09-26 (OPS-023): the MinIO target (`beelink:9000`) no longer exists. OPS-023 PR 2 removed its `accept` from the live policy, so `tag:hermes` keeps only `vps:443`. Ollama (`ace2:11434`) was retired earlier by AI-007.*
 - Single **production** control plane, no staging (ADR-015): a wrong deny-by-default could sever the live mesh. Mitigated by permissive-first (baseline cannot break flows by construction) + external probe + auto-revert (reload is reversible in seconds). Note: on v0.28 `policy check` is **syntax-only**; the `tests` block is v0.29.0.
 - **[RESOLVED 2026-05-31 — verified read-only on the live v0.28.0 VPS]**
@@ -47,10 +48,10 @@ After this PR:
 
 ## Acceptance criteria
 
-- [ ] The `headscale` role exposes a policy-path parameter, mounts the HuJSON file, and **reloads** (not restarts) Headscale on change; deploy is driven through the Makefile/toolkit (no manual edits on the VPS).
-- [ ] `policy.hujson` passes `headscale policy check` as a CI gate.
-- [ ] After reload of the permissive-first baseline, the external probe confirms **all preserved flows** still work (admin→nodes SSH, ArgoCD hub→spoke `:6443`, rpi4 route, intra-K3s, monitoring); a deliberately-broken policy triggers **auto-revert** to the prior policy.
-- [ ] `hermes` is reachable via SSH over the VPN at its recorded Tailscale IP, carries `tag:hermes` (verified in `headscale nodes list`), and authenticates to at least one target service with its **own scoped credential** (not the `100.64.0.0/10` network-trust bypass).
+- [x] The `headscale` role exposes a policy-path parameter, mounts the HuJSON file, and **reloads** (not restarts) Headscale on change; deploy is driven through the Makefile/toolkit (no manual edits on the VPS).
+- [x] `policy.hujson` passes `headscale policy check` as a CI gate.
+- [ ] After reload of the permissive-first baseline, the external probe confirms **all preserved flows** still work (admin→nodes SSH, ArgoCD hub→spoke `:6443`, rpi4 route, intra-K3s, monitoring); a deliberately-broken policy triggers **auto-revert** to the prior policy. *(Not met at archive: the restore has never run live; ticketed as #2184.)*
+- [ ] `hermes` (since 2026-09-30 `hermes-kubelab`, AI-009; the original subject `hermes-nan` is retired) is reachable via SSH over the VPN at its recorded Tailscale IP, carries `tag:hermes` (verified in `headscale nodes list`), and authenticates to at least one target service with its **own scoped credential** (not the `100.64.0.0/10` network-trust bypass). *(Not met at archive: ticketed as #590.)*
 
 ## References
 

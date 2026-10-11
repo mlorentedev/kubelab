@@ -49,7 +49,10 @@ owner: manu
    docker exec headscale headscale nodes list        # <agent> present, Tags = tag:<agent>
    toolkit infra headscale probe                      # preserved flows still hold
    ```
-   Then confirm the agent reaches an allowed service **with its own credential**, and is reachable only by admin on `:22`.
+   Then confirm the agent reaches an allowed service **with its own credential**. No agent has one yet: minting it is
+   open (#590), so until then this check cannot pass and the agent is not done.
+   Do not expect "reachable only by admin on `:22`" yet: under the permissive-first policy `kubelab@`, `manu@` and
+   `work@` reach every port of a tagged agent. That clause of ADR-041 lands with the least-privilege iteration (#586, #2189).
 
 ## Gotchas (hard-won)
 
@@ -69,5 +72,5 @@ owner: manu
 ## References
 
 - [ADR-041](../adr/adr-041-agent-fleet-vpn-segmentation.md) — the segmentation model.
-- Spec `specs/VPNACL-001-fleet-segmentation/` — implementation + verification.
+- Spec `specs/archive/VPNACL-001-fleet-segmentation/` — implementation + verification.
 - Backlog: `VPN-ACL-005` (credential rotation), `VPN-ACL-007` (codify key minting in the toolkit).

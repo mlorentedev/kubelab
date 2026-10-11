@@ -1,0 +1,30 @@
+[
+  {
+    "id": "VPNACL-001-f1",
+    "behavior": "headscale role renders policy.path from a var and reloads (not restarts) Headscale on policy change",
+    "verification": "poetry run pytest tests/test_headscale_role.py -k 'TestPolicyPathParameterized or TestReloadHandler or TestPolicyFileDeploy'",
+    "state": "passing",
+    "evidence": "passed, 2026-10-10, master `f1c952a8`"
+  },
+  {
+    "id": "VPNACL-001-f2",
+    "behavior": "policy.hujson passes headscale policy check (syntax) as a CI gate",
+    "verification": "make check-headscale-policy",
+    "state": "passing",
+    "evidence": "Policy is valid, 2026-10-10, master `f1c952a8`. CI runs the same command in check-config-drift.yml."
+  },
+  {
+    "id": "VPNACL-001-f3",
+    "behavior": "permissive-first baseline preserves all current mesh flows post-reload; broken policy auto-reverts",
+    "verification": "poetry run pytest tests/test_headscale_role.py -k 'TestHeadscaleProbe or TestAutoRevert'",
+    "state": "partial",
+    "evidence": "passed, 2026-10-10, master `f1c952a8`. The live probe ran 7/7 on 2026-05-31; the restore of a previous policy has never run live (#2184)."
+  },
+  {
+    "id": "VPNACL-001-f4",
+    "behavior": "hermes is SSH-reachable over VPN, carries tag:hermes, and authenticates to a target service with its own scoped credential",
+    "verification": "poetry run pytest tests/test_headscale_role.py -k test_tag_hermes_owned_by_registering_user",
+    "state": "partial",
+    "evidence": "passed, 2026-10-10. The policy half: tag:hermes is declared and owned by agents@, so a node registered with it carries it. SSH and tag proven live for hermes-nan on 2026-05-31, retired 2026-09-30; tag:hermes is now on hermes-kubelab (AI-009). No test covers the SSH or own-credential claims: the credential was never provisioned (#590)."
+  }
+]
