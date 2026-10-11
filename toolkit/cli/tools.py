@@ -307,6 +307,14 @@ def review_attestation(
     registry: Annotated[Path, typer.Option("--registry", help="Reviewer registry (JSON)")] = Path(
         "harness/review-attestation.json"
     ),
+    state_file: Annotated[
+        Path | None,
+        typer.Option(
+            "--state-file",
+            help="Write the classified state here. The workflow reads it rather "
+            "than parsing the log, which quotes reviewer notices (#2208).",
+        ),
+    ] = None,
 ) -> None:
     """Report whether a PR was actually reviewed, and refuse it if not.
 
@@ -325,6 +333,9 @@ def review_attestation(
         logger.error(f"review attestation: {exc}")
         logger.error("Cannot determine whether this PR was reviewed, so it is NOT treated as reviewed.")
         raise typer.Exit(2) from exc
+
+    if state_file is not None:
+        state_file.write_text(f"{verdict.state}\n", encoding="utf-8")
 
     if verdict.ok:
         logger.success(f"{verdict.state} — {verdict.detail}")
