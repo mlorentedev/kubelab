@@ -75,7 +75,7 @@ Round 2: `review.md`, **PASS WITH GAPS**, by `nan/mimo-v2.6-flash` on 2026-10-10
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/VPNACL-001-fleet-segmentation/` -> `specs/archive/VPNACL-001-fleet-segmentation/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/VPNACL-001-fleet-segmentation/` -> `specs/archive/VPNACL-001-fleet-segmentation/`
 - [ ] Backlog entries `VPN-ACL-001/002/003` ticked in vault `11-tasks.md` with PR link
-- [ ] Promotions above executed (if any)
+- [x] Promotions above executed (if any)
