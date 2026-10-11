@@ -174,6 +174,7 @@ def test_sso_signs_up_and_the_form_admits_only_the_seeded_break_glass_account() 
     """
     env = _env()
     assert env["ENABLE_LOGIN_FORM"] == "true"
+    assert env["ENABLE_PASSWORD_AUTH"] == "true", "the sign-in endpoint refuses passwords without it"
     assert env["ENABLE_SIGNUP"] == "false"
     assert env["ENABLE_OAUTH_SIGNUP"] == "true"
     assert env["OAUTH_MERGE_ACCOUNTS_BY_EMAIL"] == "false", "an SSO login must never adopt the local account"
