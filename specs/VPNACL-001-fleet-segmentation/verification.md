@@ -48,6 +48,17 @@ Round 1: `review-round1.md`, **FAIL**, by `nan/mimo-v2.6-flash` on 2026-10-10, a
 | F6 (Minor): the `rpi4 route` and intra-K3s probe flows are optional, so their regression would not trigger a revert | Declined: rpi4 is on-demand (ADR-028). A required route probe would fail every VPS deploy while the homelab is off, which is the reason `test_optional_broken_flow_is_logged_not_fatal` pins. |
 | F7 (Minor): the AC checkboxes in `proposal.md` are unticked | Fixed: AC1 and AC2 are ticked. AC3 and AC4 stay unticked, each with its ticket beside it. |
 
+Round 2: `review.md`, **PASS WITH GAPS**, by `nan/mimo-v2.6-flash` on 2026-10-10, against `d9a81362`. It re-reproduced the live inbound posture and found the corrected contract matches it.
+
+| Finding | Disposition |
+|---|---|
+| F2' (Major, theoretical): the auto-revert restore has never run | Ticketed: #2184 (VPN-ACL-011). AC3 is unmet and says so. |
+| F4 (Major, theoretical): a policy rejected on reload deploys green; no host-builder parity test | Ticketed: #2190 (VPN-ACL-013). |
+| AC4's halves are undelivered (Minor) | Ticketed: #590. AC4 is unmet and says so. |
+| The forge still shows round 1's decisions as pending (Minor) | Fixed: the decisions are posted on #2191 and #1154. |
+| `tasks.md` claims "#589 closes with this archive", and nothing closes it (Minor) | Fixed outside the contract: #589's subject, the hermes-nan pod, was retired on 2026-09-30, so its acceptance (that pod restarts into the same node) can never be met. #589 is closed as not planned, with a comment. The durability of `tag:hermes`'s current holder is AI-009's, not this spec's. The contract line stays as signed. |
+| ADR-041 gotcha 6 still names a `tag:hermes:22` rule the policy lacks (Minor) | Fixed: the sentence now says it is §3's target and points to the Amendment. |
+
 ## Decisions made during implementation
 
 - **Reload = SIGHUP via Docker, not `systemctl`** (corrects ADR-041 wording for this deployment). Headscale runs in Docker Compose (distroless), and the official policy docs state file-policy changes "require ... a SIGHUP signal" → handler is `docker kill --signal=HUP headscale` (PID 1). Verified against the live v0.28.0 install + Headscale docs.
