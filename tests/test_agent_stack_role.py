@@ -6,11 +6,16 @@ so a change to the SSOT is what these tests see, not a fixture's copy of it.
 
 from __future__ import annotations
 
+import shutil
+import subprocess
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 import yaml
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
+
+from toolkit.features import break_glass, oidc_clients
 
 REPO = Path(__file__).resolve().parent.parent
 ROLE = REPO / "infra/ansible/roles/agent_stack"
@@ -295,12 +300,45 @@ def test_only_open_webuis_own_origin_may_read_it_with_credentials() -> None:
     `allow_credentials=True`, which echoes any origin back on a request with a cookie,
     and socket.io accepts the upgrade from any origin (#2109, measured live). `.internal`
     is on no public suffix list, so every `*.kubelab.internal` host is the same site."""
-    webui = _context()["agent_stack_webui"]
+    context = _context()
+    webui = context["agent_stack_webui"]
     env = _env()
-    direct = f"{webui['scheme']}://{webui['host']}:{webui['default_port']}"
-    # People at the public name, break-glass at ace2's own address (#2135).
+    direct = f"{webui['scheme']}://{context['tailscale_ip']}:{webui['default_port']}"
+    # People at the public name, break-glass at ace2's own address (#2135, #2202).
     assert env["CORS_ALLOW_ORIGIN"].split(";") == [env["WEBUI_URL"], direct]
     assert "*" not in env["CORS_ALLOW_ORIGIN"]
+
+
+def test_the_break_glass_way_in_is_an_origin_open_webui_accepts() -> None:
+    """`make break-glass` derives its URL from the route's EndpointSlice, and the env
+    file declares the origins separately. When the two disagreed, the operator signed
+    in and every model stayed silent: socket.io refused the upgrade (#2202)."""
+    if shutil.which("kubectl") is None:
+        pytest.skip("kubectl not on PATH: the break-glass origin was NOT checked")
+    rendered = subprocess.run(
+        ["kubectl", "kustomize", str(REPO / "infra/k8s/overlays/prod")],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    docs = [d for d in yaml.safe_load_all(rendered) if d]
+    values = oidc_clients.load_values("prod", REPO)
+    route = break_glass.dependents("prod", docs, values)["open-webui"]
+    backend = route.backend
+    assert backend is not None, "the public route lost its Service backend"
+    in_namespace = [d for d in docs if d["metadata"].get("namespace") == backend.namespace]
+    [service] = [d for d in in_namespace if d["kind"] == "Service" and d["metadata"]["name"] == backend.name]
+    slices = [
+        d
+        for d in in_namespace
+        if d["kind"] == "EndpointSlice"
+        and d["metadata"].get("labels", {}).get("kubernetes.io/service-name") == backend.name
+    ]
+    decl = break_glass.declarations(values)["open-webui"]
+    plan = break_glass.plan_access(decl, route, service, slices)
+    assert isinstance(plan, break_glass.Direct), plan
+    parts = urlsplit(plan.url)
+    assert f"{parts.scheme}://{parts.netloc}" in _env()["CORS_ALLOW_ORIGIN"].split(";")
 
 
 def test_every_generated_key_survives_a_fresh_nodes_dry_run() -> None:
