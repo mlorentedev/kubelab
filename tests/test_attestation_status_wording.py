@@ -103,7 +103,14 @@ def test_the_state_is_read_from_a_file_the_classifier_writes(classify_step: str)
         "the Classify step does not ask the classifier for its state; it can only "
         "infer it from the log, which quotes reviewer notices and PR values"
     )
-    assert not re.search(r"grep[^\n]*\b(attested|disclosed)\b", classify_step), (
+    assignments = re.findall(r"^\s*state_word=(.*)$", classify_step, re.MULTILINE)
+    assert assignments, "the Classify step no longer sets state_word"
+    for rhs in assignments:
+        assert "$state_file" in rhs and "$out" not in rhs, (
+            f"state_word is derived from something other than the state file: {rhs!r}. "
+            "Any pattern over the log reads whichever state word its prose quoted last."
+        )
+    assert not re.search(r"grep[^\n]*\b(attested|exempt|disclosed|declined|pending)\b", classify_step), (
         "the Classify step still greps state words out of the classifier's prose"
     )
 
