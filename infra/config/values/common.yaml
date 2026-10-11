@@ -1880,7 +1880,7 @@ apps:
           open-webui:
             # A local account of nobody, the Grafana shape (#951). The login form
             # stays on for it: `ENABLE_LOGIN_FORM=false` only hides the form, and
-            # `/api/v1/auths/signin` keeps taking passwords either way (v0.11.4,
+            # `/api/v1/auths/signin` keeps taking passwords either way (v0.12.0,
             # lesson-520). `WEBUI_ADMIN_EMAIL` seeds it on an empty database, before
             # the first request, so no visitor can sign up as the first admin. Open
             # WebUI signs in by email, which is why rotation uses it. The public
@@ -1940,7 +1940,7 @@ apps:
         # because ace2 is (ADR-068 D1): while ace2 is off, the chat does not answer.
         state_promotion: singleton
         location: on-demand
-        image: ghcr.io/open-webui/open-webui:v0.11.4
+        image: ghcr.io/open-webui/open-webui:v0.12.0
         # The public name people use (#2135, ADR-068 D5 amended): prod Traefik
         # terminates TLS and forwards to ace2 over the tailnet. While ace2 is
         # off, it answers the error page.
@@ -1961,7 +1961,7 @@ apps:
         memory_limit: 1536m
         cpu_limit: "2.0"
         # Retrieval over uploaded documents (ADR-068 D5), on NaN's models and
-        # key, so no embedding model loads into the container. v0.11.4 sends no
+        # key, so no embedding model loads into the container. v0.12.0 sends no
         # `dimensions`, so NaN returns 4096-wide vectors; Chroma takes any width.
         # A batch of 16 was measured to answer (spec verification.md, PR 5a).
         rag:

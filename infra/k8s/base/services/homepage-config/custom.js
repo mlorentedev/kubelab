@@ -603,7 +603,7 @@ var KUBELAB_SERVICES_SHARED = [
     "auth": "Authelia (OIDC)",
     "category": "AI",
     "node": "ace2",
-    "version": "0.11.4",
+    "version": "0.12.0",
     "notes": "Chat over NaN models \u00b7 on-demand"
   }
 ];
@@ -1028,7 +1028,7 @@ var KUBELAB_SERVICES_SHARED = [
     var main = document.querySelector("main") || document.querySelector("#page_container") || document.body;
     var footer = document.createElement("div");
     footer.id = "kubelab-footer";
-    footer.textContent = "KubeLab IDP · config f034c0ec";
+    footer.textContent = "KubeLab IDP · config 37f1decb";
     main.appendChild(footer);
   }
   setTimeout(addFooter, 2000);

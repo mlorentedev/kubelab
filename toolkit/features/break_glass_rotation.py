@@ -237,7 +237,7 @@ class OpenWebUIAdminPassword:
         token = self._session(base_url, user, old)
         if token is None:
             raise RotationError("Open WebUI refused the current password")
-        # v0.11.4 `UpdatePasswordForm` (backend/open_webui/models/auths.py:75): `password` is the
+        # v0.12.0 `UpdatePasswordForm` (backend/open_webui/models/auths.py:187): `password` is the
         # current one, checked against the session's user; `new_password` replaces it.
         body = {"password": old, "new_password": new}
         status, answer = self._request("POST", base_url + "/api/v1/auths/update/password", body, f"Bearer {token}")

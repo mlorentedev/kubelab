@@ -52,7 +52,7 @@
         quiet: true
       when: _agent_stack_bridge is defined
 
-    # What an admin's chat offers. v0.11.4 fetches each connection's spec on
+    # What an admin's chat offers. v0.12.0 fetches each connection's spec on
     # this call, so a bridge Open WebUI cannot reach is missing from the list.
     - name: Sign in as the break-glass admin to read the tool list
       ansible.builtin.uri:
