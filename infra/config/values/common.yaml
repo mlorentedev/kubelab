@@ -1946,9 +1946,9 @@ apps:
         # off, it answers the error page.
         domain: chat.kubelab.live
         # Plain HTTP on the tailnet, at ace2's MagicDNS name (spec R8), for the
-        # server-side probes (Uptime Kuma, the homepage). Not a browser origin:
-        # the route and break-glass use ace2's tailnet IP from the EndpointSlice,
-        # and that IP is the origin Open WebUI admits (#2202).
+        # server-side probes (Uptime Kuma, the homepage), and one of the origins
+        # Open WebUI admits. Break-glass uses ace2's tailnet IP from the
+        # EndpointSlice instead, which is admitted too (#2202).
         # MagicDNS names a node by its Headscale given-name, which for ace2 is
         # `networking.nodes.ace2.hostname` (resolved 2026-10-01 → 100.64.0.5).
         host: ace2.kubelab.internal

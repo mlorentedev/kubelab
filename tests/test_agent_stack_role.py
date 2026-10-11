@@ -303,9 +303,10 @@ def test_only_open_webuis_own_origin_may_read_it_with_credentials() -> None:
     context = _context()
     webui = context["agent_stack_webui"]
     env = _env()
-    direct = f"{webui['scheme']}://{context['tailscale_ip']}:{webui['default_port']}"
-    # People at the public name, break-glass at ace2's own address (#2135, #2202).
-    assert env["CORS_ALLOW_ORIGIN"].split(";") == [env["WEBUI_URL"], direct]
+    by_ip = f"{webui['scheme']}://{context['tailscale_ip']}:{webui['default_port']}"
+    by_name = f"{webui['scheme']}://{webui['host']}:{webui['default_port']}"
+    # People at the public name; break-glass at ace2's IP (#2135, #2202); its MagicDNS name.
+    assert env["CORS_ALLOW_ORIGIN"].split(";") == [env["WEBUI_URL"], by_ip, by_name]
     assert "*" not in env["CORS_ALLOW_ORIGIN"]
 
 

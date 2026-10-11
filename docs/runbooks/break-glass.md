@@ -77,9 +77,8 @@ The web form is not relied on. For credential repair, see
 
 `breakglass@kubelab.live` with its local password, over the tailnet at the URL
 `make break-glass SVC=open-webui ENV=prod` prints: ace2's tailnet IP, derived from the
-route's EndpointSlice. Use that URL, not `ace2.kubelab.internal`: Open WebUI admits only
-that origin and the public name, and on any other the page loads but no model answers
-(#2202). Never at `chat.kubelab.live`: the public
+route's EndpointSlice. Open WebUI admits that origin, ace2's MagicDNS name and the public
+name; on any other the page loads but no model answers (#2202). Never at `chat.kubelab.live`: the public
 route refuses `/api/v1/auths/signin` (#2135). Open WebUI signs in by email, so that is the
 user. The form is always on and admits only this account: nobody can sign up through it,
 and SSO users never get a password. It is seeded on an empty database by

@@ -31,8 +31,8 @@ Open WebUI is reached at `https://chat.kubelab.live`, with OIDC against prod
 Authelia (ADR-068, amendment 2026-10-08). Prod Traefik terminates TLS and
 forwards over the tailnet to `ace2:3080`, and refuses the password form at
 `/api/v1/auths/signin`. Break-glass reaches it at ace2's tailnet IP, the address
-in the route's EndpointSlice and the only origin Open WebUI admits besides the
-public name (#2202). The gateway's API listens on
+in the route's EndpointSlice. Open WebUI admits that IP, `ace2.kubelab.internal`
+and the public name as origins, and no other (#2202). The gateway's API listens on
 `172.30.250.1:8642`, the gateway of Open WebUI's bridge `br-open-webui`
 (`networking.nodes.ace2.webui_bridge`), and ufw admits that bridge's subnet
 alone. Open WebUI lists Hermes as its second backend, after NaN, visible to
