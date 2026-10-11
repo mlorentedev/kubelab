@@ -136,7 +136,12 @@ Rolled out after the merge in the order the PR stated, with one break. The first
 - **OIDC**: `/oauth/oidc/login` redirects to Authelia with `redirect_uri=https://chat.kubelab.live/oauth/oidc/callback`. Authelia answers with its login flow (`flow=openid_connect`), not a redirect error.
 - **CORS**: `Origin: https://chat.kubelab.live` and `Origin: http://ace2.kubelab.internal:3080` are each echoed in `access-control-allow-origin`, and a foreign origin gets none. So Open WebUI parses the two `;`-separated origins.
 - **In the e2e suite since #2150**: the three controls above are `tests/e2e/test_open_webui_public.py`, run by `make test-e2e ENV=prod`. The refusal is asserted with ace2 off; the OIDC and CORS tests skip then. Each assertion was mutated and went red.
-- **Not yet run**: an interactive login off the tailnet with the tier check, the error page with ace2 off, and `make break-glass SVC=open-webui` (every use pages the operator channel). All three are the operator's.
+- **Operator drills, 2026-10-10 and 11** (run from the peer lane `kubelab-48`):
+  - **Off-tailnet login with the tier check**: passed, per the operator.
+  - **Error page with the backend off**: not met. With the whole homelab off, the page kept loading instead of showing the error page. Not measured yet; the hypothesis is Traefik's default 30 s dial timeout. #2207 (OBS-035) holds the measurement step and the fix.
+  - **`make break-glass SVC=open-webui`**: the first attempt reached admin, but the models stayed silent: `CORS_ALLOW_ORIGIN` lacked break-glass's derived origin `http://100.64.0.5:3080`. Fixed by #2203 (d796d0a3, closes #2202, lesson-556). Verified live: `chat/completions` 200 at 02:11:49 and 02:12:19 UTC, and no `not an accepted origin` error.
+  - After the drill, the prod break-glass accounts (gitea, grafana, open-webui) were rotated in #2206. `apply-secrets` ran, and ace2 provisioned `changed=2`, then `changed=0`.
+  - A `KeyError 'model'` in title generation appeared only during the CORS-broken window (23:51 UTC). Not yet confirmed gone after the fix.
 
 ### AC3, an approval left unanswered, Slack, ace2, 2026-10-10
 
