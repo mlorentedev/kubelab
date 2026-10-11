@@ -16,7 +16,8 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
   - `test_every_provision_asks_the_running_scanner_for_both_verdicts`.
 
   `_config()` now loads with a loader that refuses duplicate keys, because `safe_load` keeps the last of two silently.
-- [ ] AC2 to AC11: pending.
+- [ ] AC2: blocked upstream. The code is in draft #2204. Hermes swaps to the fallback when NaN refuses it, then sends the console's `sk-ant-usr` key as an OAuth token, which the API refuses (lesson-557, upstream NousResearch/hermes-agent#133856). ace2 runs without a fallback until Hermes classifies the key correctly.
+- [ ] AC3 to AC11: pending.
 
 ### AC1, live on ace2, 2026-10-10
 
@@ -64,6 +65,8 @@ Two limits remain, and neither is in AC1's scope:
   - `hermes cron create` takes `--name`, `--deliver platform:chat_id`, `--skill`, `--script`, `--no-agent`, `--model` and `--workdir`.
   - `ANTHROPIC_API_KEY` is a recognised provider key.
   - `cron/jobs.json` and `memories/` are absent or empty.
+- 2026-10-10, operator, names: `agent_config` for the ported keys, `anthropic_api_key` and `brightdata_api_token` in prod's vault, and `80_agents/operator/hermes-kubelab/` for the operator's private directory. The owner goes in the parent directory, so one path rule (`80_agents/operator/` is the operator's, and the agent's zone never covers it) holds for every agent, where a `-operator` suffix would need a rule per agent.
+- 2026-10-10, AC2 is parked, not worked around. The only route Hermes leaves to `x-api-key` on this key is a `base_url` outside `anthropic.com`, which means adding a proxy to work around one function.
 
 ## NaN harness disposition (AC11)
 

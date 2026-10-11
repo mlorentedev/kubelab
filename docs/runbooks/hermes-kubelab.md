@@ -45,6 +45,35 @@ delays the agent by up to 120 s and no more). To check the firewall by hand:
 from another network logs `[UFW BLOCK] ... DPT=8642` in `journalctl -k`
 (lesson-542). Every provision runs both probes.
 
+## Models
+
+- **Primary**: NaN (`models.unmetered` in `common.yaml`), which delegation is
+  pinned to as well.
+- **Fallback**: none for now. If NaN refuses or is down, the agent does not
+  answer. The Anthropic Haiku fallback (spec AI-012 AC2) is built in draft
+  #2204. It waits on a Hermes bug: the console issues keys prefixed
+  `sk-ant-usr`, and Hermes sends them as OAuth tokens, which the API refuses
+  with "credit balance too low" on this account (lesson-557; where the
+account's Claude Code identity has credit, the call succeeds and bills under
+that identity instead; upstream
+  NousResearch/hermes-agent#133856). The key lives in a non-Default console
+  workspace with a 20 USD monthly limit. It sits in `prod.enc.yaml` on #2204's
+  branch only.
+- **To unblock**, when the pinned Hermes image moves to a release that carries
+  the upstream fix:
+  1. Rebase #2204 on master. If `prod.enc.yaml` conflicts, take master's file and
+     set the key again with `toolkit secrets set
+     apps.services.ai.hermes_kubelab.anthropic_api_key --env prod --stdin`.
+  2. Provision ace2 from the branch: `changed>0`, then `changed=0`.
+  3. Force NaN to fail for one turn, without touching the deployed config:
+     `docker exec -e NAN_API_KEY=sk-deliberately-invalid -u hermes
+     hermes-kubelab hermes chat -q "Reply with the single word: pong"`, run
+     as the agent's user against its rootless daemon. Expect `Model fallback:
+     ... using claude-haiku-5-5 via anthropic` and the answer `pong`.
+  4. Record the output in AI-012's `verification.md`, set feature f2's
+     `verification` to `poetry run pytest --no-cov -q tests/test_hermes_fallback.py`
+     and its state to `passing`, then mark #2204 ready.
+
 ## Start, or converge after any change
 
 ```bash
