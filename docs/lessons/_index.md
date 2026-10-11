@@ -14,7 +14,7 @@
 | [gitops-delivery](gitops-delivery/_index.md) | 33 | Argo CD, releases, promotion |
 | [ci-automation](ci-automation/_index.md) | 42 | CI workflows, gates, GitHub |
 | [observability](observability/_index.md) | 27 | Metrics, logs, alerting |
-| [containers-docker](containers-docker/_index.md) | 21 | Docker, Compose, image builds |
+| [containers-docker](containers-docker/_index.md) | 22 | Docker, Compose, image builds |
 | [storage-backup](storage-backup/_index.md) | 31 | Backups, volumes, persistence |
 | [apps-web](apps-web/_index.md) | 7 | Application code (API, web) |
 

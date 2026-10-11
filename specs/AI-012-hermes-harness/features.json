@@ -10,8 +10,8 @@
     "id": "AI-012-hermes-harness-f2",
     "behavior": "AC2: A turn completes on the Anthropic fallback when NaN is unreachable",
     "verification": "echo 'not implemented' && exit 1",
-    "state": "pending",
-    "evidence": ""
+    "state": "blocked",
+    "evidence": "2026-10-10: blocked upstream. With NaN refused, Hermes swaps to Haiku and sends the sk-ant-usr key as an OAuth token; the API refuses it. Draft #2204, lesson-557."
   },
   {
     "id": "AI-012-hermes-harness-f3",

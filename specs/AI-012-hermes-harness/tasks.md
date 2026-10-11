@@ -29,7 +29,9 @@ One PR per block, in this order. Each block starts with the failing test.
 
 ### PR 2: fallback (AC2, needs R1)
 
-- [ ] [AC2] Test: the env renders `ANTHROPIC_API_KEY` only when the key exists, and `fallback_providers` names the pinned Haiku. `SECRET_CATALOG` gains the entry.
+Blocked upstream: draft #2204, lesson-557. R1 is answered: the key is in prod's vault.
+
+- [ ] [AC2] Test (written in draft #2204): the env renders `ANTHROPIC_API_KEY` only when the key exists, and `fallback_providers` names the pinned Haiku. `SECRET_CATALOG` gains the entry.
 - [ ] [AC2] Runbook: create the workspace, its 20 USD monthly limit and its key, step by step.
 - [ ] [AC2] Live (R5): with NaN refused for the agent's uid, a turn completes on Haiku.
 
