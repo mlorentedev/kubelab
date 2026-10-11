@@ -24,8 +24,9 @@ billing message. The same key with `x-api-key` returned 200, from the
 workstation and from inside the gateway container. Upstream `main` keeps the
 same check. No setting selects the auth style for `api.anthropic.com`.
 
-**Solution**: None in config. The fallback PR stays a draft (#2204) until Hermes
-classifies the key correctly, and ace2 runs without a fallback. A proxy whose
+**Solution**: None in config. Upstream tracks it as NousResearch/hermes-agent
+#133856 (P1), with fix PRs open. The fallback PR stays a draft (#2204) until a
+pinned Hermes release carries the fix, and ace2 runs without a fallback. A proxy whose
 `base_url` lies outside `anthropic.com` would force `x-api-key`, but it adds a
 component to work around one function.
 

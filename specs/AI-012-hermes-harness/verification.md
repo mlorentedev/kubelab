@@ -16,7 +16,7 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
   - `test_every_provision_asks_the_running_scanner_for_both_verdicts`.
 
   `_config()` now loads with a loader that refuses duplicate keys, because `safe_load` keeps the last of two silently.
-- [ ] AC2: blocked upstream. The code is in draft #2204. Hermes swaps to the fallback when NaN refuses it, then sends the console's `sk-ant-usr` key as an OAuth token, which the API refuses (lesson-557). ace2 runs without a fallback until Hermes classifies the key correctly.
+- [ ] AC2: blocked upstream. The code is in draft #2204. Hermes swaps to the fallback when NaN refuses it, then sends the console's `sk-ant-usr` key as an OAuth token, which the API refuses (lesson-557, upstream NousResearch/hermes-agent#133856). ace2 runs without a fallback until Hermes classifies the key correctly.
 - [ ] AC3 to AC11: pending.
 
 ### AC1, live on ace2, 2026-10-10
