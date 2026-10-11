@@ -71,5 +71,5 @@ owner: manu
 ## References
 
 - [ADR-041](../adr/adr-041-agent-fleet-vpn-segmentation.md) — the segmentation model.
-- Spec `specs/VPNACL-001-fleet-segmentation/` — implementation + verification.
+- Spec `specs/archive/VPNACL-001-fleet-segmentation/` — implementation + verification.
 - Backlog: `VPN-ACL-005` (credential rotation), `VPN-ACL-007` (codify key minting in the toolkit).
