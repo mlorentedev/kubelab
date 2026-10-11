@@ -103,6 +103,10 @@ def test_the_state_is_read_from_a_file_the_classifier_writes(classify_step: str)
         "the Classify step does not ask the classifier for its state; it can only "
         "infer it from the log, which quotes reviewer notices and PR values"
     )
+    assert re.search(r'^\s*state_file="\$RUNNER_TEMP/[^"]+"\s*$', classify_step, re.MULTILINE), (
+        "state_file is not assigned a path under $RUNNER_TEMP; with it unset the "
+        "classifier is handed an empty path and the gate cannot answer"
+    )
     assignments = re.findall(r"^\s*state_word=(.*)$", classify_step, re.MULTILINE)
     assert assignments, "the Classify step no longer sets state_word"
     for rhs in assignments:
