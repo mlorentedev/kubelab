@@ -1,9 +1,10 @@
 # Identity, auth and secret material
 
-78 lessons, newest first. Back to [all categories](../_index.md).
+79 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 556 | [Two derivations of one address diverge when a route is added](lesson-556-two-derivations-of-one-address-diverge-when-a-route-is-added.md) | 2026-10-10 |
 | 550 | [An auth smoke that only omits the credential cannot tell a value check from a presence check](lesson-550-an-auth-smoke-that-only-omits-the-credential-cannot-tell-a-value-check-from-a-presence-check.md) | 2026-10-10 |
 | 549 | [A chat approval can widen what the config allows, until the gateway restarts](lesson-549-a-chat-approval-can-widen-what-the-config-allows-until-the-gateway-restarts.md) | 2026-10-10 |
 | 532 | [A wildcard CORS origin with credentials echoes every origin, and `.internal` is one site](lesson-532-a-wildcard-cors-origin-with-credentials-echoes-every-origin-and-internal-is-one-site.md) | 2026-10-07 |
