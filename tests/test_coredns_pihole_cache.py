@@ -36,5 +36,7 @@ def test_the_corefile_task_is_the_one_registered_as_corefile() -> None:
 
 
 def test_pihole_restarts_after_coredns() -> None:
+    """A regression guard, not evidence for the fix: the order predates it. Pi-hole
+    restarting before CoreDNS would cache the old answers again."""
     names = [t.get("name") for t in _tasks()]
     assert names.index("Restart CoreDNS on config change") < names.index("Restart Pi-hole on config change")
