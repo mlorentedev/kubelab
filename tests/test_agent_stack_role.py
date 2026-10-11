@@ -170,10 +170,11 @@ def test_sso_signs_up_and_the_form_admits_only_the_seeded_break_glass_account() 
     """The form is the break-glass door (ADR-062 D4). Nobody can sign up through it.
 
     `ENABLE_LOGIN_FORM=false` would only hide the form: `/api/v1/auths/signin` keeps
-    taking passwords (v0.11.4, lesson-520), so it never made SSO the only door.
+    taking passwords (v0.12.0, lesson-520), so it never made SSO the only door.
     """
     env = _env()
     assert env["ENABLE_LOGIN_FORM"] == "true"
+    assert env["ENABLE_PASSWORD_AUTH"] == "true", "the sign-in endpoint refuses passwords without it"
     assert env["ENABLE_SIGNUP"] == "false"
     assert env["ENABLE_OAUTH_SIGNUP"] == "true"
     assert env["OAUTH_MERGE_ACCOUNTS_BY_EMAIL"] == "false", "an SSO login must never adopt the local account"
@@ -194,7 +195,7 @@ def test_tiers_come_from_authelia_groups_and_anyone_else_is_refused() -> None:
 
 
 def test_userinfo_is_always_read_because_authelia_sends_groups_only_there() -> None:
-    """lesson-457: groups are in UserInfo, not the ID token. Open WebUI v0.11.4 calls
+    """lesson-457: groups are in UserInfo, not the ID token. Open WebUI v0.12.0 calls
     UserInfo only when the ID token lacks the email or the username claim, so the
     username claim is one Authelia keeps out of the ID token."""
     assert _env()["OAUTH_USERNAME_CLAIM"] == "preferred_username"
@@ -296,7 +297,7 @@ def test_the_container_resolves_through_magicdns_first() -> None:
 
 
 def test_only_open_webuis_own_origin_may_read_it_with_credentials() -> None:
-    """v0.11.4 defaults `CORS_ALLOW_ORIGIN` to `*` and passes it to Starlette with
+    """v0.12.0 defaults `CORS_ALLOW_ORIGIN` to `*` and passes it to Starlette with
     `allow_credentials=True`, which echoes any origin back on a request with a cookie,
     and socket.io accepts the upgrade from any origin (#2109, measured live). `.internal`
     is on no public suffix list, so every `*.kubelab.internal` host is the same site."""

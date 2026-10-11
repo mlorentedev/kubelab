@@ -198,7 +198,7 @@ class GrafanaTiers:
 
 
 class OpenWebUITiers:
-    """Open WebUI's role, which it loads from its database on every request (v0.11.4
+    """Open WebUI's role, which it loads from its database on every request (v0.12.0
     `get_current_user`) and writes from `groups` at each OAuth login. Unlike Grafana,
     its API edits an OAuth account's role, so this is Gitea's shape: edit, read back.
 

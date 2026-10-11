@@ -168,7 +168,7 @@ def test_the_role_path_maps_each_tier(where: str, expr: str, groups: list[str], 
         (GiteaTiers, {ADMIN: "admin", OPERATOR: "user", VIEWER: "user"}),
         (GrafanaTiers, {ADMIN: "Admin", OPERATOR: "Editor", VIEWER: "Viewer"}),
         # A login with neither group is refused (OAUTH_ALLOWED_ROLES), and `pending` is
-        # the role with no access (v0.11.4 `VERIFIED_USER_ROLES = {'user', 'admin'}`).
+        # the role with no access (v0.12.0 `VERIFIED_USER_ROLES = {'user', 'admin'}`).
         (OpenWebUITiers, {ADMIN: "admin", OPERATOR: "user", VIEWER: "pending"}),
     ],
 )
@@ -694,7 +694,7 @@ def test_open_webui_signs_in_by_email_and_keys_each_account_by_its_authelia_logi
 
 
 def test_open_webui_edits_the_role_under_the_break_glass_session() -> None:
-    """v0.11.4 loads the user from its database on every request (`get_current_user`),
+    """v0.12.0 loads the user from its database on every request (`get_current_user`),
     so the edited role reaches a session already open on its next request."""
     app = ScriptedOpenWebUI(WEBUI_USERS)
     tiers = OpenWebUITiers(app, LOGINS)
@@ -704,7 +704,7 @@ def test_open_webui_edits_the_role_under_the_break_glass_session() -> None:
 
 
 def test_open_webui_reports_a_refused_edit_as_unfixed() -> None:
-    """v0.11.4 takes `role` as any string (`UserUpdateForm`, `routers/users.py`), so
+    """v0.12.0 takes `role` as any string (`UserUpdateForm`, `routers/users.py`), so
     `pending` is accepted; a refusal (the primary-admin guard) must not read as fixed."""
     app = ScriptedOpenWebUI(WEBUI_USERS, update_status=403)
     tiers = OpenWebUITiers(app, LOGINS)
