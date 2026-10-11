@@ -1968,6 +1968,33 @@ apps:
           embedding_model: qwen3-embedding
           embedding_batch_size: 16
           reranking_model: rerank
+        # One job per NaN model (spec AI-015, #2211). NaN's key lists every model
+        # it hosts, and the picker offered embedding, reranking, speech and image
+        # models as if they could chat. Open WebUI offers these chat models from
+        # NaN and no others; the rest are wired to the feature they serve.
+        # Measured 2026-10-11 against NaN: each chat model answers 200;
+        # `minimax-h3` (listed) and `glm5.3` answer 401, outside our tier;
+        # `qwen-image-2.1` is a second image model on the same 100-a-month cap.
+        models:
+          chat:
+            - qwen3.6
+            - gemma4
+            - glm5.3-flash
+            - deepseek-v4-flash
+            - mimo-v2.6-flash
+            - qwen3.8-flash
+          # Transcribed a Spanish sample as `es` (2026-10-11).
+          speech_to_text: whisper
+          # NaN lists no voices; `ef_dora` is Kokoro's Spanish voice and answered
+          # 200. Each user can pick another in Open WebUI's settings.
+          text_to_speech:
+            model: kokoro
+            voice: ef_dora
+          # NaN answers an image request with a `url`, so Open WebUI must not ask
+          # for `b64_json` (IMAGE_URL_RESPONSE_MODELS_REGEX_PATTERN, webui.env.j2).
+          image_generation:
+            model: flux-2-klein
+            size: 512x512
         # The MCP bridge that serves Open WebUI the vault, read-only (spec AI-009
         # AC9): mcpo in front of the filesystem MCP server, on Open WebUI's
         # network and no other, built on ace2 by the agent_stack role. The base
