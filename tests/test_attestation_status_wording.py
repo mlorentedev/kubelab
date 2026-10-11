@@ -237,8 +237,11 @@ def test_a_state_file_the_cli_cannot_write_is_exit_2(tmp_path: Path) -> None:
             }
         )
     )
-    result = CliRunner().invoke(
-        app,
-        ["review-attestation", "--payload-file", str(payload_file), "--state-file", str(tmp_path / "no" / "state")],
-    )
-    assert result.exit_code == 2, result.output
+    def run(state_file: Path) -> int:
+        args = ["review-attestation", "--payload-file", str(payload_file), "--state-file", str(state_file)]
+        return CliRunner().invoke(app, args).exit_code
+
+    # A writable path first: a CLI that rejected the option would also exit 2
+    # (a usage error), and the unwritable case alone could not tell the two apart.
+    assert run(tmp_path / "state") == 0
+    assert run(tmp_path / "no" / "state") == 2
