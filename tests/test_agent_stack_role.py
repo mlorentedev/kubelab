@@ -6,6 +6,7 @@ so a change to the SSOT is what these tests see, not a fixture's copy of it.
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -70,6 +71,8 @@ def _environment() -> Environment:
     env = Environment(loader=FileSystemLoader(str(ROLE / "templates")), undefined=StrictUndefined)
     # Ansible's: a rendered default is a string, and "False" is truthy to Jinja.
     env.filters["bool"] = lambda value: str(value).strip().lower() in ("true", "yes", "on", "1")
+    # Ansible's `regex_escape` (python flavour) is `re.escape`.
+    env.filters["regex_escape"] = re.escape
     return env
 
 
