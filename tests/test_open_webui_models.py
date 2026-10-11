@@ -28,6 +28,8 @@ def _configs() -> dict:
 def test_the_nan_connection_offers_only_the_declared_chat_models() -> None:
     nan = _configs()["0"]
     assert nan["enable"] is True
+    # An empty allowlist would render as valid JSON and offer nothing, or everything.
+    assert _models()["chat"], "no chat models declared"
     assert nan["model_ids"] == _models()["chat"]
 
 
@@ -35,7 +37,11 @@ def test_hermes_keeps_offering_what_it_serves() -> None:
     """Connection 1 is Hermes. An entry with empty `model_ids` would be harmless,
     but any `model_ids` there would hide the agent; it gets no entry at all."""
     assert set(_configs()) == {"0"}
-    assert len(_env()["OPENAI_API_BASE_URLS"].split(";")) == 2
+    # Key "0" binds by position, so NaN must stay first: swapped, the allowlist
+    # would restrict Hermes and leave NaN offering everything.
+    urls = _env()["OPENAI_API_BASE_URLS"].split(";")
+    assert len(urls) == 2
+    assert urls[0] == _context()["agent_stack_nan_api_base_url"]
 
 
 def test_no_model_has_two_jobs() -> None:
