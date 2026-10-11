@@ -167,7 +167,7 @@ Services are unreachable by domain name.
 # Test DNS resolution
 dig api.kubelab.live
 dig staging.kubelab.live
-nslookup web.kubelab.live
+nslookup mlorente.dev
 
 # Check /etc/hosts for local overrides
 cat /etc/hosts | grep kubelab
@@ -180,7 +180,7 @@ dig +trace kubelab.live
 
 ```bash
 # For local development, add to /etc/hosts
-echo "127.0.0.1 api.localhost web.localhost blog.localhost" | sudo tee -a /etc/hosts
+echo "127.0.0.1 api.localhost web.localhost" | sudo tee -a /etc/hosts
 
 # For staging (KubeLab), ensure WireGuard is connected
 sudo wg show

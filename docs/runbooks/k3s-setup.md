@@ -150,7 +150,7 @@ Verify issuance after deploying an IngressRoute:
 
 ```bash
 kubectl logs -n kube-system -l app.kubernetes.io/name=traefik | grep -i acme
-curl -vk https://web.staging.kubelab.live 2>&1 | grep -E 'subject|issuer'
+curl -vk https://staging.mlorente.dev 2>&1 | grep -E 'subject|issuer'
 ```
 
 The HelmChartConfig is **managed by Ansible** (template

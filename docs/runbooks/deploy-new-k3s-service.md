@@ -22,7 +22,7 @@ created: "2026-03-28"
 - [ ] Decide auth tier for the service (see ADR-016):
   - **OIDC** (Tier 1): Service has native OIDC support (e.g., Gitea, Grafana)
   - **Forward Auth** (Tier 2): No OIDC support, use Authelia middleware (e.g., N8N, Grafana)
-  - **Bypass** (Tier 3): Public endpoint, no auth needed (e.g., API, blog)
+  - **Bypass** (Tier 3): Public endpoint, no auth needed (e.g., API, web)
 
 ## Steps
 

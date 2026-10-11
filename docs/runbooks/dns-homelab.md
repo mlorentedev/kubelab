@@ -140,34 +140,14 @@ sudo tailscale up --login-server=https://vpn.kubelab.live --accept-routes
 
 ## Corefile Reference
 
-`edge/dns-gateway/Corefile` in the repo:
+The `coredns` role renders it from `infra/ansible/roles/coredns/templates/Corefile.j2`.
+Read the template for the current content; this page keeps only its shape, because a
+pasted copy drifted twice (lesson-561). The staging zone answers every
+`*.staging.kubelab.live` name with ace1's Tailscale IP through a wildcard `template`,
+so a staging name resolves whether or not anything routes it: check the IngressRoutes,
+not DNS, to know whether a staging service exists.
 
 ```
-staging.kubelab.live {
-    hosts {
-        100.64.0.4 staging.kubelab.live
-        100.64.0.4 api.staging.kubelab.live
-        100.64.0.4 web.staging.kubelab.live
-        100.64.0.4 blog.staging.kubelab.live
-        100.64.0.4 grafana.staging.kubelab.live
-        100.64.0.4 traefik.staging.kubelab.live
-        100.64.0.4 auth.staging.kubelab.live
-        100.64.0.4 status.staging.kubelab.live
-        100.64.0.4 gitea.staging.kubelab.live
-        100.64.0.4 n8n.staging.kubelab.live
-        100.64.0.4 loki.staging.kubelab.live
-        100.64.0.4 portainer.staging.kubelab.live
-        fallthrough
-    }
-    template IN A staging.kubelab.live {
-        match .*\.staging\.kubelab\.live
-        answer "{{ .Name }} 60 IN A 100.64.0.4"
-        fallthrough
-    }
-    log
-    errors
-}
-
 kubelab.live {
     hosts {
         # Bare-metal services: individual Tailscale IPs

@@ -42,7 +42,6 @@ Nameservers delegated from Squarespace to Cloudflare. SSL mode: Full (strict).
 ```bash
 # Verify A records
 dig kubelab.live A
-dig blog.kubelab.live A
 dig api.kubelab.live A
 
 # Verify DNS propagation (use different DNS servers)
@@ -85,7 +84,6 @@ echo | openssl s_client -connect kubelab.live:443 2>/dev/null | openssl x509 -no
 
 # Confirm HTTPS endpoints respond
 curl -f https://kubelab.live
-curl -f https://blog.kubelab.live
 curl -f https://api.kubelab.live/health
 ```
 

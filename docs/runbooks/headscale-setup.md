@@ -835,15 +835,6 @@ volumes:
   - ./config:/etc/headscale:ro
 ```
 
-### 8.6 Headplane (admin UI)
-
-Headplane provides a browser-based admin interface for Headscale:
-
-- **URL:** `headplane.kubelab.live`
-- **Auth:** Authelia one-factor (PROTECTED tier)
-- **ACL mode:** Read-only viewer (file-based ACLs managed in Git, not editable from UI)
-- **Features:** Node management, route approval, key management, real-time status
-
 ---
 
 ## Phase 9: Contractor Onboarding (Future)

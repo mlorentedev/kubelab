@@ -70,7 +70,6 @@ docker logs $(docker ps -q -f name=traefik) -f
 check_endpoints() {
   endpoints=(
     "https://mlorente.dev"
-    "https://blog.kubelab.live"
     "https://api.kubelab.live/health"
   )
 
@@ -222,9 +221,8 @@ Accept Self-Signed Certificate = ON if TLS errors.
 
 | Friendly Name | Type | Target | Interval | Tags |
 |---|---|---|---|---|
-| Staging Web | HTTP(s) | `https://web.staging.kubelab.live` | 60 | `tailscale`, `app` |
+| Staging Web | HTTP(s) | `https://staging.mlorente.dev` | 60 | `tailscale`, `app` |
 | Staging API | HTTP(s) | `https://api.staging.kubelab.live/health` | 60 | `tailscale`, `app` |
-| Staging Blog | HTTP(s) | `https://blog.staging.kubelab.live` | 60 | `tailscale`, `app` |
 | Staging Grafana | HTTP(s) | `https://grafana.staging.kubelab.live/api/health` | 120 | `tailscale`, `app` |
 
 #### Group: Production Apps
@@ -233,7 +231,6 @@ Accept Self-Signed Certificate = ON if TLS errors.
 |---|---|---|---|---|
 | Prod Web | HTTP(s) | `https://mlorente.dev` | 60 | `public`, `app` |
 | Prod API | HTTP(s) | `https://api.kubelab.live/health` | 60 | `public`, `app` |
-| Prod Blog | HTTP(s) | `https://blog.kubelab.live` | 60 | `public`, `app` |
 
 #### Status Page: `home` (slug: home)
 
@@ -365,7 +362,6 @@ Run the health endpoint check script and confirm all endpoints return `OK`.
 
 ```bash
 curl -f https://mlorente.dev
-curl -f https://blog.kubelab.live
 curl -f https://api.kubelab.live/health
 ```
 

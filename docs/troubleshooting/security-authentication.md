@@ -49,7 +49,7 @@ jwt decode $TOKEN
 
 ### Prevention
 
-- Store all credentials in Vaultwarden
+- Store all credentials in the password manager
 - Use strong, generated passwords via `toolkit credentials generate`
 - Monitor failed authentication attempts in logs
 
@@ -123,7 +123,7 @@ echo $SECRET | wc -c   # Should be >= 32 characters
 
 ### Root Cause
 
-Services that have mandatory own-authentication (portainer, gitea, n8n) placed behind Authelia ForwardAuth produce two sequential login prompts. The Authelia challenge appears first; upon success the user hits the service's own login page. This is not SSO — it is double auth.
+Services that have mandatory own-authentication (n8n, Gitea) placed behind Authelia ForwardAuth produce two sequential login prompts. The Authelia challenge appears first; upon success the user hits the service's own login page. This is not SSO — it is double auth.
 
 ### Solution
 
@@ -134,13 +134,13 @@ Two patterns depending on the service:
 Remove the Authelia middleware from the IngressRoute. Rely on the service's own auth and VPN access control (Tailscale) for network perimeter security.
 
 ```yaml
-# IngressRoute: omit the authelia middleware for portainer/gitea
+# IngressRoute: omit the authelia middleware for a service with its own login
 routes:
-  - match: Host(`portainer.staging.kubelab.live`)
+  - match: Host(`<service>.staging.kubelab.live`)
     kind: Rule
     services:
-      - name: portainer
-        port: 9000
+      - name: <service>
+        port: <port>
     # No middlewares: [] — Authelia middleware NOT applied
 ```
 
@@ -154,11 +154,10 @@ Declare the client once in `apps.services.security.authelia.oidc_clients` (`comm
 
 | Service | Auth Strategy | Reason |
 | --- | --- | --- |
-| portainer | Bypass Authelia | Docker Compose only; own mandatory auth |
 | gitea | Bypass Authelia | Own auth; OAuth2 from Authelia in staging/prod |
 | n8n | Bypass Authelia | Own user management; no OIDC support |
 | grafana | OIDC via Authelia | Native OIDC support; SSO preferred |
-| api/web/blog | Authelia ForwardAuth | No own auth; public apps need protection |
+| api/web | Authelia ForwardAuth | No own auth; public apps need protection |
 
 ### Prevention
 
@@ -178,20 +177,12 @@ Locked out of one or more KubeLab services.
 # Grafana
 docker exec grafana grafana-cli admin reset-admin-password newpass
 
-# Portainer (within 5 min of first start)
-curl -X POST http://localhost:9000/api/users/admin/init \
-  -H "Content-Type: application/json" \
-  -d '{"Username":"admin","Password":"newpassword"}'
-
-# Vaultwarden (disable admin token)
-docker exec vaultwarden sed -i 's/"admin_token":.*/"admin_token": null,/' /data/config.json
-
 # N8N (reset via database)
 docker exec n8n-db psql -U n8n -c "UPDATE user SET password='hashed_password' WHERE email='admin@kubelab.live';"
 ```
 
 ### Prevention
 
-- Store all service passwords in Vaultwarden
+- Store all service passwords in the password manager
 - Document password reset procedures for each service
 - Use SSO/OIDC where supported to reduce password sprawl
