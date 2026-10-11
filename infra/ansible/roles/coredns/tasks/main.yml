@@ -48,10 +48,14 @@
       when: corefile.changed
       notify: verify coredns
 
-    # Pi-hole v6 quirk: reloaddns does NOT reload dnsmasq configs
+    # Pi-hole v6 quirk: reloaddns does NOT reload dnsmasq configs.
+    # A Corefile change restarts it too: Pi-hole caches what CoreDNS answered
+    # for the record's TTL (3600s from the hosts plugin), so a moved record kept
+    # its old address for up to an hour after a green deploy (#2213, lesson-560).
+    # The restart empties that cache; the waits below prove DNS came back.
     - name: Restart Pi-hole on config change
       command: docker restart pihole
-      when: pihole_conf.changed
+      when: pihole_conf.changed or corefile.changed
       notify: verify pihole
 
     - name: Wait for CoreDNS

@@ -1,9 +1,10 @@
 # DNS, VPN mesh and host networking
 
-52 lessons, newest first. Back to [all categories](../_index.md).
+53 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 560 | [A green DNS deploy is not what clients resolve until the cache in front expires](lesson-560-a-green-dns-deploy-is-not-what-clients-resolve-until-the-cache-in-front-expires.md) | 2026-10-11 |
 | 559 | [A resolver entry must name who serves the name, not where the workload runs](lesson-559-a-resolver-entry-must-name-who-serves-the-name-not-where-the-workload-runs.md) | 2026-10-11 |
 | 548 | [An egress rule on the destination drops the replies of a listener owned by the same uid](lesson-548-an-egress-rule-on-the-destination-drops-the-replies-of-a-listener-owned-by-the-same-uid.md) | 2026-10-10 |
 | 543 | [A Cloudflare create that times out can still land, and Terraform then plans to replace it](lesson-543-a-cloudflare-create-that-times-out-can-land-and-leave-the-record-tainted.md) | 2026-10-08 |
