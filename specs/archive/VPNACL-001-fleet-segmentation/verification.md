@@ -59,6 +59,11 @@ Round 2: `review.md`, **PASS WITH GAPS**, by `nan/mimo-v2.6-flash` on 2026-10-10
 | `tasks.md` claims "#589 closes with this archive", and nothing closes it (Minor) | Fixed outside the contract: #589's subject, the hermes-nan pod, was retired on 2026-09-30, so its acceptance (that pod restarts into the same node) can never be met. #589 is closed as not planned, with a comment. The durability of `tag:hermes`'s current holder is AI-009's, not this spec's. The contract line stays as signed. |
 | ADR-041 gotcha 6 still names a `tag:hermes:22` rule the policy lacks (Minor) | Fixed: the sentence now says it is §3's target and points to the Amendment. |
 
+PR review on #2191 (CodeRabbit, PR-Agent), applied as factual corrections to `tasks.md` after round 2 signed. Neither changes what is claimed met:
+
+- "#589 closes with this archive" was false: no keyword closes it. The line now says #589 was closed as not planned.
+- The coverage box was ticked while its own text said AC4's credential half had no check. It is now `[~]` and names what is covered.
+
 ## Decisions made during implementation
 
 - **Reload = SIGHUP via Docker, not `systemctl`** (corrects ADR-041 wording for this deployment). Headscale runs in Docker Compose (distroless), and the official policy docs state file-policy changes "require ... a SIGHUP signal" → handler is `docker kill --signal=HUP headscale` (PID 1). Verified against the live v0.28.0 install + Headscale docs.
