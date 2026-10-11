@@ -83,5 +83,11 @@
     "zone": "kubelab",
     "proxied": false,
     "environments": ["prod"]
+  },
+  {
+    "name": "assets",
+    "zone": "kubelab",
+    "proxied": false,
+    "environments": ["prod"]
   }
 ]
