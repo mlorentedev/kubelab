@@ -56,5 +56,7 @@ def test_every_explicit_staging_host_is_the_apex_or_routed() -> None:
 def test_the_wildcard_answers_every_name_under_the_apex() -> None:
     pattern = re.search(r"^\s*match (\S+)$", _staging_zone(), flags=re.MULTILINE)
     assert pattern, "the staging zone has no template match"
+    # Derived from the apex, dots escaped: an unescaped `.` would still pass the two matches below.
+    assert pattern.group(1) == r".*\." + re.escape(APEX)
     assert re.fullmatch(pattern.group(1), f"grafana.{APEX}")
     assert not re.fullmatch(pattern.group(1), APEX)
