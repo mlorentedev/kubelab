@@ -67,11 +67,12 @@ jobs:
           TAG: ${{ github.event.client_payload.tag }}
         run: |
           # Defensive: the dispatch is authenticated (KUBELAB_DISPATCH_TOKEN), but
-          # staging only ever tracks immutable sha-<short> tags (ADR-046).
-          case "$TAG" in
-            sha-*) ;;
-            *) echo "::error::Unexpected tag '$TAG' (expected sha-<short>)"; exit 1 ;;
-          esac
+          # staging only ever tracks immutable sha-<short> tags (ADR-046). The
+          # shape is promotion._SHA_TAG's; `[[ =~ ]]` anchors against the whole
+          # string, where a `case` glob let `sha-` plus anything through (#1658).
+          if [[ ! "$TAG" =~ ^sha-[0-9a-f]{7,}$ ]]; then
+            echo "::error::Unexpected tag '$TAG' (expected sha-<short>)"; exit 1
+          fi
           poetry run toolkit deployment promote --env staging --app web --version "$TAG"
 
       - name: Open or update the staging deploy PR
