@@ -25,11 +25,11 @@ created: "2026-10-14"
 - [x] [AC5] `homelab.yml` carries the same arguments
 - [x] [P] [AC4] Failing test, then the preflight in `toolkit infra ansible run`
 - [x] [P] [AC7] `docs/runbooks/add-a-node.md`; stale `accept-new` comments in `wait-node-ready.yml`, its test and `gcp-hub-bootstrap.md`
-- [ ] [AC6] Live from the Mac, after #2465 is deployed: `ping` on every stable node; one swapped key refused
+- [x] [AC6] Live from the Mac, after #2465 is deployed: `ping` on every stable node; one swapped key refused
 
 ## Closing
 
 - [x] `make test-fast` green: 4595 passed after regenerating `platform.json` (2026-10-14)
-- [ ] `features.json` and `verification.md` filled
+- [x] `features.json` and `verification.md` filled
 - [ ] Draft PR with `## Knowledge`; reviewers triaged; `## Review triage`
 - [ ] `dotf spec review`, dispositions, archive

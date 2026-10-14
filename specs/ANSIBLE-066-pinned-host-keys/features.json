@@ -1,9 +1,51 @@
 [
   {
     "id": "ANSIBLE-066-pinned-host-keys-f1",
-    "behavior": "Outcome 1",
-    "verification": "echo 'not implemented' && exit 1",
-    "state": "pending",
-    "evidence": ""
+    "behavior": "Every stable host in the generated inventory, mesh and bootstrap, verifies against the pinned file",
+    "verification": "poetry run pytest -q tests/test_ansible_pinned_host_keys.py -k 'stable_host or SsotDeclares'",
+    "state": "passing",
+    "evidence": "verification.md"
+  },
+  {
+    "id": "ANSIBLE-066-pinned-host-keys-f2",
+    "behavior": "Only a node replaced by design keeps accept-new, derived from its SSOT shape",
+    "verification": "poetry run pytest -q tests/test_ansible_pinned_host_keys.py -k TestTheHubException",
+    "state": "passing",
+    "evidence": "verification.md"
+  },
+  {
+    "id": "ANSIBLE-066-pinned-host-keys-f3",
+    "behavior": "Bastion transport verifies both the jump and the proxied hop",
+    "verification": "poetry run pytest -q tests/test_ansible_pinned_host_keys.py -k TestBastion",
+    "state": "passing",
+    "evidence": "verification.md"
+  },
+  {
+    "id": "ANSIBLE-066-pinned-host-keys-f4",
+    "behavior": "The run refuses to start when the pinned file is missing and names it",
+    "verification": "poetry run pytest -q tests/test_ansible_pinned_host_keys.py -k TestRunRefusesWithoutThePinnedFile",
+    "state": "passing",
+    "evidence": "verification.md"
+  },
+  {
+    "id": "ANSIBLE-066-pinned-host-keys-f5",
+    "behavior": "The committed homelab inventory never trusts on first use",
+    "verification": "poetry run pytest -q tests/test_ansible_pinned_host_keys.py -k committed_inventory",
+    "state": "passing",
+    "evidence": "verification.md"
+  },
+  {
+    "id": "ANSIBLE-066-pinned-host-keys-f6",
+    "behavior": "Live: stable nodes answer with the pinned file; a swapped key is refused",
+    "verification": "manual: see verification.md AC6 (2026-10-14, macmini)",
+    "state": "passing",
+    "evidence": "verification.md"
+  },
+  {
+    "id": "ANSIBLE-066-pinned-host-keys-f7",
+    "behavior": "The add-a-node runbook orders pinning before the first provision",
+    "verification": "test -f docs/runbooks/add-a-node.md && poetry run pytest -q tests/test_wait_node_ready_host_key.py",
+    "state": "passing",
+    "evidence": "verification.md"
   }
 ]

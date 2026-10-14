@@ -41,13 +41,13 @@ Every Ansible run trusts host keys on first use: the generated inventory and the
 
 ## Acceptance criteria
 
-- [ ] AC1: the generated inventory (mesh and bootstrap) sets `StrictHostKeyChecking=yes` and `UserKnownHostsFile` to `networking.ssh_known_hosts` for every host, and no stable host carries `accept-new`. Tested from the real `common.yaml`.
-- [ ] AC2: a node with `tailscale_dns` and no `tailscale_ip` carries `StrictHostKeyChecking=accept-new` as a per-host override, and only such a node does. Tested with a fixture that adds and removes the `tailscale_ip`.
-- [ ] AC3: in bastion transport, both the jump to the VPS and the proxied hop verify against the pinned file (the hub keeps its override on the proxied hop).
-- [ ] AC4: `toolkit infra ansible run` exits non-zero before invoking `ansible-playbook` when the pinned file does not exist, and the message names the file and the dotfiles deploy.
-- [ ] AC5: `infra/ansible/inventories/homelab.yml` carries the same global arguments, and a test fails if `accept-new` reappears anywhere in it.
-- [ ] AC6: live, from the Mac: a read-only play (`ping`) against every stable node succeeds with the generated inventory, and the same play against a copy of the pinned file with one key swapped fails on that host.
-- [ ] AC7: `docs/runbooks/add-a-node.md` exists and orders pinning before the first provisioning run; `wait-node-ready.yml`'s comments no longer say the inventory uses `accept-new`.
+- [x] AC1: the generated inventory (mesh and bootstrap) sets `StrictHostKeyChecking=yes` and `UserKnownHostsFile` to `networking.ssh_known_hosts` for every host, and no stable host carries `accept-new`. Tested from the real `common.yaml`.
+- [x] AC2: a node with `tailscale_dns` and no `tailscale_ip` carries `StrictHostKeyChecking=accept-new` as a per-host override, and only such a node does. Tested with a fixture that adds and removes the `tailscale_ip`.
+- [x] AC3: in bastion transport, both the jump to the VPS and the proxied hop verify against the pinned file (the hub keeps its override on the proxied hop).
+- [x] AC4: `toolkit infra ansible run` exits non-zero before invoking `ansible-playbook` when the pinned file does not exist, and the message names the file and the dotfiles deploy.
+- [x] AC5: `infra/ansible/inventories/homelab.yml` carries the same global arguments, and a test fails if `accept-new` reappears anywhere in it.
+- [x] AC6: live, from the Mac: a read-only play (`ping`) against every stable node succeeds with the generated inventory, and the same play against a copy of the pinned file with one key swapped fails on that host.
+- [x] AC7: `docs/runbooks/add-a-node.md` exists and orders pinning before the first provisioning run; `wait-node-ready.yml`'s comments no longer say the inventory uses `accept-new`.
 
 ## References
 
