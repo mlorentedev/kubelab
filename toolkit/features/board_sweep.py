@@ -245,7 +245,7 @@ def fetch_items(registry: Registry, numbers: list[int]) -> dict[int, Item]:
     """
     if not numbers:
         return {}
-    owner, name = registry.repo.split("/", 1)
+    owner, name = gh_graphql.split_repo(registry.repo, GitHubError)
     lines = "\n".join(
         f"{_issue_alias(n)}: issue(number: {n}) {{\n"
         f"  number\n"
