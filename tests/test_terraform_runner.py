@@ -1339,3 +1339,63 @@ def test_a_data_source_and_a_resource_of_the_same_name_are_two_addresses() -> No
     data = {**managed, "mode": "data", "module": "module.m"}
     assert [tr._address(managed), tr._address(data)] == ["t.n", "module.m.data.t.n"]
     assert tr._differing({"resources": [managed, data]}, {"resources": [managed]}) == ["module.m.data.t.n"]
+
+
+# --------------------------------------------------------------------------- review of #2239
+
+
+@pytest.mark.parametrize("action", ["apply", "migrate", "restore"])
+def test_a_backend_that_cannot_be_read_stops_every_write(tmp_path: Path, action: str) -> None:
+    """An R2 outage or a refused credential is not a backend that holds no state:
+    read as one, the history copy would be skipped and the write would go ahead."""
+    module = _module_copy(tmp_path, "dns")
+    if action == "migrate":
+        (module / "terraform.tfstate").write_text(json.dumps(STATE))
+    fake = FakeTerraform(fail={"state pull": 1})
+    aws = FakeAws(objects={OLD_KEY: OLD})
+    extra = ["11111111-aaaa/5"] if action == "restore" else []
+    with pytest.raises(tr.RunnerError, match="could not be read"):
+        _run("dns", action, fake, terraform_dir=tmp_path, aws=aws, extra=extra)
+    assert not {"apply", "state push"} & set(fake.verbs())
+    assert not aws.puts()
+    if action == "migrate":
+        assert json.loads((module / "terraform.tfstate").read_text()) == STATE
+
+
+def test_history_goes_to_the_bucket_and_prefix_common_yaml_names() -> None:
+    """The fixture config holds the same literals as the code's defaults would, so
+    a hardcoded bucket or prefix needs values no default could share."""
+    config = json.loads(json.dumps(CONFIG))
+    config["terraform"]["state"]["bucket"] = "bucket-under-test"
+    config["terraform"]["state"]["history_prefix"] = "elsewhere/"
+    aws = FakeAws()
+    assert _run("dns", "apply", FakeTerraform(pulls=[STATE, {**STATE, "serial": 8}]), aws=aws, config=config) == 0
+    assert [c["key"] for c in aws.puts()] == [
+        "elsewhere/dns/11111111-aaaa/7.tfstate",
+        "elsewhere/dns/11111111-aaaa/8.tfstate",
+    ]
+    assert {c["args"][c["args"].index("--bucket") + 1] for c in aws.puts()} == {"bucket-under-test"}
+
+
+@pytest.mark.parametrize(
+    "persisted",
+    [{**STATE, "resources": []}, {**STATE, "lineage": "other", "serial": 40, "outputs": {"zone": {"value": "other"}}}],
+    ids=["emptied-by-a-destroy", "another-lineage-ahead"],
+)
+def test_migrate_never_pushes_over_a_state_r2_already_holds(tmp_path: Path, persisted: dict) -> None:
+    """`state push` may skip its lineage and serial check when the remote holds no
+    resources, so the runner refuses a written remote itself instead of trusting it."""
+    module = _module_copy(tmp_path, "dns")
+    (module / "terraform.tfstate").write_text(json.dumps(STATE))
+    fake = FakeTerraform(pulls=[persisted])
+    assert _migrate(tmp_path, fake) == 1
+    assert "state push" not in fake.verbs()
+    assert json.loads((module / "terraform.tfstate").read_text()) == STATE
+
+
+@pytest.mark.parametrize("flag", ["-lock=false", "--lock=false", "-lock=0"])
+def test_no_action_runs_without_the_state_lock(flag: str) -> None:
+    fake = FakeTerraform()
+    with pytest.raises(tr.RunnerError, match="state lock"):
+        _run("dns", "plan", fake, extra=[flag])
+    assert fake.calls == []

@@ -423,6 +423,8 @@ def run(
         raise RunnerError("restore needs exactly one history copy as <lineage>/<serial> (see make tf-state-history)")
     if root.apply != "auto" and any(a.lstrip("-").split("=", 1)[0] == "auto-approve" for a in extra):
         raise RunnerError(f"the {root.name} root never applies or destroys unattended; drop -auto-approve")
+    if any(a.lstrip("-").split("=", 1)[0] == "lock" and a.split("=", 1)[-1] not in ("true", "1") for a in extra):
+        raise RunnerError("the runner never turns off the state lock; two writers would race on one state")
 
     module = terraform_dir / root.name
     _refuse_a_state_the_backend_does_not_hold(root, action, module)
@@ -745,10 +747,11 @@ def _stage_for_migration(root: Root, module: Path) -> Path | None:
 def _migrate(tf: Callable[..., Result], root: Root, module: Path) -> int:
     """Move a root's local state into R2, without `-force`, and prove it arrived.
 
-    `state push` refuses a different lineage or a lower serial, so a remote that
-    already holds a newer or unrelated state is never overwritten. A remote that
-    already holds this content is not pushed again: that is a migration whose
-    rename did not happen, and finishing it is the rename. After the push the
+    A remote that already holds a written state with other content is refused
+    here, before any push, rather than left to `state push`: its lineage and
+    serial check is not a guarantee once the remote holds no resources. A remote
+    that already holds this content is not pushed again: that is a migration
+    whose rename did not happen, and finishing it is the rename. After the push the
     remote is read back and compared by content; only then is the local file
     renamed, which is what lets the next run start.
 
@@ -771,6 +774,12 @@ def _migrate(tf: Callable[..., Result], root: Root, module: Path) -> int:
     except ValueError:
         raise RunnerError(f"{source} is not a Terraform state; nothing was pushed.") from None
     if not _arrived(state, remote):
+        if remote is not None and _persisted(remote):
+            logger.error(
+                f"{root.name}: R2 already holds a written state that differs from the local file at "
+                f"{', '.join(_differing(state, remote))}. Nothing was pushed; the local file is kept."
+            )
+            return 1
         rc = tf("state", "push", str(source)).returncode
         if rc != 0:
             return rc

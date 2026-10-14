@@ -2,7 +2,8 @@
 
 > ADR-069, TF-007 (#558). Every root under `infra/terraform/` keeps its state in
 > the R2 bucket `kubelab-tfstate` under `<root>/terraform.tfstate`, locked with
-> S3-native lockfiles and copied to a locked `history/` prefix on every write.
+> S3-native lockfiles and copied to a locked `history/` prefix before and after
+> every run that writes it.
 
 ## The rules
 
@@ -128,8 +129,18 @@ runner refuses three cases:
 - a copy of a different lineage than the one R2 holds, which only `-force` would replace and the runner never passes;
 - any restore on a root whose state is still unrecovered.
 
-History cannot be deleted or replaced for 365 days, by anyone, including the
-operator. That is the point of it.
+A history copy cannot be deleted or replaced for 365 days through the state
+credential. The lock is the bucket's own retention rule, so it binds every
+object write, but it is configuration. `make tf-state-bootstrap` with a lower
+`terraform.state.history_retention_days` shortens it, and the R2 admin token can
+remove it, so treat the rule as part of what a review of `common.yaml` reads.
+
+The copies are taken at run boundaries: before a write starts and after it ends.
+They are not taken on every serial Terraform persists in the middle of an apply.
+A run killed between the write and the after-copy files nothing for that write.
+The next run's before-copy then files the state as it stands, so the newest state
+is always covered, but an intermediate one may not be. History is a safety net
+beside the state, not a log of it.
 
 ## Roots whose state was lost
 

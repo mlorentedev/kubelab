@@ -105,5 +105,5 @@ resolve over the VPN through Headscale split DNS to RPi4 CoreDNS, never publicly
 ## State
 
 Every root keeps its state in R2, `kubelab-tfstate/<root>/terraform.tfstate`, with a
-locked history of every write (ADR-069). Operations, restore included:
+locked history copy before and after every run that writes it (ADR-069). Operations, restore included:
 `docs/runbooks/terraform-state.md`.
