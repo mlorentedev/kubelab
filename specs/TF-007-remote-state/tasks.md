@@ -33,4 +33,4 @@ created: "2026-10-13"
 - [x] `make test-tfstate-lock-live` from the conditional-write probe.
 - [x] [AC10] ADR-069, `docs/runbooks/terraform-state.md`, lesson-564, CLAUDE.md gotcha.
 - [x] `make mutate`: 18 mutations on the runner, all RED against a green baseline (the SOPS-dependent tests deselected). Found on the way: `make mutate` never checked the baseline was green, so an already-red test certified every mutant (separate PR, lesson-565).
-- [ ] Live: bootstrap, migrate `dns`, `r2`, `aws` on msi, `No changes` from the Mac (operator confirms each write).
+- [x] Live: bootstrap, migrate `dns`, `r2`, `aws` on msi, `No changes` from the Mac (operator confirmed the bootstrap and the migrate sequence). ✓ 2026-10-14. Evidence in `verification.md` AC7.

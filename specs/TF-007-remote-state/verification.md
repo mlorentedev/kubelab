@@ -30,9 +30,9 @@ PR 1a covers AC3 and AC4; the rest land with PR 1b.
 
 ## Test status
 
-- Test suite: `<command> -> <output / coverage %>`
-- Manual smoke test: what was exercised, what was observed
-- No regressions in existing test suite: yes / no (if no, document)
+- Test suite: `poetry run pytest tests/test_terraform_*.py` -> all green (178 in the runner file alone).
+- Manual smoke test: the live AC5/AC6/AC7 runs above, from the Mac and from msi.
+- No regressions in existing test suite: yes. `make test-fast` on macOS fails only in the five files master fails on macOS (#2237); none is touched here.
 
 ## Decisions made during implementation
 
@@ -48,9 +48,9 @@ PR 1a covers AC3 and AC4; the rest land with PR 1b.
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.
 
-- [ ] Lesson for the repo's `docs/lessons/`? <yes: path / no: reason>
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? <yes: path / no: reason>
-- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes: path / no: reason>
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/storage-backup/lesson-566-terraform-does-not-keep-a-states-lineage-across-a-migration.md (also lesson-564, lesson-563)
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? yes: docs/adr/adr-069-terraform-remote-state-on-r2.md
+- [x] New pattern candidate for `00_meta/patterns/`? no: one project uses Terraform remote state; the transferable rule (verify a move by content, not identifiers) is in lesson-566 and recurs nowhere else yet
 
 ## Archive checklist
 
