@@ -64,8 +64,10 @@ template embeds: the chart values and the Applications as of the last
 `make tf-gcp-apply`, not as of git. A change to
 `infra/k8s/argocd/applications/` reaches the live hub through
 `make deploy-apps`, and reaches the next recreate only after
-`make tf-gcp-apply`. Start, stop and status are in
-`docs/runbooks/gcp-hub-bootstrap.md` §8.
+`make tf-gcp-apply`. A recreate also rotates the cluster CA, the SSH host key
+and the mesh address, so refresh the hub kubeconfig before anything else talks
+to the hub: `make fetch-kubeconfig ENV=hub DIRECT=1`. Start, stop and status
+are in `docs/runbooks/gcp-hub-bootstrap.md` §8.
 
 `aws1` was destroyed on 2026-08-23. Its Terraform root and the
 `networking.aws` block are dormant on purpose, kept for portability: the
@@ -114,8 +116,9 @@ make deploy-argocd          # retry
 If still fails after recovery:
 1. Recreate the hub: `make gcp1-replace`
 2. Wait for it to finish. It waits for cloud-init, which installs Argo CD; it does not check that Argo CD is ready
-3. `make recover-argocd && make deploy-argocd`
-4. **Never retry more than once on a stressed instance**
+3. `make fetch-kubeconfig ENV=hub DIRECT=1`: the recreate rotated the cluster CA
+4. `make recover-argocd && make deploy-argocd`
+5. **Never retry more than once on a stressed instance**
 
 ## Deploy: K8s workloads (Kustomize)
 
