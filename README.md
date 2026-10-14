@@ -171,7 +171,7 @@ See [`toolkit/README.md`](toolkit/README.md) for full command reference.
 
 ```
 Hetzner VPS (ARM)      — Production: K3s + Headscale (Docker Compose)
-AWS t4g.small (aws1)   — Argo CD hub (management plane)
+GCP e2-small (gcp1)    — Argo CD hub (management plane, ADR-063)
 Acemagic-1 (ace1)      — K3s staging (all-in-one)
 Acemagic-2 (ace2)      — Self-hosted developer node / CDE
 Beelink (bare metal)   — Platform node: Gitea forge + CI runners
