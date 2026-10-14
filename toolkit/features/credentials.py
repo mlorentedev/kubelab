@@ -599,6 +599,12 @@ class CredentialsManager:
                 logger.info(f"Skipping Docker reconciliation for {env} (use K8s deploy instead)")
                 logger.info("Next: toolkit infra k8s apply-secrets --env " + env)
 
+            # Uptime Kuma keeps its own user database, and its new password is in
+            # {env}.enc.yaml from this point on. Reconcile it before the hub write,
+            # so a failure there cannot leave the file and the service disagreeing.
+            old_uk_password = existing_secrets.get("apps.services.observability.uptime_kuma.admin_password", "")
+            self._reconcile_external_credentials(common_username, common_password, old_uk_password)
+
             # Hub credentials → always common SOPS (Argo CD hub is singleton)
             common_sops = self.project_root / PATH_STRUCTURES.CONFIG_SECRETS_DIR / "common.enc.yaml"
             if not self.config_manager.batch_update_secrets(hub_secrets, secret_file_path=common_sops):
@@ -607,10 +613,6 @@ class CredentialsManager:
                     "still hold their old values. Rerun before deploying, or the hub and the env disagree."
                 )
             logger.success("Hub credentials (Argo CD) updated in common SOPS.")
-
-            # Reconcile external services that have their own auth (not K8s Secrets)
-            old_uk_password = existing_secrets.get("apps.services.observability.uptime_kuma.admin_password", "")
-            self._reconcile_external_credentials(common_username, common_password, old_uk_password)
         else:
             self._report_secret_names(env, generated_secrets, hub_secrets)
 

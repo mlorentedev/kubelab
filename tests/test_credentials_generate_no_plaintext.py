@@ -38,7 +38,8 @@ def _manager(monkeypatch: pytest.MonkeyPatch, *, write_ok: tuple[bool, bool] = (
     monkeypatch.setattr(manager, "generate_oidc_client_secret_hash", lambda s: "$argon2id$fake")
     monkeypatch.setattr(manager, "generate_bcrypt_hash", lambda s: "$2b$fake")
     monkeypatch.setattr(manager, "_generate_htpasswd_bcrypt_hash", lambda u, p: "u:$2y$fake")
-    monkeypatch.setattr(manager, "_reconcile_external_credentials", lambda *a, **k: None)
+    manager.reconciled = []
+    monkeypatch.setattr(manager, "_reconcile_external_credentials", lambda *a, **k: manager.reconciled.append(a))
 
     def no_jwks(*_: Any, **__: Any) -> str:
         raise RuntimeError("not in a unit test: nothing may be written to the repo")
@@ -103,7 +104,9 @@ def test_the_default_names_every_key_and_shows_no_value(
     assert not missing, f"the default path did not name {missing}"
 
 
-def test_values_are_printed_only_when_asked(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+def test_values_are_printed_only_when_asked(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     manager = _manager(monkeypatch)
     generated = _capture_generated(monkeypatch, manager)
 
@@ -128,6 +131,9 @@ def test_a_failed_write_raises_and_prints_nothing(
         manager.setup_authelia_secrets("prod", auto_update=True)
     if names == "common.enc.yaml":
         assert any("argocd" in key for key in generated), "the hub values were not in the checked set"
+    # Uptime Kuma's new password is in the env file once that write succeeds, so
+    # the service is reconciled then, whatever happens to the hub write after it.
+    assert bool(manager.reconciled) is (names == "common.enc.yaml"), manager.reconciled
 
     out = _flat(capsys.readouterr().out)
     assert not [v for v in _secret_values(generated) if _flat(v) in out], "a failed write printed a secret"
@@ -147,3 +153,16 @@ def test_the_cli_exits_non_zero_on_a_failed_write(monkeypatch: pytest.MonkeyPatc
     # The runner also reports 1 for an unhandled exception; the handler is what exits cleanly.
     assert isinstance(run.exception, SystemExit), run.exception
     assert "planted" in run.output
+
+
+@pytest.mark.parametrize(("flag", "expected"), [([], False), (["--print-secrets"], True)])
+def test_the_cli_forwards_print_secrets(monkeypatch: pytest.MonkeyPatch, flag: list[str], expected: bool) -> None:
+    from typer.testing import CliRunner
+
+    from toolkit.cli import credentials as cli
+
+    seen: dict[str, Any] = {}
+    monkeypatch.setattr(cli.credentials_manager, "setup_authelia_secrets", lambda **kwargs: seen.update(kwargs))
+    run = CliRunner().invoke(cli.app, ["generate", "--env", "prod", *flag])
+    assert run.exit_code == 0, run.output
+    assert seen.get("print_secrets") is expected, seen
