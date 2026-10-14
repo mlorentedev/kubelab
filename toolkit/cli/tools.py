@@ -376,14 +376,29 @@ def mutate_cmd(
     misses the mutant), 2 refused before mutating, 3 the test did not run to a
     verdict (a collection error is not the guard going red).
     """
+    import os
     import shlex
     import sys
+    import tempfile
 
     from toolkit.features import mutate
 
     def run_test() -> int:
         cmd = [sys.executable, "-m", "pytest", "-q", "--no-cov", "-p", "no:cacheprovider", *shlex.split(test)]
-        result = subprocess.run(cmd, cwd=settings.project_root, capture_output=True, text=True, check=False)
+        # A bytecode cache of its own, discarded after the run. Python trusts a
+        # .pyc whose header matches the source's mtime (whole seconds) and size,
+        # and a same-length mutation restored within that second matches both: the
+        # mutant would outlive the restore in __pycache__, or a cached original
+        # would hide the mutant and read as GREEN.
+        with tempfile.TemporaryDirectory(prefix="mutate-pycache-") as cache:
+            result = subprocess.run(
+                cmd,
+                cwd=settings.project_root,
+                env={**os.environ, "PYTHONPYCACHEPREFIX": cache},
+                capture_output=True,
+                text=True,
+                check=False,
+            )
         lines = result.stdout.strip().splitlines()
         for line in [ln for ln in lines if ln.startswith(("FAILED", "ERROR"))] + lines[-1:]:
             logger.info(line)
