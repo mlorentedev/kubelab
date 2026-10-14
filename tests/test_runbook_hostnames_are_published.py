@@ -53,9 +53,10 @@ KNOWN_STALE = {
 # `argocd`, the one the zone would have to publish.
 _EDGE = r"(?<![A-Za-z0-9-])"
 PROD = re.compile(_EDGE + r"([a-z0-9-]+)\.kubelab\.live\b")
-# The docs name staging hosts literally, so the scan matches the literal apex. The
-# CoreDNS guard passes the one the role renders from common.yaml instead.
-STAGING_APEX = "staging.kubelab.live"
+# Read from the SSOT, as the CoreDNS role renders it (`staging.{{ common.global.base_domain }}`),
+# so a domain rename moves the scan with it instead of leaving it an empty sample.
+BASE_DOMAIN = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())["global"]["base_domain"]
+STAGING_APEX = f"staging.{BASE_DOMAIN}"
 STAGING = re.compile(_EDGE + r"([a-z0-9-]+)\." + re.escape(STAGING_APEX) + r"\b")
 PERSONAL = re.compile(_EDGE + r"([a-z0-9-]+)\.mlorente\.dev\b")
 
