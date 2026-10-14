@@ -217,6 +217,11 @@ capture_sqlite_{{ service }}_{{ loop.index }}
 # `exclude` names paths ruled tier 3 under the source, each with its reason in
 # common.yaml (Open WebUI's re-downloadable model cache): pruned with the
 # databases, so nothing beneath them is read or staged.
+#
+# Sockets are left out: a restored socket file connects to nothing, the
+# service binds a new one at start. `cp -a` recreates one with mknod, which
+# Linux allows and macOS refuses, so staging them was also the one step here
+# that depended on the kernel.
 {% set pruned = [] %}
 {% for db in dbs %}{% for suffix in ['', '-wal', '-shm', '-journal'] %}{% set _ = pruned.append(db ~ suffix) %}{% endfor %}{% endfor %}
 {% for path in (src.exclude | default({})) %}{% set _ = pruned.append(path) %}{% endfor %}
@@ -225,7 +230,7 @@ capture_sqlite_{{ service }}_{{ loop.index }}
 # command there.
 ( cd "$SRC_DIR_{{ service }}" && find . -mindepth 1 \
     \( {% for path in pruned %}{% if not loop.first %} -o {% endif %}-path "./{{ path }}"{% endfor %} \) -prune \
-    -o \( ! -type d -o -empty \) -exec cp -a --parents -t "$STAGING/{{ service }}" {} + )
+    -o \( ! -type d -o -empty \) ! -type s -exec cp -a --parents -t "$STAGING/{{ service }}" {} + )
 {% endif %}
 {% endfor %}
 
