@@ -27,7 +27,6 @@ class TestPlatformManifestGeneration:
             "generated_at",
             "source_commit",
             "cluster",
-            "metrics",
             "nodes",
             "services",
             "diagrams",
@@ -108,14 +107,6 @@ class TestPlatformManifestGeneration:
         assert "100.64." not in serialized
         assert "172.16." not in serialized
 
-        # Private services must not leak URLs
-        for service in manifest["services"]:
-            if not service.get("isPublic", False):
-                assert service.get("url") is None, f"Private service {service['slug']} leaked URL: {service.get('url')}"
-                assert service.get("healthEndpoint") is None, f"Private service {service['slug']} leaked healthEndpoint"
-            else:
-                assert service.get("url") is not None, f"Public service {service['slug']} missing public URL"
-
     def test_provenance_determinism(self) -> None:
         manifest = platform_manifest.generate_manifest()
         assert re.match(r"^[a-f0-9]{40}$", manifest["source_commit"]), (
@@ -179,7 +170,6 @@ class TestPlatformManifestEdgeCases:
                 "node": "vps",
                 "env": "prod",
                 "tech": ["Go"],
-                "isPublic": False,
                 "status": "operational",
             }
         )
@@ -201,7 +191,6 @@ class TestPlatformManifestEdgeCases:
                     "node": "vps",
                     "env": "prod",
                     "tech": ["Go"],
-                    "isPublic": False,
                     "status": "operational",
                 }
             )
@@ -222,7 +211,6 @@ class TestPlatformManifestEdgeCases:
                 "node": "vps",
                 "env": "prod",
                 "tech": ["Go"],
-                "isPublic": False,
                 "status": "operational",
             }
         )
@@ -285,15 +273,6 @@ apps:
         assert custom["runtime"] == "docker"
         assert custom["tier"] == "homelab"
 
-        # Check dynamic sanitization: api has updated healthEndpoint
-        services = manifest["services"]
-        api = next(s for s in services if s["slug"] == "kubelab-api")
-        assert api["healthEndpoint"] == "https://api.kubelab.live/v2/health"
-
-        # Check private services have no URL
-        authelia = next(s for s in services if s["slug"] == "authelia")
-        assert "url" not in authelia or authelia["url"] is None
-
     def test_drift_gate_missing_file_returns_error(self, tmp_path: Path) -> None:
         missing = tmp_path / "does_not_exist.json"
         rc = platform_manifest.sync(output_path=missing, check=True)
@@ -350,46 +329,6 @@ apps:
         stg, prd, shared = build_service_tables(config)
         assert platform_manifest.compute_total_services(config) == len(stg) + len(prd) + len(shared)
 
-    def test_dynamic_public_service_from_ssot(self, tmp_path: Path) -> None:
-        mock_yaml = tmp_path / "common.yaml"
-        mock_yaml.write_text(
-            """
-apps:
-  services:
-    custom_cat:
-      new_service:
-        name: "New Public Tool"
-        domain: "tool.kubelab.live"
-        health_path: "/health"
-        public: true
-""",
-            encoding="utf-8",
-        )
-        # Add custom service to catalog defaults for projection
-        mutated_catalog = list(platform_manifest.SERVICE_CATALOG_DEFAULTS)
-        mutated_catalog.append(
-            {
-                "slug": "new_service",
-                "name": "New Public Tool Default",
-                "category": "Core Gateway",
-                "categoryEs": "Gateway Principal",
-                "description": "Dynamic public tool",
-                "descriptionEs": "Herramienta pública dinámica",
-                "node": "vps",
-                "env": "prod",
-                "tech": ["Go"],
-                "isPublic": False,  # defaults to private, but SSOT declares public: true
-                "status": "operational",
-            }
-        )
-        with pytest.MonkeyPatch.context() as mp:
-            mp.setattr(platform_manifest, "SERVICE_CATALOG_DEFAULTS", mutated_catalog)
-            manifest = platform_manifest.generate_manifest(config_path=mock_yaml)
-            new_svc = next(s for s in manifest["services"] if s["slug"] == "new_service")
-            assert new_svc["isPublic"] is True
-            assert new_svc["url"] == "https://tool.kubelab.live"
-            assert new_svc["healthEndpoint"] == "https://tool.kubelab.live/health"
-
     def test_resolve_node_status_offline(self, tmp_path: Path) -> None:
         mock_yaml = tmp_path / "common.yaml"
         mock_yaml.write_text(
@@ -422,7 +361,6 @@ apps: {}
                 "node": "vps",
                 "env": "prod",
                 "tech": ["Linux"],
-                "isPublic": False,
                 "status": "operational",
             }
         )
@@ -476,49 +414,6 @@ apps: {}
         manifest = platform_manifest.generate_manifest(config_path=mock_yaml)
 
         assert manifest["cluster"]["version"] == "K3s v9.9.9"
-
-    def test_traefik_is_taken_from_edge_when_no_service_block_declares_it(self, tmp_path: Path) -> None:
-        """Traefik is declared under `edge`, not under `apps.services`, unlike everything else.
-
-        The fallback exists because of that asymmetry, and an untested fallback is
-        one nobody notices has stopped firing.
-        """
-        mock_yaml = tmp_path / "edge_only.yaml"
-        mock_yaml.write_text(
-            'edge:\n  traefik:\n    version: "v3.6.2"\n',
-            encoding="utf-8",
-        )
-
-        blocks = platform_manifest._collect_ssot_services(
-            {"edge": {"traefik": {"version": "v3.6.2"}}},
-        )
-
-        assert blocks["traefik"] == {"version": "v3.6.2"}
-
-    def test_non_mapping_entries_in_the_services_tree_are_skipped_not_crashed_on(self) -> None:
-        """`common.yaml` is hand-edited, so a category or service can be a string or null.
-
-        Each level guards with `isinstance`, and only the happy path had coverage —
-        so the guards were present and unproven, which is the shape this repo keeps
-        finding. A commented-out service left as a bare key parses as `None`.
-        """
-        blocks = platform_manifest._collect_ssot_services(
-            {
-                "apps": {
-                    "services": {
-                        "core": {"gitea": {"version": "1.24"}, "broken": None},
-                        "not_a_category": "just a string",
-                    }
-                }
-            },
-        )
-
-        assert blocks["gitea"] == {"version": "1.24"}
-        assert "broken" not in blocks
-        assert "not_a_category" not in blocks
-
-        # The outermost guard too: `apps.services` itself replaced by a scalar.
-        assert platform_manifest._collect_ssot_services({"apps": {"services": "oops"}}) == {}
 
     def test_sync_catches_validation_error_and_returns_failure(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path

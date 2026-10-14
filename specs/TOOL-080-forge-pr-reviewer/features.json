@@ -2,28 +2,28 @@
   {
     "id": "TOOL-080-forge-pr-reviewer-f1",
     "behavior": "AC1: A PR opened on personal/resume gets a PR Reviewer Guide comment authored by the reviewer account within 10 minutes",
-    "verification": "poetry run pytest -q tests/infra/test_pr_agent_review_live.py",
+    "verification": "poetry run pytest -q -m infra tests/infra/test_pr_agent_review_live.py",
     "state": "pending",
     "evidence": ""
   },
   {
     "id": "TOOL-080-forge-pr-reviewer-f2",
     "behavior": "AC2: A push to an open PR updates the same review comment instead of adding a second one",
-    "verification": "poetry run pytest -q tests/infra/test_pr_agent_review_live.py",
+    "verification": "poetry run pytest -q -m infra tests/infra/test_pr_agent_review_live.py",
     "state": "pending",
     "evidence": ""
   },
   {
     "id": "TOOL-080-forge-pr-reviewer-f3",
     "behavior": "AC3: An unsigned or wrongly signed POST to the webhook endpoint is refused and produces no review; the Secret key is required",
-    "verification": "poetry run pytest -q tests/test_pr_agent_manifest.py -k secret",
+    "verification": "poetry run pytest -q tests/test_pr_agent_manifests.py -k secret",
     "state": "pending",
     "evidence": ""
   },
   {
     "id": "TOOL-080-forge-pr-reviewer-f4",
     "behavior": "AC4: Reviewing never edits the PR: PR_COMMANDS and PUSH_COMMANDS are exactly [\"/review\"] and GITEA__REPO_SETTING is unset",
-    "verification": "poetry run pytest -q tests/test_pr_agent_manifest.py -k commands",
+    "verification": "poetry run pytest -q tests/test_pr_agent_config_render.py -k ReviewOnlyContract",
     "state": "pending",
     "evidence": ""
   },
@@ -37,7 +37,7 @@
   {
     "id": "TOOL-080-forge-pr-reviewer-f6",
     "behavior": "AC6: The three SOPS keys are catalogued and mapped; apply-secrets fails closed without them",
-    "verification": "poetry run pytest -q tests/test_secrets_orphan_audit.py tests/test_k8s_secrets_apply.py -k pr_agent",
+    "verification": "poetry run pytest -q tests/test_pr_agent_secrets.py",
     "state": "pending",
     "evidence": ""
   },
