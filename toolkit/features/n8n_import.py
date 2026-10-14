@@ -672,7 +672,7 @@ def _exec(env: str, spec: _Target, what: str, argv: list[str], stdin: str | None
         else:
             stdin_flag = ["-i"] if stdin is not None else []
             cmd = ["kubectl", "exec", *stdin_flag, "-n", spec.namespace, f"pod/{pod}", "--kubeconfig", kc, "--", *argv]
-            if _run(cmd, stdin=stdin, label=f"{what} in pod/{pod}"):
+            if _run(cmd, env=env, stdin=stdin, label=f"{what} in pod/{pod}"):
                 return True
             logger.error(f"  pod/{pod} now: {_pod_record(env, spec, pod)}")
         if attempt == 1:
@@ -728,7 +728,7 @@ def _list_pods(env: str, spec: _Target) -> list[dict[str, Any]] | None:
         return None
     except (subprocess.CalledProcessError, json.JSONDecodeError) as exc:
         detail = (getattr(exc, "stderr", None) or str(exc)).strip()
-        logger.error(f"  Listing n8n pods failed: {detail}{_kubeconfig_hint(cmd)}")
+        logger.error(f"  Listing n8n pods failed: {detail}{_kubeconfig_hint(cmd, env)}")
         return None
     return pods
 
@@ -750,7 +750,7 @@ def _restart_n8n(env: str, spec: N8nImportSpec) -> bool:
     """
     kc = _kubeconfig_for(env)
     restart = ["kubectl", "rollout", "restart", spec.deployment, "-n", spec.namespace, "--kubeconfig", kc]
-    if not _run(restart):
+    if not _run(restart, env=env):
         return False
     status = [
         "kubectl",
@@ -763,10 +763,10 @@ def _restart_n8n(env: str, spec: N8nImportSpec) -> bool:
         kc,
         "--timeout=120s",
     ]
-    return _run(status)
+    return _run(status, env=env)
 
 
-def _run(cmd: list[str], stdin: str | None = None, label: str | None = None) -> bool:
+def _run(cmd: list[str], *, env: str, stdin: str | None = None, label: str | None = None) -> bool:
     """Run a kubectl command; return True on success, log stderr on failure.
 
     What the pod prints is masked against `stdin` first: an import's stdin is a
@@ -783,7 +783,7 @@ def _run(cmd: list[str], stdin: str | None = None, label: str | None = None) -> 
         return False
     except subprocess.CalledProcessError as exc:
         detail = _mask_payload((exc.stderr or str(exc)).strip(), stdin)
-        logger.error(f"  {label or ' '.join(cmd[:6])} … failed: {detail}{_kubeconfig_hint(cmd)}")
+        logger.error(f"  {label or ' '.join(cmd[:6])} … failed: {detail}{_kubeconfig_hint(cmd, env)}")
         return False
 
 
@@ -791,7 +791,7 @@ def _run(cmd: list[str], stdin: str | None = None, label: str | None = None) -> 
 _NO_KUBECTL = "kubectl is not on PATH; install it before importing (dotfiles provisions it through mise)"
 
 
-def _kubeconfig_hint(cmd: list[str]) -> str:
+def _kubeconfig_hint(cmd: list[str], env: str) -> str:
     """Why kubectl failed, when the kubeconfig it was handed does not exist."""
     given = None
     for i, arg in enumerate(cmd):
@@ -802,7 +802,7 @@ def _kubeconfig_hint(cmd: list[str]) -> str:
     # Called from an error handler: it must never raise, whatever shape `cmd` has.
     if not given or Path(given).is_file():
         return ""
-    return f" (kubeconfig missing at {given}: run `make fetch-kubeconfig ENV=<env>`)"
+    return f" (kubeconfig missing at {given}: run `make fetch-kubeconfig ENV={env}`)"
 
 
 _MASK_MIN_LEN = 6
@@ -852,4 +852,4 @@ def _wait_rollout_ready(env: str, spec: _Target, timeout: str = "60s") -> bool:
         _kubeconfig_for(env),
         f"--timeout={timeout}",
     ]
-    return _run(cmd)
+    return _run(cmd, env=env)

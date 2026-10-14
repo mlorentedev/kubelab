@@ -55,8 +55,8 @@ def test_a_missing_kubeconfig_is_named(
 def test_an_existing_kubeconfig_gets_no_hint(tmp_path: Path) -> None:
     present = tmp_path / "config"
     present.touch()
-    assert n8n_import._kubeconfig_hint(["kubectl", "get", "pods", "--kubeconfig", str(present)]) == ""
-    assert n8n_import._kubeconfig_hint(["kubectl", "get", "pods"]) == ""
+    assert n8n_import._kubeconfig_hint(["kubectl", "get", "pods", "--kubeconfig", str(present)], "prod") == ""
+    assert n8n_import._kubeconfig_hint(["kubectl", "get", "pods"], "prod") == ""
 
 
 def test_every_kubectl_call_reports_a_missing_kubectl(
@@ -68,33 +68,64 @@ def test_every_kubectl_call_reports_a_missing_kubectl(
         raise FileNotFoundError(2, "No such file or directory", cmd[0])
 
     monkeypatch.setattr(n8n_import.subprocess, "run", absent)
-    assert n8n_import._run(["kubectl", "rollout", "status", "deploy/n8n"]) is False
+    assert n8n_import._run(["kubectl", "rollout", "status", "deploy/n8n"], env="prod") is False
     assert "kubectl is not on PATH" in capsys.readouterr().out
+
+
+def _guarded(call: ast.Call, parents: dict[ast.AST, ast.AST]) -> bool:
+    """Whether a `try` around this very call catches `FileNotFoundError`."""
+    node: ast.AST = call
+    while node in parents:
+        child, node = node, parents[node]
+        if isinstance(node, ast.FunctionDef):
+            return False
+        if isinstance(node, ast.Try) and child in node.body:
+            if any(h.type is not None and "FileNotFoundError" in ast.unparse(h.type) for h in node.handlers):
+                return True
+    return False
 
 
 def test_every_subprocess_call_handles_a_missing_kubectl() -> None:
     """The exec, the restart and the rollout wait spawn through `_run`, not on their own.
 
-    Measured on the source rather than by calling each path: any function that
-    calls `subprocess.run` must catch `FileNotFoundError` itself.
+    Measured on the source rather than by calling each path: every call into
+    `subprocess` must sit inside a `try` of its own function that catches
+    `FileNotFoundError`. A handler elsewhere in the function does not count.
     """
     tree = ast.parse(Path(n8n_import.__file__).read_text(encoding="utf-8"))
-    spawners = {
-        fn.name: fn
-        for fn in ast.walk(tree)
-        if isinstance(fn, ast.FunctionDef)
-        and any(isinstance(c, ast.Call) and ast.unparse(c.func) == "subprocess.run" for c in ast.walk(fn))
-    }
-    unguarded = [
-        name
-        for name, fn in spawners.items()
-        if not any(
-            isinstance(h, ast.ExceptHandler) and h.type is not None and "FileNotFoundError" in ast.unparse(h.type)
-            for h in ast.walk(fn)
-        )
+    parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+    spawns = [
+        call
+        for call in ast.walk(tree)
+        if isinstance(call, ast.Call) and ast.unparse(call.func).startswith("subprocess.")
     ]
-    assert spawners, "the scan found no subprocess call; it measures nothing"
+    assert spawns, "the scan found no subprocess call; it measures nothing"
+    unguarded = [f"line {call.lineno}" for call in spawns if not _guarded(call, parents)]
     assert not unguarded, unguarded
+
+
+def test_a_handler_beside_the_call_does_not_count() -> None:
+    """The guard's own contract: a `try` elsewhere in the function is not cover."""
+    tree = ast.parse(
+        "def f():\n"
+        "    try:\n        open('x')\n    except FileNotFoundError:\n        pass\n"
+        "    subprocess.run(['kubectl'])\n"
+    )
+    parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+    call = next(c for c in ast.walk(tree) if isinstance(c, ast.Call) and ast.unparse(c.func) == "subprocess.run")
+    assert not _guarded(call, parents)
+
+
+def test_a_failed_import_exits_non_zero(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The ticket asks for a non-zero exit, so measure the command, not only the bool."""
+    from typer.testing import CliRunner
+
+    from toolkit.cli import infra
+
+    monkeypatch.setattr(infra, "validate_environment_config", lambda _env: None)
+    monkeypatch.setattr(n8n_import, "import_n8n_workflow", lambda *a, **k: False)
+    run = CliRunner().invoke(infra.app, ["n8n", "import", "--env", "prod"])
+    assert run.exit_code == 1, run.output
 
 
 @pytest.mark.parametrize(
@@ -103,9 +134,12 @@ def test_every_subprocess_call_handles_a_missing_kubectl() -> None:
     ids=["flag-last", "empty-value"],
 )
 def test_the_hint_never_raises_on_a_short_command(tail: list[str]) -> None:
-    assert n8n_import._kubeconfig_hint(["kubectl", "get", "pods", *tail]) == ""
+    assert n8n_import._kubeconfig_hint(["kubectl", "get", "pods", *tail], "prod") == ""
 
 
 def test_the_hint_reads_the_equals_spelling(tmp_path: Path) -> None:
     missing = tmp_path / "absent"
-    assert str(missing) in n8n_import._kubeconfig_hint(["kubectl", f"--kubeconfig={missing}"])
+    hint = n8n_import._kubeconfig_hint(["kubectl", f"--kubeconfig={missing}"], "staging")
+    assert str(missing) in hint
+    # The advice is the command to run, with the environment already filled in.
+    assert "make fetch-kubeconfig ENV=staging" in hint
