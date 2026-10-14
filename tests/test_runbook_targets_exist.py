@@ -63,10 +63,14 @@ def _declared_targets() -> set[str]:
 # Scoping to those took the ledger from 32 documents to zero, which is the
 # measure of how much of the original finding was really a scoping mistake.
 _INSTRUCTIONAL = ("runbooks", "troubleshooting")
+# CLAUDE.md is instructional too, and read by every agent session: it told them
+# to run `make deploy-vps`, a target that never existed, for months (#1748).
+_AGENT_INSTRUCTIONS = REPO / "CLAUDE.md"
 
 
 def _runbooks() -> list[Path]:
-    return sorted(path for prefix in _INSTRUCTIONAL for path in (DOCS / prefix).rglob("*.md"))
+    docs = [path for prefix in _INSTRUCTIONAL for path in (DOCS / prefix).rglob("*.md")]
+    return sorted([*docs, _AGENT_INSTRUCTIONS])
 
 
 def _referenced(path: Path) -> set[str]:
@@ -100,6 +104,7 @@ KNOWN_STALE: dict[str, str] = {
     #    inside them while being English or commentary.
     "config": "ssl-certificates.md: `# Fix: make config match mount` is a sentence",
     "deploy-prod": "deployment.md: appears only in the note explaining it was retired",
+    "backup-pvc": "CLAUDE.md: appears only in the note recording its removal (OPS-023)",
     #
     # -- Retired with no replacement. Each needs the INSTRUCTION rewritten, not a
     #    target renamed, which is why they outlive a mechanical pass.
