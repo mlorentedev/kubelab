@@ -4,6 +4,7 @@ import functools
 import os
 import shutil
 import subprocess
+import sys
 from collections.abc import Generator
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -37,7 +38,37 @@ def pytest_configure(config: pytest.Config) -> None:
     """
     for var in ("FORCE_COLOR", "CLICOLOR_FORCE"):
         os.environ.pop(var, None)
+    _gnu_userland_first()
     del config  # the hook's signature, not something this needs
+
+
+#: Where Homebrew's coreutils puts its unprefixed commands (Apple silicon, Intel).
+GNU_COREUTILS = (
+    Path("/opt/homebrew/opt/coreutils/libexec/gnubin"),
+    Path("/usr/local/opt/coreutils/libexec/gnubin"),
+)
+
+
+def _gnu_userland_first() -> None:
+    """On macOS, put GNU coreutils ahead of the BSD ones for every subprocess.
+
+    Many tests run the shell scripts the roles ship to the Ubuntu nodes, which
+    use GNU `timeout`, `chown --reference`, `base64 -w0`. On macOS's BSD userland
+    90 of them failed on unmodified master (measured 2026-10-13), so
+    `make test-fast` was no gate on the operator's only workstation. Refusing
+    to start is better than 90 failures that read as regressions.
+    """
+    if sys.platform != "darwin":
+        return
+    gnubin = next((p for p in GNU_COREUTILS if (p / "timeout").exists()), None)
+    if gnubin is None:
+        raise pytest.UsageError(
+            "macOS: the node scripts under test need GNU coreutils. Install it with "
+            "`dotf tools install coreutils` (dotfiles packages.json) or `brew install coreutils`."
+        )
+    path = os.environ.get("PATH", "")
+    if not path.startswith(f"{gnubin}{os.pathsep}"):
+        os.environ["PATH"] = f"{gnubin}{os.pathsep}{path}"
     _install_host_client_barrier()
 
 
