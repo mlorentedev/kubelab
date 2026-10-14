@@ -395,3 +395,54 @@ def test_the_branch_is_keyed_on_the_app_and_not_on_the_tag() -> None:
         "the branch is keyed on the tag again; every dispatch will mint a new "
         "branch and a new pull request, which is #1645"
     )
+
+
+# --- The tag check (#1658) ------------------------------------------------------
+#
+# The promote step refused only tags not starting with `sha-`, so `sha-` followed
+# by anything reached `toolkit deployment promote` and then a git refname. These
+# run the shipped check with `poetry` stubbed, so a refused tag is proven never
+# to reach the promotion, and an accepted one proven to.
+
+_POETRY_STUB = """#!/usr/bin/env bash
+echo "$*" >> "$POETRY_CALLS"
+"""
+
+
+def _promote_step() -> dict:
+    workflow = yaml.safe_load(RECEIVER.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["promote-web"]["steps"]
+    return next(s for s in steps if s.get("name") == "Promote web to staging")
+
+
+def _run_promote_check(tmp_path: pathlib.Path, tag: str) -> tuple[int, str]:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    stub = bin_dir / "poetry"
+    stub.write_text(_POETRY_STUB, encoding="utf-8")
+    stub.chmod(0o755)
+    calls = tmp_path / "poetry-calls"
+    calls.write_text("", encoding="utf-8")
+    env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}", "TAG": tag, "POETRY_CALLS": str(calls)}
+    proc = subprocess.run(["bash", "-e", "-c", _promote_step()["run"]], env=env, capture_output=True, text=True)
+    return proc.returncode, calls.read_text(encoding="utf-8")
+
+
+@_needs_bash
+@pytest.mark.parametrize("tag", [TAG_ONE, "sha-0123456789abcdef0123456789abcdef01234567"])
+def test_a_sha_tag_reaches_the_promotion(tmp_path: pathlib.Path, tag: str) -> None:
+    code, calls = _run_promote_check(tmp_path, tag)
+    assert code == 0
+    assert f"--version {tag}" in calls
+
+
+@_needs_bash
+@pytest.mark.parametrize(
+    "tag",
+    ["sha-", "sha-abc12", "sha-../x", "sha-ABCDEF1", "sha-aaa1111\nsha-bbb2222", "sha-aaa1111 x", "v1.2.3", "dev"],
+    ids=["empty", "short", "path", "uppercase", "newline", "space", "semver", "alias"],
+)
+def test_any_other_tag_is_refused_before_the_promotion(tmp_path: pathlib.Path, tag: str) -> None:
+    code, calls = _run_promote_check(tmp_path, tag)
+    assert code == 1
+    assert calls == "", "a refused tag must never reach `toolkit deployment promote`"
