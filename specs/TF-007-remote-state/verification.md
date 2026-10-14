@@ -28,6 +28,18 @@ PR 1a covers AC3 and AC4; the rest land with PR 1b.
   - Mac: `make tf-dns-plan` and `make tf-r2-plan` read `No changes`. `make tf-state-list ROOT=aws` exits 0 with no addresses. `make tf-aws-plan` stops at STS `InvalidClientTokenId`, a credential problem, not a state one. The SOPS `aws` pair is the `kubelab` profile's key, which master's plan already used, and `kubelab-terraform` has no access key (#1351).
   - `make test-tfstate-lock-live`: 1 passed (8 concurrent writers x 10, one winner each).
 
+## Adversarial review
+
+`review.md`: verdict PASS on `e61f2320`, reviewer `nan/mimo-v2.6-flash`. Seven Minor findings, each disposed:
+
+1. `make secrets-audit` exits 1. The cause is an orphan this spec did not add. AC9's own keys all resolve (f9: 8 secrets). Ticketed as SEC-031 #2240.
+2. The `tasks.md` triage box is unticked. This is by design: it is ticked once `## Review triage` is posted on #2239.
+3. The `proposal.md` AC boxes were unticked. Ticked; the evidence for each is in the list above.
+4. The proposal's shorthand omits `ROOT=` on `tf-state-restore`/`tf-state-unlock`. Declined: `proposal.md` is frozen after review, and the runbook, which operators use, carries `ROOT=`.
+5. Three full-suite failures on macOS: Colima does not share `/private/var/folders`, so a `tmp_path` bind mount arrives empty. They are pre-existing on master and in files this spec does not touch. Ticketed as TOOL-113 #2244.
+6. `_restore` reads `current["serial"]` by key. Ticketed as TF-019 #2245, so the reviewed code stays the code that archives.
+7. Five functions exceed 40 lines, with C901 ≤ 10 held. Ticketed as TF-019 #2245.
+
 ## Test status
 
 - Test suite: `poetry run pytest tests/test_terraform_*.py` -> all green (178 in the runner file alone).

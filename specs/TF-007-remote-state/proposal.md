@@ -58,16 +58,16 @@ Two PRs, so the refactor is proven on the backend it already has before the back
 
 ## Acceptance criteria
 
-- [ ] AC1: no root under `infra/terraform/` declares `backend "local"`; each declares `backend "s3"` with `key = "<dir>/terraform.tfstate"` and nothing else (test).
-- [ ] AC2: `backend.s3.tfbackend` matches `terraform.state` in `common.yaml` and carries no credential and no `encrypt` (drift test).
-- [ ] AC3: nothing outside the runner invokes `terraform` (test over the Makefile and the toolkit).
-- [ ] AC4: the runner removes rendered tfvars on success and on failure, propagates terraform's exit code, keeps each root's apply mode, and passes secrets only through the child's environment (tests).
-- [ ] AC5: `make tf-state-bootstrap` creates the bucket, the history lock and a scoped token, and a second run reports every step unchanged (unit tests per step, plus the live run recorded in verification.md).
-- [ ] AC6: the minted token writes to `kubelab-tfstate` and is refused on a backup bucket, checked by consequence inside the bootstrap.
-- [ ] AC7: `dns`, `r2` and `aws` are migrated with the same resource count before and after, and a plan from the Mac reads `No changes` for `dns` and `r2` (live). `aws` is dormant and its plan is reported, never applied.
-- [ ] AC8: every state-writing action leaves a snapshot under `history/`, and a repeated snapshot is a no-op (tests + live).
-- [ ] AC9: `aws.access_key_id`, `aws.secret_access_key` and `terraform.state.*` are in `SECRET_CATALOG`, and `make secrets-audit` passes.
-- [ ] AC10: `docs/runbooks/terraform-state.md` (bootstrap, migrate, restore from history, force-unlock, rotate the token), ADR-069 and lesson-564 land in this PR.
+- [x] AC1: no root under `infra/terraform/` declares `backend "local"`; each declares `backend "s3"` with `key = "<dir>/terraform.tfstate"` and nothing else (test).
+- [x] AC2: `backend.s3.tfbackend` matches `terraform.state` in `common.yaml` and carries no credential and no `encrypt` (drift test).
+- [x] AC3: nothing outside the runner invokes `terraform` (test over the Makefile and the toolkit).
+- [x] AC4: the runner removes rendered tfvars on success and on failure, propagates terraform's exit code, keeps each root's apply mode, and passes secrets only through the child's environment (tests).
+- [x] AC5: `make tf-state-bootstrap` creates the bucket, the history lock and a scoped token, and a second run reports every step unchanged (unit tests per step, plus the live run recorded in verification.md).
+- [x] AC6: the minted token writes to `kubelab-tfstate` and is refused on a backup bucket, checked by consequence inside the bootstrap.
+- [x] AC7: `dns`, `r2` and `aws` are migrated with the same resource count before and after, and a plan from the Mac reads `No changes` for `dns` and `r2` (live). `aws` is dormant and its plan is reported, never applied.
+- [x] AC8: every state-writing action leaves a snapshot under `history/`, and a repeated snapshot is a no-op (tests + live).
+- [x] AC9: `aws.access_key_id`, `aws.secret_access_key` and `terraform.state.*` are in `SECRET_CATALOG`, and `make secrets-audit` passes.
+- [x] AC10: `docs/runbooks/terraform-state.md` (bootstrap, migrate, restore from history, force-unlock, rotate the token), ADR-069 and lesson-564 land in this PR.
 
 ## References
 
