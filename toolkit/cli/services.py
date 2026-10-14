@@ -15,6 +15,7 @@ from toolkit.features.configuration import ConfigurationManager
 from toolkit.features.docker_service import DockerService
 
 if TYPE_CHECKING:
+    from toolkit.features.gitea_actions_secrets import ActionsSecretsPlan, SecretTarget
     from toolkit.features.gitea_client import GiteaBasicAuthClient, GiteaClient
 
 console = Console()
@@ -1236,6 +1237,72 @@ def gitea_issue_create(
     console.print(f"#{opened.number} {opened.url}")
 
 
+def _actions_secrets_client(merged: dict[str, Any]) -> "GiteaBasicAuthClient":
+    """The authoring client for the forge named in `merged`; exits 1 when no credential resolves."""
+    from toolkit.features import gitea_authoring as ga
+
+    try:
+        return ga.authoring_client(merged)
+    except ga.AuthoringError as exc:
+        logger.error(str(exc))
+        raise typer.Exit(1) from exc
+
+
+def _report_actions_secrets_plan(plan: "ActionsSecretsPlan", env: str, apply: bool) -> bool:
+    """Print the plan; True when the run ends here (nothing to write, or plan only), exit 1 on a gap."""
+    from toolkit.features import gitea_actions_secrets as gas
+
+    console.print(f"\n[bold]Gitea Actions secrets[/bold] ({env})\n")
+    console.print(gas.format_actions_secrets_plan(plan))
+    if plan.is_noop:
+        if plan.is_complete:
+            logger.success("every declared secret exists on the forge — values unverifiable; --force re-pushes")
+            return True
+        logger.error("declared secrets cannot be delivered (listed above with !)")
+        raise typer.Exit(1)
+    if not apply:
+        console.print("\n[dim]plan only — re-run with --apply to write[/dim]")
+        if not plan.is_complete:
+            raise typer.Exit(1)
+        return True
+    return False
+
+
+def _list_actions_secrets_by_repo(
+    client: "GiteaBasicAuthClient", targets: "tuple[SecretTarget, ...]"
+) -> dict[str, set[str] | None]:
+    """Names of the Actions secrets each target repository holds; `None` where the forge cannot list it."""
+    import requests
+
+    from toolkit.features.gitea_client import GiteaError
+
+    # Per repository, so one that cannot be read is reported as unreachable -- a state
+    # the plan already models -- and the others still converge. A single try around
+    # the loop would let one repository's outage abort delivery to every other.
+    live: dict[str, set[str] | None] = {}
+    for repo in sorted({t.repo for t in targets}):
+        owner, name = repo.split("/", 1)
+        try:
+            live[repo] = client.list_actions_secret_names(owner, name)
+        except (GiteaError, requests.RequestException) as exc:
+            logger.warning(f"could not list Actions secrets on {repo}: {exc}")
+            live[repo] = None
+    return live
+
+
+def _apply_actions_secrets(plan: "ActionsSecretsPlan", client: "GiteaBasicAuthClient", merged: dict[str, Any]) -> None:
+    """Write the planned Actions secrets, print what landed and what failed, exit 1 on any failure or gap."""
+    from toolkit.features import gitea_actions_secrets as gas
+
+    report = gas.execute_actions_secrets(plan, client, lambda key_path: gas.sops_value(merged, key_path))
+    for target in report.written:
+        console.print(f"  [green]written[/green]  {target.repo}  {target.name}")
+    for target, reason in report.failed:
+        console.print(f"  [red]failed[/red]   {target.repo}  {target.name}: {reason}")
+    if report.failed or not plan.is_complete:
+        raise typer.Exit(1)
+
+
 @gitea_app.command("actions-secrets")
 def gitea_actions_secrets(
     env: Annotated[str, typer.Option("--env", "-e", help="Environment holding the forge credentials")] = "prod",
@@ -1256,65 +1323,19 @@ def gitea_actions_secrets(
     mode. "Nothing to write" is not "converged" when the reason is a missing
     source, and a zero exit there would be the silent pass this command replaces.
     """
-    import requests
-
-    from toolkit.features import gitea_authoring as ga
-    from toolkit.features.gitea_actions_secrets import (
-        delivery_targets,
-        execute_actions_secrets,
-        format_actions_secrets_plan,
-        plan_actions_secrets,
-        sops_value,
-    )
-    from toolkit.features.gitea_client import GiteaError
+    from toolkit.features import gitea_actions_secrets as gas
     from toolkit.features.secrets_manager import secrets_delivered_to_forge
 
     merged = _gitea_merged_config(env)
-    targets = delivery_targets(secrets_delivered_to_forge())
+    targets = gas.delivery_targets(secrets_delivered_to_forge())
     if not targets:
         logger.warning("no catalog entry declares `forge_actions` — nothing to deliver")
         return
 
-    try:
-        client = ga.authoring_client(merged)
-    except ga.AuthoringError as exc:
-        logger.error(str(exc))
-        raise typer.Exit(1) from exc
-
-    # Per repository, so one that cannot be read is reported as unreachable -- a state
-    # the plan already models -- and the others still converge. A single try around
-    # the loop would let one repository's outage abort delivery to every other.
-    live: dict[str, set[str] | None] = {}
-    for repo in sorted({t.repo for t in targets}):
-        owner, name = repo.split("/", 1)
-        try:
-            live[repo] = client.list_actions_secret_names(owner, name)
-        except (GiteaError, requests.RequestException) as exc:
-            logger.warning(f"could not list Actions secrets on {repo}: {exc}")
-            live[repo] = None
-
-    valued = {t.key_path for t in targets if sops_value(merged, t.key_path)}
-    plan = plan_actions_secrets(targets, live, valued, force=force)
-    console.print(f"\n[bold]Gitea Actions secrets[/bold] ({env})\n")
-    console.print(format_actions_secrets_plan(plan))
-
-    if plan.is_noop:
-        if plan.is_complete:
-            logger.success("every declared secret exists on the forge — values unverifiable; --force re-pushes")
-            return
-        logger.error("declared secrets cannot be delivered (listed above with !)")
-        raise typer.Exit(1)
-
-    if not apply:
-        console.print("\n[dim]plan only — re-run with --apply to write[/dim]")
-        if not plan.is_complete:
-            raise typer.Exit(1)
+    client = _actions_secrets_client(merged)
+    live = _list_actions_secrets_by_repo(client, targets)
+    valued = {t.key_path for t in targets if gas.sops_value(merged, t.key_path)}
+    plan = gas.plan_actions_secrets(targets, live, valued, force=force)
+    if _report_actions_secrets_plan(plan, env, apply):
         return
-
-    report = execute_actions_secrets(plan, client, lambda key_path: sops_value(merged, key_path))
-    for target in report.written:
-        console.print(f"  [green]written[/green]  {target.repo}  {target.name}")
-    for target, reason in report.failed:
-        console.print(f"  [red]failed[/red]   {target.repo}  {target.name}: {reason}")
-    if report.failed or not plan.is_complete:
-        raise typer.Exit(1)
+    _apply_actions_secrets(plan, client, merged)
