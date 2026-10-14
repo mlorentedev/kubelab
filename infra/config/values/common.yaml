@@ -1437,7 +1437,7 @@ apps:
 
       github_runner:
         name: github-runner
-        image: myoung34/github-runner:ubuntu-noble
+        image: myoung34/github-runner:2.338.0-ubuntu-noble
         repo_url: https://github.com/mlorentedev/kubelab
         runner_group: default
         labels: self-hosted,linux,docker

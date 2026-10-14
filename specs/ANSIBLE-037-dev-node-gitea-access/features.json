@@ -9,7 +9,7 @@
   {
     "id": "ANSIBLE-037-dev-node-gitea-access-f2",
     "behavior": "The credential resolves from apps.auth.identities.machine rather than a literal or the basic_auth alias, and anything secret is registered in SECRET_CATALOG with envs checked",
-    "verification": "poetry run pytest tests/test_ansible_identity_ssot.py -k dev_node -q",
+    "verification": "poetry run pytest tests/test_dev_node_gitea_identity.py -q",
     "state": "pending",
     "evidence": ""
   },

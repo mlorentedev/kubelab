@@ -67,14 +67,15 @@ is therefore exhaustive in both directions: no image may be untracked, and none
 may be ignored without appearing in `ignoreDeps` where a reader sees the
 decision.
 
-### Five images are not tracked, and the reason is tag shape
+### Two images are not tracked, and the reason is tag shape
 
 | Image | Why |
 |---|---|
 | `cloudflare/cloudflared:latest` | no version to compare |
 | `fbonalair/traefik-crowdsec-bouncer:latest` | same |
-| `grafana/grafana-oss` | **no tag at all** |
-| `myoung34/github-runner:ubuntu-noble` | distro codename, rolls in place |
+
+`grafana/grafana-oss` (once untagged) and `myoung34/github-runner` (once the
+rolling `ubuntu-noble`, #2033) now carry versions and are tracked.
 
 Give any of them a real tag and the guard forces the decision rather than
 leaving it ignored out of habit.
