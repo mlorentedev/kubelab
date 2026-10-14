@@ -581,27 +581,35 @@ def _shape(state: Mapping[str, Any]) -> tuple[str, int, int]:
     return str(state.get("lineage", "")), int(state.get("serial", 0)), len(state.get("resources") or [])
 
 
-def _addresses(state: Mapping[str, Any]) -> set[tuple[str, str, str, str]]:
-    return {
-        (str(r.get("module", "")), str(r.get("mode", "")), str(r.get("type", "")), str(r.get("name", "")))
-        for r in state.get("resources") or []
-    }
+def _address(resource: Mapping[str, Any]) -> str:
+    """`module.x.data.type.name`, the form `terraform state list` prints."""
+    parts = [str(resource.get("module") or ""), "data" if resource.get("mode") == "data" else ""]
+    return ".".join(p for p in [*parts, str(resource.get("type", "")), str(resource.get("name", ""))] if p)
+
+
+def _content(state: Mapping[str, Any]) -> dict[str, str]:
+    """Each resource address, and `outputs`, mapped to a canonical rendering of what it holds."""
+    held = {_address(r): json.dumps(r, sort_keys=True) for r in state.get("resources") or []}
+    return {**held, "outputs": json.dumps(state.get("outputs") or {}, sort_keys=True)}
+
+
+def _differing(local: Mapping[str, Any], remote: Mapping[str, Any]) -> list[str]:
+    """The addresses whose content differs or exists on one side only. Names, never values."""
+    mine, theirs = _content(local), _content(remote)
+    return sorted(a for a in mine.keys() | theirs.keys() if mine.get(a) != theirs.get(a))
 
 
 def _arrived(local: Mapping[str, Any], remote: Mapping[str, Any] | None) -> bool:
-    """R2 holds the local state: same lineage and resources, at its serial or later.
+    """R2 holds what the local state holds: every resource and every output, as they are.
 
-    Not serial equality: whether `state push` keeps the serial or bumps it is
-    Terraform's business, and a check that assumed one would refuse a migration
-    that worked, then find every retry refused by Terraform itself.
+    Lineage and serial are not compared. Both are Terraform's business, and it
+    does not keep them across a migration: the S3 backend starts an empty state
+    with a lineage of its own, and `state push` into an empty state imports the
+    resources under that lineage at serial 1 (measured on msi, 2026-10-13). A
+    gate on lineage refused a migration that had worked, and then every retry
+    was refused by Terraform itself, across lineages.
     """
-    if remote is None:
-        return False
-    return (
-        remote.get("lineage") == local.get("lineage")
-        and int(remote.get("serial", 0)) >= int(local.get("serial", 0))
-        and _addresses(remote) == _addresses(local)
-    )
+    return remote is not None and not _differing(local, remote)
 
 
 class _History:
@@ -679,7 +687,9 @@ class _History:
         from toolkit.core.logging import logger
 
         state = _pull(tf)
-        if state is None:
+        # Serial 0 is the empty state a backend answers before anything was
+        # written to it: there is nothing to keep, and a locked copy is forever.
+        if state is None or int(state.get("serial", 0)) == 0:
             return 0
         lineage, serial, _ = _shape(state)
         key = f"{self._prefix()}{lineage}/{serial}.tfstate"
@@ -722,8 +732,10 @@ def _migrate(tf: Callable[..., Result], root: Root, module: Path) -> int:
     """Move a root's local state into R2, without `-force`, and prove it arrived.
 
     `state push` refuses a different lineage or a lower serial, so a remote that
-    already holds a newer or unrelated state is never overwritten. After the
-    push the remote is read back and compared; only then is the local file
+    already holds a newer or unrelated state is never overwritten. A remote that
+    already holds this content is not pushed again: that is a migration whose
+    rename did not happen, and finishing it is the rename. After the push the
+    remote is read back and compared by content; only then is the local file
     renamed, which is what lets the next run start.
     """
     from toolkit.core.logging import logger
@@ -739,21 +751,22 @@ def _migrate(tf: Callable[..., Result], root: Root, module: Path) -> int:
         state = json.loads(local.read_text(encoding="utf-8"))
     except ValueError:
         raise RunnerError(f"{local} is not a Terraform state; nothing was pushed.") from None
-    expected = _shape(state)
-    rc = tf("state", "push", str(local)).returncode
-    if rc != 0:
-        return rc
+    if not _arrived(state, _pull(tf)):
+        rc = tf("state", "push", str(local)).returncode
+        if rc != 0:
+            return rc
     remote = _pull(tf)
-    if not _arrived(state, remote):
-        got = _shape(remote) if remote else None
+    if remote is None or not _arrived(state, remote):
+        differing = _differing(state, remote) if remote is not None else ["(no state)"]
         logger.error(
-            f"{root.name}: R2 holds {got} after the push, the local file {expected} (lineage, serial, resources). "
+            f"{root.name}: after the push R2 differs from the local file at {', '.join(differing)}. "
             f"The local file is kept."
         )
         return 1
     local.rename(moved)
+    lineage, serial, count = _shape(remote)
     logger.info(
-        f"{root.name}: {expected[2]} resources moved to R2 at serial {expected[1]}; the local file is {moved.name}."
+        f"{root.name}: {count} resources are in R2, lineage {lineage} serial {serial}; the local file is {moved.name}."
     )
     return 0
 

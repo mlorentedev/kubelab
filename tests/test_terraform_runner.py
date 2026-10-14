@@ -787,9 +787,14 @@ def test_a_snapshot_already_in_history_is_the_same_state() -> None:
     assert _run("dns", "apply", FakeTerraform(pulls=[STATE]), aws=aws) == 0
 
 
-def test_a_backend_with_no_state_yet_has_nothing_to_copy() -> None:
+@pytest.mark.parametrize(
+    "answer", [None, {"version": 4, "lineage": "fresh", "serial": 0, "resources": []}], ids=["empty", "serial-0"]
+)
+def test_a_backend_with_no_state_yet_has_nothing_to_copy(answer: dict | None) -> None:
+    """Serial 0 is what the S3 backend answers before anything was written:
+    a locked copy of it would sit in history for a year and hold nothing."""
     aws = FakeAws()
-    assert _run("dns", "apply", FakeTerraform(pulls=[None]), aws=aws) == 0
+    assert _run("dns", "apply", FakeTerraform(pulls=[answer]), aws=aws) == 0
     assert aws.calls == []
 
 
@@ -840,7 +845,7 @@ def test_migrate_pushes_without_force_checks_the_result_and_retires_the_local_fi
     module = _module_copy(tmp_path, "dns")
     (module / "terraform.tfstate").write_text(json.dumps(STATE))
     aws = FakeAws()
-    fake = FakeTerraform(pulls=[None, STATE, STATE])
+    fake = FakeTerraform(pulls=[None, None, STATE, STATE])
     assert _migrate(tmp_path, fake, aws) == 0
     push = fake.call("state push")
     assert push["args"][1:] == ["state", "push", str(module / "terraform.migrating.tfstate")]
@@ -856,10 +861,10 @@ def test_migrate_pushes_without_force_checks_the_result_and_retires_the_local_fi
     [
         {**STATE, "resources": []},
         {**STATE, "resources": [STATE["resources"][0], {**STATE["resources"][1], "name": "c"}]},
-        {**STATE, "lineage": "other"},
-        {**STATE, "serial": 6},
+        {**STATE, "resources": [STATE["resources"][0], {**STATE["resources"][1], "instances": [{"x": 1}]}]},
+        {**STATE, "outputs": {"zone": {"value": "other"}}},
     ],
-    ids=["fewer-resources", "same-count-other-addresses", "other-lineage", "lower-serial"],
+    ids=["fewer-resources", "same-count-other-addresses", "same-addresses-other-attributes", "other-outputs"],
 )
 def test_migrate_keeps_the_local_file_when_r2_holds_something_else(tmp_path: Path, remote: dict) -> None:
     module = _module_copy(tmp_path, "dns")
@@ -870,12 +875,46 @@ def test_migrate_keeps_the_local_file_when_r2_holds_something_else(tmp_path: Pat
     assert not (module / "terraform.pre-remote.tfstate").exists()
 
 
-def test_a_push_that_bumps_the_serial_is_still_a_migration(tmp_path: Path) -> None:
-    """Whether push keeps the serial is Terraform's business, not the gate's."""
+EMPTY_REMOTE = {"version": 4, "lineage": "6b5c-fresh", "serial": 0, "resources": [], "outputs": {}}
+
+
+@pytest.mark.parametrize(
+    "landed",
+    [{**STATE, "serial": 8}, {**STATE, "lineage": "6b5c-fresh", "serial": 1}],
+    ids=["serial-bumped", "backend-lineage-kept"],
+)
+def test_lineage_and_serial_are_terraforms_business_content_is_the_gate(tmp_path: Path, landed: dict) -> None:
+    """Measured on msi, 2026-10-13: the S3 backend writes an empty state with a
+    lineage of its own the first time it is touched, and `state push` into an
+    empty state imports the resources and keeps that lineage, at serial 1."""
     module = _module_copy(tmp_path, "dns")
     (module / "terraform.tfstate").write_text(json.dumps(STATE))
-    assert _migrate(tmp_path, FakeTerraform(pulls=[None, {**STATE, "serial": 8}])) == 0
+    aws = FakeAws()
+    assert _migrate(tmp_path, FakeTerraform(pulls=[EMPTY_REMOTE, EMPTY_REMOTE, landed, landed]), aws) == 0
     assert (module / "terraform.pre-remote.tfstate").exists()
+    assert [c["key"] for c in aws.calls] == [f"history/dns/{landed['lineage']}/{landed['serial']}.tfstate"]
+
+
+def test_a_remote_that_already_holds_the_content_is_not_pushed_again(tmp_path: Path) -> None:
+    """A migration whose push landed but whose rename did not (a killed run,
+    or an earlier gate that refused it) finishes without a second push, which
+    Terraform would refuse across lineages."""
+    module = _module_copy(tmp_path, "dns")
+    (module / "terraform.tfstate").write_text(json.dumps(STATE))
+    there = {**STATE, "lineage": "6b5c-fresh", "serial": 1}
+    fake = FakeTerraform(pulls=[there])
+    assert _migrate(tmp_path, fake) == 0
+    assert "state push" not in fake.verbs()
+    assert (module / "terraform.pre-remote.tfstate").exists()
+
+
+def test_a_content_mismatch_names_addresses_never_values(tmp_path: Path) -> None:
+    module = _module_copy(tmp_path, "dns")
+    local = {**STATE, "resources": [{**STATE["resources"][0], "instances": [{"token": SECRET}]}]}
+    (module / "terraform.tfstate").write_text(json.dumps(local))
+    remote = {**local, "resources": [{**STATE["resources"][0], "instances": [{"token": "other"}]}]}
+    assert _migrate(tmp_path, FakeTerraform(pulls=[None, remote])) == 1
+    assert tr._differing(local, remote) == ["cloudflare_record.a"]
 
 
 def test_a_refused_push_keeps_the_local_file(tmp_path: Path) -> None:
