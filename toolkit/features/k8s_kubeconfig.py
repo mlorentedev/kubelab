@@ -206,12 +206,15 @@ def resolve_ssh_hostname(ssh_alias: str) -> str:
     return ssh_alias
 
 
-# What ssh prints when the presented key does not match the recorded one. Matched
-# on stderr because ssh gives this the same exit code (255) as every other
-# connection-layer failure, so the code cannot tell them apart.
+# What ssh prints when host key checking refuses the connection. Matched on
+# stderr because ssh gives this the same exit code (255) as every other
+# connection-layer failure, so the code cannot tell them apart. The last line is
+# the same whether the key is unknown or changed; only a changed key names the
+# offending entry, so that is what tells the two apart.
+_HOST_KEY_FAILED = "host key verification failed"
 _HOST_KEY_CHANGED_MARKERS = (
-    "host key verification failed",
     "remote host identification has changed",
+    "offending",
 )
 
 
@@ -230,9 +233,19 @@ def host_key_hint(ssh_alias: str, stderr: str, purge_attempted: bool = False) ->
     the decision where it belongs.
     """
     lowered = stderr.lower()
-    if not any(marker in lowered for marker in _HOST_KEY_CHANGED_MARKERS):
+    changed = any(marker in lowered for marker in _HOST_KEY_CHANGED_MARKERS)
+    if not changed and _HOST_KEY_FAILED not in lowered:
         return None
     hostname = resolve_ssh_hostname(ssh_alias)
+    if not changed and not purge_attempted:
+        # A new workstation has never seen this host. Accepting the key it now
+        # presents would be trust on first use; the fetch never does that.
+        return (
+            f"No SSH host key is recorded for {hostname!r} on this machine, and "
+            f"this command never accepts one unseen.\n"
+            f"  Verify its fingerprint out of band, pin it (dotfiles ssh/known_hosts), "
+            f"then re-run. Nothing was changed."
+        )
     if purge_attempted:
         # The node IS marked ephemeral and the purge ran, yet the key still did
         # not match — so `ssh-keygen -R` did not take (a read-only known_hosts,

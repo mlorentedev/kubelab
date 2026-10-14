@@ -33,6 +33,19 @@ from toolkit.features.k8s_kubeconfig import (
     resolve_ssh_hostname,
 )
 
+# What ssh 10 prints for each failure, captured 2026-10-13 against the VPS.
+# BatchMode under the default `StrictHostKeyChecking ask` prints the last line only.
+UNKNOWN_BATCH = "Host key verification failed.\n"
+UNKNOWN_STRICT = (
+    "No ED25519 host key is known for 100.64.0.2 and you have requested strict checking.\n"
+    "Host key verification failed.\n"
+)
+CHANGED_STRICT = (
+    "Offending ED25519 key in /home/op/.ssh/known_hosts:7\n"
+    "Host key for 100.64.0.2 has changed and you have requested strict checking.\n"
+    "Host key verification failed.\n"
+)
+
 
 @pytest.fixture
 def common(tmp_path: Path) -> Path:
@@ -139,10 +152,26 @@ class TestTheErrorSaysSomethingUseful:
         assert "ssh-keygen -R vps.kubelab.internal" in hint, "the remedy must be runnable as written"
         assert "rebuilt" in hint and "impersonating" in hint, "both readings, so the operator decides"
 
-    def test_it_matches_the_other_wording_ssh_uses(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """ssh prints two different lines for this; both exit 255."""
+    def test_it_matches_the_strict_checking_wording(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """With StrictHostKeyChecking yes ssh prints no banner, only these lines; both exit 255."""
         self._stub_hostname(monkeypatch)
-        assert kc.host_key_hint("vps", "Host key verification failed.\n") is not None
+        hint = kc.host_key_hint("vps", CHANGED_STRICT)
+        assert hint is not None and "does not match" in hint
+
+    def test_an_unknown_host_is_not_called_a_changed_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """ssh ends both failures with the same line, so that line alone proves nothing.
+
+        Measured 2026-10-13 on a new workstation that had never seen the VPS: the
+        hint said its key "does not match", sending the operator to purge a key
+        that was never recorded. A changed key always names the offending entry.
+        """
+        self._stub_hostname(monkeypatch)
+        for stderr in (UNKNOWN_BATCH, UNKNOWN_STRICT):
+            hint = kc.host_key_hint("vps", stderr)
+            assert hint is not None
+            assert "does not match" not in hint and "ssh-keygen -R" not in hint, "there is nothing to remove"
+            assert "No SSH host key is recorded for 'vps.kubelab.internal'" in hint
+            assert "out of band" in hint, "the remedy is verifying the key, not accepting whatever is presented"
 
     def test_after_a_failed_purge_the_hint_does_not_lie_about_the_ssot(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """The node IS marked ephemeral and the purge ran anyway — say that.
