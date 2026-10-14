@@ -2,71 +2,71 @@
   {
     "id": "TF-007-remote-state-f1",
     "behavior": "AC1: No root declares backend local; each declares backend s3 with key <dir>/terraform.tfstate",
-    "verification": "echo 'not implemented' && exit 1",
-    "state": "pending",
-    "evidence": ""
+    "verification": "poetry run pytest --no-cov -q tests/test_terraform_backend.py -k 'local_backend or only_its_key or s3_locking'",
+    "state": "passing",
+    "evidence": "exit 0; 18 passed, 2026-10-14. Every root declares only its key in an s3 backend and requires Terraform >= 1.10."
   },
   {
     "id": "TF-007-remote-state-f2",
     "behavior": "AC2: backend.s3.tfbackend matches terraform.state in common.yaml, no credential, no encrypt",
-    "verification": "echo 'not implemented' && exit 1",
-    "state": "pending",
-    "evidence": ""
+    "verification": "poetry run pytest --no-cov -q tests/test_terraform_backend.py -k 'render_of_the_ssot or no_credential or state_bucket or missing_bucket or second_run'",
+    "state": "passing",
+    "evidence": "exit 0; 5 passed, 2026-10-14. The committed backend file is the render of terraform.state; no credential, no encrypt."
   },
   {
     "id": "TF-007-remote-state-f3",
     "behavior": "AC3: Nothing outside the runner invokes terraform",
     "verification": "poetry run pytest --no-cov -q tests/test_terraform_single_entry.py",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "exit 0; 33 passed on feature/terraform-runner, 2026-10-14"
   },
   {
     "id": "TF-007-remote-state-f4",
     "behavior": "AC4: The runner cleans rendered tfvars, propagates the exit code, keeps apply modes, passes secrets only in the child env",
     "verification": "poetry run pytest --no-cov -q tests/test_terraform_runner.py tests/test_terraform_plan_guard.py tests/test_vps_firewall_tfvars.py",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "exit 0; 125 passed on feature/terraform-runner, 2026-10-14"
   },
   {
     "id": "TF-007-remote-state-f5",
     "behavior": "AC5: make tf-state-bootstrap is idempotent",
-    "verification": "echo 'not implemented' && exit 1",
-    "state": "pending",
-    "evidence": ""
+    "verification": "poetry run pytest --no-cov -q tests/test_terraform_state_bootstrap.py -k 'bucket or lock_rule or rule'",
+    "state": "passing",
+    "evidence": "exit 0; 7 passed, 2026-10-14. Live from the Mac, 2026-10-13: first run created/set/minted, second run kept x3, rc 0 (verification.md)."
   },
   {
     "id": "TF-007-remote-state-f6",
     "behavior": "AC6: The minted token writes to kubelab-tfstate and is refused on a backup bucket",
-    "verification": "echo 'not implemented' && exit 1",
-    "state": "pending",
-    "evidence": ""
+    "verification": "poetry run pytest --no-cov -q tests/test_terraform_state_bootstrap.py -k 'token or pair or seam'",
+    "state": "passing",
+    "evidence": "exit 0; 5 passed, 2026-10-14. Live, 2026-10-13: the minted token lists kubelab-tfstate and is refused on kubelab-backups before it is stored."
   },
   {
     "id": "TF-007-remote-state-f7",
     "behavior": "AC7: dns, r2 and aws migrated with equal resource counts; dns and r2 plan No changes from the Mac",
-    "verification": "echo 'not implemented' && exit 1",
-    "state": "pending",
-    "evidence": ""
+    "verification": "poetry run pytest --no-cov -q tests/test_terraform_runner.py -k 'migrat or arrived or pre_remote or holds_nothing'",
+    "state": "passing",
+    "evidence": "exit 0; 20 passed, 2026-10-14. Live: dns, r2 and aws migrated from msi; re-runs rename or no-op; make tf-dns-plan and make tf-r2-plan read No changes from the Mac (verification.md AC7)."
   },
   {
     "id": "TF-007-remote-state-f8",
     "behavior": "AC8: Every state write leaves a snapshot under history/; a repeat is a no-op",
-    "verification": "echo 'not implemented' && exit 1",
-    "state": "pending",
-    "evidence": ""
+    "verification": "poetry run pytest --no-cov -q tests/test_terraform_runner.py -k 'history or snapshot'",
+    "state": "passing",
+    "evidence": "exit 0; 8 passed, 2026-10-14. Live: make tf-state-history ROOT=dns lists the before/after copies under history/."
   },
   {
     "id": "TF-007-remote-state-f9",
     "behavior": "AC9: aws.* and terraform.state.* in SECRET_CATALOG; make secrets-audit passes",
-    "verification": "echo 'not implemented' && exit 1",
-    "state": "pending",
-    "evidence": ""
+    "verification": "poetry run pytest --no-cov -q tests/test_terraform_runner.py -k 'test_every_secret_a_run_requires_exists_in_sops'",
+    "state": "passing",
+    "evidence": "exit 0; 8 passed, 2026-10-14. make secrets-audit: 100% in dev, staging and prod; its non-zero exit is a pre-existing orphan (SEC-031 #2240)."
   },
   {
     "id": "TF-007-remote-state-f10",
     "behavior": "AC10: Runbook, ADR-069 and lesson-564 land",
-    "verification": "echo 'not implemented' && exit 1",
-    "state": "pending",
-    "evidence": ""
+    "verification": "bash scripts/check-lessons.sh && test -f docs/runbooks/terraform-state.md && test -f docs/adr/adr-069-terraform-remote-state-on-r2.md && ls docs/lessons/storage-backup/lesson-564-*.md docs/lessons/storage-backup/lesson-566-*.md",
+    "state": "passing",
+    "evidence": "exit 0, 2026-10-14. Runbook docs/runbooks/terraform-state.md, ADR-069, lessons 564 and 566; check-lessons OK."
   }
 ]
