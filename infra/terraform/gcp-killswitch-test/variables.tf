@@ -28,8 +28,8 @@ variable "kill_switch_service_account" {
 
 variable "project_id" {
   description = <<-EOT
-    Scratch project id, UNIQUE PER RUN. Rendered by
-    `toolkit infra terraform killswitch-test-tfvars` as
+    Scratch project id, UNIQUE PER RUN. Rendered by the runner
+    (toolkit/features/terraform_runner.py) as
     `kubelab-killswitch-<UTC timestamp>`.
 
     The default used to be the fixed `kubelab-killswitch-proof`, on the reasoning

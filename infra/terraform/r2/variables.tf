@@ -15,7 +15,7 @@ variable "node_buckets" {
 
   validation {
     condition     = length(var.node_buckets) > 0
-    error_message = "node_buckets is empty: render it with `toolkit infra terraform r2-tfvars`."
+    error_message = "node_buckets is empty: run `make tf-r2-plan`, which renders it from backup.sources."
   }
 }
 

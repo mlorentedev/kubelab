@@ -2,7 +2,7 @@
 
 import os
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated
 
 import typer
 import yaml
@@ -1562,427 +1562,74 @@ def ansible_syntax_check(
 # `infra ansible run -p deploy-<target>`, and those playbooks exist.
 
 
-def _check_terraform_setup() -> None:
-    """Check if Terraform is properly set up."""
-    if command.run("which terraform", check=False).returncode != 0:
-        logger.error(MESSAGES.ERROR_TERRAFORM_NOT_FOUND)
-        raise typer.Exit(1) from None
-
-    if not settings.terraform_dir.exists():
-        logger.error(MESSAGES.ERROR_TERRAFORM_DIR_NOT_FOUND.format(settings.terraform_dir))
-        raise typer.Exit(1) from None
-
-
-def _get_terraform_env(env: str) -> dict[str, str]:
-    """Build environment dict with Cloudflare API token from SOPS.
-
-    Extracts the Cloudflare API token from the SOPS secrets and returns
-    an env dict suitable for passing to subprocess/command.run calls.
-    """
-    from toolkit.features.configuration import ConfigurationManager
-
-    config_manager = ConfigurationManager(env, settings.project_root)
-    merged = config_manager.get_merged_config()
-
-    # Navigate: cloudflare.api_token (from common.enc.yaml)
-    token = merged.get("cloudflare", {}).get("api_token", "")
-    if not token:
-        logger.error("Cloudflare API token not found in SOPS secrets (cloudflare.api_token)")
-        raise typer.Exit(1) from None
-
-    # Inherit current environment + inject TF_VAR
-    env_dict = dict(os.environ)
-    env_dict["TF_VAR_cloudflare_api_token"] = token
-    return env_dict
-
-
-@terraform_app.command("init")
-def tf_init(env: str = typer.Argument("dev", help="Target environment")) -> None:
-    """
-    Initialize Terraform configuration.
-
-    Generates necessary backend config and runs 'terraform init'.
-    """
-    logger.section(f"Terraform Init - {env.upper()}")
-    validate_environment_config(env)
-
-    try:
-        # Generate configuration first
-        from toolkit.features.generator_terraform import terraform_generator
-
-        result = terraform_generator.generate(env)
-        if not result.get("success", False):
-            logger.error(MESSAGES.ERROR_TERRAFORM_CONFIG_GENERATION_FAILED)
-            raise typer.Exit(1) from None
-
-        # Check terraform setup
-        _check_terraform_setup()
-
-        # Run terraform init
-        terraform_dir = settings.terraform_dir
-        tf_env = _get_terraform_env(env)
-
-        cmd = "terraform init"
-        logger.info(f"Running: {cmd}")
-
-        tf_result = command.run(cmd, cwd=terraform_dir, env=tf_env)
-        if tf_result.returncode == 0:
-            logger.success(MESSAGES.SUCCESS_TERRAFORM_INIT.format(env))
-        else:
-            logger.error(MESSAGES.ERROR_TERRAFORM_INIT_FAILED)
-            raise typer.Exit(1) from None
-
-    except Exception as e:
-        logger.error(MESSAGES.ERROR_TERRAFORM_INIT_FAILED_WITH_ERROR.format(e))
-        raise typer.Exit(1) from None
-
-
-@terraform_app.command("plan")
-def tf_plan(
-    env: Annotated[str, typer.Option("--env", "-e", help="Environment for SOPS credentials")] = "prod",
-    out: Annotated[str | None, typer.Option("--out", "-o", help="Save plan to file")] = None,
+@terraform_app.command(
+    "run",
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
+)
+def tf_run(
+    ctx: typer.Context,
+    root: Annotated[str, typer.Argument(help="Module under infra/terraform/ (dns, r2, aws, gcp, ...)")],
+    action: Annotated[str, typer.Argument(help="plan | apply | destroy | output | untaint")],
+    allow_destroy: Annotated[
+        bool, typer.Option("--allow-destroy", help="Let a guarded apply delete and replace")
+    ] = False,
+    allow: Annotated[
+        list[str] | None, typer.Option("--allow", help="An address a guarded apply may delete or replace")
+    ] = None,
 ) -> None:
-    """
-    Create a Terraform execution plan.
+    """Run one Terraform action against one root (TF-007).
 
-    DNS is global (not per-env). --env only selects which SOPS to decrypt.
-    Uses terraform.tfvars (auto-loaded by Terraform).
+    The only path to `terraform` in this repository: secrets from SOPS into the
+    child's environment, rendered tfvars in a private temp dir removed on every
+    exit, `init` first, and apply in the root's declared mode. Arguments after
+    the action pass through to Terraform (`-target=...`, `-raw <name>`).
     """
-    logger.section("Terraform Plan")
+    from toolkit.features import terraform_runner
 
     try:
-        _check_terraform_setup()
-        terraform_dir = settings.terraform_dir
-        tf_env = _get_terraform_env(env)
-
-        output_file = out or "dns.tfplan"
-        tfvars_file = terraform_dir / "dns.tfvars"
-        cmd_parts = ["terraform", "plan"]
-        if tfvars_file.exists():
-            cmd_parts.extend(["-var-file", str(tfvars_file)])
-        cmd_parts.extend(["-out", output_file])
-        cmd = " ".join(cmd_parts)
-
-        logger.info(f"Creating plan: {cmd}")
-        result = command.run(cmd, cwd=terraform_dir, env=tf_env)
-
-        if result.returncode == 0:
-            logger.success(MESSAGES.SUCCESS_TERRAFORM_PLAN_CREATED.format(output_file))
-        else:
-            raise typer.Exit(1) from None
-
-    except Exception as e:
-        logger.error(MESSAGES.ERROR_TERRAFORM_PLAN_FAILED.format(e))
-        raise typer.Exit(1) from None
-
-
-@terraform_app.command("apply")
-def tf_apply(
-    env: Annotated[str, typer.Option("--env", "-e", help="Environment for SOPS credentials")] = "prod",
-    plan_file: Annotated[str | None, typer.Option("--plan-file", "-f", help="Plan file to apply")] = None,
-    auto_approve: Annotated[bool, typer.Option("--auto-approve", help="Skip interactive approval")] = False,
-) -> None:
-    """
-    Apply Terraform configuration changes.
-
-    DNS is global (not per-env). --env only selects which SOPS to decrypt.
-    """
-    logger.section("Terraform Apply")
-
-    try:
-        _check_terraform_setup()
-
-        terraform_dir = settings.terraform_dir
-        tf_env = _get_terraform_env(env)
-        plan_to_apply = plan_file or "dns.tfplan"
-
-        # Check if plan file exists
-        plan_path = terraform_dir / plan_to_apply
-        if plan_path.exists():
-            cmd = f"terraform apply {plan_to_apply}"
-        else:
-            logger.warning(MESSAGES.WARNING_TERRAFORM_PLAN_NOT_FOUND.format(plan_path))
-            logger.info(MESSAGES.INFO_TERRAFORM_APPLY_WITHOUT_PLAN)
-            cmd = "terraform apply"
-            if auto_approve:
-                cmd += " -auto-approve"
-
-        logger.info(f"Applying configuration: {cmd}")
-        result = command.run(cmd, cwd=terraform_dir, env=tf_env)
-
-        if result.returncode == 0:
-            logger.success(MESSAGES.SUCCESS_TERRAFORM_APPLY.format(env))
-        else:
-            raise typer.Exit(1) from None
-
-    except Exception as e:
-        logger.error(MESSAGES.ERROR_TERRAFORM_APPLY_FAILED.format(e))
-        raise typer.Exit(1) from None
-
-
-@terraform_app.command("destroy")
-def tf_destroy(
-    env: Annotated[str, typer.Option("--env", "-e", help="Target environment")],
-    auto_approve: Annotated[bool, typer.Option("--auto-approve", help="Skip interactive approval")] = False,
-) -> None:
-    """
-    Destroy Terraform-managed infrastructure.
-
-    DANGER: This will delete resources!
-    """
-    logger.section(f"Terraform Destroy - {env.upper()}")
-
-    # Validate environment and get config
-    env_config = validate_environment_config(env)
-
-    try:
-        _check_terraform_setup()
-
-        # Always require confirmation for destroy
-        if not auto_approve:
-            logger.warning(MESSAGES.WARNING_TERRAFORM_DESTROY_DANGER)
-            confirm_dangerous_operation(env_config, "Destroy infrastructure")
-
-            # Additional confirmation for production (special case for destroy)
-            if env == "prod":
-                if not logger.confirm("This is PRODUCTION. Type 'destroy' to confirm:", default=False):
-                    logger.info(MESSAGES.INFO_TERRAFORM_DESTROY_CANCELLED)
-                    raise typer.Exit(0) from None
-
-        terraform_dir = settings.terraform_dir
-        tf_env = _get_terraform_env(env)
-        tfvars_file = terraform_dir / f"{env}.tfvars"
-
-        cmd_parts = ["terraform", "destroy"]
-
-        if tfvars_file.exists():
-            cmd_parts.extend(["-var-file", str(tfvars_file)])
-
-        if auto_approve:
-            cmd_parts.append("-auto-approve")
-
-        cmd = " ".join(cmd_parts)
-
-        logger.info(f"Destroying infrastructure: {cmd}")
-        result = command.run(cmd, cwd=terraform_dir, env=tf_env)
-
-        if result.returncode == 0:
-            logger.success(MESSAGES.SUCCESS_TERRAFORM_DESTROY.format(env))
-        else:
-            raise typer.Exit(1) from None
-
-    except Exception as e:
-        logger.error(MESSAGES.ERROR_TERRAFORM_DESTROY_FAILED.format(e))
-        raise typer.Exit(1) from None
-
-
-@terraform_app.command("vps-firewall-tfvars")
-def tf_vps_firewall_tfvars() -> None:
-    """Render the VPS cloud firewall's allow-list from common.yaml (SEC-006).
-
-    UNLIKE `aws-tfvars`, this injects no secret. The allow-list is plaintext
-    policy — which ports prod accepts from the internet — and belongs in
-    common.yaml where it is reviewable in a diff. The Hetzner token is a
-    secret and travels separately, as TF_VAR_hetzner_api_token in the child
-    process's environment (see the Makefile target).
-
-    The file is `.auto.tfvars` so `terraform plan` picks it up with no
-    -var-file flag: one fewer way to run the module against a stale list.
-    """
-    from toolkit.features.configuration import ConfigurationManager
-
-    module_dir = settings.project_root / "infra" / "terraform" / "vps-firewall"
-    tfvars_path = module_dir / "vps-firewall.auto.tfvars"
-
-    cm = ConfigurationManager("common", settings.project_root)
-    merged = cm.get_merged_config()
-    rules = merged.get("networking", {}).get("firewall", {}).get("vps_inbound", [])
-
-    if not rules:
-        logger.error(
-            "networking.firewall.vps_inbound is empty or absent in common.yaml. "
-            "Refusing to render: an attached firewall with no rules drops ALL "
-            "inbound traffic, SSH included."
+        code = terraform_runner.run(
+            root,
+            action,
+            terraform_dir=settings.project_root / "infra" / "terraform",
+            extra=list(ctx.args),
+            allow_destroy=allow_destroy,
+            allowed=allow or (),
         )
-        raise typer.Exit(1) from None
-
-    # Fail here rather than let Terraform's validation catch it, so the message
-    # names the SSOT the operator has to edit rather than the generated file.
-    # int() rather than ==22: YAML quoting the port ("22") would make an identity
-    # check false and refuse a correct allow-list. It fails safe, but on a message
-    # about SSH being absent when it is present -- the operator then goes looking
-    # for the wrong thing.
-    def _is_ssh(rule: dict[str, Any]) -> bool:
-        try:
-            return int(rule.get("port", 0)) == 22 and str(rule.get("proto", "")).lower() == "tcp"
-        except (TypeError, ValueError):
-            return False
-
-    if not any(_is_ssh(r) for r in rules):
-        logger.error(
-            "22/tcp is absent from networking.firewall.vps_inbound. Applying "
-            "this would lock every operator out of the VPS, and Headscale runs "
-            "on the same host, so the VPN is not a way back in."
-        )
-        raise typer.Exit(1) from None
-
-    # The Hetzner account's name for the server, NOT networking.vps.hostname —
-    # that is the OS hostname and the two differ. Terraform has no default for
-    # either of these on purpose: the original lookup used `hostname` as a
-    # plausible-looking fallback and resolved to nothing, so a missing value must
-    # stop here, naming the SSOT key, rather than reaching Terraform as a guess.
-    vps = merged.get("networking", {}).get("vps", {})
-    server_name = vps.get("hetzner_server_name")
-    public_ip = vps.get("public_ip")
-
-    for key, value in (("hetzner_server_name", server_name), ("public_ip", public_ip)):
-        if not value:
-            logger.error(
-                f"networking.vps.{key} is empty or absent in common.yaml. The firewall "
-                "module needs it to identify the running server, and to refuse attaching "
-                "to the wrong one. Refusing to render."
-            )
-            raise typer.Exit(1) from None
-
-    lines = ["# GENERATED by `toolkit infra terraform vps-firewall-tfvars` — do not edit."]
-    lines.append("# SSOT: networking.{firewall.vps_inbound,vps} in infra/config/values/common.yaml")
-    lines.append(f'server_name        = "{server_name}"')
-    lines.append(f'expected_public_ip = "{public_ip}"')
-    lines.append("inbound_rules = [")
-    for r in rules:
-        desc = str(r.get("description", "")).replace('"', '\\"')
-        lines.append(f'  {{ port = {int(r["port"])}, proto = "{r["proto"]}", description = "{desc}" }},')
-    lines.append("]")
-
-    tfvars_path.write_text("\n".join(lines) + "\n")
-    logger.success(f"Generated {tfvars_path} ({len(rules)} rules)")
+    except terraform_runner.RunnerError as exc:
+        logger.error(str(exc))
+        raise typer.Exit(2) from None
+    except ValueError as exc:  # a renderer refusing the SSOT names the key to fix
+        logger.error(f"cannot render the {root} inputs: {exc}")
+        raise typer.Exit(2) from None
+    if code != 0:
+        raise typer.Exit(code)
 
 
-@terraform_app.command("r2-tfvars")
-def tf_r2_tfvars() -> None:
-    """Render the R2 root's inputs from backup.* in common.yaml (BACKUP-057).
+@terraform_app.command("killswitch-prove")
+def tf_killswitch_prove() -> None:
+    """Prove the billing kill switch fires, end to end (AC2b).
 
-    Plaintext, like `vps-firewall-tfvars`: bucket names and the lock policy
-    belong in a reviewable diff. The Cloudflare token travels separately, as
-    TF_VAR_cloudflare_api_token in the child process's environment.
+    Stands up a scratch project, runs `verify-killswitch` against it, and tears
+    it down. The teardown runs whatever the proof did: a scratch project left
+    behind is one whose id the next run collides with, and one that sits detached
+    from billing looking like an incident.
     """
-    from toolkit.features import r2_tfvars
-    from toolkit.features.configuration import ConfigurationManager
+    from toolkit.features import terraform_runner
 
-    tfvars_path = settings.project_root / "infra" / "terraform" / "r2" / "r2.tfvars"
-    merged = ConfigurationManager("common", settings.project_root).get_merged_config()
+    terraform_dir = settings.project_root / "infra" / "terraform"
+    root = "gcp-killswitch-test"
+    if terraform_runner.run(root, "apply", terraform_dir=terraform_dir) != 0:
+        logger.error("scratch project apply failed")
+        raise typer.Exit(1)
     try:
-        rendered = r2_tfvars.render(merged)
-    except r2_tfvars.RenderError as e:
-        logger.error(str(e))
-        raise typer.Exit(1) from None
-
-    tfvars_path.write_text(rendered)
-    logger.success(f"Generated {tfvars_path}")
-
-
-@terraform_app.command("aws-tfvars")
-def tf_aws_tfvars() -> None:
-    """Generate aws.tfvars from SOPS secrets for AWS Argo CD hub."""
-    from toolkit.features.configuration import ConfigurationManager
-
-    aws_dir = settings.project_root / "infra" / "terraform" / "aws"
-    tfvars_path = aws_dir / "aws.tfvars"
-
-    cm = ConfigurationManager("common", settings.project_root)
-    merged = cm.get_merged_config()
-    aws = merged.get("aws", {})
-
-    authkey = aws.get("headscale_preauth_key", "")
-    api_key = aws.get("headscale_api_key", "")
-
-    if not authkey:
-        logger.error("aws.headscale_preauth_key not found in SOPS")
-        raise typer.Exit(1) from None
-    if not api_key:
-        logger.error("aws.headscale_api_key not found in SOPS")
-        raise typer.Exit(1) from None
-
-    tfvars_path.write_text(f'tailscale_authkey = "{authkey}"\nheadscale_api_key = "{api_key}"\n')
-    logger.success(f"Generated {tfvars_path}")
-
-
-@terraform_app.command("killswitch-test-tfvars")
-def tf_killswitch_test_tfvars() -> None:
-    """Render the scratch project's tfvars: the billing id, and the SA to grant.
-
-    The service-account email is READ FROM THE BOOTSTRAP ROOT'S OUTPUT rather
-    than retyped. Since the detach permission is per-project, a stale copy grants
-    the wrong identity and the proof then fails as a 403 — which reads as "the
-    kill switch does not work" when what failed was the test's own setup.
-    """
-    import subprocess
-
-    from toolkit.features.configuration import ConfigurationManager
-
-    boot_dir = settings.project_root / "infra" / "terraform" / "gcp-bootstrap"
-    test_dir = settings.project_root / "infra" / "terraform" / "gcp-killswitch-test"
-
-    cm = ConfigurationManager("common", settings.project_root)
-    billing_id = cm.get_merged_config().get("gcp", {}).get("billing_account_id", "")
-    if not billing_id:
-        logger.error("gcp.billing_account_id not found in SOPS")
-        raise typer.Exit(1) from None
-
-    result = subprocess.run(
-        ["terraform", f"-chdir={boot_dir}", "output", "-raw", "kill_switch_service_account"],
-        capture_output=True,
-        text=True,
-    )
-    sa = result.stdout.strip()
-    if result.returncode != 0 or not sa:
-        logger.error(
-            "could not read kill_switch_service_account from the bootstrap root. "
-            "Apply infra/terraform/gcp-bootstrap first."
-        )
-        raise typer.Exit(1) from None
-
-    # A UNIQUE project id per run, and this is a fix rather than a flourish.
-    # The variable's default was the fixed `kubelab-killswitch-proof`, whose
-    # docstring blamed collisions on "leaving one behind". Measured 2026-08-23:
-    # the collision happens even when the destroy is CLEAN. GCP keeps a deleted
-    # project in DELETE_REQUESTED for ~30 days and reserves its id throughout, so
-    # a second run inside that window fails with
-    #
-    #   Error 409: Requested entity already exists, alreadyExists
-    #
-    # A proof of the billing kill switch that can only run once a month does not
-    # verify the kill switch -- it records that the switch worked on one day. The
-    # switch had just been redeployed when this was hit, so the window where it
-    # was unverifiable was exactly the window where verification mattered.
-    #
-    # Derived from the current time rather than random, so a failed run's orphan
-    # is identifiable by when it was created. 30-char limit on GCP project ids.
-    from datetime import datetime, timezone
-
-    # SECOND granularity, and the year is dropped to pay for it. A GCP project id
-    # is capped at 30 characters, so the budget is 11 characters after the
-    # 19-character prefix: %Y%m%d%H%M is 31 (rejected at APPLY, not at plan) and
-    # %y%m%d%H%M fits but only resolves to the minute.
-    #
-    # Minute resolution is not enough, raised in review of #1310 and nearly
-    # demonstrated while writing it: the first attempt failed on the 31-character
-    # id and was retried about a minute later. A retry after a FAST failure — a
-    # validation error, a missing credential, anything before the project is
-    # created — lands in the same minute and collides with a 409, which reads as
-    # "the kill switch is broken" when nothing about it was exercised.
-    #
-    # The year is the safe thing to drop: this project lives ~90 seconds and GCP
-    # purges it after 30 days, so month-day-time identifies an orphan completely.
-    stamp = datetime.now(timezone.utc).strftime("%m%d%H%M%S")
-    project_id = f"kubelab-killswitch-{stamp}"  # 29 chars, unique per second
-
-    path = test_dir / "killswitch-test.tfvars"
-    path.write_text(
-        f'billing_account_id = "{billing_id}"\nkill_switch_service_account = "{sa}"\nproject_id = "{project_id}"\n'
-    )
-    logger.info(f"scratch project for this run: {project_id}")
-    logger.success(f"Generated {path}")
+        scratch = terraform_runner.output(root, "project_id", terraform_dir=terraform_dir)
+        if not scratch:
+            logger.error("the scratch project applied but its project_id output is empty")
+            raise typer.Exit(1)
+        tf_verify_killswitch(scratch_project=scratch)
+    finally:
+        if terraform_runner.run(root, "destroy", terraform_dir=terraform_dir) != 0:
+            logger.error(f"teardown failed: run `make gcp-killswitch-teardown`, then check for {root} orphans")
 
 
 @terraform_app.command("verify-killswitch")
@@ -2029,71 +1676,6 @@ def tf_verify_killswitch(
     logger.success(f"billing detached from {result.scratch_project} after {result.seconds_waited}s — the cap caps")
 
 
-@terraform_app.command("gcp-bootstrap-tfvars")
-def tf_gcp_bootstrap_tfvars() -> None:
-    """Render gcp-bootstrap.tfvars from SOPS. Carries exactly one secret.
-
-    This is the shape `aws-tfvars` has and the hub module turned out not to
-    need: a real SOPS value injected into Terraform and the file deleted after
-    use. The hub carries none because cloud-init reads its credentials from
-    Secret Manager; the BOOTSTRAP root predates Secret Manager existing, so its
-    one input has nowhere else to come from.
-
-    `gcp.billing_account_id` is not a credential -- nothing can be spent with it
-    absent IAM -- but this repository is public and git history is permanent, so
-    it is in SOPS rather than in a committed default.
-    """
-    from toolkit.features.configuration import ConfigurationManager
-
-    boot_dir = settings.project_root / "infra" / "terraform" / "gcp-bootstrap"
-    if not (boot_dir / "variables.tf").exists():
-        logger.error(f"no Terraform module at {boot_dir}")
-        raise typer.Exit(1) from None
-
-    cm = ConfigurationManager("common", settings.project_root)
-    billing_id = cm.get_merged_config().get("gcp", {}).get("billing_account_id", "")
-
-    if not billing_id:
-        logger.error(
-            "gcp.billing_account_id not found in SOPS. Set it with:\n"
-            "  toolkit secrets set gcp.billing_account_id --stdin --env common"
-        )
-        raise typer.Exit(1) from None
-
-    path = boot_dir / "gcp-bootstrap.tfvars"
-    path.write_text(f'billing_account_id = "{billing_id}"\n')
-    # The path, never the value: this line goes to a terminal, a CI log and a
-    # session transcript, none of which can be un-printed.
-    logger.success(f"Generated {path}")
-
-
-@terraform_app.command("gcp-tfvars")
-def tf_gcp_tfvars() -> None:
-    """Render gcp.tfvars from common.yaml. Carries no secret, by design.
-
-    `aws-tfvars` injects two SOPS values and deletes the file. This does NOT:
-    the GCP hub reads its credentials from Secret Manager at boot, so Terraform
-    carries none. What it renders instead is the config the Terraform defaults
-    currently restate -- see toolkit/features/gcp_tfvars.py for why the shape
-    survived while the content changed.
-    """
-    from toolkit.features import gcp_tfvars
-    from toolkit.features.configuration import ConfigurationManager
-
-    gcp_dir = settings.project_root / "infra" / "terraform" / "gcp"
-    if not (gcp_dir / "variables.tf").exists():
-        logger.error(f"no Terraform module at {gcp_dir}")
-        raise typer.Exit(1) from None
-
-    cm = ConfigurationManager("common", settings.project_root)
-    try:
-        path = gcp_tfvars.write(cm.get_merged_config(), gcp_dir)
-    except (KeyError, ValueError) as exc:
-        logger.error(f"cannot render gcp.tfvars: {exc}")
-        raise typer.Exit(1) from None
-    logger.success(f"Generated {path}")
-
-
 @terraform_app.command("gcp-status")
 def tf_gcp_status() -> None:
     """Describe the hub's managed instance group. Read-only."""
@@ -2127,83 +1709,6 @@ def _gcp_mig_call(action: str, *args: object) -> None:
         raise typer.Exit(1) from None
     if code != 0:
         raise typer.Exit(code) from None
-
-
-@terraform_app.command("validate")
-def tf_validate() -> None:
-    """
-    Validate and format Terraform configuration files.
-    """
-    logger.section("Terraform Configuration Validation")
-
-    try:
-        _check_terraform_setup()
-        terraform_dir = settings.terraform_dir
-
-        with logger.progress("Validating Terraform configuration...") as progress:
-            task = progress.add_task("Validation", total=3)
-
-            # Format check
-            progress.update(task, description="Checking formatting...")
-            format_result = command.run("terraform fmt -check", cwd=terraform_dir, check=False)
-            progress.advance(task)
-
-            # Syntax validation (needs provider vars for full validation)
-            progress.update(task, description="Validating syntax...")
-            validate_result = command.run("terraform validate", cwd=terraform_dir, check=False)
-            progress.advance(task)
-
-            progress.update(task, description="Finalizing...")
-            progress.advance(task)
-
-        if format_result.returncode != 0:
-            logger.warning(MESSAGES.WARNING_TERRAFORM_FORMAT_NEEDED)
-            logger.info(MESSAGES.INFO_TERRAFORM_FMT_COMMAND)
-
-        if validate_result.returncode == 0:
-            logger.success(MESSAGES.SUCCESS_TERRAFORM_VALID)
-        else:
-            raise typer.Exit(1) from None
-
-    except Exception as e:
-        logger.error(MESSAGES.ERROR_TERRAFORM_VALIDATION_FAILED.format(e))
-        raise typer.Exit(1) from None
-
-
-@terraform_app.command("plan-guard")
-def tf_plan_guard(
-    plan_json: Annotated[str, typer.Argument(help="`terraform show -json <plan>` output, or - for stdin")] = "-",
-    allow_destroy: Annotated[
-        bool, typer.Option("--allow-destroy", help="Let every delete and replace through")
-    ] = False,
-    allow: Annotated[
-        list[str] | None, typer.Option("--allow", help="An address that may be deleted or replaced")
-    ] = None,
-) -> None:
-    """Refuse a saved plan that deletes or replaces anything not allowed (TF-013).
-
-    The plan's JSON carries input variables, so it is read from stdin and never
-    printed; only addresses and actions reach the output.
-    """
-    import json
-    import sys
-
-    from toolkit.features.terraform_plan_guard import refused, summary
-
-    text = sys.stdin.read() if plan_json == "-" else Path(plan_json).read_text()
-    plan = json.loads(text)
-    counts = summary(plan)
-    logger.info(f"Plan: {counts['create']} to add, {counts['update']} to change, {counts['delete']} to destroy.")
-    blocked = refused(plan, allow_destroy=allow_destroy, allowed=frozenset(allow or ()))
-    if not blocked:
-        return
-    for change in blocked:
-        logger.error(f"refused: {change.describe()}")
-    if any(c.reason == "replace_because_tainted" for c in blocked):
-        logger.info("A tainted resource may already exist (lesson-543). Check it, then:")
-        logger.info("  make tf-untaint ROOT=<root> RES='<address>'")
-    logger.info("To delete on purpose, re-run with ALLOW_DESTROY=1.")
-    raise typer.Exit(1)
 
 
 # =============================================================================

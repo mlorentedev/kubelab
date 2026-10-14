@@ -30,7 +30,7 @@ variable "firewall_name" {
 }
 
 variable "inbound_rules" {
-  description = "Inbound allow-list. Generated from networking.firewall.vps_inbound in common.yaml by `toolkit infra terraform vps-firewall-tfvars` — do not hand-edit the tfvars, edit the SSOT."
+  description = "Inbound allow-list. Generated from networking.firewall.vps_inbound in common.yaml by `make tf-vps-firewall-plan` — edit the SSOT, never a tfvars."
   type = list(object({
     port        = number
     proto       = string
@@ -44,7 +44,7 @@ variable "inbound_rules" {
 
   validation {
     condition     = length(var.inbound_rules) > 0
-    error_message = "inbound_rules is empty. An attached firewall with no rules drops ALL inbound traffic, including SSH. Run `toolkit infra terraform vps-firewall-tfvars` to render it from common.yaml."
+    error_message = "inbound_rules is empty. An attached firewall with no rules drops ALL inbound traffic, including SSH. Run `make tf-vps-firewall-plan`, which renders it from common.yaml."
   }
 
   validation {

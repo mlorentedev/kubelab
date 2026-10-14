@@ -90,6 +90,13 @@ help:
 	@echo "  make hub-resume HUB=<kubecfg>  Resume a paused hub — the rollback for hub-pause"
 	@echo "  make rotate-spoke-token ENV=x  Rotate spoke SA token and re-register"
 	@echo ""
+	@echo "Terraform (one runner: toolkit infra terraform run <root> <action>):"
+	@echo "  make tf-<root>-plan             Plan a root: dns, r2, gcp, gcp-bootstrap, vps-firewall, aws"
+	@echo "  make tf-<root>-apply            Apply (dns/gcp/aws refuse deletes unless ALLOW_DESTROY=1)"
+	@echo "  make tf-untaint ROOT=x RES=y    Clear a taint on a resource that exists (lesson-543)"
+	@echo "  make gcp1-status|start|stop     Inspect or resize the GCP hub's instance group"
+	@echo "  make gcp-killswitch-prove       Prove the billing kill switch fires, on a scratch project"
+	@echo ""
 	@echo "Delivery (Docker Hub + gated prod promotion):"
 	@echo "  make promote-prod APP=x VERSION=y  Open the prod promotion PR (ADR-046; a human still merges it)"
 	@echo "  make registry-prune [DRY_RUN=1]    Prune stale sha-* image tags now, off the weekly schedule"
@@ -1198,35 +1205,34 @@ board-deps:
 # Kubeconfig derived from ENV — ignores shell $KUBECONFIG for deterministic behavior
 KUBECONFIG_PATH = ~/.kube/kubelab-$(ENV)-config
 
-# AWS Argo CD Hub — Terraform with SOPS-injected secrets
-# Usage: make tf-aws-plan   (dry-run)
-#        make tf-aws-apply  (create/update infrastructure)
+# Terraform. Every target below is one line into the runner,
+# `toolkit infra terraform run <root> <action>` (TF-007), which is the only code
+# in this repository that invokes `terraform`. It reads secrets from SOPS into the
+# child's environment (never argv, never a file), renders tfvars into a private
+# temp dir removed on every exit, runs `init` first, and applies in the mode the
+# root declares in toolkit/features/terraform_runner.py:
 #
-# THE CLEANUP RUNS WHETHER TERRAFORM SUCCEEDS OR FAILS, and that is the whole
-# reason for the `_exit` dance. Make aborts a recipe at the first failing line,
-# so a `rm` on its own line never ran after a failed plan — leaving `aws.tfvars`,
-# which carries `tailscale_authkey` and `headscale_api_key`, on disk indefinitely
-# with nothing reporting it. A failing plan is routine: expired credentials, an
-# API not enabled, a provider bump. Same `_exit=$$?` form the `provision` target
-# uses to restore its inventory unconditionally.
+#   guarded      dns, gcp, aws. Saves the plan, refuses any delete or replace
+#                (TF-013, lesson-543), applies that same file. ALLOW_DESTROY=1
+#                lets every delete through.
+#   interactive  r2, vps-firewall, gcp-bootstrap. Terraform shows the plan and
+#                asks. Read it: these hold lock rules, the VPS allow-list and the
+#                billing guardrails.
+#   auto         gcp-killswitch-test only, a fixture that creates and destroys itself.
+#
+# Arguments after the action pass through to Terraform.
+_TF = $(TOOLKIT) infra terraform run
+_TF_ALLOW = $(if $(filter 1,$(ALLOW_DESTROY)),--allow-destroy)
+
 .PHONY: tf-aws-plan tf-aws-apply tf-aws-destroy
 tf-aws-plan:
-	@$(POETRY) run toolkit infra terraform aws-tfvars
-	@cd infra/terraform/aws && terraform init -input=false >/dev/null && \
-		terraform plan -var-file=aws.tfvars; \
-		_exit=$$?; rm -f aws.tfvars; exit $$_exit
+	@$(_TF) aws plan
 
 tf-aws-apply:
-	@$(POETRY) run toolkit infra terraform aws-tfvars
-	@cd infra/terraform/aws && $(call _tf_guarded_apply,aws.tfvars); \
-		_exit=$$?; rm -f aws.tfvars; \
-		echo "✓ aws.tfvars cleaned (secrets in SOPS only)"; exit $$_exit
+	@$(_TF) aws apply $(_TF_ALLOW)
 
 tf-aws-destroy:
-	@$(POETRY) run toolkit infra terraform aws-tfvars
-	@cd infra/terraform/aws && terraform init -input=false >/dev/null && \
-		terraform destroy -var-file=aws.tfvars; \
-		_exit=$$?; rm -f aws.tfvars; exit $$_exit
+	@$(_TF) aws destroy
 
 # aws1 lifecycle wrappers — cancel the underlying Spot Persistent Request
 # BEFORE terraform destroy/replace. Without this, AWS keeps the request
@@ -1237,7 +1243,7 @@ tf-aws-destroy:
 # in AWS only and must be cancelled out-of-band.
 .PHONY: aws1-destroy aws1-replace _aws1-cancel-spot-request
 _aws1-cancel-spot-request:
-	@SIR=$$(cd infra/terraform/aws && terraform output -raw spot_request_id 2>/dev/null) && \
+	@SIR=$$($(_TF) aws output -- -raw spot_request_id 2>/dev/null) && \
 		if [ -n "$$SIR" ] && [ "$$SIR" != "null" ]; then \
 			echo "Cancelling Spot Persistent Request $$SIR..." && \
 			aws ec2 cancel-spot-instance-requests \
@@ -1246,7 +1252,7 @@ _aws1-cancel-spot-request:
 				--output text >/dev/null && \
 			echo "✓ Spot Request cancelled"; \
 		else \
-			echo "No spot_request_id in terraform state — skipping cancellation"; \
+			echo "No spot_request_id in the aws root's state — skipping cancellation"; \
 		fi
 
 aws1-destroy: _aws1-cancel-spot-request tf-aws-destroy
@@ -1258,11 +1264,11 @@ aws1-destroy: _aws1-cancel-spot-request tf-aws-destroy
 # a hub with no maintenance timer and no failure-notify path. The absence was
 # invisible in the direction it failed: no timer means no maintenance failures,
 # so the missing notifier was never exercised either.
+#
+# The replace is guarded like any apply, with that one address allowed: the
+# plan may replace the instance and nothing else.
 aws1-replace: _aws1-cancel-spot-request
-	@$(POETRY) run toolkit infra terraform aws-tfvars
-	@cd infra/terraform/aws && terraform init -input=false >/dev/null && \
-		terraform apply -auto-approve -var-file=aws.tfvars -replace=aws_instance.argo_hub; \
-		_exit=$$?; rm -f aws.tfvars; exit $$_exit
+	@$(_TF) aws apply --allow aws_instance.argo_hub -- -replace=aws_instance.argo_hub
 	@$(MAKE) --no-print-directory wait-node-ready NODE=aws1 ENV=hub
 	@$(MAKE) --no-print-directory provision NODE=aws1 ENV=hub
 	@$(MAKE) --no-print-directory deploy-argocd
@@ -1278,97 +1284,41 @@ aws1-replace: _aws1-cancel-spot-request
 # There is deliberately NO `tf-gcp-bootstrap-destroy`. The root sets
 # `prevent_destroy` on the project, so destroying it is a manual, deliberate act
 # rather than one keystroke next to the target that runs weekly.
-#
-# Unlike tf-gcp-*, this tfvars DOES carry a secret — the billing account id —
-# which is why it is removed after every use rather than merely tidied away.
-# `terraform init` runs first and every time, deliberately. It is idempotent and
-# takes under a second once the backend exists, and without it these targets fail
-# on a fresh clone with "Backend initialization required" — which is exactly the
-# state anyone following the runbook from scratch is in. Measured: that is how
-# the first real run of this target failed.
 .PHONY: tf-gcp-bootstrap-plan tf-gcp-bootstrap-apply
 tf-gcp-bootstrap-plan:
-	@$(TOOLKIT) infra terraform gcp-bootstrap-tfvars
-	@cd infra/terraform/gcp-bootstrap && terraform init -input=false >/dev/null && \
-		terraform plan -var-file=gcp-bootstrap.tfvars; \
-		_exit=$$?; rm -f gcp-bootstrap.tfvars; exit $$_exit
+	@$(_TF) gcp-bootstrap plan
 
 tf-gcp-bootstrap-apply:
-	@$(TOOLKIT) infra terraform gcp-bootstrap-tfvars
-	@cd infra/terraform/gcp-bootstrap && terraform init -input=false >/dev/null && \
-		terraform apply -var-file=gcp-bootstrap.tfvars; \
-		_exit=$$?; rm -f gcp-bootstrap.tfvars; exit $$_exit
+	@$(_TF) gcp-bootstrap apply
 
 # AC2b — prove the kill switch fires, against an expendable project.
 #
-# `gcp-killswitch-prove` is the whole cycle: stand up a scratch project, repoint
-# the live function at it, publish a real-schema threshold message to the real
-# topic, wait for billing to disappear, restore the target, tear the scratch
-# down. The restore is inside the toolkit command and runs unconditionally --
-# never as a later Make line, which is precisely how a cleanup gets skipped.
+# The whole cycle is one toolkit command: stand up a scratch project, repoint the
+# live function at it, publish a real-schema threshold message to the real topic,
+# wait for billing to disappear, restore the target, tear the scratch down. The
+# restore and the teardown run inside it unconditionally, never as a later Make
+# line, which is precisely how a cleanup gets skipped.
 #
-# The teardown IS conditional on nothing: `; _exit=$$?` again, because a scratch
-# project left behind is a project whose id the next run collides with, and one
-# that sits detached from billing looking like an incident.
-.PHONY: gcp-killswitch-prove
+# The teardown is kept as its own target too, for the case the cycle died so hard
+# the inline one never ran.
+.PHONY: gcp-killswitch-prove gcp-killswitch-teardown
 gcp-killswitch-prove:
-	@$(TOOLKIT) infra terraform killswitch-test-tfvars
-	@cd infra/terraform/gcp-killswitch-test && terraform init -input=false >/dev/null && \
-		terraform apply -auto-approve -var-file=killswitch-test.tfvars >/dev/null; \
-		_exit=$$?; rm -f killswitch-test.tfvars; \
-		if [ $$_exit -ne 0 ]; then echo "scratch project apply failed"; exit $$_exit; fi
-	@_scratch=$$(cd infra/terraform/gcp-killswitch-test && terraform output -raw project_id) && \
-		$(TOOLKIT) infra terraform verify-killswitch --scratch "$$_scratch"; \
-		_exit=$$?; \
-		$(TOOLKIT) infra terraform killswitch-test-tfvars >/dev/null && \
-		( cd infra/terraform/gcp-killswitch-test && \
-		  terraform destroy -auto-approve -var-file=killswitch-test.tfvars >/dev/null; \
-		  rm -f killswitch-test.tfvars ); \
-		exit $$_exit
+	@$(TOOLKIT) infra terraform killswitch-prove
 
-# Teardown is INLINED above rather than delegated with $(MAKE), and that was
-# measured: make runs sub-makes even under `-n`, so `make -n gcp-killswitch-prove`
-# invoked the real teardown. A dry run that destroys something is worse than no
-# dry run, because it is the command people reach for to find out what a target
-# does.
-#
-# Kept as its own target too, for the case the cycle died so hard the inline
-# teardown never ran.
-.PHONY: gcp-killswitch-teardown
 gcp-killswitch-teardown:
-	@$(TOOLKIT) infra terraform killswitch-test-tfvars
-	@cd infra/terraform/gcp-killswitch-test && \
-		terraform destroy -auto-approve -var-file=killswitch-test.tfvars; \
-		_exit=$$?; rm -f killswitch-test.tfvars; exit $$_exit
+	@$(_TF) gcp-killswitch-test destroy
 
-# GCP Argo CD Hub — Terraform driven from the SSOT, not from SOPS.
-#
-# The tfvars carries NO secret and that is the whole difference from tf-aws-*:
-# the hub reads its credentials from Secret Manager at boot, so Terraform never
-# holds one. It is still removed after every use, because a generated file left
-# behind is a second declaration of the SSOT that `terraform plan` would silently
-# prefer to the current one.
-# Cleanup is unconditional here for a different reason than tf-aws-*: this file
-# holds no secret, but a rendered tfvars left behind after a failed plan is a
-# SECOND declaration of the SSOT, and the next `terraform plan` would silently
-# prefer the stale one to the current config.
+# GCP Argo CD Hub — Terraform driven from the SSOT. Carries no secret: the hub
+# reads its credentials from Secret Manager at boot.
 .PHONY: tf-gcp-plan tf-gcp-apply tf-gcp-destroy
 tf-gcp-plan:
-	@$(TOOLKIT) infra terraform gcp-tfvars
-	@cd infra/terraform/gcp && terraform init -input=false >/dev/null && \
-		terraform plan -var-file=gcp.tfvars; \
-		_exit=$$?; rm -f gcp.tfvars; exit $$_exit
+	@$(_TF) gcp plan
 
 tf-gcp-apply:
-	@$(TOOLKIT) infra terraform gcp-tfvars
-	@cd infra/terraform/gcp && $(call _tf_guarded_apply,gcp.tfvars); \
-		_exit=$$?; rm -f gcp.tfvars; exit $$_exit
+	@$(_TF) gcp apply $(_TF_ALLOW)
 
 tf-gcp-destroy:
-	@$(TOOLKIT) infra terraform gcp-tfvars
-	@cd infra/terraform/gcp && terraform init -input=false >/dev/null && \
-		terraform destroy -var-file=gcp.tfvars; \
-		_exit=$$?; rm -f gcp.tfvars; exit $$_exit
+	@$(_TF) gcp destroy
 
 # gcp1 lifecycle — a managed instance group, which is a different animal from
 # aws1's Spot request and needs none of its out-of-band cancellation. Resizing
@@ -1411,54 +1361,27 @@ wait-node-ready:
 	$(eval _ENV := $(or $(filter staging prod hub,$(ENV)),staging))
 	@$(TOOLKIT) infra ansible run -p wait-node-ready -e $(_ENV) -l $(NODE)
 
-# Terraform DNS (Cloudflare) — SOPS-injected token
-# THE TOKEN GOES THROUGH THE ENVIRONMENT, NEVER THROUGH argv.
-#
-# These targets used `-var="cloudflare_api_token=$$TOKEN"`, which puts a live
-# Cloudflare API token in the process's command line -- readable by any user on
-# the machine through `ps`, and captured by anything that logs command lines.
-# Terraform reads `TF_VAR_<name>` from the environment, which is not in argv.
-#
-# Same rule the notification path already follows for the same reason
-# (ANSIBLE-038 f4): a credential belongs on stdin or in the environment of the
-# process that consumes it, never as an argument.
 # SEC-006. Plan is safe and reversible; apply CREATES a firewall and ATTACHES it
-# to the running production VPS. There is deliberately no -auto-approve on the
-# apply: an allow-list mistake here is not a degraded service, it is an operator
-# locked out of a host whose recovery path (Headscale) is on that same host.
-# Read the plan. Hetzner's web console is the only way back in.
-#
-# The token goes into the child process's environment, never an argument
-# (ANSIBLE-038 f4), matching tf-dns-* below. The allow-list is NOT a secret and
-# comes from common.yaml via the generator, so it shows up in the diff.
+# to the running production VPS. An allow-list mistake here is not a degraded
+# service, it is an operator locked out of a host whose recovery path
+# (Headscale) is on that same host. Read the plan. Hetzner's web console is the
+# only way back in. The allow-list is NOT a secret and comes from common.yaml,
+# so it shows up in the diff.
 .PHONY: tf-vps-firewall-plan tf-vps-firewall-apply
 tf-vps-firewall-plan:
-	@$(POETRY) run toolkit infra terraform vps-firewall-tfvars
-	@TF_VAR_hetzner_api_token=$$($(POETRY) run toolkit secrets show hetzner.api_key --env common 2>/dev/null | tail -1) && \
-		export TF_VAR_hetzner_api_token && \
-		cd infra/terraform/vps-firewall && terraform init -input=false >/dev/null && \
-		terraform plan
+	@$(_TF) vps-firewall plan
 
 tf-vps-firewall-apply:
-	@$(POETRY) run toolkit infra terraform vps-firewall-tfvars
-	@TF_VAR_hetzner_api_token=$$($(POETRY) run toolkit secrets show hetzner.api_key --env common 2>/dev/null | tail -1) && \
-		export TF_VAR_hetzner_api_token && \
-		cd infra/terraform/vps-firewall && terraform init -input=false >/dev/null && \
-		terraform apply
+	@$(_TF) vps-firewall apply
 
 # BACKUP-057: one R2 bucket per node under a lock no node token can change.
-# Same shape as tf-vps-firewall-*: the token from SOPS goes into the child
-# process's environment, never argv; the tfvars is plaintext policy rendered from
-# backup.* in common.yaml. It is removed after every run, failed or not, so a
-# stale render can never be a second declaration of the SSOT.
-#
-# SCRATCH=1 plans or applies ONLY the scratch bucket and its one-day lock, the
-# measurement pair in specs/BACKUP-057/tasks.md. No -auto-approve on apply: a
-# lock rule cannot be lifted by a node, so read the plan before giving it one.
-#
 # The token is cloudflare.r2_admin_token, not the DNS cloudflare.api_token: the
 # DNS token was refused with a 403 on the R2 bucket API (2026-10-02), and the
 # token that can lift a lock rule stays out of everything that only needs DNS.
+#
+# SCRATCH=1 plans or applies ONLY the scratch bucket and its one-day lock, the
+# measurement pair in specs/BACKUP-057/tasks.md. A lock rule cannot be lifted by
+# a node, so read the plan before giving it one.
 #
 # SCRATCH=1 SCRATCH_DESTROY=1 is the teardown: the same targets with scratch
 # turned off, so terraform removes the lock and then the bucket. The bucket
@@ -1469,24 +1392,14 @@ ifeq ($(SCRATCH),)
 $(error SCRATCH_DESTROY=1 needs SCRATCH=1, so the apply stays targeted at the scratch pair)
 endif
 endif
-_TF_R2_SCOPE = $(if $(SCRATCH),-var=scratch=$(if $(SCRATCH_DESTROY),false,true) -target=cloudflare_r2_bucket.scratch -target=cloudflare_r2_bucket_lock.scratch)
+_TF_R2_SCOPE = $(if $(SCRATCH),-- -var=scratch=$(if $(SCRATCH_DESTROY),false,true) -target=cloudflare_r2_bucket.scratch -target=cloudflare_r2_bucket_lock.scratch)
 
 .PHONY: tf-r2-plan tf-r2-apply
 tf-r2-plan:
-	@$(POETRY) run toolkit infra terraform r2-tfvars
-	@TF_VAR_cloudflare_api_token=$$($(POETRY) run toolkit secrets show cloudflare.r2_admin_token --env common 2>/dev/null | tail -1) && \
-		export TF_VAR_cloudflare_api_token && \
-		cd infra/terraform/r2 && terraform init -input=false >/dev/null && \
-		terraform plan -var-file=r2.tfvars $(_TF_R2_SCOPE); \
-		_exit=$$?; rm -f r2.tfvars; exit $$_exit
+	@$(_TF) r2 plan $(_TF_R2_SCOPE)
 
 tf-r2-apply:
-	@$(POETRY) run toolkit infra terraform r2-tfvars
-	@TF_VAR_cloudflare_api_token=$$($(POETRY) run toolkit secrets show cloudflare.r2_admin_token --env common 2>/dev/null | tail -1) && \
-		export TF_VAR_cloudflare_api_token && \
-		cd infra/terraform/r2 && terraform init -input=false >/dev/null && \
-		terraform apply -var-file=r2.tfvars $(_TF_R2_SCOPE); \
-		_exit=$$?; rm -f r2.tfvars; exit $$_exit
+	@$(_TF) r2 apply $(_TF_R2_SCOPE)
 
 # The only check that can tell an APPLIED firewall from a DECLARED one. The
 # token goes into pytest's environment and nowhere else -- never printed, never
@@ -1497,42 +1410,20 @@ test-vps-firewall-live:
 		export HCLOUD_TOKEN && \
 		$(POETRY) run pytest tests/test_vps_cloud_firewall_is_attached.py -m infra -v --no-cov
 
-# TF-013: the path every unattended apply takes. It saves the plan, refuses
-# one that deletes or replaces anything (ALLOW_DESTROY=1 lets it through), then
-# applies that same file, so what was checked is what runs. The plan holds the
-# input variables, token included: it lives in a mktemp directory removed on
-# every exit (a subshell, so the trap fires when the apply ends), and its JSON
-# is piped to the guard and never written. Run it from the root's directory.
-# aws1-replace and the killswitch test keep -auto-approve: they ask for their
-# replace or destroy by name.
-# $(1): var file. $(2): extra plan arguments.
-define _tf_guarded_apply
-( _p=$$(mktemp -d) && trap 'rm -rf "$$_p"' EXIT && \
-	terraform init -input=false >/dev/null && \
-	terraform plan -input=false -out="$$_p/plan" -var-file=$(1) $(2) && \
-	terraform show -json "$$_p/plan" | $(TOOLKIT) infra terraform plan-guard - $(if $(filter 1,$(ALLOW_DESTROY)),--allow-destroy) && \
-	terraform apply -input=false "$$_p/plan" )
-endef
-
 # State only: clear the taint on a resource that exists and matches the config,
 # which a create that timed out but landed leaves behind (lesson-543). Applying
 # instead would delete it and create it again.
 .PHONY: tf-untaint
 tf-untaint:
 	@test -n "$(ROOT)" -a -n "$(RES)" || { echo "usage: make tf-untaint ROOT=<dns|gcp|aws|...> RES='<address>'"; exit 2; }
-	@cd infra/terraform/$(ROOT) && terraform init -input=false >/dev/null && terraform untaint '$(RES)'
+	@$(_TF) $(ROOT) untaint -- '$(RES)'
 
 .PHONY: tf-dns-plan tf-dns-apply
 tf-dns-plan:
-	@TF_VAR_cloudflare_api_token=$$($(POETRY) run toolkit secrets show cloudflare.api_token --env common 2>/dev/null | tail -1) && \
-		export TF_VAR_cloudflare_api_token && \
-		cd infra/terraform/dns && terraform init -input=false >/dev/null && \
-		terraform plan -var-file=dns.tfvars
+	@$(_TF) dns plan
 
 tf-dns-apply:
-	@TF_VAR_cloudflare_api_token=$$($(POETRY) run toolkit secrets show cloudflare.api_token --env common 2>/dev/null | tail -1) && \
-		export TF_VAR_cloudflare_api_token && \
-		cd infra/terraform/dns && $(call _tf_guarded_apply,dns.tfvars)
+	@$(_TF) dns apply $(_TF_ALLOW)
 
 # sync-homepage regenerates config files from SSOT. Deployment happens via
 # `make deploy-k8s` — configMapGenerator hash suffix auto-triggers rolling update.

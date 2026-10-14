@@ -41,8 +41,8 @@ of these will look locally reasonable:
   hub. Adding autohealing later requires `initial_delay_sec` no shorter than the
   measured bootstrap time, so the guard here is "not silently present".
 
-- **No credential literal in any `.tf`** -- tfvars is rendered from SOPS and
-  deleted after every use (`toolkit infra terraform gcp-tfvars`). A key pasted
+- **No credential literal in any `.tf`** -- the runner renders tfvars from
+  common.yaml into a private temp dir (`toolkit infra terraform run gcp`). A key pasted
   into a `.tf` would be committed to a public repository.
 
 See `specs/GCP-001-hub-cloud-provider-migration/` for the full plan.
@@ -590,8 +590,8 @@ class TestNoCredentialLiterals:
             for pattern, what in self._SECRET_SHAPES:
                 assert not re.search(pattern, body), (
                     f"{path.name} contains what looks like {what}. Credentials "
-                    f"reach Terraform through `toolkit infra terraform gcp-tfvars`, "
-                    f"which renders from SOPS and is deleted after every use."
+                    f"reach Terraform through the runner (`toolkit infra terraform run`), "
+                    f"as TF_VAR_* in the child process's environment."
                 )
 
     def test_sensitive_variables_are_marked_sensitive(self, tf: str) -> None:

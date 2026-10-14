@@ -51,42 +51,42 @@ resource "hcloud_firewall" "vps" {
   name = "${var.project_name}-vps"
 
   rule {
-    direction = "in"
-    protocol  = "tcp"
-    port      = "22"
-    source_ips = ["0.0.0.0/0", "::/0"]
+    direction   = "in"
+    protocol    = "tcp"
+    port        = "22"
+    source_ips  = ["0.0.0.0/0", "::/0"]
     description = "SSH"
   }
 
   rule {
-    direction = "in"
-    protocol  = "tcp"
-    port      = "80"
-    source_ips = ["0.0.0.0/0", "::/0"]
+    direction   = "in"
+    protocol    = "tcp"
+    port        = "80"
+    source_ips  = ["0.0.0.0/0", "::/0"]
     description = "HTTP"
   }
 
   rule {
-    direction = "in"
-    protocol  = "tcp"
-    port      = "443"
-    source_ips = ["0.0.0.0/0", "::/0"]
+    direction   = "in"
+    protocol    = "tcp"
+    port        = "443"
+    source_ips  = ["0.0.0.0/0", "::/0"]
     description = "HTTPS"
   }
 
   rule {
-    direction = "in"
-    protocol  = "udp"
-    port      = "3478"
-    source_ips = ["0.0.0.0/0", "::/0"]
+    direction   = "in"
+    protocol    = "udp"
+    port        = "3478"
+    source_ips  = ["0.0.0.0/0", "::/0"]
     description = "Headscale STUN"
   }
 
   rule {
-    direction = "in"
-    protocol  = "udp"
-    port      = "41641"
-    source_ips = ["0.0.0.0/0", "::/0"]
+    direction   = "in"
+    protocol    = "udp"
+    port        = "41641"
+    source_ips  = ["0.0.0.0/0", "::/0"]
     description = "Tailscale"
   }
 }

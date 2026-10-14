@@ -50,7 +50,7 @@ kubelab services list            # List available
 kubelab config generate          # Generate configs from templates
 kubelab config validate          # Validate configs
 kubelab credentials generate     # Generate credentials
-kubelab infra terraform plan     # Terraform plan
+kubelab infra terraform run dns plan  # Terraform plan (any root; see make help)
 kubelab dashboard                # Terminal dashboard
 kubelab monitoring backup         # Pull Uptime Kuma DB
 kubelab monitoring restore        # Push DB to RPi3

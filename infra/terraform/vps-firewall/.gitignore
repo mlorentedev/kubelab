@@ -5,6 +5,6 @@
 *.tfplan
 .terraform.lock.hcl
 
-# Generated from common.yaml by `toolkit infra terraform vps-firewall-tfvars`.
-# Never hand-edited, never committed — the SSOT is networking.firewall.vps_inbound.
+# The pre-runner Make targets rendered vps-firewall.auto.tfvars here. The runner
+# renders into a private temp dir instead; the SSOT is networking.firewall.vps_inbound.
 *.tfvars

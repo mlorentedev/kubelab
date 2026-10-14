@@ -39,44 +39,32 @@ Edit `services.json`:
 }
 ```
 
-Then: `terraform plan -var-file=prod.tfvars` and `terraform apply -var-file=prod.tfvars`.
+Then `make tf-dns-plan`, and `make tf-dns-apply` once the plan reads right.
 
 ## Credentials
 
-The Cloudflare API token is stored in SOPS (`infra/config/secrets/common.enc.yaml` under `cloudflare.api_token`) and injected via toolkit as `TF_VAR_cloudflare_api_token`.
+The Cloudflare API token is stored in SOPS (`infra/config/secrets/common.enc.yaml` under `cloudflare.api_token`) and reaches Terraform as `TF_VAR_cloudflare_api_token` in the runner's child process only.
 
 Required token permissions:
 - Zone: DNS: Edit
 - Zone: Zone: Read
 
-## Toolkit integration
+## Running it
 
 ```bash
-# Validate config
-toolkit infra terraform init prod
-
-# Plan changes
-toolkit infra terraform plan --env prod
-
-# Apply changes
-toolkit infra terraform apply --env prod
-
-# Destroy (with confirmation)
-toolkit infra terraform destroy --env prod
+make tf-dns-plan     # init + plan
+make tf-dns-apply    # plan, refuse any destroy/replace, then apply that plan
 ```
 
-The toolkit automatically extracts the Cloudflare API token from SOPS and passes it as `TF_VAR_cloudflare_api_token`.
+Both go through `toolkit infra terraform run dns <action>`
+(`toolkit/features/terraform_runner.py`), the only caller of `terraform` in this
+repository (`tests/test_terraform_single_entry.py`). It reads the token from SOPS
+and hands it to the child process as `TF_VAR_cloudflare_api_token`; nothing is
+exported to your shell or written to disk. A destroy the plan proposes is refused
+unless you pass `ALLOW_DESTROY=1`.
 
-## Manual usage
-
-```bash
-cd infra/terraform/dns
-export TF_VAR_cloudflare_api_token="$(sops -d ../../config/secrets/common.enc.yaml | grep api_token | awk '{print $2}')"
-
-terraform init
-terraform plan -var-file=prod.tfvars
-terraform apply -var-file=prod.tfvars
-```
+Do not run `terraform` by hand here, and never decrypt the whole SOPS file to
+pull one value out of it: that prints every secret in it to the terminal.
 
 ## Records managed
 
@@ -102,9 +90,9 @@ zone, declared as a single `for_each` resource — `records_kubelab.tf` also add
 python3 -c "import json;[print(r['zone'],r['name'],r['proxied']) for r in json.load(open('dns/services.json'))]"
 
 # What Terraform will manage, counted by the module itself:
-terraform output kubelab_record_count      # root + www + kubelab.live services
-terraform output mlorente_record_count     # root + mlorente.dev services
-terraform output kubelab_service_urls      # the resulting https:// names
+toolkit infra terraform run dns output -- kubelab_record_count   # root + www + kubelab.live services
+toolkit infra terraform run dns output -- mlorente_record_count  # root + mlorente.dev services
+toolkit infra terraform run dns output -- kubelab_service_urls   # the resulting https:// names
 ```
 
 `mlorente.dev` currently declares **no** service entries — the module manages its

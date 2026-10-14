@@ -4,11 +4,8 @@
 # No Elastic IP — temporary public IP used only for Tailscale bootstrap.
 # Instance is disposable: destroy + apply → cloud-init → K3s → Argo resyncs.
 #
-# Usage:
-#   cd infra/terraform/aws
-#   terraform init
-#   terraform plan -var-file=aws.tfvars
-#   terraform apply -var-file=aws.tfvars
+# Usage: make tf-aws-plan / tf-aws-apply (the runner passes the Headscale keys
+# from SOPS as TF_VAR_*; nothing is written to a tfvars).
 #
 # After apply:
 #   1. Wait ~5 min for cloud-init (K3s + Tailscale registration)

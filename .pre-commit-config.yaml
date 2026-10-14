@@ -73,6 +73,14 @@ repos:
   # Custom checks for project consistency
   - repo: local
     hooks:
+      # Nothing checked Terraform formatting, and compute/ drifted unnoticed. CI
+      # has no terraform yet; the CI gate (fmt, validate, tflint) is TF-016 #2228.
+      - id: terraform-fmt
+        name: terraform fmt -check
+        entry: terraform fmt -check -recursive infra/terraform
+        language: system
+        files: \.tf$
+        pass_filenames: false
       # Check for env file commits
       - id: check-env-files
         name: Safety net - prevent accidental .env file commits
