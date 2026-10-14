@@ -68,6 +68,11 @@ def test_no_test_mounts_pytests_tmp_path_into_a_container() -> None:
     Read per function rather than per mount argument, so a path derived from
     `tmp_path` and mounted through another name (`tests = tmp_path / ...`, then
     `-v f"{tests}:..."`) counts too.
+
+    Its boundary: a function counts as mounting only when it holds the `["docker", ...]`
+    list, a `-v` constant and a `subprocess.*` call itself. A mount built in a helper,
+    spelled `--volume`, or run through `os.system` is not seen; the Mac run, where an
+    unshared mount fails loudly, is the backstop for those.
     """
     offenders = [
         name
