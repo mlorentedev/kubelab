@@ -38,3 +38,15 @@ def run(query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
     if data.get("errors"):
         raise GraphQLError(json.dumps(data["errors"])[:500])
     return data["data"]
+
+
+def split_repo(repo: str, error: type[Exception] = GraphQLError) -> tuple[str, str]:
+    """`owner/name` as its two halves, or `error` naming the bad value (#1448).
+
+    The caller passes its own exception type so a bad `--repo` takes the same
+    exit path as every other failure of that command, not a bare stack trace.
+    """
+    owner, sep, name = repo.partition("/")
+    if not (sep and owner and name):
+        raise error(f"invalid repo {repo!r}: expected owner/name")
+    return owner, name

@@ -68,7 +68,7 @@ Each OIDC-enabled service requires a client registration in Authelia's configura
 ### JWKS Key Management
 
 - RSA 4096-bit key pair required per environment
-- Private key stored in SOPS (`apps.services.security.authelia.oidc_jwks_rsa_private_key`)
+- Private key stored in SOPS (`apps.services.security.authelia.oidc_jwks_private_key`)
 - Mounted as a K8s Secret and referenced by Authelia's OIDC configuration
 - Generated via `make secrets-jwks ENV=<environment>`
 

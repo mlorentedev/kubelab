@@ -72,11 +72,10 @@ infra/config/secrets/
 ├── common.enc.yaml     # Cross-env (Cloudflare, DockerHub, Gmail, Hetzner, webhooks)
 ├── dev.enc.yaml        # Dev-specific
 ├── staging.enc.yaml    # Staging-specific
-├── prod.enc.yaml       # Prod-specific
-├── dev.oidc-jwks.pem   # OIDC signing key (dev)
-├── staging.oidc-jwks.pem  # OIDC signing key (staging)
-└── prod.oidc-jwks.pem  # OIDC signing key (prod)
+└── prod.enc.yaml       # Prod-specific
 ```
+
+There is no `*.oidc-jwks.pem`. The OIDC signing key is `apps.services.security.authelia.oidc_jwks_private_key` in each env's `.enc.yaml` (SEC-032). A pem left over in this directory is a stale copy: it is not what Authelia serves, and it can be deleted.
 
 **Merge order**: `common.yaml → {env}.yaml → common.enc.yaml → {env}.enc.yaml`
 

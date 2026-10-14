@@ -82,7 +82,7 @@ master branch  → kubectl apply -k overlays/prod → K3s VPS
 - Architecture Decision Records — all ADRs
 - Infrastructure docs — DNS and network topology
 - [Service catalog](service-catalog.md)
-- [Current architecture state](current-state-2026-03-22.md)
+- [Architecture snapshot of 2026-03-22](current-state-2026-03-22.md) (historical)
 - [Platform architecture diagram](diagram.md)
 - [Versioning strategy](versioning-strategy.md)
 - [DASH-001: Homepage cockpit](dash-001-homepage-cockpit.md)

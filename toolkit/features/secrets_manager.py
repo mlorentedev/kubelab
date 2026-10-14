@@ -2055,10 +2055,10 @@ class SecretsManager:
     # ── JWKS ─────────────────────────────────────────────────────────────────
 
     def generate_jwks(self, env: str) -> str:
-        """Generate OIDC JWKS RSA key and store in SOPS vault.
+        """Generate the OIDC JWKS RSA key and store it in SOPS, its only store.
 
-        Also saves the PEM file for reference.
-        Returns the PEM key string.
+        No copy is written to disk: a second store that nothing reconciles
+        drifts from the key Authelia serves (SEC-032). Returns the PEM string.
         """
         cm = self._credentials_manager()
         pem_key = cm.generate_jwks_rsa_key(AUTHELIA_CONFIG.RSA_KEY_SIZE)
@@ -2071,14 +2071,6 @@ class SecretsManager:
         else:
             logger.error(f"Failed to store JWKS key in {env}.enc.yaml")
             return ""
-
-        # Also save PEM file for reference
-        pem_path = (
-            self.project_root / PATH_STRUCTURES.CONFIG_SECRETS_DIR / AUTHELIA_CONFIG.JWKS_FILE_TEMPLATE.format(env=env)
-        )
-        pem_path.parent.mkdir(parents=True, exist_ok=True)
-        pem_path.write_text(pem_key)
-        logger.info(f"PEM file saved: {pem_path}")
 
         return pem_key
 

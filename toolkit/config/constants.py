@@ -558,7 +558,6 @@ class AutheliaConfig:
     RSA_KEY_SIZE: int = 4096
 
     # Secrets file templates
-    JWKS_FILE_TEMPLATE: str = "{env}.oidc-jwks.pem"
     ENCRYPTED_SECRETS_TEMPLATE: str = "{env}.enc.yaml"
 
 

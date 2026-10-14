@@ -14,8 +14,12 @@ services:
     volumes:
       - ../../../../config/authelia/generated/${ENVIRONMENT}/configuration.yml:/config/configuration.yml:ro
       - ../../../../config/authelia/generated/${ENVIRONMENT}/users_database.yml:/config/users_database.yml:ro
-      - ../../../../config/secrets/${ENVIRONMENT}.oidc-jwks.pem:/config/secrets/oidc-jwks.pem:ro
       - authelia_data:/config/data
+    secrets:
+      # SOPS is the key's only store (SEC-032): the toolkit exports it as this
+      # variable and Compose writes it inside the container, never on the host.
+      - source: oidc_jwks_private_key
+        target: /config/secrets/oidc-jwks.pem
     networks:
       - default
     healthcheck:
@@ -48,6 +52,10 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+secrets:
+  oidc_jwks_private_key:
+    environment: APPS_SERVICES_SECURITY_AUTHELIA_OIDC_JWKS_PRIVATE_KEY
 
 volumes:
   authelia_data:
