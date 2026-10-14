@@ -1567,7 +1567,7 @@ def test_gitea_s_event_expansion_is_not_read_as_a_failed_write(
 
     stored = configurator._hooks[("personal", "resume")][0]["events"]
     assert len(stored) > len(DECLARED_WEBHOOK.events), "the fake must expand, or this asserts nothing"
-    assert report.repos_hooked == ["personal/resume"]
+    assert report.repos_hooked == [("personal/resume", DECLARED_WEBHOOK.url)]
     assert report.ok
 
 
@@ -1637,7 +1637,7 @@ def test_the_report_distinguishes_hooked_from_configured(monkeypatch: pytest.Mon
         configurator=configurator,
     )
 
-    assert report.repos_hooked == ["personal/resume"]
+    assert report.repos_hooked == [("personal/resume", DECLARED_WEBHOOK.url)]
     assert report.repos_configured == [] and report.repos_created == []
 
 
@@ -1700,7 +1700,7 @@ def test_each_declared_hook_is_written_with_its_own_secret(monkeypatch: pytest.M
     )
 
     assert report.ok
-    assert report.repos_hooked.count("personal/resume") == 2
+    assert report.repos_hooked == [("personal/resume", DECLARED_WEBHOOK.url), ("personal/resume", PR_AGENT_WEBHOOK.url)]
     n8n_call = next(
         c for c in configurator.calls if c[0] == "create_hook" and c[2]["config"]["url"] == DECLARED_WEBHOOK.url
     )
@@ -1732,7 +1732,7 @@ def test_a_missing_secret_for_one_hook_does_not_block_the_other() -> None:
     )
 
     assert not report.ok
-    assert report.repos_hooked == ["personal/resume"], "n8n must still be written"
+    assert report.repos_hooked == [("personal/resume", DECLARED_WEBHOOK.url)], "n8n must still be written"
     failure = next(msg for _target, msg in report.failures if PR_AGENT_SECRET_KEY in msg)
     assert PR_AGENT_WEBHOOK.url in failure
 
@@ -1781,7 +1781,7 @@ def test_the_equality_mode_hook_converges_a_live_surplus_in_one_write(monkeypatc
     )
 
     assert report.ok, "a hook the equality mode can converge must not be reported as a failure"
-    assert report.repos_hooked == ["personal/resume"]
+    assert report.repos_hooked == [("personal/resume", PR_AGENT_WEBHOOK.url)]
     stored_events = set(configurator._hooks[("personal", "resume")][0]["events"])
     assert "pull_request_comment" not in stored_events, "the surplus must be gone after the write, not merely reported"
 
