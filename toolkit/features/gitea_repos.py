@@ -1110,11 +1110,17 @@ class HookDeclaration:
     because this receiver (PR-Agent, TOOL-080) acts on events a floor would let
     through unnoticed -- lesson-462. Validated eagerly so a typo'd value fails at
     load time, not the first time a plan is formatted.
+
+    `verify_hint` IS HOW TO PROVE THIS HOOK DELIVERS, printed after a run that
+    wrote it (#1849). Registered is not delivering: Gitea never returns the
+    secret, so only a downstream effect proves it, and that effect is the
+    receiver's own. Kept on the declaration because the CLI cannot know it.
     """
 
     spec: WebhookSpec
     secret_key: str
     event_comparison: str = "floor"
+    verify_hint: str = ""
 
     def __post_init__(self) -> None:
         if self.event_comparison not in {"floor", "equality"}:
@@ -1162,11 +1168,11 @@ def load_webhooks(common: Mapping[str, Any]) -> tuple[HookDeclaration, ...]:
     URL, because `execute` looks a `WebhookChange` up in `{hook.spec.url: hook}` and
     a duplicate would silently shadow one of the two secrets.
 
-    EACH ENTRY IS A `WebhookSpec` BLOCK PLUS `secret_key` (required) AND
-    `event_comparison` (optional, default `"floor"`) -- see `HookDeclaration`. The
-    two extra keys are popped before `_parse_webhook_block` sees the rest, so an
+    EACH ENTRY IS A `WebhookSpec` BLOCK PLUS `secret_key` (required),
+    `event_comparison` (optional, default `"floor"`) AND `verify_hint` (optional)
+    -- see `HookDeclaration`. The extra keys are popped before `_parse_webhook_block` sees the rest, so an
     unknown key in the REMAINING fields is still refused exactly as `load_webhook`
-    refuses one, and only these two names are special.
+    refuses one, and only these three names are special.
 
     BACKWARD COMPATIBLE WITH THE SINGULAR BLOCK, and this is the branch that makes
     it so: when `gitea.webhooks` is absent, this reads `gitea.webhook` through the
@@ -1204,7 +1210,8 @@ def load_webhooks(common: Mapping[str, Any]) -> tuple[HookDeclaration, ...]:
             )
         secret_key = str(block["secret_key"])
         event_comparison = str(block.get("event_comparison", "floor"))
-        spec_block = {k: v for k, v in block.items() if k not in {"secret_key", "event_comparison"}}
+        verify_hint = " ".join(str(block.get("verify_hint", "")).split())
+        spec_block = {k: v for k, v in block.items() if k not in {"secret_key", "event_comparison", "verify_hint"}}
         spec = _parse_webhook_block(spec_block, label=f"webhooks[{index}]")
         if spec.url in seen_urls:
             raise ValueError(
@@ -1213,8 +1220,19 @@ def load_webhooks(common: Mapping[str, Any]) -> tuple[HookDeclaration, ...]:
                 f"leave one of the two secrets unreachable by silently shadowing the other."
             )
         seen_urls[spec.url] = index
-        declared.append(HookDeclaration(spec=spec, secret_key=secret_key, event_comparison=event_comparison))
+        declared.append(
+            HookDeclaration(
+                spec=spec, secret_key=secret_key, event_comparison=event_comparison, verify_hint=verify_hint
+            )
+        )
     return tuple(declared)
+
+
+def verify_hints(hooked: Iterable[tuple[str, str]], declared_webhooks: Sequence[HookDeclaration]) -> list[str]:
+    """The `verify_hint` of every hook a run wrote, each once, in declaration order (#1849)."""
+    written = {url for _, url in hooked}
+    hints = [hook.verify_hint for hook in declared_webhooks if hook.spec.url in written and hook.verify_hint]
+    return list(dict.fromkeys(hints))
 
 
 def declared_full_names(declaration: Mapping[str, Iterable[RepoSpec]]) -> set[str]:
@@ -1674,7 +1692,8 @@ class ExecutionReport:
     teams_ensured: list[str] = field(default_factory=list)
     review_teams_ensured: list[str] = field(default_factory=list)
     repos_configured: list[str] = field(default_factory=list)
-    repos_hooked: list[str] = field(default_factory=list)
+    # `(full_name, url)`: a repository carries one hook per declaration (TOOL-080).
+    repos_hooked: list[tuple[str, str]] = field(default_factory=list)
     failures: list[tuple[str, str]] = field(default_factory=list)
 
     @property
@@ -2187,7 +2206,7 @@ def execute(
             ensure_webhook(
                 configurator, hook_change, declaration.spec, secret, event_comparison=declaration.event_comparison
             )
-            report.repos_hooked.append(full_name)
+            report.repos_hooked.append((full_name, hook_change.url))
         except Exception as exc:  # noqa: BLE001 - every failure is recorded, whatever its type
             _handle_failure(report, f"hook {full_name}", exc)
 
