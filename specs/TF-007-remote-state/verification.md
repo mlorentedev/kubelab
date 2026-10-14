@@ -26,7 +26,10 @@ PR 1a covers AC3 and AC4; the rest land with PR 1b.
 
 - PR 1 was split into 1a (runner, local backend kept) and 1b (R2 backend), so the refactor is proven on the state it already has before the state moves.
 - `aws1-replace` moved from `-auto-approve` to the guarded apply with an explicit `--allow aws_instance.argo_hub`.
-- `compute` is not registered in the runner: it is DR-only and its deployer key is TF-018.
+- `compute` is registered (`make tf-compute-plan|apply`), after review of #2236: an unregistered root could only be run by hand, around the secret handling. It stays DR-only; its deployer key is TF-018.
+- The DNS root's `vps_ip` is rendered from `networking.vps.public_ip` rather than typed into `dns.tfvars` a second time. The two values were equal (162.55.57.175), so the live plan is unchanged by construction.
+- The child environment is an allowlist: every inherited `TF_*` is dropped except the plugin cache (lesson-563).
+- `gcp-killswitch-prove` tears down after a failed apply too, and fails when the teardown fails.
 - A `terraform fmt` pre-commit hook was added because `compute/main.tf` had drifted unnoticed; the CI gate is TF-016.
 
 ## Promotion candidates
