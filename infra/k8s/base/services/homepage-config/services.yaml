@@ -188,7 +188,7 @@
         ping: https://github.com/mlorentedev/kubelab
     - Zero Plaintext Secrets:
         icon: mdi-shield-key
-        href: https://github.com/mlorentedev/kubelab/blob/master/docs/adr/adr-038-sops-age-encryption-for-secrets.md
+        href: https://github.com/mlorentedev/kubelab/blob/master/docs/adr/adr-038-secret-delivery-paths.md
         description: Age / SOPS Cryption & In-Memory Injection
         ping: https://github.com/mlorentedev/kubelab
 - Workflows:
