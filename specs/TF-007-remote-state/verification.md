@@ -14,7 +14,13 @@ PR 1a covers AC3 and AC4; the rest land with PR 1b.
 - [x] AC3 -> `tests/test_terraform_single_entry.py` (Makefile recipes, toolkit AST scan, one `$(_TF)` line per target). Mutation: a raw `terraform plan` in `tf-dns-plan` goes red.
 - [x] AC4 -> `tests/test_terraform_runner.py`, `tests/test_terraform_plan_guard.py`, `tests/test_vps_firewall_tfvars.py`. Mutations: legacy renders kept, inherited `TF_VAR_*` kept, guard ignored, tfvars 0644, `--allow-destroy` hardwired on dns: all red.
 - [x] AC4 live -> msi, 2026-10-13: `make tf-dns-plan` and `make tf-r2-plan` read `No changes` with exit 0 on master `1b900c22` and on this branch `1fc2ddba`.
-- [ ] AC1, AC2, AC5-AC10 -> PR 1b.
+- [x] AC1, AC2 -> `tests/test_terraform_backend.py` (each root's backend block, `>= 1.10`, the committed file equals the render, no credential, no `encrypt`).
+- [x] AC5, AC6 live -> Mac, 2026-10-13: `make tf-state-bootstrap` logged `bucket kubelab-tfstate: created`, `lock rule terraform-state-history on history/: set`, `token kubelab-tfstate: minted` (the consequence check inside: lists the state bucket, refused on `kubelab-backups`); rc 0. Second run: `kept` x3, rc 0. The SOPS diff by key name adds `terraform.state.{access_key_id,secret_access_key}` and nothing else. Unit tests: `tests/test_terraform_state_bootstrap.py`.
+- [x] AC8 -> `tests/test_terraform_runner.py` history section (before/after copies, create-only put, a failed copy before a write stops it, a taken key is a no-op). Live: pending the first migrate.
+- [x] AC9 -> `SECRET_CATALOG` entries; `test_every_secret_a_run_requires_exists_in_sops` green once the bootstrap wrote the pair. `make secrets-audit`: 100% in dev, staging and prod; it still exits non-zero on an orphan that master has too (SEC-031 #2240).
+- [x] AC10 -> ADR-069, `docs/runbooks/terraform-state.md`, lesson-564.
+- [x] Mutation: 18 mutations on the runner (local-state guard, unrecovered guard, create-only put, history env, migrate gate x2, `-reconfigure`, apply-only secrets, snapshots before/after, restore serial bump, restore lineage and content checks, restore arrival, 0600 download, `force-unlock -force`, restore ref), all RED against a green baseline.
+- [ ] AC7 live -> migrate `dns`, `r2`, `aws` on msi; `No changes` from the Mac.
 
 ## Test status
 
