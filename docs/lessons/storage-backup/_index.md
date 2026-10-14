@@ -1,9 +1,10 @@
 # Backups, volumes and persistence
 
-31 lessons, newest first. Back to [all categories](../_index.md).
+32 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 564 | [A history keyed by serial holds only if a restore moves the serial forward](lesson-564-a-history-keyed-by-serial-holds-only-if-a-restore-moves-the-serial-forward.md) | 2026-10-13 |
 | 539 | [A Secret derived from a config declaration changes when `apply-secrets` re-renders it, not when the declaration merges](lesson-539-a-secret-derived-from-a-declaration-changes-only-when-it-is-re-rendered-not-when-the-declaration-merges.md) | 2026-10-08 |
 | 538 | [`restic copy` writes a lock into the source repository, so a read-only source credential fails unless the copy runs with `--no-lock`](lesson-538-restic-copy-locks-the-source-so-a-read-only-source-credential-needs-no-lock.md) | 2026-10-08 |
 | 535 | [An on-demand node ships its first backup the moment its timer is enabled](lesson-535-an-on-demand-node-ships-its-first-backup-the-moment-its-timer-is-enabled.md) | 2026-10-07 |

@@ -1,7 +1,8 @@
 ---
-id: lesson-425-a-capability-probe-can-stop-at-the-first-authorization-layer
+id: "lesson-425-a-capability-probe-can-stop-at-the-first-authorization-layer"
 type: lesson
 status: active
+title: "A capability probe can stop at the first authorization layer and report the whole answer"
 created: "2026-09-04"
 owner: manu
 category: identity-secrets
@@ -67,7 +68,7 @@ permission.
 Corollary for reporting: a probe that crosses gate 1 of 2 is not "inconclusive
 because it was cheap". It is a check that confirms a weaker claim than it appears
 to, which is the same failure as
-[[lesson-416-a-guard-the-guard-belongs-on-the-last-value-before-the-assertion]]
+[[lesson-416-a-guard-the-guard-must-assert-on-the-derived-artifact]]
 and [[lesson-423-a-fake-cannot-verify-a-request-only-agree-with-it]]. Ninth
 instance in this area, and the first one inside the measuring instrument rather
 than in the code being measured.
