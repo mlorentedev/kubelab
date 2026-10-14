@@ -113,7 +113,9 @@ class TestBastion:
     def test_the_hub_keeps_its_exception_on_the_proxied_hop_only(self) -> None:
         net = _networking()
         hosts = _hosts(AnsibleGenerator()._build_inventory(net, transport="bastion"))
-        for name in _ephemeral_hostnames(net):
+        ephemeral = _ephemeral_hostnames(net)
+        assert ephemeral, "the SSOT declares no node replaced by design: this test would check nothing"
+        for name in ephemeral:
             args = hosts[name]["ansible_ssh_common_args"]
             proxy = args.split("ProxyCommand=", 1)[1]
             assert "accept-new" not in proxy, "the VPS is a pet: its jump is verified"
@@ -143,8 +145,10 @@ class TestRunRefusesWithoutThePinnedFile:
         monkeypatch.setattr(infra, "settings", SimpleNamespace(ansible_dir=tmp_path))
         return tmp_path
 
-    def _inventory(self, ansible_dir: Path, known_hosts: Path) -> None:
-        args = f"-o StrictHostKeyChecking=yes -o UserKnownHostsFile={known_hosts}"
+    def _inventory(self, ansible_dir: Path, known_hosts: Path, *, as_list: bool = False) -> None:
+        args: str | list[str] = f"-o StrictHostKeyChecking=yes -o UserKnownHostsFile={known_hosts}"
+        if as_list:
+            args = ["-o", "StrictHostKeyChecking=yes", "-o", f"UserKnownHostsFile={known_hosts}"]
         inv = {"all": {"vars": {"ansible_ssh_common_args": args}, "children": {}}}
         (ansible_dir / "generated" / "prod" / "hosts.yml").write_text(yaml.safe_dump(inv))
 
@@ -189,3 +193,12 @@ class TestRunRefusesWithoutThePinnedFile:
         self._inventory(ansible_dir, pinned)
         ran = self._run(monkeypatch)
         assert len(ran) == 1 and ran[0].startswith("ansible-playbook")
+
+    def test_options_given_as_a_list_are_read_too(
+        self, ansible_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import typer
+
+        self._inventory(ansible_dir, tmp_path / "nowhere" / "known_hosts_pinned", as_list=True)
+        with pytest.raises(typer.Exit):
+            self._run(monkeypatch)

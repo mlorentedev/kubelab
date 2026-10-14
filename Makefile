@@ -946,7 +946,7 @@ registry-prune: ## Prune stale sha-* image tags now, off the weekly schedule (DR
 
 .PHONY: provision
 provision:
-	@test -n "$(NODE)" || (echo "Usage: make provision NODE=ace1|ace2|aws1|rpi4|vps [ENV=staging|prod|hub] [BOOTSTRAP=1] [TRANSPORT=bastion] [CHECK=1] [ASK_PASS=1] [TAGS=tag1,tag2] [EXTRA='k=v k2=v2']" && exit 1)
+	@test -n "$(NODE)" || (echo "Usage: make provision NODE=<x, for infra/ansible/playbooks/provision-<x>.yml> [ENV=staging|prod|hub] [BOOTSTRAP=1] [TRANSPORT=bastion] [CHECK=1] [ASK_PASS=1] [TAGS=tag1,tag2] [EXTRA='k=v k2=v2']" && exit 1)
 	$(eval _ENV := $(or $(filter staging prod hub,$(ENV)),staging))
 	$(eval _K := $(if $(ASK_PASS),-K,))
 	$(eval _TAGS := $(if $(TAGS),--tags $(TAGS),))

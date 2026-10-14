@@ -1403,8 +1403,10 @@ def _missing_known_hosts_file(inventory: Path) -> Path | None:
     `--skip-generate` run is checked against what it actually uses.
     """
     inv = yaml.safe_load(inventory.read_text(encoding="utf-8")) or {}
-    args = ((inv.get("all") or {}).get("vars") or {}).get("ansible_ssh_common_args", "")
-    match = re.search(r"UserKnownHostsFile=(\S+)", args)
+    args = ((inv.get("all") or {}).get("vars") or {}).get("ansible_ssh_common_args") or ""
+    # Ansible also takes the options as a list; a hand-written inventory may use one.
+    text = " ".join(map(str, args)) if isinstance(args, list) else str(args)
+    match = re.search(r"UserKnownHostsFile=(\S+)", text)
     if not match:
         return None
     path = Path(match.group(1)).expanduser()

@@ -38,8 +38,10 @@ The path Ansible reads is `networking.ssh_known_hosts`. `toolkit infra ansible r
 
 ## 4. Provision over the LAN
 
+`NODE` names a playbook, not a host: `make provision NODE=<x>` runs `infra/ansible/playbooks/provision-<x>.yml` (the Beelink's is `provision-bee.yml`, so `NODE=bee`). A new node needs its own: copy the sibling closest to its role, set `hosts:` to the node's `hostname`, and keep its roles to what the node runs.
+
 ```bash
-make provision NODE=<name> ENV=<env> BOOTSTRAP=1 ASK_PASS=1
+make provision NODE=<x> ENV=<env> BOOTSTRAP=1 ASK_PASS=1
 ```
 
 ## 5. Move it to the mesh
