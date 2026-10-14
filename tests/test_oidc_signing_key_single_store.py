@@ -4,11 +4,19 @@ A gitignored `infra/config/secrets/{env}.oidc-jwks.pem` used to sit beside it,
 written once by `toolkit secrets jwks` and reconciled by nothing. Measured on
 msi: every env's pem held a different key from SOPS, and SOPS is what K8s
 Authelia serves. These tests keep a second copy from coming back.
+
+Coverage (#2254): every file git tracks under the Makefile, `toolkit/` and
+`infra/`, whatever its suffix, and never gitignored output. In each, a path
+ending `oidc-jwks.pem` other than the in-container one, the old
+`JWKS_FILE_TEMPLATE`, and any read of the key by name outside `KEY_CONSUMERS`.
+Not covered: a reader that assembles the name from pieces, and files outside
+those roots.
 """
 
 from __future__ import annotations
 
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -66,26 +74,77 @@ def test_generating_a_key_writes_no_file(tmp_path: Path, monkeypatch: pytest.Mon
     assert not [p for p in tmp_path.rglob("*") if p.is_file()], "SOPS is the only store"
 
 
-def _text_files() -> list[Path]:
-    files = [ROOT / "Makefile"]
-    for top in ("toolkit", "infra"):
-        files += [
-            p
-            for p in (ROOT / top).rglob("*")
-            if p.is_file() and p.suffix in {".py", ".yml", ".yaml", ".j2", ".sh", ".mk"}
-        ]
-    return files
+# Every tracked file that names the key, under either spelling, and why. A new
+# reader has to be added here, which is where a second store would be noticed
+# whatever file name it writes (#2254): the literal `oidc-jwks.pem` check below
+# cannot see a writer to `signing.pem`.
+KEY_CONSUMERS = {
+    "infra/config/secrets/dev.enc.yaml": "the store",
+    "infra/config/secrets/staging.enc.yaml": "the store",
+    "infra/config/secrets/prod.enc.yaml": "the store",
+    "infra/stacks/services/security/authelia/compose.base.yml": "dev Authelia, as a Compose secret from the env",
+    "toolkit/features/k8s_secrets.py": "K8s Authelia, as a Secret key",
+    "toolkit/features/secrets_manager.py": "the catalog entry and `secrets jwks`, which writes SOPS only",
+}
+KEY_NAMES = (KEY_PATH.rsplit(".", 1)[1], ENV_NAME)
+GUARD_ROOTS = ("Makefile", "toolkit", "infra")
+
+
+def _tracked_texts() -> list[tuple[str, str]]:
+    """Every file git tracks under the guard's roots, whatever its suffix, as text.
+
+    Tracked, not walked: gitignored generated output depends on what ran on this
+    machine, so reading it would make the verdict depend on the machine. Binary
+    files (a NUL byte) carry no path anyone reads.
+    """
+    listed = subprocess.run(
+        ["git", "ls-files", "-z", "--", *GUARD_ROOTS], cwd=ROOT, capture_output=True, check=True
+    ).stdout.decode()
+    texts = []
+    for rel in filter(None, listed.split("\0")):
+        data = (ROOT / rel).read_bytes()
+        if b"\0" not in data:
+            texts.append((rel, data.decode(errors="ignore")))
+    return texts
+
+
+def _offenders(rel: str, text: str) -> list[str]:
+    """Why `text`, the content of tracked file `rel`, could be a second store of the key."""
+    allowed = _template_key_path()
+    found = []
+    if "JWKS_FILE_TEMPLATE" in text:
+        found.append(f"{rel}: JWKS_FILE_TEMPLATE")
+    for match in re.finditer(r"\S*oidc-jwks\.pem", text):
+        if match.group(0).strip("'\"") != allowed:
+            found.append(f"{rel}: {match.group(0)}")
+    if rel not in KEY_CONSUMERS and any(name in text for name in KEY_NAMES):
+        found.append(f"{rel}: reads the key by name and is not a declared consumer")
+    return found
+
+
+def test_the_guard_reads_every_tracked_file_and_no_generated_one() -> None:
+    rels = {rel for rel, _ in _tracked_texts()}
+    assert "Makefile" in rels and any(rel.endswith(".toml") for rel in rels), "the guard lost a root or a suffix"
+    assert not [rel for rel in rels if rel.startswith("infra/config/authelia/generated/")]
+    assert set(KEY_CONSUMERS) <= rels, f"declared consumers that are not tracked: {set(KEY_CONSUMERS) - rels}"
+
+
+@pytest.mark.parametrize(
+    ("rel", "text"),
+    [
+        ("toolkit/_probe.toml", 'jwks = "infra/config/secrets/prod.oidc-jwks.pem"'),
+        ("infra/stacks/_probe/Dockerfile", "COPY oidc-jwks.pem /config/"),
+        ("toolkit/_probe.py", "JWKS_FILE_TEMPLATE = '{env}.pem'"),
+        ("toolkit/_probe.sh", f'printf %s "${ENV_NAME}" > ~/signing.pem'),
+        ("toolkit/_probe.py", "value = secrets['oidc_jwks_private_key']"),
+    ],
+    ids=["toml-path", "dockerfile-path", "template-constant", "env-to-other-file", "key-path-read"],
+)
+def test_a_planted_second_store_is_caught_in_any_file(rel: str, text: str) -> None:
+    assert _offenders(rel, text)
 
 
 def test_nothing_reads_or_writes_a_host_copy() -> None:
-    """Only the in-container path may name the file; anything else is a second store."""
-    allowed = _template_key_path()
-    offenders: list[str] = []
-    for path in _text_files():
-        text = path.read_text(errors="ignore")
-        if "JWKS_FILE_TEMPLATE" in text:
-            offenders.append(f"{path.relative_to(ROOT)}: JWKS_FILE_TEMPLATE")
-        for match in re.finditer(r"\S*oidc-jwks\.pem", text):
-            if match.group(0).strip("'\"") != allowed:
-                offenders.append(f"{path.relative_to(ROOT)}: {match.group(0)}")
+    """Only the in-container path may name the file, and only declared consumers the key."""
+    offenders = [line for rel, text in _tracked_texts() for line in _offenders(rel, text)]
     assert not offenders, offenders
