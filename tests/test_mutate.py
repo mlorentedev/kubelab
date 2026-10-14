@@ -100,8 +100,9 @@ def test_only_a_failing_test_counts_as_red(repo: Path, mutant_status: int, verdi
     """A collection error is not the guard going red: a mutation that breaks the
     file's syntax fails every test in it, whether or not they check anything.
     The baseline passes in every case: only then does the mutant's status mean anything."""
-    run_test, _ = _statuses(repo, 0, mutant_status)
+    run_test, seen = _statuses(repo, 0, mutant_status)
     assert mutate.run(repo, Path("guard.py"), "x > 0", "x >= 0", run_test) is verdict
+    assert seen == [ORIGINAL, ORIGINAL.replace("x > 0", "x >= 0")], "the baseline ran, then the mutant"
 
 
 @pytest.mark.parametrize("baseline", [1, 2, 3, 4, 5])
@@ -125,8 +126,9 @@ def test_a_green_baseline_then_a_red_mutant_is_red_with_two_runs(repo: Path) -> 
 
 
 def test_a_green_baseline_then_a_green_mutant_is_green(repo: Path) -> None:
-    run_test, _ = _statuses(repo, 0, 0)
+    run_test, seen = _statuses(repo, 0, 0)
     assert mutate.run(repo, Path("guard.py"), "x > 0", "x >= 0", run_test) is mutate.Verdict.GREEN
+    assert seen == [ORIGINAL, ORIGINAL.replace("x > 0", "x >= 0")], "the baseline ran, then the mutant"
 
 
 def test_the_exit_codes_tell_the_three_outcomes_apart() -> None:

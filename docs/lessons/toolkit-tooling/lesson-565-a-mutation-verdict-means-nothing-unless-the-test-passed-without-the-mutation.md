@@ -28,7 +28,9 @@ written. Anything but exit 0 raises `Refused` (exit 2, nothing mutated), naming
 the exit code and saying how to get a usable baseline: deselect the unrelated
 failures, for example `TEST='tests/x.py -k <passing tests>'`. A baseline that
 does not run to a verdict (collection error, nothing collected) is refused the
-same way. The cost is one extra pytest run per mutation.
+same way. The cost is one extra pytest run per mutation, and the target test must be
+idempotent across the two runs: state is not reset between them, so a test that
+leaves files behind can fail the mutant's run for that reason and read RED.
 `tests/test_mutate.py::test_a_test_that_does_not_pass_without_the_mutation_refuses`
 asserts that the test ran once, against the original, and left the file
 untouched; `test_a_failing_test_target_refuses_through_the_command` does it

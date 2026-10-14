@@ -60,6 +60,10 @@ def run(repo: Path, file: Path, find: str, replace: str, run_test: Callable[[], 
     unmutated file: a red baseline proves nothing, since it is red against every
     mutant too. The file is restored from the bytes read here, in a `finally`, so
     an interrupted test restores it too.
+
+    The target test must be idempotent across two runs in one invocation: state is
+    not reset between the baseline and the mutant run, so a test that leaves files
+    or other state behind can fail the second run for that reason and read RED.
     """
     if dirty := _dirty(repo):
         raise Refused(f"the working tree is not clean; commit first:\n{dirty}")
