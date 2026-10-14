@@ -11,9 +11,10 @@ infra/terraform/
     variables.tf         # Input variables
     records_kubelab.tf   # kubelab.live root + service records
     records_mlorente.tf  # mlorente.dev root + service records
+    zone_settings.tf     # Per-zone Cloudflare settings
     outputs.tf           # Service URLs and record counts
     services.json        # Data-driven service catalog
-    prod.tfvars          # Zone IDs, VPS IP, TTL
+    dns.tfvars           # Zone IDs, VPS IP, TTL
     terraform.tfstate    # Local state (gitignored)
   .gitignore
   README.md              # This file

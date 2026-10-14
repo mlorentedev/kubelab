@@ -118,6 +118,13 @@ def test_every_registered_root_is_a_module_on_disk() -> None:
 
 
 @pytest.mark.parametrize("name", sorted(tr.ROOTS))
+def test_every_committed_var_file_is_tracked_in_its_module(name: str) -> None:
+    """A missing `-var-file` stops the plan before it reads anything; catch it here instead."""
+    for var_file in tr.ROOTS[name].var_files:
+        assert (TERRAFORM_DIR / name / var_file).is_file(), f"{name}/{var_file}"
+
+
+@pytest.mark.parametrize("name", sorted(tr.ROOTS))
 def test_every_injected_secret_is_a_declared_variable(name: str) -> None:
     """A `TF_VAR_x` with no `variable "x"` is ignored by Terraform without a word."""
     declared = set(re.findall(r'^variable\s+"(\w+)"', (TERRAFORM_DIR / name / "variables.tf").read_text(), re.M))
