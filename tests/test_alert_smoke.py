@@ -12,6 +12,7 @@ from __future__ import annotations
 import itertools
 import json
 import subprocess
+from datetime import UTC, datetime, timedelta
 
 from toolkit.features import alert_smoke as smoke
 
@@ -313,3 +314,32 @@ class TestDeliveriesAreCountedSinceTheRunStarted:
         )
         assert result.notified
         assert result.resolve_notified
+
+    def test_every_read_counts_from_the_same_start(self) -> None:
+        """One fixed window, set from the run's start less the skew margin."""
+        start = datetime(2026, 10, 14, 12, 0, 0, tzinfo=UTC)
+        reads: list[list[str]] = []
+        states = iter([_rules("inactive"), _firing(smoke.PROBE_HOST)])
+        delivered = itertools.count()
+
+        def fake_kubectl(args: list[str], stdin: str | None = None) -> subprocess.CompletedProcess:
+            if "exec" in args:
+                return _proc(next(states, _rules("inactive")))
+            if "logs" in args:
+                reads.append(args)
+                return _proc("\n".join(["Delivered Notification"] * next(delivered)))
+            return _proc()
+
+        ticks = itertools.count()
+        later = iter(start + timedelta(hours=h) for h in itertools.count())
+        result = smoke.run_alert_smoke(
+            "staging",
+            kubectl=fake_kubectl,
+            sleep=lambda _: None,
+            now=lambda: float(next(ticks)),
+            wall_clock=lambda: next(later),
+        )
+        assert result.notified
+        assert len(reads) >= 3, reads
+        expected = f"--since-time={(start - smoke.CLOCK_SKEW_MARGIN):%Y-%m-%dT%H:%M:%SZ}"
+        assert all(expected in args and not any(a.startswith("--tail") for a in args) for args in reads), reads
