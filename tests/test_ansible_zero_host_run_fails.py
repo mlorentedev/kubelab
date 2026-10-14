@@ -14,8 +14,13 @@ import configparser
 import shutil
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
+
+from toolkit.cli import infra
+from toolkit.config.settings import settings
 
 ANSIBLE_DIR = Path(__file__).resolve().parents[1] / "infra/ansible"
 
@@ -43,3 +48,24 @@ def test_a_play_that_matches_no_host_fails(tmp_path: Path) -> None:
     )
     assert result.returncode != 0, result.stdout + result.stderr
     assert "nobody" in result.stdout + result.stderr
+
+
+def test_the_runner_starts_ansible_where_the_config_lives(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The config only binds a command started from its directory, so pin both halves."""
+    assert settings.ansible_dir.resolve() == ANSIBLE_DIR.resolve()
+
+    (tmp_path / "playbooks").mkdir()
+    (tmp_path / "playbooks" / "site.yml").write_text("---\n", encoding="utf-8")
+    (tmp_path / "generated" / "prod").mkdir(parents=True)
+    (tmp_path / "generated" / "prod" / "hosts.yml").write_text("---\n", encoding="utf-8")
+    monkeypatch.setattr(infra, "settings", SimpleNamespace(ansible_dir=tmp_path))
+    seen: dict[str, Any] = {}
+
+    def fake_run(cmd: str, **kwargs: Any) -> SimpleNamespace:
+        seen.update(kwargs, cmd=cmd)
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(infra.command, "run", fake_run)
+    infra.ansible_run(playbook="site", env="prod", skip_generate=True)
+    assert seen["cmd"].startswith("ansible-playbook ")
+    assert seen["cwd"] == tmp_path
