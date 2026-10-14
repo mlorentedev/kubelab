@@ -201,8 +201,14 @@ def hash_secrets(
     settings.validate_environment(env)
     logger.section(f"Hash OIDC Client Secrets — {env.upper()}")
 
+    from toolkit.features.secrets_manager import HashSourceMissing
+
     mgr = _get_manager()
-    hashes = mgr.hash_oidc_secrets(env)
+    try:
+        hashes = mgr.hash_oidc_secrets(env)
+    except HashSourceMissing as refusal:
+        logger.error(str(refusal))
+        raise typer.Exit(2) from refusal
 
     if hashes:
         logger.success(f"Generated {len(hashes)} hashes for {env}")

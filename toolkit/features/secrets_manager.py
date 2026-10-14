@@ -1802,6 +1802,15 @@ class AuditResult:
     malformed: list[str] = field(default_factory=list)
 
 
+class HashSourceMissing(Exception):
+    """A hash whose plaintext source is not in the env file: refused, nothing written.
+
+    `hash_oidc_secrets` used to mint a fresh client secret here (#1057). A missing
+    source is not a request to rotate: the relying party keeps the old value and
+    the failure surfaces at its next login, nowhere near the command that caused it.
+    """
+
+
 class RotationRefused(Exception):
     """A rotation this command must not perform, with the reason and the real procedure.
 
@@ -2088,44 +2097,40 @@ class SecretsManager:
         """Generate Argon2 hashes for all OIDC client secrets.
 
         Reads plaintext secrets from SOPS, generates hashes, writes hashes back.
-        Returns dict of hash_key_path → hash_value.
+        Returns dict of hash_key_path → hash_value. Never writes a plaintext: a
+        source missing from `{env}.enc.yaml` raises `HashSourceMissing` before
+        anything is written, and generating one is `secrets init`'s job (#1057).
         """
         cm = self._cm(env)
-        decrypted = cm._decrypt_sops(cm.secrets_path / f"{env}.enc.yaml")
+        env_file = cm.secrets_path / f"{env}.enc.yaml"
+        decrypted = cm._decrypt_sops(env_file)
         if not decrypted:
             logger.error(f"Cannot decrypt {env}.enc.yaml")
             return {}
 
+        specs = [
+            spec
+            for spec in SECRET_CATALOG
+            if env in spec.envs
+            and spec.kind == SecretKind.ARGON2_HASH
+            # A derived_from in parentheses names an interactive input, not a key.
+            and spec.derived_from
+            and not spec.derived_from.startswith("(")
+        ]
+        missing = [spec.derived_from for spec in specs if not self._resolve_key(decrypted, spec.derived_from)]
+        if missing:
+            raise HashSourceMissing(
+                f"{len(missing)} source(s) missing from {env_file.name}, nothing written: "
+                + ", ".join(missing)
+                + f". If the client has no secret yet, `toolkit secrets init --env {env}` generates it;"
+                " if it has one elsewhere, generating a new one is a rotation, not a fix."
+            )
+
         cred = self._credentials_manager()
         hashes: dict[str, str] = {}
 
-        for spec in SECRET_CATALOG:
-            if env not in spec.envs:
-                continue
-            if spec.kind != SecretKind.ARGON2_HASH:
-                continue
-            if not spec.derived_from or spec.derived_from.startswith("("):
-                continue  # Skip interactive-derived hashes
-
+        for spec in specs:
             plaintext = self._resolve_key(decrypted, spec.derived_from)
-            if not plaintext:
-                # Auto-generate OIDC client secrets if missing
-                if spec.kind == SecretKind.ARGON2_HASH and "oidc_client_secret" in spec.derived_from:
-                    import secrets as _secrets
-
-                    new_secret = _secrets.token_urlsafe(64)
-                    if cm.update_secret_key(spec.derived_from, new_secret):
-                        logger.success(f"  Auto-generated: {spec.derived_from}")
-                        plaintext = new_secret
-                        # Refresh decrypted data for subsequent lookups
-                        decrypted = cm._decrypt_sops(cm.secrets_path / f"{env}.enc.yaml")
-                    else:
-                        logger.error(f"  Failed to auto-generate: {spec.derived_from}")
-                        continue
-                else:
-                    logger.warning(f"  Source not found: {spec.derived_from} (needed for {spec.key_path})")
-                    continue
-
             hash_value = cred.generate_argon2_hash(str(plaintext))
             hashes[spec.key_path] = hash_value
             logger.info(f"  Hashed: {spec.derived_from} → {spec.key_path}")
