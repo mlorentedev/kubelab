@@ -834,15 +834,15 @@ def _argocd_image() -> str:
 
 
 @pytest.mark.integration
-def test_argo_cd_rbac_lets_users_operate_and_never_administer(tmp_path: Path) -> None:
+def test_argo_cd_rbac_lets_users_operate_and_never_administer(docker_mount_dir: Path) -> None:
     """AUTH-011 AC1, asked of Argo CD's own evaluator with the pinned image."""
     if shutil.which("docker") is None:
         if os.environ.get("CI"):
             pytest.fail("docker not on PATH in CI: the Argo CD RBAC went untested")
         pytest.skip("docker not on PATH: cannot run Argo CD (a skip is CANNOT CHECK, not OK)")
     rbac = yaml.safe_load((REPO / "infra/helm/argocd/values.yaml").read_text())["configs"]["rbac"]
-    (tmp_path / "policy.csv").write_text(rbac["policy.csv"])
-    (tmp_path / "kubeconfig").write_text(_OFFLINE_KUBECONFIG)
+    (docker_mount_dir / "policy.csv").write_text(rbac["policy.csv"])
+    (docker_mount_dir / "kubeconfig").write_text(_OFFLINE_KUBECONFIG)
     # One container for every case: `can` exits 0 for Yes and 1 for No.
     script = "".join(
         f"argocd admin settings rbac can '{s}' '{a}' '{r}' '{o}' --policy-file /w/policy.csv"
@@ -850,9 +850,9 @@ def test_argo_cd_rbac_lets_users_operate_and_never_administer(tmp_path: Path) ->
         for s, a, r, o, _ in ARGO_CD_CASES
     )
     out = subprocess.run(
-        # The image runs as uid 999, which cannot enter pytest's 0700 tmp_path.
+        # The image runs as uid 999, which cannot enter a 0700 temporary directory.
         ["docker", "run", "--rm", "--user", f"{os.getuid()}:{os.getgid()}"]
-        + ["-e", "KUBECONFIG=/w/kubeconfig", "-v", f"{tmp_path}:/w:ro"]
+        + ["-e", "KUBECONFIG=/w/kubeconfig", "-v", f"{docker_mount_dir}:/w:ro"]
         + [_argocd_image(), "sh", "-c", script],
         capture_output=True,
         text=True,
