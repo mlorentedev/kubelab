@@ -128,6 +128,24 @@ def test_hashing_cannot_reach_generation(monkeypatch: pytest.MonkeyPatch) -> Non
         manager.hash_oidc_secrets(ENV)
 
 
+def test_an_undecryptable_file_is_refused(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """No age key, or no file: every source is missing, so the command must not report success."""
+    vault = _Vault(tmp_path, {})
+    with pytest.raises(HashSourceMissing, match="cannot decrypt"):
+        _manager(monkeypatch, vault).hash_oidc_secrets(ENV)
+
+
+def test_the_cli_fails_when_nothing_was_written(monkeypatch: pytest.MonkeyPatch) -> None:
+    from typer.testing import CliRunner
+
+    from toolkit.cli import secrets as cli
+
+    manager = SimpleNamespace(hash_oidc_secrets=lambda _env: {})
+    monkeypatch.setattr(cli, "_get_manager", lambda: manager)
+    run = CliRunner().invoke(cli.app, ["hash", "--env", ENV])
+    assert run.exit_code == 1, run.output
+
+
 @pytest.mark.parametrize("env", ["dev", "staging", "prod"])
 def test_every_hashed_source_lives_in_its_own_env_file(env: str) -> None:
     """AC4: no spec resolves to "missing" as a normal condition.

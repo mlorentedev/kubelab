@@ -2121,8 +2121,8 @@ class SecretsManager:
         env_file = cm.secrets_path / f"{env}.enc.yaml"
         decrypted = cm._decrypt_sops(env_file)
         if not decrypted:
-            logger.error(f"Cannot decrypt {env}.enc.yaml")
-            return {}
+            # Every source is unreadable, which is the missing case for all of them at once.
+            raise HashSourceMissing(f"cannot decrypt {env_file.name} (missing file or age key), nothing written")
 
         specs = hashed_specs(env)
         # Falsy, not just absent: hashing an empty plaintext would publish a digest of "".

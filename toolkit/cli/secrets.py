@@ -215,7 +215,8 @@ def hash_secrets(
         if env != "dev":
             logger.info("Next: toolkit secrets apply --env " + env)
     else:
-        logger.warning("No hashes generated (source secrets may be missing)")
+        logger.error(f"No hashes written to {env}.enc.yaml")
+        raise typer.Exit(1)
 
 
 # =============================================================================
