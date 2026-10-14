@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+from typing import Any
 
 import pytest
 
@@ -84,6 +85,48 @@ def _one_gib_above(quantity: str) -> str:
     return f"{int(quantity[:-2]) + 1}Gi"
 
 
+def _owner(obj: dict[str, Any], kind: str) -> str | None:
+    """The name of `obj`'s owner of `kind`, if it has one."""
+    refs = obj.get("metadata", {}).get("ownerReferences") or []
+    return next((ref["name"] for ref in refs if ref.get("kind") == kind), None)
+
+
+def _complete(job: dict[str, Any]) -> bool:
+    conditions = job.get("status", {}).get("conditions") or []
+    return any(c.get("type") == "Complete" and c.get("status") == "True" for c in conditions)
+
+
+def _pods_not_running(pods: list[dict[str, Any]], jobs: list[dict[str, Any]]) -> list[str]:
+    """Pods neither Running nor Succeeded, minus failures a later run already fixed.
+
+    A CronJob keeps its last `failedJobsHistoryLimit` failed Jobs until another
+    failure rotates them out, so a fixed failure stays on record indefinitely
+    (#2194). Its pod is excused only when a later Job of the same CronJob
+    completed. A newer run still in flight, or a Failed pod with no CronJob
+    behind it, is still reported.
+    """
+    by_name = {job["metadata"]["name"]: job for job in jobs}
+    completed_at: dict[str, list[str]] = {}
+    for job in jobs:
+        cronjob = _owner(job, "CronJob")
+        if cronjob and _complete(job):
+            completed_at.setdefault(cronjob, []).append(job["metadata"]["creationTimestamp"])
+
+    def fixed_since(pod: dict[str, Any]) -> bool:
+        job = by_name.get(_owner(pod, "Job") or "")
+        cronjob = _owner(job, "CronJob") if job else None
+        if pod.get("status", {}).get("phase") != "Failed" or not cronjob:
+            return False
+        created = job["metadata"]["creationTimestamp"]  # type: ignore[index]
+        return any(later > created for later in completed_at.get(cronjob, []))
+
+    return [
+        f"{pod['metadata']['name']} ({pod.get('status', {}).get('phase', 'Unknown')})"
+        for pod in pods
+        if pod.get("status", {}).get("phase", "Unknown") not in ("Running", "Succeeded") and not fixed_since(pod)
+    ]
+
+
 class TestK3sCluster:
     """K3s cluster must be healthy with all nodes ready."""
 
@@ -127,11 +170,9 @@ class TestK3sCluster:
         pods = data.get("items", [])
         assert pods, "No pods found in kubelab namespace"
 
-        not_running = [
-            f"{pod['metadata']['name']} ({pod.get('status', {}).get('phase', 'Unknown')})"
-            for pod in pods
-            if pod.get("status", {}).get("phase", "Unknown") not in ("Running", "Succeeded")
-        ]
+        result = _kubectl("get jobs -n kubelab -o json", env)
+        assert result.returncode == 0, f"kubectl get jobs failed: {result.stderr}"
+        not_running = _pods_not_running(pods, json.loads(result.stdout).get("items", []))
         assert not not_running, "Pods not Running:\n" + "\n".join(not_running)
 
     def test_pvcs_bound(self, require_vpn: None, require_kubeconfig: None, env: str) -> None:
