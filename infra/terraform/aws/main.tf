@@ -4,8 +4,10 @@
 # No Elastic IP — temporary public IP used only for Tailscale bootstrap.
 # Instance is disposable: destroy + apply → cloud-init → K3s → Argo resyncs.
 #
-# Usage: make tf-aws-plan / tf-aws-apply (the runner passes the Headscale keys
-# from SOPS as TF_VAR_*; nothing is written to a tfvars).
+# Usage: make tf-aws-plan / tf-aws-apply (the runner passes the IAM and
+# Headscale keys from SOPS as TF_VAR_*; nothing is written to a tfvars). Dormant
+# since aws1 was destroyed (ADR-063): the Headscale keys were retired with it
+# (#1353), so a plan runs without them and an apply refuses until new ones exist.
 #
 # After apply:
 #   1. Wait ~5 min for cloud-init (K3s + Tailscale registration)
@@ -29,9 +31,12 @@ terraform {
   }
 }
 
+# Keys passed explicitly, never read from the environment: the runner puts the
+# state bucket's R2 pair there as AWS_*, for the backend.
 provider "aws" {
-  region  = var.aws_region
-  profile = var.aws_profile
+  region     = var.aws_region
+  access_key = var.aws_access_key_id
+  secret_key = var.aws_secret_access_key
 }
 
 # ---------------------------------------------------------------------------

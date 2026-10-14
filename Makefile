@@ -94,6 +94,8 @@ help:
 	@echo "  make tf-<root>-plan             Plan a root: dns, r2, gcp, gcp-bootstrap, vps-firewall, aws"
 	@echo "  make tf-<root>-apply            Apply (dns/gcp/aws refuse deletes unless ALLOW_DESTROY=1)"
 	@echo "  make tf-untaint ROOT=x RES=y    Clear a taint on a resource that exists (lesson-543)"
+	@echo "  make tf-state-migrate ROOT=x    Move a root's local state into R2, once (TF-007)"
+	@echo "  make tf-state-list ROOT=x       List the addresses a root's state holds in R2"
 	@echo "  make gcp1-status|start|stop     Inspect or resize the GCP hub's instance group"
 	@echo "  make gcp-killswitch-prove       Prove the billing kill switch fires, on a scratch project"
 	@echo ""
@@ -1417,6 +1419,21 @@ test-vps-firewall-live:
 tf-untaint:
 	@test -n "$(ROOT)" -a -n "$(RES)" || { echo "usage: make tf-untaint ROOT=<dns|gcp|aws|...> RES='<address>'"; exit 2; }
 	@$(_TF) $(ROOT) untaint -- '$(RES)'
+
+# One-time, per root: move a local terraform.tfstate into R2 (TF-007). Pushes
+# without -force, reads the result back, then renames the local file to
+# terraform.pre-remote.tfstate. Re-running it after success is a no-op.
+.PHONY: tf-state-migrate
+tf-state-migrate:
+	@test -n "$(ROOT)" || { echo "usage: make tf-state-migrate ROOT=<dns|r2|aws|...>"; exit 2; }
+	@$(_TF) $(ROOT) migrate
+
+# The addresses a root's state holds, read from R2. Addresses only: values are
+# not printed, because a state holds secrets in clear.
+.PHONY: tf-state-list
+tf-state-list:
+	@test -n "$(ROOT)" || { echo "usage: make tf-state-list ROOT=<dns|r2|aws|...>"; exit 2; }
+	@$(_TF) $(ROOT) state-list
 
 .PHONY: tf-dns-plan tf-dns-apply
 tf-dns-plan:

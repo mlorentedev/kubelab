@@ -89,7 +89,11 @@ class _Terraform:
 
 def _apply(plan: dict, **kwargs: object) -> tuple[int, _Terraform]:
     fake = _Terraform(plan)
-    config = {"cloudflare": {"api_token": "token-sentinel"}, "networking": {"vps": {"public_ip": "192.0.2.1"}}}
+    config = {
+        "cloudflare": {"api_token": "token-sentinel"},
+        "networking": {"vps": {"public_ip": "192.0.2.1"}},
+        "terraform": {"state": {"access_key_id": "k", "secret_access_key": "s"}},
+    }
     rc = tr.run(
         "dns", "apply", terraform_dir=REPO / "infra/terraform", load_config=lambda: config, terraform=fake, **kwargs
     )
@@ -108,7 +112,7 @@ def test_a_clean_plan_and_an_allowed_one_are_applied() -> None:
     assert _apply(_plan(CREATE, UPDATE))[0] == 0
     assert _apply(_plan(TAINTED), allow_destroy=True)[0] == 0
     rc, fake = _apply(_plan(CBD), allowed=[CBD[0]])
-    assert rc == 0 and fake.verbs[-1] == "apply"
+    assert rc == 0 and [v for v in fake.verbs if v != "state"][-1] == "apply"
 
 
 def test_the_guard_never_echoes_the_plan_it_reads(capsys: pytest.CaptureFixture[str]) -> None:

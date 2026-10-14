@@ -1,5 +1,5 @@
 # Variables for AWS Argo CD Hub
-# Defaults mirror common.yaml; the two secrets arrive as TF_VAR_* from SOPS
+# Defaults mirror common.yaml; the secrets arrive as TF_VAR_* from SOPS
 # through the runner (`make tf-aws-plan`), never as a tfvars file.
 
 variable "aws_region" {
@@ -8,10 +8,16 @@ variable "aws_region" {
   default     = "eu-central-1"
 }
 
-variable "aws_profile" {
-  description = "AWS CLI profile name"
+variable "aws_access_key_id" {
+  description = "IAM access key of kubelab-terraform, from SOPS aws.access_key_id"
   type        = string
-  default     = "kubelab"
+  sensitive   = true
+}
+
+variable "aws_secret_access_key" {
+  description = "IAM secret key of kubelab-terraform, from SOPS aws.secret_access_key"
+  type        = string
+  sensitive   = true
 }
 
 variable "project_name" {
@@ -80,13 +86,15 @@ variable "headscale_url" {
 }
 
 variable "tailscale_authkey" {
-  description = "Headscale pre-auth key for automatic registration"
+  description = "Headscale pre-auth key for automatic registration. Empty in a plan; the runner refuses an apply without it."
   type        = string
   sensitive   = true
+  default     = ""
 }
 
 variable "headscale_api_key" {
-  description = "Headscale management API key for node cleanup on recreate"
+  description = "Headscale management API key for node cleanup on recreate. Empty in a plan; the runner refuses an apply without it."
   type        = string
   sensitive   = true
+  default     = ""
 }

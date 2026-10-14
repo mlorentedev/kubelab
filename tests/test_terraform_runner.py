@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -35,9 +36,13 @@ SECRET_PATHS = (
     "cloudflare.api_token",
     "cloudflare.r2_admin_token",
     "hetzner.api_key",
+    "aws.access_key_id",
+    "aws.secret_access_key",
     "aws.headscale_preauth_key",
     "aws.headscale_api_key",
     "gcp.billing_account_id",
+    "terraform.state.access_key_id",
+    "terraform.state.secret_access_key",
 )
 
 
@@ -56,6 +61,35 @@ def _config() -> dict[str, Any]:
 CONFIG = _config()
 
 
+def _without(config: dict[str, Any], dotted: str) -> dict[str, Any]:
+    """A deep copy of `config` with one key removed."""
+    copy = json.loads(json.dumps(config))
+    node = copy
+    *parents, leaf = dotted.split(".")
+    for part in parents:
+        node = node[part]
+    del node[leaf]
+    return copy
+
+
+# The modules, copied without any state, plan or `.terraform/`: a checkout that
+# still holds a local state (msi, before its migration) would otherwise trip the
+# local-state guard in every test that is not about it.
+TREE = TERRAFORM_DIR
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _tree(tmp_path_factory: pytest.TempPathFactory) -> None:
+    global TREE
+    TREE = tmp_path_factory.mktemp("terraform")
+    shutil.copytree(
+        TERRAFORM_DIR,
+        TREE,
+        dirs_exist_ok=True,
+        ignore=shutil.ignore_patterns("*.tfstate", "*.tfstate.*", ".terraform", "*.tfplan"),
+    )
+
+
 def _on_disk(path: Path) -> tuple[bool, int | None]:
     return (True, path.stat().st_mode & 0o777) if path.exists() else (False, None)
 
@@ -63,14 +97,24 @@ def _on_disk(path: Path) -> tuple[bool, int | None]:
 class FakeTerraform:
     """Records each call and answers with a scripted exit code per subcommand."""
 
-    def __init__(self, fail: dict[str, int] | None = None, plan_json: dict | None = None, stdout: str = "") -> None:
+    def __init__(
+        self,
+        fail: dict[str, int] | None = None,
+        plan_json: dict | None = None,
+        stdout: str = "",
+        pulls: list[dict | None] | None = None,
+    ) -> None:
         self.calls: list[dict[str, Any]] = []
         self.fail = fail or {}
         self.plan_json = plan_json if plan_json is not None else {"resource_changes": []}
         self.stdout = stdout
+        # What each `state pull` answers, in order; the last one repeats. None
+        # is a backend that holds no state yet.
+        self.pulls = list(pulls) if pulls is not None else [None]
 
     def __call__(self, args: list[str], *, env: dict[str, str], capture: bool, quiet: bool) -> tr.Result:
-        verb = args[1] if args[0].startswith("-chdir=") else args[0]
+        rest = args[1:] if args[0].startswith("-chdir=") else args
+        verb = f"state {rest[1]}" if rest[0] == "state" else rest[0]
         # What exists on disk WHILE terraform runs, for the files the runner
         # promised to remove afterwards.
         var_files = [a.split("=", 1)[1] for a in args if a.startswith("-var-file=")]
@@ -87,6 +131,9 @@ class FakeTerraform:
         rc = self.fail.get(verb, 0)
         if verb == "show":
             return tr.Result(rc, json.dumps(self.plan_json))
+        if verb == "state pull":
+            state = self.pulls.pop(0) if len(self.pulls) > 1 else self.pulls[0]
+            return tr.Result(rc, json.dumps(state) if state is not None else "")
         return tr.Result(rc, self.stdout if capture else "")
 
     def verbs(self) -> list[str]:
@@ -96,14 +143,41 @@ class FakeTerraform:
         [match] = [c for c in self.calls if c["verb"] == verb]
         return match
 
+    def work(self) -> list[str]:
+        """The verbs, without the history snapshot's reads."""
+        return [v for v in self.verbs() if v != "state pull"]
+
+
+class FakeAws:
+    """Records each aws CLI call, the body file's state at that moment included."""
+
+    def __init__(self, rc: int = 0, out: str = "") -> None:
+        self.calls: list[dict[str, Any]] = []
+        self.rc, self.out = rc, out
+
+    def __call__(self, args: list[str], *, env: dict[str, str]) -> tr.Result:
+        body = Path(args[args.index("--body") + 1])
+        self.calls.append(
+            {
+                "args": list(args),
+                "env": dict(env),
+                "key": args[args.index("--key") + 1],
+                "body": (body.stat().st_mode & 0o777, json.loads(body.read_text())) if body.exists() else None,
+                "body_path": body,
+            }
+        )
+        return tr.Result(self.rc, self.out)
+
 
 def _run(root: str, action: str, fake: FakeTerraform, tmp_path: Path | None = None, **kwargs: Any) -> int:
-    terraform_dir = kwargs.pop("terraform_dir", TERRAFORM_DIR)
+    terraform_dir = kwargs.pop("terraform_dir", TREE)
+    config = kwargs.pop("config", CONFIG)
+    kwargs.setdefault("aws", FakeAws())
     return tr.run(
         root,
         action,
         terraform_dir=terraform_dir,
-        load_config=lambda: CONFIG,
+        load_config=lambda: config,
         terraform=fake,
         **kwargs,
     )
@@ -159,10 +233,21 @@ def test_an_unknown_action_is_refused_before_anything_runs() -> None:
 def test_init_runs_first_and_quietly(action: str) -> None:
     """A fresh clone or worktree has no `.terraform/`; the verb alone fails there."""
     fake = FakeTerraform()
-    _run("gcp", action, fake, extra=["x"] if action == "untaint" else [])
+    _run("dns", action, fake, extra=["x"] if action == "untaint" else [])
     assert fake.verbs()[0] == "init"
     assert fake.calls[0]["quiet"]
     assert "-input=false" in fake.calls[0]["args"]
+
+
+@pytest.mark.parametrize("action", ["plan", "apply", "output", "untaint", "state-list"])
+def test_init_always_takes_the_shared_backend_file(action: str) -> None:
+    """Without it, init stops and asks for the bucket; `-reconfigure` ignores a
+    previous checkout's cached backend and never prompts to migrate."""
+    fake = FakeTerraform()
+    _run("dns", action, fake, extra=["x"] if action == "untaint" else [])
+    args = fake.call("init")["args"]
+    assert "-reconfigure" in args
+    assert f"-backend-config={(TREE / 'backend.s3.tfbackend').resolve()}" in args
 
 
 def test_a_failed_init_stops_the_run_and_its_code_reaches_the_caller() -> None:
@@ -175,7 +260,7 @@ def test_every_call_targets_the_module_directory() -> None:
     fake = FakeTerraform()
     _run("dns", "plan", fake)
     for call in fake.calls:
-        assert call["args"][0] == f"-chdir={TERRAFORM_DIR / 'dns'}"
+        assert call["args"][0] == f"-chdir={TREE / 'dns'}"
 
 
 # --------------------------------------------------------------------------- secrets
@@ -198,8 +283,99 @@ def test_r2_uses_the_r2_token_not_the_dns_one() -> None:
 def test_a_missing_secret_is_named_and_nothing_runs() -> None:
     fake = FakeTerraform()
     with pytest.raises(tr.RunnerError, match=r"cloudflare\.api_token"):
-        tr.run("dns", "plan", terraform_dir=TERRAFORM_DIR, load_config=lambda: {}, terraform=fake)
+        _run("dns", "plan", fake, config=_without(CONFIG, "cloudflare.api_token"))
     assert fake.calls == []
+
+
+# --------------------------------------------------------------------------- the backend's credentials
+
+
+@pytest.mark.parametrize("action", ["plan", "apply", "output", "state-list"])
+def test_the_state_credentials_reach_every_action_as_aws_variables(action: str) -> None:
+    fake = FakeTerraform()
+    _run("dns", action, fake)
+    for call in fake.calls:
+        assert call["env"]["AWS_ACCESS_KEY_ID"] == SECRET
+        assert call["env"]["AWS_SECRET_ACCESS_KEY"] == SECRET
+
+
+@pytest.mark.parametrize("path", sorted(tr.STATE_CREDENTIALS.values()))
+def test_missing_state_credentials_name_the_bootstrap_and_nothing_runs(path: str) -> None:
+    fake = FakeTerraform()
+    with pytest.raises(tr.RunnerError, match=r"tf-state-bootstrap"):
+        _run("dns", "output", fake, config=_without(CONFIG, path))
+    assert fake.calls == []
+
+
+def test_the_aws_provider_takes_its_keys_explicitly_never_from_the_environment() -> None:
+    """The backend's R2 pair is in the child's environment as AWS_*; a provider
+    reading the environment would present it to AWS."""
+    main = (TERRAFORM_DIR / "aws" / "main.tf").read_text(encoding="utf-8")
+    provider = re.search(r'^provider "aws" \{(.*?)^\}', main, re.M | re.S)
+    assert provider, "no aws provider block"
+    body = provider.group(1)
+    assert re.search(r"^\s*access_key\s*=\s*var\.aws_access_key_id", body, re.M)
+    assert re.search(r"^\s*secret_key\s*=\s*var\.aws_secret_access_key", body, re.M)
+    assert "profile" not in body
+    assert tr.ROOTS["aws"].secrets == {
+        "aws_access_key_id": "aws.access_key_id",
+        "aws_secret_access_key": "aws.secret_access_key",
+    }
+
+
+def test_a_plan_of_aws_runs_without_the_retired_headscale_keys() -> None:
+    """Retired with aws1 (#1353): the dormant root still plans."""
+    config = _without(_without(CONFIG, "aws.headscale_preauth_key"), "aws.headscale_api_key")
+    fake = FakeTerraform()
+    assert _run("aws", "plan", fake, config=config) == 0
+    assert "TF_VAR_tailscale_authkey" not in fake.call("plan")["env"]
+
+
+def test_an_apply_of_aws_refuses_to_start_without_them() -> None:
+    config = _without(CONFIG, "aws.headscale_preauth_key")
+    fake = FakeTerraform()
+    with pytest.raises(tr.RunnerError, match=r"aws\.headscale_preauth_key.*an apply does not"):
+        _run("aws", "apply", fake, config=config)
+    assert fake.calls == []
+
+
+def test_an_apply_of_aws_with_them_passes_them_on() -> None:
+    fake = FakeTerraform()
+    _run("aws", "apply", fake)
+    assert fake.call("plan")["env"]["TF_VAR_tailscale_authkey"] == SECRET
+
+
+@pytest.mark.parametrize("name", sorted(tr.ROOTS))
+def test_every_apply_only_secret_is_a_variable_with_a_default(name: str) -> None:
+    """Without a default, a plan that runs without it stops and asks."""
+    text = (TERRAFORM_DIR / name / "variables.tf").read_text(encoding="utf-8")
+    for variable in tr.ROOTS[name].apply_secrets:
+        block = re.search(rf'^variable\s+"{variable}"\s*\{{(.*?)^\}}', text, re.M | re.S)
+        assert block and re.search(r"^\s*default\s*=", block.group(1), re.M), variable
+
+
+SOPS_FILE = REPO / "infra" / "config" / "secrets" / "common.enc.yaml"
+
+
+def _sops_has(path: str) -> bool:
+    node: Any = yaml.safe_load(SOPS_FILE.read_text(encoding="utf-8"))
+    for part in path.split("."):
+        if not isinstance(node, dict) or part not in node:
+            return False
+        node = node[part]
+    return True
+
+
+@pytest.mark.parametrize(
+    "path",
+    sorted({p for r in tr.ROOTS.values() for p in r.secrets.values()} | set(tr.STATE_CREDENTIALS.values())),
+)
+def test_every_secret_a_run_requires_exists_in_sops(path: str) -> None:
+    """The runner reads the merged `common` config. A required path that SOPS
+    does not hold fails every run of its root, which is how the aws root's plan
+    stayed broken for six weeks after #1353 retired its Headscale keys. Key
+    names are plaintext in a SOPS file, so this needs no decryption."""
+    assert _sops_has(path), f"{path} is not in {SOPS_FILE.name}"
 
 
 def test_inherited_aws_and_tf_var_variables_are_stripped(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -212,7 +388,9 @@ def test_inherited_aws_and_tf_var_variables_are_stripped(monkeypatch: pytest.Mon
     fake = FakeTerraform()
     _run("gcp", "plan", fake)
     env = fake.call("plan")["env"]
-    assert not [k for k in env if k.startswith(("AWS_", "TF_VAR_"))]
+    # The only AWS_* left are the state bucket's, from SOPS.
+    assert {k for k in env if k.startswith("AWS_")} == set(tr.STATE_CREDENTIALS)
+    assert not [k for k in env if k.startswith("TF_VAR_")]
     assert env["KEEP_ME"] == "1"
 
 
@@ -250,7 +428,7 @@ def test_the_rendered_tfvars_exists_while_terraform_runs_private_and_outside_the
     _run("gcp", "plan", fake)
     [(path, (existed, mode))] = fake.call("plan")["var_files"].items()
     assert existed and mode == 0o600
-    assert not Path(path).is_relative_to(TERRAFORM_DIR)
+    assert not Path(path).is_relative_to(TREE)
 
 
 @pytest.mark.parametrize(
@@ -293,17 +471,17 @@ def test_the_rendered_tfvars_is_removed_when_terraform_raises() -> None:
         return tr.Result(0, "")
 
     with pytest.raises(KeyboardInterrupt):
-        tr.run("gcp", "plan", terraform_dir=TERRAFORM_DIR, load_config=lambda: CONFIG, terraform=boom)
+        tr.run("gcp", "plan", terraform_dir=TREE, load_config=lambda: CONFIG, terraform=boom)
     assert seen and not any(Path(p).exists() for p in seen)
 
 
 def test_the_dns_root_reads_the_vps_address_from_the_ssot() -> None:
     fake = FakeTerraform()
     _run("dns", "plan", fake)
-    rendered = [p for p in fake.call("plan")["var_files"] if not Path(p).is_relative_to(TERRAFORM_DIR)]
+    rendered = [p for p in fake.call("plan")["var_files"] if not Path(p).is_relative_to(TREE)]
     assert len(rendered) == 1
     assert tr.ROOTS["dns"].render is not None
-    content = tr.ROOTS["dns"].render(tr.Context(CONFIG, TERRAFORM_DIR / "dns", lambda *_: ""))
+    content = tr.ROOTS["dns"].render(tr.Context(CONFIG, TREE / "dns", lambda *_: ""))
     assert content == f'vps_ip = "{CONFIG["networking"]["vps"]["public_ip"]}"\n'
 
 
@@ -318,14 +496,14 @@ def test_a_renderer_refusing_the_ssot_names_the_key_and_nothing_runs() -> None:
     fake = FakeTerraform()
     config = {**CONFIG, "networking": {}}
     with pytest.raises(tr.RunnerError, match=r"cannot render the dns inputs.*vps"):
-        tr.run("dns", "plan", terraform_dir=TERRAFORM_DIR, load_config=lambda: config, terraform=fake)
+        _run("dns", "plan", fake, config=config)
     assert fake.calls == []
 
 
 def test_committed_var_files_are_passed_from_the_module() -> None:
     fake = FakeTerraform()
     _run("dns", "plan", fake)
-    committed = str(TERRAFORM_DIR / "dns" / "dns.tfvars")
+    committed = str(TREE / "dns" / "dns.tfvars")
     assert f"-var-file={committed}" in fake.call("plan")["args"]
     # The render shares its name; the legacy-render cleanup must not take the committed one.
     assert fake.call("plan")["var_files"][committed][0]
@@ -340,13 +518,7 @@ def test_a_stale_rendered_file_in_the_module_is_removed_first(tmp_path: Path) ->
     stale = module / "vps-firewall.auto.tfvars"
     stale.write_text("inbound_rules = []\n")
     fake = FakeTerraform()
-    tr.run(
-        "vps-firewall",
-        "plan",
-        terraform_dir=tmp_path,
-        load_config=lambda: _firewall_config(),
-        terraform=fake,
-    )
+    _run("vps-firewall", "plan", fake, terraform_dir=tmp_path, config=_firewall_config())
     assert not stale.exists()
 
 
@@ -366,7 +538,7 @@ def _firewall_config() -> dict[str, Any]:
 def test_a_guarded_apply_saves_the_plan_checks_it_and_applies_that_file() -> None:
     fake = FakeTerraform()
     assert _run("dns", "apply", fake) == 0
-    assert fake.verbs() == ["init", "plan", "show", "apply"]
+    assert fake.work() == ["init", "plan", "show", "apply"]
     out = next(a for a in fake.call("plan")["args"] if a.startswith("-out="))
     planfile = out.split("=", 1)[1]
     assert fake.call("show")["args"][-1] == planfile
@@ -394,7 +566,7 @@ def test_allow_destroy_and_a_named_address_open_the_guard() -> None:
     assert _run("dns", "apply", fake, allow_destroy=True) == 0
     fake = FakeTerraform(plan_json=DELETE_PLAN)
     assert _run("dns", "apply", fake, allowed=['cloudflare_record.kubelab_svc["old"]']) == 0
-    assert fake.verbs()[-1] == "apply"
+    assert fake.work()[-1] == "apply"
 
 
 def test_a_show_without_plan_json_applies_nothing() -> None:
@@ -411,7 +583,7 @@ def test_a_show_without_plan_json_applies_nothing() -> None:
 def test_a_failed_plan_never_reaches_the_guard_or_the_apply() -> None:
     fake = FakeTerraform(fail={"plan": 1})
     assert _run("dns", "apply", fake) == 1
-    assert fake.verbs() == ["init", "plan"]
+    assert fake.work() == ["init", "plan"]
 
 
 @pytest.mark.parametrize("name", ["r2", "vps-firewall", "gcp-bootstrap"])
@@ -423,7 +595,7 @@ def test_an_interactive_root_asks_before_applying(name: str) -> None:
 
 def test_an_interactive_apply_leaves_the_prompt_to_terraform() -> None:
     fake = FakeTerraform()
-    _run("gcp-bootstrap", "apply", fake)
+    _run("r2", "apply", fake)
     args = fake.call("apply")["args"]
     assert "-auto-approve" not in args and "-input=false" not in args
 
@@ -434,18 +606,11 @@ def test_only_the_disposable_fixture_applies_and_destroys_unattended() -> None:
 
 def test_the_disposable_fixture_auto_approves() -> None:
     fake = FakeTerraform()
-    tr.run(
-        "gcp-killswitch-test",
-        "apply",
-        terraform_dir=TERRAFORM_DIR,
-        load_config=lambda: CONFIG,
-        terraform=fake,
-        outputs=lambda root, name: "sa@example.iam.gserviceaccount.com",
-    )
+    _run("gcp-killswitch-test", "apply", fake, outputs=lambda root, name: "sa@example.iam.gserviceaccount.com")
     assert "-auto-approve" in fake.call("apply")["args"]
 
 
-@pytest.mark.parametrize("name", ["dns", "gcp", "aws", "r2"])
+@pytest.mark.parametrize("name", ["dns", "aws", "r2"])
 def test_destroy_always_asks_outside_the_fixture(name: str) -> None:
     fake = FakeTerraform()
     _run(name, "destroy", fake)
@@ -486,15 +651,225 @@ def test_untaint_needs_an_address() -> None:
 def test_untaint_touches_state_only() -> None:
     fake = FakeTerraform()
     _run("dns", "untaint", fake, extra=['cloudflare_record.kubelab_svc["chat"]'])
-    assert fake.verbs() == ["init", "untaint"]
+    assert fake.work() == ["init", "untaint"]
+    assert not [k for k in fake.call("untaint")["env"] if k.startswith("TF_VAR_")]
 
 
 def test_output_reads_another_root_through_the_runner() -> None:
     """The fixture's tfvars needs the bootstrap root's service account."""
     fake = FakeTerraform(stdout="sa@example.iam.gserviceaccount.com\n")
-    value = tr.output("gcp-bootstrap", "kill_switch_service_account", terraform_dir=TERRAFORM_DIR, terraform=fake)
+    value = tr.output(
+        "gcp-bootstrap", "kill_switch_service_account", terraform_dir=TREE, terraform=fake, load_config=lambda: CONFIG
+    )
     assert value == "sa@example.iam.gserviceaccount.com"
     assert fake.call("output")["args"][1:] == ["output", "-raw", "kill_switch_service_account"]
+    # Another root's state is in R2 as well.
+    assert "-reconfigure" in fake.call("init")["args"]
+    assert fake.call("output")["env"]["AWS_ACCESS_KEY_ID"] == SECRET
+
+
+# --------------------------------------------------------------------------- no state the backend does not hold
+
+
+def _module_copy(tmp_path: Path, root: str) -> Path:
+    shutil.copytree(TREE / root, tmp_path / root)
+    shutil.copy(TREE / "backend.s3.tfbackend", tmp_path / "backend.s3.tfbackend")
+    return tmp_path / root
+
+
+STATE = {"version": 4, "lineage": "11111111-aaaa", "serial": 7, "resources": [{"name": "a"}, {"name": "b"}]}
+
+
+@pytest.mark.parametrize("action", ["plan", "apply", "output", "state-list"])
+def test_a_local_state_left_in_a_module_refuses_every_action_but_migrate(tmp_path: Path, action: str) -> None:
+    """Against R2 the run would never read it, and a plan would propose
+    recreating everything it holds (#1499)."""
+    (_module_copy(tmp_path, "dns") / "terraform.tfstate").write_text(json.dumps(STATE))
+    fake = FakeTerraform()
+    with pytest.raises(tr.RunnerError, match=r"make tf-state-migrate ROOT=dns"):
+        _run("dns", action, fake, terraform_dir=tmp_path)
+    assert fake.calls == []
+
+
+def test_the_roots_whose_state_was_lost_are_declared() -> None:
+    assert {n for n, r in tr.ROOTS.items() if r.unrecovered} == {"gcp", "gcp-bootstrap", "vps-firewall"}
+
+
+@pytest.mark.parametrize("action", ["apply", "destroy", "untaint"])
+def test_a_lost_state_refuses_every_write_and_names_its_ticket(action: str) -> None:
+    fake = FakeTerraform()
+    with pytest.raises(tr.RunnerError, match=r"#2226"):
+        _run("gcp", action, fake, extra=["x"] if action == "untaint" else [])
+    assert fake.calls == []
+
+
+def test_a_lost_state_still_plans() -> None:
+    fake = FakeTerraform()
+    assert _run("gcp", "plan", fake) == 0
+    assert "plan" in fake.verbs()
+
+
+# --------------------------------------------------------------------------- history
+
+
+def test_a_write_copies_the_state_to_history_before_and_after() -> None:
+    before, after = STATE, {**STATE, "serial": 8}
+    fake, aws = FakeTerraform(pulls=[before, after]), FakeAws()
+    assert _run("dns", "apply", fake, aws=aws) == 0
+    verbs = fake.verbs()
+    assert verbs.index("state pull") < verbs.index("plan") and verbs[-1] == "state pull"
+    assert [c["key"] for c in aws.calls] == [
+        "history/dns/11111111-aaaa/7.tfstate",
+        "history/dns/11111111-aaaa/8.tfstate",
+    ]
+    for call, state in zip(aws.calls, (before, after)):
+        assert call["args"][call["args"].index("--if-none-match") + 1] == "*"
+        assert call["args"][call["args"].index("--bucket") + 1] == CONFIG["terraform"]["state"]["bucket"]
+        assert call["body"] == (0o600, state)
+        assert not call["body_path"].exists()
+        assert call["env"]["AWS_ACCESS_KEY_ID"] == SECRET
+        assert call["env"]["AWS_REQUEST_CHECKSUM_CALCULATION"] == "when_required"
+
+
+def test_a_read_writes_no_history() -> None:
+    fake, aws = FakeTerraform(pulls=[STATE]), FakeAws()
+    _run("dns", "plan", fake, aws=aws)
+    assert aws.calls == [] and "state pull" not in fake.verbs()
+
+
+def test_a_snapshot_already_in_history_is_the_same_state() -> None:
+    """Lineage and serial name one state; the conditional put refuses a second copy."""
+    aws = FakeAws(rc=254, out="An error occurred (PreconditionFailed) when calling the PutObject operation")
+    assert _run("dns", "apply", FakeTerraform(pulls=[STATE]), aws=aws) == 0
+
+
+def test_a_backend_with_no_state_yet_has_nothing_to_copy() -> None:
+    aws = FakeAws()
+    assert _run("dns", "apply", FakeTerraform(pulls=[None]), aws=aws) == 0
+    assert aws.calls == []
+
+
+def test_a_failed_copy_before_a_write_stops_it() -> None:
+    fake = FakeTerraform(pulls=[STATE])
+    assert _run("dns", "apply", fake, aws=FakeAws(rc=1, out="AccessDenied")) == 1
+    assert "plan" not in fake.verbs()
+
+
+def test_a_failed_copy_after_a_write_fails_the_run() -> None:
+    class AfterFails(FakeAws):
+        def __call__(self, args: list[str], *, env: dict[str, str]) -> tr.Result:
+            super().__call__(args, env=env)
+            return tr.Result(1 if len(self.calls) > 1 else 0, "boom")
+
+    fake = FakeTerraform(pulls=[STATE, {**STATE, "serial": 8}])
+    assert _run("dns", "apply", fake, aws=AfterFails()) == 1
+    assert "apply" in fake.verbs()
+
+
+def test_a_failed_write_is_still_copied_and_its_code_kept() -> None:
+    """A failed apply can have written a new serial before it stopped."""
+    aws = FakeAws()
+    fake = FakeTerraform(fail={"apply": 3}, pulls=[STATE, {**STATE, "serial": 8}])
+    assert _run("dns", "apply", fake, aws=aws) == 3
+    assert [c["key"].rsplit("/", 1)[1] for c in aws.calls] == ["7.tfstate", "8.tfstate"]
+
+
+def test_a_state_that_is_not_json_is_refused_without_its_content() -> None:
+    class Garbage(FakeTerraform):
+        def __call__(self, args: list[str], **kw: Any) -> tr.Result:
+            result = super().__call__(args, **kw)
+            return tr.Result(0, "not json " + SECRET) if self.calls[-1]["verb"] == "state pull" else result
+
+    with pytest.raises(tr.RunnerError) as exc:
+        _run("dns", "apply", Garbage())
+    assert SECRET not in str(exc.value)
+
+
+# --------------------------------------------------------------------------- migrate
+
+
+def _migrate(tmp_path: Path, fake: FakeTerraform, aws: FakeAws | None = None, **kwargs: Any) -> int:
+    return _run("dns", "migrate", fake, terraform_dir=tmp_path, aws=aws or FakeAws(), **kwargs)
+
+
+def test_migrate_pushes_without_force_checks_the_result_and_retires_the_local_file(tmp_path: Path) -> None:
+    module = _module_copy(tmp_path, "dns")
+    (module / "terraform.tfstate").write_text(json.dumps(STATE))
+    aws = FakeAws()
+    fake = FakeTerraform(pulls=[None, STATE, STATE])
+    assert _migrate(tmp_path, fake, aws) == 0
+    push = fake.call("state push")
+    assert push["args"][1:] == ["state", "push", str(module / "terraform.tfstate")]
+    assert "-force" not in push["args"]
+    assert not (module / "terraform.tfstate").exists()
+    assert json.loads((module / "terraform.pre-remote.tfstate").read_text()) == STATE
+    assert [c["key"] for c in aws.calls] == ["history/dns/11111111-aaaa/7.tfstate"]
+    assert not [k for k in push["env"] if k.startswith("TF_VAR_")]
+
+
+def test_migrate_keeps_the_local_file_when_r2_holds_something_else(tmp_path: Path) -> None:
+    module = _module_copy(tmp_path, "dns")
+    (module / "terraform.tfstate").write_text(json.dumps(STATE))
+    fake = FakeTerraform(pulls=[None, {**STATE, "resources": []}])
+    assert _migrate(tmp_path, fake) == 1
+    assert (module / "terraform.tfstate").exists()
+    assert not (module / "terraform.pre-remote.tfstate").exists()
+
+
+def test_a_refused_push_keeps_the_local_file(tmp_path: Path) -> None:
+    """A different lineage or a lower serial in R2: push refuses, nothing moves."""
+    module = _module_copy(tmp_path, "dns")
+    (module / "terraform.tfstate").write_text(json.dumps(STATE))
+    assert _migrate(tmp_path, FakeTerraform(fail={"state push": 1})) == 1
+    assert (module / "terraform.tfstate").exists()
+
+
+def test_migrate_after_success_is_a_no_op(tmp_path: Path) -> None:
+    module = _module_copy(tmp_path, "dns")
+    (module / "terraform.pre-remote.tfstate").write_text(json.dumps(STATE))
+    fake = FakeTerraform(pulls=[STATE])
+    assert _migrate(tmp_path, fake) == 0
+    assert "state push" not in fake.verbs()
+
+
+def test_migrate_with_nothing_to_move_says_so(tmp_path: Path) -> None:
+    _module_copy(tmp_path, "dns")
+    with pytest.raises(tr.RunnerError, match="nothing to migrate"):
+        _migrate(tmp_path, FakeTerraform())
+
+
+def test_migrate_never_overwrites_an_earlier_pre_remote_copy(tmp_path: Path) -> None:
+    module = _module_copy(tmp_path, "dns")
+    (module / "terraform.tfstate").write_text(json.dumps(STATE))
+    (module / "terraform.pre-remote.tfstate").write_text("{}")
+    fake = FakeTerraform()
+    with pytest.raises(tr.RunnerError, match="already exists"):
+        _migrate(tmp_path, fake)
+    assert "state push" not in fake.verbs()
+
+
+def test_migrate_needs_no_secret_of_the_root(tmp_path: Path) -> None:
+    """aws's Headscale keys are retired; its state must still move."""
+    module = _module_copy(tmp_path, "aws")
+    (module / "terraform.tfstate").write_text(json.dumps(STATE))
+    config = _without(_without(CONFIG, "aws.access_key_id"), "aws.headscale_api_key")
+    fake = FakeTerraform(pulls=[None, STATE, STATE])
+    assert _run("aws", "migrate", fake, terraform_dir=tmp_path, config=config) == 0
+
+
+# --------------------------------------------------------------------------- state-list
+
+
+def test_state_list_prints_addresses_only() -> None:
+    fake = FakeTerraform()
+    assert _run("dns", "state-list", fake) == 0
+    assert fake.verbs() == ["init", "state list"]
+    assert not [k for k in fake.call("state list")["env"] if k.startswith("TF_VAR_")]
+
+
+def test_no_action_prints_a_states_values() -> None:
+    """`show` and `state show` print attribute values, and a state holds secrets in clear."""
+    assert not {"show", "state-show", "pull"} & set(tr.ACTIONS)
 
 
 # --------------------------------------------------------------------------- the real subprocess seam

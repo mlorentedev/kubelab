@@ -19,9 +19,17 @@ What every run guarantees, in one place:
   every exit, an exception or Ctrl-C included. A rendered file left in the module
   directory from the old targets is removed first, because Terraform auto-loads
   `*.auto.tfvars` and would read it next to the fresh render.
-- **`init` runs first, every time.** A fresh clone or worktree has no
-  `.terraform/`, and the verb alone fails there with a message that reads as a
-  broken checkout.
+- **`init` runs first, every time, against the shared R2 backend.** A fresh
+  clone or worktree has no `.terraform/`, and the verb alone fails there with a
+  message that reads as a broken checkout. `-backend-config` passes the one
+  generated `backend.s3.tfbackend`; the bucket's credentials reach the child as
+  AWS_* from SOPS `terraform.state.*`, for every action.
+- **No root runs against a state the backend does not hold.** A local
+  `terraform.tfstate` left in a module refuses every action but `migrate`, and
+  a root whose state was lost refuses every write until it is recovered.
+- **Every write leaves a copy of the state in history.** R2 has no object
+  versioning, so before and after each write the state is put under a locked
+  `history/<root>/<lineage>/<serial>.tfstate` key that cannot be overwritten.
 - **Apply follows the root's declared mode.** `guarded` saves the plan, refuses
   any delete or replace not allowed (TF-013), and applies that same file;
   `interactive` leaves the prompt to Terraform; `auto` is for the disposable
@@ -30,6 +38,7 @@ What every run guarantees, in one place:
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import tempfile
@@ -39,7 +48,29 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, NamedTuple, Protocol
 
-ACTIONS = ("plan", "apply", "destroy", "output", "untaint")
+from toolkit.features import terraform_backend
+
+ACTIONS = ("plan", "apply", "destroy", "output", "untaint", "migrate", "state-list")
+
+# Actions that read or write state and nothing else: no variables, so no secret
+# of the root's. They still need the backend's credentials.
+STATE_ONLY = frozenset({"output", "untaint", "migrate", "state-list"})
+
+# Actions that write state, snapshotted to history before and after.
+WRITES = frozenset({"apply", "destroy", "untaint", "migrate"})
+
+# The bucket's credentials, as the S3 backend reads them, from SOPS. Minted with
+# a token scoped to the state bucket alone by `make tf-state-bootstrap`.
+STATE_CREDENTIALS = {
+    "AWS_ACCESS_KEY_ID": "terraform.state.access_key_id",
+    "AWS_SECRET_ACCESS_KEY": "terraform.state.secret_access_key",
+}
+
+LOCAL_STATE = "terraform.tfstate"
+# Where `migrate` moves the local file once R2 holds the same state. Still
+# ignored by git (`*.tfstate`), kept rather than deleted: it is the last copy
+# from before the backend existed.
+MIGRATED_STATE = "terraform.pre-remote.tfstate"
 
 # Every name a pre-runner Make target rendered into a module directory. One left
 # behind is removed before a run: it is a second, stale declaration of the SSOT,
@@ -96,6 +127,13 @@ class Root:
     var_files: tuple[str, ...] = ()
     # Renders a tfvars from the SSOT; written to the private temp dir.
     render: Callable[[Context], str] | None = None
+    # Secrets an apply needs and a plan does not: injected when SOPS has them,
+    # and an apply refuses to start without them. For a dormant root whose
+    # credentials were retired with the host they admitted.
+    apply_secrets: Mapping[str, str] = field(default_factory=dict)
+    # The ticket that recovers a lost state. While set, every write is refused:
+    # against an empty state an apply creates a second copy of what exists.
+    unrecovered: str = ""
 
 
 def _render_gcp(ctx: Context) -> str:
@@ -175,11 +213,21 @@ ROOTS: dict[str, Root] = {
             apply="interactive",
             secrets={"hetzner_api_token": "hetzner.api_key"},
             render=_render_vps_firewall,
+            unrecovered="TF-015 (#2226)",
         ),
+        # Dormant since aws1 was destroyed (ADR-063), kept for the portability
+        # claim. The provider takes its keys explicitly: the backend's R2 pair
+        # is in the same environment, and AWS_* there would be read as AWS's.
+        # The Headscale keys were retired with the host (#1353); a re-apply
+        # mints new ones first (docs/runbooks/aws1-destroy-replace.md).
         Root(
             "aws",
             apply="guarded",
             secrets={
+                "aws_access_key_id": "aws.access_key_id",
+                "aws_secret_access_key": "aws.secret_access_key",
+            },
+            apply_secrets={
                 "tailscale_authkey": "aws.headscale_preauth_key",
                 "headscale_api_key": "aws.headscale_api_key",
             },
@@ -190,13 +238,14 @@ ROOTS: dict[str, Root] = {
             "gcp-bootstrap",
             apply="interactive",
             secrets={"billing_account_id": "gcp.billing_account_id"},
+            unrecovered="TF-015 (#2226)",
         ),
         # Disaster recovery only: how to create the VPS from scratch, never
         # imported against the running one. Its inputs are the defaults in
         # variables.tf; its deployer key is TF-018 (#2230).
         Root("compute", apply="guarded", secrets={"hetzner_api_token": "hetzner.api_key"}),
         # Carries no secret: the hub reads its credentials from Secret Manager.
-        Root("gcp", apply="guarded", render=_render_gcp),
+        Root("gcp", apply="guarded", render=_render_gcp, unrecovered="TF-015 (#2226)"),
         Root(
             "gcp-killswitch-test",
             apply="auto",
@@ -225,6 +274,15 @@ def subprocess_terraform(args: list[str], *, env: dict[str, str], capture: bool,
     return Result(proc.returncode, proc.stdout or "")
 
 
+def subprocess_aws(args: list[str], *, env: dict[str, str]) -> Result:
+    """The aws CLI, for the history snapshot. Its stdout is kept; stderr names a refusal."""
+    try:
+        proc = subprocess.run(["aws", *args], env=env, capture_output=True, text=True, check=False)
+    except FileNotFoundError:
+        raise RunnerError("the aws CLI is not on PATH; install it with `dotf tools sync`.") from None
+    return Result(proc.returncode, proc.stdout + proc.stderr)
+
+
 def _dig(config: Mapping[str, Any], dotted: str) -> Any:
     node: Any = config
     for part in dotted.split("."):
@@ -234,13 +292,28 @@ def _dig(config: Mapping[str, Any], dotted: str) -> Any:
     return node
 
 
-def child_env(config: Mapping[str, Any], root: Root, base: Mapping[str, str] | None = None) -> dict[str, str]:
-    """The child's environment: inherited minus AWS_* and TF_* (see INHERITED_TF), plus the root's secrets."""
+def child_env(
+    config: Mapping[str, Any],
+    root: Root,
+    base: Mapping[str, str] | None = None,
+    *,
+    applying: bool = False,
+) -> dict[str, str]:
+    """The child's environment: inherited minus AWS_* and TF_* (see INHERITED_TF),
+    plus the state bucket's credentials and the root's secrets."""
     env = {
         k: v
         for k, v in (os.environ if base is None else base).items()
         if not k.startswith("AWS_") and (not k.startswith("TF_") or k in INHERITED_TF)
     }
+    for name, path in STATE_CREDENTIALS.items():
+        value = _dig(config, path)
+        if value in (None, ""):
+            raise RunnerError(
+                f"{path} is empty or absent in SOPS; every root needs it to reach its state in R2. "
+                "Mint the state bucket's credentials with `make tf-state-bootstrap` (docs/runbooks/terraform-state.md)."
+            )
+        env[name] = str(value)
     for variable, path in root.secrets.items():
         value = _dig(config, path)
         if value in (None, ""):
@@ -249,7 +322,21 @@ def child_env(config: Mapping[str, Any], root: Root, base: Mapping[str, str] | N
                 f"Set it with: toolkit secrets set {path} --stdin --env common"
             )
         env[f"TF_VAR_{variable}"] = str(value)
+    for variable, path in root.apply_secrets.items():
+        value = _dig(config, path)
+        if value not in (None, ""):
+            env[f"TF_VAR_{variable}"] = str(value)
+        elif applying:
+            raise RunnerError(
+                f"{path} is absent in SOPS; a plan of {root.name} runs without it, an apply does not. "
+                f"Mint it, then: toolkit secrets set {path} --stdin --env common"
+            )
     return env
+
+
+def _state_env(config: Mapping[str, Any], root_name: str) -> dict[str, str]:
+    """The environment of a state-only action: the backend's credentials, no root secret."""
+    return child_env(config, Root(root_name, apply="guarded"))
 
 
 def _remove_legacy_renders(module_dir: Path) -> None:
@@ -263,18 +350,26 @@ def _default_config() -> Mapping[str, Any]:
     return ConfigurationManager("common").get_merged_config()
 
 
+def _init_args(terraform_dir: Path) -> list[str]:
+    """`-reconfigure`: the backend is whatever the generated file says, never a
+    previous checkout's cached choice, and never a prompt to migrate."""
+    backend = (terraform_dir / terraform_backend.BACKEND_FILE).resolve()
+    return ["init", "-input=false", "-reconfigure", f"-backend-config={backend}"]
+
+
 def output(
     root: str,
     name: str,
     *,
     terraform_dir: Path,
     terraform: Terraform = subprocess_terraform,
+    load_config: Callable[[], Mapping[str, Any]] = _default_config,
 ) -> str:
-    """One output of another root, read through the runner (no secret needed)."""
+    """One output of another root, read through the runner (no root secret needed)."""
     module = terraform_dir / root
     chdir = f"-chdir={module}"
-    env = child_env({}, Root(root, apply="guarded"))
-    if terraform([chdir, "init", "-input=false"], env=env, capture=False, quiet=True).returncode != 0:
+    env = _state_env(load_config(), root)
+    if terraform([chdir, *_init_args(terraform_dir)], env=env, capture=False, quiet=True).returncode != 0:
         return ""
     result = terraform([chdir, "output", "-raw", name], env=env, capture=True, quiet=False)
     return result.stdout.strip() if result.returncode == 0 else ""
@@ -290,6 +385,7 @@ def run(
     allowed: Sequence[str] = (),
     load_config: Callable[[], Mapping[str, Any]] = _default_config,
     terraform: Terraform = subprocess_terraform,
+    aws: AwsCli = subprocess_aws,
     outputs: Outputs | None = None,
 ) -> int:
     """Run one Terraform action against one root. Returns Terraform's exit code."""
@@ -302,14 +398,16 @@ def run(
         raise RunnerError("untaint needs the resource address to clear")
 
     module = terraform_dir / root.name
+    _refuse_a_state_the_backend_does_not_hold(root, action, module)
     chdir = f"-chdir={module}"
-    state_only = action in ("output", "untaint")
-    config = {} if state_only else load_config()
-    env = child_env(config, Root(root.name, root.apply) if state_only else root)
+    state_only = action in STATE_ONLY
+    config = load_config()
+    env = _state_env(config, root.name) if state_only else child_env(config, root, applying=action == "apply")
+    history = _History(root.name, config, aws)
     if outputs is None:
 
         def outputs(other: str, name: str) -> str:
-            return output(other, name, terraform_dir=terraform_dir, terraform=terraform)
+            return output(other, name, terraform_dir=terraform_dir, terraform=terraform, load_config=lambda: config)
 
     _remove_legacy_renders(module)
     with tempfile.TemporaryDirectory(prefix=f"tf-{root.name}-") as tmp:
@@ -330,25 +428,196 @@ def run(
         def tf(*args: str, capture: bool = False, quiet: bool = False) -> Result:
             return terraform([chdir, *args], env=env, capture=capture, quiet=quiet)
 
-        rc = tf("init", "-input=false", quiet=True).returncode
+        rc = tf(*_init_args(terraform_dir), quiet=True).returncode
         if rc != 0:
             return rc
+        if action not in WRITES:
+            return _read(tf, root, action, var_args, extra)
+        # Before: a write must not start from a state history does not hold,
+        # which is also how a snapshot missed by an earlier run is caught up.
+        rc = history.snapshot(tf, Path(tmp))
+        if rc != 0:
+            from toolkit.core.logging import logger
 
-        if action == "plan":
-            return tf("plan", "-input=false", *var_args, *extra).returncode
-        if action == "output":
-            return tf("output", *extra).returncode
-        if action == "untaint":
-            return tf("untaint", *extra).returncode
-        if action == "destroy":
-            auto = ("-auto-approve",) if root.apply == "auto" else ()
-            return tf("destroy", *auto, *var_args, *extra).returncode
-        # apply
-        if root.apply == "interactive":
-            return tf("apply", *var_args, *extra).returncode
-        if root.apply == "auto":
-            return tf("apply", "-auto-approve", *var_args, *extra).returncode
-        return _guarded_apply(tf, Path(tmp), var_args, extra, allow_destroy, allowed)
+            logger.error(f"{root.name}: the state could not be copied to history; nothing was changed.")
+            return rc
+        rc = _write(tf, root, action, module, Path(tmp), var_args, extra, allow_destroy, allowed)
+        # After, whatever the write returned: a failed apply can still have
+        # written a new serial.
+        after = history.snapshot(tf, Path(tmp))
+        return rc or after
+
+
+def _refuse_a_state_the_backend_does_not_hold(root: Root, action: str, module: Path) -> None:
+    if (module / LOCAL_STATE).exists() and action != "migrate":
+        raise RunnerError(
+            f"{module / LOCAL_STATE} is a local state, and the {root.name} root keeps its state in R2. "
+            f"Running against R2 now would ignore it. Move it first: make tf-state-migrate ROOT={root.name}"
+        )
+    if root.unrecovered and action in ("apply", "destroy", "untaint"):
+        raise RunnerError(
+            f"the {root.name} root's state was lost and is not recovered yet ({root.unrecovered}). "
+            "Against an empty state Terraform does not know what exists, so an apply would create it again. "
+            "A plan is allowed and shows what the import must cover."
+        )
+
+
+def _read(tf: Callable[..., Result], root: Root, action: str, var_args: list[str], extra: Sequence[str]) -> int:
+    if action == "plan":
+        return tf("plan", "-input=false", *var_args, *extra).returncode
+    if action == "output":
+        return tf("output", *extra).returncode
+    # state-list: resource addresses only. `state show` and `show` are not
+    # offered: they print attribute values, and a state holds secrets in clear.
+    return tf("state", "list", *extra).returncode
+
+
+def _write(
+    tf: Callable[..., Result],
+    root: Root,
+    action: str,
+    module: Path,
+    tmp: Path,
+    var_args: list[str],
+    extra: Sequence[str],
+    allow_destroy: bool,
+    allowed: Sequence[str],
+) -> int:
+    if action == "migrate":
+        return _migrate(tf, root, module)
+    if action == "untaint":
+        return tf("untaint", *extra).returncode
+    if action == "destroy":
+        auto = ("-auto-approve",) if root.apply == "auto" else ()
+        return tf("destroy", *auto, *var_args, *extra).returncode
+    if root.apply == "interactive":
+        return tf("apply", *var_args, *extra).returncode
+    if root.apply == "auto":
+        return tf("apply", "-auto-approve", *var_args, *extra).returncode
+    return _guarded_apply(tf, tmp, var_args, extra, allow_destroy, allowed)
+
+
+class AwsCli(Protocol):
+    def __call__(self, args: list[str], *, env: dict[str, str]) -> Result: ...
+
+
+def _pull(tf: Callable[..., Result]) -> dict[str, Any] | None:
+    """The remote state, parsed in memory. None when the backend holds none yet.
+
+    Never printed and never put in a message: a state holds secrets in clear.
+    """
+    pulled = tf("state", "pull", capture=True)
+    if pulled.returncode != 0:
+        raise RunnerError("terraform state pull failed; the backend could not be read.")
+    if not pulled.stdout.strip():
+        return None
+    try:
+        return dict(json.loads(pulled.stdout))
+    except ValueError:
+        raise RunnerError("terraform state pull returned something that is not a state.") from None
+
+
+def _shape(state: Mapping[str, Any]) -> tuple[str, int, int]:
+    return str(state.get("lineage", "")), int(state.get("serial", 0)), len(state.get("resources") or [])
+
+
+class _History:
+    """`history/<root>/<lineage>/<serial>.tfstate` in the state bucket.
+
+    The prefix is under a bucket lock rule, and every put is conditional
+    (`If-None-Match: *`), so a serial once copied can be neither overwritten nor
+    deleted. A put that finds its key already there is the same state: lineage
+    and serial name one state, and Terraform never reuses them.
+    """
+
+    def __init__(self, root_name: str, config: Mapping[str, Any], aws: AwsCli) -> None:
+        self.root_name = root_name
+        self.config = config
+        self.aws = aws
+
+    def snapshot(self, tf: Callable[..., Result], tmp: Path) -> int:
+        from toolkit.core.logging import logger
+        from toolkit.features.backup_node_credentials import _s3_env
+
+        state = _pull(tf)
+        if state is None:
+            return 0
+        lineage, serial, _ = _shape(state)
+        settings = self.config["terraform"]["state"]
+        key = f"{settings['history_prefix']}{self.root_name}/{lineage}/{serial}.tfstate"
+        body = tmp / "history.tfstate"
+        fd = os.open(body, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as fh:
+            json.dump(state, fh)
+        try:
+            env = {**os.environ, **_s3_env(*(str(_dig(self.config, p)) for p in STATE_CREDENTIALS.values()))}
+            put = self.aws(
+                [
+                    "--endpoint-url",
+                    self.config["backup"]["r2"]["endpoint"],
+                    "s3api",
+                    "put-object",
+                    "--bucket",
+                    settings["bucket"],
+                    "--key",
+                    key,
+                    "--body",
+                    str(body),
+                    "--if-none-match",
+                    "*",
+                ],
+                env=env,
+            )
+        finally:
+            body.unlink(missing_ok=True)
+        if put.returncode == 0:
+            logger.info(f"{self.root_name}: state serial {serial} copied to history.")
+            return 0
+        if "PreconditionFailed" in put.stdout:
+            return 0
+        logger.error(f"{self.root_name}: copying serial {serial} to {key} failed: {put.stdout.strip()[-300:]}")
+        return 1
+
+
+def _migrate(tf: Callable[..., Result], root: Root, module: Path) -> int:
+    """Move a root's local state into R2, without `-force`, and prove it arrived.
+
+    `state push` refuses a different lineage or a lower serial, so a remote that
+    already holds a newer or unrelated state is never overwritten. After the
+    push the remote is read back and compared; only then is the local file
+    renamed, which is what lets the next run start.
+    """
+    from toolkit.core.logging import logger
+
+    local = module / LOCAL_STATE
+    moved = module / MIGRATED_STATE
+    if not local.exists():
+        if moved.exists():
+            logger.info(f"{root.name}: already migrated ({moved.name} is the pre-remote copy).")
+            return 0
+        raise RunnerError(f"{root.name} has no local state at {local}; there is nothing to migrate.")
+    if moved.exists():
+        raise RunnerError(f"{moved} already exists; refusing to overwrite the last pre-remote copy.")
+    try:
+        expected = _shape(json.loads(local.read_text(encoding="utf-8")))
+    except ValueError:
+        raise RunnerError(f"{local} is not a Terraform state; nothing was pushed.") from None
+    rc = tf("state", "push", str(local)).returncode
+    if rc != 0:
+        return rc
+    arrived = _pull(tf)
+    if arrived is None or _shape(arrived) != expected:
+        got = _shape(arrived) if arrived else None
+        logger.error(
+            f"{root.name}: R2 holds {got} after the push, the local file {expected} (lineage, serial, resources). "
+            f"The local file is kept."
+        )
+        return 1
+    local.rename(moved)
+    logger.info(
+        f"{root.name}: {expected[2]} resources moved to R2 at serial {expected[1]}; the local file is {moved.name}."
+    )
+    return 0
 
 
 def _guarded_apply(
@@ -364,8 +633,6 @@ def _guarded_apply(
     The saved plan holds the input variables, token included, so it lives in the
     private temp dir and its JSON is read into memory, never printed.
     """
-    import json
-
     from toolkit.core.logging import logger
     from toolkit.features.terraform_plan_guard import refused, summary
 
