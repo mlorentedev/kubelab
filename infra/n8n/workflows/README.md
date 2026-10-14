@@ -199,9 +199,9 @@ then `make import-n8n ENV=prod`. The token is minted in the Cloudflare dashboard
 
 After the change merges, run `make import-n8n ENV=prod`: the import updates the workflow in place
 (same id), so the five Web Analytics nodes disappear from n8n. The SOPS key
-`apps.services.automation.n8n.sale_digest.site_tag` is no longer registered, so `toolkit secrets
-audit` reports it as an unbaselined orphan until it is removed. `toolkit secrets unset` takes a leaf
-path, so remove just that key (the token and the recipient stay):
+`apps.services.automation.n8n.sale_digest.site_tag` was then unregistered, and `toolkit secrets
+audit` reported it as an unbaselined orphan. It was removed on 2026-10-14 (#2240) with the leaf-path
+form, which keeps the token and the recipient:
 
     toolkit secrets unset apps.services.automation.n8n.sale_digest.site_tag --env prod
 
