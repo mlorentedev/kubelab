@@ -430,7 +430,7 @@ class IssueRef:
 
 
 def _refs_query(repo: str, numbers: list[int]) -> str:
-    owner, name = repo.split("/", 1)
+    owner, name = gh_graphql.split_repo(repo, GitHubError)
     lines = "\n".join(f"i{n}: issue(number: {n}) {{ id number state parent {{ number }} }}" for n in numbers)
     return f"query {{ repository(owner: {json.dumps(owner)}, name: {json.dumps(name)}) {{\n{lines}\n}} }}"
 

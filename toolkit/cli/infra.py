@@ -1492,14 +1492,12 @@ def ansible_syntax_check(
     Uses the committed static inventory rather than the generated one, so this
     runs in CI with no `ansible generate` step and no SSOT decrypt.
 
-    What it does NOT catch, stated because an earlier version of this docstring
-    claimed the opposite: an unresolvable `hosts:` pattern. `--syntax-check`
-    parses structure and loads roles, but pattern matching happens at execution
-    time — `hosts: typo_host` emits a WARNING and exits 0 (measured, #1180
-    review). Making that fatal is not available here either: 11 of the 20
-    playbooks already emit it against the static inventory, because the real
-    host set lives in the per-environment GENERATED inventory. Catching a
-    typo'd host needs a different mechanism than this gate.
+    What it does NOT catch: an unresolvable `hosts:` pattern. `--syntax-check`
+    does match patterns, and `infra/ansible/ansible.cfg` makes a mismatch an
+    error (#1228), but most playbooks name hosts the static inventory does not
+    carry: the real host set lives in the per-environment GENERATED inventory.
+    So this gate runs with the mismatch set back to a warning, and the runner,
+    which uses the generated inventory, is where a typo'd host fails.
 
     Requires the Galaxy collections from requirements.yml: syntax-check loads
     the roles a playbook includes, and a role using `community.docker` fails to
@@ -1531,6 +1529,7 @@ def ansible_syntax_check(
         result = command.run(
             f"ansible-playbook --syntax-check {path} -i {inventory}",
             cwd=ansible_dir,
+            env={**os.environ, "ANSIBLE_HOST_PATTERN_MISMATCH": "warning"},
             check=False,
             capture_output=True,
         )

@@ -134,7 +134,7 @@ VECTOR_CONFIGS = {
 
 @pytest.mark.integration
 @pytest.mark.parametrize("target", sorted(VECTOR_CONFIGS))
-def test_vector_redacts_every_token_kind_and_nothing_else(target: str, tmp_path: Path) -> None:
+def test_vector_redacts_every_token_kind_and_nothing_else(target: str, docker_mount_dir: Path) -> None:
     """Runs Vector's own unit-test runner on each shipped config, with the pinned image."""
     if shutil.which("docker") is None:
         # The only proof the redaction works: in CI a missing docker is a failure,
@@ -143,7 +143,7 @@ def test_vector_redacts_every_token_kind_and_nothing_else(target: str, tmp_path:
             pytest.fail("docker not on PATH in CI: the Vector redaction went untested")
         pytest.skip("docker not on PATH: cannot run Vector (a skip is CANNOT CHECK, not OK)")
     config, transform = VECTOR_CONFIGS[target]
-    tests = tmp_path / "tests.yaml"
+    tests = docker_mount_dir / "tests.yaml"
     tests.write_text(VECTOR_TESTS.read_text().replace("parse_logs", transform))
     out = subprocess.run(
         [

@@ -17,7 +17,7 @@ streams A, B, C3, D, E, G in the vault roadmap.
 ## Architecture (pointers — full detail in CLAUDE.md)
 
 - **Cluster:** K3s `v1.34.4+k3s1`, namespace `kubelab`, single all-in-one node
-  `ace1` (staging). Prod K3s on the Hetzner VPS. Hub is Argo CD on AWS `t4g.small`.
+  `ace1` (staging). Prod K3s on the Hetzner VPS. Hub is Argo CD on GCP `e2-small` (`gcp1`, ADR-063).
 - **Networking:** Headscale `v0.28.0` (Docker Compose on VPS, stays *outside* K3s
   per ADR-015) + Tailscale mesh; split DNS → RPi4 Pi-hole → CoreDNS → K3s.
 - **Always-on vs on-demand** hardware split per ADR-028 — see CLAUDE.md topology.

@@ -163,7 +163,7 @@ def jwks(
     """Generate OIDC JWKS RSA 4096 key and store in SOPS vault.
 
     The key is used by Authelia to sign OIDC JWT tokens.
-    Also saves a PEM file at infra/config/secrets/{env}.oidc-jwks.pem.
+    SOPS is the key's only store; no file is written.
 
     Example: toolkit secrets jwks --env staging
     """

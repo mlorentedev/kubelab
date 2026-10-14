@@ -474,6 +474,7 @@ def gitea_reconcile(
         load_settings,
         load_webhooks,
         plan_reconcile,
+        verify_hints,
     )
 
     admin, bot, bot_username, base_url = _gitea_clients(env)
@@ -717,15 +718,12 @@ def gitea_reconcile(
     # signed with the wrong value delivers, gets 200 from n8n and is dropped
     # silently — so the only proof is a downstream effect, and the wording here must
     # not read as though this line were it.
-    for hooked in report.repos_hooked:
-        logger.success(f"webhook registered: {hooked}")
-    if report.repos_hooked:
-        console.print(
-            "\n[yellow]Registered is not delivering.[/yellow] `multi-forge-sync` answers HTTP 200 "
-            "to a delivery whose signature it rejects, and drops the event — so a green delivery "
-            "log is not evidence. Confirm by consequence: open a pull request whose title carries a "
-            "task key and check the Vikunja task changed bucket."
-        )
+    for hooked, url in report.repos_hooked:
+        logger.success(f"webhook registered: {hooked} -> {url}")
+    # Each written hook's own proof, from its declaration (#1849): the advice for
+    # one receiver says nothing about another.
+    for hint in verify_hints(report.repos_hooked, declared_webhooks):
+        console.print(f"\n[yellow]Registered is not delivering.[/yellow] {hint}")
     if report.repos_migrated:
         console.print(
             "\n[yellow]The import continues in the background.[/yellow] Gitea returns from "

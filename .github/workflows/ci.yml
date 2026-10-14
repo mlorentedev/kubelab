@@ -175,6 +175,12 @@ jobs:
       - name: Ansible
         run: make lint-ansible
 
+      # The Tests job has no Ansible, so this test skips there; this job is the
+      # one place CI can prove `infra/ansible/ansible.cfg` is read and a play
+      # that matches no host fails (#1228).
+      - name: Ansible fails a run that matches no host
+        run: poetry run pytest -q --no-cov -p no:cacheprovider tests/test_ansible_zero_host_run_fails.py
+
   detect-changes:
     name: Detect Changes
     needs: validate
