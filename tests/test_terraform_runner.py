@@ -1280,3 +1280,11 @@ def test_a_proof_that_passed_but_left_its_project_behind_fails(monkeypatch: pyte
 def test_an_empty_project_output_is_a_failure_and_still_tears_down(monkeypatch: pytest.MonkeyPatch) -> None:
     result, calls = _prove(monkeypatch, project="")
     assert result.exit_code == 1 and calls == ["apply", "destroy"]
+
+
+def test_a_data_source_and_a_resource_of_the_same_name_are_two_addresses() -> None:
+    """One key per address: a collision would let one hide the other's difference."""
+    managed = {"mode": "managed", "type": "t", "name": "n"}
+    data = {**managed, "mode": "data", "module": "module.m"}
+    assert [tr._address(managed), tr._address(data)] == ["t.n", "module.m.data.t.n"]
+    assert tr._differing({"resources": [managed, data]}, {"resources": [managed]}) == ["module.m.data.t.n"]
