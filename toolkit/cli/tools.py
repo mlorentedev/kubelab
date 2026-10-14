@@ -370,11 +370,17 @@ def mutate_cmd(
     replace: Annotated[str, typer.Option("--to", envvar="TO", help="Text that replaces it")],
     test: Annotated[str, typer.Option("--test", help="pytest node id(s) or file(s) expected to go red")],
 ) -> None:
-    """Apply one replacement, run the test against it, restore the file.
+    """Run the test unmutated, apply one replacement, run it again, restore the file.
 
-    Exit codes: 0 the test failed (the guard is red), 1 the test passed (the guard
-    misses the mutant), 2 refused before mutating, 3 the test did not run to a
-    verdict (a collection error is not the guard going red).
+    The test must pass without the mutation first: a target already failing goes
+    red against every mutant, so its verdicts would all read RED. A red or
+    non-running baseline is refused before anything is mutated.
+
+    Exit codes: 0 the test failed against the mutant (the guard is red), 1 the test
+    passed against it (the guard misses the mutant), 2 refused before mutating
+    (dirty tree, no unique match, or the test does not pass unmutated), 3 the test
+    did not run to a verdict against the mutant (a collection error is not the
+    guard going red).
     """
     import os
     import shlex
