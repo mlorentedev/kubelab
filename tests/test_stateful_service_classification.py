@@ -73,12 +73,30 @@ DEFERRAL_KEY = "location_deferred_to"
 TICKET_REFERENCE = re.compile(r"^#\d+$")
 
 
-def _iter_manifests() -> list[pathlib.Path]:
-    """Every manifest file under the scanned roots, audit copies excluded."""
+def _patch_files(roots: list[pathlib.Path]) -> set[pathlib.Path]:
+    """Files a kustomization lists under `patches:`: partial objects, owned by no service.
+
+    Their stem names the patch file, not a service, so a StatefulSet or PVC patched
+    there would be attributed to a service called `patches` (#2279 review).
+    """
+    found: set[pathlib.Path] = set()
+    for root in roots:
+        for kustomization in root.rglob("kustomization.yaml"):
+            spec = yaml.safe_load(kustomization.read_text()) or {}
+            for patch in spec.get("patches") or []:
+                if isinstance(patch, dict) and patch.get("path"):
+                    found.add((kustomization.parent / patch["path"]).resolve())
+    return found
+
+
+def _iter_manifests(roots: list[pathlib.Path] | None = None) -> list[pathlib.Path]:
+    """Every resource manifest under the scanned roots, audit copies and patch files excluded."""
+    roots = roots if roots is not None else [REPO_ROOT / root for root in MANIFEST_ROOTS]
+    patches = _patch_files(roots)
     files: list[pathlib.Path] = []
-    for root in MANIFEST_ROOTS:
-        for path in sorted((REPO_ROOT / root).rglob("*.yaml")):
-            if SKIPPED_PATH_PARTS & set(path.parts):
+    for root in roots:
+        for path in sorted(root.rglob("*.yaml")):
+            if SKIPPED_PATH_PARTS & set(path.parts) or path.resolve() in patches:
                 continue
             files.append(path)
     return files
@@ -188,7 +206,7 @@ def classification_problems(services: dict[str, list[str]], config: dict[str, An
     """
     problems: list[str] = []
     for service, pvcs in sorted(services.items()):
-        where = f"{service} (PVCs: {', '.join(sorted(pvcs))})"
+        where = f"{service} (claims: {', '.join(sorted(pvcs))})"
         block = _service_block(config, service)
         if block is None:
             problems.append(f"{where}: no config block found in common.yaml")
@@ -306,9 +324,9 @@ OVERLAYS = ("staging", "prod")
 def duplication_problems(
     services: dict[str, list[str]], config: dict[str, Any], rendered: dict[str, set[str]]
 ) -> list[str]:
-    """One problem per `singleton` service whose PVCs render in more than one overlay.
+    """One problem per `singleton` service whose claims render in more than one overlay.
 
-    `rendered` maps overlay -> the PVC names it renders. Pure, like
+    `rendered` maps overlay -> the claim names it renders. Pure, like
     `classification_problems`, so the controls below need no cluster and no kubectl.
 
     Scope: the claims these manifests imply, PVCs and StatefulSet `volumeClaimTemplates`
@@ -316,14 +334,14 @@ def duplication_problems(
     (an external database, a node's disk) has no overlay to be duplicated across.
     """
     problems = []
-    for service, pvcs in sorted(services.items()):
+    for service, claims in sorted(services.items()):
         block = _service_block(config, service) or {}
         if block.get("state_promotion") != "singleton":
             continue
-        envs = sorted(env for env, names in rendered.items() if set(pvcs) & names)
+        envs = sorted(env for env, names in rendered.items() if set(claims) & names)
         if len(envs) > 1:
             problems.append(
-                f"{service} is `state_promotion: singleton` but its PVCs render in {envs}: "
+                f"{service} is `state_promotion: singleton` but its claims render in {envs}: "
                 "a second live instance forks state that has no promotion path"
             )
     return problems
@@ -362,7 +380,7 @@ def test_rendered_claims_carry_their_manifest_names(rendered_pvcs: dict[str, set
     declared = {name for pvcs in _stateful_services().values() for name in pvcs}
     for env in OVERLAYS:
         assert rendered_pvcs[env] <= declared, (
-            f"{env} renders PVCs no manifest declares: {rendered_pvcs[env] - declared}"
+            f"{env} renders claims no manifest declares: {rendered_pvcs[env] - declared}"
         )
 
 
@@ -389,7 +407,7 @@ def test_duplication_clause_goes_red_on_a_singleton_in_both_overlays() -> None:
     config = _fixture_config(state_promotion="singleton")
     both = {"staging": {"widget-data"}, "prod": {"widget-data"}}
     assert duplication_problems(_FIXTURE_SERVICES, config, both) == [
-        "widget is `state_promotion: singleton` but its PVCs render in ['prod', 'staging']: "
+        "widget is `state_promotion: singleton` but its claims render in ['prod', 'staging']: "
         "a second live instance forks state that has no promotion path"
     ]
 
@@ -443,3 +461,10 @@ def test_a_singleton_statefulset_in_both_overlays_fails_the_duplication_clause(t
     both = {env: _render_claims(tmp_path) for env in OVERLAYS}
     problems = duplication_problems(_stateful_services([manifest]), _fixture_config(state_promotion="singleton"), both)
     assert [p.split(" is ", 1)[0] for p in problems] == ["widget"], problems
+
+
+def test_a_statefulset_in_a_patch_file_is_not_a_service(tmp_path: pathlib.Path) -> None:
+    (tmp_path / "widget.yaml").write_text(_STATEFULSET)
+    (tmp_path / "patches.yaml").write_text(_STATEFULSET)
+    (tmp_path / "kustomization.yaml").write_text("resources: [widget.yaml]\npatches:\n  - path: patches.yaml\n")
+    assert _stateful_services(_iter_manifests([tmp_path])) == {"widget": ["data-widget"]}
