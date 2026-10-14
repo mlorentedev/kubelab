@@ -90,8 +90,8 @@
     # gcp1 is a MIG member rebuilt from scratch on every preemption, so "new node
     # whose sudo config is unproven" is its normal state rather than a one-off.
     # `deploy-harden-nodes.yml` already uses this form, under the more accurate
-    # name. Raised by review on #1225; the other six playbooks carry the weaker
-    # form and are ticketed, not changed here.
+    # name. Raised by review on #1225; every provision playbook now uses it
+    # (#1229, guarded by tests/test_nopasswd_preflight.py).
     - name: Verify NOPASSWD sudo works
       command: sudo -n true
       become: false
