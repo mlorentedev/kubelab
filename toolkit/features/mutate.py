@@ -6,6 +6,13 @@ a commit a pre-commit hook refuses leaves HEAD where it was, so the restore then
 reset the file to an older version (lesson-480, four recurrences). Here the
 restore does not depend on HEAD at all: the file's own bytes are kept in memory
 and written back, and a dirty tree is refused before anything is touched.
+
+A verdict is a comparison, and so needs both sides: the test must pass against
+the unmutated file before it is run against the mutant. A target that is already
+failing goes red against every mutation, so without the baseline it certifies
+each one as caught (measured 2026-10-13, lesson-565: two unrelated red tests made
+every mutant of a Terraform-runner test read RED, one of which the correct
+baseline showed GREEN).
 """
 
 from __future__ import annotations
@@ -48,9 +55,15 @@ def run(repo: Path, file: Path, find: str, replace: str, run_test: Callable[[], 
     """Replace the one occurrence of `find` in `file`, run the test, put the file back.
 
     Refuses on a dirty tree: the clean tree is what makes "put it back" the same
-    as "as it was committed", and what keeps uncommitted work out of reach. The
-    file is restored from the bytes read here, in a `finally`, so an interrupted
-    test restores it too.
+    as "as it was committed", and what keeps uncommitted work out of reach. It
+    also refuses, before mutating, a test that does not exit 0 against the
+    unmutated file: a red baseline proves nothing, since it is red against every
+    mutant too. The file is restored from the bytes read here, in a `finally`, so
+    an interrupted test restores it too.
+
+    The target test must be idempotent across two runs in one invocation: state is
+    not reset between the baseline and the mutant run, so a test that leaves files
+    or other state behind can fail the second run for that reason and read RED.
     """
     if dirty := _dirty(repo):
         raise Refused(f"the working tree is not clean; commit first:\n{dirty}")
@@ -63,6 +76,13 @@ def run(repo: Path, file: Path, find: str, replace: str, run_test: Callable[[], 
         raise Refused(f"{file}: cannot be read as text ({exc})") from exc
     if (count := text.count(find)) != 1:
         raise Refused(f"{file}: the text to replace matches {count} times; it must match exactly once")
+
+    if (baseline := run_test()) != 0:
+        raise Refused(
+            f"{file}: the test does not pass without the mutation (pytest exit {baseline}), so its result "
+            "against a mutant proves nothing: a red baseline is red against every mutation. Deselect the "
+            "unrelated failures (e.g. TEST='tests/x.py -k <passing tests>') and run again."
+        )
 
     path.write_bytes(text.replace(find, replace).encode())
     try:

@@ -1,9 +1,10 @@
 # The toolkit CLI, Make, Python and local tooling
 
-52 lessons, newest first. Back to [all categories](../_index.md).
+53 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 565 | [A mutation verdict means nothing unless the test passed without the mutation](lesson-565-a-mutation-verdict-means-nothing-unless-the-test-passed-without-the-mutation.md) | 2026-10-13 |
 | 563 | [A wrapper's guard is only as strong as the environment it passes on](lesson-563-a-wrapper-guard-is-only-as-strong-as-the-environment-it-passes-on.md) | 2026-10-13 |
 | 562 | [A same-length mutation outlives its restore in the bytecode cache](lesson-562-a-same-length-mutation-outlives-its-restore-in-the-bytecode-cache.md) | 2026-10-13 |
 | 547 | [A fail-closed check behind an `if` on its own input fails open when that input is empty](lesson-547-a-fail-closed-check-behind-an-if-on-its-own-input-fails-open-when-that-input-is-empty.md) | 2026-10-10 |
