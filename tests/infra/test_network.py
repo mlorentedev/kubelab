@@ -47,9 +47,9 @@ class TestTailscaleMesh:
         inventory: list[NodeInfo],
     ) -> None:
         """Tailscale ping must succeed to all inventory nodes (direct or relayed)."""
+        # `inventory` depends on `require_vpn`, which skips unless this CLI ran.
         cli = tailscale_cli()
-        if cli is None:
-            pytest.skip("tailscale CLI not available")
+        assert cli is not None, "require_vpn passed, so a Tailscale CLI was found"
         errors: list[str] = []
         for node in inventory:
             try:
@@ -64,6 +64,8 @@ class TestTailscaleMesh:
                     errors.append(f"{node.name} ({node.host}): unreachable — {result.stderr.strip()}")
             except subprocess.TimeoutExpired:
                 errors.append(f"{node.name} ({node.host}): ping timed out")
+            except OSError as exc:
+                errors.append(f"{node.name} ({node.host}): {cli} cannot run: {exc}")
 
         assert not errors, "Tailscale mesh connectivity failures:\n" + "\n".join(errors)
 

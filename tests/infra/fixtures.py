@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from collections.abc import Callable
@@ -138,11 +139,12 @@ def node_ssh_run(
 MACOS_TAILSCALE_CLI = Path("/Applications/Tailscale.app/Contents/MacOS/Tailscale")
 
 
-def tailscale_cli(
-    which: Callable[[str], str | None] = shutil.which, bundle: Path = MACOS_TAILSCALE_CLI
-) -> str | None:
-    """The Tailscale CLI to run: the one on PATH, else the macOS app's, else None."""
-    return which("tailscale") or (str(bundle) if bundle.is_file() else None)
+def tailscale_cli(which: Callable[[str], str | None] = shutil.which, bundle: Path = MACOS_TAILSCALE_CLI) -> str | None:
+    """The Tailscale CLI to run: the one on PATH, else the macOS app's, else None.
+
+    The bundle counts only when it can be executed, as `which` requires of a PATH entry.
+    """
+    return which("tailscale") or (str(bundle) if bundle.is_file() and os.access(bundle, os.X_OK) else None)
 
 
 def vpn_unavailable() -> str | None:
@@ -158,6 +160,9 @@ def vpn_unavailable() -> str | None:
         result = subprocess.run([cli, "status", "--json"], capture_output=True, text=True, timeout=5)
     except subprocess.TimeoutExpired:
         return f"Tailscale not connected: `{cli} status` timed out"
+    except OSError as exc:
+        # Found but not runnable (removed since, or a broken install): a CLI problem, not a down tailnet.
+        return f"Tailscale CLI cannot run: {exc}"
     if result.returncode != 0:
         return f"Tailscale not connected: `{cli} status` exited {result.returncode}"
     return None

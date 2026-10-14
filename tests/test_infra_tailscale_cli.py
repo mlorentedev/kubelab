@@ -16,13 +16,13 @@ from tests.infra import fixtures
 
 def test_the_cli_on_path_wins(tmp_path: Path) -> None:
     bundle = tmp_path / "Tailscale"
-    bundle.touch()
+    bundle.touch(mode=0o755)
     assert fixtures.tailscale_cli(which=lambda _: "/usr/bin/tailscale", bundle=bundle) == "/usr/bin/tailscale"
 
 
 def test_the_macos_bundle_is_used_when_path_has_none(tmp_path: Path) -> None:
     bundle = tmp_path / "Tailscale"
-    bundle.touch()
+    bundle.touch(mode=0o755)
     assert fixtures.tailscale_cli(which=lambda _: None, bundle=bundle) == str(bundle)
 
 
@@ -60,3 +60,20 @@ def test_a_found_cli_reports_the_tailnet_state(
         assert reason is None
     else:
         assert reason is not None and "not connected" in reason and expected in reason
+
+
+def test_a_bundle_that_cannot_be_executed_is_not_a_cli(tmp_path: Path) -> None:
+    bundle = tmp_path / "Tailscale"
+    bundle.touch(mode=0o644)
+    assert fixtures.tailscale_cli(which=lambda _: None, bundle=bundle) is None
+
+
+def test_a_cli_that_cannot_run_is_not_reported_as_a_down_tailnet(monkeypatch: pytest.MonkeyPatch) -> None:
+    def run(cmd: list[str], **_: object) -> object:
+        raise PermissionError(13, "Permission denied", cmd[0])
+
+    monkeypatch.setattr(fixtures, "tailscale_cli", lambda: "/opt/ts/tailscale")
+    monkeypatch.setattr(fixtures.subprocess, "run", run)
+    reason = fixtures.vpn_unavailable()
+    assert reason is not None and reason.startswith("Tailscale CLI cannot run")
+    assert "not connected" not in reason
