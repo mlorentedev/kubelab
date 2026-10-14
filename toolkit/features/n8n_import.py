@@ -793,10 +793,16 @@ _NO_KUBECTL = "kubectl is not on PATH; install it before importing (dotfiles pro
 
 def _kubeconfig_hint(cmd: list[str]) -> str:
     """Why kubectl failed, when the kubeconfig it was handed does not exist."""
-    if "--kubeconfig" not in cmd:
+    given = None
+    for i, arg in enumerate(cmd):
+        if arg.startswith("--kubeconfig="):
+            given = arg.partition("=")[2]
+        elif arg == "--kubeconfig" and i + 1 < len(cmd):
+            given = cmd[i + 1]
+    # Called from an error handler: it must never raise, whatever shape `cmd` has.
+    if not given or Path(given).is_file():
         return ""
-    path = Path(cmd[cmd.index("--kubeconfig") + 1])
-    return "" if path.is_file() else f" (kubeconfig missing at {path}: run `make fetch-kubeconfig ENV=<env>`)"
+    return f" (kubeconfig missing at {given}: run `make fetch-kubeconfig ENV=<env>`)"
 
 
 _MASK_MIN_LEN = 6

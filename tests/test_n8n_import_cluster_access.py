@@ -7,6 +7,7 @@ is missing and the run returns False, the non-zero exit, without a traceback.
 
 from __future__ import annotations
 
+import ast
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -61,7 +62,7 @@ def test_an_existing_kubeconfig_gets_no_hint(tmp_path: Path) -> None:
 def test_every_kubectl_call_reports_a_missing_kubectl(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """`_run` carries the exec, the restart and the rollout wait, not only the pod list."""
+    """`_run` reports a missing kubectl; the next test proves every call goes through a handler like it."""
 
     def absent(cmd: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
         raise FileNotFoundError(2, "No such file or directory", cmd[0])
@@ -69,3 +70,42 @@ def test_every_kubectl_call_reports_a_missing_kubectl(
     monkeypatch.setattr(n8n_import.subprocess, "run", absent)
     assert n8n_import._run(["kubectl", "rollout", "status", "deploy/n8n"]) is False
     assert "kubectl is not on PATH" in capsys.readouterr().out
+
+
+def test_every_subprocess_call_handles_a_missing_kubectl() -> None:
+    """The exec, the restart and the rollout wait spawn through `_run`, not on their own.
+
+    Measured on the source rather than by calling each path: any function that
+    calls `subprocess.run` must catch `FileNotFoundError` itself.
+    """
+    tree = ast.parse(Path(n8n_import.__file__).read_text(encoding="utf-8"))
+    spawners = {
+        fn.name: fn
+        for fn in ast.walk(tree)
+        if isinstance(fn, ast.FunctionDef)
+        and any(isinstance(c, ast.Call) and ast.unparse(c.func) == "subprocess.run" for c in ast.walk(fn))
+    }
+    unguarded = [
+        name
+        for name, fn in spawners.items()
+        if not any(
+            isinstance(h, ast.ExceptHandler) and h.type is not None and "FileNotFoundError" in ast.unparse(h.type)
+            for h in ast.walk(fn)
+        )
+    ]
+    assert spawners, "the scan found no subprocess call; it measures nothing"
+    assert not unguarded, unguarded
+
+
+@pytest.mark.parametrize(
+    "tail",
+    [["--kubeconfig"], ["--kubeconfig="]],
+    ids=["flag-last", "empty-value"],
+)
+def test_the_hint_never_raises_on_a_short_command(tail: list[str]) -> None:
+    assert n8n_import._kubeconfig_hint(["kubectl", "get", "pods", *tail]) == ""
+
+
+def test_the_hint_reads_the_equals_spelling(tmp_path: Path) -> None:
+    missing = tmp_path / "absent"
+    assert str(missing) in n8n_import._kubeconfig_hint(["kubectl", f"--kubeconfig={missing}"])
