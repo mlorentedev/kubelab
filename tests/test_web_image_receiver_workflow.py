@@ -26,11 +26,14 @@ from __future__ import annotations
 
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 
 import pytest
 import yaml
+
+from toolkit.features import promotion
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 RECEIVER = REPO_ROOT / ".github/workflows/web-image-receiver.yml"
@@ -446,3 +449,15 @@ def test_any_other_tag_is_refused_before_the_promotion(tmp_path: pathlib.Path, t
     code, calls = _run_promote_check(tmp_path, tag)
     assert code == 1
     assert calls == "", "a refused tag must never reach `toolkit deployment promote`"
+
+
+def test_the_guard_reads_the_tag_the_dispatch_carried() -> None:
+    """The tests above set TAG themselves; this pins where the workflow takes it from."""
+    assert _promote_step()["env"]["TAG"] == "${{ github.event.client_payload.tag }}"
+
+
+def test_the_guard_is_the_shape_the_promotion_accepts() -> None:
+    """One shape in two languages: a change to either side that the other lacks fails here."""
+    guard = re.search(r'=~ (\S+) \]\]', _promote_step()["run"])
+    assert guard, "the promotion step no longer checks the tag with [[ =~ ]]"
+    assert guard.group(1) == promotion._SHA_TAG.pattern
