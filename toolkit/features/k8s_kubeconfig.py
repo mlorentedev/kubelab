@@ -237,6 +237,13 @@ def host_key_hint(ssh_alias: str, stderr: str, purge_attempted: bool = False) ->
     if not changed and _HOST_KEY_FAILED not in lowered:
         return None
     hostname = resolve_ssh_hostname(ssh_alias)
+    if "revoked host key" in lowered or "marked as revoked" in lowered:
+        return (
+            f"The SSH host key {hostname!r} presented is marked as revoked on this machine "
+            f"(a known_hosts @revoked line or RevokedHostKeys).\n"
+            f"  Do not remove the revocation to get through: verify the host out of band "
+            f"and pin its current key. Nothing was changed."
+        )
     if not changed and not purge_attempted:
         # A new workstation has never seen this host. Accepting the key it now
         # presents would be trust on first use; the fetch never does that.

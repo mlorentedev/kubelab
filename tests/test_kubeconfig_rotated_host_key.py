@@ -40,6 +40,13 @@ UNKNOWN_STRICT = (
     "No ED25519 host key is known for 100.64.0.2 and you have requested strict checking.\n"
     "Host key verification failed.\n"
 )
+REVOKED = (
+    "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n"
+    "@       WARNING: REVOKED HOST KEY DETECTED!               @\n"
+    "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n"
+    "The ED25519 host key for 100.64.0.2 is marked as revoked.\n"
+    "Host key verification failed.\n"
+)
 CHANGED_STRICT = (
     "Offending ED25519 key in /home/op/.ssh/known_hosts:7\n"
     "Host key for 100.64.0.2 has changed and you have requested strict checking.\n"
@@ -189,6 +196,14 @@ class TestTheErrorSaysSomethingUseful:
         assert "NOT marked" not in hint, "the node IS marked; saying otherwise misdirects the operator"
         assert "did not take" in hint
         assert "writable" in hint, "name the likely cause, not just the fact"
+
+    def test_a_revoked_key_is_neither_unknown_nor_rotated(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A revoked key ends with the same line; removing the revocation is never the remedy (review of #2241)."""
+        self._stub_hostname(monkeypatch)
+        hint = kc.host_key_hint("vps", REVOKED)
+        assert hint is not None
+        assert "revoked" in hint
+        assert "No SSH host key is recorded" not in hint and "ssh-keygen -R" not in hint
 
     def test_an_unrelated_failure_is_left_alone(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A wrong-hint is worse than none: it sends the operator to delete a
