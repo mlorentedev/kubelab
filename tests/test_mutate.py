@@ -161,3 +161,61 @@ def test_why_pytest_ran_nothing_reaches_the_operator(repo: Path, monkeypatch: py
     code = _cli(repo, monkeypatch, lambda *a: mutate._PYTEST.get(a[-1](), mutate.Verdict.DID_NOT_RUN), test="does_not_exist.py")
     assert code == mutate.Verdict.DID_NOT_RUN.exit_code
     assert any("not found: does_not_exist.py" in line for line in said), said
+
+
+def test_the_mutant_never_reaches_the_repository_bytecode_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A mutant compiled into the repo's `__pycache__` outlives the restore.
+
+    Python trusts a `.pyc` whose header matches the source's mtime (in whole
+    seconds) and size. A same-length mutation restored within the same second
+    matches both, so every later run imports the mutant: measured 2026-10-13,
+    `0o600` -> `0o644` in the Terraform runner left a test red on correct source.
+    The reverse also holds: a cached original read during the mutant's run would
+    hide it and report GREEN. The child pytest gets a cache of its own.
+    """
+    from typer.testing import CliRunner
+
+    from toolkit.cli import tools
+
+    _git(tmp_path, "init", "-q")
+    _git(tmp_path, "config", "user.email", "t@example.invalid")
+    _git(tmp_path, "config", "user.name", "t")
+    (tmp_path / ".gitignore").write_text("__pycache__/\n")
+    (tmp_path / "limits.py").write_text("MODE = 0o600\n")
+    (tmp_path / "test_limits.py").write_text("from limits import MODE\n\n\ndef test_mode():\n    assert MODE == 0o600\n")
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-qm", "base")
+    monkeypatch.setattr(tools.settings, "project_root", tmp_path)
+
+    args = ["mutate", "--file", "limits.py", "--from", "0o600", "--to", "0o644", "--test", "test_limits.py"]
+    assert CliRunner().invoke(tools.app, args).exit_code == mutate.Verdict.RED.exit_code
+    assert not list(tmp_path.rglob("*.pyc")), "the child compiled into the repository's own bytecode cache"
+
+
+def test_a_cached_original_cannot_stand_in_for_the_mutant(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The false-GREEN direction: the child must compile the mutant, not import a cached original.
+
+    An unchecked-hash `.pyc` (PEP 552) is never validated against its source,
+    so it stands in deterministically for the mtime collision of the docstring
+    above. Read from the repo's `__pycache__`, it would run the original against
+    the test and report GREEN for a mutant the test does catch.
+    """
+    import py_compile
+
+    from typer.testing import CliRunner
+
+    from toolkit.cli import tools
+
+    _git(tmp_path, "init", "-q")
+    _git(tmp_path, "config", "user.email", "t@example.invalid")
+    _git(tmp_path, "config", "user.name", "t")
+    (tmp_path / ".gitignore").write_text("__pycache__/\n")
+    (tmp_path / "limits.py").write_text("MODE = 0o600\n")
+    (tmp_path / "test_limits.py").write_text("from limits import MODE\n\n\ndef test_mode():\n    assert MODE == 0o600\n")
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-qm", "base")
+    py_compile.compile(str(tmp_path / "limits.py"), invalidation_mode=py_compile.PycInvalidationMode.UNCHECKED_HASH)
+    monkeypatch.setattr(tools.settings, "project_root", tmp_path)
+
+    args = ["mutate", "--file", "limits.py", "--from", "0o600", "--to", "0o644", "--test", "test_limits.py"]
+    assert CliRunner().invoke(tools.app, args).exit_code == mutate.Verdict.RED.exit_code
