@@ -1963,8 +1963,10 @@ test:
 # escaping; write a literal `$` as `$$`.
 #   make mutate FILE=toolkit/x.py FROM='> 0' TO='>= 0' TEST=tests/test_x.py
 # Exit 0 only when the test went red. make reports every other outcome as its own
-# exit 2; the toolkit's code is the N in `Error N`: 1 = stayed green, 2 = refused,
-# 3 = no verdict (pytest errored or collected nothing).
+# exit 2; the toolkit's code is the N in `Error N`: 1 = stayed green, 2 = refused
+# (dirty tree, no unique match, or TEST does not pass unmutated: a red baseline
+# certifies every mutant as red), 3 = no verdict (pytest errored or collected
+# nothing against the mutant).
 .PHONY: mutate
 mutate:
 	@$(TOOLKIT) tools mutate --file "$(FILE)" --test "$(TEST)"
