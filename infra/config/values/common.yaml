@@ -67,6 +67,11 @@ networking:
     node: jetson           # resolves to networking.nodes.jetson.tailscale_ip
   ipv6_prefix: "fd7a:115c:a1e0::/48"
   ssh_key: "~/.ssh/id_ed25519"
+  # The host keys Ansible verifies every stable node against (ANSIBLE-066):
+  # the pinned file dotfiles deploys from its ssh/known_hosts, each line checked
+  # out of band before it lands. A node not in it cannot be provisioned until it
+  # is pinned (docs/runbooks/add-a-node.md). Replaced by the SSH CA (#1261).
+  ssh_known_hosts: "~/.ssh/known_hosts_pinned"
 
   # SEC-006: the VPS inbound allow-list, declared ONCE and read by two layers.
   #
@@ -1271,6 +1276,12 @@ apps:
             branch_filter: "*"
             active: true
             secret_key: apps.services.automation.n8n.forge_webhook_secret
+            # Printed after a run that wrote this hook (#1849).
+            verify_hint: >-
+              `multi-forge-sync` answers HTTP 200 to a delivery whose signature it
+              rejects, and drops the event, so a green delivery log is not evidence.
+              Confirm by consequence: open a pull request whose title carries a task
+              key and check the Vikunja task changed bucket.
           # The PR reviewer's webhook (TOOL-080, #1823). Registered inactive by
           # #1846 and turned on once the server answered (#1856): on 2026-09-27 the
           # route served a valid certificate and the server refused an unsigned
@@ -1299,6 +1310,11 @@ apps:
             # a surplus such as `pull_request_comment` reaches a server that acts on
             # it, so here a live widening is drift to correct (lesson-462).
             event_comparison: equality
+            verify_hint: >-
+              A server that rejects the signature answers 401 and Gitea records the
+              failure, but only a review proves delivery. Confirm by consequence:
+              push to an open pull request and check for a review comment from the
+              reviewer account (`apps.auth.identities.reviewer`).
         organizations:
           teledyne:
             repositories:

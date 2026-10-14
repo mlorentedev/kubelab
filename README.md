@@ -22,13 +22,13 @@ Personal Internal Developer Platform (IDP) — a hybrid-cloud infrastructure pow
                           └──────┬──────┘
                                  │
                  Headscale VPN mesh (WireGuard, 8 nodes)
-                 Argo CD hub on AWS (aws1) syncs both spokes
+                 Argo CD hub on GCP (gcp1) syncs both spokes
                     ┌────────────┼────────────────────┐
                     │            │                     │
           ┌────────┴───┐  ┌─────┴──────┐    ┌────────┴────────┐
           │   RPi4     │  │   ace1     │    │  Other nodes    │
           │  Gateway   │  │  Staging   │    │                 │
-          ├────────────┤  ├────────────┤    │ aws1: Argo CD   │
+          ├────────────┤  ├────────────┤    │ gcp1: Argo CD   │
           │ Pi-hole    │  │ K3s single │    │       hub       │
           │ CoreDNS    │  │ node: api, │    │ ace2: dev node  │
           │ DHCP       │  │ web, auth- │    │ Beelink: Gitea, │
@@ -42,7 +42,7 @@ Personal Internal Developer Platform (IDP) — a hybrid-cloud infrastructure pow
                    staging.mlorente.dev
 ```
 
-**Production:** K3s single-node on the Hetzner VPS (Headscale stays in Docker Compose per ADR-015), public via `*.kubelab.live` and `mlorente.dev`. Delivery is GitOps: an Argo CD hub on AWS (aws1) syncs the prod and staging spokes.
+**Production:** K3s single-node on the Hetzner VPS (Headscale stays in Docker Compose per ADR-015), public via `*.kubelab.live` and `mlorente.dev`. Delivery is GitOps: an Argo CD hub on GCP (gcp1) syncs the prod and staging spokes.
 **Staging:** K3s single-node on ace1 (bare metal), accessible via Headscale VPN at `*.staging.kubelab.live` and `staging.mlorente.dev`.
 **Development:** Docker Compose on localhost with `*.kubelab.test` domains.
 
@@ -69,7 +69,7 @@ Personal Internal Developer Platform (IDP) — a hybrid-cloud infrastructure pow
 | VPN | Headscale + Tailscale clients |
 | Secrets | SOPS (age encryption) |
 | Data | PostgreSQL (shared), Redis |
-| GitOps | Argo CD (hub on AWS, spokes staging/prod) |
+| GitOps | Argo CD (hub on GCP, spokes staging/prod) |
 | CI/CD | GitHub Actions, multi-arch Docker builds |
 | IaC | Terraform, Ansible, Python toolkit |
 
@@ -83,7 +83,7 @@ Personal Internal Developer Platform (IDP) — a hybrid-cloud infrastructure pow
 
 ### Self-hosted services
 
-Grafana, Loki, Vector, Authelia, CrowdSec, Gitea, n8n, Redis, PostgreSQL, Apprise, Homepage. Argo CD runs on the AWS hub. Pi-hole and Uptime Kuma are external, reached through K3s EndpointSlices.
+Grafana, Loki, Vector, Authelia, CrowdSec, Gitea, n8n, Redis, PostgreSQL, Apprise, Homepage. Argo CD runs on the GCP hub. Pi-hole and Uptime Kuma are external, reached through K3s EndpointSlices.
 
 ## Project Structure
 
@@ -98,7 +98,7 @@ kubelab/
 │   │   ├── base/                Base manifests (staging defaults)
 │   │   └── overlays/            Kustomize overlays (staging, prod)
 │   ├── stacks/                  Docker Compose stacks (dev environment)
-│   ├── terraform/               Terraform: DNS (Cloudflare) + AWS hub
+│   ├── terraform/               Terraform roots, one per provider concern
 │   ├── ansible/                 Server provisioning playbooks
 │   ├── helm/                    Helm values for third-party services (Argo CD)
 │   ├── n8n/                     n8n workflow definitions
@@ -171,7 +171,7 @@ See [`toolkit/README.md`](toolkit/README.md) for full command reference.
 
 ```
 Hetzner VPS (ARM)      — Production: K3s + Headscale (Docker Compose)
-AWS t4g.small (aws1)   — Argo CD hub (management plane)
+GCP e2-small (gcp1)    — Argo CD hub (management plane, ADR-063)
 Acemagic-1 (ace1)      — K3s staging (all-in-one)
 Acemagic-2 (ace2)      — Self-hosted developer node / CDE
 Beelink (bare metal)   — Platform node: Gitea forge + CI runners

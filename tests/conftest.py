@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from collections.abc import Generator
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -310,3 +311,17 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 def env(request: pytest.FixtureRequest) -> str:
     """Target environment from --env CLI option."""
     return request.config.getoption("--env")  # type: ignore[return-value]
+
+
+@pytest.fixture
+def docker_mount_dir() -> Generator[Path, None, None]:
+    """A temporary directory a container can bind-mount, on any host (TOOL-113, #2244).
+
+    Use it instead of `tmp_path` for anything passed to `docker run -v`. On macOS
+    `tmp_path` lives under /private/var/folders, which Colima and Docker Desktop
+    do not share with their VM, so the mount arrives empty. Both share $HOME.
+    """
+    base = Path.home() / ".cache" / "kubelab-tests"
+    base.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=base) as path:
+        yield Path(path)

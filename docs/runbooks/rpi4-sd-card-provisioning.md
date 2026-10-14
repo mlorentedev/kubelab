@@ -22,7 +22,7 @@ Pre-configure an Ubuntu Server SD card for the RPi4 network gateway before first
 
 1. **SD card flashed** with Ubuntu Server (ARM64) using Raspberry Pi Imager
    - Configure WiFi credentials, SSH, and user `manu` in the Imager before flashing
-   - **Note (SSOT-014, 2026-05-25):** `manu` here is the **OS-level** Linux user that SSHes into the node — declared via SSOT at `networking.ssh_users.homelab` in `common.yaml`. It is **NOT** the same as the App-level Authelia admin (`apps.auth.admin_username`, e.g. `operator` post-Phase-B). They coincided by historical accident. Renaming the OS user requires `useradd` + key migration per node (tracked as `SSH-RENAME-001`); do not rename here without that plan.
+   - **Note (SSOT-014, 2026-05-25):** `manu` here is the **OS-level** Linux user that SSHes into the node — declared via SSOT at `networking.ssh_users.homelab` in `common.yaml`. It is **NOT** the same as the App-level identities (`apps.auth.identities`, e.g. `operator`). They coincided by historical accident. Renaming the OS user requires `useradd` + key migration per node (tracked as `SSH-RENAME-001`); do not rename here without that plan.
 2. **SD card mounted** on workstation at `/media/$USER/writable` and `/media/$USER/system-boot`
 3. **Run from workstation**, not from the RPi4
 
