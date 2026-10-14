@@ -21,6 +21,7 @@ import yaml
 
 REPO = Path(__file__).resolve().parents[1]
 PLAYBOOK = REPO / "infra/ansible/playbooks/provision-bee.yml"
+ROLE_TEMPLATES = REPO / "infra/ansible/roles/beelink_services/templates"
 VALUES = REPO / "infra/config/values"
 # `config` and `gitea_config` are both `common | combine(<env>.yaml)` in the playbook.
 IMAGE_VAR = re.compile(r"^\{\{\s*(?:config|gitea_config)\.([\w.]+)\s*\}\}$")
@@ -79,6 +80,25 @@ def test_the_playbook_passes_the_runner_image() -> None:
     """The vacuity check: a playbook rename would otherwise leave nothing to test."""
     names = _image_vars()
     assert "runner_image" in names and len(names) >= 3, names
+
+
+def test_every_template_image_is_one_the_playbook_passes() -> None:
+    """The coverage check: an image written into a template, or passed under another
+    name, would run on the Beelink without going through the versions checked below."""
+    lines = [
+        (path.name, line.strip())
+        for path in sorted(ROLE_TEMPLATES.glob("*.j2"))
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if re.match(r"\s*image:", line)
+    ]
+    assert lines, f"no `image:` line under {ROLE_TEMPLATES.relative_to(REPO)}"
+    names = _image_vars()
+    unchecked = [
+        (name, line)
+        for name, line in lines
+        if not (m := re.fullmatch(r"image:\s*\{\{\s*(\w+)\s*\}\}", line)) or m.group(1) not in names
+    ]
+    assert not unchecked, f"images this test does not resolve: {unchecked}"
 
 
 @pytest.mark.parametrize("env", ENVS)
