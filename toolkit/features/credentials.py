@@ -636,8 +636,9 @@ class CredentialsManager:
             try:
                 from toolkit.features.generator_traefik import TraefikGenerator
 
-                generator = TraefikGenerator()
-                generator.generate(env)
+                generated = TraefikGenerator().generate(env)
+                if not generated.get("success"):
+                    raise RuntimeError(generated.get("error"))
                 logger.success("Traefik config regenerated.")
             except Exception as e:
                 logger.error(f"Failed to regenerate Traefik config: {e}")
