@@ -89,7 +89,7 @@ class _Terraform:
 
 def _apply(plan: dict, **kwargs: object) -> tuple[int, _Terraform]:
     fake = _Terraform(plan)
-    config = {"cloudflare": {"api_token": "token-sentinel"}}
+    config = {"cloudflare": {"api_token": "token-sentinel"}, "networking": {"vps": {"public_ip": "192.0.2.1"}}}
     rc = tr.run(
         "dns", "apply", terraform_dir=REPO / "infra/terraform", load_config=lambda: config, terraform=fake, **kwargs
     )
