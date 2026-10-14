@@ -76,3 +76,22 @@ PASS
 - Disposition findings 1–4 in `verification.md` (outside the contract set): the secrets-audit orphan stays tracked under SEC-031 #2240; tick the remaining `tasks.md` box and the `proposal.md` AC boxes when the PR step completes — checkbox ticks are excluded from the staleness digest (SDD-042), rewording is not.
 - Findings 6–7 are code-set follow-ups (defensive `.get("serial")` in `_restore`; function-size split) that can land in a later PR without invalidating this review; file or fix per the `track-or-fix` standing order.
 - `dotf spec archive` is **advisable** once the last `tasks.md` box (PR draft/triage) is done and ticked. No FAIL actions; no contract-set edits requested under this verdict.
+
+## Second review (2026-10-14, reviewer persona, before merge)
+
+An independent second pass on the merged branch, `565a829c`. It ran 39 mutations (31 RED) and found no path that loses, forks or overwrites state. Each finding was then applied, ticketed or declined. The fixes (`889be610`) were reviewed again as a delta. The last commit (`30fa50b6`) applies that delta review, and the mutants listed below prove it.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | A failed `state pull` was untested: dropping its `raise` kept every test green, and an outage would read as "no state" | Applied. `test_a_backend_that_cannot_be_read_stops_every_write[apply,migrate,restore]`; mutant RED |
+| 2 | `Closes #554` overstated: only presence of the token is checked, not validity | Applied in the PR body; #554 is referenced, not closed |
+| 3 | A hardcoded history bucket or prefix kept the tests green | Applied. `test_history_goes_to_the_bucket_and_prefix_common_yaml_names`; mutant RED |
+| 4 | The retention lock was described as unbreakable; the `kept` token branch is not re-proved | Runbook corrected; the token proof is TF-019 (#2245) item 4 |
+| 5 | History copies are taken at run boundaries, not on every serial | Runbook says so |
+| 6 | `state push` may skip its lineage check against a remote with no resources | Applied. The runner refuses any written remote with other content before pushing: `test_migrate_never_pushes_over_a_state_r2_already_holds`; mutant RED |
+| 7 | `-lock=false` passed through | Applied. Refused, while a bare `-lock`, `-lock=true` and `-lock-timeout` still run (both directions tested); mutants RED |
+| 8 | `output()` turns a read failure into "state lost" | TF-019 (#2245) item 3 |
+| 9 | Old worktrees still on `backend "local"` | Noted in the PR body for after the merge |
+| 10 | Two comments left above the wrong block | Moved |
+
+Delta review verdict on `889be610`: mergeable once the runbook's stale migration sentence is fixed. That sentence, the bare-`-lock` over-refusal and the missing allowed-flag tests are fixed in `30fa50b6`.
