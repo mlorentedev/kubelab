@@ -11,6 +11,7 @@ exits non-zero with nothing printed in its place.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -126,9 +127,21 @@ def test_a_failed_write_raises_and_prints_nothing(
 ) -> None:
     manager = _manager(monkeypatch, write_ok=write_ok)
     generated = _capture_generated(monkeypatch, manager)
+    # Where each write went, not only what the error says: the message is built
+    # from its own literal, so it would name the hub file whatever path was written.
+    targets: list[str] = []
+    write = manager.config_manager.batch_update_secrets.side_effect
+
+    def targeting(data: dict[str, str], secret_file_path: Any = None) -> bool:
+        targets.append(Path(secret_file_path).name if secret_file_path else "<env file>")
+        return write(data, secret_file_path=secret_file_path)
+
+    manager.config_manager.batch_update_secrets.side_effect = targeting
 
     with pytest.raises(credentials.CredentialsWriteFailed, match=re.escape(names)):
         manager.setup_authelia_secrets("prod", auto_update=True)
+    # The env file first; the hub file only once the env write succeeded.
+    assert targets == (["<env file>"] if names == "prod.enc.yaml" else ["<env file>", "common.enc.yaml"])
     if names == "common.enc.yaml":
         assert any("argocd" in key for key in generated), "the hub values were not in the checked set"
     # Uptime Kuma's new password is in the env file once that write succeeds, so
