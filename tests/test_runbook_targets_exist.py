@@ -92,42 +92,64 @@ def _referenced(path: Path) -> set[str]:
 # fix must delete a line from this list. `test_the_ledger_only_shrinks` below
 # stops the list itself from going stale.
 #
-# Emptied by #1239: the instructional docs were corrected, and the dated
-# records that made up the rest were never in scope. Kept as a mechanism, not
+# #1239 cleared the original 32: the instructional docs were corrected, and the
+# dated records that made up the rest were never in scope. Kept as a mechanism, not
 # as a list -- a NEW stale reference still has somewhere to be frozen if one
 # ever needs to be.
-KNOWN_STALE: dict[str, str] = {
+#
+# Keyed by (document, target), never by target alone (#2261): an exemption is
+# justified by one document's text, so it holds in that document only. Keyed by
+# name, `backup-pvc` exempted for CLAUDE.md's removal note would also have let a
+# new runbook instruct `make backup-pvc` without a word from this test.
+KNOWN_STALE: dict[tuple[str, str], str] = {
     # WHAT REMAINS, each with the reason it is still here. Not a list of names:
     # a name alone is what let 32 entries sit unexamined.
     #
     # -- Not make targets at all. The extractor reads code spans, and these live
     #    inside them while being English or commentary.
-    "config": "ssl-certificates.md: `# Fix: make config match mount` is a sentence",
-    "deploy-prod": "deployment.md: appears only in the note explaining it was retired",
-    "backup-pvc": "CLAUDE.md: appears only in the note recording its removal (OPS-023)",
+    ("docs/troubleshooting/ssl-certificates.md", "config"): "`# Fix: make config match mount` is a sentence",
+    ("docs/runbooks/deployment.md", "deploy-prod"): "appears only in the note explaining it was retired",
+    ("CLAUDE.md", "backup-pvc"): "appears only in the note recording its removal (OPS-023)",
     #
     # -- Retired with no replacement. Each needs the INSTRUCTION rewritten, not a
-    #    target renamed, which is why they outlive a mechanical pass.
-    "sops-check": "no equivalent; the check is now part of `make setup-sops`",
-    "clean": "no equivalent; dev cleanup is `make dev-full-clean`, different semantics",
-    "status": "no equivalent; nearest is `make k8s-status ENV=x`, different scope",
-    "env-validate": "no equivalent; validation folded into `make config-generate`",
-    "verify-dns": "no equivalent; DNS checks live in `make test-e2e`",
-    "emergency-rollback": "no equivalent; rollback is now an Argo CD operation",
-    "restore": "no equivalent; see the restore runbook, which is not one target",
+    #    target renamed, which is why they outlive a mechanical pass (DOCS-004, #836).
+    ("docs/runbooks/deploy-new-k3s-service.md", "sops-check"): "no equivalent; now part of `make setup-sops`",
+    ("docs/troubleshooting/build-failures.md", "clean"): "no equivalent; dev cleanup is `make dev-full-clean`",
+    ("docs/troubleshooting/deployment.md", "clean"): "no equivalent; dev cleanup is `make dev-full-clean`",
+    ("docs/troubleshooting/deployment.md", "status"): "no equivalent; nearest is `make k8s-status ENV=x`",
+    ("docs/troubleshooting/quick-diagnostics.md", "status"): "no equivalent; nearest is `make k8s-status ENV=x`",
+    ("docs/troubleshooting/environment-configuration.md", "env-validate"): "folded into `make config-generate`",
+    ("docs/troubleshooting/quick-diagnostics.md", "env-validate"): "folded into `make config-generate`",
+    ("docs/troubleshooting/networking-dns.md", "verify-dns"): "no equivalent; DNS checks live in `make test-e2e`",
+    ("docs/troubleshooting/ssl-certificates.md", "verify-dns"): "no equivalent; DNS checks live in `make test-e2e`",
+    ("docs/troubleshooting/deployment.md", "emergency-rollback"): "no equivalent; rollback is an Argo CD operation",
+    ("docs/troubleshooting/deployment.md", "restore"): "no equivalent; see the restore runbook, not one target",
 }
+
+
+def _unexplained(doc: str, referenced: set[str], declared: set[str]) -> list[str]:
+    """Targets `doc` names that neither exist nor carry an exemption for `doc`."""
+    return sorted(t for t in referenced if t not in declared and (doc, t) not in KNOWN_STALE)
 
 
 @pytest.mark.parametrize("doc", _runbooks(), ids=lambda p: str(p.relative_to(REPO)))
 def test_every_make_target_a_doc_names_exists(doc: Path) -> None:
-    declared = _declared_targets()
-    missing = sorted(t for t in _referenced(doc) if t not in declared and t not in KNOWN_STALE)
+    rel = str(doc.relative_to(REPO))
+    missing = _unexplained(rel, _referenced(doc), _declared_targets())
     assert not missing, (
-        f"{doc.relative_to(REPO)} tells the reader to run targets that do not exist: "
+        f"{rel} tells the reader to run targets that do not exist: "
         f"{missing}. A runbook naming a target nobody built fails as "
         "`No rule to make target`, which reads as a broken checkout rather than "
         "as a broken instruction."
     )
+
+
+def test_an_exemption_holds_only_in_its_own_document() -> None:
+    """#2261: the name exempted for one document is still caught in any other."""
+    declared = _declared_targets()
+    for doc, target in KNOWN_STALE:
+        assert _unexplained(doc, {target}, declared) == []
+        assert _unexplained("docs/runbooks/a-new-runbook.md", {target}, declared) == [target]
 
 
 def test_the_ledger_only_shrinks() -> None:
@@ -138,13 +160,13 @@ def test_the_ledger_only_shrinks() -> None:
     suppressing a check that now has nothing to suppress.
     """
     declared = _declared_targets()
-    referenced = set().union(*(_referenced(d) for d in _runbooks())) if _runbooks() else set()
+    referenced = {(str(d.relative_to(REPO)), t) for d in _runbooks() for t in _referenced(d)}
 
-    now_real = sorted(t for t in KNOWN_STALE if t in declared)
+    now_real = sorted(entry for entry in KNOWN_STALE if entry[1] in declared)
     assert not now_real, f"these targets now EXIST — remove them from KNOWN_STALE: {now_real}"
 
-    gone = sorted(t for t in KNOWN_STALE if t not in referenced)
-    assert not gone, f"no doc references these any more — remove them from KNOWN_STALE: {gone}"
+    gone = sorted(entry for entry in KNOWN_STALE if entry not in referenced)
+    assert not gone, f"the document no longer names the target — remove them from KNOWN_STALE: {gone}"
 
 
 def test_the_extractor_finds_something() -> None:
