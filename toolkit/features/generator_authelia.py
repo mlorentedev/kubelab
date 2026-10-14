@@ -5,7 +5,7 @@ from typing import Any
 from toolkit.config.constants import AUTHELIA_CONFIG, COMPONENTS
 from toolkit.core.logging import logger
 from toolkit.core.templating import create_renderer
-from toolkit.features.configuration import ConfigurationManager, resolve_user_identity
+from toolkit.features.configuration import ConfigurationManager, UserPasswordHashMissing, resolve_user_identity
 from toolkit.features.generator_base import BaseGenerator
 
 
@@ -120,9 +120,16 @@ class AutheliaGenerator(BaseGenerator):
                 password_hash = env_vars.get(password_hash_key)
 
                 if not password_hash:
-                    logger.warning(
-                        f"No password hash found for user '{username}'. Expected env var: {password_hash_key}"
-                    )
+                    hash_key = f"apps.services.security.authelia.users_{username}_password_hash"
+                    if config_manager.env_secrets_decrypted:
+                        # An empty `password` is a schema error Authelia crash-loops on (#2247).
+                        raise UserPasswordHashMissing(
+                            f"no password hash for Authelia user '{username}': {hash_key} is missing from "
+                            f"{env}.enc.yaml. Set it with `toolkit credentials hash-password {hash_key} --env {env}`."
+                        )
+                    # No key here (CI's drift gate): nothing to compare against, and the
+                    # rendered database is never deployed from such a run.
+                    logger.warning(f"No password hash for user '{username}': {env}.enc.yaml was not decrypted")
                     password_hash = ""
 
                 authelia_users.append(
