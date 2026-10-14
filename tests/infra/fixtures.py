@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import os
+import shutil
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -131,15 +134,44 @@ def node_ssh_run(
     )
 
 
+#: Where the macOS app keeps its CLI. It puts nothing on PATH, so without this
+#: every infra test skipped on the Mac as "VPN not connected" (#2283).
+MACOS_TAILSCALE_CLI = Path("/Applications/Tailscale.app/Contents/MacOS/Tailscale")
+
+
+def tailscale_cli(which: Callable[[str], str | None] = shutil.which, bundle: Path = MACOS_TAILSCALE_CLI) -> str | None:
+    """The Tailscale CLI to run: the one on PATH, else the macOS app's, else None.
+
+    The bundle counts only when it can be executed, as `which` requires of a PATH entry.
+    """
+    return which("tailscale") or (str(bundle) if bundle.is_file() and os.access(bundle, os.X_OK) else None)
+
+
+def vpn_unavailable() -> str | None:
+    """Why this machine cannot reach the tailnet, or None when it can.
+
+    An absent CLI and a disconnected tailnet are told apart, because the fix for
+    each is different and a skip reason that conflates them hides the first.
+    """
+    cli = tailscale_cli()
+    if cli is None:
+        if MACOS_TAILSCALE_CLI.is_file():
+            # Installed, but without its execute bit (an archive extracted without
+            # modes, a broken update): the fix is chmod, not an install.
+            return f"Tailscale CLI cannot run: {MACOS_TAILSCALE_CLI} is not executable"
+        return f"Tailscale CLI not found: not on PATH, and no {MACOS_TAILSCALE_CLI}"
+    try:
+        result = subprocess.run([cli, "status", "--json"], capture_output=True, text=True, timeout=5)
+    except subprocess.TimeoutExpired:
+        return f"Tailscale not connected: `{cli} status` timed out"
+    except OSError as exc:
+        # Found but not runnable (removed since, or a broken install): a CLI problem, not a down tailnet.
+        return f"Tailscale CLI cannot run: {exc}"
+    if result.returncode != 0:
+        return f"Tailscale not connected: `{cli} status` exited {result.returncode}"
+    return None
+
+
 def tailscale_connected() -> bool:
     """Check if the local machine has Tailscale running and connected."""
-    try:
-        result = subprocess.run(
-            ["tailscale", "status", "--json"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        return result.returncode == 0
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return False
+    return vpn_unavailable() is None

@@ -4,14 +4,15 @@ from __future__ import annotations
 
 import pytest
 
-from .fixtures import VPS_NODE, NodeInfo, load_inventory, tailscale_connected
+from .fixtures import VPS_NODE, NodeInfo, load_inventory, vpn_unavailable
 
 
 @pytest.fixture(scope="session")
 def require_vpn() -> None:
     """Skip all infra tests if Tailscale is not connected."""
-    if not tailscale_connected():
-        pytest.skip("Tailscale VPN not connected — infra tests require VPN access")
+    reason = vpn_unavailable()
+    if reason:
+        pytest.skip(f"{reason} — infra tests require VPN access")
 
 
 @pytest.fixture(scope="session")
