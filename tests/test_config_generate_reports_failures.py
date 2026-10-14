@@ -96,6 +96,9 @@ def test_a_failed_generator_still_has_its_output_reverted(tmp_path: Path) -> Non
     generator = tmp_path / "toolkit"
     generator.write_text(f"#!/bin/sh\necho '# partial write' >> {REPO / tracked}\nexit 1\n")
     generator.chmod(0o755)
+    # Restore the file's own bytes, never `git checkout`: the gate refuses exactly when
+    # this tree holds uncommitted overlay edits, and a checkout would discard them.
+    before = (REPO / tracked).read_bytes()
     try:
         run = _drift(str(generator))
         _skip_if_refused(run)
@@ -103,7 +106,7 @@ def test_a_failed_generator_still_has_its_output_reverted(tmp_path: Path) -> Non
         dirty = subprocess.run(["git", "diff", "--quiet", "--", tracked], cwd=REPO, check=False).returncode
         assert dirty == 0, f"{tracked} was left modified after a failed generator"
     finally:
-        subprocess.run(["git", "checkout", "--", tracked], cwd=REPO, check=False)
+        (REPO / tracked).write_bytes(before)
 
 
 def test_the_drift_gate_runs_only_the_generators_it_compares() -> None:
