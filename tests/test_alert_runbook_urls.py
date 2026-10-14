@@ -21,9 +21,6 @@ REPO = pathlib.Path(__file__).resolve().parent.parent
 RULES_DIR = REPO / "infra/k8s/base/services/grafana-alerting"
 PREFIX = "https://github.com/mlorentedev/kubelab/blob/master/"
 REPO_LINK = re.compile(r"https://github\.com/mlorentedev/kubelab/(?:blob|tree|raw)/([^/\s\"'`)<>]+)/([^\s\"'`)<>]+)")
-# A link that ends a sentence in prose ("see .../adr-040.md.") keeps its period in the
-# capture; GitHub and browsers drop it, so the guard does too.
-SENTENCE_END = ".,;:"
 # What ships links into this repo: manifests (homepage, alert rules) and the toolkit.
 LINK_SOURCES = ("infra/k8s", "toolkit")
 # The template the homepage is rendered from, where #1524's broken link lived.
@@ -70,7 +67,7 @@ def _repo_links() -> list:
         for path in sorted((REPO / root).rglob("*")):
             if path.is_file() and path.suffix in {".yaml", ".yml", ".j2", ".py", ".js"}:
                 for ref, target in REPO_LINK.findall(path.read_text(encoding="utf-8", errors="ignore")):
-                    found.add((str(path.relative_to(REPO)), f"{ref}:{target.rstrip(SENTENCE_END)}"))
+                    found.add((str(path.relative_to(REPO)), f"{ref}:{target}"))
     return [pytest.param(src, target, id=f"{src}->{target}") for src, target in sorted(found)]
 
 
