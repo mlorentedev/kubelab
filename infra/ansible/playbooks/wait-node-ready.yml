@@ -86,7 +86,8 @@
     #
     #   WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!
     #
-    # `accept-new`, which the generated inventory uses, accepts UNKNOWN hosts
+    # `accept-new`, which the generated inventory keeps for this node alone
+    # (every stable node is verified against the pinned file, ANSIBLE-066), accepts UNKNOWN hosts
     # and still refuses CHANGED ones. So the MIG self-heals and the operator
     # stops at their own known_hosts, on a path that runs unattended.
     #

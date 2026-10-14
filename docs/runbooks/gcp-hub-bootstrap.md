@@ -371,7 +371,7 @@ machine generates new host keys, and the MagicDNS name does not change, so:
 WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!
 ```
 
-`accept-new` — what the generated inventory uses — accepts *unknown* hosts and
+`accept-new` — what the generated inventory keeps for the hub alone (ANSIBLE-066) — accepts *unknown* hosts and
 still refuses *changed* ones, which is correct in general and exactly wrong for
 a node that is replaced by design. `make wait-node-ready` now clears the stale
 key first, scoped to nodes the SSOT marks as having an ephemeral address. If you
