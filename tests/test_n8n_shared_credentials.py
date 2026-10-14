@@ -591,3 +591,25 @@ class TestReadme:
     def test_it_names_every_sale_secret_path(self) -> None:
         for path in SALE_PATHS.values():
             assert path in self.README
+
+
+# ── An env with no workflow (#2158) ───────────────────────────────────────────
+
+
+class TestNoWorkflowInTheEnv:
+    def test_the_shared_credential_is_still_imported(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The docstring's promise: removing the last user leaves the credential in place."""
+        ok, kubectl = _run(catalog=[], monkeypatch=monkeypatch)
+        assert ok
+        assert [c["name"] for c in kubectl.credentials()] == ["kubelab-smtp"]
+        assert not kubectl.workflows()
+
+    def test_nothing_is_restarted_for_a_credential_alone(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """n8n reads a credential at execution; only imported webhooks need the restart."""
+        _, kubectl = _run(catalog=[], monkeypatch=monkeypatch)
+        assert not [c for c in kubectl.calls if "rollout" in c]
+
+    def test_a_credential_that_cannot_render_fails_the_run(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        ok, kubectl = _run(vault=_without(_vault(), "infra.smtp.pass"), catalog=[], monkeypatch=monkeypatch)
+        assert not ok
+        assert not kubectl.credentials()
