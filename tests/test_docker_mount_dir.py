@@ -16,7 +16,11 @@ TESTS = Path(__file__).resolve().parent
 
 def test_the_mount_dir_is_under_home(docker_mount_dir: Path) -> None:
     assert docker_mount_dir.is_dir()
-    assert docker_mount_dir.is_relative_to(Path.home()), "Colima and Docker Desktop share $HOME only"
+    # Resolved on both sides: a `~/.cache` symlinked off $HOME is lexically under it and
+    # still unshared, because the VM follows the link to a place it cannot see.
+    assert docker_mount_dir.resolve().is_relative_to(Path.home().resolve()), (
+        "Colima and Docker Desktop share $HOME only"
+    )
 
 
 def _starts_docker(node: ast.AST) -> bool:
