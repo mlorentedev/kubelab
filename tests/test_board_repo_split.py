@@ -38,7 +38,7 @@ def _no_github(*_args: object, **_kwargs: object) -> dict:
     [
         (board_ids, lambda repo: board_ids.fetch_open_issues(repo)),
         (board_deps, lambda repo: board_deps.fetch_open_issues(repo)),
-        (board_streams, lambda repo: board_streams._refs_query(repo, [1])),
+        (board_streams, lambda repo: board_streams.fetch_issue_refs(SimpleNamespace(repo=repo), [1])),
         (board_sweep, lambda repo: board_sweep.fetch_items(SimpleNamespace(repo=repo), [1])),
     ],
     ids=["board_ids", "board_deps", "board_streams", "board_sweep"],
