@@ -96,29 +96,40 @@ def _complete(job: dict[str, Any]) -> bool:
     return any(c.get("type") == "Complete" and c.get("status") == "True" for c in conditions)
 
 
+def _finished_at(pod: dict[str, Any]) -> str | None:
+    """When the pod's last container terminated, or None if none has."""
+    statuses = pod.get("status", {}).get("containerStatuses") or []
+    times = [t for c in statuses if (t := (c.get("state", {}).get("terminated") or {}).get("finishedAt"))]
+    return max(times, default=None)
+
+
 def _pods_not_running(pods: list[dict[str, Any]], jobs: list[dict[str, Any]]) -> list[str]:
     """Pods neither Running nor Succeeded, minus failures a later run already fixed.
 
     A CronJob keeps its last `failedJobsHistoryLimit` failed Jobs until another
     failure rotates them out, so a fixed failure stays on record indefinitely
-    (#2194). Its pod is excused only when a later Job of the same CronJob
-    completed. A newer run still in flight, or a Failed pod with no CronJob
-    behind it, is still reported.
+    (#2194). Its pod is excused only when a Job of the same CronJob COMPLETED
+    after the pod failed. Completion and failure times are compared, not
+    creation times: with overlapping runs, a Job created later can succeed
+    before an older one fails, and then the newest outcome is the failure. A
+    run still in flight, a pod with no recorded finish, or a Failed pod with no
+    CronJob behind it is still reported.
     """
     by_name = {job["metadata"]["name"]: job for job in jobs}
     completed_at: dict[str, list[str]] = {}
     for job in jobs:
         cronjob = _owner(job, "CronJob")
-        if cronjob and _complete(job):
-            completed_at.setdefault(cronjob, []).append(job["metadata"]["creationTimestamp"])
+        completion = job.get("status", {}).get("completionTime")
+        if cronjob and _complete(job) and completion:
+            completed_at.setdefault(cronjob, []).append(completion)
 
     def fixed_since(pod: dict[str, Any]) -> bool:
         job = by_name.get(_owner(pod, "Job") or "")
         cronjob = _owner(job, "CronJob") if job else None
-        if pod.get("status", {}).get("phase") != "Failed" or not cronjob:
+        failed_at = _finished_at(pod)
+        if pod.get("status", {}).get("phase") != "Failed" or not cronjob or not failed_at:
             return False
-        created = job["metadata"]["creationTimestamp"]  # type: ignore[index]
-        return any(later > created for later in completed_at.get(cronjob, []))
+        return any(later > failed_at for later in completed_at.get(cronjob, []))
 
     return [
         f"{pod['metadata']['name']} ({pod.get('status', {}).get('phase', 'Unknown')})"
