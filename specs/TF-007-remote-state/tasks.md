@@ -29,7 +29,7 @@ created: "2026-10-13"
 - [x] [AC9] `aws` provider takes the IAM pair from SOPS; `aws.*` and `terraform.state.*` in `SECRET_CATALOG` (#1351).
 - [x] [AC5][AC6] `make tf-state-bootstrap`: bucket, history lock, scoped token proven by consequence; second run unchanged.
 - [x] [AC8] Snapshot to `history/<root>/<lineage>/<serial>.tfstate` after every state write; repeat is a no-op.
-- [x] [AC7] `make tf-state-migrate ROOT=`: lineage, addresses and serial checked after the push, first snapshot, local file renamed and kept.
+- [x] [AC7] `make tf-state-migrate ROOT=`: content (each resource by address, and the outputs) checked after the push, not lineage (lesson-566); a push that already landed finishes with the rename; local file renamed and kept.
 - [x] `make test-tfstate-lock-live` from the conditional-write probe.
 - [x] [AC10] ADR-069, `docs/runbooks/terraform-state.md`, lesson-564, CLAUDE.md gotcha.
 - [x] `make mutate`: 18 mutations on the runner, all RED against a green baseline (the SOPS-dependent tests deselected). Found on the way: `make mutate` never checked the baseline was green, so an already-red test certified every mutant (separate PR, lesson-565).

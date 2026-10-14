@@ -54,13 +54,19 @@ Run it in the checkout that holds the local file:
 make tf-state-migrate ROOT=dns
 ```
 
-The runner pushes the file without `-force`. Terraform refuses the push if R2
-already holds a different lineage or a newer serial. The runner then reads R2
-back and accepts the result only if the lineage and the set of resource
-addresses match, at the same serial or later. Only then does it rename the local
+The runner pushes the file without `-force`, so Terraform refuses it if R2
+already holds a non-empty state of another lineage. It then reads R2 back and
+compares content: every resource, by address, and the outputs. Lineage and
+serial are not compared. Into an empty key Terraform imports the resources
+under the backend's own lineage, at serial 1, so R2's lineage will not be the
+local file's (lesson-566). Only when the content matches does it rename the local
 file to `terraform.pre-remote.tfstate`, which stays gitignored and is never
-overwritten. A failed comparison keeps the local file and exits 1. Re-running
-after a success is a no-op.
+overwritten. A mismatch names the differing addresses, never their values, keeps
+the local file and exits 1.
+
+Re-running is safe at any point. After a success it is a no-op. If R2 already
+holds the content but the rename did not happen, the run renames without pushing
+again.
 
 Then, from any other checkout:
 
@@ -151,4 +157,5 @@ up. Run it after any change to R2 or to the backend settings.
 | `the <root> root's state was lost and is not recovered yet` | An unrecovered root | TF-015 (#2226) |
 | `the state could not be copied to history; nothing was changed` | R2 unreachable or the credential refused | Fix access and re-run; nothing was written |
 | `InvalidRequest` / signature errors from R2 | A shell `AWS_SESSION_TOKEN` or `AWS_PROFILE` reached the CLI | The runner strips the shell's `AWS_*`; report it as a defect if it still happens |
+| `after the push R2 differs from the local file at <addresses>` | R2 holds another state under this root's key | Compare `make tf-state-list ROOT=<root>` with the local file's addresses; never `-force` |
 | `Unsupported Terraform Core version` | Terraform older than 1.10, which has no `use_lockfile` | `dotf tools sync` |
