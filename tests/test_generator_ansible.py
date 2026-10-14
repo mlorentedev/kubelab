@@ -34,13 +34,10 @@ class TestMeshTransportRegression:
     """Default / mesh transport must reproduce today's inventory shape (no regression)."""
 
     def test_no_per_host_proxy_in_mesh(self) -> None:
+        """Mesh never jumps. The hub's host-key override is ANSIBLE-066's, tested there."""
         inv = AnsibleGenerator()._build_inventory(_networking(), transport="mesh")
         for name, hv in _hosts(inv).items():
-            assert "ansible_ssh_common_args" not in hv, f"{name} has per-host ssh args in mesh mode"
-
-    def test_global_ssh_args_unchanged(self) -> None:
-        inv = AnsibleGenerator()._build_inventory(_networking(), transport="mesh")
-        assert inv["all"]["vars"]["ansible_ssh_common_args"] == "-o StrictHostKeyChecking=accept-new"
+            assert "ProxyCommand" not in hv.get("ansible_ssh_common_args", ""), f"{name} jumps in mesh mode"
 
     def test_mesh_is_the_default(self) -> None:
         net = _networking()

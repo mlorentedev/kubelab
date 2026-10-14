@@ -59,9 +59,9 @@
     - name: Verify SSH + Python connectivity
       ansible.builtin.ping:
 
-    - name: Verify become (sudo) works
+    - name: Verify NOPASSWD sudo works
       command: sudo -n true
-      become: true
+      become: false
       changed_when: false
 
     - name: Verify K3s is installed (cloud-init bootstrap prerequisite)
