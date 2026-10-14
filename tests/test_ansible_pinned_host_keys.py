@@ -174,35 +174,33 @@ class TestRunRefusesWithoutThePinnedFile:
         )
         return ran
 
+    @pytest.mark.parametrize("as_list", [False, True], ids=["string", "list"])
     def test_a_missing_file_stops_the_run_and_is_named(
-        self, ansible_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+        self,
+        ansible_dir: Path,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture,
+        as_list: bool,
     ) -> None:
         import typer
 
         missing = tmp_path / "nowhere" / "known_hosts_pinned"
-        self._inventory(ansible_dir, missing)
+        self._inventory(ansible_dir, missing, as_list=as_list)
         with pytest.raises(typer.Exit):
             self._run(monkeypatch)
         out = "".join(capsys.readouterr().out.split())  # the console wraps long lines
         assert "".join(str(missing).split()) in out and "dotfiles" in out
 
+    @pytest.mark.parametrize("as_list", [False, True], ids=["string", "list"])
     def test_a_present_file_lets_the_run_through(
-        self, ansible_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, ansible_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, as_list: bool
     ) -> None:
         pinned = tmp_path / "known_hosts_pinned"
         pinned.write_text("")
-        self._inventory(ansible_dir, pinned)
+        self._inventory(ansible_dir, pinned, as_list=as_list)
         ran = self._run(monkeypatch)
         assert len(ran) == 1 and ran[0].startswith("ansible-playbook")
-
-    def test_options_given_as_a_list_are_read_too(
-        self, ansible_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        import typer
-
-        self._inventory(ansible_dir, tmp_path / "nowhere" / "known_hosts_pinned", as_list=True)
-        with pytest.raises(typer.Exit):
-            self._run(monkeypatch)
 
 
 class TestAddANodeRunbook:
@@ -214,3 +212,10 @@ class TestAddANodeRunbook:
         provision = text.find("make provision")
         assert pin and provision != -1, "the runbook lost its pin step or its provision command"
         assert pin.start() < provision, "the runbook provisions a node before pinning its host key"
+
+    def test_the_pin_is_probed_strictly_before_the_first_provision(self) -> None:
+        text = (REPO / "docs/runbooks/add-a-node.md").read_text(encoding="utf-8")
+        probe = re.search(r"^ssh -o StrictHostKeyChecking=yes .*\n.*-o ControlMaster=no -o ControlPath=none", text, re.MULTILINE)
+        provision = text.find("make provision")
+        assert probe, "the runbook lost its strict probe of the pinned key"
+        assert probe.start() < provision, "the runbook provisions a node before probing its pin"
