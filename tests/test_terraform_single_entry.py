@@ -149,16 +149,38 @@ def test_the_scan_leaves_names_and_prose_alone(tmp_path: Path, source: str) -> N
 OTHER_CALLERS = (".github", "scripts", "infra/ansible", "infra/stacks", "edge")
 
 
-def test_nothing_outside_the_toolkit_runs_terraform() -> None:
-    offenders = [
-        f"{path.relative_to(REPO)}:{n}: {line.strip()}"
-        for top in OTHER_CALLERS
-        for path in sorted((REPO / top).rglob("*"))
-        if path.is_file() and path.suffix in {".yml", ".yaml", ".sh", ".j2", ".py", ".mk", ""}
+SCANNED_SUFFIXES = {".yml", ".yaml", ".sh", ".j2", ".py", ".mk", ""}
+
+
+def _text_spawns(path: Path) -> list[str]:
+    """Lines that run terraform in a workflow, script or playbook. Comments are prose."""
+    return [
+        f"{n}: {line.strip()}"
         for n, line in enumerate(path.read_text(encoding="utf-8", errors="ignore").splitlines(), 1)
         if not line.lstrip().startswith("#") and COMMAND_IN_TEXT.search(line)
     ]
+
+
+def test_nothing_outside_the_toolkit_runs_terraform() -> None:
+    offenders = [
+        f"{path.relative_to(REPO)}:{hit}"
+        for top in OTHER_CALLERS
+        for path in sorted((REPO / top).rglob("*"))
+        if path.is_file() and path.suffix in SCANNED_SUFFIXES
+        for hit in _text_spawns(path)
+    ]
     assert not offenders, "go through `make tf-<root>-<action>`:\n" + "\n".join(offenders)
+
+
+def test_the_text_scan_sees_a_workflow_step_and_skips_a_comment(tmp_path: Path) -> None:
+    workflow = tmp_path / "plan.yml"
+    workflow.write_text(
+        "# terraform plan is run by the runner\n"
+        "      - run: cd infra/terraform/dns && terraform apply -auto-approve\n"
+        "      - run: /usr/bin/terraform -chdir=x plan\n",
+        encoding="utf-8",
+    )
+    assert [hit.split(":")[0] for hit in _text_spawns(workflow)] == ["2", "3"]
 
 
 def test_the_runner_is_where_terraform_is_spawned() -> None:
