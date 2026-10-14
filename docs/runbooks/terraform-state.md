@@ -55,8 +55,10 @@ Run it in the checkout that holds the local file:
 make tf-state-migrate ROOT=dns
 ```
 
-The runner pushes the file without `-force`, so Terraform refuses it if R2
-already holds a non-empty state of another lineage. It then reads R2 back and
+The runner reads R2 first. If R2 already holds a written state (serial 1 or
+more) with other content, of any lineage, the runner refuses before pushing
+anything and keeps the local file. Otherwise it pushes the file without
+`-force`, then reads R2 back and
 compares content: every resource, by address, and the outputs. Lineage and
 serial are not compared. Into an empty key Terraform imports the resources
 under the backend's own lineage, at serial 1, so R2's lineage will not be the
@@ -138,7 +140,7 @@ remove it, so treat the rule as part of what a review of `common.yaml` reads.
 The copies are taken at run boundaries: before a write starts and after it ends.
 They are not taken on every serial Terraform persists in the middle of an apply.
 A run killed between the write and the after-copy files nothing for that write.
-The next run's before-copy then files the state as it stands, so the newest state
+The before-copy of the next run that writes then files the state as it stands, so the newest state
 is always covered, but an intermediate one may not be. History is a safety net
 beside the state, not a log of it.
 
@@ -173,5 +175,6 @@ up. Run it after any change to R2 or to the backend settings.
 | `the <root> root's state was lost and is not recovered yet` | An unrecovered root | TF-015 (#2226) |
 | `the state could not be copied to history; nothing was changed` | R2 unreachable or the credential refused | Fix access and re-run; nothing was written |
 | `InvalidRequest` / signature errors from R2 | A shell `AWS_SESSION_TOKEN` or `AWS_PROFILE` reached the CLI | The runner strips the shell's `AWS_*`; report it as a defect if it still happens |
+| `R2 already holds a written state that differs from the local file at <addresses>` | This root's key in R2 was written before, by another migration or a run from another checkout | Compare `make tf-state-list ROOT=<root>` with the local file's addresses and decide which one is the state; never `-force` |
 | `after the push R2 differs from the local file at <addresses>` | R2 holds another state under this root's key | Compare `make tf-state-list ROOT=<root>` with the local file's addresses; never `-force` |
 | `Unsupported Terraform Core version` | Terraform older than 1.10, which has no `use_lockfile` | `dotf tools sync` |

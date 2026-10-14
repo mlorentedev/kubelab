@@ -423,7 +423,7 @@ def run(
         raise RunnerError("restore needs exactly one history copy as <lineage>/<serial> (see make tf-state-history)")
     if root.apply != "auto" and any(a.lstrip("-").split("=", 1)[0] == "auto-approve" for a in extra):
         raise RunnerError(f"the {root.name} root never applies or destroys unattended; drop -auto-approve")
-    if any(a.lstrip("-").split("=", 1)[0] == "lock" and a.split("=", 1)[-1] not in ("true", "1") for a in extra):
+    if any(_turns_off_the_lock(a) for a in extra):
         raise RunnerError("the runner never turns off the state lock; two writers would race on one state")
 
     module = terraform_dir / root.name
@@ -563,6 +563,12 @@ def _write(
 
 class AwsCli(Protocol):
     def __call__(self, args: list[str], *, env: dict[str, str]) -> Result: ...
+
+
+def _turns_off_the_lock(arg: str) -> bool:
+    """`-lock=false` and its spellings. A bare `-lock` is a Go boolean flag set to true."""
+    name, given, value = arg.lstrip("-").partition("=")
+    return name == "lock" and bool(given) and value not in ("true", "1")
 
 
 def _pull(tf: Callable[..., Result]) -> dict[str, Any] | None:

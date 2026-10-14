@@ -1393,9 +1393,16 @@ def test_migrate_never_pushes_over_a_state_r2_already_holds(tmp_path: Path, pers
     assert json.loads((module / "terraform.tfstate").read_text()) == STATE
 
 
-@pytest.mark.parametrize("flag", ["-lock=false", "--lock=false", "-lock=0"])
+@pytest.mark.parametrize("flag", ["-lock=false", "--lock=FALSE", "-lock=0", "-lock="])
 def test_no_action_runs_without_the_state_lock(flag: str) -> None:
     fake = FakeTerraform()
     with pytest.raises(tr.RunnerError, match="state lock"):
         _run("dns", "plan", fake, extra=[flag])
     assert fake.calls == []
+
+
+@pytest.mark.parametrize("flag", ["-lock", "--lock", "-lock=true", "-lock-timeout=5m"])
+def test_the_lock_flags_that_keep_it_on_still_run(flag: str) -> None:
+    fake = FakeTerraform()
+    assert _run("dns", "plan", fake, extra=[flag]) == 0
+    assert fake.call("plan")["args"][-1] == flag
