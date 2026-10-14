@@ -49,7 +49,7 @@ The adversarial review (`review.md`, nan/deepseek-v4-flash, PASS-WITH-GAPS, at `
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/ANSIBLE-066-pinned-host-keys/` -> `specs/archive/ANSIBLE-066-pinned-host-keys/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/ANSIBLE-066-pinned-host-keys/` -> `specs/archive/ANSIBLE-066-pinned-host-keys/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] Promotions above executed (if any)

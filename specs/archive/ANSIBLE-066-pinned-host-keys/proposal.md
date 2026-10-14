@@ -1,7 +1,7 @@
 ---
 id: "ANSIBLE-066-pinned-host-keys"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-10-14"
 issue: "mlorentedev/kubelab#2223"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
