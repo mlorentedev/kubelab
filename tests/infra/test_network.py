@@ -8,7 +8,7 @@ import subprocess
 import pytest
 import yaml
 
-from .fixtures import _COMMON, _REPO_ROOT, NodeInfo, node_ssh_run
+from .fixtures import _COMMON, _REPO_ROOT, NodeInfo, node_ssh_run, tailscale_cli
 
 pytestmark = pytest.mark.infra
 
@@ -47,11 +47,14 @@ class TestTailscaleMesh:
         inventory: list[NodeInfo],
     ) -> None:
         """Tailscale ping must succeed to all inventory nodes (direct or relayed)."""
+        cli = tailscale_cli()
+        if cli is None:
+            pytest.skip("tailscale CLI not available")
         errors: list[str] = []
         for node in inventory:
             try:
                 result = subprocess.run(
-                    ["tailscale", "ping", "--c", "1", "--timeout", "5s", node.host],
+                    [cli, "ping", "--c", "1", "--timeout", "5s", node.host],
                     capture_output=True,
                     text=True,
                     timeout=10,
@@ -61,8 +64,6 @@ class TestTailscaleMesh:
                     errors.append(f"{node.name} ({node.host}): unreachable — {result.stderr.strip()}")
             except subprocess.TimeoutExpired:
                 errors.append(f"{node.name} ({node.host}): ping timed out")
-            except FileNotFoundError:
-                pytest.skip("tailscale CLI not available")
 
         assert not errors, "Tailscale mesh connectivity failures:\n" + "\n".join(errors)
 
