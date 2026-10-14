@@ -1,9 +1,10 @@
 # Ansible roles and node provisioning
 
-58 lessons, newest first. Back to [all categories](../_index.md).
+59 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 569 | [A host-key test through a live ControlMaster socket checks nothing](lesson-569-a-host-key-test-through-a-live-controlmaster-socket-checks-nothing.md) | 2026-10-14 |
 | 552 | [A kill switch that removes a uid-scoped rule leaves every other unit of that uid unconfined](lesson-552-a-kill-switch-that-removes-a-uid-scoped-rule-leaves-every-other-unit-of-that-uid-unconfined.md) | 2026-10-10 |
 | 534 | [A template test that renders without `trim_blocks` is not testing what Ansible ships](lesson-534-a-template-test-that-renders-without-trim-blocks-is-not-testing-what-ansible-ships.md) | 2026-10-07 |
 | 530 | [An ignore rule for Ansible Vault files swallows a task file named `vault.yml`](lesson-530-an-ignore-rule-for-ansible-vault-files-swallows-a-task-file-named-vault-yml.md) | 2026-10-07 |

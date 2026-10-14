@@ -1,6 +1,7 @@
 "Infrastructure management commands for deployment and status checking."
 
 import os
+import re
 from pathlib import Path
 from typing import Annotated
 
@@ -1395,6 +1396,23 @@ def ansible_generate(
         raise typer.Exit(1) from None
 
 
+def _missing_known_hosts_file(inventory: Path) -> Path | None:
+    """The pinned known_hosts file the inventory's ssh options name, if it does not exist (ANSIBLE-066).
+
+    Read from the inventory that will run rather than from the SSOT, so a
+    `--skip-generate` run is checked against what it actually uses.
+    """
+    inv = yaml.safe_load(inventory.read_text(encoding="utf-8")) or {}
+    args = ((inv.get("all") or {}).get("vars") or {}).get("ansible_ssh_common_args") or ""
+    # Ansible also takes the options as a list; a hand-written inventory may use one.
+    text = " ".join(map(str, args)) if isinstance(args, list) else str(args)
+    match = re.search(r"UserKnownHostsFile=(\S+)", text)
+    if not match:
+        return None
+    path = Path(match.group(1)).expanduser()
+    return None if path.is_file() else path
+
+
 @ansible_app.command("run")
 def ansible_run(
     playbook: Annotated[str, typer.Option("--playbook", "-p", help="Playbook name (without .yml)")],
@@ -1450,6 +1468,14 @@ def ansible_run(
     if not inventory.exists():
         logger.error(f"Inventory not found: {inventory}")
         logger.info("Drop --skip-generate, or run 'toolkit infra ansible generate' first")
+        raise typer.Exit(1) from None
+
+    known_hosts = _missing_known_hosts_file(inventory)
+    if known_hosts is not None:
+        # Without it every stable host fails alone with a bare "Host key
+        # verification failed", which names neither the file nor the fix.
+        logger.error(f"The pinned host keys this inventory verifies against are missing: {known_hosts}")
+        logger.info("Deploy them from dotfiles (dotf converge); add a node with docs/runbooks/add-a-node.md")
         raise typer.Exit(1) from None
 
     cmd = f"ansible-playbook {playbook_path} -i {inventory} -e deploy_env={env}"
