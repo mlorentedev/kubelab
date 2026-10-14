@@ -238,11 +238,15 @@ def host_key_hint(ssh_alias: str, stderr: str, purge_attempted: bool = False) ->
         return None
     hostname = resolve_ssh_hostname(ssh_alias)
     if "revoked host key" in lowered or "marked as revoked" in lowered:
+        # ssh checks a revocation before any known_hosts entry, so pinning the
+        # same key changes nothing: only a host presenting another key gets in.
         return (
             f"The SSH host key {hostname!r} presented is marked as revoked on this machine "
             f"(a known_hosts @revoked line or RevokedHostKeys).\n"
-            f"  Do not remove the revocation to get through: verify the host out of band "
-            f"and pin its current key. Nothing was changed."
+            f"  Pinning it changes nothing, and removing the revocation defeats it. Treat the "
+            f"host as suspect until you know why it still presents a revoked key: rotate its "
+            f"host key on the node, verify the new fingerprint out of band, pin that one. "
+            f"Nothing was changed."
         )
     if not changed and not purge_attempted:
         # A new workstation has never seen this host. Accepting the key it now

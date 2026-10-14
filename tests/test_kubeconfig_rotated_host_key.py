@@ -33,23 +33,24 @@ from toolkit.features.k8s_kubeconfig import (
     resolve_ssh_hostname,
 )
 
-# What ssh 10 prints for each failure, captured 2026-10-13 against the VPS.
+# What ssh 10 prints for each failure, captured 2026-10-13 against the VPS. The
+# address is replaced by a documentation one (RFC 5737): no assertion reads it.
 # BatchMode under the default `StrictHostKeyChecking ask` prints the last line only.
 UNKNOWN_BATCH = "Host key verification failed.\n"
 UNKNOWN_STRICT = (
-    "No ED25519 host key is known for 100.64.0.2 and you have requested strict checking.\n"
+    "No ED25519 host key is known for 192.0.2.2 and you have requested strict checking.\n"
     "Host key verification failed.\n"
 )
 REVOKED = (
     "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n"
     "@       WARNING: REVOKED HOST KEY DETECTED!               @\n"
     "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n"
-    "The ED25519 host key for 100.64.0.2 is marked as revoked.\n"
+    "The ED25519 host key for 192.0.2.2 is marked as revoked.\n"
     "Host key verification failed.\n"
 )
 CHANGED_STRICT = (
     "Offending ED25519 key in /home/op/.ssh/known_hosts:7\n"
-    "Host key for 100.64.0.2 has changed and you have requested strict checking.\n"
+    "Host key for 192.0.2.2 has changed and you have requested strict checking.\n"
     "Host key verification failed.\n"
 )
 
@@ -160,7 +161,11 @@ class TestTheErrorSaysSomethingUseful:
         assert "rebuilt" in hint and "impersonating" in hint, "both readings, so the operator decides"
 
     def test_it_matches_the_strict_checking_wording(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """With StrictHostKeyChecking yes ssh prints no banner, only these lines; both exit 255."""
+        """With StrictHostKeyChecking yes a changed key prints no banner.
+
+        Only the `Offending` line then tells it from an unknown host, so this
+        guards that marker: without it, a changed key would be called unrecorded.
+        """
         self._stub_hostname(monkeypatch)
         hint = kc.host_key_hint("vps", CHANGED_STRICT)
         assert hint is not None and "does not match" in hint
@@ -204,6 +209,8 @@ class TestTheErrorSaysSomethingUseful:
         assert hint is not None
         assert "revoked" in hint
         assert "No SSH host key is recorded" not in hint and "ssh-keygen -R" not in hint
+        assert "Pinning it changes nothing" in hint, "ssh checks the revocation first; re-pinning the key is a dead end"
+        assert "rotate its host key" in hint
 
     def test_an_unrelated_failure_is_left_alone(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A wrong-hint is worse than none: it sends the operator to delete a
