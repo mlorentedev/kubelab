@@ -25,7 +25,7 @@ created: "2026-10-13"
 - [x] [AC4] Runner: backend credentials in the child env, `init -reconfigure -backend-config`, refusal list for unrecovered roots (TF-015).
 - [x] [AC4] Read-only `state-list` and `history` runner actions (`make tf-state-list`, `make tf-state-history`); `dns-terraform.md` and `infra/terraform/README.md` point at them. `show`/`state show` are deliberately not offered: they print attribute values, and a state holds secrets in clear.
 - [x] [AC10] `restore` (a revert at the next serial, no `-force`) and `unlock` runner actions, so the runbook has no raw `terraform`.
-- [ ] Live, first: re-run `make tf-dns-plan` from msi on this branch's base (the `vps_ip` render from PR 1a) before any state moves.
+- [x] Live, first: `make tf-dns-plan` from msi on the runner's base reads `No changes` (recorded under PR 1a, 2026-10-13). On this branch the local-state guard refuses it by design until `migrate`. Preflight 2026-10-13: Terraform 1.16.4 and aws-cli >= 2.17 on the Mac and msi; msi holds local state for `dns`, `r2` and `aws` only.
 - [x] [AC9] `aws` provider takes the IAM pair from SOPS; `aws.*` and `terraform.state.*` in `SECRET_CATALOG` (#1351).
 - [x] [AC5][AC6] `make tf-state-bootstrap`: bucket, history lock, scoped token proven by consequence; second run unchanged.
 - [x] [AC8] Snapshot to `history/<root>/<lineage>/<serial>.tfstate` after every state write; repeat is a no-op.
