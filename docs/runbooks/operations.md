@@ -54,9 +54,13 @@ make tf-gcp-apply           # apply
 make gcp1-replace           # recreate the VM: the same path a preemption takes
 ```
 
-`gcp1-replace` waits for the node, provisions it, and repoints prod's Argo CD
-route at its new Tailscale IP; cloud-init installs Argo CD. Start, stop and
-status are in `docs/runbooks/gcp-hub-bootstrap.md` §8.
+`gcp1-replace` waits for sshd and for cloud-init to finish
+(`wait-node-ready`), provisions the node, and repoints prod's Argo CD route at
+its new Tailscale IP. Every recreate is a fresh disk, so cloud-init rebuilds the
+hub on its own: it installs Argo CD, registers each spoke in `managed_spokes`
+from Secret Manager, and applies the Applications. There is no `deploy-apps` or
+`register-spoke` step after a recreate. Start, stop and status are in
+`docs/runbooks/gcp-hub-bootstrap.md` §8.
 
 `aws1` was destroyed on 2026-08-23. Its Terraform root and the
 `networking.aws` block are dormant on purpose, kept for portability: the
@@ -104,7 +108,7 @@ make deploy-argocd          # retry
 
 If still fails after recovery:
 1. Recreate the hub: `make gcp1-replace`
-2. Wait for it to finish; it waits for K3s and Argo CD itself
+2. Wait for it to finish. It waits for cloud-init, which installs Argo CD; it does not check that Argo CD is ready
 3. `make recover-argocd && make deploy-argocd`
 4. **Never retry more than once on a stressed instance**
 
