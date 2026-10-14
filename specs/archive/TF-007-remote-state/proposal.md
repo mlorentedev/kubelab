@@ -1,7 +1,7 @@
 ---
 id: "TF-007-remote-state"
 type: spec
-status: implementing # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-10-13"
 issue: "mlorentedev/kubelab#558"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal, terraform, r2, state]
