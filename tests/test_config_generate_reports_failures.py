@@ -35,10 +35,12 @@ class _Generator:
 def test_the_exit_code_follows_the_generators_success_field(
     monkeypatch: pytest.MonkeyPatch, success: bool, exit_code: int
 ) -> None:
-    result = {"success": success, "error": "planted failure"}
+    result = {"success": success, "error": "planted {failure}"}
     monkeypatch.setattr(config_cli, "K8sGenerator", lambda: _Generator(result))
     run = CliRunner().invoke(config_cli.app, ["generate", "--env", "staging", "--service", "k8s", "--force"])
     assert run.exit_code == exit_code, run.output
+    # The failure names the generator's own error, braces and all.
+    assert ("k8s: planted {failure}" in " ".join(run.output.split())) is not success, run.output
 
 
 def _discarded_generate_calls(path: Path) -> list[int]:
