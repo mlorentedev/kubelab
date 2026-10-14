@@ -1,9 +1,10 @@
 # The toolkit CLI, Make, Python and local tooling
 
-50 lessons, newest first. Back to [all categories](../_index.md).
+51 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 562 | [A same-length mutation outlives its restore in the bytecode cache](lesson-562-a-same-length-mutation-outlives-its-restore-in-the-bytecode-cache.md) | 2026-10-13 |
 | 547 | [A fail-closed check behind an `if` on its own input fails open when that input is empty](lesson-547-a-fail-closed-check-behind-an-if-on-its-own-input-fails-open-when-that-input-is-empty.md) | 2026-10-10 |
 | 545 | [A fake that answers nothing cannot test what the code prints of the answer](lesson-545-a-fake-that-answers-nothing-cannot-test-what-the-code-prints-of-the-answer.md) | 2026-10-10 |
 | 544 | [Gitea's `empty` flag is written at push time and never re-read from git](lesson-544-giteas-empty-flag-is-written-at-push-time-and-never-re-read-from-git.md) | 2026-10-09 |
