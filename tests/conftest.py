@@ -50,6 +50,24 @@ GNU_COREUTILS = (
 )
 
 
+# Every GNU-only tool the node scripts call. All of them, not `timeout` alone:
+# Homebrew links an unprefixed `timeout` (macOS has none) and leaves `chown` and
+# `base64` BSD, so one GNU tool on PATH says nothing about the others.
+GNU_TOOLS = ("timeout", "chown", "base64")
+
+
+def _path_is_gnu() -> bool:
+    """Whether PATH already resolves every tool to GNU coreutils (nix, a custom prefix)."""
+    for tool in GNU_TOOLS:
+        binary = shutil.which(tool)
+        if binary is None:
+            return False
+        result = subprocess.run([binary, "--version"], capture_output=True, text=True, check=False)
+        if "GNU coreutils" not in result.stdout:
+            return False
+    return True
+
+
 def _gnu_userland_first() -> None:
     """On macOS, put GNU coreutils ahead of the BSD ones for every subprocess.
 
@@ -59,7 +77,7 @@ def _gnu_userland_first() -> None:
     `make test-fast` was no gate on the operator's only workstation. Refusing
     to start is better than 90 failures that read as regressions.
     """
-    if sys.platform != "darwin":
+    if sys.platform != "darwin" or _path_is_gnu():
         return
     gnubin = next((p for p in GNU_COREUTILS if (p / "timeout").exists()), None)
     if gnubin is None:
