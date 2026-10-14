@@ -9,8 +9,8 @@ killed and Gitea left K3s. It now holds the apex only, which the template's
 pattern does not match.
 
 Routed means what `tests/test_runbook_hostnames_are_published.py` uses for the
-docs: a name some manifest under `infra/k8s/base` or the staging overlay
-mentions.
+docs: a name some IngressRoute under `infra/k8s/base` or the staging overlay
+serves with a `Host()` rule.
 """
 
 from __future__ import annotations
@@ -45,12 +45,23 @@ def _explicit_hosts(rendered: str) -> list[str]:
     return [line.split()[1] for line in lines if line and not line.startswith("#")]
 
 
+def _unrouted(hosts: list[str]) -> list[str]:
+    routed = _routed_in_staging()
+    return [h for h in hosts if h != APEX and h.removesuffix(f".{APEX}") not in routed]
+
+
 def test_every_explicit_staging_host_is_the_apex_or_routed() -> None:
     hosts = _explicit_hosts(_staging_zone())
     assert APEX in hosts, "the apex lost its explicit entry, and the template's pattern does not answer it"
-    routed = _routed_in_staging()
-    unrouted = [h for h in hosts if h != APEX and h.removesuffix(f".{APEX}") not in routed]
+    unrouted = _unrouted(hosts)
     assert not unrouted, f"the staging zone pins names no manifest routes: {unrouted}"
+
+
+def test_the_routed_check_accepts_a_routed_name_and_refuses_a_retired_one() -> None:
+    """The zone holds only the apex, so the check above compares nothing on master;
+    this exercises its contract with `_routed_in_staging` on names that exist."""
+    assert _unrouted([APEX, f"grafana.{APEX}"]) == []
+    assert _unrouted([f"gitea.{APEX}"]) == [f"gitea.{APEX}"]
 
 
 def test_the_wildcard_answers_every_name_under_the_apex() -> None:

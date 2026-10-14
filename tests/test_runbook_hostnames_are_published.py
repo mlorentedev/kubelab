@@ -100,7 +100,9 @@ def _staging_manifests() -> str:
 
 
 def _routed_in_staging() -> set[str]:
-    return set(STAGING.findall(_staging_manifests()))
+    """Labels a staging IngressRoute serves. A mention elsewhere (a comment, a redirect
+    URI) routes nothing, so it does not count (#2219 review)."""
+    return set(re.findall(r"Host\(`([a-z0-9-]+)\.staging\.kubelab\.live`\)", _staging_manifests()))
 
 
 def test_every_prod_name_in_the_docs_is_published() -> None:
