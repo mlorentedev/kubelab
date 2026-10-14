@@ -53,7 +53,10 @@ KNOWN_STALE = {
 # `argocd`, the one the zone would have to publish.
 _EDGE = r"(?<![A-Za-z0-9-])"
 PROD = re.compile(_EDGE + r"([a-z0-9-]+)\.kubelab\.live\b")
-STAGING = re.compile(_EDGE + r"([a-z0-9-]+)\.staging\.kubelab\.live\b")
+# The docs name staging hosts literally, so the scan matches the literal apex. The
+# CoreDNS guard passes the one the role renders from common.yaml instead.
+STAGING_APEX = "staging.kubelab.live"
+STAGING = re.compile(_EDGE + r"([a-z0-9-]+)\." + re.escape(STAGING_APEX) + r"\b")
 PERSONAL = re.compile(_EDGE + r"([a-z0-9-]+)\.mlorente\.dev\b")
 
 
@@ -99,10 +102,10 @@ def _staging_manifests() -> str:
     return "\n".join(texts)
 
 
-def _routed_in_staging() -> set[str]:
-    """Labels a staging IngressRoute serves. A mention elsewhere (a comment, a redirect
-    URI) routes nothing, so it does not count (#2219 review)."""
-    return set(re.findall(r"Host\(`([a-z0-9-]+)\.staging\.kubelab\.live`\)", _staging_manifests()))
+def _routed_in_staging(apex: str) -> set[str]:
+    """Labels a staging IngressRoute serves under `apex`. A mention elsewhere (a comment,
+    a redirect URI) routes nothing, so it does not count (#2219 review)."""
+    return set(re.findall(r"Host\(`([a-z0-9-]+)\." + re.escape(apex) + r"`\)", _staging_manifests()))
 
 
 def test_every_prod_name_in_the_docs_is_published() -> None:
@@ -115,7 +118,7 @@ def test_every_prod_name_in_the_docs_is_published() -> None:
 
 
 def test_every_staging_name_in_the_docs_is_routed() -> None:
-    allowed = _routed_in_staging() | PLACEHOLDERS
+    allowed = _routed_in_staging(STAGING_APEX) | PLACEHOLDERS
     unrouted = {n: sorted(p) for n, p in _mentioned(STAGING).items() if n not in allowed}
     assert not unrouted, (
         f"docs name staging hosts no manifest routes: {unrouted}. The wildcard "

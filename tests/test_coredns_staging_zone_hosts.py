@@ -46,7 +46,7 @@ def _explicit_hosts(rendered: str) -> list[str]:
 
 
 def _unrouted(hosts: list[str]) -> list[str]:
-    routed = _routed_in_staging()
+    routed = _routed_in_staging(APEX)
     return [h for h in hosts if h != APEX and h.removesuffix(f".{APEX}") not in routed]
 
 
@@ -61,6 +61,8 @@ def test_the_routed_check_accepts_a_routed_name_and_refuses_a_retired_one() -> N
     """The zone holds only the apex, so the check above compares nothing on master;
     this exercises its contract with `_routed_in_staging` on names that exist."""
     assert _unrouted([APEX, f"grafana.{APEX}"]) == []
+    # Gitea left K3s for the Beelink (ADR-061), so no manifest routes it. If it ever
+    # returns, pick another retired name here.
     assert _unrouted([f"gitea.{APEX}"]) == [f"gitea.{APEX}"]
 
 
