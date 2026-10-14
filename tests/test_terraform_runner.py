@@ -129,6 +129,12 @@ class FakeTerraform:
             }
         )
         rc = self.fail.get(verb, 0)
+        # What the real binary does (measured on msi, 2026-10-13): an init that
+        # finds a local terraform.tfstate next to a new backend wants to ask
+        # whether to copy it, and with -input=false it refuses instead.
+        if verb == "init" and args[0].startswith("-chdir="):
+            if (Path(args[0].split("=", 1)[1]) / "terraform.tfstate").exists():
+                return tr.Result(1, "")
         if verb == "show":
             return tr.Result(rc, json.dumps(self.plan_json))
         if verb == "state pull":
@@ -837,7 +843,7 @@ def test_migrate_pushes_without_force_checks_the_result_and_retires_the_local_fi
     fake = FakeTerraform(pulls=[None, STATE, STATE])
     assert _migrate(tmp_path, fake, aws) == 0
     push = fake.call("state push")
-    assert push["args"][1:] == ["state", "push", str(module / "terraform.tfstate")]
+    assert push["args"][1:] == ["state", "push", str(module / "terraform.migrating.tfstate")]
     assert "-force" not in push["args"]
     assert not (module / "terraform.tfstate").exists()
     assert json.loads((module / "terraform.pre-remote.tfstate").read_text()) == STATE
@@ -878,6 +884,45 @@ def test_a_refused_push_keeps_the_local_file(tmp_path: Path) -> None:
     (module / "terraform.tfstate").write_text(json.dumps(STATE))
     assert _migrate(tmp_path, FakeTerraform(fail={"state push": 1})) == 1
     assert (module / "terraform.tfstate").exists()
+
+
+def test_init_never_sees_the_local_file_and_a_failure_puts_it_back(tmp_path: Path) -> None:
+    module = _module_copy(tmp_path, "dns")
+    (module / "terraform.tfstate").write_text(json.dumps(STATE))
+    fake = FakeTerraform(fail={"state push": 1})
+    assert _migrate(tmp_path, fake) == 1
+    assert fake.verbs()[0] == "init"
+    assert json.loads((module / "terraform.tfstate").read_text()) == STATE
+    assert not (module / "terraform.migrating.tfstate").exists()
+
+
+def test_a_migration_cut_short_is_resumed_from_its_staged_file(tmp_path: Path) -> None:
+    """A killed migrate leaves the file under its staging name; the next one finishes it."""
+    module = _module_copy(tmp_path, "dns")
+    (module / "terraform.migrating.tfstate").write_text(json.dumps(STATE))
+    assert _migrate(tmp_path, FakeTerraform(pulls=[None, STATE, STATE])) == 0
+    assert json.loads((module / "terraform.pre-remote.tfstate").read_text()) == STATE
+    assert not (module / "terraform.migrating.tfstate").exists()
+
+
+@pytest.mark.parametrize("action", ["plan", "apply", "state-list"])
+def test_a_staged_file_refuses_every_action_but_migrate(tmp_path: Path, action: str) -> None:
+    (_module_copy(tmp_path, "dns") / "terraform.migrating.tfstate").write_text(json.dumps(STATE))
+    fake = FakeTerraform()
+    with pytest.raises(tr.RunnerError, match=r"make tf-state-migrate ROOT=dns"):
+        _run("dns", action, fake, terraform_dir=tmp_path)
+    assert fake.calls == []
+
+
+def test_a_local_file_and_a_staged_one_together_are_refused(tmp_path: Path) -> None:
+    module = _module_copy(tmp_path, "dns")
+    for name in ("terraform.tfstate", "terraform.migrating.tfstate"):
+        (module / name).write_text(json.dumps(STATE))
+    fake = FakeTerraform()
+    with pytest.raises(tr.RunnerError, match="both"):
+        _migrate(tmp_path, fake)
+    assert fake.calls == []
+    assert (module / "terraform.tfstate").exists() and (module / "terraform.migrating.tfstate").exists()
 
 
 def test_migrate_after_success_is_a_no_op(tmp_path: Path) -> None:

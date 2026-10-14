@@ -86,6 +86,11 @@ LOCAL_STATE = "terraform.tfstate"
 # ignored by git (`*.tfstate`), kept rather than deleted: it is the last copy
 # from before the backend existed.
 MIGRATED_STATE = "terraform.pre-remote.tfstate"
+# Where `migrate` keeps the local file while it runs. An init that finds a
+# terraform.tfstate next to a new backend wants to ask whether to copy it, and
+# with -input=false refuses outright, so init must not see it. Left behind only
+# if the run is killed; the next migrate resumes from it.
+MIGRATING_STATE = "terraform.migrating.tfstate"
 
 # Every name a pre-runner Make target rendered into a module directory. One left
 # behind is removed before a run: it is a second, stale declaration of the SSOT,
@@ -419,7 +424,6 @@ def run(
 
     module = terraform_dir / root.name
     _refuse_a_state_the_backend_does_not_hold(root, action, module)
-    chdir = f"-chdir={module}"
     state_only = action in STATE_ONLY
     config = load_config()
     env = _state_env(config, root.name) if state_only else child_env(config, root, applying=action == "apply")
@@ -432,6 +436,33 @@ def run(
             return output(other, name, terraform_dir=terraform_dir, terraform=terraform, load_config=lambda: config)
 
     _remove_legacy_renders(module)
+    staged = _stage_for_migration(root, module) if action == "migrate" else None
+    try:
+        return _run_in(
+            root, action, module, terraform_dir, config, env, history, terraform, outputs, extra, allow_destroy, allowed
+        )
+    finally:
+        # A migration that did not finish leaves the file where it was found.
+        if staged is not None and staged.exists():
+            staged.rename(module / LOCAL_STATE)
+
+
+def _run_in(
+    root: Root,
+    action: str,
+    module: Path,
+    terraform_dir: Path,
+    config: Mapping[str, Any],
+    env: dict[str, str],
+    history: _History,
+    terraform: Terraform,
+    outputs: Outputs,
+    extra: Sequence[str],
+    allow_destroy: bool,
+    allowed: Sequence[str],
+) -> int:
+    chdir = f"-chdir={module}"
+    state_only = action in STATE_ONLY
     with tempfile.TemporaryDirectory(prefix=f"tf-{root.name}-") as tmp:
         var_args = [f"-var-file={module / f}" for f in root.var_files]
         if root.render is not None and not state_only:
@@ -477,11 +508,12 @@ def run(
 
 
 def _refuse_a_state_the_backend_does_not_hold(root: Root, action: str, module: Path) -> None:
-    if (module / LOCAL_STATE).exists() and action != "migrate":
-        raise RunnerError(
-            f"{module / LOCAL_STATE} is a local state, and the {root.name} root keeps its state in R2. "
-            f"Running against R2 now would ignore it. Move it first: make tf-state-migrate ROOT={root.name}"
-        )
+    for name in (LOCAL_STATE, MIGRATING_STATE):
+        if (module / name).exists() and action != "migrate":
+            raise RunnerError(
+                f"{module / name} is a local state, and the {root.name} root keeps its state in R2. "
+                f"Running against R2 now would ignore it. Move it first: make tf-state-migrate ROOT={root.name}"
+            )
     if root.unrecovered and action in ("apply", "destroy", "untaint", "restore"):
         raise RunnerError(
             f"the {root.name} root's state was lost and is not recovered yet ({root.unrecovered}). "
@@ -668,6 +700,24 @@ class _History:
         return 1
 
 
+def _stage_for_migration(root: Root, module: Path) -> Path | None:
+    """Move the local file out of init's sight, under a name the guard still refuses.
+
+    Returns the staged path, or None when there is nothing to move (already
+    migrated, or nothing to migrate: `_migrate` says which).
+    """
+    local, staged, moved = module / LOCAL_STATE, module / MIGRATING_STATE, module / MIGRATED_STATE
+    if local.exists() and staged.exists():
+        raise RunnerError(
+            f"both {local.name} and {staged.name} exist in {module}; which one is current is not decidable here."
+        )
+    if (local.exists() or staged.exists()) and moved.exists():
+        raise RunnerError(f"{moved} already exists; refusing to overwrite the last pre-remote copy.")
+    if local.exists():
+        local.rename(staged)
+    return staged if staged.exists() else None
+
+
 def _migrate(tf: Callable[..., Result], root: Root, module: Path) -> int:
     """Move a root's local state into R2, without `-force`, and prove it arrived.
 
@@ -678,15 +728,13 @@ def _migrate(tf: Callable[..., Result], root: Root, module: Path) -> int:
     """
     from toolkit.core.logging import logger
 
-    local = module / LOCAL_STATE
+    local = module / MIGRATING_STATE
     moved = module / MIGRATED_STATE
     if not local.exists():
         if moved.exists():
             logger.info(f"{root.name}: already migrated ({moved.name} is the pre-remote copy).")
             return 0
-        raise RunnerError(f"{root.name} has no local state at {local}; there is nothing to migrate.")
-    if moved.exists():
-        raise RunnerError(f"{moved} already exists; refusing to overwrite the last pre-remote copy.")
+        raise RunnerError(f"{root.name} has no local state at {module / LOCAL_STATE}; there is nothing to migrate.")
     try:
         state = json.loads(local.read_text(encoding="utf-8"))
     except ValueError:
