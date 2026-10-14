@@ -65,6 +65,16 @@ def _capture_generated(monkeypatch: pytest.MonkeyPatch, manager: Any) -> dict[st
         original_report(env, generated, hub)
 
     monkeypatch.setattr(manager, "_report_secret_names", report)
+
+    # The write path never reaches the report, so read the values where they are written.
+    cm = manager.config_manager
+    write = cm.batch_update_secrets.side_effect
+
+    def recording(data: dict[str, str], secret_file_path: Any = None) -> bool:
+        seen.update(data)
+        return write(data, secret_file_path=secret_file_path)
+
+    cm.batch_update_secrets.side_effect = recording
     return seen
 
 
@@ -116,6 +126,8 @@ def test_a_failed_write_raises_and_prints_nothing(
 
     with pytest.raises(credentials.CredentialsWriteFailed, match=re.escape(names)):
         manager.setup_authelia_secrets("prod", auto_update=True)
+    if names == "common.enc.yaml":
+        assert any("argocd" in key for key in generated), "the hub values were not in the checked set"
 
     out = _flat(capsys.readouterr().out)
     assert not [v for v in _secret_values(generated) if _flat(v) in out], "a failed write printed a secret"
@@ -132,3 +144,6 @@ def test_the_cli_exits_non_zero_on_a_failed_write(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(cli.credentials_manager, "setup_authelia_secrets", fail)
     run = CliRunner().invoke(cli.app, ["generate", "--env", "prod", "--auto-update"])
     assert run.exit_code == 1, run.output
+    # The runner also reports 1 for an unhandled exception; the handler is what exits cleanly.
+    assert isinstance(run.exception, SystemExit), run.exception
+    assert "planted" in run.output
