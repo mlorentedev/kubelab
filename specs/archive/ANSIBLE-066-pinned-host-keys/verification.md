@@ -41,6 +41,11 @@ The adversarial review (`review.md`, nan/deepseek-v4-flash, PASS-WITH-GAPS, at `
 5. Minor, the hub-only path also needs the pinned file: **accepted.** The controller must have dotfiles deployed anyway (proposal, Risks), and one rule is simpler to operate than an exception for a run that targets only ephemeral hosts.
 6. Minor, AC6 wording: **applied** above. jetson is named as a deviation, and the count names the seven stable hosts.
 
+PR-Agent on #2250, after the archive:
+
+7. Real, f7's verification was vacuous (it checked that the runbook exists and ran an unrelated test): **applied.** `TestAddANodeRunbook` asserts the pin step precedes the first `make provision`, and f7 now runs it.
+8. Rule, a literal Tailscale address in a test: **applied.** The fixture takes a declared address from `networking.vps`.
+
 ## Promotion candidates
 
 - [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/ansible-provisioning/lesson-569-a-host-key-test-through-a-live-controlmaster-socket-checks-nothing.md

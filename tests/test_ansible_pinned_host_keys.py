@@ -10,6 +10,7 @@ scoped `accept-new`, until host certificates replace both (#1261).
 from __future__ import annotations
 
 import copy
+import re
 from pathlib import Path
 from typing import Any
 
@@ -87,7 +88,7 @@ class TestTheHubException:
         """A hub that records a tailscale_ip is a pet, and loses the exception."""
         net = copy.deepcopy(_networking())
         hub = net["gcp"]
-        hub["tailscale_ip"] = "100.64.0.250"  # any address: only its presence is read
+        hub["tailscale_ip"] = net["vps"]["tailscale_ip"]  # any declared address: only its presence is read
         inv = AnsibleGenerator()._build_inventory(net)
         hv = _hosts(inv)[hub["hostname"]]
         assert "accept-new" not in _effective_args(inv, hv)
@@ -202,3 +203,14 @@ class TestRunRefusesWithoutThePinnedFile:
         self._inventory(ansible_dir, tmp_path / "nowhere" / "known_hosts_pinned", as_list=True)
         with pytest.raises(typer.Exit):
             self._run(monkeypatch)
+
+
+class TestAddANodeRunbook:
+    """f7: the runbook pins a new node's host key before anything provisions it."""
+
+    def test_pinning_comes_before_the_first_provision(self) -> None:
+        text = (REPO / "docs/runbooks/add-a-node.md").read_text(encoding="utf-8")
+        pin = re.search(r"^## \d+\. Pin it$", text, re.MULTILINE)
+        provision = text.find("make provision")
+        assert pin and provision != -1, "the runbook lost its pin step or its provision command"
+        assert pin.start() < provision, "the runbook provisions a node before pinning its host key"
