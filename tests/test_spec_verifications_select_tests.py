@@ -10,9 +10,12 @@ Each command is collected, not run, and judged by pytest's exit code:
 - 5, nothing collected: a selector that matches no test in files that exist.
   Never exempt; that is the defect.
 - 4 with pytest's "not found:" error, a named file or test does not exist.
-  Exempt only while the feature is `pending`: its tests are not written yet,
-  the TDD case. Any other exit 4 (a malformed `-k`, an unknown option) is a
-  broken command whatever the state.
+  Exempt only while the feature is `pending` AND listed in `UNWRITTEN`: its
+  tests are not written yet, the TDD case. Neither the filesystem nor pytest's
+  message tells an unwritten test from a renamed or deleted one, so the
+  exemption is declared, and a listed feature whose tests now collect fails
+  until it leaves the list. Any other exit 4 (a malformed `-k`, an unknown
+  option) is a broken command whatever the state.
 
 A shell redirection after the arguments (`2>&1`, `> out.txt`) is not part of
 them and is cut before splitting.
@@ -44,6 +47,19 @@ USAGE_ERROR = 4
 
 pytestmark = pytest.mark.integration
 
+#: Pending features whose tests are not written yet. Add a TDD spec's ids here
+#: when it lands; remove them when the tests do (a stale entry fails below).
+UNWRITTEN = frozenset(
+    {
+        "BACKUP-057-f1",
+        "BACKUP-057-f7",
+        "GITOPS-003-f2",
+        "GITOPS-003-f3",
+        "GITOPS-003-f6",
+        "TOOL-080-forge-pr-reviewer-f8",
+    }
+)
+
 
 def _commands() -> dict[tuple[str, ...], list[tuple[str, str]]]:
     """Each distinct pytest argument list, with the (feature id, state) pairs using it."""
@@ -63,14 +79,16 @@ def _collect(args: tuple[str, ...]) -> tuple[int, str]:
     return run.returncode, run.stdout + run.stderr
 
 
-def verdict(returncode: int, state: str, output: str = "") -> str | None:
+def verdict(returncode: int, state: str, output: str = "", unwritten: bool = False) -> str | None:
     """Why a command fails the guard, or None when it passes or is exempt."""
     if returncode == 0:
         return None
     if returncode == NO_TESTS_COLLECTED:
         return "selects no test"
     if returncode == USAGE_ERROR and "not found:" in output:
-        return None if state == "pending" else "names a file or test that does not exist"
+        if state == "pending" and unwritten:
+            return None
+        return "names a file or test that does not exist" + ("" if unwritten else " and is not in UNWRITTEN")
     if returncode == USAGE_ERROR:
         return "is not a valid pytest command"
     return f"pytest could not collect it (exit {returncode})"
@@ -81,21 +99,40 @@ MALFORMED = "ERROR: Wrong expression passed to '-k': a or: at column 5: expected
 
 
 @pytest.mark.parametrize(
-    ("returncode", "state", "output", "fails"),
+    ("returncode", "state", "output", "unwritten", "fails"),
     [
-        (0, "passing", "", False),
-        (NO_TESTS_COLLECTED, "pending", "", True),
-        (NO_TESTS_COLLECTED, "passing", "", True),
-        (USAGE_ERROR, "pending", MISSING, False),
-        (USAGE_ERROR, "passing", MISSING, True),
-        (USAGE_ERROR, "pending", MALFORMED, True),
-        (2, "pending", "", True),
+        (0, "passing", "", False, False),
+        (NO_TESTS_COLLECTED, "pending", "", True, True),
+        (NO_TESTS_COLLECTED, "passing", "", False, True),
+        (USAGE_ERROR, "pending", MISSING, True, False),
+        # A pending feature whose test file was renamed or deleted: not declared, so reported.
+        (USAGE_ERROR, "pending", MISSING, False, True),
+        (USAGE_ERROR, "passing", MISSING, True, True),
+        (USAGE_ERROR, "pending", MALFORMED, True, True),
+        (2, "pending", "", True, True),
     ],
 )
 def test_the_verdict_exempts_only_unwritten_tests_of_a_pending_feature(
-    returncode: int, state: str, output: str, fails: bool
+    returncode: int, state: str, output: str, unwritten: bool, fails: bool
 ) -> None:
-    assert (verdict(returncode, state, output) is not None) is fails
+    assert (verdict(returncode, state, output, unwritten) is not None) is fails
+
+
+@pytest.mark.parametrize(
+    ("args", "returncode"),
+    [
+        (("tests/test_that_was_never_written.py",), USAGE_ERROR),
+        ((f"{Path(__file__).relative_to(REPO)}::test_that_was_never_written",), USAGE_ERROR),
+        ((str(Path(__file__).relative_to(REPO)), "-k", "nothing_matches_this"), NO_TESTS_COLLECTED),
+    ],
+    ids=["missing-file", "missing-node-id", "empty-selection"],
+)
+def test_the_verdict_reads_what_pytest_actually_prints(args: tuple[str, ...], returncode: int) -> None:
+    """The exemption keys on pytest's own words; pin them to the pytest installed, not to a fixture."""
+    code, output = _collect(args)
+    assert code == returncode, output
+    # A missing file or test is the exempt shape; an empty selection never is.
+    assert (verdict(code, "pending", output, unwritten=True) is None) is (code == USAGE_ERROR), output
 
 
 @pytest.mark.parametrize("redirect", [" 2>&1", " > out.txt", " 2> err.txt"])
@@ -118,7 +155,21 @@ def test_every_verification_selects_a_test() -> None:
     for args, features in _commands().items():
         returncode, output = _collect(args)
         for feature_id, state in features:
-            reason = verdict(returncode, state, output)
+            reason = verdict(returncode, state, output, feature_id in UNWRITTEN)
             if reason:
                 failures.append(f"{feature_id}: `pytest {' '.join(args)}` {reason}")
     assert not failures, "\n".join(failures)
+
+
+def test_every_unwritten_entry_is_still_unwritten() -> None:
+    """The list only shrinks: an entry whose tests now collect has to leave it."""
+    uses = {feature_id: args for args, features in _commands().items() for feature_id, _ in features}
+    stale = []
+    for feature_id in sorted(UNWRITTEN):
+        if feature_id not in uses:
+            stale.append(f"{feature_id}: no active spec verification has this id")
+            continue
+        returncode, output = _collect(uses[feature_id])
+        if not (returncode == USAGE_ERROR and "not found:" in output):
+            stale.append(f"{feature_id}: its tests collect now (exit {returncode})")
+    assert not stale, "\n".join(stale)
