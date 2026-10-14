@@ -9,9 +9,8 @@ none is `sensitive`.
 
 The SHAPE survives -- rendered by the runner, `-var-file`, removed after use -- and
 the CONTENT is redefined to the thing that actually duplicates: the Terraform
-defaults restate `common.yaml`, and `TestModuleDefaultsMatchTheSSOT` currently
-guards that by comparison because nothing renders it. Its own docstring says so:
-"Until `gcp-tfvars` renders these inputs from `common.yaml`".
+defaults restate `common.yaml`. This renders them, so the SSOT wins at plan
+time, and `TestModuleDefaultsMatchTheSSOT` keeps the defaults from disagreeing.
 
 WHAT IS RENDERED IS DERIVED, NOT LISTED. Every key under `networking.gcp` whose
 name equals a Terraform variable is rendered by computation, so a key added to

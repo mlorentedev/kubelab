@@ -185,7 +185,7 @@ ssh user@162.55.57.175 "ls -la /backups/ 2>/dev/null || echo 'No backup dir'"
 
 ```bash
 # Terraform state is valid
-cd infra/terraform/dns && terraform plan -var-file=prod.tfvars 2>&1 | tail -5
+make tf-dns-plan 2>&1 | tail -5
 # Should show "No changes. Your infrastructure matches the configuration."
 
 # DNS TTL is 300s (set during PREP-001/PREP-003)

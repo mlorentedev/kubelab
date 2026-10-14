@@ -67,7 +67,8 @@ to Terraform (`git log -S` shows one commit, the original). Tracked as **#1106**
 
 - AWS CLI configured against the `kubelab` profile.
 - Local clone with `terraform` ≥1.5.
-- `aws.tfvars` will be regenerated transparently from SOPS by the toolkit.
+- Terraform on PATH at the pinned version (`dotf tools sync`). The two secrets come
+  from SOPS through the runner, as environment variables; no tfvars file is written.
 
 ## Procedure A — destroy (`make aws1-destroy`)
 
@@ -77,14 +78,14 @@ make aws1-destroy
 
 What it does:
 
-1. Reads `spot_request_id` from terraform output.
+1. Reads `spot_request_id` from the aws root's outputs.
 2. `aws ec2 cancel-spot-instance-requests --spot-instance-request-ids <sir-id>`
    — cancels the Spot Persistent Request so AWS won't relaunch.
-3. Runs `tf-aws-destroy` (terraform destroy with SOPS-injected tfvars).
+3. Runs `tf-aws-destroy` (destroy through the runner, secrets from SOPS).
 
 The cancellation step is idempotent: if `spot_request_id` is empty or
 the request is already cancelled, the target prints
-`No spot_request_id in terraform state — skipping cancellation` and
+`No spot_request_id in the aws root's state — skipping cancellation` and
 proceeds.
 
 ## Procedure B — cattle replace (`make aws1-replace`)
@@ -97,11 +98,11 @@ What it does (ANSIBLE-041 / #1102 — the chain used to stop after step 4 and
 print a manual instruction, which also never mentioned provisioning):
 
 1. Cancels the existing Spot Persistent Request (same as above).
-2. Regenerates `aws.tfvars` from SOPS.
-3. `terraform apply -auto-approve -replace=aws_instance.argo_hub`
-   — forces destroy+recreate even though the `lifecycle` block ignores
-   `ami` and `user_data`. The `-replace` flag is the explicit override.
-4. Cleans `aws.tfvars`.
+2. A guarded apply with `-replace=aws_instance.argo_hub`, through the runner:
+   it saves the plan, refuses it if it deletes or replaces anything except that
+   one address, and applies the saved file. `-replace` forces destroy+recreate
+   even though the `lifecycle` block ignores `ami` and `user_data`.
+3. Nothing to clean: the secrets never touch disk.
 5. `make wait-node-ready NODE=aws1 ENV=hub` — waits for sshd **and** for
    `cloud-init status --wait`. Two conditions: sshd answers long before
    cloud-init has installed K3s and registered Tailscale.

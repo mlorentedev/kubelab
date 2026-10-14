@@ -10,9 +10,11 @@ one still cleaned up.
 What every run guarantees, in one place:
 
 - **Inputs come from the SSOT only.** Secrets are read from SOPS and reach the
-  child as `TF_VAR_*`, never argv and never a file. Inherited `AWS_*` and
-  `TF_VAR_*` variables are dropped first: an operator's `AWS_PROFILE` or a stale
-  `TF_VAR_region` would otherwise outrank the SSOT without a word.
+  child as `TF_VAR_*`, never argv and never a file. Inherited `AWS_*` and `TF_*`
+  variables are dropped first, but for the plugin cache: an operator's
+  `AWS_PROFILE` or a stale `TF_VAR_region` would outrank the SSOT without a word,
+  `TF_CLI_ARGS_apply=-auto-approve` would skip the guard and the prompt, and
+  `TF_LOG` writes the injected values to the log.
 - **Rendered tfvars live in a private temporary directory** (0600), removed on
   every exit, an exception or Ctrl-C included. A rendered file left in the module
   directory from the old targets is removed first, because Terraform auto-loads
@@ -52,6 +54,11 @@ LEGACY_RENDERED = frozenset(
         "vps-firewall.auto.tfvars",
     }
 )
+
+
+# The only Terraform variables a run inherits: where downloaded providers are
+# cached. Nothing here changes what Terraform does, only how fast init is.
+INHERITED_TF = frozenset({"TF_PLUGIN_CACHE_DIR", "TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE"})
 
 
 class RunnerError(Exception):
@@ -98,6 +105,15 @@ def _render_gcp(ctx: Context) -> str:
     return gcp_tfvars.render(dict(ctx.config), names)
 
 
+def _render_dns(ctx: Context) -> str:
+    """The VPS address the apex records point at, from the SSOT.
+
+    It was typed into dns.tfvars as well, so a rebuilt VPS (runbook-disaster-
+    recovery) needed the same edit in two places, and nothing compared them.
+    """
+    return f'vps_ip = "{ctx.config["networking"]["vps"]["public_ip"]}"\n'
+
+
 def _render_r2(ctx: Context) -> str:
     from toolkit.features import r2_tfvars
 
@@ -142,6 +158,7 @@ ROOTS: dict[str, Root] = {
             apply="guarded",
             secrets={"cloudflare_api_token": "cloudflare.api_token"},
             var_files=("dns.tfvars",),
+            render=_render_dns,
         ),
         # r2's lock rules cannot be lifted by a node; read the plan first. Its
         # token is not the DNS one, which the R2 bucket API refused (2026-10-02).
@@ -174,6 +191,10 @@ ROOTS: dict[str, Root] = {
             apply="interactive",
             secrets={"billing_account_id": "gcp.billing_account_id"},
         ),
+        # Disaster recovery only: how to create the VPS from scratch, never
+        # imported against the running one. Its inputs are the defaults in
+        # variables.tf; its deployer key is TF-018 (#2230).
+        Root("compute", apply="guarded", secrets={"hetzner_api_token": "hetzner.api_key"}),
         # Carries no secret: the hub reads its credentials from Secret Manager.
         Root("gcp", apply="guarded", render=_render_gcp),
         Root(
@@ -188,13 +209,19 @@ ROOTS: dict[str, Root] = {
 
 def subprocess_terraform(args: list[str], *, env: dict[str, str], capture: bool, quiet: bool) -> Result:
     """The real seam. stdin stays inherited, so an interactive apply can prompt."""
-    proc = subprocess.run(
-        ["terraform", *args],
-        env=env,
-        stdout=subprocess.PIPE if capture else (subprocess.DEVNULL if quiet else None),
-        text=True,
-        check=False,
-    )
+    try:
+        proc = subprocess.run(
+            ["terraform", *args],
+            env=env,
+            stdout=subprocess.PIPE if capture else (subprocess.DEVNULL if quiet else None),
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        raise RunnerError(
+            "terraform is not on PATH. Install the pinned version with `dotf tools sync` "
+            "(TERRAFORM_VERSION in dotfiles versions.conf)."
+        ) from None
     return Result(proc.returncode, proc.stdout or "")
 
 
@@ -208,8 +235,12 @@ def _dig(config: Mapping[str, Any], dotted: str) -> Any:
 
 
 def child_env(config: Mapping[str, Any], root: Root, base: Mapping[str, str] | None = None) -> dict[str, str]:
-    """The child's environment: inherited, minus AWS_*/TF_VAR_*, plus the root's secrets."""
-    env = {k: v for k, v in (os.environ if base is None else base).items() if not k.startswith(("AWS_", "TF_VAR_"))}
+    """The child's environment: inherited minus AWS_* and TF_* (see INHERITED_TF), plus the root's secrets."""
+    env = {
+        k: v
+        for k, v in (os.environ if base is None else base).items()
+        if not k.startswith("AWS_") and (not k.startswith("TF_") or k in INHERITED_TF)
+    }
     for variable, path in root.secrets.items():
         value = _dig(config, path)
         if value in (None, ""):
@@ -285,7 +316,12 @@ def run(
         var_args = [f"-var-file={module / f}" for f in root.var_files]
         if root.render is not None and not state_only:
             rendered = Path(tmp) / f"{root.name}.tfvars"
-            content = root.render(Context(config, module, outputs))
+            try:
+                content = root.render(Context(config, module, outputs))
+            except (KeyError, ValueError) as exc:
+                # A renderer refusing the SSOT names the key to fix; a KeyError's
+                # message is the missing key itself.
+                raise RunnerError(f"cannot render the {root.name} inputs from common.yaml: {exc}") from exc
             fd = os.open(rendered, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             with os.fdopen(fd, "w") as fh:
                 fh.write(content)
@@ -340,7 +376,11 @@ def _guarded_apply(
     shown = tf("show", "-json", planfile, capture=True)
     if shown.returncode != 0:
         return shown.returncode
-    plan = json.loads(shown.stdout)
+    try:
+        plan = json.loads(shown.stdout)
+    except ValueError:
+        logger.error("terraform show -json returned no plan JSON; nothing was applied")
+        return 1
     counts = summary(plan)
     logger.info(f"Plan: {counts['create']} to add, {counts['update']} to change, {counts['delete']} to destroy.")
     blocked = refused(plan, allow_destroy=allow_destroy, allowed=frozenset(allowed))

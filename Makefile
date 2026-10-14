@@ -1425,6 +1425,15 @@ tf-dns-plan:
 tf-dns-apply:
 	@$(_TF) dns apply $(_TF_ALLOW)
 
+# Disaster recovery only: creates a VPS from scratch and is never imported
+# against the running one (docs/runbooks/runbook-disaster-recovery.md).
+.PHONY: tf-compute-plan tf-compute-apply
+tf-compute-plan:
+	@$(_TF) compute plan
+
+tf-compute-apply:
+	@$(_TF) compute apply $(_TF_ALLOW)
+
 # sync-homepage regenerates config files from SSOT. Deployment happens via
 # `make deploy-k8s` — configMapGenerator hash suffix auto-triggers rolling update.
 # No more manual kubectl create/apply/restart (DASH-DT-002, RELIAB-002 pattern).

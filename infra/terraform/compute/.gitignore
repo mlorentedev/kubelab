@@ -7,4 +7,3 @@
 
 # Secrets (use SOPS via toolkit)
 *.tfvars
-!compute.tfvars.example

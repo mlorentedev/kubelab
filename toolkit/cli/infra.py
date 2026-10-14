@@ -1598,9 +1598,6 @@ def tf_run(
     except terraform_runner.RunnerError as exc:
         logger.error(str(exc))
         raise typer.Exit(2) from None
-    except ValueError as exc:  # a renderer refusing the SSOT names the key to fix
-        logger.error(f"cannot render the {root} inputs: {exc}")
-        raise typer.Exit(2) from None
     if code != 0:
         raise typer.Exit(code)
 
@@ -1618,18 +1615,44 @@ def tf_killswitch_prove() -> None:
 
     terraform_dir = settings.project_root / "infra" / "terraform"
     root = "gcp-killswitch-test"
-    if terraform_runner.run(root, "apply", terraform_dir=terraform_dir) != 0:
-        logger.error("scratch project apply failed")
-        raise typer.Exit(1)
-    try:
+
+    def prove() -> int:
+        # A failed apply can still have created the project, so it falls through
+        # to the teardown like every other outcome.
+        if terraform_runner.run(root, "apply", terraform_dir=terraform_dir) != 0:
+            logger.error("scratch project apply failed")
+            return 1
         scratch = terraform_runner.output(root, "project_id", terraform_dir=terraform_dir)
         if not scratch:
             logger.error("the scratch project applied but its project_id output is empty")
-            raise typer.Exit(1)
+            return 1
         tf_verify_killswitch(scratch_project=scratch)
+        return 0
+
+    def teardown() -> bool:
+        try:
+            return terraform_runner.run(root, "destroy", terraform_dir=terraform_dir) == 0
+        except terraform_runner.RunnerError as exc:
+            logger.error(str(exc))
+            return False
+
+    code = 1
+    try:
+        code = prove()
+    except terraform_runner.RunnerError as exc:
+        logger.error(str(exc))
+    except typer.Exit as exc:
+        code = exc.exit_code
     finally:
-        if terraform_runner.run(root, "destroy", terraform_dir=terraform_dir) != 0:
+        torn_down = teardown()
+        if not torn_down:
             logger.error(f"teardown failed: run `make gcp-killswitch-teardown`, then check for {root} orphans")
+    # A proof that passed but left a project behind is not a pass: the orphan
+    # sits detached from billing, looking like an incident.
+    if not torn_down:
+        raise typer.Exit(1)
+    if code:
+        raise typer.Exit(code)
 
 
 @terraform_app.command("verify-killswitch")

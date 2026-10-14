@@ -117,11 +117,11 @@ def test_every_registered_root_is_a_module_on_disk() -> None:
         assert (TERRAFORM_DIR / name / "main.tf").is_file(), name
 
 
-@pytest.mark.parametrize("name", sorted(tr.ROOTS))
-def test_every_committed_var_file_is_tracked_in_its_module(name: str) -> None:
-    """A missing `-var-file` stops the plan before it reads anything; catch it here instead."""
-    for var_file in tr.ROOTS[name].var_files:
-        assert (TERRAFORM_DIR / name / var_file).is_file(), f"{name}/{var_file}"
+def test_every_module_on_disk_is_a_registered_root() -> None:
+    """The other direction. compute/ had no root, so the only way to run the DR
+    module was by hand, around the secret handling (review of #2236)."""
+    on_disk = {p.parent.name for p in TERRAFORM_DIR.glob("*/main.tf")}
+    assert on_disk == set(tr.ROOTS), on_disk ^ set(tr.ROOTS)
 
 
 @pytest.mark.parametrize("name", sorted(tr.ROOTS))
@@ -133,6 +133,7 @@ def test_every_injected_secret_is_a_declared_variable(name: str) -> None:
 
 @pytest.mark.parametrize("name", sorted(tr.ROOTS))
 def test_every_committed_var_file_exists(name: str) -> None:
+    """A missing `-var-file` stops the plan before it reads anything; catch it here instead."""
     for var_file in tr.ROOTS[name].var_files:
         assert (TERRAFORM_DIR / name / var_file).is_file(), var_file
 
@@ -215,6 +216,32 @@ def test_inherited_aws_and_tf_var_variables_are_stripped(monkeypatch: pytest.Mon
     assert env["KEEP_ME"] == "1"
 
 
+@pytest.mark.parametrize(
+    "name",
+    [
+        "TF_CLI_ARGS_apply",  # `-auto-approve` here would apply past the plan guard
+        "TF_CLI_ARGS",
+        "TF_LOG",  # trace logging prints the injected TF_VAR_ values
+        "TF_LOG_PATH",
+        "TF_WORKSPACE",  # a different state than the one the plan was read against
+        "TF_DATA_DIR",
+    ],
+)
+def test_no_inherited_tf_variable_changes_what_terraform_does(monkeypatch: pytest.MonkeyPatch, name: str) -> None:
+    monkeypatch.setenv(name, "-auto-approve")
+    fake = FakeTerraform()
+    _run("dns", "apply", fake)
+    assert all(name not in c["env"] for c in fake.calls)
+
+
+def test_the_plugin_cache_is_inherited(monkeypatch: pytest.MonkeyPatch) -> None:
+    """It only makes init faster; dropping it would download every provider again."""
+    monkeypatch.setenv("TF_PLUGIN_CACHE_DIR", "/cache")
+    fake = FakeTerraform()
+    _run("dns", "plan", fake)
+    assert fake.call("init")["env"]["TF_PLUGIN_CACHE_DIR"] == "/cache"
+
+
 # --------------------------------------------------------------------------- rendered tfvars
 
 
@@ -226,13 +253,34 @@ def test_the_rendered_tfvars_exists_while_terraform_runs_private_and_outside_the
     assert not Path(path).is_relative_to(TERRAFORM_DIR)
 
 
-@pytest.mark.parametrize("fail", [{}, {"plan": 1}, {"init": 1}])
-def test_the_rendered_tfvars_never_outlives_the_run(fail: dict[str, int]) -> None:
-    fake = FakeTerraform(fail=fail)
-    _run("gcp", "plan", fake)
-    for call in fake.calls:
-        for path in call["var_files"]:
-            assert not Path(path).exists(), path
+@pytest.mark.parametrize(
+    ("action", "fake"),
+    [
+        ("plan", FakeTerraform()),
+        ("plan", FakeTerraform(fail={"plan": 1})),
+        ("plan", FakeTerraform(fail={"init": 1})),
+        ("apply", FakeTerraform()),
+        ("apply", FakeTerraform(fail={"apply": 1})),
+        ("apply", FakeTerraform(plan_json={"resource_changes": [{"address": "x.y", "change": {"actions": ["delete"]}}]})),
+    ],
+    ids=["plan", "plan-fails", "init-fails", "apply", "apply-fails", "guard-refuses"],
+)
+def test_the_private_directory_never_outlives_the_run(
+    monkeypatch: pytest.MonkeyPatch, action: str, fake: FakeTerraform
+) -> None:
+    """The directory, not a file in it: it holds the render AND the saved plan,
+    and the plan carries the token. Checked even when init fails, where no
+    terraform call ever names the file."""
+    made: list[Path] = []
+
+    class Recording(tr.tempfile.TemporaryDirectory):  # type: ignore[type-arg]
+        def __enter__(self) -> str:
+            made.append(Path(self.name))
+            return super().__enter__()
+
+    monkeypatch.setattr(tr.tempfile, "TemporaryDirectory", Recording)
+    _run("dns", action, fake)
+    assert made and not any(p.exists() for p in made), made
 
 
 def test_the_rendered_tfvars_is_removed_when_terraform_raises() -> None:
@@ -247,6 +295,31 @@ def test_the_rendered_tfvars_is_removed_when_terraform_raises() -> None:
     with pytest.raises(KeyboardInterrupt):
         tr.run("gcp", "plan", terraform_dir=TERRAFORM_DIR, load_config=lambda: CONFIG, terraform=boom)
     assert seen and not any(Path(p).exists() for p in seen)
+
+
+def test_the_dns_root_reads_the_vps_address_from_the_ssot() -> None:
+    fake = FakeTerraform()
+    _run("dns", "plan", fake)
+    rendered = [p for p in fake.call("plan")["var_files"] if not Path(p).is_relative_to(TERRAFORM_DIR)]
+    assert len(rendered) == 1
+    assert tr.ROOTS["dns"].render is not None
+    content = tr.ROOTS["dns"].render(tr.Context(CONFIG, TERRAFORM_DIR / "dns", lambda *_: ""))
+    assert content == f'vps_ip = "{CONFIG["networking"]["vps"]["public_ip"]}"\n'
+
+
+def test_no_committed_var_file_sets_a_rendered_variable() -> None:
+    """Two -var-files setting one variable: the last wins, silently, and the
+    copy that loses goes stale without anything reading it."""
+    dns = (TERRAFORM_DIR / "dns" / "dns.tfvars").read_text(encoding="utf-8")
+    assert not re.search(r"^\s*vps_ip\s*=", dns, re.M)
+
+
+def test_a_renderer_refusing_the_ssot_names_the_key_and_nothing_runs() -> None:
+    fake = FakeTerraform()
+    config = {**CONFIG, "networking": {}}
+    with pytest.raises(tr.RunnerError, match=r"cannot render the dns inputs.*vps"):
+        tr.run("dns", "plan", terraform_dir=TERRAFORM_DIR, load_config=lambda: config, terraform=fake)
+    assert fake.calls == []
 
 
 def test_committed_var_files_are_passed_from_the_module() -> None:
@@ -318,6 +391,17 @@ def test_allow_destroy_and_a_named_address_open_the_guard() -> None:
     fake = FakeTerraform(plan_json=DELETE_PLAN)
     assert _run("dns", "apply", fake, allowed=['cloudflare_record.kubelab_svc["old"]']) == 0
     assert fake.verbs()[-1] == "apply"
+
+
+def test_a_show_without_plan_json_applies_nothing() -> None:
+    class NoJson(FakeTerraform):
+        def __call__(self, args: list[str], **kw: Any) -> tr.Result:
+            result = super().__call__(args, **kw)
+            return tr.Result(0, "") if self.calls[-1]["verb"] == "show" else result
+
+    fake = NoJson()
+    assert _run("dns", "apply", fake) == 1
+    assert "apply" not in fake.verbs()
 
 
 def test_a_failed_plan_never_reaches_the_guard_or_the_apply() -> None:
@@ -422,6 +506,15 @@ def test_the_default_terraform_seam_passes_the_environment_and_returns_the_code(
     assert (result.returncode, result.stdout.strip()) == (4, "hello")
 
 
+def test_a_missing_binary_names_how_to_install_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    def absent(*_: Any, **__: Any) -> None:
+        raise FileNotFoundError("terraform")
+
+    monkeypatch.setattr(tr.subprocess, "run", absent)
+    with pytest.raises(tr.RunnerError, match="dotf tools sync"):
+        tr.subprocess_terraform(["version"], env={}, capture=False, quiet=False)
+
+
 # --------------------------------------------------------------------------- the command
 
 
@@ -477,7 +570,13 @@ def test_a_refused_start_exits_2_and_names_the_cause(monkeypatch: pytest.MonkeyP
 
 
 def _prove(
-    monkeypatch: pytest.MonkeyPatch, *, apply_rc: int = 0, project: str = "kubelab-killswitch-1", verify_ok=True
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    apply_rc: int = 0,
+    destroy_rc: int = 0,
+    project: str = "kubelab-killswitch-1",
+    verify_ok=True,
+    raises: Exception | None = None,
 ):
     import typer
     from typer.testing import CliRunner
@@ -488,7 +587,9 @@ def _prove(
 
     def fake_run(root: str, action: str, **_: Any) -> int:
         calls.append(action)
-        return apply_rc if action == "apply" else 0
+        if raises is not None and action == "apply":
+            raise raises
+        return {"apply": apply_rc, "destroy": destroy_rc}[action]
 
     def fake_verify(scratch_project: str) -> None:
         calls.append(f"verify {scratch_project}")
@@ -513,9 +614,20 @@ def test_the_proof_tears_its_project_down_when_it_passes(monkeypatch: pytest.Mon
     assert result.exit_code == 0 and calls[-1] == "destroy"
 
 
-def test_a_failed_apply_stops_before_the_proof(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_failed_apply_skips_the_proof_and_still_tears_down(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A failed apply can have created the project before it failed."""
     result, calls = _prove(monkeypatch, apply_rc=1)
-    assert result.exit_code == 1 and calls == ["apply"]
+    assert result.exit_code == 1 and calls == ["apply", "destroy"]
+
+
+def test_a_refused_start_still_tears_down(monkeypatch: pytest.MonkeyPatch) -> None:
+    result, calls = _prove(monkeypatch, raises=tr.RunnerError("cannot render"))
+    assert result.exit_code == 1 and calls == ["apply", "destroy"]
+
+
+def test_a_proof_that_passed_but_left_its_project_behind_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    result, calls = _prove(monkeypatch, destroy_rc=1)
+    assert result.exit_code == 1 and calls[-1] == "destroy"
 
 
 def test_an_empty_project_output_is_a_failure_and_still_tears_down(monkeypatch: pytest.MonkeyPatch) -> None:

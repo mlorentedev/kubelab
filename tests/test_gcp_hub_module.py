@@ -347,10 +347,10 @@ class TestNoReservedAddress:
 class TestModuleDefaultsMatchTheSSOT:
     """Terraform defaults duplicate `networking.gcp`, so they can drift from it.
 
-    Until `gcp-tfvars` renders these inputs from `common.yaml` (deferred to the
-    follow-up that adds the Makefile targets), both places hold the same values
-    and nothing but this test stops them diverging. `common.yaml` is the SSOT --
-    a Terraform default that disagrees with it is the defect, in that direction.
+    The runner renders these inputs from `common.yaml` (`_render_gcp`), so at
+    plan time the SSOT wins. The defaults remain what a reader of `variables.tf`
+    sees, and this test keeps them from telling a different story. `common.yaml`
+    is the SSOT -- a Terraform default that disagrees with it is the defect.
 
     Deployment POLICY lives here too, not only sizing: `network_tier` has a cost
     consequence measured against $0.43/mo of headroom, and a policy value

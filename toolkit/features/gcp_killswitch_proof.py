@@ -137,7 +137,7 @@ def run_proof(
     if not scratch_project.strip():
         raise KillSwitchProofError(
             "no scratch project named. `make gcp-killswitch-prove` derives it from "
-            "`terraform output -raw project_id`; an empty value there means the "
+            "the scratch root's `project_id` output; an empty value there means the "
             "scratch root was never applied, or its state is gone."
         )
 

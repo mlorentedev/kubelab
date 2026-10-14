@@ -3,11 +3,9 @@
 # This module is NOT imported against the current VPS.
 # It defines "how to create a VPS from scratch" for disaster recovery.
 #
-# Usage:
-#   cd infra/terraform/compute
-#   terraform init
-#   terraform plan -var-file=compute.tfvars
-#   terraform apply -var-file=compute.tfvars
+# Usage (the Hetzner token comes from SOPS; the inputs are variables.tf's defaults):
+#   make tf-compute-plan
+#   make tf-compute-apply
 #
 # After apply:
 #   1. Update common.yaml with new VPS IP
