@@ -39,6 +39,7 @@ def pytest_configure(config: pytest.Config) -> None:
     for var in ("FORCE_COLOR", "CLICOLOR_FORCE"):
         os.environ.pop(var, None)
     _gnu_userland_first()
+    _install_host_client_barrier()
     del config  # the hook's signature, not something this needs
 
 
@@ -69,7 +70,6 @@ def _gnu_userland_first() -> None:
     path = os.environ.get("PATH", "")
     if not path.startswith(f"{gnubin}{os.pathsep}"):
         os.environ["PATH"] = f"{gnubin}{os.pathsep}{path}"
-    _install_host_client_barrier()
 
 
 # --- Host-client barrier (#1886) -------------------------------------------------
