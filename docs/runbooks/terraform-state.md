@@ -127,7 +127,9 @@ lost before this backend existed, and their recovery is TF-015 (#2226). A plan i
 allowed and shows everything the import has to cover. `apply`, `destroy`,
 `untaint` and `restore` are refused, because against an empty state Terraform
 would create a second copy of what already runs. Until TF-015,
-`make gcp-killswitch-prove` and `make gcp-recreate` are blocked by the same refusal.
+`make gcp-killswitch-prove` cannot run either: it reads the kill switch's service
+account from the `gcp-bootstrap` state. `make gcp1-replace` is unaffected, because it
+recreates the instance through the managed instance group, not through Terraform.
 
 ## Re-measure the lock
 

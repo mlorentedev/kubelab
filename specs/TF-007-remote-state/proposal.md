@@ -31,7 +31,8 @@ Every root keeps its state in the R2 bucket `kubelab-tfstate` under `<root>/terr
   The Make targets keep their names and their apply semantics (guarded or interactive per root), and become one line each.
 - **The `aws` root stops reading `~/.aws`.** The backend's `AWS_*` variables would outrank the provider's `profile`, so the provider takes the IAM pair from SOPS through `TF_VAR_*`. Registering that pair in `SECRET_CATALOG` closes #1351.
 - **Bootstrap is one idempotent command.** `make tf-state-bootstrap` creates the bucket and its lock rule through the Cloudflare API, outside every Terraform root (C16). It then mints an Object Read & Write token scoped to that bucket alone with BACKUP-057's machinery, and proves it by consequence before storing it in SOPS. A second run changes nothing.
-- **Migration is one command per root.** `make tf-state-migrate ROOT=<root>` runs in the checkout that holds the local file. It copies the state, compares the resource count before and after, takes the first snapshot, and leaves the local file in place.
+- **Migration is one command per root.** `make tf-state-migrate ROOT=<root>` runs in the checkout that holds the local file. It pushes the state without `-force`, reads R2 back and requires the same lineage and resource addresses at the same serial or later, takes the first snapshot, and renames the local file to `terraform.pre-remote.tfstate` (kept, never overwritten).
+- **Restore, history and unlock go through the runner too.** `make tf-state-history`, `make tf-state-restore TO=<lineage>/<serial>` (a revert: the old content at the next serial, no `-force`, lesson-564) and `make tf-state-unlock LOCK=<id>`, so the runbook needs no raw `terraform`.
 - **Proven, not assumed.** `make test-tfstate-lock-live` re-runs the concurrent conditional-write probe against the real bucket.
 
 ## Delivery
