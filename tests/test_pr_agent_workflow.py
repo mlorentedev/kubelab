@@ -263,6 +263,10 @@ def test_the_queue_is_not_beside_a_cancelling_group() -> None:
     workflow = _load(REVIEWER)
     assert "queue" not in workflow["concurrency"]
     assert workflow["concurrency"]["cancel-in-progress"] is True
+    # The queue itself: without it the shared group keeps one pending run and
+    # discards the rest (#2179).
+    job = workflow["jobs"]["review"]["concurrency"]
+    assert job == {"group": "pr-agent-nan-inference", "cancel-in-progress": False, "queue": "max"}
 
 
 def test_the_gate_does_not_cancel_on_events_that_add_evidence() -> None:
@@ -1296,3 +1300,25 @@ def test_a_dropped_review_skips_everything_the_diff_check_gates() -> None:
     assert _evaluate(condition, run, {"open": {"outputs": {}}})
     # A slash command never runs the open-check and is still reviewed.
     assert _evaluate(condition, _comment_run(body="/review", association="OWNER"), {})
+
+
+# Steps after the diff check that run whatever it decided, because they decide
+# nothing: a timestamp is harmless on a dropped run.
+UNGATED_AFTER_THE_DIFF_CHECK = {"Stamp run start"}
+
+
+def test_every_step_after_the_diff_check_tests_its_output() -> None:
+    """A dropped review leaves `any` empty, so a step runs only if it says otherwise.
+
+    Each gated condition compares `any` with a literal `'true'` or `'false'`,
+    and an empty output matches neither.
+    """
+    steps = _review_steps()
+    names = [s.get("name", "") for s in steps]
+    after = steps[names.index("Determine whether the diff has anything to review") + 1 :]
+    assert after, "no step follows the diff check; the guard measures nothing"
+    for step in after:
+        if step.get("name") in UNGATED_AFTER_THE_DIFF_CHECK:
+            continue
+        condition = " ".join(str(step.get("if", "")).split())
+        assert re.search(r"steps\.reviewable\.outputs\.any == '(true|false)'", condition), step.get("name")

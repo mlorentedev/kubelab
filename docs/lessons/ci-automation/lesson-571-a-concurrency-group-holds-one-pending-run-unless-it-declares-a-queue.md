@@ -33,11 +33,11 @@ Meanwhile the operator had serialised pushes by hand, polling `gh run list`. A
 three-minute gh 401 made that poller read "idle", and it skipped a push.
 
 **Solution**: `queue: max` on the job's group turns it into a FIFO; dotfiles
-had run the same design since 2026-10-01 (#1940). GitHub refuses `queue: max`
+had run the same design since 2026-10-01 (mlorentedev/dotfiles#1940). GitHub refuses `queue: max`
 beside `cancel-in-progress: true`, so the queue stays on the job and the
 workflow-level per-PR group keeps cancelling superseded runs. A queued run
 keeps the event it was queued with, so a new first step drops a review whose PR
-merged, closed or turned draft while it waited (dotfiles #2079). actionlint
+merged, closed or turned draft while it waited (mlorentedev/dotfiles#2079). actionlint
 1.7.12 does not know the key yet, and `.github/actionlint.yaml` ignores exactly
 that message for this file.
 

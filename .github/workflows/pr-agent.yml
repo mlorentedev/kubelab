@@ -183,7 +183,7 @@ jobs:
     # queued at 09:48:55Z and was cancelled at 09:54:39Z, one second after
     # #2178's review entered the group. `queue: max` makes the group a real
     # FIFO, so every review waits its turn instead of being discarded. Ported
-    # from dotfiles (#1940), where the same design has run since 2026-10-01.
+    # from mlorentedev/dotfiles#1940, where the same design has run since 2026-10-01.
     #
     # GitHub refuses `queue: max` beside `cancel-in-progress: true`, which is
     # why it lives here and not on the workflow-level group: that one still
@@ -265,7 +265,7 @@ jobs:
       # close or turn back into a draft. Nothing else notices, so the review
       # would hold the one-at-a-time lane for a PR nobody will read (measured
       # in dotfiles 2026-10-07: 18 minutes, eight open PRs waiting behind it;
-      # ported from dotfiles #2079). A draft is reviewed again on
+      # ported from mlorentedev/dotfiles#2079). A draft is reviewed again on
       # `ready_for_review`. Only a definite answer skips: a failed read leaves
       # `gone` unset and the review runs, as before. Only `pull_request` runs
       # skip, because a human typing /review on a merged PR means it.
