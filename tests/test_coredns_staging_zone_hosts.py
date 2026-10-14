@@ -34,8 +34,6 @@ def _staging_zone() -> str:
     text = (ROLE / "templates/Corefile.j2").read_text()
     zone = text.split("{{ staging_domain }} {", 1)[1].split("{% for zone in staging_zones %}", 1)[0]
     env = jinja2.Environment(undefined=jinja2.StrictUndefined)
-    # The Ansible filter the template uses; Ansible implements it with `re.escape`.
-    env.filters["regex_escape"] = re.escape
     variables = _role_vars()
     variables["staging_domain"] = APEX
     return env.from_string(zone).render(**variables)

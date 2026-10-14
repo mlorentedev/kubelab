@@ -12,7 +12,7 @@
         fallthrough
     }
     template IN A {{ staging_domain }} {
-        match .*\.{{ staging_domain | regex_escape }}
+        match .*\.{{ staging_domain | replace('.', '\\.') }}
         answer "{% raw %}{{ .Name }}{% endraw %} 60 IN A {{ node_ips.ace1 }}"
         fallthrough
     }
