@@ -66,7 +66,7 @@ Two PRs, so the refactor is proven on the backend it already has before the back
 - [ ] AC7: `dns`, `r2` and `aws` are migrated with the same resource count before and after, and a plan from the Mac reads `No changes` for `dns` and `r2` (live). `aws` is dormant and its plan is reported, never applied.
 - [ ] AC8: every state-writing action leaves a snapshot under `history/`, and a repeated snapshot is a no-op (tests + live).
 - [ ] AC9: `aws.access_key_id`, `aws.secret_access_key` and `terraform.state.*` are in `SECRET_CATALOG`, and `make secrets-audit` passes.
-- [ ] AC10: `docs/runbooks/terraform-state.md` (bootstrap, migrate, restore from history, force-unlock, rotate the token), ADR-069 and lesson-562 land in this PR.
+- [ ] AC10: `docs/runbooks/terraform-state.md` (bootstrap, migrate, restore from history, force-unlock, rotate the token), ADR-069 and lesson-564 land in this PR.
 
 ## References
 

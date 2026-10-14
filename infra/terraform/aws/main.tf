@@ -14,7 +14,7 @@
 #   4. Install Argo CD: make deploy-argocd
 
 terraform {
-  required_version = ">= 1.5"
+  required_version = ">= 1.10"
 
   required_providers {
     aws = {
@@ -23,8 +23,9 @@ terraform {
     }
   }
 
-  backend "local" {
-    path = "terraform.tfstate"
+  # Shared settings: ../backend.s3.tfbackend, passed by the runner (TF-007).
+  backend "s3" {
+    key = "aws/terraform.tfstate"
   }
 }
 

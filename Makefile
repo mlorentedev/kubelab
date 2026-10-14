@@ -1637,6 +1637,10 @@ backup-verify-restic:
 
 # Regenerate the R2 watcher's per-node targets from backup.sources (BACKUP-055).
 # Run after declaring or removing a backup source; the test suite fails until you do.
+.PHONY: sync-terraform-backend
+sync-terraform-backend: ## Render infra/terraform/backend.s3.tfbackend from terraform.state (TF-007)
+	@$(TOOLKIT) sync terraform-backend
+
 .PHONY: sync-r2-watcher-targets
 sync-r2-watcher-targets:
 	@$(TOOLKIT) sync r2-watcher-targets

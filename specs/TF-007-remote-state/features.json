@@ -64,7 +64,7 @@
   },
   {
     "id": "TF-007-remote-state-f10",
-    "behavior": "AC10: Runbook, ADR-069 and lesson-562 land",
+    "behavior": "AC10: Runbook, ADR-069 and lesson-564 land",
     "verification": "echo 'not implemented' && exit 1",
     "state": "pending",
     "evidence": ""

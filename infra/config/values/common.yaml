@@ -2160,6 +2160,22 @@ apps:
 #
 # The trigger model is NOT declared here — it derives from each node's
 # `location` in networking.* (ADR-028). One fact, one place.
+# Terraform state (TF-007, ADR-069). Every root keeps its state in this R2
+# bucket under `<root>/terraform.tfstate`; `make sync-terraform-backend` renders
+# infra/terraform/backend.s3.tfbackend from it. The S3 endpoint is
+# backup.r2.endpoint: same R2 account, one fact. The bucket's credentials live in
+# SOPS at terraform.state.access_key_id / secret_access_key, minted by
+# `make tf-state-bootstrap` and scoped to this bucket alone.
+terraform:
+  state:
+    bucket: kubelab-tfstate
+    # Every state write is also copied to history/<root>/<lineage>/<serial>.tfstate,
+    # under an R2 bucket lock: R2 has no object versioning, and this is what a
+    # lost or corrupted state is restored from. The lock never covers the state
+    # keys themselves, or the .tflock delete and every state write would fail.
+    history_prefix: history/
+    history_retention_days: 365
+
 backup:
   r2:
     # Cloudflare R2 — the offsite destination for the critical-subset backup
