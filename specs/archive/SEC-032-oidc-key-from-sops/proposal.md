@@ -1,7 +1,7 @@
 ---
 id: "SEC-032-oidc-key-from-sops"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-10-14"
 issue: "mlorentedev/kubelab#2242"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]

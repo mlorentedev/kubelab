@@ -42,5 +42,5 @@ created: "2026-10-14"
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/SEC-032-oidc-key-from-sops/` -> `specs/archive/SEC-032-oidc-key-from-sops/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/SEC-032-oidc-key-from-sops/` -> `specs/archive/SEC-032-oidc-key-from-sops/`
