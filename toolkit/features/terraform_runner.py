@@ -301,9 +301,7 @@ def run(
     if action == "untaint" and not extra:
         raise RunnerError("untaint needs the resource address to clear")
     if root.apply != "auto" and any(a.lstrip("-").split("=", 1)[0] == "auto-approve" for a in extra):
-        raise RunnerError(
-            f"the {root.name} root approves only interactively or through the plan guard; drop -auto-approve"
-        )
+        raise RunnerError(f"the {root.name} root never applies or destroys unattended; drop -auto-approve")
 
     module = terraform_dir / root.name
     chdir = f"-chdir={module}"

@@ -17,15 +17,15 @@
     "id": "TF-007-remote-state-f3",
     "behavior": "AC3: Nothing outside the runner invokes terraform",
     "verification": "poetry run pytest --no-cov -q tests/test_terraform_single_entry.py",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "exit 0; 33 passed on feature/terraform-runner, 2026-10-14"
   },
   {
     "id": "TF-007-remote-state-f4",
     "behavior": "AC4: The runner cleans rendered tfvars, propagates the exit code, keeps apply modes, passes secrets only in the child env",
     "verification": "poetry run pytest --no-cov -q tests/test_terraform_runner.py tests/test_terraform_plan_guard.py tests/test_vps_firewall_tfvars.py",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "exit 0; 125 passed on feature/terraform-runner, 2026-10-14"
   },
   {
     "id": "TF-007-remote-state-f5",

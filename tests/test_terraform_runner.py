@@ -458,7 +458,7 @@ def test_extra_arguments_cannot_approve_for_the_operator(name: str, action: str,
     """`-- -auto-approve` would skip the prompt a root's apply mode promises;
     only the disposable fixture approves unattended."""
     fake = FakeTerraform()
-    with pytest.raises(tr.RunnerError, match="approves only interactively"):
+    with pytest.raises(tr.RunnerError, match="never applies or destroys unattended"):
         _run(name, action, fake, extra=[flag])
     assert fake.calls == []
 
