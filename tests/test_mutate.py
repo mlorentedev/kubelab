@@ -9,6 +9,7 @@ record it four times, every time by someone who knew the rule. These tests drive
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -20,6 +21,18 @@ ORIGINAL = "def guard(x):\n    return x > 0\n"
 
 def _git(repo: Path, *args: str) -> str:
     return subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True, text=True).stdout
+
+
+def _statuses(repo: Path, *codes: int) -> tuple[Callable[[], int], list[str]]:
+    """A test runner answering `codes` in order, and what `guard.py` held at each call."""
+    answers = iter(codes)
+    seen: list[str] = []
+
+    def run_test() -> int:
+        seen.append((repo / "guard.py").read_text())
+        return next(answers)
+
+    return run_test, seen
 
 
 @pytest.fixture
@@ -51,29 +64,31 @@ def test_a_replacement_that_is_not_exactly_one_match_refuses(repo: Path, find: s
 
 @pytest.mark.parametrize("status", [0, 1, 2, 5])
 def test_the_file_is_byte_identical_after_every_run(repo: Path, status: int) -> None:
-    seen: list[str] = []
-
-    def run_test() -> int:
-        seen.append((repo / "guard.py").read_text())
-        return status
+    run_test, seen = _statuses(repo, 0, status)
 
     mutate.run(repo, Path("guard.py"), "x > 0", "x >= 0", run_test)
-    assert seen == [ORIGINAL.replace("x > 0", "x >= 0")], "the test ran against the mutant"
+    assert seen == [ORIGINAL, ORIGINAL.replace("x > 0", "x >= 0")], "the baseline saw the original, then the mutant"
     assert (repo / "guard.py").read_bytes() == ORIGINAL.encode()
     assert _git(repo, "status", "--porcelain") == ""
 
 
 def test_the_file_is_restored_when_the_test_runner_raises(repo: Path) -> None:
+    calls: list[int] = []
+
     def run_test() -> int:
-        raise KeyboardInterrupt
+        calls.append(1)
+        if len(calls) == 1:
+            return 0  # the baseline
+        raise KeyboardInterrupt  # the run against the mutant
 
     with pytest.raises(KeyboardInterrupt):
         mutate.run(repo, Path("guard.py"), "x > 0", "x >= 0", run_test)
+    assert len(calls) == 2, "the interrupt hit the mutant's run, not the baseline"
     assert (repo / "guard.py").read_bytes() == ORIGINAL.encode()
 
 
 @pytest.mark.parametrize(
-    ("pytest_status", "verdict"),
+    ("mutant_status", "verdict"),
     [
         (1, mutate.Verdict.RED),  # tests failed: the guard caught the mutant
         (0, mutate.Verdict.GREEN),  # tests passed: the guard missed it
@@ -81,10 +96,39 @@ def test_the_file_is_restored_when_the_test_runner_raises(repo: Path) -> None:
         (5, mutate.Verdict.DID_NOT_RUN),  # no tests collected
     ],
 )
-def test_only_a_failing_test_counts_as_red(repo: Path, pytest_status: int, verdict: mutate.Verdict) -> None:
+def test_only_a_failing_test_counts_as_red(repo: Path, mutant_status: int, verdict: mutate.Verdict) -> None:
     """A collection error is not the guard going red: a mutation that breaks the
-    file's syntax fails every test in it, whether or not they check anything."""
-    assert mutate.run(repo, Path("guard.py"), "x > 0", "x >= 0", lambda: pytest_status) is verdict
+    file's syntax fails every test in it, whether or not they check anything.
+    The baseline passes in every case: only then does the mutant's status mean anything."""
+    run_test, seen = _statuses(repo, 0, mutant_status)
+    assert mutate.run(repo, Path("guard.py"), "x > 0", "x >= 0", run_test) is verdict
+    assert seen == [ORIGINAL, ORIGINAL.replace("x > 0", "x >= 0")], "the baseline ran, then the mutant"
+
+
+@pytest.mark.parametrize("baseline", [1, 2, 3, 4, 5])
+def test_a_test_that_does_not_pass_without_the_mutation_refuses(repo: Path, baseline: int) -> None:
+    """A red baseline certifies every mutant as RED (measured 2026-10-13: two
+    tests failing for an unrelated reason made all mutants of a Terraform-runner
+    test read RED, including one the correct baseline showed GREEN)."""
+    run_test, seen = _statuses(repo, baseline, 1)
+    with pytest.raises(mutate.Refused, match=rf"does not pass without the mutation \(pytest exit {baseline}\)") as err:
+        mutate.run(repo, Path("guard.py"), "x > 0", "x >= 0", run_test)
+    assert "-k" in str(err.value), "the refusal says how to get a usable baseline"
+    assert seen == [ORIGINAL], "the test ran once, against the unmutated file"
+    assert (repo / "guard.py").read_bytes() == ORIGINAL.encode()
+    assert _git(repo, "status", "--porcelain") == ""
+
+
+def test_a_green_baseline_then_a_red_mutant_is_red_with_two_runs(repo: Path) -> None:
+    run_test, seen = _statuses(repo, 0, 1)
+    assert mutate.run(repo, Path("guard.py"), "x > 0", "x >= 0", run_test) is mutate.Verdict.RED
+    assert len(seen) == 2
+
+
+def test_a_green_baseline_then_a_green_mutant_is_green(repo: Path) -> None:
+    run_test, seen = _statuses(repo, 0, 0)
+    assert mutate.run(repo, Path("guard.py"), "x > 0", "x >= 0", run_test) is mutate.Verdict.GREEN
+    assert seen == [ORIGINAL, ORIGINAL.replace("x > 0", "x >= 0")], "the baseline ran, then the mutant"
 
 
 def test_the_exit_codes_tell_the_three_outcomes_apart() -> None:
@@ -156,14 +200,20 @@ def test_why_pytest_ran_nothing_reaches_the_operator(repo: Path, monkeypatch: py
     from toolkit.cli import tools
 
     said: list[str] = []
-    recorder = type("Recorder", (), {k: staticmethod(lambda m: said.append(str(m))) for k in ("info", "warning", "error")})
+    recorder = type(
+        "Recorder", (), {k: staticmethod(lambda m: said.append(str(m))) for k in ("info", "warning", "error")}
+    )
     monkeypatch.setattr(tools, "logger", recorder)
-    code = _cli(repo, monkeypatch, lambda *a: mutate._PYTEST.get(a[-1](), mutate.Verdict.DID_NOT_RUN), test="does_not_exist.py")
+    code = _cli(
+        repo, monkeypatch, lambda *a: mutate._PYTEST.get(a[-1](), mutate.Verdict.DID_NOT_RUN), test="does_not_exist.py"
+    )
     assert code == mutate.Verdict.DID_NOT_RUN.exit_code
     assert any("not found: does_not_exist.py" in line for line in said), said
 
 
-def test_the_mutant_never_reaches_the_repository_bytecode_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_mutant_never_reaches_the_repository_bytecode_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A mutant compiled into the repo's `__pycache__` outlives the restore.
 
     Python trusts a `.pyc` whose header matches the source's mtime (in whole
@@ -182,7 +232,9 @@ def test_the_mutant_never_reaches_the_repository_bytecode_cache(tmp_path: Path, 
     _git(tmp_path, "config", "user.name", "t")
     (tmp_path / ".gitignore").write_text("__pycache__/\n")
     (tmp_path / "limits.py").write_text("MODE = 0o600\n")
-    (tmp_path / "test_limits.py").write_text("from limits import MODE\n\n\ndef test_mode():\n    assert MODE == 0o600\n")
+    (tmp_path / "test_limits.py").write_text(
+        "from limits import MODE\n\n\ndef test_mode():\n    assert MODE == 0o600\n"
+    )
     _git(tmp_path, "add", "-A")
     _git(tmp_path, "commit", "-qm", "base")
     monkeypatch.setattr(tools.settings, "project_root", tmp_path)
@@ -211,7 +263,9 @@ def test_a_cached_original_cannot_stand_in_for_the_mutant(tmp_path: Path, monkey
     _git(tmp_path, "config", "user.name", "t")
     (tmp_path / ".gitignore").write_text("__pycache__/\n")
     (tmp_path / "limits.py").write_text("MODE = 0o600\n")
-    (tmp_path / "test_limits.py").write_text("from limits import MODE\n\n\ndef test_mode():\n    assert MODE == 0o600\n")
+    (tmp_path / "test_limits.py").write_text(
+        "from limits import MODE\n\n\ndef test_mode():\n    assert MODE == 0o600\n"
+    )
     _git(tmp_path, "add", "-A")
     _git(tmp_path, "commit", "-qm", "base")
     py_compile.compile(str(tmp_path / "limits.py"), invalidation_mode=py_compile.PycInvalidationMode.UNCHECKED_HASH)
@@ -219,3 +273,31 @@ def test_a_cached_original_cannot_stand_in_for_the_mutant(tmp_path: Path, monkey
 
     args = ["mutate", "--file", "limits.py", "--from", "0o600", "--to", "0o644", "--test", "test_limits.py"]
     assert CliRunner().invoke(tools.app, args).exit_code == mutate.Verdict.RED.exit_code
+
+
+def test_a_failing_test_target_refuses_through_the_command(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """End to end with the real pytest: a target already red is refused (exit 2), and the file is untouched."""
+    from typer.testing import CliRunner
+
+    from toolkit.cli import tools
+
+    _git(tmp_path, "init", "-q")
+    _git(tmp_path, "config", "user.email", "t@example.invalid")
+    _git(tmp_path, "config", "user.name", "t")
+    (tmp_path / ".gitignore").write_text("__pycache__/\n")
+    (tmp_path / "limits.py").write_text("MODE = 0o600\n")
+    (tmp_path / "test_limits.py").write_text(
+        "from limits import MODE\n\n\ndef test_mode():\n    assert MODE == 0o600\n\n\n"
+        "def test_unrelated():\n    assert False\n"
+    )
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-qm", "base")
+    monkeypatch.setattr(tools.settings, "project_root", tmp_path)
+
+    args = ["mutate", "--file", "limits.py", "--from", "0o600", "--to", "0o644", "--test", "test_limits.py"]
+    assert CliRunner().invoke(tools.app, args).exit_code == 2
+    assert (tmp_path / "limits.py").read_text() == "MODE = 0o600\n"
+
+    # Deselecting the unrelated failure gives a usable baseline, and the verdict is real.
+    deselected = [*args[:-1], "test_limits.py -k test_mode"]
+    assert CliRunner().invoke(tools.app, deselected).exit_code == mutate.Verdict.RED.exit_code
