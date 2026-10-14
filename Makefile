@@ -729,8 +729,10 @@ watch-argocd:
 
 # Recover Argo CD from failed Helm upgrade (pending-upgrade state)
 # Usage: make recover-argocd
+# The `helm status` below swallows its errors, so without the reachability check
+# a hub it cannot reach (a recreate rotates the CA) reads as "no recovery needed".
 .PHONY: recover-argocd
-recover-argocd:
+recover-argocd: _require-hub-reachable
 	@echo "=== Checking Argo CD Helm release state ==="
 	@STATUS=$$(helm --kubeconfig $(HUB_KUBECONFIG) status argocd -n argocd -o json 2>/dev/null | jq -r '.info.status' 2>/dev/null) && \
 	if [ "$$STATUS" = "pending-upgrade" ] || [ "$$STATUS" = "pending-install" ] || [ "$$STATUS" = "pending-rollback" ] || [ "$$STATUS" = "failed" ]; then \
