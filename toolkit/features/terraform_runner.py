@@ -599,6 +599,11 @@ def _differing(local: Mapping[str, Any], remote: Mapping[str, Any]) -> list[str]
     return sorted(a for a in mine.keys() | theirs.keys() if mine.get(a) != theirs.get(a))
 
 
+def _persisted(state: Mapping[str, Any] | None) -> bool:
+    """Serial 0 is the empty state a backend answers before anything was written to it."""
+    return state is not None and int(state.get("serial", 0)) >= 1
+
+
 def _arrived(local: Mapping[str, Any], remote: Mapping[str, Any] | None) -> bool:
     """R2 holds what the local state holds: every resource and every output, as they are.
 
@@ -608,8 +613,11 @@ def _arrived(local: Mapping[str, Any], remote: Mapping[str, Any] | None) -> bool
     resources under that lineage at serial 1 (measured on msi, 2026-10-13). A
     gate on lineage refused a migration that had worked, and then every retry
     was refused by Terraform itself, across lineages.
+
+    The remote must also have been written: a state that holds nothing has the
+    content of the empty answer an untouched key gives.
     """
-    return remote is not None and not _differing(local, remote)
+    return remote is not None and _persisted(remote) and not _differing(local, remote)
 
 
 class _History:
@@ -689,7 +697,7 @@ class _History:
         state = _pull(tf)
         # Serial 0 is the empty state a backend answers before anything was
         # written to it: there is nothing to keep, and a locked copy is forever.
-        if state is None or int(state.get("serial", 0)) == 0:
+        if state is None or not _persisted(state):
             return 0
         lineage, serial, _ = _shape(state)
         key = f"{self._prefix()}{lineage}/{serial}.tfstate"
@@ -740,33 +748,39 @@ def _migrate(tf: Callable[..., Result], root: Root, module: Path) -> int:
     rename did not happen, and finishing it is the rename. After the push the
     remote is read back and compared by content; only then is the local file
     renamed, which is what lets the next run start.
+
+    Once renamed, the pre-remote copy is the source only while R2 holds no
+    written state for the root, so a rename that ran without a write behind it
+    is finished by the next run. Otherwise R2 is the state and the run is a no-op.
     """
     from toolkit.core.logging import logger
 
-    local = module / MIGRATING_STATE
-    moved = module / MIGRATED_STATE
-    if not local.exists():
-        if moved.exists():
-            logger.info(f"{root.name}: already migrated ({moved.name} is the pre-remote copy).")
-            return 0
+    staged, moved = module / MIGRATING_STATE, module / MIGRATED_STATE
+    source = staged if staged.exists() else moved if moved.exists() else None
+    if source is None:
         raise RunnerError(f"{root.name} has no local state at {module / LOCAL_STATE}; there is nothing to migrate.")
+    remote = _pull(tf)
+    if source == moved and _persisted(remote):
+        logger.info(f"{root.name}: already migrated ({moved.name} is the pre-remote copy).")
+        return 0
     try:
-        state = json.loads(local.read_text(encoding="utf-8"))
+        state = json.loads(source.read_text(encoding="utf-8"))
     except ValueError:
-        raise RunnerError(f"{local} is not a Terraform state; nothing was pushed.") from None
-    if not _arrived(state, _pull(tf)):
-        rc = tf("state", "push", str(local)).returncode
+        raise RunnerError(f"{source} is not a Terraform state; nothing was pushed.") from None
+    if not _arrived(state, remote):
+        rc = tf("state", "push", str(source)).returncode
         if rc != 0:
             return rc
     remote = _pull(tf)
     if remote is None or not _arrived(state, remote):
-        differing = _differing(state, remote) if remote is not None else ["(no state)"]
+        differing = _differing(state, remote) if _persisted(remote) and remote is not None else ["(no written state)"]
         logger.error(
             f"{root.name}: after the push R2 differs from the local file at {', '.join(differing)}. "
             f"The local file is kept."
         )
         return 1
-    local.rename(moved)
+    if source == staged:
+        staged.rename(moved)
     lineage, serial, count = _shape(remote)
     logger.info(
         f"{root.name}: {count} resources are in R2, lineage {lineage} serial {serial}; the local file is {moved.name}."

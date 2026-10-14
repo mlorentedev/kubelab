@@ -977,6 +977,41 @@ def test_migrate_after_success_is_a_no_op(tmp_path: Path) -> None:
     assert "state push" not in fake.verbs()
 
 
+EMPTY_LOCAL = {"version": 4, "lineage": "009279ae", "serial": 32, "resources": [], "outputs": {}}
+
+
+def test_a_state_that_holds_nothing_is_still_pushed(tmp_path: Path) -> None:
+    """Measured on msi, 2026-10-13: `aws` holds no resources and no outputs, so
+    its content equals the empty state an untouched key answers, and a check on
+    content alone took it as already in R2. Serial 0 is not a written state."""
+    module = _module_copy(tmp_path, "aws")
+    (module / "terraform.tfstate").write_text(json.dumps(EMPTY_LOCAL))
+    landed = {**EMPTY_LOCAL, "lineage": "fresh", "serial": 1}
+    fake = FakeTerraform(pulls=[EMPTY_REMOTE, EMPTY_REMOTE, landed, landed])
+    assert _run("aws", "migrate", fake, terraform_dir=tmp_path, aws=FakeAws()) == 0
+    assert "state push" in fake.verbs()
+    assert (module / "terraform.pre-remote.tfstate").exists()
+
+
+def test_a_pre_remote_copy_r2_never_received_is_pushed_from_where_it_is(tmp_path: Path) -> None:
+    """A rename that ran without a write behind it is finished by the next run,
+    from the pre-remote copy, which stays where it is."""
+    module = _module_copy(tmp_path, "dns")
+    (module / "terraform.pre-remote.tfstate").write_text(json.dumps(STATE))
+    landed = {**STATE, "lineage": "fresh", "serial": 1}
+    fake = FakeTerraform(pulls=[EMPTY_REMOTE, EMPTY_REMOTE, landed, landed])
+    assert _migrate(tmp_path, fake) == 0
+    assert fake.call("state push")["args"][-1] == str(module / "terraform.pre-remote.tfstate")
+    assert json.loads((module / "terraform.pre-remote.tfstate").read_text()) == STATE
+
+
+def test_a_push_that_leaves_r2_empty_is_not_a_migration(tmp_path: Path) -> None:
+    module = _module_copy(tmp_path, "aws")
+    (module / "terraform.tfstate").write_text(json.dumps(EMPTY_LOCAL))
+    assert _run("aws", "migrate", FakeTerraform(pulls=[EMPTY_REMOTE]), terraform_dir=tmp_path, aws=FakeAws()) == 1
+    assert (module / "terraform.tfstate").exists()
+
+
 def test_migrate_with_nothing_to_move_says_so(tmp_path: Path) -> None:
     _module_copy(tmp_path, "dns")
     with pytest.raises(tr.RunnerError, match="nothing to migrate"):
