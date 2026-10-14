@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import tempfile
 from collections.abc import Callable, Mapping, Sequence
@@ -50,14 +51,28 @@ from typing import Any, Literal, NamedTuple, Protocol
 
 from toolkit.features import terraform_backend
 
-ACTIONS = ("plan", "apply", "destroy", "output", "untaint", "migrate", "state-list")
+ACTIONS = (
+    "plan",
+    "apply",
+    "destroy",
+    "output",
+    "untaint",
+    "migrate",
+    "state-list",
+    "history",
+    "restore",
+    "unlock",
+)
 
 # Actions that read or write state and nothing else: no variables, so no secret
 # of the root's. They still need the backend's credentials.
-STATE_ONLY = frozenset({"output", "untaint", "migrate", "state-list"})
+STATE_ONLY = frozenset({"output", "untaint", "migrate", "state-list", "history", "restore", "unlock"})
 
 # Actions that write state, snapshotted to history before and after.
-WRITES = frozenset({"apply", "destroy", "untaint", "migrate"})
+WRITES = frozenset({"apply", "destroy", "untaint", "migrate", "restore"})
+
+# What `restore` takes: one history copy, named as its key names it.
+HISTORY_REF = re.compile(r"^[A-Za-z0-9-]+/[0-9]+$")
 
 # The bucket's credentials, as the S3 backend reads them, from SOPS. Minted with
 # a token scoped to the state bucket alone by `make tf-state-bootstrap`.
@@ -397,6 +412,10 @@ def run(
         raise RunnerError(f"unknown action {action!r}; known: {', '.join(ACTIONS)}")
     if action == "untaint" and not extra:
         raise RunnerError("untaint needs the resource address to clear")
+    if action == "unlock" and len(extra) != 1:
+        raise RunnerError("unlock needs exactly one lock id, the one Terraform printed when it refused")
+    if action == "restore" and (len(extra) != 1 or not HISTORY_REF.match(extra[0])):
+        raise RunnerError("restore needs exactly one history copy as <lineage>/<serial> (see make tf-state-history)")
 
     module = terraform_dir / root.name
     _refuse_a_state_the_backend_does_not_hold(root, action, module)
@@ -405,6 +424,8 @@ def run(
     config = load_config()
     env = _state_env(config, root.name) if state_only else child_env(config, root, applying=action == "apply")
     history = _History(root.name, config, aws, env)
+    if action == "history":
+        return history.list()
     if outputs is None:
 
         def outputs(other: str, name: str) -> str:
@@ -432,6 +453,9 @@ def run(
         rc = tf(*_init_args(terraform_dir), quiet=True).returncode
         if rc != 0:
             return rc
+        if action == "unlock":
+            # The lock object only: the state is not read or written.
+            return tf("force-unlock", "-force", extra[0]).returncode
         if action not in WRITES:
             return _read(tf, root, action, var_args, extra)
         # Before: a write must not start from a state history does not hold,
@@ -442,7 +466,10 @@ def run(
 
             logger.error(f"{root.name}: the state could not be copied to history; nothing was changed.")
             return rc
-        rc = _write(tf, root, action, module, Path(tmp), var_args, extra, allow_destroy, allowed)
+        if action == "restore":
+            rc = _restore(tf, root, history, Path(tmp), extra[0])
+        else:
+            rc = _write(tf, root, action, module, Path(tmp), var_args, extra, allow_destroy, allowed)
         # After, whatever the write returned: a failed apply can still have
         # written a new serial.
         after = history.snapshot(tf, Path(tmp))
@@ -455,7 +482,7 @@ def _refuse_a_state_the_backend_does_not_hold(root: Root, action: str, module: P
             f"{module / LOCAL_STATE} is a local state, and the {root.name} root keeps its state in R2. "
             f"Running against R2 now would ignore it. Move it first: make tf-state-migrate ROOT={root.name}"
         )
-    if root.unrecovered and action in ("apply", "destroy", "untaint"):
+    if root.unrecovered and action in ("apply", "destroy", "untaint", "restore"):
         raise RunnerError(
             f"the {root.name} root's state was lost and is not recovered yet ({root.unrecovered}). "
             "Against an empty state Terraform does not know what exists, so an apply would create it again. "
@@ -567,6 +594,55 @@ class _History:
             **_s3_env(env["AWS_ACCESS_KEY_ID"], env["AWS_SECRET_ACCESS_KEY"]),
         }
 
+    def _prefix(self) -> str:
+        return f"{self.config['terraform']['state']['history_prefix']}{self.root_name}/"
+
+    def _s3api(self, op: str, *args: str) -> Result:
+        return self.aws(
+            [
+                "--endpoint-url",
+                self.config["backup"]["r2"]["endpoint"],
+                "s3api",
+                op,
+                "--bucket",
+                self.config["terraform"]["state"]["bucket"],
+                *args,
+            ],
+            env=self.env,
+        )
+
+    def list(self) -> int:
+        """Every copy of this root: key and date. Keys only, never a body."""
+        listed = self._s3api(
+            "list-objects-v2",
+            "--prefix",
+            self._prefix(),
+            "--query",
+            "Contents[].[Key,LastModified]",
+            "--output",
+            "text",
+        )
+        print(listed.stdout, end="")
+        return listed.returncode
+
+    def fetch(self, ref: str, tmp: Path) -> dict[str, Any]:
+        """The copy named `<lineage>/<serial>`, parsed in memory; its file never outlives the call."""
+        key = f"{self._prefix()}{ref}.tfstate"
+        body = tmp / "restore-source.tfstate"
+        # Created private before the CLI writes into it: it opens the path for
+        # writing and keeps its mode, so the body is never readable by others.
+        os.close(os.open(body, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))
+        try:
+            got = self._s3api("get-object", "--key", key, str(body))
+            if got.returncode != 0:
+                raise RunnerError(f"history has no copy {ref} of {self.root_name} ({key}): {got.stdout.strip()[-200:]}")
+            try:
+                return dict(json.loads(body.read_text(encoding="utf-8")))
+            except ValueError:
+                raise RunnerError(f"{key} is not a Terraform state; nothing was pushed.") from None
+        finally:
+            body.unlink(missing_ok=True)
+
     def snapshot(self, tf: Callable[..., Result], tmp: Path) -> int:
         from toolkit.core.logging import logger
 
@@ -574,30 +650,13 @@ class _History:
         if state is None:
             return 0
         lineage, serial, _ = _shape(state)
-        settings = self.config["terraform"]["state"]
-        key = f"{settings['history_prefix']}{self.root_name}/{lineage}/{serial}.tfstate"
+        key = f"{self._prefix()}{lineage}/{serial}.tfstate"
         body = tmp / "history.tfstate"
         fd = os.open(body, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w") as fh:
             json.dump(state, fh)
         try:
-            put = self.aws(
-                [
-                    "--endpoint-url",
-                    self.config["backup"]["r2"]["endpoint"],
-                    "s3api",
-                    "put-object",
-                    "--bucket",
-                    settings["bucket"],
-                    "--key",
-                    key,
-                    "--body",
-                    str(body),
-                    "--if-none-match",
-                    "*",
-                ],
-                env=self.env,
-            )
+            put = self._s3api("put-object", "--key", key, "--body", str(body), "--if-none-match", "*")
         finally:
             body.unlink(missing_ok=True)
         if put.returncode == 0:
@@ -648,6 +707,45 @@ def _migrate(tf: Callable[..., Result], root: Root, module: Path) -> int:
     logger.info(
         f"{root.name}: {expected[2]} resources moved to R2 at serial {expected[1]}; the local file is {moved.name}."
     )
+    return 0
+
+
+def _restore(tf: Callable[..., Result], root: Root, history: _History, tmp: Path, ref: str) -> int:
+    """Write an old copy back as the newest state, without `-force`.
+
+    A restore is a new write of old content, like a revert: it takes the serial
+    after the current one, so `state push` accepts it as a newer state of the
+    same lineage, and the history key it lands on has never been used. Pushing
+    the copy at its own serial would need `-force`, and its after-snapshot would
+    collide with the copy already filed under that serial.
+    """
+    from toolkit.core.logging import logger
+
+    lineage, serial = ref.split("/")
+    old = history.fetch(ref, tmp)
+    if (str(old.get("lineage")), int(old.get("serial", -1))) != (lineage, int(serial)):
+        raise RunnerError(f"the history copy {ref} does not hold the state its key names; nothing was pushed.")
+    current = _pull(tf)
+    if current is not None and current.get("lineage") != lineage:
+        raise RunnerError(
+            f"{root.name} holds lineage {current.get('lineage')}, the copy {lineage}: another state, "
+            "which only `-force` would replace. The runner never passes it; nothing was pushed."
+        )
+    restored = {**old, "serial": int(current["serial"]) + 1 if current is not None else int(serial)}
+    body = tmp / "restore.tfstate"
+    fd = os.open(body, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w") as fh:
+        json.dump(restored, fh)
+    try:
+        rc = tf("state", "push", str(body)).returncode
+    finally:
+        body.unlink(missing_ok=True)
+    if rc != 0:
+        return rc
+    if not _arrived(restored, _pull(tf)):
+        logger.error(f"{root.name}: R2 does not hold the restored copy {ref} after the push.")
+        return 1
+    logger.info(f"{root.name}: copy {ref} restored as serial {restored['serial']}.")
     return 0
 
 

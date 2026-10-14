@@ -149,24 +149,37 @@ class FakeTerraform:
 
 
 class FakeAws:
-    """Records each aws CLI call, the body file's state at that moment included."""
+    """Records each aws CLI call, the body file's state at that moment included.
 
-    def __init__(self, rc: int = 0, out: str = "") -> None:
+    `objects` is the history a get-object reads from, by key.
+    """
+
+    def __init__(self, rc: int = 0, out: str = "", objects: dict[str, dict] | None = None) -> None:
         self.calls: list[dict[str, Any]] = []
         self.rc, self.out = rc, out
+        self.objects = objects or {}
 
     def __call__(self, args: list[str], *, env: dict[str, str]) -> tr.Result:
-        body = Path(args[args.index("--body") + 1])
-        self.calls.append(
-            {
-                "args": list(args),
-                "env": dict(env),
-                "key": args[args.index("--key") + 1],
-                "body": (body.stat().st_mode & 0o777, json.loads(body.read_text())) if body.exists() else None,
-                "body_path": body,
-            }
-        )
+        op = args[args.index("s3api") + 1]
+        call: dict[str, Any] = {"args": list(args), "env": dict(env), "op": op}
+        self.calls.append(call)
+        if op == "get-object":
+            key = call["key"] = args[args.index("--key") + 1]
+            if key not in self.objects:
+                return tr.Result(254, "An error occurred (NoSuchKey) when calling the GetObject operation")
+            Path(args[-1]).write_text(json.dumps(self.objects[key]))
+            return tr.Result(0, "")
+        if op == "put-object":
+            body = Path(args[args.index("--body") + 1])
+            call.update(
+                key=args[args.index("--key") + 1],
+                body=(body.stat().st_mode & 0o777, json.loads(body.read_text())) if body.exists() else None,
+                body_path=body,
+            )
         return tr.Result(self.rc, self.out)
+
+    def puts(self) -> list[dict[str, Any]]:
+        return [c for c in self.calls if c["op"] == "put-object"]
 
 
 def _run(root: str, action: str, fake: FakeTerraform, tmp_path: Path | None = None, **kwargs: Any) -> int:
@@ -706,11 +719,12 @@ def test_the_roots_whose_state_was_lost_are_declared() -> None:
     assert {n for n, r in tr.ROOTS.items() if r.unrecovered} == {"gcp", "gcp-bootstrap", "vps-firewall"}
 
 
-@pytest.mark.parametrize("action", ["apply", "destroy", "untaint"])
+@pytest.mark.parametrize("action", ["apply", "destroy", "untaint", "restore"])
 def test_a_lost_state_refuses_every_write_and_names_its_ticket(action: str) -> None:
     fake = FakeTerraform()
+    extra = {"untaint": ["x"], "restore": ["11111111-aaaa/7"]}.get(action, [])
     with pytest.raises(tr.RunnerError, match=r"#2226"):
-        _run("gcp", action, fake, extra=["x"] if action == "untaint" else [])
+        _run("gcp", action, fake, extra=extra)
     assert fake.calls == []
 
 
@@ -910,6 +924,123 @@ def test_state_list_prints_addresses_only() -> None:
 def test_no_action_prints_a_states_values() -> None:
     """`show` and `state show` print attribute values, and a state holds secrets in clear."""
     assert not {"show", "state-show", "pull"} & set(tr.ACTIONS)
+
+
+# --------------------------------------------------------------------------- history, restore, unlock
+
+
+def test_history_lists_the_roots_copies_without_running_terraform(capsys: pytest.CaptureFixture[str]) -> None:
+    listing = "history/dns/11111111-aaaa/7.tfstate\t2026-10-13T10:00:00Z\n"
+    aws, fake = FakeAws(out=listing), FakeTerraform()
+    assert _run("dns", "history", fake, aws=aws) == 0
+    assert fake.calls == []
+    [call] = aws.calls
+    assert call["op"] == "list-objects-v2"
+    assert call["args"][call["args"].index("--prefix") + 1] == "history/dns/"
+    assert "11111111-aaaa/7.tfstate" in capsys.readouterr().out
+
+
+def test_history_fails_when_the_bucket_refuses() -> None:
+    assert _run("dns", "history", FakeTerraform(), aws=FakeAws(rc=254, out="AccessDenied")) == 254
+
+
+@pytest.mark.parametrize("extra", [[], ["a", "b"]])
+def test_unlock_needs_exactly_one_lock_id(extra: list[str]) -> None:
+    fake = FakeTerraform()
+    with pytest.raises(tr.RunnerError, match="lock id"):
+        _run("dns", "unlock", fake, extra=extra)
+    assert fake.calls == []
+
+
+def test_unlock_releases_the_lock_and_touches_no_state() -> None:
+    fake, aws = FakeTerraform(), FakeAws()
+    assert _run("dns", "unlock", fake, aws=aws, extra=["c0ffee"]) == 0
+    assert fake.call("force-unlock")["args"][1:] == ["force-unlock", "-force", "c0ffee"]
+    assert aws.calls == [] and "state pull" not in fake.verbs()
+
+
+OLD = {**STATE, "serial": 5, "resources": STATE["resources"][:1]}
+OLD_KEY = "history/dns/11111111-aaaa/5.tfstate"
+
+
+def _restore(fake: FakeTerraform, aws: FakeAws, ref: str = "11111111-aaaa/5") -> int:
+    return _run("dns", "restore", fake, aws=aws, extra=[ref])
+
+
+@pytest.mark.parametrize("extra", [[], ["11111111-aaaa"], ["../dns/7"], ["11111111-aaaa/7", "x"]])
+def test_restore_refuses_anything_but_one_lineage_and_serial(extra: list[str]) -> None:
+    fake = FakeTerraform()
+    with pytest.raises(tr.RunnerError, match="<lineage>/<serial>"):
+        _run("dns", "restore", fake, extra=extra)
+    assert fake.calls == []
+
+
+def test_restore_writes_the_old_content_as_the_newest_serial_without_force() -> None:
+    """A restore is a new write of an old state, like a revert: the serial moves
+    forward, so the history key it lands on is new and nothing needs -force."""
+    restored = {**OLD, "serial": 8}
+    pushed: list[dict] = []
+
+    class Seeing(FakeTerraform):
+        def __call__(self, args: list[str], **kw: Any) -> tr.Result:
+            if "push" in args:
+                path = Path(args[-1])
+                pushed.append({"mode": path.stat().st_mode & 0o777, "state": json.loads(path.read_text())})
+            return super().__call__(args, **kw)
+
+    aws = FakeAws(objects={OLD_KEY: OLD})
+    fake = Seeing(pulls=[STATE, STATE, restored, restored])
+    assert _restore(fake, aws) == 0
+    push = fake.call("state push")
+    assert "-force" not in push["args"]
+    assert pushed == [{"mode": 0o600, "state": restored}]
+    assert not Path(push["args"][-1]).exists()
+    # Before: the state being replaced. After: the restored one, at its new serial.
+    assert [c["key"] for c in aws.puts()] == [
+        "history/dns/11111111-aaaa/7.tfstate",
+        "history/dns/11111111-aaaa/8.tfstate",
+    ]
+
+
+def test_restore_into_an_empty_backend_keeps_the_serial() -> None:
+    aws = FakeAws(objects={OLD_KEY: OLD})
+    fake = FakeTerraform(pulls=[None, None, OLD, OLD])
+    assert _restore(fake, aws) == 0
+
+
+def test_restore_of_a_copy_history_does_not_hold_names_it_and_pushes_nothing() -> None:
+    fake = FakeTerraform(pulls=[STATE])
+    with pytest.raises(tr.RunnerError, match="11111111-aaaa/5"):
+        _restore(fake, FakeAws())
+    assert "state push" not in fake.verbs()
+
+
+def test_restore_refuses_a_copy_whose_content_is_not_what_its_key_names() -> None:
+    fake = FakeTerraform(pulls=[STATE])
+    with pytest.raises(tr.RunnerError, match="does not hold"):
+        _restore(fake, FakeAws(objects={OLD_KEY: {**OLD, "serial": 4}}))
+    assert "state push" not in fake.verbs()
+
+
+def test_restore_refuses_another_lineage() -> None:
+    """Another lineage is another state; replacing it would take -force, which the runner never passes."""
+    other = {**OLD, "lineage": "22222222-bbbb"}
+    fake = FakeTerraform(pulls=[STATE])
+    with pytest.raises(tr.RunnerError, match="lineage"):
+        _restore(fake, FakeAws(objects={"history/dns/22222222-bbbb/5.tfstate": other}), "22222222-bbbb/5")
+    assert "state push" not in fake.verbs()
+
+
+def test_a_restore_that_did_not_arrive_fails() -> None:
+    aws = FakeAws(objects={OLD_KEY: OLD})
+    assert _restore(FakeTerraform(pulls=[STATE, STATE, STATE, STATE]), aws) == 1
+
+
+def test_a_restore_never_puts_the_states_content_in_an_error() -> None:
+    secret_state = {**OLD, "resources": [{"mode": "managed", "type": "x", "name": SECRET}], "serial": 4}
+    with pytest.raises(tr.RunnerError) as exc:
+        _restore(FakeTerraform(pulls=[STATE]), FakeAws(objects={OLD_KEY: secret_state}))
+    assert SECRET not in str(exc.value)
 
 
 # --------------------------------------------------------------------------- the real subprocess seam

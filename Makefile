@@ -97,6 +97,9 @@ help:
 	@echo "  make tf-state-bootstrap         Create the state bucket, its lock rule and token (TF-007)"
 	@echo "  make tf-state-migrate ROOT=x    Move a root's local state into R2, once (TF-007)"
 	@echo "  make tf-state-list ROOT=x       List the addresses a root's state holds in R2"
+	@echo "  make tf-state-history ROOT=x    List a root's history copies (<lineage>/<serial>)"
+	@echo "  make tf-state-restore ROOT=x TO=<lineage>/<serial>  Write a history copy back as the newest state"
+	@echo "  make tf-state-unlock ROOT=x LOCK=<id>  Release a lock a dead run left behind"
 	@echo "  make gcp1-status|start|stop     Inspect or resize the GCP hub's instance group"
 	@echo "  make gcp-killswitch-prove       Prove the billing kill switch fires, on a scratch project"
 	@echo ""
@@ -1447,6 +1450,27 @@ tf-state-migrate:
 tf-state-list:
 	@test -n "$(ROOT)" || { echo "usage: make tf-state-list ROOT=<dns|r2|aws|...>"; exit 2; }
 	@$(_TF) $(ROOT) state-list
+
+# A root's copies under history/, each a <lineage>/<serial> that
+# tf-state-restore takes. Keys and dates only.
+.PHONY: tf-state-history
+tf-state-history:
+	@test -n "$(ROOT)" || { echo "usage: make tf-state-history ROOT=<dns|r2|aws|...>"; exit 2; }
+	@$(_TF) $(ROOT) history
+
+# Write a history copy back as the root's newest state (docs/runbooks/terraform-state.md).
+# The state it replaces is copied to history first, so a restore is undone by another.
+.PHONY: tf-state-restore
+tf-state-restore:
+	@test -n "$(ROOT)" -a -n "$(TO)" || { echo "usage: make tf-state-restore ROOT=<root> TO=<lineage>/<serial>"; exit 2; }
+	@$(_TF) $(ROOT) restore -- '$(TO)'
+
+# Release the lock a killed run left on a root. Only when no run is in progress:
+# the lock id is the one Terraform printed when it refused.
+.PHONY: tf-state-unlock
+tf-state-unlock:
+	@test -n "$(ROOT)" -a -n "$(LOCK)" || { echo "usage: make tf-state-unlock ROOT=<root> LOCK=<id>"; exit 2; }
+	@$(_TF) $(ROOT) unlock -- '$(LOCK)'
 
 .PHONY: tf-dns-plan tf-dns-apply
 tf-dns-plan:

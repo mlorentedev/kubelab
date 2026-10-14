@@ -1569,7 +1569,12 @@ def ansible_syntax_check(
 def tf_run(
     ctx: typer.Context,
     root: Annotated[str, typer.Argument(help="Module under infra/terraform/ (dns, r2, aws, gcp, ...)")],
-    action: Annotated[str, typer.Argument(help="plan | apply | destroy | output | untaint | migrate | state-list")],
+    action: Annotated[
+        str,
+        typer.Argument(
+            help="plan | apply | destroy | output | untaint | migrate | state-list | history | restore | unlock"
+        ),
+    ],
     allow_destroy: Annotated[
         bool, typer.Option("--allow-destroy", help="Let a guarded apply delete and replace")
     ] = False,
