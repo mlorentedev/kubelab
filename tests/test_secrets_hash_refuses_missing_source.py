@@ -146,6 +146,22 @@ def test_the_cli_fails_when_nothing_was_written(monkeypatch: pytest.MonkeyPatch)
     assert run.exit_code == 1, run.output
 
 
+def test_the_cli_exits_2_on_a_refused_source(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The path a real env takes: a non-empty catalog either hashes everything or raises."""
+    from typer.testing import CliRunner
+
+    from toolkit.cli import secrets as cli
+
+    def refuse(_env: str) -> dict[str, str]:
+        raise HashSourceMissing("planted refusal")
+
+    monkeypatch.setattr(cli, "_get_manager", lambda: SimpleNamespace(hash_oidc_secrets=refuse))
+    run = CliRunner().invoke(cli.app, ["hash", "--env", ENV])
+    assert run.exit_code == 2, run.output
+    assert isinstance(run.exception, SystemExit), run.exception
+    assert "planted refusal" in run.output
+
+
 @pytest.mark.parametrize("env", ["dev", "staging", "prod"])
 def test_every_hashed_source_lives_in_its_own_env_file(env: str) -> None:
     """AC4: no spec resolves to "missing" as a normal condition.
