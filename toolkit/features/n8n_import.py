@@ -402,23 +402,26 @@ _IMPORT_SCRIPT = (
 def import_n8n_workflow(env: str, project_root: Path, dry_run: bool = False) -> bool:
     """Reconstruct every workflow in N8N_IMPORT_CATALOG that targets `env`.
 
-    Returns True iff every applicable workflow imported + activated (or all were
-    out of scope for `env`, a successful no-op). Fails loudly (returns False, no
+    Returns True iff every shared credential of `env` and every applicable workflow
+    imported + activated. Shared credentials are imported even when no workflow
+    targets `env`. Fails loudly (returns False, no
     `kubectl` for the item concerned) if a precondition is unmet — missing SOPS
     secret, unreadable workflow, absent ids, or a credential nothing imports.
     """
     logger.section(f"n8n workflow import — {env.upper()}")
 
     applicable = [s for s in N8N_IMPORT_CATALOG if env in s.envs]
-    if not applicable:
-        logger.info(f"No workflows registered for env={env} — nothing to do.")
-        return True
-
     cm = ConfigurationManager(env, project_root)
 
     # Shared credentials first and once: a workflow that references one is imported
-    # only if it landed, and the rest never depend on it.
+    # only if it landed, and the rest never depend on it. They are imported even
+    # when no workflow targets the env (#2158); n8n reads a credential at execution,
+    # so a credential alone needs no restart.
     shared_ok = _import_shared_credentials(env, cm, dry_run)
+    if not applicable:
+        logger.info(f"No workflows registered for env={env}.")
+        return all(shared_ok.values())
+
     landed = [spec for spec in applicable if _process_spec(spec, env, project_root, cm, dry_run, shared_ok)]
     all_ok = len(landed) == len(applicable) and all(shared_ok.values())
 
