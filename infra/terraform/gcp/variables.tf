@@ -1,7 +1,7 @@
 # Variables for the GCP Argo CD hub (ADR-063).
 # Non-secret defaults mirror networking.gcp in common.yaml — the SSOT.
-# Secrets arrive via `toolkit infra terraform gcp-tfvars`, which renders from
-# SOPS and is deleted after every use. Nothing sensitive is defaulted here.
+# The runner renders the non-secret inputs from common.yaml into a private temp
+# dir (toolkit/features/gcp_tfvars.py). Nothing sensitive is defaulted here.
 
 variable "project_id" {
   description = "GCP project holding the hub. Must be linked to the billing account carrying the credit — see docs/runbooks/gcp-hub-bootstrap.md §1."

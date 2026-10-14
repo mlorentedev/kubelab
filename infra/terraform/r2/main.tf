@@ -4,7 +4,7 @@
 # Read this before editing:
 #
 # - Node buckets come from backup.sources in common.yaml, rendered into r2.tfvars
-#   by `toolkit infra terraform r2-tfvars`. Never add a node here by hand.
+#   by the runner (toolkit/features/r2_tfvars.py). Never add a node here by hand.
 # - The lock rule refuses deletes of objects younger than R under data/,
 #   snapshots/, keys/ and config. locks/ and index/ stay out on purpose: restic
 #   deletes them on every run (tests/test_r2_terraform.py).

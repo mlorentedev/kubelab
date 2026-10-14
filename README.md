@@ -161,8 +161,8 @@ make provision NODE=ace1 ENV=staging     # Provision a node (Ansible)
 
 # Secrets & config
 tk infra k8s apply-secrets --env staging # Inject SOPS secrets into K8s
-tk infra terraform plan                  # Plan DNS changes
-tk infra terraform apply                 # Apply DNS changes
+make tf-dns-plan                         # Plan DNS changes (Terraform)
+make tf-dns-apply                        # Apply DNS changes, destroys refused
 ```
 
 See [`toolkit/README.md`](toolkit/README.md) for full command reference.

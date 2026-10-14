@@ -1,7 +1,7 @@
 # Inputs for the bootstrap root.
 #
-# Rendered by `toolkit infra terraform gcp-bootstrap-tfvars` and deleted after
-# every use. Unlike the hub module -- which carries NO secret, because cloud-init
+# The runner passes it as TF_VAR_billing_account_id, read from SOPS, and never
+# writes it to a file. Unlike the hub module -- which carries NO secret, because cloud-init
 # reads its credentials from Secret Manager -- this root has one: the billing
 # account id. It is not a credential (nothing can be spent with it absent IAM),
 # but this repository is public and git history is permanent, so it lives in

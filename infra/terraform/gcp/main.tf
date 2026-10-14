@@ -4,8 +4,9 @@
 # of size 1. VPN-only access via Headscale; the external IP is ephemeral and
 # exists solely so the instance has egress for its own bootstrap.
 #
-# Runnable: `make tf-gcp-{plan,apply,destroy}` and `make gcp1-*` landed with the
-# `gcp-tfvars` renderer (#1220). Procedure: docs/runbooks/gcp-hub-bootstrap.md §6.
+# Runnable: `make tf-gcp-{plan,apply,destroy}` and `make gcp1-*`; the runner
+# renders the inputs from common.yaml (#1220, TF-007). Procedure:
+# docs/runbooks/gcp-hub-bootstrap.md §6.
 #
 # This module assumes the PROJECT ALREADY EXISTS. It is created, with its APIs
 # and its spend guardrails, by infra/terraform/gcp-bootstrap/ — a separate root

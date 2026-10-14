@@ -48,7 +48,7 @@ make tf-dns-apply   # apply
 
 ```bash
 # Preview
-cd infra/terraform/aws && make tf-aws-plan
+make tf-aws-plan
 
 # Apply (RECREATES instance — ~5 min downtime)
 make tf-aws-apply

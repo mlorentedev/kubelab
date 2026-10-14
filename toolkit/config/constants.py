@@ -376,36 +376,12 @@ class Messages:
     # =============================================================================
     # TERRAFORM
     # =============================================================================
-    ERROR_TERRAFORM_NOT_FOUND: str = "Terraform not found. Please install Terraform first."
     WARNING_TERRAFORM_NOT_INSTALLED: str = (
         "terraform binary not installed — skipping terraform validation (not a config defect)"
     )
     ERROR_TERRAFORM_DIR_NOT_FOUND: str = "Terraform directory not found: {}"
-    ERROR_TERRAFORM_INIT_FAILED: str = "Terraform init failed"
-    ERROR_TERRAFORM_INIT_FAILED_WITH_ERROR: str = "Terraform init failed: {}"
-    ERROR_TERRAFORM_PLAN_FAILED: str = "Terraform plan failed: {}"
-    ERROR_TERRAFORM_APPLY_FAILED: str = "Terraform apply failed: {}"
-    ERROR_TERRAFORM_DESTROY_FAILED: str = "Terraform destroy failed: {}"
-    ERROR_TERRAFORM_VALIDATION_FAILED: str = "Terraform validation failed: {}"
-    ERROR_TERRAFORM_GENERATION_FAILED: str = "Failed to generate Terraform configuration"
-    ERROR_TERRAFORM_CONFIG_GENERATION_FAILED: str = "Terraform configuration generation failed: {}"
     ERROR_DEPLOYMENT_FAILED: str = "Deployment failed"
-    INFO_TERRAFORM_APPLY_CANCELLED: str = "Terraform apply cancelled"
-    INFO_TERRAFORM_DESTROY_CANCELLED: str = "Terraform destroy cancelled"
-    INFO_TERRAFORM_RUNNING_APPLY: str = "Running apply without pre-generated plan"
-    INFO_TERRAFORM_APPLY_WITHOUT_PLAN: str = "Applying without pre-generated plan"
-    WARNING_TERRAFORM_PLAN_NOT_FOUND: str = "Terraform plan file not found for environment: {}"
-    WARNING_TERRAFORM_DESTROY_DANGER: str = "  DANGER: This will destroy infrastructure!"
-    WARNING_TERRAFORM_FORMAT_ISSUES: str = "Terraform files are not properly formatted"
-    WARNING_TERRAFORM_FORMAT_NEEDED: str = "Terraform files need formatting"
-    INFO_TERRAFORM_FIX_FORMAT: str = "Run 'terraform fmt' to fix formatting issues"
-    INFO_TERRAFORM_FMT_COMMAND: str = "Run 'terraform fmt -recursive .' to fix formatting"
     SUCCESS_TERRAFORM_VALID: str = "Terraform configuration is valid"
-    SUCCESS_TERRAFORM_FORMATTED: str = "Terraform configuration is properly formatted"
-    SUCCESS_TERRAFORM_INIT: str = "Terraform initialized for {} environment"
-    SUCCESS_TERRAFORM_PLAN_CREATED: str = "Terraform plan created for {} environment"
-    SUCCESS_TERRAFORM_APPLY: str = "Terraform applied successfully for {} environment"
-    SUCCESS_TERRAFORM_DESTROY: str = "Terraform destroyed successfully for {} environment"
 
     # =============================================================================
     # CREDENTIALS

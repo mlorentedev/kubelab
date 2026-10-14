@@ -3,15 +3,13 @@
 # This module is NOT imported against the current VPS.
 # It defines "how to create a VPS from scratch" for disaster recovery.
 #
-# Usage:
-#   cd infra/terraform/compute
-#   terraform init
-#   terraform plan -var-file=compute.tfvars
-#   terraform apply -var-file=compute.tfvars
+# Usage (the Hetzner token comes from SOPS; the inputs are variables.tf's defaults):
+#   make tf-compute-plan
+#   make tf-compute-apply
 #
 # After apply:
 #   1. Update common.yaml with new VPS IP
-#   2. Update Cloudflare DNS (terraform apply in dns/)
+#   2. Update Cloudflare DNS (make tf-dns-apply)
 #   3. Run: toolkit infra ansible run -p site -e prod
 #   4. Restore backups
 
@@ -51,42 +49,42 @@ resource "hcloud_firewall" "vps" {
   name = "${var.project_name}-vps"
 
   rule {
-    direction = "in"
-    protocol  = "tcp"
-    port      = "22"
-    source_ips = ["0.0.0.0/0", "::/0"]
+    direction   = "in"
+    protocol    = "tcp"
+    port        = "22"
+    source_ips  = ["0.0.0.0/0", "::/0"]
     description = "SSH"
   }
 
   rule {
-    direction = "in"
-    protocol  = "tcp"
-    port      = "80"
-    source_ips = ["0.0.0.0/0", "::/0"]
+    direction   = "in"
+    protocol    = "tcp"
+    port        = "80"
+    source_ips  = ["0.0.0.0/0", "::/0"]
     description = "HTTP"
   }
 
   rule {
-    direction = "in"
-    protocol  = "tcp"
-    port      = "443"
-    source_ips = ["0.0.0.0/0", "::/0"]
+    direction   = "in"
+    protocol    = "tcp"
+    port        = "443"
+    source_ips  = ["0.0.0.0/0", "::/0"]
     description = "HTTPS"
   }
 
   rule {
-    direction = "in"
-    protocol  = "udp"
-    port      = "3478"
-    source_ips = ["0.0.0.0/0", "::/0"]
+    direction   = "in"
+    protocol    = "udp"
+    port        = "3478"
+    source_ips  = ["0.0.0.0/0", "::/0"]
     description = "Headscale STUN"
   }
 
   rule {
-    direction = "in"
-    protocol  = "udp"
-    port      = "41641"
-    source_ips = ["0.0.0.0/0", "::/0"]
+    direction   = "in"
+    protocol    = "udp"
+    port        = "41641"
+    source_ips  = ["0.0.0.0/0", "::/0"]
     description = "Tailscale"
   }
 }

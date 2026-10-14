@@ -41,9 +41,8 @@ created: "2026-05-10"
 1. **Update the SSOT — already done in PR feat/aws-002-ebs-resize-12gb**
    - `infra/config/values/common.yaml` → `networking.aws.ebs_size_gb: 12`
    - `infra/terraform/aws/variables.tf` → `default = 12`
-   - `infra/terraform/aws/aws.tfvars.example` → comment mirror
 
-2. **Apply the Terraform change** (always via Makefile — wraps SOPS-injected tfvars)
+2. **Apply the Terraform change** (always via Makefile — the runner injects the SOPS secrets)
    ```bash
    make tf-aws-plan
    # Expected plan: 0 to add, 1 to change, 0 to destroy

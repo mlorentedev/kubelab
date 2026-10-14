@@ -2,8 +2,8 @@
 
 lesson-543: a Cloudflare create timed out but landed, and Terraform tainted the
 record. The next `tf-dns-apply`, which ran with `-auto-approve`, would have
-deleted a live record. The guard reads the saved plan's JSON, and the apply then
-runs that same file.
+deleted a live record. The runner reads the saved plan's JSON, and the apply then
+runs that same file (toolkit/features/terraform_runner.py).
 """
 
 from __future__ import annotations
@@ -14,8 +14,8 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from typer.testing import CliRunner
 
+from toolkit.features import terraform_runner as tr
 from toolkit.features.terraform_plan_guard import refused, summary
 
 REPO = Path(__file__).resolve().parent.parent
@@ -72,32 +72,51 @@ def test_the_summary_counts_a_replace_as_one_add_and_one_destroy() -> None:
     assert (counts["create"], counts["update"], counts["delete"]) == (2, 1, 1)
 
 
-# --------------------------------------------------------------------------- the command
+# --------------------------------------------------------------------------- the runner's guarded apply
 
 
-def _guard(plan: dict, *args: str) -> object:
-    from toolkit.cli.infra import app
+class _Terraform:
+    """Answers `show -json` with the given plan; records the verbs it was asked for."""
 
-    return CliRunner().invoke(app, ["terraform", "plan-guard", "-", *args], input=json.dumps(plan))
+    def __init__(self, plan: dict) -> None:
+        self.plan = plan
+        self.verbs: list[str] = []
 
-
-def test_the_command_exits_non_zero_on_a_refused_plan_and_names_it() -> None:
-    result = _guard(_plan(CREATE, TAINTED))
-    assert result.exit_code == 1
-    assert "replace_because_tainted" in result.output
-    assert "tf-untaint" in result.output
-
-
-def test_the_command_passes_a_clean_plan_and_an_allowed_one() -> None:
-    assert _guard(_plan(CREATE, UPDATE)).exit_code == 0
-    assert _guard(_plan(TAINTED), "--allow-destroy").exit_code == 0
-    assert _guard(_plan(CBD), "--allow", CBD[0]).exit_code == 0
+    def __call__(self, args: list[str], *, env: dict, capture: bool, quiet: bool) -> tr.Result:
+        self.verbs.append(args[1])
+        return tr.Result(0, json.dumps(self.plan) if args[1] == "show" else "")
 
 
-def test_the_command_never_echoes_the_plan_it_reads() -> None:
+def _apply(plan: dict, **kwargs: object) -> tuple[int, _Terraform]:
+    fake = _Terraform(plan)
+    config = {"cloudflare": {"api_token": "token-sentinel"}, "networking": {"vps": {"public_ip": "192.0.2.1"}}}
+    rc = tr.run(
+        "dns", "apply", terraform_dir=REPO / "infra/terraform", load_config=lambda: config, terraform=fake, **kwargs
+    )
+    return rc, fake
+
+
+def test_a_refused_plan_exits_non_zero_names_the_taint_and_never_applies(capsys: pytest.CaptureFixture[str]) -> None:
+    rc, fake = _apply(_plan(CREATE, TAINTED))
+    out = capsys.readouterr().out
+    assert rc == 1 and "apply" not in fake.verbs
+    assert "replace_because_tainted" in out
+    assert "tf-untaint" in out
+
+
+def test_a_clean_plan_and_an_allowed_one_are_applied() -> None:
+    assert _apply(_plan(CREATE, UPDATE))[0] == 0
+    assert _apply(_plan(TAINTED), allow_destroy=True)[0] == 0
+    rc, fake = _apply(_plan(CBD), allowed=[CBD[0]])
+    assert rc == 0 and fake.verbs[-1] == "apply"
+
+
+def test_the_guard_never_echoes_the_plan_it_reads(capsys: pytest.CaptureFixture[str]) -> None:
     """The plan's JSON carries input variables, the provider token included."""
-    plan = {**_plan(CREATE), "variables": {"cloudflare_api_token": {"value": "token-sentinel"}}}
-    assert "token-sentinel" not in _guard(plan).output
+    plan = {**_plan(CREATE, TAINTED), "variables": {"cloudflare_api_token": {"value": "token-sentinel"}}}
+    _apply(plan)
+    captured = capsys.readouterr()
+    assert "token-sentinel" not in captured.out + captured.err
 
 
 # --------------------------------------------------------------------------- the wiring
@@ -109,27 +128,18 @@ def _recipe(target: str) -> str:
     return match.group(1)
 
 
-@pytest.mark.parametrize("target", ["tf-dns-apply", "tf-gcp-apply", "tf-aws-apply"])
-def test_each_unattended_apply_goes_through_the_guard(target: str) -> None:
-    recipe = _recipe(target)
-    assert "$(call _tf_guarded_apply," in recipe
+@pytest.mark.parametrize("root", ["dns", "gcp", "aws", "compute"])
+def test_each_unattended_apply_is_guarded_and_honours_allow_destroy(root: str) -> None:
+    assert tr.ROOTS[root].apply == "guarded"
+    recipe = _recipe(f"tf-{root}-apply")
+    assert f"$(_TF) {root} apply $(_TF_ALLOW)" in recipe
     assert "-auto-approve" not in recipe
-
-
-def test_the_guarded_apply_runs_the_plan_it_checked_and_removes_it() -> None:
-    body = re.search(r"^define _tf_guarded_apply\n(.*?)^endef", MAKEFILE, re.M | re.S).group(1)
-    assert '-out="$$_p/plan"' in body
-    assert 'terraform show -json "$$_p/plan" | $(TOOLKIT) infra terraform plan-guard -' in body
-    assert 'terraform apply -input=false "$$_p/plan"' in body
-    assert "trap 'rm -rf \"$$_p\"' EXIT" in body
-    assert "$(if $(filter 1,$(ALLOW_DESTROY)),--allow-destroy)" in body
 
 
 @pytest.mark.parametrize(("value", "opens"), [("1", True), ("", False), ("0", False), ("false", False)])
 def test_only_allow_destroy_1_opens_the_guard(value: str, opens: bool) -> None:
     """Make's `$(if)` is true for any non-empty string, so `ALLOW_DESTROY=0` must not count."""
-    body = re.search(r"^define _tf_guarded_apply\n(.*?)^endef", MAKEFILE, re.M | re.S).group(1)
-    flag = re.search(r"\$\(if .*?ALLOW_DESTROY.*?--allow-destroy\)", body).group(0)
+    flag = re.search(r"^_TF_ALLOW = (.*)$", MAKEFILE, re.M).group(1)
     out = subprocess.run(
         ["make", "-s", "-f", "-", "show", f"ALLOW_DESTROY={value}"],
         input=f"show:\n\t@echo '{flag}'\n",
@@ -140,19 +150,21 @@ def test_only_allow_destroy_1_opens_the_guard(value: str, opens: bool) -> None:
     assert (out == "--allow-destroy") is opens, out
 
 
-def test_only_the_named_replace_and_the_test_fixture_keep_auto_approve() -> None:
-    """aws1-replace asks for its replace by address, and the killswitch test
-    creates and destroys its own fixture. Any other auto-approve is unguarded."""
-    holders = set()
-    for match in re.finditer(r"^([\w.-]+):[^\n]*\n((?:\t.*\n?)+)", MAKEFILE, re.M):
-        if re.search(r"terraform (apply|destroy) -auto-approve", match.group(2)):
-            holders.add(match.group(1))
-    assert holders == {"aws1-replace", "gcp-killswitch-prove", "gcp-killswitch-teardown"}, holders
+def test_no_make_target_auto_approves() -> None:
+    """Unattended apply lives in the runner, declared per root, and only the
+    disposable kill-switch fixture has it. A Make line cannot opt out."""
+    assert "-auto-approve" not in MAKEFILE
+
+
+def test_aws1_replace_allows_its_named_replace_and_nothing_else() -> None:
+    recipe = _recipe("aws1-replace")
+    assert "$(_TF) aws apply --allow aws_instance.argo_hub -- -replace=aws_instance.argo_hub" in recipe
+    assert "--allow-destroy" not in recipe and "_TF_ALLOW" not in recipe
 
 
 def test_untaint_is_a_target_that_touches_state_only() -> None:
     recipe = _recipe("tf-untaint")
-    assert "terraform untaint '$(RES)'" in recipe
+    assert "$(_TF) $(ROOT) untaint -- '$(RES)'" in recipe
     assert "apply" not in recipe
 
 

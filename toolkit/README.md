@@ -192,9 +192,8 @@ poetry run toolkit infra deploy --env staging
 poetry run toolkit infra status --env prod
 
  Terraform operations
-poetry run toolkit terraform init --env dev
-poetry run toolkit terraform plan --env staging
-poetry run toolkit terraform apply --env prod
+poetry run toolkit infra terraform run dns plan     # or: make tf-dns-plan
+poetry run toolkit infra terraform run dns apply    # guarded: refuses deletes
 ```
 
  Development Tools
@@ -347,7 +346,7 @@ poetry run toolkit deployment deploy --env staging
 ```bash
  Production deployment
 poetry run toolkit deployment setup --env prod
-poetry run toolkit terraform plan --env prod
+make tf-dns-plan
 poetry run toolkit deployment deploy --env prod
 ```
 

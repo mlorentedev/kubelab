@@ -1176,7 +1176,7 @@ SECRET_CATALOG: list[SecretSpec] = [
         description="Cloudflare DNS API token (ACME certs + Terraform DNS)",
         kind=SecretKind.EXTERNAL,
         services=("traefik", "terraform"),
-        rotate_note="Re-provision K3s nodes (Ansible) + re-run terraform apply. Both read from SOPS.",
+        rotate_note="Re-provision K3s nodes (Ansible) + `make tf-dns-apply`. Both read from SOPS.",
     ),
     # BACKUP-057: the only credential that manages the R2 node buckets and their
     # lock rules, so the only one that can lift a lock. The DNS token above was

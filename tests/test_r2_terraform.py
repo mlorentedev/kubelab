@@ -219,7 +219,8 @@ def _make_dry_run(target: str, *args: str) -> subprocess.CompletedProcess[str]:
 
 
 def _terraform_line(out: str, verb: str) -> str:
-    return next(line for line in out.splitlines() if f"terraform {verb} " in line)
+    """The runner call; arguments after its `--` reach Terraform unchanged."""
+    return next(line for line in out.splitlines() if f"infra terraform run r2 {verb} " in line)
 
 
 class TestTheScratchPairIsTornDownByTheSameScope:
