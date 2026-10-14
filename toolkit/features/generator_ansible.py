@@ -26,6 +26,12 @@ LOCATION_GROUPS = {"always-on": "always_on", "on-demand": "on_demand"}
 #: The hosts that run the node-path backup: the keys of `backup.sources`.
 BACKUP_GROUP = "node_backup"
 
+#: Trust on first use, kept ONLY for a node whose machine is replaced by design
+#: (`tailscale_dns` with no `tailscale_ip`): every recreate presents a new host
+#: key behind the same name, so no pin can hold. Every other node is verified
+#: against the pinned file (ANSIBLE-066). Host certificates retire both (#1261).
+TOFU_SSH_ARGS = "-o StrictHostKeyChecking=accept-new"
+
 
 class AnsibleGenerator(BaseGenerator):
     """Generates Ansible inventory from common.yaml (SSOT).
@@ -127,9 +133,15 @@ class AnsibleGenerator(BaseGenerator):
             )
         user = self._resolve_ssh_user(vps, networking, "cloud")
         ssh_key = networking.get("ssh_key", "~/.ssh/id_ed25519")
-        strict = "-o StrictHostKeyChecking=accept-new"
-        proxy = f"ssh -i {ssh_key} -W %h:%p -q {strict} {user}@{public_ip}"
-        return f'{strict} -o ProxyCommand="{proxy}"'
+        # The VPS is a pet: the jump is verified even when the hop behind it is not.
+        proxy = f"ssh -i {ssh_key} -W %h:%p -q {self._pinned_ssh_args(networking)} {user}@{public_ip}"
+        return f'-o ProxyCommand="{proxy}"'
+
+    @staticmethod
+    def _pinned_ssh_args(networking: dict[str, Any]) -> str:
+        """ssh options that verify a host against the pinned file, never accepting an unseen key."""
+        known_hosts = networking.get("ssh_known_hosts", "~/.ssh/known_hosts_pinned")
+        return f"-o StrictHostKeyChecking=yes -o UserKnownHostsFile={known_hosts}"
 
     def _build_inventory(
         self,
@@ -168,7 +180,8 @@ class AnsibleGenerator(BaseGenerator):
             )
 
         ssh_key = networking.get("ssh_key", "~/.ssh/id_ed25519")
-        bastion_args = self._bastion_ssh_args(networking) if transport == "bastion" else None
+        pinned_args = self._pinned_ssh_args(networking)
+        bastion_proxy = self._bastion_ssh_args(networking) if transport == "bastion" else None
         all_nodes = self._collect_nodes(networking, bootstrap)
 
         # Build group → hosts mapping
@@ -176,7 +189,7 @@ class AnsibleGenerator(BaseGenerator):
         host_vars: dict[str, dict[str, Any]] = {}
 
         for node in all_nodes:
-            host_vars[node["hostname"]] = self._host_vars(node, bastion_args)
+            host_vars[node["hostname"]] = self._host_vars(node, pinned_args, bastion_proxy)
             for group in node.get("groups", []):
                 groups[group].append(node["hostname"])
 
@@ -188,7 +201,7 @@ class AnsibleGenerator(BaseGenerator):
             "all": {
                 "vars": {
                     "ansible_ssh_private_key_file": ssh_key,
-                    "ansible_ssh_common_args": "-o StrictHostKeyChecking=accept-new",
+                    "ansible_ssh_common_args": pinned_args,
                     "ansible_python_interpreter": "auto_silent",
                 },
                 "children": {},
@@ -248,6 +261,7 @@ class AnsibleGenerator(BaseGenerator):
                     "ansible_host": aws.get("tailscale_dns") or aws["tailscale_ip"],
                     "ansible_user": self._resolve_ssh_user(aws, networking, "cloud"),
                     "groups": ["hub"],
+                    "ephemeral": not aws.get("tailscale_ip"),
                 }
             )
 
@@ -273,6 +287,7 @@ class AnsibleGenerator(BaseGenerator):
                     "ansible_host": gcp.get("tailscale_dns") or gcp["tailscale_ip"],
                     "ansible_user": self._resolve_ssh_user(gcp, networking, "cloud"),
                     "groups": ["hub"],
+                    "ephemeral": not gcp.get("tailscale_ip"),
                 }
             )
         return hubs
@@ -300,7 +315,7 @@ class AnsibleGenerator(BaseGenerator):
         return entry
 
     @staticmethod
-    def _host_vars(node: dict[str, Any], bastion_args: str | None) -> dict[str, Any]:
+    def _host_vars(node: dict[str, Any], pinned_args: str, bastion_proxy: str | None) -> dict[str, Any]:
         """The per-host variables one collected node contributes to the inventory."""
         host_vars: dict[str, Any] = {
             "ansible_host": node["ansible_host"],
@@ -312,10 +327,14 @@ class AnsibleGenerator(BaseGenerator):
             host_vars["lan_ip"] = node["lan_ip"]
         if node.get("legacy_python"):
             host_vars["legacy_python"] = True
+        # A node replaced by design cannot be pinned; it alone keeps TOFU (#1261).
+        host_key_args = TOFU_SSH_ARGS if node.get("ephemeral") else pinned_args
         # bastion: mesh-only nodes (no public path) jump through the VPS; the VPS
         # itself IS the jump and keeps the inventory-global (jump-free) args.
-        if bastion_args and not node.get("public_ip"):
-            host_vars["ansible_ssh_common_args"] = bastion_args
+        if bastion_proxy and not node.get("public_ip"):
+            host_vars["ansible_ssh_common_args"] = f"{host_key_args} {bastion_proxy}"
+        elif node.get("ephemeral"):
+            host_vars["ansible_ssh_common_args"] = host_key_args
         return host_vars
 
     @staticmethod

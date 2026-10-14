@@ -8,7 +8,9 @@ all:
   vars:
     ansible_user: manu
     ansible_ssh_private_key_file: ~/.ssh/id_ed25519
-    ansible_ssh_common_args: '-o StrictHostKeyChecking=accept-new'
+    # Every host is verified against the pinned file (networking.ssh_known_hosts,
+    # ANSIBLE-066); none is trusted on first use.
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=yes -o UserKnownHostsFile=~/.ssh/known_hosts_pinned'
     headscale_domain: vpn.kubelab.live
     headscale_ip: 162.55.57.175
 

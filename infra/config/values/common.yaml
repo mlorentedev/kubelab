@@ -67,6 +67,11 @@ networking:
     node: jetson           # resolves to networking.nodes.jetson.tailscale_ip
   ipv6_prefix: "fd7a:115c:a1e0::/48"
   ssh_key: "~/.ssh/id_ed25519"
+  # The host keys Ansible verifies every stable node against (ANSIBLE-066):
+  # the pinned file dotfiles deploys from its ssh/known_hosts, each line checked
+  # out of band before it lands. A node not in it cannot be provisioned until it
+  # is pinned (docs/runbooks/add-a-node.md). Replaced by the SSH CA (#1261).
+  ssh_known_hosts: "~/.ssh/known_hosts_pinned"
 
   # SEC-006: the VPS inbound allow-list, declared ONCE and read by two layers.
   #
