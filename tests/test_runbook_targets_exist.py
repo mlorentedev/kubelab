@@ -147,8 +147,10 @@ def test_every_make_target_a_doc_names_exists(doc: Path) -> None:
 def test_an_exemption_holds_only_in_its_own_document() -> None:
     """#2261: the name exempted for one document is still caught in any other."""
     declared = _declared_targets()
+    # Keyed the way the scan names a document, or no exemption could ever apply.
+    scanned = {str(d.relative_to(REPO)) for d in _runbooks()}
     for doc, target in KNOWN_STALE:
-        assert _unexplained(doc, {target}, declared) == []
+        assert doc in scanned, f"KNOWN_STALE names {doc}, which the scan never reads"
         assert _unexplained("docs/runbooks/a-new-runbook.md", {target}, declared) == [target]
 
 
