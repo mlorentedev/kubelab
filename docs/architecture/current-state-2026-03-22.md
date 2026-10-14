@@ -10,6 +10,10 @@ owner: manu
 
 # KubeLab — Current Architecture (2026-03-22)
 
+> **Historical snapshot, not the current state.** It records the platform on 2026-03-22, when the
+> Argo CD hub ran on AWS (`aws1`). The hub is now `gcp1` (ADR-063) and `aws1` was destroyed on
+> 2026-08-23. For the current topology read `CLAUDE.md` and `infra/config/values/common.yaml`.
+>
 > Snapshot after Phase 2 close + Phase 3 partial (AWS hub + Argo CD).
 
 ## Topology
