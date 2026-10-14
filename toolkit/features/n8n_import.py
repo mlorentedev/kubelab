@@ -723,8 +723,12 @@ def _list_pods(env: str, spec: _Target) -> list[dict[str, Any]] | None:
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         pods: list[dict[str, Any]] = json.loads(result.stdout).get("items", [])
+    except FileNotFoundError:
+        logger.error(f"  Listing n8n pods failed: {_NO_KUBECTL}")
+        return None
     except (subprocess.CalledProcessError, json.JSONDecodeError) as exc:
-        logger.error(f"  Listing n8n pods failed: {(getattr(exc, 'stderr', None) or str(exc)).strip()}")
+        detail = (getattr(exc, "stderr", None) or str(exc)).strip()
+        logger.error(f"  Listing n8n pods failed: {detail}{_kubeconfig_hint(cmd)}")
         return None
     return pods
 
@@ -774,10 +778,25 @@ def _run(cmd: list[str], stdin: str | None = None, label: str | None = None) -> 
         if result.stdout.strip():
             logger.info(f"  {_mask_payload(result.stdout.strip(), stdin)}")
         return True
+    except FileNotFoundError:
+        logger.error(f"  {label or ' '.join(cmd[:6])} … failed: {_NO_KUBECTL}")
+        return False
     except subprocess.CalledProcessError as exc:
         detail = _mask_payload((exc.stderr or str(exc)).strip(), stdin)
-        logger.error(f"  {label or ' '.join(cmd[:6])} … failed: {detail}")
+        logger.error(f"  {label or ' '.join(cmd[:6])} … failed: {detail}{_kubeconfig_hint(cmd)}")
         return False
+
+
+# A workstation without kubectl used to end the import in a traceback (#2201).
+_NO_KUBECTL = "kubectl is not on PATH; install it before importing (dotfiles provisions it through mise)"
+
+
+def _kubeconfig_hint(cmd: list[str]) -> str:
+    """Why kubectl failed, when the kubeconfig it was handed does not exist."""
+    if "--kubeconfig" not in cmd:
+        return ""
+    path = Path(cmd[cmd.index("--kubeconfig") + 1])
+    return "" if path.is_file() else f" (kubeconfig missing at {path}: run `make fetch-kubeconfig ENV=<env>`)"
 
 
 _MASK_MIN_LEN = 6
