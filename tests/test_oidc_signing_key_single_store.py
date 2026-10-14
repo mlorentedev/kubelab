@@ -75,9 +75,11 @@ def test_generating_a_key_writes_no_file(tmp_path: Path, monkeypatch: pytest.Mon
 
 
 # Every tracked file that names the key, under either spelling, and why. A new
-# reader has to be added here, which is where a second store would be noticed
-# whatever file name it writes (#2254): the literal `oidc-jwks.pem` check below
-# cannot see a writer to `signing.pem`.
+# reader has to be added here, which is where a second store in a NEW file would
+# be noticed whatever file name it writes (#2254): the literal `oidc-jwks.pem`
+# check below cannot see a writer to `signing.pem`. A differently named write
+# inside a declared consumer is not caught by name; for `secrets jwks` the test
+# above pins that SOPS is its only store.
 KEY_CONSUMERS = {
     "infra/config/secrets/dev.enc.yaml": "the store",
     "infra/config/secrets/staging.enc.yaml": "the store",
@@ -122,10 +124,29 @@ def _offenders(rel: str, text: str) -> list[str]:
     return found
 
 
-def test_the_guard_reads_every_tracked_file_and_no_generated_one() -> None:
-    rels = {rel for rel, _ in _tracked_texts()}
-    assert "Makefile" in rels and any(rel.endswith(".toml") for rel in rels), "the guard lost a root or a suffix"
-    assert not [rel for rel in rels if rel.startswith("infra/config/authelia/generated/")]
+def test_the_guard_reads_every_tracked_text_file_and_no_generated_one() -> None:
+    # Planted, so the "never generated output" half is measured on every machine,
+    # a fresh CI clone included, where the generated directory does not exist.
+    planted = ROOT / "infra/config/authelia/generated/_guard_probe.yml"
+    created = [d for d in planted.parents if not d.exists()]
+    planted.parent.mkdir(parents=True, exist_ok=True)
+    planted.write_text(f"{ENV_NAME}: planted\n")
+    try:
+        rels = {rel for rel, _ in _tracked_texts()}
+    finally:
+        planted.unlink()
+        for directory in created:  # innermost first, as `parents` yields them
+            directory.rmdir()
+    assert str(planted.relative_to(ROOT)) not in rels, "the guard read gitignored output"
+    # Against git's own listing, not a sample: every tracked file it skips must be binary.
+    tracked = set(
+        subprocess.run(
+            ["git", "ls-files", "--", *GUARD_ROOTS], cwd=ROOT, capture_output=True, text=True, check=True
+        ).stdout.split("\n")
+    ) - {""}
+    assert rels <= tracked
+    skipped = sorted(rel for rel in tracked - rels if b"\0" not in (ROOT / rel).read_bytes())
+    assert not skipped, f"tracked text files the guard does not read: {skipped[:10]}"
     assert set(KEY_CONSUMERS) <= rels, f"declared consumers that are not tracked: {set(KEY_CONSUMERS) - rels}"
 
 
