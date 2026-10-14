@@ -92,7 +92,11 @@ def test_ci_pins_kubectl_to_the_cluster_version() -> None:
 
     `kubectl kustomize` embeds its own kustomize, so a different kubectl renders
     with a different kustomize. Bumping `k3s.version` fails this test until the
-    workflow's version and checksum are bumped with it.
+    workflow's version is bumped with it.
+
+    The checksum is only checked for shape here. A bump that keeps the old digest
+    passes this test and is caught by `sha256sum --check --strict` in the `Install
+    kubectl` step, which reads the downloaded binary (#2020).
     """
     common = yaml.safe_load((REPO_ROOT / "infra" / "config" / "values" / "common.yaml").read_text())
     cluster = common["k3s"]["version"].split("+", 1)[0]
@@ -101,7 +105,9 @@ def test_ci_pins_kubectl_to_the_cluster_version() -> None:
         f"ci.yml installs kubectl {env['KUBECTL_VERSION']} but k3s.version is {cluster}: "
         f"bump KUBECTL_VERSION and KUBECTL_SHA256 (from dl.k8s.io/release/{cluster}/bin/linux/amd64/kubectl.sha256)"
     )
-    assert len(env["KUBECTL_SHA256"]) == 64
+    assert len(env["KUBECTL_SHA256"]) == 64, (
+        "KUBECTL_SHA256 is not a sha256 digest; the install step verifies its value"
+    )
 
 
 @pytest.mark.parametrize("step", ["Install kubectl", "kubectl is present"])
