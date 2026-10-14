@@ -148,6 +148,13 @@ def test_the_scan_leaves_names_and_prose_alone(tmp_path: Path, source: str) -> N
 # Everything else that can run a command: CI, scripts, Ansible, compose files.
 OTHER_CALLERS = (".github", "scripts", "infra/ansible", "infra/stacks", "edge")
 
+# `fmt` is the one verb allowed there: it rewrites or checks .tf text and reads no
+# secret, no state and no plan, so a CI formatting gate (TF-016, #2228) may call
+# it directly. Everything else, `validate` included (it needs `init`), goes
+# through the runner.
+OUTSIDE_VERBS = TERRAFORM_VERBS.replace("|fmt", "")
+COMMAND_OUTSIDE = re.compile(rf"(^|[\s'\"/;&|(`]){{1}}terraform\s+(-chdir=\S+\s+)?{OUTSIDE_VERBS}\b")
+
 
 SCANNED_SUFFIXES = {".yml", ".yaml", ".sh", ".j2", ".py", ".mk", ""}
 
@@ -157,7 +164,7 @@ def _text_spawns(path: Path) -> list[str]:
     return [
         f"{n}: {line.strip()}"
         for n, line in enumerate(path.read_text(encoding="utf-8", errors="ignore").splitlines(), 1)
-        if not line.lstrip().startswith("#") and COMMAND_IN_TEXT.search(line)
+        if not line.lstrip().startswith("#") and COMMAND_OUTSIDE.search(line)
     ]
 
 
@@ -177,7 +184,8 @@ def test_the_text_scan_sees_a_workflow_step_and_skips_a_comment(tmp_path: Path) 
     workflow.write_text(
         "# terraform plan is run by the runner\n"
         "      - run: cd infra/terraform/dns && terraform apply -auto-approve\n"
-        "      - run: /usr/bin/terraform -chdir=x plan\n",
+        "      - run: /usr/bin/terraform -chdir=x plan\n"
+        "      - run: terraform fmt -check -recursive infra/terraform\n",
         encoding="utf-8",
     )
     assert [hit.split(":")[0] for hit in _text_spawns(workflow)] == ["2", "3"]

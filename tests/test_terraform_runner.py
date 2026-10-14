@@ -325,7 +325,11 @@ def test_a_renderer_refusing_the_ssot_names_the_key_and_nothing_runs() -> None:
 def test_committed_var_files_are_passed_from_the_module() -> None:
     fake = FakeTerraform()
     _run("dns", "plan", fake)
-    assert f"-var-file={TERRAFORM_DIR / 'dns' / 'dns.tfvars'}" in fake.call("plan")["args"]
+    committed = str(TERRAFORM_DIR / "dns" / "dns.tfvars")
+    assert f"-var-file={committed}" in fake.call("plan")["args"]
+    # The render shares its name; the legacy-render cleanup must not take the committed one.
+    assert fake.call("plan")["var_files"][committed][0]
+    assert Path(committed).is_file()
 
 
 def test_a_stale_rendered_file_in_the_module_is_removed_first(tmp_path: Path) -> None:
