@@ -329,6 +329,14 @@ def duplication_problems(
     return problems
 
 
+def _require_kubectl() -> None:
+    if shutil.which("kubectl") is None:
+        # This file promises never to skip silently; in CI a missing binary is a failure.
+        if os.environ.get("CI"):
+            pytest.fail("kubectl not on PATH in CI: the duplication clause cannot run")
+        pytest.skip("kubectl not on PATH: the duplication clause was NOT checked")
+
+
 def _render_claims(kustomization: pathlib.Path) -> set[str]:
     """The claims one kustomization renders, by the same rule as the manifest scan."""
     out = subprocess.run(
@@ -339,11 +347,7 @@ def _render_claims(kustomization: pathlib.Path) -> set[str]:
 
 @pytest.fixture(scope="module")
 def rendered_pvcs() -> dict[str, set[str]]:
-    if shutil.which("kubectl") is None:
-        # This file promises never to skip silently; in CI a missing binary is a failure.
-        if os.environ.get("CI"):
-            pytest.fail("kubectl not on PATH in CI: the duplication clause cannot run")
-        pytest.skip("kubectl not on PATH: the duplication clause was NOT checked")
+    _require_kubectl()
     return {env: _render_claims(REPO_ROOT / "infra/k8s/overlays" / env) for env in OVERLAYS}
 
 
@@ -434,8 +438,7 @@ def test_an_unclassified_statefulset_fails_the_classification_check(tmp_path: pa
 def test_a_singleton_statefulset_in_both_overlays_fails_the_duplication_clause(tmp_path: pathlib.Path) -> None:
     manifest = tmp_path / "widget.yaml"
     manifest.write_text(_STATEFULSET)
-    if shutil.which("kubectl") is None:
-        pytest.skip("kubectl not on PATH: the render of a StatefulSet was NOT checked")
+    _require_kubectl()
     (tmp_path / "kustomization.yaml").write_text("resources: [widget.yaml]\n")
     both = {env: _render_claims(tmp_path) for env in OVERLAYS}
     problems = duplication_problems(_stateful_services([manifest]), _fixture_config(state_promotion="singleton"), both)
