@@ -50,6 +50,14 @@ except ImportError:
     HAS_CRYPTOGRAPHY = False
 
 
+class CredentialsWriteFailed(Exception):
+    """A generated credential set could not be written to SOPS.
+
+    Raised instead of printing the values as a fallback: a failed write that
+    dumps every secret to stdout is the exposure #1733 removes.
+    """
+
+
 class AuthConfig(TypedDict):
     """Configuration for authentication updates."""
 
@@ -352,7 +360,7 @@ class CredentialsManager:
                 logger.warning(f"  No existing value for {key} — using newly generated value")
         return result
 
-    def setup_authelia_secrets(self, env: str, auto_update: bool = False) -> None:
+    def setup_authelia_secrets(self, env: str, auto_update: bool = False, print_secrets: bool = False) -> None:
         """
         Generates all Authelia-related secrets, including basic auth secrets.
         Also generates Grafana admin credentials and its OIDC client secret.
@@ -360,7 +368,11 @@ class CredentialsManager:
 
         Args:
             env: Target environment (dev, staging, prod)
-            auto_update: If True, automatically update SOPS file. If False, print for manual copy.
+            auto_update: If True, write the set to SOPS. If False, report the key names it would write.
+            print_secrets: Also print every generated value. A transcript keeps them, so opt-in only (#1733).
+
+        Raises:
+            CredentialsWriteFailed: a SOPS write failed; nothing is printed in its place.
         """
         logger.section(f"Setup Authelia Secrets - {env.upper()}")
 
@@ -577,32 +589,42 @@ class CredentialsManager:
             # Batch update: single decrypt/encrypt cycle
             logger.section("Auto-updating SOPS secrets file...")
 
-            if self.config_manager.batch_update_secrets(generated_secrets):
-                logger.success(f"All {len(generated_secrets)} secrets updated in SOPS successfully!")
-                # Only reconcile Docker services for dev (staging/prod use K8s)
-                if env == "dev":
-                    self._reconcile_services(list(generated_secrets.keys()), env)
-                else:
-                    logger.info(f"Skipping Docker reconciliation for {env} (use K8s deploy instead)")
-                    logger.info("Next: toolkit infra k8s apply-secrets --env " + env)
+            if not self.config_manager.batch_update_secrets(generated_secrets):
+                raise CredentialsWriteFailed(f"nothing was written: the batch update of {env}.enc.yaml failed")
+            logger.success(f"All {len(generated_secrets)} secrets updated in SOPS successfully!")
+            # Only reconcile Docker services for dev (staging/prod use K8s)
+            if env == "dev":
+                self._reconcile_services(list(generated_secrets.keys()), env)
             else:
-                logger.warning("Batch update failed. Falling back to manual output...")
-                self._print_secrets_for_manual_copy(env, generated_secrets)
+                logger.info(f"Skipping Docker reconciliation for {env} (use K8s deploy instead)")
+                logger.info("Next: toolkit infra k8s apply-secrets --env " + env)
 
             # Hub credentials → always common SOPS (Argo CD hub is singleton)
             common_sops = self.project_root / PATH_STRUCTURES.CONFIG_SECRETS_DIR / "common.enc.yaml"
-            if self.config_manager.batch_update_secrets(hub_secrets, secret_file_path=common_sops):
-                logger.success("Hub credentials (Argo CD) updated in common SOPS.")
-            else:
-                logger.warning("Failed to update hub credentials in common SOPS.")
+            if not self.config_manager.batch_update_secrets(hub_secrets, secret_file_path=common_sops):
+                raise CredentialsWriteFailed(
+                    f"{env}.enc.yaml was rotated but common.enc.yaml was not: {', '.join(sorted(hub_secrets))} "
+                    "still hold their old values. Rerun before deploying, or the hub and the env disagree."
+                )
+            logger.success("Hub credentials (Argo CD) updated in common SOPS.")
 
             # Reconcile external services that have their own auth (not K8s Secrets)
             old_uk_password = existing_secrets.get("apps.services.observability.uptime_kuma.admin_password", "")
             self._reconcile_external_credentials(common_username, common_password, old_uk_password)
         else:
-            # Print for manual copy (original behavior)
-            all_secrets = {**generated_secrets, **hub_secrets}
-            self._print_secrets_for_manual_copy(env, all_secrets)
+            self._report_secret_names(env, generated_secrets, hub_secrets)
+
+        if print_secrets:
+            self._print_secrets_for_manual_copy(env, {**generated_secrets, **hub_secrets})
+
+    def _report_secret_names(self, env: str, generated: dict[str, str], hub: dict[str, str]) -> None:
+        """Name, never show, what a write would change (#1733)."""
+        logger.section(f"Would write {len(generated) + len(hub)} secrets (nothing written)")
+        for file_name, keys in ((f"{env}.enc.yaml", generated), ("common.enc.yaml", hub)):
+            logger.info(f"{file_name}:")
+            for key in sorted(keys):
+                logger.info(f"  {key}")
+        logger.info("Pass --auto-update to write them, or --print-secrets to see the values.")
 
     def _reconcile_services(self, updated_keys: list[str], env: str) -> None:
         """Restart services affected by credential changes.
