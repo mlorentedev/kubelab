@@ -20,12 +20,17 @@ def test_the_mount_dir_is_under_home(docker_mount_dir: Path) -> None:
 
 
 def test_no_test_mounts_pytests_tmp_path_into_a_container() -> None:
-    """`docker run -v {tmp_path}:...` is the shape that breaks; use `docker_mount_dir`."""
-    pattern = re.compile(r'"-v",\s*f"\{tmp_path')
+    """`docker run -v {tmp_path}:...` is the shape that breaks; use `docker_mount_dir`.
+
+    Read over each file's whole text, so a `-v` and its value on separate lines
+    still count, and over every module under tests/, helpers included.
+    """
+    pattern = re.compile(r'(?:"-v",\s*(?:f"\{|str\()|f"-v\s*\{)tmp_path')
     offenders = [
-        f"{p.name}:{n}"
-        for p in TESTS.rglob("test_*.py")
-        for n, line in enumerate(p.read_text().splitlines(), 1)
-        if pattern.search(line)
+        f"{p.relative_to(TESTS)}:{text.count(chr(10), 0, m.start()) + 1}"
+        for p in TESTS.rglob("*.py")
+        if p != Path(__file__).resolve()
+        for text in [p.read_text(encoding="utf-8")]
+        for m in pattern.finditer(text)
     ]
     assert not offenders, offenders
