@@ -455,19 +455,10 @@ class CredentialsManager:
             logger.warning("Using Argon2 hash from local library instead...")
             oidc_client_secret_hash = self.generate_argon2_hash(oidc_client_secret)
 
-        # 8. Generate JWKS RSA key for OIDC (saved as file, not in SOPS)
-        logger.info(f"Generating JWKS RSA private key ({AUTHELIA_CONFIG.RSA_KEY_SIZE} bits)...")
-        jwks_path = (
-            self.project_root / PATH_STRUCTURES.CONFIG_SECRETS_DIR / AUTHELIA_CONFIG.JWKS_FILE_TEMPLATE.format(env=env)
-        )
-        try:
-            jwks_private_key = self.generate_jwks_rsa_key()
-            jwks_path.parent.mkdir(parents=True, exist_ok=True)
-            jwks_path.write_text(jwks_private_key)
-            logger.success(f"JWKS RSA private key saved to: {jwks_path}")
-        except Exception as e:
-            logger.error(f"Failed to generate JWKS RSA key: {e}")
-            logger.warning("Install cryptography: poetry add cryptography")
+        # 8. The OIDC signing key is not generated here (SEC-032). This step
+        #    used to mint a new key on every run and write it only to a pem
+        #    file, so each run drifted further from the SOPS key Authelia
+        #    serves. Rotating it is deliberate: `toolkit secrets jwks`.
 
         # 9. Setup Basic Auth Credentials (htpasswd compatible bcrypt)
         logger.info("Generating Basic Auth credentials (htpasswd compatible bcrypt)...")

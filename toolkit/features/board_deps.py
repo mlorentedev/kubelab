@@ -122,9 +122,7 @@ query($owner: String!, $name: String!, $after: String) {
 
 def fetch_open_issues(repo: str) -> list[Issue]:
     """Every open issue in `owner/name`, with its body, paginated."""
-    if "/" not in repo:
-        raise GitHubError(f"invalid repo {repo!r}: expected owner/name")
-    owner, name = repo.split("/", 1)
+    owner, name = gh_graphql.split_repo(repo, GitHubError)
     issues: list[Issue] = []
     after: str | None = None
     while True:

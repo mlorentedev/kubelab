@@ -81,15 +81,6 @@ class AutheliaGenerator(BaseGenerator):
                     }
                 )
 
-            # Read JWKS PEM key if it exists
-            jwks_pem_path = self.project_root / "infra" / "config" / "secrets" / f"{env}.oidc-jwks.pem"
-            jwks_key = ""
-            if jwks_pem_path.exists():
-                jwks_key = jwks_pem_path.read_text().strip()
-            else:
-                logger.warning(f"JWKS PEM not found: {jwks_pem_path}")
-                logger.warning("Run 'toolkit credentials generate' to create it")
-
             # Get merged config (not flattened) to access user list and oidc clients
             merged_config = config_manager.get_merged_config()
 
@@ -156,7 +147,6 @@ class AutheliaGenerator(BaseGenerator):
                 "authelia_users": authelia_users,
                 "trusted_cidrs": trusted_cidrs,
                 "oidc_clients": processed_oidc_clients,  # Add the processed clients list
-                "AUTHELIA_OIDC_JWKS_KEY": jwks_key,
                 "ARGON2_TIME_COST": AUTHELIA_CONFIG.ARGON2_TIME_COST,
                 "ARGON2_MEMORY_COST": AUTHELIA_CONFIG.ARGON2_MEMORY_COST,
                 "ARGON2_PARALLELISM": AUTHELIA_CONFIG.ARGON2_PARALLELISM,
