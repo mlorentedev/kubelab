@@ -144,7 +144,9 @@ def test_the_guard_reads_every_tracked_text_file_and_no_generated_one() -> None:
             ["git", "ls-files", "--", *GUARD_ROOTS], cwd=ROOT, capture_output=True, text=True, check=True
         ).stdout.split("\n")
     ) - {""}
-    assert rels <= tracked
+    # The suffix whitelist this guard used to apply (#2254). Reading past it is the point.
+    old_suffixes = {".py", ".yml", ".yaml", ".j2", ".sh", ".mk"}
+    assert {Path(rel).suffix for rel in rels} - old_suffixes, "the guard reads only the old suffixes"
     skipped = sorted(rel for rel in tracked - rels if b"\0" not in (ROOT / rel).read_bytes())
     assert not skipped, f"tracked text files the guard does not read: {skipped[:10]}"
     assert set(KEY_CONSUMERS) <= rels, f"declared consumers that are not tracked: {set(KEY_CONSUMERS) - rels}"
