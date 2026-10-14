@@ -62,8 +62,14 @@ def test_every_sudo_check_in_the_playbooks_is_seen() -> None:
         for line in path.read_text(encoding="utf-8").splitlines()
         if not line.lstrip().startswith("#")
     )
-    assert written >= 8, "the fleet lost its NOPASSWD pre-flights"
     assert len(_sudo_checks()) == written
+
+
+def test_every_provision_playbook_carries_the_check() -> None:
+    """Per playbook, so one that drops its pre-flight cannot hide behind a fleet-wide count."""
+    expected = {p.name for p in PLAYBOOKS.glob("provision-*.yml")} | {"deploy-harden-nodes.yml"}
+    carrying = {param.id.split(":", 1)[0] for param in _sudo_checks()}
+    assert expected - carrying == set(), f"no NOPASSWD pre-flight in {sorted(expected - carrying)}"
 
 
 @pytest.mark.parametrize("become", _sudo_checks())

@@ -16,6 +16,27 @@
 #   toolkit infra ansible run -p provision-rpi4 -e prod --tags gateway
 #   toolkit infra ansible run -p provision-rpi4 -e prod --tags coredns
 # =============================================================================
+
+# ---------------------------------------------------------------------------
+# Play 0: Pre-flight validation (no changes to target)
+# ---------------------------------------------------------------------------
+- name: "Pre-flight: validate RPi4 connectivity"
+  hosts: gateway
+  gather_facts: false
+  become: false
+  tags: [always]   # Pre-flight checks must run regardless of --tags filter
+  tasks:
+    - name: Verify SSH + Python connectivity
+      ansible.builtin.ping:
+
+    # `become: false`, so `sudo -n` runs as the SSH user and fails when NOPASSWD
+    # is absent, rather than as root after an escalation that cannot fail
+    # (#1229, guarded by tests/test_nopasswd_preflight.py).
+    - name: Verify NOPASSWD sudo works
+      command: sudo -n true
+      become: false
+      changed_when: false
+
 - name: Provision RPi4 gateway
   hosts: gateway
   become: true
