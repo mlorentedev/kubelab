@@ -120,17 +120,19 @@ class AutheliaGenerator(BaseGenerator):
                 password_hash = env_vars.get(password_hash_key)
 
                 if not password_hash:
+                    # An empty `password` is a schema error Authelia crash-loops on (#2247),
+                    # and the dev Compose stack mounts this file, so a run with no age key
+                    # is refused too. Nothing renders it keyless since #2273.
                     hash_key = f"apps.services.security.authelia.users_{username}_password_hash"
-                    if config_manager.env_secrets_decrypted:
-                        # An empty `password` is a schema error Authelia crash-loops on (#2247).
+                    if not config_manager.env_secrets_decrypted:
                         raise UserPasswordHashMissing(
-                            f"no password hash for Authelia user '{username}': {hash_key} is missing from "
-                            f"{env}.enc.yaml. Set it with `toolkit credentials hash-password {hash_key} --env {env}`."
+                            f"no password hash for Authelia user '{username}': {env}.enc.yaml could not be "
+                            "decrypted (no age key, or no file), so the users database was not rendered."
                         )
-                    # No key here (CI's drift gate): nothing to compare against, and the
-                    # rendered database is never deployed from such a run.
-                    logger.warning(f"No password hash for user '{username}': {env}.enc.yaml was not decrypted")
-                    password_hash = ""
+                    raise UserPasswordHashMissing(
+                        f"no password hash for Authelia user '{username}': {hash_key} is missing from "
+                        f"{env}.enc.yaml. Set it with `toolkit credentials hash-password {hash_key} --env {env}`."
+                    )
 
                 authelia_users.append(
                     {

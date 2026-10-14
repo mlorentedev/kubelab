@@ -88,10 +88,12 @@ class TestTheComposeRenderer:
         assert "users_bob_password_hash" in result["error"] and "dev.enc.yaml" in result["error"]
         assert result["rendered"] == [], "nothing may be rendered once a hash is missing"
 
-    def test_without_a_key_the_render_proceeds(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """CI's drift gate runs the generator with no age key; it must not fail there."""
+    def test_without_a_key_the_render_is_refused_too(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The dev Compose stack mounts this file, so a keyless run must not leave an empty password in it."""
         result = self._generate(monkeypatch, decrypted=False)
-        assert result["success"] is True
+        assert result["success"] is False
+        assert "could not be decrypted" in result["error"]
+        assert result["rendered"] == [], "nothing may be rendered once a hash is missing"
 
 
 @pytest.mark.parametrize("env", ENVS)
