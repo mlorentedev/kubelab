@@ -1,6 +1,6 @@
 # The toolkit CLI, Make, Python and local tooling
 
-53 lessons, newest first. Back to [all categories](../_index.md).
+54 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
