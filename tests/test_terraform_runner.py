@@ -165,6 +165,8 @@ class FakeAws:
         self.calls.append(call)
         if op == "get-object":
             key = call["key"] = args[args.index("--key") + 1]
+            # The download target as the CLI finds it: it writes into it and keeps its mode.
+            call["target_mode"] = _on_disk(Path(args[-1]))[1]
             if key not in self.objects:
                 return tr.Result(254, "An error occurred (NoSuchKey) when calling the GetObject operation")
             Path(args[-1]).write_text(json.dumps(self.objects[key]))
@@ -1000,6 +1002,15 @@ def test_restore_writes_the_old_content_as_the_newest_serial_without_force() -> 
         "history/dns/11111111-aaaa/7.tfstate",
         "history/dns/11111111-aaaa/8.tfstate",
     ]
+
+
+def test_the_downloaded_copy_is_private_before_the_cli_writes_it_and_gone_after() -> None:
+    aws = FakeAws(objects={OLD_KEY: OLD})
+    fake = FakeTerraform(pulls=[STATE, STATE, {**OLD, "serial": 8}, {**OLD, "serial": 8}])
+    assert _restore(fake, aws) == 0
+    [get] = [c for c in aws.calls if c["op"] == "get-object"]
+    assert get["target_mode"] == 0o600
+    assert not Path(get["args"][-1]).exists()
 
 
 def test_restore_into_an_empty_backend_keeps_the_serial() -> None:
