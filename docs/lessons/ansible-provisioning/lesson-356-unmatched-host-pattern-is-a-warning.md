@@ -87,4 +87,15 @@ regenerate the inventory before they run, generation fails on a misdeclared
 source instead of thinning the group, and the coverage tests resolve each play
 against the generator's own output rather than a mirror of its naming rule.
 
-**Tags**: `#ansible` `#backup` `#silent-failure` `#pr-1179` `#pr-1186` `#issue-1943`
+**Addendum (2026-10-14, #1228)**: the warning is now an error wherever a run
+starts from `infra/ansible/`. `infra/ansible/ansible.cfg` sets
+`[inventory] host_pattern_mismatch = error`, and the toolkit runner and a raw
+`ansible-playbook` from that directory both read it. A sweep of every playbook
+with `--list-hosts` against both generated inventories found one mismatch,
+`provision-aws1.yml`, whose host was destroyed, so failing there is correct. What
+it does not cover: a pattern that names a group which exists but is empty still
+exits 0, because a defined group is a match. `--syntax-check` also matches
+patterns, so `toolkit infra ansible syntax-check`, which reads the static
+inventory, sets the mismatch back to a warning for itself.
+
+**Tags**: `#ansible` `#backup` `#silent-failure` `#pr-1179` `#pr-1186` `#issue-1943` `#issue-1228`
