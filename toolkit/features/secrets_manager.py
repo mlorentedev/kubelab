@@ -2125,10 +2125,11 @@ class SecretsManager:
             return {}
 
         specs = hashed_specs(env)
+        # Falsy, not just absent: hashing an empty plaintext would publish a digest of "".
         missing = [spec.derived_from for spec in specs if not self._resolve_key(decrypted, spec.derived_from)]
         if missing:
             raise HashSourceMissing(
-                f"{len(missing)} source(s) missing from {env_file.name}, nothing written: "
+                f"{len(missing)} source(s) missing or empty in {env_file.name}, nothing written: "
                 + ", ".join(missing)
                 + f". If the client has no secret yet, `toolkit secrets init --env {env}` generates it;"
                 " if it has one elsewhere, generating a new one is a rotation, not a fix."

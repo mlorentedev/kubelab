@@ -80,6 +80,25 @@ def test_a_missing_source_is_refused_and_the_vault_is_untouched(
     assert vault.file.read_bytes() == before
 
 
+def test_an_empty_source_is_refused_as_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A key holding "" is no source: hashing it would publish a digest of the empty string."""
+    sources = [spec.derived_from for spec in hashed_specs(ENV)]
+    tree = _nest(sources)
+    *parents, leaf = sources[0].split(".")
+    node = tree
+    for key in parents:
+        node = node[key]
+    node[leaf] = ""
+    vault = _Vault(tmp_path, tree)
+    before = vault.file.read_bytes()
+
+    with pytest.raises(HashSourceMissing, match="missing or empty") as refusal:
+        _manager(monkeypatch, vault).hash_oidc_secrets(ENV)
+
+    assert sources[0] in str(refusal.value)
+    assert vault.file.read_bytes() == before
+
+
 def test_with_every_source_present_only_hashes_are_written(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     specs = hashed_specs(ENV)
     vault = _Vault(tmp_path, _nest([spec.derived_from for spec in specs]))
@@ -119,11 +138,6 @@ def test_every_hashed_source_lives_in_its_own_env_file(env: str) -> None:
     tree = yaml.safe_load((SECRETS_DIR / f"{env}.enc.yaml").read_text(encoding="utf-8"))
     specs = hashed_specs(env)
     assert specs, f"no hashed specs for {env}: this case would check nothing"
-    absent = []
-    for spec in specs:
-        node: Any = tree
-        for key in spec.derived_from.split("."):
-            node = node.get(key) if isinstance(node, dict) else None
-        if node is None:
-            absent.append(spec.derived_from)
+    # The command's own resolver and its own test, so the two cannot disagree on "present".
+    absent = [spec.derived_from for spec in specs if not SecretsManager._resolve_key(tree, spec.derived_from)]
     assert not absent, f"{env}.enc.yaml lacks hash sources: {absent}"
