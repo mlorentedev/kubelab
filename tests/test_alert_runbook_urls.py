@@ -20,7 +20,7 @@ import yaml
 REPO = pathlib.Path(__file__).resolve().parent.parent
 RULES_DIR = REPO / "infra/k8s/base/services/grafana-alerting"
 PREFIX = "https://github.com/mlorentedev/kubelab/blob/master/"
-REPO_LINK = re.compile(r"https://github\.com/mlorentedev/kubelab/(?:blob|tree)/master/([^\s\"'`)<>]+)")
+REPO_LINK = re.compile(r"https://github\.com/mlorentedev/kubelab/(?:blob|tree|raw)/([^/\s\"'`)<>]+)/([^\s\"'`)<>]+)")
 # What ships links into this repo: manifests (homepage, alert rules) and the toolkit.
 LINK_SOURCES = ("infra/k8s", "toolkit")
 
@@ -64,8 +64,8 @@ def _repo_links() -> list:
     for root in LINK_SOURCES:
         for path in sorted((REPO / root).rglob("*")):
             if path.is_file() and path.suffix in {".yaml", ".yml", ".j2", ".py", ".js"}:
-                for target in REPO_LINK.findall(path.read_text(encoding="utf-8", errors="ignore")):
-                    found.add((str(path.relative_to(REPO)), target))
+                for ref, target in REPO_LINK.findall(path.read_text(encoding="utf-8", errors="ignore")):
+                    found.add((str(path.relative_to(REPO)), f"{ref}:{target}"))
     return [pytest.param(src, target, id=f"{src}->{target}") for src, target in sorted(found)]
 
 
@@ -76,6 +76,8 @@ def test_shipped_pages_link_into_the_repo() -> None:
 
 @pytest.mark.parametrize("source,target", _repo_links())
 def test_every_repo_link_resolves(source: str, target: str) -> None:
+    ref, _, target = target.partition(":")
+    assert ref == "master", f"{source}: links ref {ref!r}; master is this repo's only permanent branch"
     relative, _, anchor = target.partition("#")
     path = REPO / relative.rstrip("/")
     assert path.exists(), f"{source}: links a path master does not have: {relative}"
