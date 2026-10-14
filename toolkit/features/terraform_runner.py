@@ -608,9 +608,10 @@ def _arrived(local: Mapping[str, Any], remote: Mapping[str, Any] | None) -> bool
     """R2 holds what the local state holds: every resource and every output, as they are.
 
     Lineage and serial are not compared. Both are Terraform's business, and it
-    does not keep them across a migration: the S3 backend starts an empty state
-    with a lineage of its own, and `state push` into an empty state imports the
-    resources under that lineage at serial 1 (measured on msi, 2026-10-13). A
+    does not keep them across a migration: against an untouched S3 key, `state
+    pull` answers an empty state with no lineage at serial 0, and `state push`
+    into it imports the resources under a lineage minted for that write, at
+    serial 1 (measured on msi, 2026-10-13). A
     gate on lineage refused a migration that had worked, and then every retry
     was refused by Terraform itself, across lineages.
 

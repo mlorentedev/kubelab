@@ -18,13 +18,14 @@ writes the file as it is.
 
 **Problem**: It does not, the first time. Measured on msi on 2026-10-13 with
 Terraform 1.16.4: against an S3 key that holds nothing, `state pull` answers an
-empty state with a fresh lineage at serial 0. `state push` into that empty state
-imports the resources under the backend's lineage, at serial 1. The `dns` push
+empty state with no lineage at serial 0. `state push` into that empty state
+imports the resources under a lineage minted for that write, at serial 1. The `dns` push
 landed all 14 resources, and the gate refused it because the lineage was not the
 local one. A retry would have been worse: Terraform refuses a push across
 lineages without `-force`, so the gate had turned a migration that worked into one
 that could not be finished. The before-write history copy also filed that empty
-serial-0 state under the bucket lock, a locked object that holds nothing.
+serial-0 state under the bucket lock, as `history/dns//0.tfstate` (an empty
+lineage, hence the double slash): a locked object that holds nothing.
 
 **Solution**: The gate compares what the state holds, not its identifiers. Each
 resource, keyed by its address, and the outputs are rendered canonically and

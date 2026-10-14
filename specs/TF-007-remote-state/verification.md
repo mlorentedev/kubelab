@@ -16,11 +16,17 @@ PR 1a covers AC3 and AC4; the rest land with PR 1b.
 - [x] AC4 live -> msi, 2026-10-13: `make tf-dns-plan` and `make tf-r2-plan` read `No changes` with exit 0 on master `1b900c22` and on this branch `1fc2ddba`.
 - [x] AC1, AC2 -> `tests/test_terraform_backend.py` (each root's backend block, `>= 1.10`, the committed file equals the render, no credential, no `encrypt`).
 - [x] AC5, AC6 live -> Mac, 2026-10-13: `make tf-state-bootstrap` logged `bucket kubelab-tfstate: created`, `lock rule terraform-state-history on history/: set`, `token kubelab-tfstate: minted` (the consequence check inside: lists the state bucket, refused on `kubelab-backups`); rc 0. Second run: `kept` x3, rc 0. The SOPS diff by key name adds `terraform.state.{access_key_id,secret_access_key}` and nothing else. Unit tests: `tests/test_terraform_state_bootstrap.py`.
-- [x] AC8 -> `tests/test_terraform_runner.py` history section (before/after copies, create-only put, a failed copy before a write stops it, a taken key is a no-op). Live: pending the first migrate.
+- [x] AC8 -> `tests/test_terraform_runner.py` history section (before/after copies, create-only put, a failed copy before a write stops it, a taken key is a no-op, whether R2 answers `PreconditionFailed` or `ObjectLockedByBucketPolicy`; serial 0 is never copied). Live: `make tf-state-history ROOT=dns` lists `history/dns//0.tfstate` (the empty serial-0 answer, copied before that skip existed; locked until 2027-10-14) and `history/dns/6b5c1454-…/1.tfstate`.
 - [x] AC9 -> `SECRET_CATALOG` entries; `test_every_secret_a_run_requires_exists_in_sops` green once the bootstrap wrote the pair. `make secrets-audit`: 100% in dev, staging and prod; it still exits non-zero on an orphan that master has too (SEC-031 #2240).
 - [x] AC10 -> ADR-069, `docs/runbooks/terraform-state.md`, lesson-564.
-- [x] Mutation: 18 mutations on the runner (local-state guard, unrecovered guard, create-only put, history env, migrate gate x2, `-reconfigure`, apply-only secrets, snapshots before/after, restore serial bump, restore lineage and content checks, restore arrival, 0600 download, `force-unlock -force`, restore ref), all RED against a green baseline.
-- [ ] AC7 live -> migrate `dns`, `r2`, `aws` on msi; `No changes` from the Mac.
+- [x] Mutation: 18 mutations on the runner (local-state guard, unrecovered guard, create-only put, history env, migrate gate x2, `-reconfigure`, apply-only secrets, snapshots before/after, restore serial bump, restore lineage and content checks, restore arrival, 0600 download, `force-unlock -force`, restore ref), all RED against a green baseline. Later: migrate content gate (7), `-auto-approve` passthrough (2, on #2236), locked-key-as-copy (1), persisted state and pre-remote source (5), all RED.
+- [x] AC7 live -> msi, 2026-10-13/14, on `d3390f8c`..`25c9a18f`. Every file's checksum is unchanged after its rename to `terraform.pre-remote.tfstate`.
+  - `dns` (14 resources, local lineage `7c725817`, serial 113): the first push landed under a lineage minted for it, `6b5c1454`, at serial 1. The lineage gate refused it (lesson-566). After the content gate, the re-run found the content in R2 and renamed without a second push.
+  - `r2` (2 resources): landed at `178d684d`, serial 1, copied to history.
+  - `aws` (0 resources, 0 outputs): the first run took the empty key as already holding it and renamed without a push. After the persisted-state fix, the re-run pushed from the `.pre-remote` copy: `e8e59ae6`, serial 1, copied to history.
+  - A second `make tf-state-migrate` on each root logs `already migrated`.
+  - Mac: `make tf-dns-plan` and `make tf-r2-plan` read `No changes`. `make tf-state-list ROOT=aws` exits 0 with no addresses. `make tf-aws-plan` stops at STS `InvalidClientTokenId`, a credential problem, not a state one. The SOPS `aws` pair is the `kubelab` profile's key, which master's plan already used, and `kubelab-terraform` has no access key (#1351).
+  - `make test-tfstate-lock-live`: 1 passed (8 concurrent writers x 10, one winner each).
 
 ## Test status
 

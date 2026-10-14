@@ -76,7 +76,11 @@ make tf-dns-plan                 # expect: No changes
 make tf-state-list ROOT=dns      # the addresses R2 holds
 ```
 
-Delete the `.pre-remote` copy only after a plan from a second machine reads `No changes`.
+Delete the `.pre-remote` copy only after a plan from a second machine reads
+`No changes`. Delete the older local copies in the module with it, such as
+`terraform.tfstate.backup` or a `*.bak` someone made by hand: they hold the same
+secrets in clear, and nothing reads them once the state is in R2. Delete any saved
+plan file (`*.tfplan`) too, since it embeds the input variables, tokens included.
 
 ## Rotate the state credential
 

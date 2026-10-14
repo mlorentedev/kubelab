@@ -880,7 +880,7 @@ def test_migrate_keeps_the_local_file_when_r2_holds_something_else(tmp_path: Pat
     assert not (module / "terraform.pre-remote.tfstate").exists()
 
 
-EMPTY_REMOTE = {"version": 4, "lineage": "6b5c-fresh", "serial": 0, "resources": [], "outputs": {}}
+EMPTY_REMOTE = {"version": 4, "lineage": "", "serial": 0, "resources": [], "outputs": {}}
 
 
 @pytest.mark.parametrize(
@@ -889,9 +889,9 @@ EMPTY_REMOTE = {"version": 4, "lineage": "6b5c-fresh", "serial": 0, "resources":
     ids=["serial-bumped", "backend-lineage-kept"],
 )
 def test_lineage_and_serial_are_terraforms_business_content_is_the_gate(tmp_path: Path, landed: dict) -> None:
-    """Measured on msi, 2026-10-13: the S3 backend writes an empty state with a
-    lineage of its own the first time it is touched, and `state push` into an
-    empty state imports the resources and keeps that lineage, at serial 1."""
+    """Measured on msi, 2026-10-13: an untouched S3 key answers an empty state
+    with no lineage at serial 0, and `state push` into it imports the resources
+    under a lineage minted for that write, at serial 1."""
     module = _module_copy(tmp_path, "dns")
     (module / "terraform.tfstate").write_text(json.dumps(STATE))
     aws = FakeAws()

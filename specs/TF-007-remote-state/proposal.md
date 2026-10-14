@@ -29,7 +29,7 @@ Every root keeps its state in the R2 bucket `kubelab-tfstate` under `<root>/terr
   - after any action that writes state, snapshots it to `history/<root>/<lineage>/<serial>.tfstate`, under a 365-day R2 bucket lock.
 
   The Make targets keep their names and their apply semantics (guarded or interactive per root), and become one line each.
-- **The `aws` root stops reading `~/.aws`.** The backend's `AWS_*` variables would outrank the provider's `profile`, so the provider takes the IAM pair from SOPS through `TF_VAR_*`. Registering that pair in `SECRET_CATALOG` closes #1351.
+- **The `aws` root stops reading `~/.aws`.** The backend's `AWS_*` variables would outrank the provider's `profile`, so the provider takes the IAM pair from SOPS through `TF_VAR_*`. The pair is registered in `SECRET_CATALOG`; it is the dead `kubelab` key, so #1351 stays open for a working one.
 - **Bootstrap is one idempotent command.** `make tf-state-bootstrap` creates the bucket and its lock rule through the Cloudflare API, outside every Terraform root (C16). It then mints an Object Read & Write token scoped to that bucket alone with BACKUP-057's machinery, and proves it by consequence before storing it in SOPS. A second run changes nothing.
 - **Migration is one command per root.** `make tf-state-migrate ROOT=<root>` runs in the checkout that holds the local file. It pushes the state without `-force`, reads R2 back and requires the same content (each resource by address, and the outputs; not the lineage, which Terraform replaces on a first push, lesson-566), takes the first snapshot, and renames the local file to `terraform.pre-remote.tfstate` (kept, never overwritten).
 - **Restore, history and unlock go through the runner too.** `make tf-state-history`, `make tf-state-restore TO=<lineage>/<serial>` (a revert: the old content at the next serial, no `-force`, lesson-564) and `make tf-state-unlock LOCK=<id>`, so the runbook needs no raw `terraform`.
@@ -71,7 +71,7 @@ Two PRs, so the refactor is proven on the backend it already has before the back
 
 ## References
 
-- Epic #2225 (TF-014). Closes #558, #559, #1499, #1351, #554.
+- Epic #2225 (TF-014). Closes #558, #559, #1499, #554. Refers to #1351, which stays open.
 - ADR-069 `docs/adr/adr-069-terraform-remote-state-on-r2.md`; ADR-020, ADR-049, ADR-063.
 - Vault `30-architecture/session-protocol.md`, C16-C20 and the alternatives rejected on 2026-10-13.
 - lesson-369, lesson-375, lesson-453; `specs/BACKUP-057` (token minting precedent).
