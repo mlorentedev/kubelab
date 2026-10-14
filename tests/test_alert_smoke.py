@@ -282,3 +282,34 @@ def _fake_clock():
     """Monotonic clock that races past every timeout, so tests do not wait."""
     ticks = iter(range(0, 10_000_000, 10_000))
     return lambda: float(next(ticks))
+
+
+class TestDeliveriesAreCountedSinceTheRunStarted:
+    """#2197: a full log tail must not hide a delivery."""
+
+    def test_a_delivery_into_a_saturated_log_is_seen(self) -> None:
+        # Apprise already holds a full tail of deliveries from before the run.
+        before = ["Delivered Notification"] * 300
+        during: list[str] = []
+        states = iter([_rules("inactive"), _firing(smoke.PROBE_HOST)])
+
+        def fake_kubectl(args: list[str], stdin: str | None = None) -> subprocess.CompletedProcess:
+            if "exec" in args:
+                return _proc(next(states, _rules("inactive")))
+            if "logs" in args:
+                lines = before + during
+                if any(a.startswith("--since-time=") for a in args):
+                    lines = list(during)
+                elif "--tail=300" in args:
+                    lines = lines[-300:]
+                # Each read finds one new delivery among more lines than it adds.
+                during.extend(["Delivered Notification"] + ["INFO request served"] * 10)
+                return _proc("\n".join(lines))
+            return _proc()
+
+        ticks = itertools.count()
+        result = smoke.run_alert_smoke(
+            "staging", kubectl=fake_kubectl, sleep=lambda _: None, now=lambda: float(next(ticks))
+        )
+        assert result.notified
+        assert result.resolve_notified

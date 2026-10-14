@@ -32,6 +32,7 @@ import subprocess
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from toolkit.core.logging import logger
 from toolkit.features.k8s_kubeconfig import output_path
@@ -203,6 +204,7 @@ def run_alert_smoke(
     kubectl: KubectlFn | None = None,
     sleep: Callable[[float], None] = time.sleep,
     now: Callable[[], float] = time.monotonic,
+    wall_clock: Callable[[], datetime] = lambda: datetime.now(UTC),
 ) -> SmokeResult:
     """Induce a certificate failure, prove the alert fires and clears, clean up."""
     logger.section(f"alert-smoke — {env.upper()}")
@@ -218,8 +220,15 @@ def run_alert_smoke(
 
     kubectl = kubectl or _default_kubectl(env)
 
+    # Counted since the run started, not over the last N lines: once Apprise has
+    # logged more than a tail's worth, every new line pushes an old one out, and a
+    # delivery can leave a tail's count flat or lower (#2197).
+    since = wall_clock().strftime("%Y-%m-%dT%H:%M:%SZ")
+
     def deliveries() -> int:
-        return count_deliveries(kubectl(["logs", "-n", "kubelab", "deploy/apprise", "--tail=300"], None).stdout)
+        return count_deliveries(
+            kubectl(["logs", "-n", "kubelab", "deploy/apprise", f"--since-time={since}"], None).stdout
+        )
 
     #: The last rules answer, so the domain is read from the same instance that
     #: was observed firing.
