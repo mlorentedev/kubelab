@@ -92,7 +92,9 @@ def test_the_resolver_reaches_both_tiers() -> None:
 @pytest.mark.parametrize(("key", "tier", "tagged"), RESOLVED, ids=[key for key, _, _ in RESOLVED])
 def test_the_tag_follows_the_tier(key: str, tier: str, tagged: bool) -> None:
     if tier == "on-demand":
-        assert tagged, f"{key} watches an on-demand target without the `{TAG}` tag, so it pages whenever the homelab is off"
+        assert tagged, (
+            f"{key} watches an on-demand target without the `{TAG}` tag, so it pages whenever the homelab is off"
+        )
     else:
         assert not tagged, f"{key} watches an {tier} target but carries `{TAG}`, which silences a real outage"
 
@@ -100,3 +102,46 @@ def test_the_tag_follows_the_tier(key: str, tier: str, tagged: bool) -> None:
 def test_the_tag_is_muted() -> None:
     """Without this the tag is a label, not a mute."""
     assert TAG in COMMON["apps"]["services"]["observability"]["uptime_kuma"]["muted_notification_tags"]
+
+
+def test_every_seed_tag_is_declared() -> None:
+    """The apply path can attach only a tag `tags.json` declares; an undeclared
+    one would make every edit of its monitor fail (`_reconcile_tags`)."""
+    declared = {
+        t["name"] for t in json.loads((REPO / "infra/config/uptime-kuma/tags.json").read_text(encoding="utf-8"))
+    }
+    used = {tag for monitor in MONITORS for tag in monitor.get("tags", [])}
+    assert used <= declared, sorted(used - declared)
+
+
+class _Api:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, int, int, str]] = []
+
+    def add_monitor_tag(self, tag_id: int, monitor_id: int, value: str = "") -> None:
+        self.calls.append(("add", tag_id, monitor_id, value))
+
+    def delete_monitor_tag(self, tag_id: int, monitor_id: int, value: str = "") -> None:
+        self.calls.append(("delete", tag_id, monitor_id, value))
+
+
+def test_an_edit_converges_the_live_tags() -> None:
+    from toolkit.features.monitoring import _reconcile_tags
+
+    monitor = {
+        "id": 466,
+        "tags": [{"tag_id": 7, "name": "infra", "value": ""}, {"tag_id": 3, "name": "stale", "value": "v"}],
+        "_seed": {"tags": ["infra", TAG]},
+    }
+    api = _Api()
+    _reconcile_tags(api, monitor, {"infra": 7, TAG: 12})
+    assert api.calls == [("add", 12, 466, ""), ("delete", 3, 466, "v")]
+
+
+def test_an_undeclared_seed_tag_fails_the_edit_loudly() -> None:
+    from toolkit.features.monitoring import _reconcile_tags
+
+    api = _Api()
+    with pytest.raises(RuntimeError, match="tags.json: missing"):
+        _reconcile_tags(api, {"id": 1, "tags": [], "_seed": {"tags": ["missing"]}}, {})
+    assert api.calls == []

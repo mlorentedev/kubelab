@@ -20,6 +20,7 @@ from toolkit.features.monitoring_diff import (
     extract_key,
     hydrate_push_tokens,
     strip_key,
+    tag_drift,
     wants_notifications,
 )
 
@@ -204,6 +205,24 @@ def export_monitors(project_root: Path) -> Path:
         return monitors_path
     finally:
         api.disconnect()
+
+
+def _reconcile_tags(api: Any, monitor: dict[str, Any], tag_id_map: dict[str, int]) -> None:
+    """Converge one edited monitor's live tags onto its seed entry (#1974).
+
+    `edit_monitor` does not carry tags, so before this an edit converged every
+    field but them, and a tag added to the seed reached only new monitors.
+    Raises when a seed tag has no id: `tags.json` must declare every tag a
+    monitor uses, and an edit that silently drops one is the defect this fixes.
+    """
+    missing, extra = tag_drift(monitor["_seed"], monitor)
+    unknown = [name for name in missing if name not in tag_id_map]
+    if unknown:
+        raise RuntimeError(f"tags not declared in {TAGS_FILE}: {', '.join(unknown)}")
+    for name in missing:
+        api.add_monitor_tag(tag_id_map[name], monitor["id"], "")
+    for tag in extra:
+        api.delete_monitor_tag(tag["tag_id"], monitor["id"], tag.get("value") or "")
 
 
 def import_monitors(project_root: Path) -> None:
@@ -423,6 +442,7 @@ def apply_monitors(project_root: Path, *, check: bool = False, prune: bool = Fal
                 if has_default_notification:
                     params["notificationIDList"] = _notification_id_list(m["_seed"])
                 api.edit_monitor(m["id"], **params)
+                _reconcile_tags(api, m, tag_id_map)
                 edited += 1
             except Exception as e:
                 logger.warning(f"Failed to edit '{m.get('name')}': {type(e).__name__}: {e!r}")
@@ -465,7 +485,7 @@ def apply_monitors(project_root: Path, *, check: bool = False, prune: bool = Fal
                             try:
                                 api.add_monitor_tag(tag_id_map[tag_name], monitor_id, "")
                             except Exception:
-                                pass  # Non-critical — tag association failures are cosmetic
+                                pass  # The next apply sees the missing tag (`tag_drift`) and edits it in.
             except Exception as e:
                 logger.warning(f"Failed to create '{m['name']}': {type(e).__name__}: {e!r}")
 
