@@ -48,9 +48,9 @@ webauthn:
 
 # ---- Access Control ----
 # Service distribution per ADR-012:
-#   PUBLIC (bypass): mlorente.dev, api, status, wiki
-#   PROTECTED (one_factor): grafana, traefik
-#   OWN AUTH (bypass): gitea, n8n
+#   PUBLIC (bypass): mlorente.dev, api, status
+#   PROTECTED (one_factor): n8n, grafana, traefik
+#   OWN AUTH (bypass): gitea
 #   INTERNAL (no ingress): loki, vector, redis, crowdsec
 access_control:
   default_policy: deny
@@ -76,8 +76,6 @@ access_control:
     - domain: 'api.kubelab.live'
       policy: bypass
     - domain: 'status.kubelab.live'
-      policy: bypass
-    - domain: 'wiki.kubelab.live'
       policy: bypass
 
     # OIDC-enabled services (bypass forward-auth — OIDC handles login)
