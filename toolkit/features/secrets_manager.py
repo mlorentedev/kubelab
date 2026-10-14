@@ -1802,6 +1802,31 @@ class AuditResult:
     malformed: list[str] = field(default_factory=list)
 
 
+def hashed_specs(env: str) -> list[SecretSpec]:
+    """The catalog entries `hash_oidc_secrets` hashes for `env`.
+
+    An Argon2 digest of a plaintext key that lives in the vault. A `derived_from`
+    in parentheses names an interactive input, not a key, so it is not hashed here.
+    """
+    return [
+        spec
+        for spec in SECRET_CATALOG
+        if env in spec.envs
+        and spec.kind == SecretKind.ARGON2_HASH
+        and spec.derived_from
+        and not spec.derived_from.startswith("(")
+    ]
+
+
+class HashSourceMissing(Exception):
+    """A hash whose plaintext source is not in the env file: refused, nothing written.
+
+    `hash_oidc_secrets` used to mint a fresh client secret here (#1057). A missing
+    source is not a request to rotate: the relying party keeps the old value and
+    the failure surfaces at its next login, nowhere near the command that caused it.
+    """
+
+
 class RotationRefused(Exception):
     """A rotation this command must not perform, with the reason and the real procedure.
 
@@ -2080,44 +2105,33 @@ class SecretsManager:
         """Generate Argon2 hashes for all OIDC client secrets.
 
         Reads plaintext secrets from SOPS, generates hashes, writes hashes back.
-        Returns dict of hash_key_path → hash_value.
+        Returns dict of hash_key_path → hash_value. Never writes a plaintext: a
+        source missing from `{env}.enc.yaml` raises `HashSourceMissing` before
+        anything is written, and generating one is `secrets init`'s job (#1057).
         """
         cm = self._cm(env)
-        decrypted = cm._decrypt_sops(cm.secrets_path / f"{env}.enc.yaml")
+        env_file = cm.secrets_path / f"{env}.enc.yaml"
+        decrypted = cm._decrypt_sops(env_file)
         if not decrypted:
-            logger.error(f"Cannot decrypt {env}.enc.yaml")
-            return {}
+            # Every source is unreadable, which is the missing case for all of them at once.
+            raise HashSourceMissing(f"cannot decrypt {env_file.name} (missing file or age key), nothing written")
+
+        specs = hashed_specs(env)
+        # Falsy, not just absent: hashing an empty plaintext would publish a digest of "".
+        missing = [spec.derived_from for spec in specs if not self._resolve_key(decrypted, spec.derived_from)]
+        if missing:
+            raise HashSourceMissing(
+                f"{len(missing)} source(s) missing or empty in {env_file.name}, nothing written: "
+                + ", ".join(missing)
+                + f". If the client has no secret yet, `toolkit secrets init --env {env}` generates it;"
+                " if it has one elsewhere, generating a new one is a rotation, not a fix."
+            )
 
         cred = self._credentials_manager()
         hashes: dict[str, str] = {}
 
-        for spec in SECRET_CATALOG:
-            if env not in spec.envs:
-                continue
-            if spec.kind != SecretKind.ARGON2_HASH:
-                continue
-            if not spec.derived_from or spec.derived_from.startswith("("):
-                continue  # Skip interactive-derived hashes
-
+        for spec in specs:
             plaintext = self._resolve_key(decrypted, spec.derived_from)
-            if not plaintext:
-                # Auto-generate OIDC client secrets if missing
-                if spec.kind == SecretKind.ARGON2_HASH and "oidc_client_secret" in spec.derived_from:
-                    import secrets as _secrets
-
-                    new_secret = _secrets.token_urlsafe(64)
-                    if cm.update_secret_key(spec.derived_from, new_secret):
-                        logger.success(f"  Auto-generated: {spec.derived_from}")
-                        plaintext = new_secret
-                        # Refresh decrypted data for subsequent lookups
-                        decrypted = cm._decrypt_sops(cm.secrets_path / f"{env}.enc.yaml")
-                    else:
-                        logger.error(f"  Failed to auto-generate: {spec.derived_from}")
-                        continue
-                else:
-                    logger.warning(f"  Source not found: {spec.derived_from} (needed for {spec.key_path})")
-                    continue
-
             hash_value = cred.generate_argon2_hash(str(plaintext))
             hashes[spec.key_path] = hash_value
             logger.info(f"  Hashed: {spec.derived_from} → {spec.key_path}")
