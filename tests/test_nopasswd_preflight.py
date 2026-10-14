@@ -8,29 +8,62 @@ therefore resolve to `become: false`, from the task or from its play.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
 
 PLAYBOOKS = Path(__file__).resolve().parents[1] / "infra/ansible/playbooks"
+SUDO_N = re.compile(r"\bsudo\s+-n\b")
+TASK_LISTS = ("pre_tasks", "tasks", "post_tasks", "handlers")
+BLOCK_LISTS = ("block", "rescue", "always")
+MODULES = ("command", "ansible.builtin.command", "shell", "ansible.builtin.shell", "raw", "ansible.builtin.raw")
+
+
+def _command(task: dict[str, Any]) -> str:
+    """The command a task runs, in the free-form or the `cmd:` spelling; "" for any other module."""
+    for module in MODULES:
+        value = task.get(module)
+        if isinstance(value, dict):
+            value = value.get("cmd") or value.get("_raw_params")
+        if isinstance(value, str):
+            return value
+    return ""
+
+
+def _walk(tasks: list[dict[str, Any]] | None, become: bool, where: str) -> list:
+    """Each `sudo -n` task under `tasks`, with the `become` it resolves to, blocks included."""
+    found = []
+    for task in tasks or []:
+        resolved = task.get("become", become)
+        for key in BLOCK_LISTS:
+            found += _walk(task.get(key), resolved, where)
+        if SUDO_N.search(_command(task)):
+            found.append(pytest.param(resolved, id=f"{where}:{task.get('name')}"))
+    return found
 
 
 def _sudo_checks() -> list:
     found = []
     for path in sorted(PLAYBOOKS.glob("*.yml")):
         for play in yaml.safe_load(path.read_text(encoding="utf-8")) or []:
-            for task in play.get("tasks", []) or []:
-                command = task.get("command") or task.get("raw") or task.get("ansible.builtin.command")
-                if isinstance(command, str) and command.strip() == "sudo -n true":
-                    become = task.get("become", play.get("become", False))
-                    found.append(pytest.param(become, id=f"{path.name}:{task.get('name')}"))
+            for key in TASK_LISTS:
+                found += _walk(play.get(key), play.get("become", False), path.name)
     return found
 
 
-def test_the_fleet_has_nopasswd_checks() -> None:
-    """A floor, so the parametrised test cannot pass by finding nothing."""
-    assert len(_sudo_checks()) >= 8
+def test_every_sudo_check_in_the_playbooks_is_seen() -> None:
+    """The collector finds each `sudo -n` the files hold, so a respelled task cannot slip past it."""
+    written = sum(
+        len(SUDO_N.findall(line))
+        for path in PLAYBOOKS.glob("*.yml")
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if not line.lstrip().startswith("#")
+    )
+    assert written >= 8, "the fleet lost its NOPASSWD pre-flights"
+    assert len(_sudo_checks()) == written
 
 
 @pytest.mark.parametrize("become", _sudo_checks())
