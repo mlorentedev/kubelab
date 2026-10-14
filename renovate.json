@@ -108,8 +108,7 @@
   ],
   "ignoreDeps": [
     "cloudflare/cloudflared",
-    "fbonalair/traefik-crowdsec-bouncer",
-    "myoung34/github-runner"
+    "fbonalair/traefik-crowdsec-bouncer"
   ],
   "dependencyDashboard": true,
   "dependencyDashboardTitle": "Renovate: service image updates"

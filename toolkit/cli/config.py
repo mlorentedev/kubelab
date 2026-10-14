@@ -90,11 +90,12 @@ def generate(
                     logger.error(MESSAGES.ERROR_INVALID.format("service", svc))
                     continue
 
-                if result:
+                # Every generator returns {"success": bool, ...}; the dict itself is always truthy (#2273).
+                if result.get("success"):
                     success_count += 1
                     logger.success(MESSAGES.SUCCESS_CREATED.format(f"{svc} config"))
                 else:
-                    logger.warning(MESSAGES.WARNING_CONFIG_GENERATION_FAILED.format(svc, env))
+                    logger.error(MESSAGES.WARNING_CONFIG_GENERATION_FAILED.format(f"{svc}: {result.get('error')}"))
 
             except Exception as e:
                 logger.error(MESSAGES.ERROR_FAILED.format(f"generate {svc} config: {e}"))

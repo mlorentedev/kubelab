@@ -318,6 +318,13 @@ DRIFT_REVERT_PATHS := infra/k8s/overlays/staging/generated \
 # what the generator did.
 DRIFT_ENVS := staging prod
 
+# The generators whose output the diff below compares, and no others. The rest
+# need SOPS, which CI's gate does not have, so running them there fails by
+# design; while `config generate` read a failed result as success, that hid
+# Authelia and Traefik failing on every run (#2273). Generation and the diff
+# share one shell so the revert runs whether or not a generator failed.
+DRIFT_SERVICES := k8s ansible
+
 # Validate the ENV *value* against DRIFT_ENVS, not merely its provenance.
 #
 # Two weaker guards shipped here before, and both were reachable no-ops.
@@ -351,12 +358,16 @@ config-check-drift:
 		exit 1; \
 	}
 	@echo "→ Regenerating $(ENV) configs and checking for drift..."
-	@$(TOOLKIT) config generate --env $(ENV) --force
 	@_status=0; \
+	for _svc in $(DRIFT_SERVICES); do \
+		$(TOOLKIT) config generate --env $(ENV) --service $$_svc --force || _status=1; \
+	done; \
 	_paths="infra/k8s/overlays/$(ENV)/generated/ingress.yaml \
 	        infra/k8s/overlays/$(ENV)/generated/configmaps.yaml \
 	        infra/ansible/generated/$(ENV)/hosts.yml"; \
-	if git diff --quiet -- $$_paths; then \
+	if [ $$_status -ne 0 ]; then \
+		echo "✗ A generator failed for $(ENV); nothing was compared"; \
+	elif git diff --quiet -- $$_paths; then \
 		echo "✓ No drift in $(ENV) generated configs"; \
 	else \
 		echo "✗ Drift detected in $(ENV) generated configs:"; \

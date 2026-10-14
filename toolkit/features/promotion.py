@@ -202,5 +202,9 @@ def promote(env: str, app: str, version: str) -> None:
     logger.info(f"{env}: {app} version {previous} -> {version}")
 
     # Regenerate so generated/ always equals the values output (ADR-027 drift gate).
-    K8sGenerator().generate(env)
+    generated = K8sGenerator().generate(env)
+    if not generated.get("success"):
+        raise RuntimeError(
+            f"{env}: {app} set to {version}, but the overlay failed to regenerate: {generated.get('error')}"
+        )
     logger.success(f"Promoted {app} to {version} in {env}; overlay regenerated")
