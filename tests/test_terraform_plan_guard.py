@@ -132,7 +132,7 @@ def _recipe(target: str) -> str:
     return match.group(1)
 
 
-@pytest.mark.parametrize("root", ["dns", "gcp", "aws"])
+@pytest.mark.parametrize("root", ["dns", "gcp", "aws", "compute"])
 def test_each_unattended_apply_is_guarded_and_honours_allow_destroy(root: str) -> None:
     assert tr.ROOTS[root].apply == "guarded"
     recipe = _recipe(f"tf-{root}-apply")

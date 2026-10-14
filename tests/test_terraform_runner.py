@@ -641,6 +641,17 @@ def test_destroy_always_asks_outside_the_fixture(name: str) -> None:
     assert "-auto-approve" not in fake.call("destroy")["args"]
 
 
+@pytest.mark.parametrize("flag", ["-auto-approve", "--auto-approve", "-auto-approve=true"])
+@pytest.mark.parametrize(("name", "action"), [("r2", "apply"), ("vps-firewall", "destroy"), ("dns", "destroy")])
+def test_extra_arguments_cannot_approve_for_the_operator(name: str, action: str, flag: str) -> None:
+    """`-- -auto-approve` would skip the prompt a root's apply mode promises;
+    only the disposable fixture approves unattended."""
+    fake = FakeTerraform()
+    with pytest.raises(tr.RunnerError, match="never applies or destroys unattended"):
+        _run(name, action, fake, extra=[flag])
+    assert fake.calls == []
+
+
 def test_extra_arguments_reach_the_plan_of_a_guarded_apply() -> None:
     """aws1-replace names its replace; the guard lets exactly that one through."""
     fake = FakeTerraform()

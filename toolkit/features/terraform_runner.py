@@ -421,6 +421,8 @@ def run(
         raise RunnerError("unlock needs exactly one lock id, the one Terraform printed when it refused")
     if action == "restore" and (len(extra) != 1 or not HISTORY_REF.match(extra[0])):
         raise RunnerError("restore needs exactly one history copy as <lineage>/<serial> (see make tf-state-history)")
+    if root.apply != "auto" and any(a.lstrip("-").split("=", 1)[0] == "auto-approve" for a in extra):
+        raise RunnerError(f"the {root.name} root never applies or destroys unattended; drop -auto-approve")
 
     module = terraform_dir / root.name
     _refuse_a_state_the_backend_does_not_hold(root, action, module)
