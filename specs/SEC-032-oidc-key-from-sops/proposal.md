@@ -41,11 +41,11 @@ SOPS is the only store, and no command writes the key to the host disk.
 
 ## Acceptance criteria
 
-- [ ] AC1: the dev Compose stack mounts no `*.oidc-jwks.pem` from the host. It declares the key as a secret sourced from `APPS_SERVICES_SECURITY_AUTHELIA_OIDC_JWKS_PRIVATE_KEY` and targeted at the path the Authelia template reads. A test ties the two paths together.
-- [ ] AC2: `toolkit secrets jwks` stores the key in SOPS and writes no file; `credentials generate` neither mints nor writes one. A test runs `generate_jwks` against a temporary project root and finds no file, and the AC3 guard covers both writers.
-- [ ] AC3: nothing in `toolkit/` or `infra/` reads or writes a host `oidc-jwks.pem`. A guard test fails if one reappears.
-- [ ] AC4: with no pem on disk, dev Authelia loads the SOPS key. Verified live: `authelia validate-config` passes in the dev stack on the Mac, and the public key of the mounted key matches SOPS's. Fingerprints are compared, never the key.
-- [ ] AC5: `docs/runbooks/sops-and-secrets.md` and `docs/runbooks/secrets-reference.md` name SOPS as the only store, and a lesson records the drift.
+- [x] AC1: the dev Compose stack mounts no `*.oidc-jwks.pem` from the host. It declares the key as a secret sourced from `APPS_SERVICES_SECURITY_AUTHELIA_OIDC_JWKS_PRIVATE_KEY` and targeted at the path the Authelia template reads. A test ties the two paths together.
+- [x] AC2: `toolkit secrets jwks` stores the key in SOPS and writes no file; `credentials generate` neither mints nor writes one. A test runs `generate_jwks` against a temporary project root and finds no file, and the AC3 guard covers both writers.
+- [x] AC3: nothing in `toolkit/` or `infra/` reads or writes a host `oidc-jwks.pem`. A guard test fails if one reappears.
+- [x] AC4: with no pem on disk, dev Authelia loads the SOPS key. Verified live: `authelia validate-config` passes in the dev stack on the Mac, and the public key of the mounted key matches SOPS's. Fingerprints are compared, never the key.
+- [x] AC5: `docs/runbooks/sops-and-secrets.md` and `docs/runbooks/secrets-reference.md` name SOPS as the only store, and a lesson records the drift.
 
 ## References
 

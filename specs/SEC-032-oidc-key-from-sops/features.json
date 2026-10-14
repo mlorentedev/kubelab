@@ -1,9 +1,37 @@
 [
   {
     "id": "SEC-032-oidc-key-from-sops-f1",
-    "behavior": "Outcome 1",
-    "verification": "echo 'not implemented' && exit 1",
-    "state": "pending",
-    "evidence": ""
+    "behavior": "AC1: the dev Compose stack mounts no host pem; the key is a secret from the SOPS variable at the path the template reads",
+    "verification": "poetry run pytest --no-cov -q tests/test_oidc_signing_key_single_store.py -k TestTheDevStackReadsSops",
+    "state": "passing",
+    "evidence": "exit 0; 2 passed, 2026-10-14. Mutants removing the secret or renaming the variable go red."
+  },
+  {
+    "id": "SEC-032-oidc-key-from-sops-f2",
+    "behavior": "AC2: toolkit secrets jwks writes SOPS only; credentials generate neither mints nor writes a key",
+    "verification": "poetry run pytest --no-cov -q tests/test_oidc_signing_key_single_store.py -k 'generating_a_key or nothing_reads'",
+    "state": "passing",
+    "evidence": "exit 0; 2 passed, 2026-10-14. The guard found credentials.py step 8 as a second writer; it was removed in the same change."
+  },
+  {
+    "id": "SEC-032-oidc-key-from-sops-f3",
+    "behavior": "AC3: nothing in toolkit/, infra/ or the Makefile names a host oidc-jwks.pem",
+    "verification": "poetry run pytest --no-cov -q tests/test_oidc_signing_key_single_store.py -k nothing_reads",
+    "state": "passing",
+    "evidence": "exit 0; 1 passed, 2026-10-14. 5/5 mutants red across the four tests."
+  },
+  {
+    "id": "SEC-032-oidc-key-from-sops-f4",
+    "behavior": "AC4: with no pem on disk, dev Authelia validates its config and serves the SOPS key",
+    "verification": "live, on the Mac with the dev stack: docker compose run authelia validate-config; sha256 of the DER public key read inside the container vs the one derived from SOPS",
+    "state": "passing",
+    "evidence": "2026-10-14: host pem files 0; validate-config rc 0; container public key sha256 9915cc14dfdff53a equals SOPS's (match True). Only exit codes and hashes were printed; the stack was brought down afterwards."
+  },
+  {
+    "id": "SEC-032-oidc-key-from-sops-f5",
+    "behavior": "AC5: both secrets runbooks name SOPS as the only store; lesson-568 records the drift",
+    "verification": "grep -c 'oidc-jwks.pem' docs/runbooks/sops-and-secrets.md docs/runbooks/secrets-reference.md; bash scripts/check-lessons.sh",
+    "state": "passing",
+    "evidence": "2026-10-14: no pem listed as a store in either runbook (secrets-reference names it once, to say there is none and a leftover is stale); lessons index check exit 0."
   }
 ]

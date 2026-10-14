@@ -18,17 +18,17 @@ created: "2026-10-14"
 
 ## Implementation
 
-- [ ] [P] [AC1] Failing test: the dev stack binds no host pem, declares the env-sourced secret, and targets the path the template reads
-- [ ] [AC1] Compose: secret replaces the bind mount
-- [ ] [P] [AC2] Failing test: `generate_jwks` writes no file
-- [ ] [AC2] Drop the pem write from `generate_jwks`, the CLI docstring and `JWKS_FILE_TEMPLATE`
-- [ ] [P] [AC3] Failing guard: no host `oidc-jwks.pem` read or write in `toolkit/` or `infra/`
-- [ ] [AC3] Drop the dead pem read and the unused `AUTHELIA_OIDC_JWKS_KEY` from `generator_authelia`
-- [ ] [AC5] Runbooks fixed; lesson written
-- [ ] [AC4] Live: dev stack `validate-config` with no pem; public-key fingerprint equals SOPS's
+- [x] [P] [AC1] Failing test: the dev stack binds no host pem, declares the env-sourced secret, and targets the path the template reads
+- [x] [AC1] Compose: secret replaces the bind mount
+- [x] [P] [AC2] Failing test: `generate_jwks` writes no file
+- [x] [AC2] Drop the pem write from `generate_jwks`, the CLI docstring and `JWKS_FILE_TEMPLATE`
+- [x] [P] [AC3] Failing guard: no host `oidc-jwks.pem` read or write in `toolkit/` or `infra/`
+- [x] [AC3] Drop the dead pem read and the unused `AUTHELIA_OIDC_JWKS_KEY` from `generator_authelia`
+- [x] [AC5] Runbooks fixed; lesson written
+- [x] [AC4] Live: dev stack `validate-config` with no pem; public-key fingerprint equals SOPS's
 
 ## Closing
 
-- [ ] Every AC covered by a test or a recorded live run; `features.json` filled
-- [ ] `make test-fast` green except the known macOS failures (TOOL-113)
+- [x] Every AC covered by a test or a recorded live run; `features.json` filled
+- [x] `make test-fast` green: 4587 passed, 18 skipped, 2 xfailed (2026-10-14)
 - [ ] `verification.md` filled; draft PR with `## Knowledge`; triage; `## Review triage`
