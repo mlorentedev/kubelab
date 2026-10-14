@@ -84,8 +84,32 @@ def _iter_manifests() -> list[pathlib.Path]:
     return files
 
 
-def _stateful_services() -> dict[str, list[str]]:
-    """Map owning service -> its PVC names, discovered from the manifests.
+def _claim_names(doc: Any) -> list[str]:
+    """The claims a rendered resource implies: a PVC names itself, a StatefulSet its templates.
+
+    Kubernetes creates a StatefulSet's claims at runtime as
+    `<template>-<statefulset>-<ordinal>`, so no PVC object exists to find (#2062).
+    The ordinal is dropped: replicas of one StatefulSet are one service's state.
+    """
+    if not isinstance(doc, dict):
+        # Kustomize patch files hold bare lists; only mappings are resources.
+        return []
+    name = (doc.get("metadata") or {}).get("name")
+    if doc.get("kind") == "PersistentVolumeClaim":
+        return [name] if name else []
+    if doc.get("kind") == "StatefulSet" and name:
+        templates = (doc.get("spec") or {}).get("volumeClaimTemplates") or []
+        return [f"{t['metadata']['name']}-{name}" for t in templates if (t.get("metadata") or {}).get("name")]
+    return []
+
+
+def _rendered_claims(stream: str) -> set[str]:
+    """Every claim name a `kubectl kustomize` output implies."""
+    return {claim for doc in yaml.safe_load_all(stream) for claim in _claim_names(doc)}
+
+
+def _stateful_services(manifests: list[pathlib.Path] | None = None) -> dict[str, list[str]]:
+    """Map owning service -> its claim names, discovered from the manifests.
 
     The owning service is the file stem: `services/crowdsec.yaml` owns both
     `crowdsec-db` and `crowdsec-config`. Deriving it from the PVC's own name
@@ -93,20 +117,14 @@ def _stateful_services() -> dict[str, list[str]]:
     does not exist, and the two PVCs would split into two phantom services.
     """
     owned: dict[str, list[str]] = {}
-    for path in _iter_manifests():
+    for path in _iter_manifests() if manifests is None else manifests:
         try:
             docs = list(yaml.safe_load_all(path.read_text()))
         except yaml.YAMLError as exc:  # pragma: no cover - malformed manifest
             pytest.fail(f"{path.relative_to(REPO_ROOT)} is not parseable YAML: {exc}")
         for doc in docs:
-            # Kustomize patch files hold bare lists; only mappings are resources.
-            if not isinstance(doc, dict):
-                continue
-            if doc.get("kind") != "PersistentVolumeClaim":
-                continue
-            name = (doc.get("metadata") or {}).get("name")
-            if name:
-                owned.setdefault(path.stem, []).append(name)
+            for claim in _claim_names(doc):
+                owned.setdefault(path.stem, []).append(claim)
     return owned
 
 
@@ -293,10 +311,9 @@ def duplication_problems(
     `rendered` maps overlay -> the PVC names it renders. Pure, like
     `classification_problems`, so the controls below need no cluster and no kubectl.
 
-    Scope: state held in a PersistentVolumeClaim of these manifests, the same set the
-    classification half scans. A StatefulSet's `volumeClaimTemplates` is outside it
-    (#2062); state kept outside K8s (an external database, a node's disk) has no
-    overlay to be duplicated across.
+    Scope: the claims these manifests imply, PVCs and StatefulSet `volumeClaimTemplates`
+    alike (#2062), the same set the classification half scans. State kept outside K8s
+    (an external database, a node's disk) has no overlay to be duplicated across.
     """
     problems = []
     for service, pvcs in sorted(services.items()):
@@ -327,11 +344,7 @@ def rendered_pvcs() -> dict[str, set[str]]:
             text=True,
             check=True,
         ).stdout
-        rendered[env] = {
-            d["metadata"]["name"]
-            for d in yaml.safe_load_all(out)
-            if isinstance(d, dict) and d.get("kind") == "PersistentVolumeClaim"
-        }
+        rendered[env] = _rendered_claims(out)
     return rendered
 
 
@@ -390,3 +403,38 @@ def test_duplication_clause_accepts_one_overlay_or_a_dual_service(
 ) -> None:
     config = _fixture_config(state_promotion=promotion)
     assert duplication_problems(_FIXTURE_SERVICES, config, rendered) == []
+
+
+# --------------------------------------------------------------------------
+# StatefulSet claims (#2062). Kubernetes creates them at runtime, so neither
+# half of the gate saw them while it looked only for PVC objects. No overlay
+# renders a StatefulSet today; these controls hold the gap closed for the day
+# one does, which is the shape of most third-party charts.
+# --------------------------------------------------------------------------
+
+_STATEFULSET = """
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: widget
+spec:
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+"""
+
+
+def test_an_unclassified_statefulset_fails_the_classification_check(tmp_path: pathlib.Path) -> None:
+    manifest = tmp_path / "widget.yaml"
+    manifest.write_text(_STATEFULSET)
+    services = _stateful_services([manifest])
+    assert services == {"widget": ["data-widget"]}
+    assert any("no config block found" in p for p in classification_problems(services, {})), services
+
+
+def test_a_singleton_statefulset_in_both_overlays_fails_the_duplication_clause(tmp_path: pathlib.Path) -> None:
+    manifest = tmp_path / "widget.yaml"
+    manifest.write_text(_STATEFULSET)
+    both = {env: _rendered_claims(_STATEFULSET) for env in OVERLAYS}
+    problems = duplication_problems(_stateful_services([manifest]), _fixture_config(state_promotion="singleton"), both)
+    assert [p.split(" is ", 1)[0] for p in problems] == ["widget"], problems
