@@ -4,21 +4,15 @@
 # --- Staging zones (from networking.staging_zones in common.yaml) ---
 
 {{ staging_domain }} {
+    # The apex only: the template below answers every name under it with the same
+    # address. A per-service line here added nothing but a 3600s TTL, which pinned
+    # retired names (web, blog, gitea) in Pi-hole for an hour (#2219).
     hosts {
         {{ node_ips.ace1 }} {{ staging_domain }}
-        {{ node_ips.ace1 }} api.{{ staging_domain }}
-        {{ node_ips.ace1 }} web.{{ staging_domain }}
-        {{ node_ips.ace1 }} blog.{{ staging_domain }}
-        {{ node_ips.ace1 }} grafana.{{ staging_domain }}
-        {{ node_ips.ace1 }} traefik.{{ staging_domain }}
-        {{ node_ips.ace1 }} auth.{{ staging_domain }}
-        {{ node_ips.ace1 }} gitea.{{ staging_domain }}
-        {{ node_ips.ace1 }} n8n.{{ staging_domain }}
-        {{ node_ips.ace1 }} loki.{{ staging_domain }}
         fallthrough
     }
     template IN A {{ staging_domain }} {
-        match .*\.staging\.kubelab\.live
+        match .*\.{{ staging_domain | regex_escape }}
         answer "{% raw %}{{ .Name }}{% endraw %} 60 IN A {{ node_ips.ace1 }}"
         fallthrough
     }
