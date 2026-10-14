@@ -623,6 +623,8 @@ def test_a_failed_apply_skips_the_proof_and_still_tears_down(monkeypatch: pytest
 def test_a_refused_start_still_tears_down(monkeypatch: pytest.MonkeyPatch) -> None:
     result, calls = _prove(monkeypatch, raises=tr.RunnerError("cannot render"))
     assert result.exit_code == 1 and calls == ["apply", "destroy"]
+    # Reported and exited, not a traceback the operator has to read past.
+    assert isinstance(result.exception, SystemExit), result.exception
 
 
 def test_a_proof_that_passed_but_left_its_project_behind_fails(monkeypatch: pytest.MonkeyPatch) -> None:
