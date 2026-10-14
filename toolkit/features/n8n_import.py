@@ -241,6 +241,20 @@ def resolve_placeholders(text: str, cm: ConfigurationManager) -> str:
     if not found:
         return text
 
+    _reject_unmapped(found)
+    values = _read_placeholder_values(found, cm.get_merged_config())
+
+    for token, value in values.items():
+        text = text.replace(token, value)
+        # The path, never the value: a placeholder may map to a SOPS-resident value
+        # (the sale digest's recipient), and the log is a terminal and a transcript.
+        logger.info(f"  Resolved {token} (from {PLACEHOLDER_SSOT[token]})")
+
+    return text
+
+
+def _reject_unmapped(found: set[str]) -> None:
+    """Raise `PlaceholderError` if any token in `found` has no `PLACEHOLDER_SSOT` entry."""
     unknown = found - set(PLACEHOLDER_SSOT)
     if unknown:
         raise PlaceholderError(
@@ -250,7 +264,9 @@ def resolve_placeholders(text: str, cm: ConfigurationManager) -> str:
             f"literal string."
         )
 
-    config = cm.get_merged_config()
+
+def _read_placeholder_values(found: set[str], config: dict[str, Any]) -> dict[str, str]:
+    """Each token's SSOT value, or `PlaceholderError` naming every token whose path is empty."""
     values: dict[str, str] = {}
     absent: list[str] = []
     for token in sorted(found):
@@ -269,14 +285,7 @@ def resolve_placeholders(text: str, cm: ConfigurationManager) -> str:
             f"merged config. Each is required rather than defaulted: a workflow that "
             f"substitutes an empty value fails in production and names no cause."
         )
-
-    for token, value in values.items():
-        text = text.replace(token, value)
-        # The path, never the value: a placeholder may map to a SOPS-resident value
-        # (the sale digest's recipient), and the log is a terminal and a transcript.
-        logger.info(f"  Resolved {token} (from {PLACEHOLDER_SSOT[token]})")
-
-    return text
+    return values
 
 
 # ── Pure helpers ──────────────────────────────────────────────────────────────
@@ -521,48 +530,19 @@ def _process_spec(
     """Import + activate a single workflow. Returns True on success."""
     logger.info(f"Processing workflow: {spec.workflow_path.name} (credential={spec.credential_name or 'none'})")
 
-    workflow_full = project_root / spec.workflow_path
-    if not workflow_full.is_file():
-        logger.error(f"  Workflow not found at '{workflow_full}' — aborting")
+    loaded = _load_workflow(project_root / spec.workflow_path, cm)
+    if loaded is None:
         return False
+    workflow_text, workflow_doc = loaded
 
-    try:
-        workflow_text = workflow_full.read_text()
-    except OSError as exc:
-        logger.error(f"  Failed to read workflow '{workflow_full}': {exc}")
+    checked = _check_workflow(workflow_doc, spec, env, shared_ok)
+    if checked is None:
         return False
+    workflow_id, credential_id = checked
 
-    try:
-        workflow_text = resolve_placeholders(workflow_text, cm)
-    except PlaceholderError as exc:
-        logger.error(f"  {exc}")
+    cred_ok, credential_json = _render_spec_credential(spec, cm, credential_id)
+    if not cred_ok:
         return False
-
-    try:
-        workflow_doc = json.loads(workflow_text)
-    except json.JSONDecodeError as exc:
-        logger.error(f"  Failed to parse workflow '{workflow_full}': {exc}")
-        return False
-
-    try:
-        workflow_id, credential_id = read_workflow_ids(workflow_doc)
-    except ValueError as exc:
-        logger.error(f"  {exc}")
-        return False
-
-    problems = _unimported_references(read_credential_refs(workflow_doc), spec, env, shared_ok)
-    if problems:
-        for problem in problems:
-            logger.error(f"  {problem} — workflow not imported")
-        return False
-
-    credential_json = None
-    if credential_id and spec.secret_key_path:
-        secret = cm.get_secret_by_path(spec.secret_key_path)
-        if not secret:
-            logger.error(f"  Missing SOPS value at '{spec.secret_key_path}' — cannot import credential")
-            return False
-        credential_json = render_credential(credential_id, spec.credential_name, secret)
 
     if dry_run:
         logger.info(
@@ -571,6 +551,73 @@ def _process_spec(
         )
         return True
 
+    if not _import_and_publish(env, spec, workflow_text, workflow_id, credential_json):
+        return False
+
+    # The restart that makes it live runs once per run, in `import_n8n_workflow`.
+    logger.success(f"  Imported + published '{spec.workflow_path.name}' (workflow id={workflow_id})")
+    return True
+
+
+def _check_workflow(
+    workflow_doc: dict[str, Any], spec: N8nImportSpec, env: str, shared_ok: dict[str, bool]
+) -> tuple[str, str | None] | None:
+    """The workflow's `(workflow_id, credential_id)`, or None (logged) if its ids or credential references fail."""
+    try:
+        workflow_id, credential_id = read_workflow_ids(workflow_doc)
+    except ValueError as exc:
+        logger.error(f"  {exc}")
+        return None
+
+    problems = _unimported_references(read_credential_refs(workflow_doc), spec, env, shared_ok)
+    for problem in problems:
+        logger.error(f"  {problem} — workflow not imported")
+    return None if problems else (workflow_id, credential_id)
+
+
+def _load_workflow(workflow_full: Path, cm: ConfigurationManager) -> tuple[str, dict[str, Any]] | None:
+    """Read, placeholder-resolve and parse the workflow file; None (logged) on any failure."""
+    if not workflow_full.is_file():
+        logger.error(f"  Workflow not found at '{workflow_full}' — aborting")
+        return None
+
+    try:
+        workflow_text = workflow_full.read_text()
+    except OSError as exc:
+        logger.error(f"  Failed to read workflow '{workflow_full}': {exc}")
+        return None
+
+    try:
+        workflow_text = resolve_placeholders(workflow_text, cm)
+    except PlaceholderError as exc:
+        logger.error(f"  {exc}")
+        return None
+
+    try:
+        workflow_doc: dict[str, Any] = json.loads(workflow_text)
+    except json.JSONDecodeError as exc:
+        logger.error(f"  Failed to parse workflow '{workflow_full}': {exc}")
+        return None
+    return workflow_text, workflow_doc
+
+
+def _render_spec_credential(
+    spec: N8nImportSpec, cm: ConfigurationManager, credential_id: str | None
+) -> tuple[bool, str | None]:
+    """`(ok, JSON)`: JSON is None when no credential is needed; ok is False (logged) if its SOPS value is absent."""
+    if not (credential_id and spec.secret_key_path):
+        return True, None
+    secret = cm.get_secret_by_path(spec.secret_key_path)
+    if not secret:
+        logger.error(f"  Missing SOPS value at '{spec.secret_key_path}' — cannot import credential")
+        return False, None
+    return True, render_credential(credential_id, spec.credential_name, secret)
+
+
+def _import_and_publish(
+    env: str, spec: N8nImportSpec, workflow_text: str, workflow_id: str, credential_json: str | None
+) -> bool:
+    """Run the credential import, workflow import and publish in order; False (logged) at the first failure."""
     # 1. Credential — carries the secret; stdin → /dev/shm → import → shred.
     if credential_json:
         if not _exec_stdin_import(env, spec, "import:credentials", "n8n-cred", credential_json):
@@ -587,9 +634,6 @@ def _process_spec(
     if not _exec_publish(env, spec, workflow_id):
         logger.error(f"  Publish failed for workflow id={workflow_id}")
         return False
-
-    # The restart that makes it live runs once per run, in `import_n8n_workflow`.
-    logger.success(f"  Imported + published '{spec.workflow_path.name}' (workflow id={workflow_id})")
     return True
 
 
