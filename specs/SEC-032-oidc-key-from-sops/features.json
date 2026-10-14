@@ -1,0 +1,9 @@
+[
+  {
+    "id": "SEC-032-oidc-key-from-sops-f1",
+    "behavior": "Outcome 1",
+    "verification": "echo 'not implemented' && exit 1",
+    "state": "pending",
+    "evidence": ""
+  }
+]
