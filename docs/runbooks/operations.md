@@ -44,22 +44,34 @@ make tf-dns-plan    # preview
 make tf-dns-apply   # apply
 ```
 
-## On change: AWS infrastructure (aws1)
+## On change: the Argo CD hub (gcp1)
+
+The hub is `gcp1`, a one-VM managed instance group on GCP (ADR-063).
 
 ```bash
-# Preview
-make tf-aws-plan
-
-# Apply (RECREATES instance — ~5 min downtime)
-make tf-aws-apply
-
-# After instance recreates:
-make fetch-kubeconfig ENV=hub   # auto-accepts new SSH host key
-make deploy-argocd          # Helm install + resolve EndpointSlice IP
-make deploy-apps            # re-register Applications
-make register-spoke ENV=staging
-make register-spoke ENV=prod
+make tf-gcp-plan            # preview
+make tf-gcp-apply           # apply
+make gcp1-replace           # recreate the VM: the same path a preemption takes
 ```
+
+`gcp1-replace` waits for sshd and for cloud-init to finish
+(`wait-node-ready`), provisions the node, and repoints prod's Argo CD route at
+its new Tailscale IP. Every recreate is a fresh disk, so cloud-init rebuilds the
+hub on its own: it installs Argo CD, registers each spoke in `managed_spokes`
+from Secret Manager, and applies the Applications. There is no `deploy-apps` or
+`register-spoke` step after a recreate. What it restores is what the instance
+template embeds: the chart values and the Applications as of the last
+`make tf-gcp-apply`, not as of git. A change to
+`infra/k8s/argocd/applications/` reaches the live hub through
+`make deploy-apps`, and reaches the next recreate only after
+`make tf-gcp-apply`. A recreate also rotates the cluster CA, the SSH host key
+and the mesh address, so refresh the hub kubeconfig before anything else talks
+to the hub: `make fetch-kubeconfig ENV=hub DIRECT=1`. Start, stop and status
+are in `docs/runbooks/gcp-hub-bootstrap.md` §8.
+
+`aws1` was destroyed on 2026-08-23. Its Terraform root and the
+`networking.aws` block are dormant on purpose, kept for portability: the
+`tf-aws-*` targets are not part of operating the hub.
 
 ## Deploy: ArgoCD (Helm upgrade)
 
@@ -76,12 +88,12 @@ What it does:
 1. Deploys Authelia OIDC config to prod
 2. Scales down ALL ArgoCD pods (OOM mitigation)
 3. Helm upgrade with 10min timeout
-4. Renders + applies `overlays/prod/argocd-endpointslice.yaml` (MagicDNS-resolved
-   aws1 Tailscale IP) via `toolkit infra k8s render-apply` (ADR-047 / TOOL-009 T4)
+4. Runs `make argocd-repoint`, which renders and applies
+   `overlays/prod/argocd-endpointslice.yaml` with gcp1's Tailscale IP resolved
+   from MagicDNS, via `toolkit infra k8s render-apply` (ADR-047 / TOOL-009 T4)
 
-Step 4 is the only path that applies that EndpointSlice, and a Spot replacement
-is the only event that changes its value — which is why `make aws1-replace` ends
-by telling you to run this target.
+A recreate of gcp1 is the only event that changes that IP, which is why
+`make gcp1-replace` ends with `argocd-repoint` (lesson-375).
 
 The rest of the Argo CD route — the `argocd` Service and the `argo.kubelab.live`
 IngressRoute — is **Kustomize-managed** (`overlays/prod/argocd.yaml`, in the
@@ -102,10 +114,11 @@ make deploy-argocd          # retry
 ```
 
 If still fails after recovery:
-1. Reboot aws1 from AWS console
-2. Wait 2-3 min for K3s to come back
-3. `make recover-argocd && make deploy-argocd`
-4. **Never retry more than once on a stressed instance**
+1. Recreate the hub: `make gcp1-replace`
+2. Wait for it to finish. It waits for cloud-init, which installs Argo CD; it does not check that Argo CD is ready
+3. `make fetch-kubeconfig ENV=hub DIRECT=1`: the recreate rotated the cluster CA
+4. `make recover-argocd && make deploy-argocd`
+5. **Never retry more than once on a stressed instance**
 
 ## Deploy: K8s workloads (Kustomize)
 
@@ -219,7 +232,7 @@ make provision NODE=jetson ENV=prod
 | Changed VPS Traefik config | `make deploy TARGET=vps ENV=prod` |
 | ArgoCD UI down | `make deploy-argocd` |
 | ArgoCD Helm upgrade failed | `make recover-argocd && make deploy-argocd` |
-| aws1 unresponsive | Reboot AWS console → `make fetch-kubeconfig ENV=hub && make deploy-argocd` |
+| gcp1 unresponsive | `make gcp1-status`, then `make gcp1-replace` |
 | New node to provision | `make provision NODE=x ENV=y` |
 | Uptime Kuma config changed | `make monitoring-apply` |
 | Need to check pod logs | `make logs SVC=x ENV=y` |
