@@ -3,7 +3,8 @@
 A lesson renamed after it was linked leaves the link pointing at a name no file
 carries: lesson-425 linked lesson-416 by a slug lesson-416 lost, and only an
 external formatter noticed. A bare `[[lesson-NNN]]` resolves by its number; a
-link with a slug must match a file name exactly.
+link with a slug must match a file name exactly, whatever characters the slug
+carries, so a stray capital or underscore is caught rather than skipped.
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ import re
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 LESSONS = REPO_ROOT / "docs" / "lessons"
 
-_LINK = re.compile(r"\[\[(lesson-(\d+)(?:-[a-z0-9-]+)?)(?:\|[^\]]*)?\]\]")
+_LINK = re.compile(r"\[\[(lesson-(\d+)(?:-[^|\]]+)?)(?:\|[^\]]*)?\]\]")
 
 
 def test_every_lesson_wikilink_resolves() -> None:
