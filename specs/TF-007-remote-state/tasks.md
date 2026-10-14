@@ -14,8 +14,8 @@ created: "2026-10-13"
 - [x] [AC4] `aws1-replace` uses the guarded apply with `--allow`, no `-auto-approve`; `gcp-killswitch-prove` tears down in a `finally`.
 - [x] Comments, READMEs and test messages that named the removed commands point at the runner.
 - [x] `terraform fmt` pre-commit hook (`compute/main.tf` had drifted unnoticed); the CI gate is TF-016.
-- [ ] `make mutate` against the single-entry, cleanup and plan-guard tests.
-- [ ] msi: `make tf-dns-plan` and `make tf-r2-plan` read the same on master and on this branch (read-only, operator confirms first).
+- [x] `make mutate`: seven mutations, all RED (raw terraform in a recipe, dns destroy always allowed, legacy renders kept, inherited `TF_VAR_*` kept, guard ignored, tfvars 0644, a missing var file). Found and fixed a `make mutate` bytecode defect on the way: #2235, lesson-562.
+- [x] msi: `make tf-dns-plan` and `make tf-r2-plan` read `No changes` on master and on this branch (2026-10-13, operator-approved, msi returned to master).
 - [ ] Draft PR with `## Knowledge`; triage; `## Review triage`.
 
 ## PR 1b: R2 backend
