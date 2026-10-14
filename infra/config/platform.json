@@ -5,19 +5,10 @@
     "name": "KubeLab Hybrid Cloud & Edge Platform",
     "version": "K3s v1.34.4+k3s1",
     "gitops": "Argo CD v3.4.1 · 2 applications synced",
-    "uptime": "99.9% (90d, Uptime Kuma)",
     "activeNodes": 8,
     "totalServices": 36,
     "kubernetesClusters": 3,
     "kubernetesNodes": 3
-  },
-  "metrics": {
-    "inferenceLatency": "not measured",
-    "contextReduction": "67–82%",
-    "reconciliationTime": "<30s",
-    "edgeArchitecture": "Tailscale mesh (Headscale)",
-    "uptimeScore": "99.9%",
-    "gitopsSyncLoop": "<30s Drift Loop"
   },
   "nodes": [
     {
@@ -35,7 +26,7 @@
       "ram": "7.5 GB",
       "storage": "75 GB NVMe",
       "os": "Ubuntu 24.04 LTS",
-      "location": "Falkenstein (Germany)",
+      "location": "Nuremberg (Germany)",
       "status": "healthy",
       "runtime": "k3s",
       "runtimeRole": "Production K3s cluster (single node)"
@@ -209,7 +200,6 @@
       "categoryEs": "IA e Inferencia",
       "description": "On-device LLM text polish running local Qwen 1.5B with zero cloud telemetry.",
       "descriptionEs": "Corrección de texto LLM en edge con Qwen 1.5B local sin telemetría en la nube.",
-      "url": "https://mlorentedev.github.io/pollex/",
       "node": "jetson",
       "env": "prod",
       "tech": [
@@ -218,7 +208,6 @@
         "TensorRT",
         "K3s"
       ],
-      "isPublic": true,
       "status": "operational"
     },
     {
@@ -228,7 +217,6 @@
       "categoryEs": "IA e Inferencia",
       "description": "Deterministic AST chunker and MCP memory layer for multi-agent workflows.",
       "descriptionEs": "Fragmentador AST determinista y capa de memoria MCP para flujos multi-agente.",
-      "url": "https://mlorentedev.github.io/hive/",
       "node": "vps",
       "env": "prod",
       "tech": [
@@ -237,7 +225,6 @@
         "Tree-sitter",
         "SQLite FTS5"
       ],
-      "isPublic": true,
       "status": "operational"
     },
     {
@@ -255,7 +242,6 @@
         "C++",
         "Bare-metal"
       ],
-      "isPublic": false,
       "status": "operational"
     },
     {
@@ -265,8 +251,6 @@
       "categoryEs": "Gateway Principal",
       "description": "High-throughput Go API, Token-Bucket rate limiting and platform telemetry.",
       "descriptionEs": "API en Go de alto rendimiento, rate limiting por token bucket y telemetría de plataforma.",
-      "url": "https://api.kubelab.live",
-      "healthEndpoint": "https://api.kubelab.live/health",
       "node": "vps",
       "env": "prod",
       "tech": [
@@ -275,7 +259,6 @@
         "ArgoCD",
         "Kubernetes"
       ],
-      "isPublic": true,
       "status": "operational"
     },
     {
@@ -293,7 +276,6 @@
         "Let's Encrypt",
         "CrowdSec"
       ],
-      "isPublic": false,
       "status": "operational"
     },
     {
@@ -311,7 +293,6 @@
         "Tailscale",
         "SQLite"
       ],
-      "isPublic": false,
       "status": "operational"
     },
     {
@@ -329,7 +310,6 @@
         "TOTP",
         "Duo"
       ],
-      "isPublic": false,
       "status": "operational"
     },
     {
@@ -347,7 +327,6 @@
         "Kustomize",
         "Helm"
       ],
-      "isPublic": false,
       "status": "operational"
     },
     {
@@ -365,7 +344,6 @@
         "PostgreSQL",
         "SSH"
       ],
-      "isPublic": false,
       "status": "operational"
     },
     {
@@ -383,7 +361,6 @@
         "Loki",
         "Glances"
       ],
-      "isPublic": false,
       "status": "operational"
     },
     {
@@ -401,7 +378,6 @@
         "Go",
         "S3 Storage"
       ],
-      "isPublic": false,
       "status": "operational"
     },
     {
@@ -419,7 +395,6 @@
         "SQLite",
         "Docker"
       ],
-      "isPublic": false,
       "status": "operational"
     },
     {
@@ -437,7 +412,6 @@
         "Go",
         "DNSSEC"
       ],
-      "isPublic": false,
       "status": "operational"
     }
   ],

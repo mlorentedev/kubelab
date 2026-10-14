@@ -40,6 +40,11 @@ IPV6_REGEX = re.compile(
 )
 INTERNAL_HOST_REGEX = re.compile(r"\b[a-zA-Z0-9.-]+\.(?:internal|local|lan)\b")
 
+# Mirrors `server_location` in infra/terraform/compute/variables.tf, read from the
+# Hetzner API on 2026-09-25 (#1847); tests/test_platform_manifest_measured_only.py
+# fails if the two disagree.
+VPS_LOCATION = "Nuremberg (Germany)"
+
 # Canonical node hardware catalog defaults (enriched from common.yaml SSOT)
 NODE_CATALOG_DEFAULTS: dict[str, dict[str, Any]] = {
     "vps": {
@@ -56,7 +61,7 @@ NODE_CATALOG_DEFAULTS: dict[str, dict[str, Any]] = {
         "ram": "7.5 GB",
         "storage": "75 GB NVMe",
         "os": "Ubuntu 24.04 LTS",
-        "location": "Falkenstein (Germany)",
+        "location": VPS_LOCATION,
         "status": "healthy",
         "runtime": "k3s",
         "runtimeRole": "Production K3s cluster (single node)",
@@ -244,11 +249,9 @@ SERVICE_CATALOG_DEFAULTS: list[dict[str, Any]] = [
         "categoryEs": "IA e Inferencia",
         "description": "On-device LLM text polish running local Qwen 1.5B with zero cloud telemetry.",
         "descriptionEs": ("Corrección de texto LLM en edge con Qwen 1.5B local sin telemetría en la nube."),
-        "url": "https://mlorentedev.github.io/pollex/",
         "node": "jetson",
         "env": "prod",
         "tech": ["Go", "CUDA", "TensorRT", "K3s"],
-        "isPublic": True,
         "status": "operational",
     },
     {
@@ -258,11 +261,9 @@ SERVICE_CATALOG_DEFAULTS: list[dict[str, Any]] = [
         "categoryEs": "IA e Inferencia",
         "description": ("Deterministic AST chunker and MCP memory layer for multi-agent workflows."),
         "descriptionEs": ("Fragmentador AST determinista y capa de memoria MCP para flujos multi-agente."),
-        "url": "https://mlorentedev.github.io/hive/",
         "node": "vps",
         "env": "prod",
         "tech": ["Python", "FastMCP", "Tree-sitter", "SQLite FTS5"],
-        "isPublic": True,
         "status": "operational",
     },
     {
@@ -275,7 +276,6 @@ SERVICE_CATALOG_DEFAULTS: list[dict[str, Any]] = [
         "node": "jetson",
         "env": "prod",
         "tech": ["Ollama", "Go", "C++", "Bare-metal"],
-        "isPublic": False,
         "status": "operational",
     },
     {
@@ -285,12 +285,9 @@ SERVICE_CATALOG_DEFAULTS: list[dict[str, Any]] = [
         "categoryEs": "Gateway Principal",
         "description": ("High-throughput Go API, Token-Bucket rate limiting and platform telemetry."),
         "descriptionEs": ("API en Go de alto rendimiento, rate limiting por token bucket y telemetría de plataforma."),
-        "url": "https://api.kubelab.live",
-        "healthEndpoint": "https://api.kubelab.live/health",
         "node": "vps",
         "env": "prod",
         "tech": ["Go", "Traefik", "ArgoCD", "Kubernetes"],
-        "isPublic": True,
         "status": "operational",
     },
     {
@@ -303,7 +300,6 @@ SERVICE_CATALOG_DEFAULTS: list[dict[str, Any]] = [
         "node": "vps",
         "env": "common",
         "tech": ["Traefik", "K3s", "Let's Encrypt", "CrowdSec"],
-        "isPublic": False,
         "status": "operational",
     },
     {
@@ -316,7 +312,6 @@ SERVICE_CATALOG_DEFAULTS: list[dict[str, Any]] = [
         "node": "vps",
         "env": "common",
         "tech": ["WireGuard", "Go", "Tailscale", "SQLite"],
-        "isPublic": False,
         "status": "operational",
     },
     {
@@ -329,7 +324,6 @@ SERVICE_CATALOG_DEFAULTS: list[dict[str, Any]] = [
         "node": "vps",
         "env": "common",
         "tech": ["Authelia", "Redis", "TOTP", "Duo"],
-        "isPublic": False,
         "status": "operational",
     },
     {
@@ -342,7 +336,6 @@ SERVICE_CATALOG_DEFAULTS: list[dict[str, Any]] = [
         "node": "gcp1",
         "env": "common",
         "tech": ["ArgoCD", "Kubernetes", "Kustomize", "Helm"],
-        "isPublic": False,
         "status": "operational",
     },
     {
@@ -355,7 +348,6 @@ SERVICE_CATALOG_DEFAULTS: list[dict[str, Any]] = [
         "node": "beelink",
         "env": "common",
         "tech": ["Gitea", "Go", "PostgreSQL", "SSH"],
-        "isPublic": False,
         "status": "operational",
     },
     {
@@ -368,7 +360,6 @@ SERVICE_CATALOG_DEFAULTS: list[dict[str, Any]] = [
         "node": "vps",
         "env": "prod",
         "tech": ["Grafana", "Prometheus", "Loki", "Glances"],
-        "isPublic": False,
         "status": "operational",
     },
     {
@@ -381,7 +372,6 @@ SERVICE_CATALOG_DEFAULTS: list[dict[str, Any]] = [
         "node": "vps",
         "env": "prod",
         "tech": ["Loki", "Promtail", "Go", "S3 Storage"],
-        "isPublic": False,
         "status": "operational",
     },
     {
@@ -394,7 +384,6 @@ SERVICE_CATALOG_DEFAULTS: list[dict[str, Any]] = [
         "node": "rpi3",
         "env": "common",
         "tech": ["Node.js", "Vue", "SQLite", "Docker"],
-        "isPublic": False,
         "status": "operational",
     },
     {
@@ -409,7 +398,6 @@ SERVICE_CATALOG_DEFAULTS: list[dict[str, Any]] = [
         "node": "rpi4",
         "env": "common",
         "tech": ["CoreDNS", "Pi-hole", "Go", "DNSSEC"],
-        "isPublic": False,
         "status": "operational",
     },
 ]
@@ -731,90 +719,30 @@ def project_nodes(config: dict[str, Any]) -> tuple[list[dict[str, Any]], int, in
     return projected, active_count, len(clusters), len(k8s_node_ids)
 
 
-def _collect_ssot_services(config: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    """Index all service configurations declared in SSOT."""
-    apps = config.get("apps", {})
-    services_by_cat = apps.get("services", {})
-    platform_apps = apps.get("platform", {})
-    infra = config.get("infra", {})
-    argocd = config.get("argocd", {})
-
-    ssot_blocks: dict[str, dict[str, Any]] = {}
-    if isinstance(services_by_cat, dict):
-        for cat_svcs in services_by_cat.values():
-            if isinstance(cat_svcs, dict):
-                for svc_name, svc_cfg in cat_svcs.items():
-                    if isinstance(svc_cfg, dict):
-                        ssot_blocks[svc_name] = svc_cfg
-                        ssot_blocks[svc_name.replace("_", "-")] = svc_cfg
-
-    if "api" in platform_apps and isinstance(platform_apps["api"], dict):
-        ssot_blocks["kubelab-api"] = platform_apps["api"]
-    if isinstance(argocd, dict) and argocd:
-        ssot_blocks["argocd"] = argocd
-    if "postgres" in infra and isinstance(infra["postgres"], dict):
-        ssot_blocks["postgresql"] = infra["postgres"]
-    if "traefik" not in ssot_blocks and "traefik" in config.get("edge", {}):
-        ssot_blocks["traefik"] = config["edge"]["traefik"]
-
-    return ssot_blocks
-
-
-def _project_single_service(defaults: dict[str, Any], svc_cfg: dict[str, Any]) -> dict[str, Any]:
-    """Project and sanitize a single platform service."""
+def _project_single_service(defaults: dict[str, Any]) -> dict[str, Any]:
+    """Project a single platform service from its catalog entry."""
     slug = defaults["slug"]
-    domain = svc_cfg.get("domain", "")
-    health_path = svc_cfg.get("health_path", "")
-
-    # Determine public accessibility:
-    is_ssot_public = svc_cfg.get("public") if "public" in svc_cfg else svc_cfg.get("is_public")
-    if is_ssot_public is not None:
-        is_public = bool(is_ssot_public)
-    else:
-        is_public = defaults.get("isPublic") is True
-
-    if is_public:
-        url = (f"https://{domain}" if domain else None) or defaults.get("url")
-        health_endpoint = (f"https://{domain}{health_path}" if domain and health_path else None) or defaults.get(
-            "healthEndpoint"
-        )
-    else:
-        url = None
-        health_endpoint = None
-
-    entry: dict[str, Any] = {
+    return {
         "slug": slug,
-        "name": defaults.get("name") or svc_cfg.get("name") or slug,
+        "name": defaults.get("name") or slug,
         "category": defaults["category"],
         "categoryEs": defaults["categoryEs"],
         "description": defaults["description"],
         "descriptionEs": defaults["descriptionEs"],
+        "node": defaults.get("node", "vps"),
+        "env": defaults.get("env", "prod"),
+        "tech": defaults.get("tech", []),
+        "status": defaults.get("status", "operational"),
     }
-    if url is not None:
-        entry["url"] = url
-    if health_endpoint is not None:
-        entry["healthEndpoint"] = health_endpoint
-    entry.update(
-        {
-            "node": defaults.get("node", "vps"),
-            "env": defaults.get("env", "prod"),
-            "tech": defaults.get("tech", []),
-            "isPublic": is_public,
-            "status": defaults.get("status", "operational"),
-        }
-    )
-    return entry
 
 
-def project_services(config: dict[str, Any]) -> list[dict[str, Any]]:
-    """Dynamically project and sanitize platform services from common.yaml SSOT.
+def project_services() -> list[dict[str, Any]]:
+    """Project the platform services the web site renders.
 
-    Enforces Zero-Addressing doctrine (ADR-056 §3):
-    - Public services receive public URL and public health endpoint.
-    - Private / internal services strictly omit 'url' and 'healthEndpoint'.
+    No URL or health endpoint is published: the site stopped rendering them, and
+    a health endpoint nobody polls is a claim, not a measurement (#1847).
     """
-    ssot_service_blocks = _collect_ssot_services(config)
-    return [_project_single_service(d, ssot_service_blocks.get(d["slug"], {})) for d in SERVICE_CATALOG_DEFAULTS]
+    return [_project_single_service(d) for d in SERVICE_CATALOG_DEFAULTS]
 
 
 def compute_total_services(config: dict[str, Any]) -> int:
@@ -857,7 +785,7 @@ def generate_manifest(config_path: Path | None = None, target_path: Path | None 
     nodes, active_node_count, k8s_clusters, k8s_nodes = project_nodes(config)
 
     # 2. Services dynamic projection and Zero-Addressing sanitization
-    services = project_services(config)
+    services = project_services()
     total_services = compute_total_services(config)
 
     # 3. Cluster metadata
@@ -869,29 +797,20 @@ def generate_manifest(config_path: Path | None = None, target_path: Path | None 
         "name": "KubeLab Hybrid Cloud & Edge Platform",
         "version": k3s_ver,
         "gitops": "Argo CD v3.4.1 · 2 applications synced",
-        "uptime": "99.9% (90d, Uptime Kuma)",
         "activeNodes": active_node_count,
         "totalServices": total_services,
         "kubernetesClusters": k8s_clusters,
         "kubernetesNodes": k8s_nodes,
     }
 
-    # 4. Platform metrics
-    metrics = {
-        "inferenceLatency": "not measured",
-        "contextReduction": "67–82%",
-        "reconciliationTime": "<30s",
-        "edgeArchitecture": "Tailscale mesh (Headscale)",
-        "uptimeScore": "99.9%",
-        "gitopsSyncLoop": "<30s Drift Loop",
-    }
+    # 4. No metrics block: none of its figures had a method or a date. It returns
+    # when OBS-027 publishes measured series (#1847).
 
     # 5. Assemble manifest
     manifest: dict[str, Any] = {
         "generated_at": generated_at,
         "source_commit": source_commit,
         "cluster": cluster_info,
-        "metrics": metrics,
         "nodes": nodes,
         "services": services,
         "diagrams": ARCHITECTURE_DIAGRAMS,

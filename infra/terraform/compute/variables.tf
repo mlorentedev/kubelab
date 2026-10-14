@@ -28,10 +28,13 @@ variable "server_image" {
   default     = "ubuntu-24.04"
 }
 
+# The live CAX21 is in nbg1 per the Hetzner API (read 2026-09-25, #1847). The
+# location forces replacement, so a default that differs from it would plan a
+# new server on import. toolkit/features/platform_manifest.py mirrors this value.
 variable "server_location" {
   description = "Hetzner datacenter location"
   type        = string
-  default     = "fsn1"
+  default     = "nbg1"
 }
 
 variable "deploy_user" {
