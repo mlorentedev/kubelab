@@ -1,5 +1,5 @@
-# Rendered from SOPS by `toolkit infra terraform killswitch-test-tfvars` and
-# deleted after every use — it carries the billing account id.
+# Rendered here by the pre-runner Make targets, with the billing account id in
+# it. The runner renders into a private temp dir instead and removes this file.
 killswitch-test.tfvars
 .terraform/
 *.tfstate

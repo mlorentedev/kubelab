@@ -2194,7 +2194,7 @@ backup:
     # R, the age in days for which each node bucket's lock refuses deletes
     # (BACKUP-057, operator 2026-09-30; fits the free tier with both copies,
     # specs/BACKUP-057/verification.md). Rendered into infra/terraform/r2/ by
-    # `toolkit infra terraform r2-tfvars`. Must stay below the --keep-within
+    # the runner (`make tf-r2-plan`). Must stay below the --keep-within
     # days in node_backup_retention_flags, and those flags must forbid repacking
     # (--max-repack-size 0), or prune deletes a pack younger than R and the lock
     # refuses it; tests/test_r2_terraform.py enforces both.

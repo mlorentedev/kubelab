@@ -1,5 +1,6 @@
 # Variables for AWS Argo CD Hub
-# Values come from aws.tfvars (mirrors common.yaml SSOT)
+# Defaults mirror common.yaml; the two secrets arrive as TF_VAR_* from SOPS
+# through the runner (`make tf-aws-plan`), never as a tfvars file.
 
 variable "aws_region" {
   description = "AWS region"

@@ -4,6 +4,7 @@ import functools
 import os
 import shutil
 import subprocess
+import sys
 from collections.abc import Generator
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -37,8 +38,56 @@ def pytest_configure(config: pytest.Config) -> None:
     """
     for var in ("FORCE_COLOR", "CLICOLOR_FORCE"):
         os.environ.pop(var, None)
-    del config  # the hook's signature, not something this needs
+    _gnu_userland_first()
     _install_host_client_barrier()
+    del config  # the hook's signature, not something this needs
+
+
+#: Where Homebrew's coreutils puts its unprefixed commands (Apple silicon, Intel).
+GNU_COREUTILS = (
+    Path("/opt/homebrew/opt/coreutils/libexec/gnubin"),
+    Path("/usr/local/opt/coreutils/libexec/gnubin"),
+)
+
+
+# Every GNU-only tool the node scripts call. All of them, not `timeout` alone:
+# Homebrew links an unprefixed `timeout` (macOS has none) and leaves `chown` and
+# `base64` BSD, so one GNU tool on PATH says nothing about the others.
+GNU_TOOLS = ("timeout", "chown", "base64")
+
+
+def _path_is_gnu() -> bool:
+    """Whether PATH already resolves every tool to GNU coreutils (nix, a custom prefix)."""
+    for tool in GNU_TOOLS:
+        binary = shutil.which(tool)
+        if binary is None:
+            return False
+        result = subprocess.run([binary, "--version"], capture_output=True, text=True, check=False)
+        if "GNU coreutils" not in result.stdout:
+            return False
+    return True
+
+
+def _gnu_userland_first() -> None:
+    """On macOS, put GNU coreutils ahead of the BSD ones for every subprocess.
+
+    Many tests run the shell scripts the roles ship to the Ubuntu nodes, which
+    use GNU `timeout`, `chown --reference`, `base64 -w0`. On macOS's BSD userland
+    90 of them failed on unmodified master (measured 2026-10-13), so
+    `make test-fast` was no gate on the operator's only workstation. Refusing
+    to start is better than 90 failures that read as regressions.
+    """
+    if sys.platform != "darwin" or _path_is_gnu():
+        return
+    gnubin = next((p for p in GNU_COREUTILS if (p / "timeout").exists()), None)
+    if gnubin is None:
+        raise pytest.UsageError(
+            "macOS: the node scripts under test need GNU coreutils. Install it with "
+            "`dotf tools install coreutils` (dotfiles packages.json) or `brew install coreutils`."
+        )
+    path = os.environ.get("PATH", "")
+    if not path.startswith(f"{gnubin}{os.pathsep}"):
+        os.environ["PATH"] = f"{gnubin}{os.pathsep}{path}"
 
 
 # --- Host-client barrier (#1886) -------------------------------------------------

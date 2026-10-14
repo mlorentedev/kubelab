@@ -34,13 +34,13 @@ SOPS (common.enc.yaml) → cloudflare.api_token → toolkit _get_terraform_env()
 ```
 infra/terraform/dns/
   main.tf              # Provider config, data sources (zone lookups), locals (JSON parsing + target resolution)
-  variables.tf         # cloudflare_api_token (sensitive), zone IDs, vps_ip, dns_ttl
+  variables.tf         # cloudflare_api_token (sensitive), zone IDs, vps_ip (rendered), dns_ttl
   records_kubelab.tf   # Root A (@), www CNAME, service A records via for_each
   records_mlorente.tf  # Root A, service A records via for_each
   zone_settings.tf     # TLS/HSTS zone settings + CAA records (SEC-AUDIT-001/002/004/006) — not services.json-driven
   outputs.tf           # Service URLs, record counts
   services.json        # Service catalog: name, zone, proxied, environments, target (optional)
-  dns.tfvars           # Zone IDs, VPS IP, TTL
+  dns.tfvars           # Zone IDs, TTL (the VPS IP is rendered from common.yaml)
   terraform.tfstate    # Local state (gitignored)
   .terraform.lock.hcl  # Provider lock (committed)
 ```
@@ -123,9 +123,12 @@ This creates `console.svc.kubelab.live`.
 
 ### Change VPS IP address (migration)
 
-1. Edit `infra/terraform/dns/dns.tfvars`:
-```hcl
-vps_ip = "NEW.IP.ADDRESS"
+1. Edit `networking.vps.public_ip` in `infra/config/values/common.yaml`; the runner
+   renders `vps_ip` from it:
+```yaml
+networking:
+  vps:
+    public_ip: "NEW.IP.ADDRESS"
 ```
 
 2. Plan — expect every A record WITHOUT a `target` to show "change" (records with `target` set, e.g. `pihole`, are unaffected — they resolve to their node's Tailscale IP, not `vps_ip`):
@@ -200,18 +203,15 @@ terraform state list                      # List all managed resources
 terraform state show 'cloudflare_record.kubelab_svc["api"]'  # Single record detail
 ```
 
-## Manual Usage (without make)
+## There is no manual usage
 
-```bash
-cd infra/terraform/dns
-
-# Extract token from SOPS
-export TF_VAR_cloudflare_api_token="$(sops -d ../../config/secrets/common.enc.yaml | grep api_token | awk '{print $2}')"
-
-terraform init          # First time only
-terraform plan -var-file=dns.tfvars
-terraform apply -var-file=dns.tfvars
-```
+Every run goes through the runner (`make tf-dns-plan`, `make tf-dns-apply`, or
+`poetry run toolkit infra terraform run dns <action>`). It injects the token from
+SOPS into terraform's environment only, renders the VPS IP from `common.yaml`,
+runs `init`, and for an apply saves the plan and refuses any delete before
+applying that file. A shell `export` of the token, or `sops -d` piped into
+`grep`, puts it in history or a transcript; `tests/test_terraform_single_entry.py`
+fails on any code path that calls terraform around the runner.
 
 ## Bootstrap from Zero (New VPS / New Provider)
 
@@ -219,7 +219,7 @@ Use this when setting up on a completely new machine or recreating the infrastru
 
 ### Prerequisites
 
-- Terraform >= 1.5 installed (`brew install terraform` or `apt install terraform`)
+- Terraform on PATH at the pinned version: `dotf tools sync` (`TERRAFORM_VERSION` in the dotfiles `versions.conf`)
 - `jq` installed
 - Cloudflare account with domains added
 - SOPS + age configured (for credential decryption)
@@ -227,8 +227,8 @@ Use this when setting up on a completely new machine or recreating the infrastru
 ### Step 1: Obtain Cloudflare credentials
 
 ```bash
-# If SOPS secrets already exist:
-sops -d infra/config/secrets/common.enc.yaml | grep api_token
+# If SOPS secrets already exist, check it is there without printing it:
+poetry run toolkit secrets show cloudflare.api_token --env common >/dev/null && echo present
 
 # If creating a new API token:
 # Cloudflare Dashboard → My Profile → API Tokens → Create Token
@@ -250,30 +250,31 @@ curl -s "https://api.cloudflare.com/client/v4/zones" \
 # {"name": "mlorente.dev", "id": "4d0a0cf660577b845df5df982ad834a9"}
 ```
 
-Update `dns.tfvars` with the zone IDs and new VPS IP if it changed.
+Update `dns.tfvars` with the zone IDs, and `networking.vps.public_ip` in
+`common.yaml` if the VPS IP changed.
 
-### Step 3: Initialize Terraform
+### Step 3: Store the token
 
-```bash
-cd infra/terraform/dns
-export TF_VAR_cloudflare_api_token="$CF_TOKEN"
-terraform init
-```
+Put a new token in SOPS with a hidden prompt, so it never reaches history or
+argv: `poetry run toolkit secrets set cloudflare.api_token --env common --stdin`.
+The runner reads it from there and runs `init` itself.
 
 ### Step 4a: Fresh start (no existing records)
 
 If the zones are empty (new Cloudflare account or new domains):
 
 ```bash
-terraform plan -var-file=dns.tfvars    # Review what will be created
-terraform apply -var-file=dns.tfvars   # Create all records
+make tf-dns-plan     # Review what will be created
+make tf-dns-apply    # Create all records
 ```
 
 This creates every record in one pass: root + www + CAA records (both zones, from `zone_settings.tf`) plus every entry in `services.json`. No imports needed. Record count isn't fixed — see `terraform state list` after apply for the live count instead of trusting a number written down here.
 
 ### Step 4b: Adopt existing records (state rebuild)
 
-If records already exist in Cloudflare but `terraform.tfstate` is lost:
+If records already exist in Cloudflare but `terraform.tfstate` is lost. These are
+still raw `terraform import` calls; rebuilding a lost state through config-driven
+`import` blocks and the runner is TF-015 (#2226), which replaces this step:
 
 ```bash
 # 1. List existing records for each zone
@@ -363,7 +364,7 @@ Follow **Step 4b** above. Records still exist in Cloudflare — just need re-imp
 The `vps_ip` variable makes rollback a one-liner:
 ```bash
 # If K3s migration fails → revert IP to original VPS
-# Edit dns.tfvars → vps_ip = "162.55.57.175"
+# Edit common.yaml → networking.vps.public_ip: "162.55.57.175"
 make tf-dns-apply
 ```
 

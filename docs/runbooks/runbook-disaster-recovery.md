@@ -23,28 +23,19 @@ owner: manu
 ## Step 1: Create new VPS (Terraform)
 
 ```bash
-cd infra/terraform/compute
-cp compute.tfvars.example compute.tfvars
-# Edit compute.tfvars if needed (server_type, location)
-
-# Get the Hetzner API token into this shell only, extracting the ONE key needed.
-# Never `sops -d` the whole file and filter it: the filter narrows what a human
-# READS, not what was decrypted and written to the pipeline, and anything a
-# recovery session prints is captured by its transcript. Measured 2026-08-20,
-# that exact shape put a cloud access key pair, two control-plane keys and an
-# admin password into one transcript.
-export TF_VAR_hetzner_api_token=$(poetry run toolkit secrets show hetzner.api_key --env common | tail -1)
-
-# Expect 64 characters. A shorter value is not a Hetzner Cloud API token and the
-# provider rejects it with "must be exactly 64 characters long" -- re-issue in
-# the Hetzner console rather than debugging Terraform. Verified by consequence,
-# never by printing it: `printf %s "$TF_VAR_hetzner_api_token" | wc -c`.
-
-terraform init
-terraform plan -var-file=compute.tfvars
-terraform apply -var-file=compute.tfvars
+# The inputs are the defaults in infra/terraform/compute/variables.tf (server
+# type, location, image); change them there, in a commit, not on the command
+# line. The Hetzner token comes from SOPS (`hetzner.api_key`) into terraform's
+# environment only, through the runner.
+make tf-compute-plan
+make tf-compute-apply
 # Note the output: vps_public_ip
 ```
+
+A token rejected with "must be exactly 64 characters long" is not a Hetzner
+Cloud API token: re-issue it in the Hetzner console and store it with
+`poetry run toolkit secrets set hetzner.api_key --env common --stdin`, rather
+than debugging Terraform.
 
 ## Step 2: Update SSOT with new IP
 
@@ -57,11 +48,11 @@ networking:
 
 ## Step 3: Update DNS (Terraform)
 
+The DNS root reads the VPS IP from `common.yaml`, so Step 2 is the only edit:
+
 ```bash
-cd infra/terraform/dns
-# Update dns.tfvars with new IP
-terraform plan -var-file=dns.tfvars
-terraform apply -var-file=dns.tfvars
+make tf-dns-plan     # expect the apex and www records to move to <NEW_IP>
+make tf-dns-apply
 ```
 
 Wait for DNS propagation (~5 min with TTL=300).

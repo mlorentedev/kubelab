@@ -429,14 +429,17 @@ def test_a_source_may_declare_several_databases(tmp_path: Path) -> None:
     }
 
 
-def test_an_excluded_path_is_not_copied(tmp_path: Path) -> None:
+def test_an_excluded_path_is_not_copied(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Open WebUI's `cache/` is a gigabyte of re-downloadable models, ruled tier 3."""
     _tree(
         tmp_path, {"webui.db": "RAW", "cache/embedding/model.bin": "MODEL", "cache.txt": "kept", "uploads/a.pdf": "doc"}
     )
     (tmp_path / "src/empty").mkdir()
     sock = socket.socket(socket.AF_UNIX)
-    sock.bind(str(tmp_path / "src/gateway.sock"))
+    # Relative: macOS caps a socket path at 104 bytes and its TMPDIR alone is
+    # most of that, so the absolute path raised "AF_UNIX path too long".
+    monkeypatch.chdir(tmp_path)
+    sock.bind("src/gateway.sock")
     try:
         staged = _capture(
             tmp_path, {"sqlite": "webui.db", "exclude": {"cache": {"reason": "models, re-downloaded", "tier": 3}}}
@@ -444,6 +447,7 @@ def test_an_excluded_path_is_not_copied(tmp_path: Path) -> None:
     finally:
         sock.close()
     assert set(_files(staged)) == {"cache.txt", "uploads/a.pdf", "webui.db"}
+    assert not (staged / "gateway.sock").exists(), "a socket is not data: a restored one connects to nothing"
     assert not (staged / "cache").exists(), "the excluded directory itself must not be staged"
     assert (staged / "empty").is_dir(), "an empty directory is part of the tree a restore reproduces"
 

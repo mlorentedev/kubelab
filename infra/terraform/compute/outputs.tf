@@ -20,7 +20,7 @@ output "next_steps" {
 
     Next steps:
     1. Update infra/config/values/common.yaml → networking.vps.public_ip
-    2. Update Cloudflare DNS: cd ../dns && terraform apply
+    2. Update Cloudflare DNS: make tf-dns-apply
     3. Provision with Ansible: toolkit infra ansible run -p site -e prod
     4. Restore backups: toolkit infra ansible run -p restore -e prod
   EOT

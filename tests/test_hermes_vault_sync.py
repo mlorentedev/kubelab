@@ -199,6 +199,10 @@ def process_in() -> Iterator[Callable[[Path], int]]:
         process.wait()
 
 
+@pytest.mark.skipif(
+    not Path("/proc/self/cwd").exists(),
+    reason="vault-sync finds a live git through /proc/<pid>/cwd, a Linux interface; it runs only on ace2",
+)
 def test_a_lock_is_left_while_a_git_of_this_user_works_in_the_clone(
     synced: Vault, process_in: Callable[[Path], int]
 ) -> None:

@@ -146,7 +146,7 @@ def test_no_stage_of_the_chain_swallows_its_failure():
 @pytest.mark.parametrize(
     "earlier,later",
     [
-        ("terraform", "wait-node-ready"),
+        ("$(_TF) aws apply", "wait-node-ready"),
         ("wait-node-ready", "provision"),
         ("provision", "deploy-argocd"),
     ],

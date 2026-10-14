@@ -53,8 +53,8 @@ data "hcloud_server" "vps" {
 # ---------------------------------------------------------------------------
 # Firewall
 #
-# Rules come from networking.firewall.vps_inbound in common.yaml, rendered into
-# vps-firewall.auto.tfvars by `toolkit infra terraform vps-firewall-tfvars`.
+# Rules come from networking.firewall.vps_inbound in common.yaml, rendered by
+# the runner (toolkit/features/vps_firewall_tfvars.py).
 # Do not hardcode a port here — the whole point of SEC-006 is that the list is
 # declared once. A port added here and not in common.yaml would drift silently,
 # and the guard (tests/) asserts the two agree.

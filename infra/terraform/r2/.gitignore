@@ -4,6 +4,6 @@
 *.tfstate.backup
 *.tfplan
 
-# Generated from common.yaml by `toolkit infra terraform r2-tfvars`, and removed
-# after every run by the Makefile target. The SSOT is backup.* in common.yaml.
+# Rendered here by the pre-runner Make targets. The runner renders into a
+# private temp dir instead. The SSOT is backup.* in common.yaml.
 r2.tfvars
