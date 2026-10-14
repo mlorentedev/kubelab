@@ -151,3 +151,9 @@ def test_only_a_1_turns_a_make_flag_on(value: str, flag: str | None) -> None:
     line = next(text for text in out.splitlines() if "monitoring apply" in text)
     passed = {arg for arg in line.split() if arg in {"--prune", "--check"}}
     assert passed == ({flag} if flag else set())
+
+
+def test_an_edit_attaches_the_tags_the_seed_added(project) -> None:
+    """#1974: a tag added to the seed of an existing monitor reaches it live."""
+    kuma = project([{**_monitor("keep"), "tags": ["on-demand"]}], [_monitor("keep", 1)])
+    assert kuma.writes[-2:] == ["edit_monitor:1", "add_monitor_tag"], kuma.writes
