@@ -66,7 +66,8 @@ the local file and exits 1.
 
 Re-running is safe at any point. After a success it is a no-op. If R2 already
 holds the content but the rename did not happen, the run renames without pushing
-again.
+again. If the rename happened but R2 holds no written state for the root (serial
+0, or no object), the run pushes the `.pre-remote` copy and leaves it in place.
 
 Then, from any other checkout:
 

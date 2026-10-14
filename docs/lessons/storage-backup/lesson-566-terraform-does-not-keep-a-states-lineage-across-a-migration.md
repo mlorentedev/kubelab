@@ -36,6 +36,14 @@ because nothing wrote it. Mutation-tested: an always-push, a gate that ignores
 attributes or outputs, and a serial-0 copy each turn
 `tests/test_terraform_runner.py` red.
 
+The content check had a hole of its own, found on the next root. `aws` holds no
+resources and no outputs, so its content equals the empty state an untouched key
+answers. The runner took it as already in R2, pushed nothing, and renamed the
+local file. Equality of content proves arrival only against a state that was
+written, so the gate also requires a remote serial of at least 1. A pre-remote
+copy whose root has no written state in R2 is now pushed from where it is, so a
+rename with no write behind it is finished by the next run, not by hand.
+
 **Rule**: Verify a move by the content that arrived, not by the identifiers the
 source carried. The destination can re-key what it receives, and a gate keyed on
 the source's identity refuses a correct result, then blocks its own retry.
