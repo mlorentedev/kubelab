@@ -83,6 +83,34 @@ def _tier(monitor: dict) -> str | None:
 RESOLVED = [(m["key"], _tier(m), TAG in m.get("tags", [])) for m in MONITORS if _tier(m)]
 
 
+# Monitors whose target the SSOT gives no tier: public endpoints, the prod
+# cluster's own routes, and staging, which the `staging` tag already mutes.
+# Declared rather than filtered out, so a new monitor the resolver misses fails
+# here instead of dropping out of `test_the_tag_follows_the_tier` unseen (#2292).
+UNRESOLVED = {
+    "home-iot-smart-plug-co",
+    "infra-vpn-headscale",
+    "prod-api-api-kubelab-live",
+    "prod-web-homepage-cockpit",
+    "prod-web-kubelab-live",
+    "prod-web-mlorente-dev",
+    "services-auth-argo-cd",
+    "services-auth-authelia-staging",
+    "services-leaving-denver",
+    "services-monitoring-pi-hole-staging",
+    "services-monitoring-uptime-kuma-prod",
+    "staging-api-api-staging-kubelab-live",
+    "staging-web-grafana-staging",
+    "staging-web-n8n-staging",
+    "staging-web-staging-mlorente-dev",
+}
+
+
+def test_every_monitor_is_resolved_or_declared_unresolved() -> None:
+    resolved = {key for key, _, _ in RESOLVED}
+    assert {m["key"] for m in MONITORS} - resolved == UNRESOLVED
+
+
 def test_the_resolver_reaches_both_tiers() -> None:
     """The vacuity check: a renamed SSOT key would otherwise resolve nothing."""
     tiers = [tier for _, tier, _ in RESOLVED]

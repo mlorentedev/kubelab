@@ -214,6 +214,8 @@ def _reconcile_tags(api: Any, monitor: dict[str, Any], tag_id_map: dict[str, int
     field but them, and a tag added to the seed reached only new monitors.
     Raises when a seed tag has no id: `tags.json` must declare every tag a
     monitor uses, and an edit that silently drops one is the defect this fixes.
+    The apply records the raise as that monitor's failure and exits 1 once every
+    other monitor has been tried.
     """
     missing, extra = tag_drift(monitor["_seed"], monitor)
     unknown = [name for name in missing if name not in tag_id_map]
@@ -428,6 +430,11 @@ def apply_monitors(project_root: Path, *, check: bool = False, prune: bool = Fal
                 return {str(nid): True for nid in default_notif_ids}
             return {}
 
+        # A monitor that fails to converge does not stop the others, but it does
+        # fail the run: a sync that logs a warning and exits 0 is a plan saying
+        # one thing while the instance says another (#2292).
+        failed: list[str] = []
+
         # Edits keep the monitor id, and with it the uptime history.
         edited = 0
         for m in to_edit:
@@ -445,7 +452,8 @@ def apply_monitors(project_root: Path, *, check: bool = False, prune: bool = Fal
                 _reconcile_tags(api, m, tag_id_map)
                 edited += 1
             except Exception as e:
-                logger.warning(f"Failed to edit '{m.get('name')}': {type(e).__name__}: {e!r}")
+                failed.append(f"edit '{m.get('name')}'")
+                logger.error(f"Failed to edit '{m.get('name')}': {type(e).__name__}: {e!r}")
 
         created = 0
         for m in to_create:
@@ -476,22 +484,19 @@ def apply_monitors(project_root: Path, *, check: bool = False, prune: bool = Fal
                 if isinstance(r, dict) and not r.get("ok", True):
                     raise RuntimeError(r.get("msg", "Unknown error"))
                 monitor_id = r.get("monitorID") if isinstance(r, dict) else None
+                if monitor_id:
+                    # The same convergence an edit runs, from a monitor with no tags yet.
+                    _reconcile_tags(api, {"id": monitor_id, "tags": [], "_seed": m}, tag_id_map)
                 created += 1
-
-                # Associate tags (if defined in seed and tag exists)
-                if monitor_id and m.get("tags"):
-                    for tag_name in m["tags"]:
-                        if tag_name in tag_id_map:
-                            try:
-                                api.add_monitor_tag(tag_id_map[tag_name], monitor_id, "")
-                            except Exception:
-                                pass  # The next apply sees the missing tag (`tag_drift`) and edits it in.
             except Exception as e:
-                logger.warning(f"Failed to create '{m['name']}': {type(e).__name__}: {e!r}")
+                failed.append(f"create '{m['name']}'")
+                logger.error(f"Failed to create '{m['name']}': {type(e).__name__}: {e!r}")
 
-        logger.success(
-            f"Synced: {created}/{len(to_create)} created, {edited}/{len(to_edit)} edited, {len(to_delete)} deleted"
-        )
+        summary = f"{created}/{len(to_create)} created, {edited}/{len(to_edit)} edited, {len(to_delete)} deleted"
+        if failed:
+            logger.error(f"Sync incomplete: {summary}. Failed: {', '.join(failed)}")
+            raise SystemExit(1)
+        logger.success(f"Synced: {summary}")
     finally:
         api.disconnect()
 

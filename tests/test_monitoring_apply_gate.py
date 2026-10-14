@@ -157,3 +157,19 @@ def test_an_edit_attaches_the_tags_the_seed_added(project) -> None:
     """#1974: a tag added to the seed of an existing monitor reaches it live."""
     kuma = project([{**_monitor("keep"), "tags": ["on-demand"]}], [_monitor("keep", 1)])
     assert kuma.writes[-2:] == ["edit_monitor:1", "add_monitor_tag"], kuma.writes
+
+
+def test_a_create_attaches_the_seed_tags(project) -> None:
+    kuma = project([{**_monitor("new"), "tags": ["on-demand"]}], [])
+    assert kuma.writes[-2:] == ["sio:add", "add_monitor_tag"], kuma.writes
+
+
+@pytest.mark.parametrize("live", [[_monitor("broken", 1)], []], ids=["edit", "create"])
+def test_a_monitor_that_fails_to_converge_fails_the_apply(project, live) -> None:
+    """#2292: a failure used to be a warning, and `make monitoring-apply` exited 0."""
+    seed = [{**_monitor("broken"), "tags": ["undeclared"]}, {**_monitor("fine"), "tags": ["on-demand"]}]
+    with pytest.raises(SystemExit) as failed:
+        project(seed, [*live, _monitor("fine", 2)])
+    assert failed.value.code == 1
+    # The failure does not stop the monitors after it.
+    assert "edit_monitor:2" in project.last.writes, project.last.writes
