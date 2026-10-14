@@ -143,7 +143,7 @@ def init(
     elif generated:
         logger.success(f"Generated {len(generated)} machine secrets for {env}")
         logger.info("Next steps:")
-        logger.info("  1. Set passwords:  toolkit credentials generate --env " + env)
+        logger.info("  1. Set passwords:  toolkit credentials generate --auto-update --env " + env)
         logger.info("  2. Hash OIDC:      toolkit secrets hash --env " + env)
         if env != "dev":
             logger.info("  3. Apply to K8s:   toolkit secrets apply --env " + env)
