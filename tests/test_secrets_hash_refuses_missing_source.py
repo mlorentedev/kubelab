@@ -15,21 +15,10 @@ from typing import Any
 import pytest
 import yaml
 
-from toolkit.features.secrets_manager import SECRET_CATALOG, HashSourceMissing, SecretKind, SecretsManager
+from toolkit.features.secrets_manager import HashSourceMissing, SecretsManager, hashed_specs
 
 SECRETS_DIR = Path(__file__).resolve().parents[1] / "infra/config/secrets"
 ENV = "prod"
-
-
-def _hashed_specs(env: str) -> list[Any]:
-    return [
-        spec
-        for spec in SECRET_CATALOG
-        if env in spec.envs
-        and spec.kind == SecretKind.ARGON2_HASH
-        and spec.derived_from
-        and not spec.derived_from.startswith("(")
-    ]
 
 
 def _nest(paths: list[str]) -> dict[str, Any]:
@@ -77,7 +66,7 @@ def _manager(monkeypatch: pytest.MonkeyPatch, vault: _Vault) -> SecretsManager:
 def test_a_missing_source_is_refused_and_the_vault_is_untouched(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    sources = [spec.derived_from for spec in _hashed_specs(ENV)]
+    sources = [spec.derived_from for spec in hashed_specs(ENV)]
     assert len(sources) > 1, "the catalog no longer hashes several sources in prod"
     absent = sources[-1]
     vault = _Vault(tmp_path, _nest(sources[:-1]))
@@ -92,7 +81,7 @@ def test_a_missing_source_is_refused_and_the_vault_is_untouched(
 
 
 def test_with_every_source_present_only_hashes_are_written(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    specs = _hashed_specs(ENV)
+    specs = hashed_specs(ENV)
     vault = _Vault(tmp_path, _nest([spec.derived_from for spec in specs]))
 
     hashes = _manager(monkeypatch, vault).hash_oidc_secrets(ENV)
@@ -128,8 +117,10 @@ def test_every_hashed_source_lives_in_its_own_env_file(env: str) -> None:
     decrypts a value.
     """
     tree = yaml.safe_load((SECRETS_DIR / f"{env}.enc.yaml").read_text(encoding="utf-8"))
+    specs = hashed_specs(env)
+    assert specs, f"no hashed specs for {env}: this case would check nothing"
     absent = []
-    for spec in _hashed_specs(env):
+    for spec in specs:
         node: Any = tree
         for key in spec.derived_from.split("."):
             node = node.get(key) if isinstance(node, dict) else None

@@ -1802,6 +1802,22 @@ class AuditResult:
     malformed: list[str] = field(default_factory=list)
 
 
+def hashed_specs(env: str) -> list[SecretSpec]:
+    """The catalog entries `hash_oidc_secrets` hashes for `env`.
+
+    An Argon2 digest of a plaintext key that lives in the vault. A `derived_from`
+    in parentheses names an interactive input, not a key, so it is not hashed here.
+    """
+    return [
+        spec
+        for spec in SECRET_CATALOG
+        if env in spec.envs
+        and spec.kind == SecretKind.ARGON2_HASH
+        and spec.derived_from
+        and not spec.derived_from.startswith("(")
+    ]
+
+
 class HashSourceMissing(Exception):
     """A hash whose plaintext source is not in the env file: refused, nothing written.
 
@@ -2108,15 +2124,7 @@ class SecretsManager:
             logger.error(f"Cannot decrypt {env}.enc.yaml")
             return {}
 
-        specs = [
-            spec
-            for spec in SECRET_CATALOG
-            if env in spec.envs
-            and spec.kind == SecretKind.ARGON2_HASH
-            # A derived_from in parentheses names an interactive input, not a key.
-            and spec.derived_from
-            and not spec.derived_from.startswith("(")
-        ]
+        specs = hashed_specs(env)
         missing = [spec.derived_from for spec in specs if not self._resolve_key(decrypted, spec.derived_from)]
         if missing:
             raise HashSourceMissing(
