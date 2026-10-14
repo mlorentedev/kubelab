@@ -29,7 +29,7 @@ created: "2026-10-14"
 
 ## Closing
 
-- [ ] `make test-fast` green
+- [x] `make test-fast` green: 4595 passed after regenerating `platform.json` (2026-10-14)
 - [ ] `features.json` and `verification.md` filled
 - [ ] Draft PR with `## Knowledge`; reviewers triaged; `## Review triage`
 - [ ] `dotf spec review`, dispositions, archive
