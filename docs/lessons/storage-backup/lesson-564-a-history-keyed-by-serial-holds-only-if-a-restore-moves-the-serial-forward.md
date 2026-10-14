@@ -35,6 +35,13 @@ copied before the write. Mutation-tested: `restored = old`, which restores at th
 old serial, turns the restore test red (`make tf-state-restore`,
 `tests/test_terraform_runner.py`).
 
+"Key taken" has two spellings in R2. Once a history key falls under the lock
+rule, a create-only PUT on it answers `ObjectLockedByBucketPolicy`, not
+`PreconditionFailed`: R2 checks the lock before the condition (measured
+2026-10-13, when a re-run of a migration met its own earlier copy). The runner
+reads both as "already copied", which holds because only the history prefix is
+locked, so a locked key is always an existing copy.
+
 **Rule**: When an immutable store is keyed by a version counter and "key exists"
 is read as "already stored", every writer must move the counter forward,
 restores included. A restore that reuses an old version number turns the

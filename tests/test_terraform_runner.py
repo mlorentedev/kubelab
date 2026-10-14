@@ -781,9 +781,14 @@ def test_a_read_writes_no_history() -> None:
     assert aws.calls == [] and "state pull" not in fake.verbs()
 
 
-def test_a_snapshot_already_in_history_is_the_same_state() -> None:
-    """Lineage and serial name one state; the conditional put refuses a second copy."""
-    aws = FakeAws(rc=254, out="An error occurred (PreconditionFailed) when calling the PutObject operation")
+@pytest.mark.parametrize("code", ["PreconditionFailed", "ObjectLockedByBucketPolicy"])
+def test_a_snapshot_already_in_history_is_the_same_state(code: str) -> None:
+    """Lineage and serial name one state; the conditional put refuses a second copy.
+
+    R2 answers ObjectLockedByBucketPolicy, not PreconditionFailed, once the key
+    is under the lock rule: the lock is checked first (measured 2026-10-13).
+    Both say the key exists, and only the history prefix is locked."""
+    aws = FakeAws(rc=254, out=f"An error occurred ({code}) when calling the PutObject operation")
     assert _run("dns", "apply", FakeTerraform(pulls=[STATE]), aws=aws) == 0
 
 

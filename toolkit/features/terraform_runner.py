@@ -704,7 +704,10 @@ class _History:
         if put.returncode == 0:
             logger.info(f"{self.root_name}: state serial {serial} copied to history.")
             return 0
-        if "PreconditionFailed" in put.stdout:
+        # The key exists, so this lineage and serial are already copied. R2
+        # checks the lock rule before If-None-Match, so a key old enough to be
+        # locked answers ObjectLockedByBucketPolicy instead (measured 2026-10-13).
+        if any(code in put.stdout for code in ("PreconditionFailed", "ObjectLockedByBucketPolicy")):
             return 0
         logger.error(f"{self.root_name}: copying serial {serial} to {key} failed: {put.stdout.strip()[-300:]}")
         return 1
