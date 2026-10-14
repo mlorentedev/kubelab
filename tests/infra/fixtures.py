@@ -155,6 +155,10 @@ def vpn_unavailable() -> str | None:
     """
     cli = tailscale_cli()
     if cli is None:
+        if MACOS_TAILSCALE_CLI.is_file():
+            # Installed, but without its execute bit (an archive extracted without
+            # modes, a broken update): the fix is chmod, not an install.
+            return f"Tailscale CLI cannot run: {MACOS_TAILSCALE_CLI} is not executable"
         return f"Tailscale CLI not found: not on PATH, and no {MACOS_TAILSCALE_CLI}"
     try:
         result = subprocess.run([cli, "status", "--json"], capture_output=True, text=True, timeout=5)

@@ -34,8 +34,9 @@ def test_the_bundle_path_is_the_one_the_macos_app_installs() -> None:
     assert Path("/Applications/Tailscale.app/Contents/MacOS/Tailscale") == fixtures.MACOS_TAILSCALE_CLI
 
 
-def test_an_absent_cli_is_not_reported_as_a_down_tailnet(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_an_absent_cli_is_not_reported_as_a_down_tailnet(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(fixtures, "tailscale_cli", lambda: None)
+    monkeypatch.setattr(fixtures, "MACOS_TAILSCALE_CLI", tmp_path / "absent")
     reason = fixtures.vpn_unavailable()
     assert reason is not None
     assert reason.startswith("Tailscale CLI not found")
@@ -77,3 +78,33 @@ def test_a_cli_that_cannot_run_is_not_reported_as_a_down_tailnet(monkeypatch: py
     reason = fixtures.vpn_unavailable()
     assert reason is not None and reason.startswith("Tailscale CLI cannot run")
     assert "not connected" not in reason
+
+
+def test_a_bundle_without_its_execute_bit_is_named_as_such(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    bundle = tmp_path / "Tailscale"
+    bundle.touch(mode=0o644)
+    monkeypatch.setattr(fixtures, "tailscale_cli", lambda: None)
+    monkeypatch.setattr(fixtures, "MACOS_TAILSCALE_CLI", bundle)
+    reason = fixtures.vpn_unavailable()
+    assert reason == f"Tailscale CLI cannot run: {bundle} is not executable"
+
+
+@pytest.mark.parametrize(
+    "reason",
+    ["Tailscale CLI not found: not on PATH", "Tailscale CLI cannot run: x", "Tailscale not connected: exited 1"],
+)
+def test_the_infra_skip_carries_the_reason(monkeypatch: pytest.MonkeyPatch, reason: str) -> None:
+    """What an operator reads in `make test-infra`: the fixture, not the helper."""
+    from tests.infra import conftest
+
+    monkeypatch.setattr(conftest, "vpn_unavailable", lambda: reason)
+    with pytest.raises(pytest.skip.Exception) as skipped:
+        conftest.require_vpn.__wrapped__()
+    assert str(skipped.value).startswith(f"{reason} — ")
+
+
+def test_the_infra_fixture_does_not_skip_on_a_connected_tailnet(monkeypatch: pytest.MonkeyPatch) -> None:
+    from tests.infra import conftest
+
+    monkeypatch.setattr(conftest, "vpn_unavailable", lambda: None)
+    assert conftest.require_vpn.__wrapped__() is None
