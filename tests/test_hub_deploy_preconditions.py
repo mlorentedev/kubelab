@@ -50,12 +50,15 @@ def _recipe(name: str) -> str:
 
 
 class TestPrecondition:
-    def test_the_helm_step_declares_the_reachability_check_as_a_prerequisite(self) -> None:
+    # recover-argocd's `helm status` swallows its errors too: on a hub it cannot
+    # reach, it printed "no recovery needed" (#2253's review).
+    @pytest.mark.parametrize("target", [TARGET, "recover-argocd"])
+    def test_the_helm_step_declares_the_reachability_check_as_a_prerequisite(self, target: str) -> None:
         """Defining the check is not enough -- it has to run before the scale."""
-        rule = _recipe(TARGET).splitlines()[0]
+        rule = _recipe(target).splitlines()[0]
         assert PRECONDITION in rule, (
-            f"{TARGET} no longer depends on {PRECONDITION}. Defining the check without "
-            "wiring it leaves the scale-to-zero exactly as silent as it was in #1340."
+            f"{target} no longer depends on {PRECONDITION}. Defining the check without "
+            "wiring it leaves a swallowed failure exactly as silent as it was in #1340."
         )
 
     def test_the_precondition_target_exists_and_fails_loudly(self) -> None:

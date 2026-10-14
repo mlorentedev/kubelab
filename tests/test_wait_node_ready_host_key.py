@@ -6,7 +6,7 @@ and aborts:
 
     WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!
 
-`accept-new` -- what the generated inventory uses -- accepts UNKNOWN hosts and
+`accept-new` -- what the generated inventory keeps for this node alone -- accepts UNKNOWN hosts and
 still refuses CHANGED ones, which is the correct default and exactly wrong here.
 
 None of this is new: `docs/runbooks/ssh-keys.md` documents the warning and the

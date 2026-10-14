@@ -143,7 +143,9 @@ def test_the_env_provision_rpi4_merged_agrees_with_common() -> None:
     That is only the same rendering while the pinned env overrides none of these
     paths with a different value.
     """
-    [play] = yaml.safe_load((PLAYBOOKS / "provision-rpi4.yml").read_text())
+    # The pre-flight play pins nothing; the play that renders the role carries the env.
+    plays = yaml.safe_load((PLAYBOOKS / "provision-rpi4.yml").read_text())
+    [play] = [p for p in plays if "_rpi4_env" in (p.get("vars") or {})]
     env = play["vars"]["_rpi4_env"]
     common = yaml.safe_load(COMMON.read_text())
     overlay = yaml.safe_load((COMMON.parent / f"{env}.yaml").read_text()) or {}

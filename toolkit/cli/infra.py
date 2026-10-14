@@ -1,6 +1,7 @@
 "Infrastructure management commands for deployment and status checking."
 
 import os
+import re
 from pathlib import Path
 from typing import Annotated
 
@@ -1395,6 +1396,23 @@ def ansible_generate(
         raise typer.Exit(1) from None
 
 
+def _missing_known_hosts_file(inventory: Path) -> Path | None:
+    """The pinned known_hosts file the inventory's ssh options name, if it does not exist (ANSIBLE-066).
+
+    Read from the inventory that will run rather than from the SSOT, so a
+    `--skip-generate` run is checked against what it actually uses.
+    """
+    inv = yaml.safe_load(inventory.read_text(encoding="utf-8")) or {}
+    args = ((inv.get("all") or {}).get("vars") or {}).get("ansible_ssh_common_args") or ""
+    # Ansible also takes the options as a list; a hand-written inventory may use one.
+    text = " ".join(map(str, args)) if isinstance(args, list) else str(args)
+    match = re.search(r"UserKnownHostsFile=(\S+)", text)
+    if not match:
+        return None
+    path = Path(match.group(1)).expanduser()
+    return None if path.is_file() else path
+
+
 @ansible_app.command("run")
 def ansible_run(
     playbook: Annotated[str, typer.Option("--playbook", "-p", help="Playbook name (without .yml)")],
@@ -1452,6 +1470,14 @@ def ansible_run(
         logger.info("Drop --skip-generate, or run 'toolkit infra ansible generate' first")
         raise typer.Exit(1) from None
 
+    known_hosts = _missing_known_hosts_file(inventory)
+    if known_hosts is not None:
+        # Without it every stable host fails alone with a bare "Host key
+        # verification failed", which names neither the file nor the fix.
+        logger.error(f"The pinned host keys this inventory verifies against are missing: {known_hosts}")
+        logger.info("Deploy them from dotfiles (dotf converge); add a node with docs/runbooks/add-a-node.md")
+        raise typer.Exit(1) from None
+
     cmd = f"ansible-playbook {playbook_path} -i {inventory} -e deploy_env={env}"
     if limit:
         cmd += f" --limit {limit}"
@@ -1492,14 +1518,12 @@ def ansible_syntax_check(
     Uses the committed static inventory rather than the generated one, so this
     runs in CI with no `ansible generate` step and no SSOT decrypt.
 
-    What it does NOT catch, stated because an earlier version of this docstring
-    claimed the opposite: an unresolvable `hosts:` pattern. `--syntax-check`
-    parses structure and loads roles, but pattern matching happens at execution
-    time — `hosts: typo_host` emits a WARNING and exits 0 (measured, #1180
-    review). Making that fatal is not available here either: 11 of the 20
-    playbooks already emit it against the static inventory, because the real
-    host set lives in the per-environment GENERATED inventory. Catching a
-    typo'd host needs a different mechanism than this gate.
+    What it does NOT catch: an unresolvable `hosts:` pattern. `--syntax-check`
+    does match patterns, and `infra/ansible/ansible.cfg` makes a mismatch an
+    error (#1228), but most playbooks name hosts the static inventory does not
+    carry: the real host set lives in the per-environment GENERATED inventory.
+    So this gate runs with the mismatch set back to a warning, and the runner,
+    which uses the generated inventory, is where a typo'd host fails.
 
     Requires the Galaxy collections from requirements.yml: syntax-check loads
     the roles a playbook includes, and a role using `community.docker` fails to
@@ -1531,6 +1555,7 @@ def ansible_syntax_check(
         result = command.run(
             f"ansible-playbook --syntax-check {path} -i {inventory}",
             cwd=ansible_dir,
+            env={**os.environ, "ANSIBLE_HOST_PATTERN_MISMATCH": "warning"},
             check=False,
             capture_output=True,
         )
