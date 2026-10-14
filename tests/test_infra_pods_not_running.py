@@ -59,7 +59,8 @@ def test_a_failed_pod_with_no_cronjob_behind_it_is_reported() -> None:
 
 
 def test_a_pending_pod_is_reported_whatever_its_cronjob_did() -> None:
-    pending = _job("watcher-3", "2026-10-11T00:00:00Z")
+    """Only a finished failure is history; a pod still Pending is a live problem."""
+    stuck = _job("watcher-1", "2026-10-09T00:00:00Z")
     later = _job("watcher-2", "2026-10-10T00:00:00Z", complete=True)
-    pods = [_pod("watcher-3-x", "Pending", "watcher-3"), _pod("api", "Running")]
-    assert _pods_not_running(pods, [later, pending]) == ["watcher-3-x (Pending)"]
+    pods = [_pod("watcher-1-x", "Pending", "watcher-1"), _pod("api", "Running")]
+    assert _pods_not_running(pods, [stuck, later]) == ["watcher-1-x (Pending)"]
