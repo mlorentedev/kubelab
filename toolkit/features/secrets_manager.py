@@ -1195,6 +1195,60 @@ SECRET_CATALOG: list[SecretSpec] = [
             "revoke the old one. Nothing deployed reads it."
         ),
     ),
+    # The IAM user `kubelab-terraform`, read by the aws root's provider (#1351).
+    # In common.enc.yaml for months and never registered, so the audit reported
+    # 100% while a live cloud credential sat outside its view. Dormant with aws1
+    # (ADR-063) but kept: `make tf-aws-plan` measures the portability claim.
+    SecretSpec(
+        key_path="aws.access_key_id",
+        expiry=Expiry.NEVER,
+        description="AWS IAM access key id of kubelab-terraform (aws Terraform root)",
+        kind=SecretKind.EXTERNAL,
+        services=("terraform",),
+        format_hint="AKIA followed by 16 upper-case letters or digits",
+        value_pattern=r"AKIA[0-9A-Z]{16}",
+        rotate_note=(
+            "IAM console, user kubelab-terraform: create a second access key, `toolkit secrets set` "
+            "both halves in common, run `make tf-aws-plan`, then deactivate and delete the old key."
+        ),
+        envs=("prod",),
+    ),
+    SecretSpec(
+        key_path="aws.secret_access_key",
+        expiry=Expiry.NEVER,
+        description="AWS IAM secret access key of kubelab-terraform (aws Terraform root)",
+        kind=SecretKind.EXTERNAL,
+        services=("terraform",),
+        format_hint="40 characters; shown once by IAM",
+        rotate_note="Rotated together with aws.access_key_id: they are one credential.",
+        envs=("prod",),
+    ),
+    # The Terraform state bucket's own pair (TF-007): Object Read & Write on
+    # kubelab-tfstate only, so it can reach no backup. Every root's runs read it
+    # from common.enc.yaml, which is the file the runner's `common` config merges.
+    SecretSpec(
+        key_path="terraform.state.access_key_id",
+        expiry=Expiry.NEVER,
+        description="R2 access key id, Object Read & Write on kubelab-tfstate only (Terraform state)",
+        kind=SecretKind.EXTERNAL,
+        services=("terraform",),
+        format_hint="R2 API token id (not the token value)",
+        rotate_note=(
+            "`make tf-state-bootstrap ROTATE=1` mints a new token, verifies it, stores it and "
+            "revokes the old one. Nothing deployed reads it."
+        ),
+        envs=("prod",),
+    ),
+    SecretSpec(
+        key_path="terraform.state.secret_access_key",
+        expiry=Expiry.NEVER,
+        description="R2 secret access key, Object Read & Write on kubelab-tfstate only (Terraform state)",
+        kind=SecretKind.EXTERNAL,
+        services=("terraform",),
+        format_hint="SHA-256 of the R2 API token value; shown once, not recoverable",
+        rotate_note="Rotated together with terraform.state.access_key_id: they are one credential.",
+        envs=("prod",),
+    ),
     # BACKUP-057 PR 3: mints the per-node and watcher R2 tokens. It holds Account
     # API Tokens: Edit, which can create a token with any permission, so it is not
     # folded into r2_admin_token. Created with a TTL; operator workstation only.

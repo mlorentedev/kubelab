@@ -1602,6 +1602,17 @@ def tf_run(
         raise typer.Exit(code)
 
 
+@terraform_app.command("state-bootstrap")
+def tf_state_bootstrap(
+    rotate: Annotated[bool, typer.Option("--rotate", help="Replace the state token and revoke the old one")] = False,
+) -> None:
+    """Create the state bucket, its history lock rule and its token (TF-007). Idempotent."""
+    from toolkit.features import terraform_state_bootstrap
+
+    if not terraform_state_bootstrap.bootstrap(rotate=rotate):
+        raise typer.Exit(1)
+
+
 @terraform_app.command("killswitch-prove")
 def tf_killswitch_prove() -> None:
     """Prove the billing kill switch fires, end to end (AC2b).

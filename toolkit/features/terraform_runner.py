@@ -182,7 +182,8 @@ def _render_killswitch_test(ctx: Context) -> str:
     sa = ctx.outputs("gcp-bootstrap", "kill_switch_service_account")
     if not sa:
         raise RunnerError(
-            "could not read kill_switch_service_account from the gcp-bootstrap root. Apply that root first."
+            "could not read kill_switch_service_account from the gcp-bootstrap root. Its state was lost and "
+            "is recovered by TF-015 (#2226); until then the proof cannot run."
         )
     stamp = datetime.now(timezone.utc).strftime("%m%d%H%M%S")
     return f'kill_switch_service_account = "{sa}"\nproject_id = "kubelab-killswitch-{stamp}"\n'
@@ -403,7 +404,7 @@ def run(
     state_only = action in STATE_ONLY
     config = load_config()
     env = _state_env(config, root.name) if state_only else child_env(config, root, applying=action == "apply")
-    history = _History(root.name, config, aws)
+    history = _History(root.name, config, aws, env)
     if outputs is None:
 
         def outputs(other: str, name: str) -> str:
@@ -521,6 +522,29 @@ def _shape(state: Mapping[str, Any]) -> tuple[str, int, int]:
     return str(state.get("lineage", "")), int(state.get("serial", 0)), len(state.get("resources") or [])
 
 
+def _addresses(state: Mapping[str, Any]) -> set[tuple[str, str, str, str]]:
+    return {
+        (str(r.get("module", "")), str(r.get("mode", "")), str(r.get("type", "")), str(r.get("name", "")))
+        for r in state.get("resources") or []
+    }
+
+
+def _arrived(local: Mapping[str, Any], remote: Mapping[str, Any] | None) -> bool:
+    """R2 holds the local state: same lineage and resources, at its serial or later.
+
+    Not serial equality: whether `state push` keeps the serial or bumps it is
+    Terraform's business, and a check that assumed one would refuse a migration
+    that worked, then find every retry refused by Terraform itself.
+    """
+    if remote is None:
+        return False
+    return (
+        remote.get("lineage") == local.get("lineage")
+        and int(remote.get("serial", 0)) >= int(local.get("serial", 0))
+        and _addresses(remote) == _addresses(local)
+    )
+
+
 class _History:
     """`history/<root>/<lineage>/<serial>.tfstate` in the state bucket.
 
@@ -530,14 +554,21 @@ class _History:
     and serial name one state, and Terraform never reuses them.
     """
 
-    def __init__(self, root_name: str, config: Mapping[str, Any], aws: AwsCli) -> None:
+    def __init__(self, root_name: str, config: Mapping[str, Any], aws: AwsCli, env: Mapping[str, str]) -> None:
+        from toolkit.features.backup_node_credentials import _s3_env
+
         self.root_name = root_name
         self.config = config
         self.aws = aws
+        # The child's environment, already stripped of the shell's AWS_* and
+        # TF_*, without the root's variables, plus what the CLI needs for R2.
+        self.env = {
+            **{k: v for k, v in env.items() if not k.startswith("TF_VAR_")},
+            **_s3_env(env["AWS_ACCESS_KEY_ID"], env["AWS_SECRET_ACCESS_KEY"]),
+        }
 
     def snapshot(self, tf: Callable[..., Result], tmp: Path) -> int:
         from toolkit.core.logging import logger
-        from toolkit.features.backup_node_credentials import _s3_env
 
         state = _pull(tf)
         if state is None:
@@ -550,7 +581,6 @@ class _History:
         with os.fdopen(fd, "w") as fh:
             json.dump(state, fh)
         try:
-            env = {**os.environ, **_s3_env(*(str(_dig(self.config, p)) for p in STATE_CREDENTIALS.values()))}
             put = self.aws(
                 [
                     "--endpoint-url",
@@ -566,7 +596,7 @@ class _History:
                     "--if-none-match",
                     "*",
                 ],
-                env=env,
+                env=self.env,
             )
         finally:
             body.unlink(missing_ok=True)
@@ -599,15 +629,16 @@ def _migrate(tf: Callable[..., Result], root: Root, module: Path) -> int:
     if moved.exists():
         raise RunnerError(f"{moved} already exists; refusing to overwrite the last pre-remote copy.")
     try:
-        expected = _shape(json.loads(local.read_text(encoding="utf-8")))
+        state = json.loads(local.read_text(encoding="utf-8"))
     except ValueError:
         raise RunnerError(f"{local} is not a Terraform state; nothing was pushed.") from None
+    expected = _shape(state)
     rc = tf("state", "push", str(local)).returncode
     if rc != 0:
         return rc
-    arrived = _pull(tf)
-    if arrived is None or _shape(arrived) != expected:
-        got = _shape(arrived) if arrived else None
+    remote = _pull(tf)
+    if not _arrived(state, remote):
+        got = _shape(remote) if remote else None
         logger.error(
             f"{root.name}: R2 holds {got} after the push, the local file {expected} (lineage, serial, resources). "
             f"The local file is kept."

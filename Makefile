@@ -94,6 +94,7 @@ help:
 	@echo "  make tf-<root>-plan             Plan a root: dns, r2, gcp, gcp-bootstrap, vps-firewall, aws"
 	@echo "  make tf-<root>-apply            Apply (dns/gcp/aws refuse deletes unless ALLOW_DESTROY=1)"
 	@echo "  make tf-untaint ROOT=x RES=y    Clear a taint on a resource that exists (lesson-543)"
+	@echo "  make tf-state-bootstrap         Create the state bucket, its lock rule and token (TF-007)"
 	@echo "  make tf-state-migrate ROOT=x    Move a root's local state into R2, once (TF-007)"
 	@echo "  make tf-state-list ROOT=x       List the addresses a root's state holds in R2"
 	@echo "  make gcp1-status|start|stop     Inspect or resize the GCP hub's instance group"
@@ -1419,6 +1420,18 @@ test-vps-firewall-live:
 tf-untaint:
 	@test -n "$(ROOT)" -a -n "$(RES)" || { echo "usage: make tf-untaint ROOT=<dns|gcp|aws|...> RES='<address>'"; exit 2; }
 	@$(_TF) $(ROOT) untaint -- '$(RES)'
+
+# The state bucket, its history lock rule and its token, before any root can
+# reach R2 (TF-007). Idempotent; ROTATE=1 replaces the token.
+.PHONY: tf-state-bootstrap
+tf-state-bootstrap:
+	@$(TOOLKIT) infra terraform state-bootstrap $(if $(filter 1,$(ROTATE)),--rotate)
+
+# Re-measures what the state lock relies on: R2's conditional PUT lets exactly
+# one of many concurrent writers through. Writes under probe/ and removes it.
+.PHONY: test-tfstate-lock-live
+test-tfstate-lock-live:
+	@$(POETRY) run pytest tests/test_tfstate_lock_live.py -m infra -v --no-cov
 
 # One-time, per root: move a local terraform.tfstate into R2 (TF-007). Pushes
 # without -force, reads the result back, then renames the local file to

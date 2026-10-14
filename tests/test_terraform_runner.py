@@ -439,7 +439,10 @@ def test_the_rendered_tfvars_exists_while_terraform_runs_private_and_outside_the
         ("plan", FakeTerraform(fail={"init": 1})),
         ("apply", FakeTerraform()),
         ("apply", FakeTerraform(fail={"apply": 1})),
-        ("apply", FakeTerraform(plan_json={"resource_changes": [{"address": "x.y", "change": {"actions": ["delete"]}}]})),
+        (
+            "apply",
+            FakeTerraform(plan_json={"resource_changes": [{"address": "x.y", "change": {"actions": ["delete"]}}]}),
+        ),
     ],
     ids=["plan", "plan-fails", "init-fails", "apply", "apply-fails", "guard-refuses"],
 )
@@ -677,7 +680,15 @@ def _module_copy(tmp_path: Path, root: str) -> Path:
     return tmp_path / root
 
 
-STATE = {"version": 4, "lineage": "11111111-aaaa", "serial": 7, "resources": [{"name": "a"}, {"name": "b"}]}
+STATE = {
+    "version": 4,
+    "lineage": "11111111-aaaa",
+    "serial": 7,
+    "resources": [
+        {"mode": "managed", "type": "cloudflare_record", "name": "a"},
+        {"mode": "managed", "type": "cloudflare_record", "name": "b"},
+    ],
+}
 
 
 @pytest.mark.parametrize("action", ["plan", "apply", "output", "state-list"])
@@ -722,13 +733,24 @@ def test_a_write_copies_the_state_to_history_before_and_after() -> None:
         "history/dns/11111111-aaaa/7.tfstate",
         "history/dns/11111111-aaaa/8.tfstate",
     ]
-    for call, state in zip(aws.calls, (before, after)):
+    for call, state in zip(aws.calls, (before, after), strict=True):
         assert call["args"][call["args"].index("--if-none-match") + 1] == "*"
         assert call["args"][call["args"].index("--bucket") + 1] == CONFIG["terraform"]["state"]["bucket"]
         assert call["body"] == (0o600, state)
         assert not call["body_path"].exists()
         assert call["env"]["AWS_ACCESS_KEY_ID"] == SECRET
         assert call["env"]["AWS_REQUEST_CHECKSUM_CALCULATION"] == "when_required"
+
+
+def test_the_history_copy_never_sees_the_shells_aws_variables(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A session token or profile sent with the state pair fails the put."""
+    monkeypatch.setenv("AWS_SESSION_TOKEN", "stale")
+    monkeypatch.setenv("AWS_PROFILE", "someone-else")
+    aws = FakeAws()
+    _run("dns", "apply", FakeTerraform(pulls=[STATE]), aws=aws)
+    for call in aws.calls:
+        assert "AWS_SESSION_TOKEN" not in call["env"] and "AWS_PROFILE" not in call["env"]
+        assert not [k for k in call["env"] if k.startswith("TF_VAR_")]
 
 
 def test_a_read_writes_no_history() -> None:
@@ -807,13 +829,31 @@ def test_migrate_pushes_without_force_checks_the_result_and_retires_the_local_fi
     assert not [k for k in push["env"] if k.startswith("TF_VAR_")]
 
 
-def test_migrate_keeps_the_local_file_when_r2_holds_something_else(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "remote",
+    [
+        {**STATE, "resources": []},
+        {**STATE, "resources": [STATE["resources"][0], {**STATE["resources"][1], "name": "c"}]},
+        {**STATE, "lineage": "other"},
+        {**STATE, "serial": 6},
+    ],
+    ids=["fewer-resources", "same-count-other-addresses", "other-lineage", "lower-serial"],
+)
+def test_migrate_keeps_the_local_file_when_r2_holds_something_else(tmp_path: Path, remote: dict) -> None:
     module = _module_copy(tmp_path, "dns")
     (module / "terraform.tfstate").write_text(json.dumps(STATE))
-    fake = FakeTerraform(pulls=[None, {**STATE, "resources": []}])
+    fake = FakeTerraform(pulls=[None, remote])
     assert _migrate(tmp_path, fake) == 1
     assert (module / "terraform.tfstate").exists()
     assert not (module / "terraform.pre-remote.tfstate").exists()
+
+
+def test_a_push_that_bumps_the_serial_is_still_a_migration(tmp_path: Path) -> None:
+    """Whether push keeps the serial is Terraform's business, not the gate's."""
+    module = _module_copy(tmp_path, "dns")
+    (module / "terraform.tfstate").write_text(json.dumps(STATE))
+    assert _migrate(tmp_path, FakeTerraform(pulls=[None, {**STATE, "serial": 8}])) == 0
+    assert (module / "terraform.pre-remote.tfstate").exists()
 
 
 def test_a_refused_push_keeps_the_local_file(tmp_path: Path) -> None:
