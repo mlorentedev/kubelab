@@ -59,7 +59,12 @@ make gcp1-replace           # recreate the VM: the same path a preemption takes
 its new Tailscale IP. Every recreate is a fresh disk, so cloud-init rebuilds the
 hub on its own: it installs Argo CD, registers each spoke in `managed_spokes`
 from Secret Manager, and applies the Applications. There is no `deploy-apps` or
-`register-spoke` step after a recreate. Start, stop and status are in
+`register-spoke` step after a recreate. What it restores is what the instance
+template embeds: the chart values and the Applications as of the last
+`make tf-gcp-apply`, not as of git. A change to
+`infra/k8s/argocd/applications/` reaches the live hub through
+`make deploy-apps`, and reaches the next recreate only after
+`make tf-gcp-apply`. Start, stop and status are in
 `docs/runbooks/gcp-hub-bootstrap.md` §8.
 
 `aws1` was destroyed on 2026-08-23. Its Terraform root and the
