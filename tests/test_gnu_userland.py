@@ -76,3 +76,17 @@ def test_gnubin_is_prepended_when_path_is_bsd(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("PATH", str(bsd))
     conftest._gnu_userland_first()
     assert conftest.os.environ["PATH"] == f"{gnubin}{conftest.os.pathsep}{bsd}"
+
+
+def test_the_session_hook_puts_the_gnu_userland_first(monkeypatch) -> None:
+    """The unit tests above call the function; this proves the hook still does (review of #2237).
+
+    On Linux every other check here passes with the call removed, because the host is GNU already.
+    """
+    import tests.conftest as conftest
+
+    calls: list[str] = []
+    monkeypatch.setattr(conftest, "_gnu_userland_first", lambda: calls.append("gnu"))
+    monkeypatch.setattr(conftest, "_install_host_client_barrier", lambda: None)
+    conftest.pytest_configure(None)  # type: ignore[arg-type]
+    assert calls == ["gnu"]
