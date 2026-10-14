@@ -1,9 +1,10 @@
 # CI workflows, gates and the GitHub surface
 
-43 lessons, newest first. Back to [all categories](../_index.md).
+44 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 573 | [An integration test that ships production targets tests the runner's network](lesson-573-an-integration-test-that-ships-production-targets-tests-the-runners-network.md) | 2026-10-14 |
 | 558 | [A state scraped from prose is whatever the prose quoted last](lesson-558-a-state-scraped-from-prose-is-whatever-the-prose-quoted-last.md) | 2026-10-11 |
 | 553 | [A slash command runs the default branch's workflow, not the PR's](lesson-553-a-slash-command-runs-the-default-branchs-workflow-not-the-prs.md) | 2026-10-10 |
 | 522 | [act_runner removes a job's volumes only if the job container started, so a cancel during the image pull leaks both](lesson-522-act-runner-removes-job-volumes-only-after-the-job-container-started.md) | 2026-10-04 |
