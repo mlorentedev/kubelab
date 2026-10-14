@@ -176,26 +176,21 @@ jobs:
     # the diagnosed cause of PR-Agent reporting success while publishing
     # nothing (upstream #1107).
     #
-    # It does NOT queue, and this comment said it did until #1203 measured
-    # otherwise. `cancel-in-progress: false` protects the run that is already
-    # EXECUTING, but GitHub holds only ONE pending run per group: when a new run
-    # enters, the run that was waiting is cancelled. Queue depth is 1, and past
-    # that it discards silently.
+    # Without `queue: max` it did NOT queue (#1203, TOOL-108 #2179): GitHub
+    # keeps one running and ONE pending run per group, and a newer pending run
+    # cancels the older one whatever `cancel-in-progress` says, before it gets
+    # a runner. Measured 2026-10-10: the #2177 `/improve` run 38042716679
+    # queued at 09:48:55Z and was cancelled at 09:54:39Z, one second after
+    # #2178's review entered the group. `queue: max` makes the group a real
+    # FIFO, so every review waits its turn instead of being discarded. Ported
+    # from dotfiles (#1940), where the same design has run since 2026-10-01.
     #
-    # Measured on PR #1202, run 32438555543: job `review` started 02:04:34Z and
-    # was cancelled at 02:06:09Z with `steps: 0` — it never executed a single
-    # step. 02:06:09Z is the second PR #1201's run entered this same group. The
-    # consequence is worst exactly when review matters most: with two or more
-    # PRs open, the second review is thrown away.
-    #
-    # Nothing inside this job can report that, either — a job cancelled while
-    # still pending never starts, so the `always()` step below never runs. From
-    # outside, a discarded review is indistinguishable from a review that ran
-    # and published nothing.
-    #
-    # Not solved here: the fix is a decision between raising the wait, dropping
-    # the group in favour of `fallback_models` (which reintroduces the #1107
-    # 429s if taken alone), and making the discard observable. Tracked in #1203.
+    # GitHub refuses `queue: max` beside `cancel-in-progress: true`, which is
+    # why it lives here and not on the workflow-level group: that one still
+    # cancels a PR's older run on a new push, wherever that run is waiting,
+    # so the queue never holds two reviews of one PR and event. A run that waits here can outlive its PR's state, so
+    # `Skip a review whose PR is no longer open` below drops it at the head of
+    # the queue instead of spending the lane on it.
     #
     # Second known limit, unchanged: concurrency groups are per repository, so
     # this serialises kubelab's own runs and not the other repository's against
@@ -203,6 +198,7 @@ jobs:
     concurrency:
       group: pr-agent-nan-inference
       cancel-in-progress: false
+      queue: max
     steps:
       # The PR number, handed to `review-attestation.yml` (#1184).
       #
@@ -264,6 +260,38 @@ jobs:
           # longer is storage held for nobody.
           retention-days: 1
 
+      # A run's event is a snapshot from when it was queued, and with
+      # `queue: max` above a run can wait long enough for its PR to merge,
+      # close or turn back into a draft. Nothing else notices, so the review
+      # would hold the one-at-a-time lane for a PR nobody will read (measured
+      # in dotfiles 2026-10-07: 18 minutes, eight open PRs waiting behind it;
+      # ported from dotfiles #2079). A draft is reviewed again on
+      # `ready_for_review`. Only a definite answer skips: a failed read leaves
+      # `gone` unset and the review runs, as before. Only `pull_request` runs
+      # skip, because a human typing /review on a merged PR means it.
+      #
+      # Skipping `reviewable` is what skips everything after it: every later
+      # step tests its `any` output, which an unrun step leaves empty, so no
+      # review is attempted, no failure is reported and nothing is declared
+      # unreviewed.
+      - name: Skip a review whose PR is no longer open
+        id: open
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -uo pipefail
+          state=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" \
+            --jq 'if .merged then "merged" elif .state == "closed" then "closed" elif .draft then "draft" else "open" end' \
+            2>/dev/null) || state=""
+          case "$state" in
+            merged|closed|draft)
+              echo "::notice::PR #${PR_NUMBER} became ${state} while this review waited in the queue; not reviewing it."
+              echo "gone=true" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
       # CI-GATE-017 (#1527). PR-Agent's OWN diff-fetch (`get_pr_diff`) computes
       # a real diff for token accounting, but a separate pass inside
       # `_prepare_prediction` re-derives the reviewable set after applying
@@ -291,10 +319,11 @@ jobs:
       - name: Determine whether the diff has anything to review
         id: reviewable
         if: >
-          github.event_name == 'pull_request'
-            || (github.event_name == 'issue_comment'
-                && (contains(github.event.comment.body, '/review')
-                    || contains(github.event.comment.body, '/improve')))
+          steps.open.outputs.gone != 'true'
+            && (github.event_name == 'pull_request'
+                || (github.event_name == 'issue_comment'
+                    && (contains(github.event.comment.body, '/review')
+                        || contains(github.event.comment.body, '/improve'))))
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
