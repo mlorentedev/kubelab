@@ -11,7 +11,7 @@
 #
 # After apply:
 #   1. Update common.yaml with new VPS IP
-#   2. Update Cloudflare DNS (terraform apply in dns/)
+#   2. Update Cloudflare DNS (make tf-dns-apply)
 #   3. Run: toolkit infra ansible run -p site -e prod
 #   4. Restore backups
 
