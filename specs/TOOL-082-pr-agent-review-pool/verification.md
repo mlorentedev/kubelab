@@ -27,7 +27,7 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 
   `actionlint` reports only the 5 SC2016 infos that master already has.
 - [ ] **AC5**: live on #2302 (2,926 changed lines, above the 1,500 threshold). Run 38685369694 on 55f12ad3: the draw logged `PR-Agent reviews first on anthropic/claude-sonnet-5-5 (risk, override: draw); second attempt: nan`, and the guard logged `review published (markers: ["## PR Reviewer Guide"]) on anthropic/claude-sonnet-5-5`. Run details: 116,858 tokens in, 1,641 out, 19.1 s, one call, full diff. The first Sonnet run (38683281099, on 4a616727) was refused before reaching the API: `.pr_agent.toml`'s `custom_llm_provider = "openai"` applies to every model. 55f12ad3 sets `LITELLM__CUSTOM_LLM_PROVIDER: anthropic` on both Anthropic attempts, and the streaming test now requires it (red without it).
-- [ ] **AC6**: pending (PR 3, live)
+- [ ] **AC6**: live on #2302 once it was rebased on master (720 changed lines, below the threshold, no label). Run 38686296555 on 9d8e35a7: the draw logged `PR-Agent reviews first on anthropic/claude-haiku-5-5 (draw, override: draw); second attempt: nan`, and the guard logged `review published (markers: ["## PR Reviewer Guide"]) on anthropic/claude-haiku-5-5`. Run details: 67,511 tokens in, 1,948 out, 14.3 s. A NaN member drawn first is AC4's path, which #2301 and earlier PRs exercise on every run.
 
 ## Test status
 
