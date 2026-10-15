@@ -10,7 +10,7 @@
   JSON is YAML, so `tojson` writes each value as the SSOT typed it.
 #}
 {% set ported = agent_stack_hermes.agent_config %}
-{% set role_sections = ['approvals', 'terminal', 'slack', 'unauthorized_dm_behavior', 'cron', 'model', 'delegation'] %}
+{% set role_sections = ['approvals', 'terminal', 'slack', 'unauthorized_dm_behavior', 'cron', 'model', 'delegation', 'fallback_providers'] %}
 
 model:
   provider: custom
@@ -20,6 +20,15 @@ model:
 {% for key, value in (ported.model | default({})).items() if key not in ['provider', 'base_url', 'key_env', 'default'] %}
   {{ key }}: {{ value | tojson }}
 {% endfor %}
+{% if agent_stack_anthropic_api_key | length > 0 %}
+
+# When NaN fails (429 after retries, 5xx, 401/403, 404), an unpinned session
+# moves here mid-turn (spec AI-012 AC2). Pinned scheduled and delegated work
+# does not: a pinned route gets no inherited chain (v0.22.1 too).
+fallback_providers:
+  - provider: anthropic
+    model: {{ agent_stack_hermes.models.fallback }}
+{% endif %}
 
 terminal:
   # Every command runs in a container on the agent's rootless daemon, never on
@@ -52,7 +61,7 @@ approvals:
   cron_mode: "deny"
   unattended_mode: "deny"
   # files/guardrails-denylist.yaml. With no host path mounted into the sandbox,
-  # v2026.9.24 skips every other command guard for the docker backend, the
+  # the image skips every other command guard for the docker backend, the
   # prompts above included, and these globs are the one it still applies. With
   # the vault mounted, they apply after Hermes's own hardline floor.
   deny:

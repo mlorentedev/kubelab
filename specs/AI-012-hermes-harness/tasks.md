@@ -15,7 +15,8 @@ created: "2026-10-10"
 
 - [x] Branch `feat/ai009-hermes-harness` (it carries AI-009's AC3 record too) ✓ 2026-10-10
 - [x] `proposal.md` complete. Operator decisions 2026-10-10: a new spec; research jobs included; the fallback is Anthropic Haiku with a 20 USD cap; triage hourly.
-- [ ] R1 (Anthropic key), R2 (BrightData token, operator directory name) and R3 (alert channels) answered before the PR that needs each. R4 to R6 are measured in their PRs.
+- [x] R1 (Anthropic key) answered: workspace `hermes-kubelab`, 20 USD monthly limit read in the Console (`verification.md`). ✓ 2026-10-15
+- [ ] R2 (BrightData token, operator directory name) and R3 (alert channels) answered before the PR that needs each. R4 to R6 are measured in their PRs.
 
 ## Implementation
 
@@ -29,11 +30,11 @@ One PR per block, in this order. Each block starts with the failing test.
 
 ### PR 2: fallback (AC2, needs R1)
 
-Blocked upstream: draft #2204, lesson-557. R1 is answered: the key is in `prod.enc.yaml` on #2204's branch only, not on master (runbook `## Models`, step 1).
+Unblocked by Hermes v0.22 (draft #2204, lesson-557). The pin moved to v0.22.1 in the same PR, which retires the tirith scanner (verification.md, 2026-10-15).
 
-- [ ] [AC2] Test (written in draft #2204): the env renders `ANTHROPIC_API_KEY` only when the key exists, and `fallback_providers` names the pinned Haiku. `SECRET_CATALOG` gains the entry.
-- [ ] [AC2] Runbook: create the workspace, its 20 USD monthly limit and its key, step by step.
-- [ ] [AC2] Live (R5): with NaN refused for the agent's uid, a turn completes on Haiku.
+- [x] [AC2] Test (written in draft #2204): the env renders `ANTHROPIC_API_KEY` only when the key exists, and `fallback_providers` names the pinned Haiku. `SECRET_CATALOG` gains the entry. ✓ 2026-10-10
+- [x] [AC2] Runbook: create the workspace, its 20 USD monthly limit and its key, step by step (`## Models`, "Create the workspace and key"). ✓ 2026-10-15
+- [x] [AC2] Live (R5): with NaN refused for the agent's uid, a turn completes on Haiku. ✓ 2026-10-15
 
 ### PR 3: identity (AC3)
 

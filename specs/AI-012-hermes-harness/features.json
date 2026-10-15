@@ -2,16 +2,16 @@
   {
     "id": "AI-012-hermes-harness-f1",
     "behavior": "AC1: Every applicable config-desired.yaml key is rendered and tested",
-    "verification": "poetry run pytest --no-cov -q tests/test_hermes_config.py -k 'ported or role_owned or scanner'",
+    "verification": "poetry run pytest --no-cov -q tests/test_hermes_config.py -k 'ported or role_owned or tirith or sandbox'",
     "state": "passing",
-    "evidence": "2026-10-10: tests green; ace2 provision changed=3 then changed=0; load_config() reads the ported keys back; the scanner allows ls and blocks a homograph."
+    "evidence": "2026-10-10: tests green; ace2 provision changed=3 then changed=0; load_config() reads the ported keys back; the scanner allows ls and blocks a homograph. 2026-10-15: the scanner was removed upstream in v0.22 and retired here; the tests now assert no tirith key and a networkless sandbox."
   },
   {
     "id": "AI-012-hermes-harness-f2",
     "behavior": "AC2: A turn completes on the Anthropic fallback when NaN is unreachable",
-    "verification": "echo 'not implemented' && exit 1",
-    "state": "blocked",
-    "evidence": "2026-10-10: blocked upstream. With NaN refused, Hermes swaps to Haiku and sends the sk-ant-usr key as an OAuth token; the API refuses it. Draft #2204, lesson-557."
+    "verification": "poetry run pytest --no-cov -q tests/test_hermes_fallback.py",
+    "state": "passing",
+    "evidence": "2026-10-15: pin v0.22.1; provision changed=8 then 0; a throwaway gateway with an invalid NaN key answered pong on claude-haiku-5-5 via anthropic (x-api-key, not OAuth). See verification.md."
   },
   {
     "id": "AI-012-hermes-harness-f3",
