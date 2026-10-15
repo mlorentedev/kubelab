@@ -1,8 +1,17 @@
 """Run `git` against the Gitea forge with a credential that never reaches a terminal.
 
-WHY THIS EXISTS. Working in the forge means pushing to it, and no workstation in
-the fleet holds a credential for `gitea.kubelab.live` -- only `github.com`, via
-`gh`. The obvious workarounds are all the wrong shape: a token in the remote URL
+WHO IT IS FOR. Automation and agent authoring over HTTPS, where no token may push
+(see below). It is NOT the human path: a person works on the forge over SSH with
+the key registered on their own account, through the `forge` host that dotfiles
+declares and pins (dotfiles#2512) -- `git clone forge:personal/resume.git`. This
+module authenticates as the forge's sole admin, so every operation it runs is
+recorded as that account, and ADR-062 D4 reserves that password for when Authelia
+is unavailable. A human using it daily loses attribution, and every rotation of
+that password breaks their git on every machine at once.
+
+WHY HTTPS NEEDS IT. The forge's SSH is published on the mesh only, and over HTTPS
+no workstation holds a credential for `gitea.kubelab.live` -- only `github.com`,
+via `gh`. The obvious workarounds are all the wrong shape: a token in the remote URL
 lands in `.git/config` and in every error message that echoes the address; a
 `store` helper writes it to `~/.git-credentials` in plaintext; and printing it to
 copy-paste puts it in a transcript, which is a durable artefact nothing scans and
