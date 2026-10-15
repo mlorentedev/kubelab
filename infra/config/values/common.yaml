@@ -917,7 +917,8 @@ apps:
 
     web:
       name: web
-      domain: web.kubelab.live
+      # No `domain` default: each env declares its own (dev mlorente.test, staging
+      # staging.mlorente.dev, prod mlorente.dev), and web.kubelab.live served nothing (#2219).
       image_name: kubelab-web
       version: dev
       enable_auth: false

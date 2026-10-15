@@ -30,6 +30,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
         ["kubectl", "version"],
         ["/usr/local/bin/kubectl", "get", "ns"],
         ["kubectl.exe", "get", "ns"],
+        ["KUBECTL.EXE", "get", "ns"],
+        ["/Applications/Tailscale.app/Contents/MacOS/Tailscale", "status", "--json"],
         ["helm", "upgrade", "--install", "argocd", "argo/argo-cd"],
         ["ssh", "deployer@vps", "true"],
         ["scp", "a", "host:b"],
