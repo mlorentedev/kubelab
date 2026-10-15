@@ -294,8 +294,26 @@ def _add_default_notification(kuma_url: str) -> None:
         api.disconnect()
 
 
+# What the instance under test checks: itself, from inside its container. The
+# real seed points at production hosts, tailnet addresses and VPN-only names,
+# which a CI runner cannot reach. Right after an apply all its active monitors
+# check them at once, and a login on a fresh connection then hung past its 60 s
+# timeout on hosted runners, about one run in four (#1196). These tests prove
+# apply semantics, which need the seed's field shapes and not its targets.
+SELF_HOST = "127.0.0.1"
+SELF_URL = f"http://{SELF_HOST}:3001"
+
+
 def _real_seed() -> list[dict]:
-    return json.loads((REPO_ROOT / "infra/config/uptime-kuma/monitors.json").read_text())
+    seed = json.loads((REPO_ROOT / "infra/config/uptime-kuma/monitors.json").read_text())
+    for monitor in seed:
+        if monitor.get("url"):
+            monitor["url"] = SELF_URL
+        # A `dns` monitor's hostname is the name it resolves, not where it connects.
+        for field in ("dns_resolve_server",) if monitor["type"] == "dns" else ("hostname", "dns_resolve_server"):
+            if monitor.get(field):
+                monitor[field] = SELF_HOST
+    return seed
 
 
 class TestApplyAgainstARealInstance:
