@@ -74,6 +74,9 @@ from another network logs `[UFW BLOCK] ... DPT=8642` in `journalctl -k`
      the single word: pong"`. Expect `Model fallback: ... authentication
      failed; using claude-haiku-5-5 via anthropic.` and the answer `pong`.
   3. `docker rm -f hermes-fallback-probe`.
+  To prove it against the live pool state too, copy `auth.json` (and the rendered
+  config) into a scratch directory owned by the container's `hermes` uid and mount
+  that as `HERMES_HOME`; delete the copy afterwards. Codifying this is AI-018 (#2299).
   A `400 credit balance is too low` instead of `pong` means the key is being
   sent as OAuth again.
 - **No command scanner.** v0.22 removed the bundled tirith scanner. What
