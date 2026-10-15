@@ -245,3 +245,10 @@ def test_error_handling_sits_where_n8n_reads_it() -> None:
     assert "onError" not in node("Create Task in Vikunja")
     # The task already exists by then; a failed confirmation must not stop the dev-activity notice.
     assert node("Update Slack via Response URL")["onError"] == "continueRegularOutput"
+
+
+def test_an_empty_project_list_still_reaches_the_answer_node() -> None:
+    # A 200 `[]` makes the HTTP node emit zero items, and a Code node given none never runs,
+    # so the run would end with nothing posted to response_url. alwaysOutputData turns that
+    # into one empty item, which `Extract Project ID` answers as "no such project".
+    assert node("Lookup Vikunja Projects")["alwaysOutputData"] is True
