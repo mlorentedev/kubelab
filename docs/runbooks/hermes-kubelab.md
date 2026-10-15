@@ -173,6 +173,17 @@ pushes it. A failed run pages through `kubelab-notify@`.
   `ask-approval` means a scheduled job is refused under `cron_mode: deny`
   (lesson-540). There is no command scanner to ask since v0.22 (above).
 
+## Scheduled jobs
+
+Jobs are declared in `apps.services.ai.hermes_kubelab.cron` (`common.yaml`) and reconciled by `make provision NODE=ace2 ENV=prod TAGS=agent_stack` (`CHECK=1` shows the diff). The gateway is not restarted: it reads `cron/jobs.json` on every tick.
+
+- **Ownership**: the role owns jobs whose name starts with `kubelab:`. A job created by hand under another name is never edited or removed. A job dropped from the declaration is removed; one changed in the declaration is edited in place, so its id and history stay.
+- **Modes**: `agent` runs a turn from `prompt`; `script` runs a file from `files/hermes-scripts/` and delivers its stdout. An `agent` job may also name a `script`: the output is injected into the turn, and a last line of `{"wakeAgent": false}` (or no output) skips the turn and its cost.
+- **Scripts** ship from the role into a directory mounted read-only over `<data>/scripts/`. They run in the gateway, which sees `HERMES_HOME` and not `/vault`.
+- **Delivery** defaults to `slack:<home_channel>`, failures included.
+- **Run one now**: `hermes cron run <id>` inside the gateway, as the `hermes` user; it fires at the next tick, within a minute. `hermes cron list` prints text only; read `cron/jobs.json` for status.
+- **A job's commands** are checked against the approvals under `cron_mode: deny`: test them with `hermes approvals test --env-type local` before declaring the job.
+
 ## Re-register the sidecar
 
 Needed when the sidecar reports anything but `Running` (for example after its

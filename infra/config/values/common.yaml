@@ -2150,6 +2150,31 @@ apps:
           home_channel:
             id: C0BSWLG4M6C
             name: agent-fleet
+        # The scheduled jobs (spec AI-012 AC4), reconciled by name against the
+        # gateway's own by the agent_stack role. Governs the agent, so it lives
+        # here and never in the vault zone the agent writes (placement rule). A job
+        # is `<name_prefix><key>`; a job without the prefix is not the role's and is
+        # never touched. `mode: agent` runs `prompt` as a turn on `cron.model`
+        # (qwen3.6, unmetered); `mode: script` runs a file the role ships under
+        # HERMES_HOME/scripts and delivers its stdout. Delivery is the Slack home
+        # channel. Schedules are UTC, five-field cron or `every <n>m|h|d`.
+        cron:
+          name_prefix: "kubelab:"
+          jobs:
+            session-record:
+              mode: agent
+              schedule: "0 22 * * *"
+              # Runs inside the gateway before the turn: the agent cannot list its own
+              # sessions. Nothing to report ends the run before it spends a token.
+              script: session-activity.py
+              prompt: >-
+                The script output above lists the operator's conversations from the
+                last 24 hours. Write a concise session record of them to
+                /vault/80_agents/hermes-kubelab/sessions/<YYYY-MM-DD>-auto.md, with
+                today's date in UTC, using your file tools: what was asked, what was
+                decided, and what is left open. If that file already exists, replace
+                it with one record that has a single front matter. Write nowhere else
+                in /vault. Then reply with one line, the path you wrote.
 
 # Terraform state (TF-007, ADR-069). Every root keeps its state in this R2
 # bucket under `<root>/terraform.tfstate`; `make sync-terraform-backend` renders

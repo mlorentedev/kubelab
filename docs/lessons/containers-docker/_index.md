@@ -1,9 +1,10 @@
 # Docker, Compose and image builds
 
-23 lessons, newest first. Back to [all categories](../_index.md).
+24 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 576 | [A scheduled agent cannot say whether there was activity to record, so the job feeds it the activity](lesson-576-an-agent-cannot-tell-you-whether-it-had-a-day-so-feed-it-the-day.md) | 2026-10-15 |
 | 574 | [In Hermes v0.22 `hermes chat` runs in the gateway, so a per-launch key or variable never reaches the model call](lesson-574-hermes-chat-is-a-client-of-the-gateway.md) | 2026-10-15 |
 | 557 | [Hermes reads a new Anthropic key prefix as an OAuth token](lesson-557-hermes-reads-an-anthropic-key-prefix-as-oauth.md) | 2026-10-10 |
 | 555 | [`hermes approvals test` does not run the command scanner](lesson-555-hermes-approvals-test-does-not-run-the-command-scanner.md) | 2026-10-10 |

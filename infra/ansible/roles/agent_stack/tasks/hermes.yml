@@ -127,6 +127,41 @@
         mode: "0644"
       register: _agent_stack_hermes_config
 
+    # The jobs' scripts: outside the data directory and mounted read-only, like
+    # the config. A file removed from the role is removed here too, or a job that
+    # still named it would run a script nobody ships.
+    - name: Create the job scripts directory
+      ansible.builtin.file:
+        path: "{{ agent_stack_hermes_scripts }}"
+        state: directory
+        owner: "{{ agent_stack_agent_user }}"
+        group: "{{ agent_stack_agent_user }}"
+        mode: "0755"
+
+    - name: Install the job scripts
+      ansible.builtin.copy:
+        src: "hermes-scripts/{{ item }}"
+        dest: "{{ agent_stack_hermes_scripts }}/{{ item }}"
+        owner: "{{ agent_stack_agent_user }}"
+        group: "{{ agent_stack_agent_user }}"
+        mode: "0644"
+      loop: "{{ lookup('ansible.builtin.fileglob', role_path ~ '/files/hermes-scripts/*', wantlist=True) | map('basename') | list }}"
+
+    - name: List the job scripts on the node
+      ansible.builtin.find:
+        paths: "{{ agent_stack_hermes_scripts }}"
+        file_type: file
+      register: _agent_stack_hermes_scripts_found
+
+    - name: Remove job scripts the role no longer ships
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop: >-
+        {{ _agent_stack_hermes_scripts_found.files | map(attribute='path') | map('basename')
+           | difference(lookup('ansible.builtin.fileglob', role_path ~ '/files/hermes-scripts/*', wantlist=True) | map('basename') | list)
+           | map('regex_replace', '^', agent_stack_hermes_scripts ~ '/') | list }}
+
     # The sidecar rejoins from its state on its own, so a key is minted only when
     # it is not on the tailnet now. Asked of the sidecar, not read from its state
     # file: tailscaled writes that file at its first start, before any login, so
@@ -415,3 +450,9 @@
       changed_when: false
       failed_when: (_agent_stack_hermes_allowed.stdout | from_json).verdict not in _agent_stack_hermes_passed_verdicts
       check_mode: false
+
+    # Last, against a gateway that answers. Every job delivers to Slack, so with no
+    # Slack there is nothing to reconcile (spec AI-012 AC4).
+    - name: Reconcile the scheduled jobs
+      ansible.builtin.import_tasks: hermes_jobs.yml
+      when: agent_stack_slack_configured | bool

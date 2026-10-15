@@ -1,0 +1,65 @@
+---
+# =============================================================================
+# hermes-kubelab's scheduled jobs (spec AI-012 AC4). The declaration is
+# `apps.services.ai.hermes_kubelab.cron` in common.yaml; the gateway's state is
+# its cron/jobs.json. files/hermes-jobs.py compares the two and returns the
+# `hermes cron` calls that make them match. Imported from hermes.yml, after the
+# gateway answers.
+#
+# The gateway is left running: it reads jobs.json on every tick (R6, measured on
+# ace2 2026-10-15, verification.md), so a job created here fires without a
+# recreate. Jobs are written through the CLI, which holds the store's lock, and
+# as the gateway's own user, or the file would be unreadable to it.
+# =============================================================================
+
+# Read only, so it also runs in a dry run: the diff is what a dry run reports.
+# The planner reaches the container on stdin and never lands in the data
+# directory, which the agent can write.
+- name: Plan the job changes between the declaration and the gateway
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - -i
+      - -u
+      - hermes
+      - hermes-kubelab
+      - python3
+      - "-"
+      - plan
+      - --state
+      - "{{ agent_stack_hermes_home }}/cron/jobs.json"
+      - --declared
+      - "{{ _agent_stack_hermes_jobs_declared | to_json }}"
+    stdin: "{{ lookup('ansible.builtin.file', role_path ~ '/files/hermes-jobs.py') }}"
+  become_user: "{{ agent_stack_agent_user }}"
+  environment: "{{ agent_stack_agent_daemon_env }}"
+  register: _agent_stack_hermes_jobs_plan_raw
+  changed_when: false
+  check_mode: false
+  # A dry run of a fresh node has no gateway to ask: nothing is declared there yet.
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: Hold the job changes the diff found
+  ansible.builtin.set_fact:
+    _agent_stack_hermes_jobs_plan: >-
+      {{ (_agent_stack_hermes_jobs_plan_raw.stdout | from_json).actions
+         if _agent_stack_hermes_jobs_plan_raw.rc | default(1) == 0 else [] }}
+
+# The diff alone decides `changed`, so a second run reports nothing and a dry run
+# reports what the first would do.
+- name: Report the jobs that differ from the declaration
+  ansible.builtin.debug:
+    msg: "{{ _agent_stack_hermes_jobs_plan | map(attribute='op') | zip(_agent_stack_hermes_jobs_plan | map(attribute='name')) | map('join', ' ') | list }}"
+  changed_when: _agent_stack_hermes_jobs_plan | length > 0
+
+- name: Apply the job changes
+  ansible.builtin.command:
+    argv: "{{ ['docker', 'exec', '-u', 'hermes', 'hermes-kubelab', 'hermes'] + item.argv }}"
+  loop: "{{ _agent_stack_hermes_jobs_plan }}"
+  loop_control:
+    label: "{{ item.op }} {{ item.name }}"
+  become_user: "{{ agent_stack_agent_user }}"
+  environment: "{{ agent_stack_agent_daemon_env }}"
+  when: not ansible_check_mode
+  changed_when: true

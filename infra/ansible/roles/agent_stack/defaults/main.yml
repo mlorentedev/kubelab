@@ -131,6 +131,11 @@ agent_stack_hermes_compose: "{{ agent_stack_agent_home }}/compose-hermes.yml"
 # rewrite it (stage2-hook.sh), so a file in the data directory would
 # be the agent's to edit, approvals included, and would drift from this role.
 agent_stack_hermes_config: "{{ agent_stack_agent_home }}/hermes-config.yaml"
+# The scripts the scheduled jobs run (files/hermes-scripts/), mounted read-only
+# over the data directory's scripts/. What governs the agent does not live where
+# the agent writes: a script in the data directory could be rewritten by the
+# very job it feeds.
+agent_stack_hermes_scripts: "{{ agent_stack_agent_home }}/hermes-scripts"
 # The tailscale sidecar's (spec PR 3b-2). Its state is the node key: beside the
 # data directory, so the gateway's container does not see it. The env file
 # holds the one-time preauth key until the first registration, then nothing.
@@ -172,3 +177,10 @@ _agent_stack_hermes_evaluate: [docker, exec, -u, hermes, hermes-kubelab, hermes,
 # floor, or let through, possibly to a prompt that a scheduled job then denies.
 _agent_stack_hermes_refused_verdicts: [user-deny, hardline-deny]
 _agent_stack_hermes_passed_verdicts: [allow, ask-approval]
+
+# The jobs the gateway runs (spec AI-012 AC4): what files/hermes-jobs.py is given.
+# Every job delivers to the Slack home channel unless it names another target.
+_agent_stack_hermes_jobs_declared:
+  name_prefix: "{{ agent_stack_hermes.cron.name_prefix }}"
+  default_deliver: "slack:{{ agent_stack_hermes.slack.home_channel.id }}"
+  jobs: "{{ agent_stack_hermes.cron.jobs }}"
