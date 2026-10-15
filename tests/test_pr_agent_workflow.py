@@ -465,7 +465,13 @@ def test_an_improve_comment_never_touches_the_attestation(name: str) -> None:
 
 
 def test_pr_agent_only_runs_when_something_is_reviewable() -> None:
-    for step in _attempts().values():
+    """Every step that probes a provider, draws, reviews or judges the review is
+    gated, not only the attempts: an ungated probe would spend a call, and an
+    ungated guard would fail a PR whose diff is entirely excluded."""
+    guard = next(s for s in _review_job()["steps"] if "no review was published" in s.get("name", ""))
+    gated = [*_attempts().values(), *(_step_by_id(i) for i in ("models", "route")), guard]
+    gated += [_step_by_id(i) for i in ("published_after_anthropic", "published_after_nan")]
+    for step in gated:
         assert "steps.reviewable.outputs.any == 'true'" in " ".join(str(step.get("if", "")).split()), step["name"]
 
 
