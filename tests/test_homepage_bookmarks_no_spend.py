@@ -11,10 +11,11 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
 import yaml
 
 BOOKMARKS = Path(__file__).resolve().parents[1] / "infra/k8s/base/services/homepage-config/bookmarks.yaml"
-SPEND = re.compile(r"[€$£]|\b(?:USD|EUR)\b|/\s*mo\b", re.I)
+SPEND = re.compile(r"[€$£]|\b(?:USD|EUR)\b|/\s*mo(?:nth)?\b|\b(?:monthly|per\s+month)\b", re.I)
 
 
 def _labels() -> list[str]:
@@ -26,3 +27,16 @@ def test_no_bookmark_label_carries_a_spend() -> None:
     labels = _labels()
     assert len(labels) > 10, "too few labels parsed for this check to mean anything"
     assert not [label for label in labels if SPEND.search(label)]
+
+
+@pytest.mark.parametrize(
+    "label",
+    ["Hetzner (~9€/mo)", "GCP Hub (~$6/mo)", "VPS (9 USD)", "R2 (9/month)", "Box (9 / mo)", "S3 (9 monthly)", "B2 (9 per month)"],
+)
+def test_the_pattern_catches_each_spelling_of_a_spend(label: str) -> None:
+    assert SPEND.search(label), label
+
+
+@pytest.mark.parametrize("label", ["Grafana", "Monitoring", "Argo CD", "Uptime Kuma"])
+def test_the_pattern_leaves_a_plain_label_alone(label: str) -> None:
+    assert not SPEND.search(label), label
