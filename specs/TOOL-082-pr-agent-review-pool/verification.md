@@ -13,6 +13,9 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
   - `dotf spec review TOOL-082-pr-agent-review-pool --dry-run --reviewer anthropic-review/claude-haiku-5-5` is refused with `it is a fallback, which signs first only when the first signers failed: pass --fallback-reason`;
   - the same with `--fallback-reason quota` builds the launch command;
   - `--reviewer nan/glm5.3-flash` builds the launch command.
+  - `--reviewer agy/gemini-3.8-flash-high` builds `agy --model gemini-3.8-flash-high ...` with no `--provider` flag and no `dotf secrets run --only` wrapper. That is the `auth: login` path, so the arm launches without the key it used to name (#2298 review).
+
+  `test_another_vendor_can_sign_first` holds the other half of amendment B: a first signer from outside Anthropic exists.
 
   ADR: `docs/adr/adr-070-review-pool-adopts-dotfiles-adr-046.md`.
 - [ ] **AC2**: pending (PR 2)

@@ -54,6 +54,14 @@ def test_an_anthropic_member_never_signs_first(member: dict) -> None:
         assert signs in {"second", "fallback"}, f"{member['id']} is Anthropic and would sign first"
 
 
+def test_another_vendor_can_sign_first() -> None:
+    """The other half of amendment B: with every Anthropic member barred from
+    signing first, the pool still needs a first signer from another vendor, or
+    the adversarial draw has no candidate and fails at launch rather than here."""
+    first = [m["id"] for m in MEMBERS if m.get("signs", "first") == "first" and m["vendor"].lower() != "anthropic"]
+    assert first, "no member outside Anthropic signs first"
+
+
 def test_the_ci_draw_has_drawable_members() -> None:
     weights = [m["pr_agent"]["weight"] for m in PR_AGENT_MEMBERS if "weight" in m["pr_agent"]]
     assert weights, "no pool member carries a PR-Agent weight"
