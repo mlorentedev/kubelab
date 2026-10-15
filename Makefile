@@ -538,8 +538,8 @@ gitea-drop-empty:
 # alternatives are all worse: a token in the remote URL lands in .git/config, a
 # `store` helper writes it to ~/.git-credentials, and printing it to copy-paste
 # puts it in a session transcript. It is `admin_password` and not a token because
-# no token may author: measured 2026-09-04, neither could push; #1616 has since
-# let the bot push, but authoring is not its role (ADR-065 D1) -- see
+# no token is allowed to author: the admin token cannot push (measured 2026-09-04),
+# and the bot can since #1616 but ADR-065 D1 keeps authoring off it -- see
 # toolkit/features/gitea_git.py.
 #
 #   make gitea-git ARGS="clone https://gitea.kubelab.live/personal/resume.git"
