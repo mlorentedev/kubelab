@@ -69,6 +69,7 @@ Two limits remained, and neither was in AC1's scope:
 ## Decisions made during implementation
 
 - 2026-10-10, operator: a new spec rather than widening AI-009. Research jobs are included. The fallback is Anthropic Haiku, capped at 20 USD per month in the provider. Triage runs hourly.
+- 2026-10-14, operator, read in the Console: the `hermes-kubelab` workspace has a 20 USD monthly spend limit. The Anthropic spend is split by workspace, not shared: `ci` (PR-Agent) 60 USD, `hermes-kubelab` 20 USD, organization 80 USD, so neither can starve the other and the sum equals the organization's cap. PR-Agent's old key still sits in the Default workspace until its secret is switched to the `ci` key.
 - 2026-10-10, the placement rule (`proposal.md`). It supersedes AI-009 AC6's seeding of `cronjobs` into the zone, and amends ADR-068 at archive.
 - 2026-10-10, measured in the pinned image (v2026.9.24):
   - `SOUL.md` is seeded by `docker/stage2-hook.sh` (`seed_one`), so the gateway runs the image's persona today.
