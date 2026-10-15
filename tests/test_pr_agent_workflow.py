@@ -1445,6 +1445,9 @@ def test_a_second_attempt_runs_only_on_a_measured_absence() -> None:
     assert "steps.published_after_anthropic.outputs.published == 'false'" in nan_if
     second_if = " ".join(str(_attempts()["pr_agent_anthropic_second"]["if"]).split())
     assert "steps.published_after_nan.outputs.published == 'false'" in second_if
+    # Its own gate on the route, not only the probe's: nan-only (second == none)
+    # must keep the Anthropic key's holder skipped even if the probe ever answered.
+    assert "steps.route.outputs.second == 'anthropic'" in second_if
     for probe in ("published_after_anthropic", "published_after_nan"):
         step = _step_by_id(probe)
         assert step["run"].strip() == './scripts/pr-agent-publish-guard.sh --probe --output "$GITHUB_OUTPUT"'

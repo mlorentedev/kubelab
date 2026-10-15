@@ -710,6 +710,7 @@ jobs:
         id: pr_agent_anthropic_second
         if: >
           !cancelled() && steps.reviewable.outputs.any == 'true'
+            && steps.route.outputs.second == 'anthropic'
             && steps.published_after_nan.outputs.published == 'false'
         timeout-minutes: 8
         continue-on-error: true
