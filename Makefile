@@ -529,12 +529,18 @@ gitea-drop-empty:
 	@test -n "$(REPO)" || (echo "Usage: make gitea-drop-empty REPO=owner/name [ENV=prod] [APPLY=1] [DISCARD=<issues+pulls count>]" && exit 1)
 	@$(TOOLKIT) services gitea drop-empty --repo $(REPO) --env $(or $(filter staging prod,$(ENV)),prod) $(if $(APPLY),--apply,) $(if $(DISCARD),--discard-tracker-items $(DISCARD),)
 
-# Run git against the forge with the operator credential injected into the child
-# process. No workstation holds a credential for gitea.kubelab.live, and the three
+# Run git against the forge over HTTPS as its admin, with the break-glass
+# password: an exception to ADR-062 D4 kept for agent authoring until #2296
+# decides which identity authors, and everything run here is recorded as the
+# admin. Not the human path: a person clones over SSH with their own key,
+# `git clone forge:personal/resume.git` (dotfiles#2512). Over HTTPS no
+# workstation holds a per-human credential for gitea.kubelab.live, and the three
 # alternatives are all worse: a token in the remote URL lands in .git/config, a
 # `store` helper writes it to ~/.git-credentials, and printing it to copy-paste
 # puts it in a session transcript. It is `admin_password` and not a token because
-# neither token may push -- measured 2026-09-04, see toolkit/features/gitea_git.py.
+# no token is allowed to author: the admin token cannot push (measured 2026-09-04),
+# and the bot can since #1616 but ADR-065 D1 keeps authoring off it -- see
+# toolkit/features/gitea_git.py.
 #
 #   make gitea-git ARGS="clone https://gitea.kubelab.live/personal/resume.git"
 #   make gitea-git ARGS="push origin HEAD"      # from inside the clone
