@@ -31,6 +31,8 @@ REVIEWER = REPO_ROOT / ".github/workflows/pr-agent.yml"
 GATE = REPO_ROOT / ".github/workflows/review-attestation.yml"
 PR_AGENT_CONFIG = REPO_ROOT / ".pr_agent.toml"
 REVIEWER_POOL = REPO_ROOT / "harness/reviewer-pool.json"
+PUBLISH_GUARD = REPO_ROOT / "scripts/pr-agent-publish-guard.sh"
+ROUTE = REPO_ROOT / "scripts/pr-agent-route.sh"
 
 
 def _load(path: pathlib.Path) -> dict:
@@ -215,18 +217,21 @@ def test_the_publish_check_reads_the_marker_from_the_shared_registry() -> None:
     """
     steps = _load(REVIEWER)["jobs"]["review"]["steps"]
     verifier = next(s for s in steps if "no review was published" in s.get("name", ""))
-    assert "harness/review-attestation.json" in verifier["run"]
-    assert "review_markers" in verifier["run"]
-    # The marker itself must NOT appear as a literal in the workflow.
+    # One definition of "published", shared with the probes between attempts
+    # (TOOL-082): the step runs the script, and the script reads the registry.
+    assert verifier["run"].strip() == "./scripts/pr-agent-publish-guard.sh"
+    guard = PUBLISH_GUARD.read_text(encoding="utf-8")
+    assert "harness/review-attestation.json" in guard
+    assert "review_markers" in guard
+    # The marker itself must NOT appear as a literal in the workflow or the script.
     registry = json.loads((REPO_ROOT / "harness/review-attestation.json").read_text())
     marker = next(
         r["review_markers"][0]
         for r in registry["reviewers"]
         if r["login"] == "github-actions" and r.get("review_markers")
     )
-    assert marker not in verifier["run"], (
-        f"the marker {marker!r} is hardcoded in the workflow; the registry is the SSOT"
-    )
+    for text in (REVIEWER.read_text(encoding="utf-8"), guard):
+        assert marker not in text, f"the marker {marker!r} is hardcoded; the registry is the SSOT"
 
 
 def test_the_publish_check_does_not_read_an_attacker_influenced_ref() -> None:
@@ -460,8 +465,8 @@ def test_an_improve_comment_never_touches_the_attestation(name: str) -> None:
 
 
 def test_pr_agent_only_runs_when_something_is_reviewable() -> None:
-    step = _reviewer_step("PR-Agent")
-    assert step.get("if") == "steps.reviewable.outputs.any == 'true'"
+    for step in _attempts().values():
+        assert "steps.reviewable.outputs.any == 'true'" in " ".join(str(step.get("if", "")).split()), step["name"]
 
 
 def test_the_guard_skips_when_nothing_was_reviewable() -> None:
@@ -948,9 +953,7 @@ def test_every_model_pr_agent_reviews_with_is_admitted_in_the_reviewer_pool() ->
     # Matched on each member's `pr_agent.model` (TOOL-082), not on the id: a
     # member admitted for the adversarial review is not thereby a CI reviewer.
     admitted = {
-        e["pr_agent"]["model"].split("/")[-1]
-        for e in json.loads(REVIEWER_POOL.read_text())["pool"]
-        if "pr_agent" in e
+        e["pr_agent"]["model"].split("/")[-1] for e in json.loads(REVIEWER_POOL.read_text())["pool"] if "pr_agent" in e
     }
     for model in {_primary_model_name()} | _fallback_model_names():
         assert model in admitted, (
@@ -1113,9 +1116,22 @@ def test_a_run_the_job_skips_cannot_cancel_one_that_reviews() -> None:
 # --- the reviewer's time and findings budget, held in two files -------------
 
 
+def _attempts() -> dict[str, dict]:
+    """Every PR-Agent attempt, by step id, in execution order (TOOL-082)."""
+    return {s["id"]: s for s in _review_job()["steps"] if "pr-agent@" in str(s.get("uses", ""))}
+
+
+def _nan_attempt() -> dict:
+    """The NaN attempt, found by its id: the job now runs the action three times."""
+    return _attempts()["pr_agent"]
+
+
 def _review_env() -> dict:
-    step = next(s for s in _review_job()["steps"] if "pr-agent@" in str(s.get("uses", "")))
-    return step.get("env", {})
+    return _nan_attempt().get("env", {})
+
+
+def _preflight_env() -> dict:
+    return next(s for s in _review_job()["steps"] if s.get("id") == "models")["env"]
 
 
 def _toml() -> dict:
@@ -1165,6 +1181,11 @@ def test_every_request_to_nan_is_streamed() -> None:
         json.loads(env["LITELLM__FORCE_STREAMING_API_BASE_SUBSTRINGS"])
         == litellm["force_streaming_api_base_substrings"]
     )
+    # Only NaN is reached through the OpenAI transport. On an Anthropic attempt
+    # these keys would send a Claude model to NaN's base URL.
+    for step_id in ANTHROPIC_ATTEMPTS:
+        leaked = [k for k in _attempts()[step_id]["env"] if k.startswith(("LITELLM__", "OPENAI__"))]
+        assert not leaked, f"{step_id} carries {leaked}"
 
 
 def test_a_review_can_report_more_findings_than_the_upstream_default() -> None:
@@ -1203,12 +1224,12 @@ def test_every_model_in_the_chain_gets_its_whole_timeout_inside_the_job() -> Non
     """
     timeout = int(_toml()["config"]["ai_timeout"])
     assert str(_review_env()["CONFIG__AI_TIMEOUT"]) == str(timeout)
-    # The chain the job runs is the env's, which overrides the toml; count it
+    # The chain the job runs is the preflight's, handed on by the draw; count it
     # from the toml only after proving the two agree.
-    assert json.loads(_review_env()["CONFIG__FALLBACK_MODELS"]) == _toml()["config"]["fallback_models"]
+    assert json.loads(_preflight_env()["DECLARED_FALLBACK_MODELS"]) == _toml()["config"]["fallback_models"]
     chain = 1 + len(_fallback_model_names())
     assert timeout > 300
-    step = next(s for s in _review_job()["steps"] if "pr-agent@" in str(s.get("uses", "")))
+    step = _nan_attempt()
     assert "timeout-minutes" in step, "the PR-Agent step has no limit of its own; a replayed APIError outlives the job"
     step_seconds = int(step["timeout-minutes"]) * 60
     assert chain * timeout + 60 <= step_seconds
@@ -1222,8 +1243,11 @@ def test_every_model_in_the_chain_gets_its_whole_timeout_inside_the_job() -> Non
 def test_the_workflow_reviews_with_the_toml_model() -> None:
     """The env reaches the PR under test, the toml every later default-branch
     read. Two models in two files is how mimo-v2.5's retirement produced a 401
-    on one path and not the other (#1909)."""
-    assert _review_env()["CONFIG__MODEL"] == _toml()["config"]["model"]
+    on one path and not the other (#1909). Since TOOL-082 the workflow declares
+    the chain on the preflight, and the NaN attempt takes what the draw hands on."""
+    assert _preflight_env()["DECLARED_MODEL"] == _toml()["config"]["model"]
+    assert _review_env()["CONFIG__MODEL"] == "${{ steps.route.outputs.nan_model }}"
+    assert _review_env()["CONFIG__FALLBACK_MODELS"] == "${{ steps.route.outputs.nan_fallbacks }}"
 
 
 _OPEN_GH_STUB = """#!/usr/bin/env bash
@@ -1328,3 +1352,185 @@ def test_every_step_after_the_diff_check_tests_its_output() -> None:
             continue
         condition = " ".join(str(step.get("if", "")).split())
         assert re.search(r"steps\.reviewable\.outputs\.any == '(true|false)'", condition), step.get("name")
+
+
+# --- the review pool: preflight, draw, two providers (TOOL-082, #1843) ------
+
+ANTHROPIC_ATTEMPTS = ("pr_agent_anthropic_first", "pr_agent_anthropic_second")
+# What a reviewer reads: every attempt must review the same way, whichever
+# provider the draw picked, or the draw would change the review, not the model.
+REVIEW_SETTINGS = (
+    "PR_REVIEWER__NUM_MAX_FINDINGS",
+    "CONFIG__PUBLISH_OUTPUT_PROGRESS",
+    "CONFIG__OUTPUT_RUN_DETAILS",
+    "CONFIG__AI_TIMEOUT",
+    "CONFIG__RETRY_SAME_MODEL_ON_TIMEOUT",
+    "CONFIG__NUM_RETRIES",
+)
+
+
+def _step_by_id(step_id: str) -> dict:
+    return next(s for s in _review_job()["steps"] if s.get("id") == step_id)
+
+
+def _allowed_anthropic() -> set[str]:
+    m = re.search(r'^ALLOWED_ANTHROPIC="([^"]+)"', ROUTE.read_text(encoding="utf-8"), re.M)
+    assert m, "ALLOWED_ANTHROPIC not found in scripts/pr-agent-route.sh"
+    return set(m.group(1).split())
+
+
+def test_the_attempts_run_in_the_order_the_guard_reads_them() -> None:
+    assert list(_attempts()) == ["pr_agent_anthropic_first", "pr_agent", "pr_agent_anthropic_second"]
+    attempts = _reviewer_step("no review was published")["env"]["ATTEMPTS"]
+    order = [re.search(r"steps\.(\w+)\.outcome", line).group(1) for line in attempts.strip().splitlines()]
+    assert order == list(_attempts())
+
+
+def test_every_attempt_runs_the_same_pinned_action() -> None:
+    assert len({s["uses"] for s in _attempts().values()}) == 1
+
+
+def test_the_two_anthropic_attempts_are_one_step_written_twice() -> None:
+    """Steps cannot be reordered at run time, so the Anthropic attempt appears
+    before and after the NaN one. Anything that differs between the copies
+    besides when they run is a review that depends on the draw's order."""
+    first, second = (_attempts()[i] for i in ANTHROPIC_ATTEMPTS)
+    for key in ("uses", "env", "timeout-minutes", "continue-on-error"):
+        assert first[key] == second[key], key
+
+
+def test_every_attempt_reviews_with_the_same_settings() -> None:
+    envs = {step_id: step["env"] for step_id, step in _attempts().items()}
+    for key in REVIEW_SETTINGS:
+        values = {step_id: str(env.get(key)) for step_id, env in envs.items()}
+        assert len(set(values.values())) == 1, f"{key} differs between attempts: {values}"
+    configs = [{k: v for k, v in env.items() if k.startswith("github_action_config.")} for env in envs.values()]
+    assert all(c == configs[0] for c in configs), "the github_action_config settings differ between attempts"
+    assert all(env["CONFIG__OUTPUT_RUN_DETAILS"] == "true" for env in envs.values())
+
+
+def test_each_attempt_holds_only_its_own_provider_s_key() -> None:
+    nan = _review_env()
+    assert "secrets.NAN_API_KEY" in nan["OPENAI__KEY"]
+    assert "ANTHROPIC__KEY" not in nan
+    for step_id in ANTHROPIC_ATTEMPTS:
+        env = _attempts()[step_id]["env"]
+        assert "secrets.PR_AGENT_ANTHROPIC_API_KEY" in env["ANTHROPIC__KEY"]
+        assert not any("NAN_API_KEY" in str(v) for v in env.values()), step_id
+
+
+def test_only_the_draw_and_the_anthropic_attempts_see_the_anthropic_key() -> None:
+    holders = {
+        s.get("id") or s.get("name")
+        for s in _review_job()["steps"]
+        if "PR_AGENT_ANTHROPIC_API_KEY" in str(s.get("env", {}))
+    }
+    assert holders == {"route", *ANTHROPIC_ATTEMPTS}
+
+
+def test_a_missing_anthropic_key_does_not_fail_the_credential_check() -> None:
+    """NaN alone is a working pool. Without the Anthropic key the draw names the
+    remedy and reviews on NaN; failing the job here would turn a degraded review
+    into none."""
+    assert "ANTHROPIC" not in str(_step_by_id("credential"))
+
+
+def test_a_second_attempt_runs_only_on_a_measured_absence() -> None:
+    nan_if = " ".join(str(_nan_attempt()["if"]).split())
+    assert "steps.published_after_anthropic.outputs.published == 'false'" in nan_if
+    second_if = " ".join(str(_attempts()["pr_agent_anthropic_second"]["if"]).split())
+    assert "steps.published_after_nan.outputs.published == 'false'" in second_if
+    for probe in ("published_after_anthropic", "published_after_nan"):
+        step = _step_by_id(probe)
+        assert step["run"].strip() == './scripts/pr-agent-publish-guard.sh --probe --output "$GITHUB_OUTPUT"'
+        assert "default_branch" in step["env"]["BASE_REF"]
+        assert "always()" not in str(step["if"]), "a cancelled run must not spend a second attempt"
+
+
+def test_the_anthropic_models_the_workflow_configures_are_the_allowlist() -> None:
+    """The Console cannot restrict a key to a model, so ALLOWED_ANTHROPIC is the
+    allowlist. A model the pool names outside it fails the draw; a model the
+    workflow configures outside it would run without its temperature and
+    thinking settings."""
+    allowed = _allowed_anthropic()
+    assert allowed == {"anthropic/claude-haiku-5-5", "anthropic/claude-sonnet-5-5"}
+    env = _attempts()["pr_agent_anthropic_first"]["env"]
+    assert set(json.loads(env["CONFIG__CLAUDE_ADAPTIVE_THINKING_MODELS_OVERRIDE"])) == allowed
+    assert allowed <= set(json.loads(env["CONFIG__NO_TEMPERATURE_MODELS"]))
+    pool = json.loads(REVIEWER_POOL.read_text())["pool"]
+    named = {m["pr_agent"]["model"] for m in pool if m.get("pr_agent", {}).get("model", "").startswith("anthropic/")}
+    assert named == allowed
+
+
+def test_the_scripts_are_checked_out_sparsely_and_without_credentials() -> None:
+    step = _reviewer_step("Check out the reviewer's scripts")
+    paths = set(step["with"]["sparse-checkout"].split())
+    assert paths == {
+        "harness/reviewer-pool.json",
+        "scripts/pr-agent-model-preflight.sh",
+        "scripts/pr-agent-route.sh",
+        "scripts/pr-agent-publish-guard.sh",
+    }
+    assert step["with"]["persist-credentials"] is False
+    assert "ref" not in step["with"], "the PR's merge ref is the default; any other ref is a choice to justify"
+    for path in paths:
+        assert (REPO_ROOT / path).is_file(), path
+
+
+def test_the_draw_reads_the_pr_s_size_from_the_api_not_the_event() -> None:
+    """An `issue_comment` event carries no size or labels, so a `/review` would
+    never take the risk route if the draw read them from the event."""
+    run = _step_by_id("route")["run"]
+    assert 'gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}"' in run
+    assert ".additions + .deletions" in run
+    env = str(_step_by_id("route").get("env", {}))
+    assert "additions" not in env and "labels" not in env
+
+
+def test_the_job_outlasts_its_worst_two_attempt_path() -> None:
+    """At most two attempts run, one per provider. The job must hold the longer
+    pair plus the preflight (one probe per declared model), the draw's two
+    Anthropic probes, and a minute each for setup, the probe between attempts
+    and the final guard, or a slow run is cancelled before the guard names it."""
+    attempts = _attempts()
+    anthropic = int(attempts["pr_agent_anthropic_first"]["timeout-minutes"]) * 60
+    nan = int(attempts["pr_agent"]["timeout-minutes"]) * 60
+    preflight = 90 * (1 + len(json.loads(_preflight_env()["DECLARED_FALLBACK_MODELS"])))
+    draw = 2 * 30
+    assert re.search(r"PREFLIGHT_TIMEOUT:-90\}", (REPO_ROOT / "scripts/pr-agent-model-preflight.sh").read_text())
+    assert re.search(r"ROUTE_PROBE_TIMEOUT:-30\}", ROUTE.read_text())
+    overhead = 3 * 60
+    assert anthropic + nan + preflight + draw + overhead < int(_review_job()["timeout-minutes"]) * 60
+
+
+# Highest price per million tokens (input, output) and the ceiling one review
+# may cost, per allowed model. Haiku 5.5's rates are its rates above 100,000
+# prompt tokens; Sonnet 5.5 has no price step. Ported from dotfiles'
+# pr-agent-config.bats, where the owner set the ceilings (ADR-046 there).
+ANTHROPIC_PRICES = {
+    "anthropic/claude-haiku-5-5": (0.50, 2.50, 0.25),
+    "anthropic/claude-sonnet-5-5": (2.00, 10.00, 1.00),
+}
+
+
+def test_the_worst_anthropic_review_stays_under_its_ceiling() -> None:
+    """The allowlist is a rule only because every allowed model needs a price
+    row here, and its worst review under the caps must cost less than the
+    ceiling. Claude's tokenizer counts about 30% more than PR-Agent's."""
+    env = _attempts()["pr_agent_anthropic_first"]["env"]
+    routed = "${{ steps.route.outputs.anthropic_model }}"
+    assert env["CONFIG__MODEL"] == env["CONFIG__MODEL_WEAK"] == routed
+    assert json.loads(env["CONFIG__FALLBACK_MODELS"]) == []
+    prompt = int(env["CONFIG__MAX_MODEL_TOKENS"])
+    assert (
+        prompt == int(env["CONFIG__CUSTOM_MODEL_MAX_TOKENS"]) == int(_review_env()["CONFIG__CUSTOM_MODEL_MAX_TOKENS"])
+    )
+    output = int(env["DEFAULT_ANTHROPIC_CHAT_MAX_TOKENS"])
+    for model in _allowed_anthropic():
+        assert model in ANTHROPIC_PRICES, f"{model} is allowed but has no price row"
+        price_in, price_out, ceiling = ANTHROPIC_PRICES[model]
+        worst = prompt * 1.3 * price_in / 1e6 + output * price_out / 1e6
+        assert worst < ceiling, f"{model}: worst review ${worst:.2f} exceeds ${ceiling:.2f}"
+    # Not streamed, so ai_timeout bounds the whole answer and must end inside
+    # the step, or the step's kill would hide PR-Agent's own timeout.
+    assert int(env["CONFIG__AI_TIMEOUT"]) < int(_attempts()["pr_agent_anthropic_first"]["timeout-minutes"]) * 60
