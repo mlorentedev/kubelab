@@ -40,7 +40,6 @@ HTTP = "n8n-nodes-base.httpRequest"
 CODE = "n8n-nodes-base.code"
 
 KNOWN_BROKEN = {
-    "slack-task-capture.json": "APP-CONFIG-017 (#1877) owns slack-task-capture's post-create reads",
 }
 
 _RETURN_KEY = re.compile(r"^\s*([A-Za-z_]\w*)\s*:", re.MULTILINE)
