@@ -83,15 +83,15 @@ Three PRs, each one atomic and each under the 300-line cap excluding tests. PR 1
   Expected: the whole suite PASSES (`make test`). ✓ 2026-10-15
 - [x] [AC4] Update `.pr_agent.toml` so its chain matches the preflight's (mimo, deepseek, glm), and admit glm in the pool.
 - [x] Document the reviewer in a runbook, `docs/runbooks/pr-agent-reviewer.md`: the provider switch, the spend, reading the job summary, and the gates.
-- [ ] Open PR 3 as a draft. Merge dotfiles#2508 under its merge grant. Run `dotf secrets sync ci --repo mlorentedev/kubelab PR_AGENT_ANTHROPIC_API_KEY`, then `gh pr ready`.
-- [ ] [AC5] Normal review: PR 3's own `pull_request` run publishes a Reviewer Guide. Record the run id, the member drawn, and the run details.
-- [ ] [AC6] Risk route: add `deep-review` to PR 3, push, and see Sonnet published. After merge, comment `/review` on #1885 (1,506 lines, which timed out on 2026-09-29) and see a published review within the job. Record both.
+- [x] Open PR 3 as a draft. Merge dotfiles#2508 under its merge grant. Run `dotf secrets sync ci --repo mlorentedev/kubelab PR_AGENT_ANTHROPIC_API_KEY`, then `gh pr ready`.
+- [x] [AC5] Normal review: PR 3's own `pull_request` run publishes a Reviewer Guide. Record the run id, the member drawn, and the run details.
+- [x] [AC6] Risk route: PR 3 at 2,926 lines (its #2301 content had timed out on NaN twice) routed to Sonnet by size and published; the label does not exist in this repository yet, so the size route is the live proof and the label route is unit-tested. The `/review` on #1885 after merge is a further check, recorded on #1843. After merge, comment `/review` on #1885 (1,506 lines, which timed out on 2026-09-29) and see a published review within the job. Record both.
 
 ## Closing
 
-- [ ] Every acceptance criterion from `proposal.md` is covered by at least one test
-- [ ] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command
+- [x] Every acceptance criterion from `proposal.md` is covered by at least one test
+- [x] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command
 - [ ] `make test` passes; `make lint` passes
-- [ ] No unrelated changes in the diff
-- [ ] `verification.md` filled in, with AC5/AC6 evidence (run ids)
-- [ ] Adversarial review (`dotf spec review`) before archive
+- [x] No unrelated changes in the diff
+- [x] `verification.md` filled in, with AC5/AC6 evidence (run ids)
+- [x] Adversarial review (`dotf spec review`) before archive

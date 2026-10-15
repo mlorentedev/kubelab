@@ -62,6 +62,18 @@ Claude Console. Use `nan-only` to stop spending before the limit is reached.
 | `published no review` on NaN | Saturation, an empty answer (#1205, #1966) or a diff too large for the step (#1909) | Comment `/review` to retry; for a large diff, add `deep-review` first |
 | `published no review` on Anthropic | No cause is measured yet | Read the attempt's log for an answer cut at the 40,000-token output cap |
 
+## What the job trusts
+
+The scripts that pick the model and judge the result come from the PR's merge ref, not from `master`.
+The draw step holds `PR_AGENT_ANTHROPIC_API_KEY`, and the preflight holds `NAN_API_KEY`. A PR can
+therefore change the code that runs next to both keys. That is the trust a `pull_request` run already
+gives the workflow file, which also comes from the head. The job admits no fork (`head.repo.fork ==
+false`) and skips Dependabot, so only people with push access reach it. Accepted in TOOL-082's
+review. Revisit it if the job is ever opened to forks or moved to `pull_request_target`.
+
+The credential step checks only `NAN_API_KEY`. A missing Anthropic key is a note, not a failure: NaN
+still reviews.
+
 ## Changing the pool
 
 - **Weights and members** live in `harness/reviewer-pool.json`, which is a port of dotfiles' copy. Change
