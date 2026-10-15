@@ -233,6 +233,17 @@ def test_each_member_is_drawn_at_its_own_points_with_the_other_provider_second(r
     assert route.get("nan_fallbacks") == f'["{DEEPSEEK}"]'
 
 
+def test_an_anthropic_member_with_no_declared_effort_runs_at_medium(route: Route) -> None:
+    pool = json.loads(json.dumps(FIXTURE_POOL))
+    for member in pool["pool"]:
+        member.get("pr_agent", {}).pop("reasoning_effort", None)
+    route.pool.write_text(json.dumps(pool))
+    proc = route.run(PR_AGENT_DRAW="0")
+    assert proc.returncode == 0, _output(proc)
+    assert route.get("anthropic_model") == HAIKU
+    assert route.get("anthropic_effort") == "medium"
+
+
 def test_across_every_point_each_member_is_drawn_exactly_its_weight(route: Route) -> None:
     assert route.every_point(10) == {HAIKU: 5, DEEPSEEK: 2, MIMO: 3}
 
