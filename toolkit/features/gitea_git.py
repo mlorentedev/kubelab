@@ -2,12 +2,15 @@
 
 AN EXCEPTION TO ADR-062 D4, NOT A SANCTIONED PATH. It authenticates as the
 forge's sole admin with the password D4 reserves for when Authelia is unavailable,
-and it checks no such condition: every operation it runs is recorded as that
-account, and every rotation of the password breaks it. Agents author through it
-today because no other identity may (see below); which one should is #2296.
-It is NOT the human path: a person works on the forge over SSH with the key
-registered on their own account, through the `forge` host that dotfiles declares
-and pins (dotfiles#2512) -- `git clone forge:personal/resume.git`.
+and it checks no such condition. Every operation it runs is recorded as that
+account, and while a rotation is applied to the forge but not yet merged to SOPS
+it fails. Agents author through it today because no other identity may (see
+below); which one should is #2296.
+It is NOT the human path: a person works on the forge over SSH with the key on
+their own account, through the `forge` host that dotfiles declares and pins
+(dotfiles#2512) -- `git clone forge:personal/resume.git`. That account is
+`manu`, the same sole admin, so SSH does not separate the identity either; it
+removes the shared password, not the privilege (#2296).
 
 WHY HTTPS NEEDS IT. The forge's SSH is published on the mesh only, and over HTTPS
 no workstation holds a per-human credential for `gitea.kubelab.live` -- only `github.com`,
