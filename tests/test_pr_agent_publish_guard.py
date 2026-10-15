@@ -305,6 +305,34 @@ def test_probe_a_comment_listing_that_is_not_json_answers_unknown_never_false(gu
     assert answer == "published=unknown"
 
 
+def test_probe_a_pasted_heading_from_anyone_but_the_bot_is_not_a_review(guard: Guard) -> None:
+    """Only github-actions[bot] publishes PR-Agent's review, so a human or another
+    bot quoting the heading must not open the gate as if the run had reviewed."""
+    pasted = json.dumps(
+        [{"user": {"login": "someone"}, "updated_at": "2026-10-07T10:00:00Z", "body": "## PR Reviewer Guide"}]
+    )
+    guard.stub(BASE=REGISTRY, COMMENTS=pasted)
+    _, answer = guard.probe()
+    assert answer == "published=false"
+
+
+def test_probe_on_the_head_fallback_a_bot_comment_without_the_heading_is_not_a_review(guard: Guard) -> None:
+    """The head-ref fallback uses the generic heading, never a head-supplied marker
+    (CWE-345), so a bot comment that lacks it still answers false."""
+    other = json.dumps(
+        [
+            {
+                "user": {"login": "github-actions[bot]"},
+                "updated_at": "2026-10-07T10:00:00Z",
+                "body": "## PR Code Suggestions",
+            }
+        ]
+    )
+    guard.stub(BASE="fail:404", HEAD=REGISTRY, COMMENTS=other)
+    _, answer = guard.probe()
+    assert answer == "published=false"
+
+
 # --- final guard: the last attempt that ran is the one judged --------------------
 
 
