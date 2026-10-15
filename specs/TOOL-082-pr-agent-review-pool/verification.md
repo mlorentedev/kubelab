@@ -20,7 +20,12 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
   ADR: `docs/adr/adr-070-review-pool-adopts-dotfiles-adr-046.md`.
 - [ ] **AC2**: `tests/test_pr_agent_preflight.py`, 13 tests: 10 against a stubbed `curl`, 3 against the real `curl` and a local HTTP server (an answer, a hang to the timeout, a 200 status line whose body never arrives). Mutation `2??)` to `2xx)` in the script: 10 failed.
 - [ ] **AC3**: `tests/test_pr_agent_route.py`, 42 tests. They cover the cumulative draw at every point, the shipped pool's weights, the risk route at 1,500 and not 1,499, the exact label, the allowlist, the `PR_AGENT_PROVIDER` values and the key on stdin only. Mutation `-ge` to `-gt` on the risk line: 2 failed.
-- [ ] **AC4**: the guard is in `tests/test_pr_agent_publish_guard.py`, 24 tests. Mutation "an API failure answers `published=false`": the 3 "unknown, never false" tests failed. The workflow half is pending (PR 3).
+- [ ] **AC4**: the guard is in `tests/test_pr_agent_publish_guard.py`, 24 tests. Mutation "an API failure answers `published=false`": the 3 "unknown, never false" tests failed. Workflow half: `tests/test_pr_agent_workflow.py`, 74 tests, 14 of them new or rewritten for the pool. They check the attempt order the guard reads, one action pin, the two Anthropic copies identical, equal review settings, each attempt holding only its provider's key, the probes gating the second attempt, the allowlist against the pool and the workflow, the price ceiling per allowed model, the sparse checkout, size and labels read from the API, and the job outlasting its worst two-attempt path. Three mutations went red under `make mutate`:
+  - NaN step `timeout-minutes: 19` to `13`;
+  - the second attempt gated on `!= 'true'` instead of `== 'false'`;
+  - Opus added to `ALLOWED_ANTHROPIC`.
+
+  `actionlint` reports only the 5 SC2016 infos that master already has.
 - [ ] **AC5**: pending (PR 3, live)
 - [ ] **AC6**: pending (PR 3, live)
 
@@ -40,6 +45,7 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
   - kubelab's own deepseek measurement (#1205) is kept.
 
   Rewriting the admission records by hand would have produced a third version of the same facts.
+- Timeouts: the NaN step is 19 minutes, so that `ai_timeout=360` (measured here, #1962) fits the three-model chain: 3 x 360 s + 60 s. The job is 40 minutes, against a worst two-attempt path of about 37 minutes. dotfiles' 12/32 do not transfer, because dotfiles runs PR-Agent's default 120 s timeout. Cutting the chain to two models would have kept glm out of the draw that ADR-070 weighs.
 - The WIP gate refused a new spec (16 active against a limit of 10). The owner overrode it on 2026-10-15; the reason is recorded as `wip_override` in `proposal.md`.
 
 ## Promotion candidates

@@ -65,7 +65,7 @@ Three PRs, each one atomic and each under the 300-line cap excluding tests. PR 1
 
 ### PR 3: the wiring, which reviews itself (closes #1843, #1964, #1909, #1966)
 
-- [ ] [AC4] Write failing tests in `tests/test_pr_agent_workflow.py`:
+- [x] [AC4] Write failing tests in `tests/test_pr_agent_workflow.py`:
   - the scripts are checked out sparsely at the PR head; the data read stays on the default branch;
   - the preflight chain equals the toml chain;
   - the route step's inputs come from the API, not the event;
@@ -75,14 +75,14 @@ Three PRs, each one atomic and each under the 300-line cap excluding tests. PR 1
   - the second attempt is gated on the probe output;
   - the job timeout is at least the steps' bounds plus their overhead;
   - the credential step accepts NaN-only.
-- [ ] [AC4] Wire `.github/workflows/pr-agent.yml`:
+- [x] [AC4] Wire `.github/workflows/pr-agent.yml`:
   - sparse checkout, then the preflight, the route, the Anthropic attempt first, the probe, the NaN attempt, the probe, and the Anthropic attempt second;
   - the final guard becomes `pr-agent-publish-guard.sh`;
   - the timeouts are re-derived.
 
-  Expected: the whole suite PASSES (`make test`).
-- [ ] [AC4] Update `.pr_agent.toml` so its chain matches the preflight's (mimo, deepseek, glm), and admit glm in the pool.
-- [ ] Document the reviewer in a runbook, `docs/runbooks/pr-agent-reviewer.md`: the provider switch, the spend, reading the job summary, and the gates.
+  Expected: the whole suite PASSES (`make test`). ✓ 2026-10-15
+- [x] [AC4] Update `.pr_agent.toml` so its chain matches the preflight's (mimo, deepseek, glm), and admit glm in the pool.
+- [x] Document the reviewer in a runbook, `docs/runbooks/pr-agent-reviewer.md`: the provider switch, the spend, reading the job summary, and the gates.
 - [ ] Open PR 3 as a draft. Merge dotfiles#2508 under its merge grant. Run `dotf secrets sync ci --repo mlorentedev/kubelab PR_AGENT_ANTHROPIC_API_KEY`, then `gh pr ready`.
 - [ ] [AC5] Normal review: PR 3's own `pull_request` run publishes a Reviewer Guide. Record the run id, the member drawn, and the run details.
 - [ ] [AC6] Risk route: add `deep-review` to PR 3, push, and see Sonnet published. After merge, comment `/review` on #1885 (1,506 lines, which timed out on 2026-09-29) and see a published review within the job. Record both.
