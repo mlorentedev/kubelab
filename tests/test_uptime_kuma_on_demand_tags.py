@@ -83,11 +83,20 @@ def _tier(monitor: dict) -> str | None:
 RESOLVED = [(m["key"], _tier(m), TAG in m.get("tags", [])) for m in MONITORS if _tier(m)]
 
 
-# Monitors whose target the SSOT gives no tier: public endpoints, the prod
-# cluster's own routes, and staging, which the `staging` tag already mutes.
-# Declared rather than filtered out, so a new monitor the resolver misses fails
-# here instead of dropping out of `test_the_tag_follows_the_tier` unseen (#2292).
-UNRESOLVED = {
+# Monitors whose target the SSOT gives no tier, declared rather than filtered
+# out, so a new monitor the resolver misses fails here instead of dropping out
+# of `test_the_tag_follows_the_tier` unseen (#2292). Split by why each may page:
+# staging watches on-demand hosts and is muted by its `staging` tag; the rest
+# watch public or always-on endpoints and must page.
+UNRESOLVED_MUTED = {
+    "services-auth-authelia-staging",
+    "services-monitoring-pi-hole-staging",
+    "staging-api-api-staging-kubelab-live",
+    "staging-web-grafana-staging",
+    "staging-web-n8n-staging",
+    "staging-web-staging-mlorente-dev",
+}
+UNRESOLVED_PAGING = {
     "home-iot-smart-plug-co",
     "infra-vpn-headscale",
     "prod-api-api-kubelab-live",
@@ -95,20 +104,22 @@ UNRESOLVED = {
     "prod-web-kubelab-live",
     "prod-web-mlorente-dev",
     "services-auth-argo-cd",
-    "services-auth-authelia-staging",
     "services-leaving-denver",
-    "services-monitoring-pi-hole-staging",
     "services-monitoring-uptime-kuma-prod",
-    "staging-api-api-staging-kubelab-live",
-    "staging-web-grafana-staging",
-    "staging-web-n8n-staging",
-    "staging-web-staging-mlorente-dev",
 }
+MUTED_TAGS = set(COMMON["apps"]["services"]["observability"]["uptime_kuma"]["muted_notification_tags"])
 
 
 def test_every_monitor_is_resolved_or_declared_unresolved() -> None:
     resolved = {key for key, _, _ in RESOLVED}
-    assert {m["key"] for m in MONITORS} - resolved == UNRESOLVED
+    assert {m["key"] for m in MONITORS} - resolved == UNRESOLVED_MUTED | UNRESOLVED_PAGING
+
+
+@pytest.mark.parametrize("key", sorted(UNRESOLVED_MUTED | UNRESOLVED_PAGING))
+def test_an_unresolved_monitor_is_muted_exactly_when_declared(key: str) -> None:
+    """The declaration is checked against the seed, not trusted."""
+    tags = set(next(m for m in MONITORS if m["key"] == key).get("tags", []))
+    assert bool(tags & MUTED_TAGS) is (key in UNRESOLVED_MUTED), (key, sorted(tags))
 
 
 def test_the_resolver_reaches_both_tiers() -> None:
