@@ -761,11 +761,12 @@ class _Probe:
             )
             if summary is not None:
                 errors += judge_slack_unknown_project(summary)
-        finally:
-            # A task here is the defect, so the sweep that deletes it also fails the probe.
+            # A task here is the defect. The lookup sits in the `try` so a failing pod call
+            # cannot skip the sweep below.
             found = self._pod({"op": "find_tasks", "key": task_key})
             if found["ids"]:
                 errors.append(f"{len(found['ids'])} task(s) created for a project that does not exist")
+        finally:
             errors += self._sweep(label, task_key)
         return self._verdict(label, errors)
 
