@@ -1182,10 +1182,15 @@ def test_every_request_to_nan_is_streamed() -> None:
         == litellm["force_streaming_api_base_substrings"]
     )
     # Only NaN is reached through the OpenAI transport. On an Anthropic attempt
-    # these keys would send a Claude model to NaN's base URL.
+    # NaN's keys would send a Claude model to NaN's base URL, and the toml's
+    # provider, read from the default branch, applies to every model unless the
+    # attempt overrides it: #2302's first Sonnet run was refused by the OpenAI
+    # transport while this test asserted only that no key leaked.
     for step_id in ANTHROPIC_ATTEMPTS:
-        leaked = [k for k in _attempts()[step_id]["env"] if k.startswith(("LITELLM__", "OPENAI__"))]
+        env = _attempts()[step_id]["env"]
+        leaked = [k for k in env if k.startswith(("LITELLM__", "OPENAI__")) and k != "LITELLM__CUSTOM_LLM_PROVIDER"]
         assert not leaked, f"{step_id} carries {leaked}"
+        assert env.get("LITELLM__CUSTOM_LLM_PROVIDER") == "anthropic", f"{step_id} inherits the toml's provider"
 
 
 def test_a_review_can_report_more_findings_than_the_upstream_default() -> None:

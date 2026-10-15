@@ -542,6 +542,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # The only inference credential this step holds; NaN's is not here.
           ANTHROPIC__KEY: ${{ secrets.PR_AGENT_ANTHROPIC_API_KEY }}
+          # .pr_agent.toml declares custom_llm_provider = "openai" for NaN, and that
+          # applies to every model: without this override a Claude model is sent
+          # through the OpenAI transport and refused (`openai does not support
+          # parameters: ['thinking']`, measured on #2302).
+          LITELLM__CUSTOM_LLM_PROVIDER: anthropic
           CONFIG__MODEL: ${{ steps.route.outputs.anthropic_model }}
           CONFIG__MODEL_WEAK: ${{ steps.route.outputs.anthropic_model }}
           CONFIG__FALLBACK_MODELS: "[]"
@@ -713,6 +718,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # The only inference credential this step holds; NaN's is not here.
           ANTHROPIC__KEY: ${{ secrets.PR_AGENT_ANTHROPIC_API_KEY }}
+          # .pr_agent.toml declares custom_llm_provider = "openai" for NaN, and that
+          # applies to every model: without this override a Claude model is sent
+          # through the OpenAI transport and refused (`openai does not support
+          # parameters: ['thinking']`, measured on #2302).
+          LITELLM__CUSTOM_LLM_PROVIDER: anthropic
           CONFIG__MODEL: ${{ steps.route.outputs.anthropic_model }}
           CONFIG__MODEL_WEAK: ${{ steps.route.outputs.anthropic_model }}
           CONFIG__FALLBACK_MODELS: "[]"
