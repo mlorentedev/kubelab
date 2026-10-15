@@ -529,9 +529,11 @@ gitea-drop-empty:
 	@test -n "$(REPO)" || (echo "Usage: make gitea-drop-empty REPO=owner/name [ENV=prod] [APPLY=1] [DISCARD=<issues+pulls count>]" && exit 1)
 	@$(TOOLKIT) services gitea drop-empty --repo $(REPO) --env $(or $(filter staging prod,$(ENV)),prod) $(if $(APPLY),--apply,) $(if $(DISCARD),--discard-tracker-items $(DISCARD),)
 
-# Run git against the forge with the operator credential injected into the child
-# process. No workstation holds a credential for gitea.kubelab.live, and the three
-# alternatives are all worse: a token in the remote URL lands in .git/config, a
+# Run git against the forge over HTTPS as its admin, for automation and agents.
+# Not the human path: a person clones over SSH with their own key,
+# `git clone forge:personal/resume.git` (dotfiles#2512); everything run here is
+# recorded as the forge's admin account. Over HTTPS no workstation holds a
+# credential for gitea.kubelab.live, and the three alternatives are all worse: a token in the remote URL lands in .git/config, a
 # `store` helper writes it to ~/.git-credentials, and printing it to copy-paste
 # puts it in a session transcript. It is `admin_password` and not a token because
 # neither token may push -- measured 2026-09-04, see toolkit/features/gitea_git.py.
