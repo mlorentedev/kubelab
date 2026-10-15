@@ -91,7 +91,7 @@ Three PRs, each one atomic and each under the 300-line cap excluding tests. PR 1
 
 - [x] Every acceptance criterion from `proposal.md` is covered by at least one test
 - [x] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command
-- [ ] `make test` passes; `make lint` passes
+- [x] `make test` passes; `make lint` passes
 - [x] No unrelated changes in the diff
 - [x] `verification.md` filled in, with AC5/AC6 evidence (run ids)
 - [x] Adversarial review (`dotf spec review`) before archive

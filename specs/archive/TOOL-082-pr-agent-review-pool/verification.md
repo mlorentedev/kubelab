@@ -56,6 +56,13 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
   - Ticketed: the spec-verification guard reads only pytest-shaped commands, so the scaffold's `echo` escaped it (#2308, TOOL-119).
   - Declined: the `dotf spec check` mismatch. dotfiles' AGENTS.md lists `check` among the conversational steps the `/spec` skill drives, not among the `dotf spec` subcommands, and the skill says it has no CLI fallback yet. The docs and the binary agree.
 
+- Pooled review round 2 (`nan/mimo-v2.6-flash`, PASS at a33748c7, no blocker or major). Dispositions:
+  - Applied: `make test` and `make lint` ticked; the reviewer ran both green at that sha.
+  - Noted: the review-before-archive box was ticked before round 2 existed. Round 2 now satisfies it.
+  - Noted: the launcher's diff base predates master merges, so it shows 8 files from #2297, #2300, #2303 and #2306. The spec's own delta against master is the 10 files the proposal names.
+  - Declined: rejecting a `"` in a key before `probe()` builds curl's config line. Provider-issued keys carry no quotes, and the failure is closed: the member leaves the draw with a note and the other provider reviews.
+  - Declined: skipping the Haiku probe when the risk route will pick Sonnet. It costs one 64-token call on a risky PR, and the probe order matches dotfiles' script, which TOOL-117 (#2295) will share.
+
 ## Promotion candidates
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.
@@ -66,7 +73,7 @@ Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`.
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/TOOL-082-pr-agent-review-pool/` -> `specs/archive/TOOL-082-pr-agent-review-pool/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/TOOL-082-pr-agent-review-pool/` -> `specs/archive/TOOL-082-pr-agent-review-pool/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] Promotions above executed (if any)
