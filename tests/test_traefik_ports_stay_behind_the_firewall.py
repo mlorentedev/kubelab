@@ -97,15 +97,27 @@ def _firewall_allowed_tcp_ports() -> set[int]:
 def _exposed_ports(values: dict) -> dict[str, int]:
     """Ports the chart puts into the Service, by name.
 
-    A port is in the Service when `expose.default` is true. Because the Service
-    is type LoadBalancer, klipper-lb then publishes each one as a hostPort --
-    so this set, not the container port list, is what reaches the internet.
+    A port is in the Service unless `expose.default` is explicitly false. The
+    template states it only for `traefik`; `web` and `websecure` are exposed by
+    the upstream chart's default, which the template does not restate. Reading
+    only what the template overrides emptied this set and made every assertion
+    below vacuous (#1565), so opting out has to be explicit -- which mirrors the
+    chart and is the safer default for a security guard.
+
+    Because the Service is type LoadBalancer, klipper-lb then publishes each
+    exposed port as a hostPort -- so this set, not the container port list, is
+    what reaches the internet.
     """
     exposed = {}
     for name, spec in (values.get("ports") or {}).items():
-        if (spec.get("expose") or {}).get("default") is True:
+        if (spec.get("expose") or {}).get("default", True) is not False:
             exposed[name] = int(spec.get("exposedPort", spec["port"]))
     return exposed
+
+
+def _unfirewalled(exposed: dict[str, int], allowed: set[int]) -> dict[str, int]:
+    """Exposed ports the allow-list does not cover."""
+    return {name: port for name, port in exposed.items() if port not in allowed}
 
 
 @pytest.mark.parametrize("acme_enabled", [False, True])
@@ -115,25 +127,25 @@ class TestPublishedPortsAreFirewalled:
         exposed = _exposed_ports(_render(acme_enabled))
         allowed = _firewall_allowed_tcp_ports()
 
-        unfirewalled = {name: port for name, port in exposed.items() if port not in allowed}
+        unfirewalled = _unfirewalled(exposed, allowed)
 
         assert not unfirewalled, (
             "These Traefik ports are published by the LoadBalancer Service but are not in "
-            f"`firewall_allowed_ports`: {unfirewalled}.\n\n"
+            f"`networking.firewall.vps_inbound`: {unfirewalled}.\n\n"
             "That combination is reachable from the public internet and ufw CANNOT restrict "
             "it -- klipper-lb publishes each Service port as a hostPort with "
             "SRC_RANGES=0.0.0.0/0, and DNAT is evaluated in PREROUTING, upstream of ufw's "
             "INPUT chain (#959, #1538).\n\n"
             "Either set `expose.default: false` for the port -- the chart's own default, and "
             "the right answer for an admin surface, which belongs behind an IngressRoute -- "
-            "or add it to `firewall_allowed_ports` deliberately, knowing it is world-open."
+            "or add it to `networking.firewall.vps_inbound` deliberately, knowing it is world-open."
         )
 
     def test_the_dashboard_port_is_not_in_the_service(self, acme_enabled: bool) -> None:
         """Named directly, because this is the specific port that was exposed.
 
         The assertion above is the general rule; if 9000 were ever added to
-        `firewall_allowed_ports` it would pass while re-opening #1538. An admin
+        `networking.firewall.vps_inbound` it would pass while re-opening #1538. An admin
         API has no business on a published port whatever ufw says about it.
         """
         exposed = _exposed_ports(_render(acme_enabled))
@@ -158,6 +170,37 @@ class TestPublishedPortsAreFirewalled:
             "through `api@internal`, which is reachable only via an IngressRoute and so "
             "inherits that route's middlewares."
         )
+
+
+@pytest.mark.parametrize("acme_enabled", [False, True])
+def test_the_derived_exposed_set_is_not_empty(acme_enabled: bool) -> None:
+    """Guard the guard one level deeper: the DERIVED set, not the raw port dict.
+
+    `values["ports"]` being populated says nothing about whether any port reads
+    as exposed, and an empty exposed set satisfies the allow-list assertion
+    trivially (#1565). Traefik unquestionably publishes web and websecure.
+    """
+    exposed = _exposed_ports(_render(acme_enabled))
+
+    assert {"web", "websecure"} <= set(exposed), (
+        f"Only {sorted(exposed)} read as exposed. web and websecure are published by the "
+        "chart's default, so the allow-list assertions are vacuous until this holds."
+    )
+
+
+@pytest.mark.parametrize("acme_enabled", [False, True])
+@pytest.mark.parametrize("dropped", [80, 443])
+def test_shrinking_the_allow_list_turns_the_guard_red(acme_enabled: bool, dropped: int) -> None:
+    """The reverse direction: a port stays published while its allow-list entry goes.
+
+    Since SEC-006 the allow-list also drives the Hetzner cloud firewall, which is
+    enforced ahead of DNAT, so removing an entry really drops traffic. The guard
+    has to notice, not pass because it compared nothing.
+    """
+    exposed = _exposed_ports(_render(acme_enabled))
+    shrunk = _firewall_allowed_tcp_ports() - {dropped}
+
+    assert dropped in _unfirewalled(exposed, shrunk).values()
 
 
 def test_the_render_is_actually_exercised() -> None:

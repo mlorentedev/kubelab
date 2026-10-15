@@ -1133,9 +1133,15 @@ def gitea_git(
     ctx: typer.Context,
     env: Annotated[str, typer.Option("--env", "-e", help="Environment holding the forge credentials")] = "prod",
 ) -> None:
-    """Run `git` against the forge with the operator credential injected.
+    """Run `git` against the forge over HTTPS as its admin (break-glass credential).
 
     `toolkit services gitea git -- clone https://gitea.kubelab.live/personal/resume.git`
+
+    An exception to ADR-062 D4 kept for agent authoring until #2296 decides which
+    identity authors; every operation is recorded as the forge's admin account.
+    Not the human path: a person clones over SSH, `git clone forge:personal/resume.git`
+    (dotfiles#2512). That key is also on `manu`, the admin: SSH removes the shared
+    password, not the privilege (#2296).
 
     A WRAPPER AND NOT A CREDENTIAL HELPER GIT COULD CALL DIRECTLY, deliberately. A
     helper is a program that PRINTS the password when asked, so a helper installed

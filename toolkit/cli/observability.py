@@ -296,7 +296,10 @@ def slack_cmd(
             typer.echo(f"✗ Failed to post message: {resp.get('error')}")
             raise typer.Exit(code=1)
     else:
-        typer.echo(f"Slack channel #{channel} connected (Ready for triage posting).")
+        # No read path exists yet (#1829): printing "connected" here claimed a
+        # contact this command never made. An unanswered read exits non-zero.
+        typer.echo(f"✗ Cannot read #{channel}: no read path is implemented, so nothing was asked (use --post).")
+        raise typer.Exit(code=1)
 
 
 @app.command("triage")
