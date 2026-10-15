@@ -7,6 +7,15 @@ import yaml
 from toolkit.core.sops import age_key_env
 
 
+class UserPasswordHashMissing(Exception):
+    """A users database would render an identity with no password hash (#2247).
+
+    Rendering it anyway produced either an empty `password`, which Authelia refuses
+    at startup (a crash loop), or a user silently dropped from the database, who
+    then cannot log in for a reason that points nowhere near the config.
+    """
+
+
 def resolve_user_identity(user: Dict[str, Any], merged_config: Dict[str, Any]) -> str:
     """The username for one Authelia user entry — AUTH-004 C1, ADR-062 D3.
 
@@ -48,6 +57,8 @@ class ConfigurationManager:
             self.project_root = Path(__file__).resolve().parent.parent.parent
 
         self.env = env
+        # Set by get_merged_config: whether `{env}.enc.yaml` decrypted to anything.
+        self.env_secrets_decrypted = False
         self.infra_path = self.project_root / "infra"
         self.config_path = self.infra_path / "config"
         self.secrets_path = self.config_path / "secrets"
@@ -164,6 +175,7 @@ class ConfigurationManager:
         # 4. Load Env Secrets (Decrypt) — env-specific secrets override common
         env_secrets = self._decrypt_sops(self.secrets_path / f"{self.env}.enc.yaml")
         self._deep_update(config, env_secrets)
+        self.env_secrets_decrypted = bool(env_secrets)
 
         # 5. SSOT-014c: derive operator-contact fields from apps.contact.email
         #    if not explicitly set. Keeps `common.yaml` to a single declaration

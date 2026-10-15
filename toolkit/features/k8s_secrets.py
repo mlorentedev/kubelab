@@ -14,7 +14,7 @@ import yaml
 
 from toolkit.config.constants import is_placeholder
 from toolkit.core.logging import logger
-from toolkit.features.configuration import ConfigurationManager, resolve_user_identity
+from toolkit.features.configuration import ConfigurationManager, UserPasswordHashMissing, resolve_user_identity
 from toolkit.features.k8s_kubeconfig import output_path
 from toolkit.features.secret_consumers import restart_consumers
 
@@ -579,8 +579,11 @@ def _build_users_database(cm: ConfigurationManager) -> str:
         password_hash = authelia.get(hash_key, "")
 
         if not password_hash:
-            logger.warning(f"  No password hash for user '{username}' (key: {hash_key})")
-            continue
+            raise UserPasswordHashMissing(
+                f"no password hash for Authelia user '{username}': {hash_key} is missing from "
+                f"{cm.env}.enc.yaml. Set it with `toolkit credentials hash-password "
+                f"apps.services.security.authelia.{hash_key} --env {cm.env}`."
+            )
 
         db[username] = {
             "disabled": bool(user.get("disabled", False)),
