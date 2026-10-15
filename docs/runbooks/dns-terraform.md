@@ -41,29 +41,15 @@ infra/terraform/dns/
   outputs.tf           # Service URLs, record counts
   services.json        # Service catalog: name, zone, proxied, environments, target (optional)
   dns.tfvars           # Zone IDs, TTL (the VPS IP is rendered from common.yaml)
-  terraform.tfstate    # Local state (gitignored)
   .terraform.lock.hcl  # Provider lock (committed)
 ```
 
-## Working from a fresh git worktree
+## State
 
-The local backend (`terraform.tfstate`, gitignored) lives only in whichever checkout
-last ran `terraform init` there — it is NOT shared automatically across worktrees.
-Running a bare `terraform init` in a new worktree creates an **empty** state; the
-next `apply` would then try to recreate every live Cloudflare record from scratch.
-
-Before running `make tf-dns-plan`/`tf-dns-apply` (or raw `terraform`) from a new
-worktree, point its backend at the canonical state file instead:
-
-```bash
-cd infra/terraform/dns
-terraform init -backend-config="path=<path-to-canonical-checkout>/infra/terraform/dns/terraform.tfstate"
-```
-
-`<path-to-canonical-checkout>` is whichever checkout (usually the primary clone, not
-a `.worktrees/*` branch worktree) most recently ran terraform here — check
-`git worktree list` if unsure which one that is. This only needs doing once per
-worktree; after `init`, `make tf-dns-plan`/`tf-dns-apply` work normally.
+The state lives in R2 (`kubelab-tfstate/dns/terraform.tfstate`, ADR-069), so every
+checkout on every machine plans against the same one, under one lock. Nothing needs
+doing in a fresh worktree beyond `make worktree-init`. Bootstrap, migration,
+restore and unlocking are in `docs/runbooks/terraform-state.md`.
 
 ## Daily Operations
 
@@ -197,11 +183,11 @@ dig +short api.kubelab.live @9.9.9.9     # Quad9
 ### Check current Terraform state
 
 ```bash
-cd infra/terraform/dns
-terraform show                            # Full state dump
-terraform state list                      # List all managed resources
-terraform state show 'cloudflare_record.kubelab_svc["api"]'  # Single record detail
+make tf-state-list ROOT=dns               # every managed address
+dig +short api.kubelab.live @1.1.1.1      # what a record serves, by consequence
 ```
+
+There is no `show`: it prints attribute values, and a state holds secrets in clear.
 
 ## There is no manual usage
 
@@ -272,7 +258,8 @@ This creates every record in one pass: root + www + CAA records (both zones, fro
 
 ### Step 4b: Adopt existing records (state rebuild)
 
-If records already exist in Cloudflare but `terraform.tfstate` is lost. These are
+If records already exist in Cloudflare but the state is lost and `make tf-state-history ROOT=dns`
+holds no copy to restore. These are
 still raw `terraform import` calls; rebuilding a lost state through config-driven
 `import` blocks and the runner is TF-015 (#2226), which replaces this step:
 
@@ -357,7 +344,8 @@ and creates it again.
 
 ### Recover state (tfstate lost, records intact)
 
-Follow **Step 4b** above. Records still exist in Cloudflare — just need re-import.
+First restore the newest good copy from history (`docs/runbooks/terraform-state.md`,
+"Restore a state from history"). Only if history holds none, follow **Step 4b** above.
 
 ### Rollback DNS for K3s migration (ADR-015)
 
@@ -375,7 +363,7 @@ way more than once (see `docs/lessons.md`: the yamllint header, the `tls: {}` pa
 this file's own `prod.tfvars` references). The authoritative live list is one command:
 
 ```bash
-cd infra/terraform/dns && terraform state list
+make tf-state-list ROOT=dns
 ```
 
 `services.json` is the SSOT for which service records exist; `zone_settings.tf`
@@ -421,5 +409,5 @@ These records exist in Cloudflare but are managed manually (email, tunnels, veri
 1. **Root record name:** Use FQDN (`kubelab.live`) not `@` in Terraform — the CF provider stores FQDN in state, `@` causes unnecessary replacements on import.
 2. **Proxied records ignore TTL:** When `proxied = true`, Cloudflare sets TTL = auto (1). The `ttl` field in Terraform is ignored.
 3. **www.kubelab.live is a CNAME**, not an A record. It points to `kubelab.live` (the root A record).
-4. **State is local.** If you lose `terraform.tfstate`, records still exist in Cloudflare — just need re-import.
+4. **State is in R2, with a year of history.** A bad write is undone with `make tf-state-restore`; records still exist in Cloudflare either way.
 5. **Email records are NOT managed.** MX, SPF, DKIM, DMARC records for Zoho/SendGrid/Beehiiv are manual. Importing them would risk breaking email delivery.

@@ -71,7 +71,10 @@ class DestinationError(RuntimeError):
 
 
 def _default_run(argv: list[str], env: dict[str, str]) -> tuple[int, str, str]:
-    merged = {**os.environ, **env}
+    # The shell's AWS_* are dropped: an AWS_SESSION_TOKEN or AWS_PROFILE sent
+    # along with an R2 pair makes R2 refuse it, and the refusal reads as a
+    # wrong credential (TF-007 review).
+    merged = {**{k: v for k, v in os.environ.items() if not k.startswith("AWS_")}, **env}
     proc = subprocess.run(argv, capture_output=True, text=True, timeout=_TIMEOUT, env=merged, check=False)
     return proc.returncode, proc.stdout, proc.stderr
 

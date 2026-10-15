@@ -1594,7 +1594,12 @@ def ansible_syntax_check(
 def tf_run(
     ctx: typer.Context,
     root: Annotated[str, typer.Argument(help="Module under infra/terraform/ (dns, r2, aws, gcp, ...)")],
-    action: Annotated[str, typer.Argument(help="plan | apply | destroy | output | untaint")],
+    action: Annotated[
+        str,
+        typer.Argument(
+            help="plan | apply | destroy | output | untaint | migrate | state-list | history | restore | unlock"
+        ),
+    ],
     allow_destroy: Annotated[
         bool, typer.Option("--allow-destroy", help="Let a guarded apply delete and replace")
     ] = False,
@@ -1625,6 +1630,17 @@ def tf_run(
         raise typer.Exit(2) from None
     if code != 0:
         raise typer.Exit(code)
+
+
+@terraform_app.command("state-bootstrap")
+def tf_state_bootstrap(
+    rotate: Annotated[bool, typer.Option("--rotate", help="Replace the state token and revoke the old one")] = False,
+) -> None:
+    """Create the state bucket, its history lock rule and its token (TF-007). Idempotent."""
+    from toolkit.features import terraform_state_bootstrap
+
+    if not terraform_state_bootstrap.bootstrap(rotate=rotate):
+        raise typer.Exit(1)
 
 
 @terraform_app.command("killswitch-prove")

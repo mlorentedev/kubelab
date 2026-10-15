@@ -1,7 +1,7 @@
 # State reconstruction — same incident as gcp-bootstrap, second root.
 #
 # The local state for this root was lost along with the bootstrap one: backend
-# is `local`, tfstate is gitignored, no copy survived. `terraform plan` reported
+# was `local`, tfstate was gitignored, no copy survived. `terraform plan` reported
 # `14 to add` against a hub that is RUNNING and reconciling both spokes.
 #
 # THIS ROOT IS THE DANGEROUS ONE. `make tf-gcp-apply` carries `-auto-approve`
