@@ -49,30 +49,37 @@ from another network logs `[UFW BLOCK] ... DPT=8642` in `journalctl -k`
 
 - **Primary**: NaN (`models.unmetered` in `common.yaml`), which delegation is
   pinned to as well.
-- **Fallback**: none for now. If NaN refuses or is down, the agent does not
-  answer. The Anthropic Haiku fallback (spec AI-012 AC2) is built in draft
-  #2204. It waits on a Hermes bug: the console issues keys prefixed
-  `sk-ant-usr`, and Hermes sends them as OAuth tokens, which the API refuses
-  with "credit balance too low" on this account (lesson-557; where the
-account's Claude Code identity has credit, the call succeeds and bills under
-that identity instead; upstream
-  NousResearch/hermes-agent#133856). The key lives in a non-Default console
-  workspace with a 20 USD monthly limit. It sits in `prod.enc.yaml` on #2204's
-  branch only.
-- **To unblock**, when the pinned Hermes image moves to a release that carries
-  the upstream fix:
-  1. Rebase #2204 on master. If `prod.enc.yaml` conflicts, take master's file and
-     set the key again with `toolkit secrets set
-     apps.services.ai.hermes_kubelab.anthropic_api_key --env prod --stdin`.
-  2. Provision ace2 from the branch: `changed>0`, then `changed=0`.
-  3. Force NaN to fail for one turn, without touching the deployed config:
-     `docker exec -e NAN_API_KEY=sk-deliberately-invalid -u hermes
-     hermes-kubelab hermes chat -q "Reply with the single word: pong"`, run
-     as the agent's user against its rootless daemon. Expect `Model fallback:
-     ... using claude-haiku-5-5 via anthropic` and the answer `pong`.
-  4. Record the output in AI-012's `verification.md`, set feature f2's
-     `verification` to `poetry run pytest --no-cov -q tests/test_hermes_fallback.py`
-     and its state to `passing`, then mark #2204 ready.
+- **Fallback**: Anthropic Haiku (`models.fallback` in `common.yaml`), on the key
+  of the Console workspace `hermes-kubelab` (non-Default, 20 USD monthly
+  limit), in `prod.enc.yaml` as
+  `apps.services.ai.hermes_kubelab.anthropic_api_key`. An unpinned session
+  moves to it when NaN answers 429 after retries, 5xx, 401/403 or 404;
+  scheduled and delegated work is pinned to NaN and does not. The console
+  issues keys prefixed `sk-ant-usr`; Hermes sent them as OAuth tokens until
+  v0.22 (lesson-557, NousResearch/hermes-agent#133856), so the pin must not go
+  back below it. Spec AI-012 AC2.
+- **Prove it still works** (after an image bump, or a rotated key). In v0.22
+  `hermes chat` is a client of the gateway, so a per-launch `NAN_API_KEY` or
+  `--api-key` never reaches the model call and the turn answers on NaN
+  (lesson-574). Fail NaN in a throwaway gateway instead, with its own
+  `HERMES_HOME` and Slack and the API off, so no live state or channel is
+  touched. On ace2, as the agent's user against its rootless daemon:
+  1. `docker run -d --rm --name hermes-fallback-probe --dns 1.1.1.1 --env-file
+     /var/lib/hermes-kubelab/hermes.env -e NAN_API_KEY=sk-deliberately-invalid
+     -e SLACK_BOT_TOKEN= -e SLACK_APP_TOKEN= -e SLACK_ALLOWED_USERS= -e
+     API_SERVER_ENABLED=false -e HERMES_HOME=/opt/probe-home -v
+     /var/lib/hermes-kubelab/hermes-config.yaml:/opt/probe-home/config.yaml:ro
+     <the pinned image> gateway run`, then wait about 45 s.
+  2. `docker exec -u hermes hermes-fallback-probe hermes chat -q "Reply with
+     the single word: pong"`. Expect `Model fallback: ... authentication
+     failed; using claude-haiku-5-5 via anthropic.` and the answer `pong`.
+  3. `docker rm -f hermes-fallback-probe`.
+  A `400 credit balance is too low` instead of `pong` means the key is being
+  sent as OAuth again.
+- **No command scanner.** v0.22 removed the bundled tirith scanner. What
+  remains is the sandbox with no network (`terminal.docker_network: false`) and
+  Hermes's own approval patterns. Do not re-add `security.tirith_*`: upgrading
+  deletes them.
 
 ## Start, or converge after any change
 
@@ -146,10 +153,7 @@ pushes it. A failed run pages through `kubelab-notify@`.
   `docker exec -u hermes hermes-kubelab hermes approvals test --env-type local
   -- <cmd>`, as the agent's user against its daemon. With the vault mounted,
   `ask-approval` means a scheduled job is refused under `cron_mode: deny`
-  (lesson-540). That evaluator does not run the command scanner (Tirith), which
-  is fail-closed: ask it with the provision's own probe,
-  `_agent_stack_hermes_scan` in the role's defaults, followed by the command
-  (lesson-555).
+  (lesson-540). There is no command scanner to ask since v0.22 (above).
 
 ## Re-register the sidecar
 

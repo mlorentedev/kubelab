@@ -45,9 +45,20 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 | `fallback_providers` | PR 2, Anthropic Haiku in place of OpenRouter |
 | `mcp_servers.brightdata` | PR 7 |
 
-Two limits remain, and neither is in AC1's scope:
+Retired 2026-10-15: v0.22 removed the scanner, so the two limits below describe v2026.9.24 only.
+
+Two limits remained, and neither was in AC1's scope:
 - The scanner binary lives in the data directory, which the gateway's process can write. The sandbox, where commands run, does not mount that directory.
 - The scanner's circuit breaker fails open after repeated crashes, whatever `tirith_fail_open` says (`tools/tirith_security.py`, issue #41400 upstream).
+
+### AC2, live on ace2, 2026-10-15 (Hermes v0.22.1)
+
+- `make provision NODE=ace2 ENV=prod TAGS=agent_stack`: `changed=8`, then `changed=0`. `hermes gateway status`: running, supervised by s6, no boot-guard refusal. The config migration still logs `Read-only file system` for the mounted `config.yaml` and continues, as it did on every start of v2026.9.24 (`backups/config/*.pre-docker-migrate.*` go back to 2026-10-10).
+- The runbook's old step 3 no longer forces a failure. In v0.22 `hermes chat` is a client of the gateway ("inbound message: platform=local" in the gateway's log), so neither `-e NAN_API_KEY=...` nor `--api-key` reaches the model call: both turns answered on NaN (`provider=custom`). The failure is forced in a throwaway gateway instead: the image run on the agent's daemon with the live env file, `NAN_API_KEY` invalid, Slack and the API off, and its own `HERMES_HOME` (so no live state is touched).
+- Result, from that throwaway gateway: NaN answers `401 Invalid API key`, then `Fallback activated: deepseek-v4-flash -> claude-haiku-5-5 (anthropic)`, `API call #1: model=claude-haiku-5-5 provider=anthropic ... id=msg_...`, the CLI prints `Model fallback: ... authentication failed; using claude-haiku-5-5 via anthropic.` and the answer `pong`.
+- API key, not OAuth: `_is_oauth_token("sk-ant-usr-x")` is `False` and `anthropic_route_is_oauth(...)` is `False` in the pinned image. On v2026.9.24 the same call answered `400 credit balance is too low` (the OAuth identity), on v0.22.1 it succeeds. The Console usage of the `hermes-kubelab` workspace is the operator's confirmation.
+- The live gateway's `auth.json` still carries `ANTHROPIC_API_KEY` as `exhausted` (400, 2026-10-11). Hermes' longest cooldown is one hour (`EXHAUSTED_TTL_*`), so it has expired; it is not a block.
+- AC1's scanner is retired, not ported: v0.22 removed it (see the decision below).
 
 ## Test status
 
@@ -67,6 +78,7 @@ Two limits remain, and neither is in AC1's scope:
   - `cron/jobs.json` and `memories/` are absent or empty.
 - 2026-10-10, operator, names: `agent_config` for the ported keys, `anthropic_api_key` and `brightdata_api_token` in prod's vault, and `80_agents/operator/hermes-kubelab/` for the operator's private directory. The owner goes in the parent directory, so one path rule (`80_agents/operator/` is the operator's, and the agent's zone never covers it) holds for every agent, where a `-operator` suffix would need a rule per agent.
 - 2026-10-10, AC2 is parked, not worked around. The only route Hermes leaves to `x-api-key` on this key is a `base_url` outside `anthropic.com`, which means adding a proxy to work around one function.
+- 2026-10-15, operator: move the pin to v0.22.1 (published the day before, against the "a few days old" rule) and accept the loss of the tirith scanner, which v0.22 removes without a replacement. What stands in its place is the sandbox with no network (`docker_network: false`, read back as `net=none` on the live container), plus the two new content checks that run through the approval flow when the vault is mounted. The scanner's own circuit breaker already failed open, so it was never a reliable fail-closed control.
 
 ## NaN harness disposition (AC11)
 
