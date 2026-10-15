@@ -324,12 +324,12 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("authelia",),
         derived_from="(interactive password prompt)",
         format_hint="$argon2id$v=19$m=65536,t=3,p=4$...",
-        # Staging and prod, the two envs where `manu` is declared in Authelia
-        # (AUTH-004 Part 2, 2026-09-23; it was prod-only while the hash had no
-        # consumer). `envs` is the AUDIT dimension (ANSIBLE-033): dev renders its
-        # users through the Compose path and is left out on purpose, so the audit
-        # does not report a gap for a key that is never written there.
-        envs=("staging", "prod"),
+        # Every env: each one's users database renders `manu` (AUTH-004 Part 2),
+        # dev's through the Compose path. This entry used to leave dev out on
+        # the belief that dev never wrote the key, so the audit read 100% while
+        # dev Authelia crash-looped on the empty password (#2247).
+        # `tests/test_user_password_hashes.py` holds each user's `envs` to the
+        # envs whose users database renders that identity.
         rotate_note=(
             "The superadmin must know the new password to log in. `manu` is an "
             "Authelia user in staging and prod (AUTH-004 Part 2), and this hash is "

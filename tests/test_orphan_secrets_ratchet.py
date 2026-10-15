@@ -111,10 +111,10 @@ def test_a_missing_baseline_raises_rather_than_permitting_everything() -> None:
 def test_the_registered_superadmin_hash_is_no_longer_an_orphan() -> None:
     """The key that exposed the gap now has an owner rather than a baseline line.
 
-    It is registered in SECRET_CATALOG with `envs=("staging", "prod")`: the
-    superadmin is an Authelia user in both since AUTH-004 AC3, and `envs` is the
-    audit dimension (ANSIBLE-033), so it names exactly the envs that must hold
-    the hash. Dev stays out; nothing writes it there.
+    Which envs must hold it is not asserted here: it was, as staging and prod
+    only, on the belief that dev never renders the superadmin, and dev's
+    Authelia crash-looped on the empty password that belief let through (#2247).
+    `tests/test_user_password_hashes.py` derives the envs from the resolver.
     """
     from toolkit.features.secrets_manager import SECRET_CATALOG
 
@@ -122,5 +122,4 @@ def test_the_registered_superadmin_hash_is_no_longer_an_orphan() -> None:
     spec = next((s for s in SECRET_CATALOG if s.key_path == key), None)
 
     assert spec is not None, f"{key} must be registered, not baselined"
-    assert spec.envs == ("staging", "prod")
     assert key not in baselined_orphans()

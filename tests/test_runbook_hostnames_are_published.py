@@ -53,7 +53,11 @@ KNOWN_STALE = {
 # `argocd`, the one the zone would have to publish.
 _EDGE = r"(?<![A-Za-z0-9-])"
 PROD = re.compile(_EDGE + r"([a-z0-9-]+)\.kubelab\.live\b")
-STAGING = re.compile(_EDGE + r"([a-z0-9-]+)\.staging\.kubelab\.live\b")
+# Read from the SSOT, as the CoreDNS role renders it (`staging.{{ common.global.base_domain }}`),
+# so a domain rename moves the scan with it instead of leaving it an empty sample.
+BASE_DOMAIN = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())["global"]["base_domain"]
+STAGING_APEX = f"staging.{BASE_DOMAIN}"
+STAGING = re.compile(_EDGE + r"([a-z0-9-]+)\." + re.escape(STAGING_APEX) + r"\b")
 PERSONAL = re.compile(_EDGE + r"([a-z0-9-]+)\.mlorente\.dev\b")
 
 
@@ -99,8 +103,10 @@ def _staging_manifests() -> str:
     return "\n".join(texts)
 
 
-def _routed_in_staging() -> set[str]:
-    return set(STAGING.findall(_staging_manifests()))
+def _routed_in_staging(apex: str) -> set[str]:
+    """Labels a staging IngressRoute serves under `apex`. A mention elsewhere (a comment,
+    a redirect URI) routes nothing, so it does not count (#2219 review)."""
+    return set(re.findall(r"Host\(`([a-z0-9-]+)\." + re.escape(apex) + r"`\)", _staging_manifests()))
 
 
 def test_every_prod_name_in_the_docs_is_published() -> None:
@@ -113,7 +119,7 @@ def test_every_prod_name_in_the_docs_is_published() -> None:
 
 
 def test_every_staging_name_in_the_docs_is_routed() -> None:
-    allowed = _routed_in_staging() | PLACEHOLDERS
+    allowed = _routed_in_staging(STAGING_APEX) | PLACEHOLDERS
     unrouted = {n: sorted(p) for n, p in _mentioned(STAGING).items() if n not in allowed}
     assert not unrouted, (
         f"docs name staging hosts no manifest routes: {unrouted}. The wildcard "
