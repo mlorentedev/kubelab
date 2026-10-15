@@ -22,6 +22,10 @@ Accepted — 2026-08-23. Establishes the standard for human and AI-agent observa
 
 **Amended by [ADR-067](adr-067-product-contract-and-agent-access.md).** The MCP exposure this ADR describes is realised by [ADR-067](adr-067-product-contract-and-agent-access.md) D6. It is read-only, it is served by a Python FastMCP server behind Traefik that validates its own tokens, and it covers product-scoped reads (deploy status, promote dry-run, contract validation, logs and alerts), not only `toolkit obs`.
 
+## Amendment — 2026-10-15 (`toolkit obs slack` has no read path)
+
+Section 1 below says `toolkit obs slack` "connects via Slack Bot API to read recent channel alerts and thread conversations". That was not true at acceptance and is not true yet: `SlackSreClient` implements only `chat.postMessage`, and the command without `--post` printed a connection it never made (#1829). The command now exits non-zero and says it has no read path, and a post without `SLACK_BOT_TOKEN` fails instead of reporting success. The read path (a read-scoped bot token in `SECRET_CATALOG`, the channel map in `common.yaml`) is still open under #1829.
+
 ## Context
 
 ### The Observability Gap for Autonomous and Interactive Agents
