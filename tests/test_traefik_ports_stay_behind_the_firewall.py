@@ -131,21 +131,21 @@ class TestPublishedPortsAreFirewalled:
 
         assert not unfirewalled, (
             "These Traefik ports are published by the LoadBalancer Service but are not in "
-            f"`firewall_allowed_ports`: {unfirewalled}.\n\n"
+            f"`networking.firewall.vps_inbound`: {unfirewalled}.\n\n"
             "That combination is reachable from the public internet and ufw CANNOT restrict "
             "it -- klipper-lb publishes each Service port as a hostPort with "
             "SRC_RANGES=0.0.0.0/0, and DNAT is evaluated in PREROUTING, upstream of ufw's "
             "INPUT chain (#959, #1538).\n\n"
             "Either set `expose.default: false` for the port -- the chart's own default, and "
             "the right answer for an admin surface, which belongs behind an IngressRoute -- "
-            "or add it to `firewall_allowed_ports` deliberately, knowing it is world-open."
+            "or add it to `networking.firewall.vps_inbound` deliberately, knowing it is world-open."
         )
 
     def test_the_dashboard_port_is_not_in_the_service(self, acme_enabled: bool) -> None:
         """Named directly, because this is the specific port that was exposed.
 
         The assertion above is the general rule; if 9000 were ever added to
-        `firewall_allowed_ports` it would pass while re-opening #1538. An admin
+        `networking.firewall.vps_inbound` it would pass while re-opening #1538. An admin
         API has no business on a published port whatever ufw says about it.
         """
         exposed = _exposed_ports(_render(acme_enabled))
