@@ -215,7 +215,8 @@ poetry run toolkit tools wiki-build
 poetry run toolkit tools wiki-serve --port 
 
  Credential management
-poetry run toolkit credentials generate username password
+poetry run toolkit credentials generate --env staging                 # lists the keys it would write
+poetry run toolkit credentials generate --env staging --auto-update   # writes them to SOPS
 poetry run toolkit credentials github-sync infra/config/env/env.prod
 ```
 

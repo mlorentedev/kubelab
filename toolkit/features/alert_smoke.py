@@ -32,6 +32,7 @@ import subprocess
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 
 from toolkit.core.logging import logger
 from toolkit.features.k8s_kubeconfig import output_path
@@ -51,6 +52,10 @@ ALLOWED_ENVS = ("staging",)
 FIRING_TIMEOUT_S = 900
 RESOLVE_TIMEOUT_S = 1200
 POLL_INTERVAL_S = 30
+
+#: How far before this machine's "now" deliveries are counted from, to absorb a
+#: local clock that runs ahead of the node's (`kubectl logs --since-time`).
+CLOCK_SKEW_MARGIN = timedelta(minutes=5)
 
 #: Grafana is OIDC-only (since 2026-09-24), so an anonymous read of its rules
 #: answers 401. The pod already holds the admin from the `grafana-admin` Secret in
@@ -203,6 +208,7 @@ def run_alert_smoke(
     kubectl: KubectlFn | None = None,
     sleep: Callable[[float], None] = time.sleep,
     now: Callable[[], float] = time.monotonic,
+    wall_clock: Callable[[], datetime] = lambda: datetime.now(UTC),
 ) -> SmokeResult:
     """Induce a certificate failure, prove the alert fires and clears, clean up."""
     logger.section(f"alert-smoke — {env.upper()}")
@@ -218,8 +224,19 @@ def run_alert_smoke(
 
     kubectl = kubectl or _default_kubectl(env)
 
+    # Counted since the run started, not over the last N lines: once Apprise has
+    # logged more than a tail's worth, every new line pushes an old one out, and a
+    # delivery can leave a tail's count flat or lower (#2197). The start is read
+    # from THIS machine's clock and compared with the node's, so it is moved back
+    # by a margin: a local clock running ahead would otherwise hide a delivery.
+    # Starting early is harmless, because every check compares against a baseline
+    # read over the same window.
+    since = (wall_clock() - CLOCK_SKEW_MARGIN).strftime("%Y-%m-%dT%H:%M:%SZ")
+
     def deliveries() -> int:
-        return count_deliveries(kubectl(["logs", "-n", "kubelab", "deploy/apprise", "--tail=300"], None).stdout)
+        return count_deliveries(
+            kubectl(["logs", "-n", "kubelab", "deploy/apprise", f"--since-time={since}"], None).stdout
+        )
 
     #: The last rules answer, so the domain is read from the same instance that
     #: was observed firing.

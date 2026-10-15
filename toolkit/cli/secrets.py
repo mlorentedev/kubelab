@@ -143,7 +143,7 @@ def init(
     elif generated:
         logger.success(f"Generated {len(generated)} machine secrets for {env}")
         logger.info("Next steps:")
-        logger.info("  1. Set passwords:  toolkit credentials generate --env " + env)
+        logger.info("  1. Set passwords:  toolkit credentials generate --auto-update --env " + env)
         logger.info("  2. Hash OIDC:      toolkit secrets hash --env " + env)
         if env != "dev":
             logger.info("  3. Apply to K8s:   toolkit secrets apply --env " + env)
@@ -201,15 +201,22 @@ def hash_secrets(
     settings.validate_environment(env)
     logger.section(f"Hash OIDC Client Secrets — {env.upper()}")
 
+    from toolkit.features.secrets_manager import HashSourceMissing
+
     mgr = _get_manager()
-    hashes = mgr.hash_oidc_secrets(env)
+    try:
+        hashes = mgr.hash_oidc_secrets(env)
+    except HashSourceMissing as refusal:
+        logger.error(str(refusal))
+        raise typer.Exit(2) from refusal
 
     if hashes:
         logger.success(f"Generated {len(hashes)} hashes for {env}")
         if env != "dev":
             logger.info("Next: toolkit secrets apply --env " + env)
     else:
-        logger.warning("No hashes generated (source secrets may be missing)")
+        logger.error(f"No hashes written to {env}.enc.yaml")
+        raise typer.Exit(1)
 
 
 # =============================================================================

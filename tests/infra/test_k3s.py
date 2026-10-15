@@ -8,7 +8,10 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
+from decimal import Decimal
+from typing import Any
 
 import pytest
 
@@ -84,6 +87,97 @@ def _one_gib_above(quantity: str) -> str:
     return f"{int(quantity[:-2]) + 1}Gi"
 
 
+def _owner(obj: dict[str, Any], kind: str) -> str | None:
+    """The name of `obj`'s owner of `kind`, if it has one."""
+    refs = obj.get("metadata", {}).get("ownerReferences") or []
+    return next((ref["name"] for ref in refs if ref.get("kind") == kind), None)
+
+
+def _complete(job: dict[str, Any]) -> bool:
+    conditions = job.get("status", {}).get("conditions") or []
+    return any(c.get("type") == "Complete" and c.get("status") == "True" for c in conditions)
+
+
+def _finished_at(pod: dict[str, Any]) -> str | None:
+    """When the pod's last container terminated, or None if none has."""
+    statuses = pod.get("status", {}).get("containerStatuses") or []
+    times = [t for c in statuses if (t := (c.get("state", {}).get("terminated") or {}).get("finishedAt"))]
+    return max(times, default=None)
+
+
+def _pods_not_running(pods: list[dict[str, Any]], jobs: list[dict[str, Any]]) -> list[str]:
+    """Pods neither Running nor Succeeded, minus failures a later run already fixed.
+
+    A CronJob keeps its last `failedJobsHistoryLimit` failed Jobs until another
+    failure rotates them out, so a fixed failure stays on record indefinitely
+    (#2194). Its pod is excused only when a Job of the same CronJob COMPLETED
+    after the pod failed. Completion and failure times are compared, not
+    creation times: with overlapping runs, a Job created later can succeed
+    before an older one fails, and then the newest outcome is the failure. A
+    run still in flight, a pod with no recorded finish, or a Failed pod with no
+    CronJob behind it is still reported.
+    """
+    by_name = {job["metadata"]["name"]: job for job in jobs}
+    completed_at: dict[str, list[str]] = {}
+    for job in jobs:
+        cronjob = _owner(job, "CronJob")
+        completion = job.get("status", {}).get("completionTime")
+        if cronjob and _complete(job) and completion:
+            completed_at.setdefault(cronjob, []).append(completion)
+
+    def fixed_since(pod: dict[str, Any]) -> bool:
+        job = by_name.get(_owner(pod, "Job") or "")
+        cronjob = _owner(job, "CronJob") if job else None
+        failed_at = _finished_at(pod)
+        if pod.get("status", {}).get("phase") != "Failed" or not cronjob or not failed_at:
+            return False
+        return any(later > failed_at for later in completed_at.get(cronjob, []))
+
+    return [
+        f"{pod['metadata']['name']} ({pod.get('status', {}).get('phase', 'Unknown')})"
+        for pod in pods
+        if pod.get("status", {}).get("phase", "Unknown") not in ("Running", "Succeeded") and not fixed_since(pod)
+    ]
+
+
+#: Kubernetes quantity suffixes, as multipliers of one byte.
+_QUANTITY_SUFFIXES = {
+    "Ki": 2**10, "Mi": 2**20, "Gi": 2**30, "Ti": 2**40, "Pi": 2**50, "Ei": 2**60,
+    "k": 10**3, "M": 10**6, "G": 10**9, "T": 10**12, "P": 10**15, "E": 10**18,
+    "m": Decimal("0.001"), "": 1,
+}  # fmt: skip
+_QUANTITY = re.compile(r"^([0-9.]+(?:[eE][-+]?[0-9]+)?)(Ki|Mi|Gi|Ti|Pi|Ei|k|M|G|T|P|E|m)?$")
+
+
+def _bytes(quantity: str) -> Decimal:
+    """A memory quantity in bytes, from the Kubernetes quantity format."""
+    match = _QUANTITY.match(quantity)
+    assert match, f"not a Kubernetes quantity: {quantity!r}"
+    return Decimal(match.group(1)) * _QUANTITY_SUFFIXES[match.group(2) or ""]
+
+
+def _requests_above_default_limit(workloads: list[dict[str, Any]], default_limit: str) -> list[str]:
+    """Containers the LimitRange would make unadmittable: a memory request above
+    its default limit, and no limit of their own to stop the default applying.
+
+    The API server rejects such a pod (`requests` must not exceed `limits`), so
+    the workload sits with no pod at all, which a check over Running pods never
+    sees (#2163).
+    """
+    ceiling = _bytes(default_limit)
+    found = []
+    for workload in workloads:
+        spec = workload.get("spec", {}).get("template", {}).get("spec", {})
+        for container in spec.get("containers", []) + spec.get("initContainers", []):
+            resources = container.get("resources", {})
+            request = resources.get("requests", {}).get("memory")
+            if request and "memory" not in resources.get("limits", {}) and _bytes(request) > ceiling:
+                found.append(
+                    f"{workload['kind']}/{workload['metadata']['name']}/{container['name']} requests {request}"
+                )
+    return found
+
+
 class TestK3sCluster:
     """K3s cluster must be healthy with all nodes ready."""
 
@@ -127,11 +221,9 @@ class TestK3sCluster:
         pods = data.get("items", [])
         assert pods, "No pods found in kubelab namespace"
 
-        not_running = [
-            f"{pod['metadata']['name']} ({pod.get('status', {}).get('phase', 'Unknown')})"
-            for pod in pods
-            if pod.get("status", {}).get("phase", "Unknown") not in ("Running", "Succeeded")
-        ]
+        result = _kubectl("get jobs -n kubelab -o json", env)
+        assert result.returncode == 0, f"kubectl get jobs failed: {result.stderr}"
+        not_running = _pods_not_running(pods, json.loads(result.stdout).get("items", []))
         assert not not_running, "Pods not Running:\n" + "\n".join(not_running)
 
     def test_pvcs_bound(self, require_vpn: None, require_kubeconfig: None, env: str) -> None:
@@ -397,3 +489,33 @@ class TestKubeSystemGovernance:
 
         best_effort = [p["metadata"]["name"] for p in running if p.get("status", {}).get("qosClass") == "BestEffort"]
         assert not best_effort, f"Running kube-system pods still BestEffort QoS: {best_effort}"
+
+    def test_no_workload_requests_more_memory_than_the_default_limit(
+        self, require_vpn: None, require_kubeconfig: None, env: str
+    ) -> None:
+        """No kube-system workload declares a memory request the LimitRange's default limit
+        would undercut (#2163). Such a pod is rejected at admission, so it never runs and
+        the Running-pod check above cannot see it. The default is read from the live
+        LimitRange, so a changed default is judged by the value the API server applies.
+        """
+        result = _kubectl("get limitrange -n kube-system -o json", env)
+        assert result.returncode == 0, f"kubectl get limitrange failed: {result.stderr}"
+        defaults = [
+            limit["default"]["memory"]
+            for lr in json.loads(result.stdout).get("items", [])
+            for limit in lr.get("spec", {}).get("limits", [])
+            if limit.get("type") == "Container" and "memory" in limit.get("default", {})
+        ]
+        assert defaults, "No Container default.memory in any kube-system LimitRange"
+        default_limit = min(defaults, key=_bytes)
+
+        result = _kubectl("get deployments,daemonsets,statefulsets -n kube-system -o json", env)
+        assert result.returncode == 0, f"kubectl get workloads failed: {result.stderr}"
+        workloads = json.loads(result.stdout).get("items", [])
+        assert workloads, "No workloads in kube-system — the check would pass on nothing"
+
+        rejected = _requests_above_default_limit(workloads, default_limit)
+        assert not rejected, (
+            f"kube-system containers whose memory request exceeds the LimitRange default limit "
+            f"{default_limit} and that set no limit, so admission rejects their pods: {rejected}"
+        )

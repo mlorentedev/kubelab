@@ -111,9 +111,8 @@ def test_the_ignore_list_names_only_images_that_exist() -> None:
 def test_the_unversionable_images_are_the_ignored_ones() -> None:
     """The ignore list is a statement about tag SHAPE, not preference.
 
-    Each of these cannot be compared by a version scheme: two carry `latest`,
-    one carries no tag at all, and one is a distro codename that rolls in
-    place. Renovate would either guess wrong or do nothing.
+    Each of these cannot be compared by a version scheme: both carry `latest`.
+    Renovate would either guess wrong or do nothing.
 
     Pinned so that giving one of them a real tag forces a decision here instead
     of leaving it ignored out of habit.

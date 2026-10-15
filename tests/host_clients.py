@@ -82,7 +82,9 @@ _ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 
 
 def _name(token: str) -> str:
-    name = PurePath(token).name
+    # Lowercased: macOS and Windows resolve names case-insensitively, and the
+    # macOS Tailscale app's CLI is `Tailscale.app/Contents/MacOS/Tailscale` (#2283).
+    name = PurePath(token).name.lower()
     return name[:-4] if name.endswith(".exe") else name
 
 

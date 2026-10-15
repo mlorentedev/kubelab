@@ -10,7 +10,7 @@ from toolkit.config.constants import MESSAGES, PATH_STRUCTURES
 from toolkit.config.settings import PROJECT_ROOT, settings
 from toolkit.core.logging import logger
 from toolkit.core.sops import age_key_env
-from toolkit.features.credentials import credentials_manager
+from toolkit.features.credentials import CredentialsWriteFailed, credentials_manager
 from toolkit.features.github_secrets import github_secrets_manager
 from toolkit.features.grafana_admin_identity import (
     GrafanaIdentityUnavailableError,
@@ -135,7 +135,11 @@ def init_env(
 
     Example: toolkit credentials init-env --env staging
     """
-    credentials_manager.setup_authelia_secrets(env=env, auto_update=True)
+    try:
+        credentials_manager.setup_authelia_secrets(env=env, auto_update=True)
+    except CredentialsWriteFailed as e:
+        logger.error(str(e))
+        raise typer.Exit(1) from None
 
 
 @app.command("generate")
@@ -148,11 +152,19 @@ def generate_credentials(
             help="Automatically update SOPS and restart affected services",
         ),
     ] = False,
+    print_secrets: Annotated[
+        bool,
+        typer.Option(
+            "--print-secrets",
+            help="Also print every generated value. They stay in any terminal log or agent transcript.",
+        ),
+    ] = False,
 ) -> None:
     """
     Generate all primary authentication credentials (Authelia and Basic Auth).
 
-    Prints secrets for manual copy to SOPS file.
+    Without --auto-update, nothing is written: it lists the keys it would write,
+    by name. Values are printed only with --print-secrets.
 
     Generates:
     - Authelia admin password hash (Argon2)
@@ -162,7 +174,11 @@ def generate_credentials(
     - JWKS RSA private key (saved as file)
     - Basic auth user/password/credentials (htpasswd bcrypt)
     """
-    credentials_manager.setup_authelia_secrets(env=env, auto_update=auto_update)
+    try:
+        credentials_manager.setup_authelia_secrets(env=env, auto_update=auto_update, print_secrets=print_secrets)
+    except CredentialsWriteFailed as e:
+        logger.error(str(e))
+        raise typer.Exit(1) from None
 
 
 @app.command()
