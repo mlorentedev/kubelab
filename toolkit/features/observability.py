@@ -346,8 +346,9 @@ class SlackSreClient:
     ) -> dict[str, Any]:
         """Post a message or thread reply to a Slack channel."""
         if not self.token:
-            logger.info(f"[Mock Slack Post -> #{channel} (thread={thread_ts})]: {text[:80]}...")
-            return {"ok": True, "ts": str(datetime.datetime.now().timestamp()), "mock": True}
+            # Not "ok": nothing was sent, and a caller that reads `ok` must not
+            # report a delivery that did not happen (#1829).
+            return {"ok": False, "error": "SLACK_BOT_TOKEN is not set, so nothing was posted"}
 
         # Resolve channel name (e.g. 'alerts' -> '#alerts') or pass explicit channel ID
         channel_id = self.channel_map.get(channel) or (

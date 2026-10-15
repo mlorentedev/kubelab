@@ -393,11 +393,13 @@ class TestAlertsCommandFailsLoudly:
 
 
 class TestSlackSreClient:
-    def test_post_message_mock_mode(self):
+    def test_post_message_without_a_token_fails_loudly(self):
+        """A post that was never sent must not read as sent (#1829 AC5)."""
         client = SlackSreClient(token=None)
         resp = client.post_message(channel="alerts", text="Test notification", thread_ts="12345")
-        assert resp["ok"] is True
-        assert resp.get("mock") is True
+        assert resp["ok"] is False
+        assert "SLACK_BOT_TOKEN" in resp["error"]
+        assert "mock" not in resp
 
     @patch("urllib.request.urlopen")
     def test_post_message_api_mode(self, mock_urlopen):
@@ -480,10 +482,31 @@ class TestCliCommands:
         assert "[FIRING] obs007-acme-failure" in result.output
         assert "ACME renew error" in result.output
 
-    def test_cli_obs_slack(self):
+    @patch("urllib.request.urlopen")
+    def test_cli_obs_slack(self, mock_urlopen, monkeypatch):
+        monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-test-token")
+        mock_response = MagicMock()
+        mock_response.read.return_value = json.dumps({"ok": True, "ts": "1724395100.001"}).encode("utf-8")
+        mock_response.__enter__.return_value = mock_response
+        mock_urlopen.return_value = mock_response
         result = runner.invoke(app, ["obs", "slack", "--channel", "alerts", "--post", "Test alert triage"])
         assert result.exit_code == 0
         assert "Message posted" in result.output
+
+    def test_cli_obs_slack_post_without_a_token_exits_nonzero(self, monkeypatch):
+        monkeypatch.delenv("SLACK_BOT_TOKEN", raising=False)
+        result = runner.invoke(app, ["obs", "slack", "--channel", "alerts", "--post", "Test alert triage"])
+        assert result.exit_code == 1
+        assert "Message posted" not in result.output
+        assert "SLACK_BOT_TOKEN" in result.output
+
+    def test_cli_obs_slack_read_is_unanswered_not_connected(self, monkeypatch):
+        """There is no read path (#1829), so the command must not claim a connection it never made."""
+        monkeypatch.delenv("SLACK_BOT_TOKEN", raising=False)
+        result = runner.invoke(app, ["obs", "slack", "--channel", "alerts"])
+        assert result.exit_code == 1
+        assert "connected" not in result.output
+        assert "no read path" in result.output
 
     @patch("toolkit.features.observability.LokiClient.query_service_logs")
     def test_cli_obs_logs_json(self, mock_logs, monkeypatch):
