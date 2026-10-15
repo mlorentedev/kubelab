@@ -38,13 +38,13 @@ Three PRs, each one atomic and each under the 300-line cap excluding tests. PR 1
 
 ### PR 2: the three scripts, inert (refs #1964, #1909)
 
-- [ ] [P] [AC2] Write failing tests in `tests/test_pr_agent_preflight.py`, which run the script against a local HTTP stub (`http.server` in a thread):
+- [x] [P] [AC2] Write failing tests in `tests/test_pr_agent_preflight.py`, which run the script against a local HTTP stub (`http.server` in a thread):
   - the first model that answers is chosen;
   - a 401 is named as "the chain is wrong", a 429 as quota, a hang or 5xx as "NaN is not serving";
   - exit 1 when none answers, exit 2 on a usage error;
   - a model outside the chain is never admitted.
-- [ ] [AC2] Port `scripts/pr-agent-model-preflight.sh`. Expected: PASS.
-- [ ] [P] [AC3] Write failing tests in `tests/test_pr_agent_route.py`:
+- [x] [AC2] Port `scripts/pr-agent-model-preflight.sh`. Expected: PASS. ✓ 2026-10-15
+- [x] [P] [AC3] Write failing tests in `tests/test_pr_agent_route.py`:
   - `PR_AGENT_DRAW` boundaries follow the cumulative weights;
   - a dead member's weight is shared out;
   - the risk route triggers at 1500 but not at 1499, and on the exact label only;
@@ -54,14 +54,14 @@ Three PRs, each one atomic and each under the 300-line cap excluding tests. PR 1
   - an unknown `PR_AGENT_PROVIDER` gives exit 1, and `nan-only` probes no Anthropic model;
   - the key is never on argv;
   - each allowed model has a price row with its worst review under its ceiling.
-- [ ] [AC3] Port `scripts/pr-agent-route.sh`, with `POOL_FILE` defaulting to `harness/reviewer-pool.json`. Expected: PASS.
-- [ ] [P] [AC4] Write failing tests in `tests/test_pr_agent_publish_guard.py`:
+- [x] [AC3] Port `scripts/pr-agent-route.sh`, with `POOL_FILE` defaulting to `harness/reviewer-pool.json`. Expected: PASS. ✓ 2026-10-15
+- [x] [P] [AC4] Write failing tests in `tests/test_pr_agent_publish_guard.py`:
   - `--probe` answers `published=true|false` from a stubbed comment list;
   - only `github-actions[bot]` comments count;
   - a comment must be updated after the start stamp;
   - the marker is read from the default branch's registry;
   - the head-registry fallback for a bootstrap PR is kept.
-- [ ] [AC4] Port `scripts/pr-agent-publish-guard.sh`, carrying over kubelab's inline guard logic and error text, which keeps both of its causes. Expected: PASS.
+- [x] [AC4] Port `scripts/pr-agent-publish-guard.sh`, carrying over kubelab's inline guard logic and error text, which keeps both of its causes. Expected: PASS. ✓ 2026-10-15
 
 ### PR 3: the wiring, which reviews itself (closes #1843, #1964, #1909, #1966)
 

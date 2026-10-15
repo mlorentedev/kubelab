@@ -18,9 +18,9 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
   `test_another_vendor_can_sign_first` holds the other half of amendment B: a first signer from outside Anthropic exists.
 
   ADR: `docs/adr/adr-070-review-pool-adopts-dotfiles-adr-046.md`.
-- [ ] **AC2**: pending (PR 2)
-- [ ] **AC3**: pending (PR 2)
-- [ ] **AC4**: pending (PR 2, PR 3)
+- [ ] **AC2**: `tests/test_pr_agent_preflight.py`, 13 tests: 10 against a stubbed `curl`, 3 against the real `curl` and a local HTTP server (an answer, a hang to the timeout, a 200 status line whose body never arrives). Mutation `2??)` to `2xx)` in the script: 10 failed.
+- [ ] **AC3**: `tests/test_pr_agent_route.py`, 42 tests. They cover the cumulative draw at every point, the shipped pool's weights, the risk route at 1,500 and not 1,499, the exact label, the allowlist, the `PR_AGENT_PROVIDER` values and the key on stdin only. Mutation `-ge` to `-gt` on the risk line: 2 failed.
+- [ ] **AC4**: the guard is in `tests/test_pr_agent_publish_guard.py`, 24 tests. Mutation "an API failure answers `published=false`": the 3 "unknown, never false" tests failed. The workflow half is pending (PR 3).
 - [ ] **AC5**: pending (PR 3, live)
 - [ ] **AC6**: pending (PR 3, live)
 
