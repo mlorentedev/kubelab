@@ -82,7 +82,8 @@
     "parent": null,
     "tags": [
       "infra",
-      "vpn"
+      "vpn",
+      "on-demand"
     ]
   },
   {
@@ -111,7 +112,8 @@
     "parent": null,
     "tags": [
       "infra",
-      "dns"
+      "dns",
+      "on-demand"
     ],
     "dns_resolve_server": "100.64.0.10",
     "dns_resolve_type": "A"
@@ -142,7 +144,8 @@
     "parent": null,
     "tags": [
       "infra",
-      "vpn"
+      "vpn",
+      "on-demand"
     ]
   },
   {
@@ -161,7 +164,7 @@
     "accepted_statuscodes": [
       "200-299"
     ],
-    "description": "Platform node (heavy workloads). SSOT: networking.nodes.ace2.tailscale_ip (100.64.0.5).",
+    "description": "On-demand developer node / CDE (ADR-058 D1), also hosting the operator's agent tooling (ADR-068). SSOT: networking.nodes.ace2.tailscale_ip (100.64.0.5).",
     "active": true,
     "httpBodyEncoding": null,
     "maxredirects": 10,
@@ -171,7 +174,8 @@
     "parent": null,
     "tags": [
       "infra",
-      "vpn"
+      "vpn",
+      "on-demand"
     ]
   },
   {
@@ -200,7 +204,8 @@
     "parent": null,
     "tags": [
       "infra",
-      "vpn"
+      "vpn",
+      "on-demand"
     ]
   },
   {
@@ -229,7 +234,8 @@
     "parent": null,
     "tags": [
       "infra",
-      "vpn"
+      "vpn",
+      "on-demand"
     ]
   },
   {
@@ -560,7 +566,8 @@
     "tags": [
       "prod",
       "data",
-      "service"
+      "service",
+      "on-demand"
     ],
     "expiryNotification": true
   },
