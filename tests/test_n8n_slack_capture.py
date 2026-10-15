@@ -34,6 +34,8 @@ from tests.n8n_code_node import (
     wrapped_array,
     wrapped_data,
 )
+from toolkit.features.configuration import ConfigurationManager
+from toolkit.features.n8n_import import resolve_placeholders
 
 WORKFLOW_PATH = Path(__file__).resolve().parent.parent / "infra/n8n/workflows/slack-task-capture.json"
 SECRET = "slack-signing-secret"
@@ -252,3 +254,20 @@ def test_an_empty_project_list_still_reaches_the_answer_node() -> None:
     # so the run would end with nothing posted to response_url. alwaysOutputData turns that
     # into one empty item, which `Extract Project ID` answers as "no such project".
     assert node("Lookup Vikunja Projects")["alwaysOutputData"] is True
+
+
+def test_a_command_without_a_project_targets_the_declared_default_that_the_lookup_can_find() -> None:
+    # `Extract Project ID` fails closed, so the parse default must be a real project title, not
+    # a name nobody created. It is the same SSOT value multi-forge-sync resolves.
+    fields = {**COMMAND, "text": "create Refactor auth layer P1"}
+    raw, headers = signed(fields)
+    js = resolve_placeholders(
+        node_js("slack-task-capture.json", "Parse Slack Command"), ConfigurationManager(env="prod")
+    )
+    item = webhook_item(raw, headers, fields, content_type=FORM)
+    (out,) = run_code_node(js, [item], {"SLACK_SIGNING_SECRET": SECRET})
+    assert out["project"] == "Bitacora"
+
+    extract = node_js("slack-task-capture.json", "Extract Project ID")
+    found = run_items_node(extract, [{"id": 7, "title": "Bitacora"}], {"Parse Slack Command": out})
+    assert found["projectFound"] is True
