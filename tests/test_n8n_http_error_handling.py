@@ -17,9 +17,9 @@ So the option did the opposite of what it said, in both directions:
   node level would have made the write silent.
 
 The intent is written where n8n reads it, one node at a time. This guard keeps
-the dead spelling from coming back. `slack-task-capture` carries the same
-defect and is its own ticket, hence its strict `xfail`: fixing it turns this
-red until the marker goes.
+the dead spelling from coming back. `KNOWN_BROKEN` is how a workflow that still
+carries it is kept honest: a strict `xfail` turns red the day it is fixed, so
+the marker cannot outlive the defect (`slack-task-capture` was the last, #1877).
 """
 
 from __future__ import annotations
@@ -35,7 +35,6 @@ WORKFLOW_DIR = REPO_ROOT / "infra" / "n8n" / "workflows"
 
 #: Workflows known to still carry the defect, each with the ticket that owns it.
 KNOWN_BROKEN = {
-    "slack-task-capture.json": "APP-CONFIG-017 (#1877) owns slack-task-capture's HTTP error handling",
 }
 
 

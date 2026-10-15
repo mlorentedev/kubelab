@@ -93,19 +93,18 @@
             }
           ]
         },
-        "options": {
-          "continueOnFail": true
-        }
+        "options": {}
       },
       "id": "c3000000-0000-4000-8000-000000000008",
       "name": "Lookup Vikunja Projects",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [240, 50]
+      "position": [240, 50],
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "jsCode": "// Resolve target project ID from search or default to 1\nconst projects = Array.isArray($json) ? $json : ($json.data || []);\nconst command = $('Parse Slack Command').first().json;\nlet projectId = 1;\n\nconst match = projects.find(p => p.title?.toLowerCase() === command.project?.toLowerCase() || p.identifier?.toLowerCase() === command.project?.toLowerCase());\nif (match && match.id) {\n  projectId = match.id;\n}\n\nreturn [{\n  json: {\n    ...command,\n    projectId: projectId\n  }\n}];"
+        "jsCode": "// Resolve the project the command named. Fail closed: no match answers the user\n// through response_url, it never falls back to a default project (#1877).\n//\n// `GET /projects` returns a JSON array and n8n emits one item per element, so `$json`\n// here is only the first project. Read every input item, as `Extract Issue Task Match`\n// in multi-forge-sync does, and accept the wrapped shapes too.\nconst command = $('Parse Slack Command').first().json;\nconst items = $input.all().map((i) => i.json);\n\n// A lookup that failed arrives as a lone item carrying `error` (the node continues on error).\nconst lookupFailed = items.length > 0 && items.every((j) => j && j.error !== undefined && j.id === undefined);\nconst projects = items\n  .flatMap((j) => (Array.isArray(j) ? j : Array.isArray(j?.data) ? j.data : [j]))\n  .filter((p) => p && p.id);\n\nconst wanted = (command.project || '').toLowerCase();\nconst match = wanted\n  ? projects.find((p) => p.title?.toLowerCase() === wanted || p.identifier?.toLowerCase() === wanted)\n  : undefined;\n\nif (match) {\n  return [{ json: { ...command, projectId: match.id, projectFound: true } }];\n}\n\nconst errorMessage = lookupFailed\n  ? `❌ Could not look up Vikunja projects, so *${command.project}* was not checked and nothing was created. Try again in a minute.`\n  : `❌ No Vikunja project named *${command.project}*, so nothing was created.`;\n\nreturn [{ json: { ...command, projectId: null, projectFound: false, errorMessage } }];"
       },
       "id": "c3000000-0000-4000-8000-000000000009",
       "name": "Extract Project ID",
@@ -129,29 +128,10 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ title: $json.title, priority: $json.priorityNum, description: 'Created via Slack by @' + $json.userName }) }}",
-        "options": {
-          "continueOnFail": true
-        }
+        "options": {}
       },
       "id": "c3000000-0000-4000-8000-000000000004",
       "name": "Create Task in Vikunja",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [640, 50]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $json.responseUrl }}",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ text: '✅ Task created: *' + $json.title + '*\\n👉 <https://tasks.kubelab.live|Open in Vikunja>' }) }}",
-        "options": {
-          "continueOnFail": true
-        }
-      },
-      "id": "c3000000-0000-4000-8000-000000000005",
-      "name": "Update Slack via Response URL",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [840, 50]
@@ -159,17 +139,78 @@
     {
       "parameters": {
         "method": "POST",
+        "url": "={{ $('Extract Project ID').first().json.responseUrl }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: '✅ Task created: *' + $('Extract Project ID').first().json.title + '*\\n👉 <https://tasks.kubelab.live|Open in Vikunja>' }) }}",
+        "options": {}
+      },
+      "id": "c3000000-0000-4000-8000-000000000005",
+      "name": "Update Slack via Response URL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1040, 50],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
         "url": "http://apprise:8000/notify/kubelab",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ tag: 'log', title: '📋 Slack Task Captured: ' + $json.title, body: 'Project: #' + $json.project + ' | Priority: ' + $json.priority + ' | By: @' + $json.userName, type: 'info' }) }}",
+        "jsonBody": "={{ JSON.stringify({ tag: 'log', title: '📋 Slack Task Captured: ' + $('Extract Project ID').first().json.title, body: 'Project: #' + $('Extract Project ID').first().json.project + ' | Priority: ' + $('Extract Project ID').first().json.priority + ' | By: @' + $('Extract Project ID').first().json.userName, type: 'info' }) }}",
         "options": {}
       },
       "id": "c3000000-0000-4000-8000-000000000006",
       "name": "Notify #dev-activity",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1040, 50]
+      "position": [1240, 50]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "e59c157e-372a-5001-b251-3f372f164c90",
+              "leftValue": "={{ $json.projectFound }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c3000000-0000-4000-8000-00000000000a",
+      "name": "Project Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [640, 50]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Extract Project ID').first().json.responseUrl }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: $('Extract Project ID').first().json.errorMessage }) }}",
+        "options": {}
+      },
+      "id": "c3000000-0000-4000-8000-00000000000b",
+      "name": "Tell Slack the Project Is Unknown",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [840, 200]
     }
   ],
   "connections": {
@@ -226,7 +267,25 @@
       "main": [
         [
           {
+            "node": "Project Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Project Found?": {
+      "main": [
+        [
+          {
             "node": "Create Task in Vikunja",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Tell Slack the Project Is Unknown",
             "type": "main",
             "index": 0
           }

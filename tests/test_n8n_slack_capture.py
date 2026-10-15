@@ -23,7 +23,17 @@ import urllib.parse
 from pathlib import Path
 from typing import Any
 
-from tests.n8n_code_node import node_js, run_code_node, webhook_item
+from tests.n8n_code_node import (
+    EMPTY_ITEM,
+    ERROR_ITEM,
+    node_js,
+    run_code_node,
+    run_items_node,
+    split_items,
+    webhook_item,
+    wrapped_array,
+    wrapped_data,
+)
 
 WORKFLOW_PATH = Path(__file__).resolve().parent.parent / "infra/n8n/workflows/slack-task-capture.json"
 SECRET = "slack-signing-secret"
@@ -143,3 +153,95 @@ def test_slack_workflow_json_structure() -> None:
 
     update_node = next(n for n in data["nodes"] if n["name"] == "Update Slack via Response URL")
     assert "responseUrl" in update_node["parameters"]["url"]
+
+
+# --- APP-CONFIG-017 (#1877): project resolution and the post-create reads -----------------------
+
+PROJECTS = [{"id": 7, "title": "Inbox"}, {"id": 12, "title": "Kubelab", "identifier": "KUBE"}]
+COMMAND_OUT = {
+    "title": "Fix the thing",
+    "project": "kubelab",
+    "priority": "P2",
+    "priorityNum": 2,
+    "responseUrl": "https://hooks.slack.test/response/1",
+    "userName": "manu",
+}
+
+
+def extract(items: list[Any], command: dict[str, Any] | None = None) -> dict[str, Any]:
+    return run_items_node(
+        node_js("slack-task-capture.json", "Extract Project ID"),
+        items,
+        {"Parse Slack Command": COMMAND_OUT if command is None else command},
+    )
+
+
+def workflow() -> dict[str, Any]:
+    return json.loads(WORKFLOW_PATH.read_text(encoding="utf-8"))
+
+
+def node(name: str) -> dict[str, Any]:
+    return next(n for n in workflow()["nodes"] if n["name"] == name)
+
+
+def test_the_project_is_found_in_every_shape_the_lookup_can_arrive_in() -> None:
+    """`GET /projects` returns an array, which n8n emits as one item per element.
+
+    Reading `$json` saw only the first project, so the match always failed and the
+    task went to project 1 whatever the command named."""
+    for shape in (split_items, wrapped_array, wrapped_data):
+        out = extract(shape(PROJECTS))
+        assert out["projectFound"] is True, shape.__name__
+        assert out["projectId"] == 12, shape.__name__
+
+
+def test_the_project_can_be_named_by_its_identifier() -> None:
+    out = extract(split_items(PROJECTS), {**COMMAND_OUT, "project": "kube"})
+    assert out["projectId"] == 12
+
+
+def test_an_unknown_project_fails_closed_instead_of_defaulting_to_project_1() -> None:
+    for items in (split_items(PROJECTS), EMPTY_ITEM, ERROR_ITEM):
+        out = extract(items, {**COMMAND_OUT, "project": "nonexistent"})
+        assert out["projectFound"] is False
+        assert out.get("projectId") is None
+        assert "nonexistent" in out["errorMessage"]
+
+
+def test_a_failed_lookup_says_so_rather_than_naming_the_project_unknown() -> None:
+    out = extract(ERROR_ITEM)
+    assert out["projectFound"] is False
+    assert "could not" in out["errorMessage"].lower()
+
+
+def test_the_unknown_project_branch_answers_slack_and_never_creates() -> None:
+    data = workflow()
+    gate = data["connections"]["Extract Project ID"]["main"][0]
+    assert [t["node"] for t in gate] == ["Project Found?"]
+    found, missing = data["connections"]["Project Found?"]["main"]
+    assert [t["node"] for t in found] == ["Create Task in Vikunja"]
+    assert [t["node"] for t in missing] == ["Tell Slack the Project Is Unknown"]
+    tell = node("Tell Slack the Project Is Unknown")["parameters"]
+    assert "$('Extract Project ID')" in tell["url"] and "responseUrl" in tell["url"]
+    assert "errorMessage" in tell["jsonBody"]
+    assert "Tell Slack the Project Is Unknown" not in data["connections"], "the error branch must end there"
+
+
+def test_the_nodes_after_the_create_read_the_command_not_the_response() -> None:
+    update = json.dumps(node("Update Slack via Response URL")["parameters"])
+    notify = json.dumps(node("Notify #dev-activity")["parameters"])
+    for params in (update, notify):
+        assert "$('Extract Project ID')" in params
+    for field in ("responseUrl", "userName", "project", "priority"):
+        assert f"$json.{field}" not in update + notify, field
+
+
+def test_error_handling_sits_where_n8n_reads_it() -> None:
+    for name in ("Lookup Vikunja Projects", "Create Task in Vikunja", "Update Slack via Response URL"):
+        assert "continueOnFail" not in node(name)["parameters"].get("options", {}), name
+    # The lookup's failure must reach `Extract Project ID`, which turns it into an answer.
+    assert node("Lookup Vikunja Projects")["onError"] == "continueRegularOutput"
+    # A failed create halts the run: no node-level setting, so nothing swallows it.
+    assert "onError" not in node("Create Task in Vikunja")
+    # The task already exists by then; a failed confirmation must not stop the dev-activity notice.
+    assert node("Update Slack via Response URL")["onError"] == "continueRegularOutput"
