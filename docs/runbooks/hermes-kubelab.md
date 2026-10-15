@@ -58,6 +58,21 @@ from another network logs `[UFW BLOCK] ... DPT=8642` in `journalctl -k`
   issues keys prefixed `sk-ant-usr`; Hermes sent them as OAuth tokens until
   v0.22 (lesson-557, NousResearch/hermes-agent#133856), so the pin must not go
   back below it. Spec AI-012 AC2.
+- **Create the workspace and key** (once, in the Anthropic Console; the
+  Default workspace takes no spend limit and cannot be renamed, so each service
+  gets a workspace of its own):
+  1. Settings > Workspaces > Create workspace, named `hermes-kubelab`.
+  2. Select it, open Spend limits, set 20 USD a month. A workspace limit can be
+     lower than the organization's, never higher.
+  3. Settings > API keys > Create key, in that workspace.
+  4. Store it without printing it:
+     with the key in a variable of your shell (pasted at a hidden prompt, never
+     on the command line), `toolkit secrets set
+     apps.services.ai.hermes_kubelab.anthropic_api_key --env prod --from-env
+     VAR`, then `make provision NODE=ace2 ENV=prod TAGS=agent_stack`.
+  5. Read `anthropic-workspace-id` off one response made with that key (it
+     must be this workspace's id, not the Default's), and keep the Usage page
+     filtered on the workspace as the signal that the cap is working.
 - **Prove it still works** (after an image bump, or a rotated key). In v0.22
   `hermes chat` is a client of the gateway, so a per-launch `NAN_API_KEY` or
   `--api-key` never reaches the model call and the turn answers on NaN

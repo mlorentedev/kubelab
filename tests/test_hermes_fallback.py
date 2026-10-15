@@ -12,7 +12,7 @@ from __future__ import annotations
 import pytest
 import yaml
 
-from tests.test_agent_stack_role import COMMON, ROLE, _environment, _resolved
+from tests.test_agent_stack_role import COMMON, REPO, ROLE, _environment, _resolved
 from toolkit.features.secrets_manager import SECRET_CATALOG
 
 HERMES = yaml.safe_load(COMMON.read_text())["apps"]["services"]["ai"]["hermes_kubelab"]
@@ -75,3 +75,12 @@ def test_the_key_is_in_the_catalog_for_prod() -> None:
     [spec] = [s for s in SECRET_CATALOG if s.key_path == "apps.services.ai.hermes_kubelab.anthropic_api_key"]
     assert spec.envs == ("prod",)
     assert "hermes_kubelab" in spec.services
+
+
+def test_prods_vault_carries_the_key_the_playbook_reads() -> None:
+    """The two tests above sample a declaration and a string, so both stay green
+    with the value missing from storage, and the first provision after merge would
+    render no fallback while reporting `changed=0`. SOPS encrypts values, not key
+    names, so this reads the committed file without decrypting it."""
+    vault = yaml.safe_load((REPO / "infra/config/secrets/prod.enc.yaml").read_text())
+    assert "anthropic_api_key" in vault["apps"]["services"]["ai"]["hermes_kubelab"]

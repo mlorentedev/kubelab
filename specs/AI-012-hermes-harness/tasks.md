@@ -31,8 +31,8 @@ One PR per block, in this order. Each block starts with the failing test.
 
 Unblocked by Hermes v0.22 (draft #2204, lesson-557). The pin moved to v0.22.1 in the same PR, which retires the tirith scanner (verification.md, 2026-10-15).
 
-- [x] [AC2] Test (written in draft #2204): the env renders `ANTHROPIC_API_KEY` only when the key exists, and `fallback_providers` names the pinned Haiku. `SECRET_CATALOG` gains the entry.
-- [x] [AC2] Runbook: create the workspace, its 20 USD monthly limit and its key, step by step.
+- [x] [AC2] Test (written in draft #2204): the env renders `ANTHROPIC_API_KEY` only when the key exists, and `fallback_providers` names the pinned Haiku. `SECRET_CATALOG` gains the entry. ✓ 2026-10-10
+- [x] [AC2] Runbook: create the workspace, its 20 USD monthly limit and its key, step by step (`## Models`, "Create the workspace and key"). ✓ 2026-10-15
 - [x] [AC2] Live (R5): with NaN refused for the agent's uid, a turn completes on Haiku. ✓ 2026-10-15
 
 ### PR 3: identity (AC3)
