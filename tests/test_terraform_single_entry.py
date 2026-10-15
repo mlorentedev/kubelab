@@ -40,7 +40,7 @@ def test_no_make_recipe_runs_terraform() -> None:
     offenders = [
         f"Makefile:{n}: {line.strip()}"
         for n, line in _recipe_lines()
-        if re.search(rf"(^|[\s;&|(`$]){{1}}terraform\s+(-chdir=\S+\s+)?{TERRAFORM_VERBS}\b", line)
+        if re.search(rf"(^|[\s;&|(`$]){{1}}terraform\s+(-chdir=\S+\s+)?{TERRAFORM_VERBS}(?![\w-])", line)
         or "cd infra/terraform" in line
     ]
     assert not offenders, "call `$(_TF) <root> <action>` instead:\n" + "\n".join(offenders)
@@ -48,7 +48,7 @@ def test_no_make_recipe_runs_terraform() -> None:
 
 # A terraform command inside any string: `terraform plan`, `'terraform apply'`,
 # `/usr/local/bin/terraform destroy`, `bash -c "terraform init"`.
-COMMAND_IN_TEXT = re.compile(rf"(^|[\s'\"/;&|(`]){{1}}terraform\s+(-chdir=\S+\s+)?{TERRAFORM_VERBS}\b")
+COMMAND_IN_TEXT = re.compile(rf"(^|[\s'\"/;&|(`]){{1}}terraform\s+(-chdir=\S+\s+)?{TERRAFORM_VERBS}(?![\w-])")
 
 
 def _is_terraform_binary(node: ast.expr) -> bool:

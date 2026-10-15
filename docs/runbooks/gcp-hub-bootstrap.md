@@ -27,7 +27,7 @@ created: "2026-08-20"
 ## Prerequisites
 
 - A Google account with the platform credit attached (confirmed 2026-08-20).
-- `terraform` ≥ 1.5 and `sops` on the workstation.
+- `terraform` ≥ 1.10 (S3-native state locking, ADR-069) and `sops` on the workstation.
 - The repo cloned, with `make worktree-init` already run in the worktree.
 - **`gcloud` is not installed by default on this workstation.** §2 installs it.
 - Headscale reachable at `vpn.kubelab.live` (public IP — never the Tailscale

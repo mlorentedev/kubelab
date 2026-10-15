@@ -393,6 +393,35 @@ def r2_watcher_targets(
         raise typer.Exit(1)
 
 
+def _sync_terraform_backend(check: bool) -> bool:
+    """Render (or, with check, compare) infra/terraform/backend.s3.tfbackend (TF-007 AC2)."""
+    import yaml
+
+    from toolkit.features import terraform_backend
+
+    root = _repo_root()
+    config = yaml.safe_load((root / "infra/config/values/common.yaml").read_text())
+    path = root / "infra/terraform" / terraform_backend.BACKEND_FILE
+    if check:
+        if not path.exists() or path.read_text() != terraform_backend.render(config):
+            logger.error(f"terraform-backend: {path.name} is stale; run `make sync-terraform-backend`")
+            return False
+        logger.success(f"terraform-backend: {path.name} is current")
+        return True
+    changed = terraform_backend.sync(config, path.parent)
+    logger.success(f"terraform-backend: {path.name} {'written' if changed else 'unchanged'}")
+    return True
+
+
+@app.command("terraform-backend")
+def terraform_backend_cmd(
+    check: Annotated[bool, typer.Option("--check", help="Fail if the committed file is stale")] = False,
+) -> None:
+    """Render the shared Terraform backend settings from terraform.state (TF-007)."""
+    if not _sync_terraform_backend(check=check):
+        raise typer.Exit(1)
+
+
 @app.command("vikunja")
 def sync_vikunja_cmd(
     env: Annotated[str, typer.Option("--env", "-e", help="Target environment")] = "staging",
@@ -436,7 +465,10 @@ def sync_all(
     env: Annotated[str, typer.Option("--env", "-e", help="Environment for OIDC sync")] = "staging",
     check: Annotated[bool, typer.Option("--check", help="Check for drift without modifying files")] = False,
 ) -> None:
-    """Run all sync operations (homepage, images, oidc, branding, platform-json, r2-watcher-targets)."""
+    """Run all sync operations.
+
+    homepage, images, oidc, branding, platform-json, r2-watcher-targets, terraform-backend.
+    """
     failures: list[str] = []
 
     logger.section("Sync All" + (" — check mode" if check else ""))
@@ -536,6 +568,13 @@ def sync_all(
     except Exception as e:
         logger.error(f"r2-watcher-targets sync crashed: {e}")
         failures.append("r2-watcher-targets")
+
+    try:
+        if not _sync_terraform_backend(check=check):
+            failures.append("terraform-backend")
+    except Exception as e:
+        logger.error(f"terraform-backend sync crashed: {e}")
+        failures.append("terraform-backend")
 
     if failures:
         logger.error(f"Sync failures: {', '.join(failures)}")

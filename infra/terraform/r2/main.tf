@@ -17,7 +17,7 @@
 #   provider v5, and the DNS root stays on ~> 4.0 until it is migrated.
 
 terraform {
-  required_version = ">= 1.5"
+  required_version = ">= 1.10"
 
   required_providers {
     cloudflare = {
@@ -26,8 +26,9 @@ terraform {
     }
   }
 
-  backend "local" {
-    path = "terraform.tfstate"
+  # Shared settings: ../backend.s3.tfbackend, passed by the runner (TF-007).
+  backend "s3" {
+    key = "r2/terraform.tfstate"
   }
 }
 

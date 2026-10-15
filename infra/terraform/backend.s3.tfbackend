@@ -1,0 +1,12 @@
+# Generated from terraform.state in common.yaml by `make sync-terraform-backend`.
+# Do not edit. Passed to every init by the runner (toolkit/features/terraform_runner.py).
+bucket = "kubelab-tfstate"
+region = "auto"
+endpoints = { s3 = "https://76967f5ede1ce50efce34d90b7e94958.r2.cloudflarestorage.com" }
+use_path_style = true
+use_lockfile = true
+skip_credentials_validation = true
+skip_region_validation = true
+skip_requesting_account_id = true
+skip_metadata_api_check = true
+skip_s3_checksum = true
