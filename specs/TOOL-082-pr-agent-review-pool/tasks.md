@@ -23,7 +23,7 @@ Three PRs, each one atomic and each under the 300-line cap excluding tests. PR 1
 
 ### PR 1: the unified pool and the ADR (closes #1561)
 
-- [ ] [AC1] Write failing tests in `tests/test_reviewer_pool.py`:
+- [x] [AC1] Write failing tests in `tests/test_reviewer_pool.py`:
   - every entry has a `vendor` and exactly one of `secret_id` or `auth`;
   - an Anthropic entry declares `signs` as `second` or `fallback`, never first;
   - `pr_agent.weight` is a positive integer and the weights sum to more than 0;
@@ -31,10 +31,10 @@ Three PRs, each one atomic and each under the 300-line cap excluding tests. PR 1
   - `pr_agent_risk` is `{min_changed_lines: 1500, label: "deep-review"}`.
 
   Run `make test PYTEST_ARGS="tests/test_reviewer_pool.py"`. Expected: FAIL (no `vendor`, no `pr_agent`).
-- [ ] [AC1] Port dotfiles' `harness/reviewer-pool.json` entries and `pr_agent_risk`. Keep kubelab's `$comment` history and rewrite the standing rule as amendment B. Expected: PASS.
-- [ ] [AC1] Make `test_every_model_pr_agent_reviews_with_is_admitted_in_the_reviewer_pool` match on `pr_agent.model`, not on the id suffix. Run `tests/test_pr_agent_workflow.py` and expect PASS.
-- [ ] [AC1] Check that `dotf spec review` still loads the pool: run `dotf spec review --help` against a spec with no side effects, or the CLI's pool validation. Record the output in `verification.md`.
-- [ ] [AC1] Write `docs/adr/adr-070-*.md`: kubelab adopts dotfiles ADR-046, covering amendment B, the weighted draw, the risk route and the shared budget.
+- [x] [AC1] Port dotfiles' `harness/reviewer-pool.json` entries and `pr_agent_risk`. Keep kubelab's `$comment` history and rewrite the standing rule as amendment B. Expected: PASS.
+- [x] [AC1] Make `test_every_model_pr_agent_reviews_with_is_admitted_in_the_reviewer_pool` match on `pr_agent.model`, not on the id suffix. Run `tests/test_pr_agent_workflow.py` and expect PASS.
+- [x] [AC1] Check that `dotf spec review` still loads the pool: run `dotf spec review --help` against a spec with no side effects, or the CLI's pool validation. Record the output in `verification.md`.
+- [x] [AC1] Write `docs/adr/adr-070-review-pool-adopts-dotfiles-adr-046.md`: kubelab adopts dotfiles ADR-046, covering amendment B, the weighted draw, the risk route and the shared budget.
 
 ### PR 2: the three scripts, inert (refs #1964, #1909)
 

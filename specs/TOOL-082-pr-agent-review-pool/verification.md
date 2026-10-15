@@ -9,9 +9,17 @@ created: "2026-10-14"
 
 Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
 
-- [ ] Criterion 1 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 2 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 3 -> commit `<hash>` / test `<name>`
+- [ ] **AC1**: `tests/test_reviewer_pool.py` (vendor, credential path, amendment B, draw and route shape, risk predicate) and `test_every_model_pr_agent_reviews_with_is_admitted_in_the_reviewer_pool`, now matched on `pr_agent.model`. The CLI enforces amendment B on load, measured 2026-10-15 with dotf at the commit that added the pool:
+  - `dotf spec review TOOL-082-pr-agent-review-pool --dry-run --reviewer anthropic-review/claude-haiku-5-5` is refused with `it is a fallback, which signs first only when the first signers failed: pass --fallback-reason`;
+  - the same with `--fallback-reason quota` builds the launch command;
+  - `--reviewer nan/glm5.3-flash` builds the launch command.
+
+  ADR: `docs/adr/adr-070-review-pool-adopts-dotfiles-adr-046.md`.
+- [ ] **AC2**: pending (PR 2)
+- [ ] **AC3**: pending (PR 2)
+- [ ] **AC4**: pending (PR 2, PR 3)
+- [ ] **AC5**: pending (PR 3, live)
+- [ ] **AC6**: pending (PR 3, live)
 
 ## Test status
 
@@ -23,8 +31,13 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 
 Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
 
--
--
+- The pool is dotfiles' file transformed, not rewritten:
+  - dotfiles issue numbers are qualified as `mlorentedev/dotfiles#N`, and dotfiles-only paths are prefixed `dotfiles`;
+  - a header records the source commit;
+  - kubelab's own deepseek measurement (#1205) is kept.
+
+  Rewriting the admission records by hand would have produced a third version of the same facts.
+- The WIP gate refused a new spec (16 active against a limit of 10). The owner overrode it on 2026-10-15; the reason is recorded as `wip_override` in `proposal.md`.
 
 ## Promotion candidates
 
