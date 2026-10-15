@@ -945,7 +945,13 @@ def test_every_model_pr_agent_reviews_with_is_admitted_in_the_reviewer_pool() ->
     the reviewer ran a vetoed model — the exact failure this guard exists to
     prevent, reachable through the one line it did not read.
     """
-    admitted = {e["id"].split("/")[-1] for e in json.loads(REVIEWER_POOL.read_text())["pool"]}
+    # Matched on each member's `pr_agent.model` (TOOL-082), not on the id: a
+    # member admitted for the adversarial review is not thereby a CI reviewer.
+    admitted = {
+        e["pr_agent"]["model"].split("/")[-1]
+        for e in json.loads(REVIEWER_POOL.read_text())["pool"]
+        if "pr_agent" in e
+    }
     for model in {_primary_model_name()} | _fallback_model_names():
         assert model in admitted, (
             f"{model!r} is a model PR-Agent reviews with but is not in the reviewer "
