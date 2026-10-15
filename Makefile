@@ -1658,7 +1658,10 @@ notify-smoke:
 # forge issue creates a Vikunja task (read back, then deleted); unsigned and
 # wrongly signed forge events and an unsigned Slack command stop at their gate,
 # judged from n8n's execution record; an unauthenticated agent-dispatcher call
-# gets 403. In prod the signed probe also posts one "Task Created" message.
+# gets 403. A signed Slack /task naming the declared default project must land in
+# that project (Vikunja's project_id is the judge), and one naming a project that
+# does not exist must create nothing (#2304). In prod the signed probes also post
+# "Task Created" notices.
 .PHONY: n8n-probe
 n8n-probe:
 	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make n8n-probe ENV=staging|prod" && exit 1)
