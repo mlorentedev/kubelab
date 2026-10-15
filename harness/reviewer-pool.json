@@ -1,15 +1,46 @@
 {
   "$comment": [
-    "Reviewer pool for /adversarial-review (HARNESS-071, #955).",
+    "Ported from mlorentedev/dotfiles harness/reviewer-pool.json at 6d92b561 (TOOL-082, #1843;",
+    "ADR-070 adopts dotfiles' ADR-046). Unqualified issue numbers below are this repository's;",
+    "the dotfiles ones are written mlorentedev/dotfiles#N. The two copies are kept in step by",
+    "hand until TOOL-117 (#2295) gives both repositories one source.",
     "",
-    "Ordered allow-list of models permitted to SIGN a review.md. The first entry",
-    "is the launcher's primary; the whole array is the gate's allow-list, which",
+    "kubelab history: this file was the adversarial pool alone (HARNESS-071, #955) and held",
+    "the rule that no Anthropic model ever reviews here. ADR-070 replaces that rule with",
+    "amendment B below. #1561 (no member declared its credential) is closed by the",
+    "secret_id/auth fields every entry now carries; tests/test_reviewer_pool.py holds them.",
+    "",
+    "Reviewer pool for /adversarial-review (HARNESS-071, mlorentedev/dotfiles#955).",
+    "",
+    "Ordered allow-list of models permitted to SIGN a review.md. Since HARNESS-093 the",
+    "launcher DRAWS one member at random; the whole array is the gate's allow-list, which",
     "dotf spec archive enforces via checkReviewGate.",
     "",
-    "Standing rule: an adversarial review never runs on an Anthropic model. The",
-    "reviewer must not be the implementer, and Claude implements nearly every",
-    "change in this repo — BUG-074 was reviewed twice by claude-opus-5 before",
-    "anyone noticed, which is the incident this file exists to prevent.",
+    "Standing rule (amended 2026-10-09, mlorentedev/dotfiles#1923, amendment B): an Anthropic model never",
+    "signs an adversarial review ALONE. The reviewer must not be the implementer, and",
+    "Claude implements nearly every change in this repo and in dotfiles — BUG-074 was reviewed twice",
+    "by claude-opus-5 before anyone noticed, which is the incident this file exists to",
+    "prevent. So every signed review keeps a first signature from another vendor, and",
+    "an Anthropic member signs only as `signs: second` (a second signature beside a",
+    "first signer of another vendor) or `signs: fallback` (in place of the first",
+    "signers when they failed for a classified reason the launch request records).",
+    "`dotf spec archive` enforces it: pool loading refuses an Anthropic member that",
+    "would sign first, and the gate checks roles, reason and that the vendors differ.",
+    "",
+    "Second signature: required when proposal.md declares `risk: high`. Only Sonnet",
+    "declares `signs: second` today, so a high-risk spec's second signature depends on",
+    "the Anthropic review key; when it is down, wait, or waive or lower the risk in",
+    "proposal.md with a stated reason. That dependency is deliberate (the owner wants",
+    "the quality tier in play, 2026-10-09) and costs about 8 reviews a month.",
+    "",
+    "`vendor` is who trains the model: the unit the second signature must differ in.",
+    "`signs` defaults to `first`.",
+    "",
+    "PR-Agent reads this file too (AI-045 AC9, mlorentedev/dotfiles#1923): each `pr_agent` block is that",
+    "member's PR-Agent model, its weight in the CI draw, and its reasoning effort.",
+    "`route: risk` is not drawn: it reviews first when a PR crosses `pr_agent_risk`",
+    "(changed lines, or the label). scripts/pr-agent-route.sh holds the allowlist of",
+    "Anthropic models CI may spend on, so an edit here cannot route CI onto another.",
     "",
     "Entries are model IDS, not tool names, and that distinction is load-bearing:",
     "`agy` also serves claude-opus-4-6-thinking and claude-sonnet-4-6, so pinning",
@@ -23,13 +54,20 @@
     "A pin that depends on a default is not a pin.",
     "",
     "Reasoning-class only. The latency-optimised daily models (nan/qwen3.6,",
-    "nan/gemma4, the gemini flash tier) are deliberately absent: a reviewer that",
-    "PASSes cheaply is worse than no gate, because it converts the gate into a",
-    "green checkmark. This file is read once per spec, so slow is fine.",
+    "nan/gemma4) are deliberately absent: a reviewer that PASSes cheaply is worse",
+    "than no gate, because it converts the gate into a green checkmark. This file",
+    "is read once per spec, so slow is fine. A member is admitted by the bar, not",
+    "by its tier name: gemini-3.8-flash-high is in because agy dropped its Pro tier",
+    "and Flash at High effort found the planted defect (owner decision 2026-10-14,",
+    "mlorentedev/dotfiles#2385). gpt-oss-120b-medium is out because it missed it twice; never admit it.",
     "",
     "This is the load-bearing slice of H-044, not a replacement for it. H-044's",
     "model-map.json maps a neutral tier (top|mid|low) to a provider per agent — a",
-    "different shape. Kept in a separate file so H-044 need not migrate this one."
+    "different shape. Kept in a separate file so H-044 need not migrate this one.",
+    "",
+    "Order is provenance, not precedence, since HARNESS-093 (mlorentedev/dotfiles#1370): the launcher draws one first-signer member at random (an Anthropic member is never drawn first), so every first signer is exercised in the ordinary course of reviews and NaN's per-model concurrency buckets are spread; --reviewer names one deliberately, which is how a run is reproduced. The roles below record why each member was admitted, not who runs first.",
+    "",
+    "On saturation, measured 2026-08-20: NaN's concurrency limit is PER MODEL, not per API key (8 concurrent to deepseek gives 5x200 + 3x429, while mimo answers 200 during that saturation). So a spec review launched while the PR reviewer is saturating deepseek WILL fail, and falling through to another entry is the correct response rather than a bug. Do not 'fix' that by promoting the NaN sibling above the provider-diverse entry — it would trade an outage-proof fallback for a saturation-proof one and lose the stronger property. This file is read once per spec, so slow is fine; that is why availability does not outrank independence here."
   ],
   "pool": [
     {
@@ -37,23 +75,100 @@
       "runner": "pi",
       "provider": "nan",
       "model": "deepseek-v4-flash",
+      "secret_id": "NAN_API_KEY",
       "role": "primary",
-      "why": "1M context and a mandatory reasoning chain — roughly 4x slower than qwen3.6 on trivial prompts, which is the correct trade for a gate that runs once per spec. Exercised: BUG-074 round 3 re-ran the mutation battery itself rather than trusting the spec's table. FLAGGED 2026-08-21 (#1205), not changed: this same model returns a 200 with an EMPTY body under PR-Agent — it spends its OUTPUT budget on the reasoning chain and never writes the answer, measured at 4m15s of silence on kubelab#1202 run 32440498259. The same failure appeared in this pool's own harness: given the planted-defect snippet of mlorentedev/dotfiles#1116, it spent 29,299 characters of reasoning and returned finish_reason=length with an empty body. PR-Agent's chain was inverted to lead with mimo; this pool's ordering was NOT, because its runner and prompt differ and no measurement of THIS harness exists yet. Read that as an open question about the primary, not as an endorsement of it."
+      "vendor": "deepseek",
+      "pr_agent": {
+        "model": "openai/deepseek-v4-flash",
+        "weight": 19
+      },
+      "why": "1M context and a mandatory reasoning chain — roughly 4x slower than qwen3.6 on trivial prompts, which is the correct trade for a gate that runs once per spec. Exercised: BUG-074 round 3 re-ran the mutation battery itself rather than trusting the spec's table. kubelab, 2026-08-21 (#1205): under PR-Agent this model returned a 200 with an EMPTY body, spending its output on reasoning (4m15s of silence on #1202, run 32440498259), which is why it is not PR-Agent's primary here either."
     },
     {
-      "id": "agy/gemini-3.1-pro-high",
+      "id": "agy/gemini-3.8-flash-high",
       "runner": "agy",
-      "model": "gemini-3.1-pro-high",
+      "model": "gemini-3.8-flash-high",
       "role": "fallback",
-      "why": "A second provider family, independent of both NaN and Anthropic — provider diversity rather than merely a different model. Pro tier at high effort; the flash tiers are excluded for the same reason qwen3.6 is. agy has no --provider flag; the model id selects the family."
+      "vendor": "google",
+      "why": "A second provider family, independent of both NaN and Anthropic — provider diversity rather than merely a different model. Flash tier at high effort, admitted 2026-10-14 by owner decision (mlorentedev/dotfiles#2385) when agy stopped serving gemini-3.1-pro-high, the id this arm held until then, so roughly one random draw in five died at startup. Admitted on the bar every member clears: the planted `((count++))` defect under `set -e` with count=0 (agy 1.3.5, macOS). It found the defect in 54 s, named a failing input and gave the fix. gpt-oss-120b-medium, the only other non-Anthropic id agy serves, missed it twice and must not be admitted. PROVISIONAL: when Gemini ships new models, measure them on the same bar and replace this one if one passes. agy has no --provider flag; the model id selects the family. AUTH IS LOGIN, not a key (mlorentedev/dotfiles#1156): agy holds an OAuth token at ~/.gemini/antigravity-cli/google_credentials.json and answers with no API key in the environment at all (measured 2026-08-22). This entry previously named GEMINI_API_KEY, a secret the registry has never declared, so every attempt to use the provider-diverse arm died at `dotf secrets run --only` -- and nothing noticed, because the primary always answered. The arm this pool exists to provide had therefore never run once.",
+      "auth": "login"
     },
     {
       "id": "nan/mimo-v2.6-flash",
       "runner": "pi",
+      "provider": "nan",
       "model": "mimo-v2.6-flash",
+      "secret_id": "NAN_API_KEY",
       "role": "fallback",
-      "why": "Replaced nan/mimo-v2.5 on 2026-10-01, re-admitted on this file's bar rather than renamed in. NaN retired mimo-v2.5: it answers 401 'This API key does not have access to the requested model' (CI run 36800846902, and a direct call from this repo's key, 2026-10-01), so PR-Agent's primary was dead (#1909). The admission evidence is carried from mlorentedev/dotfiles#1856, not re-derived: given the planted-defect test its predecessor passed (`((count++))` under `set -e`), mimo-v2.6-flash found it, named the failing input (count=0) and gave the fix. That is agreement on one planted defect, not a quality ranking against deepseek. Profile: 1,048,576 context and a reasoning chain (pi's model record; a minimal call here returned reasoning_tokens alongside the answer), which is this pool's line against qwen3.6 and gemma4 at 262K. 'flash' in the name is NaN's naming, not the gemini flash tier this pool excludes; deepseek-v4-flash is admitted on the same profile. Ordering unchanged: a SECOND fallback, after the provider-diverse one, because gemini answers a NaN outage and mimo only answers NaN saturation. In .pr_agent.toml it is the PRIMARY, for the reason in the previous entry's history: its failure mode raises, deepseek's empty 200 does not.",
-      "provider": "nan"
+      "vendor": "xiaomi",
+      "pr_agent": {
+        "model": "openai/mimo-v2.6-flash",
+        "weight": 27
+      },
+      "why": "Re-admitted 2026-09-30 on the bar this file requires, not renamed in. NaN retired its predecessor mimo-v2.5 that day: it hung, then answered 401 'This API key does not have access to the requested model' (AI-045, mlorentedev/dotfiles#1763). mimo-v2.5 had been admitted 2026-08-20 on a planted-defect test, and the successor was given the same one: the `((count++))` exit-status-1 case under `set -e` from this repo's prohibited-pattern table. mimo-v2.6-flash found it in 21 s and 772 completion tokens, named a failing input (count=0), and gave the fix (`count=$((count + 1))`). deepseek-v4-flash, run on the same prompt, found the same defect in 9 s. That is agreement on one planted defect, not a quality ranking, and it is stated as that. It stays a SECOND fallback, after the provider-diverse one, because provider diversity remains the stronger property. Profile: 1M context, reasoning chain, which is this pool's line against qwen3.6 and gemma4 at 262K.",
+      "operational_note": "Reasoning models here emit reasoning_content BEFORE content. Under-provisioning max_tokens returns an empty body with finish_reason=length and no error — the same shape as a review that silently did not happen (lesson 213). Provision generously and check finish_reason. NaN recommends max_tokens >= 300 for this model and publishes a per-model concurrency limit of 5."
+    },
+    {
+      "id": "nan/glm5.3-flash",
+      "runner": "pi",
+      "provider": "nan",
+      "model": "glm5.3-flash",
+      "secret_id": "NAN_API_KEY",
+      "role": "member",
+      "vendor": "zhipu",
+      "pr_agent": {
+        "model": "openai/glm5.3-flash",
+        "weight": 19,
+        "reasoning_effort": "low"
+      },
+      "why": "Admitted 2026-08-29 by owner decision (HARNESS-093, mlorentedev/dotfiles#1370) to spread reviews across NaN's PER-MODEL concurrency buckets and exercise more than one model on the gate. What IS established: reasoning-class by profile — pi-nan-provider's snapshot marks glm5.3-flash reasoning: true with a 1M context, the line this pool draws (dotfiles tests/pi-nan-package.bats holds it). What is NOT established: a calibration against a review of known outcome (e.g. CLI-050 round 1's real Major); recorded here so nobody reads this entry as measured equivalence to deepseek. Drawn at random like every member; --reviewer names it deliberately."
+    },
+    {
+      "id": "nan/qwen3.8-flash",
+      "runner": "pi",
+      "provider": "nan",
+      "model": "qwen3.8-flash",
+      "secret_id": "NAN_API_KEY",
+      "role": "member",
+      "vendor": "alibaba",
+      "why": "Admitted 2026-08-29 by owner decision (HARNESS-093, mlorentedev/dotfiles#1370) to spread reviews across NaN's per-model concurrency buckets and exercise more than one model on the gate. What IS established: reasoning-class by profile — pi-nan-provider's snapshot marks qwen3.8-flash reasoning: true, and dotfiles ai/pi/models.json corrects its stale native-window snapshot to NaN's served 1,048,576-token window (dotfiles tests/pi-nan-package.bats holds the effective values). What is NOT established: a calibration against a review of known outcome (e.g. CLI-050 round 1's real Major); recorded here so nobody reads this entry as measured equivalence to deepseek. Drawn at random like every member; --reviewer names it deliberately."
+    },
+    {
+      "id": "anthropic-review/claude-haiku-5-5",
+      "runner": "pi",
+      "provider": "anthropic-review",
+      "model": "claude-haiku-5-5",
+      "secret_id": "REVIEW_ANTHROPIC_API_KEY",
+      "role": "fallback",
+      "vendor": "anthropic",
+      "signs": "fallback",
+      "pr_agent": {
+        "model": "anthropic/claude-haiku-5-5",
+        "weight": 35,
+        "reasoning_effort": "medium"
+      },
+      "why": "Admitted 2026-10-09 by owner decision (mlorentedev/dotfiles#1923, amendment B). In the adversarial review it signs only as a FALLBACK, with a classified reason (rate limit, quota, provider error, timeout, content filter, empty answer) when the NaN first signers failed; it never signs first by draw. In PR-Agent it is drawn at weight 35, about a third of reviews, because NaN's shared per-model concurrency is the scarcer resource and the owner judged the spend acceptable (2026-10-14, mlorentedev/dotfiles#2215). Measured on four real reviews (25K-55K tokens in, 9K-32K out, all under the 100K price step): about $0.02-0.06 a review, 3 to 7 times the $0.008 this entry first estimated, because thinking tokens bill as output. Reasoning-class by profile (adaptive thinking). Effort is medium, not high: at high, thinking spent the 32,000-token output cap on large diffs and the answer came back empty in 5 of 11 runs (mlorentedev/dotfiles#2458). No calibration against a review of known outcome yet; mlorentedev/dotfiles#2215 and mlorentedev/dotfiles#2216 measure its addressed-comment rate."
+    },
+    {
+      "id": "anthropic-review/claude-sonnet-5-5",
+      "runner": "pi",
+      "provider": "anthropic-review",
+      "model": "claude-sonnet-5-5",
+      "secret_id": "REVIEW_ANTHROPIC_API_KEY",
+      "role": "second",
+      "vendor": "anthropic",
+      "signs": "second",
+      "pr_agent": {
+        "model": "anthropic/claude-sonnet-5-5",
+        "route": "risk",
+        "reasoning_effort": "medium"
+      },
+      "why": "Admitted 2026-10-09 by owner decision (mlorentedev/dotfiles#1923, amendment B) as the quality tier, placed where it pays: the SECOND signature of a `risk: high` spec (about 8 a month, about $1.60 each agentic), and in PR-Agent the first review of a PR past `pr_agent_risk` (about 3% of PRs at 1500 changed lines, about $0.37 each, measured). Never drawn at random in either flow: at 15x Haiku's PR-Agent price a uniform share would spend the month's budget in a week. No calibration yet; mlorentedev/dotfiles#2215 and mlorentedev/dotfiles#2216 measure it."
     }
-  ]
+  ],
+  "pr_agent_risk": {
+    "min_changed_lines": 1500,
+    "label": "deep-review",
+    "$comment": "A PR reviews first on the `route: risk` member when its additions plus deletions reach min_changed_lines, or it carries the label. Set to 1500 by owner decision 2026-10-09: the first live Sonnet review cost $0.37, not $0.13, because a PR this large fills the prompt cap, and over the last 395 merged PRs 9.1% reach 900 lines, 4.8% reach 1200 and 3.0% reach 1500. At 1500 the route costs about $28 of the $60-65 month. A path-based predicate matched 14-35% and was rejected as too costly. Recalibrate at mlorentedev/dotfiles#2215 / mlorentedev/dotfiles#2216."
+  }
 }
