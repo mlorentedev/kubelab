@@ -1,6 +1,6 @@
 """hermes-kubelab's fallback model (spec AI-012 AC2).
 
-When NaN fails (429 after retries, 5xx, 401/403, 404), Hermes v2026.9.24 swaps
+When NaN fails (429 after retries, 5xx, 401/403, 404), Hermes swaps
 an unpinned session to the next `fallback_providers` entry mid-turn. The entry
 is Anthropic's Haiku on its own key, in a workspace the operator capped at 20
 USD a month. Without the key the chain is empty, never an entry Hermes cannot
@@ -50,7 +50,7 @@ def test_the_key_reaches_the_env_file_only() -> None:
 
 def test_delegated_work_never_borrows_the_metered_chain() -> None:
     """ADR-068 D7. A child pinned by model gets no fallback unless one is declared
-    for it (v2026.9.24 `scoped_fallback_chain`), so the pin is what keeps it off."""
+    for it (`scoped_fallback_chain`, unchanged in v0.22.1), so the pin is what keeps it off."""
     delegation = _config(**KEY)["delegation"]
     assert delegation["model"] == HERMES["models"]["unmetered"]
     assert "fallback_providers" not in delegation

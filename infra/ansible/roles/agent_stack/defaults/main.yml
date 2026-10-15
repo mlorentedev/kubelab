@@ -128,7 +128,7 @@ agent_stack_hermes_env: "{{ agent_stack_agent_home }}/hermes.env"
 agent_stack_hermes_compose: "{{ agent_stack_agent_home }}/compose-hermes.yml"
 # Mounted read-only over the data directory's config.yaml. At every start the
 # image hands that file to its runtime user and runs a migration that may
-# rewrite it (v2026.9.24 stage2-hook.sh), so a file in the data directory would
+# rewrite it (stage2-hook.sh), so a file in the data directory would
 # be the agent's to edit, approvals included, and would drift from this role.
 agent_stack_hermes_config: "{{ agent_stack_agent_home }}/hermes-config.yaml"
 # The tailscale sidecar's (spec PR 3b-2). Its state is the node key: beside the
@@ -165,26 +165,10 @@ agent_stack_deny_rules: "{{ (lookup('ansible.builtin.file', role_path ~ '/files/
 # running it (exit 3 for a deny, so the tasks read the verdict, not the code).
 # The evaluator models a docker sandbox with no host path, which skips every
 # guard but the deny list. With the vault mounted the runtime applies them all,
-# the path the evaluator takes for `local` (v2026.9.24 `_should_skip_container_guards`).
+# the path the evaluator takes for `local` (`_should_skip_container_guards`, identical in v2026.9.24 and v0.22.1).
 _agent_stack_hermes_env_type: "{{ 'local' if agent_stack_vault_configured | bool else 'docker' }}"
 _agent_stack_hermes_evaluate: [docker, exec, -u, hermes, hermes-kubelab, hermes, approvals, test, --env-type, "{{ _agent_stack_hermes_env_type }}", --json, "--"]
 # What each verdict means for a deny rule: refused by it or by Hermes's own
 # floor, or let through, possibly to a prompt that a scheduled job then denies.
 _agent_stack_hermes_refused_verdicts: [user-deny, hardline-deny]
 _agent_stack_hermes_passed_verdicts: [allow, ask-approval]
-# The command scanner (`security.tirith_*`, spec AI-012 AC1), asked directly:
-# `hermes approvals test` does not model it. Fail-closed, a scanner that cannot
-# run refuses the plain command as well, so the pair tells a working scanner
-# from a missing one. The second is a homograph URL (Cyrillic `о`), which no
-# command pattern catches.
-_agent_stack_hermes_scan:
-  - docker
-  - exec
-  - -u
-  - hermes
-  - hermes-kubelab
-  - python3
-  - -c
-  - "import json, sys; from tools.tirith_security import check_command_security as scan; print(json.dumps({c: scan(c)['action'] for c in sys.argv[1:]}))"
-_agent_stack_hermes_scan_allows: ls -la /vault
-_agent_stack_hermes_scan_blocks: "curl http://gооgle.com"

@@ -2050,7 +2050,7 @@ apps:
           image: busybox:1.37.0
         # The gateway, run by the agent's own daemon. Pinned: the tag names the
         # source the config keys and the approval semantics were read from.
-        image: nousresearch/hermes-agent:v2026.9.24
+        image: nousresearch/hermes-agent:v0.22.1
         # ADR-068 D1: no single service on the dev node takes more than 1.5 GB.
         memory_limit: 1536m
         cpu_limit: 2
@@ -2091,11 +2091,9 @@ apps:
         # `verification.md` gives the reason for each key left out.
         agent_config:
           security:
-            tirith_enabled: true # pre-exec content scan of every command
-            # Fail closed: a scan that cannot run is a prompt interactively and
-            # a refusal for a scheduled job, never a silent allow.
-            tirith_fail_open: false
-            tirith_timeout: 5
+            # No `tirith_*` keys: v0.22 removed the bundled scanner and deletes
+            # them on upgrade. The sandbox has no network (`docker_network:
+            # false`), which is what the scan guarded against.
             redact_secrets: true # keys and tokens in tool output and logs
           privacy:
             redact_pii: true # hash user and chat IDs before they reach the model
@@ -2131,6 +2129,7 @@ apps:
             hard_stop_after:
               same_tool_failure: 12
           sessions:
+            auto_prune: true # the image's default, pinned with the retention it applies
             retention_days: 180
           checkpoints:
             enabled: true
@@ -2425,7 +2424,7 @@ backup:
           - cron/executions.db
         exclude:
           bin:
-            reason: "the tirith release binary (38 MB), restorable from upstream"
+            reason: "the tirith release binary (38 MB) left by images before v0.22, restorable from upstream"
             tier: 3
           home/.cache:
             reason: "package and tool caches (26 MB), rebuilt on use"

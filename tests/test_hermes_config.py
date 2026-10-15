@@ -94,13 +94,7 @@ def test_commands_run_in_a_sandbox_that_receives_no_host_secret() -> None:
     terminal = _config()["terminal"]
     assert terminal["backend"] == "docker"
     assert terminal["docker_forward_env"] == [], "a forwarded variable is readable by every command"
-
-
-def test_the_sandbox_has_no_network_until_it_has_its_own_tailnet_identity() -> None:
-    """Through the rootless daemon a sandbox leaves as ace2, whose tailnet identity is
-    the admin's and matches every allow rule (measured 2026-10-06: the VPS's :22 and
-    :6443, both K3s APIs and Gitea answered). `false` is `--network=none`."""
-    assert _config()["terminal"]["docker_network"] is False
+    assert terminal["docker_network"] is False, "with no scanner, no network is what stops a command leaking"
 
 
 def test_approvals_are_manual_and_fail_closed() -> None:
@@ -289,25 +283,16 @@ def test_a_role_owned_key_in_the_ssot_does_not_override_the_role(ported: dict) -
     assert config["delegation"]["model"] == HERMES["models"]["unmetered"]
 
 
-def test_the_scanner_is_configured_fail_closed() -> None:
-    """The setting only: v2026.9.24 defaults to fail-open, and hermes-nan ran it
-    closed (HERMES-012). The behaviour is the provision's probe, below."""
-    assert _config()["security"]["tirith_fail_open"] is False
-
-
-def test_every_provision_asks_the_running_scanner_for_both_verdicts() -> None:
-    """`hermes approvals test` does not model the scanner (v2026.9.24: a homograph
-    URL reads `allow` there, and `block` from the scanner itself). Fail-closed,
-    a scanner that cannot run refuses the plain command too, so the pair tells
-    a working scanner from a missing one, which the config alone cannot."""
+def test_no_tirith_key_is_declared_for_an_image_that_removed_the_scanner() -> None:
+    """v0.22 deletes `security.tirith_*` on upgrade and enables nothing in its
+    place. A key kept in the SSOT would read as a control that no longer runs;
+    the sandbox's missing network is the control that remains (`docker_network:
+    false`, asserted with the rest of the terminal block above)."""
+    assert not [k for k in _config()["security"] if k.startswith("tirith_")]
     defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text())
-    probe = defaults["_agent_stack_hermes_scan"]
-    assert probe[:5] == ["docker", "exec", "-u", "hermes", "hermes-kubelab"]
-    assert "check_command_security" in probe[-1]
-    allowed, blocked = defaults["_agent_stack_hermes_scan_allows"], defaults["_agent_stack_hermes_scan_blocks"]
-    assert allowed.isascii() and not blocked.isascii(), "the block is a homograph, not a pattern the evaluator knows"
-    [task] = [t for t in _tasks() if "_agent_stack_hermes_scan" in str(t.get("ansible.builtin.command"))]
-    assert "== 'allow'" in task["until"] and "== 'block'" in task["until"]
-    # The first start installs the scanner in the background.
-    assert task["retries"] * task["delay"] >= 60
-    assert task["changed_when"] is False
+    assert not [k for k in defaults if "scan" in k], "the probe imports a module the image no longer ships"
+
+
+def test_the_sandbox_has_no_network() -> None:
+    """What stands where the scanner stood: nothing a command runs can leave."""
+    assert _config()["terminal"]["docker_network"] is False

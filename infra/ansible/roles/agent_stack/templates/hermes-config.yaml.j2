@@ -24,7 +24,7 @@ model:
 
 # When NaN fails (429 after retries, 5xx, 401/403, 404), an unpinned session
 # moves here mid-turn (spec AI-012 AC2). Pinned scheduled and delegated work
-# does not: v2026.9.24 gives a pinned route no inherited chain.
+# does not: a pinned route gets no inherited chain (v0.22.1 too).
 fallback_providers:
   - provider: anthropic
     model: {{ agent_stack_hermes.models.fallback }}
@@ -61,7 +61,7 @@ approvals:
   cron_mode: "deny"
   unattended_mode: "deny"
   # files/guardrails-denylist.yaml. With no host path mounted into the sandbox,
-  # v2026.9.24 skips every other command guard for the docker backend, the
+  # the image skips every other command guard for the docker backend, the
   # prompts above included, and these globs are the one it still applies. With
   # the vault mounted, they apply after Hermes's own hardline floor.
   deny:
