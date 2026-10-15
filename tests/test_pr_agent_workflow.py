@@ -249,7 +249,24 @@ def test_inference_runs_are_queued_not_run_in_parallel() -> None:
         "the group must NOT be keyed per PR — that is the workflow-level group's "
         "job, and it is the cross-PR pile-up that exhausts the cluster"
     )
-    assert job["concurrency"]["cancel-in-progress"] is False, "queue, never cancel"
+    assert job["concurrency"]["cancel-in-progress"] is False, "never cancel the review that is running"
+    # TOOL-108 (#2179): without it GitHub keeps one running and ONE pending run,
+    # and a third request silently cancels the second before it gets a runner.
+    assert job["concurrency"].get("queue") == "max", (
+        "without `queue: max` the group holds one pending run, and a newer one discards it"
+    )
+
+
+def test_the_queue_is_not_beside_a_cancelling_group() -> None:
+    """GitHub refuses `queue: max` in a group that cancels in progress, so the
+    queue lives on the job and the workflow-level group keeps cancelling."""
+    workflow = _load(REVIEWER)
+    assert "queue" not in workflow["concurrency"]
+    assert workflow["concurrency"]["cancel-in-progress"] is True
+    # The queue itself: without it the shared group keeps one pending run and
+    # discards the rest (#2179).
+    job = workflow["jobs"]["review"]["concurrency"]
+    assert job == {"group": "pr-agent-nan-inference", "cancel-in-progress": False, "queue": "max"}
 
 
 def test_the_gate_does_not_cancel_on_events_that_add_evidence() -> None:
@@ -1138,7 +1155,10 @@ def test_every_request_to_nan_is_streamed() -> None:
     assert any(s in host for s in litellm["force_streaming_api_base_substrings"])
     assert env["LITELLM__CUSTOM_LLM_PROVIDER"] == litellm["custom_llm_provider"]
     assert env["LITELLM__FORCE_STREAMING_CUSTOM_LLM_PROVIDER"] == litellm["force_streaming_custom_llm_provider"]
-    assert json.loads(env["LITELLM__FORCE_STREAMING_API_BASE_SUBSTRINGS"]) == litellm["force_streaming_api_base_substrings"]
+    assert (
+        json.loads(env["LITELLM__FORCE_STREAMING_API_BASE_SUBSTRINGS"])
+        == litellm["force_streaming_api_base_substrings"]
+    )
 
 
 def test_a_review_can_report_more_findings_than_the_upstream_default() -> None:
@@ -1198,3 +1218,107 @@ def test_the_workflow_reviews_with_the_toml_model() -> None:
     read. Two models in two files is how mimo-v2.5's retirement produced a 401
     on one path and not the other (#1909)."""
     assert _review_env()["CONFIG__MODEL"] == _toml()["config"]["model"]
+
+
+_OPEN_GH_STUB = """#!/usr/bin/env bash
+echo "$*" >> "$GH_CALLS"
+[ "$STUB_STATE" = "fail" ] && exit 1
+echo "$STUB_STATE"
+"""
+# Answers as `gh api ... --jq` would: the filtered state, already a word.
+
+
+def _run_open_step(tmp_path: pathlib.Path, state: str) -> dict[str, str]:
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    stub = bindir / "gh"
+    stub.write_text(_OPEN_GH_STUB, encoding="utf-8")
+    stub.chmod(0o755)
+    output = tmp_path / "github_output"
+    output.touch()
+    env = {
+        **os.environ,
+        "PATH": os.pathsep.join([str(bindir), os.environ["PATH"]]),
+        "GITHUB_OUTPUT": str(output),
+        "GITHUB_REPOSITORY": "mlorentedev/kubelab",
+        "GH_CALLS": str(tmp_path / "gh_calls"),
+        "GH_TOKEN": "stub",
+        "PR_NUMBER": "2179",
+        "STUB_STATE": state,
+    }
+    step = _reviewer_step("Skip a review whose PR is no longer open")
+    proc = subprocess.run(  # noqa: S603
+        ["bash", "-c", step["run"]], cwd=tmp_path, env=env, capture_output=True, text=True, timeout=60
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    return dict(line.split("=", 1) for line in output.read_text().splitlines() if "=" in line)
+
+
+@_needs_bash
+@pytest.mark.parametrize(
+    ("state", "gone"), [("merged", "true"), ("closed", "true"), ("draft", "true"), ("open", None), ("fail", None)]
+)
+def test_a_queued_review_of_a_pr_that_is_no_longer_open_is_dropped(
+    tmp_path: pathlib.Path, state: str, gone: str | None
+) -> None:
+    """A run waits in the queue with the event it was queued with. Only a
+    definite answer drops it: a failed read reviews, as before the queue."""
+    assert _run_open_step(tmp_path, state).get("gone") == gone
+
+
+@pytest.mark.skipif(shutil.which("jq") is None, reason="needs jq to evaluate the step's filter")
+@pytest.mark.parametrize(
+    ("pull", "state"),
+    [
+        ({"merged": True, "state": "closed", "draft": False}, "merged"),
+        ({"merged": False, "state": "closed", "draft": False}, "closed"),
+        ({"merged": False, "state": "open", "draft": True}, "draft"),
+        ({"merged": False, "state": "open", "draft": False}, "open"),
+    ],
+)
+def test_the_state_filter_reads_the_pull_request(pull: dict, state: str) -> None:
+    """The filter `gh api --jq` applies, run over the fields the API returns."""
+    run = _reviewer_step("Skip a review whose PR is no longer open")["run"]
+    jq_filter = re.search(r"--jq '([^']+)'", run).group(1)
+    proc = subprocess.run(  # noqa: S603
+        ["jq", "-r", jq_filter], input=json.dumps(pull), capture_output=True, text=True, check=True
+    )
+    assert proc.stdout.strip() == state
+
+
+def test_a_dropped_review_skips_everything_the_diff_check_gates() -> None:
+    """The open-check only works through `reviewable`: an unrun step leaves its
+    `any` output empty, and every later step tests that output."""
+    steps = _review_steps()
+    names = [s.get("name", "") for s in steps]
+    assert names.index("Skip a review whose PR is no longer open") < names.index(
+        "Determine whether the diff has anything to review"
+    )
+    condition = _reviewer_step("Determine whether the diff has anything to review")["if"]
+    run = _pull_request_run(draft=False, actor="someone")
+    assert not _evaluate(condition, run, {"open": {"outputs": {"gone": "true"}}})
+    assert _evaluate(condition, run, {"open": {"outputs": {}}})
+    # A slash command never runs the open-check and is still reviewed.
+    assert _evaluate(condition, _comment_run(body="/review", association="OWNER"), {})
+
+
+# Steps after the diff check that run whatever it decided, because they decide
+# nothing: a timestamp is harmless on a dropped run.
+UNGATED_AFTER_THE_DIFF_CHECK = {"Stamp run start"}
+
+
+def test_every_step_after_the_diff_check_tests_its_output() -> None:
+    """A dropped review leaves `any` empty, so a step runs only if it says otherwise.
+
+    Each gated condition compares `any` with a literal `'true'` or `'false'`,
+    and an empty output matches neither.
+    """
+    steps = _review_steps()
+    names = [s.get("name", "") for s in steps]
+    after = steps[names.index("Determine whether the diff has anything to review") + 1 :]
+    assert after, "no step follows the diff check; the guard measures nothing"
+    for step in after:
+        if step.get("name") in UNGATED_AFTER_THE_DIFF_CHECK:
+            continue
+        condition = " ".join(str(step.get("if", "")).split())
+        assert re.search(r"steps\.reviewable\.outputs\.any == '(true|false)'", condition), step.get("name")
