@@ -21,6 +21,7 @@ from toolkit.features.monitoring_diff import (
     extract_key,
     hydrate_push_tokens,
     strip_key,
+    tag_drift,
     wants_notifications,
 )
 
@@ -169,9 +170,11 @@ class TestComparisonUsesOnlyFieldsTheSyncWrites:
 
         assert (create, edit, delete) == ([], [], [])
 
-    def test_tags_alone_never_mark_a_monitor_dirty(self):
-        # Tags are applied by a separate API call, not by the edit. Flagging them
-        # would request an edit that cannot fix the difference.
+    def test_a_seed_tag_missing_live_marks_the_monitor_dirty(self):
+        # The edit path now converges tags too (`_reconcile_tags`, #1974), so a
+        # drifted tag is a difference an edit CAN clear. Before it, tags reached
+        # only new monitors, and seven monitors showed no `on-demand` tag live
+        # while the seed muted them.
         seed = [{**self.REAL_SHAPE, "key": "k", "tags": ["infra", "new"]}]
         live = [
             {
@@ -183,7 +186,7 @@ class TestComparisonUsesOnlyFieldsTheSyncWrites:
 
         _, edit, _ = _diff(seed, live)
 
-        assert edit == []
+        assert [m["id"] for m in edit] == [1]
 
     def test_a_field_the_sync_does_write_still_marks_it_dirty(self):
         # The guard above must not silence real drift.
@@ -282,9 +285,19 @@ class TestNotificationMuting:
 
     MUTED = frozenset({"staging"})
 
+    # Each live monitor carries its seed's tags, so only notifications can differ.
+
     def test_a_muted_monitor_with_live_notifications_is_edited_to_clear_them(self):
         seed = [{"key": "k1", "name": "One", "tags": ["staging"]}]
-        live = [{"id": 1, "name": "One", "description": embed_key("", "k1"), "notificationIDList": [1]}]
+        live = [
+            {
+                "id": 1,
+                "name": "One",
+                "description": embed_key("", "k1"),
+                "tags": seed[0].get("tags", []),
+                "notificationIDList": [1],
+            }
+        ]
 
         _, edit, _ = diff_monitors(seed, live, muted_tags=self.MUTED, has_default_notification=True)
 
@@ -292,7 +305,15 @@ class TestNotificationMuting:
 
     def test_a_muted_monitor_already_without_notifications_is_a_no_op(self):
         seed = [{"key": "k1", "name": "One", "tags": ["staging"]}]
-        live = [{"id": 1, "name": "One", "description": embed_key("", "k1"), "notificationIDList": []}]
+        live = [
+            {
+                "id": 1,
+                "name": "One",
+                "description": embed_key("", "k1"),
+                "tags": seed[0].get("tags", []),
+                "notificationIDList": [],
+            }
+        ]
 
         _, edit, _ = diff_monitors(seed, live, muted_tags=self.MUTED, has_default_notification=True)
 
@@ -300,7 +321,15 @@ class TestNotificationMuting:
 
     def test_an_unmuted_monitor_with_notifications_is_a_no_op(self):
         seed = [{"key": "k1", "name": "One", "tags": ["infra"]}]
-        live = [{"id": 1, "name": "One", "description": embed_key("", "k1"), "notificationIDList": [1]}]
+        live = [
+            {
+                "id": 1,
+                "name": "One",
+                "description": embed_key("", "k1"),
+                "tags": seed[0].get("tags", []),
+                "notificationIDList": [1],
+            }
+        ]
 
         _, edit, _ = diff_monitors(seed, live, muted_tags=self.MUTED, has_default_notification=True)
 
@@ -308,7 +337,7 @@ class TestNotificationMuting:
 
     def test_an_unmuted_monitor_missing_notifications_is_edited_to_attach_them(self):
         seed = [{"key": "k1", "name": "One", "tags": ["infra"]}]
-        live = [{"id": 1, "name": "One", "description": embed_key("", "k1")}]
+        live = [{"id": 1, "name": "One", "description": embed_key("", "k1"), "tags": ["infra"]}]
 
         _, edit, _ = diff_monitors(seed, live, muted_tags=self.MUTED, has_default_notification=True)
 
@@ -323,6 +352,7 @@ class TestNotificationMuting:
                 "id": 1,
                 "name": "One",
                 "description": embed_key("", "k1"),
+                "tags": ["infra"],
                 "notificationIDList": {"1": True},
             }
         ]
@@ -336,7 +366,15 @@ class TestNotificationMuting:
         # anyway would flag every notified monitor dirty and, on apply, wipe
         # whatever links it actually has — fail-safe is skipping, not zeroing.
         seed = [{"key": "k1", "name": "One", "tags": ["infra"]}]
-        live = [{"id": 1, "name": "One", "description": embed_key("", "k1"), "notificationIDList": [1]}]
+        live = [
+            {
+                "id": 1,
+                "name": "One",
+                "description": embed_key("", "k1"),
+                "tags": seed[0].get("tags", []),
+                "notificationIDList": [1],
+            }
+        ]
 
         _, edit, _ = diff_monitors(seed, live, muted_tags=self.MUTED, has_default_notification=False)
 
@@ -496,3 +534,24 @@ class TestPushTokenDrift:
         ]
         to_create, to_edit, to_delete = _diff(seed, live)
         assert (to_create, to_edit, to_delete) == ([], [], [])
+
+
+class TestTagDrift:
+    """#1974: live tags converge onto the seed's, compared by name."""
+
+    LIVE = {"tags": [{"tag_id": 7, "name": "infra", "value": ""}, {"tag_id": 9, "name": "old", "value": "x"}]}
+
+    def test_missing_and_extra_tags_are_both_reported(self):
+        missing, extra = tag_drift({"tags": ["infra", "on-demand"]}, self.LIVE)
+        assert missing == ["on-demand"]
+        assert extra == [{"tag_id": 9, "name": "old", "value": "x"}]
+
+    def test_a_converged_monitor_has_no_drift(self):
+        assert tag_drift({"tags": ["infra", "old"]}, self.LIVE) == ([], [])
+
+    def test_a_seed_entry_without_a_tags_field_has_no_opinion(self):
+        assert tag_drift({"name": "x"}, self.LIVE) == ([], [])
+
+    def test_an_empty_tags_field_removes_every_live_tag(self):
+        _, extra = tag_drift({"tags": []}, self.LIVE)
+        assert [t["tag_id"] for t in extra] == [7, 9]

@@ -94,6 +94,12 @@ help:
 	@echo "  make tf-<root>-plan             Plan a root: dns, r2, gcp, gcp-bootstrap, vps-firewall, aws"
 	@echo "  make tf-<root>-apply            Apply (dns/gcp/aws refuse deletes unless ALLOW_DESTROY=1)"
 	@echo "  make tf-untaint ROOT=x RES=y    Clear a taint on a resource that exists (lesson-543)"
+	@echo "  make tf-state-bootstrap         Create the state bucket, its lock rule and token (TF-007)"
+	@echo "  make tf-state-migrate ROOT=x    Move a root's local state into R2, once (TF-007)"
+	@echo "  make tf-state-list ROOT=x       List the addresses a root's state holds in R2"
+	@echo "  make tf-state-history ROOT=x    List a root's history copies (<lineage>/<serial>)"
+	@echo "  make tf-state-restore ROOT=x TO=<lineage>/<serial>  Write a history copy back as the newest state"
+	@echo "  make tf-state-unlock ROOT=x LOCK=<id>  Release a lock a dead run left behind"
 	@echo "  make gcp1-status|start|stop     Inspect or resize the GCP hub's instance group"
 	@echo "  make gcp-killswitch-prove       Prove the billing kill switch fires, on a scratch project"
 	@echo ""
@@ -1431,6 +1437,54 @@ tf-untaint:
 	@test -n "$(ROOT)" -a -n "$(RES)" || { echo "usage: make tf-untaint ROOT=<dns|gcp|aws|...> RES='<address>'"; exit 2; }
 	@$(_TF) $(ROOT) untaint -- '$(RES)'
 
+# The state bucket, its history lock rule and its token, before any root can
+# reach R2 (TF-007). Idempotent; ROTATE=1 replaces the token.
+.PHONY: tf-state-bootstrap
+tf-state-bootstrap:
+	@$(TOOLKIT) infra terraform state-bootstrap $(if $(filter 1,$(ROTATE)),--rotate)
+
+# Re-measures what the state lock relies on: R2's conditional PUT lets exactly
+# one of many concurrent writers through. Writes under probe/ and removes it.
+.PHONY: test-tfstate-lock-live
+test-tfstate-lock-live:
+	@$(POETRY) run pytest tests/test_tfstate_lock_live.py -m infra -v --no-cov
+
+# One-time, per root: move a local terraform.tfstate into R2 (TF-007). Pushes
+# without -force, reads the result back, then renames the local file to
+# terraform.pre-remote.tfstate. Re-running it after success is a no-op.
+.PHONY: tf-state-migrate
+tf-state-migrate:
+	@test -n "$(ROOT)" || { echo "usage: make tf-state-migrate ROOT=<dns|r2|aws|...>"; exit 2; }
+	@$(_TF) $(ROOT) migrate
+
+# The addresses a root's state holds, read from R2. Addresses only: values are
+# not printed, because a state holds secrets in clear.
+.PHONY: tf-state-list
+tf-state-list:
+	@test -n "$(ROOT)" || { echo "usage: make tf-state-list ROOT=<dns|r2|aws|...>"; exit 2; }
+	@$(_TF) $(ROOT) state-list
+
+# A root's copies under history/, each a <lineage>/<serial> that
+# tf-state-restore takes. Keys and dates only.
+.PHONY: tf-state-history
+tf-state-history:
+	@test -n "$(ROOT)" || { echo "usage: make tf-state-history ROOT=<dns|r2|aws|...>"; exit 2; }
+	@$(_TF) $(ROOT) history
+
+# Write a history copy back as the root's newest state (docs/runbooks/terraform-state.md).
+# The state it replaces is copied to history first, so a restore is undone by another.
+.PHONY: tf-state-restore
+tf-state-restore:
+	@test -n "$(ROOT)" -a -n "$(TO)" || { echo "usage: make tf-state-restore ROOT=<root> TO=<lineage>/<serial>"; exit 2; }
+	@$(_TF) $(ROOT) restore -- '$(TO)'
+
+# Release the lock a killed run left on a root. Only when no run is in progress:
+# the lock id is the one Terraform printed when it refused.
+.PHONY: tf-state-unlock
+tf-state-unlock:
+	@test -n "$(ROOT)" -a -n "$(LOCK)" || { echo "usage: make tf-state-unlock ROOT=<root> LOCK=<id>"; exit 2; }
+	@$(_TF) $(ROOT) unlock -- '$(LOCK)'
+
 .PHONY: tf-dns-plan tf-dns-apply
 tf-dns-plan:
 	@$(_TF) dns plan
@@ -1647,6 +1701,10 @@ backup-migrate:
 .PHONY: backup-verify-restic
 backup-verify-restic:
 	@$(TOOLKIT) backup verify-restic --env $(or $(filter staging prod,$(ENV)),prod)
+
+.PHONY: sync-terraform-backend
+sync-terraform-backend: ## Render infra/terraform/backend.s3.tfbackend from terraform.state (TF-007)
+	@$(TOOLKIT) sync terraform-backend
 
 # Regenerate the R2 watcher's per-node targets from backup.sources (BACKUP-055).
 # Run after declaring or removing a backup source; the test suite fails until you do.

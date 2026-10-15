@@ -69,10 +69,10 @@
         - icon: si-youtube
           href: https://studio.youtube.com
 - Ops:
-    - "Hetzner (~9€/mo)":
+    - "Hetzner":
         - icon: si-hetzner
           href: https://console.hetzner.cloud/billing
-    - "GCP Hub (~$6/mo)":
+    - "GCP Hub":
         - icon: si-googlecloud
           href: https://console.cloud.google.com/welcome?project=kubelab-hub
     - "Cloudflare R2":

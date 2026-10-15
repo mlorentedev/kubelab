@@ -1,9 +1,10 @@
 # Metrics, logs, dashboards and alerting
 
-27 lessons, newest first. Back to [all categories](../_index.md).
+28 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 572 | [A seed field the sync never writes is drift its plan cannot show](lesson-572-a-seed-field-the-sync-never-writes-is-drift-its-plan-cannot-show.md) | 2026-10-14 |
 | 531 | [A GraphQL API refuses with 200, so an HTTP retry never fires](lesson-531-a-graphql-api-refuses-with-200-so-an-http-retry-never-fires.md) | 2026-10-07 |
 | 512 | [A JSON field named like a stream label is renamed, and `by (<field>)` silently groups on the stream label instead](lesson-512-a-json-field-named-like-a-stream-label-is-renamed-and-the-grouping-moves.md) | 2026-10-02 |
 | 510 | [A throwaway Loki answers "no data" for lines older than 3 h, whatever the querier flags say](lesson-510-loki-answers-no-data-for-ranges-older-than-3h-it-never-flushed.md) | 2026-10-02 |

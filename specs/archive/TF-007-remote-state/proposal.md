@@ -1,7 +1,7 @@
 ---
 id: "TF-007-remote-state"
 type: spec
-status: implementing # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-10-13"
 issue: "mlorentedev/kubelab#558"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal, terraform, r2, state]
@@ -29,9 +29,10 @@ Every root keeps its state in the R2 bucket `kubelab-tfstate` under `<root>/terr
   - after any action that writes state, snapshots it to `history/<root>/<lineage>/<serial>.tfstate`, under a 365-day R2 bucket lock.
 
   The Make targets keep their names and their apply semantics (guarded or interactive per root), and become one line each.
-- **The `aws` root stops reading `~/.aws`.** The backend's `AWS_*` variables would outrank the provider's `profile`, so the provider takes the IAM pair from SOPS through `TF_VAR_*`. Registering that pair in `SECRET_CATALOG` closes #1351.
+- **The `aws` root stops reading `~/.aws`.** The backend's `AWS_*` variables would outrank the provider's `profile`, so the provider takes the IAM pair from SOPS through `TF_VAR_*`. The pair is registered in `SECRET_CATALOG`; it is the dead `kubelab` key, so #1351 stays open for a working one.
 - **Bootstrap is one idempotent command.** `make tf-state-bootstrap` creates the bucket and its lock rule through the Cloudflare API, outside every Terraform root (C16). It then mints an Object Read & Write token scoped to that bucket alone with BACKUP-057's machinery, and proves it by consequence before storing it in SOPS. A second run changes nothing.
-- **Migration is one command per root.** `make tf-state-migrate ROOT=<root>` runs in the checkout that holds the local file. It copies the state, compares the resource count before and after, takes the first snapshot, and leaves the local file in place.
+- **Migration is one command per root.** `make tf-state-migrate ROOT=<root>` runs in the checkout that holds the local file. It pushes the state without `-force`, reads R2 back and requires the same content (each resource by address, and the outputs; not the lineage, which Terraform replaces on a first push, lesson-566), takes the first snapshot, and renames the local file to `terraform.pre-remote.tfstate` (kept, never overwritten).
+- **Restore, history and unlock go through the runner too.** `make tf-state-history`, `make tf-state-restore TO=<lineage>/<serial>` (a revert: the old content at the next serial, no `-force`, lesson-564) and `make tf-state-unlock LOCK=<id>`, so the runbook needs no raw `terraform`.
 - **Proven, not assumed.** `make test-tfstate-lock-live` re-runs the concurrent conditional-write probe against the real bucket.
 
 ## Delivery
@@ -57,20 +58,20 @@ Two PRs, so the refactor is proven on the backend it already has before the back
 
 ## Acceptance criteria
 
-- [ ] AC1: no root under `infra/terraform/` declares `backend "local"`; each declares `backend "s3"` with `key = "<dir>/terraform.tfstate"` and nothing else (test).
-- [ ] AC2: `backend.s3.tfbackend` matches `terraform.state` in `common.yaml` and carries no credential and no `encrypt` (drift test).
-- [ ] AC3: nothing outside the runner invokes `terraform` (test over the Makefile and the toolkit).
-- [ ] AC4: the runner removes rendered tfvars on success and on failure, propagates terraform's exit code, keeps each root's apply mode, and passes secrets only through the child's environment (tests).
-- [ ] AC5: `make tf-state-bootstrap` creates the bucket, the history lock and a scoped token, and a second run reports every step unchanged (unit tests per step, plus the live run recorded in verification.md).
-- [ ] AC6: the minted token writes to `kubelab-tfstate` and is refused on a backup bucket, checked by consequence inside the bootstrap.
-- [ ] AC7: `dns`, `r2` and `aws` are migrated with the same resource count before and after, and a plan from the Mac reads `No changes` for `dns` and `r2` (live). `aws` is dormant and its plan is reported, never applied.
-- [ ] AC8: every state-writing action leaves a snapshot under `history/`, and a repeated snapshot is a no-op (tests + live).
-- [ ] AC9: `aws.access_key_id`, `aws.secret_access_key` and `terraform.state.*` are in `SECRET_CATALOG`, and `make secrets-audit` passes.
-- [ ] AC10: `docs/runbooks/terraform-state.md` (bootstrap, migrate, restore from history, force-unlock, rotate the token), ADR-069 and lesson-562 land in this PR.
+- [x] AC1: no root under `infra/terraform/` declares `backend "local"`; each declares `backend "s3"` with `key = "<dir>/terraform.tfstate"` and nothing else (test).
+- [x] AC2: `backend.s3.tfbackend` matches `terraform.state` in `common.yaml` and carries no credential and no `encrypt` (drift test).
+- [x] AC3: nothing outside the runner invokes `terraform` (test over the Makefile and the toolkit).
+- [x] AC4: the runner removes rendered tfvars on success and on failure, propagates terraform's exit code, keeps each root's apply mode, and passes secrets only through the child's environment (tests).
+- [x] AC5: `make tf-state-bootstrap` creates the bucket, the history lock and a scoped token, and a second run reports every step unchanged (unit tests per step, plus the live run recorded in verification.md).
+- [x] AC6: the minted token writes to `kubelab-tfstate` and is refused on a backup bucket, checked by consequence inside the bootstrap.
+- [x] AC7: `dns`, `r2` and `aws` are migrated with the same resource count before and after, and a plan from the Mac reads `No changes` for `dns` and `r2` (live). `aws` is dormant and its plan is reported, never applied.
+- [x] AC8: every state-writing action leaves a snapshot under `history/`, and a repeated snapshot is a no-op (tests + live).
+- [x] AC9: `aws.access_key_id`, `aws.secret_access_key` and `terraform.state.*` are in `SECRET_CATALOG`, and `make secrets-audit` passes.
+- [x] AC10: `docs/runbooks/terraform-state.md` (bootstrap, migrate, restore from history, force-unlock, rotate the token), ADR-069 and lesson-564 land in this PR.
 
 ## References
 
-- Epic #2225 (TF-014). Closes #558, #559, #1499, #1351, #554.
+- Epic #2225 (TF-014). Closes #558, #559, #1499, #554. Refers to #1351, which stays open.
 - ADR-069 `docs/adr/adr-069-terraform-remote-state-on-r2.md`; ADR-020, ADR-049, ADR-063.
 - Vault `30-architecture/session-protocol.md`, C16-C20 and the alternatives rejected on 2026-10-13.
 - lesson-369, lesson-375, lesson-453; `specs/BACKUP-057` (token minting precedent).

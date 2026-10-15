@@ -232,6 +232,9 @@ def apply_seed(kuma_url, monkeypatch, tmp_path):
         export_dir = tmp_path / monitoring.EXPORT_DIR
         export_dir.mkdir(parents=True, exist_ok=True)
         (export_dir / monitoring.MONITORS_FILE).write_text(json.dumps(seed))
+        # The seed directory is both files: tags are converged like any field
+        # (#1974), so a seed without its tag declarations cannot converge.
+        shutil.copyfile(REPO_ROOT / monitoring.EXPORT_DIR / monitoring.TAGS_FILE, export_dir / monitoring.TAGS_FILE)
         monkeypatch.setattr(monitoring, "_connect", lambda _root: (_client(kuma_url), {"url": kuma_url}))
         monitoring.apply_monitors(tmp_path, prune=prune)
 

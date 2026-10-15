@@ -36,7 +36,7 @@ from typing import Any
 # flagging it as a difference would request an edit that cannot clear the flag.
 # Known members of that set, all observed live: `expiryNotification` (in the
 # seed but in neither `_MONITOR_EXPORT_FIELDS` nor the API payload — 20
-# monitors), `tags` (applied via add_monitor_tag), `active` (paused/resumed at
+# monitors), `tags` (written by add/delete_monitor_tag, compared by `tag_drift`), `active` (paused/resumed at
 # runtime), `id`, and `key` (ours; it travels in `description`).
 #
 # `notificationIDList` is deliberately NOT here despite the apply path writing
@@ -256,6 +256,31 @@ def wants_notifications(seed_entry: dict[str, Any], muted_tags: frozenset[str]) 
     return not (tags & muted_tags)
 
 
+def tag_drift(seed_entry: dict[str, Any], live_monitor: dict[str, Any]) -> tuple[list[str], list[dict[str, Any]]]:
+    """(tag names the seed declares and the live monitor lacks, live tags the seed does not declare).
+
+    Compared by name: the seed declares names only, and the live monitor carries
+    each tag as `{tag_id, name, value, ...}`. The extras come back whole, because
+    removing one needs its `tag_id` and `value`.
+
+    Tags are not in `WRITABLE_FIELDS` because `edit_monitor` does not carry them;
+    they travel through `add_monitor_tag` / `delete_monitor_tag`, so they are
+    compared here, beside the call that writes them, like `notificationIDList`.
+    Muting reads the SEED's tags (`wants_notifications`), so a drifted live tag
+    never changed who gets paged. It did leave the dashboard showing a monitor
+    as always-on while the seed muted it (#1974).
+
+    A seed entry that declares no `tags` field has no opinion, and nothing drifts.
+    """
+    if "tags" not in seed_entry:
+        return [], []
+    wanted = list(dict.fromkeys(seed_entry.get("tags") or []))
+    # The API returns dicts; a bare name (the seed's own shape) is read as one.
+    live = [t if isinstance(t, dict) else {"name": t} for t in live_monitor.get("tags") or []]
+    live_names = {t.get("name") for t in live}
+    return [name for name in wanted if name not in live_names], [t for t in live if t.get("name") not in wanted]
+
+
 def _needs_edit(
     seed_entry: dict[str, Any],
     live_monitor: dict[str, Any],
@@ -287,6 +312,9 @@ def _needs_edit(
         live_has_notifications = bool(_normalize_notif_ids(live_monitor.get("notificationIDList")))
         if live_has_notifications != wants_notifications(seed_entry, muted_tags):
             return True
+
+    if any(tag_drift(seed_entry, live_monitor)):
+        return True
 
     if seed_entry.get("key") and extract_key(live_monitor.get("description")) is None:
         # Converged in content but unmarked: it still needs one edit to stamp the

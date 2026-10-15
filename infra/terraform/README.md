@@ -15,7 +15,7 @@ infra/terraform/
     outputs.tf           # Service URLs and record counts
     services.json        # Data-driven service catalog
     dns.tfvars           # Zone IDs, VPS IP, TTL
-    terraform.tfstate    # Local state (gitignored)
+  backend.s3.tfbackend   # Shared backend settings, generated (make sync-terraform-backend)
   .gitignore
   README.md              # This file
 ```
@@ -104,4 +104,6 @@ resolve over the VPN through Headscale split DNS to RPi4 CoreDNS, never publicly
 
 ## State
 
-Local backend (`terraform.tfstate`). State file is gitignored. To recover state, re-import existing records using `terraform import`.
+Every root keeps its state in R2, `kubelab-tfstate/<root>/terraform.tfstate`, with a
+locked history copy before and after every run that writes it (ADR-069). Operations, restore included:
+`docs/runbooks/terraform-state.md`.
