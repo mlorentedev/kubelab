@@ -105,7 +105,13 @@ ai_timeout = 360
 # NOT a licence to drop the inference concurrency group below. That group is
 # what caps this workflow's demand, and removing it without measuring first
 # reinstates the 429s this fallback exists to absorb. See #1203.
-fallback_models = ["openai/deepseek-v4-flash"]
+#
+# glm5.3-flash joins as the third member (TOOL-082, ADR-070), with the weight the
+# pool gives it in the CI draw. It needs a low reasoning effort to answer at all,
+# which the workflow sets on the NaN attempt. The workflow's preflight declares
+# this same chain and drops any model that does not answer before PR-Agent runs;
+# a test holds the two lists equal.
+fallback_models = ["openai/deepseek-v4-flash", "openai/glm5.3-flash"]
 
 # `model_weak` is deliberately ABSENT. Upstream sets it to a flash-tier model for
 # descriptions and commit summaries. Two reasons not to carry it: `auto_describe`

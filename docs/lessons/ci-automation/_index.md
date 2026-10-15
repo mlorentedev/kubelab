@@ -1,9 +1,10 @@
 # CI workflows, gates and the GitHub surface
 
-45 lessons, newest first. Back to [all categories](../_index.md).
+46 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 575 | [A PR-Agent toml provider applies to every model, so a second provider has to override it](lesson-575-a-pr-agent-toml-provider-applies-to-every-model.md) | 2026-10-15 |
 | 573 | [An integration test that ships production targets tests the runner's network](lesson-573-an-integration-test-that-ships-production-targets-tests-the-runners-network.md) | 2026-10-14 |
 | 571 | [A concurrency group holds one pending run unless it declares a queue](lesson-571-a-concurrency-group-holds-one-pending-run-unless-it-declares-a-queue.md) | 2026-10-14 |
 | 558 | [A state scraped from prose is whatever the prose quoted last](lesson-558-a-state-scraped-from-prose-is-whatever-the-prose-quoted-last.md) | 2026-10-11 |

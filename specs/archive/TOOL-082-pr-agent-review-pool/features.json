@@ -1,0 +1,44 @@
+[
+  {
+    "id": "TOOL-082-pr-agent-review-pool-f1",
+    "behavior": "AC1: One reviewer pool in dotfiles' shape: every member names its vendor and one credential path, no Anthropic member signs first, and PR-Agent members are drawn by weight or routed by risk",
+    "verification": "poetry run pytest tests/test_reviewer_pool.py tests/test_pr_agent_workflow.py::test_every_model_pr_agent_reviews_with_is_admitted_in_the_reviewer_pool -q",
+    "state": "verified",
+    "evidence": "test_reviewer_pool.py and the admitted-models test pass; dotf spec review refuses an Anthropic first signer without --fallback-reason (verification.md AC1)."
+  },
+  {
+    "id": "TOOL-082-pr-agent-review-pool-f2",
+    "behavior": "AC2: The preflight probes the declared NaN chain, names each model that does not answer by status class, and the chain equals .pr_agent.toml's",
+    "verification": "poetry run pytest tests/test_pr_agent_preflight.py -q",
+    "state": "verified",
+    "evidence": "13 tests pass; mutation 2??) -> 2xx) turns 10 red."
+  },
+  {
+    "id": "TOOL-082-pr-agent-review-pool-f3",
+    "behavior": "AC3: The draw picks a member at its weight, routes 1,500+ lines or the deep-review label to Sonnet, enforces the Anthropic allowlist and keeps the key off argv",
+    "verification": "poetry run pytest tests/test_pr_agent_route.py -q",
+    "state": "verified",
+    "evidence": "43 tests pass; mutation -ge -> -gt on the risk line turns 2 red; Opus in the allowlist turns 3 red."
+  },
+  {
+    "id": "TOOL-082-pr-agent-review-pool-f4",
+    "behavior": "AC4: The workflow runs at most one attempt per provider, gates the second on a measured absence, holds each provider's key only where it is used, and the publish guard judges the last attempt",
+    "verification": "poetry run pytest tests/test_pr_agent_publish_guard.py tests/test_pr_agent_workflow.py -q",
+    "state": "verified",
+    "evidence": "26 guard and 74 workflow tests pass; mutations on the NaN timeout, the second-attempt gate, the reviewable gate and the Anthropic provider override each go red."
+  },
+  {
+    "id": "TOOL-082-pr-agent-review-pool-f5",
+    "behavior": "AC5: A normal PR under 1,500 lines gets a published Reviewer Guide from the drawn member, named in the run",
+    "verification": "gh run view 38686296555 --repo mlorentedev/kubelab --log | grep -E 'reviews first on|review published'",
+    "state": "verified",
+    "evidence": "Run 38686296555 on #2302 (720 lines): drawn anthropic/claude-haiku-5-5, review published, 67,511 tokens in, 14.3 s."
+  },
+  {
+    "id": "TOOL-082-pr-agent-review-pool-f6",
+    "behavior": "AC6: A large PR that previously timed out on NaN gets a published review on Sonnet through the risk route",
+    "verification": "gh run view 38685369694 --repo mlorentedev/kubelab --log | grep -E 'reviews first on|review published'",
+    "state": "verified",
+    "evidence": "Run 38685369694 on #2302 (2,926 lines, its #2301 content timed out on NaN twice): risk route anthropic/claude-sonnet-5-5, review published, 116,858 tokens in, 19.1 s."
+  }
+]
