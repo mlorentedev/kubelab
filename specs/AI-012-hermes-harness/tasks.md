@@ -15,7 +15,8 @@ created: "2026-10-10"
 
 - [x] Branch `feat/ai009-hermes-harness` (it carries AI-009's AC3 record too) ✓ 2026-10-10
 - [x] `proposal.md` complete. Operator decisions 2026-10-10: a new spec; research jobs included; the fallback is Anthropic Haiku with a 20 USD cap; triage hourly.
-- [ ] R1 (Anthropic key), R2 (BrightData token, operator directory name) and R3 (alert channels) answered before the PR that needs each. R4 to R6 are measured in their PRs.
+- [x] R1 (Anthropic key) answered: workspace `hermes-kubelab`, 20 USD monthly limit read in the Console (`verification.md`). ✓ 2026-10-15
+- [ ] R2 (BrightData token, operator directory name) and R3 (alert channels) answered before the PR that needs each. R4 to R6 are measured in their PRs.
 
 ## Implementation
 
