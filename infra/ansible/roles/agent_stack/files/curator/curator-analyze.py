@@ -188,20 +188,31 @@ def split_session_file(text: str) -> list[str]:
 
 
 def is_lessons_file(path: Path) -> bool:
-    return path.name in ("lessons.md", "lessons/_index.md") or "docs" in path.parts or path.name.startswith("lesson-")
+    # `Path.name` is a basename, so the vault's `lessons/_index.md` is told apart by its parent.
+    return (
+        path.name == "lessons.md"
+        or path.parent.name == "lessons"
+        or "docs" in path.parts
+        or path.name.startswith("lesson-")
+    )
 
 
-def load_corpus(paths: list[Path], vault_root: Path) -> list[dict]:
+def load_corpus(paths: list[Path], vault_root: Path, extra_roots: tuple[Path, ...] = ()) -> list[dict]:
+    """Units of every file. A unit's source is its path under the vault, or under a fetched
+    repository's cache (`<owner>_<repo>/<category>/<file>`), so the judge sees where it came from."""
     units = []
     for p in paths:
         try:
             raw = p.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        try:
-            source = str(p.relative_to(vault_root))
-        except ValueError:
-            source = p.name
+        source = p.name
+        for root in (vault_root, *extra_roots):
+            try:
+                source = str(p.relative_to(root))
+                break
+            except ValueError:
+                continue
         m = DATE_RE.search(p.name)
         file_date = m.group(1) if m else ""
         raw_units = split_lessons_file(raw) if is_lessons_file(p) else split_session_file(raw)
@@ -353,13 +364,15 @@ def fetch_github_lessons(repos: list[str], cache_dir: Path) -> dict[str, int]:
                         if not member.isfile() or not (in_lessons or parts == ["docs", "lessons.md"]):
                             continue
                         name = parts[-1]
-                        if not name.endswith(".md") or name.startswith("_"):
+                        if not name.endswith(".md") or name.startswith("_") or ".." in parts:
                             continue
                         handle = archive.extractfile(member)
                         if handle is None:
                             continue
-                        staging.mkdir(parents=True, exist_ok=True)
-                        (staging / name).write_bytes(handle.read())
+                        # Under its category folder: two categories may hold the same file name.
+                        relative = Path(*parts[2:]) if in_lessons else Path(name)
+                        (staging / relative).parent.mkdir(parents=True, exist_ok=True)
+                        (staging / relative).write_bytes(handle.read())
                         taken += 1
         except (OSError, tarfile.TarError, EOFError) as error:
             print(f"warning: {owner_repo}: {type(error).__name__}: {error}", file=sys.stderr)
@@ -412,9 +425,9 @@ def main() -> int:
             # An empty corpus reads as "no recurrence", the one answer a broken fetch must not give.
             print(f"error: no lessons fetched from {', '.join(empty)}", file=sys.stderr)
             return 3
-        paths += sorted(cache.glob("*/*.md"))
+        paths += sorted(cache.glob("*/**/*.md"))
 
-    units = load_corpus(paths, vault)
+    units = load_corpus(paths, vault, (cache,) if args.repos else ())
     distinctive_signatures(units)
     clusters = cluster(units)
 

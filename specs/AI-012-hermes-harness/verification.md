@@ -111,7 +111,7 @@ What each process sees, same run:
 
 ## The curator analyzer, live on ace2, 2026-10-16 (AC6, part 6a)
 
-Provision from the merged tree: `CHECK=1` changed=2 (service and timer), first run changed=4, second run changed=0. `systemctl start hermes-kubelab-curator-analyze.service` ended `Result=success`, `ExecMainStatus=0`, and wrote `curator/candidates.json` (62 KB) in the agent's zone: 1962 corpus files, 6536 units, 8 candidates. The timer's next run is Monday 2026-10-19 16:00 CEST. The judge job and the emitter to `proposals/` are part 6b.
+Provision from the merged tree: `CHECK=1` changed=2 (service and timer), first run changed=4, second run changed=0. `systemctl start hermes-kubelab-curator-analyze.service` ended `Result=success`, `ExecMainStatus=0`, and wrote `curator/candidates.json` (62 KB) in the agent's zone: 1962 corpus files, 6536 units, 8 candidates. After the review fixes (fetched lessons kept under their category, the vault's lessons index read as lessons) the same provision gave 1964 files, 6545 units, 8 candidates, changed=1 (the script) then 0, and the new read-back asserted that this run rewrote the file. The timer's next run is Monday 2026-10-19 16:00 CEST. The judge job and the emitter to `proposals/` are part 6b.
 
 ## Test status
 

@@ -155,7 +155,38 @@ def test_lessons_are_taken_from_category_folders_and_the_single_file_layout(
     monkeypatch.setattr(analyzer.urllib.request, "urlopen", lambda *_a, **_k: io.BytesIO(archive))
     counts = analyzer.fetch_github_lessons(["mlorentedev/demo"], tmp_path)
     assert counts == {"mlorentedev/demo": 2}
-    assert sorted(p.name for p in (tmp_path / "mlorentedev_demo").iterdir()) == ["lesson-001-a.md", "lessons.md"]
+    taken = sorted(
+        str(p.relative_to(tmp_path / "mlorentedev_demo")) for p in (tmp_path / "mlorentedev_demo").rglob("*.md")
+    )
+    assert taken == ["containers/lesson-001-a.md", "lessons.md"], "kept under their category folder"
+
+
+def test_two_categories_may_hold_the_same_file_name_and_neither_is_lost(analyzer, tmp_path: Path, monkeypatch) -> None:
+    archive = _tarball({"demo-abc/docs/lessons/a/note.md": b"# a", "demo-abc/docs/lessons/b/note.md": b"# b"})
+    monkeypatch.setattr(analyzer.urllib.request, "urlopen", lambda *_a, **_k: io.BytesIO(archive))
+    assert analyzer.fetch_github_lessons(["mlorentedev/demo"], tmp_path) == {"mlorentedev/demo": 2}
+
+
+def test_a_path_that_climbs_out_of_the_lessons_is_not_extracted(analyzer, tmp_path: Path, monkeypatch) -> None:
+    archive = _tarball({"demo-abc/docs/lessons/../../../escape.md": b"# x", "demo-abc/docs/lessons/ok.md": b"# ok"})
+    monkeypatch.setattr(analyzer.urllib.request, "urlopen", lambda *_a, **_k: io.BytesIO(archive))
+    assert analyzer.fetch_github_lessons(["mlorentedev/demo"], tmp_path) == {"mlorentedev/demo": 1}
+    assert not list(tmp_path.parent.glob("escape.md")) and not (tmp_path / "escape.md").exists()
+
+
+def test_a_fetched_lesson_names_its_repository_and_category_as_its_source(analyzer, tmp_path: Path) -> None:
+    cache = tmp_path / "cache"
+    (cache / "mlorentedev_demo" / "containers").mkdir(parents=True)
+    lesson = cache / "mlorentedev_demo" / "containers" / "lesson-001-sync.md"
+    lesson.write_text(SAME_CAUSE)
+    units = analyzer.load_corpus([lesson], tmp_path / "vault", (cache,))
+    assert {u["source"] for u in units} == {"mlorentedev_demo/containers/lesson-001-sync.md"}
+
+
+def test_the_vaults_lessons_index_is_read_as_a_lessons_file(analyzer) -> None:
+    """The check once compared a basename with a path, so this branch could never match."""
+    assert analyzer.is_lessons_file(Path("/v/10_projects/kubelab/lessons/_index.md"))
+    assert not analyzer.is_lessons_file(Path("/v/10_projects/kubelab/sessions/2026-01-01-a.md"))
 
 
 def test_a_stream_that_drops_mid_archive_leaves_no_partial_corpus(analyzer, tmp_path: Path, monkeypatch) -> None:
@@ -230,7 +261,40 @@ def test_the_provision_proves_the_analyzer_read_a_corpus() -> None:
     assert names.index("Verify the analyzer read a corpus") < names.index("Enable the analyzer timer")
 
 
-def test_every_repository_is_a_public_owner_slash_name() -> None:
+def test_every_repository_is_an_owner_slash_name() -> None:
+    """The shape only. Whether each is public is proven by the fetch itself: an unreachable
+    repository yields no lessons and fails the run (exit 3), at every provision and every week."""
     for repo in HERMES["curator"]["repos"]:
         owner, _, name = repo.partition("/")
         assert owner and name and "/" not in name
+
+
+def _assert_that() -> list[str]:
+    tasks = yaml.safe_load((ROLE / "tasks/curator.yml").read_text())
+    task = next(t for b in tasks for t in b.get("block", []) if t.get("name") == "Verify this run wrote the candidates")
+    return task["ansible.builtin.assert"]["that"]
+
+
+def _holds(before: dict, after: dict) -> bool:
+    from jinja2 import Environment
+
+    env = Environment()  # noqa: S701 (evaluates the role's own conditions, not a page)
+    context = {"_agent_stack_curator_before": {"stat": before}, "_agent_stack_curator_after": {"stat": after}}
+    return all(bool(env.compile_expression(cond)(**context)) for cond in _assert_that())
+
+
+def test_the_read_back_testifies_for_this_run_and_not_for_last_weeks_file() -> None:
+    names = [
+        t.get("name") for b in yaml.safe_load((ROLE / "tasks/curator.yml").read_text()) for t in b.get("block", [])
+    ]
+    assert (
+        names.index("Note when the candidates were last written")
+        < names.index("Run the analyzer once")
+        < names.index("Look at the candidates again")
+        < names.index("Verify this run wrote the candidates")
+        < names.index("Read the candidates back")
+    )
+    assert _holds({"exists": False}, {"exists": True, "mtime": 5.0}), "the first run"
+    assert _holds({"exists": True, "mtime": 5.0}, {"exists": True, "mtime": 9.0}), "rewritten"
+    assert not _holds({"exists": True, "mtime": 5.0}, {"exists": True, "mtime": 5.0}), "left as it was"
+    assert not _holds({"exists": False}, {"exists": False}), "never written"
