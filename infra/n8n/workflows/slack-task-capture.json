@@ -23,7 +23,10 @@
       "name": "Webhook Slack Ingress",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [-400, 0],
+      "position": [
+        -400,
+        0
+      ],
       "webhookId": "w3000000-0000-4000-8000-000000000001"
     },
     {
@@ -34,7 +37,10 @@
       "name": "Parse Slack Command",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-180, 0]
+      "position": [
+        -180,
+        0
+      ]
     },
     {
       "parameters": {
@@ -48,7 +54,10 @@
       "name": "Instant Slack Ack (<500ms)",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [40, -100]
+      "position": [
+        40,
+        -100
+      ]
     },
     {
       "parameters": {
@@ -78,7 +87,10 @@
       "name": "Is Slack Valid?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [40, 50]
+      "position": [
+        40,
+        50
+      ]
     },
     {
       "parameters": {
@@ -99,7 +111,10 @@
       "name": "Lookup Vikunja Projects",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [240, 50],
+      "position": [
+        240,
+        50
+      ],
       "onError": "continueRegularOutput",
       "alwaysOutputData": true
     },
@@ -111,7 +126,10 @@
       "name": "Extract Project ID",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [440, 50]
+      "position": [
+        440,
+        50
+      ]
     },
     {
       "parameters": {
@@ -135,7 +153,11 @@
       "name": "Create Task in Vikunja",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [840, 50]
+      "position": [
+        840,
+        50
+      ],
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -150,7 +172,10 @@
       "name": "Update Slack via Response URL",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1040, 50],
+      "position": [
+        1140,
+        50
+      ],
       "onError": "continueRegularOutput"
     },
     {
@@ -166,7 +191,10 @@
       "name": "Notify #dev-activity",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1240, 50]
+      "position": [
+        1340,
+        50
+      ]
     },
     {
       "parameters": {
@@ -196,7 +224,10 @@
       "name": "Project Found?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [640, 50]
+      "position": [
+        640,
+        50
+      ]
     },
     {
       "parameters": {
@@ -211,7 +242,61 @@
       "name": "Tell Slack the Project Is Unknown",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [840, 200]
+      "position": [
+        840,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "e59c157e-372a-5001-b251-3f372f164c91",
+              "leftValue": "={{ !$json.error && $json.id !== undefined }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c3000000-0000-4000-8000-00000000000c",
+      "name": "Task Created?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        940,
+        50
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Extract Project ID').first().json.responseUrl }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: '❌ Vikunja did not confirm the task *' + $('Extract Project ID').first().json.title + '*, so it may not have been created. Check the board before creating it again.' }) }}",
+        "options": {}
+      },
+      "id": "c3000000-0000-4000-8000-00000000000d",
+      "name": "Tell Slack the Create Failed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1140,
+        200
+      ]
     }
   ],
   "connections": {
@@ -297,7 +382,7 @@
       "main": [
         [
           {
-            "node": "Update Slack via Response URL",
+            "node": "Task Created?",
             "type": "main",
             "index": 0
           }
@@ -309,6 +394,24 @@
         [
           {
             "node": "Notify #dev-activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Task Created?": {
+      "main": [
+        [
+          {
+            "node": "Update Slack via Response URL",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Tell Slack the Create Failed",
             "type": "main",
             "index": 0
           }
