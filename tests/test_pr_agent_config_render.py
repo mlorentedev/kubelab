@@ -49,6 +49,7 @@ REQUIRED_VALUES = {
     "PR_REVIEWER__NUM_MAX_FINDINGS": "5",
     "CONFIG__FALLBACK_MODELS": '["openai/deepseek-v4-flash"]',
     "CONFIG__CUSTOM_MODEL_MAX_TOKENS": "200000",
+    "CONFIG__MAX_MODEL_TOKENS": "200000",
     "CONFIG__PUBLISH_OUTPUT_PROGRESS": "false",
     "GITEA__PR_COMMANDS": '["/review"]',
     "GITEA__PUSH_COMMANDS": '["/review"]',
@@ -102,6 +103,19 @@ class TestReviewOnlyContract:
 
         mismatched = {k: data[k] for k, expected in REQUIRED_VALUES.items() if data.get(k) != expected}
         assert not mismatched, f"rendered values disagree with the contract: {mismatched}"
+
+    def test_the_prompt_cap_is_stated_and_matches_the_model_budget(self) -> None:
+        """PR-Agent caps every prompt at `config.max_model_tokens`, whose upstream
+        default is 32000 (configuration.toml at v0.45.0), whatever
+        `custom_model_max_tokens` says (`get_max_tokens`). Left unset, the forge
+        reviews a third-sized diff and reports the rest as skipped "because of the
+        token budget". The GitHub workflow states both caps; so must the forge.
+        """
+        data = _pr_agent_config().get("data") or {}
+        assert "CONFIG__MAX_MODEL_TOKENS" in data, "the prompt cap falls back to PR-Agent's 32000 default"
+        assert data["CONFIG__MAX_MODEL_TOKENS"] == data.get("CONFIG__CUSTOM_MODEL_MAX_TOKENS"), (
+            "the prompt cap and the model budget disagree, so the smaller one silently wins"
+        )
 
     def test_no_repo_setting_key_is_present(self) -> None:
         """Absence is the requirement: a repository .pr_agent.toml read at the PR
