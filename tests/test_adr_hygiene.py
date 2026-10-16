@@ -13,7 +13,7 @@ from pathlib import Path
 
 ADR_DIR = Path(__file__).resolve().parent.parent / "docs" / "adr"
 VOCABULARY = {"proposed", "accepted", "superseded", "deprecated"}
-FRONT_STATUS = re.compile(r"^status:\s*(\S+)\s*$", re.MULTILINE)
+FRONT_STATUS = re.compile(r"^status:\s*([^\s#]+)", re.MULTILINE)
 
 
 def _adrs() -> list[Path]:
@@ -31,12 +31,14 @@ def test_no_adr_number_is_used_twice() -> None:
 
 def test_front_matter_status_is_in_the_vocabulary() -> None:
     bad: list[str] = []
+    unread: list[str] = []
     for path in _adrs():
         text = path.read_text(encoding="utf-8")
-        if not text.startswith("---"):
-            continue
-        front = text.split("---", 2)[1]
-        match = FRONT_STATUS.search(front)
-        if match and match.group(1).strip("\"'").lower() not in VOCABULARY:
+        match = FRONT_STATUS.search(text.split("---", 2)[1]) if text.startswith("---") else None
+        if match is None:
+            unread.append(path.name)
+        elif match.group(1).strip("\"'").lower() not in VOCABULARY:
             bad.append(f"{path.name}: {match.group(1)}")
     assert bad == [], f"status must be one of {sorted(VOCABULARY)}: {bad}"
+    # A guard that skips what it cannot parse goes quiet instead of red.
+    assert unread == [], f"no readable front-matter `status:` in: {unread}"
