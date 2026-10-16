@@ -1379,6 +1379,25 @@ apps:
         # through `GET /projects` — an id would be environment-specific and
         # opaque, and would silently point at a different board per env.
         default_project: Bitacora
+        # The boards `make sync-vikunja` makes exist (APP-CONFIG-013, #1701), matched
+        # by title like default_project, which must be one of them. A project is
+        # visible only to its owner and to whoever it is shared with, so the creating
+        # account (the one holding n8n's token) would otherwise decide who sees the
+        # board. Today every human sees every project; narrowing it later is a change
+        # to the team below, not to N projects x M users.
+        projects:
+          - Bitacora
+        team:
+          name: kubelab
+          # read | write | admin: what the team may do in every declared project.
+          right: write
+          # Keys of apps.auth.identities, resolved to usernames by the reconciler.
+          # People only: `machine` and `reviewer` are accounts, not members, and a
+          # test refuses them. Each must have signed in once, or Vikunja has no
+          # account to add and the run fails naming them.
+          members:
+            - superadmin
+            - operator
         resources:
           cpu_limit: "0.5"
           memory_limit: "256M"

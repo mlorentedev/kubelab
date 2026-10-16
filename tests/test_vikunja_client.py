@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from toolkit.features.vikunja_client import VikunjaClient, VikunjaError
+from toolkit.features.vikunja_client import PAGE_SIZE, VikunjaClient, VikunjaError
 
 
 @pytest.fixture
@@ -23,40 +23,51 @@ def test_headers_include_bearer_token() -> None:
     assert headers["Content-Type"] == "application/json"
 
 
-def test_get_namespaces_returns_list(client: VikunjaClient) -> None:
-    mock_resp = MagicMock()
-    mock_resp.ok = True
-    mock_resp.status_code = 200
-    mock_resp.content = b'[{"id": 1, "title": "kubelab"}]'
-    mock_resp.json.return_value = [{"id": 1, "title": "kubelab"}, {"id": 2, "title": "personal"}]
-    client.session.request.return_value = mock_resp
+def _ok(payload: object, status: int = 200) -> MagicMock:
+    resp = MagicMock()
+    resp.ok = True
+    resp.status_code = status
+    resp.content = b"x"
+    resp.json.return_value = payload
+    return resp
 
-    namespaces = client.get_namespaces()
-    assert len(namespaces) == 2
-    assert namespaces[0]["title"] == "kubelab"
+
+def test_list_calls_read_every_page(client: VikunjaClient) -> None:
+    """A single page silently hides every project past the first 50."""
+    full_page = [{"id": i, "title": f"p{i}"} for i in range(PAGE_SIZE)]
+    client.session.request.side_effect = [_ok(full_page), _ok([{"id": 99, "title": "last"}])]
+
+    projects = client.get_projects(include_archived=True)
+
+    assert len(projects) == PAGE_SIZE + 1
+    pages = [c.kwargs["params"]["page"] for c in client.session.request.call_args_list]
+    assert pages == [1, 2]
+    assert client.session.request.call_args_list[0].kwargs["params"]["is_archived"] == "true"
+
+
+def test_share_project_with_team_sends_team_id_and_permission(client: VikunjaClient) -> None:
+    client.session.request.return_value = _ok({"team_id": 5, "permission": 1}, 201)
+
+    client.share_project_with_team(project_id=2, team_id=5, permission=1)
+
     client.session.request.assert_called_once_with(
-        "GET",
-        "https://tasks.kubelab.live/api/v1/namespaces",
+        "PUT",
+        "https://tasks.kubelab.live/api/v1/projects/2/teams",
+        json={"team_id": 5, "permission": 1},
         headers=client._headers(),
         timeout=10,
     )
 
 
-def test_create_namespace_success(client: VikunjaClient) -> None:
-    mock_resp = MagicMock()
-    mock_resp.ok = True
-    mock_resp.status_code = 201
-    mock_resp.content = b'{"id": 3, "title": "teledyne"}'
-    mock_resp.json.return_value = {"id": 3, "title": "teledyne"}
-    client.session.request.return_value = mock_resp
+def test_add_team_member_sends_the_username(client: VikunjaClient) -> None:
+    client.session.request.return_value = _ok({"username": "manu"}, 201)
 
-    res = client.create_namespace(title="teledyne")
-    assert res["id"] == 3
-    assert res["title"] == "teledyne"
+    client.add_team_member(team_id=5, username="manu")
+
     client.session.request.assert_called_once_with(
         "PUT",
-        "https://tasks.kubelab.live/api/v1/namespaces",
-        json={"title": "teledyne", "description": ""},
+        "https://tasks.kubelab.live/api/v1/teams/5/members",
+        json={"username": "manu"},
         headers=client._headers(),
         timeout=10,
     )
@@ -134,4 +145,4 @@ def test_api_error_raises_vikunja_error(client: VikunjaClient) -> None:
     client.session.request.return_value = mock_resp
 
     with pytest.raises(VikunjaError, match="Vikunja API error 401"):
-        client.get_namespaces()
+        client.get_teams()

@@ -1,17 +1,25 @@
-"""Vikunja platform reconciler: idempotently provisions namespaces, labels, and webhooks."""
+"""Vikunja platform reconciler: idempotently provisions projects, one team, shares and labels.
+
+A Vikunja project is visible only to its owner and to whoever it is shared with.
+Whoever creates it (here the account holding n8n's token) must not decide who
+sees the board, so the projects a deployment declares are shared with one team
+whose members are the human identities (#1701, APP-CONFIG-013).
+
+Webhooks are deliberately not registered here: the one consumer,
+`agent-dispatcher`, requires `headerAuth`, and Vikunja can only sign with an
+HMAC, so a registered hook would answer 403 on every event.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from toolkit.core.logging import logger
-from toolkit.features.vikunja_client import VikunjaClient
+from toolkit.features.vikunja_client import VikunjaClient, VikunjaError
 
-DEFAULT_NAMESPACES = (
-    "kubelab",
-    "personal",
-    "teledyne",
-)
+#: Declared right -> Vikunja's permission integer (models.Permission in its swagger).
+RIGHTS = {"read": 0, "write": 1, "admin": 2}
 
 DEFAULT_LABELS = {
     "type:spec": "#2ecc71",
@@ -25,58 +33,151 @@ DEFAULT_LABELS = {
 }
 
 
+class ReconcileError(Exception):
+    """The declaration cannot be applied; nothing further was written."""
+
+
+@dataclass(frozen=True)
+class VikunjaDeclaration:
+    """What `apps.services.core.vikunja` declares, with members already resolved to usernames."""
+
+    projects: tuple[str, ...]
+    team_name: str
+    team_right: str
+    members: tuple[str, ...]
+
+
+def declaration_from_config(config: dict[str, Any]) -> VikunjaDeclaration:
+    """Read the declaration from merged config; member keys resolve through `apps.auth.identities`."""
+    apps = config["apps"]
+    vikunja = apps["services"]["core"]["vikunja"]
+    identities = apps["auth"]["identities"]
+    team = vikunja["team"]
+    try:
+        members = tuple(identities[key] for key in team["members"])
+    except KeyError as exc:
+        raise ReconcileError(f"team member {exc} is not a key of apps.auth.identities") from exc
+    return VikunjaDeclaration(
+        projects=tuple(vikunja["projects"]),
+        team_name=team["name"],
+        team_right=team["right"],
+        members=members,
+    )
+
+
 @dataclass(frozen=True)
 class ReconcileResult:
     """Result of a Vikunja platform reconciliation run."""
 
-    namespaces_created: int
+    projects_created: int
+    team_created: int
+    members_added: int
+    shares_changed: int
     labels_created: int
-    webhooks_created: int
 
     @property
     def changed(self) -> bool:
-        return (self.namespaces_created + self.labels_created + self.webhooks_created) > 0
+        return (
+            self.projects_created + self.team_created + self.members_added + self.shares_changed + self.labels_created
+        ) > 0
 
 
 class VikunjaReconciler:
-    """Idempotently synchronizes desired namespaces, labels, and webhooks to Vikunja."""
+    """Idempotently synchronizes the declared projects, team, shares and labels to Vikunja."""
 
     def __init__(self, client: VikunjaClient) -> None:
         self.client = client
 
-    def reconcile(self, n8n_webhook_url: str = "http://n8n:5678/webhook/agent-dispatcher") -> ReconcileResult:
+    def reconcile(self, declaration: VikunjaDeclaration) -> ReconcileResult:
         """Run full platform reconciliation. Safe to re-run anytime (changed=0 on re-run)."""
-        namespaces_created = self._reconcile_namespaces()
+        if declaration.team_right not in RIGHTS:
+            raise ReconcileError(f"team right {declaration.team_right!r} is not one of {sorted(RIGHTS)}")
+
+        project_ids, projects_created = self._reconcile_projects(declaration.projects)
+        team_id, team_created, members_added = self._reconcile_team(declaration)
+        shares_changed = self._reconcile_shares(project_ids, team_id, RIGHTS[declaration.team_right])
         labels_created = self._reconcile_labels()
-        webhooks_created = self._reconcile_webhooks(n8n_webhook_url=n8n_webhook_url)
 
         result = ReconcileResult(
-            namespaces_created=namespaces_created,
+            projects_created=projects_created,
+            team_created=team_created,
+            members_added=members_added,
+            shares_changed=shares_changed,
             labels_created=labels_created,
-            webhooks_created=webhooks_created,
         )
 
         if result.changed:
             logger.info(
-                f"Vikunja reconciled: created {result.namespaces_created} namespaces, "
-                f"{result.labels_created} labels, {result.webhooks_created} webhooks."
+                f"Vikunja reconciled: {result.projects_created} projects, {result.team_created} team, "
+                f"{result.members_added} members, {result.shares_changed} shares, {result.labels_created} labels."
             )
         else:
             logger.info("Vikunja already in desired state (changed=0).")
 
         return result
 
-    def _reconcile_namespaces(self) -> int:
-        existing = {ns.get("title", ""): ns for ns in self.client.get_namespaces()}
+    def _reconcile_projects(self, desired: tuple[str, ...]) -> tuple[list[int], int]:
+        # Archived projects count: a second board next to an archived one splits the work.
+        existing = {p.get("title", "").lower(): p for p in self.client.get_projects(include_archived=True)}
+        ids: list[int] = []
         created = 0
 
-        for desired in DEFAULT_NAMESPACES:
-            if desired not in existing:
-                logger.info(f"Creating missing Vikunja namespace: {desired}")
-                self.client.create_namespace(title=desired)
+        for title in desired:
+            project = existing.get(title.lower())
+            if project is None:
+                logger.info(f"Creating missing Vikunja project: {title}")
+                project = self.client.create_project(title=title)
                 created += 1
+            ids.append(project["id"])
 
-        return created
+        return ids, created
+
+    def _reconcile_team(self, declaration: VikunjaDeclaration) -> tuple[int, int, int]:
+        teams = {t.get("name", "").lower(): t for t in self.client.get_teams()}
+        team = teams.get(declaration.team_name.lower())
+        created = 0
+        if team is None:
+            logger.info(f"Creating missing Vikunja team: {declaration.team_name}")
+            team = self.client.create_team(name=declaration.team_name)
+            created = 1
+        team_id = team["id"]
+
+        # Read the members after creating: the creator joins its own team, and adding it again errors.
+        present = {m.get("username", "").lower() for m in self.client.get_team(team_id).get("members") or []}
+        added = 0
+        for username in declaration.members:
+            if username.lower() in present:
+                continue
+            logger.info(f"Adding {username} to Vikunja team {declaration.team_name}")
+            try:
+                self.client.add_team_member(team_id=team_id, username=username)
+            except VikunjaError as exc:
+                raise ReconcileError(
+                    f"cannot add {username!r} to team {declaration.team_name!r}: {exc}. "
+                    "Vikunja creates an account on first SSO login; has that user signed in once?"
+                ) from exc
+            added += 1
+
+        return team_id, created, added
+
+    def _reconcile_shares(self, project_ids: list[int], team_id: int, permission: int) -> int:
+        changed = 0
+        for project_id in project_ids:
+            shared = {t["id"]: t for t in self.client.get_project_teams(project_id)}
+            current = shared.get(team_id)
+            if current is None:
+                logger.info(f"Sharing Vikunja project {project_id} with team {team_id} (permission {permission})")
+                self.client.share_project_with_team(project_id=project_id, team_id=team_id, permission=permission)
+                changed += 1
+            elif current.get("permission") != permission:
+                logger.info(
+                    f"Correcting project {project_id} share: permission {current.get('permission')} -> {permission}"
+                )
+                self.client.update_project_team_permission(
+                    project_id=project_id, team_id=team_id, permission=permission
+                )
+                changed += 1
+        return changed
 
     def _reconcile_labels(self) -> int:
         existing = {lbl.get("title", ""): lbl for lbl in self.client.get_labels()}
@@ -86,28 +187,6 @@ class VikunjaReconciler:
             if label_title not in existing:
                 logger.info(f"Creating missing Vikunja label: {label_title} ({color})")
                 self.client.create_label(title=label_title, hex_color=color)
-                created += 1
-
-        return created
-
-    def _reconcile_webhooks(self, n8n_webhook_url: str) -> int:
-        projects = self.client.get_projects()
-        created = 0
-
-        for proj in projects:
-            proj_id = proj.get("id")
-            if not proj_id:
-                continue
-
-            existing_webhooks = self.client.get_webhooks(proj_id)
-            has_webhook = any(wh.get("target_url") == n8n_webhook_url for wh in existing_webhooks)
-            if not has_webhook:
-                logger.info(f"Registering n8n webhook on project {proj_id} ({proj.get('title')})")
-                self.client.create_webhook(
-                    project_id=proj_id,
-                    target_url=n8n_webhook_url,
-                    events=["task.updated", "task.created"],
-                )
                 created += 1
 
         return created

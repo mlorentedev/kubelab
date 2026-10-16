@@ -428,15 +428,15 @@ def sync_vikunja_cmd(
     base_url: Annotated[str, typer.Option("--url", help="Vikunja base API URL")] = "",
     token: Annotated[str, typer.Option("--token", help="Vikunja API token")] = "",
 ) -> None:
-    """Sync Vikunja platform namespaces, labels, and webhooks idempotently."""
+    """Sync the declared Vikunja projects, team, shares and labels idempotently."""
     import os
 
     from toolkit.features.configuration import ConfigurationManager
     from toolkit.features.vikunja_client import VikunjaClient
-    from toolkit.features.vikunja_reconciler import VikunjaReconciler
+    from toolkit.features.vikunja_reconciler import VikunjaReconciler, declaration_from_config
 
+    config = ConfigurationManager(env=env).get_merged_config()
     if not base_url:
-        config = ConfigurationManager(env=env).get_merged_config()
         domain = (
             config.get("apps", {})
             .get("services", {})
@@ -451,10 +451,11 @@ def sync_vikunja_cmd(
 
     client = VikunjaClient(base_url=base_url, api_token=token)
     reconciler = VikunjaReconciler(client=client)
-    res = reconciler.reconcile()
+    res = reconciler.reconcile(declaration_from_config(config))
     if res.changed:
         logger.success(
-            f"Vikunja sync completed: {res.namespaces_created} namespaces, {res.labels_created} labels created."
+            f"Vikunja sync completed: {res.projects_created} projects, {res.team_created} team, "
+            f"{res.members_added} members, {res.shares_changed} shares, {res.labels_created} labels."
         )
     else:
         logger.success("Vikunja is up to date (changed=0).")
