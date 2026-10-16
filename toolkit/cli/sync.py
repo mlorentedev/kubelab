@@ -422,32 +422,37 @@ def terraform_backend_cmd(
         raise typer.Exit(1)
 
 
+VIKUNJA_TOKEN_KEY = "apps.services.core.vikunja.reconciler_api_token"
+
+
 @app.command("vikunja")
 def sync_vikunja_cmd(
     env: Annotated[str, typer.Option("--env", "-e", help="Target environment")] = "staging",
     base_url: Annotated[str, typer.Option("--url", help="Vikunja base API URL")] = "",
-    token: Annotated[str, typer.Option("--token", help="Vikunja API token")] = "",
 ) -> None:
-    """Sync the declared Vikunja projects, team, shares and labels idempotently."""
-    import os
+    """Sync the declared Vikunja projects, team, shares and labels idempotently.
 
+    The credential is read from SOPS (`apps.services.core.vikunja.reconciler_api_token`)
+    and from nowhere else: no flag, so it never reaches argv or shell history, and no
+    environment variable, so what ran is what the vault says.
+    """
     from toolkit.features.configuration import ConfigurationManager
     from toolkit.features.vikunja_client import VikunjaClient
     from toolkit.features.vikunja_reconciler import VikunjaReconciler, declaration_from_config
 
     config = ConfigurationManager(env=env).get_merged_config()
-    if not base_url:
-        domain = (
-            config.get("apps", {})
-            .get("services", {})
-            .get("core", {})
-            .get("vikunja", {})
-            .get("domain", f"tasks.{env}.kubelab.live")
-        )
-        base_url = f"https://{domain}/api/v1"
+    vikunja = config.get("apps", {}).get("services", {}).get("core", {}).get("vikunja", {})
 
+    token = vikunja.get("reconciler_api_token") or ""
     if not token:
-        token = os.environ.get("VIKUNJA_API_TOKEN", "")
+        logger.error(
+            f"No Vikunja reconciler token for {env}: {VIKUNJA_TOKEN_KEY} is unset. "
+            f"Mint it in an `operator` session and run: toolkit secrets set {VIKUNJA_TOKEN_KEY} --env {env} --stdin"
+        )
+        raise typer.Exit(1)
+
+    if not base_url:
+        base_url = f"https://{vikunja.get('domain', f'tasks.{env}.kubelab.live')}/api/v1"
 
     client = VikunjaClient(base_url=base_url, api_token=token)
     reconciler = VikunjaReconciler(client=client)
