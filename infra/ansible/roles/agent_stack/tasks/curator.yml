@@ -1,0 +1,87 @@
+---
+# =============================================================================
+# The curator's analyzer (spec AI-012 AC6, kubelab half): a weekly host unit of the
+# agent's user. The script is root's, outside the agent's home, like the vault sync,
+# so nothing of the agent's user can replace what the unit runs.
+# =============================================================================
+
+- name: Provision the curator's analyzer
+  when: agent_stack_vault_configured | bool
+  block:
+    - name: Install the analyzer
+      ansible.builtin.copy:
+        src: curator/curator-analyze.py
+        dest: "{{ agent_stack_vault_libexec }}/curator-analyze.py"
+        owner: root
+        group: root
+        mode: "0755"
+
+    # The unit's only writable path, so it must exist before the unit starts. The zone
+    # is the agent's: the sync commits what lands here with the rest.
+    - name: Create the directory the candidates are written to
+      ansible.builtin.file:
+        path: "{{ agent_stack_curator_out }}"
+        state: directory
+        owner: "{{ agent_stack_agent_user }}"
+        group: "{{ agent_stack_agent_user }}"
+        mode: "0755"
+      when: not ansible_check_mode
+
+    - name: Install the analyzer units
+      ansible.builtin.template:
+        src: "curator-analyze.{{ item }}.j2"
+        dest: "/etc/systemd/system/{{ agent_stack_curator_unit }}.{{ item }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop: [service, timer]
+      register: _agent_stack_curator_units
+
+    # The run is the measurement: it proves the clone is readable, the lessons fetch and
+    # the zone is writable. Not a change: the units are.
+    - name: Run the analyzer once
+      ansible.builtin.systemd:
+        name: "{{ agent_stack_curator_unit }}.service"
+        state: started
+        daemon_reload: true
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: Read the candidates back
+      ansible.builtin.slurp:
+        src: "{{ agent_stack_curator_out }}/candidates.json"
+      register: _agent_stack_curator_candidates
+      when: not ansible_check_mode
+
+    # An empty corpus reads as "nothing recurs", so the file must show the lessons were read.
+    - name: Verify the analyzer read a corpus
+      ansible.builtin.assert:
+        that:
+          - (_agent_stack_curator_candidates.content | b64decode | from_json).corpus_files > 0
+          - (_agent_stack_curator_candidates.content | b64decode | from_json).units > 0
+        fail_msg: "{{ agent_stack_curator_out }}/candidates.json reports an empty corpus"
+        quiet: true
+      when: not ansible_check_mode
+
+    - name: Enable the analyzer timer
+      ansible.builtin.systemd:
+        name: "{{ agent_stack_curator_unit }}.timer"
+        enabled: true
+        state: started
+      when: not ansible_check_mode
+
+# The vault is what the analyzer reads: without it the unit would fail every week and page.
+- name: Stop the curator's analyzer when the vault is not configured
+  when: not (agent_stack_vault_configured | bool)
+  block:
+    - name: Look for a previously installed analyzer timer
+      ansible.builtin.stat:
+        path: "/etc/systemd/system/{{ agent_stack_curator_unit }}.timer"
+      register: _agent_stack_curator_prior
+
+    - name: Disable the analyzer timer
+      ansible.builtin.systemd:
+        name: "{{ agent_stack_curator_unit }}.timer"
+        enabled: false
+        state: stopped
+      when: _agent_stack_curator_prior.stat.exists and not ansible_check_mode

@@ -379,6 +379,11 @@
   ansible.builtin.import_tasks: vault_mirror.yml
   tags: [agent_stack]
 
+# After the sync: it reads the clone the sync keeps and writes into the zone the sync commits.
+- name: Provision the curator's analyzer
+  ansible.builtin.import_tasks: curator.yml
+  tags: [agent_stack]
+
 # After the mirror: the probes read the vault through the bridge.
 - name: Verify Open WebUI's MCP bridge
   ansible.builtin.import_tasks: mcp_bridge.yml

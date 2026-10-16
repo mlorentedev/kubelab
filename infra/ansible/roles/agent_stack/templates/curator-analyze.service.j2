@@ -1,0 +1,35 @@
+# {{ ansible_managed }}
+# The curation loop's deterministic half (spec AI-012 AC6). Plumbing, not an agent job:
+# it reads the vault clone and the repositories' public lessons and runs no model. The
+# judge, a gateway job, reads the file this writes.
+[Unit]
+Description=hermes-kubelab curator: recurrence candidates
+Wants=network-online.target
+# The agent's uid, which the egress rule confines (#2161): with the rule down, no run.
+Requisite=agent-stack-egress.service
+PartOf=agent-stack-egress.service
+After=network-online.target agent-stack-egress.service
+OnFailure=kubelab-notify@%n.service
+
+[Service]
+Type=oneshot
+User={{ agent_stack_agent_user }}
+Group={{ agent_stack_agent_user }}
+# The tarballs of the repositories, kept between runs by systemd under /var/cache.
+CacheDirectory={{ agent_stack_curator_unit }}
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/python3 -I {{ agent_stack_vault_libexec }}/curator-analyze.py \
+  --vault {{ agent_stack_vault_clone }} \
+  --repos {{ agent_stack_hermes.curator.repos | join(' ') }} \
+  --cache-dir /var/cache/{{ agent_stack_curator_unit }} \
+  --out {{ agent_stack_curator_out }}/candidates.json \
+  --top {{ agent_stack_hermes.curator.top }}
+SuccessExitStatus=SIGTERM
+TimeoutStartSec=10min
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths={{ agent_stack_curator_out }}
+StandardOutput=journal
+StandardError=journal

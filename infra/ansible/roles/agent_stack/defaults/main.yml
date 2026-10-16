@@ -102,6 +102,9 @@ agent_stack_vault_token_file: "{{ agent_stack_dir }}/vault-token"
 agent_stack_vault_libexec: /usr/local/libexec/agent-stack
 agent_stack_vault_ignore: "{{ agent_stack_vault_libexec }}/vault-ignore"
 agent_stack_vault_sync_unit: hermes-kubelab-vault-sync
+# The curator's analyzer (spec AI-012 AC6): root's script, run by a unit as the agent's user.
+agent_stack_curator_unit: hermes-kubelab-curator-analyze
+agent_stack_curator_out: "{{ agent_stack_vault_clone }}/{{ agent_stack_vault_zone }}/curator"
 
 # The read-only vault the MCP bridge serves Open WebUI (spec AI-009 AC9): root's,
 # in the root-only stack directory, refreshed from the remote by its own unit and
