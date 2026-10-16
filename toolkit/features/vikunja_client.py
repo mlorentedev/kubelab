@@ -9,9 +9,9 @@ import requests
 if TYPE_CHECKING:
     from toolkit.features.configuration import ConfigurationManager
 
-#: Where the token n8n uses lives. The reconciler is the same caller class, so it
-#: reads the same key rather than a second one.
-TOKEN_SECRET_KEY = "apps.services.automation.n8n.vikunja_api_token"
+#: The reconciler's own token, minted by `operator` with the groups it needs (projects,
+#: projects_teams, teams, labels). n8n keeps its own, narrower one under `automation`.
+TOKEN_SECRET_KEY = "apps.services.core.vikunja.reconciler_api_token"
 
 #: Vikunja's default max items per page; asking for more silently returns this many.
 PAGE_SIZE = 50
@@ -141,16 +141,15 @@ class VikunjaClient:
         return self._request("PUT", f"/tasks/{task_id}/comments", json={"comment": comment})
 
 
-def resolve_token(explicit: str, from_env: str, cm: ConfigurationManager) -> str:
-    """The flag, then `VIKUNJA_API_TOKEN`, then SOPS. Never an empty token.
+def resolve_token(cm: ConfigurationManager) -> str:
+    """The reconciler token from SOPS, and nowhere else. Never an empty token.
 
-    `make sync-vikunja` passed neither flag nor variable and so authenticated as
-    nobody (#1701). An empty result is an error here, because a request without a
-    credential reads as the server's 401, which names the server and not the gap.
+    There is no flag (argv and shell history) and no environment variable (what ran
+    would differ from what the vault says). An empty result is an error here, because
+    a request without a credential reads as the server's 401, which names the server
+    and not the gap.
     """
-    token = explicit or from_env or cm.get_secret_by_path(TOKEN_SECRET_KEY) or ""
+    token = cm.get_secret_by_path(TOKEN_SECRET_KEY) or ""
     if not token:
-        raise VikunjaError(
-            f"no Vikunja API token: pass --token, set VIKUNJA_API_TOKEN, or set {TOKEN_SECRET_KEY} in SOPS"
-        )
+        raise VikunjaError(f"no Vikunja reconciler token: {TOKEN_SECRET_KEY} is unset in SOPS")
     return token
