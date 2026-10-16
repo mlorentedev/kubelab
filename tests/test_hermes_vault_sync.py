@@ -402,7 +402,7 @@ def _config(**overrides: object) -> dict:
 def test_the_sandbox_mounts_no_vault_without_the_vault_token() -> None:
     """The docs mirror (AI-012 AC10) is the one mount that needs no token."""
     context = _resolved(_env())
-    docs = f"{context['agent_stack_docs_sandbox']}:{HERMES['docs_mirror']['mount']}:ro"
+    docs = f"{context['agent_stack_docs_sandbox']}/{HERMES['docs_mirror']['path']}:{HERMES['docs_mirror']['mount']}:ro"
     assert _config(agent_stack_vault_configured="False")["terminal"]["docker_volumes"] == [docs]
 
 

@@ -52,7 +52,7 @@ terminal:
     - '{{ agent_stack_vault_clone }}:{{ agent_stack_hermes.vault_sync.mount }}:ro'
     - '{{ agent_stack_vault_clone }}/{{ agent_stack_vault_zone }}:{{ agent_stack_hermes.vault_sync.mount }}/{{ agent_stack_vault_zone }}:rw'
 {% endif %}
-    - '{{ agent_stack_docs_sandbox }}:{{ agent_stack_hermes.docs_mirror.mount }}:ro'
+    - '{{ agent_stack_docs_sandbox }}/{{ agent_stack_hermes.docs_mirror.path }}:{{ agent_stack_hermes.docs_mirror.mount }}:ro'
 
 approvals:
   # Quoted: a bare `off` is YAML for false, which is how hermes-nan ended up
