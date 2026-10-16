@@ -248,6 +248,40 @@ def test_prune_never_deletes_the_snapshot_just_taken_or_all_of_them() -> None:
         plan(client_for(fake), CONFIG, today=TODAY, keep=0)
 
 
+def test_a_failed_image_never_takes_a_keep_slot_from_a_restorable_one() -> None:
+    fake = FakeHetzner()
+    fake.add_snapshot("kubelab-vps-2026-10-01", "2026-10-01T00:00:00+00:00")
+    fake.add_snapshot("kubelab-vps-2026-10-02", "2026-10-02T00:00:00+00:00")
+    stuck = fake.add_snapshot("kubelab-vps-2026-10-15", "2026-10-15T00:00:00+00:00", status="creating")
+    run(fake, keep=2)
+    kept = {i["description"] for i in fake.images.values()}
+    # keep=2 means today's plus the newest restorable one; the unfinished image is left alone
+    assert kept == {"kubelab-vps-2026-10-02", "kubelab-vps-2026-10-15", "kubelab-vps-2026-10-16"}
+    assert stuck in fake.images
+
+
+def test_the_plan_counts_what_accumulates_without_keep() -> None:
+    fake = FakeHetzner()
+    for day in range(1, 5):
+        fake.add_snapshot(f"kubelab-vps-2026-10-0{day}", f"2026-10-0{day}T00:00:00+00:00")
+    p, _ = run(fake, apply_it=False)
+    assert p.managed_count == 4
+
+
+def test_the_command_warns_when_snapshots_pile_up_without_keep(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = FakeHetzner()
+    for day in range(1, 5):
+        fake.add_snapshot(f"kubelab-vps-2026-10-0{day}", f"2026-10-0{day}T00:00:00+00:00")
+    result = _invoke(monkeypatch, fake)
+    assert "4 managed snapshots" in result.output
+    assert "--keep" in result.output
+
+
+def test_the_command_is_quiet_about_retention_when_few_exist(monkeypatch: pytest.MonkeyPatch) -> None:
+    result = _invoke(monkeypatch, FakeHetzner())
+    assert "managed snapshots" not in result.output
+
+
 # ── the command ──────────────────────────────────────────────────────────────
 
 

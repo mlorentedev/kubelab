@@ -29,6 +29,8 @@ API = "https://api.hetzner.cloud/v1"
 MANAGED_LABEL = ("managed-by", "kubelab-toolkit")
 TOKEN_SECRET_KEY = "hetzner.api_key"
 PREFIX = "kubelab-vps-"
+#: Managed snapshots beyond this many, taken without `keep`, are worth a warning: each is billed.
+WARN_ABOVE = 3
 
 
 class SnapshotError(Exception):
@@ -85,6 +87,8 @@ class Plan:
     labels: dict[str, str]
     existing: dict[str, Any] | None
     prune: list[dict[str, Any]] = field(default_factory=list)
+    #: Every managed snapshot that exists now, today's included: what accumulates without `keep`.
+    managed_count: int = 0
 
     @property
     def exists(self) -> bool:
@@ -128,15 +132,17 @@ def plan(client: HetznerClient, config: dict[str, Any], *, today: date, keep: in
     doomed: list[dict[str, Any]] = []
     if keep is not None:
         # The one being taken counts toward `keep`, so a fresh run never prunes it.
+        # Only restorable images compete for a slot: a `creating` or `unavailable` one is
+        # neither a rollback point nor safe to delete (it may still be in flight).
         survivors = sorted(
-            (i for i in managed if i.get("description") != description),
+            (i for i in managed if i.get("description") != description and i.get("status") == "available"),
             key=lambda i: str(i.get("created", "")),
             reverse=True,
         )
         # Today's snapshot, new or existing, takes one of the `keep` slots.
         doomed = survivors[keep - 1 :]
     labels = {MANAGED_LABEL[0]: MANAGED_LABEL[1], "server": name}
-    return Plan(int(server["id"]), name, description, labels, existing, doomed)
+    return Plan(int(server["id"]), name, description, labels, existing, doomed, len(managed))
 
 
 def apply(client: HetznerClient, plan_: Plan, *, interval: float = 10.0, timeout: float = 1800.0) -> dict[str, Any]:

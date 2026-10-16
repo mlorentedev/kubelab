@@ -121,6 +121,7 @@ def vps_snapshot(
     from toolkit.features.configuration import ConfigurationManager
     from toolkit.features.vps_snapshot import (
         TOKEN_SECRET_KEY,
+        WARN_ABOVE,
         HetznerClient,
         SnapshotError,
     )
@@ -144,6 +145,11 @@ def vps_snapshot(
         logger.info("today's snapshot already exists" if plan.exists else "today's snapshot does not exist yet")
         for old in plan.prune:
             logger.info(f"would prune {old.get('description')} (id {old.get('id')})")
+        if keep is None and plan.managed_count > WARN_ABOVE:
+            logger.warning(
+                f"{plan.managed_count} managed snapshots exist and each is billed; "
+                "pass --keep N (make vps-snapshot APPLY=1 KEEP=N) to prune the oldest"
+            )
         if not apply:
             logger.info("plan only; pass --apply (make vps-snapshot APPLY=1) to take it")
             return
@@ -153,7 +159,7 @@ def vps_snapshot(
         raise typer.Exit(1) from exc
     logger.success(
         f"{image.get('description')} is {image.get('status')} (image {image.get('id')}, "
-        f"{image.get('image_size') or 'size pending'} GB)"
+        f"{str(image['image_size']) + ' GB' if image.get('image_size') else 'size pending'})"
     )
 
 
