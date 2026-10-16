@@ -305,3 +305,11 @@ def test_the_proposals_directory_is_the_kind_the_gateways_user_can_write_and_the
     flat = [t for block in tasks for t in (block.get("block") or [block])]
     task = next(t for t in flat if "proposals directory" in t.get("name", ""))
     assert task["ansible.builtin.file"]["mode"] == "01777", "sticky and world-writable, like memories/"
+
+
+def test_an_id_is_checked_even_when_the_candidates_file_names_it(tmp_path: Path) -> None:
+    """Defence in depth: the file the analyzer wrote is trusted less than the shape of its ids."""
+    escape = "../../escape"
+    written, zone = _emit(tmp_path, json.dumps({"verdicts": [_verdict(cid=escape)]}), [_candidate(escape)])
+    assert written == []
+    assert not list(tmp_path.rglob("escape.md"))
