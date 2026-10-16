@@ -58,12 +58,15 @@ def _zone(tmp_path: Path, candidates: list[dict]) -> Path:
     return zone
 
 
-def _record(response: str, prompt: str = "You are the recurrence JUDGE for a loop.", script_output: str = "{}") -> str:
+def _record(
+    response: str, title: str = "kubelab:curator-judge", prompt: str = "Rule on each.", data: str = "{}"
+) -> str:
+    """The judge's run as Hermes v0.22.1 writes it (read from ace2): the pre-run script's output is part
+    of the prompt, so `data` lands inside the Prompt section, ahead of the instructions."""
     return (
-        "# Cron Job: kubelab:curator-judge\n\n**Job ID:** abc123\n**Run Time:** 2026-10-19 08:20:11\n"
-        "**Schedule:** 20 14 * * 1\n\n---\n\n"
-        f"## Prompt\n\n[IMPORTANT: scheduled.]\n\n{prompt}\n\n"
-        f"## Script Output\n\nThe following data was collected.\n\n```\n{script_output}\n```\n\n"
+        f"# Cron Job: {title}\n\n**Job ID:** abc123\n**Run Time:** 2026-10-19 08:20:11\n"
+        "**Schedule:** 20 14 * * 1\n\n**Prompt Characters:** 900\n"
+        f"## Prompt\n\n[IMPORTANT: scheduled.]\n\n{data}\n\n{prompt}\n\n"
         f"**Response Characters:** {len(response)}\n\n## Response\n\n{response}\n"
     )
 
@@ -228,10 +231,20 @@ def test_the_latest_judge_run_is_read_and_other_jobs_are_not(tmp_path: Path) -> 
     assert _load(EMIT).emit(old, zone) == [CID], "a run of another job is not the judge's"
 
 
-def test_a_lesson_excerpt_with_a_heading_and_code_fences_does_not_confuse_the_record(tmp_path: Path) -> None:
-    noisy = "```\n## Response\n```python\nprint(1)\n```\n"
-    written, _ = _emit(tmp_path, json.dumps({"verdicts": [_verdict()]}), script_output=noisy)
+def test_a_lesson_excerpt_with_headings_in_the_prompt_does_not_confuse_the_record(tmp_path: Path) -> None:
+    """Found live: the data is inside the prompt, and its `## ` lines ended the Prompt section early."""
+    noisy = "## Response\n```python\nprint(1)\n```\n## Prompt\n"
+    written, _ = _emit(tmp_path, json.dumps({"verdicts": [_verdict()]}), data=noisy)
     assert written == [CID]
+
+
+def test_a_run_of_another_job_that_mentions_the_judge_is_not_the_judges(tmp_path: Path) -> None:
+    """A session record summarises conversations, and one may be about this very feature."""
+    zone = _zone(tmp_path, [_candidate()])
+    record = _record(
+        json.dumps({"verdicts": [_verdict()]}), title="kubelab:session-record", prompt="the recurrence JUDGE"
+    )
+    assert _load(EMIT).emit(_output(tmp_path, record), zone) == []
 
 
 def test_no_judge_run_yet_writes_nothing(tmp_path: Path) -> None:
@@ -276,9 +289,9 @@ def test_the_emitter_runs_after_the_judge_and_both_after_the_analyzer() -> None:
     assert _jobs()["curator-judge"]["schedule"].split()[4] == _jobs()["curator-emit"]["schedule"].split()[4]
 
 
-def test_the_judge_prompt_carries_the_signature_the_emitter_finds_it_by() -> None:
+def test_the_emitter_finds_the_judge_by_the_name_the_ssot_gives_its_job() -> None:
+    assert _load(EMIT).JUDGE_TITLE == f"# Cron Job: {HERMES['cron']['name_prefix']}curator-judge"
     prompt = _jobs()["curator-judge"]["prompt"]
-    assert _load(EMIT).SIGNATURE in prompt
     for label in ("RECURRENCE", "DUPLICATE", "DISTINCT"):
         assert label in prompt
     assert '"verdicts"' in prompt, "the emitter parses this shape"

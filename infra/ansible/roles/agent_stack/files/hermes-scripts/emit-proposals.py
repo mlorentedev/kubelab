@@ -3,7 +3,7 @@
 
 A no-agent job that runs after the judge. The judge is an agent job, and Hermes keeps each
 run in `cron/output/<job id>/<time>.md`: the prompt, the pre-run script's output and the
-response. This reads the latest run whose prompt carries the judge's signature, takes the
+response. This reads the latest run of the judge (named on the record's first line), takes the
 verdicts from its response, and writes one draft per RECURRENCE to
 `<zone>/proposals/<candidate id>.md`, which the vault sync commits. The evidence comes from
 `curator/candidates.json`, joined by the candidate's id, and not from the record: lesson
@@ -23,7 +23,10 @@ import re
 import sys
 from pathlib import Path
 
-SIGNATURE = "recurrence JUDGE"
+# The record's first line names the job. The prompt is no signature to look for: Hermes puts
+# the pre-run script's output into it, lesson excerpts hold `## ` lines that end the section
+# early, and a session record can mention the judge in the conversation it summarises.
+JUDGE_TITLE = "# Cron Job: kubelab:curator-judge"
 ID = re.compile(r"^[0-9a-f]{10}$")
 RUN_TIME = re.compile(r"\*\*Run Time:\*\*\s*(\d{4}-\d{2}-\d{2})")
 FENCE = re.compile(r"```(?:json)?\s*\n(.*?)\n```", re.DOTALL)
@@ -49,8 +52,8 @@ def latest_judge_record(output: Path) -> Path | None:
             mtime = path.stat().st_mtime
         except OSError:
             continue
-        prompt = _section(text, "Prompt") or ""
-        if SIGNATURE in prompt and _section(text, "Response", last=True) is not None and (best is None or mtime > best[0]):
+        titled = text.startswith(JUDGE_TITLE + "\n")
+        if titled and _section(text, "Response", last=True) is not None and (best is None or mtime > best[0]):
             best = (mtime, path)
     return best[1] if best else None
 
