@@ -21,10 +21,12 @@ import pytest
 from toolkit.features.n8n_probe import (
     DEFAULT_PROJECT_KEY,
     FORGE_SECRET_KEY,
+    IN_PROGRESS_BUCKET_KEY,
     SLACK_SECRET_KEY,
     ExecutionSummary,
     build_issue_event,
     build_pr_merge_event,
+    build_pr_open_event,
     build_slack_command,
     forge_headers,
     http_request_nodes,
@@ -42,6 +44,7 @@ _SECRET = "forge-secret"
 _SLACK_SECRET = "slack-secret"
 _PROJECT = "Bitacora"
 _PROJECT_ID = 4
+_BUCKET = "Doing"
 _DOMAIN = "n8n.staging.kubelab.live"
 
 FORGE = "multi-forge-sync.json"
@@ -160,14 +163,22 @@ def test_no_execution_before_the_timeout_names_the_save_setting() -> None:
 
 
 def _cm(
-    secret: str | None = _SECRET, slack_secret: str | None = _SLACK_SECRET, project: str | None = _PROJECT
+    secret: str | None = _SECRET,
+    slack_secret: str | None = _SLACK_SECRET,
+    project: str | None = _PROJECT,
+    bucket: str | None = _BUCKET,
 ) -> MagicMock:
     cm = MagicMock()
     secrets_by_path = {FORGE_SECRET_KEY: secret, SLACK_SECRET_KEY: slack_secret}
     cm.get_secret_by_path.side_effect = lambda p: secrets_by_path.get(p)
     services: dict[str, Any] = {"automation": {"n8n": {"domain": _DOMAIN}}}
+    vikunja: dict[str, Any] = {}
     if project is not None:
-        services["core"] = {"vikunja": {"default_project": project}}
+        vikunja["default_project"] = project
+    if bucket is not None:
+        vikunja["in_progress_bucket"] = bucket
+    if vikunja:
+        services["core"] = {"vikunja": vikunja}
     cm.get_merged_config.return_value = {"apps": {"services": services}}
     return cm
 
@@ -191,6 +202,10 @@ class _Cluster:
         pr_erases_description: bool = False,
         pr_comments: bool = True,
         pr_answer: str = "done",
+        open_moves: bool = True,
+        open_moves_to: str = _BUCKET,
+        open_answer: str = "linked",
+        open_lies: bool = False,
         gate_answer: str | None = "ignored",
         slack_lands_in: int = _PROJECT_ID,
         slack_creates_for_unknown: bool = False,
@@ -212,6 +227,11 @@ class _Cluster:
         self.pr_erases_description = pr_erases_description  # the #1871 write: `{done: true}` alone
         self.pr_comments = pr_comments
         self.pr_answer = pr_answer
+        self.open_moves = open_moves  # False: the pre-#2318 workflow, an opened PR leaves the task where it was
+        self.open_moves_to = open_moves_to  # the bucket the fake workflow moves the task to
+        self.open_answer = open_answer
+        self.open_lies = open_lies  # answers `movedTo` but Vikunja never stored the move
+        self.bucket_of: dict[int, str] = {}
         self.gate_answer = gate_answer  # the `status` a gate stop answers; None is the pre-#1659 body
         self.slack_lands_in = slack_lands_in  # the #1877 defect: every task went to project 1
         self.slack_creates_for_unknown = slack_creates_for_unknown
@@ -239,6 +259,7 @@ class _Cluster:
                 self.done[task_id] = False
                 self.descriptions[task_id] = f"<p>{event['issue']['html_url']}</p>"
                 self.comments[task_id] = []
+                self.bucket_of[task_id] = "Backlog"
                 self._run(FORGE, {"Has Task Key & Valid Sig?": [1, 0], "Create Task from Issue": [1]})
                 body_out = {"status": "ok", "created": True}
                 if not self.omit_task_id:
@@ -305,6 +326,8 @@ class _Cluster:
                 {"id": 999, "status": "error", "outputs": {"Find Vikunja Task by Key": []}}
             )
             return self.pr_status, json.dumps({"message": "Error in workflow"})
+        if event["action"] == "opened":
+            return self._pull_request_opened(event, key, task_id)
         if self.pr_marks_done:
             self.done[task_id] = True
         if self.pr_erases_description:
@@ -322,6 +345,23 @@ class _Cluster:
             },
         )
         return 200, json.dumps({"status": self.pr_answer, "taskKey": key, "taskId": task_id})
+
+    def _pull_request_opened(self, event: dict[str, Any], key: str, task_id: int) -> tuple[int, str]:
+        self.comments[task_id].append(f"Linked PR: {event['pull_request']['html_url']} (opened)")
+        outputs = {
+            "Has Task Key & Valid Sig?": [1, 0],
+            "Is Tracked PR Event?": [1, 0],
+            "Append PR URL Comment": [1],
+            "Respond PR Synced": [1],
+        }
+        moved_to = None
+        if self.open_moves:
+            if not self.open_lies:
+                self.bucket_of[task_id] = self.open_moves_to
+            moved_to = self.open_moves_to
+            outputs.update({"Move Task to In-Progress Bucket": [1], "Confirm Move": [1]})
+        self._run(FORGE, outputs)
+        return 200, json.dumps({"status": self.open_answer, "taskKey": key, "taskId": task_id, "movedTo": moved_to})
 
     def exec_node(self, script: str) -> str:
         request = json.loads(script.split("const REQUEST = ", 1)[1].split(";\n", 1)[0])
@@ -347,6 +387,7 @@ class _Cluster:
                     "done": self.done.get(task_id, False),
                     "descriptionSha256": digest,
                     "projectId": self.project_of.get(task_id, 1),
+                    "bucketTitles": [self.bucket_of[task_id]] if task_id in self.bucket_of else [],
                 }
             )
         if op == "list_projects":
@@ -378,7 +419,7 @@ def _run(cluster: _Cluster, cm: MagicMock | None = None) -> bool:
 def test_every_probe_passes_against_a_fixed_cluster() -> None:
     cluster = _Cluster()
     assert _run(cluster) is True
-    assert len(cluster.tasks) == 3, "the issue, PR and signed Slack probes each create one task"
+    assert len(cluster.tasks) == 4, "the issue, merge, open and signed Slack probes each create one task"
     assert list(cluster.tasks) == cluster.deleted, "every created probe task must be deleted"
     urls = [u for u, _, _ in cluster.posts]
     assert f"https://{_DOMAIN}/webhook/multi-forge-sync" in urls
@@ -490,7 +531,7 @@ def _pr_posts(cluster: _Cluster) -> list[dict[str, Any]]:
 def test_the_merge_probe_sends_one_signed_merge_for_the_task_it_created() -> None:
     cluster = _Cluster()
     assert _run(cluster) is True
-    (merge,) = _pr_posts(cluster)
+    (merge,) = [e for e in _pr_posts(cluster) if e["action"] == "closed"]
     assert merge["action"] == "closed" and merge["pull_request"]["merged"] is True
     key = merge["pull_request"]["title"].split(":", 1)[0]
     assert any(title.startswith(key + ":") for title in cluster.tasks.values())
@@ -636,3 +677,93 @@ def test_a_missing_input_fails_the_signed_slack_probe_without_aborting_the_other
     assert _run(cluster, cm=cm) is False
     assert needs in capsys.readouterr().out
     assert any(u.endswith("agent-dispatcher") for u, _, _ in cluster.posts), "the other probes still ran"
+
+
+# ── The Doing move (ADR-066 D4, #2318) ───────────────────────────────────────
+
+
+def test_the_open_event_is_one_the_workflow_itself_would_move_to_doing() -> None:
+    """Built by the probe, read by the workflow's own `Parse Forge Event`: an event
+    that parsed as a merge, or as untracked, would pass the probe by moving nothing."""
+    from tests.n8n_code_node import node_js, run_code_node, webhook_item
+
+    event = build_pr_open_event("PROBE-OPEN-1700000000")
+    raw = json.dumps(event, indent=2).encode()
+    headers = {k.lower(): v for k, v in forge_headers(raw, _SECRET, event="pull_request").items()}
+    (parsed,) = run_code_node(
+        node_js(FORGE, "Parse Forge Event"), [webhook_item(raw, headers, event)], {"FORGE_WEBHOOK_SECRET": _SECRET}
+    )
+    assert parsed["taskKey"] == "PROBE-OPEN-1700000000"
+    assert parsed["prWriteKind"] == "comment", "an opened PR links; only a merge writes done"
+    assert parsed["isTrackedPrEvent"] is True
+    assert event["pull_request"]["merged"] is False
+
+
+def test_the_open_probe_sends_one_signed_open_for_the_task_it_created() -> None:
+    cluster = _Cluster()
+    assert _run(cluster) is True
+    opens = [e for e in _pr_posts(cluster) if e["action"] == "opened"]
+    assert len(opens) == 1
+    key = opens[0]["pull_request"]["title"].split(":", 1)[0]
+    (task_id,) = [i for i, title in cluster.tasks.items() if title.startswith(key + ":")]
+    assert cluster.bucket_of[task_id] == _BUCKET
+    assert cluster.done[task_id] is False, "an opened PR must not close its task"
+
+
+@pytest.mark.parametrize(
+    ("defect", "named"),
+    [
+        pytest.param({"open_moves": False}, "never ran", id="no-move"),
+        pytest.param({"open_moves_to": "Done"}, "Done", id="moved-to-the-wrong-bucket"),
+        pytest.param({"open_answer": "done"}, "expected 200 linked", id="answer-not-linked"),
+        pytest.param({"open_lies": True}, "left task", id="answer-claims-a-move-vikunja-never-stored"),
+    ],
+)
+def test_an_open_that_did_not_move_the_task_fails_and_still_cleans_up(
+    defect: dict[str, Any], named: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    cluster = _Cluster(**defect)
+    assert _run(cluster) is False
+    out = " ".join(capsys.readouterr().out.split())
+    assert "opened PR" in out and named in out
+    assert list(cluster.tasks) == cluster.deleted
+
+
+def test_a_task_already_in_doing_cannot_prove_the_move(capsys: pytest.CaptureFixture[str]) -> None:
+    """A probe task that starts in the target bucket would pass whatever the workflow does."""
+    cluster = _Cluster()
+    original = cluster.exec_node
+
+    def seeded(script: str) -> str:
+        cluster.bucket_of.update({i: _BUCKET for i in cluster.tasks})
+        return original(script)
+
+    clock = _Clock()
+    ok = run_n8n_probe("staging", cm=_cm(), post=cluster.post, exec_node=seeded, clock=clock, sleep=clock.sleep)
+    assert ok is False
+    assert "already in" in " ".join(capsys.readouterr().out.split())
+
+
+def test_a_missing_bucket_declaration_fails_only_the_open_probe(capsys: pytest.CaptureFixture[str]) -> None:
+    cluster = _Cluster()
+    assert _run(cluster, _cm(bucket=None)) is False
+    out = " ".join(capsys.readouterr().out.split())
+    assert IN_PROGRESS_BUCKET_KEY in out
+    assert len([e for e in _pr_posts(cluster) if e["action"] == "opened"]) == 0
+    assert any(e["action"] == "closed" for e in _pr_posts(cluster)), "the other probes still ran"
+
+
+def test_a_failed_open_delivery_fails_and_still_deletes_its_task(capsys: pytest.CaptureFixture[str]) -> None:
+    cluster = _Cluster()
+    original = cluster.post
+
+    def failing(url: str, body: bytes, headers: dict[str, str]) -> tuple[int, str]:
+        if b'"opened"' in body and b"pull_request" in body:
+            return 500, json.dumps({"message": "Error in workflow"})
+        return original(url, body, headers)
+
+    clock = _Clock()
+    ok = run_n8n_probe("staging", cm=_cm(), post=failing, exec_node=cluster.exec_node, clock=clock, sleep=clock.sleep)
+    assert ok is False
+    assert "HTTP 500" in " ".join(capsys.readouterr().out.split())
+    assert list(cluster.tasks) == cluster.deleted

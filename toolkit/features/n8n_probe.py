@@ -18,6 +18,11 @@ Probes, in order:
    key must answer 200 `done`, and Vikunja must show the task done, its
    description unchanged and one comment naming the PR. The task is deleted
    whatever happened. In prod this also posts one "Forge Sync" notice.
+   **Signed forge opened PR** (ADR-066 D4, #2318): a third task, then a signed
+   `pull_request` `opened` event with its key must answer 200 `linked` naming the
+   bucket declared at `apps.services.core.vikunja.in_progress_bucket`. Vikunja must
+   show the task in that bucket (it started elsewhere) and still open. Deleted
+   whatever happened.
 3. **Unsigned forge event**, and **forge event under a wrong secret** (AC5). Each
    must answer 200 with `status: ignored` (#1659).
 4. **Unsigned Slack command** (AC5). Slack is acknowledged before the gate, so
@@ -70,6 +75,7 @@ from toolkit.features.notify_smoke import resolve_service_domain
 FORGE_SECRET_KEY = "apps.services.automation.n8n.forge_webhook_secret"
 SLACK_SECRET_KEY = "apps.services.automation.n8n.slack_signing_secret"
 DEFAULT_PROJECT_KEY = "apps.services.core.vikunja.default_project"
+IN_PROGRESS_BUCKET_KEY = "apps.services.core.vikunja.in_progress_bucket"
 
 _WORKFLOW_DIR = Path("infra") / "n8n" / "workflows"
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -80,6 +86,7 @@ _FORGE_GATE = "Has Task Key & Valid Sig?"
 _SLACK_GATE = "Is Slack Valid?"
 _CREATE_NODE = "Create Task from Issue"
 _PR_WRITE_NODES = ("Update Vikunja Task State", "Append PR URL Comment")
+_MOVE_NODES = ("Append PR URL Comment", "Move Task to In-Progress Bucket", "Confirm Move")
 _SLACK_FOUND = "Project Found?"
 _SLACK_CREATE = "Create Task in Vikunja"
 _SLACK_UNKNOWN = "Tell Slack the Project Is Unknown"
@@ -164,6 +171,14 @@ def build_pr_merge_event(task_key: str) -> dict[str, Any]:
             "owner": {"login": "kubelab"},
         },
     }
+
+
+def build_pr_open_event(task_key: str) -> dict[str, Any]:
+    """A Gitea `pull_request` `opened` payload: the PR event that links a task and moves it to Doing."""
+    event = build_pr_merge_event(task_key)
+    event["action"] = "opened"
+    event["pull_request"]["merged"] = False
+    return event
 
 
 def forge_headers(raw: bytes, secret: str | None, *, event: str = "issues") -> dict[str, str]:
@@ -339,11 +354,33 @@ function summarise(data) {
 const TASKS = 'http://vikunja:3456/api/v1/tasks/';
 const AUTH = { Authorization: 'Bearer ' + (process.env.VIKUNJA_API_TOKEN || '') };
 
+// Where a task sits on the board. A task read by id carries no bucket (bucket_id
+// is 0 and `expand=buckets` adds nothing, measured on staging 2026-10-16), because
+// a bucket belongs to a VIEW. The board itself says it: the Kanban view answers
+// with its buckets and the tasks in each, which is what the page the operator
+// looks at renders. Titles only leave the pod.
+async function bucketTitles(taskId, projectId) {
+  const base = 'http://vikunja:3456/api/v1/projects/' + projectId + '/views';
+  const views = await (await fetch(base, { headers: AUTH })).json();
+  const kanban = (Array.isArray(views) ? views : []).filter((v) => v.view_kind === 'kanban')
+    .sort((a, b) => a.id - b.id)[0];
+  if (!kanban) return [];
+  const res = await fetch(base + '/' + kanban.id + '/tasks?filter=' + encodeURIComponent('id = ' + taskId),
+    { headers: AUTH });
+  if (!res.ok) return [];
+  const buckets = await res.json();
+  return (Array.isArray(buckets) ? buckets : [])
+    .filter((b) => (b.tasks || []).some((t) => Number(t.id) === taskId))
+    .map((b) => String(b.title || ''));
+}
+
 // The description leaves the pod only as a digest: the probe compares it before
 // and after a write, and has no use for what it says.
 async function getTask(taskId) {
   const res = await fetch(TASKS + Number(taskId), { headers: AUTH });
-  if (!res.ok) return { status: res.status, title: null, done: null, descriptionSha256: null, projectId: null };
+  if (!res.ok) {
+    return { status: res.status, title: null, done: null, descriptionSha256: null, projectId: null, bucketTitles: [] };
+  }
   const task = await res.json();
   const digest = require('crypto').createHash('sha256').update(String(task.description ?? '')).digest('hex');
   return {
@@ -352,6 +389,7 @@ async function getTask(taskId) {
     done: Boolean(task.done),
     descriptionSha256: digest,
     projectId: task.project_id == null ? null : Number(task.project_id),
+    bucketTitles: await bucketTitles(Number(taskId), Number(task.project_id)),
   };
 }
 
@@ -456,6 +494,7 @@ def run_n8n_probe(
 
     slack_secret = cm.get_secret_by_path(SLACK_SECRET_KEY)
     default_project = _default_project(cm.get_merged_config())
+    in_progress_bucket = _declared(cm.get_merged_config(), IN_PROGRESS_BUCKET_KEY)
 
     probe = _Probe(
         env=env,
@@ -470,6 +509,7 @@ def run_n8n_probe(
     checks: list[tuple[str, Callable[[], bool]]] = [
         ("signed forge", lambda: probe.signed_forge_creates_a_task(secret)),
         ("signed forge merge", lambda: probe.signed_pr_merge_closes_its_task(secret)),
+        ("signed forge open", lambda: probe.signed_pr_open_moves_its_task_to_doing(secret, in_progress_bucket)),
         ("unsigned forge", lambda: probe.forge_stops_at_its_gate("unsigned forge event", None)),
         (
             "wrong-secret forge",
@@ -569,6 +609,67 @@ class _Probe:
         finally:
             errors += self._delete(task_id)
         return self._verdict(label, errors)
+
+    def signed_pr_open_moves_its_task_to_doing(self, secret: str, bucket: str | None) -> bool:
+        """An opened PR links its task and moves it to the declared in-progress bucket, still open (#2318).
+
+        The bucket title comes from SSOT, like the workflow's own copy of it. The
+        task is checked to start elsewhere: a task already in the bucket would
+        pass whatever the workflow did.
+        """
+        label = "signed forge opened PR (#2318)"
+        if bucket is None:
+            logger.error(f"  {label}: no bucket declared at {IN_PROGRESS_BUCKET_KEY}; nothing to compare the move to")
+            return False
+        task_key = f"PROBE-OPEN-{int(self.clock())}"
+        task_id, before, errors = self._create_task(label, secret, task_key)
+        if task_id is None:
+            return self._verdict(label, errors)
+        try:
+            created, errors = self._confirm_created(label, before, task_id, task_key)
+            if created is not None:
+                errors += self._open_moves(label, secret, task_key, task_id, bucket)
+        finally:
+            errors += self._delete(task_id)
+        return self._verdict(label, errors)
+
+    def _open_moves(self, label: str, secret: str, task_key: str, task_id: int, bucket: str) -> list[str]:
+        """Send the signed open for `task_key`; why the task is not in `bucket`, or nothing."""
+        start = self._pod({"op": "get_task", "taskId": task_id})["bucketTitles"]
+        if bucket in start:
+            return [f"task {task_id} starts already in {bucket!r}; the probe cannot show a move"]
+        workflow = self._workflow(_FORGE)
+        event = build_pr_open_event(task_key)
+        raw = json.dumps(event, indent=2).encode()
+        before = self._max_id(workflow["id"])
+        sent = self._send(label, webhook_path(workflow), raw, forge_headers(raw, secret, event="pull_request"))
+        if sent is None:
+            return ["no response to the signed opened PR event"]
+        status, text = sent
+        summary, error = self._await_one(workflow["id"], before)
+        answer = _json_object(text)
+        errors: list[str] = []
+        if status != 200 or answer.get("status") != "linked" or answer.get("taskId") != task_id:
+            errors.append(f"opened PR answered HTTP {status}, expected 200 linked for task {task_id}: {text[:200]}")
+        elif answer.get("movedTo") != bucket:
+            errors.append(f"opened PR moved task {task_id} to {answer.get('movedTo')!r}, expected {bucket!r}")
+        if error or summary is None:
+            errors.append(error or "no execution")
+        else:
+            if summary.status != "success":
+                detail = f": {summary.error}" if summary.error else ""
+                errors.append(f"opened PR execution {summary.id} ended {summary.status}{detail}")
+            skipped = [n for n in _MOVE_NODES if n not in summary.outputs]
+            if skipped:
+                errors.append(f"opened PR execution {summary.id} never ran {', '.join(skipped)}")
+        task = self._pod({"op": "get_task", "taskId": task_id})
+        if bucket not in task["bucketTitles"]:
+            errors.append(f"opened PR left task {task_id} in {task['bucketTitles']}, expected {bucket!r}")
+        if task["done"] is not False:
+            errors.append(f"opened PR left task {task_id} with done={task['done']}; only a merge closes a task")
+        if not errors:
+            logger.info(f"  {label}: task {task_id} moved from {start} to {bucket!r}, still open")
+        return errors
 
     def _create_task(self, label: str, secret: str, task_key: str) -> tuple[int | None, int, list[str]]:
         """POST a signed `opened` issue. Returns (task id, execution floor, errors).
@@ -838,11 +939,15 @@ class _Probe:
         return self._verdict(label, errors)
 
 
-def _default_project(config: dict[str, Any]) -> str | None:
+def _declared(config: dict[str, Any], key: str) -> str | None:
     node: Any = config
-    for part in DEFAULT_PROJECT_KEY.split("."):
+    for part in key.split("."):
         node = node.get(part) if isinstance(node, dict) else None
     return node if isinstance(node, str) and node.strip() else None
+
+
+def _default_project(config: dict[str, Any]) -> str | None:
+    return _declared(config, DEFAULT_PROJECT_KEY)
 
 
 def _guarded(name: str, check: Callable[[], bool]) -> bool:
