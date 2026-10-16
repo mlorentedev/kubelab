@@ -18,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import subprocess
 import time
 import urllib.parse
 from pathlib import Path
@@ -243,8 +244,9 @@ def test_error_handling_sits_where_n8n_reads_it() -> None:
         assert "continueOnFail" not in node(name)["parameters"].get("options", {}), name
     # The lookup's failure must reach `Extract Project ID`, which turns it into an answer.
     assert node("Lookup Vikunja Projects")["onError"] == "continueRegularOutput"
-    # A failed create halts the run: no node-level setting, so nothing swallows it.
-    assert "onError" not in node("Create Task in Vikunja")
+    # A failed create must reach `Task Created?`, which answers Slack (#2312): halting is silent,
+    # because Slack was acknowledged before the pipeline ran.
+    assert node("Create Task in Vikunja")["onError"] == "continueRegularOutput"
     # The task already exists by then; a failed confirmation must not stop the dev-activity notice.
     assert node("Update Slack via Response URL")["onError"] == "continueRegularOutput"
 
@@ -271,3 +273,32 @@ def test_a_command_without_a_project_targets_the_declared_default_that_the_looku
     extract = node_js("slack-task-capture.json", "Extract Project ID")
     found = run_items_node(extract, [{"id": 7, "title": "Bitacora"}], {"Parse Slack Command": out})
     assert found["projectFound"] is True
+
+
+def _task_created(item: dict[str, Any]) -> bool:
+    """Evaluate `Task Created?`'s condition on one item, as n8n would."""
+    expression = node("Task Created?")["parameters"]["conditions"]["conditions"][0]["leftValue"]
+    assert expression.startswith("={{") and expression.endswith("}}")
+    script = f"const $json = {json.dumps(item)}; console.log(JSON.stringify({expression[3:-2]}));"
+    done = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True)
+    return json.loads(done.stdout)
+
+
+def test_a_failed_create_is_told_to_slack_instead_of_ending_silently() -> None:
+    assert _task_created({"id": 14, "title": "x", "project_id": 4}) is True
+    assert _task_created(ERROR_ITEM[0]) is False
+    assert _task_created({}) is False, "a 200 that carries no task is not a created task"
+
+
+def test_the_create_failure_branch_answers_slack_and_stops_before_the_success_nodes() -> None:
+    data = workflow()
+    assert [t["node"] for t in data["connections"]["Create Task in Vikunja"]["main"][0]] == ["Task Created?"]
+    created, failed = data["connections"]["Task Created?"]["main"]
+    assert [t["node"] for t in created] == ["Update Slack via Response URL"]
+    assert [t["node"] for t in failed] == ["Tell Slack the Create Failed"]
+    tell = node("Tell Slack the Create Failed")["parameters"]
+    assert "$('Extract Project ID')" in tell["url"] and "responseUrl" in tell["url"]
+    assert "nothing was created" in tell["jsonBody"]
+    assert "Tell Slack the Create Failed" not in data["connections"], "the failure branch must end there"
+    for name in ("Update Slack via Response URL", "Notify #dev-activity"):
+        assert name not in [t["node"] for t in failed], f"{name} announces a task that does not exist"
