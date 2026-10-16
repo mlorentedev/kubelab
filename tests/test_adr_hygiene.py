@@ -25,7 +25,7 @@ def test_adr_directory_is_not_empty() -> None:
 
 
 def test_no_adr_number_is_used_twice() -> None:
-    numbers = Counter(re.match(r"adr-(\d+)", p.name).group(1) for p in _adrs())  # type: ignore[union-attr]
+    numbers = Counter(int(re.match(r"adr-(\d+)", p.name).group(1)) for p in _adrs())  # type: ignore[union-attr]
     assert [n for n, c in numbers.items() if c > 1] == []
 
 
