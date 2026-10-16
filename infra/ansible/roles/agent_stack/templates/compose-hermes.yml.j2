@@ -20,6 +20,11 @@ services:
       # tool agree with the mount instead of refusing a path the agent then writes
       # through the shell (#2321).
       HERMES_WRITE_SAFE_ROOT: "{{ agent_stack_hermes_home }}{% if agent_stack_vault_configured | bool %}:{{ agent_stack_hermes.vault_sync.mount }}/{{ agent_stack_vault_zone }}{% endif %}"
+{% if agent_stack_vault_configured | bool %}
+      # The zone's path, for the job scripts that read and write the curator's two
+      # directories of it, which are mounted below (the judge input and the emitter).
+      HERMES_VAULT_ZONE: "{{ agent_stack_hermes.vault_sync.mount }}/{{ agent_stack_vault_zone }}"
+{% endif %}
     # The image is its own init (s6-overlay must be PID 1), so no `init: true`.
     volumes:
       # The same path on both sides. The gateway computes the host side of every
@@ -36,6 +41,13 @@ services:
       # The agent's memories are written where the user that syncs the zone can read
       # them: the data directory is 0700 for a subuid, which that user cannot open.
       - {{ agent_stack_vault_clone }}/{{ agent_stack_vault_zone }}/memories:{{ agent_stack_hermes_home }}/memories
+{% endif %}
+{% if agent_stack_vault_configured | bool %}
+      # The curator's two directories, and nothing else of the zone (spec AI-012 6b): the
+      # judge's input script reads the analyzer's candidates, and the emitter creates the
+      # drafts. Read-only where it only reads; the rest of the zone stays the sandbox's.
+      - {{ agent_stack_vault_clone }}/{{ agent_stack_vault_zone }}/curator:{{ agent_stack_hermes.vault_sync.mount }}/{{ agent_stack_vault_zone }}/curator:ro
+      - {{ agent_stack_vault_clone }}/{{ agent_stack_vault_zone }}/proposals:{{ agent_stack_hermes.vault_sync.mount }}/{{ agent_stack_vault_zone }}/proposals
 {% endif %}
 {% if agent_stack_vault_configured | bool and agent_stack_hermes.skills | default([]) | length > 0 %}
       # The managed skills (spec AI-012 AC9): root-owned on the host and read-only here,

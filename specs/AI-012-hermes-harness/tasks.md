@@ -61,11 +61,11 @@ PR 4 was split: with both halves it was about 650 non-test lines against the 300
 ### PR 5: skills and the repository mirror (AC9, AC10)
 
 - [x] [AC9] Test: the manifest in `common.yaml` installs each `SKILL.md` from the vault mirror. A missing file fails. Managed skills are read-only to the gateway.
-- [ ] [AC10] A root-owned read-only mirror of the repository's `docs/`, mounted in the sandbox and served by the MCP bridge.
+- [x] [AC10] A root-owned read-only mirror of the repository's `docs/`, mounted in the sandbox and served by the MCP bridge.
 
 ### PR 6: curator (AC6)
 
-- [ ] [AC6] Port `curator-analyze.py` and `emit-proposals.py` as host units of the agent's user, which can see the clone, plus the judge as an agent job that reads the analyzer's output.
+- [x] [AC6] Port `curator-analyze.py` (6a, live) as a host unit of the agent's user, plus the judge as an agent job and `emit-proposals.py` as a gateway script job (6b, live: four drafts in `proposals/`). The emitter runs in the gateway, not on the host, because the judge's records are in `data/` (`0700`, a subuid).
 - [ ] [AC6] `dispose-proposals` (dotfiles skill) reads `hermes-kubelab/proposals/`, landed in a sibling worktree of that repository.
 
 ### PR 7: research (AC7, needs R2, R4)

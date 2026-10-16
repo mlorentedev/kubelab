@@ -1,0 +1,10 @@
+# {{ ansible_managed }}
+[Unit]
+Description=The repository's read-only docs mirror, every {{ agent_stack_hermes.docs_mirror.interval }}
+
+[Timer]
+OnBootSec=4min
+OnUnitActiveSec={{ agent_stack_hermes.docs_mirror.interval }}
+
+[Install]
+WantedBy=timers.target

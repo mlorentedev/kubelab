@@ -1,0 +1,22 @@
+# {{ ansible_managed }}
+# The repository's read-only docs (spec AI-012 AC10): the tree the MCP bridge mounts and the
+# copy the agent's sandbox mounts, both refreshed from the public remote.
+[Unit]
+Description=The repository's read-only docs mirror
+Wants=network-online.target
+After=network-online.target
+OnFailure=kubelab-notify@%n.service
+
+[Service]
+Type=oneshot
+Environment=GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+ExecStart={{ agent_stack_vault_libexec }}/docs-mirror
+# The bridge runs as a non-root user and the agent's daemon as the agent: both read.
+UMask=0022
+TimeoutStartSec=10min
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths={{ agent_stack_docs_mirror }} {{ agent_stack_docs_sandbox }}
+StandardOutput=journal
+StandardError=journal

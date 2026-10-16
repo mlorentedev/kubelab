@@ -4,6 +4,12 @@
 > (n8n -> Git) is still manual until **APP-CONFIG-003** (`mlorentedev/knowledge#102`).
 > n8n stores workflows in its SQLite DB (ADR-026 gap), so this directory is the
 > versioned source of truth — re-export after any UI edit.
+>
+> **Every `*.json` here is either imported or excluded with a reason**
+> (`tests/test_n8n_workflow_set.py` derives the set from this directory).
+> **The export direction admits drift:** a workflow edited in the n8n UI and not downloaded
+> back into this directory is lost on a PVC wipe, and nothing detects it until
+> APP-CONFIG-003 automates the round-trip.
 
 ## `notify-router.json` — NOTIFY-001 routing brain (ADR-044)
 
@@ -127,7 +133,11 @@ creating. An issue whose title carries no `AREA-NNN` key reaches no board.
 
 - **Envelope**: Alertmanager alert object or `{ service, alert_name, severity, query, thread_ts }`.
 - **Diagnostic Engine**: Fingerprints tracebacks, correlates with SRE runbooks, and classifies OOMKilled, Connection Refused, and Timeout signatures.
-- **Import**: `make import-n8n ENV=staging` (idempotent upsert).
+- **Import**: **not imported** — `make import-n8n` does not reconstruct this file, on purpose
+  (`N8N_IMPORT_EXCLUDED` in `toolkit/features/n8n_import.py` carries the reason). Nothing posts to
+  `/webhook/sre-triage`, it declares no credential in the import registry, and the alert read path
+  it builds on does not exist yet (#1395, ADR-064 amendment 2026-10-15). After a wiped PVC it
+  comes back only by importing the file by hand; add an `N8nImportSpec` when something calls it.
 
 ---
 

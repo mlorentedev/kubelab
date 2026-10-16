@@ -1,0 +1,39 @@
+#!/bin/sh
+# {{ ansible_managed }}
+# The repository's `docs/`, read-only for the agent's sandbox and for the MCP bridge (spec
+# AI-012 AC10). Run by {{ agent_stack_docs_mirror_unit }}.service as root.
+#
+# The remote is public: no credential is read or passed. Each run fetches the branch's tip,
+# one commit deep, and checks out only `{{ agent_stack_hermes.docs_mirror.path }}/` into two
+# trees, discarding anything else there. `--force` rewrites what the shared index calls
+# current but the second tree lacks, and `clean` removes what upstream deleted. It never
+# commits, and no tree holds a `.git`.
+set -eu
+
+gitdir='{{ agent_stack_docs_mirror }}/git'
+remote='{{ agent_stack_hermes.docs_mirror.remote }}'
+branch='{{ agent_stack_hermes.docs_mirror.branch }}'
+
+export GIT_TERMINAL_PROMPT=0
+
+mgit() {
+  git --git-dir="$gitdir" -c core.hooksPath=/dev/null -c core.logAllRefUpdates=false \
+      -c gc.pruneExpire=now "$@"
+}
+
+[ -d "$gitdir" ] || git init --quiet --bare "$gitdir"
+git --git-dir="$gitdir" config core.sparseCheckout true
+printf '/%s/\n' '{{ agent_stack_hermes.docs_mirror.path }}' > "$gitdir/info/sparse-checkout"
+
+mgit fetch --quiet --depth 1 --no-tags "$remote" "$branch"
+
+# checkout_into <work tree>
+checkout_into() {
+  mkdir -p "$1"
+  mgit --work-tree="$1" checkout --quiet --force --detach FETCH_HEAD
+  mgit --work-tree="$1" clean --quiet -ffdx
+}
+
+checkout_into '{{ agent_stack_docs_mirror }}/tree'
+checkout_into '{{ agent_stack_docs_sandbox }}'
+mgit gc --auto --quiet
