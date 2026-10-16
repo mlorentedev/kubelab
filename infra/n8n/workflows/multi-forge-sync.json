@@ -102,7 +102,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Find the task this pull request names -- by an EXACT key match -- and build\n// what the writes after it send.\n//\n// READ THE ITEMS, NOT `$json`. An HTTP node handed a JSON array emits ONE ITEM\n// PER ELEMENT, so `$json` here is the first task, not the list. This node read\n// `$json` as the list until APP-CONFIG-016 (#1871): with a match it saw one\n// object and concluded \"no results\", and with no match the search emitted no\n// item at all, so no pull request ever reached its task. `$input.all()` covers\n// every shape: split items, one item wrapping an array or `{data: [...]}`, and\n// the empty item `alwaysOutputData` emits.\nconst event = $('Parse Forge Event').first().json;\nconst items = $input.all().map(i => i.json);\n\n// A failed search is not an empty one. The search node has no `onError`, so a\n// 401 or a timeout halts the run before this node; an error item reaching here\n// means someone added one, and answering \"no task\" for it would be a lie.\nconst failed = items.find(i => i && i.error);\nif (failed) {\n  throw new Error('Vikunja task search failed: ' + JSON.stringify(failed.error).slice(0, 200));\n}\n\nlet results;\nif (items.length === 1 && Array.isArray(items[0])) {\n  results = items[0];\n} else if (items.length === 1 && items[0] && Array.isArray(items[0].data)) {\n  results = items[0].data;\n} else {\n  results = items.filter(i => i && i.id);\n}\n\n// `?s=` is a SUBSTRING search, so `TOOL-035` also finds `TOOL-0350: ...`, and\n// taking `results[0]` would mark the wrong task done (#1692). The rule is\n// `Extract Issue Task Match`'s: the title starts with the key, and the next\n// character is not a digit.\nconst key = (event.taskKey || '').toUpperCase();\nconst task = results.find(t => {\n  const title = (t.title || '').toUpperCase();\n  return key && title.startsWith(key) && !/[0-9]/.test(title.charAt(key.length));\n}) || null;\n\n// Vikunja 1.0's `POST /tasks/{id}` is a FULL update: `Task.updateSingleTask`\n// clears description, priority, dates and colour when the body omits them, and\n// rejects an empty title. So the write sends the task as searched, with only\n// `done` changed. The field-scoped `POST /tasks/bulk` would need a token\n// permission (`tasks.update_bulk`) neither environment's token carries.\nconst merged = event.prWriteKind === 'done';\nreturn [{\n  json: {\n    ...event,\n    taskId: task ? task.id : null,\n    hasMatchedTask: Boolean(task),\n    updateBody: task ? Object.assign({}, task, { done: true }) : null,\n    comment: 'Linked PR: ' + event.prUrl + ' (' + (merged ? 'merged' : event.action) + ')',\n  }\n}];"
+        "jsCode": "// Find the task this pull request names -- by an EXACT key match -- and build\n// what the writes after it send.\n//\n// READ THE ITEMS, NOT `$json`. An HTTP node handed a JSON array emits ONE ITEM\n// PER ELEMENT, so `$json` here is the first task, not the list. This node read\n// `$json` as the list until APP-CONFIG-016 (#1871): with a match it saw one\n// object and concluded \"no results\", and with no match the search emitted no\n// item at all, so no pull request ever reached its task. `$input.all()` covers\n// every shape: split items, one item wrapping an array or `{data: [...]}`, and\n// the empty item `alwaysOutputData` emits.\nconst event = $('Parse Forge Event').first().json;\nconst items = $input.all().map(i => i.json);\n\n// A failed search is not an empty one. The search node has no `onError`, so a\n// 401 or a timeout halts the run before this node; an error item reaching here\n// means someone added one, and answering \"no task\" for it would be a lie.\nconst failed = items.find(i => i && i.error);\nif (failed) {\n  throw new Error('Vikunja task search failed: ' + JSON.stringify(failed.error).slice(0, 200));\n}\n\nlet results;\nif (items.length === 1 && Array.isArray(items[0])) {\n  results = items[0];\n} else if (items.length === 1 && items[0] && Array.isArray(items[0].data)) {\n  results = items[0].data;\n} else {\n  results = items.filter(i => i && i.id);\n}\n\n// `?s=` is a SUBSTRING search, so `TOOL-035` also finds `TOOL-0350: ...`, and\n// taking `results[0]` would mark the wrong task done (#1692). The rule is\n// `Extract Issue Task Match`'s: the title starts with the key, and the next\n// character is not a digit.\nconst key = (event.taskKey || '').toUpperCase();\nconst task = results.find(t => {\n  const title = (t.title || '').toUpperCase();\n  return key && title.startsWith(key) && !/[0-9]/.test(title.charAt(key.length));\n}) || null;\n\n// Vikunja 1.0's `POST /tasks/{id}` is a FULL update: `Task.updateSingleTask`\n// clears description, priority, dates and colour when the body omits them, and\n// rejects an empty title. So the write sends the task as searched, with only\n// `done` changed. The field-scoped `POST /tasks/bulk` would need a token\n// permission (`tasks.update_bulk`) neither environment's token carries.\nconst merged = event.prWriteKind === 'done';\nreturn [{\n  json: {\n    ...event,\n    taskId: task ? task.id : null,\n    hasMatchedTask: Boolean(task),\n    // Forward only (ADR-066 D4): a task moves to the in-progress bucket when a PR\n    // is opened or reopened, and only while it is not done -- a done task sits in\n    // the Done bucket, and moving it back would un-do finished work.\n    moveToDoing: Boolean(task && !task.done && event.prWriteKind === 'comment'),\n    projectId: task ? task.project_id : null,\n    updateBody: task ? Object.assign({}, task, { done: true }) : null,\n    comment: 'Linked PR: ' + event.prUrl + ' (' + (merged ? 'merged' : event.action) + ')',\n  }\n}];"
       },
       "id": "b2000000-0000-4000-8000-000000000009",
       "name": "Extract Matched Task ID",
@@ -206,7 +206,7 @@
         "url": "http://apprise:8000/notify/kubelab",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ tag: 'deploy', title: 'Forge Sync: ' + $('Extract Matched Task ID').first().json.taskKey + ($('Extract Matched Task ID').first().json.prWriteKind === 'done' ? ' done' : ' linked'), body: 'PR: ' + $('Extract Matched Task ID').first().json.prUrl + ' (' + $('Extract Matched Task ID').first().json.action + ')', type: 'info' }) }}",
+        "jsonBody": "={{ JSON.stringify({ tag: 'deploy', title: 'Forge Sync: ' + $('Extract Matched Task ID').first().json.taskKey + ($('Extract Matched Task ID').first().json.prWriteKind === 'done' ? ' done' : ' linked' + ($('Extract Matched Task ID').first().json.moveToDoing ? ' -> ' + $('Confirm Move').first().json.movedTo : '')), body: 'PR: ' + $('Extract Matched Task ID').first().json.prUrl + ' (' + $('Extract Matched Task ID').first().json.action + ')', type: 'info' }) }}",
         "options": {}
       },
       "id": "b2000000-0000-4000-8000-000000000006",
@@ -558,7 +558,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ status: $('Extract Matched Task ID').first().json.prWriteKind === 'done' ? 'done' : 'linked', taskKey: $('Extract Matched Task ID').first().json.taskKey, taskId: $('Extract Matched Task ID').first().json.taskId }) }}",
+        "responseBody": "={{ JSON.stringify({ status: $('Extract Matched Task ID').first().json.prWriteKind === 'done' ? 'done' : 'linked', taskKey: $('Extract Matched Task ID').first().json.taskKey, taskId: $('Extract Matched Task ID').first().json.taskId, movedTo: $('Extract Matched Task ID').first().json.moveToDoing ? $('Confirm Move').first().json.movedTo : null }) }}",
         "options": {
           "responseCode": 200
         }
@@ -570,6 +570,153 @@
       "position": [
         1640,
         -260
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "67722745-6841-5968-98b4-9f026a5b46cb",
+              "leftValue": "={{ $('Extract Matched Task ID').first().json.moveToDoing }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "1b142066-c5ba-5b9f-8572-532f42b9d3c4",
+      "name": "Should Move to Doing?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1240,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://vikunja:3456/api/v1/projects/{{ $('Extract Matched Task ID').first().json.projectId }}/views",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.VIKUNJA_API_TOKEN }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c372dc0f-13d0-5fb3-aade-623177d8c4ea",
+      "name": "Read Project Views",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// The project's Kanban view, found by KIND. A view id is environment-specific and\n// opaque (the same reason a project is matched by title), so nothing is guessed:\n// no Kanban view is an error, not a quiet skip, or a PR would be reported linked\n// to a task that never moved.\n//\n// READ THE ITEMS, NOT `$json`: an HTTP node handed a JSON array emits one item per\n// element (APP-CONFIG-016, #1871).\nconst items = $input.all().map(i => i.json);\nconst views = (items.length === 1 && Array.isArray(items[0])) ? items[0] : items.filter(i => i && i.id);\nconst kanban = views.filter(v => v.view_kind === 'kanban').sort((a, b) => a.id - b.id)[0];\nif (!kanban) {\n  throw new Error('project has no Kanban view; views: ' + JSON.stringify(views.map(v => v.view_kind)));\n}\nreturn [{ json: { viewId: kanban.id } }];"
+      },
+      "id": "0cfab8aa-3e8d-5621-831f-ad4d480948b2",
+      "name": "Pick Kanban View",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1640,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://vikunja:3456/api/v1/projects/{{ $('Extract Matched Task ID').first().json.projectId }}/views/{{ $('Pick Kanban View').first().json.viewId }}/buckets",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.VIKUNJA_API_TOKEN }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "928d5782-919e-5cb6-b5a0-716ee9c0b9a1",
+      "name": "Read Kanban Buckets",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1840,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// The bucket a task moves to when its PR opens, matched by TITLE (declared once in\n// common.yaml as apps.services.core.vikunja.in_progress_bucket, filled at import),\n// case-insensitively, for the reason a project is: an id is per environment.\n// A missing bucket throws and lists what exists, so the failure names the fix.\nconst wanted = 'RESOLVE_VIKUNJA_IN_PROGRESS_BUCKET'.trim().toLowerCase();\nconst items = $input.all().map(i => i.json);\nconst buckets = (items.length === 1 && Array.isArray(items[0])) ? items[0] : items.filter(i => i && i.id);\nconst bucket = buckets.find(b => (b.title || '').trim().toLowerCase() === wanted);\nif (!bucket) {\n  throw new Error('no bucket titled ' + JSON.stringify(wanted) + '; buckets: ' + JSON.stringify(buckets.map(b => b.title)));\n}\nreturn [{ json: { bucketId: bucket.id, bucketTitle: bucket.title } }];"
+      },
+      "id": "c815e5ae-c3f6-540e-afa6-52735e5fe20b",
+      "name": "Pick In-Progress Bucket",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2040,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://vikunja:3456/api/v1/projects/{{ $('Extract Matched Task ID').first().json.projectId }}/views/{{ $('Pick Kanban View').first().json.viewId }}/buckets/{{ $('Pick In-Progress Bucket').first().json.bucketId }}/tasks",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.VIKUNJA_API_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ task_id: $('Extract Matched Task ID').first().json.taskId }) }}",
+        "options": {}
+      },
+      "id": "563c78c2-d8a7-5831-9933-b2a26d024e24",
+      "name": "Move Task to In-Progress Bucket",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2240,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// A success signal may name only what was written. Vikunja answers the move with\n// the TaskBucket it stored; anything other than the bucket we asked for is a\n// failed move, and the notification below must not say otherwise.\nconst picked = $('Pick In-Progress Bucket').first().json;\nconst stored = ($input.all()[0] || {}).json;\nif (!stored || Number(stored.bucket_id) !== Number(picked.bucketId)) {\n  throw new Error('move not confirmed: asked for bucket ' + picked.bucketId + ', Vikunja stored ' + JSON.stringify(stored && stored.bucket_id));\n}\nreturn [{ json: { movedTo: picked.bucketTitle } }];"
+      },
+      "id": "ffe66c8a-8504-5b3a-b7d7-c3df6a536a3f",
+      "name": "Confirm Move",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2440,
+        -360
       ]
     }
   ],
@@ -669,7 +816,7 @@
       "main": [
         [
           {
-            "node": "Notify #dev-activity",
+            "node": "Should Move to Doing?",
             "type": "main",
             "index": 0
           }
@@ -855,6 +1002,90 @@
         [
           {
             "node": "Append PR URL Comment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Move to Doing?": {
+      "main": [
+        [
+          {
+            "node": "Read Project Views",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify #dev-activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Project Views": {
+      "main": [
+        [
+          {
+            "node": "Pick Kanban View",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick Kanban View": {
+      "main": [
+        [
+          {
+            "node": "Read Kanban Buckets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Kanban Buckets": {
+      "main": [
+        [
+          {
+            "node": "Pick In-Progress Bucket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick In-Progress Bucket": {
+      "main": [
+        [
+          {
+            "node": "Move Task to In-Progress Bucket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Move Task to In-Progress Bucket": {
+      "main": [
+        [
+          {
+            "node": "Confirm Move",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confirm Move": {
+      "main": [
+        [
+          {
+            "node": "Notify #dev-activity",
             "type": "main",
             "index": 0
           }

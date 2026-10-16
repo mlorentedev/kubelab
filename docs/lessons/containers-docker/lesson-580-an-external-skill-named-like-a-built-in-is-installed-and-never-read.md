@@ -1,5 +1,5 @@
 ---
-id: lesson-579-an-external-skill-named-like-a-built-in-is-installed-and-never-read
+id: lesson-580-an-external-skill-named-like-a-built-in-is-installed-and-never-read
 type: lesson
 status: active
 created: "2026-10-16"
