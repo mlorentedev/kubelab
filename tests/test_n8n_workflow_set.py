@@ -12,11 +12,18 @@ from pathlib import Path
 
 from toolkit.features.n8n_import import N8N_IMPORT_CATALOG, N8N_IMPORT_EXCLUDED
 
+ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = Path("infra/n8n/workflows")
 
 
 def _on_disk() -> set[Path]:
-    return set(WORKFLOWS.glob("*.json"))
+    # Anchored on this file, not the working directory: a wrong cwd would otherwise list
+    # nothing and leave every assertion below green over no sample at all.
+    return {p.relative_to(ROOT) for p in (ROOT / WORKFLOWS).glob("*.json")}
+
+
+def test_the_directory_listing_is_a_real_sample() -> None:
+    assert len(_on_disk()) >= len(N8N_IMPORT_CATALOG) > 0
 
 
 def test_every_workflow_file_is_imported_or_excluded() -> None:
@@ -46,6 +53,12 @@ def test_an_exclusion_is_a_decision_with_a_reason() -> None:
 
 
 def test_the_readme_states_every_exclusion() -> None:
-    readme = (WORKFLOWS / "README.md").read_text(encoding="utf-8")
-    missing = [p.name for p in N8N_IMPORT_EXCLUDED if p.name not in readme or "not imported" not in readme]
-    assert missing == [], f"README must say {missing} is deliberately not imported"
+    # Per exclusion: the README section headed by the file's name must say "not imported".
+    readme = (ROOT / WORKFLOWS / "README.md").read_text(encoding="utf-8")
+    sections = {chunk.split("\n", 1)[0]: chunk for chunk in readme.split("\n## ")[1:]}
+    missing = [
+        p.name
+        for p in N8N_IMPORT_EXCLUDED
+        if not any(p.name in head and "not imported" in body for head, body in sections.items())
+    ]
+    assert missing == [], f"README must say, under its own heading, that {missing} is deliberately not imported"
