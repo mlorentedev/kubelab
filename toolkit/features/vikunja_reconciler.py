@@ -1,4 +1,4 @@
-"""Vikunja platform reconciler: idempotently provisions namespaces, labels, and webhooks."""
+"""Vikunja platform reconciler: idempotently provisions labels and webhooks."""
 
 from __future__ import annotations
 
@@ -6,12 +6,6 @@ from dataclasses import dataclass
 
 from toolkit.core.logging import logger
 from toolkit.features.vikunja_client import VikunjaClient
-
-DEFAULT_NAMESPACES = (
-    "kubelab",
-    "personal",
-    "teledyne",
-)
 
 DEFAULT_LABELS = {
     "type:spec": "#2ecc71",
@@ -29,54 +23,38 @@ DEFAULT_LABELS = {
 class ReconcileResult:
     """Result of a Vikunja platform reconciliation run."""
 
-    namespaces_created: int
     labels_created: int
     webhooks_created: int
 
     @property
     def changed(self) -> bool:
-        return (self.namespaces_created + self.labels_created + self.webhooks_created) > 0
+        return (self.labels_created + self.webhooks_created) > 0
 
 
 class VikunjaReconciler:
-    """Idempotently synchronizes desired namespaces, labels, and webhooks to Vikunja."""
+    """Idempotently synchronizes desired labels and webhooks to Vikunja."""
 
     def __init__(self, client: VikunjaClient) -> None:
         self.client = client
 
     def reconcile(self, n8n_webhook_url: str = "http://n8n:5678/webhook/agent-dispatcher") -> ReconcileResult:
         """Run full platform reconciliation. Safe to re-run anytime (changed=0 on re-run)."""
-        namespaces_created = self._reconcile_namespaces()
         labels_created = self._reconcile_labels()
         webhooks_created = self._reconcile_webhooks(n8n_webhook_url=n8n_webhook_url)
 
         result = ReconcileResult(
-            namespaces_created=namespaces_created,
             labels_created=labels_created,
             webhooks_created=webhooks_created,
         )
 
         if result.changed:
             logger.info(
-                f"Vikunja reconciled: created {result.namespaces_created} namespaces, "
-                f"{result.labels_created} labels, {result.webhooks_created} webhooks."
+                f"Vikunja reconciled: created {result.labels_created} labels, {result.webhooks_created} webhooks."
             )
         else:
             logger.info("Vikunja already in desired state (changed=0).")
 
         return result
-
-    def _reconcile_namespaces(self) -> int:
-        existing = {ns.get("title", ""): ns for ns in self.client.get_namespaces()}
-        created = 0
-
-        for desired in DEFAULT_NAMESPACES:
-            if desired not in existing:
-                logger.info(f"Creating missing Vikunja namespace: {desired}")
-                self.client.create_namespace(title=desired)
-                created += 1
-
-        return created
 
     def _reconcile_labels(self) -> int:
         existing = {lbl.get("title", ""): lbl for lbl in self.client.get_labels()}

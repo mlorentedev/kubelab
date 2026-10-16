@@ -1,10 +1,17 @@
-"""Vikunja REST API client for namespace, project, label, and webhook orchestration."""
+"""Vikunja REST API client for project, label, and webhook orchestration."""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import requests
+
+if TYPE_CHECKING:
+    from toolkit.features.configuration import ConfigurationManager
+
+#: Where the token n8n uses lives. The reconciler is the same caller class, so it
+#: reads the same key rather than a second one.
+TOKEN_SECRET_KEY = "apps.services.automation.n8n.vikunja_api_token"
 
 
 class VikunjaError(Exception):
@@ -39,15 +46,6 @@ class VikunjaClient:
         if resp.status_code == 204 or not resp.content:
             return {}
         return resp.json()
-
-    def get_namespaces(self) -> list[dict[str, Any]]:
-        """Fetch all user namespaces."""
-        data = self._request("GET", "/namespaces")
-        return data if isinstance(data, list) else []
-
-    def create_namespace(self, title: str, description: str = "") -> dict[str, Any]:
-        """Create a new namespace."""
-        return self._request("PUT", "/namespaces", json={"title": title, "description": description})
 
     def get_projects(self) -> list[dict[str, Any]]:
         """Fetch all projects."""
@@ -94,3 +92,18 @@ class VikunjaClient:
     def add_task_comment(self, task_id: int, comment: str) -> dict[str, Any]:
         """Add a comment to an existing task."""
         return self._request("PUT", f"/tasks/{task_id}/comments", json={"comment": comment})
+
+
+def resolve_token(explicit: str, from_env: str, cm: ConfigurationManager) -> str:
+    """The flag, then `VIKUNJA_API_TOKEN`, then SOPS. Never an empty token.
+
+    `make sync-vikunja` passed neither flag nor variable and so authenticated as
+    nobody (#1701). An empty result is an error here, because a request without a
+    credential reads as the server's 401, which names the server and not the gap.
+    """
+    token = explicit or from_env or cm.get_secret_by_path(TOKEN_SECRET_KEY) or ""
+    if not token:
+        raise VikunjaError(
+            f"no Vikunja API token: pass --token, set VIKUNJA_API_TOKEN, or set {TOKEN_SECRET_KEY} in SOPS"
+        )
+    return token
