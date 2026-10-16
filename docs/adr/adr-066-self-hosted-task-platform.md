@@ -14,7 +14,7 @@ created: "2026-08-27"
 
 ## Status
 
-Accepted — 2026-08-27. Output of an SDD implementation session ([`specs/IDP-035-vikunja-n8n-task-platform/`](../../specs/IDP-035-vikunja-n8n-task-platform/)). Formally amends and supersedes the custom Go API console build decision of [ADR-050](adr-050-cross-context-command-center.md) (D1) by adopting a lightweight self-hosted tracker (**Vikunja**) backed by **n8n** multi-forge orchestration and **Slack ChatOps**.
+Accepted — 2026-08-27. Output of an SDD implementation session ([`specs/archive/IDP-035-vikunja-n8n-task-platform/`](../../specs/archive/IDP-035-vikunja-n8n-task-platform/)). Formally amends and supersedes the custom Go API console build decision of [ADR-050](adr-050-cross-context-command-center.md) (D1) by adopting a lightweight self-hosted tracker (**Vikunja**) backed by **n8n** multi-forge orchestration and **Slack ChatOps**.
 
 ## Context
 

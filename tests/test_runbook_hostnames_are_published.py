@@ -37,6 +37,7 @@ NOT_CURRENT = {
     "docs/architecture/components/kubelab-console.md": "design doc for a product with no code yet",
     "docs/architecture/diagram.md": "#825, still draws OpenClaw, PicoClaw and Prometheus",
     "docs/architecture/infra/dns-cloudflare.md": "historical zone export of 2025-08-30",
+    "docs/architecture/plans/2026-03-26-homepage-endpoints-tab.md": "implementation plan of 2026-03, kept as a record",
 }
 
 # Names used as placeholders in examples, never meant to resolve.

@@ -200,7 +200,7 @@ configs:
     # Admin local account. NOT apiKey-only: v3.4.1 creates `admin` with `login`
     # and appends these capabilities. Its removal is the single-door change.
     accounts.admin: apiKey
-    # Custom branding CSS (ADR-032)
+    # Custom branding CSS (ADR-071)
     ui.cssurl: "https://assets.kubelab.live/brand/brand.css"
     # OIDC via Authelia (ARGO-010) — native OIDC, no dex
     url: https://argo.kubelab.live

@@ -1,7 +1,7 @@
 ---
 id: 2026-03-26-homepage-endpoints-tab
 type: plan
-status: active
+status: historical
 created: "2026-03-26"
 owner: manu
 ---
