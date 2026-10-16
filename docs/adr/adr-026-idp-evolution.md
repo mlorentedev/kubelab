@@ -1,7 +1,7 @@
 ---
 id: adr-026-idp-evolution
 type: adr
-status: active
+status: accepted
 created: "2026-03-27"
 tags: [idp, architecture, platform-engineering, portfolio]
 owner: manu

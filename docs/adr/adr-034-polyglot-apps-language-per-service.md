@@ -1,7 +1,7 @@
 ---
 id: adr-034-polyglot-apps-language-per-service
 type: adr
-status: active
+status: accepted
 created: "2026-05-19"
 ---
 

@@ -1,7 +1,7 @@
 ---
 id: "adr-015-vps-k3s-migration"
 type: adr
-status: active
+status: accepted
 tags: [k3s, migration, production, vps, headscale, traefik]
 created: "2026-02-27"
 owner: manu

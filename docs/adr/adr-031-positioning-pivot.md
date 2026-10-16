@@ -1,7 +1,7 @@
 ---
 id: adr-031-positioning-pivot
 type: adr
-status: active
+status: accepted
 created: "2026-05-09"
 ---
 

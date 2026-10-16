@@ -1,7 +1,7 @@
 ---
 id: adr-038-secret-delivery-paths
 type: adr
-status: active
+status: accepted
 created: "2026-05-25"
 ---
 

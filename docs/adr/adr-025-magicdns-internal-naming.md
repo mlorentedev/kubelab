@@ -1,7 +1,7 @@
 ---
 id: adr-025-magicdns-internal-naming
 type: adr
-status: active
+status: accepted
 created: "2026-03-26"
 owner: manu
 ---

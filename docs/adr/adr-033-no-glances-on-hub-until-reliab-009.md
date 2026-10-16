@@ -1,7 +1,7 @@
 ---
 id: adr-033-no-glances-on-hub-until-reliab-009
 type: adr
-status: active
+status: accepted
 created: "2026-05-19"
 ---
 

@@ -1,7 +1,7 @@
 ---
 id: adr-028-operational-topology
 type: adr
-status: active
+status: accepted
 owner: manu
 created: "2026-03-28"
 ---
