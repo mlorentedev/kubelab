@@ -455,7 +455,11 @@ def sync_vikunja_cmd(
 
     client = VikunjaClient(base_url=base_url, api_token=token)
     reconciler = VikunjaReconciler(client=client)
-    res = reconciler.reconcile()
+    try:
+        res = reconciler.reconcile()
+    except VikunjaError as exc:
+        logger.error(f"Vikunja refused the sync: {exc}. A 401 here usually means the token lacks that scope.")
+        raise typer.Exit(1) from exc
     if res.changed:
         logger.success(f"Vikunja sync completed: {res.labels_created} labels, {res.webhooks_created} webhooks created.")
     else:

@@ -73,3 +73,20 @@ def test_the_client_has_no_namespace_endpoint_because_vikunja_1_0_removed_it() -
     """
     assert not hasattr(VikunjaClient, "get_namespaces")
     assert not hasattr(VikunjaClient, "create_namespace")
+
+
+def test_a_rejected_call_exits_with_the_servers_answer_not_a_traceback(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A token that authenticates but lacks a scope (401 on `GET /labels`) is the likeliest failure."""
+    from typer.testing import CliRunner
+
+    from toolkit.cli.sync import app
+    from toolkit.features import vikunja_client
+    from toolkit.features.vikunja_client import VikunjaError
+
+    def refuse(self: object) -> list[dict[str, object]]:
+        raise VikunjaError("Vikunja API error 401: token lacks labels")
+
+    monkeypatch.setattr(vikunja_client.VikunjaClient, "get_labels", refuse)
+    result = CliRunner().invoke(app, ["vikunja", "--env", "staging", "--url", "http://x/api/v1", "--token", "t"])
+    assert result.exit_code == 1
+    assert "401" in result.output and "Traceback" not in result.output
