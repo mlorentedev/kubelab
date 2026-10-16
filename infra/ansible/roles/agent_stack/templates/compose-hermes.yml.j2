@@ -35,6 +35,11 @@ services:
       # them: the data directory is 0700 for a subuid, which that user cannot open.
       - {{ agent_stack_vault_clone }}/{{ agent_stack_vault_zone }}/memories:{{ agent_stack_hermes_home }}/memories
 {% endif %}
+{% if agent_stack_vault_configured | bool and agent_stack_hermes.skills | default([]) | length > 0 %}
+      # The managed skills (spec AI-012 AC9): root-owned on the host and read-only here,
+      # so the agent uses them through `skills.external_dirs` and cannot rewrite them.
+      - {{ agent_stack_hermes_skills }}:{{ agent_stack_hermes_skills_mount }}:ro
+{% endif %}
       # Where the image looks for a socket to join the group of.
       - /run/user/{{ _agent_stack_agent_uid }}/docker.sock:/var/run/docker.sock
     # On the host's address in Open WebUI's network, which ufw opens to that

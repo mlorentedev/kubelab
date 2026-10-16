@@ -261,6 +261,7 @@ ROLE_OWNED = {
     ("model", "default"),
     ("cron",),
     ("delegation", "model"),
+    ("skills", "external_dirs"),
 }
 
 
