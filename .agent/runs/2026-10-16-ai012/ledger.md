@@ -20,3 +20,7 @@ Times are UTC, taken from GitHub (`createdAt`, `mergedAt`) and commit timestamps
 | 11:57 | #2355 merged | `e836b533` squash, --match-head-commit 5f0bb403; Tests, review, attestation green; PR-Agent 4 findings triaged (3 declined with evidence, 1 deviation) | |
 | 11:57 | DEVIATION #2355 | the emitter runs as a gateway script job; #2342's text says "never as gateway scripts". #2342 reopened (11:59) and awaits the operator | PR body, verification.md decisions |
 | 11:57 | DEVIATION #2355 | size: ~435 executable lines including tests against `max_loc` 400. The envelope's rule is park(scope-violation); it was merged and disclosed instead | PR #2355 body |
+| 12:34 | #2340 AC10 | PR #2356 opened: docs mirror (two root-owned checkouts), bridge serves /docs, sandbox mounts it ro; live proof (sandbox read, write refused, bridge mount rw=false); provision changed=11, 2, 0 | verification.md in PR #2356; found and fixed a doubled /docs/docs path (lesson-583) |
+| 13:32 | #2356 merged | `f84baafc` squash, --match-head-commit a0af00cb; Tests, review, attestation green; PR-Agent findings triaged (2 applied, rest declined with evidence); #2340 closed | |
+| 14:07 | 4b digest first scheduled run | `kubelab:digest` ran 14:05:29Z `ok`, no delivery error | cron/jobs.json |
+| 14:10 | queue | remaining Backlog items (Helm, cert-manager, Headscale) are outside write_paths: run ends queue-empty | |
