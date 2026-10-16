@@ -111,8 +111,12 @@ def report(
         usage = _usage(db_path, month_start)
     except sqlite3.Error as error:
         usage = None
-        lines.append(f"  cannot read the usage ({error})")
-    if usage is None:
+        unreadable = f"  cannot read the usage ({error})"
+    else:
+        unreadable = ""
+    if unreadable:
+        lines.append(unreadable)
+    elif usage is None:
         lines.append("  no usage database yet")
     elif not usage:
         lines.append("  no usage recorded this month")

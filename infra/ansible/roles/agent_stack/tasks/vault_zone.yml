@@ -134,7 +134,7 @@
         state: directory
         owner: "{{ agent_stack_agent_user }}"
         group: "{{ agent_stack_agent_user }}"
-        mode: "0777"
+        mode: "01777"
       when: not ansible_check_mode
 
     - name: Enable the vault sync timer

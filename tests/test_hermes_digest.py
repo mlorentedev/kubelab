@@ -200,6 +200,19 @@ def test_the_report_fits_a_slack_message(tmp_path: Path) -> None:
     assert len(_report(_usage_db(tmp_path, rows))) < 3500
 
 
+def test_an_unreadable_usage_table_is_not_reported_as_a_missing_database(tmp_path: Path) -> None:
+    """A renamed table or a locked file is not "no database yet": the operator would look
+    for a file that is there."""
+    path = _usage_db(tmp_path, [_row("m", "custom", 1, 1, 1)])
+    db = sqlite3.connect(path)
+    db.execute("ALTER TABLE session_model_usage RENAME TO moved")
+    db.commit()
+    db.close()
+    out = _report(path)
+    assert "cannot read the usage" in out
+    assert "no usage database yet" not in out
+
+
 def test_the_database_is_opened_read_only(tmp_path: Path) -> None:
     path = _usage_db(tmp_path, [])
     db = _digest()._connect(path)
@@ -259,7 +272,10 @@ def test_the_memories_directory_exists_before_the_gateway_mounts_it() -> None:
 
     [task] = [t for t in flat(tasks) if "memories" in str(t.get("ansible.builtin.file", {}).get("path", ""))]
     assert task["ansible.builtin.file"]["state"] == "directory"
-    assert task["ansible.builtin.file"]["mode"] in ("0777", "01777"), "the gateway's user is not the clone's owner"
+    assert task["ansible.builtin.file"]["mode"] == "01777", (
+        "the gateway's user is not the clone's owner, and the sticky bit stops any other local uid "
+        "from replacing files the sync will commit"
+    )
 
 
 def test_the_scripts_cleanup_refuses_to_run_on_an_empty_glob() -> None:
@@ -279,6 +295,8 @@ def test_the_scripts_cleanup_refuses_to_run_on_an_empty_glob() -> None:
     cleanup = names.index("Remove job scripts the role no longer ships")
     guards = [i for i, t in enumerate(ordered) if "ansible.builtin.assert" in t and "hermes-scripts" in str(t)]
     assert guards, "no assertion on the shipped scripts"
+    condition = ordered[guards[0]]["ansible.builtin.assert"]["that"]
+    assert condition.strip().endswith("| length > 0"), "the guard must pass when scripts ship, and fail when none do"
     assert guards[0] < cleanup, "the guard comes before the removal"
 
 
