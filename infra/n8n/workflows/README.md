@@ -92,8 +92,8 @@ a task somebody finished.
 - **The create request has no `continueOnFail`**, so a create that 401s cannot reach
   the notification or the 201. The 201 carries the new task's `id` — the cheapest
   observable that a task exists (#1659). The notice names only what happened (a task
-  was created) and deliberately does not name a bucket — `targetBucket` is computed
-  and never written to Vikunja (#1687).
+  was created) and deliberately does not name a bucket: no bucket is ever written to Vikunja,
+  and `Parse Forge Event` no longer computes one (#1687, ADR-066 D4 amendment).
 
 ### Two n8n behaviours the code nodes depend on
 
