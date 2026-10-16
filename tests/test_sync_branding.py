@@ -1,4 +1,4 @@
-"""Tests for sync_branding — IDP brand design system tokens (ADR-032).
+"""Tests for sync_branding — IDP brand design system tokens (ADR-071).
 
 Verifies that branding tokens declared in common.yaml SSOT are deterministically
 projected into master brand CSS (edge/errors/html/brand/brand.css) and that drift

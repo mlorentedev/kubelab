@@ -176,6 +176,7 @@ def test_a_second_run_over_what_the_first_created_changes_nothing(client: MagicM
 
 
 def test_a_rejected_call_exits_with_the_servers_answer_not_a_traceback(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("toolkit.features.vikunja_client.resolve_token", lambda cm: "tk_x")
     """A token that authenticates but lacks a scope (401 on the first read) is the likeliest failure."""
     from typer.testing import CliRunner
 
@@ -186,6 +187,6 @@ def test_a_rejected_call_exits_with_the_servers_answer_not_a_traceback(monkeypat
         raise VikunjaError("Vikunja API error 401: token lacks projects")
 
     monkeypatch.setattr(vikunja_client.VikunjaClient, "get_projects", refuse)
-    result = CliRunner().invoke(app, ["vikunja", "--env", "staging", "--url", "http://x/api/v1", "--token", "t"])
+    result = CliRunner().invoke(app, ["vikunja", "--env", "staging", "--url", "http://x/api/v1"])
     assert result.exit_code == 1
     assert "401" in result.output and "Traceback" not in result.output

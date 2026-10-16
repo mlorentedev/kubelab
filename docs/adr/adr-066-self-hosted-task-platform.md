@@ -14,7 +14,7 @@ created: "2026-08-27"
 
 ## Status
 
-Accepted — 2026-08-27. Output of an SDD implementation session ([`specs/IDP-035-vikunja-n8n-task-platform/`](../../specs/IDP-035-vikunja-n8n-task-platform/)). Formally amends and supersedes the custom Go API console build decision of [ADR-050](adr-050-cross-context-command-center.md) (D1) by adopting a lightweight self-hosted tracker (**Vikunja**) backed by **n8n** multi-forge orchestration and **Slack ChatOps**.
+Accepted — 2026-08-27. Output of an SDD implementation session ([`specs/archive/IDP-035-vikunja-n8n-task-platform/`](../../specs/archive/IDP-035-vikunja-n8n-task-platform/)). Formally amends and supersedes the custom Go API console build decision of [ADR-050](adr-050-cross-context-command-center.md) (D1) by adopting a lightweight self-hosted tracker (**Vikunja**) backed by **n8n** multi-forge orchestration and **Slack ChatOps**.
 
 ## Context
 
@@ -101,6 +101,14 @@ A general-purpose "staging bucket" combining file storage and backups was consid
 D4 as accepted named three transitions, `In Progress` to `In Review` to `Done`. Only the last was ever real, and by a side effect: Vikunja's update endpoint auto-moves a task to the view's done bucket when `done` flips, and moves it nowhere otherwise. The workflow computed a `targetBucket` for the other two and wrote it to nothing, while its notification and its 200 body announced it by name, three success signals for a move that did not happen.
 
 Decision: **D4 is amended, not implemented** (option (b) of #1687). The bus performs comment-on-open and done-on-merge, and `multi-forge-sync.json` no longer computes a bucket, so nothing can announce one. Moving a task between buckets would need the Kanban view id declared in SSOT and owned by `vikunja_reconciler`, which declares none today; that is a feature with its own ticket, not a correction. The notifications had already stopped naming a bucket under APP-CONFIG-016; this removes the dead computation and makes the ADR agree.
+
+### 2026-10-16 — The single board is visible to its owner only; access is declared, not inherited (APP-CONFIG-013, #1701)
+
+The D6 revision (one board, `Bitacora`, product carried by `area:*` labels) said nothing about who may see it. A Vikunja project is visible only to its owner and to whoever it is shared with, and every task n8n creates belongs to the project owner's account (`operator`), so a human signing in as `manu` saw an empty board while the workflow reported success. `make sync-vikunja` had never repaired this: it called `/namespaces`, which Vikunja 1.0 removed, and carried no credential.
+
+Decision: **access is part of the declaration.** `apps.services.core.vikunja` declares the projects, one team and its members (keys of `apps.auth.identities`, never `machine` or `reviewer`), and the reconciler shares every declared project with that team at the declared right. Everyone sees every project for now, as in a small company; narrowing later is a change to the team or to which team a project is shared with, not an edit of N projects by M users. The reconciler authenticates with its own API token in SOPS (`apps.services.core.vikunja.reconciler_api_token`), minted by `operator` with the groups `projects`, `projects_teams`, `teams` and `labels` selected explicitly, kept apart from n8n's minimal one. It registers no webhook: the one consumer, `agent-dispatcher`, authenticates with `headerAuth` and Vikunja can only sign with an HMAC (#2326).
+
+The client's requests are checked against Vikunja's own swagger, recorded at the deployed version (`tests/fixtures/vikunja/swagger-paths-1.0.0.json`), so an endpoint the server drops fails the suite instead of the first live run. The formal task lifecycle (states and deterministic transitions) is a separate spec.
 
 ## References
 

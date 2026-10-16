@@ -120,7 +120,7 @@ spec:
         sans:
           - "*.staging.kubelab.live"
 ---
-# Brand assets route: serves assets.staging.kubelab.live and assets.kubelab.live (ADR-032)
+# Brand assets route: serves assets.staging.kubelab.live and assets.kubelab.live (ADR-071)
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
