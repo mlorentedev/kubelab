@@ -194,6 +194,15 @@ Jobs are declared in `apps.services.ai.hermes_kubelab.cron` (`common.yaml`) and 
 - **Not a built-in's name**: a built-in outranks an external skill, so `systematic-debugging` and `test-driven-development` would be installed and never read (lesson-580). `hermes skills list` in the gateway shows the built-ins.
 - **Remove one**: drop the name; the provision deletes its directory.
 
+## Repository docs mirror
+
+`agent-stack-docs-mirror.timer` (hourly) keeps the repository's `docs/` readable, read-only, in two places: `/docs` in the agent's sandbox and `/docs` in Open WebUI's MCP bridge (the `vault` tool server now lists both). The remote is public, so the refresh carries no credential.
+
+- **Two root-owned checkouts of one bare repository**: `/opt/agent-stack/docs-mirror/tree/docs` (the bridge) and `/var/lib/hermes-kubelab/docs-mirror/docs` (the sandbox, in the agent's home because its rootless daemon must read it). Root owns both, so the agent reads the docs and cannot edit them. The settings are `apps.services.ai.hermes_kubelab.docs_mirror` in `common.yaml`.
+- **Refresh now**: `sudo systemctl start agent-stack-docs-mirror.service` on ace2, then `journalctl -u agent-stack-docs-mirror -n 20`. A failed run keeps the last trees and pages.
+- **The docs are always mounted into the sandbox**, even without the vault token. That turns Hermes's command guards on for the docker backend, which only makes the sandbox stricter.
+- Anything written into a tree is discarded at the next run; a file deleted upstream leaves the tree.
+
 ## Curator analyzer
 
 `hermes-kubelab-curator-analyze.timer` (Mondays 16:00 local) runs the recurrence analyzer as the agent's user. It reads the agent's own vault clone and the public `docs/lessons/` of the repositories, and writes `80_agents/hermes-kubelab/curator/candidates.json`; the vault sync commits it. Nothing is promoted: the judge and the emitter (see "Curator judge and proposals") read the file.
