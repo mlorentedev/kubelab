@@ -528,6 +528,9 @@ def test_the_first_fix_after_a_resolved_conflict_exits_1_once_then_0(tmp_path: p
     modified files); the second finds nothing and exits 0. The `Unmerged files`
     refusal that was blamed on this command is pre-commit's, raised by the global
     post-checkout hook while paths were unmerged, and is closed in dotfiles#2493.
+
+    This pins the in-repo half only (the exit convention and its announcement). It
+    builds no git conflict: the trigger lives in the global hook, outside this code.
     """
     lessons = _repo_with_lessons(tmp_path, {"alpha": ["lesson-1-one.md", "lesson-2-two.md"]})
     top = lessons / "_index.md"
@@ -536,6 +539,9 @@ def test_the_first_fix_after_a_resolved_conflict_exits_1_once_then_0(tmp_path: p
     first = runner.invoke(tools_app, ["lessons-index", "--root", str(lessons), "--fix"])
     assert first.exit_code == 1, first.output
     assert "rewrote" in first.output
+    # The one line this change adds: exit 1 is announced as deliberate, so a caller
+    # reading a non-zero status is told to stage the rewrite and run again.
+    assert "Exiting 1 on purpose" in first.output
     assert "Unmerged" not in first.output
     assert "2 lessons, one file each" in top.read_text()
 
