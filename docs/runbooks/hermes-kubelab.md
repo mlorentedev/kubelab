@@ -186,6 +186,14 @@ Jobs are declared in `apps.services.ai.hermes_kubelab.cron` (`common.yaml`) and 
 - **The digest** (`kubelab:digest`, a script job) reports the gateway, the sidecar, the sandbox count, the disk and the month's usage per model and provider. A stopped container or an unreachable Docker is its first line; it never prints nothing, because a no-agent job with empty stdout sends nothing.
 - **A job's commands** are checked against the approvals under `cron_mode: deny`: test them with `hermes approvals test --env-type local` before declaring the job.
 
+## Managed skills
+
+`apps.services.ai.hermes_kubelab.skills` names the vault skills (`00_meta/skills/<name>/`) the agent is given. The provision copies each from the root-owned vault mirror into `/var/lib/hermes-kubelab/hermes-skills` and mounts it read-only at `/managed-skills`, which `skills.external_dirs` points at: the agent can use a managed skill and cannot change it.
+
+- **Add one**: append its name, `make provision NODE=ace2 ENV=prod TAGS=agent_stack` (`CHECK=1` first). The mirror must already hold it, so merge the skill into the vault and wait for `vault-mirror.timer`; a missing `SKILL.md` fails the provision.
+- **Not a built-in's name**: a built-in outranks an external skill, so `systematic-debugging` and `test-driven-development` would be installed and never read (lesson-579). `hermes skills list` in the gateway shows the built-ins.
+- **Remove one**: drop the name; the provision deletes its directory.
+
 ## Re-register the sidecar
 
 Needed when the sidecar reports anything but `Running` (for example after its

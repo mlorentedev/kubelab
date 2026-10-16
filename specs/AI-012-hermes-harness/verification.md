@@ -102,6 +102,13 @@ What each process sees, same run:
 - The two scheduled runs of 2026-10-15 posted a file-mutation warning each: `write_file` refused `/vault/80_agents/hermes-kubelab/sessions/...` as outside `HERMES_WRITE_SAFE_ROOT` (the image sets `/opt/data`), and the record was written anyway through the shell. The variable is an `os.pathsep`-separated list (`agent/file_safety.py`, read in the pinned image), so the gateway now sets `<data>:<mount>/<zone>`. That widens nothing the agent could not already write: the sandbox mounts the zone writable and the rest of the vault read-only, and the shell fallback proved it. The operator approved this on 2026-10-15, after the advisor corrected an earlier recommendation to change the prompt (the only tool the policy allowed could not reach the zone).
 - Live: after the provision, `hermes cron run` on `kubelab:session-record` ended `ok` and its `#agent-fleet` message carried no warning; the next sync committed the file (`eb3fe171`). Provision: `CHECK=1` changed=5, first run changed=1, second run changed=0 (that run was against master's role, which lacks #2322, and failed the sync on the lock files; the branch is stacked on #2322, and the converge on the stacked tree was changed=3, then 0).
 
+### The managed skills, live on ace2, 2026-10-16 (AC9)
+
+- `apps.services.ai.hermes_kubelab.skills` lists `insights`. The role copies each `<name>/` from the vault mirror (`00_meta/skills/`) into `/var/lib/hermes-kubelab/hermes-skills`, root-owned, mounted `:ro` at `/managed-skills`, and the gateway's `skills.external_dirs` names it. A declared skill the mirror lacks fails the provision; one dropped from the declaration is removed from the node.
+- Finding: the dry run's read-back showed `systematic-debugging` already ships as a built-in, which outranks an external skill, so the manifest leaves it (and `test-driven-development`) out (lesson-579).
+- Provision: dry run `changed=2`, first run `changed=6`, second run `changed=0`. The run reads the skills back through the gateway (`hermes skills list` names `insights`) and a `touch` in `/managed-skills` as the gateway's user must fail.
+- Tests: `tests/test_hermes_skills.py` 13 pass; the `:ro` flag removed from the mount goes red under `make mutate`.
+
 ## Test status
 
 - Test suite: `<command> -> <output / coverage %>`

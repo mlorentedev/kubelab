@@ -181,6 +181,7 @@
             owner: root
             group: root
             mode: "0755"
+          register: _agent_stack_hermes_skills_dir
 
         - name: Look for each declared skill in the vault mirror
           ansible.builtin.stat:
@@ -217,6 +218,8 @@
           # Only what the mirror holds: a real run stopped at the assert above, and a dry
           # run of a node whose mirror was never filled has nothing to copy.
           loop: "{{ _agent_stack_hermes_skills_found.results | selectattr('stat.exists') | map(attribute='item') | list }}"
+          # A dry run of a first provision has not created the directory it would copy into.
+          when: not (ansible_check_mode and _agent_stack_hermes_skills_dir.changed)
 
         - name: List the managed skills on the node
           ansible.builtin.find:
@@ -539,7 +542,7 @@
         _agent_stack_hermes_skills_listed.rc != 0
         or (agent_stack_hermes.skills | default([]) | reject('in', _agent_stack_hermes_skills_listed.stdout) | list | length > 0)
       check_mode: false
-      when: agent_stack_vault_configured | bool and (agent_stack_hermes.skills | default([]) | length > 0)
+      when: not ansible_check_mode and agent_stack_vault_configured | bool and (agent_stack_hermes.skills | default([]) | length > 0)
 
     - name: Try to write into the managed skills as the gateway's user
       ansible.builtin.command:
@@ -550,7 +553,7 @@
       changed_when: false
       failed_when: _agent_stack_hermes_skills_write.rc == 0
       check_mode: false
-      when: agent_stack_vault_configured | bool and (agent_stack_hermes.skills | default([]) | length > 0)
+      when: not ansible_check_mode and agent_stack_vault_configured | bool and (agent_stack_hermes.skills | default([]) | length > 0)
 
     # Last, against a gateway that answers. Every job delivers to Slack, so with no
     # Slack there is nothing to reconcile (spec AI-012 AC4).

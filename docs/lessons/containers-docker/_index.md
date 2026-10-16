@@ -1,9 +1,10 @@
 # Docker, Compose and image builds
 
-25 lessons, newest first. Back to [all categories](../_index.md).
+26 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 579 | [A managed skill named like a Hermes built-in is installed, listed, and never read](lesson-579-an-external-skill-named-like-a-built-in-is-installed-and-never-read.md) | 2026-10-16 |
 | 577 | [One file the sync user cannot read stops the zone syncing, and an exclude pathspec reports success while staging nothing](lesson-577-a-path-the-sync-user-cannot-read-fails-the-whole-add-and-an-exclude-pathspec-hides-it.md) | 2026-10-15 |
 | 576 | [A scheduled agent cannot say whether there was activity to record, so the job feeds it the activity](lesson-576-an-agent-cannot-tell-you-whether-it-had-a-day-so-feed-it-the-day.md) | 2026-10-15 |
 | 574 | [In Hermes v0.22 `hermes chat` runs in the gateway, so a per-launch key or variable never reaches the model call](lesson-574-hermes-chat-is-a-client-of-the-gateway.md) | 2026-10-15 |

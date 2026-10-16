@@ -2110,9 +2110,11 @@ apps:
         # Left out on purpose, each because it drives a tool this agent does not have (the
         # Hive MCP, `dotf`, `gh`) and would send it down a path that cannot work:
         # handoff, vault-doctor, agent-lifecycle, new-ticket, crystallize, pattern-loader.
-        # `verification-before-completion` and `audit` have no SKILL.md in the vault.
+        # `systematic-debugging` and `test-driven-development` are left out because the
+        # image ships a built-in of the same name, which outranks an external one: the
+        # vault's copy would be installed and never read. `verification-before-completion`
+        # and `audit` have no SKILL.md in the vault.
         skills:
-          - systematic-debugging # root cause before a fix; its helper files travel with it
           - insights # staleness, structure and drift of the vault, read only
         # Hermes config keys ported from hermes-nan's `config-desired.yaml` (spec
         # AI-012 AC1), in Hermes's own layout. The role renders every leaf; keys

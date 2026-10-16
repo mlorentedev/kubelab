@@ -60,7 +60,7 @@ PR 4 was split: with both halves it was about 650 non-test lines against the 300
 
 ### PR 5: skills and the repository mirror (AC9, AC10)
 
-- [ ] [AC9] Test: the manifest in `common.yaml` installs each `SKILL.md` from the vault mirror. A missing file fails. Managed skills are read-only to the gateway.
+- [x] [AC9] Test: the manifest in `common.yaml` installs each `SKILL.md` from the vault mirror. A missing file fails. Managed skills are read-only to the gateway.
 - [ ] [AC10] A root-owned read-only mirror of the repository's `docs/`, mounted in the sandbox and served by the MCP bridge.
 
 ### PR 6: curator (AC6)
