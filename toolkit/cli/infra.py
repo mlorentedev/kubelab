@@ -142,7 +142,15 @@ def vps_snapshot(
     try:
         plan = plan_snapshot(client, cm.get_merged_config(), today=datetime.now(UTC).date(), keep=keep)
         logger.info(f"server {plan.server_name} (id {plan.server_id}), snapshot {plan.description}")
-        logger.info("today's snapshot already exists" if plan.exists else "today's snapshot does not exist yet")
+        if not plan.exists:
+            logger.info("today's snapshot does not exist yet")
+        elif (plan.existing or {}).get("status") == "available":
+            logger.info("today's snapshot already exists")
+        else:
+            logger.warning(
+                f"today's image exists but is {(plan.existing or {}).get('status')!r}, not a snapshot yet; "
+                "--apply will refuse until Hetzner finishes it"
+            )
         for old in plan.prune:
             logger.info(f"would prune {old.get('description')} (id {old.get('id')})")
         if keep is None and plan.managed_count > WARN_ABOVE:

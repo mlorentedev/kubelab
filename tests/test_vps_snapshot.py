@@ -11,11 +11,13 @@ exercised, not asserted by reading the code.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
+import yaml
 
 from toolkit.features.vps_snapshot import (
     MANAGED_LABEL,
@@ -26,14 +28,18 @@ from toolkit.features.vps_snapshot import (
     plan,
 )
 
-CONFIG = {"networking": {"vps": {"hetzner_server_name": "mlorente-01", "public_ip": "162.55.57.175"}}}
+# The committed SSOT, not a copy of it: a renamed server or a new address must reach these
+# tests, because `make vps-snapshot` reads the same keys at runtime.
+CONFIG = yaml.safe_load(Path("infra/config/values/common.yaml").read_text(encoding="utf-8"))
+SERVER_NAME = CONFIG["networking"]["vps"]["hetzner_server_name"]
+PUBLIC_IP = CONFIG["networking"]["vps"]["public_ip"]
 TODAY = date(2026, 10, 16)
 
 
 class FakeHetzner:
     """Enough of Hetzner Cloud for the snapshot flow. Records every request."""
 
-    def __init__(self, *, server_ip: str = "162.55.57.175", servers: int = 1, action_status: str = "success") -> None:
+    def __init__(self, *, server_ip: str = PUBLIC_IP, servers: int = 1, action_status: str = "success") -> None:
         self.calls: list[tuple[str, str, dict[str, Any]]] = []
         self.server_ip = server_ip
         self.n_servers = servers
@@ -43,7 +49,7 @@ class FakeHetzner:
 
     def add_snapshot(self, description: str, created: str, status: str = "available", *, managed: bool = True) -> int:
         self.next_id += 1
-        labels = {MANAGED_LABEL[0]: MANAGED_LABEL[1], "server": "mlorente-01"} if managed else {"keep": "me"}
+        labels = {MANAGED_LABEL[0]: MANAGED_LABEL[1], "server": SERVER_NAME} if managed else {"keep": "me"}
         self.images[self.next_id] = {
             "id": self.next_id,
             "type": "snapshot",
@@ -68,9 +74,9 @@ class FakeHetzner:
 
     def _route(self, method: str, path: str, kwargs: dict[str, Any]) -> tuple[int, Any]:
         if method == "GET" and path == "/servers":
-            if kwargs["params"].get("name") != "mlorente-01" or self.n_servers == 0:
+            if kwargs["params"].get("name") != SERVER_NAME or self.n_servers == 0:
                 return 200, {"servers": []}
-            one = {"id": 7, "name": "mlorente-01", "public_net": {"ipv4": {"ip": self.server_ip}}}
+            one = {"id": 7, "name": SERVER_NAME, "public_net": {"ipv4": {"ip": self.server_ip}}}
             return 200, {"servers": [one] * self.n_servers}
         if method == "GET" and path == "/images":
             selector = kwargs["params"].get("label_selector", "")
@@ -149,7 +155,7 @@ def test_the_token_travels_in_the_header_only() -> None:
 
 def test_a_server_at_another_address_is_refused() -> None:
     """The firewall module's guard, reused: a renamed server must not be snapshotted as the VPS."""
-    with pytest.raises(SnapshotError, match="162.55.57.175"):
+    with pytest.raises(SnapshotError, match=PUBLIC_IP):
         run(FakeHetzner(server_ip="10.9.9.9"))
 
 
@@ -201,6 +207,15 @@ def test_a_plan_alone_writes_nothing() -> None:
 def test_a_failed_action_raises_with_the_reason() -> None:
     with pytest.raises(SnapshotError, match="boom"):
         run(FakeHetzner(action_status="error"))
+
+
+def test_the_plan_does_not_call_an_unfinished_image_a_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = FakeHetzner()
+    # The command takes its own "today", so the fixture is dated by the same clock.
+    fake.add_snapshot(description_for(datetime.now(UTC).date()), "2026-10-16T08:00:00+00:00", status="creating")
+    result = _invoke(monkeypatch, fake)
+    assert "already exists" not in result.output
+    assert "creating" in result.output
 
 
 @pytest.mark.parametrize("status", ["creating", "unavailable"])
