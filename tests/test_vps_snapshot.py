@@ -145,6 +145,9 @@ def test_the_snapshot_is_labelled_so_nothing_else_is_ever_touched() -> None:
     (create,) = [kw for m, p, kw in fake.calls if m == "POST"]
     assert create["json"]["type"] == "snapshot"
     assert create["json"]["labels"][MANAGED_LABEL[0]] == MANAGED_LABEL[1]
+    # The literal is a cross-system contract (the prune selector, the runbook, and the
+    # snapshots already taken carry it): renaming it must be a deliberate edit here too.
+    assert MANAGED_LABEL == ("managed-by", "kubelab-toolkit")
     assert create["json"]["description"] == "kubelab-vps-2026-10-16"
 
 
