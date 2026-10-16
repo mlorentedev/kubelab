@@ -3,7 +3,7 @@ run_id: "ap-20261015-kubelab-1"
 armed_by: manu
 armed_at: 2026-10-16T04:55:00Z
 expires_at: 2026-10-16T12:55:00Z
-objective: "Land #2318 on staging (In Review bucket, by title), then close bounded bugs and chores test-first."
+objective: "Close bounded bugs and chores test-first, starting with #1701; #2318 is parked pending an owner decision."
 scope:
   write_paths: ["toolkit/**", "tests/**", "infra/n8n/**", "infra/config/values/**", "docs/**", "specs/**"]
   frozen_paths: [".github/**", "harness/**", "**/AGENTS.md", "infra/config/secrets/**", "infra/terraform/**", ".agent/**"]
