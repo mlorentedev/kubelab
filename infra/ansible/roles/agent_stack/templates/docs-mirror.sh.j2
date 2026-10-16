@@ -5,8 +5,8 @@
 #
 # The remote is public: no credential is read or passed. Each run fetches the branch's tip,
 # one commit deep, and checks out only `{{ agent_stack_hermes.docs_mirror.path }}/` into two
-# trees, discarding anything else there. The git directory keeps one index per tree, because
-# a shared one would call the second tree up to date and write nothing into it. It never
+# trees, discarding anything else there. `--force` rewrites what the shared index calls
+# current but the second tree lacks, and `clean` removes what upstream deleted. It never
 # commits, and no tree holds a `.git`.
 set -eu
 
@@ -27,13 +27,13 @@ printf '/%s/\n' '{{ agent_stack_hermes.docs_mirror.path }}' > "$gitdir/info/spar
 
 mgit fetch --quiet --depth 1 --no-tags "$remote" "$branch"
 
-# checkout_into <work tree> <index name>
+# checkout_into <work tree>
 checkout_into() {
   mkdir -p "$1"
-  GIT_INDEX_FILE="$gitdir/$2" mgit --work-tree="$1" checkout --quiet --force --detach FETCH_HEAD
-  GIT_INDEX_FILE="$gitdir/$2" mgit --work-tree="$1" clean --quiet -ffdx
+  mgit --work-tree="$1" checkout --quiet --force --detach FETCH_HEAD
+  mgit --work-tree="$1" clean --quiet -ffdx
 }
 
-checkout_into '{{ agent_stack_docs_mirror }}/tree' index-tree
-checkout_into '{{ agent_stack_docs_sandbox }}' index-sandbox
+checkout_into '{{ agent_stack_docs_mirror }}/tree'
+checkout_into '{{ agent_stack_docs_sandbox }}'
 mgit gc --auto --quiet

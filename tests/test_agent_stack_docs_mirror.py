@@ -58,7 +58,7 @@ def test_both_trees_hold_the_docs_and_nothing_else_of_the_repository(mirror) -> 
 
 
 def test_the_second_tree_is_written_too_and_a_run_follows_the_remote(mirror) -> None:
-    """One shared index would call the second tree up to date and write nothing into it."""
+    """Both trees come from one index, so the second must be written by `--force`, not by the index."""
     remote, tree, sandbox, script = mirror
     _run(script)
     remote.commit("docs/guide.md", "v2\n")
