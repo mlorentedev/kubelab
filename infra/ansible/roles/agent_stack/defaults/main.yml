@@ -112,6 +112,14 @@ agent_stack_curator_out: "{{ agent_stack_vault_clone }}/{{ agent_stack_vault_zon
 agent_stack_vault_mirror: "{{ agent_stack_dir }}/vault-mirror"
 agent_stack_vault_mirror_unit: agent-stack-vault-mirror
 
+# The repository's `docs/`, read-only (spec AI-012 AC10), from a public remote: no token. One
+# bare repository and two root-owned checkouts of it. `tree` is for the MCP bridge, in the
+# root-only stack directory; `sandbox` is the agent's copy, in its home because its rootless
+# daemon must read it, and root's so the agent cannot edit what it reads.
+agent_stack_docs_mirror: "{{ agent_stack_dir }}/docs-mirror"
+agent_stack_docs_sandbox: "{{ agent_stack_agent_home }}/docs-mirror"
+agent_stack_docs_mirror_unit: agent-stack-docs-mirror
+
 # The MCP bridge in front of that mirror (spec AI-009 AC9), in Open WebUI's
 # Compose project: it runs exactly when both Open WebUI and the vault do. Its
 # build context is root's, and the image tag exists only on this node.

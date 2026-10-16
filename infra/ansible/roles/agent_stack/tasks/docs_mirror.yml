@@ -1,0 +1,65 @@
+---
+# =============================================================================
+# The repository's read-only docs (spec AI-012 AC10): one fetch from the public remote, two
+# root-owned checkouts of `docs/`. Before the bridge is probed and before Hermes, whose
+# sandbox mounts the second. Unlike the vault mirror it needs no token, so it runs wherever
+# the agent stack does.
+# =============================================================================
+
+- name: Create the docs mirror's directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ agent_stack_docs_mirror }}"
+    - "{{ agent_stack_docs_sandbox }}"
+
+- name: Install the docs mirror script
+  ansible.builtin.template:
+    src: docs-mirror.sh.j2
+    dest: "{{ agent_stack_vault_libexec }}/docs-mirror"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the docs mirror units
+  ansible.builtin.template:
+    src: "docs-mirror.{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ agent_stack_docs_mirror_unit }}.{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: [service, timer]
+
+# The run is the measurement. Not a change: the units are.
+- name: Run the docs mirror once
+  ansible.builtin.systemd:
+    name: "{{ agent_stack_docs_mirror_unit }}.service"
+    state: started
+    daemon_reload: true
+  changed_when: false
+  when: not ansible_check_mode
+
+# Both trees hold the docs directory, not an empty checkout. A dry run reads the mirror as it
+# stands; on a node it never reached there is none to read.
+- name: Verify the docs mirror filled both trees
+  ansible.builtin.find:
+    paths: "{{ item }}/{{ agent_stack_hermes.docs_mirror.path }}"
+    recurse: true
+  loop:
+    - "{{ agent_stack_docs_mirror }}/tree"
+    - "{{ agent_stack_docs_sandbox }}"
+  register: _agent_stack_docs_filled
+  failed_when: _agent_stack_docs_filled.matched | default(0) == 0
+  check_mode: false
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: Enable the docs mirror timer
+  ansible.builtin.systemd:
+    name: "{{ agent_stack_docs_mirror_unit }}.timer"
+    enabled: true
+    state: started
+  when: not ansible_check_mode

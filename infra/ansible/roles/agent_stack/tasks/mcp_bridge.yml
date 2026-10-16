@@ -52,6 +52,14 @@
         quiet: true
       when: _agent_stack_bridge is defined
 
+    - name: Verify the bridge's user reads the docs mirror
+      ansible.builtin.assert:
+        # A dry run probes the bridge as it still is, before it mounts the docs.
+        that: ansible_check_mode or (_agent_stack_bridge.docs == 200 and _agent_stack_bridge.docs_entries > 0)
+        fail_msg: "list_directory /docs answered {{ _agent_stack_bridge.docs }} with {{ _agent_stack_bridge.docs_entries }} entries"
+        quiet: true
+      when: _agent_stack_bridge is defined
+
     # What an admin's chat offers. v0.12.0 fetches each connection's spec on
     # this call, so a bridge Open WebUI cannot reach is missing from the list.
     - name: Sign in as the break-glass admin to read the tool list

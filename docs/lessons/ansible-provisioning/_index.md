@@ -1,9 +1,10 @@
 # Ansible roles and node provisioning
 
-59 lessons, newest first. Back to [all categories](../_index.md).
+60 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 583 | [A mount test that asserts the template passes a path the consumer never sees](lesson-583-a-mount-test-that-asserts-the-template-passes-a-path-the-consumer-never-sees.md) | 2026-10-16 |
 | 569 | [A host-key test through a live ControlMaster socket checks nothing](lesson-569-a-host-key-test-through-a-live-controlmaster-socket-checks-nothing.md) | 2026-10-14 |
 | 552 | [A kill switch that removes a uid-scoped rule leaves every other unit of that uid unconfined](lesson-552-a-kill-switch-that-removes-a-uid-scoped-rule-leaves-every-other-unit-of-that-uid-unconfined.md) | 2026-10-10 |
 | 534 | [A template test that renders without `trim_blocks` is not testing what Ansible ships](lesson-534-a-template-test-that-renders-without-trim-blocks-is-not-testing-what-ansible-ships.md) | 2026-10-07 |

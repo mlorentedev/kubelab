@@ -27,7 +27,8 @@ services:
 {% endfor %}
 {% if agent_stack_mcp_bridge_configured | bool %}
 
-  # The vault, read-only, as an OpenAPI tool server (spec AI-009 AC9). No port:
+  # The vault and the repository's docs, read-only, as an OpenAPI tool server (spec AI-009 AC9,
+  # AI-012 AC10). No port:
   # Open WebUI reaches it by service name on this project's network. It reads the
   # root-owned mirror, never the agent's clone, and serves no write tool.
   mcp-bridge:
@@ -44,6 +45,7 @@ services:
       MCP_BRIDGE_PORT: "{{ agent_stack_webui.mcp_bridge.container_port }}"
     volumes:
       - {{ agent_stack_vault_mirror }}/tree:/vault:ro
+      - {{ agent_stack_docs_mirror }}/tree/{{ agent_stack_hermes.docs_mirror.path }}:{{ agent_stack_hermes.docs_mirror.mount }}:ro
     read_only: true
     tmpfs:
       - /tmp

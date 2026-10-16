@@ -21,6 +21,7 @@ from tests.test_agent_stack_role import COMMON, REPO, ROLE, _environment, _resol
 BRIDGE = ROLE / "files/mcp-bridge"
 WRITERS = {"write_file", "edit_file", "create_directory", "move_file"}
 KEY = "mcp-bridge-key-sentinel"
+HERMES_DOCS = yaml.safe_load(COMMON.read_text())["apps"]["services"]["ai"]["hermes_kubelab"]["docs_mirror"]
 CONFIGURED = {"agent_stack_vault_token": "vault-token-sentinel", "_agent_stack_mcp_bridge_key": KEY}
 
 
@@ -65,7 +66,11 @@ def test_the_bridge_publishes_no_port_and_reads_the_mirror_read_only() -> None:
     service = _compose(**CONFIGURED)["services"]["mcp-bridge"]
     assert "ports" not in service, "reached from Open WebUI's network only"
     assert "network_mode" not in service and "networks" not in service, "on Open WebUI's network, the default"
-    assert service["volumes"] == [f"{d['agent_stack_vault_mirror']}/tree:/vault:ro"]
+    docs = HERMES_DOCS
+    assert service["volumes"] == [
+        f"{d['agent_stack_vault_mirror']}/tree:/vault:ro",
+        f"{d['agent_stack_docs_mirror']}/tree/{docs['path']}:{docs['mount']}:ro",
+    ]
 
 
 def test_the_bridge_container_cannot_write_or_escalate() -> None:
@@ -138,7 +143,7 @@ def test_only_the_read_tools_are_served() -> None:
     is read-only besides."""
     [(name, server)] = json.loads((BRIDGE / "config.json").read_text())["mcpServers"].items()
     assert name == "vault"
-    assert server["args"] == ["/vault"], "the server's only allowed directory is the mount"
+    assert server["args"] == ["/vault", HERMES_DOCS["mount"]], "the server's only allowed directories are the mounts"
     assert set(server["disabledTools"]) == WRITERS
 
 

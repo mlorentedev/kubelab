@@ -123,6 +123,15 @@ Two findings along the way, both fixed before the proof above:
 
 The 4b digest's first scheduled run is 14:05 UTC the same day.
 
+## The repository docs mirror, live on ace2, 2026-10-16 (AC10)
+
+Provision from this tree: `CHECK=1` changed=7, first run changed=11, second changed=0. After the fix below: changed=2, then 0. Read live, not from the templates:
+- The sandbox's view, started through the agent's daemon with `--network none` and the configured mount: `/docs` holds `README.md`, `adr/` (68 entries) and `architecture/`; `touch /docs/x` answers `Read-only file system`.
+- The bridge container mounts `/opt/agent-stack/docs-mirror/tree/docs -> /docs` with `rw=false`, and the provision's own probe asserts `list_directory /docs` answers 200 with entries.
+- Both trees are `root:root 755`, hold no `.git`, and `agent-stack-docs-mirror.timer` is scheduled. The gateway restarted after the config changed (config 14:23:53, container start 14:24:15 CEST).
+
+Finding: the first provision mounted the sandbox's work tree, whose `docs/` sits one level down, so the sandbox saw `/docs/docs/adr`. The unit test passed because it asserted what the template said; only reading the directory from a container showed the doubled path. The sandbox now mounts `docs-mirror/docs`, as the bridge does, and the config test pins the path with the `docs` segment.
+
 ## Test status
 
 - Test suite: `<command> -> <output / coverage %>`

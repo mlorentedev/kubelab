@@ -2068,6 +2068,15 @@ apps:
           # the operator's, the way hermes-nan's read `hermes-nan@nan-server`.
           author_name: hermes-kubelab
           author_email: hermes-kubelab@ace2
+        # Spec AI-012 AC10: the repository's own docs, read-only for the agent's sandbox (at
+        # `mount`) and for Open WebUI's bridge (at the same path). The remote is public, so the
+        # refresh carries no credential.
+        docs_mirror:
+          remote: https://github.com/mlorentedev/kubelab.git
+          branch: master
+          path: docs
+          interval: 1h
+          mount: /docs
         # Spec AI-012 AC6: the curation loop's deterministic half. A host unit of the agent's
         # user reads its vault clone and the repositories' public `docs/lessons/` and writes
         # the recurrence candidates to `<zone>/curator/candidates.json` for the judge. It is
