@@ -11,7 +11,7 @@ exercised, not asserted by reading the code.
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import date
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -22,6 +22,7 @@ import yaml
 from toolkit.features.vps_snapshot import (
     MANAGED_LABEL,
     HetznerClient,
+    PruneError,
     SnapshotError,
     apply,
     description_for,
@@ -39,11 +40,14 @@ TODAY = date(2026, 10, 16)
 class FakeHetzner:
     """Enough of Hetzner Cloud for the snapshot flow. Records every request."""
 
-    def __init__(self, *, server_ip: str = PUBLIC_IP, servers: int = 1, action_status: str = "success") -> None:
+    def __init__(
+        self, *, server_ip: str = PUBLIC_IP, servers: int = 1, action_status: str = "success", delete_status: int = 204
+    ) -> None:
         self.calls: list[tuple[str, str, dict[str, Any]]] = []
         self.server_ip = server_ip
         self.n_servers = servers
         self.action_status = action_status
+        self.delete_status = delete_status
         self.images: dict[int, dict[str, Any]] = {}
         self.next_id = 100
 
@@ -105,6 +109,8 @@ class FakeHetzner:
         if method == "GET" and path.startswith("/images/"):
             return 200, {"image": self.images[int(path.rsplit("/", 1)[1])]}
         if method == "DELETE" and path.startswith("/images/"):
+            if self.delete_status >= 400:
+                return self.delete_status, {"error": {"message": "gone"}}
             del self.images[int(path.rsplit("/", 1)[1])]
             return 204, {}
         return 404, {"error": {"message": f"unrouted {method} {path}"}}
@@ -212,8 +218,9 @@ def test_a_failed_action_raises_with_the_reason() -> None:
 def test_the_plan_does_not_call_an_unfinished_image_a_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
     fake = FakeHetzner()
     # The command takes its own "today", so the fixture is dated by the same clock.
-    fake.add_snapshot(description_for(datetime.now(UTC).date()), "2026-10-16T08:00:00+00:00", status="creating")
+    fake.add_snapshot(description_for(TODAY), "2026-10-16T08:00:00+00:00", status="creating")
     result = _invoke(monkeypatch, fake)
+    assert result.exit_code == 0, result.output
     assert "already exists" not in result.output
     assert "creating" in result.output
 
@@ -288,13 +295,34 @@ def test_the_command_warns_when_snapshots_pile_up_without_keep(monkeypatch: pyte
     for day in range(1, 5):
         fake.add_snapshot(f"kubelab-vps-2026-10-0{day}", f"2026-10-0{day}T00:00:00+00:00")
     result = _invoke(monkeypatch, fake)
+    assert result.exit_code == 0, result.output
     assert "4 managed snapshots" in result.output
     assert "--keep" in result.output
 
 
 def test_the_command_is_quiet_about_retention_when_few_exist(monkeypatch: pytest.MonkeyPatch) -> None:
     result = _invoke(monkeypatch, FakeHetzner())
+    assert result.exit_code == 0, result.output
+    assert "does not exist yet" in result.output
     assert "managed snapshots" not in result.output
+
+
+def test_a_failed_prune_still_reports_the_snapshot_that_was_taken(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = FakeHetzner(delete_status=404)
+    for day in range(1, 4):
+        fake.add_snapshot(f"kubelab-vps-2026-10-0{day}", f"2026-10-0{day}T00:00:00+00:00")
+    result = _invoke(monkeypatch, fake, "--apply", "--keep", "1")
+    assert result.exit_code == 1, result.output
+    assert "kubelab-vps-2026-10-16 is available" in result.output
+    assert "pruning failed" in result.output
+
+
+def test_a_failed_prune_raises_an_error_that_carries_the_image() -> None:
+    fake = FakeHetzner(delete_status=404)
+    fake.add_snapshot("kubelab-vps-2026-10-01", "2026-10-01T00:00:00+00:00")
+    with pytest.raises(PruneError) as caught:
+        run(fake, keep=1)
+    assert caught.value.image["status"] == "available"
 
 
 # ── the command ──────────────────────────────────────────────────────────────
@@ -315,6 +343,7 @@ def _invoke(monkeypatch: pytest.MonkeyPatch, fake: FakeHetzner, *args: str, toke
         return client_for(fake)
 
     monkeypatch.setattr(vps_snapshot, "HetznerClient", make_client)
+    monkeypatch.setattr(vps_snapshot, "today_utc", lambda: TODAY)
     return CliRunner().invoke(app, ["vps", "snapshot", *args])
 
 

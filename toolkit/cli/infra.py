@@ -3,7 +3,7 @@
 import os
 import re
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 import yaml
@@ -116,14 +116,14 @@ def vps_snapshot(
     snapshots are ever pruned. Crash-consistent only (ADR-024), so it is not a backup.
     Reports a plan and changes nothing without `--apply`.
     """
-    from datetime import UTC, datetime
-
     from toolkit.features.configuration import ConfigurationManager
     from toolkit.features.vps_snapshot import (
         TOKEN_SECRET_KEY,
         WARN_ABOVE,
         HetznerClient,
+        PruneError,
         SnapshotError,
+        today_utc,
     )
     from toolkit.features.vps_snapshot import (
         apply as apply_snapshot,
@@ -140,7 +140,7 @@ def vps_snapshot(
 
     client = HetznerClient(token=token)
     try:
-        plan = plan_snapshot(client, cm.get_merged_config(), today=datetime.now(UTC).date(), keep=keep)
+        plan = plan_snapshot(client, cm.get_merged_config(), today=today_utc(), keep=keep)
         logger.info(f"server {plan.server_name} (id {plan.server_id}), snapshot {plan.description}")
         if not plan.exists:
             logger.info("today's snapshot does not exist yet")
@@ -162,13 +162,20 @@ def vps_snapshot(
             logger.info("plan only; pass --apply (make vps-snapshot APPLY=1) to take it")
             return
         image = apply_snapshot(client, plan)
+    except PruneError as exc:
+        # The snapshot exists; only the cleanup failed. Say so before failing the run.
+        logger.success(_snapshot_line(exc.image))
+        logger.error(str(exc))
+        raise typer.Exit(1) from exc
     except SnapshotError as exc:
         logger.error(str(exc))
         raise typer.Exit(1) from exc
-    logger.success(
-        f"{image.get('description')} is {image.get('status')} (image {image.get('id')}, "
-        f"{str(image['image_size']) + ' GB' if image.get('image_size') else 'size pending'})"
-    )
+    logger.success(_snapshot_line(image))
+
+
+def _snapshot_line(image: dict[str, Any]) -> str:
+    size = f"{image['image_size']} GB" if image.get("image_size") else "size pending"
+    return f"{image.get('description')} is {image.get('status')} (image {image.get('id')}, {size})"
 
 
 @node_app.command("reclaim")

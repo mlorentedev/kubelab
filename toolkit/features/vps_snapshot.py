@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Any
 
 import requests
@@ -35,6 +35,23 @@ WARN_ABOVE = 3
 
 class SnapshotError(Exception):
     """The snapshot cannot be taken, or did not complete; the message names the fix."""
+
+
+class PruneError(SnapshotError):
+    """The snapshot WAS taken and is `available`; deleting an older one failed.
+
+    Kept apart from `SnapshotError` so a caller can report the rollback point that exists
+    instead of letting a failed cleanup read as "no snapshot".
+    """
+
+    def __init__(self, message: str, image: dict[str, Any]) -> None:
+        super().__init__(message)
+        self.image = image
+
+
+def today_utc() -> date:
+    """The UTC day a snapshot is named for; one seam so tests need not race the clock."""
+    return datetime.now(UTC).date()
 
 
 def description_for(day: date) -> str:
@@ -179,6 +196,14 @@ def apply(client: HetznerClient, plan_: Plan, *, interval: float = 10.0, timeout
             raise SnapshotError(
                 f"image {image_id} is {image.get('status')!r} after a successful action, not 'available'"
             )
+    failed: list[str] = []
     for old in plan_.prune:
-        client.delete_image(int(old["id"]))
+        try:
+            client.delete_image(int(old["id"]))
+        except SnapshotError as exc:
+            failed.append(f"{old.get('description')} (id {old.get('id')}): {exc}")
+    if failed:
+        raise PruneError(
+            f"snapshot {image.get('id')} is available, but pruning failed for: " + "; ".join(failed), image
+        )
     return image
