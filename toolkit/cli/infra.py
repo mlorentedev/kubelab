@@ -78,6 +78,12 @@ n8n_app = typer.Typer(
     no_args_is_help=True,
 )
 
+vps_app = typer.Typer(
+    name="vps",
+    help="The prod VPS as Hetzner sees it: snapshots (PREP-002)",
+    no_args_is_help=True,
+)
+
 node_app = typer.Typer(
     name="node",
     help="Node-level recovery that must work when Ansible cannot reach the host (OPS-024)",
@@ -92,6 +98,63 @@ app.add_typer(argo_app, name="argo")
 app.add_typer(headscale_app, name="headscale")
 app.add_typer(n8n_app, name="n8n")
 app.add_typer(node_app, name="node")
+app.add_typer(vps_app, name="vps")
+
+
+@vps_app.command("snapshot")
+def vps_snapshot(
+    env: Annotated[str, typer.Option("--env", "-e", help="Environment whose VPS to snapshot")] = "prod",
+    apply: Annotated[bool, typer.Option("--apply", help="Take the snapshot; default reports the plan only")] = False,
+    keep: Annotated[
+        int | None,
+        typer.Option("--keep", help="Also delete managed snapshots beyond the newest N (at least 1); off by default"),
+    ] = None,
+) -> None:
+    """Snapshot the VPS through the Hetzner API: the rollback of last resort (PREP-002).
+
+    Idempotent per UTC day, labelled `managed-by=kubelab-toolkit`, and only labelled
+    snapshots are ever pruned. Crash-consistent only (ADR-024), so it is not a backup.
+    Reports a plan and changes nothing without `--apply`.
+    """
+    from datetime import UTC, datetime
+
+    from toolkit.features.configuration import ConfigurationManager
+    from toolkit.features.vps_snapshot import (
+        TOKEN_SECRET_KEY,
+        HetznerClient,
+        SnapshotError,
+    )
+    from toolkit.features.vps_snapshot import (
+        apply as apply_snapshot,
+    )
+    from toolkit.features.vps_snapshot import (
+        plan as plan_snapshot,
+    )
+
+    cm = ConfigurationManager(env=env)
+    token = cm.get_secret_by_path(TOKEN_SECRET_KEY)
+    if not token:
+        logger.error(f"no Hetzner token: toolkit secrets set {TOKEN_SECRET_KEY} --stdin")
+        raise typer.Exit(1)
+
+    client = HetznerClient(token=token)
+    try:
+        plan = plan_snapshot(client, cm.get_merged_config(), today=datetime.now(UTC).date(), keep=keep)
+        logger.info(f"server {plan.server_name} (id {plan.server_id}), snapshot {plan.description}")
+        logger.info("today's snapshot already exists" if plan.exists else "today's snapshot does not exist yet")
+        for old in plan.prune:
+            logger.info(f"would prune {old.get('description')} (id {old.get('id')})")
+        if not apply:
+            logger.info("plan only; pass --apply (make vps-snapshot APPLY=1) to take it")
+            return
+        image = apply_snapshot(client, plan)
+    except SnapshotError as exc:
+        logger.error(str(exc))
+        raise typer.Exit(1) from exc
+    logger.success(
+        f"{image.get('description')} is {image.get('status')} (image {image.get('id')}, "
+        f"{image.get('image_size') or 'size pending'} GB)"
+    )
 
 
 @node_app.command("reclaim")

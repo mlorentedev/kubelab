@@ -218,9 +218,9 @@ SECRET_CATALOG: list[SecretSpec] = [
     SecretSpec(
         key_path="hetzner.api_key",
         expiry=Expiry.NEVER,
-        description="Hetzner Cloud API token — Terraform and the DR runbook",
+        description="Hetzner Cloud API token — Terraform, `make vps-snapshot` and the DR runbook",
         kind=SecretKind.EXTERNAL,
-        services=("terraform",),
+        services=("terraform", "vps-snapshot"),
         rotate_note="Re-issue in the Hetzner console. See docs/runbooks/runbook-disaster-recovery.md.",
     ),
     SecretSpec(
