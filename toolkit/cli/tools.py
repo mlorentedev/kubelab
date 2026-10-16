@@ -517,6 +517,42 @@ def lessons_index(
 
 
 # =============================================================================
+# TOOLKIT README COMMAND REFERENCE (#1751)
+# =============================================================================
+
+
+@app.command("cli-reference")
+def cli_reference(
+    readme: Annotated[Path, typer.Option("--readme", help="README holding the cli-reference markers")] = Path(
+        "toolkit/README.md"
+    ),
+    write: Annotated[
+        bool,
+        typer.Option("--write/--check", help="Rewrite the block from the live command tree, or only compare"),
+    ] = False,
+) -> None:
+    """Keep the README's command table equal to the command tree it describes.
+
+    Exits 0 when the block already matches, 1 when it was rewritten (--write) or
+    differs (--check).
+    """
+    from toolkit.features import cli_reference as ref
+    from toolkit.main import app as toolkit_app
+
+    current = readme.read_text(encoding="utf-8")
+    wanted = ref.splice(current, ref.render(toolkit_app))
+    if wanted == current:
+        logger.success(f"{readme}: command table matches the command tree")
+        return
+    if write:
+        readme.write_text(wanted, encoding="utf-8")
+        logger.success(f"{readme}: command table rewritten from the command tree")
+    else:
+        logger.error(f"{readme}: command table differs from the command tree — run with --write")
+    raise typer.Exit(1)
+
+
+# =============================================================================
 # DELIVERY LANE STARTUP VISIBILITY (#1682)
 # =============================================================================
 
