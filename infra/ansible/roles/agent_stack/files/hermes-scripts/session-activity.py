@@ -71,7 +71,7 @@ def report(db_path: Path, now: float) -> str:
         entry = f"- {role}: {_clean(content)}"
         header = []
         if sid not in seen:
-            opened = datetime.fromtimestamp(started, UTC).strftime("%H:%M")
+            opened = datetime.fromtimestamp(started, UTC).strftime("%Y-%m-%d %H:%M")
             header = ["", f"## {opened} UTC, {source}, {_clean(title) if title else 'untitled'}"]
         cost = sum(len(line) + 1 for line in [*header, entry])
         if used + cost > BUDGET:

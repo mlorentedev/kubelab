@@ -167,6 +167,7 @@ pushes it. A failed run pages through `kubelab-notify@`.
   - *push refused*: the token. See "Rotate".
   An exit 75 is not a failure: the remote moved during the push, and the next
   run commits on the new tip.
+- **Memories**: the zone's `memories/` is mounted over the gateway's, so what the agent remembers is committed by the same sync. The gateway's lock files and temporaries (`*.lock`, `.mem_*`) are `0600` as a subuid the sync user cannot read; the sync's root-owned ignore file (`vault-ignore` next to the script) leaves them out. If a sync fails on `Permission denied` under `memories/`, that file is the first place to look.
 - **Before seeding a job into the zone**, check each command it runs:
   `docker exec -u hermes hermes-kubelab hermes approvals test --env-type local
   -- <cmd>`, as the agent's user against its daemon. With the vault mounted,
@@ -182,6 +183,7 @@ Jobs are declared in `apps.services.ai.hermes_kubelab.cron` (`common.yaml`) and 
 - **Scripts** ship from the role into a directory mounted read-only over `<data>/scripts/`. They run in the gateway, which sees `HERMES_HOME` and not `/vault`.
 - **Delivery** defaults to `slack:<home_channel>`, failures included.
 - **Run one now**: `hermes cron run <id>` inside the gateway, as the `hermes` user; it fires at the next tick, within a minute. `hermes cron list` prints text only; read `cron/jobs.json` for status.
+- **The digest** (`kubelab:digest`, a script job) reports the gateway, the sidecar, the sandbox count, the disk and the month's usage per model and provider. A stopped container or an unreachable Docker is its first line; it never prints nothing, because a no-agent job with empty stdout sends nothing.
 - **A job's commands** are checked against the approvals under `cron_mode: deny`: test them with `hermes approvals test --env-type local` before declaring the job.
 
 ## Re-register the sidecar

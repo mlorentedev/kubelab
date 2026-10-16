@@ -153,6 +153,12 @@
         file_type: file
       register: _agent_stack_hermes_scripts_found
 
+    - name: Refuse to clean the job scripts from a checkout that ships none
+      ansible.builtin.assert:
+        that: lookup('ansible.builtin.fileglob', role_path ~ '/files/hermes-scripts/*', wantlist=True) | length > 0
+        fail_msg: "files/hermes-scripts/ holds no script, so removing what the role no longer ships would clear them all"
+        quiet: true
+
     - name: Remove job scripts the role no longer ships
       ansible.builtin.file:
         path: "{{ item }}"

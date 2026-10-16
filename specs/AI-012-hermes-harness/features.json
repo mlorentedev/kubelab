@@ -30,9 +30,9 @@
   {
     "id": "AI-012-hermes-harness-f5",
     "behavior": "AC5: A scheduled job's commit lands under the zone and a digest reaches #agent-fleet",
-    "verification": "poetry run pytest --no-cov -q tests/test_hermes_job_scripts.py",
+    "verification": "poetry run pytest --no-cov -q tests/test_hermes_job_scripts.py tests/test_hermes_digest.py",
     "state": "pending",
-    "evidence": "2026-10-15, partial: the session record ran on ace2 (status ok) and the sync committed sessions/2026-10-15-auto.md as hermes-kubelab (81037703). Memory capture and the digest are PR 4b."
+    "evidence": "2026-10-15: the session record ran on ace2 (status ok) and the sync committed sessions/2026-10-15-auto.md as hermes-kubelab (81037703). PR 4b: kubelab:digest reached #agent-fleet, and the sync committed memories/ as hermes-kubelab (38182a63). Open: the scheduled session-record runs of 2026-10-15 reported a write denied outside HERMES_WRITE_SAFE_ROOT (#2321)."
   },
   {
     "id": "AI-012-hermes-harness-f6",

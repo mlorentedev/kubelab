@@ -89,6 +89,14 @@ What each process sees, same run:
 - The file already existed from the first run, so the agent kept two front matters. The prompt now says to replace an existing file with one record; the re-provision of that edit: `CHECK=1` `changed=1`, first run `changed=2` (the diff report and the edit), second run `changed=0`.
 - `hermes cron edit --script ""` clears the stored script (checked in the pinned image: a job with a context script, edited to drop it, re-plans to nothing and reads `script: null`), so an agent job can lose its script without the planner editing it forever.
 
+### The digest and the memory capture, live on ace2, 2026-10-15
+
+- Digest: `kubelab:digest` (08:05 UTC daily, `mode: script`) ran on `hermes cron run` with `last_status: ok` and reached `#agent-fleet` as a `Cronjob Response`: gateway and sidecar uptime, one sandbox, 181 GB free, month-to-date calls and tokens per model and provider, and the Anthropic fallback line (0.00 USD). A first version summed `COALESCE(actual, estimated)` and printed 0.00 for everything, because Hermes writes `actual_cost_usd = 0.0` until a provider reconciles it; the sum is now the larger of the two.
+- Memory capture, the operator's decision: mount the zone's `memories/` over the gateway's, instead of copying it at sync time. The reason is a permission fact measured on ace2: `data/` is `0700` owned by the gateway's subuid (534287), so the host user that runs the sync cannot read it, and a copy step would need a new privilege for the user that holds the vault token. The mount needs none; the directory is created `0777` by the role, because the gateway's user is not the clone's owner.
+- It broke the sync once. Hermes creates `MEMORY.md.lock` and `.mem_*` temporaries `0600` as the subuid; git fails the whole `add` on one unreadable file, and `hermes-kubelab-vault-sync` stopped committing the zone, session record included (it paged, as designed). Fix: a root-owned ignore file passed as `core.excludesFile`. Exclude pathspecs were tried first and git 2.43 stages nothing at all with them, exit 0 (the same `add -n` listed the files from an interactive shell and listed none under the unit's environment, repeatedly), which is why the first fix looked applied and was not.
+- Live: after the fix, one forced sync committed `memories/MEMORY.md` and `USER.md` as `hermes-kubelab` (`38182a63`) and pushed; the lock files stay untracked and the unit is not failed.
+- Provision: first run `changed=2`, second run `changed=0`.
+
 ## Test status
 
 - Test suite: `<command> -> <output / coverage %>`

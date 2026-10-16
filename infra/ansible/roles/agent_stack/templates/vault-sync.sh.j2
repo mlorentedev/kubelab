@@ -31,6 +31,7 @@ export GIT_TERMINAL_PROMPT=0
 vgit() {
   git -c credential.helper= -c 'credential.helper={{ agent_stack_vault_libexec }}/vault-credential' \
       -c 'core.hooksPath={{ agent_stack_vault_hooks }}' \
+      -c 'core.excludesFile={{ agent_stack_vault_ignore }}' \
       -c 'user.name={{ agent_stack_hermes.vault_sync.author_name }}' \
       -c 'user.email={{ agent_stack_hermes.vault_sync.author_email }}' \
       -c commit.gpgsign=false "$@"
@@ -90,6 +91,13 @@ vgit merge --ff-only --quiet "$upstream" \
 
 # The sandbox's mount point. Git keeps no empty directory, so it is made here.
 mkdir -p "$zone"
+# Hermes's own plumbing in the memories it writes through a mount (spec AI-012
+# AC5): its lock files and the temporary files of an atomic write are created
+# 0600 by the gateway's subuid, which this user cannot read, and one unreadable
+# file fails the whole add. They hold nothing worth keeping; the memory files do.
+# Left out by the root-owned ignore file above, not by exclude pathspecs: on git
+# 2.43 an exclude pathspec over a directory that holds untracked files stages
+# nothing at all, with exit 0 (measured on ace2).
 vgit add --all -- ":(top,literal)$zone/"
 if ! vgit diff --cached --quiet; then
   vgit commit --quiet -m "chore($zone): sync from hermes-kubelab"
