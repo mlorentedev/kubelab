@@ -41,5 +41,12 @@ def test_no_asset_sits_in_the_errors_directory_unreferenced() -> None:
     itself; the test above does that.
     """
     pages = "\n".join(p.read_text(encoding="utf-8") for p in PAGES)
-    orphans = [f.name for f in (HTML / "errors").iterdir() if f.suffix != ".html" and f.name not in pages]
+    # A real reference (src=/href=/url()), not a substring: "404" appears as text in the 404 page.
+    referenced = {
+        Path(m).name
+        for m in re.findall(r"""(?:src|href)=["']([^"']+)["']|url\(["']?([^)"']+)""", pages)
+        for m in m
+        if m
+    }
+    orphans = [f.name for f in (HTML / "errors").iterdir() if f.suffix != ".html" and f.name not in referenced]
     assert not orphans, orphans

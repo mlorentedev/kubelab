@@ -70,7 +70,7 @@ Vikunja has no custom fields — the title is the only place it can live.
 
 | event | path | writes |
 |---|---|---|
-| `pull_request`, `push` | find the task by key -> update state | `{done}` on merge |
+| `pull_request`, `push` | find the task by key -> update state | `{done}` on merge; on open/reopen a comment and a move of a not-done task to the `Doing` bucket (`apps.services.core.vikunja.in_progress_bucket`, found by title in the project's Kanban view, confirmed before it is announced; #2318) |
 | `issues` (`opened`, `reopened`) | find by key -> **create it if absent** | a new task |
 
 The two are split immediately after the signature gate (`Is Issue Event?`), so an

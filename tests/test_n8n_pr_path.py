@@ -169,7 +169,7 @@ def test_only_a_merge_reaches_the_state_write() -> None:
     assert targets("Is PR Merged?", 0) == ["Update Vikunja Task State"]
     assert targets("Is PR Merged?", 1) == ["Append PR URL Comment"]
     assert targets("Update Vikunja Task State", 0) == ["Append PR URL Comment"]
-    assert targets("Append PR URL Comment", 0) == ["Notify #dev-activity"]
+    assert targets("Append PR URL Comment", 0) == ["Should Move to Doing?"]
     assert targets("Notify #dev-activity", 0) == ["Respond PR Synced"]
     assert "prWriteKind" in json.dumps(node("Is PR Merged?")["parameters"])
 

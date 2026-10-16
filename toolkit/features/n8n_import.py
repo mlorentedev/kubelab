@@ -216,6 +216,7 @@ N8N_IMPORT_CATALOG: list[N8nImportSpec] = [
 #: not by name, inside any file this runs over.
 PLACEHOLDER_SSOT: dict[str, str] = {
     "RESOLVE_VIKUNJA_DEFAULT_PROJECT": "apps.services.core.vikunja.default_project",
+    "RESOLVE_VIKUNJA_IN_PROGRESS_BUCKET": "apps.services.core.vikunja.in_progress_bucket",
     # The From of any workflow sending through `kubelab-smtp`: the relay's own account.
     "RESOLVE_KUBELAB_SMTP_FROM": "infra.smtp.user",
     # The sale digest's own values; SOPS-resident, hence never logged below.
