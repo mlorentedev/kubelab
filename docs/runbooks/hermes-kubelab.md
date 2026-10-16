@@ -199,7 +199,7 @@ Jobs are declared in `apps.services.ai.hermes_kubelab.cron` (`common.yaml`) and 
 `agent-stack-docs-mirror.timer` (hourly) keeps the repository's `docs/` readable, read-only, in two places: `/docs` in the agent's sandbox and `/docs` in Open WebUI's MCP bridge (the `vault` tool server now lists both). The remote is public, so the refresh carries no credential.
 
 - **Two root-owned checkouts of one bare repository**: `/opt/agent-stack/docs-mirror/tree/docs` (the bridge) and `/var/lib/hermes-kubelab/docs-mirror/docs` (the sandbox, in the agent's home because its rootless daemon must read it). Root owns both, so the agent reads the docs and cannot edit them. The settings are `apps.services.ai.hermes_kubelab.docs_mirror` in `common.yaml`.
-- **Refresh now**: `sudo systemctl start agent-stack-docs-mirror.service` on ace2, then `journalctl -u agent-stack-docs-mirror -n 20`. A failed run keeps the last trees and pages.
+- **Refresh now**: `sudo systemctl start agent-stack-docs-mirror.service` on ace2, then `journalctl -u agent-stack-docs-mirror -n 20`. A run that fails to fetch keeps the last trees and pages. One that fails between the two checkouts (a full disk) leaves them disagreeing until the next successful run, an hour later.
 - **The docs are always mounted into the sandbox**, even without the vault token. That turns Hermes's command guards on for the docker backend, which only makes the sandbox stricter.
 - Anything written into a tree is discarded at the next run; a file deleted upstream leaves the tree.
 

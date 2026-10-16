@@ -28,20 +28,20 @@ def call(path: str, body: object = None, key: str | None = connection["key"]) ->
         return error.code, None
 
 
-unauthenticated, _ = call("/openapi.json", key=None)
-status, spec = call("/openapi.json")
-paths = sorted(p.strip("/") for p in (spec or {}).get("paths", {}))
-listed, listing = call("/list_directory", {"path": "/vault"})
-docs_listed, docs_listing = call("/list_directory", {"path": "/docs"})
-# mcpo answers with the tool's text, one `[FILE] name` or `[DIR] name` line per
-# entry and "" for an empty directory (measured, v0.0.20). Any other shape is
-# -1, so a change in the format fails the check instead of passing it.
 def count_entries(listing):
+    """mcpo answers with the tool's text, one `[FILE] name` or `[DIR] name` line per entry
+    and "" for an empty directory (measured, v0.0.20). Any other shape is -1, so a change in
+    the format fails the check instead of passing it."""
     if not isinstance(listing, str):
         return -1
     return sum(1 for line in listing.splitlines() if line.startswith(("[FILE] ", "[DIR] ")))
 
 
+unauthenticated, _ = call("/openapi.json", key=None)
+status, spec = call("/openapi.json")
+paths = sorted(p.strip("/") for p in (spec or {}).get("paths", {}))
+listed, listing = call("/list_directory", {"path": "/vault"})
+docs_listed, docs_listing = call("/list_directory", {"path": "/docs"})
 print(
     json.dumps(
         {
