@@ -186,6 +186,14 @@ Jobs are declared in `apps.services.ai.hermes_kubelab.cron` (`common.yaml`) and 
 - **The digest** (`kubelab:digest`, a script job) reports the gateway, the sidecar, the sandbox count, the disk and the month's usage per model and provider. A stopped container or an unreachable Docker is its first line; it never prints nothing, because a no-agent job with empty stdout sends nothing.
 - **A job's commands** are checked against the approvals under `cron_mode: deny`: test them with `hermes approvals test --env-type local` before declaring the job.
 
+## Persona
+
+`SOUL.md` is the role's, mounted read-only over the data directory's copy, so the agent cannot rewrite who it is. The public part is `templates/hermes-soul.md.j2`. The operator's private profile is `80_agents/operator/hermes-kubelab/profile.md` in the vault: the provision copies it from the root-owned mirror on the node (frontmatter stripped), joins it after the public part with `assemble`, and never prints it (`diff: false`). Without the file the persona is the public part alone.
+
+- **Change the public text**: edit the template, `CHECK=1`, provision. A changed `SOUL.md` recreates the gateway, because a rename leaves a single-file bind mount on the old file.
+- **Change the profile**: edit it in the vault, wait for `vault-mirror.timer`, provision.
+- **Check it live**: an edit of `SOUL.md` from inside the gateway fails (read-only), and the next session's context starts with the role's file.
+
 ## Managed skills
 
 `apps.services.ai.hermes_kubelab.skills` names the vault skills (`00_meta/skills/<name>/`) the agent is given. The provision copies each from the root-owned vault mirror into `/var/lib/hermes-kubelab/hermes-skills` and mounts it read-only at `/managed-skills`, which `skills.external_dirs` points at: the agent can use a managed skill and cannot change it.

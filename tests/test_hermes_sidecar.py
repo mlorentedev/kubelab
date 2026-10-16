@@ -137,7 +137,12 @@ def test_a_new_key_recreates_the_sidecar_so_it_logs_in_again() -> None:
     env = Environment(undefined=StrictUndefined)
     env.filters["bool"] = lambda value: value if isinstance(value, bool) else str(value).lower() in ("true", "yes", "1")
     command = env.from_string(_task("Start hermes-kubelab")["ansible.builtin.command"])
-    registers = ("_agent_stack_hermes_env_file", "_agent_stack_hermes_config", "_agent_stack_hermes_ts_env_file")
+    registers = (
+        "_agent_stack_hermes_env_file",
+        "_agent_stack_hermes_config",
+        "_agent_stack_hermes_ts_env_file",
+        "_agent_stack_hermes_soul",
+    )
     # The fourth input is a fact, and set_fact hands it over as a string.
     for *changed, unbound in product((False, True), repeat=len(registers) + 1):
         context = {name: {"changed": flag} for name, flag in zip(registers, changed, strict=True)}
