@@ -46,7 +46,22 @@ def test_the_three_revoked_credentials_are_gone_from_every_vault() -> None:
     """
     revoked = {"cloudflare_token", "github_token", "uptimekuma_key"}
     offenders = []
-    for vault in sorted(SECRETS.glob("*.enc.yaml")):
+    vaults = sorted(SECRETS.glob("*.enc.yaml"))
+    # Positive controls: an absence check is green over an empty sample or a layout it cannot read.
+    # The vaults are found, and the walk below resolves a key that is known to exist (the Authelia
+    # block, CLAUDE.md), so a renamed directory or a reshaped tree turns this red instead of silent.
+    assert vaults, f"no vault found under {SECRETS}"
+    reachable = [
+        v.name
+        for v in vaults
+        if (yaml.safe_load(v.read_text(encoding="utf-8")) or {})
+        .get("apps", {})
+        .get("services", {})
+        .get("security", {})
+        .get("authelia")
+    ]
+    assert reachable, "the path walked below reaches no known secret in any vault; the layout changed"
+    for vault in vaults:
         data = yaml.safe_load(vault.read_text(encoding="utf-8")) or {}
         homepage = data.get("apps", {}).get("services", {}).get("dashboard", {}).get("homepage", {}) or {}
         offenders += [f"{vault.name}:{key}" for key in revoked & set(homepage)]
