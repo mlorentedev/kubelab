@@ -176,6 +176,21 @@ def test_a_path_that_climbs_out_of_the_lessons_is_not_extracted(analyzer, tmp_pa
     assert not list(tmp_path.parent.glob("escape.md")) and not (tmp_path / "escape.md").exists()
 
 
+def test_a_repository_dropped_from_the_list_stops_feeding_the_corpus(analyzer, tmp_path: Path, monkeypatch) -> None:
+    cache = tmp_path / "cache"
+    (cache / "mlorentedev_gone").mkdir(parents=True)
+    (cache / "mlorentedev_gone" / "lesson-001-old.md").write_text(SAME_CAUSE)
+    (cache / "mlorentedev_kept").mkdir()
+    (cache / "mlorentedev_kept" / "lesson-002-new.md").write_text(SAME_CAUSE)
+    monkeypatch.setattr(analyzer, "fetch_github_lessons", lambda repos, c: {r: 1 for r in repos})
+    vault = _vault(tmp_path / "vault", {"2026-01-01-a.md": SAME_CAUSE})
+    out = tmp_path / "c.json"
+    assert _run(analyzer, vault, out) == 0
+    vault_only = json.loads(out.read_text())["corpus_files"]
+    assert _run(analyzer, vault, out, "--repos", "mlorentedev/kept", "--cache-dir", str(cache)) == 0
+    assert json.loads(out.read_text())["corpus_files"] == vault_only + 1, "only the repository asked for is added"
+
+
 def test_a_fetched_lesson_names_its_repository_and_category_as_its_source(analyzer, tmp_path: Path) -> None:
     cache = tmp_path / "cache"
     (cache / "mlorentedev_demo" / "containers").mkdir(parents=True)
