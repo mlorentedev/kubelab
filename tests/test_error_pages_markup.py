@@ -29,8 +29,17 @@ def test_a_page_asks_not_to_be_indexed(page: Path) -> None:
     assert '<meta name="robots" content="noindex">' in page.read_text(encoding="utf-8")
 
 
+def test_the_orphaned_webp_stays_gone() -> None:
+    """UX-7 named one file; it had already been removed when this guard was written."""
+    assert not (HTML / "errors" / "404-southpark.webp").exists()
+
+
 def test_no_asset_sits_in_the_errors_directory_unreferenced() -> None:
-    """A binary shipped in every image and read by nothing (404-southpark.webp, UX-7)."""
+    """A tripwire for the next binary shipped in every image and read by nothing.
+
+    On today's tree the candidate set is empty, so this proves nothing about UX-7
+    itself; the test above does that.
+    """
     pages = "\n".join(p.read_text(encoding="utf-8") for p in PAGES)
     orphans = [f.name for f in (HTML / "errors").iterdir() if f.suffix != ".html" and f.name not in pages]
     assert not orphans, orphans
