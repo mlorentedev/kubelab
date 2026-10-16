@@ -267,3 +267,34 @@ def test_every_repository_is_an_owner_slash_name() -> None:
     for repo in HERMES["curator"]["repos"]:
         owner, _, name = repo.partition("/")
         assert owner and name and "/" not in name
+
+
+def _assert_that() -> list[str]:
+    tasks = yaml.safe_load((ROLE / "tasks/curator.yml").read_text())
+    task = next(t for b in tasks for t in b.get("block", []) if t.get("name") == "Verify this run wrote the candidates")
+    return task["ansible.builtin.assert"]["that"]
+
+
+def _holds(before: dict, after: dict) -> bool:
+    from jinja2 import Environment
+
+    env = Environment()  # noqa: S701 (evaluates the role's own conditions, not a page)
+    context = {"_agent_stack_curator_before": {"stat": before}, "_agent_stack_curator_after": {"stat": after}}
+    return all(bool(env.compile_expression(cond)(**context)) for cond in _assert_that())
+
+
+def test_the_read_back_testifies_for_this_run_and_not_for_last_weeks_file() -> None:
+    names = [
+        t.get("name") for b in yaml.safe_load((ROLE / "tasks/curator.yml").read_text()) for t in b.get("block", [])
+    ]
+    assert (
+        names.index("Note when the candidates were last written")
+        < names.index("Run the analyzer once")
+        < names.index("Look at the candidates again")
+        < names.index("Verify this run wrote the candidates")
+        < names.index("Read the candidates back")
+    )
+    assert _holds({"exists": False}, {"exists": True, "mtime": 5.0}), "the first run"
+    assert _holds({"exists": True, "mtime": 5.0}, {"exists": True, "mtime": 9.0}), "rewritten"
+    assert not _holds({"exists": True, "mtime": 5.0}, {"exists": True, "mtime": 5.0}), "left as it was"
+    assert not _holds({"exists": False}, {"exists": False}), "never written"

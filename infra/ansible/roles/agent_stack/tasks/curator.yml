@@ -39,12 +39,35 @@
 
     # The run is the measurement: it proves the clone is readable, the lessons fetch and
     # the zone is writable. Not a change: the units are.
+    - name: Note when the candidates were last written
+      ansible.builtin.stat:
+        path: "{{ agent_stack_curator_out }}/candidates.json"
+      register: _agent_stack_curator_before
+      when: not ansible_check_mode
+
     - name: Run the analyzer once
       ansible.builtin.systemd:
         name: "{{ agent_stack_curator_unit }}.service"
         state: started
         daemon_reload: true
       changed_when: false
+      when: not ansible_check_mode
+
+    - name: Look at the candidates again
+      ansible.builtin.stat:
+        path: "{{ agent_stack_curator_out }}/candidates.json"
+      register: _agent_stack_curator_after
+      when: not ansible_check_mode
+
+    # A file left from an earlier week must not testify for this run.
+    - name: Verify this run wrote the candidates
+      ansible.builtin.assert:
+        that:
+          - _agent_stack_curator_after.stat.exists
+          - not (_agent_stack_curator_before.stat.exists | default(false))
+            or _agent_stack_curator_after.stat.mtime > _agent_stack_curator_before.stat.mtime
+        fail_msg: "{{ agent_stack_curator_out }}/candidates.json was not rewritten by the run"
+        quiet: true
       when: not ansible_check_mode
 
     - name: Read the candidates back
