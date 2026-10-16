@@ -1,12 +1,12 @@
 ---
-id: adr-032-idp-branding-substrate
+id: adr-071-idp-branding-substrate
 type: adr
-status: active
+status: accepted
 created: "2026-09-04"
 owner: manu
 ---
 
-# ADR-032: Centralized IDP Branding Substrate & Drift-Checked Theming Pipeline
+# ADR-071: Centralized IDP Branding Substrate & Drift-Checked Theming Pipeline
 
 ## Status
 

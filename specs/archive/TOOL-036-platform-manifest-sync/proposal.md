@@ -48,7 +48,7 @@ Provide `tk sync platform-json` (and `make sync-platform-json` / `make sync-plat
 
 - GitHub issue: `mlorentedev/kubelab#1347` (Work-gate)
 - Downstream issue: `mlorentedev/web#162` (WEB-073)
-- Related ADR: `docs/adr/adr-032-idp-branding-substrate.md` (`kubelab`)
+- Related ADR: `docs/adr/adr-071-idp-branding-substrate.md` (`kubelab`)
 - Related ADR: `Projects/web/docs/adr/ADR-056-live-platform-cockpit-architecture.md` (`web`)
 
 <!-- archived 2026-09-05 — PR: https://github.com/mlorentedev/kubelab/pull/1689 -->

@@ -39,7 +39,7 @@ Map every acceptance criterion from `proposal.md` to concrete proof:
 Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.
 
 - [x] Lesson for the repo's `docs/lessons/`? Not needed now (captured in spec verification & commit message).
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? No (aligns with ADR-032 SSOT and ADR-056 Zero-Addressing).
+- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? No (aligns with ADR-071 SSOT and ADR-056 Zero-Addressing).
 - [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. No.
 
 ## Archive checklist
