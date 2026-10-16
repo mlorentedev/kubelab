@@ -286,7 +286,7 @@
         "url": "={{ $('Extract Project ID').first().json.responseUrl }}",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ text: '❌ Vikunja refused to create *' + $('Extract Project ID').first().json.title + '*, so nothing was created. Try again in a minute.' }) }}",
+        "jsonBody": "={{ JSON.stringify({ text: '❌ Vikunja did not confirm the task *' + $('Extract Project ID').first().json.title + '*, so it may not have been created. Check the board before creating it again.' }) }}",
         "options": {}
       },
       "id": "c3000000-0000-4000-8000-00000000000d",

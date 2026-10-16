@@ -298,7 +298,10 @@ def test_the_create_failure_branch_answers_slack_and_stops_before_the_success_no
     assert [t["node"] for t in failed] == ["Tell Slack the Create Failed"]
     tell = node("Tell Slack the Create Failed")["parameters"]
     assert "$('Extract Project ID')" in tell["url"] and "responseUrl" in tell["url"]
-    assert "nothing was created" in tell["jsonBody"]
+    # A 200 without an id may still have created the task, so the answer neither claims it did not
+    # nor advises a retry that would duplicate it.
+    assert "may not have been created" in tell["jsonBody"]
+    assert "Try again" not in tell["jsonBody"]
     assert "Tell Slack the Create Failed" not in data["connections"], "the failure branch must end there"
     for name in ("Update Slack via Response URL", "Notify #dev-activity"):
         assert name not in [t["node"] for t in failed], f"{name} announces a task that does not exist"
