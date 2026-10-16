@@ -510,7 +510,10 @@ def lessons_index(
 
     if fix:
         logger.success(f"{root}: rewrote {len(fixes)} line(s) (counters or row order) from the files")
-        raise typer.Exit(1)  # pre-commit convention: a hook that modified files fails
+        # Exit 1 is not a failure to fix: a hook that modified files fails by pre-commit's
+        # convention, so the next step is to stage the rewrite and run again (#2294).
+        logger.info("Exiting 1 on purpose, the pre-commit convention for a hook that modified files: stage and re-run.")
+        raise typer.Exit(1)
 
     logger.error(f"{root}: {len(fixes)} line(s) (counters or row order) disagree with the files — run with --fix")
     raise typer.Exit(1)
