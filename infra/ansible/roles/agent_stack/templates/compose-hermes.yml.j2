@@ -14,6 +14,12 @@ services:
       - {{ agent_stack_hermes_env }}
     environment:
       HERMES_HOME: {{ agent_stack_hermes_home }}
+      # Where `write_file` may write (os.pathsep-separated; the image sets the data
+      # directory alone). The sandbox mounts the zone writable and the rest of the
+      # vault read-only, so the zone is the boundary already: naming it here makes the
+      # tool agree with the mount instead of refusing a path the agent then writes
+      # through the shell (#2321).
+      HERMES_WRITE_SAFE_ROOT: "{{ agent_stack_hermes_home }}{% if agent_stack_vault_configured | bool %}:{{ agent_stack_hermes.vault_sync.mount }}/{{ agent_stack_vault_zone }}{% endif %}"
     # The image is its own init (s6-overlay must be PID 1), so no `init: true`.
     volumes:
       # The same path on both sides. The gateway computes the host side of every

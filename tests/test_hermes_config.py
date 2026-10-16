@@ -147,6 +147,31 @@ def _gateway() -> dict:
     return yaml.safe_load(_render("compose-hermes.yml.j2"))["services"]["hermes"]
 
 
+def _gateway_with(**overrides: object) -> dict:
+    return yaml.safe_load(_render("compose-hermes.yml.j2", **overrides))["services"]["hermes"]["environment"]
+
+
+def test_write_file_may_write_in_the_zone_the_sandbox_may() -> None:
+    """`write_file` is refused outside HERMES_WRITE_SAFE_ROOT (the image sets /opt/data),
+    while the session record's prompt names a path in the vault zone: every scheduled run
+    reported a refused write and succeeded through the shell (#2321). The sandbox mounts
+    the zone writable and the rest of the vault read-only, so the zone is already the
+    boundary; the safe root names it, the data directory the image already allowed, and
+    nothing else."""
+    from tests.test_agent_stack_role import _environment, _resolved
+
+    resolved = _resolved(_environment())
+    env = _gateway_with(agent_stack_vault_configured=True)
+    zone = f"{resolved['agent_stack_hermes']['vault_sync']['mount']}/{resolved['agent_stack_vault_zone']}"
+    assert env["HERMES_WRITE_SAFE_ROOT"].split(":") == [env["HERMES_HOME"], zone]
+    assert zone.startswith("/") and ".." not in zone and "{{" not in zone
+
+
+def test_without_the_vault_the_safe_root_is_the_data_directory_alone() -> None:
+    env = _gateway_with(agent_stack_vault_configured=False)
+    assert env["HERMES_WRITE_SAFE_ROOT"] == env["HERMES_HOME"]
+
+
 def test_the_gateway_drives_the_agents_own_daemon() -> None:
     from tests.test_agent_stack_role import _context as role_context
 
