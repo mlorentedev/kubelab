@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import types
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -95,6 +96,19 @@ def test_operator_sessions_are_reported_with_what_was_said(tmp_path: Path) -> No
     assert "what is the state of the backup?" in out
     assert "It is fine." in out
     assert "wakeAgent" not in out
+
+
+def test_a_session_that_began_before_the_window_shows_its_own_date(tmp_path: Path) -> None:
+    """A conversation open since yesterday evening and continued this morning must not
+    read as if it opened inside the 24 hours it is reported under."""
+    started = NOW - 30 * HOUR
+    chat = (
+        {"id": "long", "source": "slack", "started_at": started, "title": "Long"},
+        [("long", "user", "still here", NOW - 2 * HOUR)],
+    )
+    out = _report(tmp_path, chat)
+    day = datetime.fromtimestamp(started, UTC).strftime("%Y-%m-%d")
+    assert f"## {day} " in out
 
 
 @pytest.mark.parametrize("source", ["cron", "subagent", "tool", "recovered", "kanban"])

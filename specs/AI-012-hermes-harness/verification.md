@@ -89,6 +89,14 @@ What each process sees, same run:
 - The file already existed from the first run, so the agent kept two front matters. The prompt now says to replace an existing file with one record; the re-provision of that edit: `CHECK=1` `changed=1`, first run `changed=2` (the diff report and the edit), second run `changed=0`.
 - `hermes cron edit --script ""` clears the stored script (checked in the pinned image: a job with a context script, edited to drop it, re-plans to nothing and reads `script: null`), so an agent job can lose its script without the planner editing it forever.
 
+### The digest and the memory capture, live on ace2, 2026-10-15
+
+- Digest: `kubelab:digest` (14:05 UTC daily, 08:05 in Denver, `mode: script`) ran on `hermes cron run` with `last_status: ok` and reached `#agent-fleet` as a `Cronjob Response`: gateway and sidecar uptime, one sandbox, 181 GB free, month-to-date calls and tokens per model and provider, and the Anthropic fallback line (0.00 USD). A first version summed `COALESCE(actual, estimated)` and printed 0.00 for everything, because Hermes writes `actual_cost_usd = 0.0` until a provider reconciles it; the sum is now the larger of the two.
+- Memory capture, the operator's decision: mount the zone's `memories/` over the gateway's, instead of copying it at sync time. The reason is a permission fact measured on ace2: `data/` is `0700` owned by the gateway's subuid (534287), so the host user that runs the sync cannot read it, and a copy step would need a new privilege for the user that holds the vault token. The mount needs none; the directory is created `0777` by the role, because the gateway's user is not the clone's owner.
+- It broke the sync once. Hermes creates `MEMORY.md.lock` and `.mem_*` temporaries `0600` as the subuid; git fails the whole `add` on one unreadable file, and `hermes-kubelab-vault-sync` stopped committing the zone, session record included (the unit failed). Fix: a root-owned ignore file passed as `core.excludesFile`, anchored to `<zone>/memories/` so an untracked file elsewhere in the clone still counts as a change outside the zone. Exclude pathspecs were tried first and git 2.43 stages nothing at all with them, exit 0 (the same `add -n` listed the files from an interactive shell and listed none under the unit's environment, repeatedly), which is why the first fix looked applied and was not.
+- Live: after the fix, one forced sync committed `memories/MEMORY.md` and `USER.md` as `hermes-kubelab` (`38182a63`) and pushed; the lock files stay untracked and the unit is not failed.
+- Provision: first run `changed=2`, second run `changed=0`.
+
 ## Test status
 
 - Test suite: `<command> -> <output / coverage %>`
@@ -108,6 +116,7 @@ What each process sees, same run:
   - `cron/jobs.json` and `memories/` are absent or empty.
 - 2026-10-10, operator, names: `agent_config` for the ported keys, `anthropic_api_key` and `brightdata_api_token` in prod's vault, and `80_agents/operator/hermes-kubelab/` for the operator's private directory. The owner goes in the parent directory, so one path rule (`80_agents/operator/` is the operator's, and the agent's zone never covers it) holds for every agent, where a `-operator` suffix would need a rule per agent.
 - 2026-10-15, operator: jobs are owned by the name prefix `kubelab:`; the digest covers what the gateway sees (docker.sock, its data directory, `state.db`); memory capture is done by the host sync copying `memories/` into the zone. PR 4 split into 4a (reconciler, session record) and 4b (memory capture, digest).
+- 2026-10-15, operator, superseding the line above on memory capture: mount the zone's `memories/` over the gateway's instead of copying, because the host sync user cannot read the gateway's data directory.
 - 2026-10-10, AC2 is parked, not worked around. The only route Hermes leaves to `x-api-key` on this key is a `base_url` outside `anthropic.com`, which means adding a proxy to work around one function.
 - 2026-10-15, operator: move the pin to v0.22.1 (published the day before, against the "a few days old" rule) and accept the loss of the tirith scanner, which v0.22 removes without a replacement. What stands in its place is the sandbox with no network (`docker_network: false`, read back as `net=none` on the live container), plus the two new content checks that run through the approval flow when the vault is mounted. The scanner's own circuit breaker already failed open, so it was never a reliable fail-closed control.
 
