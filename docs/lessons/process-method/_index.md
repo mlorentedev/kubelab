@@ -1,9 +1,10 @@
 # How the work is run: specs, reviews, knowledge
 
-74 lessons, newest first. Back to [all categories](../_index.md).
+75 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 578 | [A client test checks its requests against the server's own swagger, because a fake certifies whatever it is asked](lesson-578-a-client-test-checks-its-requests-against-the-servers-own-swagger-not-a-fake.md) | 2026-10-16 |
 | 561 | [A retired service lives on in every doc that names its host, and a pasted config copy rots twice](lesson-561-a-retired-service-lives-on-in-every-doc-that-names-its-host.md) | 2026-10-11 |
 | 492 | [Read what the agent runtime ships before designing its jail, and apply "always-on" to callees, not callers](lesson-492-read-what-the-runtime-ships-before-designing-the-jail.md) | 2026-09-30 |
 | 480 | [A WIP commit that a hook refused turns the safe restore back into the destructive one](lesson-480-a-wip-commit-a-hook-refused-turns-the-safe-restore-back-into-the-destructive-one.md) | 2026-09-27 |

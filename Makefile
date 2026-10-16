@@ -1547,7 +1547,7 @@ sync-oidc-hashes:
 	@$(TOOLKIT) sync oidc --env $(ENV)
 
 .PHONY: sync-vikunja
-sync-vikunja: ## Idempotently reconcile Vikunja namespaces, labels, and webhooks
+sync-vikunja: ## Idempotently reconcile the declared Vikunja projects, team, shares and labels
 	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make sync-vikunja ENV=staging|prod" && exit 1)
 	@$(TOOLKIT) sync vikunja --env $(ENV)
 

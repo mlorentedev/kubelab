@@ -1,4 +1,4 @@
-"""Vikunja REST API client for project, label, and webhook orchestration."""
+"""Vikunja REST API client for project, team, label, and webhook orchestration."""
 
 from __future__ import annotations
 
@@ -12,6 +12,9 @@ if TYPE_CHECKING:
 #: Where the token n8n uses lives. The reconciler is the same caller class, so it
 #: reads the same key rather than a second one.
 TOKEN_SECRET_KEY = "apps.services.automation.n8n.vikunja_api_token"
+
+#: Vikunja's default max items per page; asking for more silently returns this many.
+PAGE_SIZE = 50
 
 
 class VikunjaError(Exception):
@@ -47,10 +50,54 @@ class VikunjaClient:
             return {}
         return resp.json()
 
-    def get_projects(self) -> list[dict[str, Any]]:
-        """Fetch all projects."""
-        data = self._request("GET", "/projects")
-        return data if isinstance(data, list) else []
+    def _get_all(self, endpoint: str, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+        """Read every page of a list endpoint; a single page silently hides the rest."""
+        items: list[dict[str, Any]] = []
+        for page in range(1, 1000):
+            data = self._request("GET", endpoint, params={**(params or {}), "page": page, "per_page": PAGE_SIZE})
+            batch = data if isinstance(data, list) else []
+            items.extend(batch)
+            if len(batch) < PAGE_SIZE:
+                break
+        return items
+
+    def get_projects(self, include_archived: bool = False) -> list[dict[str, Any]]:
+        """Fetch every project the token's owner can see."""
+        return self._get_all("/projects", {"is_archived": str(include_archived).lower()})
+
+    def create_project(self, title: str) -> dict[str, Any]:
+        """Create a top-level project owned by the token's owner."""
+        return self._request("PUT", "/projects", json={"title": title})
+
+    def get_teams(self) -> list[dict[str, Any]]:
+        """Fetch the teams the token's owner belongs to."""
+        return self._get_all("/teams")
+
+    def create_team(self, name: str) -> dict[str, Any]:
+        """Create a team; its creator joins it as an admin."""
+        return self._request("PUT", "/teams", json={"name": name})
+
+    def get_team(self, team_id: int) -> dict[str, Any]:
+        """Fetch one team with its members."""
+        return self._request("GET", f"/teams/{team_id}")
+
+    def add_team_member(self, team_id: int, username: str) -> dict[str, Any]:
+        """Add an existing account to a team by username."""
+        return self._request("PUT", f"/teams/{team_id}/members", json={"username": username})
+
+    def get_project_teams(self, project_id: int) -> list[dict[str, Any]]:
+        """Fetch the teams a project is shared with, each carrying its permission."""
+        return self._get_all(f"/projects/{project_id}/teams")
+
+    def share_project_with_team(self, project_id: int, team_id: int, permission: int) -> dict[str, Any]:
+        """Share a project with a team (permission 0 read, 1 write, 2 admin)."""
+        return self._request(
+            "PUT", f"/projects/{project_id}/teams", json={"team_id": team_id, "permission": permission}
+        )
+
+    def update_project_team_permission(self, project_id: int, team_id: int, permission: int) -> dict[str, Any]:
+        """Change the permission of an existing project-team share."""
+        return self._request("POST", f"/projects/{project_id}/teams/{team_id}", json={"permission": permission})
 
     def get_labels(self) -> list[dict[str, Any]]:
         """Fetch all task labels."""
