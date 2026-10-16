@@ -10,6 +10,8 @@ owner: manu
 # KubeLab — Service Catalog
 
 > Inventory of services running on the hybrid platform. Update when adding/removing services.
+>
+> Node, domain and health path come from `infra/config/values/common.yaml` (`apps.services.*`); when a row and that file disagree, the file wins.
 
 ## Infrastructure
 
@@ -48,8 +50,10 @@ owner: manu
 | Service | Node | Purpose | Health Check |
 | --- | --- | --- | --- |
 | Portainer | Acemagic (dev/staging) | Container management UI (Docker Compose; NOT K8s) | `/api/system/status` |
-| Gitea | Acemagic / VPS | Git hosting (mirrors) | `/api/healthz` |
+| Gitea | Beelink (on-demand) | Canonical forge for private repositories, organized in orgs (ADR-061, ADR-065). Public code stays on GitHub, which Argo CD reconciles from | `/api/healthz` |
+| act_runner | Beelink (on-demand) | Gitea Actions runner, registered as `kubelab-bee-gitea`. A job queues until the Beelink is on; it does not fail | Runner shown online in Gitea admin |
 | n8n | Acemagic / VPS | Workflow automation + agent orchestration | `GET /healthz` (node HTTP) |
+| Vikunja | K3s (ace1 staging, VPS prod) | The one task board (ADR-066): Deployment on `infra.postgres`, attachments in R2, OIDC against Authelia. `tasks.kubelab.live` | `/api/v1/info` |
 
 ## Data
 
@@ -67,10 +71,9 @@ owner: manu
 
 | Service | Planned Node | Purpose | When |
 | --- | --- | --- | --- |
-| GitHub Runner | Acemagic | Self-hosted CI runner | When CI load grows |
+| GitHub Runner | Beelink | Self-hosted CI runner; exists but idle by default, CI runs on GitHub-hosted runners (ADR-030) | Opt-in through `RUNNER_DOCKER` |
 | Vaultwarden | VPS | Password management | Prod deployment |
 | Headlamp | Acemagic (K8s pod) | Kubernetes web UI (behind Authelia IngressRoute) | B6 / PROD-K3S-000b |
-| Vikunja | Acemagic / VPS | Task management (replaces Google Keep) + agent delegation UI | Stream F |
 | OpenClaw | Acemagic / VPS | AI agent execution and isolation | Stream F |
 | Knowledge Base (Quartz) | Acemagic / VPS | Read-only Obsidian vault web viewer | Stream G |
 | Prometheus | Acemagic / VPS | Metrics scraper + time-series database | Stream D2 |
@@ -91,6 +94,7 @@ owner: manu
 | n8n | `n8n.kubelab.test` | `n8n.staging.kubelab.live` | `n8n.kubelab.live` |
 | Uptime Kuma | `status.kubelab.test` | `status.staging.kubelab.live` | `status.kubelab.live` |
 | CrowdSec | `crowdsec.kubelab.test` | internal only (ClusterIP, no IngressRoute) | internal only (ClusterIP, no IngressRoute) |
+| Vikunja | — | `tasks.staging.kubelab.live` | `tasks.kubelab.live` |
 | Headscale | — | — | `vpn.kubelab.live` |
 
 ## Summary
