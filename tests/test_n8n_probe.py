@@ -205,6 +205,7 @@ class _Cluster:
         open_moves: bool = True,
         open_moves_to: str = _BUCKET,
         open_answer: str = "linked",
+        open_lies: bool = False,
         gate_answer: str | None = "ignored",
         slack_lands_in: int = _PROJECT_ID,
         slack_creates_for_unknown: bool = False,
@@ -229,6 +230,7 @@ class _Cluster:
         self.open_moves = open_moves  # False: the pre-#2318 workflow, an opened PR leaves the task where it was
         self.open_moves_to = open_moves_to  # the bucket the fake workflow moves the task to
         self.open_answer = open_answer
+        self.open_lies = open_lies  # answers `movedTo` but Vikunja never stored the move
         self.bucket_of: dict[int, str] = {}
         self.gate_answer = gate_answer  # the `status` a gate stop answers; None is the pre-#1659 body
         self.slack_lands_in = slack_lands_in  # the #1877 defect: every task went to project 1
@@ -354,7 +356,8 @@ class _Cluster:
         }
         moved_to = None
         if self.open_moves:
-            self.bucket_of[task_id] = self.open_moves_to
+            if not self.open_lies:
+                self.bucket_of[task_id] = self.open_moves_to
             moved_to = self.open_moves_to
             outputs.update({"Move Task to In-Progress Bucket": [1], "Confirm Move": [1]})
         self._run(FORGE, outputs)
@@ -713,6 +716,7 @@ def test_the_open_probe_sends_one_signed_open_for_the_task_it_created() -> None:
         pytest.param({"open_moves": False}, "never ran", id="no-move"),
         pytest.param({"open_moves_to": "Done"}, "Done", id="moved-to-the-wrong-bucket"),
         pytest.param({"open_answer": "done"}, "expected 200 linked", id="answer-not-linked"),
+        pytest.param({"open_lies": True}, "left task", id="answer-claims-a-move-vikunja-never-stored"),
     ],
 )
 def test_an_open_that_did_not_move_the_task_fails_and_still_cleans_up(
