@@ -106,7 +106,7 @@ What each process sees, same run:
 
 - `apps.services.ai.hermes_kubelab.skills` lists `insights`. The role copies each `<name>/` from the vault mirror (`00_meta/skills/`) into `/var/lib/hermes-kubelab/hermes-skills`, root-owned, mounted `:ro` at `/managed-skills`, and the gateway's `skills.external_dirs` names it. A declared skill the mirror lacks fails the provision; one dropped from the declaration is removed from the node.
 - Finding: the dry run's read-back showed `systematic-debugging` already ships as a built-in, which outranks an external skill, so the manifest leaves it (and `test-driven-development`) out (lesson-579).
-- Provision: dry run `changed=2`, first run `changed=6`, second run `changed=0`. The run reads the skills back through the gateway (`hermes skills list` names `insights`) and a `touch` in `/managed-skills` as the gateway's user must fail.
+- Provision: dry run `changed=2`, first run `changed=6`, second run `changed=0`. The run reads the skills back through the gateway (`hermes skills list` lists `insights` with the source `external`; a built-in of the same name fails it) and a `touch` in `/managed-skills` as the gateway's user must fail.
 - Tests: `tests/test_hermes_skills.py` 13 pass; the `:ro` flag removed from the mount goes red under `make mutate`.
 
 ## Test status

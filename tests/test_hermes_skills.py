@@ -56,7 +56,8 @@ def test_the_gateway_reads_the_managed_skills_as_an_external_directory() -> None
 def test_without_the_vault_there_is_no_external_directory_to_point_at() -> None:
     """The mount does not exist either, and Hermes refuses an external dir that is not there."""
     config = _config(agent_stack_vault_configured=False)
-    assert "external_dirs" not in (config.get("skills") or {})
+    assert isinstance(config["skills"], dict), "a mapping, never a bare key that parses as null"
+    assert "external_dirs" not in config["skills"]
     assert MOUNT not in _compose(agent_stack_vault_configured=False)
 
 
@@ -64,6 +65,11 @@ def test_the_ported_harness_cannot_repoint_the_external_directory() -> None:
     hermes = {**HERMES, "agent_config": {**HERMES["agent_config"], "skills": {"external_dirs": ["/elsewhere"]}}}
     config = _config(agent_stack_vault_configured=True, agent_stack_hermes=hermes)
     assert config["skills"]["external_dirs"] == [MOUNT]
+
+
+def test_a_ported_skills_section_holding_only_the_directory_renders_empty_not_null() -> None:
+    hermes = {**HERMES, "skills": [], "agent_config": {**HERMES["agent_config"], "skills": {"external_dirs": ["/x"]}}}
+    assert _config(agent_stack_vault_configured=True, agent_stack_hermes=hermes)["skills"] == {}
 
 
 def test_the_ported_skills_keys_other_than_the_directory_still_render() -> None:
@@ -82,9 +88,8 @@ def test_the_skills_mount_is_read_only_and_comes_from_the_root_owned_copy() -> N
 def test_the_mount_is_dropped_when_no_skill_is_declared() -> None:
     hermes = {**HERMES, "skills": []}
     assert MOUNT not in _compose(agent_stack_hermes=hermes)
-    assert "external_dirs" not in (
-        _config(agent_stack_vault_configured=True, agent_stack_hermes=hermes).get("skills") or {}
-    )
+    config = _config(agent_stack_vault_configured=True, agent_stack_hermes=hermes)
+    assert isinstance(config["skills"], dict) and "external_dirs" not in config["skills"]
 
 
 def test_the_copy_is_root_owned_so_the_agent_cannot_rewrite_what_it_uses() -> None:
@@ -129,3 +134,51 @@ def test_the_running_gateway_is_asked_for_its_skills_and_refused_a_write() -> No
     written = _task("Try to write into the managed skills as the gateway's user")
     assert written["failed_when"] == "_agent_stack_hermes_skills_write.rc == 0", "a write that succeeds fails the run"
     assert written["ansible.builtin.command"]["argv"][-1] == "{{ agent_stack_hermes_skills_mount }}/.write-probe"
+
+
+# --------------------------------------------------------------------------- the live read-back
+
+LISTING = [
+    "┃ Name             ┃ Category         ┃ Source   ┃ Trust   ┃ Status            ┃",
+    "│ insights         │                  │ external │ local   │ enabled           │",
+    "│                  │                  │          │         │ /insights         │",
+    "│ systematic-debu… │ software-develo… │ builtin  │ builtin │ enabled           │",
+    "│ a-very-long-ext… │                  │ external │ local   │ enabled           │",
+]
+
+
+def _readback_fails(declared: list[str], listing: list[str], rc: int = 0) -> bool:
+    """The read-back's own `failed_when`, evaluated with the Ansible filters and tests it uses."""
+    import re
+
+    from jinja2 import Environment
+
+    env = Environment()
+    env.filters["regex_replace"] = lambda value, pattern, repl: re.sub(pattern, repl.replace("\\1", r"\1"), value)
+    env.tests["search"] = lambda value, pattern: re.search(pattern, value) is not None
+    env.filters["difference"] = lambda left, right: [item for item in left if item not in right]
+    expression = _task("Read the managed skills back through the running gateway")["failed_when"]
+    listed = {"rc": rc, "stdout_lines": listing}
+    context = {"agent_stack_hermes": {"skills": declared}, "_agent_stack_hermes_skills_listed": listed}
+    return env.from_string("{{ " + expression.strip() + " }}").render(**context) == "True"
+
+
+def test_an_external_skill_in_the_listing_passes() -> None:
+    assert not _readback_fails(["insights"], LISTING)
+
+
+def test_a_name_the_image_ships_as_a_built_in_fails_even_though_it_is_listed() -> None:
+    """The vault's copy would be installed and never read; the name alone is in the listing."""
+    assert _readback_fails(["systematic-debugging"], LISTING)
+
+
+def test_a_declared_skill_missing_from_the_listing_fails() -> None:
+    assert _readback_fails(["insights", "audit"], LISTING)
+
+
+def test_a_long_name_is_compared_the_way_the_table_cuts_it() -> None:
+    assert not _readback_fails(["a-very-long-external-skill"], LISTING)
+
+
+def test_a_failing_command_fails_the_read_back() -> None:
+    assert _readback_fails(["insights"], LISTING, rc=1)

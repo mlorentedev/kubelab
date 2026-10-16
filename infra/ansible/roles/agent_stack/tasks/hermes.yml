@@ -528,9 +528,11 @@
       failed_when: (_agent_stack_hermes_allowed.stdout | from_json).verdict not in _agent_stack_hermes_passed_verdicts
       check_mode: false
 
-    # The gateway's own view of the managed skills: it lists each declared one, and the
-    # mount refuses a write, as the gateway's user. Without the second, a skill the agent
-    # could rewrite would pass for one it cannot.
+    # The gateway's own view of the managed skills: each declared one must be listed with
+    # the source `external`. A name the image also ships as a built-in is listed too, as
+    # `builtin`, and then the vault's copy is installed and never read; matching the name
+    # alone would pass on exactly that. The table cuts a long name at 15 characters and an
+    # ellipsis, so the declared names are cut the same way before they are compared.
     - name: Read the managed skills back through the running gateway
       ansible.builtin.command:
         argv: [docker, exec, -u, hermes, hermes-kubelab, hermes, skills, list]
@@ -540,7 +542,10 @@
       changed_when: false
       failed_when: >-
         _agent_stack_hermes_skills_listed.rc != 0
-        or (agent_stack_hermes.skills | default([]) | reject('in', _agent_stack_hermes_skills_listed.stdout) | list | length > 0)
+        or (agent_stack_hermes.skills | default([]) | map('regex_replace', '^(.{15}).{2,}$', '\\1…') | list
+            | difference(_agent_stack_hermes_skills_listed.stdout_lines | select('search', '│\\s*external\\s*│')
+                         | map('regex_replace', '^│\\s*([^\\s│]+).*$', '\\1') | list)
+            | length > 0)
       check_mode: false
       when: not ansible_check_mode and agent_stack_vault_configured | bool and (agent_stack_hermes.skills | default([]) | length > 0)
 
