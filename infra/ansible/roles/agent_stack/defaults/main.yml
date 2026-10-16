@@ -137,6 +137,11 @@ agent_stack_hermes_config: "{{ agent_stack_agent_home }}/hermes-config.yaml"
 # the agent writes: a script in the data directory could be rewritten by the
 # very job it feeds.
 agent_stack_hermes_scripts: "{{ agent_stack_agent_home }}/hermes-scripts"
+# The persona (spec AI-012 AC3): root-owned, so the agent cannot rewrite who it is. The
+# public fragment is rendered by the role; the operator's private profile is copied
+# from the vault mirror on the node, and `SOUL.md` is the two joined, mounted read-only.
+agent_stack_hermes_persona: "{{ agent_stack_agent_home }}/hermes-persona"
+agent_stack_hermes_profile_source: "{{ agent_stack_vault_mirror }}/tree/80_agents/operator/hermes-kubelab/profile.md"
 # The tailscale sidecar's (spec PR 3b-2). Its state is the node key: beside the
 # data directory, so the gateway's container does not see it. The env file
 # holds the one-time preauth key until the first registration, then nothing.

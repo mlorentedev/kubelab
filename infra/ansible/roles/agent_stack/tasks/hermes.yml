@@ -127,6 +127,88 @@
         mode: "0644"
       register: _agent_stack_hermes_config
 
+    # The persona (spec AI-012 AC3): root-owned and mounted read-only, so the agent cannot
+    # rewrite who it is. The public fragment is rendered here; the operator's private
+    # profile is copied from the root-owned vault mirror on the node, so its content never
+    # passes through the controller, and nothing below prints it (`diff: false`).
+    - name: Create the persona directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - "{{ agent_stack_hermes_persona }}"
+        - "{{ agent_stack_hermes_persona }}/fragments"
+      register: _agent_stack_hermes_persona_dirs
+
+    - name: Render the public persona
+      ansible.builtin.template:
+        src: hermes-soul.md.j2
+        dest: "{{ agent_stack_hermes_persona }}/fragments/00-public.md"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Look for the operator's profile in the vault mirror
+      ansible.builtin.stat:
+        path: "{{ agent_stack_hermes_profile_source }}"
+      register: _agent_stack_hermes_profile
+      check_mode: false
+      when: agent_stack_vault_configured | bool
+
+    # Without the profile the persona is the public part alone: a node whose mirror has
+    # not caught up still comes up, as itself, and the profile joins at the next provision.
+    - name: Take the profile without its frontmatter
+      ansible.builtin.shell:
+        cmd: >-
+          awk 'NR==1 && $0=="---" {skip=1; next} skip && $0=="---" {skip=0; next} !skip'
+          {{ agent_stack_hermes_profile_source | quote }} > {{ (agent_stack_hermes_persona ~ '/fragments/.10-operator.new') | quote }}
+      changed_when: false
+      check_mode: false
+      diff: false
+      when: _agent_stack_hermes_profile.stat.exists | default(false)
+
+    - name: Install the profile fragment
+      ansible.builtin.copy:
+        src: "{{ agent_stack_hermes_persona }}/fragments/.10-operator.new"
+        dest: "{{ agent_stack_hermes_persona }}/fragments/10-operator.md"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0644"
+      diff: false
+      when: _agent_stack_hermes_profile.stat.exists | default(false)
+
+    - name: Remove the profile fragment when the mirror has none
+      ansible.builtin.file:
+        path: "{{ agent_stack_hermes_persona }}/fragments/10-operator.md"
+        state: absent
+      when: not (_agent_stack_hermes_profile.stat.exists | default(false))
+
+    - name: Remove the profile's staging copy
+      ansible.builtin.file:
+        path: "{{ agent_stack_hermes_persona }}/fragments/.10-operator.new"
+        state: absent
+      changed_when: false
+
+    # `SOUL.md` is replaced by a rename, so a bind mount keeps the old file until the
+    # container is recreated: its change is one of the reasons `up` is forced.
+    - name: Join the persona
+      ansible.builtin.assemble:
+        src: "{{ agent_stack_hermes_persona }}/fragments"
+        dest: "{{ agent_stack_hermes_persona }}/SOUL.md"
+        regexp: '^[0-9]+-.*\.md$'
+        delimiter: "\n"
+        owner: root
+        group: root
+        mode: "0644"
+        remote_src: true
+      diff: false
+      register: _agent_stack_hermes_soul
+      when: not (ansible_check_mode and _agent_stack_hermes_persona_dirs.changed)
+
     # The jobs' scripts: outside the data directory and mounted read-only, like
     # the config. A file removed from the role is removed here too, or a job that
     # still named it would run a script nobody ships.
@@ -279,6 +361,7 @@
       ansible.builtin.command: >-
         docker compose -p {{ agent_stack_hermes_project }} -f {{ agent_stack_hermes_compose }} up -d
         {{ '--force-recreate' if (_agent_stack_hermes_env_file.changed or _agent_stack_hermes_config.changed
+                                  or _agent_stack_hermes_soul.changed | default(false)
                                   or _agent_stack_hermes_ts_env_file.changed
                                   or _agent_stack_hermes_unbound | bool) else '' }}
       become_user: "{{ agent_stack_agent_user }}"

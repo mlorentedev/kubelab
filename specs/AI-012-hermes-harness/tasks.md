@@ -38,8 +38,8 @@ Unblocked by Hermes v0.22 (draft #2204, lesson-557). The pin moved to v0.22.1 in
 
 ### PR 3: identity (AC3)
 
-- [ ] [AC3] Test: `SOUL.md` renders from the role and is mounted `:ro` over `<data>/SOUL.md`. The private profile is joined on the node with `ansible.builtin.assemble` (`remote_src: true`): the public template is rendered to a fragment beside the mirror's profile, so the profile's content never passes through the controller. No `slurp`, and no diff output.
-- [ ] [AC3] Adapt the persona from `hermes-nan/SOUL.md` and `AGENTS.md`, without NaN, Telegram or pod references.
+- [x] [AC3] Test: `SOUL.md` renders from the role and is mounted `:ro` over `<data>/SOUL.md`. The private profile is joined on the node with `ansible.builtin.assemble` (`remote_src: true`): the public template is rendered to a fragment beside the mirror's profile, so the profile's content never passes through the controller. No `slurp`, and no diff output.
+- [x] [AC3] Adapt the persona from `hermes-nan/SOUL.md` and `AGENTS.md`, without NaN, Telegram or pod references.
 - [ ] [AC3] Live: an edit to `SOUL.md` from inside the gateway fails, and the next turn's context lists the role's file.
 
 ### PR 4a: job reconciler and the session record (AC4, AC5 in part)
