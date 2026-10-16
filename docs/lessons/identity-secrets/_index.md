@@ -1,9 +1,10 @@
 # Identity, auth and secret material
 
-80 lessons, newest first. Back to [all categories](../_index.md).
+81 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 579 | [A replacement token that passes the new probe can have lost every old route](lesson-579-replacement-token-probe-every-route.md) | 2026-10-16 |
 | 568 | [A "reference copy" of a secret is a second store](lesson-568-a-reference-copy-of-a-secret-is-a-second-store.md) | 2026-10-14 |
 | 556 | [Two derivations of one address diverge when a route is added](lesson-556-two-derivations-of-one-address-diverge-when-a-route-is-added.md) | 2026-10-10 |
 | 550 | [An auth smoke that only omits the credential cannot tell a value check from a presence check](lesson-550-an-auth-smoke-that-only-omits-the-credential-cannot-tell-a-value-check-from-a-presence-check.md) | 2026-10-10 |
