@@ -11,3 +11,6 @@
 | 10:30 | Slack read probe | bot token reads all 4 alert channels from the gateway (allow-list does not govern a script read) | verification.md in PR #2354 |
 | 10:50 | #2347 conflict | master moved (lesson-579 collision, platform.json): merged master, renumbered mine to 580, 157 tests pass, pushed ed2c9dc4; CI rerunning | |
 | 11:00 | #2338 8a | draft PR #2354 (channels SSOT, alert-activity.py, catalog entry); never merged unattended (prod.enc.yaml, secrets_manager.py) | 19 tests |
+| 11:35 | #2347 merged | `07f1ed3b` squash, --match-head-commit ed2c9dc4; Tests, review, attestation, drift green; triage addendum posted; #2340 stays open for AC10 | |
+| 11:50 | #2342 6a live | master merged into #2352, provision changed=4 then 0; unit Result=success; candidates.json 1962 files / 8 candidates; lesson-581; PR ready | verification.md |
+| 11:55 | #2350 | master merged (conflicts: runbook, defaults; kept both), 121 tests pass, still draft, no live provision | |
