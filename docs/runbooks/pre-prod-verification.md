@@ -173,13 +173,22 @@ ssh user@162.55.57.175 "tailscale status"
 ### 3.2 Backups (PREP-002 + PREP-004)
 
 ```bash
-# PREP-002: VPS snapshot (via Hetzner Cloud Console or API)
-# Verify snapshot exists and is recent (< 24h)
+# PREP-002: VPS snapshot, through the Hetzner API (token hetzner.api_key in SOPS)
+make vps-snapshot                # plan: finds the server, checks its address, reports today's snapshot
+make vps-snapshot APPLY=1        # takes kubelab-vps-<UTC date>; a second run the same day changes nothing
+# Verify snapshot exists and is recent (< 24h): the APPLY run prints its image id and status
 
 # PREP-004: Docker volume backups
 ssh user@162.55.57.175 "ls -la /backups/ 2>/dev/null || echo 'No backup dir'"
 # Must backup: Headscale SQLite, acme.json, any app data volumes
 ```
+
+A snapshot is **crash-consistent only** (ADR-024): SQLite may be torn, so it is the way back from a
+failed cutover, not a backup (backups are `node_backup`, restic to R2). The first one,
+`kubelab-vps-2026-10-16` (image 444208685, 7.3 GB), was taken on 2026-10-16. Restoring is a Hetzner
+`rebuild` of the server from that image (it keeps the IPs and wipes the disk); that path has **not**
+been exercised. `KEEP=N` prunes managed snapshots beyond the newest N and touches only those labelled
+`managed-by=kubelab-toolkit`.
 
 ### 3.3 DNS Rollback Ready
 
