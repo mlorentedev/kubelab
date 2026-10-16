@@ -523,9 +523,10 @@ def lessons_index(
 
 @app.command("cli-reference")
 def cli_reference(
-    readme: Annotated[Path, typer.Option("--readme", help="README holding the cli-reference markers")] = Path(
-        "toolkit/README.md"
-    ),
+    readme: Annotated[Path, typer.Option("--readme", help="README holding the cli-reference markers")] = Path(__file__)
+    .resolve()
+    .parents[1]
+    / "README.md",
     write: Annotated[
         bool,
         typer.Option("--write/--check", help="Rewrite the block from the live command tree, or only compare"),
