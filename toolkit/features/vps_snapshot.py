@@ -79,8 +79,14 @@ class HetznerClient:
 
     def managed_snapshots(self, server_name: str) -> list[dict[str, Any]]:
         selector = f"{MANAGED_LABEL[0]}={MANAGED_LABEL[1]},server={server_name}"
-        data = self._request("GET", "/images", params={"type": "snapshot", "label_selector": selector})
-        return list(data.get("images", []))
+        images: list[dict[str, Any]] = []
+        page: int | None = 1
+        while page:
+            params = {"type": "snapshot", "label_selector": selector, "per_page": 50, "page": page}
+            data = self._request("GET", "/images", params=params)
+            images += list(data.get("images", []))
+            page = ((data.get("meta") or {}).get("pagination") or {}).get("next_page")
+        return images
 
     def create_snapshot(self, server_id: int, description: str, labels: dict[str, str]) -> dict[str, Any]:
         body = {"type": "snapshot", "description": description, "labels": labels}

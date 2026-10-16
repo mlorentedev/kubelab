@@ -86,7 +86,15 @@ class FakeHetzner:
             selector = kwargs["params"].get("label_selector", "")
             wanted = dict(p.split("=") for p in selector.split(",") if p)
             found = [i for i in self.images.values() if all(i["labels"].get(k) == v for k, v in wanted.items())]
-            return 200, {"images": found}
+            # Like Hetzner: a page of `per_page` (default 25) plus the pointer to the next one.
+            per_page = int(kwargs["params"].get("per_page", 25))
+            page = int(kwargs["params"].get("page", 1))
+            chunk = found[(page - 1) * per_page : page * per_page]
+            more = page * per_page < len(found)
+            return 200, {
+                "images": chunk,
+                "meta": {"pagination": {"page": page, "next_page": page + 1 if more else None}},
+            }
         if method == "POST" and path == "/servers/7/actions/create_image":
             body = kwargs["json"]
             self.next_id += 1
@@ -201,6 +209,20 @@ def test_a_second_run_the_same_day_changes_nothing() -> None:
     assert len(fake.images) == before
     assert image["description"] == "kubelab-vps-2026-10-16"
     assert [v for v in fake.verbs() if v.startswith("POST")].count("POST /servers/7/actions/create_image") == 1
+
+
+def test_a_second_run_sees_todays_snapshot_beyond_the_first_page_of_images() -> None:
+    # 60 older snapshots push today's past a page of 50; missing it would take, and bill,
+    # a duplicate on every rerun.
+    fake = FakeHetzner()
+    for n in range(60):
+        fake.add_snapshot(f"kubelab-vps-old-{n:02d}", f"2026-08-{n % 28 + 1:02d}T00:00:00+00:00")
+    run(fake)  # today's lands after them, on the second page
+    before = len(fake.images)
+    p, _ = run(fake)
+    assert p.exists is True
+    assert len(fake.images) == before
+    assert p.managed_count == before
 
 
 def test_a_plan_alone_writes_nothing() -> None:
