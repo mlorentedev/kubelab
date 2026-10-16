@@ -81,7 +81,9 @@ def _skip_if_refused(run: subprocess.CompletedProcess[str]) -> None:
         pytest.skip("uncommitted changes under the generated overlays; the gate refuses before generating")
 
 
-@pytest.mark.parametrize(("toolkit", "exit_code", "says"), [("false", 2, "A generator failed"), ("true", 0, "No drift")])
+@pytest.mark.parametrize(
+    ("toolkit", "exit_code", "says"), [("false", 2, "A generator failed"), ("true", 0, "No drift")]
+)
 def test_the_drift_gate_fails_on_a_failed_generator(toolkit: str, exit_code: int, says: str) -> None:
     run = _drift(toolkit)
     _skip_if_refused(run)

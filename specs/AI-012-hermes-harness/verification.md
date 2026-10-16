@@ -60,6 +60,35 @@ Two limits remained, and neither was in AC1's scope:
 - The live gateway's `auth.json` still carries `ANTHROPIC_API_KEY` as `exhausted` (400, 2026-10-11, from the OAuth-era bug). Measured, not inferred: the same throwaway gateway rerun with a copy of that `auth.json` (the `exhausted` entry present) still prints `Fallback activated: deepseek-v4-flash -> claude-haiku-5-5 (anthropic)` and answers `pong`. The probe opened no Slack connection (empty `SLACK_*` reads as unset) and the live gateway stayed connected (`Socket Mode connected` since 02:49Z, no later Slack line).
 - AC1's scanner is retired, not ported: v0.22 removed it (see the decision below).
 
+### R6, live on ace2, 2026-10-15 (Hermes v0.22.1)
+
+Does the running gateway pick up `hermes cron` changes without a restart? **Yes.**
+- A throwaway Ansible playbook (not committed) ran as the agent's user against its daemon, with the gateway left running. Before: `hermes cron status` reported the gateway as the scheduler host (ticker heartbeat 48 s old), and `cron/jobs.json` did not exist.
+- `hermes cron create --name r6-probe --deliver local --repeat 1 1m "..."` through `docker exec -u hermes`. 67 s later the job had run: `last_run_at` 07:08:27, `last_status: ok`, `hermes cron runs` showed it `completed`. No recreate, no restart. The probe job was removed afterwards.
+- Source agrees: `get_due_jobs` calls `load_jobs()` from disk on every tick (`cron/jobs.py`). So the reconciler never restarts the gateway.
+- `hermes cron list` prints text with a scheduler warning, so the reconciler reads `cron/jobs.json` (structured) and writes through `hermes cron create|edit|remove` (the CLI holds the store's lock). Writes run as `-u hermes`, or the files land owned by root.
+
+What each process sees, same run:
+- The gateway container has no `/vault` (`ls: cannot access '/vault'`, rc 2). A `--no-agent` script therefore cannot read or write the zone.
+- No sandbox was running, so the sandbox's view of `HERMES_HOME` is not measured here; it is measured with the session record's live proof.
+
+### The job reconciler, live on ace2, 2026-10-15
+
+- `make provision NODE=ace2 ENV=prod TAGS=agent_stack CHECK=1`: `changed=1` (the job to create). First real run `changed=2`, second `changed=0`.
+- Jobs are owned by the name prefix `kubelab:` (operator's choice). A job without it is never edited, resumed or removed, and two owned jobs with one name fail the plan.
+- `edit` rather than `remove` + `create`: the id and the run history survive. It states every managed field, a cleared one with its empty value, and the mode (`--agent` or `--no-agent`) because `edit` keeps the old one otherwise.
+- Locally, against the real CLI in the pinned image, every op ran with a foreign job preserved.
+
+### The session record, live on ace2, 2026-10-15
+
+- First run, with no context feed: the job answered `[SILENT]`. The agent cannot list its own sessions (its tools see the vault; `state.db` is in `HERMES_HOME`), so asking it whether there was activity cannot work.
+- Fix: an agent job may carry a pre-run `script`. Its stdout is injected into the turn (cut at 8000 characters), and a last line of `{"wakeAgent": false}` skips the turn, the delivery and the spend. `session-activity.py` reads `state.db` read-only, drops automated sessions (`cron`, `subagent`, `tool`, `recovered`, `kanban`), redacts credentials and keeps to 7000 characters.
+- The scripts directory is mounted read-only over `<data>/scripts/` (like `config.yaml`): what governs the agent is not where the agent writes. The image's start hook tolerated the mount.
+- Run on the real Slack conversation of the night before: `last_status: ok`, the agent wrote `sessions/2026-10-15-auto.md`, and the next sync committed it as `hermes-kubelab` (`81037703`). The sandbox's write was not blocked by `cron_mode: deny`, and the injection scanner did not stop the transcript.
+- Provision with the new mount: `CHECK=1` `changed=4`, first run `changed=6` (the Compose project re-rendered, so the gateway was recreated once for the mount, then the job edited), second run `changed=0`.
+- The file already existed from the first run, so the agent kept two front matters. The prompt now says to replace an existing file with one record; the re-provision of that edit: `CHECK=1` `changed=1`, first run `changed=2` (the diff report and the edit), second run `changed=0`.
+- `hermes cron edit --script ""` clears the stored script (checked in the pinned image: a job with a context script, edited to drop it, re-plans to nothing and reads `script: null`), so an agent job can lose its script without the planner editing it forever.
+
 ## Test status
 
 - Test suite: `<command> -> <output / coverage %>`
@@ -78,6 +107,7 @@ Two limits remained, and neither was in AC1's scope:
   - `ANTHROPIC_API_KEY` is a recognised provider key.
   - `cron/jobs.json` and `memories/` are absent or empty.
 - 2026-10-10, operator, names: `agent_config` for the ported keys, `anthropic_api_key` and `brightdata_api_token` in prod's vault, and `80_agents/operator/hermes-kubelab/` for the operator's private directory. The owner goes in the parent directory, so one path rule (`80_agents/operator/` is the operator's, and the agent's zone never covers it) holds for every agent, where a `-operator` suffix would need a rule per agent.
+- 2026-10-15, operator: jobs are owned by the name prefix `kubelab:`; the digest covers what the gateway sees (docker.sock, its data directory, `state.db`); memory capture is done by the host sync copying `memories/` into the zone. PR 4 split into 4a (reconciler, session record) and 4b (memory capture, digest).
 - 2026-10-10, AC2 is parked, not worked around. The only route Hermes leaves to `x-api-key` on this key is a `base_url` outside `anthropic.com`, which means adding a proxy to work around one function.
 - 2026-10-15, operator: move the pin to v0.22.1 (published the day before, against the "a few days old" rule) and accept the loss of the tirith scanner, which v0.22 removes without a replacement. What stands in its place is the sandbox with no network (`docker_network: false`, read back as `net=none` on the live container), plus the two new content checks that run through the approval flow when the vault is mounted. The scanner's own circuit breaker already failed open, so it was never a reliable fail-closed control.
 

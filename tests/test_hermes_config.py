@@ -290,7 +290,9 @@ def test_no_tirith_key_is_declared_for_an_image_that_removed_the_scanner() -> No
     false`, asserted with the rest of the terminal block above)."""
     assert not [k for k in _config()["security"] if k.startswith("tirith_")]
     for path in ("defaults/main.yml", "tasks/hermes.yml"):
-        assert "tirith" not in (ROLE / path).read_text().lower(), f"{path} still reaches the scanner the image no longer ships"
+        assert "tirith" not in (ROLE / path).read_text().lower(), (
+            f"{path} still reaches the scanner the image no longer ships"
+        )
 
 
 def test_the_sandbox_has_no_network() -> None:

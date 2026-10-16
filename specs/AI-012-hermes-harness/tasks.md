@@ -42,13 +42,21 @@ Unblocked by Hermes v0.22 (draft #2204, lesson-557). The pin moved to v0.22.1 in
 - [ ] [AC3] Adapt the persona from `hermes-nan/SOUL.md` and `AGENTS.md`, without NaN, Telegram or pod references.
 - [ ] [AC3] Live: an edit to `SOUL.md` from inside the gateway fails, and the next turn's context lists the role's file.
 
-### PR 4: job reconciler, first jobs (AC4, AC5)
+### PR 4a: job reconciler and the session record (AC4, AC5 in part)
 
-- [ ] [AC4] Measure R6: does the gateway pick up `hermes cron create` without a restart?
-- [ ] [AC4] Test: declared jobs render into the reconcile task's input. A job is identified by name. Undeclared jobs that the role did not create are untouched, using a marker in the job's name or a state file the role owns.
-- [ ] [AC4] Reconcile task: list, diff, create, replace, remove. `changed_when` comes from the diff, and it is `CHECK=1`-safe.
-- [ ] [AC5] Jobs: daily session record, memory capture, daily health and consumption digest. Delivery goes to `slack:<home_channel>`.
-- [ ] [AC5] Live: the session record's commit lands under the zone, and the digest reaches `#agent-fleet`.
+- [x] [AC4] Measure R6: does the gateway pick up `hermes cron create` without a restart? No restart needed (`verification.md`). ✓ 2026-10-15
+- [x] [AC4] Test: declared jobs render into the reconcile task's input. A job is identified by name. Undeclared jobs that the role did not create are untouched, by the `kubelab:` name prefix. ✓ 2026-10-15
+- [x] [AC4] Reconcile task: list, diff, create, replace, remove. `changed_when` comes from the diff, and it is `CHECK=1`-safe. `edit` replaces `remove` + `create`, which would lose the job's history. ✓ 2026-10-15
+- [x] [AC5] Job: daily session record, fed by a read-only context script and gated by `wakeAgent`. ✓ 2026-10-15
+- [x] [AC5] Live: the session record's commit lands under the zone. ✓ 2026-10-15
+
+### PR 4b: memory capture and the digest (AC5 in part)
+
+PR 4 was split: with both halves it was about 650 non-test lines against the 300 cap.
+
+- [ ] [AC5] Job: memory capture. `vault-sync.sh` copies the agent's `memories/` into `<zone>/memories/` before it commits.
+- [ ] [AC5] Job: daily health and consumption digest, a no-agent script (gateway, sandbox and sidecar through `docker.sock`, data-directory disk, month-to-date tokens per model and provider). Delivery goes to `slack:<home_channel>`.
+- [ ] [AC5] Live: the digest reaches `#agent-fleet`.
 
 ### PR 5: skills and the repository mirror (AC9, AC10)
 

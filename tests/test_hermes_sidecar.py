@@ -142,7 +142,10 @@ def test_a_new_key_recreates_the_sidecar_so_it_logs_in_again() -> None:
     for *changed, unbound in product((False, True), repeat=len(registers) + 1):
         context = {name: {"changed": flag} for name, flag in zip(registers, changed, strict=True)}
         rendered = command.render(
-            agent_stack_hermes_project="p", agent_stack_hermes_compose="c", _agent_stack_hermes_unbound=str(unbound), **context
+            agent_stack_hermes_project="p",
+            agent_stack_hermes_compose="c",
+            _agent_stack_hermes_unbound=str(unbound),
+            **context,
         )
         # Recreated exactly when an input changed or the port is lost: always
         # would break `changed=0`, and never would leave a new key unread.

@@ -22,6 +22,8 @@ services:
       - {{ agent_stack_hermes_home }}:{{ agent_stack_hermes_home }}
       # Read-only over the image's own copy, which it would hand to its runtime user.
       - {{ agent_stack_hermes_config }}:{{ agent_stack_hermes_home }}/config.yaml:ro
+      # The jobs' scripts, read-only for the same reason.
+      - {{ agent_stack_hermes_scripts }}:{{ agent_stack_hermes_home }}/scripts:ro
       # Where the image looks for a socket to join the group of.
       - /run/user/{{ _agent_stack_agent_uid }}/docker.sock:/var/run/docker.sock
     # On the host's address in Open WebUI's network, which ufw opens to that

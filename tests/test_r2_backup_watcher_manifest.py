@@ -128,9 +128,7 @@ def test_the_sizing_step_gets_only_the_read_only_token(rendered: dict) -> None:
     (mapping,) = [m for m in SECRET_DEFINITIONS if m.name.startswith(NAME)]
     init = rendered["init"]
     assert "envFrom" not in init
-    from_secret = {
-        e["name"]: e["valueFrom"]["secretKeyRef"] for e in init.get("env", []) if "valueFrom" in e
-    }
+    from_secret = {e["name"]: e["valueFrom"]["secretKeyRef"] for e in init.get("env", []) if "valueFrom" in e}
     assert set(from_secret) == {"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"}
     assert {ref["name"] for ref in from_secret.values()} == {mapping.name}
     assert all(ref["key"] == name for name, ref in from_secret.items())

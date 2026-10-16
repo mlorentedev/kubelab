@@ -34,8 +34,7 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 WORKFLOW_DIR = REPO_ROOT / "infra" / "n8n" / "workflows"
 
 #: Workflows known to still carry the defect, each with the ticket that owns it.
-KNOWN_BROKEN = {
-}
+KNOWN_BROKEN = {}
 
 
 def _workflows() -> list[Any]:
@@ -56,8 +55,7 @@ def test_no_http_node_declares_error_handling_where_n8n_never_reads_it(path: pat
     dead = [
         n["name"]
         for n in _http_nodes(path)
-        if isinstance(n.get("parameters", {}).get("options"), dict)
-        and "continueOnFail" in n["parameters"]["options"]
+        if isinstance(n.get("parameters", {}).get("options"), dict) and "continueOnFail" in n["parameters"]["options"]
     ]
     assert not dead, (
         f"{path.name}: `parameters.options.continueOnFail` is ignored by n8n 2.12.3 on {dead}. "

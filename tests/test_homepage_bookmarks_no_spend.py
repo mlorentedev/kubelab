@@ -31,7 +31,15 @@ def test_no_bookmark_label_carries_a_spend() -> None:
 
 @pytest.mark.parametrize(
     "label",
-    ["Hetzner (~9€/mo)", "GCP Hub (~$6/mo)", "VPS (9 USD)", "R2 (9/month)", "Box (9 / mo)", "S3 (9 monthly)", "B2 (9 per month)"],
+    [
+        "Hetzner (~9€/mo)",
+        "GCP Hub (~$6/mo)",
+        "VPS (9 USD)",
+        "R2 (9/month)",
+        "Box (9 / mo)",
+        "S3 (9 monthly)",
+        "B2 (9 per month)",
+    ],
 )
 def test_the_pattern_catches_each_spelling_of_a_spend(label: str) -> None:
     assert SPEND.search(label), label

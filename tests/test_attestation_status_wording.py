@@ -237,6 +237,7 @@ def test_a_state_file_the_cli_cannot_write_is_exit_2(tmp_path: Path) -> None:
             }
         )
     )
+
     def run(state_file: Path) -> int:
         args = ["review-attestation", "--payload-file", str(payload_file), "--state-file", str(state_file)]
         return CliRunner().invoke(app, args).exit_code

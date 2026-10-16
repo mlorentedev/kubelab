@@ -92,8 +92,8 @@ def _ruled_excluded(node_name: str) -> set[str]:
 # Either alone misses one: the service's timestamp resets at boot, and a manual
 # `systemctl start` does not move the timer's.
 _LAST_RUN = (
-    "for t in \"$(systemctl show kubelab-maintenance.timer -p LastTriggerUSec --value)\" "
-    "\"$(systemctl show kubelab-maintenance.service -p ExecMainStartTimestamp --value)\"; do "
+    'for t in "$(systemctl show kubelab-maintenance.timer -p LastTriggerUSec --value)" '
+    '"$(systemctl show kubelab-maintenance.service -p ExecMainStartTimestamp --value)"; do '
     '[ -n "$t" ] && [ "$t" != n/a ] && date -d "$t" +%s; done | sort -n | tail -1'
 )
 

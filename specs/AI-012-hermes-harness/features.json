@@ -23,16 +23,16 @@
   {
     "id": "AI-012-hermes-harness-f4",
     "behavior": "AC4: Declared jobs and gateway jobs match by name, idempotently, without touching jobs the role did not create",
-    "verification": "echo 'not implemented' && exit 1",
+    "verification": "poetry run pytest --no-cov -q tests/test_hermes_jobs.py",
     "state": "pending",
-    "evidence": ""
+    "evidence": "2026-10-15: tests/test_hermes_jobs.py green (34); seven mutants of the planner caught; ace2 provision CHECK=1 changed=1, run 1 changed=2, run 2 changed=0; local end-to-end against the real CLI covered every op with a foreign job preserved."
   },
   {
     "id": "AI-012-hermes-harness-f5",
     "behavior": "AC5: A scheduled job's commit lands under the zone and a digest reaches #agent-fleet",
-    "verification": "echo 'not implemented' && exit 1",
+    "verification": "poetry run pytest --no-cov -q tests/test_hermes_job_scripts.py",
     "state": "pending",
-    "evidence": ""
+    "evidence": "2026-10-15, partial: the session record ran on ace2 (status ok) and the sync committed sessions/2026-10-15-auto.md as hermes-kubelab (81037703). Memory capture and the digest are PR 4b."
   },
   {
     "id": "AI-012-hermes-harness-f6",

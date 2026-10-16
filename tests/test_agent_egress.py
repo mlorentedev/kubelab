@@ -66,7 +66,9 @@ def _rules(table: str) -> list[str]:
 
 def test_both_tailnet_ranges_are_refused_to_the_agents_uid() -> None:
     rules = _rules(_render(TABLE))
-    assert all(r.startswith(f"meta skuid {UID} ") and r.endswith("reject with icmpx type admin-prohibited") for r in rules)
+    assert all(
+        r.startswith(f"meta skuid {UID} ") and r.endswith("reject with icmpx type admin-prohibited") for r in rules
+    )
     assert any(f"ct original ip daddr {RANGES[0]}" in r for r in rules), rules
     assert any(f"ct original ip6 daddr {RANGES[1]}" in r for r in rules), rules
     # The tailnet is in both lists; one rule each.

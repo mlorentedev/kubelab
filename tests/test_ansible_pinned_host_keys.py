@@ -215,7 +215,9 @@ class TestAddANodeRunbook:
 
     def test_the_pin_is_probed_strictly_before_the_first_provision(self) -> None:
         text = (REPO / "docs/runbooks/add-a-node.md").read_text(encoding="utf-8")
-        probe = re.search(r"^ssh -o StrictHostKeyChecking=yes .*\n.*-o ControlMaster=no -o ControlPath=none", text, re.MULTILINE)
+        probe = re.search(
+            r"^ssh -o StrictHostKeyChecking=yes .*\n.*-o ControlMaster=no -o ControlPath=none", text, re.MULTILINE
+        )
         provision = text.find("make provision")
         assert probe, "the runbook lost its strict probe of the pinned key"
         assert probe.start() < provision, "the runbook provisions a node before probing its pin"

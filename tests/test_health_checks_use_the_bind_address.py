@@ -135,8 +135,8 @@ def test_a_loopback_check_on_a_tailnet_port_is_still_caught(tmp_path: Path) -> N
     (role / "templates").mkdir(parents=True)
     (role / "tasks").mkdir()
     (role / "templates/compose.yml.j2").write_text(
-        "services:\n  a:\n    ports:\n      - \"{{ tailscale_ip }}:3080:8080\"\n"
-        "  b:\n    ports:\n      - \"127.0.0.1:{{ api_port }}:{{ api_port }}\"\n"
+        'services:\n  a:\n    ports:\n      - "{{ tailscale_ip }}:3080:8080"\n'
+        '  b:\n    ports:\n      - "127.0.0.1:{{ api_port }}:{{ api_port }}"\n'
     )
     (role / "tasks/main.yml").write_text(
         "- name: ok\n  ansible.builtin.uri:\n    url: http://127.0.0.1:{{ api_port }}/health\n"

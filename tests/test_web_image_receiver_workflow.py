@@ -458,6 +458,6 @@ def test_the_guard_reads_the_tag_the_dispatch_carried() -> None:
 
 def test_the_guard_is_the_shape_the_promotion_accepts() -> None:
     """One shape in two languages: a change to either side that the other lacks fails here."""
-    guard = re.search(r'=~ (\S+) \]\]', _promote_step()["run"])
+    guard = re.search(r"=~ (\S+) \]\]", _promote_step()["run"])
     assert guard, "the promotion step no longer checks the tag with [[ =~ ]]"
     assert guard.group(1) == promotion._SHA_TAG.pattern

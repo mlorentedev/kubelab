@@ -143,9 +143,18 @@ def _entry(kind: str, path: str) -> str:
     # scratch repository: `name`, `type`, `path` first, then the metadata.
     name = path.rsplit("/", 1)[-1]
     return json.dumps(
-        {"name": name, "type": kind, "path": path, "uid": 0, "gid": 0, "mode": 2147484141,
-         "permissions": "drwxr-xr-x" if kind == "dir" else "-rw-r--r--",
-         "mtime": SNAPSHOT_TIME, "message_type": "node", "struct_type": "node"},
+        {
+            "name": name,
+            "type": kind,
+            "path": path,
+            "uid": 0,
+            "gid": 0,
+            "mode": 2147484141,
+            "permissions": "drwxr-xr-x" if kind == "dir" else "-rw-r--r--",
+            "mtime": SNAPSHOT_TIME,
+            "message_type": "node",
+            "struct_type": "node",
+        },
         separators=(",", ":"),
     )
 
@@ -155,8 +164,14 @@ def _listing(*services: str, sentinel: bool = True, files: tuple[str, ...] = ())
 
     `files` are names present as regular files, not directories.
     """
-    snapshot = {"time": SNAPSHOT_TIME, "paths": [STAGING], "id": "abc", "short_id": "abc12345",
-                "message_type": "snapshot", "struct_type": "snapshot"}
+    snapshot = {
+        "time": SNAPSHOT_TIME,
+        "paths": [STAGING],
+        "id": "abc",
+        "short_id": "abc12345",
+        "message_type": "snapshot",
+        "struct_type": "snapshot",
+    }
     lines = [json.dumps(snapshot, separators=(",", ":")), _entry("dir", STAGING)]
     lines += [_entry("dir", f"{STAGING}/{s}") for s in services]
     lines += [_entry("file", f"{STAGING}/{f}") for f in files]
@@ -500,7 +515,9 @@ OTHER_BUCKET_BYTES = 777_000_001
 
 def _split_buckets(targets: pathlib.Path) -> None:
     """Move vps into a bucket of its own, keeping its repository name for the fake."""
-    text = targets.read_text().replace(f"{PREFIX}/kubelab-vps", f"{PREFIX.rsplit('/', 1)[0]}/{OTHER_BUCKET}/kubelab-vps")
+    text = targets.read_text().replace(
+        f"{PREFIX}/kubelab-vps", f"{PREFIX.rsplit('/', 1)[0]}/{OTHER_BUCKET}/kubelab-vps"
+    )
     targets.write_text(text)
 
 
@@ -668,7 +685,9 @@ def test_the_probe_knocks_on_each_nodes_declared_port_with_a_timeout(fleet) -> N
 
 def _make_on_demand(targets: pathlib.Path, node: str) -> None:
     lines = targets.read_text().splitlines(keepends=True)
-    targets.write_text("".join(ln.replace(" always-on ", " on-demand ") if ln.startswith(f"{node} ") else ln for ln in lines))
+    targets.write_text(
+        "".join(ln.replace(" always-on ", " on-demand ") if ln.startswith(f"{node} ") else ln for ln in lines)
+    )
 
 
 def test_an_on_demand_node_that_is_off_stays_healthy(fleet) -> None:

@@ -53,7 +53,6 @@ def _docker0_cidr() -> str:
     return cidr
 
 
-
 def test_the_bridge_is_private_and_clear_of_every_declared_range() -> None:
     subnet = ipaddress.ip_network(BRIDGE["subnet"])
     common = yaml.safe_load(COMMON.read_text())["networking"]
