@@ -59,7 +59,9 @@ def _usage(db_path: Path, month_start: float) -> list[tuple] | None:
 
     The table keeps one cumulative row per session, model and provider, with no per-event
     timestamp, so a session that straddles the month boundary counts whole in the later
-    month. Sessions last minutes to hours; the overstatement is bounded by one session."""
+    month. Measured on ace2 (2026-10-16, 43 rows since 2026-10-07): the longest session
+    spanned 48 hours and none straddled a month, so the overstatement is bounded by one
+    session's usage."""
     if not db_path.exists():
         return None
     with _connect(db_path) as db:
