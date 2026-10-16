@@ -158,20 +158,19 @@ class _Config:
         return self.value
 
 
-def test_the_token_comes_from_the_flag_then_the_environment_then_sops() -> None:
-    from toolkit.features.vikunja_client import resolve_token
+def test_the_token_comes_from_sops_and_only_from_the_reconciler_key() -> None:
+    from toolkit.features.vikunja_client import TOKEN_SECRET_KEY, resolve_token
 
     cm = _Config("from-sops")
-    assert resolve_token("flag", "env", cm) == "flag"  # type: ignore[arg-type]
-    assert resolve_token("", "env", cm) == "env"  # type: ignore[arg-type]
-    assert cm.asked == [], "SOPS is only read when nothing else supplied a token"
-    assert resolve_token("", "", cm) == "from-sops"  # type: ignore[arg-type]
-    assert cm.asked == ["apps.services.automation.n8n.vikunja_api_token"]
+    assert resolve_token(cm) == "from-sops"  # type: ignore[arg-type]
+    assert cm.asked == ["apps.services.core.vikunja.reconciler_api_token"] == [TOKEN_SECRET_KEY]
 
 
-def test_no_token_anywhere_is_an_error_not_an_anonymous_request() -> None:
+def test_no_token_is_an_error_naming_the_key_not_an_anonymous_request() -> None:
     """`make sync-vikunja` authenticated as nobody for as long as it existed (#1701)."""
     from toolkit.features.vikunja_client import resolve_token
 
-    with pytest.raises(VikunjaError, match="no Vikunja API token"):
-        resolve_token("", "", _Config(None))  # type: ignore[arg-type]
+    with pytest.raises(VikunjaError, match="reconciler_api_token"):
+        resolve_token(_Config(None))  # type: ignore[arg-type]
+    with pytest.raises(VikunjaError, match="reconciler_api_token"):
+        resolve_token(_Config(""))  # type: ignore[arg-type]

@@ -31,17 +31,17 @@ created: "2026-10-15"
 
 ### PR B: CLI, token, rollout
 
-- [ ] [AC1] Failing test in a new `tests/test_sync_vikunja_cli.py`: with no flag and no env var the token comes from SOPS key `apps.services.core.vikunja.reconciler_api_token`; never in `argv`; missing token exits non-zero naming the key
-- [ ] [AC1] `toolkit/cli/sync.py` `sync_vikunja_cmd`: resolve token (flag > env > SOPS), fix help text, wire the declared projects/team into the reconciler
+- [x] [AC1] Failing test in a new `tests/test_sync_vikunja_cli.py`: with no flag and no env var the token comes from SOPS key `apps.services.core.vikunja.reconciler_api_token`; never in `argv`; missing token exits non-zero naming the key
+- [x] [AC1] `toolkit/cli/sync.py` `sync_vikunja_cmd`: the token comes from SOPS only (no `--token` flag, no environment variable: one source, nothing in argv), declared projects/team wired into the reconciler
 - [ ] [AC9] `SecretSpec` in `toolkit/features/secrets_manager.py` (key path confirmed by the owner 2026-10-16): `kind=EXTERNAL`, `envs=("staging","prod")`, `value_pattern=tk_[0-9a-f]{40}`, `expiry=PROVIDER` or `UNKNOWN` (read `secret_expiry.py` first; Vikunja must be able to report a token's expiry for `PROVIDER`), `rotate_note` stating it is minted by `operator` with every group selected explicitly; correct `n8n.vikunja_api_token`'s `Expiry.NEVER`; assert it in a new `tests/test_vikunja_reconciler_token_spec.py`
-- [ ] `Makefile`: update the `sync-vikunja` description (namespaces → projects, team, labels)
-- [ ] [AC8] File the ticket for the `agent-dispatcher` signature mismatch (HMAC vs `headerAuth`); put its number in `verification.md`
+- [x] `Makefile`: update the `sync-vikunja` description (namespaces → projects, team, labels)
+- [x] [AC8] File the ticket for the `agent-dispatcher` signature mismatch (HMAC vs `headerAuth`): #2326 (APP-CONFIG-019)
 
 ### Rollout (needs the owner)
 
-- [ ] Owner, in an `operator` session: mint the reconciler token selecting every group explicitly (`projects`, `projects_teams`, `teams`, `labels`: create/read/write; webhooks not needed); `toolkit secrets set ... --env staging|prod`
-- [ ] Read-only consequence check: `GET /teams` with the new token answers 200 (confirms the route group is assignable)
-- [ ] [AC2][AC3][AC4] `make sync-vikunja ENV=staging`, read back projects/team/shares, re-run for `changed=0`
+- [x] Owner, in an `operator` session (staging done 2026-10-16; prod pending): mint the reconciler token selecting every group explicitly (`projects`, `projects_teams`, `teams`, `labels`: create/read/write; webhooks not needed); `toolkit secrets set ... --env staging|prod`
+- [x] Read-only consequence check (staging: `/projects`, `/teams`, `/labels` all 200): `GET /teams` with the new token answers 200 (confirms the route group is assignable)
+- [x] [AC2][AC3][AC4] `make sync-vikunja ENV=staging` (2026-10-16: 0 projects, 1 team, 1 member, 1 share, 8 labels; second run `changed=0`), read back projects/team/shares, re-run for `changed=0`
 - [ ] [AC2][AC3][AC4] Same on prod
 - [ ] [AC7] Verify as `manu` (read-only token from their session, or the browser); record how in `verification.md`
 
