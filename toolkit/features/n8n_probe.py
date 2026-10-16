@@ -24,6 +24,14 @@ Probes, in order:
    the HTTP status says nothing here and only the execution does.
 5. **Unauthenticated agent-dispatcher call** (AC5): n8n's Header Auth must refuse
    it with 403 before any execution exists.
+6. **Signed Slack `/task create`** (#2304): signed with the SOPS Slack secret and
+   naming the instance's declared default project, it must end at the create node,
+   and Vikunja must hold exactly one task, in that project's id. The task is
+   deleted whatever happened. In prod this also posts one "Task Created" notice.
+7. **Signed Slack command naming a project that does not exist** (#2304): it must
+   create nothing and end at `Tell Slack the Project Is Unknown`. The probe's
+   `response_url` does not resolve, so that node's own POST fails the execution;
+   that one failure is expected, and any other is a defect.
 
 "Stops at its gate" is judged from the execution, with two checks. The gate sent
 nothing to its TRUE output. And no `httpRequest` node ran; that set is read from
@@ -60,6 +68,8 @@ from toolkit.features.k8s_kubeconfig import output_path
 from toolkit.features.notify_smoke import resolve_service_domain
 
 FORGE_SECRET_KEY = "apps.services.automation.n8n.forge_webhook_secret"
+SLACK_SECRET_KEY = "apps.services.automation.n8n.slack_signing_secret"
+DEFAULT_PROJECT_KEY = "apps.services.core.vikunja.default_project"
 
 _WORKFLOW_DIR = Path("infra") / "n8n" / "workflows"
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -70,6 +80,10 @@ _FORGE_GATE = "Has Task Key & Valid Sig?"
 _SLACK_GATE = "Is Slack Valid?"
 _CREATE_NODE = "Create Task from Issue"
 _PR_WRITE_NODES = ("Update Vikunja Task State", "Append PR URL Comment")
+_SLACK_FOUND = "Project Found?"
+_SLACK_CREATE = "Create Task in Vikunja"
+_SLACK_UNKNOWN = "Tell Slack the Project Is Unknown"
+_SLACK_FORM = "application/x-www-form-urlencoded"
 
 _NAMESPACE = "kubelab"
 _DEPLOYMENT = "deploy/n8n"
@@ -158,6 +172,81 @@ def forge_headers(raw: bytes, secret: str | None, *, event: str = "issues") -> d
     if secret is not None:
         headers["X-Gitea-Signature"] = hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
     return headers
+
+
+def slack_headers(raw: bytes, secret: str, timestamp: int) -> dict[str, str]:
+    """Slack's request headers; the v0 signature is over `v0:<timestamp>:<raw body>`."""
+    base = f"v0:{timestamp}:".encode() + raw
+    signature = "v0=" + hmac.new(secret.encode(), base, hashlib.sha256).hexdigest()
+    return {
+        "Content-Type": _SLACK_FORM,
+        "X-Slack-Signature": signature,
+        "X-Slack-Request-Timestamp": str(timestamp),
+    }
+
+
+def build_slack_command(text: str) -> bytes:
+    """A `/task` slash-command form. Its `response_url` is unresolvable on purpose."""
+    return urlencode(
+        {
+            "token": "n8n-probe",
+            "command": "/task",
+            "text": text,
+            "user_name": "n8n-probe",
+            "response_url": "https://slack.invalid/n8n-probe",
+        }
+    ).encode()
+
+
+def _branch(summary: ExecutionSummary, node: str) -> tuple[int, int] | None:
+    """(TRUE, FALSE) item counts of an IF node, or None when it never ran."""
+    outputs = summary.outputs.get(node)
+    if outputs is None:
+        return None
+    return (outputs[0] if outputs else 0, outputs[1] if len(outputs) > 1 else 0)
+
+
+def judge_slack_create(summary: ExecutionSummary) -> list[str]:
+    """Why `summary` is NOT a Slack command that found its project and created the task."""
+    errors = []
+    if summary.status != "success":
+        detail = f": {summary.error}" if summary.error else ""
+        errors.append(f"execution {summary.id} ended with status {summary.status}, not success{detail}")
+    found = _branch(summary, _SLACK_FOUND)
+    if found is None:
+        errors.append(f"{_SLACK_FOUND!r} never ran in execution {summary.id}")
+    elif not found[0] or found[1]:
+        errors.append(f"{_SLACK_FOUND!r} sent {found[0]} item(s) to TRUE and {found[1]} to FALSE, expected 1 and 0")
+    if _SLACK_CREATE not in summary.outputs:
+        errors.append(f"{_SLACK_CREATE!r} did not run in execution {summary.id}")
+    if _SLACK_UNKNOWN in summary.outputs:
+        errors.append(f"{_SLACK_UNKNOWN!r} ran for a project that exists")
+    return errors
+
+
+def judge_slack_unknown_project(summary: ExecutionSummary) -> list[str]:
+    """Why `summary` is NOT a Slack command that named no project and ended at the answer node.
+
+    The probe's `response_url` does not resolve, so the answer node's own POST fails
+    the execution. That failure, and only in that node, is the expected ending.
+    """
+    errors = []
+    if summary.status != "success" and not (summary.error or "").startswith(f"{_SLACK_UNKNOWN}:"):
+        detail = f": {summary.error}" if summary.error else ""
+        errors.append(
+            f"execution {summary.id} ended with status {summary.status}{detail}, "
+            f"not success and not a failure of {_SLACK_UNKNOWN!r}"
+        )
+    found = _branch(summary, _SLACK_FOUND)
+    if found is None:
+        errors.append(f"{_SLACK_FOUND!r} never ran in execution {summary.id}")
+    elif found[0] or not found[1]:
+        errors.append(f"{_SLACK_FOUND!r} sent {found[0]} item(s) to TRUE and {found[1]} to FALSE, expected 0 and 1")
+    if _SLACK_UNKNOWN not in summary.outputs and not (summary.error or "").startswith(f"{_SLACK_UNKNOWN}:"):
+        errors.append(f"{_SLACK_UNKNOWN!r} did not run in execution {summary.id}")
+    if _SLACK_CREATE in summary.outputs:
+        errors.append(f"{_SLACK_CREATE!r} ran for a project that does not exist")
+    return errors
 
 
 def judge_gate_stop(summary: ExecutionSummary, gate: str, http_nodes: set[str]) -> list[str]:
@@ -254,7 +343,7 @@ const AUTH = { Authorization: 'Bearer ' + (process.env.VIKUNJA_API_TOKEN || '') 
 // and after a write, and has no use for what it says.
 async function getTask(taskId) {
   const res = await fetch(TASKS + Number(taskId), { headers: AUTH });
-  if (!res.ok) return { status: res.status, title: null, done: null, descriptionSha256: null };
+  if (!res.ok) return { status: res.status, title: null, done: null, descriptionSha256: null, projectId: null };
   const task = await res.json();
   const digest = require('crypto').createHash('sha256').update(String(task.description ?? '')).digest('hex');
   return {
@@ -262,6 +351,19 @@ async function getTask(taskId) {
     title: task.title == null ? null : String(task.title),
     done: Boolean(task.done),
     descriptionSha256: digest,
+    projectId: task.project_id == null ? null : Number(task.project_id),
+  };
+}
+
+// Ids and titles only: a project's title is what a Slack command names it by.
+async function listProjects() {
+  const res = await fetch('http://vikunja:3456/api/v1/projects', { headers: AUTH });
+  if (!res.ok) return { status: res.status, projects: [] };
+  const projects = await res.json();
+  return {
+    status: res.status,
+    projects: (Array.isArray(projects) ? projects : [])
+      .map((p) => ({ id: Number(p.id), title: String(p.title || '') })),
   };
 }
 
@@ -292,6 +394,7 @@ async function findTasks(key) {
 
 async function main() {
   if (REQUEST.op === 'find_tasks') return out(await findTasks(REQUEST.key));
+  if (REQUEST.op === 'list_projects') return out(await listProjects());
   if (REQUEST.op === 'get_task') return out(await getTask(REQUEST.taskId));
   if (REQUEST.op === 'delete_task') return out(await deleteTask(REQUEST.taskId));
   if (REQUEST.op === 'count_comments') return out(await countComments(REQUEST.taskId, REQUEST.contains));
@@ -351,6 +454,9 @@ def run_n8n_probe(
         logger.error(str(exc))
         return False
 
+    slack_secret = cm.get_secret_by_path(SLACK_SECRET_KEY)
+    default_project = _default_project(cm.get_merged_config())
+
     probe = _Probe(
         env=env,
         base_url=f"https://{domain}",
@@ -370,6 +476,11 @@ def run_n8n_probe(
             lambda: probe.forge_stops_at_its_gate("forge event under a wrong secret", secrets.token_hex(16)),
         ),
         ("unsigned Slack", probe.unsigned_slack_stops_at_its_gate),
+        (
+            "signed Slack",
+            lambda: probe.signed_slack_creates_a_task_in_the_named_project(slack_secret, default_project),
+        ),
+        ("signed Slack, unknown project", lambda: probe.signed_slack_unknown_project_creates_nothing(slack_secret)),
         ("agent-dispatcher", probe.unauthenticated_agent_dispatch_is_refused),
     ]
     results = [_guarded(name, check) for name, check in checks]
@@ -601,6 +712,89 @@ class _Probe:
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         return self._stops_at_gate("unsigned Slack command (AC5)", workflow, _SLACK_GATE, body, headers)
 
+    def signed_slack_creates_a_task_in_the_named_project(self, secret: str | None, project_title: str | None) -> bool:
+        """A signed `/task create #<project>` lands in that project, and nowhere else (#2304).
+
+        The project is the instance's declared default, so the probe needs nothing
+        the SSOT does not already say. It must exist on the instance, and Vikunja's
+        own `project_id` on the created task is the judge, not the confirmation text.
+        """
+        label = "signed Slack command (#2304)"
+        if not secret or not project_title:
+            return self._verdict(label, [f"needs SOPS {SLACK_SECRET_KEY} and SSOT {DEFAULT_PROJECT_KEY}"])
+        if project_title != project_title.strip() or len(project_title.split()) != 1:
+            return self._verdict(label, [f"project {project_title!r} cannot be named by a single '#word' in a command"])
+        listed = self._pod({"op": "list_projects"})
+        match = next((p for p in listed["projects"] if p["title"].lower() == project_title.lower()), None)
+        if listed["status"] != 200 or match is None:
+            return self._verdict(
+                label,
+                [
+                    f"project {project_title!r} not among the {len(listed['projects'])} project(s) "
+                    f"Vikunja listed (HTTP {listed['status']})"
+                ],
+            )
+        task_key = f"PROBE-SLACK-{int(self.clock())}"
+        errors: list[str] = []
+        try:
+            summary, errors = self._send_slack(
+                label, secret, f"create {task_key}: signed slack probe #{match['title']} P3"
+            )
+            if summary is not None:
+                errors += judge_slack_create(summary)
+                errors += self._created_in(task_key, match["id"])
+        finally:
+            errors += self._sweep(label, task_key)
+        return self._verdict(label, errors)
+
+    def signed_slack_unknown_project_creates_nothing(self, secret: str | None) -> bool:
+        """A signed command naming a project that does not exist creates nothing and answers (#2304)."""
+        label = "signed Slack command, unknown project (#2304)"
+        if not secret:
+            return self._verdict(label, [f"needs SOPS {SLACK_SECRET_KEY}"])
+        stamp = int(self.clock())
+        task_key = f"PROBE-SLACK-UNKNOWN-{stamp}"
+        errors: list[str] = []
+        try:
+            summary, errors = self._send_slack(
+                label, secret, f"create {task_key}: unknown project probe #no-such-project-{stamp}"
+            )
+            if summary is not None:
+                errors += judge_slack_unknown_project(summary)
+            # A task here is the defect. The lookup sits in the `try` so a failing pod call
+            # cannot skip the sweep below.
+            found = self._pod({"op": "find_tasks", "key": task_key})
+            if found["ids"]:
+                errors.append(f"{len(found['ids'])} task(s) created for a project that does not exist")
+        finally:
+            errors += self._sweep(label, task_key)
+        return self._verdict(label, errors)
+
+    def _send_slack(self, label: str, secret: str, text: str) -> tuple[ExecutionSummary | None, list[str]]:
+        """POST a signed command and return its single execution (None, errors) when there is none."""
+        workflow = self._workflow(_SLACK)
+        raw = build_slack_command(text)
+        before = self._max_id(workflow["id"])
+        sent = self._send(label, webhook_path(workflow), raw, slack_headers(raw, secret, int(self.clock())))
+        if sent is None:
+            return None, ["no response to the signed Slack command"]
+        if sent[0] != 200:
+            return None, [f"HTTP {sent[0]}, expected the 200 acknowledgement"]
+        summary, error = self._await_one(workflow["id"], before)
+        if error or summary is None:
+            return None, [error or "no execution"]
+        return summary, []
+
+    def _created_in(self, task_key: str, project_id: int) -> list[str]:
+        """Vikunja holds exactly one task for the key, and it sits in `project_id`."""
+        found = self._pod({"op": "find_tasks", "key": task_key})
+        if found["status"] != 200 or len(found["ids"]) != 1:
+            return [f"expected 1 task titled {task_key!r}, Vikunja listed {len(found['ids'])} (HTTP {found['status']})"]
+        task = self._pod({"op": "get_task", "taskId": found["ids"][0]})
+        if task["projectId"] != project_id:
+            return [f"task {found['ids'][0]} landed in project {task['projectId']}, expected {project_id}"]
+        return []
+
     def _stops_at_gate(
         self,
         label: str,
@@ -642,6 +836,13 @@ class _Probe:
         if started:
             errors.append(f"{len(started)} execution(s) started for a refused request")
         return self._verdict(label, errors)
+
+
+def _default_project(config: dict[str, Any]) -> str | None:
+    node: Any = config
+    for part in DEFAULT_PROJECT_KEY.split("."):
+        node = node.get(part) if isinstance(node, dict) else None
+    return node if isinstance(node, str) and node.strip() else None
 
 
 def _guarded(name: str, check: Callable[[], bool]) -> bool:

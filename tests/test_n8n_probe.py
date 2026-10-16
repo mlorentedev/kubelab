@@ -14,24 +14,34 @@ import hmac
 import json
 from typing import Any
 from unittest.mock import MagicMock
+from urllib.parse import parse_qs
 
 import pytest
 
 from toolkit.features.n8n_probe import (
+    DEFAULT_PROJECT_KEY,
     FORGE_SECRET_KEY,
+    SLACK_SECRET_KEY,
     ExecutionSummary,
     build_issue_event,
     build_pr_merge_event,
+    build_slack_command,
     forge_headers,
     http_request_nodes,
     judge_gate_stop,
+    judge_slack_create,
+    judge_slack_unknown_project,
     load_workflow,
     run_n8n_probe,
+    slack_headers,
     wait_for_execution,
     webhook_path,
 )
 
 _SECRET = "forge-secret"
+_SLACK_SECRET = "slack-secret"
+_PROJECT = "Bitacora"
+_PROJECT_ID = 4
 _DOMAIN = "n8n.staging.kubelab.live"
 
 FORGE = "multi-forge-sync.json"
@@ -149,10 +159,16 @@ def test_no_execution_before_the_timeout_names_the_save_setting() -> None:
 # ── Orchestrator ──────────────────────────────────────────────────────────────
 
 
-def _cm(secret: str | None = _SECRET) -> MagicMock:
+def _cm(
+    secret: str | None = _SECRET, slack_secret: str | None = _SLACK_SECRET, project: str | None = _PROJECT
+) -> MagicMock:
     cm = MagicMock()
-    cm.get_secret_by_path.side_effect = lambda p: secret if p == FORGE_SECRET_KEY else None
-    cm.get_merged_config.return_value = {"apps": {"services": {"automation": {"n8n": {"domain": _DOMAIN}}}}}
+    secrets_by_path = {FORGE_SECRET_KEY: secret, SLACK_SECRET_KEY: slack_secret}
+    cm.get_secret_by_path.side_effect = lambda p: secrets_by_path.get(p)
+    services: dict[str, Any] = {"automation": {"n8n": {"domain": _DOMAIN}}}
+    if project is not None:
+        services["core"] = {"vikunja": {"default_project": project}}
+    cm.get_merged_config.return_value = {"apps": {"services": services}}
     return cm
 
 
@@ -176,6 +192,10 @@ class _Cluster:
         pr_comments: bool = True,
         pr_answer: str = "done",
         gate_answer: str | None = "ignored",
+        slack_lands_in: int = _PROJECT_ID,
+        slack_creates_for_unknown: bool = False,
+        unknown_fails_in: str = "Tell Slack the Project Is Unknown",
+        projects: dict[int, str] | None = None,
     ) -> None:
         self.executions: dict[str, list[dict[str, Any]]] = {}
         self.tasks: dict[int, str] = {}
@@ -193,6 +213,11 @@ class _Cluster:
         self.pr_comments = pr_comments
         self.pr_answer = pr_answer
         self.gate_answer = gate_answer  # the `status` a gate stop answers; None is the pre-#1659 body
+        self.slack_lands_in = slack_lands_in  # the #1877 defect: every task went to project 1
+        self.slack_creates_for_unknown = slack_creates_for_unknown
+        self.unknown_fails_in = unknown_fails_in  # the node n8n names for the answer POST's failure
+        self.projects = {_PROJECT_ID: _PROJECT} if projects is None else projects
+        self.project_of: dict[int, int] = {}
         self.posts: list[tuple[str, bytes, dict[str, str]]] = []
         self.workflow_ids = {name: load_workflow(name)["id"] for name in (FORGE, SLACK, AGENT)}
 
@@ -226,6 +251,8 @@ class _Cluster:
             answer = {} if self.gate_answer is None else {"status": self.gate_answer}
             return 200, json.dumps(answer)
         if url.endswith("/webhook/slack-task-capture"):
+            if self._slack_signed(body, headers):
+                return self._signed_slack(body)
             if self.open_gates:
                 self._run(SLACK, {"Is Slack Valid?": [1, 0], "Lookup Vikunja Projects": [1]})
             else:
@@ -234,6 +261,41 @@ class _Cluster:
         if url.endswith("/webhook/agent-dispatcher"):
             return 403, "Authorization data is wrong!"
         return 404, ""
+
+    def _slack_signed(self, body: bytes, headers: dict[str, str]) -> bool:
+        timestamp = headers.get("X-Slack-Request-Timestamp")
+        return timestamp is not None and headers.get("X-Slack-Signature") == slack_headers(
+            body, _SLACK_SECRET, int(timestamp)
+        ).get("X-Slack-Signature")
+
+    def _signed_slack(self, body: bytes) -> tuple[int, str]:
+        text = parse_qs(body.decode())["text"][0]
+        wanted = next(w[1:] for w in text.split() if w.startswith("#"))
+        project_id = next((i for i, t in self.projects.items() if t.lower() == wanted.lower()), None)
+        if project_id is not None or self.slack_creates_for_unknown:
+            task_id = 100 + len(self.tasks)
+            self.tasks[task_id] = text.split(" ", 1)[1].split(" #", 1)[0]
+            self.project_of[task_id] = self.slack_lands_in
+            self._run(
+                SLACK,
+                {
+                    "Is Slack Valid?": [1, 0],
+                    "Project Found?": [1, 0] if project_id is not None else [0, 1],
+                    "Create Task in Vikunja": [1],
+                },
+            )
+            return 200, "{}"
+        wf_id = self.workflow_ids[SLACK]
+        rows = self.executions.setdefault(wf_id, [])
+        rows.append(
+            {
+                "id": sum(len(r) for r in self.executions.values()) + 1,
+                "status": "error",
+                "error": f"{self.unknown_fails_in}: The service refused the connection",
+                "outputs": {"Is Slack Valid?": [1, 0], "Project Found?": [0, 1], self.unknown_fails_in: []},
+            }
+        )
+        return 200, "{}"
 
     def _pull_request(self, event: dict[str, Any]) -> tuple[int, str]:
         key = event["pull_request"]["title"].split(":", 1)[0]
@@ -274,9 +336,21 @@ class _Cluster:
             task_id = request["taskId"]
             title = self.tasks.get(task_id)
             if title is None:
-                return json.dumps({"status": 404, "title": None, "done": None, "descriptionSha256": None})
-            digest = hashlib.sha256(self.descriptions[task_id].encode()).hexdigest()
-            return json.dumps({"status": 200, "title": title, "done": self.done[task_id], "descriptionSha256": digest})
+                return json.dumps(
+                    {"status": 404, "title": None, "done": None, "descriptionSha256": None, "projectId": None}
+                )
+            digest = hashlib.sha256(self.descriptions.get(task_id, "").encode()).hexdigest()
+            return json.dumps(
+                {
+                    "status": 200,
+                    "title": title,
+                    "done": self.done.get(task_id, False),
+                    "descriptionSha256": digest,
+                    "projectId": self.project_of.get(task_id, 1),
+                }
+            )
+        if op == "list_projects":
+            return json.dumps({"status": 200, "projects": [{"id": i, "title": t} for i, t in self.projects.items()]})
         if op == "count_comments":
             found = [c for c in self.comments.get(request["taskId"], []) if request["contains"] in c]
             return json.dumps({"status": 200, "count": len(found)})
@@ -304,7 +378,7 @@ def _run(cluster: _Cluster, cm: MagicMock | None = None) -> bool:
 def test_every_probe_passes_against_a_fixed_cluster() -> None:
     cluster = _Cluster()
     assert _run(cluster) is True
-    assert len(cluster.tasks) == 2, "the issue probe and the PR probe each create one task"
+    assert len(cluster.tasks) == 3, "the issue, PR and signed Slack probes each create one task"
     assert list(cluster.tasks) == cluster.deleted, "every created probe task must be deleted"
     urls = [u for u, _, _ in cluster.posts]
     assert f"https://{_DOMAIN}/webhook/multi-forge-sync" in urls
@@ -317,7 +391,8 @@ def test_the_unsigned_probes_send_no_signature_and_no_auth() -> None:
     _run(cluster)
     slack = [h for u, _, h in cluster.posts if u.endswith("slack-task-capture")]
     agent = [h for u, _, h in cluster.posts if u.endswith("agent-dispatcher")]
-    assert slack and not any(k.lower().startswith("x-slack") for h in slack for k in h)
+    # The first Slack request is the unsigned probe; the signed ones come after it.
+    assert slack and not any(k.lower().startswith("x-slack") for k in slack[0])
     assert agent and not any(k.lower() == "authorization" for h in agent for k in h)
 
 
@@ -452,3 +527,112 @@ def test_a_gate_stop_must_name_its_status(capsys: pytest.CaptureFixture[str]) ->
     cluster = _Cluster(gate_answer=None)
     assert _run(cluster) is False
     assert "ignored" in capsys.readouterr().out
+
+
+# ── Signed Slack command (#2304) ──────────────────────────────────────────────
+
+
+def _slack_summary(
+    outputs: dict[str, list[int]], status: str = "success", error: str | None = None
+) -> ExecutionSummary:
+    return ExecutionSummary(id=7, status=status, outputs=outputs, error=error)
+
+
+_FOUND = {"Is Slack Valid?": [1, 0], "Project Found?": [1, 0], "Create Task in Vikunja": [1]}
+_UNKNOWN = {"Is Slack Valid?": [1, 0], "Project Found?": [0, 1], "Tell Slack the Project Is Unknown": [1]}
+
+
+def test_slack_headers_sign_v0_over_the_timestamp_and_the_exact_bytes() -> None:
+    raw = build_slack_command("create x #Bitacora")
+    headers = slack_headers(raw, _SLACK_SECRET, 1700000000)
+    expected = hmac.new(_SLACK_SECRET.encode(), b"v0:1700000000:" + raw, hashlib.sha256).hexdigest()
+    assert headers["X-Slack-Signature"] == f"v0={expected}"
+    assert headers["X-Slack-Request-Timestamp"] == "1700000000"
+
+
+def test_a_command_that_found_its_project_and_created_is_accepted() -> None:
+    assert judge_slack_create(_slack_summary(_FOUND)) == []
+
+
+def test_a_command_that_took_the_unknown_branch_is_not_a_create() -> None:
+    errors = judge_slack_create(_slack_summary(_UNKNOWN))
+    assert any("did not run" in e for e in errors)
+    assert any("ran for a project that exists" in e for e in errors)
+
+
+def test_an_unknown_project_that_reached_the_answer_node_is_accepted_in_both_endings() -> None:
+    assert judge_slack_unknown_project(_slack_summary(_UNKNOWN)) == []
+    failed = _slack_summary(
+        {**_UNKNOWN, "Tell Slack the Project Is Unknown": []},
+        status="error",
+        error="Tell Slack the Project Is Unknown: The service refused the connection",
+    )
+    assert judge_slack_unknown_project(failed) == []
+
+
+def test_an_unknown_project_that_failed_elsewhere_is_a_defect() -> None:
+    failed = _slack_summary(_UNKNOWN, status="error", error="Create Task in Vikunja: HTTP 500 boom")
+    assert any("not a failure of" in e for e in judge_slack_unknown_project(failed))
+
+
+def test_an_unknown_project_that_created_is_a_defect() -> None:
+    errors = judge_slack_unknown_project(_slack_summary({**_FOUND, "Project Found?": [0, 1]}))
+    assert any("ran for a project that does not exist" in e for e in errors)
+
+
+def test_the_judged_node_names_exist_in_the_committed_workflow() -> None:
+    names = {n["name"] for n in load_workflow(SLACK)["nodes"]}
+    assert {"Project Found?", "Create Task in Vikunja", "Tell Slack the Project Is Unknown"} <= names
+
+
+def test_the_signed_probes_sign_with_the_slack_secret_and_name_the_declared_project() -> None:
+    cluster = _Cluster()
+    assert _run(cluster) is True
+    signed = [(b, h) for u, b, h in cluster.posts if u.endswith("slack-task-capture") and "X-Slack-Signature" in h]
+    assert len(signed) == 2
+    texts = [parse_qs(b.decode())["text"][0] for b, _ in signed]
+    assert texts[0].endswith(f"#{_PROJECT} P3")
+    assert "#no-such-project-" in texts[1]
+    assert all(_SLACK_SECRET not in b.decode() for b, _ in signed)
+
+
+def test_a_task_that_lands_in_the_wrong_project_fails_the_probe(capsys: pytest.CaptureFixture[str]) -> None:
+    """#1877: every Slack task went to project 1, whatever the command named."""
+    cluster = _Cluster(slack_lands_in=1)
+    assert _run(cluster) is False
+    assert f"expected {_PROJECT_ID}" in " ".join(capsys.readouterr().out.split())
+    assert sorted(cluster.deleted) == sorted(cluster.tasks), "even the misplaced task is cleaned up"
+
+
+def test_an_unknown_project_that_creates_a_task_fails_and_deletes_it(capsys: pytest.CaptureFixture[str]) -> None:
+    cluster = _Cluster(slack_creates_for_unknown=True)
+    assert _run(cluster) is False
+    out = " ".join(capsys.readouterr().out.split())
+    assert "created for a project that does not exist" in out
+    assert sorted(cluster.deleted) == sorted(cluster.tasks)
+
+
+def test_an_unknown_project_whose_error_is_in_another_node_fails_the_probe(capsys: pytest.CaptureFixture[str]) -> None:
+    cluster = _Cluster(unknown_fails_in="Parse Slack Command")
+    assert _run(cluster) is False
+    assert "not a failure of" in " ".join(capsys.readouterr().out.split())
+
+
+def test_a_declared_project_that_vikunja_does_not_have_fails_naming_it(capsys: pytest.CaptureFixture[str]) -> None:
+    cluster = _Cluster(projects={9: "Elsewhere"})
+    assert _run(cluster) is False
+    assert "not among the 1 project(s)" in " ".join(capsys.readouterr().out.split())
+
+
+@pytest.mark.parametrize(
+    ("cm", "needs"),
+    [(_cm(slack_secret=None), SLACK_SECRET_KEY), (_cm(project=None), DEFAULT_PROJECT_KEY)],
+    ids=["no-slack-secret", "no-declared-project"],
+)
+def test_a_missing_input_fails_the_signed_slack_probe_without_aborting_the_others(
+    cm: MagicMock, needs: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    cluster = _Cluster()
+    assert _run(cluster, cm=cm) is False
+    assert needs in capsys.readouterr().out
+    assert any(u.endswith("agent-dispatcher") for u, _, _ in cluster.posts), "the other probes still ran"

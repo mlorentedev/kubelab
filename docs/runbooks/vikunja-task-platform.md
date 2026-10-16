@@ -112,8 +112,13 @@ make n8n-probe ENV=staging   # then ENV=prod
 It creates a task through a signed issue event, sends a signed merge for a second
 task and reads back `done`, the description and the PR comment, checks that
 unsigned forge and Slack events stop at their gates, and deletes every task it
-created. In prod it posts one "Task Created" and one "Forge Sync" notice to the
-operator channel. Run `make import-n8n ENV=<env>` first when testing a branch:
+created. It also signs a Slack `/task create #<default project>` with the SOPS
+signing secret and requires Vikunja to hold the task in that project's id, then
+signs one naming a project that does not exist and requires that nothing was
+created (#2304). The probe's `response_url` does not resolve, so the answer
+node `Tell Slack the Project Is Unknown` fails its own POST; that one failure
+is expected, any other is a defect. In prod it posts "Task Created", "Forge
+Sync" and Slack-capture notices to the operator channel. Run `make import-n8n ENV=<env>` first when testing a branch:
 `make deploy-k8s` re-imports master's workflows (#1859).
 
 ### No SSO button on the login page
