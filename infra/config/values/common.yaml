@@ -2068,6 +2068,30 @@ apps:
           # the operator's, the way hermes-nan's read `hermes-nan@nan-server`.
           author_name: hermes-kubelab
           author_email: hermes-kubelab@ace2
+        # Spec AI-012 AC10: the repository's own docs, read-only for the agent's sandbox (at
+        # `mount`) and for Open WebUI's bridge (at the same path). The remote is public, so the
+        # refresh carries no credential.
+        docs_mirror:
+          remote: https://github.com/mlorentedev/kubelab.git
+          branch: master
+          path: docs
+          interval: 1h
+          mount: /docs
+        # Spec AI-012 AC6: the curation loop's deterministic half. A host unit of the agent's
+        # user reads its vault clone and the repositories' public `docs/lessons/` and writes
+        # the recurrence candidates to `<zone>/curator/candidates.json` for the judge. It is
+        # a host unit, not a gateway script, because the analyzer needs the vault and the
+        # gateway sees none of it. `Persistent` runs a missed week at the next boot: ace2 is
+        # on-demand.
+        curator:
+          schedule: "Mon *-*-* 14:00:00 UTC"
+          top: 8
+          repos:
+            - mlorentedev/kubelab
+            - mlorentedev/dotfiles
+            - mlorentedev/pollex
+            - mlorentedev/iris
+            - mlorentedev/hive
         # Run through the agent's daemon at every provision, with a memory and a
         # CPU limit, to prove the sandbox Hermes executes commands in can start.
         probe:
@@ -2107,6 +2131,20 @@ apps:
           # on Anthropic's key, in a workspace capped at 20 USD a month. Pinned
           # scheduled and delegated work never does.
           fallback: claude-haiku-5-5
+        # Spec AI-012 AC9: the vault's cross-agent skills (`00_meta/skills/<name>/`) this
+        # agent is given, replacing hermes-nan's skills-manifest. Each is copied from the
+        # root-owned vault mirror at provision and reaches the gateway through
+        # `skills.external_dirs`, a read-only mount: the agent can use a managed skill and
+        # cannot change it. A declared skill the mirror does not hold fails the provision.
+        # Left out on purpose, each because it drives a tool this agent does not have (the
+        # Hive MCP, `dotf`, `gh`) and would send it down a path that cannot work:
+        # handoff, vault-doctor, agent-lifecycle, new-ticket, crystallize, pattern-loader.
+        # `systematic-debugging` and `test-driven-development` are left out because the
+        # image ships a built-in of the same name, which outranks an external one: the
+        # vault's copy would be installed and never read. `verification-before-completion`
+        # and `audit` have no SKILL.md in the vault.
+        skills:
+          - insights # staleness, structure and drift of the vault, read only
         # Hermes config keys ported from hermes-nan's `config-desired.yaml` (spec
         # AI-012 AC1), in Hermes's own layout. The role renders every leaf; keys
         # equal to the image's defaults are pinned here so an image bump cannot
@@ -2217,6 +2255,43 @@ apps:
               mode: script
               schedule: "5 14 * * *"
               script: daily-digest.py
+            # The curator's judge (spec AI-012 AC6, 6b): the analyzer's candidates (host
+            # unit, Monday 14:00 UTC plus up to two minutes) arrive trimmed by the script,
+            # and the model rules on each. It writes nothing: the emitter below turns the
+            # RECURRENCE verdicts into drafts, so a model's output is data, not a path.
+            # Kept out of the Slack channel; the drafts are the product.
+            curator-judge:
+              mode: agent
+              schedule: "20 14 * * 1"
+              script: curator-judge-input.py
+              deliver: local
+              prompt: >-
+                You are the recurrence JUDGE for a knowledge-curation loop. The script
+                output above holds candidate clusters, each a set of lesson excerpts that
+                a keyword detector grouped. Keyword overlap is not proof of recurrence.
+                For each candidate give exactly one label. RECURRENCE: the excerpts
+                describe the same underlying root cause in two or more distinct incidents
+                (different contexts and dates, not one event described twice), and that
+                root cause is not already a canonical pattern, runbook, skill or
+                feedback note. DUPLICATE: same root cause, but one excerpt already is the
+                canonical artifact, or it is one lesson written twice. DISTINCT: only the
+                vocabulary is shared and the root causes differ. Procedure per
+                candidate: state each excerpt's root cause in one clause; if they differ
+                the label is DISTINCT; if one is canonical or they are the same event it
+                is DUPLICATE; otherwise RECURRENCE, with the placement (pattern, runbook
+                or check) and the one-line root cause that would anchor it. Be
+                conservative: when the root cause is unclear prefer DISTINCT. Reply with
+                JSON only, no other text, in this shape:
+                {"verdicts": [{"id": "<candidate id>",
+                "label": "RECURRENCE|DUPLICATE|DISTINCT", "root_cause": "<one line>",
+                "placement": "pattern|runbook|check|none", "confidence": "high|medium|low"}]}
+            # No agent: turns the judge's verdicts into proposal drafts in the zone. Run
+            # half an hour after the judge; a draft is never replaced, so a re-run is safe.
+            # Prints nothing, and so sends nothing, when no new recurrence was judged.
+            curator-emit:
+              mode: script
+              schedule: "50 14 * * 1"
+              script: emit-proposals.py
 
 # Terraform state (TF-007, ADR-069). Every root keeps its state in this R2
 # bucket under `<root>/terraform.tfstate`; `make sync-terraform-backend` renders

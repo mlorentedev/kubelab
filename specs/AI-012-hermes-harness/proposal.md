@@ -110,7 +110,7 @@ Also out of scope:
 - [ ] AC7. Live: the research jobs run with BrightData and deliver to Slack.
 - [ ] AC8. AI-011's four criteria (#2080): a test alert reaches the digest with its log context; catch-up at power-on; the token is read-only, proven by a refused write; no credential reaches the digest or the vault.
 - [ ] AC9. A declared skill is installed from the mirror. A missing `SKILL.md` fails the provision, and the agent cannot edit a managed skill.
-- [ ] AC10. The agent and Open WebUI can read the repository's `docs/` read-only.
+- [x] AC10. The agent and Open WebUI can read the repository's `docs/` read-only.
 - [ ] AC11. `80_agents/hermes-nan/_index.md` points to this spec, and every NaN artifact is marked ported, superseded or retired.
 
 ## References

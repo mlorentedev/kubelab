@@ -1,7 +1,7 @@
 ---
 id: "adr-016"
 type: adr
-status: active
+status: accepted
 tags: [auth, oidc, authelia, minio, gitea, n8n]
 owner: manu
 created: "2026-03-28"

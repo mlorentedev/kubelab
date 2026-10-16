@@ -3,7 +3,8 @@
     "vault": {
       "command": "/opt/mcp-bridge/node_modules/.bin/mcp-server-filesystem",
       "args": [
-        "/vault"
+        "/vault",
+        "/docs"
       ],
       "disabledTools": [
         "write_file",

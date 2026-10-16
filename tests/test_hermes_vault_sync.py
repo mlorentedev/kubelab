@@ -399,15 +399,19 @@ def _config(**overrides: object) -> dict:
     return yaml.safe_load(_render("hermes-config.yaml.j2", **overrides))
 
 
-def test_the_sandbox_mounts_nothing_without_the_vault_token() -> None:
-    assert "docker_volumes" not in _config(agent_stack_vault_configured="False")["terminal"]
+def test_the_sandbox_mounts_no_vault_without_the_vault_token() -> None:
+    """The docs mirror (AI-012 AC10) is the one mount that needs no token."""
+    context = _resolved(_env())
+    docs = f"{context['agent_stack_docs_sandbox']}/{HERMES['docs_mirror']['path']}:{HERMES['docs_mirror']['mount']}:ro"
+    assert _config(agent_stack_vault_configured="False")["terminal"]["docker_volumes"] == [docs]
 
 
 def test_the_sandbox_sees_the_vault_read_only_and_only_its_zone_writable() -> None:
     context = _resolved(_env())
     clone, mount = context["agent_stack_vault_clone"], SYNC["mount"]
     volumes = _config(agent_stack_vault_configured="True")["terminal"]["docker_volumes"]
-    assert volumes == [f"{clone}:{mount}:ro", f"{clone}/{ZONE}:{mount}/{ZONE}:rw"]
+    assert volumes[:2] == [f"{clone}:{mount}:ro", f"{clone}/{ZONE}:{mount}/{ZONE}:rw"]
+    assert len(volumes) == 3 and volumes[2].endswith(":ro"), "the docs follow, read-only"
 
 
 def test_the_deny_list_is_evaluated_on_the_path_the_runtime_takes() -> None:

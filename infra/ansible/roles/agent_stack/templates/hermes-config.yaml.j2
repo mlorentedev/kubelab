@@ -10,7 +10,7 @@
   JSON is YAML, so `tojson` writes each value as the SSOT typed it.
 #}
 {% set ported = agent_stack_hermes.agent_config %}
-{% set role_sections = ['approvals', 'terminal', 'slack', 'unauthorized_dm_behavior', 'cron', 'model', 'delegation', 'fallback_providers'] %}
+{% set role_sections = ['approvals', 'terminal', 'slack', 'unauthorized_dm_behavior', 'cron', 'model', 'delegation', 'fallback_providers', 'skills'] %}
 
 model:
   provider: custom
@@ -42,15 +42,17 @@ terminal:
   # `tag:hermes`). Through the rootless daemon it would leave as ace2, the
   # admin's node: measured 2026-10-06, it opened the VPS's :22 and :6443.
   docker_network: false
-{% if agent_stack_vault_configured | bool %}
-  # The vault (ADR-068 D4 as amended 2026-10-08): read-only, and the agent's
-  # zone writable inside it. The sync unit commits and pushes; the sandbox has
-  # no token and no network. A host path here turns Hermes's command guards
-  # back on for the docker backend, approvals included.
+  # A host path here turns Hermes's command guards back on for the docker backend, approvals
+  # included. The docs are always mounted (read-only, root's copy; spec AI-012 AC10), so the
+  # guards are always on.
   docker_volumes:
+{% if agent_stack_vault_configured | bool %}
+    # The vault (ADR-068 D4 as amended 2026-10-08): read-only, and the agent's zone writable
+    # inside it. The sync unit commits and pushes; the sandbox has no token and no network.
     - '{{ agent_stack_vault_clone }}:{{ agent_stack_hermes.vault_sync.mount }}:ro'
     - '{{ agent_stack_vault_clone }}/{{ agent_stack_vault_zone }}:{{ agent_stack_hermes.vault_sync.mount }}/{{ agent_stack_vault_zone }}:rw'
 {% endif %}
+    - '{{ agent_stack_docs_sandbox }}/{{ agent_stack_hermes.docs_mirror.path }}:{{ agent_stack_hermes.docs_mirror.mount }}:ro'
 
 approvals:
   # Quoted: a bare `off` is YAML for false, which is how hermes-nan ended up
@@ -91,6 +93,18 @@ delegation:
 {% for key, value in (ported.delegation | default({})).items() if key != 'model' %}
   {{ key }}: {{ value | tojson }}
 {% endfor %}
+
+# The managed skills (spec AI-012 AC9) are an external directory: Hermes treats its
+# skills as read-only to the agent and its curator, and ranks them below the agent's
+# own. `external_dirs` is the role's, so the ported keys cannot point it elsewhere.
+{% set skills = {} %}
+{% for key, value in (ported.skills | default({})).items() if key != 'external_dirs' %}
+{% set _ = skills.update({key: value}) %}
+{% endfor %}
+{% if agent_stack_vault_configured | bool and agent_stack_hermes.skills | default([]) | length > 0 %}
+{% set _ = skills.update({'external_dirs': [agent_stack_hermes_skills_mount]}) %}
+{% endif %}
+skills: {{ skills | tojson }}
 
 # The rest of the ported harness, as `apps.services.ai.hermes_kubelab.agent_config`
 # declares it.

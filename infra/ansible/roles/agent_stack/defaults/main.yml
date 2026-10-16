@@ -102,12 +102,23 @@ agent_stack_vault_token_file: "{{ agent_stack_dir }}/vault-token"
 agent_stack_vault_libexec: /usr/local/libexec/agent-stack
 agent_stack_vault_ignore: "{{ agent_stack_vault_libexec }}/vault-ignore"
 agent_stack_vault_sync_unit: hermes-kubelab-vault-sync
+# The curator's analyzer (spec AI-012 AC6): root's script, run by a unit as the agent's user.
+agent_stack_curator_unit: hermes-kubelab-curator-analyze
+agent_stack_curator_out: "{{ agent_stack_vault_clone }}/{{ agent_stack_vault_zone }}/curator"
 
 # The read-only vault the MCP bridge serves Open WebUI (spec AI-009 AC9): root's,
 # in the root-only stack directory, refreshed from the remote by its own unit and
 # never from the agent's clone. `git` holds the history, `tree` the notes.
 agent_stack_vault_mirror: "{{ agent_stack_dir }}/vault-mirror"
 agent_stack_vault_mirror_unit: agent-stack-vault-mirror
+
+# The repository's `docs/`, read-only (spec AI-012 AC10), from a public remote: no token. One
+# bare repository and two root-owned checkouts of it. `tree` is for the MCP bridge, in the
+# root-only stack directory; `sandbox` is the agent's copy, in its home because its rootless
+# daemon must read it, and root's so the agent cannot edit what it reads.
+agent_stack_docs_mirror: "{{ agent_stack_dir }}/docs-mirror"
+agent_stack_docs_sandbox: "{{ agent_stack_agent_home }}/docs-mirror"
+agent_stack_docs_mirror_unit: agent-stack-docs-mirror
 
 # The MCP bridge in front of that mirror (spec AI-009 AC9), in Open WebUI's
 # Compose project: it runs exactly when both Open WebUI and the vault do. Its
@@ -137,6 +148,11 @@ agent_stack_hermes_config: "{{ agent_stack_agent_home }}/hermes-config.yaml"
 # the agent writes: a script in the data directory could be rewritten by the
 # very job it feeds.
 agent_stack_hermes_scripts: "{{ agent_stack_agent_home }}/hermes-scripts"
+# The managed skills (spec AI-012 AC9): copied from the vault mirror, root-owned, and
+# mounted read-only where `skills.external_dirs` names them.
+agent_stack_hermes_skills: "{{ agent_stack_agent_home }}/hermes-skills"
+agent_stack_hermes_skills_mount: /managed-skills
+agent_stack_hermes_skills_source: "{{ agent_stack_vault_mirror }}/tree/00_meta/skills"
 # The tailscale sidecar's (spec PR 3b-2). Its state is the node key: beside the
 # data directory, so the gateway's container does not see it. The env file
 # holds the one-time preauth key until the first registration, then nothing.

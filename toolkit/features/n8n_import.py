@@ -191,6 +191,20 @@ N8N_IMPORT_CATALOG: list[N8nImportSpec] = [
 ]
 
 
+#: Workflow files in git that `make import-n8n` deliberately does not reconstruct, each with
+#: the reason. A file in `infra/n8n/workflows/` is either an `N8nImportSpec` above or here:
+#: `tests/test_n8n_workflow_set.py` derives the expected set from the directory, so a new
+#: workflow cannot be a silent absence (#1685). An exclusion is a decision, so it is stated.
+N8N_IMPORT_EXCLUDED: dict[Path, str] = {
+    Path("infra/n8n/workflows/sre-auto-triage.json"): (
+        "ADR-064's reactive triage brain was never wired: nothing posts to /webhook/sre-triage, "
+        "it declares no credential in this registry, and it is active:true, so importing it "
+        "would switch on an endpoint nobody calls. The alert read path it builds on does not "
+        "exist yet (#1395, ADR-064 amendment 2026-10-15). Add an N8nImportSpec when a caller does."
+    ),
+}
+
+
 # ── Placeholders ──────────────────────────────────────────────────────────────
 #
 # A committed workflow may carry `RESOLVE_*` tokens filled from SSOT at import

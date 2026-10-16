@@ -102,6 +102,36 @@ What each process sees, same run:
 - The two scheduled runs of 2026-10-15 posted a file-mutation warning each: `write_file` refused `/vault/80_agents/hermes-kubelab/sessions/...` as outside `HERMES_WRITE_SAFE_ROOT` (the image sets `/opt/data`), and the record was written anyway through the shell. The variable is an `os.pathsep`-separated list (`agent/file_safety.py`, read in the pinned image), so the gateway now sets `<data>:<mount>/<zone>`. That widens nothing the agent could not already write: the sandbox mounts the zone writable and the rest of the vault read-only, and the shell fallback proved it. The operator approved this on 2026-10-15, after the advisor corrected an earlier recommendation to change the prompt (the only tool the policy allowed could not reach the zone).
 - Live: after the provision, `hermes cron run` on `kubelab:session-record` ended `ok` and its `#agent-fleet` message carried no warning; the next sync committed the file (`eb3fe171`). Provision: `CHECK=1` changed=5, first run changed=1, second run changed=0 (that run was against master's role, which lacks #2322, and failed the sync on the lock files; the branch is stacked on #2322, and the converge on the stacked tree was changed=3, then 0).
 
+### The managed skills, live on ace2, 2026-10-16 (AC9)
+
+- `apps.services.ai.hermes_kubelab.skills` lists `insights`. The role copies each `<name>/` from the vault mirror (`00_meta/skills/`) into `/var/lib/hermes-kubelab/hermes-skills`, root-owned, mounted `:ro` at `/managed-skills`, and the gateway's `skills.external_dirs` names it. A declared skill the mirror lacks fails the provision; one dropped from the declaration is removed from the node.
+- Finding: the dry run's read-back showed `systematic-debugging` already ships as a built-in, which outranks an external skill, so the manifest leaves it (and `test-driven-development`) out (lesson-580).
+- Provision: dry run `changed=2`, first run `changed=6`, second run `changed=0`. The run reads the skills back through the gateway (`hermes skills list` lists `insights` with the source `external`; a built-in of the same name fails it) and a `touch` in `/managed-skills` as the gateway's user must fail.
+- Tests: `tests/test_hermes_skills.py` 13 pass; the `:ro` flag removed from the mount goes red under `make mutate`.
+
+## The curator analyzer, live on ace2, 2026-10-16 (AC6, part 6a)
+
+Provision from the merged tree: `CHECK=1` changed=2 (service and timer), first run changed=4, second run changed=0. `systemctl start hermes-kubelab-curator-analyze.service` ended `Result=success`, `ExecMainStatus=0`, and wrote `curator/candidates.json` (62 KB) in the agent's zone: 1962 corpus files, 6536 units, 8 candidates. After the review fixes (fetched lessons kept under their category, the vault's lessons index read as lessons) the same provision gave 1964 files, 6545 units, 8 candidates, changed=1 (the script) then 0, and the new read-back asserted that this run rewrote the file. The timer's next run is Monday 2026-10-19 16:00 CEST. The judge job and the emitter to `proposals/` are part 6b.
+
+## The curator judge and the emitter, live on ace2, 2026-10-16 (AC6, part 6b)
+
+Provision from the stacked tree: the two jobs registered, the gateway recreated with the `curator:ro` and `proposals` mounts, changed=0 on the second run. `hermes cron run` on `kubelab:curator-judge` ended `ok` (record `2026-10-16_10-37-56.md`), then on `kubelab:curator-emit` ended `ok`. The emitter wrote four drafts to `proposals/` (ids `112085212d`, `7350f44897`, `dcab01e269`, `fa2b6d3db4`) from the judge's RECURRENCE verdicts, and printed one line naming them. A second run wrote nothing and printed nothing (a draft is never replaced). The first scheduled runs are Monday 2026-10-19 14:20 and 14:50 UTC.
+
+Two findings along the way, both fixed before the proof above:
+- The gateway did not mount the zone's `curator/` and `proposals/`, so the scripts reported the analyzer as never run. Both are mounted now.
+- The emitter first wrote nothing: it searched the record's Prompt section for the judge's signature, and Hermes injects the script output into that section. Lesson excerpts contain `## ` lines, which cut the section short. It now identifies the run by the record's title line (lesson-582).
+
+The 4b digest's first scheduled run is 14:05 UTC the same day.
+
+## The repository docs mirror, live on ace2, 2026-10-16 (AC10)
+
+Provision from this tree: `CHECK=1` changed=7, first run changed=11, second changed=0. After the fix below: changed=2, then 0. Read live, not from the templates:
+- The sandbox's view, started through the agent's daemon with `--network none` and the configured mount: `/docs` holds `README.md`, `adr/` (68 entries) and `architecture/`; `touch /docs/x` answers `Read-only file system`.
+- The bridge container mounts `/opt/agent-stack/docs-mirror/tree/docs -> /docs` with `rw=false`, and the provision's own probe asserts `list_directory /docs` answers 200 with entries.
+- Both trees are `root:root 755`, hold no `.git`, and `agent-stack-docs-mirror.timer` is scheduled. The gateway restarted after the config changed (config 14:23:53, container start 14:24:15 CEST).
+
+Finding: the first provision mounted the sandbox's work tree, whose `docs/` sits one level down, so the sandbox saw `/docs/docs/adr`. The unit test passed because it asserted what the template said; only reading the directory from a container showed the doubled path. The sandbox now mounts `docs-mirror/docs`, as the bridge does, and the config test pins the path with the `docs` segment.
+
 ## The alert channels, read from the gateway, 2026-10-16 (AC8, R3)
 
 R3 answered by the operator's channels: `#ops-log`, `#alerts`, `#deployments`, `#vault-health`, declared by ID in `slack.alert_channels` (`common.yaml`). Measured on ace2 with a throwaway probe that called `conversations.history` with the gateway's own `SLACK_BOT_TOKEN` from inside the container and printed only the outcome: all four returned `ok` with at least one message (`True None None 1` each). So the bot is already a member of every channel with the history scope, and `SLACK_ALLOWED_CHANNELS` (which limits what the agent answers) does not limit a script's read. The probe playbook was deleted and never committed.
@@ -130,6 +160,8 @@ R3 answered by the operator's channels: `#ops-log`, `#alerts`, `#deployments`, `
 - 2026-10-15, operator, superseding the line above on memory capture: mount the zone's `memories/` over the gateway's instead of copying, because the host sync user cannot read the gateway's data directory.
 - 2026-10-10, AC2 is parked, not worked around. The only route Hermes leaves to `x-api-key` on this key is a `base_url` outside `anthropic.com`, which means adding a proxy to work around one function.
 - 2026-10-15, operator: move the pin to v0.22.1 (published the day before, against the "a few days old" rule) and accept the loss of the tirith scanner, which v0.22 removes without a replacement. What stands in its place is the sandbox with no network (`docker_network: false`, read back as `net=none` on the live container), plus the two new content checks that run through the approval flow when the vault is mounted. The scanner's own circuit breaker already failed open, so it was never a reliable fail-closed control.
+
+- 2026-10-16, curator judge (6b): the emitter is a gateway script job, not a host unit, because the judge's records sit in `data/`, which is `0700` to a subuid the host cannot read. The gateway therefore mounts the two zone directories it needs. The judge input is trimmed to ids and excerpts to stay under the 8000-character injection cut. Evidence for a draft comes from `candidates.json` by id, not from the record, whose fences are the lessons' own.
 
 ## NaN harness disposition (AC11)
 

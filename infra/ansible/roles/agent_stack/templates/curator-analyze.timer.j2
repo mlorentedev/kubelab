@@ -1,0 +1,15 @@
+# {{ ansible_managed }}
+[Unit]
+Description=hermes-kubelab curator: {{ agent_stack_hermes.curator.schedule }}
+# Stopped with the egress rule, the kill switch: a firing would only be refused by the
+# service's Requisite and page.
+PartOf=agent-stack-egress.service
+
+[Timer]
+OnCalendar={{ agent_stack_hermes.curator.schedule }}
+# ace2 is on-demand: a week it slept through runs at the next boot.
+Persistent=true
+RandomizedDelaySec=2min
+
+[Install]
+WantedBy=timers.target
