@@ -194,6 +194,16 @@
       loop: ["", tree]
       when: agent_stack_mcp_bridge_configured | bool
 
+    - name: Create the docs mirror's tree for the MCP bridge
+      ansible.builtin.file:
+        path: "{{ agent_stack_docs_mirror }}/{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      loop: ["", tree, "tree/{{ agent_stack_hermes.docs_mirror.path }}"]
+      when: agent_stack_mcp_bridge_configured | bool
+
     - name: Install the MCP bridge's build context
       ansible.builtin.copy:
         src: mcp-bridge/
@@ -372,6 +382,11 @@
 # Before Hermes: its sandbox mounts the clone this makes.
 - name: Provision the agent's vault clone and its sync
   ansible.builtin.import_tasks: vault_zone.yml
+  tags: [agent_stack]
+
+# Before the bridge is probed and before Hermes: no token, so no wait for the sync.
+- name: Provision the repository's read-only docs mirror
+  ansible.builtin.import_tasks: docs_mirror.yml
   tags: [agent_stack]
 
 # After the sync: both read the vault with its token, from the same directory.
