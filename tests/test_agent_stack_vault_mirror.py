@@ -180,7 +180,9 @@ def test_the_role_installs_runs_and_enables_the_mirror() -> None:
     names = " | ".join(t["name"] for t in _mirror_tasks())
     for step in ("Install the vault mirror", "Run the vault mirror once", "Enable the vault mirror timer"):
         assert step in names, names
-    owned = [t for t in _tasks() if (t.get("ansible.builtin.file") or {}).get("path") == "{{ agent_stack_vault_mirror }}"]
+    owned = [
+        t for t in _tasks() if (t.get("ansible.builtin.file") or {}).get("path") == "{{ agent_stack_vault_mirror }}"
+    ]
     assert owned and owned[0]["ansible.builtin.file"]["owner"] == "root"
 
 

@@ -341,7 +341,7 @@ class TestResticPasswords:
         assert [body["name"] for body in http.posts()] == [bnc.node_bucket(nodes[0])]
 
 
-OUTSIDE ="kubelab-vikunja-staging"
+OUTSIDE = "kubelab-vikunja-staging"
 
 
 def _held_fleet(monkeypatch: pytest.MonkeyPatch, nodes: list[str]) -> tuple[FakeStore, FakeHttp]:

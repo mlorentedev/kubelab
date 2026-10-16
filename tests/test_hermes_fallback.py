@@ -66,7 +66,7 @@ def test_the_ported_keys_cannot_set_the_chain(ported: dict) -> None:
 def test_the_playbook_reads_the_key_from_prods_vault() -> None:
     playbook = (ROLE.parents[1] / "playbooks/provision-ace2.yml").read_text()
     assert (
-        "agent_stack_anthropic_api_key: \"{{ gitea_secrets.apps.services.ai.hermes_kubelab.anthropic_api_key"
+        'agent_stack_anthropic_api_key: "{{ gitea_secrets.apps.services.ai.hermes_kubelab.anthropic_api_key'
         " | default('') }}\"" in playbook
     )
 

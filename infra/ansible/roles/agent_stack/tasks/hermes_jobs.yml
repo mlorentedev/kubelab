@@ -37,8 +37,12 @@
   register: _agent_stack_hermes_jobs_plan_raw
   changed_when: false
   check_mode: false
-  # A dry run of a fresh node has no gateway to ask: nothing is declared there yet.
-  ignore_errors: "{{ ansible_check_mode }}"
+  # A dry run of a fresh node has no gateway to ask, and only that is tolerated:
+  # the planner's own refusal (exit 2: a malformed declaration, duplicate names)
+  # fails a dry run as well as a real one.
+  failed_when: >-
+    _agent_stack_hermes_jobs_plan_raw.rc == 2
+    or (_agent_stack_hermes_jobs_plan_raw.rc != 0 and not ansible_check_mode)
 
 - name: Hold the job changes the diff found
   ansible.builtin.set_fact:

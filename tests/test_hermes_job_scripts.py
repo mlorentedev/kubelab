@@ -130,6 +130,8 @@ def test_a_long_message_is_cut_and_the_report_fits_what_hermes_injects(tmp_path:
         "ghp_" + "b" * 36,
         "github_pat_" + "c" * 40,
         "Authorization: Bearer " + "d" * 30,
+        "xox" + "e-" + "1-" + "abcdefghijklmnop",
+        "eyJ" + "hbGciOiJIUzI1NiJ9." + "eyJzdWIiOiIxMjM0NTY3ODkwIn0." + "dozjgNryP4J3jVmNHl0w5N",
     ],
 )
 def test_a_credential_pasted_into_a_conversation_does_not_reach_the_record(tmp_path: Path, secret: str) -> None:
@@ -145,9 +147,13 @@ def test_a_credential_pasted_into_a_conversation_does_not_reach_the_record(tmp_p
 
 
 def test_the_database_is_opened_read_only(tmp_path: Path) -> None:
-    """A report must not be able to change the gateway's session store."""
-    text = (SCRIPTS / "session-activity.py").read_text()
-    assert "mode=ro" in text
+    """A report must not be able to change the gateway's session store: the
+    connection it opens refuses a write, whatever the code around it does."""
+    path = _database(tmp_path, [{"id": "s", "source": "slack", "started_at": NOW}], [])
+    db = _script("session-activity.py")._connect(path)
+    with pytest.raises(sqlite3.OperationalError, match="readonly"):
+        db.execute("INSERT INTO sessions (id, source, started_at) VALUES ('x', 'slack', 1)")
+    db.close()
 
 
 # --------------------------------------------------------------------------- the declaration

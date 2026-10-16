@@ -334,7 +334,9 @@ def test_the_cli_requires_a_node_and_exits_non_zero_when_the_drill_fails(monkeyp
     runner = CliRunner()
     assert runner.invoke(app, ["drill-node"]).exit_code != 0
     calls = []
-    monkeypatch.setattr(node_drill, "drill_node", lambda node, env, project_root=None: calls.append((node, env)) or False)
+    monkeypatch.setattr(
+        node_drill, "drill_node", lambda node, env, project_root=None: calls.append((node, env)) or False
+    )
     assert runner.invoke(app, ["drill-node", "--node", "ace2", "--env", "prod"]).exit_code == 1
     monkeypatch.setattr(node_drill, "drill_node", lambda node, env, project_root=None: True)
     assert runner.invoke(app, ["drill-node", "--node", "ace2", "--env", "prod"]).exit_code == 0

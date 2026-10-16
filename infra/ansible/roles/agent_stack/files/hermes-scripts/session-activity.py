@@ -29,9 +29,10 @@ BUDGET = 7000
 NOTHING = '{"wakeAgent": false}'
 # A credential pasted into a chat must not be copied into the vault.
 SECRETS = re.compile(
-    r"sk-[A-Za-z0-9_-]{20,}|xox[abprs]-[A-Za-z0-9-]{10,}|gh[pousr]_[A-Za-z0-9]{30,}"
+    r"sk-[A-Za-z0-9_-]{20,}|xox[a-z]-[A-Za-z0-9-]{10,}|gh[pousr]_[A-Za-z0-9]{30,}"
     r"|github_pat_[A-Za-z0-9_]{30,}|AKIA[0-9A-Z]{16}|authelia_(?:at|rt|ac)_[A-Za-z0-9._-]+"
     r"|(?i:bearer)\s+[A-Za-z0-9._~+/-]{20,}"
+    r"|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"
 )
 
 
@@ -40,12 +41,16 @@ def _clean(text: object) -> str:
     return one_line if len(one_line) <= MESSAGE_CHARS else one_line[:MESSAGE_CHARS] + "..."
 
 
+def _connect(db_path: Path) -> sqlite3.Connection:
+    """Read only: a report must not be able to change the gateway's session store."""
+    return sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+
+
 def report(db_path: Path, now: float) -> str:
     if not db_path.exists():
         return f"No conversation database yet.\n{NOTHING}"
     marks = ",".join("?" for _ in AUTOMATED)
-    # Read only: a report must not be able to change the gateway's session store.
-    with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as db:
+    with _connect(db_path) as db:
         rows = db.execute(
             f"""SELECT s.id, s.source, s.title, s.started_at, m.role, m.content
                 FROM messages m JOIN sessions s ON s.id = m.session_id

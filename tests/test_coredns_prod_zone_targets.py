@@ -104,9 +104,7 @@ def test_every_prod_route_name_resolves_to_the_vps() -> None:
     # A staging name on a shared base route is not a prod name: staging resolves
     # through its own zone, above this one.
     routes = {
-        h
-        for h in _prod_route_hosts()
-        if (h == base or h.endswith("." + base)) and not h.endswith(".staging." + base)
+        h for h in _prod_route_hosts() if (h == base or h.endswith("." + base)) and not h.endswith(".staging." + base)
     }
     exceptions = {ctx["service_domains"]["vpn"]: ctx["vps_public_ip"]}
     missing = sorted(routes - zone.keys())
@@ -122,9 +120,7 @@ def test_every_pinned_name_is_served() -> None:
     """The reverse: a pin for a name nothing serves is a stale record, not a harmless one."""
     ctx = _role_vars()
     routes = _prod_route_hosts()
-    node_served = {
-        f"{r['name']}.{ctx['base_domain']}" for r in ctx["coredns_public_records"] if r.get("target")
-    }
+    node_served = {f"{r['name']}.{ctx['base_domain']}" for r in ctx["coredns_public_records"] if r.get("target")}
     declared_elsewhere = {ctx["service_domains"]["jetson"]}  # retirement is #964
     stale = sorted(set(_prod_zone()) - routes - node_served - declared_elsewhere)
     assert not stale, f"the LAN resolver pins names no prod route serves: {stale}"

@@ -138,7 +138,13 @@ def test_two_buckets_are_each_listed_once_at_their_root(fleet) -> None:
     assert entries[("node", "rpi4")][0] == "4000"
     listed = [c.split()[1] for c in _calls(fake)]
     assert sorted(listed) == sorted(
-        ["kubelab-backups", "kubelab-backups/rpi3", "kubelab-backups/kubelab-vps", "kubelab-backup-rpi4", "kubelab-backup-rpi4/rpi4"]
+        [
+            "kubelab-backups",
+            "kubelab-backups/rpi3",
+            "kubelab-backups/kubelab-vps",
+            "kubelab-backup-rpi4",
+            "kubelab-backup-rpi4/rpi4",
+        ]
     )
 
 

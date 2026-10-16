@@ -340,3 +340,13 @@ def test_an_edit_switches_the_job_between_agent_and_script_mode() -> None:
     [action] = _plan(_declaration(digest=SCRIPT_JOB), was_agent)
     assert "--no-agent" in action["argv"]
     assert "--agent" not in action["argv"]
+
+
+def test_the_planners_refusal_fails_the_play_even_in_a_dry_run() -> None:
+    """Only a missing gateway is tolerated in a dry run. A malformed declaration
+    exits 2 and must not read as 'nothing to do'."""
+    [plan] = [t for t in _flat(_job_tasks()) if "plan" in t.get("name", "").lower() and "command" in str(t)]
+    assert "ignore_errors" not in plan
+    rule = str(plan["failed_when"])
+    assert "rc == 2" in rule, "exit 2 is the planner's refusal"
+    assert "not ansible_check_mode" in rule, "any other failure still fails a real run"

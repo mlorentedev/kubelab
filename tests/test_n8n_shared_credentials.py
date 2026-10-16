@@ -379,7 +379,6 @@ class TestProdRun:
         for sentinel in SENTINELS:
             assert sentinel not in out
 
-
     def test_a_short_credential_secret_is_masked_too(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
@@ -388,6 +387,7 @@ class TestProdRun:
         vault = _deep_update(_vault(), {"infra": {"smtp": {"pass": short}}})
         _run(vault=vault, kubectl=_Kubectl(fail_kind="credentials", echo=True), monkeypatch=monkeypatch)
         assert short not in capsys.readouterr().out
+
 
 class TestFailsClosed:
     @pytest.mark.parametrize("name", ["token", "recipient"])

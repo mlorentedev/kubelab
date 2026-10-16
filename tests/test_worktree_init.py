@@ -25,10 +25,7 @@ def _fake_poetry(tmp_path: pathlib.Path, *, lock_is_fresh: bool) -> tuple[pathli
     script = tmp_path / "poetry"
     check_rc = 0 if lock_is_fresh else 1
     script.write_text(
-        "#!/bin/sh\n"
-        f'echo "$*" >> "{log}"\n'
-        f'case "$*" in "check --lock"*) exit {check_rc};; esac\n'
-        "exit 0\n",
+        f'#!/bin/sh\necho "$*" >> "{log}"\ncase "$*" in "check --lock"*) exit {check_rc};; esac\nexit 0\n',
         encoding="utf-8",
     )
     script.chmod(script.stat().st_mode | stat.S_IEXEC)
