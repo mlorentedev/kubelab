@@ -194,6 +194,14 @@ Jobs are declared in `apps.services.ai.hermes_kubelab.cron` (`common.yaml`) and 
 - **Not a built-in's name**: a built-in outranks an external skill, so `systematic-debugging` and `test-driven-development` would be installed and never read (lesson-580). `hermes skills list` in the gateway shows the built-ins.
 - **Remove one**: drop the name; the provision deletes its directory.
 
+## Curator analyzer
+
+`hermes-kubelab-curator-analyze.timer` (Mondays 16:00 local) runs the recurrence analyzer as the agent's user. It reads the agent's own vault clone and the public `docs/lessons/` of the repositories, and writes `80_agents/hermes-kubelab/curator/candidates.json`; the vault sync commits it. Nothing is promoted: the judge and the emitter (part 6b) read the file.
+
+- Run now: `sudo systemctl start hermes-kubelab-curator-analyze.service` on ace2, then `journalctl -u hermes-kubelab-curator-analyze -n 20`.
+- Exit 3 is the fetch guard: a repository whose lessons could not be listed fails the run rather than writing a thin candidate list.
+- An empty `candidates.json` after a clean run means no recurrence; a missing file means the unit never ran.
+
 ## Re-register the sidecar
 
 Needed when the sidecar reports anything but `Running` (for example after its
