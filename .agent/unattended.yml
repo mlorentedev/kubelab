@@ -1,0 +1,46 @@
+# .agent/unattended.yml - written at arming, committed on the run's branch
+version: 1
+run_id: ap-20261016-kubelab-fc
+armed_by: manu
+armed_at: 2026-10-16T08:00:00Z
+expires_at: 2026-10-16T18:00:00Z
+objective: >-
+  Finish the four tickets the operator approved (#2323 remainder, #2318 option B,
+  #244 VPS snapshot, ticket housekeeping), then quick wins nobody else holds.
+scope:
+  write_paths:
+    - "toolkit/**"
+    - "tests/**"
+    - "docs/**"
+    - "specs/**"
+    - "infra/n8n/**"
+    - "infra/config/**"
+    - "Makefile"
+    - ".agent/runs/**"
+  frozen_paths:
+    - ".github/**"
+    - "harness/**"
+    - "**/AGENTS.md"
+    - "infra/terraform/**"
+    - "infra/k8s/**"
+    - "infra/ansible/**"
+  max_files: 20
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make, toolkit, poetry, pytest, python3, jq]
+queue:
+  source: bitacora
+  filter: >-
+    1) #2323 2) #2318 3) #244 4) housekeeping #1699 #1701; then label bug or chore,
+    repo mlorentedev/kubelab, unassigned, no decision or owner action needed
+  max_items: 8
+budget:
+  max_iterations: 10
+  max_minutes_per_iteration: 45
+  max_consecutive_failures: 2
+authority:
+  # Verbal 4-condition grant from the operator (no .github/merge-grant.yml in
+  # this repo); PRs touching SOPS, the envelope or CI stay open for the operator.
+  merge: standing-grant
+  push: true
+  open_pr: true
+  advisor_tier: top
