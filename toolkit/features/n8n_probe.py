@@ -354,10 +354,30 @@ function summarise(data) {
 const TASKS = 'http://vikunja:3456/api/v1/tasks/';
 const AUTH = { Authorization: 'Bearer ' + (process.env.VIKUNJA_API_TOKEN || '') };
 
+// Where a task sits on the board. A task read by id carries no bucket (bucket_id
+// is 0 and `expand=buckets` adds nothing, measured on staging 2026-10-16), because
+// a bucket belongs to a VIEW. The board itself says it: the Kanban view answers
+// with its buckets and the tasks in each, which is what the page the operator
+// looks at renders. Titles only leave the pod.
+async function bucketTitles(taskId, projectId) {
+  const base = 'http://vikunja:3456/api/v1/projects/' + projectId + '/views';
+  const views = await (await fetch(base, { headers: AUTH })).json();
+  const kanban = (Array.isArray(views) ? views : []).filter((v) => v.view_kind === 'kanban')
+    .sort((a, b) => a.id - b.id)[0];
+  if (!kanban) return [];
+  const res = await fetch(base + '/' + kanban.id + '/tasks?filter=' + encodeURIComponent('id = ' + taskId),
+    { headers: AUTH });
+  if (!res.ok) return [];
+  const buckets = await res.json();
+  return (Array.isArray(buckets) ? buckets : [])
+    .filter((b) => (b.tasks || []).some((t) => Number(t.id) === taskId))
+    .map((b) => String(b.title || ''));
+}
+
 // The description leaves the pod only as a digest: the probe compares it before
 // and after a write, and has no use for what it says.
 async function getTask(taskId) {
-  const res = await fetch(TASKS + Number(taskId) + '?expand=buckets', { headers: AUTH });
+  const res = await fetch(TASKS + Number(taskId), { headers: AUTH });
   if (!res.ok) {
     return { status: res.status, title: null, done: null, descriptionSha256: null, projectId: null, bucketTitles: [] };
   }
@@ -369,8 +389,7 @@ async function getTask(taskId) {
     done: Boolean(task.done),
     descriptionSha256: digest,
     projectId: task.project_id == null ? null : Number(task.project_id),
-    // Vikunja puts `buckets` on a task only with `?expand=buckets`: one entry per view the task is in.
-    bucketTitles: (Array.isArray(task.buckets) ? task.buckets : []).map((b) => String(b.title || '')),
+    bucketTitles: await bucketTitles(Number(taskId), Number(task.project_id)),
   };
 }
 
