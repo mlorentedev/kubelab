@@ -1,7 +1,7 @@
 ---
 id: "adr-018"
 type: adr
-status: active
+status: accepted
 tags: [web, cms, ghost, content-strategy]
 owner: manu
 created: "2026-03-28"

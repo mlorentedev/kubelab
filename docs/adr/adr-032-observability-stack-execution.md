@@ -1,7 +1,7 @@
 ---
 id: adr-032-observability-stack-execution
 type: adr
-status: active
+status: proposed
 created: "2026-05-12"
 ---
 

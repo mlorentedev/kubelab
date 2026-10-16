@@ -1,7 +1,7 @@
 ---
 id: adr-024-pvc-backup-strategy
 type: adr
-status: active
+status: accepted
 created: "2026-03-21"
 owner: manu
 ---

@@ -1,7 +1,7 @@
 ---
 id: adr-040-oidc-secret-lifecycle
 type: adr
-status: active
+status: accepted
 created: "2026-05-29"
 ---
 

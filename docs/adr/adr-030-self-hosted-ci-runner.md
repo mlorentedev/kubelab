@@ -1,7 +1,7 @@
 ---
 id: adr-030-self-hosted-ci-runner
 type: adr
-status: active
+status: accepted
 created: "2026-03-29"
 ---
 
