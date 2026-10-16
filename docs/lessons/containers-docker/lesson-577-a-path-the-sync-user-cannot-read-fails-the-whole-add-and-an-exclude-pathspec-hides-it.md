@@ -16,6 +16,8 @@ tags: [kubelab, containers-docker, hermes, git, rootless, ai-012]
 
 **Solution**: Skip the files with a root-owned ignore file passed as configuration, like the hooks: `-c core.excludesFile=/usr/local/libexec/agent-stack/vault-ignore` (`*.lock`, `.mem_*`), and a plain `git add --all -- ":(top,literal)$zone/"`. Proof on ace2: one forced sync committed `memories/MEMORY.md` and `USER.md` as `hermes-kubelab` and pushed, with the lock files left untracked.
 
+**Aftershock**: the ignore file names the two artifacts seen, not the cause. A check that replaced `MEMORY.md` the way an atomic write does (`mkstemp` then `os.replace`) left it `0600`, and the sync failed on a name the file did not exclude; Hermes's own writes arrive `0644`, which is why the live run was clean. The next unreadable name fails the unit the same way, loudly, until it is added.
+
 **Rule**: A directory a different uid writes into will contain files the reader cannot open; decide what the reader skips, in a file the writer cannot edit, before mounting it. And never accept "exit 0 and nothing happened" from a staging step: prove it by the commit it should have produced, under the same environment the unit runs in, because a second environment variable was enough to change the answer.
 
 **Tags**: `#hermes` `#git` `#rootless` `#ai-012`
