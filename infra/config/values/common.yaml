@@ -2178,7 +2178,7 @@ apps:
             # No agent: the script's output is the message. Read over breakfast.
             digest:
               mode: script
-              schedule: "5 8 * * *"
+              schedule: "5 14 * * *"
               script: daily-digest.py
 
 # Terraform state (TF-007, ADR-069). Every root keeps its state in this R2

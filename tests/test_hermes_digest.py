@@ -172,7 +172,8 @@ def test_the_digest_job_is_a_script_job_with_no_agent_and_runs_in_the_morning() 
     assert job["script"] == "daily-digest.py"
     minute, hour, *_ = job["schedule"].split()
     assert minute.isdigit()
-    assert 5 <= int(hour) <= 10, "read over breakfast, not at 3 AM"
+    # Cron runs in UTC; the operator is in Denver (UTC-6 or -7).
+    assert 13 <= int(hour) <= 16, "read over breakfast in Denver, not at 2 AM"
 
 
 # --------------------------------------------------------------------------- memory capture
@@ -256,7 +257,8 @@ def test_the_sync_skips_the_gateways_unreadable_plumbing_in_the_memories(tmp_pat
         entry for entry in task["ansible.builtin.copy"]["content"].splitlines() if entry and not entry.startswith("#")
     ]
     ignore = tmp_path / "vault-ignore"
-    ignore.write_text("\n".join(patterns) + "\n")
+    assert patterns and all("/memories/" in entry for entry in patterns), "anchored to the memories, not the clone"
+    ignore.write_text("\n".join(patterns).replace("{{ agent_stack_vault_zone }}", "zone") + "\n")
 
     repo = tmp_path / "clone"
     memories = repo / "zone" / "memories"

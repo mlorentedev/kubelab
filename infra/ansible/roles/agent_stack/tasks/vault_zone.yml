@@ -27,14 +27,16 @@
     mode: "0755"
 
 # What the sync never stages: the gateway's lock files and the temporaries of an
-# atomic write, which it creates 0600 as a subuid this user cannot read.
+# atomic write in the memories, which it creates 0600 as a subuid this user cannot
+# read. Anchored to that directory, so an untracked file elsewhere in the clone
+# still counts as a change outside the zone.
 - name: Install the vault sync's ignore file
   ansible.builtin.copy:
     dest: "{{ agent_stack_vault_ignore }}"
     content: |
       # Managed by Ansible (role agent_stack): what the vault sync never stages.
-      *.lock
-      .mem_*
+      {{ agent_stack_vault_zone }}/memories/*.lock
+      {{ agent_stack_vault_zone }}/memories/.mem_*
     owner: root
     group: root
     mode: "0644"
