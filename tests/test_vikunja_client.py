@@ -23,45 +23,6 @@ def test_headers_include_bearer_token() -> None:
     assert headers["Content-Type"] == "application/json"
 
 
-def test_get_namespaces_returns_list(client: VikunjaClient) -> None:
-    mock_resp = MagicMock()
-    mock_resp.ok = True
-    mock_resp.status_code = 200
-    mock_resp.content = b'[{"id": 1, "title": "kubelab"}]'
-    mock_resp.json.return_value = [{"id": 1, "title": "kubelab"}, {"id": 2, "title": "personal"}]
-    client.session.request.return_value = mock_resp
-
-    namespaces = client.get_namespaces()
-    assert len(namespaces) == 2
-    assert namespaces[0]["title"] == "kubelab"
-    client.session.request.assert_called_once_with(
-        "GET",
-        "https://tasks.kubelab.live/api/v1/namespaces",
-        headers=client._headers(),
-        timeout=10,
-    )
-
-
-def test_create_namespace_success(client: VikunjaClient) -> None:
-    mock_resp = MagicMock()
-    mock_resp.ok = True
-    mock_resp.status_code = 201
-    mock_resp.content = b'{"id": 3, "title": "teledyne"}'
-    mock_resp.json.return_value = {"id": 3, "title": "teledyne"}
-    client.session.request.return_value = mock_resp
-
-    res = client.create_namespace(title="teledyne")
-    assert res["id"] == 3
-    assert res["title"] == "teledyne"
-    client.session.request.assert_called_once_with(
-        "PUT",
-        "https://tasks.kubelab.live/api/v1/namespaces",
-        json={"title": "teledyne", "description": ""},
-        headers=client._headers(),
-        timeout=10,
-    )
-
-
 def test_get_labels_returns_list(client: VikunjaClient) -> None:
     mock_resp = MagicMock()
     mock_resp.ok = True
@@ -134,4 +95,33 @@ def test_api_error_raises_vikunja_error(client: VikunjaClient) -> None:
     client.session.request.return_value = mock_resp
 
     with pytest.raises(VikunjaError, match="Vikunja API error 401"):
-        client.get_namespaces()
+        client.get_projects()
+
+
+class _Config:
+    def __init__(self, value: str | None) -> None:
+        self.value = value
+        self.asked: list[str] = []
+
+    def get_secret_by_path(self, path: str) -> str | None:
+        self.asked.append(path)
+        return self.value
+
+
+def test_the_token_comes_from_the_flag_then_the_environment_then_sops() -> None:
+    from toolkit.features.vikunja_client import resolve_token
+
+    cm = _Config("from-sops")
+    assert resolve_token("flag", "env", cm) == "flag"  # type: ignore[arg-type]
+    assert resolve_token("", "env", cm) == "env"  # type: ignore[arg-type]
+    assert cm.asked == [], "SOPS is only read when nothing else supplied a token"
+    assert resolve_token("", "", cm) == "from-sops"  # type: ignore[arg-type]
+    assert cm.asked == ["apps.services.automation.n8n.vikunja_api_token"]
+
+
+def test_no_token_anywhere_is_an_error_not_an_anonymous_request() -> None:
+    """`make sync-vikunja` authenticated as nobody for as long as it existed (#1701)."""
+    from toolkit.features.vikunja_client import resolve_token
+
+    with pytest.raises(VikunjaError, match="no Vikunja API token"):
+        resolve_token("", "", _Config(None))  # type: ignore[arg-type]
