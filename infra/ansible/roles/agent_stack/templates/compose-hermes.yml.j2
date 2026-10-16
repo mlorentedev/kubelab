@@ -30,6 +30,11 @@ services:
       - {{ agent_stack_hermes_config }}:{{ agent_stack_hermes_home }}/config.yaml:ro
       # The jobs' scripts, read-only for the same reason.
       - {{ agent_stack_hermes_scripts }}:{{ agent_stack_hermes_home }}/scripts:ro
+{% if agent_stack_vault_configured | bool %}
+      # The agent's memories are written where the user that syncs the zone can read
+      # them: the data directory is 0700 for a subuid, which that user cannot open.
+      - {{ agent_stack_vault_clone }}/{{ agent_stack_vault_zone }}/memories:{{ agent_stack_hermes_home }}/memories
+{% endif %}
       # Where the image looks for a socket to join the group of.
       - /run/user/{{ _agent_stack_agent_uid }}/docker.sock:/var/run/docker.sock
     # On the host's address in Open WebUI's network, which ufw opens to that

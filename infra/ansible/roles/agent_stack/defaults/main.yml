@@ -100,6 +100,7 @@ agent_stack_vault_configured: "{{ agent_stack_vault_token | length > 0 }}"
 agent_stack_vault_clone: "{{ agent_stack_agent_home }}/vault"
 agent_stack_vault_token_file: "{{ agent_stack_dir }}/vault-token"
 agent_stack_vault_libexec: /usr/local/libexec/agent-stack
+agent_stack_vault_ignore: "{{ agent_stack_vault_libexec }}/vault-ignore"
 agent_stack_vault_sync_unit: hermes-kubelab-vault-sync
 
 # The read-only vault the MCP bridge serves Open WebUI (spec AI-009 AC9): root's,
