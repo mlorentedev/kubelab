@@ -196,11 +196,22 @@ Jobs are declared in `apps.services.ai.hermes_kubelab.cron` (`common.yaml`) and 
 
 ## Curator analyzer
 
-`hermes-kubelab-curator-analyze.timer` (Mondays 16:00 local) runs the recurrence analyzer as the agent's user. It reads the agent's own vault clone and the public `docs/lessons/` of the repositories, and writes `80_agents/hermes-kubelab/curator/candidates.json`; the vault sync commits it. Nothing is promoted: the judge and the emitter (part 6b) read the file.
+`hermes-kubelab-curator-analyze.timer` (Mondays 16:00 local) runs the recurrence analyzer as the agent's user. It reads the agent's own vault clone and the public `docs/lessons/` of the repositories, and writes `80_agents/hermes-kubelab/curator/candidates.json`; the vault sync commits it. Nothing is promoted: the judge and the emitter (see "Curator judge and proposals") read the file.
 
 - Run now: `sudo systemctl start hermes-kubelab-curator-analyze.service` on ace2, then `journalctl -u hermes-kubelab-curator-analyze -n 20`.
 - Exit 3 is the fetch guard: a repository whose lessons could not be listed fails the run rather than writing a thin candidate list.
 - An empty `candidates.json` after a clean run means no recurrence; a missing file means the unit never ran.
+
+## Curator judge and proposals
+
+Two jobs follow the analyzer on Mondays (UTC): `kubelab:curator-judge` at 14:20 and `kubelab:curator-emit` at 14:50. The judge is an agent turn with `deliver: local`, so nothing goes to Slack. Its pre-run script (`curator-judge-input.py`) trims `curator/candidates.json` to each candidate's id and excerpts; Hermes injects that output into the prompt (cut at 8000 characters) and the model answers with JSON verdicts. The emitter (`emit-proposals.py`, a no-agent job) reads the judge's latest run record and writes one draft per `RECURRENCE` to `proposals/<id>.md`; the vault sync commits it. The operator disposes of the drafts.
+
+- **The gateway mounts** `curator/` read-only and `proposals/` writable (`HERMES_VAULT_ZONE` names the zone's path inside it). The job scripts run in the gateway, which sees nothing else of the zone. `proposals/` is `01777`: the gateway's user writes, the sync user reads.
+- **Model output is data.** An id that is not ten hex digits, a label other than `RECURRENCE`, or an id the analyzer did not produce is ignored. A draft is created, never replaced, so a re-run is safe and a draft being triaged is never overwritten. The evidence comes from `candidates.json` by id, never from the run record.
+- **The run is found by its title**, `# Cron Job: kubelab:curator-judge`, and its response is the record's last section. Not by a phrase in the prompt: the prompt holds the injected script output (lesson-582).
+- **Run both now**: `hermes cron run <id>` for the judge, wait for it to end, then the emitter (ids in `cron/jobs.json`). Read `cron/output/<job id>/` for the record.
+- **Nothing printed means nothing sent**: a week without a new recurrence is silent by design. `last_status: ok` with no new file in `proposals/` is that case, not a failure.
+- **Reading the drafts**: each carries the judge's label, placement, confidence, one-line root cause and the evidence. The suggested tier is a hint; a human confirms. The disposing skill (`dispose-proposals`, dotfiles) is a separate change.
 
 ## Re-register the sidecar
 

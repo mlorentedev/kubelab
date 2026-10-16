@@ -137,6 +137,17 @@
         mode: "01777"
       when: not ansible_check_mode
 
+    # The curator's emitter creates its drafts here as the gateway's user (spec AI-012
+    # 6b), so it is the same kind of directory as memories/ and for the same reason.
+    - name: Create the proposals directory the gateway writes into
+      ansible.builtin.file:
+        path: "{{ agent_stack_vault_clone }}/{{ agent_stack_vault_zone }}/proposals"
+        state: directory
+        owner: "{{ agent_stack_agent_user }}"
+        group: "{{ agent_stack_agent_user }}"
+        mode: "01777"
+      when: not ansible_check_mode
+
     - name: Enable the vault sync timer
       ansible.builtin.systemd:
         name: "{{ agent_stack_vault_sync_unit }}.timer"
