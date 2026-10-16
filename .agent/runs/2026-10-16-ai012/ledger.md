@@ -14,3 +14,5 @@
 | 11:35 | #2347 merged | `07f1ed3b` squash, --match-head-commit ed2c9dc4; Tests, review, attestation, drift green; triage addendum posted; #2340 stays open for AC10 | |
 | 11:50 | #2342 6a live | master merged into #2352, provision changed=4 then 0; unit Result=success; candidates.json 1962 files / 8 candidates; lesson-581; PR ready | verification.md |
 | 11:55 | #2350 | master merged (conflicts: runbook, defaults; kept both), 121 tests pass, still draft, no live provision | |
+| 12:20 | #2342 6a review rounds | PR-Agent found 8 over 3 heads (partial fetch, dead guard, provenance, stale read-back applied; 4 declined with evidence); live re-provision changed=1 then 0 | PR #2352 triage comments |
+| 12:40 | #2342 6b | judge input + emitter + 2 jobs written on feat/hermes-curator-judge (stacked on 6a; rebase after 6a merges); 42 tests, 3 mutations red; no provision yet | decisions: emitter is a gateway script job (data/ is 0700 to a subuid), evidence from candidates.json not the record |
