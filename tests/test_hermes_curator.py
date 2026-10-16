@@ -7,11 +7,11 @@ tested by running the script on a fixture corpus; the unit by what its text gran
 
 from __future__ import annotations
 
-import importlib.util
 import io
 import json
 import sys
 import tarfile
+import types
 from pathlib import Path
 
 import pytest
@@ -52,10 +52,12 @@ FILLER = [
 
 
 def _load():
-    spec = importlib.util.spec_from_file_location("curator_analyze", SCRIPT)
-    module = importlib.util.module_from_spec(spec)
+    """Compiled from source, never imported: an import writes a .pyc into the role's files/,
+    which the sudo-grant test reads as text."""
+    module = types.ModuleType("curator_analyze")
+    module.__file__ = str(SCRIPT)
     sys.modules["curator_analyze"] = module
-    spec.loader.exec_module(module)
+    exec(compile(SCRIPT.read_text(), str(SCRIPT), "exec"), module.__dict__)  # noqa: S102
     return module
 
 
