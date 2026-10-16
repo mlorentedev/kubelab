@@ -2174,6 +2174,19 @@ apps:
           home_channel:
             id: C0BSWLG4M6C
             name: agent-fleet
+          # The channels the fleet's alerts land in, which the triage reads (spec
+          # AI-012 AC8, R3). Reading is not obeying: SLACK_ALLOWED_CHANNELS governs
+          # what the agent answers, and a script's history read ignores it (measured
+          # on ace2, 2026-10-16: all four returned ok with the gateway's bot token).
+          alert_channels:
+            - id: C0BRLU6PUTZ
+              name: ops-log
+            - id: C0AGV95PXRP
+              name: alerts
+            - id: C0APESG5VNZ
+              name: deployments
+            - id: C0BRW2QB8SX
+              name: vault-health
         # The scheduled jobs (spec AI-012 AC4), reconciled by name against the
         # gateway's own by the agent_stack role. Governs the agent, so it lives
         # here and never in the vault zone the agent writes (placement rule). A job

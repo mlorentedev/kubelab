@@ -102,6 +102,12 @@ What each process sees, same run:
 - The two scheduled runs of 2026-10-15 posted a file-mutation warning each: `write_file` refused `/vault/80_agents/hermes-kubelab/sessions/...` as outside `HERMES_WRITE_SAFE_ROOT` (the image sets `/opt/data`), and the record was written anyway through the shell. The variable is an `os.pathsep`-separated list (`agent/file_safety.py`, read in the pinned image), so the gateway now sets `<data>:<mount>/<zone>`. That widens nothing the agent could not already write: the sandbox mounts the zone writable and the rest of the vault read-only, and the shell fallback proved it. The operator approved this on 2026-10-15, after the advisor corrected an earlier recommendation to change the prompt (the only tool the policy allowed could not reach the zone).
 - Live: after the provision, `hermes cron run` on `kubelab:session-record` ended `ok` and its `#agent-fleet` message carried no warning; the next sync committed the file (`eb3fe171`). Provision: `CHECK=1` changed=5, first run changed=1, second run changed=0 (that run was against master's role, which lacks #2322, and failed the sync on the lock files; the branch is stacked on #2322, and the converge on the stacked tree was changed=3, then 0).
 
+## The alert channels, read from the gateway, 2026-10-16 (AC8, R3)
+
+R3 answered by the operator's channels: `#ops-log`, `#alerts`, `#deployments`, `#vault-health`, declared by ID in `slack.alert_channels` (`common.yaml`). Measured on ace2 with a throwaway probe that called `conversations.history` with the gateway's own `SLACK_BOT_TOKEN` from inside the container and printed only the outcome: all four returned `ok` with at least one message (`True None None 1` each). So the bot is already a member of every channel with the history scope, and `SLACK_ALLOWED_CHANNELS` (which limits what the agent answers) does not limit a script's read. The probe playbook was deleted and never committed.
+
+`alert-activity.py` is the triage's input: it reads the last hour of each channel, redacts credentials, and ends with `{"wakeAgent": false}` when nothing was said. A channel it cannot read is reported in the output instead of reading as quiet. The hourly job and the Grafana read (needs the route, #2339) are not in this PR.
+
 ## Test status
 
 - Test suite: `<command> -> <output / coverage %>`
