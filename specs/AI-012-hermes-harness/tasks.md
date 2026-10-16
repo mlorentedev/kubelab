@@ -54,9 +54,9 @@ Unblocked by Hermes v0.22 (draft #2204, lesson-557). The pin moved to v0.22.1 in
 
 PR 4 was split: with both halves it was about 650 non-test lines against the 300 cap.
 
-- [ ] [AC5] Job: memory capture. `vault-sync.sh` copies the agent's `memories/` into `<zone>/memories/` before it commits.
-- [ ] [AC5] Job: daily health and consumption digest, a no-agent script (gateway, sandbox and sidecar through `docker.sock`, data-directory disk, month-to-date tokens per model and provider). Delivery goes to `slack:<home_channel>`.
-- [ ] [AC5] Live: the digest reaches `#agent-fleet`.
+- [x] [AC5] Job: memory capture. The zone's `memories/` directory is mounted over the gateway's `memories/`, so the existing sync commits what the agent remembers. ✓ 2026-10-15
+- [x] [AC5] Job: daily health and consumption digest, a no-agent script (gateway, sandbox and sidecar through `docker.sock`, data-directory disk, month-to-date tokens per model and provider). Delivery goes to `slack:<home_channel>`. ✓ 2026-10-15
+- [x] [AC5] Live: the digest reaches `#agent-fleet`, and a memory commit lands under the zone. ✓ 2026-10-15
 
 ### PR 5: skills and the repository mirror (AC9, AC10)
 

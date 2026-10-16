@@ -2194,6 +2194,11 @@ apps:
                 decided, and what is left open. If that file already exists, replace
                 it with one record that has a single front matter. Write nowhere else
                 in /vault. Then reply with one line, the path you wrote.
+            # No agent: the script's output is the message. Read over breakfast.
+            digest:
+              mode: script
+              schedule: "5 14 * * *"
+              script: daily-digest.py
 
 # Terraform state (TF-007, ADR-069). Every root keeps its state in this R2
 # bucket under `<root>/terraform.tfstate`; `make sync-terraform-backend` renders
