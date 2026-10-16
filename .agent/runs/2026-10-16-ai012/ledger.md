@@ -6,3 +6,5 @@
 | 08:22 | #2340 AC9 managed skills | draft PR #2347, live on ace2 (changed=6, then 0) | verification.md; AC10 docs mirror still open |
 | 08:35 | #2339 Grafana token route | parked(scope-violation) | needs infra/k8s/overlays/prod/patches.yaml, frozen; ticket commented (no `blocked` label exists in the repo) |
 | 09:05 | #2341 persona | draft PR #2350, no live provision (held for operator); dry-run failed=0 | vault profile added 540990c3 |
+| 10:05 | #2347 triage | PR-Agent 2 findings applied; live changed=2 then 0; waiting CI on new head | triage comment posted |
+| 10:15 | #2342 curator 6a | draft PR #2352 (analyzer + weekly host unit); live waits for #2347 merge (branch does not carry skills) | fetch finding: category folders |
