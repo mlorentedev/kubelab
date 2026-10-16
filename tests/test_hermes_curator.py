@@ -7,11 +7,11 @@ tested by running the script on a fixture corpus; the unit by what its text gran
 
 from __future__ import annotations
 
-import importlib.util
 import io
 import json
 import sys
 import tarfile
+import types
 from pathlib import Path
 
 import pytest
@@ -52,10 +52,12 @@ FILLER = [
 
 
 def _load():
-    spec = importlib.util.spec_from_file_location("curator_analyze", SCRIPT)
-    module = importlib.util.module_from_spec(spec)
+    """Compiled from source, never imported: an import writes a .pyc into the role's files/,
+    which the sudo-grant test reads as text."""
+    module = types.ModuleType("curator_analyze")
+    module.__file__ = str(SCRIPT)
     sys.modules["curator_analyze"] = module
-    spec.loader.exec_module(module)
+    exec(compile(SCRIPT.read_text(), str(SCRIPT), "exec"), module.__dict__)  # noqa: S102
     return module
 
 
@@ -172,6 +174,21 @@ def test_a_path_that_climbs_out_of_the_lessons_is_not_extracted(analyzer, tmp_pa
     monkeypatch.setattr(analyzer.urllib.request, "urlopen", lambda *_a, **_k: io.BytesIO(archive))
     assert analyzer.fetch_github_lessons(["mlorentedev/demo"], tmp_path) == {"mlorentedev/demo": 1}
     assert not list(tmp_path.parent.glob("escape.md")) and not (tmp_path / "escape.md").exists()
+
+
+def test_a_repository_dropped_from_the_list_stops_feeding_the_corpus(analyzer, tmp_path: Path, monkeypatch) -> None:
+    cache = tmp_path / "cache"
+    (cache / "mlorentedev_gone").mkdir(parents=True)
+    (cache / "mlorentedev_gone" / "lesson-001-old.md").write_text(SAME_CAUSE)
+    (cache / "mlorentedev_kept").mkdir()
+    (cache / "mlorentedev_kept" / "lesson-002-new.md").write_text(SAME_CAUSE)
+    monkeypatch.setattr(analyzer, "fetch_github_lessons", lambda repos, c: {r: 1 for r in repos})
+    vault = _vault(tmp_path / "vault", {"2026-01-01-a.md": SAME_CAUSE})
+    out = tmp_path / "c.json"
+    assert _run(analyzer, vault, out) == 0
+    vault_only = json.loads(out.read_text())["corpus_files"]
+    assert _run(analyzer, vault, out, "--repos", "mlorentedev/kept", "--cache-dir", str(cache)) == 0
+    assert json.loads(out.read_text())["corpus_files"] == vault_only + 1, "only the repository asked for is added"
 
 
 def test_a_fetched_lesson_names_its_repository_and_category_as_its_source(analyzer, tmp_path: Path) -> None:

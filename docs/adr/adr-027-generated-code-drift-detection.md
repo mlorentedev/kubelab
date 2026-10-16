@@ -1,7 +1,7 @@
 ---
 id: adr-027-generated-code-drift-detection
 type: adr
-status: active
+status: accepted
 created: "2026-03-27"
 owner: manu
 ---

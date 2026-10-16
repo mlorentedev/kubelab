@@ -1,7 +1,7 @@
 ---
 id: adr-020-iac-lifecycle-strategy
 type: adr
-status: active
+status: accepted
 created: "2026-03-15"
 owner: manu
 ---

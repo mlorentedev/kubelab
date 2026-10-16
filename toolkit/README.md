@@ -137,6 +137,8 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit infra terraform run` | Run one Terraform action against one root (TF-007). |
 | `toolkit infra terraform state-bootstrap` | Create the state bucket, its history lock rule and its token (TF-007). Idempotent. |
 | `toolkit infra terraform verify-killswitch` | Prove the billing kill switch fires, against a scratch project (AC2b). |
+| `toolkit infra vps` | The prod VPS as Hetzner sees it: snapshots (PREP-002) |
+| `toolkit infra vps snapshot` | Snapshot the VPS through the Hetzner API: the rollback of last resort (PREP-002). |
 | `toolkit monitoring` | Uptime Kuma monitoring: backup, restore, and status |
 | `toolkit monitoring apply` | Declarative sync: apply monitors from seed JSON to Uptime Kuma. |
 | `toolkit monitoring backup` | Pull Uptime Kuma database from RPi3 to local repo. |

@@ -425,7 +425,10 @@ def main() -> int:
             # An empty corpus reads as "no recurrence", the one answer a broken fetch must not give.
             print(f"error: no lessons fetched from {', '.join(empty)}", file=sys.stderr)
             return 3
-        paths += sorted(cache.glob("*/**/*.md"))
+        # Only the repositories asked for this run: the cache outlives a repository dropped from
+        # the list, and its lessons would otherwise keep feeding the corpus.
+        for repo in counts:
+            paths += sorted((cache / repo.replace("/", "_")).rglob("*.md"))
 
     units = load_corpus(paths, vault, (cache,) if args.repos else ())
     distinctive_signatures(units)

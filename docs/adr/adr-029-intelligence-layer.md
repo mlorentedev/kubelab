@@ -1,7 +1,7 @@
 ---
 id: adr-029-intelligence-layer
 type: adr
-status: active
+status: accepted
 created: "2026-03-28"
 tags: [intelligence, llm, rag, hardware, architecture]
 owner: manu

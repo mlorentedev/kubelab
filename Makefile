@@ -1546,6 +1546,10 @@ sync-oidc-hashes:
 	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make sync-oidc-hashes ENV=staging|prod" && exit 1)
 	@$(TOOLKIT) sync oidc --env $(ENV)
 
+.PHONY: vps-snapshot
+vps-snapshot: ## Snapshot the prod VPS via the Hetzner API (PREP-002); plan only unless APPLY=1, KEEP=N prunes
+	@$(TOOLKIT) infra vps snapshot --env prod $(if $(APPLY),--apply) $(if $(KEEP),--keep $(KEEP))
+
 .PHONY: sync-vikunja
 sync-vikunja: ## Idempotently reconcile the declared Vikunja projects, team, shares and labels
 	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make sync-vikunja ENV=staging|prod" && exit 1)
