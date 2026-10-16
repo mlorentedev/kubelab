@@ -2102,6 +2102,18 @@ apps:
           # on Anthropic's key, in a workspace capped at 20 USD a month. Pinned
           # scheduled and delegated work never does.
           fallback: claude-haiku-5-5
+        # Spec AI-012 AC9: the vault's cross-agent skills (`00_meta/skills/<name>/`) this
+        # agent is given, replacing hermes-nan's skills-manifest. Each is copied from the
+        # root-owned vault mirror at provision and reaches the gateway through
+        # `skills.external_dirs`, a read-only mount: the agent can use a managed skill and
+        # cannot change it. A declared skill the mirror does not hold fails the provision.
+        # Left out on purpose, each because it drives a tool this agent does not have (the
+        # Hive MCP, `dotf`, `gh`) and would send it down a path that cannot work:
+        # handoff, vault-doctor, agent-lifecycle, new-ticket, crystallize, pattern-loader.
+        # `verification-before-completion` and `audit` have no SKILL.md in the vault.
+        skills:
+          - systematic-debugging # root cause before a fix; its helper files travel with it
+          - insights # staleness, structure and drift of the vault, read only
         # Hermes config keys ported from hermes-nan's `config-desired.yaml` (spec
         # AI-012 AC1), in Hermes's own layout. The role renders every leaf; keys
         # equal to the image's defaults are pinned here so an image bump cannot
