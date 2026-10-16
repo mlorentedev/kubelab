@@ -443,7 +443,7 @@ def test_the_post_create_nodes_read_the_event_from_the_node_that_holds_it() -> N
 
 
 def test_the_creation_notice_does_not_announce_a_bucket() -> None:
-    """`targetBucket` is computed and never written to Vikunja (#1687). A notice
+    """No bucket is ever written to Vikunja (#1687). A notice
     naming it would be that defect reintroduced -- and this path's notice is the
     one a human actually reads."""
     body = node("Notify Task Created")["parameters"]["jsonBody"]

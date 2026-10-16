@@ -61,8 +61,7 @@ def test_gitea_signature_over_the_delivered_bytes_is_valid() -> None:
     assert result["hasTask"] is True
     assert result["taskKey"] == "IDP-035"
     assert result["taskId"] == 35
-    assert result["targetBucket"] == "In Review"
-    assert result["isDone"] is False
+    assert result["prWriteKind"] == "comment"
 
 
 def test_github_prefixed_signature_over_the_delivered_bytes_is_valid() -> None:
@@ -87,8 +86,7 @@ def test_merged_pr_goes_to_done() -> None:
     result = parse(raw, {"X-Gitea-Signature": hex_hmac(raw)}, body)
     assert result["isValidSig"] is True
     assert result["taskKey"] == "GITOPS-007"
-    assert result["targetBucket"] == "Done"
-    assert result["isDone"] is True
+    assert result["prWriteKind"] == "done"
 
 
 def test_signed_issue_opened_is_a_create_candidate() -> None:
@@ -166,3 +164,25 @@ def test_multi_forge_workflow_json_structure() -> None:
 
     comment_node = next(n for n in data["nodes"] if n["name"] == "Append PR URL Comment")
     assert "/comments" in comment_node["parameters"]["url"]
+
+
+def test_no_bucket_is_computed_because_none_is_ever_written() -> None:
+    """The only state write is `done: true` on a merge (#1687). A `targetBucket` or
+    `isDone` computed beside it reads as a transition the workflow performs, and a
+    later node could announce it. They were dead, and they were the defect's seed."""
+    body = open_pr()
+    raw = gitea_bytes(body)
+    result = parse(raw, {"X-Gitea-Signature": hex_hmac(raw)}, body)
+    assert "targetBucket" not in result
+    assert "isDone" not in result
+
+
+def test_adr_066_d4_states_the_transitions_the_workflow_performs() -> None:
+    """AC1 of #1687: D4 and the workflow agree. D4 promised `In Progress` -> `In Review`
+    -> `Done`; the workflow comments on open/reopen and marks done on merge."""
+    adr = (WORKFLOW_PATH.parent.parent.parent.parent / "docs/adr/adr-066-self-hosted-task-platform.md").read_text(
+        encoding="utf-8"
+    )
+    d4 = adr.split("**D4 ", 1)[1].split("5. **D5", 1)[0]
+    assert "In Review" not in d4 and "In Progress" not in d4, "D4 still promises bucket moves"
+    assert "done" in d4 and "comment" in d4

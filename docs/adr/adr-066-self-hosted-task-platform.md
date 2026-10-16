@@ -50,7 +50,7 @@ Pragmatic evaluation showed that adopting **Vikunja** (~50MB RAM footprint) deli
    - Configured as an OIDC client against Authelia (`client_id: vikunja`).
    - Traefik ForwardAuth middleware is **not** applied to `tasks.kubelab.live`, ensuring REST API calls (`Bearer <token>`) and webhooks bypass SSO cleanly while user browser sessions authenticate via OIDC.
 4. **D4 · n8n Multi-Forge Event Bus**:
-   - Webhooks from GitHub and Gitea trigger monotonic state transitions (`In Progress` $\rightarrow$ `In Review` $\rightarrow$ `Done`) with HMAC signature verification (`X-Hub-Signature-256`, `X-Gitea-Signature`).
+   - Webhooks from GitHub and Gitea, verified by HMAC signature (`X-Hub-Signature-256`, `X-Gitea-Signature`), write forward only: opening or reopening a pull request adds one comment linking it to the task, and merging it marks the task done. An `issues` event opens a task. See the 2026-10-15 amendment: moving a task between Kanban buckets is not performed.
 5. **D5 · Slack ChatOps & Notification Routing**:
    - `/task create` slash command parses project and priority, returns an immediate ACK in <500ms (avoiding Slack's 3000ms timeout), and updates Slack asynchronously via response URLs.
 6. **D6 · Idempotent Platform Reconciler (`toolkit`)**:
@@ -95,6 +95,12 @@ Separately, once real credentials existed: an R2 API token was created for the `
 D2 closes with this fix, not the earlier ones. The `optional_keys` wiring in `k8s_secrets.py` stays as-is deliberately (fail-open on absence rather than fail-closed on a future credential rotation gap) rather than being promoted to required.
 
 A general-purpose "staging bucket" combining file storage and backups was considered and rejected: staging has no backup mechanism today (`infra/k8s/overlays/prod/backup.yaml` is prod-only by design, "staging data is disposable"), so a shared bucket would provision for a requirement that does not exist, and would recreate the same credential-scope problem this amendment exists to fix.
+
+### 2026-10-15 — D4 promised bucket moves the workflow never made (APP-CONFIG-010, #1687)
+
+D4 as accepted named three transitions, `In Progress` to `In Review` to `Done`. Only the last was ever real, and by a side effect: Vikunja's update endpoint auto-moves a task to the view's done bucket when `done` flips, and moves it nowhere otherwise. The workflow computed a `targetBucket` for the other two and wrote it to nothing, while its notification and its 200 body announced it by name, three success signals for a move that did not happen.
+
+Decision: **D4 is amended, not implemented** (option (b) of #1687). The bus performs comment-on-open and done-on-merge, and `multi-forge-sync.json` no longer computes a bucket, so nothing can announce one. Moving a task between buckets would need the Kanban view id declared in SSOT and owned by `vikunja_reconciler`, which declares none today; that is a feature with its own ticket, not a correction. The notifications had already stopped naming a bucket under APP-CONFIG-016; this removes the dead computation and makes the ADR agree.
 
 ## References
 
