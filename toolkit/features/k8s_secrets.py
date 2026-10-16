@@ -116,14 +116,6 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
         # The raw bot_token / chat_* values stay in SOPS, read at render time.
     ),
     SecretMapping(
-        name="homepage-secrets",
-        keys={
-            "HOMEPAGE_VAR_CLOUDFLARE_TOKEN": "APPS_SERVICES_DASHBOARD_HOMEPAGE_CLOUDFLARE_TOKEN",
-            "HOMEPAGE_VAR_GITHUB_TOKEN": "APPS_SERVICES_DASHBOARD_HOMEPAGE_GITHUB_TOKEN",
-            "HOMEPAGE_VAR_UPTIMEKUMA_KEY": "APPS_SERVICES_DASHBOARD_HOMEPAGE_UPTIMEKUMA_KEY",
-        },
-    ),
-    SecretMapping(
         name="postgres-secrets",
         keys={
             # Shared data-service (ADR-051). The server reads POSTGRES_PASSWORD;
@@ -219,7 +211,13 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
 #
 # Empty is its resting state. OPS-023's entry left once staging and prod both
 # read NotFound (2026-09-26) and nothing rendered the Secret any more.
-RETIRED_SECRETS: tuple[tuple[str, str], ...] = ()
+#
+# `homepage-secrets` (#1761): three keys that resolved to nothing, so it held an
+# empty value for each. Its `envFrom` left `homepage.yaml` in the same change, and
+# the delete must follow that manifest, never precede it: a pod still referencing
+# a missing Secret does not start. In prod, Argo CD lands the manifest on merge,
+# so run `apply-secrets` after the merge.
+RETIRED_SECRETS: tuple[tuple[str, str], ...] = (("kubelab", "homepage-secrets"),)
 
 
 def _definitions_for_env(env: str, definitions: list[SecretMapping]) -> list[SecretMapping]:
