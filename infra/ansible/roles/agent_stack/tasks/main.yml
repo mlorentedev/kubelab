@@ -384,6 +384,11 @@
   ansible.builtin.import_tasks: mcp_bridge.yml
   tags: [agent_stack]
 
+# After the sync, and before Hermes (whose gateway mounts what this creates): it reads the clone the sync keeps and writes into the zone the sync commits.
+- name: Provision the curator's analyzer
+  ansible.builtin.import_tasks: curator.yml
+  tags: [agent_stack]
+
 # After the agent's user: Hermes runs on the daemon that file provisions and proves.
 - name: Provision hermes-kubelab on the agent's daemon
   ansible.builtin.import_tasks: hermes.yml

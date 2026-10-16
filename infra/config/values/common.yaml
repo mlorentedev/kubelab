@@ -2068,6 +2068,21 @@ apps:
           # the operator's, the way hermes-nan's read `hermes-nan@nan-server`.
           author_name: hermes-kubelab
           author_email: hermes-kubelab@ace2
+        # Spec AI-012 AC6: the curation loop's deterministic half. A host unit of the agent's
+        # user reads its vault clone and the repositories' public `docs/lessons/` and writes
+        # the recurrence candidates to `<zone>/curator/candidates.json` for the judge. It is
+        # a host unit, not a gateway script, because the analyzer needs the vault and the
+        # gateway sees none of it. `Persistent` runs a missed week at the next boot: ace2 is
+        # on-demand.
+        curator:
+          schedule: "Mon *-*-* 14:00:00 UTC"
+          top: 8
+          repos:
+            - mlorentedev/kubelab
+            - mlorentedev/dotfiles
+            - mlorentedev/pollex
+            - mlorentedev/iris
+            - mlorentedev/hive
         # Run through the agent's daemon at every provision, with a memory and a
         # CPU limit, to prove the sandbox Hermes executes commands in can start.
         probe:
