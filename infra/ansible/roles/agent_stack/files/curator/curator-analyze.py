@@ -46,32 +46,60 @@ except (AttributeError, ValueError):
     pass
 
 # ── Tuning knobs (the signal-vs-noise crux — the "autonomy dial" gate) ────────────────────
-MIN_UNIT_TOKENS = 10      # a block needs this many distinct significant tokens to be a "lesson unit"
-DF_MAX_RATIO = 0.45       # drop tokens appearing in >45% of units — too common to be distinctive
-SIM_THRESHOLD = 0.18      # Jaccard over distinctive tokens; >= this links two units into a cluster
-DEDUP_THRESHOLD = 0.65    # >= this Jaccard => a near-LITERAL duplicate (same lesson copy-pasted) —
-                          # collapse to one occurrence. Set high on purpose: a session bullet and its
-                          # distilled lessons.md twin (~0.3-0.5) and a genuine recurrence of one
-                          # discipline (~0.3-0.5) are lexically indistinguishable, so the
-                          # promotion-vs-recurrence call is left to the LLM judge, not this threshold.
-MIN_OCCURRENCES = 2       # a real recurrence = >=2 DISTINCT lessons (after dedup)
+MIN_UNIT_TOKENS = 10  # a block needs this many distinct significant tokens to be a "lesson unit"
+DF_MAX_RATIO = 0.45  # drop tokens appearing in >45% of units — too common to be distinctive
+SIM_THRESHOLD = 0.18  # Jaccard over distinctive tokens; >= this links two units into a cluster
+DEDUP_THRESHOLD = 0.65  # >= this Jaccard => a near-LITERAL duplicate (same lesson copy-pasted) —
+# collapse to one occurrence. Set high on purpose: a session bullet and its
+# distilled lessons.md twin (~0.3-0.5) and a genuine recurrence of one
+# discipline (~0.3-0.5) are lexically indistinguishable, so the
+# promotion-vs-recurrence call is left to the LLM judge, not this threshold.
+MIN_OCCURRENCES = 2  # a real recurrence = >=2 DISTINCT lessons (after dedup)
 
 
 # Session sections that carry root-cause lessons vs. activity-log boilerplate. Section headers
 # are matched exactly (after stripping #/*/: markers), so normal prose never trips them.
 LESSON_SECTIONS = {
-    "decisions", "findings", "lessons", "learnings", "lesson", "key learnings",
-    "what i learned", "what changed", "gotchas", "takeaways",
-    "decisiones", "lecciones", "hallazgos", "aprendizajes",
+    "decisions",
+    "findings",
+    "lessons",
+    "learnings",
+    "lesson",
+    "key learnings",
+    "what i learned",
+    "what changed",
+    "gotchas",
+    "takeaways",
+    "decisiones",
+    "lecciones",
+    "hallazgos",
+    "aprendizajes",
 }
 NOISE_SECTIONS = {
-    "open threads", "next action", "next actions", "next", "artifacts", "last task",
-    "repo state", "summary", "status", "context", "tldr", "tl;dr", "blockers", "carried",
-    "open", "state", "hilos abiertos", "siguiente accion", "próxima acción",
+    "open threads",
+    "next action",
+    "next actions",
+    "next",
+    "artifacts",
+    "last task",
+    "repo state",
+    "summary",
+    "status",
+    "context",
+    "tldr",
+    "tl;dr",
+    "blockers",
+    "carried",
+    "open",
+    "state",
+    "hilos abiertos",
+    "siguiente accion",
+    "próxima acción",
 }
 SECTION_VOCAB = LESSON_SECTIONS | NOISE_SECTIONS
 
-STOPWORDS = set("""
+STOPWORDS = set(
+    """
 the a an and or but of to in on at for with from by as is are was were be been being this that
 these those it its it's we our you your they their them he she his her i me my mine ours
 not no yes do does did done can could should would will shall may might must have has had
@@ -86,7 +114,8 @@ md sh ps1 yaml json bats test tests use used using set get
 manu claude opencode dotfiles knowledge hermes agent agents
 problem solution context rule related tags example approach symptom why how
 always never instead ensure must want need make made way
-""".split())
+""".split()
+)
 
 DATE_RE = re.compile(r"(\d{4}-\d{2}-\d{2})")
 TOKEN_RE = re.compile(r"[a-zA-Z][a-zA-Z0-9_+-]{2,}")
@@ -159,11 +188,7 @@ def split_session_file(text: str) -> list[str]:
 
 
 def is_lessons_file(path: Path) -> bool:
-    return (
-        path.name in ("lessons.md", "lessons/_index.md")
-        or "docs" in path.parts
-        or path.name.startswith("lesson-")
-    )
+    return path.name in ("lessons.md", "lessons/_index.md") or "docs" in path.parts or path.name.startswith("lesson-")
 
 
 def load_corpus(paths: list[Path], vault_root: Path) -> list[dict]:
@@ -185,12 +210,14 @@ def load_corpus(paths: list[Path], vault_root: Path) -> list[dict]:
             if len(set(toks)) < MIN_UNIT_TOKENS:
                 continue
             d = DATE_RE.search(u)
-            units.append({
-                "source": source,
-                "date": d.group(1) if d else file_date,
-                "text": u,
-                "tokens": set(toks),
-            })
+            units.append(
+                {
+                    "source": source,
+                    "date": d.group(1) if d else file_date,
+                    "text": u,
+                    "tokens": set(toks),
+                }
+            )
     return units
 
 
@@ -289,8 +316,8 @@ def summarize_cluster(units: list[dict], idxs: list[int], dedup_threshold: float
     dates = sorted({r["date"] for r in reps if r["date"]})
     return {
         "id": candidate_id(sources, dates),  # stable across runs (S3): join verdict->evidence + dedup
-        "occurrences": len(lessons),       # distinct lessons (post-dedup)
-        "captures": len(members),          # raw units before dedup
+        "occurrences": len(lessons),  # distinct lessons (post-dedup)
+        "captures": len(members),  # raw units before dedup
         "sources": sources,
         "dates": dates,
         "theme": theme,
@@ -312,10 +339,14 @@ def fetch_github_lessons(repos: list[str], cache_dir: Path) -> dict[str, int]:
         owner_repo = repo.strip() if "/" in repo else f"mlorentedev/{repo.strip()}"
         target = cache_dir / owner_repo.replace("/", "_")
         counts[owner_repo] = 0
+        # Extracted beside the target and swapped in whole: a stream that drops mid-archive
+        # must not leave a partial corpus that passes the zero-files guard as a valid one.
+        staging = target.with_name(target.name + ".part")
+        shutil.rmtree(staging, ignore_errors=True)
+        taken = 0
         try:
             with urllib.request.urlopen(f"https://codeload.github.com/{owner_repo}/tar.gz/HEAD", timeout=60) as resp:
                 with tarfile.open(fileobj=resp, mode="r|gz") as archive:
-                    shutil.rmtree(target, ignore_errors=True)
                     for member in archive:
                         parts = member.name.split("/", 1)[-1].split("/")
                         in_lessons = parts[:2] == ["docs", "lessons"] and len(parts) >= 3
@@ -327,23 +358,34 @@ def fetch_github_lessons(repos: list[str], cache_dir: Path) -> dict[str, int]:
                         handle = archive.extractfile(member)
                         if handle is None:
                             continue
-                        target.mkdir(parents=True, exist_ok=True)
-                        (target / name).write_bytes(handle.read())
-                        counts[owner_repo] += 1
-        except (OSError, tarfile.TarError) as error:
+                        staging.mkdir(parents=True, exist_ok=True)
+                        (staging / name).write_bytes(handle.read())
+                        taken += 1
+        except (OSError, tarfile.TarError, EOFError) as error:
             print(f"warning: {owner_repo}: {type(error).__name__}: {error}", file=sys.stderr)
+            shutil.rmtree(staging, ignore_errors=True)
+            continue
+        shutil.rmtree(target, ignore_errors=True)
+        if taken:
+            staging.rename(target)
+        counts[owner_repo] = taken
     return counts
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Recurrence detector over the lesson corpus.")
     ap.add_argument("--vault", required=True, help="vault root (the read-only mirror's tree)")
-    ap.add_argument("--repos", nargs="*", default=[],
-                    help="owner/repo whose docs/lessons/ is fetched as a public tarball")
+    ap.add_argument(
+        "--repos", nargs="*", default=[], help="owner/repo whose docs/lessons/ is fetched as a public tarball"
+    )
     ap.add_argument("--cache-dir", default=None, help="where fetched lessons are kept (required with --repos)")
     ap.add_argument("--out", required=True, help="file the candidates are written to, atomically")
-    ap.add_argument("--dedup", type=float, default=DEDUP_THRESHOLD,
-                    help="Jaccard >= this collapses same-lesson captures into one occurrence")
+    ap.add_argument(
+        "--dedup",
+        type=float,
+        default=DEDUP_THRESHOLD,
+        help="Jaccard >= this collapses same-lesson captures into one occurrence",
+    )
     ap.add_argument("--top", type=int, default=10, help="max candidates to report")
     args = ap.parse_args()
 
@@ -379,10 +421,9 @@ def main() -> int:
     # A recurrence is the same root cause at >=2 DISTINCT TIMES. Requiring >=2 distinct dates
     # (not just >=2 captures) is the principled line that drops promotion-twins.
     candidates = [summarize_cluster(units, g, args.dedup) for g in clusters]
-    candidates = [c for c in candidates
-                  if c["occurrences"] >= MIN_OCCURRENCES and len(c["dates"]) >= MIN_OCCURRENCES]
+    candidates = [c for c in candidates if c["occurrences"] >= MIN_OCCURRENCES and len(c["dates"]) >= MIN_OCCURRENCES]
     candidates.sort(key=lambda c: (len(c["dates"]), c["occurrences"]), reverse=True)
-    candidates = candidates[:args.top]
+    candidates = candidates[: args.top]
 
     report = {"corpus_files": len(paths), "units": len(units), "candidates": candidates}
     out = Path(args.out)

@@ -158,6 +158,15 @@ def test_lessons_are_taken_from_category_folders_and_the_single_file_layout(
     assert sorted(p.name for p in (tmp_path / "mlorentedev_demo").iterdir()) == ["lesson-001-a.md", "lessons.md"]
 
 
+def test_a_stream_that_drops_mid_archive_leaves_no_partial_corpus(analyzer, tmp_path: Path, monkeypatch) -> None:
+    """A truncated download must read as a failed fetch (exit 3), never as a smaller valid corpus."""
+    archive = _tarball({f"demo-abc/docs/lessons/lesson-{n:03d}-x.md": b"# lesson " * 4000 for n in range(40)})
+    monkeypatch.setattr(analyzer.urllib.request, "urlopen", lambda *_a, **_k: io.BytesIO(archive[: len(archive) // 2]))
+    counts = analyzer.fetch_github_lessons(["mlorentedev/demo"], tmp_path)
+    assert counts == {"mlorentedev/demo": 0}
+    assert not any(tmp_path.iterdir()), "neither the target nor the staging directory may survive"
+
+
 def test_a_repository_that_yields_no_lessons_fails_the_run_instead_of_reading_as_quiet(
     analyzer, tmp_path: Path, monkeypatch, capsys
 ) -> None:
