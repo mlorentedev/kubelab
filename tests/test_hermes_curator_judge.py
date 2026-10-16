@@ -313,3 +313,21 @@ def test_an_id_is_checked_even_when_the_candidates_file_names_it(tmp_path: Path)
     written, zone = _emit(tmp_path, json.dumps({"verdicts": [_verdict(cid=escape)]}), [_candidate(escape)])
     assert written == []
     assert not list(tmp_path.rglob("escape.md"))
+
+
+def _volumes(**overrides: object) -> list[str]:
+    return _compose(agent_stack_vault_configured=True, **overrides)["services"]["hermes"]["volumes"]
+
+
+def test_the_gateway_mounts_the_curators_two_directories_and_not_the_zone() -> None:
+    """Found live: the gateway saw no zone at all, so the scripts reported the analyzer as never run."""
+    zone = _compose(agent_stack_vault_configured=True)["services"]["hermes"]["environment"]["HERMES_VAULT_ZONE"]
+    mounts = {v.split(":")[1]: v for v in _volumes() if v.count(":") >= 1}
+    assert mounts[f"{zone}/curator"].endswith(":ro"), "the gateway only reads the candidates"
+    assert not mounts[f"{zone}/proposals"].endswith(":ro"), "the emitter creates the drafts here"
+    assert zone not in mounts, "the rest of the zone is the sandbox's, not the gateway's"
+
+
+def test_no_curator_mount_without_the_vault() -> None:
+    volumes = _compose(agent_stack_vault_configured=False)["services"]["hermes"]["volumes"]
+    assert not [v for v in volumes if "curator" in v or "proposals" in v]
