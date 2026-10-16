@@ -55,7 +55,11 @@ def _usage(db_path: Path, month_start: float) -> list[tuple] | None:
     """(model, provider, calls, tokens in, tokens out, cost) per model and provider this month.
 
     A row's cost is the larger of the actual and the estimate: Hermes writes 0.0 to the
-    actual until a provider reconciles it, so the first non-null would hide the estimate."""
+    actual until a provider reconciles it, so the first non-null would hide the estimate.
+
+    The table keeps one cumulative row per session, model and provider, with no per-event
+    timestamp, so a session that straddles the month boundary counts whole in the later
+    month. Sessions last minutes to hours; the overstatement is bounded by one session."""
     if not db_path.exists():
         return None
     with _connect(db_path) as db:
@@ -82,7 +86,9 @@ def _health(containers: list[tuple[str, str, str]] | None) -> list[str]:
     return lines
 
 
-def report(db_path: Path, now: float, containers: list[tuple[str, str, str]] | None, disk: tuple[int, int]) -> str:
+def report(
+    db_path: Path, now: float, containers: list[tuple[str, str, str]] | None, disk: tuple[int, int] | None
+) -> str:
     when = datetime.fromtimestamp(now, UTC)
     month_start = datetime(when.year, when.month, 1, tzinfo=UTC).timestamp()
     health = _health(containers)
@@ -91,10 +97,12 @@ def report(db_path: Path, now: float, containers: list[tuple[str, str, str]] | N
     problems = [line for line in health if "NOT running" in line or "unreachable" in line]
     lines = [*problems, head, *(line for line in health if line not in problems)]
 
-    total, free = disk
-    free_gb = free / 1024**3
-    flag = " (disk low)" if total and free / total < DISK_LOW else ""
-    lines.append(f"Disk: {free_gb:.1f} GB free of {total / 1024**3:.0f} GB{flag}")
+    if disk is None:
+        lines.append("Disk: cannot be read (is the data directory there?)")
+    else:
+        total, free = disk
+        flag = " (disk low)" if total and free / total < DISK_LOW else ""
+        lines.append(f"Disk: {free / 1024**3:.1f} GB free of {total / 1024**3:.0f} GB{flag}")
 
     lines += ["", f"Usage, {when:%Y-%m} to date:"]
     try:
@@ -121,8 +129,15 @@ def report(db_path: Path, now: float, containers: list[tuple[str, str, str]] | N
 
 def main() -> int:
     home = Path(os.environ.get("HERMES_HOME", "/opt/data"))
-    usage = shutil.disk_usage(home)
-    print(report(home / "state.db", time.time(), _containers(), (usage.total, usage.free)))
+    try:
+        usage = shutil.disk_usage(home)
+        disk: tuple[int, int] | None = (usage.total, usage.free)
+    except OSError:
+        disk = None
+    try:
+        print(report(home / "state.db", time.time(), _containers(), disk))
+    except Exception as error:  # noqa: BLE001 (whatever broke, the channel must hear it)
+        print(f"hermes-kubelab digest FAILED: {type(error).__name__}: {error}")
     return 0
 
 

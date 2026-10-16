@@ -97,6 +97,55 @@ def test_the_digest_never_goes_quiet(tmp_path: Path) -> None:
     assert "no usage" in out.lower(), "a missing database is said, not skipped"
 
 
+def test_a_data_directory_that_cannot_be_read_is_said_not_silenced(tmp_path: Path) -> None:
+    """`main()` ran `shutil.disk_usage` outside any guard, so a missing HERMES_HOME made the
+    job exit with empty stdout: the quiet day this script exists to rule out."""
+    import contextlib
+    import io
+    import os
+
+    module = _digest()
+    out = io.StringIO()
+    previous = os.environ.get("HERMES_HOME")
+    os.environ["HERMES_HOME"] = str(tmp_path / "gone")
+    try:
+        with contextlib.redirect_stdout(out):
+            module.main()
+    finally:
+        if previous is None:
+            del os.environ["HERMES_HOME"]
+        else:
+            os.environ["HERMES_HOME"] = previous
+    assert "hermes-kubelab" in out.getvalue()
+    assert "disk: cannot be read" in out.getvalue().lower()
+
+
+def test_a_crash_while_reporting_still_prints_a_line(tmp_path: Path) -> None:
+    import contextlib
+    import io
+    import os
+
+    module = _digest()
+
+    def boom(*_: object, **__: object) -> str:
+        raise RuntimeError("boom")
+
+    module.report = boom
+    out = io.StringIO()
+    previous = os.environ.get("HERMES_HOME")
+    os.environ["HERMES_HOME"] = str(tmp_path)
+    try:
+        with contextlib.redirect_stdout(out):
+            assert module.main() == 0
+    finally:
+        if previous is None:
+            del os.environ["HERMES_HOME"]
+        else:
+            os.environ["HERMES_HOME"] = previous
+    assert "FAILED" in out.getvalue()
+    assert "boom" in out.getvalue()
+
+
 def test_only_the_current_month_counts(tmp_path: Path) -> None:
     rows = [
         _row("qwen3.6", "custom", 4, 1_000, 10, seen=MONTH_START + 3600),
