@@ -520,6 +520,29 @@ class TestALessonThatHeadHasAndTheTreeDoesNotIsRefused:
         assert "1 lessons, one file each" in (lessons / "_index.md").read_text()
 
 
+def test_the_first_fix_after_a_resolved_conflict_exits_1_once_then_0(tmp_path: pathlib.Path) -> None:
+    """#2294: the sequence `checkout --theirs && add`, then `lessons-index --fix`.
+
+    A resolved merge leaves a counter that no longer matches the files. The first
+    `--fix` rewrites it and exits 1 on purpose (pre-commit's rule for a hook that
+    modified files); the second finds nothing and exits 0. The `Unmerged files`
+    refusal that was blamed on this command is pre-commit's, raised by the global
+    post-checkout hook while paths were unmerged, and is closed in dotfiles#2493.
+    """
+    lessons = _repo_with_lessons(tmp_path, {"alpha": ["lesson-1-one.md", "lesson-2-two.md"]})
+    top = lessons / "_index.md"
+    top.write_text(top.read_text().replace("2 lessons, one file each", "99 lessons, one file each"), encoding="utf-8")
+
+    first = runner.invoke(tools_app, ["lessons-index", "--root", str(lessons), "--fix"])
+    assert first.exit_code == 1, first.output
+    assert "rewrote" in first.output
+    assert "Unmerged" not in first.output
+    assert "2 lessons, one file each" in top.read_text()
+
+    second = runner.invoke(tools_app, ["lessons-index", "--root", str(lessons), "--fix"])
+    assert second.exit_code == 0, second.output
+
+
 class TestAnUnanswerableQuestionIsNotAPass:
     """CANNOT CHECK is its own verdict, with its own exit code."""
 
