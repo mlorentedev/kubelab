@@ -65,7 +65,7 @@ PR 4 was split: with both halves it was about 650 non-test lines against the 300
 
 ### PR 6: curator (AC6)
 
-- [ ] [AC6] Port `curator-analyze.py` (done, 6a, live) and `emit-proposals.py` (6b) as host units of the agent's user, which can see the clone, plus the judge as an agent job that reads the analyzer's output (6b).
+- [x] [AC6] Port `curator-analyze.py` (6a, live) as a host unit of the agent's user, plus the judge as an agent job and `emit-proposals.py` as a gateway script job (6b, live: four drafts in `proposals/`). The emitter runs in the gateway, not on the host, because the judge's records are in `data/` (`0700`, a subuid).
 - [ ] [AC6] `dispose-proposals` (dotfiles skill) reads `hermes-kubelab/proposals/`, landed in a sibling worktree of that repository.
 
 ### PR 7: research (AC7, needs R2, R4)
