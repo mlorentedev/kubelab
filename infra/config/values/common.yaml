@@ -1379,6 +1379,11 @@ apps:
         # through `GET /projects` — an id would be environment-specific and
         # opaque, and would silently point at a different board per env.
         default_project: Bitacora
+        # The Kanban bucket a task moves to when its pull request opens or reopens
+        # (ADR-066 D4, #2318), matched by TITLE in the project's Kanban view for the
+        # reason above. It must be a bucket every declared project has: Vikunja
+        # creates To-Do, Doing and Done on a new Kanban view.
+        in_progress_bucket: Doing
         # The boards `make sync-vikunja` makes exist (APP-CONFIG-013, #1701), matched
         # by title like default_project, which must be one of them. A project is
         # visible only to its owner and to whoever it is shared with, so the creating
