@@ -1,4 +1,4 @@
-"""Unit tests for Vikunja platform reconciler (idempotent namespaces, labels, webhooks)."""
+"""Unit tests for the Vikunja platform reconciler (idempotent labels and webhooks)."""
 
 from __future__ import annotations
 
@@ -16,9 +16,8 @@ def mock_client() -> MagicMock:
     return client
 
 
-def test_reconciler_creates_missing_namespaces_and_labels(mock_client: MagicMock) -> None:
-    # Initial state: empty namespaces, labels, and one project needing webhook
-    mock_client.get_namespaces.return_value = []
+def test_reconciler_creates_missing_labels_and_webhooks(mock_client: MagicMock) -> None:
+    # Initial state: no labels, and one project needing a webhook
     mock_client.get_labels.return_value = []
     mock_client.get_projects.return_value = [{"id": 10, "title": "kubelab-core"}]
     mock_client.get_webhooks.return_value = []
@@ -26,15 +25,9 @@ def test_reconciler_creates_missing_namespaces_and_labels(mock_client: MagicMock
     reconciler = VikunjaReconciler(client=mock_client)
     res = reconciler.reconcile()
 
-    # Verify created namespaces, labels, and webhook
-    assert res.namespaces_created == 3
     assert res.labels_created >= 6
     assert res.webhooks_created == 1
     assert res.changed is True
-
-    mock_client.create_namespace.assert_any_call(title="kubelab")
-    mock_client.create_namespace.assert_any_call(title="personal")
-    mock_client.create_namespace.assert_any_call(title="teledyne")
 
     mock_client.create_label.assert_any_call(title="agent:delegable", hex_color="#4a90e2")
     mock_client.create_label.assert_any_call(title="type:spec", hex_color="#2ecc71")
@@ -46,12 +39,7 @@ def test_reconciler_creates_missing_namespaces_and_labels(mock_client: MagicMock
 
 
 def test_reconciler_is_strictly_idempotent_when_resources_exist(mock_client: MagicMock) -> None:
-    # State: all namespaces, labels, and webhooks already exist
-    mock_client.get_namespaces.return_value = [
-        {"id": 1, "title": "kubelab"},
-        {"id": 2, "title": "personal"},
-        {"id": 3, "title": "teledyne"},
-    ]
+    # State: all labels and webhooks already exist
     mock_client.get_labels.return_value = [
         {"id": 1, "title": "type:spec"},
         {"id": 2, "title": "type:bug"},
@@ -68,11 +56,20 @@ def test_reconciler_is_strictly_idempotent_when_resources_exist(mock_client: Mag
     reconciler = VikunjaReconciler(client=mock_client)
     res = reconciler.reconcile()
 
-    assert res.namespaces_created == 0
     assert res.labels_created == 0
     assert res.webhooks_created == 0
     assert res.changed is False
 
-    mock_client.create_namespace.assert_not_called()
     mock_client.create_label.assert_not_called()
     mock_client.create_webhook.assert_not_called()
+
+
+def test_the_client_has_no_namespace_endpoint_because_vikunja_1_0_removed_it() -> None:
+    """`GET /namespaces` answers 404 on vikunja/vikunja:1.0.0 (#1701).
+
+    The old tests passed against a fake that answered whatever the client asked,
+    so they certified an endpoint the server no longer has. A client that cannot
+    make the call cannot be certified by a fake for it.
+    """
+    assert not hasattr(VikunjaClient, "get_namespaces")
+    assert not hasattr(VikunjaClient, "create_namespace")
