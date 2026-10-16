@@ -143,6 +143,14 @@ def apply(client: HetznerClient, plan_: Plan, *, interval: float = 10.0, timeout
     """Take the snapshot (or return today's), wait until it is `available`, then prune."""
     if plan_.exists:
         image = plan_.existing or {}
+        # A timed-out earlier run leaves today's image behind unfinished. Finding it by
+        # description is not proof it can restore anything, so the same `available` bar
+        # as a fresh snapshot applies before the rerun reports success.
+        if image.get("status") != "available":
+            raise SnapshotError(
+                f"today's snapshot {image.get('id')} is {image.get('status')!r}, not 'available'; "
+                "wait for Hetzner to finish it and rerun, or delete the image and rerun"
+            )
     else:
         created = client.create_snapshot(plan_.server_id, plan_.description, plan_.labels)
         action_id = int(created["action"]["id"])

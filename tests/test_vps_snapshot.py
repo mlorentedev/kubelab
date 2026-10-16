@@ -203,6 +203,17 @@ def test_a_failed_action_raises_with_the_reason() -> None:
         run(FakeHetzner(action_status="error"))
 
 
+@pytest.mark.parametrize("status", ["creating", "unavailable"])
+def test_a_rerun_never_reports_an_unfinished_snapshot_as_done(status: str) -> None:
+    # A timed-out run leaves today's image behind; the rerun finds it by description and
+    # must not call it a rollback point until Hetzner says `available` (PR-Agent, #2351).
+    fake = FakeHetzner()
+    fake.add_snapshot("kubelab-vps-2026-10-16", "2026-10-16T08:00:00+00:00", status=status)
+    with pytest.raises(SnapshotError, match=status):
+        run(fake)
+    assert not [v for v in fake.verbs() if v.split()[0] in {"POST", "DELETE"}]
+
+
 def test_an_action_that_never_finishes_times_out() -> None:
     with pytest.raises(SnapshotError, match="did not finish"):
         run(FakeHetzner(action_status="running"))
