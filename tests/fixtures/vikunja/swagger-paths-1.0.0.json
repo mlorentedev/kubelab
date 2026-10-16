@@ -1,0 +1,361 @@
+{
+ "source": "https://tasks.kubelab.live/api/v1/docs.json",
+ "vikunja_version": "1.0.0",
+ "paths": {
+  "/auth/openid/{provider}/callback": [
+   "post"
+  ],
+  "/backgrounds/unsplash/image/{image}": [
+   "get"
+  ],
+  "/backgrounds/unsplash/image/{image}/thumb": [
+   "get"
+  ],
+  "/backgrounds/unsplash/search": [
+   "get"
+  ],
+  "/filters": [
+   "put"
+  ],
+  "/filters/{id}": [
+   "delete",
+   "get",
+   "post"
+  ],
+  "/info": [
+   "get"
+  ],
+  "/labels": [
+   "get",
+   "put"
+  ],
+  "/labels/{id}": [
+   "delete",
+   "get",
+   "put"
+  ],
+  "/login": [
+   "post"
+  ],
+  "/migration/microsoft-todo/auth": [
+   "get"
+  ],
+  "/migration/microsoft-todo/migrate": [
+   "post"
+  ],
+  "/migration/microsoft-todo/status": [
+   "get"
+  ],
+  "/migration/ticktick/migrate": [
+   "post"
+  ],
+  "/migration/ticktick/status": [
+   "get"
+  ],
+  "/migration/todoist/auth": [
+   "get"
+  ],
+  "/migration/todoist/migrate": [
+   "post"
+  ],
+  "/migration/todoist/status": [
+   "get"
+  ],
+  "/migration/trello/auth": [
+   "get"
+  ],
+  "/migration/trello/migrate": [
+   "post"
+  ],
+  "/migration/trello/status": [
+   "get"
+  ],
+  "/migration/vikunja-file/migrate": [
+   "post"
+  ],
+  "/migration/vikunja-file/status": [
+   "get"
+  ],
+  "/notifications": [
+   "get",
+   "post"
+  ],
+  "/notifications/{id}": [
+   "post"
+  ],
+  "/projects": [
+   "get",
+   "put"
+  ],
+  "/projects/{id}": [
+   "delete",
+   "get",
+   "post"
+  ],
+  "/projects/{id}/background": [
+   "delete",
+   "get"
+  ],
+  "/projects/{id}/backgrounds/unsplash": [
+   "post"
+  ],
+  "/projects/{id}/backgrounds/upload": [
+   "put"
+  ],
+  "/projects/{id}/projectusers": [
+   "get"
+  ],
+  "/projects/{id}/tasks": [
+   "put"
+  ],
+  "/projects/{id}/teams": [
+   "get",
+   "put"
+  ],
+  "/projects/{id}/users": [
+   "get",
+   "put"
+  ],
+  "/projects/{id}/views/{view}/buckets": [
+   "get",
+   "put"
+  ],
+  "/projects/{id}/views/{view}/tasks": [
+   "get"
+  ],
+  "/projects/{id}/webhooks": [
+   "get",
+   "put"
+  ],
+  "/projects/{id}/webhooks/{webhookID}": [
+   "delete",
+   "post"
+  ],
+  "/projects/{projectID}/duplicate": [
+   "put"
+  ],
+  "/projects/{projectID}/teams/{teamID}": [
+   "delete",
+   "post"
+  ],
+  "/projects/{projectID}/users/{userID}": [
+   "delete",
+   "post"
+  ],
+  "/projects/{projectID}/views/{view}/buckets/{bucketID}": [
+   "delete",
+   "post"
+  ],
+  "/projects/{project}/shares": [
+   "get",
+   "put"
+  ],
+  "/projects/{project}/shares/{share}": [
+   "delete",
+   "get"
+  ],
+  "/projects/{project}/views": [
+   "get",
+   "put"
+  ],
+  "/projects/{project}/views/{id}": [
+   "delete",
+   "get",
+   "post"
+  ],
+  "/projects/{project}/views/{view}/buckets/{bucket}/tasks": [
+   "post"
+  ],
+  "/register": [
+   "post"
+  ],
+  "/routes": [
+   "get"
+  ],
+  "/shares/{share}/auth": [
+   "post"
+  ],
+  "/subscriptions/{entity}/{entityID}": [
+   "delete",
+   "put"
+  ],
+  "/tasks": [
+   "get"
+  ],
+  "/tasks/bulk": [
+   "post"
+  ],
+  "/tasks/{id}": [
+   "delete",
+   "get",
+   "post"
+  ],
+  "/tasks/{id}/attachments": [
+   "get",
+   "put"
+  ],
+  "/tasks/{id}/attachments/{attachmentID}": [
+   "delete",
+   "get"
+  ],
+  "/tasks/{id}/position": [
+   "post"
+  ],
+  "/tasks/{projecttask}/read": [
+   "post"
+  ],
+  "/tasks/{taskID}/assignees": [
+   "get",
+   "put"
+  ],
+  "/tasks/{taskID}/assignees/bulk": [
+   "post"
+  ],
+  "/tasks/{taskID}/assignees/{userID}": [
+   "delete"
+  ],
+  "/tasks/{taskID}/comments": [
+   "get",
+   "put"
+  ],
+  "/tasks/{taskID}/comments/{commentID}": [
+   "delete",
+   "get",
+   "post"
+  ],
+  "/tasks/{taskID}/labels/bulk": [
+   "post"
+  ],
+  "/tasks/{taskID}/relations": [
+   "put"
+  ],
+  "/tasks/{taskID}/relations/{relationKind}/{otherTaskID}": [
+   "delete"
+  ],
+  "/tasks/{task}/labels": [
+   "get",
+   "put"
+  ],
+  "/tasks/{task}/labels/{label}": [
+   "delete"
+  ],
+  "/teams": [
+   "get",
+   "put"
+  ],
+  "/teams/{id}": [
+   "delete",
+   "get",
+   "post"
+  ],
+  "/teams/{id}/members": [
+   "put"
+  ],
+  "/teams/{id}/members/{userID}/admin": [
+   "post"
+  ],
+  "/teams/{id}/members/{username}": [
+   "delete"
+  ],
+  "/test/{table}": [
+   "patch"
+  ],
+  "/tokens": [
+   "get",
+   "put"
+  ],
+  "/tokens/{tokenID}": [
+   "delete"
+  ],
+  "/user": [
+   "get"
+  ],
+  "/user/confirm": [
+   "post"
+  ],
+  "/user/deletion/cancel": [
+   "post"
+  ],
+  "/user/deletion/confirm": [
+   "post"
+  ],
+  "/user/deletion/request": [
+   "post"
+  ],
+  "/user/export": [
+   "get"
+  ],
+  "/user/export/download": [
+   "post"
+  ],
+  "/user/export/request": [
+   "post"
+  ],
+  "/user/password": [
+   "post"
+  ],
+  "/user/password/reset": [
+   "post"
+  ],
+  "/user/password/token": [
+   "post"
+  ],
+  "/user/settings/avatar": [
+   "get",
+   "post"
+  ],
+  "/user/settings/avatar/upload": [
+   "put"
+  ],
+  "/user/settings/email": [
+   "post"
+  ],
+  "/user/settings/general": [
+   "post"
+  ],
+  "/user/settings/token/caldav": [
+   "get",
+   "put"
+  ],
+  "/user/settings/token/caldav/{id}": [
+   "delete"
+  ],
+  "/user/settings/totp": [
+   "get"
+  ],
+  "/user/settings/totp/disable": [
+   "post"
+  ],
+  "/user/settings/totp/enable": [
+   "post"
+  ],
+  "/user/settings/totp/enroll": [
+   "post"
+  ],
+  "/user/settings/totp/qrcode": [
+   "get"
+  ],
+  "/user/timezones": [
+   "get"
+  ],
+  "/user/token": [
+   "post"
+  ],
+  "/users": [
+   "get"
+  ],
+  "/webhooks/events": [
+   "get"
+  ],
+  "/{kind}/{id}/reactions": [
+   "get",
+   "put"
+  ],
+  "/{kind}/{id}/reactions/delete": [
+   "post"
+  ],
+  "/{username}/avatar": [
+   "get"
+  ]
+ }
+}

@@ -1,0 +1,51 @@
+[
+  {
+    "id": "APP-CONFIG-013-vikunja-shared-projects-f1",
+    "behavior": "AC1: sync vikunja authenticates from SOPS, never via argv or stdout, and fails closed naming the key",
+    "verification": "poetry run pytest tests/test_sync_vikunja_cli.py -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "APP-CONFIG-013-vikunja-shared-projects-f2",
+    "behavior": "AC2/AC5: the client calls only endpoints present in Vikunja's swagger fixture, creates or adopts declared projects, and never calls /namespaces",
+    "verification": "poetry run pytest tests/test_vikunja_client.py tests/test_vikunja_reconciler.py -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "APP-CONFIG-013-vikunja-shared-projects-f3",
+    "behavior": "AC3/AC4: the team has exactly the declared human members, every project is shared with it, and a re-run changes nothing",
+    "verification": "poetry run pytest tests/test_vikunja_reconciler.py -q -k 'team or share or idempotent'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "APP-CONFIG-013-vikunja-shared-projects-f4",
+    "behavior": "AC6: the declared projects, team and members live in common.yaml and are consistent with the identities and default_project",
+    "verification": "poetry run pytest tests/test_vikunja_ssot.py -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "APP-CONFIG-013-vikunja-shared-projects-f5",
+    "behavior": "AC7: Bitacora and its tasks are visible to manu in prod (observed live, recorded in verification.md)",
+    "verification": "grep -q 'AC7 observed' specs/APP-CONFIG-013-vikunja-shared-projects/verification.md",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "APP-CONFIG-013-vikunja-shared-projects-f6",
+    "behavior": "AC8: the reconciler registers no webhook",
+    "verification": "poetry run pytest tests/test_vikunja_reconciler.py -q -k webhook",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "APP-CONFIG-013-vikunja-shared-projects-f7",
+    "behavior": "AC9: the reconciler token is an EXTERNAL SecretSpec for staging and prod with an honest expiry (never NEVER)",
+    "verification": "poetry run pytest tests/test_vikunja_reconciler_token_spec.py -q",
+    "state": "pending",
+    "evidence": ""
+  }
+]

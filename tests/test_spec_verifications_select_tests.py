@@ -51,6 +51,8 @@ pytestmark = pytest.mark.integration
 #: when it lands; remove them when the tests do (a stale entry fails below).
 UNWRITTEN = frozenset(
     {
+        "APP-CONFIG-013-vikunja-shared-projects-f1",
+        "APP-CONFIG-013-vikunja-shared-projects-f7",
         "BACKUP-057-f1",
         "BACKUP-057-f7",
         "GITOPS-003-f2",

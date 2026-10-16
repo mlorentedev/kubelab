@@ -428,16 +428,16 @@ def sync_vikunja_cmd(
     base_url: Annotated[str, typer.Option("--url", help="Vikunja base API URL")] = "",
     token: Annotated[str, typer.Option("--token", help="Vikunja API token")] = "",
 ) -> None:
-    """Sync Vikunja platform labels and webhooks idempotently."""
+    """Sync the declared Vikunja projects, team, shares and labels idempotently."""
     import os
 
     from toolkit.features.configuration import ConfigurationManager
     from toolkit.features.vikunja_client import VikunjaClient, VikunjaError, resolve_token
-    from toolkit.features.vikunja_reconciler import VikunjaReconciler
+    from toolkit.features.vikunja_reconciler import VikunjaReconciler, declaration_from_config
 
     cm = ConfigurationManager(env=env)
+    config = cm.get_merged_config()
     if not base_url:
-        config = cm.get_merged_config()
         domain = (
             config.get("apps", {})
             .get("services", {})
@@ -456,12 +456,15 @@ def sync_vikunja_cmd(
     client = VikunjaClient(base_url=base_url, api_token=token)
     reconciler = VikunjaReconciler(client=client)
     try:
-        res = reconciler.reconcile()
+        res = reconciler.reconcile(declaration_from_config(config))
     except VikunjaError as exc:
         logger.error(f"Vikunja refused the sync: {exc}. A 401 here usually means the token lacks that scope.")
         raise typer.Exit(1) from exc
     if res.changed:
-        logger.success(f"Vikunja sync completed: {res.labels_created} labels, {res.webhooks_created} webhooks created.")
+        logger.success(
+            f"Vikunja sync completed: {res.projects_created} projects, {res.team_created} team, "
+            f"{res.members_added} members, {res.shares_changed} shares, {res.labels_created} labels."
+        )
     else:
         logger.success("Vikunja is up to date (changed=0).")
 
