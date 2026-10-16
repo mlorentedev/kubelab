@@ -250,6 +250,77 @@
            | difference(lookup('ansible.builtin.fileglob', role_path ~ '/files/hermes-scripts/*', wantlist=True) | map('basename') | list)
            | map('regex_replace', '^', agent_stack_hermes_scripts ~ '/') | list }}
 
+    # The managed skills (spec AI-012 AC9). Copied from the root-owned vault mirror, owned
+    # by root and mounted read-only, so the agent can use a skill and cannot change it. The
+    # mirror is refreshed by its own timer; this copy is what the provision pinned.
+    - name: Install the managed skills
+      when: agent_stack_vault_configured | bool
+      block:
+        - name: Create the managed skills directory
+          ansible.builtin.file:
+            path: "{{ agent_stack_hermes_skills }}"
+            state: directory
+            owner: root
+            group: root
+            mode: "0755"
+          register: _agent_stack_hermes_skills_dir
+
+        - name: Look for each declared skill in the vault mirror
+          ansible.builtin.stat:
+            path: "{{ agent_stack_hermes_skills_source }}/{{ item }}/SKILL.md"
+          loop: "{{ agent_stack_hermes.skills | default([]) }}"
+          register: _agent_stack_hermes_skills_found
+          check_mode: false
+
+        # A declared skill with no SKILL.md is a manifest that names nothing: the agent
+        # would be told it has a skill it does not. A dry run of a node whose mirror was
+        # never filled has none to find.
+        - name: Refuse a declared skill the vault mirror does not hold
+          ansible.builtin.assert:
+            that: item.stat.exists
+            fail_msg: >-
+              {{ item.item }} is declared in apps.services.ai.hermes_kubelab.skills but
+              {{ agent_stack_hermes_skills_source }}/{{ item.item }}/SKILL.md does not exist
+            quiet: true
+          loop: "{{ _agent_stack_hermes_skills_found.results }}"
+          loop_control:
+            label: "{{ item.item }}"
+          ignore_errors: "{{ ansible_check_mode }}"
+
+        - name: Install each declared skill
+          ansible.builtin.copy:
+            src: "{{ agent_stack_hermes_skills_source }}/{{ item }}/"
+            dest: "{{ agent_stack_hermes_skills }}/{{ item }}"
+            remote_src: true
+            owner: root
+            group: root
+            directory_mode: "0755"
+            # Read for all, and the executable bit only where the vault set it.
+            mode: "u=rwX,go=rX"
+          # Only what the mirror holds: a real run stopped at the assert above, and a dry
+          # run of a node whose mirror was never filled has nothing to copy.
+          loop: "{{ _agent_stack_hermes_skills_found.results | selectattr('stat.exists') | map(attribute='item') | list }}"
+          # A dry run of a first provision has not created the directory it would copy into.
+          when: not (ansible_check_mode and _agent_stack_hermes_skills_dir.changed)
+
+        - name: List the managed skills on the node
+          ansible.builtin.find:
+            paths: "{{ agent_stack_hermes_skills }}"
+            file_type: directory
+            recurse: false
+          register: _agent_stack_hermes_skills_present
+
+        # A skill dropped from the declaration is gone from the node, or the agent would
+        # keep a procedure nobody declares. The directory is the role's alone.
+        - name: Remove managed skills no longer declared
+          ansible.builtin.file:
+            path: "{{ item }}"
+            state: absent
+          loop: >-
+            {{ _agent_stack_hermes_skills_present.files | map(attribute='path')
+               | reject('in', (agent_stack_hermes.skills | default([])) | map('regex_replace', '^', agent_stack_hermes_skills ~ '/') | list)
+               | list }}
+
     # The sidecar rejoins from its state on its own, so a key is minted only when
     # it is not on the tailnet now. Asked of the sidecar, not read from its state
     # file: tailscaled writes that file at its first start, before any login, so
@@ -539,6 +610,38 @@
       changed_when: false
       failed_when: (_agent_stack_hermes_allowed.stdout | from_json).verdict not in _agent_stack_hermes_passed_verdicts
       check_mode: false
+
+    # The gateway's own view of the managed skills: each declared one must be listed with
+    # the source `external`. A name the image also ships as a built-in is listed too, as
+    # `builtin`, and then the vault's copy is installed and never read; matching the name
+    # alone would pass on exactly that. The table cuts a long name at 15 characters and an
+    # ellipsis, so the declared names are cut the same way before they are compared.
+    - name: Read the managed skills back through the running gateway
+      ansible.builtin.command:
+        argv: [docker, exec, -u, hermes, hermes-kubelab, hermes, skills, list]
+      become_user: "{{ agent_stack_agent_user }}"
+      environment: "{{ agent_stack_agent_daemon_env }}"
+      register: _agent_stack_hermes_skills_listed
+      changed_when: false
+      failed_when: >-
+        _agent_stack_hermes_skills_listed.rc != 0
+        or (agent_stack_hermes.skills | default([]) | map('regex_replace', '^(.{15}).{2,}$', '\\1…') | list
+            | difference(_agent_stack_hermes_skills_listed.stdout_lines | select('search', '│\\s*external\\s*│')
+                         | map('regex_replace', '^│\\s*([^\\s│]+).*$', '\\1') | list)
+            | length > 0)
+      check_mode: false
+      when: not ansible_check_mode and agent_stack_vault_configured | bool and (agent_stack_hermes.skills | default([]) | length > 0)
+
+    - name: Try to write into the managed skills as the gateway's user
+      ansible.builtin.command:
+        argv: [docker, exec, -u, hermes, hermes-kubelab, touch, "{{ agent_stack_hermes_skills_mount }}/.write-probe"]
+      become_user: "{{ agent_stack_agent_user }}"
+      environment: "{{ agent_stack_agent_daemon_env }}"
+      register: _agent_stack_hermes_skills_write
+      changed_when: false
+      failed_when: _agent_stack_hermes_skills_write.rc == 0
+      check_mode: false
+      when: not ansible_check_mode and agent_stack_vault_configured | bool and (agent_stack_hermes.skills | default([]) | length > 0)
 
     # Last, against a gateway that answers. Every job delivers to Slack, so with no
     # Slack there is nothing to reconcile (spec AI-012 AC4).

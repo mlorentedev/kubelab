@@ -1,7 +1,7 @@
 ---
 id: "adr-014-secrets-management"
 type: adr
-status: active
+status: accepted
 tags: [security, secrets, sops, sealed-secrets, gitops]
 created: "2026-02-26"
 owner: manu

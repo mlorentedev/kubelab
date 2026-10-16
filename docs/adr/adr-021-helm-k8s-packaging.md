@@ -1,7 +1,7 @@
 ---
 id: adr-021-helm-k8s-packaging
 type: adr
-status: active
+status: accepted
 created: "2026-03-15"
 owner: manu
 ---

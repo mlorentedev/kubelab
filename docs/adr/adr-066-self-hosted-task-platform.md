@@ -50,7 +50,7 @@ Pragmatic evaluation showed that adopting **Vikunja** (~50MB RAM footprint) deli
    - Configured as an OIDC client against Authelia (`client_id: vikunja`).
    - Traefik ForwardAuth middleware is **not** applied to `tasks.kubelab.live`, ensuring REST API calls (`Bearer <token>`) and webhooks bypass SSO cleanly while user browser sessions authenticate via OIDC.
 4. **D4 · n8n Multi-Forge Event Bus**:
-   - Webhooks from GitHub and Gitea, verified by HMAC signature (`X-Hub-Signature-256`, `X-Gitea-Signature`), write forward only: opening or reopening a pull request adds one comment linking it to the task, and merging it marks the task done. An `issues` event opens a task. See the 2026-10-15 amendment: moving a task between Kanban buckets is not performed.
+   - Webhooks from GitHub and Gitea, verified by HMAC signature (`X-Hub-Signature-256`, `X-Gitea-Signature`), write forward only: opening or reopening a pull request adds one comment linking it to the task and moves a task that is not yet done to the `Doing` bucket, and merging it marks the task done. An `issues` event opens a task. See the 2026-10-16 amendment for the move.
 5. **D5 · Slack ChatOps & Notification Routing**:
    - `/task create` slash command parses project and priority, returns an immediate ACK in <500ms (avoiding Slack's 3000ms timeout), and updates Slack asynchronously via response URLs.
 6. **D6 · Idempotent Platform Reconciler (`toolkit`)**:
@@ -101,6 +101,12 @@ A general-purpose "staging bucket" combining file storage and backups was consid
 D4 as accepted named three transitions, `In Progress` to `In Review` to `Done`. Only the last was ever real, and by a side effect: Vikunja's update endpoint auto-moves a task to the view's done bucket when `done` flips, and moves it nowhere otherwise. The workflow computed a `targetBucket` for the other two and wrote it to nothing, while its notification and its 200 body announced it by name, three success signals for a move that did not happen.
 
 Decision: **D4 is amended, not implemented** (option (b) of #1687). The bus performs comment-on-open and done-on-merge, and `multi-forge-sync.json` no longer computes a bucket, so nothing can announce one. Moving a task between buckets would need the Kanban view id declared in SSOT and owned by `vikunja_reconciler`, which declares none today; that is a feature with its own ticket, not a correction. The notifications had already stopped naming a bucket under APP-CONFIG-016; this removes the dead computation and makes the ADR agree.
+
+### 2026-10-16 — The move to `Doing` is performed, to the bucket that already exists (APP-CONFIG-010, #2318)
+
+The 2026-10-15 amendment removed the bucket moves D4 had promised and left the unbuilt half to its own ticket. The operator decided it (option B of #2318): no `In Review` bucket is created, and an opened or reopened pull request moves its task to the existing `Doing` bucket. This supersedes that amendment's "not performed" for that one transition; the rest of it stands.
+
+The rules that keep it safe: it is forward only (a task that is already done is never moved, and a merge writes `done`, which Vikunja files in the Done bucket by itself); the bucket is a title declared once (`apps.services.core.vikunja.in_progress_bucket`) and the view and bucket are found at run time by kind and by title, never by id, because ids are per environment; a missing view or bucket fails the run and names what exists; and the notification and the 200 body name the bucket only after Vikunja's answer to the move names it too (`Confirm Move`), the failure that D4's first draft shipped. The verb is `POST /projects/{p}/views/{v}/buckets/{b}/tasks`, read from the deployed swagger: the `PUT` in the ticket creates a bucket one level up.
 
 ### 2026-10-16 — The single board is visible to its owner only; access is declared, not inherited (APP-CONFIG-013, #1701)
 

@@ -1,7 +1,7 @@
 ---
 id: adr-019-saas-consolidation-proton
 type: adr
-status: active
+status: accepted
 created: "2026-03-10"
 owner: manu
 ---

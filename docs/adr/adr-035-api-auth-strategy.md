@@ -1,7 +1,7 @@
 ---
 id: adr-035-api-auth-strategy
 type: adr
-status: active
+status: accepted
 created: "2026-05-21"
 ---
 

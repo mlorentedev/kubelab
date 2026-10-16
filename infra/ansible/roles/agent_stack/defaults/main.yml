@@ -142,6 +142,11 @@ agent_stack_hermes_scripts: "{{ agent_stack_agent_home }}/hermes-scripts"
 # from the vault mirror on the node, and `SOUL.md` is the two joined, mounted read-only.
 agent_stack_hermes_persona: "{{ agent_stack_agent_home }}/hermes-persona"
 agent_stack_hermes_profile_source: "{{ agent_stack_vault_mirror }}/tree/80_agents/operator/hermes-kubelab/profile.md"
+# The managed skills (spec AI-012 AC9): copied from the vault mirror, root-owned, and
+# mounted read-only where `skills.external_dirs` names them.
+agent_stack_hermes_skills: "{{ agent_stack_agent_home }}/hermes-skills"
+agent_stack_hermes_skills_mount: /managed-skills
+agent_stack_hermes_skills_source: "{{ agent_stack_vault_mirror }}/tree/00_meta/skills"
 # The tailscale sidecar's (spec PR 3b-2). Its state is the node key: beside the
 # data directory, so the gateway's container does not see it. The env file
 # holds the one-time preauth key until the first registration, then nothing.

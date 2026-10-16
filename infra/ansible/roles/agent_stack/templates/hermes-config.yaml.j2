@@ -10,7 +10,7 @@
   JSON is YAML, so `tojson` writes each value as the SSOT typed it.
 #}
 {% set ported = agent_stack_hermes.agent_config %}
-{% set role_sections = ['approvals', 'terminal', 'slack', 'unauthorized_dm_behavior', 'cron', 'model', 'delegation', 'fallback_providers'] %}
+{% set role_sections = ['approvals', 'terminal', 'slack', 'unauthorized_dm_behavior', 'cron', 'model', 'delegation', 'fallback_providers', 'skills'] %}
 
 model:
   provider: custom
@@ -91,6 +91,18 @@ delegation:
 {% for key, value in (ported.delegation | default({})).items() if key != 'model' %}
   {{ key }}: {{ value | tojson }}
 {% endfor %}
+
+# The managed skills (spec AI-012 AC9) are an external directory: Hermes treats its
+# skills as read-only to the agent and its curator, and ranks them below the agent's
+# own. `external_dirs` is the role's, so the ported keys cannot point it elsewhere.
+{% set skills = {} %}
+{% for key, value in (ported.skills | default({})).items() if key != 'external_dirs' %}
+{% set _ = skills.update({key: value}) %}
+{% endfor %}
+{% if agent_stack_vault_configured | bool and agent_stack_hermes.skills | default([]) | length > 0 %}
+{% set _ = skills.update({'external_dirs': [agent_stack_hermes_skills_mount]}) %}
+{% endif %}
+skills: {{ skills | tojson }}
 
 # The rest of the ported harness, as `apps.services.ai.hermes_kubelab.agent_config`
 # declares it.
