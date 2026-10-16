@@ -110,7 +110,8 @@ make n8n-probe ENV=staging   # then ENV=prod
 ```
 
 It creates a task through a signed issue event, sends a signed merge for a second
-task and reads back `done`, the description and the PR comment, checks that
+task and reads back `done`, the description and the PR comment, sends a signed
+opened PR for a third and reads back its move to the Doing bucket (#2318), checks that
 unsigned forge and Slack events stop at their gates, and deletes every task it
 created. It also signs a Slack `/task create #<default project>` with the SOPS
 signing secret and requires Vikunja to hold the task in that project's id, then
