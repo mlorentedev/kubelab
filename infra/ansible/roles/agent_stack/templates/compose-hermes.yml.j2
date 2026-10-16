@@ -20,6 +20,11 @@ services:
       # tool agree with the mount instead of refusing a path the agent then writes
       # through the shell (#2321).
       HERMES_WRITE_SAFE_ROOT: "{{ agent_stack_hermes_home }}{% if agent_stack_vault_configured | bool %}:{{ agent_stack_hermes.vault_sync.mount }}/{{ agent_stack_vault_zone }}{% endif %}"
+{% if agent_stack_vault_configured | bool %}
+      # The zone as the gateway sees it, for the job scripts that read and write it
+      # (the curator's judge input and emitter).
+      HERMES_VAULT_ZONE: "{{ agent_stack_hermes.vault_sync.mount }}/{{ agent_stack_vault_zone }}"
+{% endif %}
     # The image is its own init (s6-overlay must be PID 1), so no `init: true`.
     volumes:
       # The same path on both sides. The gateway computes the host side of every
