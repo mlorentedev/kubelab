@@ -52,3 +52,24 @@
   - Reboot still required on beelink and gcp1. rpi3 does not need one.
 - gcp1 snap, read-only: `sudo snap get -d system` returns `refresh.retain: 2`, rc 0. The `snap "core" has no "refresh.retain"` error happened only on the first run, before anything had set the option. The morning run set it, and the check now passes and the set is skipped. #2407 claimed "every run" from a single run; that claim is corrected on the ticket.
 - Logs: `maintain-prod-rerun-1.log` and `maintain-prod-rerun-2.log` beside this file.
+
+## Follow-up: reboots (operator-approved, 2026-10-17 18:55–19:11Z)
+
+The operator approved the reboots. No reboot path existed, so I added one: `make reboot` (PR #2433, draft). It ran from that branch, and peers were told before each node and again when it came back ("<node> back").
+
+| Node | Env | Window (UTC) | Recap | Log |
+|---|---|---|---|---|
+| ace1 | staging | 18:55–18:57 | ok=4 changed=1 failed=0 | reboot-ace1.log |
+| ace2 | prod | 18:57–18:58 | ok=4 changed=1 failed=0 | reboot-ace2.log |
+| beelink | prod | 19:01–19:04 | ok=4 changed=1 failed=0 | reboot-beelink.log |
+| gcp1 | prod | 19:06–19:07 | ok=4 changed=1 failed=0 | reboot-gcp1.log |
+| kubelab-vps | prod | 19:09–19:11 | ok=4 changed=1 failed=0 | reboot-vps.log |
+
+- Re-run on all five: `changed=0` (reboot-rerun-*.log).
+- After the reboots:
+  - headscale probe OK;
+  - check-spokes OK on both spokes;
+  - check-drift shows only staging's targetRevision on `fix/retire-reset-jwt-900`, held by fix-sso-signout for #2426;
+  - e2e prod: 70 passed, 1 failed. The failure is homepage 302, debt from #2402 that its owner is fixing.
+  - Staging e2e: 64 passed and 4 failed while pods were still starting; on the second run only the same homepage 302 remained.
+- #2398: Tests went red because the IDP-042 verifications name tests that are not written yet. Fixed in f48e6316, which adds f1–f7 to UNWRITTEN. The operator's acceptance of Q1–Q7 is recorded on the PR; Q8 is still open.
