@@ -1,0 +1,46 @@
+# Arming envelope for the 2026-10-17 stage 2 run. Committed on the run branch;
+# the run reads only the committed copy. A PR whose diff touches this file is never merged.
+version: 1
+run_id: "2026-10-17-ai024-stage2"
+armed_by: manu
+armed_at: 2026-10-17T07:30:00Z
+expires_at: 2026-10-17T17:30:00Z
+objective: >-
+  Ship AI-024 stage 2: land the decisions PR #2392 and PR 2a (gateway script with four fixed Grafana
+  queries and tests), and leave PR 2b (catalog and env wiring) triaged and ready for the operator.
+scope:
+  write_paths:
+    - "infra/ansible/roles/agent_stack/**"
+    - "toolkit/features/secrets_manager.py"
+    - "toolkit/features/hermes_*"
+    - "tests/**"
+    - "specs/AI-024-hermes-reach/**"
+    - "docs/runbooks/hermes-kubelab.md"
+    - "docs/lessons/**"
+    - "infra/config/values/common.yaml"
+    - "infra/config/platform.json"
+    - ".agent/runs/**"
+  frozen_paths:
+    - ".github/**"
+    - "harness/**"
+    - ".pr_agent.toml"
+    - "infra/config/secrets/**"
+    - "infra/k8s/**"
+    - "**/AGENTS.md"
+  max_files: 25
+  max_loc: 400
+allowed_commands: [dotf, gh, git, make, poetry, toolkit]
+queue:
+  source: bitacora
+  filter: >-
+    AI-024 stage 2 only (#2364): PR #2392, PR 2a, PR 2b; nothing else
+  max_items: 3
+budget:
+  max_iterations: 10
+  max_minutes_per_iteration: 30
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant
+  push: true
+  open_pr: true
+  advisor_tier: top
