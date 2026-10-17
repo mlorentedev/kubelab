@@ -1,0 +1,59 @@
+version: 1
+run_id: "20261017-kubelab-auth"
+armed_by: manu
+armed_at: 2026-10-17T07:38:51Z
+expires_at: 2026-10-17T17:38:51Z
+objective: >-
+  Work the auth epic #2390 in its published order (comment 6231198297), landing each
+  step whose PR meets the merge conditions, starting with the open draft #2395.
+scope:
+  write_paths:
+    - "toolkit/**"
+    - "tests/**"
+    - "docs/**"
+    - "specs/**"
+    - "infra/k8s/**"
+    - "infra/config/values/**"
+    - "infra/config/authelia/**"
+    - "infra/config/uptime-kuma/**"
+    - "infra/helm/argocd/**"
+    - "renovate.json"
+    - "Makefile"
+    - "*.md"
+  frozen_paths:
+    - ".github/**"
+    - "harness/**"
+    - "**/AGENTS.md"
+    - ".agent/unattended.yml"
+    - "infra/config/secrets/**"
+    - "infra/terraform/**"
+    - "infra/ansible/**"
+  max_files: 25
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make, poetry, python, pytest, ruff, toolkit, kubectl, curl]
+queue:
+  source: bitacora
+  filter: >-
+    Children of epic #2390 only, in the published order: #2395 (Renovate note), #456,
+    #1593 (+#900), #2374, #2377 part 1, #1782 part 1, remember_me disable (#1813, owner
+    decided 2026-10-17), #1813 part 1, then #1777, #1355, #1356. Skip any step marked
+    owner-gated in the order comment (Argo CD deploy, Viewer token, DNS repoint, operator
+    logins) and anything that needs a SOPS or Ansible change. kubectl only read-only or
+    through make targets.
+  max_items: 8
+budget:
+  max_iterations: 10
+  max_minutes_per_iteration: 60
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant
+  merge_basis: >-
+    Owner's verbal grant 2026-10-17 (no .github/merge-grant.yml on master yet; the PR adding
+    it stays for the owner). Conditions on one head commit: peers coordinated, CI green,
+    no conflicts, `## Review triage` posted, `dotf pr triage-queue --pr N` clear.
+    Merge squash --match-head-commit. Owner 2026-10-17: prod-affecting merges allowed when
+    the conditions hold; staging validated by consequence first, prod verified after merge,
+    revert PR if prod breaks.
+  push: true
+  open_pr: true
+  advisor_tier: top
