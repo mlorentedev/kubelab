@@ -38,6 +38,10 @@ agent_stack_anthropic_api_key: ""
 # in the environment; `web.backend` in the ported config is pinned to it, so web
 # tools then answer with the vendor's own error rather than rerouting.
 agent_stack_tavily_api_key: ""
+# The Grafana Viewer token the cluster-state reader presents (spec AI-024 stage 2), from
+# prod's vault. Empty means no reader: the config declares no MCP server and the env file
+# no variable, so the agent does not see tools that could only fail.
+agent_stack_grafana_token: ""
 agent_stack_nan_api_base_url: https://api.nan.builders/v1
 
 # The container's resolvers, the rpi3_services form of `docker_dns_servers`:
@@ -152,6 +156,9 @@ agent_stack_hermes_config: "{{ agent_stack_agent_home }}/hermes-config.yaml"
 # the agent writes: a script in the data directory could be rewritten by the
 # very job it feeds.
 agent_stack_hermes_scripts: "{{ agent_stack_agent_home }}/hermes-scripts"
+# The MCP servers the gateway starts (files/hermes-mcp/), mounted read-only for the same
+# reason: the agent starts these processes, so it must not be able to rewrite them.
+agent_stack_hermes_mcp: "{{ agent_stack_agent_home }}/hermes-mcp"
 # The persona (spec AI-012 AC3): root-owned, so the agent cannot rewrite who it is. The
 # public fragment is rendered by the role; the operator's private profile is copied
 # from the vault mirror on the node, and `SOUL.md` is the two joined, mounted read-only.
