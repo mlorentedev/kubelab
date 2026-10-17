@@ -35,6 +35,8 @@ services:
       - {{ agent_stack_hermes_config }}:{{ agent_stack_hermes_home }}/config.yaml:ro
       # The jobs' scripts, read-only for the same reason.
       - {{ agent_stack_hermes_scripts }}:{{ agent_stack_hermes_home }}/scripts:ro
+      # The MCP servers the gateway starts, read-only for the same reason.
+      - {{ agent_stack_hermes_mcp }}:{{ agent_stack_hermes_home }}/mcp:ro
       # Who the agent is: the role's persona and the operator's profile, never the agent's to edit.
       - {{ agent_stack_hermes_persona }}/SOUL.md:{{ agent_stack_hermes_home }}/SOUL.md:ro
 {% if agent_stack_vault_configured | bool %}

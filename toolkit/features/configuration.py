@@ -182,7 +182,29 @@ class ConfigurationManager:
         #    of the contact email while preserving consumer paths unchanged.
         self._inject_contact_email_derivations(config)
 
+        # 6. SSOT-027: OIDC client ids come from the client list, not a second key.
+        self._inject_oidc_client_derivations(config)
+
         return config
+
+    @staticmethod
+    def _inject_oidc_client_derivations(config: Dict[str, Any]) -> None:
+        """SSOT-027 (#1782): fill `apps.services.observability.grafana.oauth_client_id`.
+
+        It is the `client_id` of the OIDC client that redirects to Grafana's domain, so
+        renaming the client in `apps.services.security.authelia.oidc_clients` also
+        renames what the Compose Grafana presents. The other consumers keep the id in
+        their own formats, and `tests/test_oidc_consumer_client_ids.py` holds them to it.
+        The value is assigned, not defaulted: a stale override in an env file must not
+        win over the client Authelia registers. A missing client fails that test in CI.
+        """
+        services = config.get("apps", {}).get("services", {})
+        clients = services.get("security", {}).get("authelia", {}).get("oidc_clients", [])
+        grafana_key = "apps.services.observability.grafana.domain"
+        client_id = next((c["client_id"] for c in clients if c.get("redirect", {}).get("domain") == grafana_key), None)
+        grafana = services.get("observability", {}).get("grafana")
+        if client_id and isinstance(grafana, dict):
+            grafana["oauth_client_id"] = client_id
 
     @staticmethod
     def _inject_contact_email_derivations(config: Dict[str, Any]) -> None:

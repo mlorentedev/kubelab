@@ -1018,7 +1018,7 @@ apps:
         # the Beelink platform node. The node itself is prose, not an axis value.
         state_promotion: singleton
         location: on-demand
-        image: gitea/gitea:1.25.5
+        image: gitea/gitea:1.27.3
         domain: gitea.kubelab.live
         app_name: "KubeLab Git"
         enable_auth: false
@@ -1660,9 +1660,8 @@ apps:
         image: grafana/grafana-oss:13.0.2
         # Permite que Authelia registre usuarios en Grafana si no existen
         oauth_allow_sign_up: true
-        # Must equal the grafana client_id in authelia.oidc_clients (SSOT-017).
-        # Read by the Compose stack only; the K8s grafana.env carries it literally.
-        oauth_client_id: grafana
+        # oauth_client_id is derived by the loader from the grafana entry of
+        # authelia.oidc_clients (SSOT-027, #1782). Do not declare it here.
 
 
       loki:
@@ -1768,7 +1767,7 @@ apps:
         session_same_site: lax
         session_inactivity: 1h
         session_expiration: 8h
-        session_remember_me: 1M
+        session_remember_me: -1 # disabled (#1813)
         regulation_max_retries: 3
         regulation_find_time: 2m
         regulation_ban_time: 5m
@@ -1973,6 +1972,9 @@ apps:
             none: "Read-only diagnostics on api@internal; the cluster credential covers inspection."
           dev-node:
             none: "On-demand developer node (ADR-058): its own access path is SSH over the tailnet."
+          # #456: Homepage has no login of its own; with the IdP down, the cockpit is
+          # one port-forward away, which is what `{}` derives.
+          homepage: {}
 
       crowdsec:
         name: crowdsec
@@ -2123,6 +2125,13 @@ apps:
             - mlorentedev/pollex
             - mlorentedev/iris
             - mlorentedev/hive
+        # Spec AI-024 stage 2: what the cluster-state reader may ask Grafana. The model picks
+        # an app from this closed list, never writes a query. Container names, as Vector
+        # labels them in Loki (the workloads of prod's `kubelab` namespace).
+        grafana_reader:
+          url: https://grafana.kubelab.live # apps.services.observability.grafana.domain
+          apps: [api, apprise, authelia, crowdsec, errors, grafana, homepage, loki, n8n, postgres, redis, vector, vikunja]
+          tools: [firing_alerts, errors_by_app, log_volume_by_app, recent_errors]
         # Run through the agent's daemon at every provision, with a memory and a
         # CPU limit, to prove the sandbox Hermes executes commands in can start.
         probe:

@@ -17,9 +17,26 @@
 - name: Node maintenance
   hosts: all
   become: true
-  gather_facts: true
+  # Gathered below, after the legacy exit: `setup` itself is a module, so a
+  # play-level gather fails on a host that cannot run modules before any task
+  # could skip it.
+  gather_facts: false
 
   pre_tasks:
+    # A `legacy_python` host (declared in common.yaml; the Jetson, Python 3.6)
+    # cannot run Ansible modules, so it failed every `NODE=all` run and the
+    # command could never exit 0 (#2407). End it here, before any module runs.
+    # `always`, like the gathering it replaces: under TAGS= an untagged pre_task
+    # is skipped, and the roles would run without facts.
+    - name: Skip hosts that cannot run Ansible modules (legacy_python)
+      meta: end_host
+      when: legacy_python | default(false) | bool
+      tags: [always]
+
+    - name: Gather facts
+      setup:
+      tags: [always]
+
     - name: Load base config (SSOT)
       include_vars:
         file: "{{ playbook_dir }}/../../config/values/common.yaml"

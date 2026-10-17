@@ -136,8 +136,9 @@ mkdir -p ~/uptime-kuma
 # scp infra/stacks/services/observability/uptime/compose.yml manu@100.64.0.6:~/uptime-kuma/
 cd ~/uptime-kuma && docker compose up -d
 
-# 5. Restore monitors from backup (from workstation):
-# toolkit monitoring restore
+# 5. Rebuild the monitors from the seed (from workstation):
+# toolkit monitoring bootstrap
+#    (history and settings come back only from a node_backup restore)
 ```
 
 **Key detail**: The compose.yml includes `dns: [100.64.0.10, 1.1.1.1]` so the container
@@ -299,54 +300,39 @@ volumes:
 
 After editing: `docker compose down && docker compose up -d`
 
-#### Backup & restore (toolkit)
+#### Backup & restore
 
 Uptime Kuma v2.x removed the UI backup/import feature. The SQLite database
-(`kuma.db`) is the single source of truth for all monitors, status pages, and settings.
+(`kuma.db`) holds monitors, status pages, settings **and the uptime history**.
+Two things protect it, and they protect different things:
 
-**Two-layer backup strategy**:
+| What | Where | Protects |
+|------|-------|----------|
+| Monitors and notifications | `infra/config/uptime-kuma/{monitors,notifications}.json` in git | The configuration: `toolkit monitoring bootstrap` rebuilds an empty instance from it |
+| The whole database | `uptime_kuma_data` volume, shipped to R2 by `node_backup` (`backup.sources.rpi3`) | History, status pages and settings that are not in the seed |
 
-| Layer | Location | Purpose | Retention |
-|-------|----------|---------|-----------|
-| Repo | `infra/config/uptime-kuma/kuma.db` | Disaster recovery (RPi3 dies) | Git history (infinite) |
-| Local RPi3 | `~/backups/kuma-YYYYMMDD.db` | Quick "oops" recovery | 7-day rolling |
+There is no copy of `kuma.db` in the repo (the file is gitignored) and no
+workstation copy to keep fresh: the `backup` and `restore` subcommands of
+`toolkit monitoring` were removed because they were a second, unscheduled mechanism whose `restore`
+overwrote the live database with whatever stale file sat on the machine
+(#2243).
 
-**Layer 1 — Repo snapshot (from workstation, after significant changes)**:
-
-```bash
-toolkit monitoring backup     # pulls kuma.db from RPi3 → repo
-toolkit monitoring status     # check Uptime Kuma health
-toolkit monitoring restore    # push repo kuma.db → RPi3 (overwrites — use with caution)
-```
-
-The toolkit commands handle the full workflow: SSH to RPi3, `docker cp` from the
-running container, `scp` to workstation, and cleanup.
-
-**Layer 2 — Local rolling backup (cron on RPi3)**:
+Back up on demand and check the newest snapshot:
 
 ```bash
-# Crontab entry on kubelab-rpi3 (crontab -e):
-0 3 * * * docker cp uptime-kuma:/app/data/kuma.db /home/manu/backups/kuma-$(date +\%Y\%m\%d).db && find /home/manu/backups -name "kuma-*.db" -mtime +7 -delete
+make backup-node NODE=rpi3 ENV=prod       # ship now
+make backup-coverage ENV=prod             # newest snapshot per node
+toolkit monitoring status                 # check Uptime Kuma health
 ```
 
-Creates `kuma-20260222.db` etc. The `find -mtime +7 -delete` auto-removes backups older than 7 days.
-~3MB each, max ~21MB.
+Restore from R2 (into a scratch directory first, never over the live path) is
+documented once, in [offsite-backup-restore.md](offsite-backup-restore.md#restoring--normal-case).
+If the database is gone and R2 is unreachable, `toolkit monitoring bootstrap`
+recreates the admin user and the monitors from the seed; history is lost.
 
-```bash
-# Initial setup on RPi3:
-mkdir -p ~/backups
-```
-
-To restore from a local backup (on RPi3 directly):
-
-```bash
-cd ~/uptime-kuma && docker compose down
-docker run --rm \
-  -v uptime-kuma_uptime_kuma_data:/data \
-  -v /home/manu/backups:/backup \
-  alpine cp /backup/kuma-20260222.db /data/kuma.db    # pick the date you want
-docker compose up -d
-```
+> The restore drill for the `uptime_kuma_data` volume has not been run, and the
+> hand-edited `~/backups` crontab on rpi3 that older versions of this page
+> described is not in the `rpi3_services` role. Both are tracked on #2243.
 
 #### Alert configuration (MON-006) ✓ Configured 2026-02-22
 
