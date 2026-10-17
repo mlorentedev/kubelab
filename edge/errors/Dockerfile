@@ -34,6 +34,7 @@ RUN addgroup -g 1001 -S appgroup && \
     touch /var/run/nginx.pid && chown appuser:appgroup /var/run/nginx.pid
 
 COPY nginx.conf /etc/nginx/nginx.conf
+COPY error-headers.conf /etc/nginx/error-headers.conf
 COPY html/ /usr/share/nginx/html/
 
 RUN chown -R appuser:appgroup /usr/share/nginx/html
