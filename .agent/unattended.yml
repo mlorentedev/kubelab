@@ -1,0 +1,33 @@
+version: 1
+run_id: ap-20261017-kubelab-fc
+armed_by: manu
+armed_at: 2026-10-17T04:30:00Z
+expires_at: 2026-10-17T06:45:00Z
+objective: Fix bounded bug/chore tickets one PR each and triage every reviewer comment on the PRs this run opens.
+scope:
+  write_paths: ["toolkit/**", "tests/**", "scripts/**", "Makefile", "docs/**", "specs/**", "infra/k8s/base/**", "infra/n8n/**"]
+  frozen_paths:
+    - ".github/**"
+    - "harness/**"
+    - "**/AGENTS.md"
+    - "infra/config/secrets/**"
+    - "infra/terraform/**"
+    - "infra/ansible/**"
+    - "infra/k8s/overlays/prod/**"
+    - ".agent/unattended.yml"
+  max_files: 10
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make, poetry, python3]
+queue:
+  source: bitacora
+  filter: 'label bug or chore, unassigned, no decision pending, not touching live nodes'
+  max_items: 4
+budget:
+  max_iterations: 4
+  max_minutes_per_iteration: 30
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant
+  push: true
+  open_pr: true
+  advisor_tier: top
