@@ -17,6 +17,7 @@ that accepts anything (measured 2026-10-03: it does reject this, #2058).
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -157,3 +158,40 @@ def test_the_validated_image_is_the_pinned_one() -> None:
     for overlay in OVERLAYS:
         _, container = _authelia(_render(overlay))
         assert container["image"] == f"authelia/authelia:{pin['newTag']}"
+
+
+# #2377: validate-config exits 0 on a deprecated key and only warns, so nothing noticed them
+# until a release dropped one. Each remaining key names the ticket that removes it.
+DEPRECATED_KEY = re.compile(r"configuration key '([^']+)' is deprecated")
+TOLERATED_DEPRECATIONS = {
+    # `_FILE` env vars cannot fill an array element, so moving to `jwks` needs a file path
+    # for the key first (lesson-096). #2377 part 2.
+    "identity_providers.oidc.issuer_private_key",
+}
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("overlay", OVERLAYS)
+def test_the_rendered_config_uses_no_new_deprecated_key(overlay: str, docker_mount_dir: Path) -> None:
+    _require_docker()
+    files, container = _authelia(_render(overlay))
+    done = _validate(docker_mount_dir, files, container)
+    text = done.stdout + done.stderr
+    parsed = DEPRECATED_KEY.findall(text)
+    # Guard the guard: a pattern that matches nothing would pass every config. Every
+    # line that mentions a deprecation must be one it parsed, and a key the config
+    # still uses must be seen.
+    assert text.lower().count("deprecat") == len(parsed), f"unparsed deprecation output:\n{text}"
+    if "issuer_private_key" in files["configuration.yml"]:
+        assert "identity_providers.oidc.issuer_private_key" in parsed, f"pattern missed a live warning:\n{text}"
+    deprecated = set(parsed)
+    assert deprecated <= TOLERATED_DEPRECATIONS, f"{overlay} uses deprecated keys: {sorted(deprecated - TOLERATED_DEPRECATIONS)}"
+
+
+@pytest.mark.parametrize("overlay", OVERLAYS)
+def test_passkeys_keep_preferred_user_verification(overlay: str) -> None:
+    """The #2377 rename moved the setting; it must not change what passkeys ask for."""
+    files, _ = _authelia(_render(overlay))
+    webauthn = yaml.safe_load(files["configuration.yml"])["webauthn"]
+    assert "user_verification" not in webauthn
+    assert webauthn["selection_criteria"]["user_verification"] == "preferred"
