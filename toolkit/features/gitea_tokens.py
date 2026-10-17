@@ -30,6 +30,10 @@ Prefer the loud recoverable failure to the quiet unrecoverable one.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
+from typing import Any, Iterable
+
+from toolkit.features.gitea_client import expand_grant
 
 
 @dataclass(frozen=True)
@@ -142,3 +146,88 @@ def format_rotation_plan(plan: RotationPlan) -> str:
         "         mint task can issue a replacement on the next provision.",
     ]
     return "\n".join(lines)
+
+
+# --- scope drift: the minted token against the declared grant (TOOL-056, #1551) ---------------
+#
+# `tests/test_gitea_token_scopes.py` ties the DECLARATION to the code's requirement.
+# This ties the LIVE token to the declaration, the step that test cannot see: Gitea
+# cannot edit a token's scopes after minting and the mint task is gated on the SOPS
+# key being absent, so a widened declaration stays inert until a rotation. Both prod
+# tokens were in that state on 2026-09-01 and each surfaced only as a 403.
+#
+# REPORT, NEVER ROTATE. A rotation opens an outage window and is a decision; the
+# check names the command and stops.
+
+#: Gitea's scope that grants every category. Normalisation collapses a full grant to
+#: this literal, so it covers any declared scope and is never itself declared.
+ALL_SCOPE = "all"
+
+
+class ScopeVerdict(Enum):
+    """One token's standing against its declaration. Only OK is converged."""
+
+    OK = "ok"
+    MISSING = "missing"  # the minted token lacks a declared scope: calls fail today
+    UNDECLARED = "undeclared"  # it holds more than declared: privilege nobody decided
+    ABSENT = "absent"  # no token carries the registered name on that account
+    DUPLICATE = "duplicate"  # two tokens share the name: nothing records which is used
+
+
+@dataclass(frozen=True)
+class ScopeCheck:
+    """What one registered token was minted with, compared with what is declared."""
+
+    label: str
+    token_name: str
+    declared: frozenset[str]
+    minted: frozenset[str]
+    missing: frozenset[str]
+    undeclared: frozenset[str]
+    verdict: ScopeVerdict
+
+
+def parse_scopes(scopes: str | Iterable[str]) -> frozenset[str]:
+    """Normalise a comma-separated grant or a listing's array into a set.
+
+    Order, case and whitespace carry no meaning in Gitea's scope strings, and its
+    normalisation is free to reorder them, so none of them may decide a verdict.
+    """
+    items = scopes.split(",") if isinstance(scopes, str) else scopes
+    return frozenset(s.strip().lower() for s in items if s and s.strip())
+
+
+def check_token_scopes(label: str, declared_grant: str, tokens: list[dict[str, Any]]) -> ScopeCheck:
+    """Compare the registered token in an account's listing with its declared grant.
+
+    Pure: takes the declaration and the `GET /users/{u}/tokens` payload rather than
+    reading either, so every verdict is testable without a forge.
+
+    Both directions are drift. Missing breaks calls; undeclared is privilege the
+    SSOT never granted, and for the admin token that is exactly the delete
+    capability #1076 refuses. Each side is widened with `expand_grant` before the
+    other is subtracted from it, because a write scope already carries its read.
+    """
+    if label not in ROTATABLE_TOKENS:
+        known = ", ".join(sorted(ROTATABLE_TOKENS))
+        raise KeyError(f"unknown token {label!r}; known: {known}")
+
+    token_name = ROTATABLE_TOKENS[label].token_name
+    declared = parse_scopes(declared_grant)
+    matches = [t for t in tokens if t.get("name") == token_name]
+
+    if len(matches) != 1:
+        verdict = ScopeVerdict.ABSENT if not matches else ScopeVerdict.DUPLICATE
+        return ScopeCheck(label, token_name, declared, frozenset(), frozenset(), frozenset(), verdict)
+
+    minted = parse_scopes(matches[0].get("scopes") or [])
+    missing = frozenset() if ALL_SCOPE in minted else frozenset(declared - expand_grant(set(minted)))
+    undeclared = frozenset(minted - expand_grant(set(declared)))
+
+    if missing:
+        verdict = ScopeVerdict.MISSING
+    elif undeclared:
+        verdict = ScopeVerdict.UNDECLARED
+    else:
+        verdict = ScopeVerdict.OK
+    return ScopeCheck(label, token_name, declared, minted, missing, undeclared, verdict)
