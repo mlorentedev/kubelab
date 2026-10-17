@@ -1,5 +1,5 @@
 ---
-id: lesson-587-a-guard-keyed-on-an-error-string-breaks-when-the-role-changes-what-produced-it
+id: lesson-588-a-guard-keyed-on-an-error-string-breaks-when-the-role-changes-what-produced-it
 type: lesson
 status: active
 created: "2026-10-17"
