@@ -2123,6 +2123,13 @@ apps:
             - mlorentedev/pollex
             - mlorentedev/iris
             - mlorentedev/hive
+        # Spec AI-024 stage 2: what the cluster-state reader may ask Grafana. The model picks
+        # an app from this closed list, never writes a query. Container names, as Vector
+        # labels them in Loki (the workloads of prod's `kubelab` namespace).
+        grafana_reader:
+          url: https://grafana.kubelab.live # apps.services.observability.grafana.domain
+          apps: [api, apprise, authelia, crowdsec, errors, grafana, homepage, loki, n8n, postgres, redis, vector, vikunja]
+          tools: [firing_alerts, errors_by_app, log_volume_by_app, recent_errors]
         # Run through the agent's daemon at every provision, with a memory and a
         # CPU limit, to prove the sandbox Hermes executes commands in can start.
         probe:

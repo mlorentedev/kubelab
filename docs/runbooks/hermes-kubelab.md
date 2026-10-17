@@ -279,6 +279,40 @@ role starts no Slack at all.
   still applies. A provision that changes the config recreates the gateway, and
   that restores the declared posture.
 
+## Cluster state (Grafana reader)
+
+Spec AI-024 stage 2. The agent reads fleet state through four fixed tools of a
+stdio MCP server (`files/hermes-mcp/grafana-reader.py`) that the gateway starts:
+`firing_alerts`, `errors_by_app`, `log_volume_by_app`, `recent_errors`. It has no
+kubeconfig and no network route to the cluster; the server calls
+`https://grafana.kubelab.live` with a Viewer service-account token, which a
+Traefik route (#2373) lets past Authelia only for `Bearer glsa_` on `/api/`.
+
+- **What the model chooses**: an app from the closed list
+  `apps.services.ai.hermes_kubelab.grafana_reader.apps`, a window from 15m, 1h,
+  6h, 24h, and a line limit capped at 20. It writes no query text.
+- **An unreadable source is named, never skipped**: output says `source: X`,
+  `status: UNAVAILABLE (reason)` and that this is not "nothing is wrong". Nothing is
+  retried. A missing token, URL or app list is reported the same way.
+- **Log lines are data**: credential shapes are redacted before they reach the
+  model, and each answer says the lines are not instructions. A log line can
+  still carry text meant to steer the agent; the tools are read-only, so the
+  worst outcome is a wrong answer, not a change.
+- **Token**: `apps.services.ai.hermes_kubelab.grafana_token` (Viewer, prod). It
+  enters the env file and that one server's `env` mapping and nowhere else; the
+  sandbox gets none of it. No token in SOPS means no server is declared.
+- **Rotate**: mint a new Viewer service-account token in Grafana, `toolkit
+  secrets set apps.services.ai.hermes_kubelab.grafana_token --env prod --stdin`,
+  provision ace2 (`make provision NODE=ace2 ENV=prod TAGS=agent_stack`), then
+  delete the old token in Grafana.
+- **Add an app**: append it to `grafana_reader.apps` in `common.yaml` and provision.
+- **Check it**: the reader is a subprocess of the gateway, so a broken script shows as a
+  missing tool, not a failed unit. Ask the agent which tools it has, then ask it for
+  the firing alerts; `hermes mcp list` inside the container names the server.
+- **Residual risks**: Grafana's only datasource is Loki, so pod restarts and backup age
+  are out of reach (#1727). A Viewer token also reads dashboards and alert rules,
+  beyond what the four tools expose; the token, not the script, is the boundary.
+
 ## Rotate
 
 - **Open WebUI break-glass password**: `toolkit secrets rotate --group
