@@ -24,17 +24,14 @@ class FakeServer:
         self.broken = broken
         self.calls: list[list[str]] = []
         self.merge_style = "merge"
-        self.fixed = False
 
     def __call__(self, argv: list[str], **_: Any) -> tuple[int, str, str]:
         self.calls.append(argv)
         if "doctor" in argv:
-            if "--fix" in argv:
-                self.fixed = True
             out = "[1] Garbage collect LFS\nERROR\n[2] Check schema\n- [I] fine\nOK\n"
             if self.broken.get("doctor"):
                 out += "[3] Check tables\n- [E] schema mismatch\nERROR\n"
-            stale = None if self.fixed else self.broken.get("stale_merge_bases")
+            stale = self.broken.get("stale_merge_bases")
             if stale is True:  # the count line is worded differently: the ceiling cannot be read
                 out += "[4] Recalculate merge bases\n- [E] 5 pull requests are stale of 370\nERROR\n"
             elif stale:
@@ -103,27 +100,7 @@ def test_a_failing_doctor_check_is_named_by_its_header(capsys: pytest.CaptureFix
     assert "failing doctor check: Check tables" in capsys.readouterr().out
 
 
-def test_the_known_merge_base_count_is_tolerated_but_a_larger_one_is_not() -> None:
-    """A baseline entry excuses the count measured on the deployed version, not any count under that name."""
-    assert _run(FakeServer(stale_merge_bases=23))
-    assert not _run(FakeServer(stale_merge_bases=24))
-
-
-def test_a_baselined_check_whose_count_cannot_be_read_fails_closed() -> None:
-    """Wording drift between Gitea versions must not turn a ceiling into a blanket excuse."""
-    assert not _run(FakeServer(stale_merge_bases=True))
-
-
-def test_the_merge_base_repair_is_rehearsed_on_the_copy_and_reported(capsys: pytest.CaptureFixture[str]) -> None:
-    """OPS-039: show what `--fix` does to the stale rows on the restored copy, where nothing is at stake."""
-    server = FakeServer(stale_merge_bases=23)
-    assert _run(server)
-    assert server.fixed
-    assert "merge-base repair on the copy: 23 stale before, 0 after" in capsys.readouterr().out
-
-
-def test_no_repair_is_attempted_when_nothing_is_stale(capsys: pytest.CaptureFixture[str]) -> None:
-    server = FakeServer()
-    assert _run(server)
-    assert not server.fixed
-    assert "0 pull request(s) report a stale merge base" in capsys.readouterr().out
+def test_a_stale_merge_base_fails_the_drill() -> None:
+    """OPS-039: 23 stale merge bases measured on 1.25.5 were gone from the first snapshot taken on 1.27.3, so the
+    check is no longer excused. Any stale row on the restored copy now fails."""
+    assert not _run(FakeServer(stale_merge_bases=1))

@@ -73,32 +73,7 @@ def _mint_write_token(run: Run, name: str, admin_user: str) -> str:
 #: drill), so a failure there says nothing about an upgrade. Each needs a reason; none may be added to quiet a new one.
 KNOWN_BASELINE_FAILURES = {
     "Garbage collect LFS": "errors on the deployed 1.25.5 against the same restored data",
-    "Recalculate merge bases": (
-        "23 of 370 migrated pull requests carry a stale merge base on the deployed 1.25.5 "
-        "(drill of snapshot 13893d74, 2026-10-17)"
-    ),
 }
-
-
-#: A baseline excuse is a measurement, so it carries the number measured: a check listed here still fails when the
-#: candidate reports more than the deployed version did. Pattern captures the count; ceiling is the baseline's.
-BASELINE_CEILINGS = {"Recalculate merge bases": (re.compile(r"(\d+) PRs with incorrect mergebases"), 23)}
-
-
-def _worse_than_baseline(check: str, line: str, lines: list[str]) -> bool:
-    """Above the measured count, or a ceiling check whose count line cannot be found: fail closed."""
-    ceiling = BASELINE_CEILINGS.get(check)
-    if not ceiling:
-        return False
-    counts = [
-        int(m.group(1))
-        for i, other in enumerate(lines)
-        if (m := ceiling[0].search(other)) and _check_of(lines, i) == check
-    ]
-    if not counts:
-        return True
-    match = ceiling[0].search(line)
-    return bool(match and int(match.group(1)) > ceiling[1])
 
 
 def _check_of(lines: list[str], index: int) -> str:
@@ -110,15 +85,14 @@ def _check_of(lines: list[str], index: int) -> str:
     return ""
 
 
-def _fails(lines: list[str], index: int, line: str) -> bool:
-    check = _check_of(lines, index)
-    return check not in KNOWN_BASELINE_FAILURES or _worse_than_baseline(check, line, lines)
-
-
 def _doctor(run: Run, name: str) -> bool:
     rc, out, _ = run(["docker", "exec", "-u", "git", name, "gitea", "doctor", "check", "--all"])
     lines = out.splitlines()
-    bad = [i for i, line in enumerate(lines) if ("[E]" in line or line.strip() == "ERROR") and _fails(lines, i, line)]
+    bad = [
+        i
+        for i, line in enumerate(lines)
+        if ("[E]" in line or line.strip() == "ERROR") and _check_of(lines, i) not in KNOWN_BASELINE_FAILURES
+    ]
     errors = [lines[i].strip()[:160] for i in bad]
     if rc != 0 or errors:
         logger.error(f"FAIL doctor: `gitea doctor check --all` exit {rc}, {len(errors)} error line(s)")
@@ -131,30 +105,6 @@ def _doctor(run: Run, name: str) -> bool:
         return False
     logger.success("probe: gitea doctor check --all is clean")
     return True
-
-
-def _stale_merge_bases(run: Run, name: str, *extra: str) -> int:
-    """How many pull requests `Recalculate merge bases` reports; 0 when the check is silent."""
-    argv = ["docker", "exec", "-u", "git", name, "gitea", "doctor", "check", "--run", "recalculate-merge-bases"]
-    _, out, _ = run([*argv, *extra])
-    pattern = BASELINE_CEILINGS["Recalculate merge bases"][0]
-    lines = out.splitlines()
-    summary = max((int(m.group(1)) for line in lines if (m := pattern.search(line))), default=0)
-    rows = sum(
-        "MergeBase should be" in line for line in lines
-    )  # a per-PR row, in case the summary is worded differently
-    return max(summary, rows)
-
-
-def _rehearse_merge_base_repair(run: Run, name: str) -> None:
-    """OPS-039: run `--fix` on the restored copy and report before/after. Informational: it never fails the drill."""
-    before = _stale_merge_bases(run, name)
-    logger.info(f"probe: {before} pull request(s) report a stale merge base on the copy")
-    if not before:
-        return
-    _stale_merge_bases(run, name, "--fix")
-    after = _stale_merge_bases(run, name)
-    logger.info(f"probe: merge-base repair on the copy: {before} stale before, {after} after")
 
 
 def _pick_repo(run: Run, name: str, token: str, repos: list[str]) -> Optional[str]:
@@ -200,7 +150,6 @@ def _merge_settings(run: Run, name: str, token: str, full: str) -> bool:
 def run_probes(run: Run, name: str, admin_user: str, repos: list[str]) -> bool:
     """True only when every probe passes. A probe that cannot run is a failure, never a pass."""
     ok = _doctor(run, name)
-    _rehearse_merge_base_repair(run, name)
     token = _mint_write_token(run, name, admin_user)
     if not token:
         logger.error("drill: CANNOT CHECK — a write token could not be minted for the upgrade probes")
