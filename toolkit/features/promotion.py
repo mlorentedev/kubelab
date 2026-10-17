@@ -10,6 +10,8 @@ not be tripped.
 
 The values files are human-authored and comment-rich, so edits go through a
 ruamel round-trip (comment- and order-preserving) rather than a PyYAML rewrite.
+``common.yaml`` is the exception: its mixed sequence indentation does not survive
+a round-trip, so the errors pin is replaced on its own line (#2430).
 """
 
 from __future__ import annotations
@@ -23,6 +25,7 @@ from ruamel.yaml import YAML
 from toolkit.config.constants import COMPONENTS
 from toolkit.config.settings import settings
 from toolkit.core.logging import logger
+from toolkit.features import platform_manifest
 from toolkit.features.configuration import ConfigurationManager
 from toolkit.features.generator_k8s import K8sGenerator
 from toolkit.features.registry import tag_exists
@@ -111,7 +114,7 @@ def _promote_errors(version: str) -> None:
     the image sync — no per-env overlay regeneration. Refuses a tag that does not
     exist in the registry, same safety as platform apps.
     """
-    yaml, common_path, data = _load_values_doc("common")
+    _, common_path, data = _load_values_doc("common")
     registry = data.get("registry", "docker.io/mlorentedev")
     errors_cfg = (data.get("edge") or {}).get("errors")
     if not errors_cfg or "image_name" not in errors_cfg:
@@ -127,18 +130,40 @@ def _promote_errors(version: str) -> None:
     if exists is None:
         logger.warning(f"Could not verify {registry}/{image_name}:{version} exists; proceeding")
 
-    previous = errors_cfg.get("version", "(unset)")
+    if "version" not in errors_cfg:
+        raise ValueError("edge.errors.version missing from common.yaml; declare it once by hand")
+    previous = str(errors_cfg["version"])
     if previous == version:
         logger.info(f"errors already at {version}; nothing to do")
         return
-    errors_cfg["version"] = version
-    with common_path.open("w") as fh:
-        yaml.dump(data, fh)
+    _replace_scalar_in_place(common_path, errors_cfg, "version", previous, version)
     logger.info(f"errors version {previous} -> {version} (edge.errors.version)")
 
-    # Derive the K3s tag from the SSOT so the drift gate stays authoritative.
-    sync_k8s_images.sync(common_path, settings.project_root / "infra" / "k8s" / "base" / "kustomization.yaml")
-    logger.success(f"Promoted errors to {version}; kustomization re-synced")
+    # Derive the K3s tag from the SSOT so the drift gate stays authoritative, and
+    # regenerate platform.json, which records common.yaml's blob hash (#2430).
+    root = settings.project_root
+    if sync_k8s_images.sync(common_path, root / "infra" / "k8s" / "base" / "kustomization.yaml") != 0:
+        raise RuntimeError(f"errors set to {version}, but the kustomization failed to re-sync")
+    if platform_manifest.sync(output_path=root / "infra" / "config" / "platform.json", config_path=common_path) != 0:
+        raise RuntimeError(f"errors set to {version}, but platform.json failed to regenerate")
+    logger.success(f"Promoted errors to {version}; kustomization and platform.json re-synced")
+
+
+def _replace_scalar_in_place(path: Path, mapping: Any, key: str, old: str, new: str) -> None:
+    """Rewrite one plain or quoted scalar on its own line; every other byte stays as it was.
+
+    ``common.yaml`` mixes indented and flush block sequences, and no ruamel dump
+    config reproduces both: a full round-trip rewrote ~250 lines on every errors
+    promotion (#2430). ruamel still parses the file, which validates it and gives
+    the scalar's position; the write touches that position only.
+    """
+    line_no, col = mapping.lc.value(key)
+    lines = path.read_text().splitlines(keepends=True)
+    head, tail = lines[line_no][:col], lines[line_no][col:]
+    if not re.match(rf"""(["']?){re.escape(old)}\1(\s|#|$)""", tail):
+        raise ValueError(f"{key} at {path.name}:{line_no + 1} is not a one-line scalar '{old}'; edit it by hand")
+    lines[line_no] = head + tail.replace(old, new, 1)
+    path.write_text("".join(lines))
 
 
 def promote(env: str, app: str, version: str) -> None:
