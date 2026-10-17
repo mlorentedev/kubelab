@@ -27,11 +27,14 @@ spec:
     # service-account token (`glsa_`) on /api/ skips it. Basic credentials do not match
     # this rule and keep going through Authelia, which is why the bypass is not an
     # Authelia access_control rule: that would have let the break-glass password be
-    # tried on the public host without Authelia's regulation. Residual: Traefik matches
-    # a header if ANY of its values matches, so a request carrying a second
-    # `Authorization` header can still reach Grafana's own login. Grafana's brute-force
-    # lockout, the rate limit and CrowdSec bound that.
-    - match: Host(`grafana.kubelab.live`) && PathPrefix(`/api/`) && HeaderRegexp(`Authorization`, `^Bearer glsa_[A-Za-z0-9_]+$`)
+    # tried on the public host without Authelia's regulation. Traefik matches a header
+    # if ANY of its values matches, so a request carrying a token AND a Basic header
+    # would otherwise select this route; the negated matcher sends it back through
+    # Authelia (measured on traefik:v3.6, 2026-10-17).
+    - match: >-
+        Host(`grafana.kubelab.live`) && PathPrefix(`/api/`)
+        && HeaderRegexp(`Authorization`, `^Bearer glsa_[A-Za-z0-9_]+$`)
+        && !HeaderRegexp(`Authorization`, `(?i)^Basic\s`)
       kind: Rule
       priority: 100
       middlewares:

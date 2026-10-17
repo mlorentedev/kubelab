@@ -44,6 +44,22 @@ def test_exactly_one_route_skips_authelia_and_it_needs_a_service_account_token()
     assert not re.fullmatch(regexp.group(1), "Bearer eyJhbGciOi"), "only a Grafana service-account token"
 
 
+def test_a_second_basic_header_sends_the_request_back_through_authelia() -> None:
+    """Traefik matches a header when ANY value matches, so a token plus a Basic header would pick the ungated route.
+
+    Measured on traefik:v3.6 (2026-10-17): without the negated matcher a `Basic` then `Bearer glsa_`
+    pair reached the ungated service; with it, every ordering and casing went to the gated route.
+    This test pins the matcher; the routing itself was proven against the real image.
+    """
+    token = next(r for r in _routes() if _ungated(r))["match"]
+    negated = re.search(r"&& !HeaderRegexp\(`Authorization`, `([^`]+)`\)", token)
+    assert negated, "the token route must exclude any request that also carries Basic credentials"
+    basic = "Basic " + base64.b64encode(b"user:" + b"placeholder").decode()
+    assert re.search(negated.group(1), basic)
+    assert re.search(negated.group(1), basic.lower()), "the scheme name is case-insensitive"
+    assert not re.search(negated.group(1), "Bearer glsa_AbC123_def456")
+
+
 def test_the_token_route_outranks_the_gated_one_and_keeps_every_other_guard() -> None:
     token, gated = sorted(_routes(), key=lambda r: -r["priority"])
     assert _ungated(token) and not _ungated(gated)
