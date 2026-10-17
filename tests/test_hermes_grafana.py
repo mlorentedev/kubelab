@@ -265,6 +265,5 @@ def test_handle_itself_refuses_what_is_not_a_request(monkeypatch: pytest.MonkeyP
     module = _module(monkeypatch)
     assert module.handle(None)["error"]["code"] == -32600
     assert module.handle({"id": 1, "method": "tools/call", "params": [1]})["error"]["code"] == -32602
-    assert _call(module, "firing_alerts", **{})["isError"] is False or True
     reply = module.handle({"id": 2, "method": "tools/call", "params": {"name": "firing_alerts", "arguments": [1]}})
     assert reply["result"]["isError"] is True
