@@ -17,9 +17,9 @@ tags: [kubelab, observability, loki, traefik, agents, triage, security]
 2. Raw log streams contain hundreds of repetitive multi-line exception stack traces, which rapidly exhaust LLM token context windows during incident triaging if not deduplicated.
 
 **Solution**:
-1. Added a Traefik `vpn-whitelist` Middleware restricting access strictly to the Tailscale subnet (`100.64.0.0/10`) and configured a dual-route IngressRoute for Loki (`infra/k8s/base/services/loki.yaml`). Requests carrying `Authorization: Bearer <token>` bypass Authelia SSO redirects to serve automated agents directly, while unauthorized browser sessions redirect to 2FA.
+1. Added a Traefik `vpn-whitelist` Middleware restricting access strictly to the Tailscale subnet (`100.64.0.0/10`). Loki's IngressRoute (`infra/k8s/base/services/loki.yaml`) has one route, behind both `vpn-whitelist` and Authelia; the AI-024 reader (in review on 2026-10-17) queries Loki through Grafana's datasource proxy instead. **Correction (2026-10-17, #2374):** this item first described a second route that let `Authorization: Bearer` requests skip Authelia. That route never existed: it used the Traefik v2 matcher `HeadersRegexp`, which v3 disables. It was deleted rather than revived, and `tests/test_grafana_api_token_route.py` fails on any v2 matcher.
 2. Built fingerprint-based traceback normalization in `deduplicate_tracebacks()` supporting bracketed timestamps `[%Y-%m-%d %H:%M:%S]` and ISO-8601 formats, replacing repeated bursts with `[Repeated Nx]` count badges.
 
-**Rule**: Never expose raw Kubernetes ClusterIP services via ad-hoc host ports or port-forwards. Standardize internal API ingress routes guarded by VPN IP-whitelists and Service Account Bearer Tokens, and always compress repetitive telemetry streams before handing them to LLM agents.
+**Rule**: Never expose raw Kubernetes ClusterIP services via ad-hoc host ports or port-forwards. Put internal API ingress routes behind a VPN IP-whitelist and Authelia. A route may skip Authelia for a token only when the backend itself verifies that token (Grafana's `glsa_` service-account route); never in front of a backend that authenticates nothing, such as Loki. Always compress repetitive telemetry streams before handing them to LLM agents.
 
 **Tags**: `#observability` `#loki` `#agents` `#pr-1319`
