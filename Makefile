@@ -224,7 +224,9 @@ setup-local-dns:
 # poetry install populates `.venv` (per-worktree); pre-commit hooks are NOT
 # reinstalled because the repo already has `core.hooksPath = main/.git/hooks`
 # (one-time set during `make setup`), which all worktrees share automatically.
-# Idempotent: re-running in an already-bootstrapped worktree is ~1s no-op.
+# Idempotent: re-running in an already-bootstrapped worktree is ~1s no-op. A venv
+# whose scripts name another directory (a renamed worktree with an in-project
+# `.venv`) is not ready: it is rebuilt, and restored if the rebuild fails.
 # `poetry.lock` is gitignored, so a long-lived checkout keeps the lock of the
 # day it was first installed. Once pyproject.toml moves on (a new dependency),
 # `poetry install` refuses the stale lock and the checkout cannot import what
