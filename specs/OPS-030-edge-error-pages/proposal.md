@@ -36,7 +36,7 @@ After this work, the class of an error decides what the client sees (ADR-072): b
 
 ## Acceptance criteria
 
-- [ ] **AC1** A test fails when any `edge/errors/html/errors/*.html` is not targeted by a Middleware status range in `infra/k8s`, an nginx `error_page`, or the catch-all route.
+- [ ] **AC1** A test fails when any `edge/errors/html/errors/*.html` is not targeted by a Middleware status range in `infra/k8s`, by an nginx `error_page` for a status nginx can itself emit (derived from the config), or declared as a source page. A declaration for a status nothing can produce does not count.
 - [ ] **AC2** A test renders both overlays and fails when an IngressRoute lacks the `error-pages` middleware and is not listed, with a reason, in `edge.errors.coverage.exceptions` in `infra/config/values/common.yaml`.
 - [ ] **AC3** `401.html`, `408.html`, `429.html`, `500.html` and `maintenance.html` are deleted; `403.html` is kept as the source of the future ban page, and the reachability test knows it.
 - [ ] **AC4** Error responses from the `errors` service carry `Cache-Control: no-store` and `X-Robots-Tag: noindex`; 503 and 504 carry `Retry-After`; `access_log` is on for `/errors/`. Verified by a request against the built image.

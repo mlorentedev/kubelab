@@ -1,7 +1,7 @@
 [
   {
     "id": "OPS-030-edge-error-pages-f1",
-    "behavior": "AC1: every errors/*.html is targeted by a Middleware range, an nginx error_page or the catch-all",
+    "behavior": "AC1: every errors/*.html is targeted by a Middleware range, an nginx error_page for a status nginx emits, or is a declared source page",
     "verification": "poetry run pytest tests/test_error_pages_reachable.py --no-cov -q",
     "state": "pending",
     "evidence": ""
