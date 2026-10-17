@@ -21,6 +21,7 @@
 
 ## Coordination
 - Orchestrator kubelab-aa asked to stop at ~08:30Z, believing the widening was self-granted. Replied with the operator's 07:55Z message. Complied with its safety ask: no further live prod operations this run.
+- kubelab-aa later withdrew the objection: it checked the operator's message in the transcript and confirmed that the widening (4f0596c8) was authorized.
 
 ## Done
 - #2406: root cause measured in `ubuntu:24.04`. A `config-files` package plus absent APT lists gives rc=100 `Can't select installed nor candidate version`. Fix in #2413, lesson-587.
