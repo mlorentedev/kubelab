@@ -15,16 +15,14 @@ log:
   format: {{ APPS_SERVICES_SECURITY_AUTHELIA_LOG_FORMAT }}
 
 # =============================================================================
-# IDENTITY VALIDATION
-# =============================================================================
-identity_validation:
-  reset_password:
-    jwt_secret: "{{ APPS_SERVICES_SECURITY_AUTHELIA_JWT_SECRET_RESET_PASSWORD }}"
-
-# =============================================================================
 # AUTHENTICATION BACKEND
 # =============================================================================
 authentication_backend:
+  # #1593: no self-service reset, as in the K8s overlays. Every identity is reset
+  # with `toolkit credentials hash-password`; with the flow off, Authelia needs no
+  # reset-password JWT secret (#900).
+  password_reset:
+    disable: true
   file:
     path: /config/users_database.yml
     watch: true
