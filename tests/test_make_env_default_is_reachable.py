@@ -134,6 +134,7 @@ ENV_TARGETS: dict[str, tuple[str, str]] = {
     # Fixed by #1644: promised prod, ran against dev.
     "gitea-reconcile": ("--env", "prod"),
     "gitea-rotate-token": ("--env", "prod"),
+    "gitea-token-scopes": ("--env", "prod"),
     "gitea-drop-empty": ("--env", "prod"),
     "gitea-git": ("--env", "prod"),
     "backup": ("-e", "prod"),

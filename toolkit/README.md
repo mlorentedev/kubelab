@@ -184,6 +184,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit services gitea prune-runners` | Deregister Actions runners the declaration does not name. |
 | `toolkit services gitea reconcile` | Create declared organizations and repositories in Gitea; report undeclared ones. |
 | `toolkit services gitea rotate-token` | Revoke a Gitea machine token and clear its SOPS key so a re-provision re-mints it. |
+| `toolkit services gitea token-scopes` | Check each machine token's MINTED scopes against its declared grant (TOOL-056, #1551). |
 | `toolkit services health` | Check health of running services using config-driven endpoints. |
 | `toolkit services list` | List all available services and applications. |
 | `toolkit services logs` | Show logs for one or more services or applications. |

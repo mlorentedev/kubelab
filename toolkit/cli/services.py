@@ -958,6 +958,90 @@ def _secret_leaf(token: str) -> str:
     return spec.secret_key.rsplit(".", 1)[-1] if spec else ""
 
 
+@gitea_app.command("token-scopes")
+def gitea_token_scopes(
+    env: Annotated[str, typer.Option("--env", "-e", help="Environment holding the forge credentials")] = "prod",
+) -> None:
+    """Check each machine token's MINTED scopes against its declared grant (TOOL-056, #1551).
+
+    `token_scopes` in `common.yaml` is what a token should hold; this reads what
+    Gitea actually minted, through the same listing `rotate-token` revokes from.
+    A widened declaration is inert until a rotation re-mints the token, and nothing
+    else reports that gap: the scope test, `secrets-audit` and a key-name diff all
+    read green while the live token answers 403.
+
+    READ-ONLY, and report-only on drift: a rotation opens an outage window, so the
+    check names the command and leaves the decision to a human. Exits non-zero on
+    any drift and on any token it could not read.
+    """
+    from toolkit.features.gitea_client import GiteaBasicAuthClient
+
+    merged = ConfigurationManager(env, get_settings().project_root).get_merged_config()
+    gitea = merged["apps"]["services"]["core"]["gitea"]
+    identities = merged["apps"]["auth"]["identities"]
+
+    admin_password = gitea.get("admin_password")
+    if not admin_password:
+        logger.error(f"missing apps.services.core.gitea.admin_password in {env} SOPS — cannot reach the token listing")
+        raise typer.Exit(1)
+
+    base_url = f"https://{gitea['domain']}"
+    console.print(f"\n[bold]Gitea token scopes[/bold] — {base_url} ({env})\n")
+    client = GiteaBasicAuthClient(base_url, identities["superadmin"], str(admin_password))
+    raise typer.Exit(check_gitea_token_scopes(client, identities, gitea.get("token_scopes") or {}, env))
+
+
+def check_gitea_token_scopes(
+    client: "GiteaBasicAuthClient",
+    identities: dict[str, str],
+    declared: dict[str, str],
+    env: str,
+) -> int:
+    """Print one line per registered token and return the exit code.
+
+    Split from the command so the whole verdict path runs against a scripted
+    session. Zero only when every token reads OK: a listing Gitea refused, or a
+    token with no declared grant, is "could not compare" (lesson-408) and fails.
+    """
+    from toolkit.features.gitea_client import GiteaError
+    from toolkit.features.gitea_tokens import ROTATABLE_TOKENS, ScopeVerdict, check_token_scopes
+
+    failures = 0
+    for label, spec in ROTATABLE_TOKENS.items():
+        username = identities.get(spec.identity, "?")
+        prefix = f"  {label:<9} {username}/{spec.token_name}"
+        if label not in declared:
+            console.print(f"{prefix}  [yellow]unchecked[/yellow] — no `token_scopes.{label}` declared")
+            failures += 1
+            continue
+        try:
+            tokens = client.list_tokens(username)
+        except GiteaError as exc:
+            hint = " (the SOPS admin password has likely drifted)" if exc.status_code == 401 else ""
+            console.print(f"{prefix}  [yellow]unchecked[/yellow] — listing refused: {exc.status_code}{hint}")
+            failures += 1
+            continue
+
+        result = check_token_scopes(label, declared[label], tokens)
+        if result.verdict is ScopeVerdict.OK:
+            console.print(f"{prefix}  [green]ok[/green]  {','.join(sorted(result.minted))}")
+            continue
+        failures += 1
+        details = []
+        if result.missing:
+            details.append(f"missing {','.join(sorted(result.missing))}")
+        if result.undeclared:
+            details.append(f"undeclared {','.join(sorted(result.undeclared))}")
+        console.print(f"{prefix}  [red]{result.verdict.value}[/red]  {'; '.join(details)}")
+
+    if failures:
+        console.print(
+            f"\n[bold]Not rotated.[/bold] A rotation opens an outage window; to converge a drifted token run\n"
+            f"  make gitea-rotate-token TOKEN=<label> ENV={env} APPLY=1   then   make provision NODE=bee ENV={env}"
+        )
+    return 1 if failures else 0
+
+
 vikunja_app = typer.Typer(help="Audit the Vikunja task platform")
 app.add_typer(vikunja_app, name="vikunja")
 

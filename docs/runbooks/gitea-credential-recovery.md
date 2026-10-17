@@ -145,6 +145,28 @@ authenticate. Short, but real — run it deliberately, not as a side effect.
 **Two tokens sharing a name** makes Gitea answer 422 and the rotation propagates it rather than
 guessing. That state needs a human.
 
+### Deciding a rotation: is the live token what `token_scopes` declares?
+
+```
+make gitea-token-scopes ENV=prod      # read-only; exit 1 on any drift or unreadable token
+```
+
+Gitea cannot edit a token's scopes after minting, and the mint task only runs when the SOPS key is
+absent, so **widening `token_scopes` in `common.yaml` changes nothing live** until the token is
+rotated. Both prod tokens sat in that state on 2026-09-01: declaration correct, `secrets-audit`
+green, live token missing a scope, and the only symptom a 403 that reads like a team-permission
+refusal. Run this after any `token_scopes` edit, and before trusting a 403 from a machine token.
+
+| Verdict | Meaning | Action |
+|---|---|---|
+| `ok` | minted scopes equal the declaration (a write scope covers its read) | none |
+| `missing` | the token lacks a declared scope; calls that need it fail now | rotate, then provision |
+| `undeclared` | the token holds more than declared, including `all` | rotate, then provision |
+| `absent` / `duplicate` | no token, or two, under the registered name | provision / needs a human |
+| `unchecked` | the listing was refused, or no grant is declared | fix access first; this is not `ok` |
+
+The check reports and stops. It never rotates, because a rotation opens the outage window above.
+
 ## Verification
 
 ```
