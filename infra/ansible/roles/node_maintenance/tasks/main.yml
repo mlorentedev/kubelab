@@ -69,6 +69,31 @@
   when: maintenance_run_cleanup | bool and maintenance_security_updates | bool
         and ansible_facts.pkg_mgr == 'apt'
 
+- name: Record which held-list packages are INSTALLED here
+  # From dpkg's own state, because apt's error text cannot say it (#2406). A
+  # package removed with its config files kept (dpkg `config-files`) holds fine
+  # while APT lists exist and fails with "Can't select installed nor candidate
+  # version" once they are gone, and this role deletes them at the end of every
+  # run. Matching apt's text read that as an installed package left unheld.
+  # rc=1 only means some names are unknown to dpkg; the known ones still print.
+  command: "dpkg-query -W -f='${Package} ${db:Status-Status}\\n' {{ maintenance_patch_blacklist | join(' ') }}"
+  register: _installed_query
+  changed_when: false
+  check_mode: false
+  failed_when: _installed_query.rc not in [0, 1]
+  when: maintenance_run_cleanup | bool and maintenance_security_updates | bool
+        and ansible_facts.pkg_mgr == 'apt'
+
+- name: Keep only the installed ones
+  set_fact:
+    _installed: >-
+      {{ _installed_query.stdout_lines | default([])
+         | select('search', ' installed$')
+         | map('split', ' ') | map('first')
+         | list }}
+  when: maintenance_run_cleanup | bool and maintenance_security_updates | bool
+        and ansible_facts.pkg_mgr == 'apt'
+
 - name: Hold packages whose upgrade would restart a live workload
   # docker/containerd restarting stops every container — on ace1 that is K3s
   # itself. `tailscale` is the path this fleet is administered over: a failed
@@ -77,12 +102,11 @@
   # Only what is not already held, so `_holds_created` is exactly this run's
   # additions and the release below cannot overreach.
   command: "apt-mark hold {{ item }}"
-  loop: "{{ maintenance_patch_blacklist | difference(_holds_before.stdout_lines | default([])) }}"
+  loop: "{{ maintenance_patch_blacklist | intersect(_installed | default([])) | difference(_holds_before.stdout_lines | default([])) }}"
   register: _holds_created
   changed_when: false
-  # A hold on a package that is NOT INSTALLED fails, and that is fine: not every
-  # node runs docker or k3s. A hold that fails on an INSTALLED package is a
-  # different thing entirely, and the next task refuses to upgrade over it.
+  # Installed packages only, so any failure here is a hold that did not land on
+  # something running, and the next task refuses to upgrade over it.
   failed_when: false
   when: maintenance_run_cleanup | bool and maintenance_security_updates | bool
         and ansible_facts.pkg_mgr == 'apt'
@@ -92,22 +116,14 @@
   # docker unheld on a node that runs docker is the exact outcome the hold list
   # exists to prevent — and it would have proceeded silently.
   #
-  # Told apart by apt's own output rather than by package facts, because this
-  # role never runs `package_facts` — a filter on `ansible_facts.packages`
-  # would have matched nothing on every node and produced a guard that can
-  # never fire. Measured on beelink 2026-08-22:
-  #
-  #   apt-mark hold docker-ce  (installed)      -> rc=0
-  #   apt-mark hold k3s        (not installed)  -> rc=100, "Unable to locate package"
-  #
-  # So a non-zero rc WITHOUT that message is a hold that failed on a package
-  # apt does know about, which is the case worth stopping for.
+  # The loop above holds installed packages only, so every non-zero rc counts.
+  # Not `ansible_facts.packages`: this role never runs `package_facts`, so a
+  # filter on it would match nothing and produce a guard that never fires.
   set_fact:
     _unprotected: >-
       {{ _holds_created.results | default([])
          | selectattr('rc', 'defined')
          | selectattr('rc', '!=', 0)
-         | rejectattr('stderr', 'search', 'Unable to locate package')
          | map(attribute='item')
          | list }}
   when: maintenance_run_cleanup | bool and maintenance_security_updates | bool
@@ -151,7 +167,7 @@
   # `maintenance_patch_blacklist` minus what was already held, so an operator's
   # deliberate pin survives. The hold lasts the run, not longer — and not less.
   command: "apt-mark unhold {{ item }}"
-  loop: "{{ maintenance_patch_blacklist | difference(_holds_before.stdout_lines | default([])) }}"
+  loop: "{{ maintenance_patch_blacklist | intersect(_installed | default([])) | difference(_holds_before.stdout_lines | default([])) }}"
   changed_when: false
   failed_when: false
   when: maintenance_run_cleanup | bool and maintenance_security_updates | bool

@@ -49,21 +49,17 @@ else
     UNPROTECTED=""
 {% for pkg in maintenance_patch_blacklist %}
     if ! printf '%s\n' "$HELD_BEFORE" | grep -qx '{{ pkg }}'; then
-        # A hold on a package that is NOT INSTALLED fails, and that is fine —
-        # not every node runs docker or k3s. A hold that fails on a package apt
-        # DOES know about is a different thing, and the upgrade is skipped over
-        # it. Measured on beelink 2026-08-22: installed -> rc=0, absent ->
-        # rc=100 with "Unable to locate package".
-        # `if`, not `A && B || C`: with the latter, C also runs when A
-        # succeeds and B fails, so a failed assignment would be reported as a
-        # failed hold (SC2015).
-        if HOLD_ERR="$(apt-mark hold '{{ pkg }}' 2>&1 >/dev/null)"; then
-            HELD_BY_US="$HELD_BY_US {{ pkg }}"
-        else
-            case "$HOLD_ERR" in
-                *"Unable to locate package"*) : ;;
-                *) UNPROTECTED="$UNPROTECTED {{ pkg }}" ;;
-            esac
+        # Installed packages only, read from dpkg's own state: apt's error
+        # text changes once the APT lists are gone, and this script deletes
+        # them (#2406). A package removed with its config files kept holds
+        # fine with lists and fails with "Can't select installed nor candidate
+        # version" without, which the old text match read as unprotected.
+        if dpkg-query -W -f='${db:Status-Status}' '{{ pkg }}' 2>/dev/null | grep -qx installed; then
+            if apt-mark hold '{{ pkg }}' >/dev/null 2>&1; then
+                HELD_BY_US="$HELD_BY_US {{ pkg }}"
+            else
+                UNPROTECTED="$UNPROTECTED {{ pkg }}"
+            fi
         fi
     fi
 {% endfor %}
