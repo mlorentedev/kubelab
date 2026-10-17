@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import re
 
 import yaml
 
@@ -57,7 +58,18 @@ def test_the_matcher_agrees_with_a_line_the_reviewer_really_wrote() -> None:
     needle = "Failed to review PR"
     assert f'|= "{needle}"' in _expr(_rule())
     assert needle in json.loads(REAL_FAILURE_LINE)["text"]
-    assert json.loads(REAL_FAILURE_LINE)["record"]["extra"]["pr_url"].startswith("https://")
+
+
+def test_the_pr_label_is_extracted_from_the_path_the_line_really_carries() -> None:
+    """`sum by (pr)` is only per-PR if `pr` is filled. A wrong JSON path leaves it empty,
+    every PR merges into one unlabeled series, and the summary names no PR."""
+    path = re.search(r'\| json pr="([^"]+)"', _expr(_rule()))
+    assert path, 'the rule must extract `pr` with `| json pr="<path>"`'
+    value: object = json.loads(REAL_FAILURE_LINE)
+    for key in path.group(1).split("."):
+        assert isinstance(value, dict) and key in value, f"the real line has no {path.group(1)!r}"
+        value = value[key]
+    assert value == "https://gitea.kubelab.live/personal/imagesensortool/pulls/29"
 
 
 def test_silence_is_health_for_this_rule() -> None:
