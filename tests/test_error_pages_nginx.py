@@ -52,6 +52,9 @@ def base_url() -> Iterator[str]:
                 break
             except OSError:
                 time.sleep(0.2)
+        else:
+            logs = subprocess.run(["docker", "logs", name], capture_output=True, text=True).stderr[-400:]
+            raise RuntimeError(f"the errors image did not answer /health within 10s: {logs}")
         yield url
     finally:
         subprocess.run(["docker", "rm", "-f", name], capture_output=True)
