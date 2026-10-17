@@ -61,6 +61,7 @@ type Handler struct {
 	cached     Check
 	cachedAt   time.Time
 	cacheValid bool
+	refreshing bool
 }
 
 // New returns a Handler wired to the real configuration and the Beehiiv API.
@@ -130,18 +131,34 @@ func emailCheck(conf *config.Config) Check {
 
 // beehiivCheck makes a real authenticated round trip, cached for
 // beehiivCacheTTL so a probe every few seconds does not become a request every
-// few seconds against a rate-limited third party.
+// few seconds against a rate-limited third party. The lock guards only the
+// cache: one caller refreshes an expired entry while the others answer from the
+// stale one at once, so a slow Beehiiv never queues probes behind its timeout.
 func (h *Handler) beehiivCheck(ctx context.Context, conf *config.Config) Check {
 	h.mu.Lock()
-	defer h.mu.Unlock()
-
 	if h.cacheValid && h.Now().Sub(h.cachedAt) < beehiivCacheTTL {
-		return h.cached
+		ck := h.cached
+		h.mu.Unlock()
+		return ck
 	}
-	h.cached = h.probeBeehiiv(ctx, conf)
-	h.cachedAt = h.Now()
-	h.cacheValid = true
-	return h.cached
+	if h.refreshing {
+		ck := h.cached
+		valid := h.cacheValid
+		h.mu.Unlock()
+		if valid {
+			return ck
+		}
+		return Check{Component: "beehiiv", Status: checkDegraded, Message: "first check in progress"}
+	}
+	h.refreshing = true
+	h.mu.Unlock()
+
+	ck := h.probeBeehiiv(ctx, conf)
+
+	h.mu.Lock()
+	h.cached, h.cachedAt, h.cacheValid, h.refreshing = ck, h.Now(), true, false
+	h.mu.Unlock()
+	return ck
 }
 
 func (h *Handler) probeBeehiiv(ctx context.Context, conf *config.Config) Check {

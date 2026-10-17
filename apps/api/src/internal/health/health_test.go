@@ -127,3 +127,37 @@ func TestBeehiivRoundTripIsCached(t *testing.T) {
 		t.Fatalf("hits after TTL = %d, want 2", *hits)
 	}
 }
+
+func TestSlowBeehiivDoesNotQueueProbes(t *testing.T) {
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { <-release }))
+	t.Cleanup(func() { close(release); srv.Close() })
+	now := time.Unix(1_700_000_000, 0)
+	h := &Handler{
+		LoadConfig:  func() (*config.Config, error) { return fullConfig(), nil },
+		HTTPClient:  srv.Client(),
+		BeehiivBase: srv.URL,
+		Now:         func() time.Time { return now },
+	}
+	first := make(chan struct{})
+	go func() { get(t, h, "/ready"); close(first) }()
+	for i := 0; i < 200; i++ { // wait until the first probe is in flight
+		h.mu.Lock()
+		busy := h.refreshing
+		h.mu.Unlock()
+		if busy {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	done := make(chan Response, 1)
+	go func() { _, b := get(t, h, "/ready"); done <- b }()
+	select {
+	case b := <-done:
+		if b.Status != StatusDegraded {
+			t.Fatalf("status while first probe pending = %q, want degraded", b.Status)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("second /ready blocked behind the in-flight Beehiiv probe")
+	}
+}
