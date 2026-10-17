@@ -1,0 +1,45 @@
+version: 1
+run_id: "20261017-kubelab-gitea"
+armed_by: manu
+armed_at: 2026-10-17T07:45:00Z
+expires_at: 2026-10-17T17:45:00Z
+objective: >-
+  Finish OPS-038 (Gitea 1.27.3 live upgrade, #2375) without touching a repository
+  the owner has not named: land #2384, record the runner and PR-API checks, and
+  keep the forge healthy; then the forge-lane follow-ups only.
+scope:
+  write_paths:
+    - "toolkit/features/gitea*"
+    - "tests/test_gitea*"
+    - "tests/infra/test_gitea*"
+    - "docs/runbooks/gitea*"
+    - "docs/lessons/**"
+    - "specs/OPS-038-gitea-forge-upgrade/**"
+    - "specs/OPS-039*/**"
+  frozen_paths:
+    - ".github/**"
+    - "harness/**"
+    - "**/AGENTS.md"
+    - ".agent/unattended.yml"
+    - "infra/config/secrets/**"
+    - "infra/terraform/**"
+    - "infra/k8s/**"
+  max_files: 12
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make, poetry, python, pytest, ruff, toolkit]
+queue:
+  source: bitacora
+  filter: >-
+    #2375 (OPS-038 remainder), #2385 (OPS-039), OPS-034 (#2063) as a proposal
+    only. No personal/resume workflow edit, no second live provision, no prod
+    rollout, no SSO or Authelia work (another session holds #1813).
+  max_items: 3
+budget:
+  max_iterations: 6
+  max_minutes_per_iteration: 25
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant
+  push: true
+  open_pr: true
+  advisor_tier: top
