@@ -39,14 +39,26 @@ def test_the_gateway_gets_the_key_only_when_there_is_one() -> None:
     assert "TAVILY_API_KEY" not in _env_text(agent_stack_tavily_api_key="")
 
 
-def test_the_sandbox_is_given_no_environment_and_no_network() -> None:
+def test_the_key_is_named_in_no_file_of_the_role_but_the_gateway_env() -> None:
+    """The one place the key can enter is the gateway's env file.
+
+    The sandbox's boundary (`docker_forward_env: []`, `docker_network: false`, ADR-068 D2)
+    predates this spec, so asserting it here would pass with the change reverted. What this
+    change can break is a second path for the key, so the test names the files that mention it.
+    """
+    allowed = {"templates/hermes.env.j2", "defaults/main.yml"}
+    mentions = {
+        str(path.relative_to(ROLE))
+        for path in ROLE.rglob("*")
+        if path.is_file() and re.search("agent_stack_tavily_api_key|TAVILY_API_KEY", path.read_text(errors="ignore"))
+    }
+    assert mentions == allowed
+
     terminal = _rendered_config(agent_stack_tavily_api_key="tvly-sentinel")["terminal"]
-    assert terminal["docker_forward_env"] == []
-    assert terminal["docker_network"] is False
-    assert "tvly-sentinel" not in yaml.safe_dump(terminal)
+    assert terminal["docker_forward_env"] == [] and terminal["docker_network"] is False
 
 
-def test_the_backend_is_pinned_and_a_turn_cannot_spend_the_month() -> None:
+def test_the_backend_is_pinned_and_a_turn_cannot_loop_on_searches() -> None:
     config = _rendered_config(agent_stack_tavily_api_key="tvly-sentinel")
     assert config["web"]["backend"] == "tavily"
     assert config["web"]["keyless_rescue"] is False, "a failed call must not send the query to four anonymous vendors"

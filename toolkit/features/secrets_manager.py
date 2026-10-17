@@ -1071,7 +1071,8 @@ SECRET_CATALOG: list[SecretSpec] = [
     ),
     # Spec AI-024: the gateway's web_search and web_extract run in the gateway, never
     # in the sandbox (which has no network). One key; Tavily's free tier is 1,000
-    # credits a month, so the key is also the spend limit.
+    # credits a month on an account with no card, so the account is the spend limit
+    # (the per-turn cap in agent_config covers web_search only, not web_extract).
     SecretSpec(
         key_path="apps.services.ai.hermes_kubelab.tavily_api_key",
         description="Tavily API key the hermes-kubelab gateway searches and reads the web with",

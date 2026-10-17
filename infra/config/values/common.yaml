@@ -2190,8 +2190,10 @@ apps:
           tool_loop_guardrails:
             hard_stop_after:
               same_tool_failure: 12
-            # A ceiling per turn, and the free tier's 1,000 credits a month is the one
-            # per month: twenty searches in one turn is already a loop.
+            # A ceiling on web_search calls per turn: twenty in one turn is already a
+            # loop. The image counts only web_search (agent/tool_guardrails.py _LOOP_CAPS,
+            # v0.22.1); web_extract has no cap. The month's bound is the free tier's 1,000
+            # credits, on an account with no card: past it Tavily refuses, nothing bills.
             loop_caps:
               max_web_searches: 20
           web:
