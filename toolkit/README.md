@@ -139,13 +139,11 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit infra terraform verify-killswitch` | Prove the billing kill switch fires, against a scratch project (AC2b). |
 | `toolkit infra vps` | The prod VPS as Hetzner sees it: snapshots (PREP-002) |
 | `toolkit infra vps snapshot` | Snapshot the VPS through the Hetzner API: the rollback of last resort (PREP-002). |
-| `toolkit monitoring` | Uptime Kuma monitoring: backup, restore, and status |
+| `toolkit monitoring` | Uptime Kuma monitoring: status and config-as-code (backup is node_backup) |
 | `toolkit monitoring apply` | Declarative sync: apply monitors from seed JSON to Uptime Kuma. |
-| `toolkit monitoring backup` | Pull Uptime Kuma database from RPi3 to local repo. |
 | `toolkit monitoring bootstrap` | Full disaster recovery: create admin user + import monitors. |
 | `toolkit monitoring export` | Export monitors and notifications to JSON (config-as-code). |
 | `toolkit monitoring import` | Import monitors from JSON seed files into Uptime Kuma. |
-| `toolkit monitoring restore` | Push a local kuma.db backup to RPi3 and restart Uptime Kuma. |
 | `toolkit monitoring status` | Check Uptime Kuma connectivity and container status on RPi3. |
 | `toolkit obs` | Agentic Observability & SRE triage commands (Loki, Grafana, Slack). |
 | `toolkit obs alerts` | List active Grafana alerts and their firing states. |

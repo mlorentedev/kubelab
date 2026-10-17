@@ -1,12 +1,8 @@
-"Monitoring management commands for Uptime Kuma backup and status."
-
-from pathlib import Path
-from typing import Annotated
+"Monitoring management commands for Uptime Kuma: status and config-as-code."
 
 import typer
 from rich.table import Table
 
-from toolkit.config.constants import MESSAGES
 from toolkit.config.settings import get_settings
 from toolkit.core.logging import console, logger
 from toolkit.features import command
@@ -16,12 +12,9 @@ from toolkit.features.monitoring import bootstrap as bootstrap_fn
 
 app = typer.Typer(
     name="monitoring",
-    help="Uptime Kuma monitoring: backup, restore, and status",
+    help="Uptime Kuma monitoring: status and config-as-code (backup is node_backup)",
     no_args_is_help=True,
 )
-
-_KUMA_DB_PATH_IN_CONTAINER = "/app/data/kuma.db"
-_KUMA_BACKUP_DIR = "infra/config/uptime-kuma"
 
 # Cached config loaded lazily from common.yaml (SSOT)
 _kuma_config: dict[str, str] | None = None
@@ -63,147 +56,6 @@ def _ssh_cmd(cmd: str) -> str:
     """Build SSH command to RPi3."""
     cfg = _get_kuma_config()
     return f"ssh -o ConnectTimeout=5 {cfg['ssh_user']}@{cfg['host']} {cmd!r}"
-
-
-def _backup_dir(project_root: Path) -> Path:
-    """Get the local backup directory path."""
-    return project_root / _KUMA_BACKUP_DIR
-
-
-@app.command("backup")
-def backup(
-    output: Annotated[
-        str | None,
-        typer.Option("--output", "-o", help="Custom output filename (default: kuma.db)"),
-    ] = None,
-) -> None:
-    """Pull Uptime Kuma database from RPi3 to local repo.
-
-    Extracts kuma.db from the running container via docker cp,
-    then copies it to infra/config/uptime-kuma/ via scp.
-    """
-    settings = get_settings()
-    backup_path = _backup_dir(settings.project_root)
-    filename = output or "kuma.db"
-    local_file = backup_path / filename
-
-    cfg = _get_kuma_config()
-    logger.section("Uptime Kuma Backup")
-
-    # 1. Check RPi3 reachability
-    logger.info(f"Connecting to RPi3 ({cfg['host']})...")
-    ping = command.run(f"ping -c1 -W2 {cfg['host']}", check=False)
-    if ping.returncode != 0:
-        logger.error(f"RPi3 unreachable at {cfg['host']}. Is Tailscale connected?")
-        raise typer.Exit(1)
-
-    # 2. Extract DB from container to RPi3 /tmp
-    logger.info("Extracting kuma.db from container...")
-    extract = command.run(
-        _ssh_cmd(f"docker cp {cfg['container']}:{_KUMA_DB_PATH_IN_CONTAINER} /tmp/kuma.db"),
-        check=False,
-    )
-    if extract.returncode != 0:
-        logger.error(f"Failed to extract DB: {extract.stderr}")
-        raise typer.Exit(1)
-
-    # 3. Copy to local workstation
-    logger.info(f"Copying to {local_file}...")
-    backup_path.mkdir(parents=True, exist_ok=True)
-    scp = command.run(
-        f"scp -o ConnectTimeout=5 {cfg['ssh_user']}@{cfg['host']}:/tmp/kuma.db {local_file}",
-        check=False,
-    )
-    if scp.returncode != 0:
-        logger.error(f"SCP failed: {scp.stderr}")
-        raise typer.Exit(1)
-
-    # 4. Cleanup remote temp file
-    command.run(_ssh_cmd("rm -f /tmp/kuma.db"), check=False)
-
-    # 5. Show file info
-    size_kb = local_file.stat().st_size / 1024
-    logger.success(f"Backup saved: {local_file} ({size_kb:.0f} KB)")
-    logger.info("Commit this file to Git as a restore point when monitors change significantly.")
-
-
-@app.command("restore")
-def restore(
-    input_file: Annotated[
-        str | None,
-        typer.Option("--input", "-i", help="Path to kuma.db file (default: infra/config/uptime-kuma/kuma.db)"),
-    ] = None,
-    force: Annotated[
-        bool,
-        typer.Option("--force", "-f", help="Skip confirmation prompt"),
-    ] = False,
-) -> None:
-    """Push a local kuma.db backup to RPi3 and restart Uptime Kuma.
-
-    This overwrites the running database. Use with caution.
-    """
-    settings = get_settings()
-    backup_path = _backup_dir(settings.project_root)
-    local_file = Path(input_file) if input_file else backup_path / "kuma.db"
-
-    cfg = _get_kuma_config()
-    logger.section("Uptime Kuma Restore")
-
-    if not local_file.exists():
-        logger.error(f"Backup file not found: {local_file}")
-        raise typer.Exit(1)
-
-    size_kb = local_file.stat().st_size / 1024
-    logger.warning(f"This will overwrite the running Uptime Kuma database with {local_file} ({size_kb:.0f} KB)")
-
-    if not force and not logger.confirm("Are you sure?", default=False):
-        logger.info(MESSAGES.WARNING_CANCELLED)
-        raise typer.Exit(0)
-
-    # 1. Check connectivity
-    logger.info(f"Connecting to RPi3 ({cfg['host']})...")
-    ping = command.run(f"ping -c1 -W2 {cfg['host']}", check=False)
-    if ping.returncode != 0:
-        logger.error(f"RPi3 unreachable at {cfg['host']}")
-        raise typer.Exit(1)
-
-    # 2. Upload DB to RPi3
-    logger.info("Uploading kuma.db to RPi3...")
-    scp = command.run(
-        f"scp -o ConnectTimeout=5 {local_file} {cfg['ssh_user']}@{cfg['host']}:/tmp/kuma-restore.db",
-        check=False,
-    )
-    if scp.returncode != 0:
-        logger.error(f"Upload failed: {scp.stderr}")
-        raise typer.Exit(1)
-
-    # 3. Stop container, replace DB, start container
-    logger.info("Stopping Uptime Kuma...")
-    command.run(_ssh_cmd("cd ~/uptime-kuma && docker compose down"), check=False)
-
-    logger.info("Replacing database...")
-    command.run(
-        _ssh_cmd(
-            "docker run --rm "
-            "-v uptime-kuma_uptime_kuma_data:/data "
-            "-v /tmp:/backup "
-            "alpine sh -c 'cp /backup/kuma-restore.db /data/kuma.db'"
-        ),
-        check=False,
-    )
-
-    logger.info("Starting Uptime Kuma...")
-    start = command.run(_ssh_cmd("cd ~/uptime-kuma && docker compose up -d"), check=False)
-
-    # 4. Cleanup
-    command.run(_ssh_cmd("rm -f /tmp/kuma-restore.db"), check=False)
-
-    if start.returncode == 0:
-        logger.success(f"Uptime Kuma restored from {local_file}")
-        logger.info(f"Verify at {cfg['url']}")
-    else:
-        logger.error("Failed to restart Uptime Kuma after restore")
-        raise typer.Exit(1)
 
 
 @app.command("status")

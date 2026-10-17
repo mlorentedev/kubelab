@@ -103,7 +103,7 @@ logs/
 GEMINI.md
 MEMORY.md
 
-# Uptime Kuma backups (binary SQLite, use `toolkit monitoring backup` to pull)
+# Uptime Kuma SQLite files (binary; the backup is node_backup, not a file in the repo)
 infra/config/uptime-kuma/*.db
 
 # Docker overrides
