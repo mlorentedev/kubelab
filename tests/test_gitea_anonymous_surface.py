@@ -60,7 +60,7 @@ def _beelink_tailscale_ip() -> str:
 #: variable anywhere in the stack would break it for no security reason.
 _EXTERNAL = dict(
     ansible_managed="Ansible managed",
-    gitea_image="gitea/gitea:1.25.5",
+    gitea_image="gitea/gitea:1.27.3",
     gitea_domain="gitea.kubelab.live",
 )
 

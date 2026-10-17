@@ -62,8 +62,9 @@ make provision NODE=bee ENV=prod TAGS=gitea
 make provision NODE=bee ENV=prod TAGS=gitea   # second run: changed=0
 ```
 
-Then check `/api/healthz`, one push, one PR, one OIDC login, and the runner listing (`Settings > Actions >
-Runners`). A forge workflow that sets `concurrency` is the measurement for the ticket: two quick pushes to
+Then check `/api/healthz`, one push, one PR, one OIDC login, the runner listing (`Settings > Actions >
+Runners`) and the anonymous surface (`tests/infra/test_gitea_anonymous_surface_live.py`: its recorded answers are
+the 1.25.5 ones, so a changed default shows up there first). A forge workflow that sets `concurrency` is the measurement for the ticket: two quick pushes to
 one branch, the second run cancels the first, including when the first is already running.
 
 ## 5. Roll back
