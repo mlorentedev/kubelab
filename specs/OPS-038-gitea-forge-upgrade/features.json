@@ -58,7 +58,7 @@
   {
     "id": "OPS-038-gitea-forge-upgrade-f9",
     "behavior": "The upgrade runbook and a lesson exist (AC9)",
-    "verification": "test -f docs/runbooks/gitea-upgrade.md && test -n \"$(ls docs/lessons/lesson-*gitea-upgrade*.md 2>/dev/null)\"",
+    "verification": "test -f docs/runbooks/gitea-upgrade.md && find docs/lessons -name 'lesson-*upgrade*.md' | grep -q .",
     "state": "pending",
     "evidence": ""
   }
