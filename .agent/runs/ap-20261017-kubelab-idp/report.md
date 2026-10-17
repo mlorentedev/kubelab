@@ -1,4 +1,6 @@
-# run ap-20261017-kubelab-idp (in progress, state checkpoint 2026-10-17 ~08:25Z)
+# run ap-20261017-kubelab-idp: ended `envelope-expiring` at 2026-10-17 16:45Z
+
+**Verdict:** 4 PRs opened (#2396, #2398, #2413, #2414), 0 merged, 0 parked. One live operation on prod (maintain, exit 0). Nothing irreversible is pending except the reboot decision. No merge was possible: `.github/merge-grant.yml` never reached master, because #2397 (a peer's PR) is still open.
 
 ## Waiting on you (irreversible first)
 - **Ready to land once `.github/merge-grant.yml` is on master (#2397):** #2396 (`6b5ac266`), #2413 (`bcb4cd5e`) and #2414 (`5413489e`). Each has CI green on its head and a posted `## Review triage`. On #2413, PR-Agent marks all findings resolved. On #2414, one finding is declined: the gcp1 half is scoped out.
@@ -26,3 +28,16 @@
 
 ## Evidence
 - `maintain-prod-apply.log` beside this file (PLAY RECAP: failed=0 on all 7 hosts).
+
+## Evidence index
+- #2396 (#1551): `make test` green; live `make gitea-token-scopes ENV=prod` exit 0; CI green on `6b5ac266`; triage posted.
+- #2413 (#2406): `make test` 5670 passed. 6 mutation proofs RED. Behavioural test of the timer hold block. PR-Agent re-review marks all 3 findings resolved. CI green on `bcb4cd5e`.
+- #2414 (#2407): `make test` 5675 passed. 4 mutation proofs RED. Local ansible-playbook check of `meta: end_host` with tags. CI green on `5413489e`. 2 of 3 PR-Agent findings applied; the gcp1 one is declined and scoped out.
+- `maintain-prod-apply.log` (PLAY RECAP failed=0 on 7 hosts).
+
+## Budget and host
+- Run window 2026-10-17 ~06:30Z to 16:45Z. No circuit breaker tripped. Laptop sleep was not guarded by a wake-lock; the loop was driven by ScheduleWakeup ticks, and a usage-limit pause ran from about 10:00Z to 12:40Z.
+
+## Next action
+- Land #2397 (the grant), then `dotf pr land` for #2396, #2413 and #2414, in that order. #2413 and #2414 both touch `node_maintenance/tasks/main.yml` in different hunks; re-check for conflicts after the first lands.
+- Then `make maintain NODE=beelink,gcp1,rpi3 ENV=prod`. Decide on the five reboots.
