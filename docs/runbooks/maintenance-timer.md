@@ -92,6 +92,22 @@ once, immediately, without touching the timer. This is the only path that
 runs cleanup synchronously — `make provision` never does (see "Why
 provisioning doesn't run cleanup" below).
 
+## Applying a pending reboot
+
+Maintenance patches and reports `reboot required`; it never reboots. The
+operator does that with `make reboot NODE=<node> ENV=<env>`
+(`infra/ansible/playbooks/reboot.yml`). It only reboots hosts that have
+`/var/run/reboot-required`, one at a time, and fails if the flag is still
+there after the boot. A re-run on a fleet with nothing pending is `changed=0`.
+`CHECK=1` shows which hosts would reboot.
+
+Order: on-demand nodes first, then `gcp1`, then the VPS. The VPS goes last
+because it carries Headscale: its reboot cuts the tailnet for every node, and
+the playbook refuses it without `EXTRA='reboot_allow_vps=true'`. Tell peer
+sessions before each node. Afterwards check `make test-e2e ENV=<env>`,
+`toolkit infra argo check-spokes` and `toolkit infra headscale probe`.
+Measured 2026-10-17: every node was back in 1–3 minutes.
+
 ## Temporarily disabling the timer on a node
 
 ```bash
