@@ -50,7 +50,7 @@ Tell the peers that call the API (`dotf forge` in dotfiles#2649 and #2635, the f
 the downtime. Then take a fresh node backup so the restore point is minutes old:
 
 ```bash
-make backup-node NODE=bee ENV=prod
+make backup-node NODE=beelink ENV=prod
 make backup-drill-gitea ENV=prod HOST=ace2   # on the CURRENT pin: proves this backup restores
 ```
 
@@ -59,7 +59,7 @@ make backup-drill-gitea ENV=prod HOST=ace2   # on the CURRENT pin: proves this b
 ```bash
 make sync-platform-json        # platform.json mirrors the pin
 make provision NODE=bee ENV=prod TAGS=gitea
-make provision NODE=bee ENV=prod TAGS=gitea   # second run: changed=0
+make provision NODE=bee ENV=prod TAGS=gitea   # `bee` names provision-bee.yml; backup-node wants the host, `beelink`. Second run: changed=0
 ```
 
 Then check `/api/healthz`, one push, one PR, one OIDC login, the runner listing (`Settings > Actions >
