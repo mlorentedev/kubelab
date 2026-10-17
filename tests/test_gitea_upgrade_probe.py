@@ -75,3 +75,8 @@ def test_the_token_is_only_ever_sent_to_the_scratch_container(caplog: pytest.Log
     _run(server)
     assert all(argv[:2] == ["docker", "exec"] for argv in server.calls)
     assert TOKEN not in caplog.text
+
+
+def test_a_failing_doctor_check_is_named_in_the_output(capsys: pytest.CaptureFixture[str]) -> None:
+    _run(FakeServer(doctor=True))
+    assert "schema mismatch" in capsys.readouterr().out
