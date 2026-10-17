@@ -214,6 +214,31 @@ class TestPromoteErrors:
             promotion.promote("prod", "errors", "1.2.0")
         assert common.read_text() == body
 
+    @pytest.mark.parametrize("value", ['""', ""])
+    def test_refuses_an_empty_version(self, env_patched, monkeypatch, value: str) -> None:
+        root, _ = env_patched
+        body = _COMMON.replace('"1.1.1"', value)
+        common = self._write_common(root, body)
+        monkeypatch.setattr(promotion, "tag_exists", MagicMock(return_value=True))
+
+        with pytest.raises(ValueError, match="missing or empty"):
+            promotion.promote("prod", "errors", "1.2.0")
+        assert common.read_text() == body
+
+    def test_a_retry_at_the_same_version_still_resyncs(self, env_patched, monkeypatch) -> None:
+        # A run whose sync failed already wrote the SSOT; the retry must repair the derived files.
+        root, _ = env_patched
+        common = self._write_common(root)
+        monkeypatch.setattr(promotion, "tag_exists", MagicMock(return_value=True))
+        k8s_sync = MagicMock(return_value=0)
+        monkeypatch.setattr(promotion.sync_k8s_images, "sync", k8s_sync)
+
+        promotion.promote("prod", "errors", "1.1.1")
+
+        assert common.read_text() == _COMMON
+        k8s_sync.assert_called_once()
+        self.manifest_sync.assert_called_once()
+
     @pytest.mark.parametrize("failing", ["kustomization", "manifest"])
     def test_a_failed_sync_fails_the_promotion(self, env_patched, monkeypatch, failing: str) -> None:
         root, _ = env_patched

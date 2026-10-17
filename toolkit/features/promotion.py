@@ -129,14 +129,16 @@ def _promote_errors(version: str) -> None:
     if exists is None:
         logger.warning(f"Could not verify {registry}/{image_name}:{version} exists; proceeding")
 
-    if "version" not in errors_cfg:
-        raise ValueError("edge.errors.version missing from common.yaml; declare it once by hand")
+    if not errors_cfg.get("version"):
+        raise ValueError("edge.errors.version missing or empty in common.yaml; declare it once by hand")
     previous = str(errors_cfg["version"])
     if previous == version:
-        logger.info(f"errors already at {version}; nothing to do")
-        return
-    _replace_scalar_in_place(common_path, errors_cfg, "version", previous, version)
-    logger.info(f"errors version {previous} -> {version} (edge.errors.version)")
+        # Still re-sync: a run whose sync failed left the SSOT at this version, and
+        # returning here would leave the derived files stale on every retry.
+        logger.info(f"errors already at {version}; re-syncing derived files")
+    else:
+        _replace_scalar_in_place(common_path, errors_cfg, "version", previous, version)
+        logger.info(f"errors version {previous} -> {version} (edge.errors.version)")
 
     # Derive the K3s tag from the SSOT so the drift gate stays authoritative, and
     # regenerate platform.json, which records common.yaml's blob hash (#2430).
@@ -163,9 +165,10 @@ def _replace_scalar_in_place(path: Path, mapping: Any, key: str, old: str, new: 
     line_no, col = mapping.lc.value(key)
     lines = path.read_text().splitlines(keepends=True)
     head, tail = lines[line_no][:col], lines[line_no][col:]
-    if not re.match(rf"""(["']?){re.escape(old)}\1(\s|#|$)""", tail):
+    match = re.match(rf"""(["']?)({re.escape(old)})\1(?=\s|#|$)""", tail)
+    if not match:
         raise ValueError(f"{key} at {path.name}:{line_no + 1} is not a one-line scalar '{old}'; edit it by hand")
-    lines[line_no] = head + tail.replace(old, new, 1)
+    lines[line_no] = head + tail[: match.start(2)] + new + tail[match.end(2) :]
     path.write_text("".join(lines))
 
 
