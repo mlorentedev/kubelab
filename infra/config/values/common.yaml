@@ -1973,6 +1973,9 @@ apps:
             none: "Read-only diagnostics on api@internal; the cluster credential covers inspection."
           dev-node:
             none: "On-demand developer node (ADR-058): its own access path is SSH over the tailnet."
+          # #456: Homepage has no login of its own; with the IdP down, the cockpit is
+          # one port-forward away, which is what `{}` derives.
+          homepage: {}
 
       crowdsec:
         name: crowdsec

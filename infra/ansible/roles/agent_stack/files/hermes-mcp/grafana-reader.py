@@ -46,6 +46,17 @@ class Unavailable(Exception):
     """A source that could not be read; the message is safe to show the model."""
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """urllib re-sends the Authorization header to wherever a 3xx points. Refusing the redirect
+    turns it into `HTTP 30x`, so the token only ever goes to the host this process was given."""
+
+    def redirect_request(self, *_args: object, **_kwargs: object) -> None:
+        return None
+
+
+urllib.request.install_opener(urllib.request.build_opener(_NoRedirect))
+
+
 def _get(path: str, params: dict[str, str] | None = None) -> object:
     """One attempt, never retried. The reason names the class of failure, never the URL or token."""
     if not GRAFANA:
@@ -120,7 +131,9 @@ def firing_alerts(_args: dict) -> str:
 def _count_by_container(selector: str, window: str) -> list[str]:
     query = f"sum by (container) (count_over_time({selector} [{window}]))"
     rows = _loki("/loki/api/v1/query", {"query": query, "time": str(int(time.time()))})
-    counts = sorted(((int(float(r["value"][1])), r["metric"].get("container", "?")) for r in rows), reverse=True)
+    if any("container" not in r.get("metric", {}) for r in rows):
+        raise Unavailable("log streams carry no container label")
+    counts = sorted(((int(float(r["value"][1])), r["metric"]["container"]) for r in rows), reverse=True)
     return [f"{name}: {count}" for count, name in counts]
 
 

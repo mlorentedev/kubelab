@@ -69,9 +69,9 @@ def test_the_token_route_outranks_the_gated_one_and_keeps_every_other_guard() ->
 
 # Traefik v3 renamed these matchers; the v2 names parse only under `ruleSyntax: v2`, which
 # nothing here sets. A route using one is `disabled` in Traefik and never exists, and kustomize
-# renders it without complaint (measured on traefik:v3.6, 2026-10-17). #2374 owns loki.yaml.
+# renders it without complaint (measured on traefik:v3.6, 2026-10-17). Loki's Bearer route was
+# the one such route; it never existed and was deleted rather than revived (#2374).
 V2_MATCHERS = re.compile(r"\b(HeadersRegexp|Headers|QueryRegexp|Query)\(")
-KNOWN_BROKEN = {"infra/k8s/base/services/loki.yaml"}
 
 
 def test_no_route_uses_a_traefik_v2_matcher() -> None:
@@ -80,7 +80,7 @@ def test_no_route_uses_a_traefik_v2_matcher() -> None:
         for path in (ROOT / "infra/k8s").rglob("*.y*ml")
         if V2_MATCHERS.search(path.read_text(errors="ignore"))
     }
-    assert offenders == KNOWN_BROKEN, "a v2 matcher disables its route; use HeaderRegexp / Header (see #2374)"
+    assert not offenders, "a v2 matcher disables its route; use HeaderRegexp / Header (see #2374)"
 
 
 def test_authelia_holds_no_bypass_for_grafana() -> None:

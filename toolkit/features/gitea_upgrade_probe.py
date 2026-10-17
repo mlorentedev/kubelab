@@ -73,10 +73,6 @@ def _mint_write_token(run: Run, name: str, admin_user: str) -> str:
 #: drill), so a failure there says nothing about an upgrade. Each needs a reason; none may be added to quiet a new one.
 KNOWN_BASELINE_FAILURES = {
     "Garbage collect LFS": "errors on the deployed 1.25.5 against the same restored data",
-    "Recalculate merge bases": (
-        "23 of 370 migrated pull requests carry a stale merge base on the deployed 1.25.5 "
-        "(drill of snapshot 13893d74, 2026-10-17)"
-    ),
 }
 
 

@@ -17,6 +17,11 @@ log:
 
 # ---- Authentication Backend ----
 authentication_backend:
+  # #1593: no self-service reset. Every identity is an operator or machine account
+  # reset with `toolkit credentials hash-password` + `make apply-secrets`, and the
+  # flow left an unauthenticated mail-send endpoint on the portal.
+  password_reset:
+    disable: true
   file:
     # Mounted as a directory (no subPath) so K8s propagates Secret updates.
     # `watch: true` does NOT pick them up: it waits for an event naming
@@ -46,8 +51,10 @@ totp:
 # ---- WebAuthn ----
 webauthn:
   attestation_conveyance_preference: indirect
-  user_verification: preferred
   timeout: 60s
+  # Was `webauthn.user_verification`, deprecated in 4.39.0 and not auto-mapped (#2377).
+  selection_criteria:
+    user_verification: preferred
 
 # ---- Access Control ----
 access_control:

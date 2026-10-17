@@ -1,9 +1,10 @@
 # Metrics, logs, dashboards and alerting
 
-28 lessons, newest first. Back to [all categories](../_index.md).
+29 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 587 | [urllib resends the Authorization header to wherever a redirect points](lesson-587-urllib-resends-the-authorization-header-to-wherever-a-redirect-points.md) | 2026-10-17 |
 | 572 | [A seed field the sync never writes is drift its plan cannot show](lesson-572-a-seed-field-the-sync-never-writes-is-drift-its-plan-cannot-show.md) | 2026-10-14 |
 | 531 | [A GraphQL API refuses with 200, so an HTTP retry never fires](lesson-531-a-graphql-api-refuses-with-200-so-an-http-retry-never-fires.md) | 2026-10-07 |
 | 512 | [A JSON field named like a stream label is renamed, and `by (<field>)` silently groups on the stream label instead](lesson-512-a-json-field-named-like-a-stream-label-is-renamed-and-the-grouping-moves.md) | 2026-10-02 |

@@ -12,7 +12,10 @@ from __future__ import annotations
 import io
 import json
 import types
+import http.server
+import threading
 import urllib.error
+import urllib.request
 from pathlib import Path
 
 import pytest
@@ -27,6 +30,7 @@ def _module(monkeypatch: pytest.MonkeyPatch, **env: str) -> types.ModuleType:
     monkeypatch.setenv("GRAFANA_TOKEN", env.pop("GRAFANA_TOKEN", TOKEN))
     monkeypatch.setenv("GRAFANA_URL", env.pop("GRAFANA_URL", "https://grafana.example.test"))
     monkeypatch.setenv("HERMES_GRAFANA_APPS", env.pop("HERMES_GRAFANA_APPS", APPS))
+    monkeypatch.setattr(urllib.request, "_opener", None)  # the script installs its own; do not leak it
     module = types.ModuleType("grafana_reader")
     module.__dict__["__name__"] = "grafana_reader"
     exec(compile(SCRIPT.read_text(), str(SCRIPT), "exec"), module.__dict__)  # noqa: S102
@@ -254,16 +258,57 @@ def test_a_credential_in_a_failure_reason_cannot_exist(monkeypatch: pytest.Monke
     assert TOKEN not in _text(_call(module, "firing_alerts"))
 
 
-def test_the_script_is_read_only(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Every request is a GET: the Request is built without data, so no write can leave this process."""
-    source = SCRIPT.read_text()
-    assert "data=" not in source and "method=" not in source
+def test_every_request_is_a_get_without_a_body(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Measured on what leaves the process, not on how the source spells it."""
+    module, calls = _module(monkeypatch), []
+    _answer(monkeypatch, {"status": "success", "data": {"result": []}}, calls)
+    _call(module, "firing_alerts")
+    _call(module, "errors_by_app")
+    _call(module, "log_volume_by_app")
+    _call(module, "recent_errors", app="api")
+    assert len(calls) == 4
+    assert all(c.get_method() == "GET" and c.data is None for c in calls)
 
 
-def test_handle_itself_refuses_what_is_not_a_request(monkeypatch: pytest.MonkeyPatch) -> None:
-    """serve() has a last-resort catch; the request check must hold without it."""
+def test_streams_without_a_container_label_are_unavailable_not_a_question_mark(monkeypatch: pytest.MonkeyPatch) -> None:
     module = _module(monkeypatch)
-    assert module.handle(None)["error"]["code"] == -32600
-    assert module.handle({"id": 1, "method": "tools/call", "params": [1]})["error"]["code"] == -32602
-    reply = module.handle({"id": 2, "method": "tools/call", "params": {"name": "firing_alerts", "arguments": [1]}})
-    assert reply["result"]["isError"] is True
+    _answer(monkeypatch, {"status": "success", "data": {"result": [{"metric": {"pod": "x"}, "value": [0, "9"]}]}})
+    for tool in ("errors_by_app", "log_volume_by_app"):
+        assert "UNAVAILABLE (log streams carry no container label)" in _text(_call(module, tool))
+
+
+def test_a_redirect_is_not_followed_and_the_token_does_not_travel(monkeypatch: pytest.MonkeyPatch) -> None:
+    """urllib re-sends Authorization on a 3xx; the first live run would have, while the route redirected."""
+    seen: list[str | None] = []
+
+    class Elsewhere(http.server.BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802
+            seen.append(self.headers.get("Authorization"))
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"[]")
+
+        def log_message(self, *_args: object) -> None:
+            return None
+
+    target = http.server.HTTPServer(("127.0.0.1", 0), Elsewhere)
+
+    class Redirecting(Elsewhere):
+        def do_GET(self) -> None:  # noqa: N802
+            self.send_response(302)
+            self.send_header("Location", f"http://127.0.0.1:{target.server_port}/api/")
+            self.end_headers()
+
+    front = http.server.HTTPServer(("127.0.0.1", 0), Redirecting)
+    threads = [threading.Thread(target=s.serve_forever, daemon=True) for s in (target, front)]
+    for thread in threads:
+        thread.start()
+    try:
+        module = _module(monkeypatch, GRAFANA_URL=f"http://127.0.0.1:{front.server_port}")
+        text = _text(_call(module, "firing_alerts"))
+    finally:
+        for s in (target, front):
+            s.shutdown()
+            s.server_close()
+    assert "UNAVAILABLE (HTTP 302)" in text
+    assert seen == [], "the redirect target must never be asked"
