@@ -1660,9 +1660,8 @@ apps:
         image: grafana/grafana-oss:13.0.2
         # Permite que Authelia registre usuarios en Grafana si no existen
         oauth_allow_sign_up: true
-        # Must equal the grafana client_id in authelia.oidc_clients (SSOT-017).
-        # Read by the Compose stack only; the K8s grafana.env carries it literally.
-        oauth_client_id: grafana
+        # oauth_client_id is derived by the loader from the grafana entry of
+        # authelia.oidc_clients (SSOT-027, #1782). Do not declare it here.
 
 
       loki:
