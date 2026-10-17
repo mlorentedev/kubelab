@@ -26,7 +26,7 @@ created: "2026-10-16"
 - [x] [AC2] PR 2a (#2393): stdio MCP server with four fixed tools (firing alerts, errors per app, log volume per app, recent errors of one app), app from a closed list, window from a closed set, Loki redactor in front ✓ 2026-10-17
 - [x] [AC2] PR 2a: test that an unreadable source is named with its reason in the output, never skipped, and that nothing is retried ✓ 2026-10-17
 - [x] [AC2] PR 2b: `mcp_servers` entry with a `tools.include` allowlist, `GRAFANA_TOKEN` fed from `hermes_kubelab.grafana_token`, the app list in `common.yaml`, the mount and install task, runbook ✓ 2026-10-17 (#2400)
-- [!] [AC2] After 2b merges: provision ace2 from a master-based tree and prove the four tools live through the gateway (that is the stage-2 evidence); the refused write is probed through the public `Bearer glsa_` route on `grafana.kubelab.live`, so it measures the route and the token together, and it is a negative control, not proof the wiring works Blocked by #2417: vault-sync fails on ace2 (MEMORY.md rewritten 0600), which fails the agent_stack provision; no agent_stack task ran, so the Grafana reader is not on ace2 yet.
+- [x] [AC2] After 2b merges: provision ace2 from a master-based tree and prove the four tools live through the gateway (that is the stage-2 evidence); the refused write is probed through the public `Bearer glsa_` route on `grafana.kubelab.live`, so it measures the route and the token together, and it is a negative control, not proof the wiring works ✓ 2026-10-17 (#2417 fixed by #2422; evidence on #2364: `hermes mcp test grafana` lists the four tools, the three reads return data through the gateway, the Viewer token is refused with 403 on writes)
 
 ### Stage 3: changes by pull request
 
