@@ -116,6 +116,7 @@ def _template_vars(runner: dict) -> dict:
         act_runner_cpu_limit=runner["resources"]["cpu_limit"],
         act_runner_memory_limit=runner["resources"]["memory_limit"],
         act_runner_labels=runner["labels"],
+        act_runner_stop_grace_period=runner["stop_grace_period"],
         act_runner_log_retention_days=runner["log_retention_days"],
         act_runner_artifact_retention_days=runner["artifact_retention_days"],
         act_runner_run_retention_days=runner["run_retention_days"],
@@ -150,6 +151,9 @@ def _config() -> dict:
             act_runner_capacity=runner["capacity"],
             act_runner_labels=runner["labels"],
             act_runner_container_options=runner["container_options"],
+            act_runner_shutdown_timeout=runner["shutdown_timeout"],
+            act_runner_workdir_cleanup_age=runner["workdir_cleanup_age"],
+            act_runner_idle_cleanup_interval=runner["idle_cleanup_interval"],
         )
     )
 
@@ -556,3 +560,49 @@ def test_the_actions_cache_lives_in_the_runner_volume() -> None:
         f"cache.dir is {cache_dir!r}, not under the {data} volume. Left empty, "
         "act_runner writes the cache to /root/.cache/actcache in the container layer."
     )
+
+
+def _seconds(duration: str) -> int:
+    """A Go duration limited to what the declaration uses: `<n>s`, `<n>m` or `<n>h`."""
+    units = {"s": 1, "m": 60, "h": 3600}
+    return int(duration[:-1]) * units[duration[-1]]
+
+
+def test_the_runner_is_gitea_runner_at_or_after_the_orphan_sweep() -> None:
+    """OPS-034: 0.2.13 leaks a cancelled job's volumes; the sweep arrived in gitea/runner 3.5.0.
+
+    The project was renamed from act_runner, so the old repository stops at 0.x and a
+    plain version bump of the old name would pin a dead line.
+    """
+    image = _ssot()["image"]
+    repository, _, tag = image.partition(":")
+    assert repository == "gitea/runner", f"expected the renamed project gitea/runner, got {image}"
+    assert tag and tag != "latest", f"image must be pinned to a version, got {image}"
+    version = tuple(int(part) for part in tag.split("."))
+    assert version >= (3, 5, 0), f"{tag} predates RemoveOrphanJobVolumes (3.5.0), OPS-034 AC1"
+
+
+def test_a_restart_lets_a_running_job_finish() -> None:
+    """OPS-034 AC3: the shipped default is 0s, which cancels every in-flight job on a restart.
+
+    Docker kills the container after `stop_grace_period`, so a shutdown_timeout longer
+    than the grace period is never honoured: the runner is SIGKILLed first.
+    """
+    runner = _ssot()
+    timeout = _seconds(runner["shutdown_timeout"])
+    assert timeout > 0, "shutdown_timeout 0s cancels running jobs on every restart"
+    assert _config()["runner"]["shutdown_timeout"] == runner["shutdown_timeout"]
+    grace = _runner()["stop_grace_period"]
+    assert _seconds(grace) > timeout, f"stop_grace_period {grace} must outlast shutdown_timeout {runner['shutdown_timeout']}"
+
+
+def test_idle_cleanup_is_enabled_and_matches_the_reaper_window() -> None:
+    """OPS-034 AC2: the runner sweeps leaked job volumes it labelled itself.
+
+    workdir_cleanup_age equals the OPS-024 reaper's 24 h so the two cannot disagree
+    about when a volume is stale. A non-positive value disables the whole sweep.
+    """
+    runner_cfg = _config()["runner"]
+    assert _seconds(runner_cfg["workdir_cleanup_age"]) > 0
+    assert _seconds(runner_cfg["idle_cleanup_interval"]) > 0
+    assert _seconds(runner_cfg["workdir_cleanup_age"]) == 24 * 3600
