@@ -1,6 +1,7 @@
 # run ap-20261017-kubelab-idp (in progress, state checkpoint 2026-10-17 ~08:25Z)
 
 ## Waiting on you (irreversible first)
+- **Ready to land once `.github/merge-grant.yml` is on master (#2397):** #2396 (`6b5ac266`), #2413 (`bcb4cd5e`) and #2414 (`5413489e`). Each has CI green on its head and a posted `## Review triage`. On #2413, PR-Agent marks all findings resolved. On #2414, one finding is declined: the gcp1 half is scoped out.
 - **Landed live on prod:** `make maintain NODE='all:!jetson' ENV=prod`, exit 0, on ace1, ace2, beelink, gcp1, kubelab-vps, rpi3, rpi4. Security-only patching with workload packages held, APT/rsyslog/journal/Docker cleanup, and `node_notify` converged on ace1 and gcp1. No reboot, no K3s, Headscale or kernel switch. Done under the operator's 07:55Z widening ("tareas de ansible o de housekeeping de prod y staging, limpiar y actualizar los nodos").
 - **Reboot required (operator decision, never unattended):** ace1, ace2, beelink, gcp1, kubelab-vps. Each has a patched kernel on disk.
 - **Security patching SKIPPED** on beelink (containerd, docker.io), gcp1 (docker-ce, docker-ce-cli) and rpi3 (containerd, docker.io). This was a false refusal, not an unprotected package (#2406). Fixed in **draft PR #2413**: the role now reads "installed" from dpkg instead of matching apt's error text. After merging, run `make maintain NODE=beelink,gcp1,rpi3 ENV=prod` and expect `changed=0` on a second run. Optional read-only confirmation first: `dpkg -l | grep '^rc'` on beelink.
