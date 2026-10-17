@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.2.1](https://github.com/mlorentedev/kubelab/compare/errors-v1.2.0...errors-v1.2.1) (2026-10-17)
+
+
+### Bug Fixes
+
+* **errors:** answer JSON to clients that ask and never cache an error page ([#2371](https://github.com/mlorentedev/kubelab/issues/2371)) ([30d3be8](https://github.com/mlorentedev/kubelab/commit/30d3be8ce0934eff140fc21b8bf24f3bb6baba72))
+* **errors:** delete the five pages nothing can serve and test reachability ([#2360](https://github.com/mlorentedev/kubelab/issues/2360)) ([1f0014c](https://github.com/mlorentedev/kubelab/commit/1f0014cd5a2718946327b369df8f27bed368ccb9))
+* **errors:** give every error page a real h1 and ask search engines not to index it ([#2336](https://github.com/mlorentedev/kubelab/issues/2336)) ([125f711](https://github.com/mlorentedev/kubelab/commit/125f711bf7d2a0f856238ee927ebd77de5d867e7))
+
 ## [1.2.0](https://github.com/mlorentedev/kubelab/compare/errors-v1.1.6...errors-v1.2.0) (2026-09-05)
 
 
