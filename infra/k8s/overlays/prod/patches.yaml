@@ -10,6 +10,7 @@ data:
   GF_AUTH_GENERIC_OAUTH_AUTH_URL: "https://auth.kubelab.live/api/oidc/authorization"
   GF_AUTH_GENERIC_OAUTH_TOKEN_URL: "https://auth.kubelab.live/api/oidc/token"
   GF_AUTH_GENERIC_OAUTH_API_URL: "https://auth.kubelab.live/api/oidc/userinfo"
+  GF_AUTH_SIGNOUT_REDIRECT_URL: "https://auth.kubelab.live/logout?rd=https%3A%2F%2Fgrafana.kubelab.live%2F"
   GF_LOG_LEVEL: "info"
 ---
 # Override base grafana IngressRoute with prod domain

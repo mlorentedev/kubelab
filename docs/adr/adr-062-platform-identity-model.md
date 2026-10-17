@@ -21,10 +21,30 @@ owner: manu
 Accepted — 2026-08-14. Tracks [#1013](https://github.com/mlorentedev/kubelab/issues/1013) (AUTH-004).
 
 Amended 2026-09-24: D1's machine class. See the amendment below.
+Amended 2026-10-17: session policy (S1–S3). See the amendment below.
 
 Complements [ADR-016](adr-016-oidc-centralized-auth.md), which decides *how* authentication is delivered (OIDC / forward-auth / bypass tiers) but never decides *who* the identities are or what privilege each one carries. This ADR fills that gap and does not supersede it.
 
 Supersedes the single-identity decision recorded on #1013 earlier the same day — see [D0](#d0--what-this-reverses-and-why).
+
+## Amendment — 2026-10-17 (session policy: no app outlives the IdP)
+
+Tracks [#1813](https://github.com/mlorentedev/kubelab/issues/1813). D2 decides who holds which tier, and D5 says to check it live. Neither said how long a session that carries the tier may last. Before this amendment, a demotion or a sign-out stopped at Authelia while the apps kept their own sessions: Grafana's for 30 days, and Authelia's own for a month whenever "remember me" was ticked.
+
+- **S1. Authelia's session is the bound.** It is `session.expiration` (8h) and `session.inactivity` (1h) in each overlay's emitted `authelia-config`. "Remember me" is disabled (`remember_me: -1`, owner decision 2026-10-17), held in every environment by `tests/test_authelia_remember_me_disabled.py` (#2410). Its cookie expiry rolled forward on every save, so a session in active use never ended.
+- **S2. No app session outlives S1.** Where an app has its own lifetime setting, it equals Authelia's. A test on the emitted manifests holds the two together, the same way SSOT-027 holds client ids. The test is the derivation because the consumers are static files in four formats, and a generator would add a declaration nothing reads.
+- **S3. Signing out of an app signs out of Authelia.** Authelia 4.39 has no RP-initiated or back-channel logout. Each app's sign-out therefore redirects to Authelia's `/logout`, with an `rd` back to the app. Authelia follows `rd` only inside its cookie domain.
+
+Where each app stands on 2026-10-17:
+
+| App | S2 | S3 |
+|---|---|---|
+| Grafana | `login_maximum_lifetime_duration` / `login_maximum_inactive_lifetime_duration` | `GF_AUTH_SIGNOUT_REDIRECT_URL` (both K8s overlays; the dev Compose Grafana is still open, #2415) |
+| Argo CD | open: lands with `make deploy-argocd` (owner) | open: `oidc.config.logoutURL`, same deploy |
+| Vikunja | open: `service.jwtttl` (default 3 days), after #2320 | open: key unverified in 1.0.0 |
+| Gitea | open: `SESSION_LIFE_TIME` / `LOGIN_REMEMBER_DAYS`, set by Ansible | none: Gitea has no sign-out redirect, so S2 is its only bound |
+
+The open rows stay on #1813 until each one is fixed.
 
 ## Amendment — 2026-09-30 (agent access surface)
 
