@@ -159,7 +159,7 @@ jobs:
       # Security Scanning - Go (API)
       - name: Install gosec for API
         if: steps.changes.outputs.should_build == 'true' && inputs.app == 'api'
-        run: go install github.com/securego/gosec/v2/cmd/gosec@latest
+        run: go install github.com/securego/gosec/v2/cmd/gosec@v2.29.0
 
       - name: Run gosec SAST scanner on API
         if: steps.changes.outputs.should_build == 'true' && inputs.app == 'api'
@@ -174,7 +174,7 @@ jobs:
         working-directory: ./apps/api/src
         run: |
           echo "Checking API dependencies for vulnerabilities"
-          go install golang.org/x/vuln/cmd/govulncheck@latest
+          go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
           govulncheck ./... || echo "::warning::Vulnerabilities found in Go dependencies"
 
       - name: Determine Docker context
