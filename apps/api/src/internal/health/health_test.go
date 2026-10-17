@@ -1,6 +1,7 @@
 package health
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -159,5 +160,27 @@ func TestSlowBeehiivDoesNotQueueProbes(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("second /ready blocked behind the in-flight Beehiiv probe")
+	}
+}
+
+// A prober that gives up mid-request (kubelet aborts at timeoutSeconds, shorter
+// than the Beehiiv timeout) must not leave its own cancellation as the cached
+// verdict for the next 30s: the probe measures Beehiiv, not the caller's patience.
+func TestAbortedProberDoesNotPoisonTheCache(t *testing.T) {
+	h, hits, _ := newHandler(t, 200, fullConfig(), nil)
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	h.Register(r)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // the prober has already hung up
+	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/ready", nil).WithContext(ctx))
+
+	code, body := get(t, h, "/ready")
+	if code != http.StatusOK || body.Status != StatusReady {
+		t.Fatalf("after an aborted prober: %d %q, want 200 %q (Beehiiv is healthy)", code, body.Status, StatusReady)
+	}
+	if *hits != 1 {
+		t.Fatalf("hits = %d, want 1 (the aborted probe's verdict is the cached one)", *hits)
 	}
 }

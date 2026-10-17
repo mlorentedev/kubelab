@@ -153,7 +153,11 @@ func (h *Handler) beehiivCheck(ctx context.Context, conf *config.Config) Check {
 	h.refreshing = true
 	h.mu.Unlock()
 
-	ck := h.probeBeehiiv(ctx, conf)
+	// The verdict is shared for the whole TTL, so it must describe Beehiiv, not
+	// the caller's patience: a prober that hangs up mid-request would otherwise
+	// cache its own cancellation as "beehiiv unreachable" for every other prober.
+	// probeBeehiiv still bounds the call with beehiivTimeout.
+	ck := h.probeBeehiiv(context.WithoutCancel(ctx), conf)
 
 	h.mu.Lock()
 	h.cached, h.cachedAt, h.cacheValid, h.refreshing = ck, h.Now(), true, false
