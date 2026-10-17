@@ -132,6 +132,12 @@ Provision from this tree: `CHECK=1` changed=7, first run changed=11, second chan
 
 Finding: the first provision mounted the sandbox's work tree, whose `docs/` sits one level down, so the sandbox saw `/docs/docs/adr`. The unit test passed because it asserted what the template said; only reading the directory from a container showed the doubled path. The sandbox now mounts `docs-mirror/docs`, as the bridge does, and the config test pins the path with the `docs` segment.
 
+## The alert channels, read from the gateway, 2026-10-16 (AC8, R3)
+
+R3 answered by the operator's channels: `#ops-log`, `#alerts`, `#deployments`, `#vault-health`, declared by ID in `slack.alert_channels` (`common.yaml`). Measured on ace2 with a throwaway probe that called `conversations.history` with the gateway's own `SLACK_BOT_TOKEN` from inside the container and printed only the outcome: all four returned `ok` with at least one message (`True None None 1` each). So the bot is already a member of every channel with the history scope, and `SLACK_ALLOWED_CHANNELS` (which limits what the agent answers) does not limit a script's read. The probe playbook was deleted and never committed.
+
+`alert-activity.py` is the triage's input: it reads the last hour of each channel, redacts credentials, and ends with `{"wakeAgent": false}` when nothing was said. A channel it cannot read is reported in the output instead of reading as quiet. The hourly job and the Grafana read (needs the route, #2339) are not in this PR.
+
 ## Test status
 
 - Test suite: `<command> -> <output / coverage %>`
