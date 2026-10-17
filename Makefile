@@ -244,8 +244,11 @@ worktree-init:
 	@# An in-project venv carries its own path in every shebang, so a renamed worktree
 	@# keeps a venv whose scripts point at the old directory (TOOL-067, #1707). Set it
 	@# aside rather than delete it: if the install fails the previous venv comes back.
-	@venv=$$($(POETRY) env info --path 2>/dev/null || true); aside=""; \
-	if [ -n "$$venv" ] && [ -d "$$venv" ] && ! python3 -I scripts/venv_relocated.py "$$venv"; then \
+	@# Only the script's exit 1 means "moved"; a crash or a missing python3 (exit 2, 127)
+	@# must not condemn a healthy venv.
+	@venv=$$($(POETRY) env info --path 2>/dev/null || true); aside=""; moved=0; \
+	if [ -n "$$venv" ] && [ -d "$$venv" ]; then python3 -I scripts/venv_relocated.py "$$venv" || moved=$$?; fi; \
+	if [ "$$moved" = 1 ]; then \
 		aside="$$venv.relocated"; rm -rf "$$aside"; mv "$$venv" "$$aside"; \
 		echo "venv moved aside to $$aside; rebuilding"; \
 	fi; \

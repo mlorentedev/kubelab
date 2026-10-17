@@ -19,9 +19,11 @@ target used to do nothing because the directory was present.
 from __future__ import annotations
 
 import importlib.util
+import os
 import pathlib
 import stat
 import subprocess
+import venv
 from types import ModuleType
 
 import pytest
@@ -110,6 +112,35 @@ class TestRelocatedVenv:
         (venv / "bin" / "activate-helper").write_text("#!/bin/sh\n", encoding="utf-8")
         (venv / "bin" / "tool").write_text("#!/usr/bin/env python3\n", encoding="utf-8")
         assert _detector().relocated_shebang(venv) is None
+
+    def test_a_real_venv_is_stale_exactly_after_its_directory_is_renamed(self, tmp_path: pathlib.Path) -> None:
+        """The shebang format comes from `python -m venv`, not from this file's fixture."""
+        before = tmp_path / "before"
+        before.mkdir()
+        venv.EnvBuilder(with_pip=True).create(before / ".venv")
+        assert _detector().relocated_shebang(before / ".venv") is None
+        after = tmp_path / "after"
+        before.rename(after)
+        found = _detector().relocated_shebang(after / ".venv")
+        assert found is not None
+        assert "before" in found
+
+    def test_worktree_init_keeps_a_healthy_venv_when_the_detector_cannot_run(self, tmp_path: pathlib.Path) -> None:
+        venv_dir = _venv(tmp_path, shebang_dir=tmp_path / "old-name" / ".venv")
+        script = tmp_path / "python3"
+        script.write_text("#!/bin/sh\nexit 2\n", encoding="utf-8")
+        script.chmod(script.stat().st_mode | stat.S_IEXEC)
+        fake, _ = _fake_poetry(tmp_path, lock_is_fresh=True, venv=venv_dir)
+        done = subprocess.run(
+            ["make", "--no-print-directory", "worktree-init", f"POETRY={fake}"],
+            cwd=REPO,
+            check=False,
+            capture_output=True,
+            text=True,
+            env={**os.environ, "PATH": f"{tmp_path}{os.pathsep}{os.environ['PATH']}"},
+        )
+        assert done.returncode == 0, done.stderr
+        assert (venv_dir / "bin" / "pytest").exists(), "exit 2 is a failure to ask, not a verdict"
 
     def test_a_missing_venv_is_not_stale(self, tmp_path: pathlib.Path) -> None:
         assert _detector().relocated_shebang(tmp_path / "nothing") is None
