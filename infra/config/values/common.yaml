@@ -529,10 +529,10 @@ ci:
         # and no paths filter on it), so requiring it costs no extra CI minutes —
         # only the latency of waiting for a job that was already running.
         required_contexts:
-          - Validate
-          - Detect Changes
-          - review-attestation
-          - Tests
+        - Validate
+        - Detect Changes
+        - review-attestation
+        - Tests
     # web (mlorentedev/web) is a product repository (ADR-053) whose protection
     # was hand-set and recorded only in its own ADR-057. The values are that
     # ADR's, verified against the live object on 2026-09-23:
@@ -546,8 +546,8 @@ ci:
       master:
         strict: false
         required_contexts:
-          - PR gate
-          - GitGuardian Security Checks
+        - PR gate
+        - GitGuardian Security Checks
 
 # ===========================================================================
 # K3S CLUSTER
@@ -705,7 +705,7 @@ edge:
   errors:
     name: errors
     image_name: kubelab-errors
-    version: "1.2.0"
+    version: "1.2.1"
     port: 8080
     health_path: /health
     # Routes that deliberately do NOT carry the `error-pages` middleware (ADR-072).
@@ -716,29 +716,35 @@ edge:
     # whose Traefik match contains that text.
     coverage:
       exceptions:
-        - route: argocd
-          reason: "CLI and gRPC-web clients; an HTML body breaks them"
-        - route: loki
-          reason: "Machine clients only (Grafana, Vector); internal in prod"
-        - route: headscale
-          reason: "Tailscale control protocol (Noise); a branded page is not a valid response"
-        - route: traefik-dashboard
-          reason: "Backed by api@internal, which Traefik itself serves and never answers 502-504"
-        - route: pr-agent
-          match: gitea_webhooks
-          reason: "Forge webhook receiver; the sender reads status codes, not pages"
-        - route: n8n
-          match: /webhook/
-          reason: "Webhook receivers called by machines (NOTIFY-001); n8n answers its own JSON"
-        - route: open-webui
-          match: /api/v1/auths/signin
-          reason: "Denied path (deny-all); the edge answers 403, which this middleware never touches"
-        - route: catch-all
-          reason: "Is the error page route: it serves the 404 itself, there is nothing upstream to intercept"
-        - route: brand-assets
-          reason: "Static assets fetched by other pages; an HTML body in place of an image or stylesheet is worse than an error"
-        - route: kubelab-redirect
-          reason: "Redirect-only route; it has no upstream"
+      - route: argocd
+        reason: "CLI and gRPC-web clients; an HTML body breaks them"
+      - route: loki
+        reason: "Machine clients only (Grafana, Vector); internal in prod"
+      - route: headscale
+        reason: "Tailscale control protocol (Noise); a branded page is not a valid
+          response"
+      - route: traefik-dashboard
+        reason: "Backed by api@internal, which Traefik itself serves and never answers
+          502-504"
+      - route: pr-agent
+        match: gitea_webhooks
+        reason: "Forge webhook receiver; the sender reads status codes, not pages"
+      - route: n8n
+        match: /webhook/
+        reason: "Webhook receivers called by machines (NOTIFY-001); n8n answers its
+          own JSON"
+      - route: open-webui
+        match: /api/v1/auths/signin
+        reason: "Denied path (deny-all); the edge answers 403, which this middleware
+          never touches"
+      - route: catch-all
+        reason: "Is the error page route: it serves the 404 itself, there is nothing
+          upstream to intercept"
+      - route: brand-assets
+        reason: "Static assets fetched by other pages; an HTML body in place of an
+          image or stylesheet is worse than an error"
+      - route: kubelab-redirect
+        reason: "Redirect-only route; it has no upstream"
     resources:
       cpu_limit: "0.25"
       memory_limit: 128M
@@ -1274,16 +1280,16 @@ apps:
           # is `state_promotion: singleton` — one forge, on the Beelink — so
           # `--env staging` must not rewrite the real forge's hooks to n8n.staging,
           # a wrong value produced by correct-looking code.
-          - # DECLARED WHOLE, NOT DERIVED from apps.services.automation.n8n.domain,
+            # DECLARED WHOLE, NOT DERIVED from apps.services.automation.n8n.domain,
             # which is the prod value this must equal (pinned by the same test).
-            url: https://n8n.kubelab.live/webhook/multi-forge-sync
+        - url: https://n8n.kubelab.live/webhook/multi-forge-sync
             # The workflow reads `rawBody` and HMACs it. `form` would deliver a
             # body that no longer matches what was signed.
-            content_type: json
+          content_type: json
             # Gitea's payload dialect. Not cosmetic: `slack`/`discord` send an
             # entirely different body, and `Parse Forge Event` reads
             # pull_request.merged and head_commit.message out of Gitea's.
-            type: gitea
+          type: gitea
             # Compared as a FLOOR, never for equality — Gitea expands `pull_request`
             # into nine sub-events and returns them unordered, so an equality check
             # would fail forever on a correct hook. Measured 2026-09-04 on
@@ -1301,26 +1307,26 @@ apps:
             # it the create path is unreachable and every issue silently misses the
             # board -- with a 200 recorded on every delivery, because there is no
             # delivery to record.
-            events:
-              - push
-              - pull_request
-              - issues
-            branch_filter: "*"
-            active: true
-            secret_key: apps.services.automation.n8n.forge_webhook_secret
+          events:
+          - push
+          - pull_request
+          - issues
+          branch_filter: "*"
+          active: true
+          secret_key: apps.services.automation.n8n.forge_webhook_secret
             # Printed after a run that wrote this hook (#1849).
-            verify_hint: >-
-              `multi-forge-sync` answers HTTP 200 to a delivery whose signature it
-              rejects, and drops the event, so a green delivery log is not evidence.
-              Confirm by consequence: open a pull request whose title carries a task
-              key and check the Vikunja task changed bucket.
+          verify_hint: >-
+            `multi-forge-sync` answers HTTP 200 to a delivery whose signature it
+            rejects, and drops the event, so a green delivery log is not evidence.
+            Confirm by consequence: open a pull request whose title carries a task
+            key and check the Vikunja task changed bucket.
           # The PR reviewer's webhook (TOOL-080, #1823). Registered inactive by
           # #1846 and turned on once the server answered (#1856): on 2026-09-27 the
           # route served a valid certificate and the server refused an unsigned
           # POST with 400 and a wrongly signed one with 401.
-          - url: https://pr-agent.kubelab.live/api/v1/gitea_webhooks
-            content_type: json
-            type: gitea
+        - url: https://pr-agent.kubelab.live/api/v1/gitea_webhooks
+          content_type: json
+          type: gitea
             # `pull_request_only`, NOT `pull_request`. Gitea's hook API expands
             # `pull_request` into every PR sub-event, comments included, and the
             # upstream Gitea server runs any comment starting with `/` from any
@@ -1330,23 +1336,23 @@ apps:
             # local Gitea 1.25.5 lab (lesson-462,
             # specs/TOOL-080-forge-pr-reviewer/scope-lab.py): this pair delivers
             # opened, reopened, closed and edited, plus pushes, and nothing else.
-            events:
-              - pull_request_only
-              - pull_request_sync
-            branch_filter: "*"
-            active: true
-            secret_key: apps.services.automation.pr_agent.webhook_secret
+          events:
+          - pull_request_only
+          - pull_request_sync
+          branch_filter: "*"
+          active: true
+          secret_key: apps.services.automation.pr_agent.webhook_secret
             # EQUALITY, NOT THE FLOOR n8n GETS ABOVE. n8n fails closed on a surplus
             # event — dropped, with HTTP 200 recorded regardless — so a surplus is
             # Gitea's own expansion and never drift. PR-Agent does not fail closed:
             # a surplus such as `pull_request_comment` reaches a server that acts on
             # it, so here a live widening is drift to correct (lesson-462).
-            event_comparison: equality
-            verify_hint: >-
-              A server that rejects the signature answers 401 and Gitea records the
-              failure, but only a review proves delivery. Confirm by consequence:
-              push to an open pull request and check for a review comment from the
-              reviewer account (`apps.auth.identities.reviewer`).
+          event_comparison: equality
+          verify_hint: >-
+            A server that rejects the signature answers 401 and Gitea records the
+            failure, but only a review proves delivery. Confirm by consequence:
+            push to an open pull request and check for a review comment from the
+            reviewer account (`apps.auth.identities.reviewer`).
         organizations:
           teledyne:
             repositories:
@@ -1422,7 +1428,7 @@ apps:
         # board. Today every human sees every project; narrowing it later is a change
         # to the team below, not to N projects x M users.
         projects:
-          - Bitacora
+        - Bitacora
         team:
           name: kubelab
           # read | write | admin: what the team may do in every declared project.
@@ -1432,8 +1438,8 @@ apps:
           # test refuses them. Each must have signed in once, or Vikunja has no
           # account to add and the run fails naming them.
           members:
-            - superadmin
-            - operator
+          - superadmin
+          - operator
         resources:
           cpu_limit: "0.5"
           memory_limit: "256M"
@@ -1449,7 +1455,7 @@ apps:
         storage:
           # Account ID is not a secret (same account as `backup.r2` above) --
           # R2's S3 endpoint embeds it in the hostname, unlike AWS S3.
-          s3_endpoint:
+          s3_endpoint: 
             https://76967f5ede1ce50efce34d90b7e94958.r2.cloudflarestorage.com
           # Staging's bucket (base default). Prod overrides to `kubelab-vikunja`
           # via the vikunja-config configMapGenerator (behavior: merge) in
@@ -1963,16 +1969,21 @@ apps:
             secret: apps.services.ai.open_webui.admin_password
           loki: {}
           vikunja:
-            none: "Task board, not a 3 AM service (ADR-028): it waits for the IdP to come back."
+            none: "Task board, not a 3 AM service (ADR-028): it waits for the IdP
+              to come back."
           n8n:
             none: >-
-              Automations keep running with the IdP down; only the editor needs a login,
-              and editing workflows waits for the IdP (ADR-028). The editor's own owner credential
+              Automations keep running with the IdP down; only the editor needs a
+              login,
+              and editing workflows waits for the IdP (ADR-028). The editor's own
+              owner credential
               is not in SOPS: #1796.
           traefik-dashboard:
-            none: "Read-only diagnostics on api@internal; the cluster credential covers inspection."
+            none: "Read-only diagnostics on api@internal; the cluster credential covers
+              inspection."
           dev-node:
-            none: "On-demand developer node (ADR-058): its own access path is SSH over the tailnet."
+            none: "On-demand developer node (ADR-058): its own access path is SSH
+              over the tailnet."
 
       crowdsec:
         name: crowdsec
@@ -1988,7 +1999,7 @@ apps:
         auth_level: one_factor
         default_port: 8080
         health_path: /health
-        bouncer_api_key:
+        bouncer_api_key: 
           secrets://apps.services.security.crowdsec.bouncer_api_key
 
     # Network services (bare-metal, external to K3s)
@@ -2049,12 +2060,12 @@ apps:
         # `qwen-image-2.1` is a second image model on the same 100-a-month cap.
         models:
           chat:
-            - qwen3.6
-            - gemma4
-            - glm5.3-flash
-            - deepseek-v4-flash
-            - mimo-v2.6-flash
-            - qwen3.8-flash
+          - qwen3.6
+          - gemma4
+          - glm5.3-flash
+          - deepseek-v4-flash
+          - mimo-v2.6-flash
+          - qwen3.8-flash
           # Transcribed a Spanish sample as `es` (2026-10-11).
           speech_to_text: whisper
           # NaN lists no voices; `ef_dora` is Kokoro's Spanish voice and answered
@@ -2118,11 +2129,11 @@ apps:
           schedule: "Mon *-*-* 14:00:00 UTC"
           top: 8
           repos:
-            - mlorentedev/kubelab
-            - mlorentedev/dotfiles
-            - mlorentedev/pollex
-            - mlorentedev/iris
-            - mlorentedev/hive
+          - mlorentedev/kubelab
+          - mlorentedev/dotfiles
+          - mlorentedev/pollex
+          - mlorentedev/iris
+          - mlorentedev/hive
         # Run through the agent's daemon at every provision, with a memory and a
         # CPU limit, to prove the sandbox Hermes executes commands in can start.
         probe:
@@ -2175,7 +2186,7 @@ apps:
         # vault's copy would be installed and never read. `verification-before-completion`
         # and `audit` have no SKILL.md in the vault.
         skills:
-          - insights # staleness, structure and drift of the vault, read only
+        - insights   # staleness, structure and drift of the vault, read only
         # Hermes config keys ported from hermes-nan's `config-desired.yaml` (spec
         # AI-012 AC1), in Hermes's own layout. The role renders every leaf; keys
         # equal to the image's defaults are pinned here so an image bump cannot
@@ -2252,7 +2263,7 @@ apps:
           # with this list empty the role starts no Slack at all, because Hermes
           # would fall back to pairing codes (state, not IaC).
           allowed_users:
-            - U087ZDNQVRT # the operator
+          - U087ZDNQVRT   # the operator
           # Where scheduled jobs deliver, and the only channel it answers in; a
           # 1:1 DM from an allowed user is always answered.
           home_channel:
@@ -2263,14 +2274,14 @@ apps:
           # what the agent answers, and a script's history read ignores it (measured
           # on ace2, 2026-10-16: all four returned ok with the gateway's bot token).
           alert_channels:
-            - id: C0BRLU6PUTZ
-              name: ops-log
-            - id: C0AGV95PXRP
-              name: alerts
-            - id: C0APESG5VNZ
-              name: deployments
-            - id: C0BRW2QB8SX
-              name: vault-health
+          - id: C0BRLU6PUTZ
+            name: ops-log
+          - id: C0AGV95PXRP
+            name: alerts
+          - id: C0APESG5VNZ
+            name: deployments
+          - id: C0BRW2QB8SX
+            name: vault-health
         # The scheduled jobs (spec AI-012 AC4), reconciled by name against the
         # gateway's own by the agent_stack role. Governs the agent, so it lives
         # here and never in the vault zone the agent writes (placement rule). A job
@@ -2313,20 +2324,27 @@ apps:
               deliver: local
               prompt: >-
                 You are the recurrence JUDGE for a knowledge-curation loop. The script
-                output above holds candidate clusters, each a set of lesson excerpts that
+                output above holds candidate clusters, each a set of lesson excerpts
+                that
                 a keyword detector grouped. Keyword overlap is not proof of recurrence.
                 For each candidate give exactly one label. RECURRENCE: the excerpts
                 describe the same underlying root cause in two or more distinct incidents
-                (different contexts and dates, not one event described twice), and that
+                (different contexts and dates, not one event described twice), and
+                that
                 root cause is not already a canonical pattern, runbook, skill or
-                feedback note. DUPLICATE: same root cause, but one excerpt already is the
-                canonical artifact, or it is one lesson written twice. DISTINCT: only the
+                feedback note. DUPLICATE: same root cause, but one excerpt already
+                is the
+                canonical artifact, or it is one lesson written twice. DISTINCT: only
+                the
                 vocabulary is shared and the root causes differ. Procedure per
-                candidate: state each excerpt's root cause in one clause; if they differ
-                the label is DISTINCT; if one is canonical or they are the same event it
+                candidate: state each excerpt's root cause in one clause; if they
+                differ
+                the label is DISTINCT; if one is canonical or they are the same event
+                it
                 is DUPLICATE; otherwise RECURRENCE, with the placement (pattern, runbook
                 or check) and the one-line root cause that would anchor it. Be
-                conservative: when the root cause is unclear prefer DISTINCT. Reply with
+                conservative: when the root cause is unclear prefer DISTINCT. Reply
+                with
                 JSON only, no other text, in this shape:
                 {"verdicts": [{"id": "<candidate id>",
                 "label": "RECURRENCE|DUPLICATE|DISTINCT", "root_cause": "<one line>",
@@ -2347,14 +2365,19 @@ apps:
               schedule: "10 * * * *"
               script: alert-activity.py
               prompt: >-
-                The script output above lists what the fleet's alert channels said in
+                The script output above lists what the fleet's alert channels said
+                in
                 the last hour. Triage it. Group messages that describe the same problem
-                and, for each group, say in one line what is wrong, how serious it is
-                (page now, look today, or noise) and the evidence: the channel and the
+                and, for each group, say in one line what is wrong, how serious it
+                is
+                (page now, look today, or noise) and the evidence: the channel and
+                the
                 message. Say plainly when a channel could not be read, and never call
                 an unreadable channel quiet. Propose the next step for each real
-                problem, but change nothing and run nothing that changes a system: the
-                operator approves fixes. Reply in English, under twelve lines, with the
+                problem, but change nothing and run nothing that changes a system:
+                the
+                operator approves fixes. Reply in English, under twelve lines, with
+                the
                 most serious group first. Never repeat a credential.
 
 # Terraform state (TF-007, ADR-069). Every root keeps its state in this R2
@@ -2614,7 +2637,8 @@ backup:
         sqlite: [webui.db, vector_db/chroma.sqlite3]
         exclude:
           cache:
-            reason: "embedding and whisper models (1.07 GB of the volume's 1.1 GB), downloaded again on first use"
+            reason: "embedding and whisper models (1.07 GB of the volume's 1.1 GB),
+              downloaded again on first use"
             tier: 3
       hermes:
         path: /var/lib/hermes-kubelab/data
@@ -2622,15 +2646,16 @@ backup:
         # credential, read 2026-10-07); the role's secrets live beside it, in
         # hermes.env, and are rebuilt from SOPS.
         sqlite:
-          - state.db
-          - kanban.db
-          - shared-state.db
-          - response_store.db
-          - runs_idempotency.db
-          - cron/executions.db
+        - state.db
+        - kanban.db
+        - shared-state.db
+        - response_store.db
+        - runs_idempotency.db
+        - cron/executions.db
         exclude:
           bin:
-            reason: "the tirith release binary (38 MB) left by images before v0.22, restorable from upstream"
+            reason: "the tirith release binary (38 MB) left by images before v0.22,
+              restorable from upstream"
             tier: 3
           home/.cache:
             reason: "package and tool caches (26 MB), rebuilt on use"
