@@ -29,8 +29,11 @@ API = "https://api.hetzner.cloud/v1"
 MANAGED_LABEL = ("managed-by", "kubelab-toolkit")
 TOKEN_SECRET_KEY = "hetzner.api_key"
 PREFIX = "kubelab-vps-"
-#: Managed snapshots beyond this many, taken without `keep`, are worth a warning: each is billed.
-WARN_ABOVE = 3
+#: How many managed snapshots `toolkit infra vps snapshot` leaves behind unless told otherwise (OPS-036).
+#: Each is billed and nothing else removes one; the newest is the rollback point until the next replaces it.
+DEFAULT_KEEP = 3
+#: With pruning off, more managed snapshots than this are worth a warning.
+WARN_ABOVE = DEFAULT_KEEP
 
 
 class SnapshotError(Exception):
