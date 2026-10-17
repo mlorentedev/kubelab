@@ -6,3 +6,10 @@ ssh_pubkey_authentication: "yes"
 ssh_max_auth_tries: 3
 ssh_client_alive_interval: 300
 ssh_client_alive_count_max: 2
+
+# The LAN jump host (networking.nodes.<key>.lan_jump in common.yaml). The
+# inventory generator sets this host var on that one node, to the lan_ip of every
+# other node behind it; a non-empty list is what makes the template render the
+# trailing `Match` block. Empty everywhere else, so every other node renders
+# exactly the file it did before the jump host existed.
+ssh_lan_jump_targets: []
