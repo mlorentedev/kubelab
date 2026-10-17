@@ -10,7 +10,7 @@ import re
 
 import yaml
 
-from tests.test_agent_stack_role import COMMON, _environment, _resolved
+from tests.test_agent_stack_role import COMMON, ROLE, _environment, _resolved
 from toolkit.features.secrets_manager import SECRET_CATALOG
 
 KEY = "apps.services.ai.hermes_kubelab.tavily_api_key"
