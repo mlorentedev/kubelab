@@ -36,10 +36,10 @@ Staged, one small PR each; each stage is useful alone.
 
 ## Risks / open questions
 
-- The Authelia `/api/` bypass leaves Grafana's own authentication as the only gate on that path. The token stays Viewer-scoped. Prod IdP edit: the operator merges it.
+- A Traefik route (#2373) skips Authelia for `/api/` only when the request carries a `Bearer glsa_` token, so Grafana's own authentication is the only gate on that path. An Authelia `bypass` rule was tried first (#2369) and rejected: it cannot see headers, so it also opened Basic credentials (lesson-585). The token stays Viewer-scoped. Prod ingress edit: the operator merges it.
 - Hermes's email adapter marks existing mail seen on the first connect of each process, so it cannot be the intake on an on-demand node. To measure: whether `send_message` can address an arbitrary email and needs constraining, and whether an approval can be answered by email.
 - Third-party mail is untrusted input to a model that can send mail: the tiers, the restricted toolset and the ledger are the controls. State the residual risk in the runbook.
-- Zoho: whether IMAP is blocked at the domain level, the region, and the `Authentication-Results` authserv-id from a real header. Operator checks these in the Admin Console. ADR-019 says to cancel Zoho and needs an amendment.
+- Zoho: whether IMAP is blocked at the domain level, the region, and the `Authentication-Results` authserv-id from a real header. The poll script fails closed: a missing header, a different authserv-id or a non-`pass` result drops the message without starting a turn. Operator checks these in the Admin Console. ADR-019 says to cancel Zoho and needs an amendment.
 - Spend: every authorized email starts an agent turn; the per-turn web cap and the quiet-period rule bound it.
 - The model must not be the only line of defense: authorization is enforced in the script, not in the prompt.
 

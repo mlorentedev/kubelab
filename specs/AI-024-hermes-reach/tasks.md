@@ -22,7 +22,7 @@ created: "2026-10-16"
 
 ### Stage 2: cluster state
 
-- [ ] [AC3] Authelia bypass for `grafana.kubelab.live` `^/api/.*` (PR #2369), operator merges
+- [ ] [AC3] Traefik route that skips Authelia for `grafana.kubelab.live` `/api/` only with a `Bearer glsa_` token (PR #2373), operator merges
 - [ ] [AC2] Hand the Grafana token to the gateway env; a gateway script reads alerts and Loki through the datasource API
 - [ ] [AC2] Test: an unreadable source is named in the answer, not skipped
 
@@ -40,7 +40,7 @@ created: "2026-10-16"
 ### Stage 5: the mailbox
 
 - [ ] Measure: `send_message` to an arbitrary address, and an approval answered by email
-- [ ] [AC6] Poll script: IMAP `UNSEEN`, persisted watermark, allowlist and `Authentication-Results` enforced in the script
+- [ ] [AC6] Poll script: IMAP `UNSEEN`, persisted watermark, allowlist and `Authentication-Results` enforced in the script, failing closed on a missing header, a foreign authserv-id or a non-`pass` result
 - [ ] [AC7] Test: mail that arrived while the gateway was down is read once at the next poll
 - [ ] [AC6] Three tiers; third-party mail goes to a job with `enabled_toolsets` empty
 - [ ] [AC8] Outbound mail over SMTP, logged in the ledger
