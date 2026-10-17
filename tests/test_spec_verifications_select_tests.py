@@ -51,7 +51,6 @@ pytestmark = pytest.mark.integration
 #: when it lands; remove them when the tests do (a stale entry fails below).
 UNWRITTEN = frozenset(
     {
-        "AI-024-hermes-reach-f2",
         "AI-024-hermes-reach-f4",
         "AI-024-hermes-reach-f5",
         "AI-024-hermes-reach-f6",
