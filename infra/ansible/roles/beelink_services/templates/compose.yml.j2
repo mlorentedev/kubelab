@@ -164,6 +164,9 @@ services:
     image: {{ act_runner_image }}
     container_name: {{ act_runner_name }}
     restart: {{ restart_policy }}
+    # Longer than runner.shutdown_timeout in act-runner-config.yaml, or Docker
+    # SIGKILLs the runner while it is still waiting for jobs (default is 10 s).
+    stop_grace_period: {{ act_runner_stop_grace_period }}
     depends_on:
       - gitea
     environment:
