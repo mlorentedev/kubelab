@@ -89,6 +89,10 @@ access_control:
       policy: one_factor
     - domain: 'traefik.kubelab.live'
       policy: one_factor
+    # #456: the operator reaches prod over its public IP, which the
+    # vpn/internal-only wildcard below would deny.
+    - domain: 'home.kubelab.live'
+      policy: one_factor
 
     # VPN users get one_factor for everything else
     - domain: '*.kubelab.live'
