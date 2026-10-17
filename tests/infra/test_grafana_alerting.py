@@ -309,6 +309,34 @@ class TestAcmeAlertRule:
         )
 
 
+#: Literal on purpose, like the titles around it.
+EXPECTED_REVIEWER_RULE_TITLE = "Forge reviewer failed to review a pull request"
+
+
+class TestReviewerFailureRule:
+    """The rule that makes a failed forge review visible (TOOL-093, #1957).
+
+    Both environments provision it from the shared base. Staging runs no PR-Agent,
+    so there the rule exists and stays quiet, which is what these tests pin.
+    """
+
+    def test_reviewer_rule_is_provisioned(self, grafana_api: ProvisioningGet, env: str) -> None:
+        titles = {r.get("title") for r in grafana_api("alert-rules")}
+        assert EXPECTED_REVIEWER_RULE_TITLE in titles, (
+            f"Grafana in {env} has no {EXPECTED_REVIEWER_RULE_TITLE!r} rule: a failed review is invisible. "
+            f"Found: {sorted(t for t in titles if t) or 'no rules at all'}."
+        )
+
+    def test_reviewer_rule_treats_no_data_as_healthy(self, grafana_api: ProvisioningGet, env: str) -> None:
+        rule = next((r for r in grafana_api("alert-rules") if r.get("title") == EXPECTED_REVIEWER_RULE_TITLE), None)
+        if rule is None:
+            pytest.skip(f"{EXPECTED_REVIEWER_RULE_TITLE!r} not provisioned in {env}: see the test above")
+        assert rule.get("noDataState") == "OK", (
+            f"{EXPECTED_REVIEWER_RULE_TITLE!r} in {env} has noDataState={rule.get('noDataState')!r}, "
+            "expected 'OK': no failure lines is the good state, and Loki returns it as no series."
+        )
+
+
 #: Titles of the two rules OBS-010 provisions. Literal on purpose (docs/lessons.md
 #: 2026-08-09 — a test must not read its expectation from the file it validates).
 EXPECTED_QUOTA_RULE_TITLES = {

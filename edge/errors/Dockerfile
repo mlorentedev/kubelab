@@ -6,7 +6,7 @@ ARG VERSION=dev
 ARG COMMIT_SHA=unknown
 
 LABEL org.opencontainers.image.title="kubelab-errors" \
-      org.opencontainers.image.description="Branded error and maintenance pages for KubeLab" \
+      org.opencontainers.image.description="Branded error pages for KubeLab" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.source="https://github.com/mlorentedev/kubelab"
 

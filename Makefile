@@ -1547,8 +1547,8 @@ sync-oidc-hashes:
 	@$(TOOLKIT) sync oidc --env $(ENV)
 
 .PHONY: vps-snapshot
-vps-snapshot: ## Snapshot the prod VPS via the Hetzner API (PREP-002); plan only unless APPLY=1, KEEP=N prunes
-	@$(TOOLKIT) infra vps snapshot --env prod $(if $(APPLY),--apply) $(if $(KEEP),--keep $(KEEP))
+vps-snapshot: ## Snapshot the prod VPS via the Hetzner API (PREP-002); plan only unless APPLY=1; prunes to 3 (KEEP=N, NO_PRUNE=1)
+	@$(TOOLKIT) infra vps snapshot --env prod $(if $(APPLY),--apply) $(if $(KEEP),--keep $(KEEP)) $(if $(NO_PRUNE),--no-prune)
 
 .PHONY: sync-vikunja
 sync-vikunja: ## Idempotently reconcile the declared Vikunja projects, team, shares and labels

@@ -138,6 +138,7 @@ spec:
       middlewares:
         - name: secure-headers
         - name: rate-limit
+        - name: error-pages
         - name: crowdsec-bouncer
       services:
         - name: vikunja

@@ -67,6 +67,8 @@ spec:
           namespace: kubelab
         - name: rate-limit
           namespace: kubelab
+        - name: error-pages
+          namespace: kubelab
         - name: authelia
           namespace: kubelab
       services:
