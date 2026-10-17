@@ -28,7 +28,9 @@ class FakeServer:
     def __call__(self, argv: list[str], **_: Any) -> tuple[int, str, str]:
         self.calls.append(argv)
         if "doctor" in argv:
-            out = "[E] schema mismatch\n" if self.broken.get("doctor") else "[I] all good\n"
+            out = "[1] Garbage collect LFS\nERROR\n[2] Check schema\n- [I] fine\nOK\n"
+            if self.broken.get("doctor"):
+                out += "[3] Check tables\n- [E] schema mismatch\nERROR\n"
             return 0, out, ""
         if "generate-access-token" in argv:
             return (1, "", "boom") if self.broken.get("mint") else (0, TOKEN + "\n", "")
@@ -80,3 +82,8 @@ def test_the_token_is_only_ever_sent_to_the_scratch_container(caplog: pytest.Log
 def test_a_failing_doctor_check_is_named_in_the_output(capsys: pytest.CaptureFixture[str]) -> None:
     _run(FakeServer(doctor=True))
     assert "schema mismatch" in capsys.readouterr().out
+
+
+def test_the_lfs_collection_error_the_deployed_version_also_has_is_not_a_failure() -> None:
+    """Measured on 1.25.5 with the same data: it errors there too, so it cannot be blamed on an upgrade."""
+    assert _run(FakeServer())

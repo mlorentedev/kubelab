@@ -18,6 +18,7 @@ never leaves it.
 from __future__ import annotations
 
 import json
+import re
 import secrets
 from collections.abc import Callable
 from typing import Any, Optional
@@ -68,10 +69,28 @@ def _mint_write_token(run: Run, name: str, admin_user: str) -> str:
     return token.strip() if rc == 0 else ""
 
 
+#: Doctor checks that fail the same way on the deployed 1.25.5 (measured 2026-10-17 by the baseline run of this
+#: drill), so a failure there says nothing about an upgrade. Each needs a reason; none may be added to quiet a new one.
+KNOWN_BASELINE_FAILURES = {"Garbage collect LFS": "errors on the deployed 1.25.5 against the same restored data"}
+
+
+def _check_of(lines: list[str], index: int) -> str:
+    """The doctor check a result line belongs to: the nearest `[N] Name` header above it."""
+    for line in reversed(lines[: index + 1]):
+        match = re.match(r"^\[\d+\]\s+(.*\S)\s*$", line)
+        if match:
+            return match.group(1)
+    return ""
+
+
 def _doctor(run: Run, name: str) -> bool:
     rc, out, _ = run(["docker", "exec", "-u", "git", name, "gitea", "doctor", "check", "--all"])
     lines = out.splitlines()
-    bad = [i for i, line in enumerate(lines) if "[E]" in line or line.strip() == "ERROR"]
+    bad = [
+        i
+        for i, line in enumerate(lines)
+        if ("[E]" in line or line.strip() == "ERROR") and _check_of(lines, i) not in KNOWN_BASELINE_FAILURES
+    ]
     errors = [lines[i].strip()[:160] for i in bad]
     if rc != 0 or errors:
         logger.error(f"FAIL doctor: `gitea doctor check --all` exit {rc}, {len(errors)} error line(s)")
