@@ -1,8 +1,7 @@
 ---
-id: "lesson-590-a-ruamel-round-trip-is-lossless-only-for-files-written-in-one-sequence-style"
+id: lesson-590-a-ruamel-round-trip-is-lossless-only-for-files-written-in-one-sequence-style
 type: lesson
 status: active
-title: "A ruamel round-trip is lossless only for files written in one sequence style"
 created: "2026-10-17"
 owner: manu
 category: toolkit-tooling

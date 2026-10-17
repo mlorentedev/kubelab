@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from toolkit.features import promotion, registry
+from toolkit.features import platform_manifest, promotion, registry
 
 _VALUES = """\
 # top-of-file comment must survive a round-trip edit
@@ -169,7 +169,7 @@ class TestPromoteErrors:
     def _platform_manifest(self, monkeypatch: pytest.MonkeyPatch) -> MagicMock:
         # Never let a test reach the real generator: its default paths are the repo's own files.
         self.manifest_sync = MagicMock(return_value=0)
-        monkeypatch.setattr(promotion.platform_manifest, "sync", self.manifest_sync)
+        monkeypatch.setattr(platform_manifest, "sync", self.manifest_sync)
         return self.manifest_sync
 
     def _write_common(self, root: Path, body: str = _COMMON) -> Path:

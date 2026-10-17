@@ -25,7 +25,6 @@ from ruamel.yaml import YAML
 from toolkit.config.constants import COMPONENTS
 from toolkit.config.settings import settings
 from toolkit.core.logging import logger
-from toolkit.features import platform_manifest
 from toolkit.features.configuration import ConfigurationManager
 from toolkit.features.generator_k8s import K8sGenerator
 from toolkit.features.registry import tag_exists
@@ -141,6 +140,10 @@ def _promote_errors(version: str) -> None:
 
     # Derive the K3s tag from the SSOT so the drift gate stays authoritative, and
     # regenerate platform.json, which records common.yaml's blob hash (#2430).
+    # Imported here: platform_manifest resolves settings at import, and the CLI
+    # must not build a configuration just to load (test_toolkit_import_reads_no_config).
+    from toolkit.features import platform_manifest
+
     root = settings.project_root
     if sync_k8s_images.sync(common_path, root / "infra" / "k8s" / "base" / "kustomization.yaml") != 0:
         raise RuntimeError(f"errors set to {version}, but the kustomization failed to re-sync")
