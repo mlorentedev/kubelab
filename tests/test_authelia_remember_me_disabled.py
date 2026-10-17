@@ -8,7 +8,7 @@ group demotion, app lifetimes bounded by the IdP). The owner chose to disable it
 
 The check reads what each environment runs: the EMITTED authelia-config for the K8s
 overlays (prod's uses `behavior: replace` and inherits nothing from the base file),
-and the value the dev template renders.
+and the dev configuration rendered from the template with the loader's real values.
 """
 
 from __future__ import annotations
@@ -19,6 +19,10 @@ from pathlib import Path
 
 import pytest
 import yaml
+from jinja2 import Environment, FileSystemLoader, Undefined
+
+from toolkit.config.constants import AUTHELIA_CONFIG
+from toolkit.features.configuration import ConfigurationManager
 
 ROOT = Path(__file__).resolve().parents[1]
 DISABLED = -1
@@ -40,6 +44,27 @@ def test_the_emitted_config_disables_remember_me(overlay: str) -> None:
     assert session["remember_me"] == DISABLED, f"{overlay}: remember_me is {session['remember_me']!r}"
 
 
-def test_the_dev_template_value_disables_remember_me() -> None:
-    common = yaml.safe_load((ROOT / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
-    assert common["apps"]["services"]["security"]["authelia"]["session_remember_me"] == DISABLED
+class _SopsPlaceholder(Undefined):
+    """Stands in for values only SOPS holds; the setting under test is not one of them."""
+
+    def __str__(self) -> str:
+        return "unset-secret"
+
+
+def test_the_rendered_dev_config_disables_remember_me(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Renders the dev template from the loader's values, so a broken mapping fails here."""
+    manager = ConfigurationManager("dev", ROOT)
+    monkeypatch.setattr(manager, "_decrypt_sops", lambda _path: {})
+    context = {
+        **manager.get_env_vars(),
+        "apps": [],
+        "authelia_users": [],
+        "trusted_cidrs": [],
+        "oidc_clients": [],
+        **{name: getattr(AUTHELIA_CONFIG, name) for name in dir(AUTHELIA_CONFIG) if name.startswith("ARGON2_")},
+    }
+    templates = Environment(
+        loader=FileSystemLoader(ROOT / "infra/config/authelia/templates"), undefined=_SopsPlaceholder
+    )
+    rendered = yaml.safe_load(templates.get_template("configuration.yml.j2").render(context))
+    assert rendered["session"]["remember_me"] == DISABLED, f"dev: remember_me is {rendered['session']['remember_me']!r}"
