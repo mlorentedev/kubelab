@@ -245,15 +245,17 @@ worktree-init:
 	@# keeps a venv whose scripts point at the old directory (TOOL-067, #1707). Set it
 	@# aside rather than delete it: if the install fails the previous venv comes back.
 	@# Only the script's exit 1 means "moved"; a crash or a missing python3 (exit 2, 127)
-	@# must not condemn a healthy venv.
+	@# must not condemn a healthy venv. A signal during the install restores it too: an
+	@# `else` branch is never reached by a shell that was killed.
 	@venv=$$($(POETRY) env info --path 2>/dev/null || true); aside=""; moved=0; \
 	if [ -n "$$venv" ] && [ -d "$$venv" ]; then python3 -I scripts/venv_relocated.py "$$venv" || moved=$$?; fi; \
 	if [ "$$moved" = 1 ]; then \
 		aside="$$venv.relocated"; rm -rf "$$aside"; mv "$$venv" "$$aside"; \
 		echo "venv moved aside to $$aside; rebuilding"; \
+		trap 'rm -rf "$$venv"; mv "$$aside" "$$venv"; echo "interrupted; previous venv restored"; exit 143' INT TERM; \
 	fi; \
 	if PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring $(POETRY) install --no-interaction; then \
-		[ -z "$$aside" ] || rm -rf "$$aside"; \
+		trap - INT TERM; [ -z "$$aside" ] || rm -rf "$$aside"; \
 	else \
 		[ -z "$$aside" ] || { rm -rf "$$venv"; mv "$$aside" "$$venv"; echo "install failed; previous venv restored"; }; \
 		exit 1; \

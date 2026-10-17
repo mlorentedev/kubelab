@@ -128,7 +128,8 @@ class TestRelocatedVenv:
     def test_worktree_init_keeps_a_healthy_venv_when_the_detector_cannot_run(self, tmp_path: pathlib.Path) -> None:
         venv_dir = _venv(tmp_path, shebang_dir=tmp_path / "old-name" / ".venv")
         script = tmp_path / "python3"
-        script.write_text("#!/bin/sh\nexit 2\n", encoding="utf-8")
+        asked = tmp_path / "detector-asked"
+        script.write_text(f'#!/bin/sh\necho "$*" >> "{asked}"\nexit 2\n', encoding="utf-8")
         script.chmod(script.stat().st_mode | stat.S_IEXEC)
         fake, _ = _fake_poetry(tmp_path, lock_is_fresh=True, venv=venv_dir)
         done = subprocess.run(
@@ -140,7 +141,30 @@ class TestRelocatedVenv:
             env={**os.environ, "PATH": f"{tmp_path}{os.pathsep}{os.environ['PATH']}"},
         )
         assert done.returncode == 0, done.stderr
+        assert str(venv_dir) in asked.read_text(encoding="utf-8"), "the detector must actually have been asked"
         assert (venv_dir / "bin" / "pytest").exists(), "exit 2 is a failure to ask, not a verdict"
+
+    def test_a_signal_during_the_install_restores_the_previous_venv(self, tmp_path: pathlib.Path) -> None:
+        """An `else` branch is never reached by a shell that a signal killed."""
+        venv_dir = _venv(tmp_path, shebang_dir=tmp_path / "old-name" / ".venv")
+        fake = tmp_path / "poetry"
+        fake.write_text(
+            '#!/bin/sh\ncase "$*" in\n"check --lock"*) exit 0;;\n'
+            f'"env info"*) echo "{venv_dir}"; exit 0;;\n'
+            '"install"*) kill -TERM $PPID; sleep 2; exit 0;;\nesac\nexit 0\n',
+            encoding="utf-8",
+        )
+        fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+        done = subprocess.run(
+            ["make", "--no-print-directory", "worktree-init", f"POETRY={fake}"],
+            cwd=REPO,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert done.returncode != 0
+        assert (venv_dir / "bin" / "pytest").exists(), "an interrupted rebuild must not strand the worktree"
+        assert not (tmp_path / ".venv.relocated").exists()
 
     def test_a_missing_venv_is_not_stale(self, tmp_path: pathlib.Path) -> None:
         assert _detector().relocated_shebang(tmp_path / "nothing") is None
