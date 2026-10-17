@@ -36,4 +36,4 @@ password form. And check that the switch you flip does not also take away the
 non-browser path break-glass uses: in Gitea the web form and API basic auth
 are different keys.
 
-**Tags**: `#gitea` `#sso` `#pr-2438`
+**Tags**: `#gitea` `#sso` `#pr-2439`
