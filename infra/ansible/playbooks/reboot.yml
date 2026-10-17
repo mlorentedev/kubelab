@@ -1,0 +1,79 @@
+---
+# =============================================================================
+# Reboot nodes whose installed kernel/libraries are not the running ones
+#
+# `make maintain` patches and REPORTS a pending reboot; it never reboots (see
+# node_maintenance/tasks/main.yml). This is the deliberate, operator-run half:
+# it reboots only hosts where /var/run/reboot-required exists, one at a time,
+# waits for each to come back, and fails the run if the flag survived the boot.
+# A re-run on a fleet that needs nothing reports changed=0.
+#
+# The VPS carries Headscale (ADR-015): rebooting it cuts the tailnet for every
+# node and session until it is back. It is refused unless the run says so with
+# -e reboot_allow_vps=true, the same opt-in shape as rpi_boot_allow_reboot.
+#
+# Usage:
+#   make reboot NODE=ace1 ENV=staging
+#   make reboot NODE=vps ENV=prod EXTRA='reboot_allow_vps=true'
+#   make reboot NODE=ace2 ENV=prod EXTRA='reboot_force=true'   # no flag needed
+# =============================================================================
+
+- name: Reboot nodes with a pending reboot
+  hosts: all
+  become: true
+  gather_facts: false
+  # One host at a time: a fleet-wide reboot would take the tailnet, the hub and
+  # prod down together, with nothing left to observe them coming back.
+  serial: 1
+  # Stop at the first host that does not come back healthy, before the next
+  # one is touched.
+  any_errors_fatal: true
+
+  vars:
+    reboot_force: false
+    reboot_allow_vps: false
+    # Generous: K3s nodes and the Spot hub take minutes to settle after boot.
+    reboot_timeout_seconds: 900
+
+  tasks:
+    - name: Skip hosts that cannot run Ansible modules (legacy_python)
+      meta: end_host
+      when: legacy_python | default(false) | bool
+
+    - name: Check whether a reboot is pending
+      stat:
+        path: /var/run/reboot-required
+      register: _reboot_required
+
+    - name: Leave hosts with nothing pending alone
+      meta: end_host
+      when:
+        - not _reboot_required.stat.exists
+        - not (reboot_force | bool)
+
+    - name: Refuse the VPS unless the run opted in
+      fail:
+        msg: >-
+          {{ inventory_hostname }} carries Headscale: a reboot cuts the tailnet
+          for every node until it is back. Re-run with
+          EXTRA='reboot_allow_vps=true' once the other nodes are done.
+      when:
+        - "'vps' in group_names"
+        - not (reboot_allow_vps | bool)
+
+    - name: Reboot
+      reboot:
+        reboot_timeout: "{{ reboot_timeout_seconds }}"
+        msg: "kubelab: reboot requested by make reboot"
+
+    - name: Re-check the pending flag after the boot
+      stat:
+        path: /var/run/reboot-required
+      register: _reboot_required_after
+
+    - name: Fail if the reboot did not clear it
+      assert:
+        that: not _reboot_required_after.stat.exists
+        fail_msg: >-
+          {{ inventory_hostname }} came back still flagged reboot-required:
+          the boot did not load what the flag asked for.
