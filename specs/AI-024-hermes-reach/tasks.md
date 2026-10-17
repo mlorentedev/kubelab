@@ -33,14 +33,14 @@ created: "2026-10-16"
 ### Stage 4: the 8-hour report
 
 - [ ] [AC5] Signal script with a persisted watermark, a deterministic signal list and the Loki redactor in front
-- [ ] [AC5] Job at 06:00, 14:00 and 22:00 Denver in UTC, `wakeAgent: false` when no signal changed
+- [ ] [AC5] Job at 06:00, 14:00 and 22:00 Denver (timezone-aware cron if supported, else fixed UTC), `wakeAgent: false` when no signal changed
 - [ ] [AC5] Fixed template and one proposal file per suggested action in the zone
 - [ ] [AC8] Action ledger written by the actions and listed by the report
 
 ### Stage 5: the mailbox
 
 - [ ] Measure: `send_message` to an arbitrary address, and an approval answered by email
-- [ ] [AC6] Poll script: IMAP `UNSEEN`, persisted watermark, allowlist and `Authentication-Results` enforced in the script, failing closed on a missing header, a foreign authserv-id or a non-`pass` result
+- [ ] [AC6] Poll script: IMAP `UNSEEN`, persisted watermark, allowlist and `Authentication-Results` enforced in the script, failing closed on a missing header, a foreign authserv-id or a result that is not a DMARC pass aligned with `From`
 - [ ] [AC7] Test: mail that arrived while the gateway was down is read once at the next poll
 - [ ] [AC6] Three tiers; third-party mail goes to a job with `enabled_toolsets` empty
 - [ ] [AC8] Outbound mail over SMTP, logged in the ledger
