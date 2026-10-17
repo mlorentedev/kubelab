@@ -9,7 +9,7 @@
   {
     "id": "OPS-030-edge-error-pages-f2",
     "behavior": "AC2: every IngressRoute carries error-pages or is a declared exception with a reason",
-    "verification": "poetry run pytest tests/test_ingressroute_error_page_coverage.py --no-cov -q",
+    "verification": "poetry run pytest tests/test_error_pages_coverage.py --no-cov -q",
     "state": "pending",
     "evidence": ""
   },
@@ -30,7 +30,7 @@
   {
     "id": "OPS-030-edge-error-pages-f5",
     "behavior": "AC6: the prod routes without error-pages are fixed or declared exceptions",
-    "verification": "poetry run pytest tests/test_ingressroute_error_page_coverage.py --no-cov -q",
+    "verification": "poetry run pytest tests/test_error_pages_coverage.py --no-cov -q",
     "state": "pending",
     "evidence": ""
   }

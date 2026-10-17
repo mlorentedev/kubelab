@@ -1,7 +1,7 @@
 ---
 id: adr-072-edge-error-pages-brand-what-the-edge-generates
 type: adr
-status: proposed
+status: accepted
 created: "2026-10-16"
 owner: manu
 ---
@@ -10,7 +10,7 @@ owner: manu
 
 ## Status
 
-Proposed — 2026-10-16. Amends the scope of the `error-pages intercepts 502/503/504 ONLY` rule in `CLAUDE.md`; it does not reverse it. Tracks #1753 (OPS-030, UX-6). Promotes to `accepted` when the first implementation PR merges.
+Accepted — 2026-10-17 (first implementation, #2360, merged). Proposed 2026-10-16. Amends the scope of the `error-pages intercepts 502/503/504 ONLY` rule in `CLAUDE.md`; it does not reverse it. Tracks #1753 (OPS-030, UX-6).
 
 ## Context
 

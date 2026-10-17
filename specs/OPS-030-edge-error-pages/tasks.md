@@ -21,15 +21,15 @@ created: "2026-10-16"
 
 > Three PRs, in this order. PR 1 is tests and deletions, PR 2 the nginx/image change (`fix:` so release-please builds it), PR 3 the owner-decided prod coverage.
 
-- [ ] [AC6] Owner decides, per prod route without `error-pages` (`argocd`, `authelia`, `loki`, `vikunja`, `n8n`): add the middleware or declare the exception. Record it on #1753
+- [x] [AC6] Owner decides, per prod route without `error-pages` (`argocd`, `authelia`, `loki`, `vikunja`, `n8n`): add the middleware or declare the exception. Record it on #1753
 - [x] [P] [AC1] Failing test `tests/test_error_pages_reachable.py`: every `errors/*.html` is targeted by a Middleware status range, an nginx `error_page` or the catch-all. Expected: FAIL on 401, 408, 429, 500, maintenance
 - [x] [AC3] Delete `401.html`, `408.html`, `429.html`, `500.html`, `maintenance.html` and their `error_page` lines; update `tests/test_error_pages_markup.py` (page count, orphan scan)
-- [ ] [P] [AC2] Failing test `tests/test_ingressroute_error_page_coverage.py`: render both overlays, every IngressRoute carries `error-pages` or is in `edge.errors.coverage.exceptions`. Expected: FAIL on the prod gaps
-- [ ] [AC2] Declare `edge.errors.coverage.exceptions` in `common.yaml` (`headscale`, `catch-all`, `kubelab-redirect`, `brand-assets`, webhook routes, each with a reason); the test reads it with `yaml.safe_load`
+- [x] [P] [AC2] Failing test `tests/test_error_pages_coverage.py`: render both overlays, every IngressRoute carries `error-pages` or is in `edge.errors.coverage.exceptions`. Expected: FAIL on the prod gaps
+- [x] [AC2] Declare `edge.errors.coverage.exceptions` in `common.yaml` (`headscale`, `catch-all`, `kubelab-redirect`, `brand-assets`, webhook routes, each with a reason); the test reads it with `yaml.safe_load`
 - [x] [AC5] Failing test: built image answers JSON for `Accept: application/json` on `/errors/502.html`, `/errors/503.html`, `/errors/504.html` and on an unknown path (status unchanged), HTML otherwise
 - [x] [AC4][AC5] `edge/errors/nginx.conf`: `map $http_accept` negotiation, `no-store`, `X-Robots-Tag`, `Retry-After` on 503/504, `access_log` on `/errors/`; JSON bodies next to the HTML pages
-- [ ] [AC6] Apply the owner's decision: add the middleware or the exception; the coverage test goes green
-- [ ] Update `CLAUDE.md` / ADR-072 status to `accepted` when PR 1 merges
+- [x] [AC6] Apply the owner's decision: add the middleware or the exception; the coverage test goes green
+- [x] Update `CLAUDE.md` / ADR-072 status to `accepted` when PR 1 merges
 
 ## Closing
 
