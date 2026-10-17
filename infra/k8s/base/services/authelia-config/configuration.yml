@@ -46,8 +46,10 @@ totp:
 # ---- WebAuthn ----
 webauthn:
   attestation_conveyance_preference: indirect
-  user_verification: preferred
   timeout: 60s
+  # Was `webauthn.user_verification`, deprecated in 4.39.0 and not auto-mapped (#2377).
+  selection_criteria:
+    user_verification: preferred
 
 # ---- Access Control ----
 access_control:
