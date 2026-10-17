@@ -29,7 +29,7 @@
   },
   {
     "id": "AI-024-hermes-reach-f5",
-    "behavior": "The 8-hour report has the fixed sections and is silent when no signal changed",
+    "behavior": "The 8-hour report has the fixed sections and is silent when neither a signal nor the action ledger changed",
     "verification": "poetry run pytest tests/test_hermes_report.py -q",
     "state": "pending",
     "evidence": ""
