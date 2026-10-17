@@ -30,7 +30,7 @@ Migrations run in order at start, so skipping minors is supported; the rehearsal
 
 1. Pin the candidate on a branch (`image: gitea/gitea:<version>`), commit and push it. The drill refuses a
    dirty tree and a commit the host has not got.
-2. Run the baseline first, on the deployed version, with the same probes (lesson-585). Pin the old image on a
+2. Run the baseline first, on the deployed version, with the same probes (lesson-586). Pin the old image on a
    throwaway branch and run the drill; record which probes fail there.
 3. Run `make backup-drill-gitea ENV=prod HOST=ace2` on the candidate. It restores the newest R2 snapshot into
    a scratch directory on ace2, starts the pinned image on it **with no network**, and passes only if:

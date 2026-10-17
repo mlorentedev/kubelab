@@ -1,5 +1,5 @@
 ---
-id: lesson-585-an-upgrade-probe-needs-the-same-run-on-the-deployed-version
+id: lesson-586-an-upgrade-probe-needs-the-same-run-on-the-deployed-version
 type: lesson
 status: active
 created: "2026-10-17"

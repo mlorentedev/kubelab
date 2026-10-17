@@ -4,7 +4,7 @@
 
 | # | Lesson | Date |
 |---|---|---|
-| 585 | [A failing check on the new version proves nothing until the old version fails it too](lesson-585-an-upgrade-probe-needs-the-same-run-on-the-deployed-version.md) | 2026-10-17 |
+| 586 | [A failing check on the new version proves nothing until the old version fails it too](lesson-586-an-upgrade-probe-needs-the-same-run-on-the-deployed-version.md) | 2026-10-17 |
 | 566 | [Terraform does not keep a state's lineage across a migration](lesson-566-terraform-does-not-keep-a-states-lineage-across-a-migration.md) | 2026-10-13 |
 | 564 | [A history keyed by serial holds only if a restore moves the serial forward](lesson-564-a-history-keyed-by-serial-holds-only-if-a-restore-moves-the-serial-forward.md) | 2026-10-13 |
 | 539 | [A Secret derived from a config declaration changes when `apply-secrets` re-renders it, not when the declaration merges](lesson-539-a-secret-derived-from-a-declaration-changes-only-when-it-is-re-rendered-not-when-the-declaration-merges.md) | 2026-10-08 |
