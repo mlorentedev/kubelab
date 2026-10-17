@@ -1,9 +1,10 @@
 # Traefik, TLS and the request path
 
-27 lessons, newest first. Back to [all categories](../_index.md).
+28 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 584 | [A page is reachable only if something targets it, and a test must say what](lesson-584-a-page-is-reachable-only-if-something-targets-it-and-a-test-must-say-what.md) | 2026-10-16 |
 | 406 | [An explicit Traefik priority can rank below one that is absent](lesson-406-an-explicit-traefik-priority-can-rank-below-one-that-is-absent.md) | 2026-08-27 |
 | 304 | [`tls: {}` is not "no TLS config" — an empty map in a strategic-merge patch changes nothing](lesson-304-tls-is-not-no-tls-config-an-empty-map-in-a-st.md) | 2026-08-09 |
 | 238 | [2026-03-29: Generated IngressRoutes were missing secure-headers middleware](lesson-238-2026-03-29-generated-ingressroutes-were-missi.md) | 2026-05-01 |

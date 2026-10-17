@@ -1052,6 +1052,23 @@ SECRET_CATALOG: list[SecretSpec] = [
         ),
         envs=("prod",),
     ),
+    # Spec AI-012 AC8 (#2080): the alert and log triage reads Grafana, and through its
+    # datasource API Loki, with a service account of the Viewer role. Read-only is
+    # the property that matters, so it is proven by a refused write, not by the name.
+    SecretSpec(
+        key_path="apps.services.ai.hermes_kubelab.grafana_token",
+        description="Grafana service-account token (Viewer) the hermes-kubelab triage reads alerts and logs with",
+        kind=SecretKind.EXTERNAL,
+        format_hint="glsa_…",
+        value_pattern=r"glsa_[A-Za-z0-9_]+",
+        expiry=Expiry.NEVER,
+        services=("hermes_kubelab",),
+        rotate_note=(
+            "Grafana > Administration > Users and access > Service accounts: add a token to the same "
+            "account, `toolkit secrets set` it, re-provision ace2, then delete the old token."
+        ),
+        envs=("prod",),
+    ),
     # =========================================================================
     # Argo CD (hub management plane — common.enc.yaml)  [TOOL-023 / audit D64]
     # =========================================================================

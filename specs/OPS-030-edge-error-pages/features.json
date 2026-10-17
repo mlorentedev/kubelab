@@ -1,0 +1,37 @@
+[
+  {
+    "id": "OPS-030-edge-error-pages-f1",
+    "behavior": "AC1: every errors/*.html is targeted by a Middleware range, an nginx error_page for a status nginx emits, or is a declared source page",
+    "verification": "poetry run pytest tests/test_error_pages_reachable.py --no-cov -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "OPS-030-edge-error-pages-f2",
+    "behavior": "AC2: every IngressRoute carries error-pages or is a declared exception with a reason",
+    "verification": "poetry run pytest tests/test_error_pages_coverage.py --no-cov -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "OPS-030-edge-error-pages-f3",
+    "behavior": "AC3: the five unreachable pages are gone and 403.html is kept as the ban-page source",
+    "verification": "poetry run pytest tests/test_error_pages_markup.py tests/test_error_pages_reachable.py --no-cov -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "OPS-030-edge-error-pages-f4",
+    "behavior": "AC4+AC5: the errors image sends no-store, noindex, Retry-After and negotiates JSON by Accept",
+    "verification": "poetry run pytest tests/test_error_pages_nginx.py --no-cov -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "OPS-030-edge-error-pages-f5",
+    "behavior": "AC6: the prod routes without error-pages are fixed or declared exceptions",
+    "verification": "poetry run pytest tests/test_error_pages_coverage.py --no-cov -q",
+    "state": "pending",
+    "evidence": ""
+  }
+]

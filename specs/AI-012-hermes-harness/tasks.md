@@ -75,7 +75,7 @@ PR 4 was split: with both halves it was about 650 non-test lines against the 300
 
 ### PR 8: triage (AC8, needs R3; closes #2080)
 
-- [ ] [AC8] Alert channels in `common.yaml`. A Grafana read-only service account token goes in `SECRET_CATALOG`, plus the `tag:hermes` grant to Grafana.
+- [ ] [AC8] Alert channels in `common.yaml` (done, 8a). A Grafana read-only service account token goes in `SECRET_CATALOG` (done, 8a), plus the `tag:hermes` grant to Grafana (#2339, open).
 - [ ] [AC8] Hourly triage job, plus catch-up at power-on. Loki output passes through the SEC-021 redactor.
 - [ ] [AC8] Live: #2080's four criteria.
 
