@@ -1,8 +1,8 @@
 # Run 20261017-kubelab-auth
 
-run 20261017-kubelab-auth ended queue-empty: all 8 items done (max_items 8), none parked. 9 PRs merged, 0 unmerged. Armed 07:38Z, closed ~13:40Z.
+run 20261017-kubelab-auth ended queue-empty: all 8 items done (max_items 8), none parked. 8 PRs merged, 0 unmerged. Armed 07:38Z, closed ~13:40Z.
 
-What waits on a human: the owner-only steps listed below. Irreversible actions taken: nine merges (seven with prod effect, all verified live) and one prod session flush.
+What waits on a human: the owner-only steps listed below. Irreversible actions taken: eight merges (six with prod effect, all verified live) and one prod session flush.
 
 ## Waiting on you, irreversible first
 
@@ -57,6 +57,8 @@ None. #2411 conflicted twice on the generated `platform.json` as peers landed (#
 ## Notes
 
 - Out of this run by `max_items: 8`: #1777, #1355, #1356 (epic #2390 continues).
-- Debt observed, not mine: PR-Agent run `32217810608` (`docs/attestation-gate-docs`, created 2026-08-19) still shows `queued`. It does not block the FIFO; reviews ran past it all day.
+- **#2420**: PR-Agent run `32217810608` (`docs/attestation-gate-docs`, created 2026-08-19) still shows `queued`. It does not block the FIFO; it was ticketed rather than cancelled, because it is shared CI state.
+- Staging and prod Argo CD Applications both track `master` and were `Synced` at close (read-only check on the hub). No branch repoint was left behind.
+- The repo-wide `dotf pr triage-queue` lists #2418, #2414, #2397 and #2396 as awaiting disposition. None is this run's: #2397 is yours, the others belong to peers.
 - The session was paused ~10:15–12:40Z by a usage limit. No work was lost: nothing was in flight.
 - Leftover worktrees: `dotf worktree done` refuses some of them over ignored files (`poetry.lock`). Removing those is your call, as in earlier runs.
