@@ -23,8 +23,10 @@ created: "2026-10-16"
 ### Stage 2: cluster state
 
 - [ ] [AC3] Traefik route that skips Authelia for `grafana.kubelab.live` `/api/` only with a `Bearer glsa_` token (PR #2373), operator merges
-- [ ] [AC2] Hand the Grafana token to the gateway env; a gateway script reads alerts and Loki through the datasource API
-- [ ] [AC2] Test: an unreadable source is named in the answer, not skipped
+- [ ] [AC2] PR 2a (agent merges): gateway script with four fixed queries (firing alerts, errors per app, pod restarts, backup age per node), app from a closed list, window with a maximum, Loki redactor in front
+- [ ] [AC2] PR 2a: test that an unreadable source is named with its reason in the output, never skipped, and that nothing is retried in a loop
+- [ ] [AC2] PR 2b (operator merges): drop `hermes_kubelab.grafana_token` from the catalog, feed the gateway env from `observability.grafana.alerts_ro_token`, `agent_stack` task, rotation note says re-provision ace2
+- [ ] [AC2] After 2b merges: provision ace2 from a master-based tree and prove the four queries live, including a refused write with the token
 
 ### Stage 3: changes by pull request
 
