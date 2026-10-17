@@ -708,6 +708,37 @@ edge:
     version: "1.2.0"
     port: 8080
     health_path: /health
+    # Routes that deliberately do NOT carry the `error-pages` middleware (ADR-072).
+    # The middleware replaces an upstream 502-504 with a branded HTML page, which is wrong
+    # for a client that is not a person. `tests/test_error_pages_coverage.py` fails on any
+    # IngressRoute rule missing the middleware and not listed here, and on a stale entry.
+    # `route` is the IngressRoute name; `match`, when set, limits the entry to the rule
+    # whose Traefik match contains that text.
+    coverage:
+      exceptions:
+        - route: argocd
+          reason: "CLI and gRPC-web clients; an HTML body breaks them"
+        - route: loki
+          reason: "Machine clients only (Grafana, Vector); internal in prod"
+        - route: headscale
+          reason: "Tailscale control protocol (Noise); a branded page is not a valid response"
+        - route: traefik-dashboard
+          reason: "Backed by api@internal, which Traefik itself serves and never answers 502-504"
+        - route: pr-agent
+          match: gitea_webhooks
+          reason: "Forge webhook receiver; the sender reads status codes, not pages"
+        - route: n8n
+          match: /webhook/
+          reason: "Webhook receivers called by machines (NOTIFY-001); n8n answers its own JSON"
+        - route: open-webui
+          match: /api/v1/auths/signin
+          reason: "Denied path (deny-all); the edge answers 403, which this middleware never touches"
+        - route: catch-all
+          reason: "Is the error page route: it serves the 404 itself, there is nothing upstream to intercept"
+        - route: brand-assets
+          reason: "Static assets fetched by other pages; an HTML body in place of an image or stylesheet is worse than an error"
+        - route: kubelab-redirect
+          reason: "Redirect-only route; it has no upstream"
     resources:
       cpu_limit: "0.25"
       memory_limit: 128M
