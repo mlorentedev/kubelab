@@ -82,6 +82,14 @@ access_control:
     - domain: 'gitea.kubelab.live'
       policy: bypass
 
+    # Grafana's HTTP API authenticates its own callers with a service-account token
+    # (AI-024: hermes-kubelab reads alerts and dashboards). The ForwardAuth perimeter
+    # cannot carry a bearer token, so the API path skips it; the UI below keeps it.
+    - domain: 'grafana.kubelab.live'
+      policy: bypass
+      resources:
+        - '^/api/.*$'
+
     # PROTECTED services (one_factor via Authelia forward-auth)
     - domain: 'n8n.kubelab.live'
       policy: one_factor

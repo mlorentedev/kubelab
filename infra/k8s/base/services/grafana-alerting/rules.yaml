@@ -1,4 +1,5 @@
-# Grafana alerting — the ACME failure rule (OBS-007 phase 2).
+# Grafana alerting — the ACME failure rule (OBS-007 phase 2) and the forge
+# reviewer failure rule (TOOL-093).
 #
 # Runs in both environments from the shared base; the root notification policy
 # decides which Apprise tier it reaches (prod pages, staging archives).
@@ -101,6 +102,91 @@ groups:
           - refId: C
             relativeTimeRange:
               from: 600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+              datasource:
+                type: __expr__
+                uid: __expr__
+
+  - orgId: 1
+    name: forge-review
+    folder: kubelab
+    # A failed review is logged once per attempt. A 15-minute window sampled every
+    # 5 minutes shows each failure to three evaluations, so a missed scrape cannot
+    # hide one, and the instance resolves by itself once the window passes.
+    interval: 5m
+    rules:
+      - uid: tool093-reviewer-failed
+        title: Forge reviewer failed to review a pull request
+        condition: C
+        for: 0s
+        # No series is the healthy state: `sum by` over lines that do not exist is
+        # an empty vector, not zero. Mapping NoData to Alerting would page forever
+        # in staging, where PR-Agent does not run, and in prod between failures.
+        # A reviewer that is down entirely is a different fault, caught by the
+        # review-attestation gate and not by this rule.
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: >-
+            PR-Agent logged `Failed to review PR` for {{ $labels.pr }}: every model
+            failed and nothing was published on the pull request, so it will wait
+            for a review that never comes. Push a commit to retry (a `/review`
+            comment is ignored, #1963). If it repeats, read the model errors with
+            `toolkit obs logs --env prod --service pr-agent --since 1h`.
+          runbook_url: >-
+            https://github.com/mlorentedev/kubelab/blob/master/docs/runbooks/runbook-notifications-and-alerting.md#10-forge-reviewer-failure-tool-093
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: loki
+            model:
+              refId: A
+              datasource:
+                type: loki
+                uid: loki
+              editorMode: code
+              queryType: range
+              # Measured on prod Loki 2026-10-16: PR-Agent writes JSON lines to
+              # stdout and the failure is `record.extra.pr_url` plus the text
+              # `Failed to review PR: Failed to generate prediction with any model
+              # of [...]`. Grouping by PR keeps two failures on two PRs as two
+              # alerts. The `pr` label is the URL the reviewer was working on.
+              expr: >-
+                sum by (pr) (
+                  count_over_time(
+                    {container="pr-agent"}
+                      |= "Failed to review PR"
+                      | json pr="record.extra.pr_url"
+                    [15m]
+                  )
+                )
+          - refId: B
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              reducer: last
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+          - refId: C
+            relativeTimeRange:
+              from: 900
               to: 0
             datasourceUid: __expr__
             model:
