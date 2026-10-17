@@ -11,7 +11,8 @@ Authelia 4.39 has no RP-initiated or back-channel logout, so two things are ours
 
 The bound Authelia enforces is the `session` block of each overlay's EMITTED
 authelia-config, so that is what this reads. Nothing in K8s reads the common.yaml
-`session_*` values (the dev template does), so they are held to the same numbers.
+`session_*` values (the dev Authelia template does), so the dev Authelia is held to
+the same numbers. The dev Compose Grafana carries no bound yet: #2415.
 """
 
 from __future__ import annotations
@@ -70,7 +71,8 @@ def test_grafana_signs_out_through_its_own_authelia(overlay: str) -> None:
     assert back.netloc == urlsplit(grafana["GF_SERVER_ROOT_URL"]).netloc
 
 
-def test_the_dev_values_carry_the_same_bound() -> None:
+def test_the_dev_authelia_session_matches_the_overlays() -> None:
+    """Authelia against Authelia: S1's bound is one number in every environment."""
     values = yaml.safe_load((ROOT / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
     authelia = values["apps"]["services"]["security"]["authelia"]
     for overlay in OVERLAYS:
