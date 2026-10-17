@@ -1,8 +1,8 @@
 # Run 20261017-kubelab-auth
 
-run 20261017-kubelab-auth ended queue-empty: all 8 items done (max_items 8), none parked. 8 PRs merged; #2411 was still open when this report was written (see "Done but unmerged"). Armed 07:38Z, closed ~13:30Z.
+run 20261017-kubelab-auth ended queue-empty: all 8 items done (max_items 8), none parked. 9 PRs merged, 0 unmerged. Armed 07:38Z, closed ~13:40Z.
 
-What waits on a human: the owner-only steps listed below. Irreversible actions taken: seven prod merges, all verified live, and one prod session flush.
+What waits on a human: the owner-only steps listed below. Irreversible actions taken: nine merges (seven with prod effect, all verified live) and one prod session flush.
 
 ## Waiting on you, irreversible first
 
@@ -17,6 +17,7 @@ Already landed in prod. Each is verified, with the evidence on its PR:
 | #2405 | #2377 part 1: webauthn key moved to 4.39 | `0f1548a1` | prod Authelia logs show only the `issuer_private_key` deprecation (part 2) |
 | #2410 | #1813: remember_me disabled | `c93a2d4a` | portal `data-rememberme="false"` |
 | #2412 | #1813: Grafana bounded by Authelia, signs out through it | `d0456613` | pod env `8h` / `1h` / `SIGNOUT_REDIRECT_URL`, `/logout?rd=` answers 200 |
+| #2411 | #1782: OIDC consumers held to the SSOT client_id; Compose Grafana id derived (#1782 closed) | `bd84bbfd` | loader and tests only; `make test` 5748 passed on the merged head |
 
 **Prod sessions flushed** (`make flush-sessions ENV=prod`, ~13:00Z, after prod Authelia read `authelia-config-c26dchgmf4`). Every SSO user signs in again. This was promised in #2410's body and is not reversible, but it costs only a login.
 
@@ -35,12 +36,13 @@ None.
 
 ## Done but unmerged
 
-- **#2411** (#1782 part 1: OIDC consumers present the SSOT client_id; Grafana Compose id derived). Head `3b3ec7af`, merged with master, `make test` 5748 passed. The triage addendum is posted, and the PR waits for CI and PR-Agent on the new head. If it is still open when you read this, it needs only the usual checks: CI green, the triage queue clear, then a merge with `--match-head-commit`.
+None. #2411 conflicted twice on the generated `platform.json` as peers landed (#2400). It was regenerated each time and merged at `e2a5a7d5`.
 
 ## Filed during the run
 
 - **#2415**: the dev Compose Grafana sets no session bound and no Authelia sign-out (`infra/stacks/**` was outside the envelope). ADR-062's table names it as open.
 - **#2416**: decide the Homepage cockpit's future, following the owner's statement of 2026-10-17.
+- **#2419**: hold Grafana's OAuth endpoint URLs to each overlay's Authelia (epic DoD: no hand-written IdP URL).
 
 ## Evidence index
 
