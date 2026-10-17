@@ -42,3 +42,13 @@
 ## Next action
 - Land #2397 (the grant), then `dotf pr land` for #2396, #2413 and #2414, in that order. #2413 and #2414 both touch `node_maintenance/tasks/main.yml` in different hunks; re-check for conflicts after the first lands.
 - Then `make maintain NODE=beelink,gcp1,rpi3 ENV=prod`. Decide on the five reboots.
+
+## Follow-up after the operator returned (2026-10-17 ~18:30Z, operator OK)
+- Coordinated first: kubelab-aa and feat-self-deploy-trigger-53 confirmed that no session had work on beelink, gcp1 or rpi3.
+- `make maintain NODE=beelink,gcp1,rpi3 ENV=prod` ran twice from master (`fd03584a`, with #2413 and #2414), exit 0 both times.
+  - No `SKIPPED` line on either run. The holds landed on the installed packages, and `ignored=0` on all three nodes.
+  - Patching reported `already current` on all three.
+  - Run 2 is NOT `changed=0` (beelink 4, gcp1 2, rpi3 4). The changes come from the APT-list wipe and from Docker prune tasks that report `changed` even when they reclaim 0B. Neither comes from the fix; ticketed separately.
+  - Reboot still required on beelink and gcp1. rpi3 does not need one.
+- gcp1 snap, read-only: `sudo snap get -d system` returns `refresh.retain: 2`, rc 0. The `snap "core" has no "refresh.retain"` error happened only on the first run, before anything had set the option. The morning run set it, and the check now passes and the set is skipped. #2407 claimed "every run" from a single run; that claim is corrected on the ticket.
+- Logs: `maintain-prod-rerun-1.log` and `maintain-prod-rerun-2.log` beside this file.
