@@ -16,6 +16,25 @@
 # run commits on the new tip. The unit counts it as success.
 set -eu
 
+# The gateway writes the agent's memories as a subuid, with mkstemp (0600) and a
+# rename, which keeps the mode (#2417). From the host this user cannot read them,
+# and one unreadable file fails the whole add. Nothing applied at creation time
+# helps: a default ACL is masked to `---` on a 0600 create. So the run goes
+# inside the user namespace of this user's own rootless daemon. Root there is
+# this user on the host and the subuids are mapped into it, so it reads what the
+# agent wrote and gains nothing on the host: the files it can reach as root are
+# the ones this user owns or maps. Once, never in a loop, and a daemon that is
+# not up fails the run instead of syncing from the host, where the add would
+# fail on the same file.
+if [ -z "${VAULT_SYNC_IN_USERNS:-}" ]; then
+  state="${VAULT_SYNC_ROOTLESS_STATE:-/run/user/$(id -u)/dockerd-rootless}"
+  pid=$(cat "$state/child_pid" 2>/dev/null) || {
+    echo "vault-sync: the rootless Docker daemon is not up ($state/child_pid is missing)" >&2
+    exit 1
+  }
+  VAULT_SYNC_IN_USERNS=1 exec nsenter --user --target "$pid" "$0"
+fi
+
 clone='{{ agent_stack_vault_clone }}'
 zone='{{ agent_stack_vault_zone }}'
 remote='{{ agent_stack_hermes.vault_sync.remote }}'

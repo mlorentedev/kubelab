@@ -227,6 +227,12 @@ configs:
       enableUserInfoGroups: true
       userInfoPath: /api/oidc/userinfo
       userInfoCacheExpiration: 5m
+      # ADR-062 S3 (#1813): signing out of Argo CD ends the Authelia session too.
+      # Authelia 4.39 has no RP-initiated logout, so this is its /logout with an
+      # `rd` back here (followed only inside the kubelab.live cookie domain).
+      # The session itself already ends with the ID token (1h): no refresh path is
+      # configured. tests/test_argocd_session_bound_by_authelia.py holds both.
+      logoutURL: https://auth.kubelab.live/logout?rd=https%3A%2F%2Fargo.kubelab.live%2F
   rbac:
     # Tiers (ADR-062 D2, amended by AUTH-011): `admins` administer, `users` operate,
     # anyone else reads. Operating is readonly plus sync and resource actions (restart,

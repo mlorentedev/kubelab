@@ -1,9 +1,10 @@
 # The toolkit CLI, Make, Python and local tooling
 
-55 lessons, newest first. Back to [all categories](../_index.md).
+56 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 590 | [A ruamel round-trip is lossless only for files written in one sequence style](lesson-590-a-ruamel-round-trip-is-lossless-only-for-files-written-in-one-sequence-style.md) | 2026-10-17 |
 | 570 | [pytest says whether a selector matched in its exit code, not in its collect output](lesson-570-pytest-says-whether-a-selector-matched-in-its-exit-code-not-in-its-collect-output.md) | 2026-10-14 |
 | 567 | [ssh ends an unknown and a changed host key with the same line](lesson-567-ssh-ends-an-unknown-and-a-changed-host-key-with-the-same-line.md) | 2026-10-13 |
 | 565 | [A mutation verdict means nothing unless the test passed without the mutation](lesson-565-a-mutation-verdict-means-nothing-unless-the-test-passed-without-the-mutation.md) | 2026-10-13 |
