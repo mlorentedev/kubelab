@@ -287,6 +287,7 @@ def test_a_hold_that_fails_on_an_installed_package_stops_the_upgrade() -> None:
         "the timer path still decides from apt's error text"
     )
     assert "dpkg-query" in script and "db:Status-Status" in script, "the timer path does not read dpkg state"
+    assert "| grep -qx installed; then" in script, "the timer path reads dpkg state but does not gate the hold on it"
     assert 'PATCH_STATUS="unprotected"' in script, "the timer path does not report the skip, so the node looks patched"
 
 
