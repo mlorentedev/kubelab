@@ -605,4 +605,8 @@ def test_idle_cleanup_is_enabled_and_matches_the_reaper_window() -> None:
     runner_cfg = _config()["runner"]
     assert _seconds(runner_cfg["workdir_cleanup_age"]) > 0
     assert _seconds(runner_cfg["idle_cleanup_interval"]) > 0
-    assert _seconds(runner_cfg["workdir_cleanup_age"]) == 24 * 3600
+    reaper = yaml.safe_load((REPO_ROOT / "infra/ansible/roles/node_maintenance/defaults/main.yml").read_text())
+    reaper_seconds = reaper["maintenance_docker_reclaim_min_age_hours"] * 3600
+    assert _seconds(runner_cfg["workdir_cleanup_age"]) == reaper_seconds, (
+        "the runner's sweep and the node_maintenance reaper must agree on when a volume is stale"
+    )
