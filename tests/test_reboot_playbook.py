@@ -89,3 +89,11 @@ def test_the_make_target_runs_this_playbook_with_a_limit() -> None:
     recipe = text.split("\nreboot:\n", 1)[1].split("\n\n", 1)[0]
     assert "-p reboot" in recipe
     assert "-l $(NODE)" in recipe
+
+
+def test_a_dry_run_does_not_fail_on_the_flag_it_could_not_clear() -> None:
+    """CHECK=1 reboots nothing, so the post-boot check must not run there.
+    Caught by the first dry run against the fleet: every host failed the assert."""
+    reboot = _index(lambda t: "reboot" in t)
+    for task in _tasks()[reboot + 1 :]:
+        assert "not ansible_check_mode" in _whens(task), task["name"]

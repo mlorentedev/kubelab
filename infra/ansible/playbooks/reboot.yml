@@ -66,10 +66,13 @@
         reboot_timeout: "{{ reboot_timeout_seconds }}"
         msg: "kubelab: reboot requested by make reboot"
 
+    # Not in check mode: nothing rebooted, so the flag is still there by
+    # construction and the assert below would fail every dry run.
     - name: Re-check the pending flag after the boot
       stat:
         path: /var/run/reboot-required
       register: _reboot_required_after
+      when: not ansible_check_mode
 
     - name: Fail if the reboot did not clear it
       assert:
@@ -77,3 +80,4 @@
         fail_msg: >-
           {{ inventory_hostname }} came back still flagged reboot-required:
           the boot did not load what the flag asked for.
+      when: not ansible_check_mode
