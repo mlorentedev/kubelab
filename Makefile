@@ -527,6 +527,12 @@ secrets-audit:
 gitea-reconcile:
 	@$(TOOLKIT) services gitea reconcile --env $(or $(filter staging prod,$(ENV)),prod) $(if $(APPLY),--apply,)
 
+# Read-only. Compares each machine token's MINTED scopes with `token_scopes` in
+# common.yaml and exits non-zero on drift; it never rotates (TOOL-056, #1551).
+.PHONY: gitea-token-scopes
+gitea-token-scopes:
+	@$(TOOLKIT) services gitea token-scopes --env $(or $(filter staging prod,$(ENV)),prod)
+
 # Plan only. `APPLY=1` revokes the token and clears its SOPS key — which OPENS AN
 # OUTAGE until `make provision NODE=bee ENV=prod` mints the replacement. Both
 # halves run together on purpose: the SOPS key is the mint gate, so a revoke on
