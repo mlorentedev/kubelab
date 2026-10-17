@@ -24,7 +24,7 @@ Verdict: ended `queue-empty`. 3 queue items: 1 merged, 1 proposal posted, 1 park
 - Reviewers: PR-Agent reviewed; Codex and CodeRabbit hit usage limits (no review from them). Triage comment: pull/2408#issuecomment-6231927044.
 
 ## Budget
-3 items of 3, 1 PR, about 2 h of the 10 h window. No dollar figure exists. GitHub GraphQL had a secondary limit early on; REST was used and recovered later.
+3 items of 3, 1 PR, about 1 h of the 10 h window (07:45Z to 08:50Z). No dollar figure exists. GitHub GraphQL had a secondary limit early on; REST was used and recovered later.
 
 ## Host
 `caffeinate -i -t 36000` was running; the window was covered.
