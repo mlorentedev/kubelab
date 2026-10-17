@@ -42,7 +42,9 @@ def _middleware_statuses() -> set[int]:
             if not isinstance(doc, dict) or doc.get("kind") != "Middleware":
                 continue
             errors = (doc.get("spec") or {}).get("errors") or {}
-            if "{status}.html" not in str(errors.get("query", "")):
+            # Only a Middleware that sends the exact page path to the `errors` service counts: one that
+            # points at another service, or a query that merely contains the text, serves nothing here.
+            if (errors.get("service") or {}).get("name") != "errors" or errors.get("query") != "/errors/{status}.html":
                 continue
             for entry in errors.get("status") or []:
                 found |= _expand(entry)
@@ -57,7 +59,9 @@ def _nginx_error_pages() -> dict[int, str]:
 
 # Pages that are not served by a request path but consumed as files. The ban page is rendered by
 # the CrowdSec bouncer plugin from a mounted file (ADR-072 phase 2), so nothing targets it by status.
-SOURCE_PAGES = {"403.html": "CrowdSec ban page source (ADR-072 phase 2)"}
+# That consumer does not exist yet: #2368 owns it, and replaces this entry with a check that the
+# HelmChartConfig mounts the file. An entry here is a debt with an owner, not a permanent exemption.
+SOURCE_PAGES = {"403.html": "CrowdSec ban page source (ADR-072 phase 2, OPS-037 / #2368)"}
 
 
 def _nginx_emits() -> set[int]:
