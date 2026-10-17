@@ -46,6 +46,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 from toolkit.core.logging import logger
+from toolkit.features.gitea_upgrade_probe import run_probes
 from toolkit.features.restore_drill import latest_snapshot, report, restore_source, scratch, wait_until
 
 Run = Callable[..., "tuple[int, str, str]"]
@@ -319,6 +320,8 @@ def _restore_and_check(
 
     ok, lines = compare(live_counts, restored, on_disk, commit_known)
     report(lines)
+    # The restored copy is the only place a version bump can be exercised against real data (OPS-038).
+    ok = ok and run_probes(run, name, admin_user, sorted(restored))
     if ok:
         logger.success(
             f"drill: snapshot {snapshot} restores Gitea completely "

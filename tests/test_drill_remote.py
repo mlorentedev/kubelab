@@ -302,6 +302,7 @@ def test_a_real_gitea_restore_on_the_host_writes_no_injected_value_to_disk(tmp_p
                 leaked.extend(str(f) for s in _all_secrets() if s.encode() in f.read_bytes())
 
     fake = _GiteaFake()
+    monkeypatch.setattr(gitea_drill, "run_probes", lambda *a, **k: True)  # own tests: test_gitea_upgrade_probe
 
     def run(argv, *, env=None):
         # The root-run wipe empties the tree before rmtree sees it, so read it here too.
