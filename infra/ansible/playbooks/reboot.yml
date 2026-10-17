@@ -15,7 +15,7 @@
 # Usage:
 #   make reboot NODE=ace1 ENV=staging
 #   make reboot NODE=vps ENV=prod EXTRA='reboot_allow_vps=true'
-#   make reboot NODE=ace2 ENV=prod EXTRA='reboot_force=true'   # no flag needed
+#   make reboot NODE=ace2 ENV=prod EXTRA='reboot_force=true'   # reboot even without /var/run/reboot-required
 # =============================================================================
 
 - name: Reboot nodes with a pending reboot
