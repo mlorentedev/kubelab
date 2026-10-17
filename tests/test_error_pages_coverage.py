@@ -45,6 +45,13 @@ def _excepted(route: str, match: str) -> bool:
 
 
 @pytest.mark.parametrize("overlay", OVERLAYS)
+def test_the_render_measured_the_routes_it_is_judging(overlay: str) -> None:
+    """An empty render would pass every assertion below over nothing."""
+    names = {route for route, _, _ in _rules(overlay)}
+    assert {"catch-all", "authelia", "grafana"} <= names, sorted(names)
+
+
+@pytest.mark.parametrize("overlay", OVERLAYS)
 def test_every_rule_has_error_pages_or_a_declared_exception(overlay: str) -> None:
     gaps = [
         f"{route}: {match}"
