@@ -10,10 +10,13 @@
 ## Disk reclaimed
 - beelink 72% -> 40% (30 GB freed). gcp1 (hub) 88% -> 80%. The others changed by less than 1 GB.
 
-## Findings to ticket
+## Findings, ticketed (#2406 security-patching false skip, #2407 jetson + snap noise; board fields pending, GraphQL rate-limited)
 - `make maintain NODE=all` always fails on jetson: Ubuntu 18.04 / Python 3.6 cannot run Ansible's `setup` (`from __future__ import annotations`). It was excluded by limit pattern.
 - `snap get system refresh.retain` errors (ignored) on kubelab-vps, rpi3 and gcp1 (`snap "core" has no "refresh.retain"`).
 - The hold step fails on installed docker packages on three nodes (see above).
+
+## Coordination
+- Orchestrator kubelab-aa asked to stop at ~08:30Z, believing the widening was self-granted. Replied with the operator's 07:55Z message. Complied with its safety ask: no further live prod operations this run.
 
 ## Done
 - #1775 checklist reconciled; #2399 filed (dead web build args in `ci-pipeline.yml`).
