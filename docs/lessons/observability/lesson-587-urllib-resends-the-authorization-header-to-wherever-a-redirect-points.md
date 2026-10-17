@@ -1,5 +1,5 @@
 ---
-id: "lesson-587-urllib-resends-the-authorization-header-to-wherever-a-redirect-points"
+id: lesson-587-urllib-resends-the-authorization-header-to-wherever-a-redirect-points
 type: lesson
 status: active
 title: "urllib re-sends the Authorization header to wherever a redirect points"
