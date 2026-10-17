@@ -6,7 +6,8 @@ targeted them. The audit that found it was a one-off; this makes it a CI failure
 A page `errors/<status>.html` is reachable when either
   - a Traefik `errors` Middleware lists its status and queries `/errors/{status}.html`, or
   - nginx maps a status it can itself generate to it with `error_page` (the catch-all 404,
-    which is `return 404` inside nginx, and 403 on a directory request).
+    which is `return 404` inside nginx), or
+  - it is a declared source page: a file consumed by something other than a request path.
 """
 
 from __future__ import annotations
@@ -54,10 +55,23 @@ def _nginx_error_pages() -> dict[int, str]:
     return {int(m[0]): m[1] for m in re.findall(r"^\s*error_page\s+(\d{3})\s+/errors/([\w.-]+);", text, re.M)}
 
 
-# Statuses this nginx can generate for itself: `location / { return 404 }` and `try_files ... =404`
-# give 404, and a request for the bare `/errors/` directory gives 403. An `error_page` for any other
-# status is decoration, which is how 401/408/429/500 sat in the config for months.
-NGINX_EMITS = {403, 404}
+# Pages that are not served by a request path but consumed as files. The ban page is rendered by
+# the CrowdSec bouncer plugin from a mounted file (ADR-072 phase 2), so nothing targets it by status.
+SOURCE_PAGES = {"403.html": "CrowdSec ban page source (ADR-072 phase 2)"}
+
+
+def _nginx_emits() -> set[int]:
+    """Statuses this nginx generates for itself: `return NNN` and `try_files ... =NNN`.
+
+    Derived from the config, not assumed. An `error_page` for any other status is decoration,
+    which is how 401/408/429/500 sat in the config for months. Measured on the built image:
+    `/errors/`, `/errors` and an unknown path all answer 404, and nothing here answers 403.
+    """
+    text = NGINX_CONF.read_text(encoding="utf-8")
+    found = {int(n) for n in re.findall(r"\breturn\s+(\d{3})\b", text)}
+    found |= {int(n) for n in re.findall(r"try_files\s+[^;]*=(\d{3})\s*;", text)}
+    return {status for status in found if status >= 400}  # `return 200` and `return 204` are not errors
+
 
 PAGES = sorted(PAGES_DIR.glob("*.html"))
 
@@ -66,6 +80,7 @@ def test_the_scan_sees_the_sources() -> None:
     """A parser that finds nothing would pass every page below for the wrong reason."""
     assert {502, 503, 504} <= _middleware_statuses()
     assert 404 in _nginx_error_pages()
+    assert _nginx_emits() == {404}, _nginx_emits()
     assert PAGES, "no pages found"
 
 
@@ -73,10 +88,11 @@ def test_the_scan_sees_the_sources() -> None:
 def test_a_page_is_targeted_by_something(page: Path) -> None:
     status = int(page.stem)
     via_middleware = status in _middleware_statuses()
-    via_nginx = status in NGINX_EMITS and _nginx_error_pages().get(status) == page.name
-    assert via_middleware or via_nginx, (
+    via_nginx = status in _nginx_emits() and _nginx_error_pages().get(status) == page.name
+    assert via_middleware or via_nginx or page.name in SOURCE_PAGES, (
         f"{page.name} is served by nothing: no errors Middleware lists {status} and nginx has no "
-        f"`error_page {status} /errors/{page.name}`. Delete it or target it (ADR-072)."
+        f"`error_page {status} /errors/{page.name}` for a status nginx emits. Delete it, target it, or declare it "
+        f"in SOURCE_PAGES (ADR-072)."
     )
 
 
@@ -88,3 +104,8 @@ def test_every_nginx_error_page_points_at_a_file_that_exists() -> None:
 def test_maintenance_page_stays_gone() -> None:
     """Nothing routed to it; ADR-072 deleted it."""
     assert not (PAGES_DIR.parent / "maintenance.html").exists()
+
+
+def test_a_declared_source_page_exists() -> None:
+    """An allowlist entry for a file that is gone would excuse the next page given that name."""
+    assert all((PAGES_DIR / name).exists() for name in SOURCE_PAGES)
