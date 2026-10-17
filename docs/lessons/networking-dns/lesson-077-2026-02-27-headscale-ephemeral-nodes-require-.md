@@ -1,8 +1,7 @@
 ---
-id: "lesson-077-2026-02-27-headscale-ephemeral-nodes-require-"
+id: lesson-077-2026-02-27-headscale-ephemeral-nodes-require-
 type: lesson
 status: active
-title: "2026-02-27 — Headscale Ephemeral Nodes Require `--ephemeral` on the Pre-Auth Key"
 created: "2026-05-01"
 owner: manu
 category: networking-dns

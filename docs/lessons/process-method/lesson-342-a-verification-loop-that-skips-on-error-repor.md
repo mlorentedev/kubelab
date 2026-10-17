@@ -1,8 +1,7 @@
 ---
-id: "lesson-342-a-verification-loop-that-skips-on-error-repor"
+id: lesson-342-a-verification-loop-that-skips-on-error-repor
 type: lesson
 status: active
-title: "A verification loop that skips on error reports success — the failure hides behind the skip"
 created: "2026-08-09"
 owner: manu
 category: process-method

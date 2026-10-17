@@ -1,8 +1,7 @@
 ---
-id: "lesson-010-sops-matches-sops-yaml-path-regex-against-the"
+id: lesson-010-sops-matches-sops-yaml-path-regex-against-the
 type: lesson
 status: active
-title: "SOPS matches `.sops.yaml` path_regex against the basename on Windows"
 created: "2026-06-20"
 owner: manu
 category: identity-secrets

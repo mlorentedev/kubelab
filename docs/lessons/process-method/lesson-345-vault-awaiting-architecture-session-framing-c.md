@@ -1,8 +1,7 @@
 ---
-id: "lesson-345-vault-awaiting-architecture-session-framing-c"
+id: lesson-345-vault-awaiting-architecture-session-framing-c
 type: lesson
 status: active
-title: "Vault \"awaiting architecture session\" framing can be stale — check for a closed ticket/merged ADR before trusting it"
 created: "2026-08-10"
 owner: manu
 category: process-method

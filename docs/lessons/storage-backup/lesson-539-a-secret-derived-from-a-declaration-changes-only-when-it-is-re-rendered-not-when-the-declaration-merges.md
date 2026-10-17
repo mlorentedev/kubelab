@@ -1,8 +1,7 @@
 ---
-id: "lesson-539-a-secret-derived-from-a-declaration-changes-only-when-it-is-re-rendered-not-when-the-declaration-merges"
+id: lesson-539-a-secret-derived-from-a-declaration-changes-only-when-it-is-re-rendered-not-when-the-declaration-merges
 type: lesson
 status: active
-title: "A Secret derived from a config declaration changes when `apply-secrets` re-renders it, not when the declaration merges"
 created: "2026-10-08"
 owner: manu
 category: storage-backup

@@ -1,8 +1,7 @@
 ---
-id: "lesson-269-ssot-consolidation-category-inference-by-yaml"
+id: lesson-269-ssot-consolidation-category-inference-by-yaml
 type: lesson
 status: active
-title: "SSOT consolidation: category-inference by YAML position beats an explicit `category:` field"
 created: "2026-05-25"
 owner: manu
 category: process-method

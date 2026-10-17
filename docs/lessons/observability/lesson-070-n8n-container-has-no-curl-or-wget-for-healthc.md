@@ -1,8 +1,7 @@
 ---
-id: "lesson-070-n8n-container-has-no-curl-or-wget-for-healthc"
+id: lesson-070-n8n-container-has-no-curl-or-wget-for-healthc
 type: lesson
 status: active
-title: "n8n Container Has No curl or wget for Healthchecks"
 created: "2026-02-25"
 owner: manu
 category: observability

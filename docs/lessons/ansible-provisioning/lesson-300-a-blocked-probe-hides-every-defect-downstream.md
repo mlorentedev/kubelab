@@ -1,8 +1,7 @@
 ---
-id: "lesson-300-a-blocked-probe-hides-every-defect-downstream"
+id: lesson-300-a-blocked-probe-hides-every-defect-downstream
 type: lesson
 status: active
-title: "A blocked probe hides every defect downstream of where it stops (ANSIBLE-033)"
 created: "2026-08-08"
 owner: manu
 category: ansible-provisioning

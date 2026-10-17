@@ -1,8 +1,7 @@
 ---
-id: "lesson-502-a-patch-applied-after-import-cannot-see-what-the-import-did"
+id: lesson-502-a-patch-applied-after-import-cannot-see-what-the-import-did
 type: lesson
 status: active
-title: "A patch applied after import cannot see what the import already did"
 created: "2026-10-01"
 owner: manu
 category: toolkit-tooling

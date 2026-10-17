@@ -1,8 +1,7 @@
 ---
-id: "lesson-157-traefik-helm-chart-api-dashboard-values-don-t"
+id: lesson-157-traefik-helm-chart-api-dashboard-values-don-t
 type: lesson
 status: active
-title: "Traefik Helm chart api.dashboard values don't work in K3s HelmChartConfig"
 created: "2026-03-22"
 owner: manu
 category: kubernetes

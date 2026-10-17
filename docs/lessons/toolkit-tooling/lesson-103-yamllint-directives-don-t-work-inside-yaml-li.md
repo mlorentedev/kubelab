@@ -1,8 +1,7 @@
 ---
-id: "lesson-103-yamllint-directives-don-t-work-inside-yaml-li"
+id: lesson-103-yamllint-directives-don-t-work-inside-yaml-li
 type: lesson
 status: active
-title: "yamllint Directives Don't Work Inside YAML Literal Block Scalars"
 created: "2026-03-01"
 owner: manu
 category: toolkit-tooling

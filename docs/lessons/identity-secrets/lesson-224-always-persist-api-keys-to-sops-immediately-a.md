@@ -1,8 +1,7 @@
 ---
-id: "lesson-224-always-persist-api-keys-to-sops-immediately-a"
+id: lesson-224-always-persist-api-keys-to-sops-immediately-a
 type: lesson
 status: active
-title: "Always persist API keys to SOPS immediately after generation"
 created: "2026-03-27"
 owner: manu
 category: identity-secrets

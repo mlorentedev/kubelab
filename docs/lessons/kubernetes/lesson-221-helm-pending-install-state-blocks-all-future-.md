@@ -1,8 +1,7 @@
 ---
-id: "lesson-221-helm-pending-install-state-blocks-all-future-"
+id: lesson-221-helm-pending-install-state-blocks-all-future-
 type: lesson
 status: active
-title: "Helm pending-install state blocks all future upgrades"
 created: "2026-03-27"
 owner: manu
 category: kubernetes

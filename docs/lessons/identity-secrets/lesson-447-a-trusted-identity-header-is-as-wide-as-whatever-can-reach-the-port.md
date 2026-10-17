@@ -1,8 +1,7 @@
 ---
-id: "lesson-447-a-trusted-identity-header-is-as-wide-as-whatever-can-reach-the-port"
+id: lesson-447-a-trusted-identity-header-is-as-wide-as-whatever-can-reach-the-port
 type: lesson
 status: active
-title: "A trusted identity header is as wide as whatever can reach the port"
 created: "2026-08-26"
 owner: manu
 category: identity-secrets

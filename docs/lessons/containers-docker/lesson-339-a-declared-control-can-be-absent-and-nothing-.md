@@ -1,8 +1,7 @@
 ---
-id: "lesson-339-a-declared-control-can-be-absent-and-nothing-"
+id: lesson-339-a-declared-control-can-be-absent-and-nothing-
 type: lesson
 status: active
-title: "A declared control can be absent, and nothing will say so"
 created: "2026-05-01"
 owner: manu
 category: containers-docker

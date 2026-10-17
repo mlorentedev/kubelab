@@ -1,8 +1,7 @@
 ---
-id: "lesson-177-aws-spot-t4g-micro-1gb-ram-is-not-enough-for-"
+id: lesson-177-aws-spot-t4g-micro-1gb-ram-is-not-enough-for-
 type: lesson
 status: active
-title: "AWS Spot t4g.micro: 1GB RAM is NOT enough for K3s + Argo CD without swap"
 created: "2026-03-22"
 owner: manu
 category: kubernetes

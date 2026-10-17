@@ -1,8 +1,7 @@
 ---
-id: "lesson-087-docker-compose-only-services-and-k3s-dns-wild"
+id: lesson-087-docker-compose-only-services-and-k3s-dns-wild
 type: lesson
 status: active
-title: "Docker-Compose-Only Services and K3s DNS Wildcard Gap"
 created: "2026-02-28"
 owner: manu
 category: networking-dns

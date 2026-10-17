@@ -1,8 +1,7 @@
 ---
-id: "lesson-439-a-callers-permissions-block-is-a-ceiling-and-the-run-never-starts"
+id: lesson-439-a-callers-permissions-block-is-a-ceiling-and-the-run-never-starts
 type: lesson
 status: active
-title: "A caller's `permissions:` block is a ceiling, and a run that breaks it never starts — so nothing turns red"
 created: "2026-09-05"
 owner: manu
 category: ci-automation

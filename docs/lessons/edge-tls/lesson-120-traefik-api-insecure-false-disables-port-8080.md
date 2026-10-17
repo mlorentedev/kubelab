@@ -1,8 +1,7 @@
 ---
-id: "lesson-120-traefik-api-insecure-false-disables-port-8080"
+id: lesson-120-traefik-api-insecure-false-disables-port-8080
 type: lesson
 status: active
-title: "Traefik api.insecure=false disables port 8080 dashboard access"
 created: "2026-03-15"
 owner: manu
 category: edge-tls

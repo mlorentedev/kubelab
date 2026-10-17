@@ -1,8 +1,7 @@
 ---
-id: "lesson-445-a-hint-guarded-by-a-bare-failure-names-a-cause-it-never-observed"
+id: lesson-445-a-hint-guarded-by-a-bare-failure-names-a-cause-it-never-observed
 type: lesson
 status: active
-title: "A hint step guarded by a bare `failure()` names a cause it never observed — and a named cause gets acted on"
 created: "2026-08-25"
 owner: manu
 category: ci-automation

@@ -1,8 +1,7 @@
 ---
-id: "lesson-583-a-mount-test-that-asserts-the-template-passes-a-path-the-consumer-never-sees"
+id: lesson-583-a-mount-test-that-asserts-the-template-passes-a-path-the-consumer-never-sees
 type: lesson
 status: active
-title: "A mount test that asserts the template passes a path the consumer never sees"
 created: "2026-10-16"
 owner: manu
 category: ansible-provisioning

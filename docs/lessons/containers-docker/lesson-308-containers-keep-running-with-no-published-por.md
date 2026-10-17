@@ -1,8 +1,7 @@
 ---
-id: "lesson-308-containers-keep-running-with-no-published-por"
+id: lesson-308-containers-keep-running-with-no-published-por
 type: lesson
 status: active
-title: "Containers keep running with no published ports, and every restart reports success"
 created: "2026-08-10"
 owner: manu
 category: containers-docker

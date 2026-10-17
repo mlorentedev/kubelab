@@ -1,8 +1,7 @@
 ---
-id: "lesson-006-a-config-that-provisions-cleanly-can-still-fa"
+id: lesson-006-a-config-that-provisions-cleanly-can-still-fa
 type: lesson
 status: active
-title: "A config that provisions cleanly can still fail at delivery"
 created: "2026-08-10"
 owner: manu
 category: ansible-provisioning

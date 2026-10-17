@@ -1,8 +1,7 @@
 ---
-id: "lesson-529-restic-copy-reads-both-repositories-with-one-s3-credential"
+id: lesson-529-restic-copy-reads-both-repositories-with-one-s3-credential
 type: lesson
 status: active
-title: "`restic copy` reads both repositories with one S3 credential, so per-bucket tokens cannot copy between buckets"
 created: "2026-10-07"
 owner: manu
 category: storage-backup

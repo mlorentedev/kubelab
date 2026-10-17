@@ -1,8 +1,7 @@
 ---
-id: "lesson-094-minio-server-url-must-be-internal-k8s-url"
+id: lesson-094-minio-server-url-must-be-internal-k8s-url
 type: lesson
 status: active
-title: "MINIO_SERVER_URL Must Be Internal K8s URL"
 created: "2026-03-01"
 owner: manu
 category: storage-backup

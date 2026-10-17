@@ -1,8 +1,7 @@
 ---
-id: "lesson-207-rollout-restart-is-destructive-for-stateful-s"
+id: lesson-207-rollout-restart-is-destructive-for-stateful-s
 type: lesson
 status: active
-title: "rollout restart is destructive for stateful services"
 created: "2026-03-23"
 owner: manu
 category: kubernetes

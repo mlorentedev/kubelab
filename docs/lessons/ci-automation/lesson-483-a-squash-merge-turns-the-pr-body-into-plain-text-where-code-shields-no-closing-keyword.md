@@ -1,8 +1,7 @@
 ---
-id: "lesson-483-a-squash-merge-turns-the-pr-body-into-plain-text-where-code-shields-no-closing-keyword"
+id: lesson-483-a-squash-merge-turns-the-pr-body-into-plain-text-where-code-shields-no-closing-keyword
 type: lesson
 status: active
-title: "A squash merge turns the PR body into plain text, where code shields no closing keyword"
 created: "2026-09-28"
 owner: manu
 category: ci-automation

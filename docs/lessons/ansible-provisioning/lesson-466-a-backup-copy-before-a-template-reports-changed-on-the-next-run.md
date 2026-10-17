@@ -1,8 +1,7 @@
 ---
-id: "lesson-466-a-backup-copy-before-a-template-reports-changed-on-the-next-run"
+id: lesson-466-a-backup-copy-before-a-template-reports-changed-on-the-next-run
 type: lesson
 status: active
-title: "A \"back up the current file\" task before a template reports `changed` on the run after every change"
 created: "2026-09-26"
 owner: manu
 category: ansible-provisioning

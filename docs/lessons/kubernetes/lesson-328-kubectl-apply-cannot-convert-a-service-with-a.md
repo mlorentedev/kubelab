@@ -1,8 +1,7 @@
 ---
-id: "lesson-328-kubectl-apply-cannot-convert-a-service-with-a"
+id: lesson-328-kubectl-apply-cannot-convert-a-service-with-a
 type: lesson
 status: active
-title: "`kubectl apply` cannot convert a Service with a selector into a selector-less one — omitting a field is not deleting it"
 created: "2026-08-14"
 owner: manu
 category: kubernetes

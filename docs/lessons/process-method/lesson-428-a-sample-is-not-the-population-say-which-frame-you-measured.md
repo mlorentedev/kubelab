@@ -1,8 +1,7 @@
 ---
-id: "lesson-428-a-sample-is-not-the-population-say-which-frame-you-measured"
+id: lesson-428-a-sample-is-not-the-population-say-which-frame-you-measured
 type: lesson
 status: active
-title: "A sample is not the population — state the frame next to the verdict"
 created: "2026-09-04"
 owner: manu
 category: process-method

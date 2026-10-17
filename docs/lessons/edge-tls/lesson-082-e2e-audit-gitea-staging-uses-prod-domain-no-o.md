@@ -1,8 +1,7 @@
 ---
-id: "lesson-082-e2e-audit-gitea-staging-uses-prod-domain-no-o"
+id: lesson-082-e2e-audit-gitea-staging-uses-prod-domain-no-o
 type: lesson
 status: active
-title: "E2E Audit: Gitea Staging Uses Prod Domain (No Override)"
 created: "2026-02-28"
 owner: manu
 category: edge-tls

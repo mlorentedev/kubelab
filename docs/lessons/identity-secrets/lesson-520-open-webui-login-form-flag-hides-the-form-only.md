@@ -1,8 +1,7 @@
 ---
-id: "lesson-520-open-webui-login-form-flag-hides-the-form-only"
+id: lesson-520-open-webui-login-form-flag-hides-the-form-only
 type: lesson
 status: active
-title: "Open WebUI's `ENABLE_LOGIN_FORM=false` hides the form; the password endpoint stays open"
 created: "2026-10-03"
 owner: manu
 category: identity-secrets

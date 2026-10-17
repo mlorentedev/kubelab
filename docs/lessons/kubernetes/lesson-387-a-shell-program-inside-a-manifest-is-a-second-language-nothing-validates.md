@@ -1,8 +1,7 @@
 ---
-id: "lesson-387-a-shell-program-inside-a-manifest-is-a-second-language-nothing-validates"
+id: lesson-387-a-shell-program-inside-a-manifest-is-a-second-language-nothing-validates
 type: lesson
 status: active
-title: "A shell program embedded in a manifest is a second language, and nothing in the delivery path reads it as one"
 created: "2026-08-25"
 owner: manu
 category: kubernetes

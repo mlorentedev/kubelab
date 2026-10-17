@@ -1,8 +1,7 @@
 ---
-id: "lesson-099-unified-secrets-cli-replaces-scattered-sops-o"
+id: lesson-099-unified-secrets-cli-replaces-scattered-sops-o
 type: lesson
 status: active
-title: "Unified Secrets CLI Replaces Scattered sops/openssl Commands"
 created: "2026-03-01"
 owner: manu
 category: identity-secrets

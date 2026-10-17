@@ -1,8 +1,7 @@
 ---
-id: "lesson-561-a-retired-service-lives-on-in-every-doc-that-names-its-host"
+id: lesson-561-a-retired-service-lives-on-in-every-doc-that-names-its-host
 type: lesson
 status: active
-title: "A retired service lives on in every doc that names its host, and a pasted config copy rots twice"
 created: "2026-10-11"
 owner: manu
 category: process-method

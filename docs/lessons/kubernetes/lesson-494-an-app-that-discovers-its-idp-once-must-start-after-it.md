@@ -1,8 +1,7 @@
 ---
-id: "lesson-494-an-app-that-discovers-its-idp-once-must-start-after-it"
+id: lesson-494-an-app-that-discovers-its-idp-once-must-start-after-it
 type: lesson
 status: active
-title: "An app that discovers its IdP once must start after it, and only the discovery document proves the IdP is up"
 created: "2026-09-30"
 owner: manu
 category: kubernetes

@@ -1,8 +1,7 @@
 ---
-id: "lesson-013-argo-cd-never-creates-imperative-secrets-secr"
+id: lesson-013-argo-cd-never-creates-imperative-secrets-secr
 type: lesson
 status: active
-title: "Argo CD never creates imperative Secrets — \"secret not found\" after sync is expected"
 created: "2026-06-20"
 owner: manu
 category: gitops-delivery

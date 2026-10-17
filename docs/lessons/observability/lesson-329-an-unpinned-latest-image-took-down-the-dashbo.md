@@ -1,8 +1,7 @@
 ---
-id: "lesson-329-an-unpinned-latest-image-took-down-the-dashbo"
+id: lesson-329-an-unpinned-latest-image-took-down-the-dashbo
 type: lesson
 status: active
-title: "An unpinned `:latest` image took down the dashboard the same day upstream shipped a major version"
 created: "2026-08-14"
 owner: manu
 category: observability

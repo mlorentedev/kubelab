@@ -1,8 +1,7 @@
 ---
-id: "lesson-148-grafana-oidc-is-fully-declarative-via-env-var"
+id: lesson-148-grafana-oidc-is-fully-declarative-via-env-var
 type: lesson
 status: active
-title: "Grafana OIDC is fully declarative via env vars"
 created: "2026-03-21"
 owner: manu
 category: identity-secrets

@@ -1,8 +1,7 @@
 ---
-id: "lesson-187-pi-hole-v6-built-in-auth-conflicts-with-authe"
+id: lesson-187-pi-hole-v6-built-in-auth-conflicts-with-authe
 type: lesson
 status: active
-title: "Pi-hole v6 built-in auth conflicts with Authelia"
 created: "2026-03-23"
 owner: manu
 category: networking-dns

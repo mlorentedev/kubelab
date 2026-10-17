@@ -1,8 +1,7 @@
 ---
-id: "lesson-007-a-trivy-image-failure-has-two-independent-sou"
+id: lesson-007-a-trivy-image-failure-has-two-independent-sou
 type: lesson
 status: active
-title: "A Trivy image failure has two independent sources — base-OS *and* the Go binary"
 created: "2026-06-26"
 owner: manu
 category: ci-automation

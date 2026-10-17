@@ -1,8 +1,7 @@
 ---
-id: "lesson-169-vps-ansible-host-must-use-public-ip-bootstrap"
+id: lesson-169-vps-ansible-host-must-use-public-ip-bootstrap
 type: lesson
 status: active
-title: "VPS ansible_host must use public IP — bootstrap circular dependency"
 created: "2026-03-22"
 owner: manu
 category: ansible-provisioning

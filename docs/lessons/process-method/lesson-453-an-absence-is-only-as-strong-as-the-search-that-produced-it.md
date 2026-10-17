@@ -1,8 +1,7 @@
 ---
-id: "lesson-453-an-absence-is-only-as-strong-as-the-search-that-produced-it"
+id: lesson-453-an-absence-is-only-as-strong-as-the-search-that-produced-it
 type: lesson
 status: active
-title: "An absence is only as strong as the search that produced it, and an audit is mostly absences"
 created: "2026-09-07"
 owner: manu
 category: process-method

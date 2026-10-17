@@ -1,8 +1,7 @@
 ---
-id: "lesson-519-a-remote-tilde-is-the-home-of-whoever-runs-the-task"
+id: lesson-519-a-remote-tilde-is-the-home-of-whoever-runs-the-task
 type: lesson
 status: active
-title: "A remote `~` is the home of whoever runs the task, so a role that uses one has a result per caller"
 created: "2026-10-04"
 owner: manu
 category: ansible-provisioning

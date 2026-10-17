@@ -1,8 +1,7 @@
 ---
-id: "lesson-014-a-generated-artifact-s-content-must-not-depen"
+id: lesson-014-a-generated-artifact-s-content-must-not-depen
 type: lesson
 status: active
-title: "A generated artifact's content must not depend on whether secrets are decrypted"
 created: "2026-06-15"
 owner: manu
 category: toolkit-tooling

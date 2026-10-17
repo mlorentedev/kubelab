@@ -1,8 +1,7 @@
 ---
-id: "lesson-326-max-over-time-remembers-a-spike-long-after-th"
+id: lesson-326-max-over-time-remembers-a-spike-long-after-th
 type: lesson
 status: active
-title: "`max_over_time` remembers a spike long after the value that caused it is gone — it silently defeats `for:`"
 created: "2026-08-14"
 owner: manu
 category: observability

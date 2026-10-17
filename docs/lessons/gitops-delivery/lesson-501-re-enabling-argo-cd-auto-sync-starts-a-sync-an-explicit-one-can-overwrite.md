@@ -1,8 +1,7 @@
 ---
-id: "lesson-501-re-enabling-argo-cd-auto-sync-starts-a-sync-an-explicit-one-can-overwrite"
+id: lesson-501-re-enabling-argo-cd-auto-sync-starts-a-sync-an-explicit-one-can-overwrite
 type: lesson
 status: active
-title: "Re-enabling Argo CD auto-sync starts a sync by itself, and an explicit one sent after it can overwrite it"
 created: "2026-10-01"
 owner: manu
 category: gitops-delivery

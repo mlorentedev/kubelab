@@ -1,8 +1,7 @@
 ---
-id: "lesson-017-under-enforce-admins-branch-protection-delive"
+id: lesson-017-under-enforce-admins-branch-protection-delive
 type: lesson
 status: active
-title: "Under `enforce_admins` branch protection, delivery must be PR-per-update opened with a PAT"
 created: "2026-06-15"
 owner: manu
 category: ci-automation

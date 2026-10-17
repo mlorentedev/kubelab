@@ -1,8 +1,7 @@
 ---
-id: "lesson-060-headscale-split-dns-use-parent-domain-for-ful"
+id: lesson-060-headscale-split-dns-use-parent-domain-for-ful
 type: lesson
 status: active
-title: "Headscale Split DNS: Use Parent Domain for Full Coverage"
 created: "2026-02-21"
 owner: manu
 category: networking-dns

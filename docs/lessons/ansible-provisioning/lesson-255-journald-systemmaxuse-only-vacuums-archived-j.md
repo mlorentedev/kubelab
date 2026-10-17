@@ -1,8 +1,7 @@
 ---
-id: "lesson-255-journald-systemmaxuse-only-vacuums-archived-j"
+id: lesson-255-journald-systemmaxuse-only-vacuums-archived-j
 type: lesson
 status: active
-title: "journald SystemMaxUse only vacuums archived journals — active journal can briefly exceed cap"
 created: "2026-05-12"
 owner: manu
 category: ansible-provisioning

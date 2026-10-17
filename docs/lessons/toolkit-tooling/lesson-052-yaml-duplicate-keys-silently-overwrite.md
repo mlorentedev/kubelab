@@ -1,8 +1,7 @@
 ---
-id: "lesson-052-yaml-duplicate-keys-silently-overwrite"
+id: lesson-052-yaml-duplicate-keys-silently-overwrite
 type: lesson
 status: active
-title: "YAML Duplicate Keys Silently Overwrite"
 created: "2026-02-14"
 owner: manu
 category: toolkit-tooling

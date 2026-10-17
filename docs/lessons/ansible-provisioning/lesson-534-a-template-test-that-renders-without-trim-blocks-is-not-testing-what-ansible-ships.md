@@ -1,8 +1,7 @@
 ---
-id: "lesson-534-a-template-test-that-renders-without-trim-blocks-is-not-testing-what-ansible-ships"
+id: lesson-534-a-template-test-that-renders-without-trim-blocks-is-not-testing-what-ansible-ships
 type: lesson
 status: active
-title: "A template test that renders without `trim_blocks` is not testing what Ansible ships"
 created: "2026-10-07"
 owner: manu
 category: ansible-provisioning

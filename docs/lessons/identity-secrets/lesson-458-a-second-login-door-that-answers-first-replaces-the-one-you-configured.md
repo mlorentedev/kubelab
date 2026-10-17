@@ -1,8 +1,7 @@
 ---
-id: "lesson-458-a-second-login-door-that-answers-first-replaces-the-one-you-configured"
+id: lesson-458-a-second-login-door-that-answers-first-replaces-the-one-you-configured
 type: lesson
 status: active
-title: "A second login door that answers first replaces the one you configured, and yours never runs"
 created: "2026-09-24"
 owner: manu
 category: identity-secrets

@@ -1,8 +1,7 @@
 ---
-id: "lesson-384-proto3-omits-false-so-the-predicate-selected-nothing"
+id: lesson-384-proto3-omits-false-so-the-predicate-selected-nothing
 type: lesson
 status: active
-title: "A predicate testing `== false` against proto3 JSON selects nothing, not \"the false ones\""
 created: "2026-08-24"
 owner: manu
 category: networking-dns

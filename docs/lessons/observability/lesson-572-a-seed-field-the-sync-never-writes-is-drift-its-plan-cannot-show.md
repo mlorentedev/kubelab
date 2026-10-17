@@ -1,8 +1,7 @@
 ---
-id: "lesson-572-a-seed-field-the-sync-never-writes-is-drift-its-plan-cannot-show"
+id: lesson-572-a-seed-field-the-sync-never-writes-is-drift-its-plan-cannot-show
 type: lesson
 status: active
-title: "A seed field the sync never writes is drift its plan cannot show"
 created: "2026-10-14"
 owner: manu
 category: observability

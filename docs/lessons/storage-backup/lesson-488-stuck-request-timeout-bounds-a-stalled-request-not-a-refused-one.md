@@ -1,8 +1,7 @@
 ---
-id: "lesson-488-stuck-request-timeout-bounds-a-stalled-request-not-a-refused-one"
+id: lesson-488-stuck-request-timeout-bounds-a-stalled-request-not-a-refused-one
 type: lesson
 status: active
-title: "restic's `--stuck-request-timeout` bounds a stalled request, not a refused one, and R2's credential refusals are retried for 15 minutes"
 created: "2026-09-30"
 owner: manu
 category: storage-backup

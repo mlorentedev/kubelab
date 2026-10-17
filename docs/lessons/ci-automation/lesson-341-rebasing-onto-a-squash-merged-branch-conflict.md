@@ -1,8 +1,7 @@
 ---
-id: "lesson-341-rebasing-onto-a-squash-merged-branch-conflict"
+id: lesson-341-rebasing-onto-a-squash-merged-branch-conflict
 type: lesson
 status: active
-title: "Rebasing onto a squash-merged branch conflicts against your own merged work"
 created: "2026-08-16"
 owner: manu
 category: ci-automation

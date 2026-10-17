@@ -1,8 +1,7 @@
 ---
-id: "lesson-530-an-ignore-rule-for-ansible-vault-files-swallows-a-task-file-named-vault-yml"
+id: lesson-530-an-ignore-rule-for-ansible-vault-files-swallows-a-task-file-named-vault-yml
 type: lesson
 status: active
-title: "An ignore rule for Ansible Vault files swallows a task file named `vault.yml`"
 created: "2026-10-07"
 owner: manu
 category: ansible-provisioning

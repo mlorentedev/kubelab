@@ -1,8 +1,7 @@
 ---
-id: "lesson-024-generated-then-committed-configs-drift-silent"
+id: lesson-024-generated-then-committed-configs-drift-silent
 type: lesson
 status: active
-title: "Generated-then-committed configs drift silently — regen-and-diff periodically"
 created: "2026-05-23"
 owner: manu
 category: ci-automation

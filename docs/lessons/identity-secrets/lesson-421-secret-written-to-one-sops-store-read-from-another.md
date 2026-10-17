@@ -1,8 +1,7 @@
 ---
-id: "lesson-421-secret-written-to-one-sops-store-read-from-another"
+id: lesson-421-secret-written-to-one-sops-store-read-from-another
 type: lesson
 status: active
-title: "A secret read from the wrong SOPS store resolves to `''`, so a presence gate on it is open forever"
 created: "2026-09-02"
 owner: manu
 category: identity-secrets

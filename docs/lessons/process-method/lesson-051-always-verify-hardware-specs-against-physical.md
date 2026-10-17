@@ -1,8 +1,7 @@
 ---
-id: "lesson-051-always-verify-hardware-specs-against-physical"
+id: lesson-051-always-verify-hardware-specs-against-physical
 type: lesson
 status: active
-title: "Always Verify Hardware Specs Against Physical Devices"
 created: "2026-02-10"
 owner: manu
 category: process-method

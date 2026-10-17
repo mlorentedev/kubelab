@@ -1,8 +1,7 @@
 ---
-id: "lesson-444-a-drill-that-asks-is-the-alert-firing-tests-a-level-when-the-property-is-an-edge"
+id: lesson-444-a-drill-that-asks-is-the-alert-firing-tests-a-level-when-the-property-is-an-edge
 type: lesson
 status: active
-title: "A drill that asks \"is the alert firing?\" tests a level when the property under test is an edge — refuse before, rather than mis-attribute after"
 created: "2026-09-04"
 owner: manu
 category: observability

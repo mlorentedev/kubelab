@@ -1,8 +1,7 @@
 ---
-id: "lesson-522-act-runner-removes-job-volumes-only-after-the-job-container-started"
+id: lesson-522-act-runner-removes-job-volumes-only-after-the-job-container-started
 type: lesson
 status: active
-title: "act_runner removes a job's volumes only if the job container started, so a cancel during the image pull leaks both"
 created: "2026-10-04"
 owner: manu
 category: ci-automation

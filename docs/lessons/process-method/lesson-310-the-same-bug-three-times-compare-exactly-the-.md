@@ -1,8 +1,7 @@
 ---
-id: "lesson-310-the-same-bug-three-times-compare-exactly-the-"
+id: lesson-310-the-same-bug-three-times-compare-exactly-the-
 type: lesson
 status: active
-title: "The same bug three times: compare exactly the fields you write"
 created: "2026-08-11"
 owner: manu
 category: process-method

@@ -1,8 +1,7 @@
 ---
-id: "lesson-211-spot-stop-behavior-causes-stale-state-use-ter"
+id: lesson-211-spot-stop-behavior-causes-stale-state-use-ter
 type: lesson
 status: active
-title: "Spot `stop` behavior causes stale state — use `terminate` for cattle"
 created: "2026-03-26"
 owner: manu
 category: ansible-provisioning

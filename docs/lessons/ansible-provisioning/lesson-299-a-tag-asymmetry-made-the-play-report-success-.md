@@ -1,8 +1,7 @@
 ---
-id: "lesson-299-a-tag-asymmetry-made-the-play-report-success-"
+id: lesson-299-a-tag-asymmetry-made-the-play-report-success-
 type: lesson
 status: active
-title: "A tag asymmetry made the play report success while delivering no credential — and the acceptance probe agreed (ANSIBLE-033)"
 created: "2026-08-08"
 owner: manu
 category: ansible-provisioning

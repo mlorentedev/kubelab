@@ -1,8 +1,7 @@
 ---
-id: "lesson-065-authelia-on-k8s-service-links-inject-conflict"
+id: lesson-065-authelia-on-k8s-service-links-inject-conflict
 type: lesson
 status: active
-title: "Authelia on K8s: Service Links Inject Conflicting Env Vars"
 created: "2026-02-24"
 owner: manu
 category: identity-secrets

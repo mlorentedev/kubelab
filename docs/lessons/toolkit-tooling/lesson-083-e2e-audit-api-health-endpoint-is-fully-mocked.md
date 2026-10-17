@@ -1,8 +1,7 @@
 ---
-id: "lesson-083-e2e-audit-api-health-endpoint-is-fully-mocked"
+id: lesson-083-e2e-audit-api-health-endpoint-is-fully-mocked
 type: lesson
 status: active
-title: "E2E Audit: API /health Endpoint Is Fully Mocked"
 created: "2026-02-28"
 owner: manu
 category: toolkit-tooling

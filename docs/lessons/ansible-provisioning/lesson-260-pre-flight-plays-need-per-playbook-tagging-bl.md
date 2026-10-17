@@ -1,8 +1,7 @@
 ---
-id: "lesson-260-pre-flight-plays-need-per-playbook-tagging-bl"
+id: lesson-260-pre-flight-plays-need-per-playbook-tagging-bl
 type: lesson
 status: active
-title: "Pre-flight Plays need per-playbook tagging — blanket `tags: [always]` breaks playbooks designed for one-time installs"
 created: "2026-05-19"
 owner: manu
 category: ansible-provisioning

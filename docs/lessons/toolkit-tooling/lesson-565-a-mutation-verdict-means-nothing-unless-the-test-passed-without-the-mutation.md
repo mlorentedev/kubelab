@@ -1,8 +1,7 @@
 ---
-id: "lesson-565-a-mutation-verdict-means-nothing-unless-the-test-passed-without-the-mutation"
+id: lesson-565-a-mutation-verdict-means-nothing-unless-the-test-passed-without-the-mutation
 type: lesson
 status: active
-title: "A mutation verdict means nothing unless the test passed without the mutation"
 created: "2026-10-13"
 owner: manu
 category: toolkit-tooling

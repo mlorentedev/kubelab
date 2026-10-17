@@ -1,8 +1,7 @@
 ---
-id: "lesson-032-deploy-dns-yml-must-read-from-common-yaml-not"
+id: lesson-032-deploy-dns-yml-must-read-from-common-yaml-not
 type: lesson
 status: active
-title: "deploy-dns.yml must read from common.yaml, not merged config"
 created: "2026-03-19"
 owner: manu
 category: ansible-provisioning

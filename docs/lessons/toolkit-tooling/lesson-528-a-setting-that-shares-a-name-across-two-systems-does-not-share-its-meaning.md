@@ -1,8 +1,7 @@
 ---
-id: "lesson-528-a-setting-that-shares-a-name-across-two-systems-does-not-share-its-meaning"
+id: lesson-528-a-setting-that-shares-a-name-across-two-systems-does-not-share-its-meaning
 type: lesson
 status: active
-title: "A setting that shares a name across two systems does not share its meaning"
 created: "2026-10-07"
 owner: manu
 category: toolkit-tooling

@@ -1,8 +1,7 @@
 ---
-id: "lesson-463-grafana-logs-every-opaque-oauth-access-token-it-cannot-parse"
+id: lesson-463-grafana-logs-every-opaque-oauth-access-token-it-cannot-parse
 type: lesson
 status: active
-title: "Grafana logs every opaque OAuth access token it cannot parse, so each SSO login wrote a live bearer token to Loki"
 created: "2026-09-26"
 owner: manu
 category: identity-secrets

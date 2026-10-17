@@ -1,8 +1,7 @@
 ---
-id: "lesson-377-rotating-is-not-landing-under-selfheal"
+id: lesson-377-rotating-is-not-landing-under-selfheal
 type: lesson
 status: active
-title: "Under selfHeal, a rotation that is not committed is not a rotation — it is a scheduled outage"
 created: "2026-08-23"
 owner: manu
 category: gitops-delivery

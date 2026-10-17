@@ -1,8 +1,7 @@
 ---
-id: "lesson-167-post-mortem-prod-cutover-cert-loss-performanc"
+id: lesson-167-post-mortem-prod-cutover-cert-loss-performanc
 type: lesson
 status: active
-title: "POST-MORTEM: Prod cutover — cert loss + performance degradation"
 created: "2026-03-22"
 owner: manu
 category: edge-tls

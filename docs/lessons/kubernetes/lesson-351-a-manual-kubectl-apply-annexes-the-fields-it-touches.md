@@ -1,8 +1,7 @@
 ---
-id: "lesson-351-a-manual-kubectl-apply-annexes-the-fields-it-touches"
+id: lesson-351-a-manual-kubectl-apply-annexes-the-fields-it-touches
 type: lesson
 status: active
-title: "A manual `kubectl apply` annexes the fields it touches, and the bill arrives months later"
 created: "2026-08-19"
 owner: manu
 category: kubernetes

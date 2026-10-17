@@ -1,8 +1,7 @@
 ---
-id: "lesson-510-loki-answers-no-data-for-ranges-older-than-3h-it-never-flushed"
+id: lesson-510-loki-answers-no-data-for-ranges-older-than-3h-it-never-flushed
 type: lesson
 status: active
-title: "A throwaway Loki answers \"no data\" for lines older than 3 h, whatever the querier flags say"
 created: "2026-10-02"
 owner: manu
 category: observability

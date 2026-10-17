@@ -1,8 +1,7 @@
 ---
-id: "lesson-479-a-deploy-that-imports-from-its-worktree-reverts-other-lanes-on-shared-staging"
+id: lesson-479-a-deploy-that-imports-from-its-worktree-reverts-other-lanes-on-shared-staging
 type: lesson
 status: active
-title: "A deploy step that imports from the worktree it runs in reverts every other lane's state on shared staging"
 created: "2026-09-26"
 owner: manu
 category: gitops-delivery

@@ -1,8 +1,7 @@
 ---
-id: "lesson-507-a-terraform-plan-cannot-prove-a-token-may-create-what-does-not-exist"
+id: lesson-507-a-terraform-plan-cannot-prove-a-token-may-create-what-does-not-exist
 type: lesson
 status: active
-title: "A `terraform plan` cannot prove a token may create something that does not exist yet"
 created: "2026-10-02"
 owner: manu
 category: identity-secrets

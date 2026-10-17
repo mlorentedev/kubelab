@@ -1,8 +1,7 @@
 ---
-id: "lesson-304-tls-is-not-no-tls-config-an-empty-map-in-a-st"
+id: lesson-304-tls-is-not-no-tls-config-an-empty-map-in-a-st
 type: lesson
 status: active
-title: "`tls: {}` is not \"no TLS config\" — an empty map in a strategic-merge patch changes nothing"
 created: "2026-08-09"
 owner: manu
 category: edge-tls

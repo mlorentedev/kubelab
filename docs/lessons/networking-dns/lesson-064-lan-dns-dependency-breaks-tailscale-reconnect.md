@@ -1,8 +1,7 @@
 ---
-id: "lesson-064-lan-dns-dependency-breaks-tailscale-reconnect"
+id: lesson-064-lan-dns-dependency-breaks-tailscale-reconnect
 type: lesson
 status: active
-title: "LAN DNS Dependency Breaks Tailscale Reconnection"
 created: "2026-02-22"
 owner: manu
 category: networking-dns

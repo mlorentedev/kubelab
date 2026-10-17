@@ -1,8 +1,7 @@
 ---
-id: "lesson-195-configmap-mount-must-use-subpath-for-homepage"
+id: lesson-195-configmap-mount-must-use-subpath-for-homepage
 type: lesson
 status: active
-title: "ConfigMap mount must use subPath for Homepage"
 created: "2026-03-23"
 owner: manu
 category: kubernetes

@@ -1,8 +1,7 @@
 ---
-id: "lesson-574-hermes-chat-is-a-client-of-the-gateway"
+id: lesson-574-hermes-chat-is-a-client-of-the-gateway
 type: lesson
 status: active
-title: "In Hermes v0.22 `hermes chat` runs in the gateway, so a per-launch key or variable never reaches the model call"
 created: "2026-10-15"
 owner: manu
 category: containers-docker

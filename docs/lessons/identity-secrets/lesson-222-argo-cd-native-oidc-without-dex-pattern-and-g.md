@@ -1,8 +1,7 @@
 ---
-id: "lesson-222-argo-cd-native-oidc-without-dex-pattern-and-g"
+id: lesson-222-argo-cd-native-oidc-without-dex-pattern-and-g
 type: lesson
 status: active
-title: "Argo CD native OIDC without dex — pattern and gotchas"
 created: "2026-03-27"
 owner: manu
 category: identity-secrets

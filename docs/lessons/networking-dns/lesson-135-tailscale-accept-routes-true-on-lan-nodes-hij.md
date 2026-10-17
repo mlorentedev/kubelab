@@ -1,8 +1,7 @@
 ---
-id: "lesson-135-tailscale-accept-routes-true-on-lan-nodes-hij"
+id: lesson-135-tailscale-accept-routes-true-on-lan-nodes-hij
 type: lesson
 status: active
-title: "Tailscale accept-routes=true on LAN nodes hijacks reply routing and kills inbound traffic"
 created: "2026-03-18"
 owner: manu
 category: networking-dns

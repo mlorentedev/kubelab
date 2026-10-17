@@ -1,8 +1,7 @@
 ---
-id: "lesson-074-2026-02-25-grafana-dashboard-provisioning-con"
+id: lesson-074-2026-02-25-grafana-dashboard-provisioning-con
 type: lesson
 status: active
-title: "2026-02-25 — Grafana dashboard provisioning: ConfigMaps ≠ Docker Compose volumes"
 created: "2026-05-01"
 owner: manu
 category: observability

@@ -1,8 +1,7 @@
 ---
-id: "lesson-524-size-a-backup-bucket-by-listing-it-not-by-walking-its-snapshots"
+id: lesson-524-size-a-backup-bucket-by-listing-it-not-by-walking-its-snapshots
 type: lesson
 status: active
-title: "Size a backup bucket by listing its objects, not by walking its snapshots"
 created: "2026-10-07"
 owner: manu
 category: storage-backup

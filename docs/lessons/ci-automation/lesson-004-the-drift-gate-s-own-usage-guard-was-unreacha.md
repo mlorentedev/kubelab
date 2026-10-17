@@ -1,8 +1,7 @@
 ---
-id: "lesson-004-the-drift-gate-s-own-usage-guard-was-unreacha"
+id: lesson-004-the-drift-gate-s-own-usage-guard-was-unreacha
 type: lesson
 status: active
-title: "The drift gate's own usage guard was unreachable, so it checked the one environment nobody deploys"
 created: "2026-08-16"
 owner: manu
 category: ci-automation

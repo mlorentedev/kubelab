@@ -1,8 +1,7 @@
 ---
-id: "lesson-464-vector-interpolates-every-dollar-in-its-config-comments-included"
+id: lesson-464-vector-interpolates-every-dollar-in-its-config-comments-included
 type: lesson
 status: active
-title: "Vector interpolates every `${...}` in its config file, comments included, and refuses to start on an unset one"
 created: "2026-09-26"
 owner: manu
 category: observability

@@ -1,8 +1,7 @@
 ---
-id: "lesson-231-2026-03-28-cloudflare-api-token-consolidated-"
+id: lesson-231-2026-03-28-cloudflare-api-token-consolidated-
 type: lesson
 status: active
-title: "2026-03-28: Cloudflare API token consolidated — old \"DNS mlorente.dev\" revoked"
 created: "2026-05-01"
 owner: manu
 category: identity-secrets

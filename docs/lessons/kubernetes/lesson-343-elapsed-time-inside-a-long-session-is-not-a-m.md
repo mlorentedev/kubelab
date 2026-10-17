@@ -1,8 +1,7 @@
 ---
-id: "lesson-343-elapsed-time-inside-a-long-session-is-not-a-m"
+id: lesson-343-elapsed-time-inside-a-long-session-is-not-a-m
 type: lesson
 status: active
-title: "Elapsed time inside a long session is not a measurement — pull the authoritative clock"
 created: "2026-08-09"
 owner: manu
 category: kubernetes

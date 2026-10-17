@@ -1,8 +1,7 @@
 ---
-id: "lesson-450-a-key-appended-by-ruamel-renders-below-the-next-blocks-comment"
+id: lesson-450-a-key-appended-by-ruamel-renders-below-the-next-blocks-comment
 type: lesson
 status: active
-title: "A key appended by ruamel renders below the next block's comment"
 created: "2026-09-04"
 owner: manu
 category: toolkit-tooling

@@ -1,8 +1,7 @@
 ---
-id: "lesson-054-proxmox-hostname-rename-breaks-vm-visibility"
+id: lesson-054-proxmox-hostname-rename-breaks-vm-visibility
 type: lesson
 status: active
-title: "Proxmox Hostname Rename Breaks VM Visibility"
 created: "2026-02-20"
 owner: manu
 category: ansible-provisioning

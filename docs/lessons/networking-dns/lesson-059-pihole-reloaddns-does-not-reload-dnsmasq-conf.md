@@ -1,8 +1,7 @@
 ---
-id: "lesson-059-pihole-reloaddns-does-not-reload-dnsmasq-conf"
+id: lesson-059-pihole-reloaddns-does-not-reload-dnsmasq-conf
 type: lesson
 status: active
-title: "pihole reloaddns Does NOT Reload dnsmasq Config Files"
 created: "2026-02-21"
 owner: manu
 category: networking-dns

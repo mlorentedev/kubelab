@@ -1,8 +1,7 @@
 ---
-id: "lesson-499-gitea-answers-an-empty-list-with-null"
+id: lesson-499-gitea-answers-an-empty-list-with-null
 type: lesson
 status: active
-title: "Gitea answers an empty list with `null`: one empty repository made the restore drill unable to check anything"
 created: "2026-10-01"
 owner: manu
 category: storage-backup

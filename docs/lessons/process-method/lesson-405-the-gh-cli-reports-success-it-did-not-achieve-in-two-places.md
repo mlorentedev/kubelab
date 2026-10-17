@@ -1,8 +1,7 @@
 ---
-id: "lesson-405-the-gh-cli-reports-success-it-did-not-achieve-in-two-places"
+id: lesson-405-the-gh-cli-reports-success-it-did-not-achieve-in-two-places
 type: lesson
 status: active
-title: "The `gh` CLI reports success it did not achieve, in two unrelated places"
 created: "2026-08-26"
 owner: manu
 category: process-method

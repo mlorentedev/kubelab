@@ -1,8 +1,7 @@
 ---
-id: "lesson-549-a-chat-approval-can-widen-what-the-config-allows-until-the-gateway-restarts"
+id: lesson-549-a-chat-approval-can-widen-what-the-config-allows-until-the-gateway-restarts
 type: lesson
 status: active
-title: "A chat approval can widen what the config allows, until the gateway restarts"
 created: "2026-10-10"
 owner: manu
 category: identity-secrets

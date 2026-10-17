@@ -1,8 +1,7 @@
 ---
-id: "lesson-161-authelia-oidc-issuer-url-is-request-dependent"
+id: lesson-161-authelia-oidc-issuer-url-is-request-dependent
 type: lesson
 status: active
-title: "Authelia OIDC issuer URL is request-dependent"
 created: "2026-03-22"
 owner: manu
 category: identity-secrets

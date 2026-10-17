@@ -1,8 +1,7 @@
 ---
-id: "lesson-227-github-api-unauthenticated-rate-limit-breaks-"
+id: lesson-227-github-api-unauthenticated-rate-limit-breaks-
 type: lesson
 status: active
-title: "GitHub API unauthenticated rate limit breaks Homepage widgets"
 created: "2026-03-27"
 owner: manu
 category: edge-tls

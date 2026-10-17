@@ -1,8 +1,7 @@
 ---
-id: "lesson-076-2026-02-27-tsnet-version-must-meet-headscale-"
+id: lesson-076-2026-02-27-tsnet-version-must-meet-headscale-
 type: lesson
 status: active
-title: "2026-02-27 — tsnet Version Must Meet Headscale minimum_version"
 created: "2026-05-01"
 owner: manu
 category: networking-dns

@@ -1,8 +1,7 @@
 ---
-id: "lesson-256-2026-05-12-argo-cd-targetrevision-preview-pat"
+id: lesson-256-2026-05-12-argo-cd-targetrevision-preview-pat
 type: lesson
 status: active
-title: "2026-05-12 — Argo CD `targetRevision` preview pattern for visual PR validation"
 created: "2026-05-01"
 owner: manu
 category: gitops-delivery

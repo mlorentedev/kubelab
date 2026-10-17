@@ -1,8 +1,7 @@
 ---
-id: "lesson-163-prod-sops-secrets-must-be-manually-synchroniz"
+id: lesson-163-prod-sops-secrets-must-be-manually-synchroniz
 type: lesson
 status: active
-title: "Prod SOPS secrets must be manually synchronized with staging"
 created: "2026-03-22"
 owner: manu
 category: identity-secrets

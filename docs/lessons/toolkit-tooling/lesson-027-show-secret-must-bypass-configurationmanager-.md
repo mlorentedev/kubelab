@@ -1,8 +1,7 @@
 ---
-id: "lesson-027-show-secret-must-bypass-configurationmanager-"
+id: lesson-027-show-secret-must-bypass-configurationmanager-
 type: lesson
 status: active
-title: "show_secret must bypass ConfigurationManager for env='common'"
 created: "2026-03-22"
 owner: manu
 category: toolkit-tooling

@@ -1,8 +1,7 @@
 ---
-id: "lesson-515-a-sqlite-journal-mode-is-read-from-the-file-header-when-the-image-ships-no-sqlite3"
+id: lesson-515-a-sqlite-journal-mode-is-read-from-the-file-header-when-the-image-ships-no-sqlite3
 type: lesson
 status: active
-title: "A SQLite journal mode can be read from the file header when the image ships no `sqlite3`"
 created: "2026-10-01"
 owner: manu
 category: storage-backup

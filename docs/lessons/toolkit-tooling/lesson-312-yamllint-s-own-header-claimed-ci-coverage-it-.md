@@ -1,8 +1,7 @@
 ---
-id: "lesson-312-yamllint-s-own-header-claimed-ci-coverage-it-"
+id: lesson-312-yamllint-s-own-header-claimed-ci-coverage-it-
 type: lesson
 status: active
-title: "`.yamllint`'s own header claimed CI coverage it doesn't have"
 created: "2026-08-11"
 owner: manu
 category: toolkit-tooling

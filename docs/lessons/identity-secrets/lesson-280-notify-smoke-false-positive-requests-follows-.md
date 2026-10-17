@@ -1,8 +1,7 @@
 ---
-id: "lesson-280-notify-smoke-false-positive-requests-follows-"
+id: lesson-280-notify-smoke-false-positive-requests-follows-
 type: lesson
 status: active
-title: "`notify-smoke` false-positive: `requests` follows the Authelia 303 to a 200 login page"
 created: "2026-06-17"
 owner: manu
 category: identity-secrets

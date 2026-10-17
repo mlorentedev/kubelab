@@ -1,8 +1,7 @@
 ---
-id: "lesson-283-make-fetch-kubeconfig-from-a-non-admin-window"
+id: lesson-283-make-fetch-kubeconfig-from-a-non-admin-window
 type: lesson
 status: active
-title: "`make fetch-kubeconfig` from a non-admin Windows box fails silently from PowerShell — ssh-agent in Git Bash is mandatory"
 created: "2026-06-22"
 owner: manu
 category: toolkit-tooling

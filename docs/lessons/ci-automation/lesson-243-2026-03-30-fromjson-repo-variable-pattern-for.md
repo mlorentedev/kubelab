@@ -1,8 +1,7 @@
 ---
-id: "lesson-243-2026-03-30-fromjson-repo-variable-pattern-for"
+id: lesson-243-2026-03-30-fromjson-repo-variable-pattern-for
 type: lesson
 status: active
-title: "2026-03-30: fromJSON repo variable pattern for hybrid runner fleets"
 created: "2026-05-01"
 owner: manu
 category: ci-automation

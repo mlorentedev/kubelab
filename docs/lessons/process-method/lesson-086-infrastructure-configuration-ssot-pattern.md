@@ -1,8 +1,7 @@
 ---
-id: "lesson-086-infrastructure-configuration-ssot-pattern"
+id: lesson-086-infrastructure-configuration-ssot-pattern
 type: lesson
 status: active
-title: "Infrastructure Configuration SSOT Pattern"
 created: "2026-02-28"
 owner: manu
 category: process-method

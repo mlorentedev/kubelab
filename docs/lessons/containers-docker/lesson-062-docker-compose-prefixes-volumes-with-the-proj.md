@@ -1,8 +1,7 @@
 ---
-id: "lesson-062-docker-compose-prefixes-volumes-with-the-proj"
+id: lesson-062-docker-compose-prefixes-volumes-with-the-proj
 type: lesson
 status: active
-title: "Docker Compose Prefixes Volumes with the Project Name"
 created: "2026-02-21"
 owner: manu
 category: containers-docker

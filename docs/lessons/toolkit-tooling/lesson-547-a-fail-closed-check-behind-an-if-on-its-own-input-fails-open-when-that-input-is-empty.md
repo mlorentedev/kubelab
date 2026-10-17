@@ -1,8 +1,7 @@
 ---
-id: "lesson-547-a-fail-closed-check-behind-an-if-on-its-own-input-fails-open-when-that-input-is-empty"
+id: lesson-547-a-fail-closed-check-behind-an-if-on-its-own-input-fails-open-when-that-input-is-empty
 type: lesson
 status: active
-title: "A fail-closed check behind an `if` on its own input fails open when that input is empty"
 created: "2026-10-10"
 owner: manu
 category: toolkit-tooling

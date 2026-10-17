@@ -1,8 +1,7 @@
 ---
-id: "lesson-327-k3s-s-built-in-servicelb-masks-every-client-s"
+id: lesson-327-k3s-s-built-in-servicelb-masks-every-client-s
 type: lesson
 status: active
-title: "K3s's built-in ServiceLB masks every client's real IP — `externalTrafficPolicy: Local` cannot fix it"
 created: "2026-08-14"
 owner: manu
 category: kubernetes

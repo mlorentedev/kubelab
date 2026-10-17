@@ -1,8 +1,7 @@
 ---
-id: "lesson-186-sops-3-11-removed-editor-flag"
+id: lesson-186-sops-3-11-removed-editor-flag
 type: lesson
 status: active
-title: "SOPS 3.11 removed --editor flag"
 created: "2026-03-23"
 owner: manu
 category: identity-secrets

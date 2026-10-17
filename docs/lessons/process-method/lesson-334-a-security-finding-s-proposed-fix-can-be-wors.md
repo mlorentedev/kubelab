@@ -1,8 +1,7 @@
 ---
-id: "lesson-334-a-security-finding-s-proposed-fix-can-be-wors"
+id: lesson-334-a-security-finding-s-proposed-fix-can-be-wors
 type: lesson
 status: active
-title: "A security finding's proposed fix can be worse than the bug it invents — reproduce before remediating"
 created: "2026-08-15"
 owner: manu
 category: process-method

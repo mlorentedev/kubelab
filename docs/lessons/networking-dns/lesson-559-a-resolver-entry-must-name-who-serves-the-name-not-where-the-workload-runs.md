@@ -1,8 +1,7 @@
 ---
-id: "lesson-559-a-resolver-entry-must-name-who-serves-the-name-not-where-the-workload-runs"
+id: lesson-559-a-resolver-entry-must-name-who-serves-the-name-not-where-the-workload-runs
 type: lesson
 status: active
-title: "A resolver entry must name who serves the name, not where the workload runs"
 created: "2026-10-11"
 owner: manu
 category: networking-dns

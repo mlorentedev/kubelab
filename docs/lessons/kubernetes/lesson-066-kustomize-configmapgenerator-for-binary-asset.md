@@ -1,8 +1,7 @@
 ---
-id: "lesson-066-kustomize-configmapgenerator-for-binary-asset"
+id: lesson-066-kustomize-configmapgenerator-for-binary-asset
 type: lesson
 status: active
-title: "Kustomize configMapGenerator for Binary Assets"
 created: "2026-02-24"
 owner: manu
 category: kubernetes

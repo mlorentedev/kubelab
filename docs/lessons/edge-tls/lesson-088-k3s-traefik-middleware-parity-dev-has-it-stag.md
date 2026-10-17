@@ -1,8 +1,7 @@
 ---
-id: "lesson-088-k3s-traefik-middleware-parity-dev-has-it-stag"
+id: lesson-088-k3s-traefik-middleware-parity-dev-has-it-stag
 type: lesson
 status: active
-title: "K3s Traefik Middleware Parity: Dev Has It, Staging Must Too"
 created: "2026-03-01"
 owner: manu
 category: edge-tls

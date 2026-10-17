@@ -1,8 +1,7 @@
 ---
-id: "lesson-292-a-sops-subprocess-with-a-bare-os-environ-pass"
+id: lesson-292-a-sops-subprocess-with-a-bare-os-environ-pass
 type: lesson
 status: active
-title: "A `sops` subprocess with a bare `os.environ` passes in your shell and returns empty in CI (TOOL-017)"
 created: "2026-07-08"
 owner: manu
 category: identity-secrets

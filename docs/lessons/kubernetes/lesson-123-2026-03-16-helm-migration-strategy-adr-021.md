@@ -1,8 +1,7 @@
 ---
-id: "lesson-123-2026-03-16-helm-migration-strategy-adr-021"
+id: lesson-123-2026-03-16-helm-migration-strategy-adr-021
 type: lesson
 status: active
-title: "2026-03-16: Helm Migration Strategy (ADR-021)"
 created: "2026-05-01"
 owner: manu
 category: kubernetes

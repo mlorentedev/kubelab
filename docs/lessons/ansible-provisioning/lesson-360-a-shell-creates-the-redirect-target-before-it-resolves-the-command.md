@@ -1,8 +1,7 @@
 ---
-id: "lesson-360-a-shell-creates-the-redirect-target-before-it-resolves-the-command"
+id: lesson-360-a-shell-creates-the-redirect-target-before-it-resolves-the-command
 type: lesson
 status: active
-title: "A shell creates the redirect target before it resolves the command, so a missing command yields a corrupt artifact rather than no artifact"
 created: "2026-08-21"
 owner: manu
 category: ansible-provisioning

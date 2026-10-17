@@ -1,8 +1,7 @@
 ---
-id: "lesson-179-hub-ingress-don-t-install-traefik-on-manageme"
+id: lesson-179-hub-ingress-don-t-install-traefik-on-manageme
 type: lesson
 status: active
-title: "Hub ingress: don't install Traefik on management plane — proxy via prod"
 created: "2026-03-22"
 owner: manu
 category: edge-tls

@@ -1,8 +1,7 @@
 ---
-id: "lesson-236-2026-03-29-argocd-notifications-service-webho"
+id: lesson-236-2026-03-29-argocd-notifications-service-webho
 type: lesson
 status: active
-title: "2026-03-29: ArgoCD notifications — service.webhook not service.slack for incoming webhooks"
 created: "2026-05-01"
 owner: manu
 category: gitops-delivery

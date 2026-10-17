@@ -1,8 +1,7 @@
 ---
-id: "lesson-079-2026-02-27-terraform-one-time-setup-vs-day-to"
+id: lesson-079-2026-02-27-terraform-one-time-setup-vs-day-to
 type: lesson
 status: active
-title: "2026-02-27 — Terraform: One-Time Setup vs Day-to-Day Automation Are Different Problems"
 created: "2026-05-01"
 owner: manu
 category: toolkit-tooling

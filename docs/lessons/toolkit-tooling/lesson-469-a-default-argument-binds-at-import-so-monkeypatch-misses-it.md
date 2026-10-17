@@ -1,8 +1,7 @@
 ---
-id: "lesson-469-a-default-argument-binds-at-import-so-monkeypatch-misses-it"
+id: lesson-469-a-default-argument-binds-at-import-so-monkeypatch-misses-it
 type: lesson
 status: active
-title: "A default argument binds at import, so monkeypatching the module constant misses it"
 created: "2026-09-27"
 owner: manu
 category: toolkit-tooling

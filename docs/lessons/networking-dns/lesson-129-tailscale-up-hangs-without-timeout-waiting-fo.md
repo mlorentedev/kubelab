@@ -1,8 +1,7 @@
 ---
-id: "lesson-129-tailscale-up-hangs-without-timeout-waiting-fo"
+id: lesson-129-tailscale-up-hangs-without-timeout-waiting-fo
 type: lesson
 status: active
-title: "tailscale up hangs without --timeout waiting for DERP mesh"
 created: "2026-03-17"
 owner: manu
 category: networking-dns

@@ -1,8 +1,7 @@
 ---
-id: "lesson-566-terraform-does-not-keep-a-states-lineage-across-a-migration"
+id: lesson-566-terraform-does-not-keep-a-states-lineage-across-a-migration
 type: lesson
 status: active
-title: "Terraform does not keep a state's lineage across a migration"
 created: "2026-10-13"
 owner: manu
 category: storage-backup

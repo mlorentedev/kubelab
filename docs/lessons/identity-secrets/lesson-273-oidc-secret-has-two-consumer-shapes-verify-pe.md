@@ -1,8 +1,7 @@
 ---
-id: "lesson-273-oidc-secret-has-two-consumer-shapes-verify-pe"
+id: lesson-273-oidc-secret-has-two-consumer-shapes-verify-pe
 type: lesson
 status: active
-title: "OIDC secret has two consumer shapes — verify per delivery mechanism, not uniformly"
 created: "2026-05-30"
 owner: manu
 category: identity-secrets

@@ -1,8 +1,7 @@
 ---
-id: "lesson-254-ubuntu-etc-logrotate-d-rsyslog-groups-6-syslo"
+id: lesson-254-ubuntu-etc-logrotate-d-rsyslog-groups-6-syslo
 type: lesson
 status: active
-title: "Ubuntu /etc/logrotate.d/rsyslog groups 6 syslog paths into ONE block — regex must match multi-path stanza"
 created: "2026-05-12"
 owner: manu
 category: ansible-provisioning

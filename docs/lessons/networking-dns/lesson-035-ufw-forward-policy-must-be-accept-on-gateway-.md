@@ -1,8 +1,7 @@
 ---
-id: "lesson-035-ufw-forward-policy-must-be-accept-on-gateway-"
+id: lesson-035-ufw-forward-policy-must-be-accept-on-gateway-
 type: lesson
 status: active
-title: "UFW FORWARD policy must be ACCEPT on gateway nodes"
 created: "2026-03-19"
 owner: manu
 category: networking-dns

@@ -1,8 +1,7 @@
 ---
-id: "lesson-406-an-explicit-traefik-priority-can-rank-below-one-that-is-absent"
+id: lesson-406-an-explicit-traefik-priority-can-rank-below-one-that-is-absent
 type: lesson
 status: active
-title: "An explicit Traefik priority can rank below one that is absent"
 created: "2026-08-27"
 owner: manu
 category: edge-tls

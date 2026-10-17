@@ -1,8 +1,7 @@
 ---
-id: "lesson-378-two-paths-to-one-value-and-only-one-guarded"
+id: lesson-378-two-paths-to-one-value-and-only-one-guarded
 type: lesson
 status: active
-title: "When two commands reach the same value, the guard on one is not a guard"
 created: "2026-08-23"
 owner: manu
 category: toolkit-tooling

@@ -1,8 +1,7 @@
 ---
-id: "lesson-544-giteas-empty-flag-is-written-at-push-time-and-never-re-read-from-git"
+id: lesson-544-giteas-empty-flag-is-written-at-push-time-and-never-re-read-from-git
 type: lesson
 status: active
-title: "Gitea's `empty` flag is written at push time and never re-read from git"
 created: "2026-10-09"
 owner: manu
 category: toolkit-tooling

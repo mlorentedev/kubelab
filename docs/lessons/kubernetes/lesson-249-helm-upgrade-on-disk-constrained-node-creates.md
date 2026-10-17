@@ -1,8 +1,7 @@
 ---
-id: "lesson-249-helm-upgrade-on-disk-constrained-node-creates"
+id: lesson-249-helm-upgrade-on-disk-constrained-node-creates
 type: lesson
 status: active
-title: "Helm upgrade on disk-constrained node creates pull-evict-prune-pull death loop"
 created: "2026-05-10"
 owner: manu
 category: kubernetes

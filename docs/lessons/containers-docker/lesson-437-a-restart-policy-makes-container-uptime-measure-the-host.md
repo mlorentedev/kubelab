@@ -1,8 +1,7 @@
 ---
-id: "lesson-437-a-restart-policy-makes-container-uptime-measure-the-host"
+id: lesson-437-a-restart-policy-makes-container-uptime-measure-the-host
 type: lesson
 status: active
-title: "A restart policy makes container uptime measure the host, not the container"
 created: "2026-09-05"
 owner: manu
 category: containers-docker
@@ -15,6 +14,7 @@ tags: [kubelab, containers-docker, docker, buildx, ci, verification, ops-024]
 > 435 and 436 by open PR #1662. Taken as 437 after checking all of them, because
 > announcing a number is not allocating one (#1334).
 
+**Date:** 2026-09-05
 **Context:** OPS-024 / #1657 — the Beelink root filesystem reached 0 bytes free
 **Category:** containers-docker
 

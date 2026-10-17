@@ -1,8 +1,7 @@
 ---
-id: "lesson-009-from-the-non-admin-workstation-can-t-reach-th"
+id: lesson-009-from-the-non-admin-workstation-can-t-reach-th
 type: lesson
 status: active
-title: "From the non-admin workstation, \"can't reach the node\" has three independent causes — not \"node down\""
 created: "2026-06-20"
 owner: manu
 category: networking-dns

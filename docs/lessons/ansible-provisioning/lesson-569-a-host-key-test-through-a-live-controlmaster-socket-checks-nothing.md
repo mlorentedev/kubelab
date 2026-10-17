@@ -1,8 +1,7 @@
 ---
-id: "lesson-569-a-host-key-test-through-a-live-controlmaster-socket-checks-nothing"
+id: lesson-569-a-host-key-test-through-a-live-controlmaster-socket-checks-nothing
 type: lesson
 status: active
-title: "A host-key test through a live ControlMaster socket checks nothing"
 created: "2026-10-14"
 owner: manu
 category: ansible-provisioning

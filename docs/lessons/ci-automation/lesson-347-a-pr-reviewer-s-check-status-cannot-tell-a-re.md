@@ -1,8 +1,7 @@
 ---
-id: "lesson-347-a-pr-reviewer-s-check-status-cannot-tell-a-re"
+id: lesson-347-a-pr-reviewer-s-check-status-cannot-tell-a-re
 type: lesson
 status: active
-title: "A PR reviewer's check status cannot tell a review from a notice, and its inline comments are only a subset of its findings"
 created: "2026-08-15"
 owner: manu
 category: ci-automation

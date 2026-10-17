@@ -1,8 +1,7 @@
 ---
-id: "lesson-056-pi-hole-v6-ignores-dnsmasq-d-by-default"
+id: lesson-056-pi-hole-v6-ignores-dnsmasq-d-by-default
 type: lesson
 status: active
-title: "Pi-hole v6 Ignores dnsmasq.d by Default"
 created: "2026-02-21"
 owner: manu
 category: networking-dns

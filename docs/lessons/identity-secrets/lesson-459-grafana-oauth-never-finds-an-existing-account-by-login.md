@@ -1,8 +1,7 @@
 ---
-id: "lesson-459-grafana-oauth-never-finds-an-existing-account-by-login"
+id: lesson-459-grafana-oauth-never-finds-an-existing-account-by-login
 type: lesson
 status: active
-title: "Grafana OAuth never finds an existing account by login, so switching an account to OAuth fails with \"user sync failed\""
 created: "2026-09-24"
 owner: manu
 category: identity-secrets

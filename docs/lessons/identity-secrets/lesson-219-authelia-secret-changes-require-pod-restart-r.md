@@ -1,8 +1,7 @@
 ---
-id: "lesson-219-authelia-secret-changes-require-pod-restart-r"
+id: lesson-219-authelia-secret-changes-require-pod-restart-r
 type: lesson
 status: active
-title: "Authelia Secret changes require pod restart — RELIAB-002 only covers ConfigMaps"
 created: "2026-03-27"
 owner: manu
 category: identity-secrets

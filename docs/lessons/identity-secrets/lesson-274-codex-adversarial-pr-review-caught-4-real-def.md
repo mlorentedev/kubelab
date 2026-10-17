@@ -1,8 +1,7 @@
 ---
-id: "lesson-274-codex-adversarial-pr-review-caught-4-real-def"
+id: lesson-274-codex-adversarial-pr-review-caught-4-real-def
 type: lesson
 status: active
-title: "Codex adversarial PR review caught 4 real defects across the OIDC sprint — bias toward verification over self-trust"
 created: "2026-05-30"
 owner: manu
 category: identity-secrets

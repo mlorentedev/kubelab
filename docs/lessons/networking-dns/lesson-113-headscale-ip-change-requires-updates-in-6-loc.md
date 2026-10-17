@@ -1,8 +1,7 @@
 ---
-id: "lesson-113-headscale-ip-change-requires-updates-in-6-loc"
+id: lesson-113-headscale-ip-change-requires-updates-in-6-loc
 type: lesson
 status: active
-title: "Headscale IP change requires updates in 6+ locations"
 created: "2026-03-14"
 owner: manu
 category: networking-dns

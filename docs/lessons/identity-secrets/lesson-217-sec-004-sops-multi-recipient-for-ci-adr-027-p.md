@@ -1,8 +1,7 @@
 ---
-id: "lesson-217-sec-004-sops-multi-recipient-for-ci-adr-027-p"
+id: lesson-217-sec-004-sops-multi-recipient-for-ci-adr-027-p
 type: lesson
 status: active
-title: "SEC-004: SOPS Multi-Recipient for CI (ADR-027 Phase 2, 2026-03-27)"
 created: "2026-05-01"
 owner: manu
 category: identity-secrets

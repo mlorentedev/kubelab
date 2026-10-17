@@ -1,8 +1,7 @@
 ---
-id: "lesson-238-2026-03-29-generated-ingressroutes-were-missi"
+id: lesson-238-2026-03-29-generated-ingressroutes-were-missi
 type: lesson
 status: active
-title: "2026-03-29: Generated IngressRoutes were missing secure-headers middleware"
 created: "2026-05-01"
 owner: manu
 category: edge-tls

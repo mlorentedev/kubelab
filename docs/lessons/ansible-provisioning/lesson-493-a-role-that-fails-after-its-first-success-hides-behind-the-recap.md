@@ -1,8 +1,7 @@
 ---
-id: "lesson-493-a-role-that-fails-after-its-first-success-hides-behind-the-recap"
+id: lesson-493-a-role-that-fails-after-its-first-success-hides-behind-the-recap
 type: lesson
 status: active
-title: "Three convergence bugs in one role each looked like a different symptom, and the recap showed none of them"
 created: "2026-10-01"
 owner: manu
 category: ansible-provisioning

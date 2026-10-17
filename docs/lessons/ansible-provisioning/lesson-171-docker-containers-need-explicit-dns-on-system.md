@@ -1,8 +1,7 @@
 ---
-id: "lesson-171-docker-containers-need-explicit-dns-on-system"
+id: lesson-171-docker-containers-need-explicit-dns-on-system
 type: lesson
 status: active
-title: "Docker containers need explicit DNS on systemd-resolved hosts"
 created: "2026-03-22"
 owner: manu
 category: ansible-provisioning

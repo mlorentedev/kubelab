@@ -1,8 +1,7 @@
 ---
-id: "lesson-121-k3s-tests-should-use-local-kubeconfig-not-ssh"
+id: lesson-121-k3s-tests-should-use-local-kubeconfig-not-ssh
 type: lesson
 status: active
-title: "K3s tests should use local kubeconfig not SSH+sudo"
 created: "2026-03-15"
 owner: manu
 category: kubernetes

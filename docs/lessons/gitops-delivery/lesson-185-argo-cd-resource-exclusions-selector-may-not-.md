@@ -1,8 +1,7 @@
 ---
-id: "lesson-185-argo-cd-resource-exclusions-selector-may-not-"
+id: lesson-185-argo-cd-resource-exclusions-selector-may-not-
 type: lesson
 status: active
-title: "Argo CD resource.exclusions selector may not work"
 created: "2026-03-23"
 owner: manu
 category: gitops-delivery

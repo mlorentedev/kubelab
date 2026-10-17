@@ -1,8 +1,7 @@
 ---
-id: "lesson-317-kubectl-exec-with-a-cli-that-boots-a-full-run"
+id: lesson-317-kubectl-exec-with-a-cli-that-boots-a-full-run
 type: lesson
 status: active
-title: "`kubectl exec` with a CLI that boots a full runtime shares the pod's own cgroup"
 created: "2026-08-12"
 owner: manu
 category: kubernetes

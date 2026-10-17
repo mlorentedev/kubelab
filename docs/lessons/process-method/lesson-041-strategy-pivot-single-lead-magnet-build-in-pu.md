@@ -1,8 +1,7 @@
 ---
-id: "lesson-041-strategy-pivot-single-lead-magnet-build-in-pu"
+id: lesson-041-strategy-pivot-single-lead-magnet-build-in-pu
 type: lesson
 status: active
-title: "Strategy pivot: single lead magnet, build-in-public, execution over planning"
 created: "2026-03-15"
 owner: manu
 category: process-method

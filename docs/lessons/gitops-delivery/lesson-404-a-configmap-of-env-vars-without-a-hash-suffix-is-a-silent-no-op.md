@@ -1,8 +1,7 @@
 ---
-id: "lesson-404-a-configmap-of-env-vars-without-a-hash-suffix-is-a-silent-no-op"
+id: lesson-404-a-configmap-of-env-vars-without-a-hash-suffix-is-a-silent-no-op
 type: lesson
 status: active
-title: "A ConfigMap of env vars without a hash suffix is a silent no-op, and Argo CD reports Synced"
 created: "2026-08-26"
 owner: manu
 category: gitops-delivery

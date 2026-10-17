@@ -1,8 +1,7 @@
 ---
-id: "lesson-335-refuting-a-finding-does-not-vaccinate-the-lin"
+id: lesson-335-refuting-a-finding-does-not-vaccinate-the-lin
 type: lesson
 status: active
-title: "Refuting a finding does not vaccinate the line it was about"
 created: "2026-08-15"
 owner: manu
 category: identity-secrets

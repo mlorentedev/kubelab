@@ -1,8 +1,7 @@
 ---
-id: "lesson-154-never-expose-secrets-in-chat-or-logs"
+id: lesson-154-never-expose-secrets-in-chat-or-logs
 type: lesson
 status: active
-title: "Never expose secrets in chat or logs"
 created: "2026-03-21"
 owner: manu
 category: process-method

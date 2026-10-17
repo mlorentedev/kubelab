@@ -1,8 +1,7 @@
 ---
-id: "lesson-550-an-auth-smoke-that-only-omits-the-credential-cannot-tell-a-value-check-from-a-presence-check"
+id: lesson-550-an-auth-smoke-that-only-omits-the-credential-cannot-tell-a-value-check-from-a-presence-check
 type: lesson
 status: active
-title: "An auth smoke that only omits the credential cannot tell a value check from a presence check"
 created: "2026-10-10"
 owner: manu
 category: identity-secrets

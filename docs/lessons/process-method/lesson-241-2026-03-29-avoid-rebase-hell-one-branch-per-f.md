@@ -1,8 +1,7 @@
 ---
-id: "lesson-241-2026-03-29-avoid-rebase-hell-one-branch-per-f"
+id: lesson-241-2026-03-29-avoid-rebase-hell-one-branch-per-f
 type: lesson
 status: active
-title: "2026-03-29: Avoid rebase hell — one branch per file group, one PR at the end"
 created: "2026-05-01"
 owner: manu
 category: process-method

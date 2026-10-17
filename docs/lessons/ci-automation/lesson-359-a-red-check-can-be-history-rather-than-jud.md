@@ -1,8 +1,7 @@
 ---
-id: "lesson-359-a-red-check-can-be-history-rather-than-jud"
+id: lesson-359-a-red-check-can-be-history-rather-than-jud
 type: lesson
 status: active
-title: "A red check can be history rather than judgement — re-trigger before investigating"
 created: "2026-08-20"
 owner: manu
 category: ci-automation

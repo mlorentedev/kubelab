@@ -1,8 +1,7 @@
 ---
-id: "lesson-043-code-bugs-masked-as-documentation-issues"
+id: lesson-043-code-bugs-masked-as-documentation-issues
 type: lesson
 status: active
-title: "Code Bugs Masked as Documentation Issues"
 created: "2026-02-05"
 owner: manu
 category: process-method

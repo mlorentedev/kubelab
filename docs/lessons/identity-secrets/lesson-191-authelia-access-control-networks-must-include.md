@@ -1,8 +1,7 @@
 ---
-id: "lesson-191-authelia-access-control-networks-must-include"
+id: lesson-191-authelia-access-control-networks-must-include
 type: lesson
 status: active
-title: "Authelia access_control networks must include Tailscale CIDR"
 created: "2026-03-25"
 owner: manu
 category: identity-secrets

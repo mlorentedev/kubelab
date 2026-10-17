@@ -1,8 +1,7 @@
 ---
-id: "lesson-044-configurationmanager-vs-direct-file-reference"
+id: lesson-044-configurationmanager-vs-direct-file-reference
 type: lesson
 status: active
-title: "ConfigurationManager vs Direct File References"
 created: "2026-02-05"
 owner: manu
 category: toolkit-tooling

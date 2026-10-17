@@ -1,8 +1,7 @@
 ---
-id: "lesson-582-hermes-injects-a-jobs-script-output-into-its-prompt-so-a-record-parser-cannot-use-the-prompt-section"
+id: lesson-582-hermes-injects-a-jobs-script-output-into-its-prompt-so-a-record-parser-cannot-use-the-prompt-section
 type: lesson
 status: active
-title: "Hermes injects a job's script output into its prompt, so a record parser cannot use the Prompt section"
 created: "2026-10-16"
 owner: manu
 category: containers-docker

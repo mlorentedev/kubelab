@@ -1,8 +1,7 @@
 ---
-id: "lesson-397-check-mode-skips-command-so-every-condition-reading-its-register-fails-the-dry-run"
+id: lesson-397-check-mode-skips-command-so-every-condition-reading-its-register-fails-the-dry-run
 type: lesson
 status: active
-title: "Check mode skips `command:`, so every condition reading its register fails the dry run — and there is never just one"
 created: "2026-08-26"
 owner: manu
 category: ansible-provisioning

@@ -1,8 +1,7 @@
 ---
-id: "lesson-100-tailscale-bootstrap-circular-dependency-on-rp"
+id: lesson-100-tailscale-bootstrap-circular-dependency-on-rp
 type: lesson
 status: active
-title: "Tailscale Bootstrap Circular Dependency on RPi4"
 created: "2026-03-01"
 owner: manu
 category: networking-dns

@@ -1,8 +1,7 @@
 ---
-id: "lesson-109-rpi4-full-sd-card-reflash-recovery-procedure"
+id: lesson-109-rpi4-full-sd-card-reflash-recovery-procedure
 type: lesson
 status: active
-title: "RPi4 full SD card reflash — recovery procedure"
 created: "2026-03-14"
 owner: manu
 category: ansible-provisioning

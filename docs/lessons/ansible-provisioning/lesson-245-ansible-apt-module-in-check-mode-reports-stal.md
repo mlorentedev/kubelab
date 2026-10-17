@@ -1,8 +1,7 @@
 ---
-id: "lesson-245-ansible-apt-module-in-check-mode-reports-stal"
+id: lesson-245-ansible-apt-module-in-check-mode-reports-stal
 type: lesson
 status: active
-title: "Ansible apt module in --check mode reports stale-cache false positives"
 created: "2026-05-10"
 owner: manu
 category: ansible-provisioning

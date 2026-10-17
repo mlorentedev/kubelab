@@ -1,8 +1,7 @@
 ---
-id: "lesson-348-prose-that-contains-a-closing-keyword-is-a-cl"
+id: lesson-348-prose-that-contains-a-closing-keyword-is-a-cl
 type: lesson
 status: active
-title: "Prose that contains a closing keyword is a closing keyword"
 created: "2026-08-18"
 owner: manu
 category: ci-automation

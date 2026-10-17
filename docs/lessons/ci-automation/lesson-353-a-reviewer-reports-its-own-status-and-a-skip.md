@@ -1,8 +1,7 @@
 ---
-id: "lesson-353-a-reviewer-reports-its-own-status-and-a-skip"
+id: lesson-353-a-reviewer-reports-its-own-status-and-a-skip
 type: lesson
 status: active
-title: "A reviewer reports its own status, and a skipped review is not a failed one"
 created: "2026-08-19"
 owner: manu
 category: ci-automation

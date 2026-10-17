@@ -1,8 +1,7 @@
 ---
-id: "lesson-173-k3s-ingressroute-needed-for-vpn-kubelab-live-"
+id: lesson-173-k3s-ingressroute-needed-for-vpn-kubelab-live-
 type: lesson
 status: active
-title: "K3s IngressRoute needed for vpn.kubelab.live after cutover"
 created: "2026-03-22"
 owner: manu
 category: kubernetes

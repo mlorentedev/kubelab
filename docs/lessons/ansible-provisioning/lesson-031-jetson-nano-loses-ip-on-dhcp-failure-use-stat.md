@@ -1,8 +1,7 @@
 ---
-id: "lesson-031-jetson-nano-loses-ip-on-dhcp-failure-use-stat"
+id: lesson-031-jetson-nano-loses-ip-on-dhcp-failure-use-stat
 type: lesson
 status: active
-title: "Jetson Nano loses IP on DHCP failure — use static nmcli config"
 created: "2026-03-19"
 owner: manu
 category: ansible-provisioning

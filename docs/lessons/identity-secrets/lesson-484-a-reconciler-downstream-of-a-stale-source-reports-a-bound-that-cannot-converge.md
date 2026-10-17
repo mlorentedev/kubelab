@@ -1,8 +1,7 @@
 ---
-id: "lesson-484-a-reconciler-downstream-of-a-stale-source-reports-a-bound-that-cannot-converge"
+id: lesson-484-a-reconciler-downstream-of-a-stale-source-reports-a-bound-that-cannot-converge
 type: lesson
 status: active
-title: "A reconciler downstream of a stale source reports a bound that cannot converge"
 created: "2026-09-29"
 owner: manu
 category: identity-secrets

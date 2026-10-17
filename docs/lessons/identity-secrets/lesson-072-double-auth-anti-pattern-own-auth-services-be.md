@@ -1,8 +1,7 @@
 ---
-id: "lesson-072-double-auth-anti-pattern-own-auth-services-be"
+id: lesson-072-double-auth-anti-pattern-own-auth-services-be
 type: lesson
 status: active
-title: "Double Auth Anti-Pattern: Own-Auth Services Behind Authelia"
 created: "2026-02-25"
 owner: manu
 category: identity-secrets

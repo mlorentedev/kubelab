@@ -1,8 +1,7 @@
 ---
-id: "lesson-410-a-healthy-pod-does-not-prove-an-app-read-its-config"
+id: lesson-410-a-healthy-pod-does-not-prove-an-app-read-its-config
 type: lesson
 status: active
-title: "A healthy pod does not prove an app read its config — an unrecognized env var can fail silently"
 created: "2026-08-31"
 owner: manu
 category: kubernetes

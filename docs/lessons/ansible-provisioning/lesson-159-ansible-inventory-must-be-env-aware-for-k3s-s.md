@@ -1,8 +1,7 @@
 ---
-id: "lesson-159-ansible-inventory-must-be-env-aware-for-k3s-s"
+id: lesson-159-ansible-inventory-must-be-env-aware-for-k3s-s
 type: lesson
 status: active
-title: "Ansible inventory must be env-aware for k3s_servers group"
 created: "2026-03-22"
 owner: manu
 category: ansible-provisioning

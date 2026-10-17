@@ -1,8 +1,7 @@
 ---
-id: "lesson-180-cloud-init-yaml-colons-in-strings-cause-parse"
+id: lesson-180-cloud-init-yaml-colons-in-strings-cause-parse
 type: lesson
 status: active
-title: "cloud-init YAML: colons in strings cause parse errors"
 created: "2026-03-22"
 owner: manu
 category: ansible-provisioning

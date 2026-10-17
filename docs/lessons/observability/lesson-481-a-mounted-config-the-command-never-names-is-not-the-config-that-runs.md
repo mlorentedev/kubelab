@@ -1,8 +1,7 @@
 ---
-id: "lesson-481-a-mounted-config-the-command-never-names-is-not-the-config-that-runs"
+id: lesson-481-a-mounted-config-the-command-never-names-is-not-the-config-that-runs
 type: lesson
 status: active
-title: "A mounted config that the command never names is not the config that runs"
 created: "2026-09-26"
 owner: manu
 category: observability

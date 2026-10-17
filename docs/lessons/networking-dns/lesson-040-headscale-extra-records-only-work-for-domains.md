@@ -1,8 +1,7 @@
 ---
-id: "lesson-040-headscale-extra-records-only-work-for-domains"
+id: lesson-040-headscale-extra-records-only-work-for-domains
 type: lesson
 status: active
-title: "Headscale extra_records only work for domains under its zones"
 created: "2026-03-15"
 owner: manu
 category: networking-dns

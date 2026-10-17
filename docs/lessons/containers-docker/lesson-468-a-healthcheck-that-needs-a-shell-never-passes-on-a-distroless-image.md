@@ -1,8 +1,7 @@
 ---
-id: "lesson-468-a-healthcheck-that-needs-a-shell-never-passes-on-a-distroless-image"
+id: lesson-468-a-healthcheck-that-needs-a-shell-never-passes-on-a-distroless-image
 type: lesson
 status: active
-title: "A healthcheck that needs a shell never passes on a distroless image, and blocks whatever waits on it"
 created: "2026-09-26"
 owner: manu
 category: containers-docker

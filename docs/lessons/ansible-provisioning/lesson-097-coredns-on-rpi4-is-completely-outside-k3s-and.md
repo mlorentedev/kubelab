@@ -1,8 +1,7 @@
 ---
-id: "lesson-097-coredns-on-rpi4-is-completely-outside-k3s-and"
+id: lesson-097-coredns-on-rpi4-is-completely-outside-k3s-and
 type: lesson
 status: active
-title: "CoreDNS on RPi4 Is Completely Outside K3s and Ansible Automation"
 created: "2026-03-01"
 owner: manu
 category: ansible-provisioning

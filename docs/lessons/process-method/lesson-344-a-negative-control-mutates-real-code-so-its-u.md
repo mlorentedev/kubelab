@@ -1,8 +1,7 @@
 ---
-id: "lesson-344-a-negative-control-mutates-real-code-so-its-u"
+id: lesson-344-a-negative-control-mutates-real-code-so-its-u
 type: lesson
 status: active
-title: "A negative control mutates real code, so its undo must be scoped to the experiment and not to the file"
 created: "2026-08-09"
 owner: manu
 category: process-method

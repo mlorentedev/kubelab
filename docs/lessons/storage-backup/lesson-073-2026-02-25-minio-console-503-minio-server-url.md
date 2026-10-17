@@ -1,8 +1,7 @@
 ---
-id: "lesson-073-2026-02-25-minio-console-503-minio-server-url"
+id: lesson-073-2026-02-25-minio-console-503-minio-server-url
 type: lesson
 status: active
-title: "2026-02-25 — MinIO console 503: MINIO_SERVER_URL must be internal in dev"
 created: "2026-05-01"
 owner: manu
 category: storage-backup

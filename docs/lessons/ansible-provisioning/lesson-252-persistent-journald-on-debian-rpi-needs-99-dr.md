@@ -1,8 +1,7 @@
 ---
-id: "lesson-252-persistent-journald-on-debian-rpi-needs-99-dr"
+id: lesson-252-persistent-journald-on-debian-rpi-needs-99-dr
 type: lesson
 status: active
-title: "Persistent journald on Debian RPi needs 99- drop-in AND post-restart flush"
 created: "2026-05-11"
 owner: manu
 category: ansible-provisioning

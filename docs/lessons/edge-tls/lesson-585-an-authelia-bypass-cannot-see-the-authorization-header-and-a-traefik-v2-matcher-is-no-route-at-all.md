@@ -1,8 +1,7 @@
 ---
-id: "lesson-585-an-authelia-bypass-cannot-see-the-authorization-header-and-a-traefik-v2-matcher-is-no-route-at-all"
+id: lesson-585-an-authelia-bypass-cannot-see-the-authorization-header-and-a-traefik-v2-matcher-is-no-route-at-all
 type: lesson
 status: active
-title: "An Authelia bypass cannot see the Authorization header, and a Traefik v2 matcher is no route at all"
 created: "2026-10-17"
 owner: manu
 category: edge-tls

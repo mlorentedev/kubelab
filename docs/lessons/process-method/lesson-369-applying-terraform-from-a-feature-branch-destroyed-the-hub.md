@@ -1,8 +1,7 @@
 ---
-id: "lesson-369-applying-terraform-from-a-feature-branch-destroyed-the-hub"
+id: lesson-369-applying-terraform-from-a-feature-branch-destroyed-the-hub
 type: lesson
 status: active
-title: "Applying Terraform from a feature branch destroyed the running hub"
 created: "2026-08-22"
 owner: manu
 category: process-method

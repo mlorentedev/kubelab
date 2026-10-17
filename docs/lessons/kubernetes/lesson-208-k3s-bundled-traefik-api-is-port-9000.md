@@ -1,8 +1,7 @@
 ---
-id: "lesson-208-k3s-bundled-traefik-api-is-port-9000"
+id: lesson-208-k3s-bundled-traefik-api-is-port-9000
 type: lesson
 status: active
-title: "K3s bundled Traefik API is port 9000"
 created: "2026-03-23"
 owner: manu
 category: kubernetes

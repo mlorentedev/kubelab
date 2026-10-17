@@ -1,8 +1,7 @@
 ---
-id: "lesson-578-a-client-test-checks-its-requests-against-the-servers-own-swagger-not-a-fake"
+id: lesson-578-a-client-test-checks-its-requests-against-the-servers-own-swagger-not-a-fake
 type: lesson
 status: active
-title: "A client test checks its requests against the server's own swagger, because a fake certifies whatever it is asked"
 created: "2026-10-16"
 owner: manu
 category: process-method

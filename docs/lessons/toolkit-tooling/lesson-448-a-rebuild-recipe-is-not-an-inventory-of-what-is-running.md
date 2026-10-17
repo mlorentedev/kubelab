@@ -1,8 +1,7 @@
 ---
-id: "lesson-448-a-rebuild-recipe-is-not-an-inventory-of-what-is-running"
+id: lesson-448-a-rebuild-recipe-is-not-an-inventory-of-what-is-running
 type: lesson
 status: active
-title: "A rebuild recipe is not an inventory of what is running"
 created: "2026-08-25"
 owner: manu
 category: toolkit-tooling

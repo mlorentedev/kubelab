@@ -1,8 +1,7 @@
 ---
-id: "lesson-067-toolkit-k8s-deploy-misses-configmapgenerator-"
+id: lesson-067-toolkit-k8s-deploy-misses-configmapgenerator-
 type: lesson
 status: active
-title: "Toolkit K8s Deploy Misses configMapGenerator Binary Resources"
 created: "2026-02-24"
 owner: manu
 category: toolkit-tooling

@@ -1,8 +1,7 @@
 ---
-id: "lesson-138-always-validate-security-policies-in-staging-"
+id: lesson-138-always-validate-security-policies-in-staging-
 type: lesson
 status: active
-title: "Always validate security policies in staging before prod cutover"
 created: "2026-03-20"
 owner: manu
 category: process-method

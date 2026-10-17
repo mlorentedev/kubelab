@@ -1,8 +1,7 @@
 ---
-id: "lesson-143-gitea-admin-auto-creation-via-poststart-lifec"
+id: lesson-143-gitea-admin-auto-creation-via-poststart-lifec
 type: lesson
 status: active
-title: "Gitea admin auto-creation via postStart lifecycle hook"
 created: "2026-03-21"
 owner: manu
 category: identity-secrets

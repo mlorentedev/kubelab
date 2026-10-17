@@ -1,8 +1,7 @@
 ---
-id: "lesson-537-keeping-both-sides-of-a-conflict-also-keeps-both-copies-of-a-line-that-must-exist-once"
+id: lesson-537-keeping-both-sides-of-a-conflict-also-keeps-both-copies-of-a-line-that-must-exist-once
 type: lesson
 status: active
-title: "Keeping both sides of a conflict also keeps both copies of a line that must exist once"
 created: "2026-10-07"
 owner: manu
 category: toolkit-tooling

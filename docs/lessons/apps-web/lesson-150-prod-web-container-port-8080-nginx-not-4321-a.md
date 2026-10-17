@@ -1,8 +1,7 @@
 ---
-id: "lesson-150-prod-web-container-port-8080-nginx-not-4321-a"
+id: lesson-150-prod-web-container-port-8080-nginx-not-4321-a
 type: lesson
 status: active
-title: "Prod web container port: 8080 (Nginx) not 4321 (Astro dev)"
 created: "2026-03-21"
 owner: manu
 category: apps-web

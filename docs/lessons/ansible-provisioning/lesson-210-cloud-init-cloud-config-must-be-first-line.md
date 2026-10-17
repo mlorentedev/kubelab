@@ -1,8 +1,7 @@
 ---
-id: "lesson-210-cloud-init-cloud-config-must-be-first-line"
+id: lesson-210-cloud-init-cloud-config-must-be-first-line
 type: lesson
 status: active
-title: "cloud-init `#cloud-config` must be first line"
 created: "2026-03-26"
 owner: manu
 category: ansible-provisioning

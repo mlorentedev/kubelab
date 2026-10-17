@@ -1,8 +1,7 @@
 ---
-id: "lesson-313-a-stage-agnostic-pre-commit-hook-silently-red"
+id: lesson-313-a-stage-agnostic-pre-commit-hook-silently-red
 type: lesson
 status: active
-title: "A stage-agnostic pre-commit hook silently redundant since hooks went machine-wide"
 created: "2026-08-12"
 owner: manu
 category: ci-automation

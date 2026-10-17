@@ -1,8 +1,7 @@
 ---
-id: "lesson-201-homepage-has-no-native-github-cloudflare-dock"
+id: lesson-201-homepage-has-no-native-github-cloudflare-dock
 type: lesson
 status: active
-title: "Homepage has no native GitHub/Cloudflare/DockerHub widgets"
 created: "2026-03-23"
 owner: manu
 category: apps-web

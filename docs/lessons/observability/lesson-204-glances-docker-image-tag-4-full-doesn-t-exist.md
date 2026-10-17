@@ -1,8 +1,7 @@
 ---
-id: "lesson-204-glances-docker-image-tag-4-full-doesn-t-exist"
+id: lesson-204-glances-docker-image-tag-4-full-doesn-t-exist
 type: lesson
 status: active
-title: "Glances Docker image tag 4-full doesn't exist"
 created: "2026-03-23"
 owner: manu
 category: observability

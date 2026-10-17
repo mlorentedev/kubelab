@@ -1,8 +1,7 @@
 ---
-id: "lesson-364-make-has-no-unknown-variable-error-so-an-unsupported-flag-is-a-real-run"
+id: lesson-364-make-has-no-unknown-variable-error-so-an-unsupported-flag-is-a-real-run
 type: lesson
 status: active
-title: "`make` has no unknown-variable error, so a flag one target ignores is a real run"
 created: "2026-08-21"
 owner: manu
 category: toolkit-tooling

@@ -1,8 +1,7 @@
 ---
-id: "lesson-553-a-slash-command-runs-the-default-branchs-workflow-not-the-prs"
+id: lesson-553-a-slash-command-runs-the-default-branchs-workflow-not-the-prs
 type: lesson
 status: active
-title: "A slash command runs the default branch's workflow, not the PR's"
 created: "2026-10-10"
 owner: manu
 category: ci-automation

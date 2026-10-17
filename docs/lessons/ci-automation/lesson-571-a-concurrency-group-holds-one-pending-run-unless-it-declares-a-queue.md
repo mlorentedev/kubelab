@@ -1,8 +1,7 @@
 ---
-id: "lesson-571-a-concurrency-group-holds-one-pending-run-unless-it-declares-a-queue"
+id: lesson-571-a-concurrency-group-holds-one-pending-run-unless-it-declares-a-queue
 type: lesson
 status: active
-title: "A concurrency group holds one pending run unless it declares a queue"
 created: "2026-10-14"
 owner: manu
 category: ci-automation

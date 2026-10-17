@@ -1,8 +1,7 @@
 ---
-id: "lesson-514-poetry-asks-the-desktop-keyring-even-with-no-private-source"
+id: lesson-514-poetry-asks-the-desktop-keyring-even-with-no-private-source
 type: lesson
 status: active
-title: "Poetry asks the desktop keyring even when no private source exists, and a locked keyring hangs the install with no output"
 created: "2026-10-01"
 owner: manu
 category: toolkit-tooling

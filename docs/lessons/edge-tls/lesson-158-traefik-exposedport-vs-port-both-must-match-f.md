@@ -1,8 +1,7 @@
 ---
-id: "lesson-158-traefik-exposedport-vs-port-both-must-match-f"
+id: lesson-158-traefik-exposedport-vs-port-both-must-match-f
 type: lesson
 status: active
-title: "Traefik exposedPort vs port — both must match for HTTP→HTTPS redirect"
 created: "2026-03-22"
 owner: manu
 category: edge-tls

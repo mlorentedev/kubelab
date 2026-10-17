@@ -1,8 +1,7 @@
 ---
-id: "lesson-114-headscale-v0-28-has-no-http-health-endpoint"
+id: lesson-114-headscale-v0-28-has-no-http-health-endpoint
 type: lesson
 status: active
-title: "Headscale v0.28 has no HTTP /health endpoint"
 created: "2026-03-15"
 owner: manu
 category: networking-dns

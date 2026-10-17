@@ -1,8 +1,7 @@
 ---
-id: "lesson-538-restic-copy-locks-the-source-so-a-read-only-source-credential-needs-no-lock"
+id: lesson-538-restic-copy-locks-the-source-so-a-read-only-source-credential-needs-no-lock
 type: lesson
 status: active
-title: "`restic copy` writes a lock into the source repository, so a read-only source credential fails unless the copy runs with `--no-lock`"
 created: "2026-10-08"
 owner: manu
 category: storage-backup

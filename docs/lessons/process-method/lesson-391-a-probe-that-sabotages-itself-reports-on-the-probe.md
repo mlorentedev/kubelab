@@ -1,8 +1,7 @@
 ---
-id: "lesson-391-a-probe-that-sabotages-itself-reports-on-the-probe"
+id: lesson-391-a-probe-that-sabotages-itself-reports-on-the-probe
 type: lesson
 status: active
-title: "Two ways a one-line probe reports on itself, and both look like a fact about the system"
 created: "2026-08-24"
 owner: manu
 category: process-method

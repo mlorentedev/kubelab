@@ -1,8 +1,7 @@
 ---
-id: "lesson-330-staging-s-selfheal-false-doesn-t-stop-argo-cd"
+id: lesson-330-staging-s-selfheal-false-doesn-t-stop-argo-cd
 type: lesson
 status: active
-title: "Staging's `selfHeal: false` doesn't stop Argo CD from reverting a manual deploy mid-session — it only suppresses drift correction, not new-revision sync"
 created: "2026-08-15"
 owner: manu
 category: gitops-delivery

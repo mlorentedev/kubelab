@@ -1,8 +1,7 @@
 ---
-id: "lesson-095-sops-set-quoting-special-characters-break-jso"
+id: lesson-095-sops-set-quoting-special-characters-break-jso
 type: lesson
 status: active
-title: "sops --set Quoting: Special Characters Break JSON Parsing"
 created: "2026-03-01"
 owner: manu
 category: identity-secrets

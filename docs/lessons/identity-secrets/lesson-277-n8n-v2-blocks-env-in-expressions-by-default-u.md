@@ -1,8 +1,7 @@
 ---
-id: "lesson-277-n8n-v2-blocks-env-in-expressions-by-default-u"
+id: lesson-277-n8n-v2-blocks-env-in-expressions-by-default-u
 type: lesson
 status: active
-title: "n8n v2 blocks `$env` in expressions by default — use a native Header Auth credential for webhook secrets"
 created: "2026-06-14"
 owner: manu
 category: identity-secrets

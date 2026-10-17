@@ -1,8 +1,7 @@
 ---
-id: "lesson-323-a-default-value-has-to-be-judged-by-what-it-c"
+id: lesson-323-a-default-value-has-to-be-judged-by-what-it-c
 type: lesson
 status: active
-title: "A default value has to be judged by what it converges toward, not just whether it avoids a crash"
 created: "2026-08-13"
 owner: manu
 category: observability

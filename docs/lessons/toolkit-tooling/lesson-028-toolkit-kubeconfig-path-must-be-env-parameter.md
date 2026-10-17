@@ -1,8 +1,7 @@
 ---
-id: "lesson-028-toolkit-kubeconfig-path-must-be-env-parameter"
+id: lesson-028-toolkit-kubeconfig-path-must-be-env-parameter
 type: lesson
 status: active
-title: "Toolkit kubeconfig path must be env-parameterized"
 created: "2026-03-19"
 owner: manu
 category: toolkit-tooling

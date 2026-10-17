@@ -1,8 +1,7 @@
 ---
-id: "lesson-556-two-derivations-of-one-address-diverge-when-a-route-is-added"
+id: lesson-556-two-derivations-of-one-address-diverge-when-a-route-is-added
 type: lesson
 status: active
-title: "Two derivations of one address diverge when a route is added"
 created: "2026-10-10"
 owner: manu
 category: identity-secrets

@@ -1,8 +1,7 @@
 ---
-id: "lesson-034-nftables-flush-ruleset-is-incompatible-with-d"
+id: lesson-034-nftables-flush-ruleset-is-incompatible-with-d
 type: lesson
 status: active
-title: "nftables `flush ruleset` is incompatible with Docker/UFW/Tailscale"
 created: "2026-03-19"
 owner: manu
 category: networking-dns

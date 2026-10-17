@@ -1,8 +1,7 @@
 ---
-id: "lesson-151-gitea-oidc-cli-writes-to-db-but-web-process-c"
+id: lesson-151-gitea-oidc-cli-writes-to-db-but-web-process-c
 type: lesson
 status: active
-title: "Gitea OIDC: CLI writes to DB but web process caches in memory"
 created: "2026-03-21"
 owner: manu
 category: identity-secrets

@@ -1,8 +1,7 @@
 ---
-id: "lesson-306-a-check-never-observed-failing-is-a-claim-in-"
+id: lesson-306-a-check-never-observed-failing-is-a-claim-in-
 type: lesson
 status: active
-title: "A check never observed failing is a claim in executable syntax, not a check (AI-007)"
 created: "2026-08-09"
 owner: manu
 category: process-method

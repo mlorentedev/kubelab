@@ -1,8 +1,7 @@
 ---
-id: "lesson-370-nine-green-signals-described-a-broken-hub"
+id: lesson-370-nine-green-signals-described-a-broken-hub
 type: lesson
 status: active
-title: "Nine green signals described a broken hub, and running it found all nine"
 created: "2026-08-22"
 owner: manu
 category: process-method

@@ -1,8 +1,7 @@
 ---
-id: "lesson-423-a-fake-cannot-verify-a-request-only-agree-with-it"
+id: lesson-423-a-fake-cannot-verify-a-request-only-agree-with-it
 type: lesson
 status: active
-title: "A fake cannot verify a request — it can only agree with whoever wrote it"
 created: "2026-09-03"
 owner: manu
 category: toolkit-tooling

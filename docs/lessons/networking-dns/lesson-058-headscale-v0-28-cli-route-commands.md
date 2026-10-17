@@ -1,8 +1,7 @@
 ---
-id: "lesson-058-headscale-v0-28-cli-route-commands"
+id: lesson-058-headscale-v0-28-cli-route-commands
 type: lesson
 status: active
-title: "Headscale v0.28 CLI Route Commands"
 created: "2026-02-21"
 owner: manu
 category: networking-dns

@@ -1,8 +1,7 @@
 ---
-id: "lesson-214-homepage-services-tab-ssot-driven-dashboard-t"
+id: lesson-214-homepage-services-tab-ssot-driven-dashboard-t
 type: lesson
 status: active
-title: "Homepage Services Tab — SSOT-Driven Dashboard Tables"
 created: "2026-03-26"
 owner: manu
 category: kubernetes

@@ -1,8 +1,7 @@
 ---
-id: "lesson-137-k8s-ingressroute-port-must-match-service-port"
+id: lesson-137-k8s-ingressroute-port-must-match-service-port
 type: lesson
 status: active
-title: "K8s IngressRoute port must match Service port, not container port"
 created: "2026-03-20"
 owner: manu
 category: edge-tls

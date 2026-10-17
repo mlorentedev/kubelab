@@ -1,8 +1,7 @@
 ---
-id: "lesson-509-a-check-inside-the-unit-cannot-see-the-unit-not-running"
+id: lesson-509-a-check-inside-the-unit-cannot-see-the-unit-not-running
 type: lesson
 status: active
-title: "A check inside the unit it guards cannot see the unit not running, and filtering on \"is it up\" turns \"all off\" into a page"
 created: "2026-10-02"
 owner: manu
 category: observability

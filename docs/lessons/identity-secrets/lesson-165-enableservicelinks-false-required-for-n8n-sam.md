@@ -1,8 +1,7 @@
 ---
-id: "lesson-165-enableservicelinks-false-required-for-n8n-sam"
+id: lesson-165-enableservicelinks-false-required-for-n8n-sam
 type: lesson
 status: active
-title: "enableServiceLinks: false required for n8n (same as Authelia)"
 created: "2026-03-22"
 owner: manu
 category: identity-secrets

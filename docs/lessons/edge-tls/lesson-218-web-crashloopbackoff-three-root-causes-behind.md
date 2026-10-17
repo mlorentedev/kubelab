@@ -1,8 +1,7 @@
 ---
-id: "lesson-218-web-crashloopbackoff-three-root-causes-behind"
+id: lesson-218-web-crashloopbackoff-three-root-causes-behind
 type: lesson
 status: active
-title: "Web CrashLoopBackOff: three root causes behind one symptom"
 created: "2026-03-27"
 owner: manu
 category: edge-tls

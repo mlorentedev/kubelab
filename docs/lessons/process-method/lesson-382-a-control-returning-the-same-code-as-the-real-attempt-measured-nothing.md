@@ -1,8 +1,7 @@
 ---
-id: "lesson-382-a-control-returning-the-same-code-as-the-real-attempt-measured-nothing"
+id: lesson-382-a-control-returning-the-same-code-as-the-real-attempt-measured-nothing
 type: lesson
 status: active
-title: "Discriminate the error code, and check that your control can even distinguish the answer"
 created: "2026-08-23"
 owner: manu
 category: process-method

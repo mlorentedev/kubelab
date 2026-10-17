@@ -1,8 +1,7 @@
 ---
-id: "lesson-368-a-finding-closed-in-code-was-never-executed"
+id: lesson-368-a-finding-closed-in-code-was-never-executed
 type: lesson
 status: active
-title: "\"Closed in code\" is not closed, and the gap is invisible until something runs"
 created: "2026-08-22"
 owner: manu
 category: gitops-delivery

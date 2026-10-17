@@ -1,8 +1,7 @@
 ---
-id: "lesson-272-kubernetes-subpath-mounts-freeze-content-sile"
+id: lesson-272-kubernetes-subpath-mounts-freeze-content-sile
 type: lesson
 status: active
-title: "Kubernetes `subPath` mounts freeze content — silently breaks app-level watch and live Secret updates"
 created: "2026-05-25"
 owner: manu
 category: kubernetes

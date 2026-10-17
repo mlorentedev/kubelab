@@ -1,8 +1,7 @@
 ---
-id: "lesson-554-a-staging-secret-applied-from-a-branch-outlives-its-merge"
+id: lesson-554-a-staging-secret-applied-from-a-branch-outlives-its-merge
 type: lesson
 status: active
-title: "A staging Secret applied from a branch outlives its merge, because Argo CD reverts the branch's manifests but never its Secrets"
 created: "2026-10-10"
 owner: manu
 category: gitops-delivery

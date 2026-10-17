@@ -1,8 +1,7 @@
 ---
-id: "lesson-021-oidc-token-endpoint-auth-method-must-be-decla"
+id: lesson-021-oidc-token-endpoint-auth-method-must-be-decla
 type: lesson
 status: active
-title: "OIDC `token_endpoint_auth_method` must be declared explicitly on every client"
 created: "2026-05-26"
 owner: manu
 category: identity-secrets

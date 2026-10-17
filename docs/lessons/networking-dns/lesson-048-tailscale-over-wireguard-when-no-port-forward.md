@@ -1,8 +1,7 @@
 ---
-id: "lesson-048-tailscale-over-wireguard-when-no-port-forward"
+id: lesson-048-tailscale-over-wireguard-when-no-port-forward
 type: lesson
 status: active
-title: "Tailscale Over WireGuard When No Port Forwarding"
 created: "2026-02-09"
 owner: manu
 category: networking-dns

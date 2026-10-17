@@ -1,8 +1,7 @@
 ---
-id: "lesson-424-a-convergence-step-scoped-to-the-creation-diff-repairs-nothing"
+id: lesson-424-a-convergence-step-scoped-to-the-creation-diff-repairs-nothing
 type: lesson
 status: active
-title: "A convergence step scoped to the creation diff never repairs what already exists"
 created: "2026-09-04"
 owner: manu
 category: toolkit-tooling

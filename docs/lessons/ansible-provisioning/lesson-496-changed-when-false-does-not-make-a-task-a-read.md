@@ -1,8 +1,7 @@
 ---
-id: "lesson-496-changed-when-false-does-not-make-a-task-a-read"
+id: lesson-496-changed-when-false-does-not-make-a-task-a-read
 type: lesson
 status: active
-title: "`changed_when: false` does not make a task a read"
 created: "2026-10-01"
 owner: manu
 category: ansible-provisioning

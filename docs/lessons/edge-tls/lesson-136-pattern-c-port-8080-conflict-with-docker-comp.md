@@ -1,8 +1,7 @@
 ---
-id: "lesson-136-pattern-c-port-8080-conflict-with-docker-comp"
+id: lesson-136-pattern-c-port-8080-conflict-with-docker-comp
 type: lesson
 status: active
-title: "Pattern C port 8080 conflict with Docker Compose Traefik dashboard"
 created: "2026-03-20"
 owner: manu
 category: edge-tls

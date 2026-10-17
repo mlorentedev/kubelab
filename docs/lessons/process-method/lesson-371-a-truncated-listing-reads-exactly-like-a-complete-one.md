@@ -1,8 +1,7 @@
 ---
-id: "lesson-371-a-truncated-listing-reads-exactly-like-a-complete-one"
+id: lesson-371-a-truncated-listing-reads-exactly-like-a-complete-one
 type: lesson
 status: active
-title: "A truncated listing reads exactly like a complete one, and planning built on it stays coherent for hours"
 created: "2026-08-23"
 owner: manu
 category: process-method

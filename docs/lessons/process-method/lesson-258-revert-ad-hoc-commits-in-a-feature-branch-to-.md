@@ -1,8 +1,7 @@
 ---
-id: "lesson-258-revert-ad-hoc-commits-in-a-feature-branch-to-"
+id: lesson-258-revert-ad-hoc-commits-in-a-feature-branch-to-
 type: lesson
 status: active
-title: "Revert ad-hoc commits in a feature branch to keep PR scope atomic (alternative to interactive rebase + force-push)"
 created: "2026-05-19"
 owner: manu
 category: process-method

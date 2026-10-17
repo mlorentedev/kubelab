@@ -1,8 +1,7 @@
 ---
-id: "lesson-557-hermes-reads-an-anthropic-key-prefix-as-oauth"
+id: lesson-557-hermes-reads-an-anthropic-key-prefix-as-oauth
 type: lesson
 status: active
-title: "Hermes reads a new Anthropic key prefix as an OAuth token"
 created: "2026-10-10"
 owner: manu
 category: containers-docker

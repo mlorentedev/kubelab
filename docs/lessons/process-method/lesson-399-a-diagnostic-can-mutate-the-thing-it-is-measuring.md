@@ -1,8 +1,7 @@
 ---
-id: "lesson-399-a-diagnostic-can-mutate-the-thing-it-is-measuring"
+id: lesson-399-a-diagnostic-can-mutate-the-thing-it-is-measuring
 type: lesson
 status: active
-title: "A diagnostic can mutate the thing it is measuring, and the mutation can be invisible in the channel you check with"
 created: "2026-08-26"
 owner: manu
 category: process-method

@@ -1,8 +1,7 @@
 ---
-id: "lesson-449-a-declared-public-domain-nothing-serves-becomes-a-ticket-to-publish-it"
+id: lesson-449-a-declared-public-domain-nothing-serves-becomes-a-ticket-to-publish-it
 type: lesson
 status: active
-title: "A declared public domain nothing serves becomes a ticket to publish it"
 created: "2026-09-02"
 owner: manu
 category: networking-dns

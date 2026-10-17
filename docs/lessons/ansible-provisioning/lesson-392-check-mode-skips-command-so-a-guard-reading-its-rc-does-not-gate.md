@@ -1,8 +1,7 @@
 ---
-id: "lesson-392-check-mode-skips-command-so-a-guard-reading-its-rc-does-not-gate"
+id: lesson-392-check-mode-skips-command-so-a-guard-reading-its-rc-does-not-gate
 type: lesson
 status: active
-title: "`--check` skips `command:`, so a guard that reads its `rc` stops gating — the dry run fails where the real run does not"
 created: "2026-08-24"
 owner: manu
 category: ansible-provisioning

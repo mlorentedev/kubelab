@@ -1,8 +1,7 @@
 ---
-id: "lesson-402-a-push-to-a-merged-prs-branch-recreates-it-and-exits-zero"
+id: lesson-402-a-push-to-a-merged-prs-branch-recreates-it-and-exits-zero
 type: lesson
 status: active
-title: "A push to a merged PR's branch recreates the branch and exits 0"
 created: "2026-08-26"
 owner: manu
 category: process-method

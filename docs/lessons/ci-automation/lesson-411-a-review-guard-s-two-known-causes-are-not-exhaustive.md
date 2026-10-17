@@ -1,8 +1,7 @@
 ---
-id: "lesson-411-a-review-guard-s-two-known-causes-are-not-exhaustive"
+id: lesson-411-a-review-guard-s-two-known-causes-are-not-exhaustive
 type: lesson
 status: active
-title: "A review guard's two documented failure causes were not exhaustive — a third, structural one hid behind an identical error"
 created: "2026-09-01"
 owner: manu
 category: ci-automation

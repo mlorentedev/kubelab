@@ -1,8 +1,7 @@
 ---
-id: "lesson-525-a-container-on-a-tailnet-node-leaves-as-that-node"
+id: lesson-525-a-container-on-a-tailnet-node-leaves-as-that-node
 type: lesson
 status: active
-title: "A container on a tailnet node reaches the tailnet as that node"
 created: "2026-10-06"
 owner: manu
 category: networking-dns

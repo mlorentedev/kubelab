@@ -1,8 +1,7 @@
 ---
-id: "lesson-471-a-userinfo-cache-does-not-bound-a-demotion-the-token-lifespan-does"
+id: lesson-471-a-userinfo-cache-does-not-bound-a-demotion-the-token-lifespan-does
 type: lesson
 status: active
-title: "A UserInfo cache does not bound a demotion: the token lifespan does"
 created: "2026-09-26"
 owner: manu
 category: identity-secrets

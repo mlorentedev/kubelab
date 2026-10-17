@@ -1,8 +1,7 @@
 ---
-id: "lesson-282-read-write-traefik-config-guis-are-rejected-i"
+id: lesson-282-read-write-traefik-config-guis-are-rejected-i
 type: lesson
 status: active
-title: "Read-write Traefik config GUIs are rejected: IaC/SSOT inversion + K3s CRD-incompatible"
 created: "2026-06-20"
 owner: manu
 category: kubernetes

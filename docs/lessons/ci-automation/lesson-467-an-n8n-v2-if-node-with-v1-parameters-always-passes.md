@@ -1,8 +1,7 @@
 ---
-id: "lesson-467-an-n8n-v2-if-node-with-v1-parameters-always-passes"
+id: lesson-467-an-n8n-v2-if-node-with-v1-parameters-always-passes
 type: lesson
 status: active
-title: "An n8n IF node at `typeVersion: 2` with v1-shaped conditions always passes, and `rawBody` never reaches `$json`"
 created: "2026-09-25"
 owner: manu
 category: ci-automation

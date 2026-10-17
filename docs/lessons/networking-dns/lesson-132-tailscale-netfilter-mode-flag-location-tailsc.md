@@ -1,8 +1,7 @@
 ---
-id: "lesson-132-tailscale-netfilter-mode-flag-location-tailsc"
+id: lesson-132-tailscale-netfilter-mode-flag-location-tailsc
 type: lesson
 status: active
-title: "Tailscale netfilter-mode flag location: tailscale up, NOT tailscaled daemon"
 created: "2026-03-17"
 owner: manu
 category: networking-dns

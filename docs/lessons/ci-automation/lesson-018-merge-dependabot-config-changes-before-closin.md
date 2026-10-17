@@ -1,8 +1,7 @@
 ---
-id: "lesson-018-merge-dependabot-config-changes-before-closin"
+id: lesson-018-merge-dependabot-config-changes-before-closin
 type: lesson
 status: active
-title: "Merge Dependabot config changes BEFORE closing its PRs"
 created: "2026-06-14"
 owner: manu
 category: ci-automation

@@ -1,8 +1,7 @@
 ---
-id: "lesson-417-an-unapplied-iac-module-is-read-as-a-control"
+id: lesson-417-an-unapplied-iac-module-is-read-as-a-control
 type: lesson
 status: active
-title: "An IaC module that was never applied is read as a control, and the header saying otherwise does not stop it"
 created: "2026-09-02"
 owner: manu
 category: gitops-delivery

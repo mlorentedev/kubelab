@@ -1,8 +1,7 @@
 ---
-id: "lesson-160-configure-oidc-py-must-use-update-oauth-not-d"
+id: lesson-160-configure-oidc-py-must-use-update-oauth-not-d
 type: lesson
 status: active
-title: "configure_oidc.py must use update-oauth (not delete + add-oauth)"
 created: "2026-03-22"
 owner: manu
 category: identity-secrets

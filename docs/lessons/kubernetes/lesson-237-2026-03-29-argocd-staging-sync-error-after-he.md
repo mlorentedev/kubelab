@@ -1,8 +1,7 @@
 ---
-id: "lesson-237-2026-03-29-argocd-staging-sync-error-after-he"
+id: lesson-237-2026-03-29-argocd-staging-sync-error-after-he
 type: lesson
 status: active
-title: "2026-03-29: ArgoCD staging sync error after Helm upgrade — stale repo-server connection"
 created: "2026-05-01"
 owner: manu
 category: kubernetes

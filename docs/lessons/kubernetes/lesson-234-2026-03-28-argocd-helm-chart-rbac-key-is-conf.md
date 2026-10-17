@@ -1,8 +1,7 @@
 ---
-id: "lesson-234-2026-03-28-argocd-helm-chart-rbac-key-is-conf"
+id: lesson-234-2026-03-28-argocd-helm-chart-rbac-key-is-conf
 type: lesson
 status: active
-title: "2026-03-28: ArgoCD Helm chart RBAC key is `configs.rbac`, NOT `configs.rbacConfig`"
 created: "2026-05-01"
 owner: manu
 category: kubernetes

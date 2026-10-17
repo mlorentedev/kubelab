@@ -1,8 +1,7 @@
 ---
-id: "lesson-268-always-git-pull-master-before-make-apply-secr"
+id: lesson-268-always-git-pull-master-before-make-apply-secr
 type: lesson
 status: active
-title: "Always `git pull` master before `make apply-secrets ENV=prod` — toolkit code runs from local checkout"
 created: "2026-05-23"
 owner: manu
 category: toolkit-tooling

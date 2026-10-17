@@ -1,8 +1,7 @@
 ---
-id: "lesson-036-docker-gpg-key-never-delete-asc-on-re-runs"
+id: lesson-036-docker-gpg-key-never-delete-asc-on-re-runs
 type: lesson
 status: active
-title: "Docker GPG key: never delete .asc on re-runs"
 created: "2026-03-19"
 owner: manu
 category: ansible-provisioning

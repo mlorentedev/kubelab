@@ -1,8 +1,7 @@
 ---
-id: "lesson-240-2026-03-29-argocd-selfheal-reverts-manual-kub"
+id: lesson-240-2026-03-29-argocd-selfheal-reverts-manual-kub
 type: lesson
 status: active
-title: "2026-03-29: ArgoCD selfHeal reverts manual kubectl apply instantly"
 created: "2026-05-01"
 owner: manu
 category: gitops-delivery

@@ -1,8 +1,7 @@
 ---
-id: "lesson-480-a-wip-commit-a-hook-refused-turns-the-safe-restore-back-into-the-destructive-one"
+id: lesson-480-a-wip-commit-a-hook-refused-turns-the-safe-restore-back-into-the-destructive-one
 type: lesson
 status: active
-title: "A WIP commit that a hook refused turns the safe restore back into the destructive one"
 created: "2026-09-27"
 owner: manu
 category: process-method

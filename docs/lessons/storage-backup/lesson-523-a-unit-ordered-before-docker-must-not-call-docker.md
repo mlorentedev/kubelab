@@ -1,8 +1,7 @@
 ---
-id: "lesson-523-a-unit-ordered-before-docker-must-not-call-docker"
+id: lesson-523-a-unit-ordered-before-docker-must-not-call-docker
 type: lesson
 status: active
-title: "A unit ordered `Before=docker.service` that calls the docker CLI deadlocks the boot until its own timeout"
 created: "2026-10-07"
 owner: manu
 category: storage-backup

@@ -1,8 +1,7 @@
 ---
-id: "lesson-225-external-service-credential-reconciliation-pa"
+id: lesson-225-external-service-credential-reconciliation-pa
 type: lesson
 status: active
-title: "External service credential reconciliation pattern"
 created: "2026-03-27"
 owner: manu
 category: identity-secrets

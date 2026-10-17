@@ -1,8 +1,7 @@
 ---
-id: "lesson-198-glances-v4-api-path-is-api-4"
+id: lesson-198-glances-v4-api-path-is-api-4
 type: lesson
 status: active
-title: "Glances v4 API path is /api/4/"
 created: "2026-03-23"
 owner: manu
 category: observability

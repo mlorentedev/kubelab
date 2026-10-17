@@ -1,8 +1,7 @@
 ---
-id: "lesson-142-kustomize-images-transformer-is-ssot-for-imag"
+id: lesson-142-kustomize-images-transformer-is-ssot-for-imag
 type: lesson
 status: active
-title: "Kustomize images: transformer is SSOT for image versions"
 created: "2026-03-21"
 owner: manu
 category: kubernetes

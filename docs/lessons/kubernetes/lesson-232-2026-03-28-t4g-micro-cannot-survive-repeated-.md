@@ -1,8 +1,7 @@
 ---
-id: "lesson-232-2026-03-28-t4g-micro-cannot-survive-repeated-"
+id: lesson-232-2026-03-28-t4g-micro-cannot-survive-repeated-
 type: lesson
 status: active
-title: "2026-03-28: t4g.micro cannot survive repeated Helm upgrade retries — stop after first failure"
 created: "2026-05-01"
 owner: manu
 category: kubernetes

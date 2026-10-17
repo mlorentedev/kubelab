@@ -1,8 +1,7 @@
 ---
-id: "lesson-168-headscale-override-local-dns-must-be-false"
+id: lesson-168-headscale-override-local-dns-must-be-false
 type: lesson
 status: active
-title: "Headscale override_local_dns must be false"
 created: "2026-03-22"
 owner: manu
 category: networking-dns

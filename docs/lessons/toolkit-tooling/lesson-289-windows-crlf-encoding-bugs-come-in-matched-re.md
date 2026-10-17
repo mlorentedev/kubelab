@@ -1,8 +1,7 @@
 ---
-id: "lesson-289-windows-crlf-encoding-bugs-come-in-matched-re"
+id: lesson-289-windows-crlf-encoding-bugs-come-in-matched-re
 type: lesson
 status: active
-title: "Windows CRLF/encoding bugs come in matched read+write pairs, and pytest's own capture can hide the bug you're testing for (TOOL-020)"
 created: "2026-07-08"
 owner: manu
 category: toolkit-tooling

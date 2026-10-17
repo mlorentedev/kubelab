@@ -1,8 +1,7 @@
 ---
-id: "lesson-498-docker-rm-without-v-keeps-the-restored-database"
+id: lesson-498-docker-rm-without-v-keeps-the-restored-database
 type: lesson
 status: active
-title: "`docker rm` without `-v` keeps the restored database: the image declares the volume"
 created: "2026-10-01"
 owner: manu
 category: storage-backup

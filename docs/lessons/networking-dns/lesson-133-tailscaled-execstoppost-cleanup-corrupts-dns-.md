@@ -1,8 +1,7 @@
 ---
-id: "lesson-133-tailscaled-execstoppost-cleanup-corrupts-dns-"
+id: lesson-133-tailscaled-execstoppost-cleanup-corrupts-dns-
 type: lesson
 status: active
-title: "tailscaled ExecStopPost cleanup corrupts DNS state on crash"
 created: "2026-03-17"
 owner: manu
 category: networking-dns

@@ -1,8 +1,7 @@
 ---
-id: "lesson-116-toolkit-command-run-must-stream-output-for-an"
+id: lesson-116-toolkit-command-run-must-stream-output-for-an
 type: lesson
 status: active
-title: "Toolkit command.run must stream output for Ansible"
 created: "2026-03-15"
 owner: manu
 category: toolkit-tooling

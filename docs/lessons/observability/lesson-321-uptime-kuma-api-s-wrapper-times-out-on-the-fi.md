@@ -1,8 +1,7 @@
 ---
-id: "lesson-321-uptime-kuma-api-s-wrapper-times-out-on-the-fi"
+id: lesson-321-uptime-kuma-api-s-wrapper-times-out-on-the-fi
 type: lesson
 status: active
-title: "`uptime-kuma-api`'s wrapper times out on the first call over a fresh v2 socket, and integration-test containers need per-process names"
 created: "2026-08-13"
 owner: manu
 category: observability

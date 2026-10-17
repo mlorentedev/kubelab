@@ -1,8 +1,7 @@
 ---
-id: "lesson-089-crowdsec-bouncer-lapi-registration-lost-after"
+id: lesson-089-crowdsec-bouncer-lapi-registration-lost-after
 type: lesson
 status: active
-title: "CrowdSec Bouncer LAPI Registration Lost After Pod Recreation"
 created: "2026-03-01"
 owner: manu
 category: edge-tls

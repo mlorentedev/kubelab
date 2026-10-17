@@ -1,8 +1,7 @@
 ---
-id: "lesson-108-rpi4-sd-reflash-etc-hosts-vpn-fallback-missin"
+id: lesson-108-rpi4-sd-reflash-etc-hosts-vpn-fallback-missin
 type: lesson
 status: active
-title: "RPi4 SD reflash — /etc/hosts VPN fallback missing"
 created: "2026-03-14"
 owner: manu
 category: ansible-provisioning

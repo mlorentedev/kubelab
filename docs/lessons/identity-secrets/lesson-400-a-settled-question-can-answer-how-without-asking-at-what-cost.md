@@ -1,8 +1,7 @@
 ---
-id: "lesson-400-a-settled-question-can-answer-how-without-asking-at-what-cost"
+id: lesson-400-a-settled-question-can-answer-how-without-asking-at-what-cost
 type: lesson
 status: active
-title: "A settled question can answer \"how\" without asking \"at what cost\", and the spec builds on it anyway"
 created: "2026-08-26"
 owner: manu
 category: identity-secrets

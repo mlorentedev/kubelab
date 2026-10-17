@@ -1,8 +1,7 @@
 ---
-id: "lesson-039-headscale-v0-28-works-with-http-proxy-not-tcp"
+id: lesson-039-headscale-v0-28-works-with-http-proxy-not-tcp
 type: lesson
 status: active
-title: "Headscale v0.28 works with HTTP proxy (not TCP passthrough)"
 created: "2026-03-15"
 owner: manu
 category: networking-dns

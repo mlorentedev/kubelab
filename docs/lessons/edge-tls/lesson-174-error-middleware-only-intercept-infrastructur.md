@@ -1,8 +1,7 @@
 ---
-id: "lesson-174-error-middleware-only-intercept-infrastructur"
+id: lesson-174-error-middleware-only-intercept-infrastructur
 type: lesson
 status: active
-title: "Error middleware: only intercept infrastructure errors (502/503/504)"
 created: "2026-03-22"
 owner: manu
 category: edge-tls

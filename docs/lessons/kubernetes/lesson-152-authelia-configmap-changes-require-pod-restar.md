@@ -1,8 +1,7 @@
 ---
-id: "lesson-152-authelia-configmap-changes-require-pod-restar"
+id: lesson-152-authelia-configmap-changes-require-pod-restar
 type: lesson
 status: active
-title: "Authelia ConfigMap changes require pod restart"
 created: "2026-03-21"
 owner: manu
 category: kubernetes

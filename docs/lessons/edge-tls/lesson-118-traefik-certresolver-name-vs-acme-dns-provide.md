@@ -1,8 +1,7 @@
 ---
-id: "lesson-118-traefik-certresolver-name-vs-acme-dns-provide"
+id: lesson-118-traefik-certresolver-name-vs-acme-dns-provide
 type: lesson
 status: active
-title: "Traefik certResolver name vs ACME DNS provider are different concepts"
 created: "2026-03-15"
 owner: manu
 category: edge-tls

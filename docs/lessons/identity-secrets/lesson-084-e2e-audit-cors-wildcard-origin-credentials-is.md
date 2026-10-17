@@ -1,8 +1,7 @@
 ---
-id: "lesson-084-e2e-audit-cors-wildcard-origin-credentials-is"
+id: lesson-084-e2e-audit-cors-wildcard-origin-credentials-is
 type: lesson
 status: active
-title: "E2E Audit: CORS Wildcard Origin + Credentials Is Invalid"
 created: "2026-02-28"
 owner: manu
 category: identity-secrets

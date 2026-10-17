@@ -1,8 +1,7 @@
 ---
-id: "lesson-130-tailscale-subnet-routes-intercept-lan-traffic"
+id: lesson-130-tailscale-subnet-routes-intercept-lan-traffic
 type: lesson
 status: active
-title: "Tailscale subnet routes intercept LAN traffic from workstation"
 created: "2026-03-17"
 owner: manu
 category: networking-dns

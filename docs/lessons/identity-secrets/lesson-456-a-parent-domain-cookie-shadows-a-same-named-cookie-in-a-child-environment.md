@@ -1,8 +1,7 @@
 ---
-id: "lesson-456-a-parent-domain-cookie-shadows-a-same-named-cookie-in-a-child-environment"
+id: lesson-456-a-parent-domain-cookie-shadows-a-same-named-cookie-in-a-child-environment
 type: lesson
 status: active
-title: "A session cookie on a parent domain shadows a same-named cookie in a child environment, so login succeeds and access is anonymous"
 created: "2026-09-24"
 owner: manu
 category: identity-secrets

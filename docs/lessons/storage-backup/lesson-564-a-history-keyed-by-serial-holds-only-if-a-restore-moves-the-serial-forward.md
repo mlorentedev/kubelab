@@ -1,8 +1,7 @@
 ---
-id: "lesson-564-a-history-keyed-by-serial-holds-only-if-a-restore-moves-the-serial-forward"
+id: lesson-564-a-history-keyed-by-serial-holds-only-if-a-restore-moves-the-serial-forward
 type: lesson
 status: active
-title: "A history keyed by serial holds only if a restore moves the serial forward"
 created: "2026-10-13"
 owner: manu
 category: storage-backup

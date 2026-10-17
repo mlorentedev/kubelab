@@ -1,8 +1,7 @@
 ---
-id: "lesson-181-argo-cd-spoke-registration-scoped-rbac-cluste"
+id: lesson-181-argo-cd-spoke-registration-scoped-rbac-cluste
 type: lesson
 status: active
-title: "Argo CD spoke registration: scoped RBAC > cluster-admin"
 created: "2026-03-23"
 owner: manu
 category: gitops-delivery

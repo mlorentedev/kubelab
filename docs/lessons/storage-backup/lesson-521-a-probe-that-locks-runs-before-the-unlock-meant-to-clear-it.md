@@ -1,8 +1,7 @@
 ---
-id: "lesson-521-a-probe-that-locks-runs-before-the-unlock-meant-to-clear-it"
+id: lesson-521-a-probe-that-locks-runs-before-the-unlock-meant-to-clear-it
 type: lesson
 status: active
-title: "An `unlock` placed before the write is too late if a read before it takes a lock"
 created: "2026-10-04"
 owner: manu
 category: storage-backup

@@ -1,8 +1,7 @@
 ---
-id: "lesson-413-a-credential-can-exist-authenticate-and-not-work"
+id: lesson-413-a-credential-can-exist-authenticate-and-not-work
 type: lesson
 status: active
-title: "A credential can exist, authenticate, and still not work — and every presence check will call that success"
 created: "2026-09-01"
 owner: manu
 category: identity-secrets

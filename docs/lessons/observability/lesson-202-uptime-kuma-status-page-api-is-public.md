@@ -1,8 +1,7 @@
 ---
-id: "lesson-202-uptime-kuma-status-page-api-is-public"
+id: lesson-202-uptime-kuma-status-page-api-is-public
 type: lesson
 status: active
-title: "Uptime Kuma status page API is public"
 created: "2026-03-23"
 owner: manu
 category: observability

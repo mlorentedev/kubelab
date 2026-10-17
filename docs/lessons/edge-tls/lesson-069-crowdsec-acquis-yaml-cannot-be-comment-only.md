@@ -1,8 +1,7 @@
 ---
-id: "lesson-069-crowdsec-acquis-yaml-cannot-be-comment-only"
+id: lesson-069-crowdsec-acquis-yaml-cannot-be-comment-only
 type: lesson
 status: active
-title: "CrowdSec acquis.yaml Cannot Be Comment-Only"
 created: "2026-02-25"
 owner: manu
 category: edge-tls

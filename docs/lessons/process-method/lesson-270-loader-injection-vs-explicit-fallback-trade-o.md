@@ -1,8 +1,7 @@
 ---
-id: "lesson-270-loader-injection-vs-explicit-fallback-trade-o"
+id: lesson-270-loader-injection-vs-explicit-fallback-trade-o
 type: lesson
 status: active
-title: "Loader-injection vs explicit-fallback: trade-off SSOT cleanliness vs grep-ability"
 created: "2026-05-25"
 owner: manu
 category: process-method

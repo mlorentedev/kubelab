@@ -1,8 +1,7 @@
 ---
-id: "lesson-512-a-json-field-named-like-a-stream-label-is-renamed-and-the-grouping-moves"
+id: lesson-512-a-json-field-named-like-a-stream-label-is-renamed-and-the-grouping-moves
 type: lesson
 status: active
-title: "A JSON field named like a stream label is renamed, and `by (<field>)` silently groups on the stream label instead"
 created: "2026-10-02"
 owner: manu
 category: observability

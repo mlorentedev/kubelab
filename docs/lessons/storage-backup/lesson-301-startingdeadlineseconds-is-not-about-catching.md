@@ -1,8 +1,7 @@
 ---
-id: "lesson-301-startingdeadlineseconds-is-not-about-catching"
+id: lesson-301-startingdeadlineseconds-is-not-about-catching
 type: lesson
 status: active
-title: "`startingDeadlineSeconds` is not about catching up a late run — it is what stops a CronJob from retiring itself (IDP-032)"
 created: "2026-08-09"
 owner: manu
 category: storage-backup

@@ -1,8 +1,7 @@
 ---
-id: "lesson-026-argo-cd-hub-oom-cascade-on-aws1-t4g-small-spo"
+id: lesson-026-argo-cd-hub-oom-cascade-on-aws1-t4g-small-spo
 type: lesson
 status: active
-title: "Argo CD hub OOM cascade on aws1 (t4g.small Spot)"
 created: "2026-05-06"
 owner: manu
 category: gitops-delivery

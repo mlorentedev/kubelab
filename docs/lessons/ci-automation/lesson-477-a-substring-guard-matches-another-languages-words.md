@@ -1,8 +1,7 @@
 ---
-id: "lesson-477-a-substring-guard-matches-another-languages-words"
+id: lesson-477-a-substring-guard-matches-another-languages-words
 type: lesson
 status: active
-title: "A substring guard matches another language's words, and a word boundary misses identifiers"
 created: "2026-09-28"
 owner: manu
 category: ci-automation

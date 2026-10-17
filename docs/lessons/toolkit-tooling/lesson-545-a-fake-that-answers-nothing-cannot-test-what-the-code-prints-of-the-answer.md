@@ -1,8 +1,7 @@
 ---
-id: "lesson-545-a-fake-that-answers-nothing-cannot-test-what-the-code-prints-of-the-answer"
+id: lesson-545-a-fake-that-answers-nothing-cannot-test-what-the-code-prints-of-the-answer
 type: lesson
 status: active
-title: "A fake that answers nothing cannot test what the code prints of the answer"
 created: "2026-10-10"
 owner: manu
 category: toolkit-tooling

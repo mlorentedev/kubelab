@@ -1,8 +1,7 @@
 ---
-id: "lesson-396-replacing-a-bind-mounted-file-does-not-replace-what-the-container-runs"
+id: lesson-396-replacing-a-bind-mounted-file-does-not-replace-what-the-container-runs
 type: lesson
 status: active
-title: "Replacing a bind-mounted file does not replace what the container runs, and an unrelated bug was hiding it"
 created: "2026-08-26"
 owner: manu
 category: containers-docker

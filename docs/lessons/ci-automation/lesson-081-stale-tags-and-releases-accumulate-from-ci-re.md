@@ -1,8 +1,7 @@
 ---
-id: "lesson-081-stale-tags-and-releases-accumulate-from-ci-re"
+id: lesson-081-stale-tags-and-releases-accumulate-from-ci-re
 type: lesson
 status: active
-title: "Stale Tags and Releases Accumulate from CI Renames and Deleted Branches"
 created: "2026-02-28"
 owner: manu
 category: ci-automation

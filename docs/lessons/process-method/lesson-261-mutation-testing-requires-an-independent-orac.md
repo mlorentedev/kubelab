@@ -1,8 +1,7 @@
 ---
-id: "lesson-261-mutation-testing-requires-an-independent-orac"
+id: lesson-261-mutation-testing-requires-an-independent-orac
 type: lesson
 status: active
-title: "Mutation testing requires an independent oracle"
 created: "2026-05-22"
 owner: manu
 category: process-method

@@ -1,8 +1,7 @@
 ---
-id: "lesson-465-a-read-only-restic-token-needs-no-lock-even-to-read"
+id: lesson-465-a-read-only-restic-token-needs-no-lock-even-to-read
 type: lesson
 status: active
-title: "A read-only object-store token cannot run restic's read commands unless they skip the lock"
 created: "2026-09-26"
 owner: manu
 category: storage-backup
