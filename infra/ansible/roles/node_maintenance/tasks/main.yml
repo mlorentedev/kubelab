@@ -261,18 +261,27 @@
     - _oversize_syslog.matched | default(0) | int > 0
 
 # --- Snap cleanup ---
+# Not every node runs snapd (kubelab-vps and rpi3 do not). Without this probe
+# each snap task failed there with "No such file or directory" and showed up
+# as `ignored` in every recap (#2407).
+- name: Check whether snapd is installed
+  stat:
+    path: /usr/bin/snap
+  register: _snap_bin
+  when: maintenance_run_cleanup | bool
+
 - name: Check snap refresh retention
   command: snap get system refresh.retain
   register: _snap_retain_check
   changed_when: false
   check_mode: false
   ignore_errors: true
-  when: maintenance_run_cleanup | bool
+  when: maintenance_run_cleanup | bool and _snap_bin.stat.exists | default(false)
 
 - name: Set snap refresh retention to {{ maintenance_snap_retain }}
   command: snap set system refresh.retain={{ maintenance_snap_retain }}
   when: >-
-    maintenance_run_cleanup | bool and
+    maintenance_run_cleanup | bool and _snap_bin.stat.exists | default(false) and
     _snap_retain_check.stdout | default('') | trim != maintenance_snap_retain | string
   ignore_errors: true
 
@@ -283,7 +292,7 @@
   register: _snap_clean
   changed_when: _snap_clean.stdout | length > 0
   ignore_errors: true
-  when: maintenance_run_cleanup | bool
+  when: maintenance_run_cleanup | bool and _snap_bin.stat.exists | default(false)
 
 # --- Docker CI residue reclaimer (OPS-024) ---
 # Installed whenever the role either installs the timer or runs a cleanup, so
