@@ -1,0 +1,35 @@
+version: 1
+run_id: ap-20261017-kubelab-idp
+armed_by: manu
+armed_at: 2026-10-17T07:40:00Z
+expires_at: 2026-10-17T17:30:00Z
+objective: Land the IDP backlog children that already have a plan (start with #1551 via PR #2396), publish the IDP-042 spec draft for the operator's decisions, and triage every reviewer comment on PRs this run opens.
+scope:
+  write_paths: ["toolkit/**", "tests/**", "scripts/**", "Makefile", "docs/**", "specs/**"]
+  frozen_paths:
+    - ".github/**"
+    - "harness/**"
+    - "**/AGENTS.md"
+    - "infra/config/secrets/**"
+    - "infra/terraform/**"
+    - "infra/ansible/**"
+    - "infra/k8s/overlays/prod/**"
+    - "toolkit/features/oidc_clients.py"
+    - "toolkit/features/credentials.py"
+    - ".agent/unattended.yml"
+  max_files: 10
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make, poetry, python3]
+queue:
+  source: bitacora
+  filter: 'children of IDP epics #1775 and #1931 (and IDP-* tickets) with a plan or clear ACs, no operator decision pending, not touching live nodes, not owned by a peer lane'
+  max_items: 4
+budget:
+  max_iterations: 6
+  max_minutes_per_iteration: 45
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant   # effective only once .github/merge-grant.yml is on master (dotf pr land refuses otherwise)
+  push: true
+  open_pr: true
+  advisor_tier: top
