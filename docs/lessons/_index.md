@@ -1,16 +1,16 @@
 # Lessons
 
-588 lessons, one file each. Newest: 2026-10-17. Open a category for its list.
+590 lessons, one file each. Newest: 2026-10-17. Open a category for its list.
 
 | Category | # | Scope |
 |---|---|---|
 | [identity-secrets](identity-secrets/_index.md) | 82 | Authelia, OIDC, SOPS, credentials |
 | [kubernetes](kubernetes/_index.md) | 56 | Cluster, workloads, manifests |
 | [networking-dns](networking-dns/_index.md) | 53 | DNS, VPN mesh, host networking |
-| [ansible-provisioning](ansible-provisioning/_index.md) | 61 | Roles, playbooks, IaC, node setup |
+| [ansible-provisioning](ansible-provisioning/_index.md) | 62 | Roles, playbooks, IaC, node setup |
 | [process-method](process-method/_index.md) | 75 | Specs, reviews, how work is run |
 | [edge-tls](edge-tls/_index.md) | 29 | Traefik, TLS, the request path |
-| [toolkit-tooling](toolkit-tooling/_index.md) | 55 | Toolkit CLI, Make, Python, tests |
+| [toolkit-tooling](toolkit-tooling/_index.md) | 56 | Toolkit CLI, Make, Python, tests |
 | [gitops-delivery](gitops-delivery/_index.md) | 33 | Argo CD, releases, promotion |
 | [ci-automation](ci-automation/_index.md) | 46 | CI workflows, gates, GitHub |
 | [observability](observability/_index.md) | 29 | Metrics, logs, alerting |

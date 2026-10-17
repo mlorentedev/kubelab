@@ -81,5 +81,5 @@ and announced.
   data, and still exits 0. The text is read, not the status.
 - 1.25.5 ignores `PUBLIC_URL_DETECTION`; 1.27.3 accepts `legacy`, `auto`, `never` and refuses anything else at
   start. The compose template pins `legacy` (the 1.25 behaviour) so the upgrade changes one thing at a time.
-- The runner (`gitea/act_runner:0.2.13`) is upgraded by OPS-034 (#2063). The Cancelling state for running
-  jobs needs Gitea Runner 2.0.0 or later on a 1.27 server.
+- The runner moved from `gitea/act_runner:0.2.13` to `gitea/runner:4.1.0` under OPS-034 (#2063). The Cancelling
+  state for running jobs needs Gitea Runner 2.0.0 or later on a 1.27 server, which 4.1.0 satisfies.
