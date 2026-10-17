@@ -10,7 +10,7 @@
 ## Disk reclaimed
 - beelink 72% -> 40% (30 GB freed). gcp1 (hub) 88% -> 80%. The others changed by less than 1 GB.
 
-## Findings, ticketed (#2406 security-patching false skip, #2407 jetson + snap noise; board fields pending, GraphQL rate-limited)
+## Findings, ticketed (#2406 security-patching false skip, #2407 jetson + snap noise; on the board: #2406 P2 bug, #2407 P3 chore, both Backlog)
 - `make maintain NODE=all` always fails on jetson: Ubuntu 18.04 / Python 3.6 cannot run Ansible's `setup` (`from __future__ import annotations`). It was excluded by limit pattern.
 - `snap get system refresh.retain` errors (ignored) on kubelab-vps, rpi3 and gcp1 (`snap "core" has no "refresh.retain"`).
 - The hold step fails on installed docker packages on three nodes (see above).
