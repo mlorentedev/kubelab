@@ -144,6 +144,7 @@ def _stale_merge_bases(run: Run, name: str, *extra: str) -> int:
 def _rehearse_merge_base_repair(run: Run, name: str) -> None:
     """OPS-039: run `--fix` on the restored copy and report before/after. Informational: it never fails the drill."""
     before = _stale_merge_bases(run, name)
+    logger.info(f"probe: {before} pull request(s) report a stale merge base on the copy")
     if not before:
         return
     _stale_merge_bases(run, name, "--fix")

@@ -122,7 +122,8 @@ def test_the_merge_base_repair_is_rehearsed_on_the_copy_and_reported(capsys: pyt
     assert "merge-base repair on the copy: 23 stale before, 0 after" in capsys.readouterr().out
 
 
-def test_no_repair_is_attempted_when_nothing_is_stale() -> None:
+def test_no_repair_is_attempted_when_nothing_is_stale(capsys: pytest.CaptureFixture[str]) -> None:
     server = FakeServer()
     assert _run(server)
     assert not server.fixed
+    assert "0 pull request(s) report a stale merge base" in capsys.readouterr().out
