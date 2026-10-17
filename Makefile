@@ -224,7 +224,9 @@ setup-local-dns:
 # poetry install populates `.venv` (per-worktree); pre-commit hooks are NOT
 # reinstalled because the repo already has `core.hooksPath = main/.git/hooks`
 # (one-time set during `make setup`), which all worktrees share automatically.
-# Idempotent: re-running in an already-bootstrapped worktree is ~1s no-op.
+# Idempotent: re-running in an already-bootstrapped worktree is ~1s no-op. A venv
+# whose scripts name another directory (a renamed worktree with an in-project
+# `.venv`) is not ready: it is rebuilt, and restored if the rebuild fails.
 # `poetry.lock` is gitignored, so a long-lived checkout keeps the lock of the
 # day it was first installed. Once pyproject.toml moves on (a new dependency),
 # `poetry install` refuses the stale lock and the checkout cannot import what
@@ -239,7 +241,25 @@ worktree-init:
 	@# session where that cannot be unlocked the install hangs with no output
 	@# (measured 2026-10-01: stuck 15 min at 181/209 packages with no open socket; the rerun with it completed).
 	@PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring $(POETRY) check --lock >/dev/null 2>&1 || PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring $(POETRY) lock --no-interaction
-	@PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring $(POETRY) install --no-interaction
+	@# An in-project venv carries its own path in every shebang, so a renamed worktree
+	@# keeps a venv whose scripts point at the old directory (TOOL-067, #1707). Set it
+	@# aside rather than delete it: if the install fails the previous venv comes back.
+	@# Only the script's exit 1 means "moved"; a crash or a missing python3 (exit 2, 127)
+	@# must not condemn a healthy venv. A signal during the install restores it too: an
+	@# `else` branch is never reached by a shell that was killed.
+	@venv=$$($(POETRY) env info --path 2>/dev/null || true); aside=""; moved=0; \
+	if [ -n "$$venv" ] && [ -d "$$venv" ]; then python3 -I scripts/venv_relocated.py "$$venv" || moved=$$?; fi; \
+	if [ "$$moved" = 1 ]; then \
+		aside="$$venv.relocated"; rm -rf "$$aside"; mv "$$venv" "$$aside"; \
+		echo "venv moved aside to $$aside; rebuilding"; \
+		trap 'rm -rf "$$venv"; mv "$$aside" "$$venv"; echo "interrupted; previous venv restored"; exit 143' INT TERM; \
+	fi; \
+	if PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring $(POETRY) install --no-interaction; then \
+		trap - INT TERM; [ -z "$$aside" ] || rm -rf "$$aside"; \
+	else \
+		[ -z "$$aside" ] || { rm -rf "$$venv"; mv "$$aside" "$$venv"; echo "install failed; previous venv restored"; }; \
+		exit 1; \
+	fi
 	@hookspath=$$(git config --get core.hooksPath 2>/dev/null || echo ""); \
 	if [ -n "$$hookspath" ] && [ -x "$$hookspath/pre-commit" ]; then \
 		echo "✓ pre-commit hooks shared from $$hookspath (no re-install needed)"; \
