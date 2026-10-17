@@ -77,10 +77,12 @@ def test_argocd_url_is_its_declared_host() -> None:
     assert values["configs"]["cm"]["url"] == f"https://{_common()['argocd']['domain']}"
 
 
-def test_the_compose_grafana_id_is_derived_not_declared() -> None:
+@pytest.mark.parametrize("env", ("dev", "staging", "prod"))
+def test_the_compose_grafana_id_is_derived_not_declared(env: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Goes through `get_merged_config`, so dropping the derivation step fails here, not at login."""
     grafana = _common()["apps"]["services"]["observability"]["grafana"]
     assert "oauth_client_id" not in grafana, "a second declaration of the id; the loader derives it"
-    config = _common()
-    ConfigurationManager._inject_oidc_client_derivations(config)
-    derived = config["apps"]["services"]["observability"]["grafana"]["oauth_client_id"]
+    manager = ConfigurationManager(env, ROOT)
+    monkeypatch.setattr(manager, "_decrypt_sops", lambda _path: {})
+    derived = manager.get_merged_config()["apps"]["services"]["observability"]["grafana"]["oauth_client_id"]
     assert derived == _client_for("apps.services.observability.grafana.domain")
