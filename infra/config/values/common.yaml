@@ -1529,7 +1529,13 @@ apps:
         # deregister by NOT matching it. A literal in any one of them keeps matching
         # after a rename and quietly protects or destroys the wrong record.
         runner_name: kubelab-bee-gitea
-        image: gitea/act_runner:0.2.13
+        # OPS-034: `gitea/runner` is act_runner under its new name. 0.2.13 left a cancelled
+        # job's two named volumes behind (lesson-521); 3.5.0 added the sweep that removes
+        # volumes the runner labelled itself, and 4.1.0 is the newest release that is not
+        # a new major (5.x is days old). Config keys and the GITEA_* env vars the compose
+        # template sets were checked against `generate-config` and `run.sh` read from the
+        # 4.1.0 image, and `.runner` survives because it lives in `act_runner_data`.
+        image: gitea/runner:4.1.0
         # `ubuntu-latest` DOES NOT EXIST on a self-hosted forge -- Gitea has no hosted
         # runners, so the label is only ever what act_runner declares. Every workflow
         # migrated from GitHub asks for it, and a job matching no runner is QUEUED
@@ -1570,6 +1576,19 @@ apps:
         # nothing has ever executed this workflow on this hardware, so `build-pdf`'s
         # actual footprint is unknown.
         capacity: 2
+        # OPS-034 AC3. The shipped default is 0s: every restart (image bump, provision,
+        # `node-reclaim` pause) cancelled the jobs it interrupted. A job that outlives
+        # this is cancelled after all, so it bounds the wait, not the job. Docker kills
+        # the container after `stop_grace_period`, which therefore must be longer; a
+        # test asserts the order.
+        shutdown_timeout: 5m
+        stop_grace_period: 330s
+        # OPS-034 AC2. The idle sweep removes the per-job volumes and networks of jobs
+        # this runner did not live to tear down. `workdir_cleanup_age` equals the 24 h
+        # window of the `node_maintenance` reaper (OPS-024), which stays: volumes left
+        # by 0.2.13 carry no runner label and are invisible to this sweep.
+        workdir_cleanup_age: 24h
+        idle_cleanup_interval: 10m
         # Bounds the JOB containers, which is a different thing from the runner's own
         # `resources` below. act_runner is a 43 MB binary that orchestrates; the
         # multi-GB `runner-images` container it spawns per job is a SIBLING on the

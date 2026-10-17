@@ -34,6 +34,15 @@ runner:
   # runner is QUEUED FOREVER rather than failed. No error, no red check.
   labels:
     - "{{ act_runner_labels }}"
+  # OPS-034. How long a stopping runner waits for running jobs before cancelling them.
+  # Default 0s cancelled every in-flight job on each restart. Docker's own
+  # `stop_grace_period` (compose) must outlast it or the runner is killed first.
+  shutdown_timeout: {{ act_runner_shutdown_timeout }}
+  # OPS-034. While idle, remove the volumes and networks of jobs this runner did not
+  # live to tear down (gitea/runner >= 3.5.0). A non-positive value for EITHER key
+  # switches the whole sweep off, so both are declared rather than inherited.
+  workdir_cleanup_age: {{ act_runner_workdir_cleanup_age }}
+  idle_cleanup_interval: {{ act_runner_idle_cleanup_interval }}
 
 cache:
   # actions/cache support. On by default in act_runner, and left on: the whole
