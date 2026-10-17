@@ -85,10 +85,20 @@ KNOWN_BASELINE_FAILURES = {
 BASELINE_CEILINGS = {"Recalculate merge bases": (re.compile(r"(\d+) PRs with incorrect mergebases"), 23)}
 
 
-def _worse_than_baseline(check: str, line: str) -> bool:
+def _worse_than_baseline(check: str, line: str, lines: list[str]) -> bool:
+    """Above the measured count, or a ceiling check whose count line cannot be found: fail closed."""
     ceiling = BASELINE_CEILINGS.get(check)
-    match = ceiling[0].search(line) if ceiling else None
-    return bool(match and ceiling and int(match.group(1)) > ceiling[1])
+    if not ceiling:
+        return False
+    counts = [
+        int(m.group(1))
+        for i, other in enumerate(lines)
+        if (m := ceiling[0].search(other)) and _check_of(lines, i) == check
+    ]
+    if not counts:
+        return True
+    match = ceiling[0].search(line)
+    return bool(match and int(match.group(1)) > ceiling[1])
 
 
 def _check_of(lines: list[str], index: int) -> str:
@@ -100,15 +110,15 @@ def _check_of(lines: list[str], index: int) -> str:
     return ""
 
 
+def _fails(lines: list[str], index: int, line: str) -> bool:
+    check = _check_of(lines, index)
+    return check not in KNOWN_BASELINE_FAILURES or _worse_than_baseline(check, line, lines)
+
+
 def _doctor(run: Run, name: str) -> bool:
     rc, out, _ = run(["docker", "exec", "-u", "git", name, "gitea", "doctor", "check", "--all"])
     lines = out.splitlines()
-    bad = [
-        i
-        for i, line in enumerate(lines)
-        if ("[E]" in line or line.strip() == "ERROR")
-        and (_check_of(lines, i) not in KNOWN_BASELINE_FAILURES or _worse_than_baseline(_check_of(lines, i), line))
-    ]
+    bad = [i for i, line in enumerate(lines) if ("[E]" in line or line.strip() == "ERROR") and _fails(lines, i, line)]
     errors = [lines[i].strip()[:160] for i in bad]
     if rc != 0 or errors:
         logger.error(f"FAIL doctor: `gitea doctor check --all` exit {rc}, {len(errors)} error line(s)")
