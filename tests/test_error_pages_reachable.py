@@ -12,6 +12,7 @@ A page `errors/<status>.html` is reachable when either
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -113,3 +114,16 @@ def test_maintenance_page_stays_gone() -> None:
 def test_a_declared_source_page_exists() -> None:
     """An allowlist entry for a file that is gone would excuse the next page given that name."""
     assert all((PAGES_DIR / name).exists() for name in SOURCE_PAGES)
+
+
+@pytest.mark.parametrize("page", PAGES, ids=lambda p: p.name)
+def test_every_served_page_has_a_json_twin_with_its_own_status(page: Path) -> None:
+    """`Accept: application/json` is rewritten to `<status>.json` (AC5); a missing twin is a 404 for an API client.
+
+    The source page (403) is never requested by status, so it needs no twin.
+    """
+    if page.name in SOURCE_PAGES:
+        pytest.skip("source page: rendered by the ban plugin, never negotiated")
+    twin = page.with_suffix(".json")
+    assert twin.exists(), f"{twin.name} is missing: an API client asking for JSON would get a 404"
+    assert json.loads(twin.read_text(encoding="utf-8"))["error"]["status"] == int(page.stem)
