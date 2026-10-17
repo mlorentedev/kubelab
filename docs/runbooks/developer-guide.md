@@ -52,8 +52,6 @@ kubelab config validate          # Validate configs
 kubelab credentials generate     # Generate credentials
 kubelab infra terraform run dns plan  # Terraform plan (any root; see make help)
 kubelab dashboard                # Terminal dashboard
-kubelab monitoring backup         # Pull Uptime Kuma DB
-kubelab monitoring restore        # Push DB to RPi3
 kubelab monitoring status         # Check Uptime Kuma health
 kubelab tools certs generate     # Generate local certs
 kubelab docs serve               # Serve project documentation
