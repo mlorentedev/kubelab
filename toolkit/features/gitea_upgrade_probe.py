@@ -74,8 +74,8 @@ def _doctor(run: Run, name: str) -> bool:
     if rc != 0 or errors:
         logger.error(f"FAIL doctor: `gitea doctor check --all` exit {rc}, {len(errors)} error line(s)")
         # Check names and counts, never row content: doctor reports on the schema, not on the data.
-        for line in errors[:5]:
-            logger.error(f"     {line}")
+        for line in out.splitlines()[-15:]:
+            logger.error(f"     {line.strip()[:160]}")
         return False
     logger.success("probe: gitea doctor check --all is clean")
     return True
