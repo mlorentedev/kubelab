@@ -27,7 +27,7 @@ Owner-only steps. None of them blocks anything already merged:
 3. **Passkey ceremony for #2405**: check that a passkey login still asks for the same user verification.
 4. **#2397**: the `merge-grant.yml` PR stays yours (a PR that changes the grant is never merged under it).
 5. **Argo CD logout URL and lifetime** (#1813, ADR-062 amendment table): reaching the hub needs `make deploy-argocd`, which is owner-gated.
-6. **Homepage public version**: #2402 puts the cockpit behind Authelia. The decision to absorb it into the public web is still yours to ticket.
+6. **Homepage's future** (#2416): #2402 put the cockpit behind Authelia. Whether to fold it into the public web or retire it is your decision, recorded on #2416.
 
 ## Parked
 
@@ -40,6 +40,7 @@ None.
 ## Filed during the run
 
 - **#2415**: the dev Compose Grafana sets no session bound and no Authelia sign-out (`infra/stacks/**` was outside the envelope). ADR-062's table names it as open.
+- **#2416**: decide the Homepage cockpit's future, following the owner's statement of 2026-10-17.
 
 ## Evidence index
 
