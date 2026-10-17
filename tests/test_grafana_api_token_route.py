@@ -9,6 +9,7 @@ the break-glass password could be tried on the public host without Authelia's re
 
 from __future__ import annotations
 
+import base64
 import re
 from pathlib import Path
 
@@ -39,7 +40,7 @@ def test_exactly_one_route_skips_authelia_and_it_needs_a_service_account_token()
     regexp = re.search(r"HeaderRegexp\(`Authorization`, `([^`]+)`\)", match)
     assert regexp, "the route must be selected by the Authorization header"
     assert re.fullmatch(regexp.group(1), "Bearer glsa_AbC123_def456")
-    assert not re.fullmatch(regexp.group(1), "Basic YnJlYWs6Z2xhc3M="), "Basic credentials must stay behind Authelia"
+    assert not re.fullmatch(regexp.group(1), "Basic " + base64.b64encode(b"user:" + b"placeholder").decode()), "Basic credentials must stay behind Authelia"
     assert not re.fullmatch(regexp.group(1), "Bearer eyJhbGciOi"), "only a Grafana service-account token"
 
 
