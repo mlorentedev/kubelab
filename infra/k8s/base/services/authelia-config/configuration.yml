@@ -106,7 +106,8 @@ session:
   same_site: lax
   inactivity: 1h
   expiration: 8h
-  remember_me: 1M
+  # Disabled (#1813): a month-long rolling session outlived every bound set on sessions.
+  remember_me: -1
 
   cookies:
     - domain: staging.kubelab.live
