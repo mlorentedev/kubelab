@@ -87,7 +87,8 @@
         "needs-care"
       ],
       "prBodyNotes": [
-        "**Locks you out if it goes wrong.** Verify a current backup of `authelia-data` first; the session/WebAuthn store is in it."
+        "**Locks you out if it goes wrong.** Verify a current backup of `authelia-data` first; the session/WebAuthn store is in it.",
+        "**Check #1845 first.** The `grafana` client issues JWT access tokens with no audience. Newer validators warn about that, so give it an audience before or with this bump, and read Authelia's startup log for an audience warning on staging."
       ]
     },
     {
