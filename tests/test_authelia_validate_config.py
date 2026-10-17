@@ -176,7 +176,15 @@ def test_the_rendered_config_uses_no_new_deprecated_key(overlay: str, docker_mou
     _require_docker()
     files, container = _authelia(_render(overlay))
     done = _validate(docker_mount_dir, files, container)
-    deprecated = set(DEPRECATED_KEY.findall(done.stdout + done.stderr))
+    text = done.stdout + done.stderr
+    parsed = DEPRECATED_KEY.findall(text)
+    # Guard the guard: a pattern that matches nothing would pass every config. Every
+    # line that mentions a deprecation must be one it parsed, and a key the config
+    # still uses must be seen.
+    assert text.lower().count("deprecat") == len(parsed), f"unparsed deprecation output:\n{text}"
+    if "issuer_private_key" in files["configuration.yml"]:
+        assert "identity_providers.oidc.issuer_private_key" in parsed, f"pattern missed a live warning:\n{text}"
+    deprecated = set(parsed)
     assert deprecated <= TOLERATED_DEPRECATIONS, f"{overlay} uses deprecated keys: {sorted(deprecated - TOLERATED_DEPRECATIONS)}"
 
 
