@@ -70,12 +70,15 @@ def _mint_write_token(run: Run, name: str, admin_user: str) -> str:
 
 def _doctor(run: Run, name: str) -> bool:
     rc, out, _ = run(["docker", "exec", "-u", "git", name, "gitea", "doctor", "check", "--all"])
-    errors = [line.strip()[:160] for line in out.splitlines() if "[E]" in line or "ERROR" in line]
+    lines = out.splitlines()
+    bad = [i for i, line in enumerate(lines) if "[E]" in line or line.strip() == "ERROR"]
+    errors = [lines[i].strip()[:160] for i in bad]
     if rc != 0 or errors:
         logger.error(f"FAIL doctor: `gitea doctor check --all` exit {rc}, {len(errors)} error line(s)")
         # Check names and counts, never row content: doctor reports on the schema, not on the data.
-        for line in out.splitlines()[-15:]:
-            logger.error(f"     {line.strip()[:160]}")
+        for i in bad[:3]:
+            for line in lines[max(0, i - 4) : i + 1]:
+                logger.error(f"     {line.strip()[:160]}")
         return False
     logger.success("probe: gitea doctor check --all is clean")
     return True
