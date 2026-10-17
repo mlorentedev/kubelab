@@ -176,3 +176,11 @@ Following Google SRE error budget doctrine, public ingress alerts fire on actual
 
 - Evaluates CrowdSec container decision and bouncer logs (`obs015-crowdsec-ban-surge`).
 - Alerts when more than 5 automated IP ban decisions occur in a 10-minute window.
+
+## 10. Forge Reviewer Failure (TOOL-093)
+
+PR-Agent, the forge's reviewer, logs `Failed to review PR` when every configured model fails, and then publishes nothing on the pull request. From the PR that looks like a webhook that never arrived, so the rule `tool093-reviewer-failed` in `rules.yaml` (group `forge-review`) reads that line from Loki (`{container="pr-agent"}`) and alerts once per pull request.
+
+- **What to do:** push a commit to the pull request. A `/review` comment is ignored by the forge reviewer (#1963), so a push is the only retry.
+- **Why it happened:** `toolkit obs logs --env prod --service pr-agent --since 1h` shows each model's error (an authentication refusal, a timeout, an exhausted quota). The same cause on every PR is a provider problem, not the PR.
+- **Silence is health:** no failure lines means no series, and the rule maps that to OK. A reviewer that is down entirely is caught by the `review-attestation` gate, not by this rule.
