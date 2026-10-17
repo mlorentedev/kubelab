@@ -12,11 +12,11 @@ from pathlib import Path
 import pytest
 
 HTML = Path(__file__).resolve().parent.parent / "edge" / "errors" / "html"
-PAGES = sorted([*HTML.glob("errors/*.html"), HTML / "maintenance.html"])
+PAGES = sorted(HTML.glob("errors/*.html"))
 
 
 def test_the_scan_finds_the_pages() -> None:
-    assert len(PAGES) == 10, [p.name for p in PAGES]
+    assert len(PAGES) == 5, [p.name for p in PAGES]
 
 
 @pytest.mark.parametrize("page", PAGES, ids=lambda p: p.name)

@@ -1,0 +1,90 @@
+"""A branded error page must be reachable, and a test must say by what (OPS-030, ADR-072, lesson-584).
+
+Five of ten pages shipped in every `errors` image could never be served: nothing
+targeted them. The audit that found it was a one-off; this makes it a CI failure.
+
+A page `errors/<status>.html` is reachable when either
+  - a Traefik `errors` Middleware lists its status and queries `/errors/{status}.html`, or
+  - nginx maps a status it can itself generate to it with `error_page` (the catch-all 404,
+    which is `return 404` inside nginx, and 403 on a directory request).
+"""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+import pytest
+import yaml
+
+ROOT = Path(__file__).resolve().parent.parent
+PAGES_DIR = ROOT / "edge" / "errors" / "html" / "errors"
+NGINX_CONF = ROOT / "edge" / "errors" / "nginx.conf"
+K8S = ROOT / "infra" / "k8s"
+
+
+def _expand(spec: str | int) -> set[int]:
+    """`"502-504"` -> {502, 503, 504}; `404` -> {404}. Traefik's range syntax."""
+    low, _, high = str(spec).partition("-")
+    return set(range(int(low), int(high or low) + 1))
+
+
+def _middleware_statuses() -> set[int]:
+    """Statuses that some `errors` Middleware sends to `/errors/{status}.html`."""
+    found: set[int] = set()
+    for path in sorted(K8S.rglob("*.yaml")):
+        try:
+            docs = list(yaml.safe_load_all(path.read_text(encoding="utf-8")))
+        except yaml.YAMLError:
+            continue  # a patch or template that is not plain YAML cannot declare a Middleware
+        for doc in docs:
+            if not isinstance(doc, dict) or doc.get("kind") != "Middleware":
+                continue
+            errors = (doc.get("spec") or {}).get("errors") or {}
+            if "{status}.html" not in str(errors.get("query", "")):
+                continue
+            for entry in errors.get("status") or []:
+                found |= _expand(entry)
+    return found
+
+
+def _nginx_error_pages() -> dict[int, str]:
+    """`error_page 404 /errors/404.html;` -> {404: "404.html"}."""
+    text = NGINX_CONF.read_text(encoding="utf-8")
+    return {int(m[0]): m[1] for m in re.findall(r"^\s*error_page\s+(\d{3})\s+/errors/([\w.-]+);", text, re.M)}
+
+
+# Statuses this nginx can generate for itself: `location / { return 404 }` and `try_files ... =404`
+# give 404, and a request for the bare `/errors/` directory gives 403. An `error_page` for any other
+# status is decoration, which is how 401/408/429/500 sat in the config for months.
+NGINX_EMITS = {403, 404}
+
+PAGES = sorted(PAGES_DIR.glob("*.html"))
+
+
+def test_the_scan_sees_the_sources() -> None:
+    """A parser that finds nothing would pass every page below for the wrong reason."""
+    assert {502, 503, 504} <= _middleware_statuses()
+    assert 404 in _nginx_error_pages()
+    assert PAGES, "no pages found"
+
+
+@pytest.mark.parametrize("page", PAGES, ids=lambda p: p.name)
+def test_a_page_is_targeted_by_something(page: Path) -> None:
+    status = int(page.stem)
+    via_middleware = status in _middleware_statuses()
+    via_nginx = status in NGINX_EMITS and _nginx_error_pages().get(status) == page.name
+    assert via_middleware or via_nginx, (
+        f"{page.name} is served by nothing: no errors Middleware lists {status} and nginx has no "
+        f"`error_page {status} /errors/{page.name}`. Delete it or target it (ADR-072)."
+    )
+
+
+def test_every_nginx_error_page_points_at_a_file_that_exists() -> None:
+    missing = [name for name in _nginx_error_pages().values() if not (PAGES_DIR / name).exists()]
+    assert not missing, missing
+
+
+def test_maintenance_page_stays_gone() -> None:
+    """Nothing routed to it; ADR-072 deleted it."""
+    assert not (PAGES_DIR.parent / "maintenance.html").exists()
