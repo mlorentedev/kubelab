@@ -100,12 +100,7 @@ def test_a_failing_doctor_check_is_named_by_its_header(capsys: pytest.CaptureFix
     assert "failing doctor check: Check tables" in capsys.readouterr().out
 
 
-def test_the_known_merge_base_count_is_tolerated_but_a_larger_one_is_not() -> None:
-    """A baseline entry excuses the count measured on the deployed version, not any count under that name."""
-    assert _run(FakeServer(stale_merge_bases=23))
-    assert not _run(FakeServer(stale_merge_bases=24))
-
-
-def test_a_baselined_check_whose_count_cannot_be_read_fails_closed() -> None:
-    """Wording drift between Gitea versions must not turn a ceiling into a blanket excuse."""
-    assert not _run(FakeServer(stale_merge_bases=True))
+def test_a_stale_merge_base_fails_the_drill() -> None:
+    """OPS-039: 23 stale merge bases measured on 1.25.5 were gone from the first snapshot taken on 1.27.3, so the
+    check is no longer excused. Any stale row on the restored copy now fails."""
+    assert not _run(FakeServer(stale_merge_bases=1))
