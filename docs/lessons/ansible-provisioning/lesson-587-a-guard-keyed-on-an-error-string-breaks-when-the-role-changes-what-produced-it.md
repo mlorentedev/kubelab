@@ -29,14 +29,18 @@ A package that was never installed still says `Unable to locate package` without
 first measurement looked general. Leftovers from a Docker packaging switch are `config-files`
 packages, so the guard read them as installed packages it could not protect, and skipped the patch.
 
-**Solution**: read "installed" from dpkg, which needs no lists:
-`dpkg-query -W -f='${Package} ${db:Status-Status}\n' <held list>`. Only installed packages are held,
-so any non-zero rc from a hold now means a running package is unprotected. Both implementations
-changed (the Ansible tasks and the timer's `kubelab-maintenance.sh`), and
-`tests/test_node_maintenance_patching.py` fails if either matches apt's text again.
+**Solution**: judge a failed hold by dpkg's state, which needs no lists:
+`dpkg-query -W -f='${Package} ${db:Status-Status}\n' <held list>`. Every listed package is still
+held. The dpkg read only decides whether a failed hold matters, so a read that comes back empty
+cannot drop a hold that would have landed. In the timer script, a `dpkg-query` error (exit 2) counts
+as unprotected. Both implementations changed: the Ansible tasks and the timer's
+`kubelab-maintenance.sh`. `tests/test_node_maintenance_patching.py` runs the rendered hold block
+against stubbed `apt-mark` and `dpkg-query`, covering each dpkg state.
 
 **Rule**: before keying a guard on a tool's message, list the states that change the message. If the
 same role changes one of those states, the measurement holds only for the first run. Ask the tool
-for its state (`dpkg-query`, `systemctl is-active`, an exit code), not for an error message.
+for its state (`dpkg-query`, `systemctl is-active`, an exit code), not for an error message. Use that
+state to judge the outcome of a protective step, never to decide whether to take it: a parse error
+then costs a missed report, not a missing protection.
 
 **Tags**: `#apt` `#node-maintenance` `#issue-2406`
