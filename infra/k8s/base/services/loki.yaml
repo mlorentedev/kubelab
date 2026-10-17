@@ -171,7 +171,7 @@ spec:
     # One route, behind Authelia. A Bearer-token route used to sit above it, written with
     # the Traefik v2 matcher `HeadersRegexp`, which v3 disables, so it never existed. It was
     # deleted rather than revived (#2374): no client sends Loki a token over the ingress,
-    # and agents read Loki through Grafana's datasource proxy.
+    # and the AI-024 reader (in review) goes through Grafana's datasource proxy.
     - match: Host(`loki.staging.kubelab.live`) || Host(`loki.kubelab.live`)
       kind: Rule
       middlewares:
