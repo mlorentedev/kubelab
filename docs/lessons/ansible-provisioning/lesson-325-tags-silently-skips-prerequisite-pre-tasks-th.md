@@ -1,7 +1,8 @@
 ---
-id: lesson-325-tags-silently-skips-prerequisite-pre-tasks-th
+id: "lesson-325-tags-silently-skips-prerequisite-pre-tasks-th"
 type: lesson
 status: active
+title: "`--tags` silently skips prerequisite `pre_tasks` that were never tagged, and a shared secret key collides across an Ansible env-override merge"
 created: "2026-08-14"
 owner: manu
 category: ansible-provisioning

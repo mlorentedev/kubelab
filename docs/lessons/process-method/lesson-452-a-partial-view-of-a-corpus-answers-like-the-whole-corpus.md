@@ -1,7 +1,8 @@
 ---
-id: lesson-452-a-partial-view-of-a-corpus-answers-like-the-whole-corpus
+id: "lesson-452-a-partial-view-of-a-corpus-answers-like-the-whole-corpus"
 type: lesson
 status: active
+title: "A partial view of a corpus answers exactly like the whole corpus, and it caught this lesson three times while it was being written"
 created: "2026-09-06"
 owner: manu
 category: process-method

@@ -1,7 +1,8 @@
 ---
-id: lesson-555-hermes-approvals-test-does-not-run-the-command-scanner
+id: "lesson-555-hermes-approvals-test-does-not-run-the-command-scanner"
 type: lesson
 status: active
+title: "`hermes approvals test` does not run the command scanner"
 created: "2026-10-10"
 owner: manu
 category: containers-docker

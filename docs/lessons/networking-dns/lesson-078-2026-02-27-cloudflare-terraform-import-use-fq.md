@@ -1,7 +1,8 @@
 ---
-id: lesson-078-2026-02-27-cloudflare-terraform-import-use-fq
+id: "lesson-078-2026-02-27-cloudflare-terraform-import-use-fq"
 type: lesson
 status: active
+title: "2026-02-27 — Cloudflare Terraform Import: Use FQDN for Root Records, Not @"
 created: "2026-05-01"
 owner: manu
 category: networking-dns

@@ -1,7 +1,8 @@
 ---
-id: lesson-457-a-default-in-a-claim-mapping-hides-the-claim-source-it-never-reads
+id: "lesson-457-a-default-in-a-claim-mapping-hides-the-claim-source-it-never-reads"
 type: lesson
 status: active
+title: "A default in a claim mapping hides the claim source it never reads, so the admin tier was never enforced"
 created: "2026-09-24"
 owner: manu
 category: identity-secrets

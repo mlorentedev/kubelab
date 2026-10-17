@@ -1,7 +1,8 @@
 ---
-id: lesson-305-a-limitrange-can-reject-pods-the-guardrail-ha
+id: "lesson-305-a-limitrange-can-reject-pods-the-guardrail-ha"
 type: lesson
 status: active
+title: "A LimitRange can *reject* pods — the guardrail has the same failure mode as the thing it guards (IDP-031)"
 created: "2026-08-09"
 owner: manu
 category: kubernetes

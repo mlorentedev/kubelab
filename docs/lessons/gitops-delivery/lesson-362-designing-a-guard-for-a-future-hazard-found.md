@@ -1,7 +1,8 @@
 ---
-id: lesson-362-designing-a-guard-for-a-future-hazard-found
+id: "lesson-362-designing-a-guard-for-a-future-hazard-found"
 type: lesson
 status: active
+title: "Designing a guard for a future hazard found it already loaded and aimed at prod"
 created: "2026-08-21"
 owner: manu
 category: gitops-delivery

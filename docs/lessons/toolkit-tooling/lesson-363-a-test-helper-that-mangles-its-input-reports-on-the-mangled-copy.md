@@ -1,7 +1,8 @@
 ---
-id: lesson-363-a-test-helper-that-mangles-its-input-reports-on-the-mangled-copy
+id: "lesson-363-a-test-helper-that-mangles-its-input-reports-on-the-mangled-copy"
 type: lesson
 status: active
+title: "A test helper that mangles its input makes every guard downstream report on the mangled copy"
 created: "2026-08-21"
 owner: manu
 category: toolkit-tooling

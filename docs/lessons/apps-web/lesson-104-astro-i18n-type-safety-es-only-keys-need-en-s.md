@@ -1,7 +1,8 @@
 ---
-id: lesson-104-astro-i18n-type-safety-es-only-keys-need-en-s
+id: "lesson-104-astro-i18n-type-safety-es-only-keys-need-en-s"
 type: lesson
 status: active
+title: "Astro i18n Type Safety — ES-Only Keys Need EN Stubs"
 created: "2026-03-06"
 owner: manu
 category: apps-web

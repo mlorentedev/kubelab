@@ -1,7 +1,8 @@
 ---
-id: lesson-212-magicdns-eliminates-tailscale-ip-hardcoding-f
+id: "lesson-212-magicdns-eliminates-tailscale-ip-hardcoding-f"
 type: lesson
 status: active
+title: "MagicDNS eliminates Tailscale IP hardcoding for cattle instances"
 created: "2026-03-26"
 owner: manu
 category: networking-dns

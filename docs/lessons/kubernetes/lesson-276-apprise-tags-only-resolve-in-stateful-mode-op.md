@@ -1,7 +1,8 @@
 ---
-id: lesson-276-apprise-tags-only-resolve-in-stateful-mode-op
+id: "lesson-276-apprise-tags-only-resolve-in-stateful-mode-op"
 type: lesson
 status: active
+title: "Apprise tags only resolve in stateful mode — Option B needs `simple` mode + a mounted config, not stateless"
 created: "2026-06-14"
 owner: manu
 category: kubernetes

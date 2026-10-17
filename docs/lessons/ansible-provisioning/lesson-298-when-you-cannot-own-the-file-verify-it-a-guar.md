@@ -1,7 +1,8 @@
 ---
-id: lesson-298-when-you-cannot-own-the-file-verify-it-a-guar
+id: "lesson-298-when-you-cannot-own-the-file-verify-it-a-guar"
 type: lesson
 status: active
+title: "When you cannot own the file, verify it — a guarded write is not a fallback (ANSIBLE-033)"
 created: "2026-08-08"
 owner: manu
 category: ansible-provisioning

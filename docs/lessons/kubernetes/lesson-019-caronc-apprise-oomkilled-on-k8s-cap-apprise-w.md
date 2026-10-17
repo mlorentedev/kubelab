@@ -1,7 +1,8 @@
 ---
-id: lesson-019-caronc-apprise-oomkilled-on-k8s-cap-apprise-w
+id: "lesson-019-caronc-apprise-oomkilled-on-k8s-cap-apprise-w"
 type: lesson
 status: active
+title: "caronc/apprise OOMKilled on k8s — cap APPRISE_WORKER_COUNT, don't inherit the host-core default"
 created: "2026-06-14"
 owner: manu
 category: kubernetes

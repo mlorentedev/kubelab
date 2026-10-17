@@ -1,7 +1,8 @@
 ---
-id: lesson-388-a-decision-reaches-only-as-far-as-the-artefact-at-the-point-of-use
+id: "lesson-388-a-decision-reaches-only-as-far-as-the-artefact-at-the-point-of-use"
 type: lesson
 status: active
+title: "A decision reaches only as far as the artefact someone opens at the point of use — three re-derivations in one session"
 created: "2026-08-25"
 owner: manu
 category: process-method

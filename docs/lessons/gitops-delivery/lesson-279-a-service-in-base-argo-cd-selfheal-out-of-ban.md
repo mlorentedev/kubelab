@@ -1,7 +1,8 @@
 ---
-id: lesson-279-a-service-in-base-argo-cd-selfheal-out-of-ban
+id: "lesson-279-a-service-in-base-argo-cd-selfheal-out-of-ban"
 type: lesson
 status: active
+title: "A service in `base/` + Argo CD selfHeal + out-of-band Secrets = silent prod degradation"
 created: "2026-06-17"
 owner: manu
 category: gitops-delivery

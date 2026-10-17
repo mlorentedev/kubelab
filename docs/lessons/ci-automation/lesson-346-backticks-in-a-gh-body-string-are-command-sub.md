@@ -1,7 +1,8 @@
 ---
-id: lesson-346-backticks-in-a-gh-body-string-are-command-sub
+id: "lesson-346-backticks-in-a-gh-body-string-are-command-sub"
 type: lesson
 status: active
+title: "Backticks in a gh --body string are command substitution, and they delete your text silently"
 created: "2026-08-15"
 owner: manu
 category: ci-automation

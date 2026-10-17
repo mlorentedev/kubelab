@@ -1,7 +1,8 @@
 ---
-id: lesson-209-traefik-plugins-can-t-mount-secrets-cross-nam
+id: "lesson-209-traefik-plugins-can-t-mount-secrets-cross-nam"
 type: lesson
 status: active
+title: "Traefik plugins can't mount Secrets cross-namespace"
 created: "2026-03-26"
 owner: manu
 category: edge-tls

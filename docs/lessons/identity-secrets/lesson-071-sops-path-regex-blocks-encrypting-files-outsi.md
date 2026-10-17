@@ -1,7 +1,8 @@
 ---
-id: lesson-071-sops-path-regex-blocks-encrypting-files-outsi
+id: "lesson-071-sops-path-regex-blocks-encrypting-files-outsi"
 type: lesson
 status: active
+title: "SOPS path_regex Blocks Encrypting Files Outside Defined Paths"
 created: "2026-02-25"
 owner: manu
 category: identity-secrets

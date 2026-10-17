@@ -1,7 +1,8 @@
 ---
-id: lesson-516-an-empty-cache-dir-puts-act-runner-cache-in-the-container-layer
+id: "lesson-516-an-empty-cache-dir-puts-act-runner-cache-in-the-container-layer"
 type: lesson
 status: active
+title: "An empty `cache.dir` puts act_runner's cache in the container layer, while two documents said it was in the volume"
 created: "2026-10-02"
 owner: manu
 category: containers-docker

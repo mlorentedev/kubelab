@@ -1,7 +1,8 @@
 ---
-id: lesson-478-after-an-n8n-http-node-json-is-the-response-not-the-event
+id: "lesson-478-after-an-n8n-http-node-json-is-the-response-not-the-event"
 type: lesson
 status: active
+title: "After an n8n HTTP Request node, `$json` is the response, not the event, and `options.continueOnFail` is read by nothing"
 created: "2026-09-27"
 owner: manu
 category: ci-automation

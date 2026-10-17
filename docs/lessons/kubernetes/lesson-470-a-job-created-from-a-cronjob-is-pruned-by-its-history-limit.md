@@ -1,7 +1,8 @@
 ---
-id: lesson-470-a-job-created-from-a-cronjob-is-pruned-by-its-history-limit
+id: "lesson-470-a-job-created-from-a-cronjob-is-pruned-by-its-history-limit"
 type: lesson
 status: active
+title: "A Job created from a CronJob is pruned by that CronJob's history limit, pod and log included"
 created: "2026-09-27"
 owner: manu
 category: kubernetes

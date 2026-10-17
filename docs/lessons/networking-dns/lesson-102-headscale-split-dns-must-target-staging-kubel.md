@@ -1,7 +1,8 @@
 ---
-id: lesson-102-headscale-split-dns-must-target-staging-kubel
+id: "lesson-102-headscale-split-dns-must-target-staging-kubel"
 type: lesson
 status: active
+title: "Headscale Split DNS Must Target `staging.kubelab.live`, Not `kubelab.live`"
 created: "2026-03-03"
 owner: manu
 category: networking-dns

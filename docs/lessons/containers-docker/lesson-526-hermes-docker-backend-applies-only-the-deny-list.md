@@ -1,7 +1,8 @@
 ---
-id: lesson-526-hermes-docker-backend-applies-only-the-deny-list
+id: "lesson-526-hermes-docker-backend-applies-only-the-deny-list"
 type: lesson
 status: active
+title: "Hermes's docker backend applies only `approvals.deny`, and nothing fails when that list is empty"
 created: "2026-10-06"
 owner: manu
 category: containers-docker

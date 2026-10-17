@@ -1,7 +1,8 @@
 ---
-id: lesson-536-a-platform-json-conflict-is-never-resolved-by-taking-a-side
+id: "lesson-536-a-platform-json-conflict-is-never-resolved-by-taking-a-side"
 type: lesson
 status: active
+title: "A platform.json conflict is never resolved by taking a side"
 created: "2026-10-07"
 owner: manu
 category: toolkit-tooling

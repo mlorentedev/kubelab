@@ -1,7 +1,8 @@
 ---
-id: lesson-385-a-drill-gentler-than-the-event-tests-the-wrong-branch
+id: "lesson-385-a-drill-gentler-than-the-event-tests-the-wrong-branch"
 type: lesson
 status: active
+title: "A drill gentler than the event it stands for exercises the branch that works"
 created: "2026-08-24"
 owner: manu
 category: process-method

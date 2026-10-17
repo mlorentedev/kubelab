@@ -1,7 +1,8 @@
 ---
-id: lesson-226-docker-compose-volume-naming-mismatch-destroy
+id: "lesson-226-docker-compose-volume-naming-mismatch-destroy"
 type: lesson
 status: active
+title: "Docker Compose volume naming mismatch destroys data on migration"
 created: "2026-03-27"
 owner: manu
 category: containers-docker

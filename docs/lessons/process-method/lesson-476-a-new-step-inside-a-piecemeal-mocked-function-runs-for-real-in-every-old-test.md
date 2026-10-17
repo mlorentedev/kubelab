@@ -1,7 +1,8 @@
 ---
-id: lesson-476-a-new-step-inside-a-piecemeal-mocked-function-runs-for-real-in-every-old-test
+id: "lesson-476-a-new-step-inside-a-piecemeal-mocked-function-runs-for-real-in-every-old-test"
 type: lesson
 status: active
+title: "A new step inside a function that tests mock piecemeal runs for real in every test written before it"
 created: "2026-09-24"
 owner: manu
 category: process-method

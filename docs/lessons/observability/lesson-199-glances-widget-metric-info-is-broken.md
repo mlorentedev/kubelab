@@ -1,7 +1,8 @@
 ---
-id: lesson-199-glances-widget-metric-info-is-broken
+id: "lesson-199-glances-widget-metric-info-is-broken"
 type: lesson
 status: active
+title: "Glances widget metric: info is broken"
 created: "2026-03-23"
 owner: manu
 category: observability

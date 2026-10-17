@@ -1,7 +1,8 @@
 ---
-id: lesson-002-gh-pr-edit-fails-on-a-projects-classic-field-
+id: "lesson-002-gh-pr-edit-fails-on-a-projects-classic-field-"
 type: lesson
 status: active
+title: "`gh pr edit` fails on a Projects-classic field, applies nothing, and blames Projects"
 created: "2026-08-17"
 owner: manu
 category: ci-automation

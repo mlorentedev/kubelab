@@ -1,7 +1,8 @@
 ---
-id: lesson-294-a-deploy-step-that-warns-and-exits-0-is-a-sil
+id: "lesson-294-a-deploy-step-that-warns-and-exits-0-is-a-sil"
 type: lesson
 status: active
+title: "A deploy step that warns and exits 0 is a silent failure — the exit code is the only thing the next step reads (TOOL-021)"
 created: "2026-07-09"
 owner: manu
 category: toolkit-tooling

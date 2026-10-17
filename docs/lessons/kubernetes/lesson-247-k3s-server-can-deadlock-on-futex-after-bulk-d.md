@@ -1,7 +1,8 @@
 ---
-id: lesson-247-k3s-server-can-deadlock-on-futex-after-bulk-d
+id: "lesson-247-k3s-server-can-deadlock-on-futex-after-bulk-d"
 type: lesson
 status: active
+title: "K3s server can deadlock on futex after bulk-delete; restart releases the lock"
 created: "2026-05-10"
 owner: manu
 category: kubernetes

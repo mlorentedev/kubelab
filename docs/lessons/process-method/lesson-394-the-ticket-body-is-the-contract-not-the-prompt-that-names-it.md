@@ -1,7 +1,8 @@
 ---
-id: lesson-394-the-ticket-body-is-the-contract-not-the-prompt-that-names-it
+id: "lesson-394-the-ticket-body-is-the-contract-not-the-prompt-that-names-it"
 type: lesson
 status: active
+title: "The ticket body is the contract; the prompt that names it is not"
 created: "2026-08-25"
 owner: manu
 category: process-method

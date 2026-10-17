@@ -1,7 +1,8 @@
 ---
-id: lesson-322-a-cleanup-step-that-reverts-more-than-the-ste
+id: "lesson-322-a-cleanup-step-that-reverts-more-than-the-ste"
 type: lesson
 status: active
+title: "A cleanup step that reverts more than the step wrote is a destructive op wearing a check's clothing"
 created: "2026-08-12"
 owner: manu
 category: toolkit-tooling

@@ -1,7 +1,8 @@
 ---
-id: lesson-197-authelia-catch-all-rules-don-t-cover-new-serv
+id: "lesson-197-authelia-catch-all-rules-don-t-cover-new-serv"
 type: lesson
 status: active
+title: "Authelia catch-all rules don't cover new services automatically"
 created: "2026-03-23"
 owner: manu
 category: identity-secrets

@@ -1,7 +1,8 @@
 ---
-id: lesson-011-keep-sops-ciphertext-out-of-gitleaks-and-yaml
+id: "lesson-011-keep-sops-ciphertext-out-of-gitleaks-and-yaml"
 type: lesson
 status: active
+title: "Keep SOPS ciphertext out of gitleaks, and YAML/Markdown out of CRLF, on Windows"
 created: "2026-06-20"
 owner: manu
 category: identity-secrets

@@ -1,7 +1,8 @@
 ---
-id: lesson-541-a-reconciler-that-tests-presence-reads-an-unfilled-migration-as-converged
+id: "lesson-541-a-reconciler-that-tests-presence-reads-an-unfilled-migration-as-converged"
 type: lesson
 status: active
+title: "A reconciler that tests presence reads an unfilled migration as converged"
 created: "2026-10-08"
 owner: manu
 category: toolkit-tooling

@@ -1,7 +1,8 @@
 ---
-id: lesson-577-a-path-the-sync-user-cannot-read-fails-the-whole-add-and-an-exclude-pathspec-hides-it
+id: "lesson-577-a-path-the-sync-user-cannot-read-fails-the-whole-add-and-an-exclude-pathspec-hides-it"
 type: lesson
 status: active
+title: "One file the sync user cannot read stops the zone syncing, and an exclude pathspec reports success while staging nothing"
 created: "2026-10-15"
 owner: manu
 category: containers-docker

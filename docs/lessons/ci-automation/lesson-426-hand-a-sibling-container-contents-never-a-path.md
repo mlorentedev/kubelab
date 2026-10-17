@@ -1,7 +1,8 @@
 ---
-id: lesson-426-hand-a-sibling-container-contents-never-a-path
+id: "lesson-426-hand-a-sibling-container-contents-never-a-path"
 type: lesson
 status: active
+title: "Hand a sibling container contents, never a path"
 created: "2026-09-04"
 owner: manu
 category: ci-automation

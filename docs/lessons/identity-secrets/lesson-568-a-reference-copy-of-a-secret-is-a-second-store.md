@@ -1,7 +1,8 @@
 ---
-id: lesson-568-a-reference-copy-of-a-secret-is-a-second-store
+id: "lesson-568-a-reference-copy-of-a-secret-is-a-second-store"
 type: lesson
 status: active
+title: "A \"reference copy\" of a secret is a second store"
 created: "2026-10-14"
 owner: manu
 category: identity-secrets

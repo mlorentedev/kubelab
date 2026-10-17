@@ -1,7 +1,8 @@
 ---
-id: lesson-401-a-second-commit-on-a-branch-someone-else-can-merge-is-a-bet-you-lose-silently
+id: "lesson-401-a-second-commit-on-a-branch-someone-else-can-merge-is-a-bet-you-lose-silently"
 type: lesson
 status: active
+title: "A second commit on a branch someone else can merge is a bet you lose silently"
 created: "2026-08-26"
 owner: manu
 category: process-method

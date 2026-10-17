@@ -1,7 +1,8 @@
 ---
-id: lesson-293-kubectl-create-secret-leaks-every-value-into-
+id: "lesson-293-kubectl-create-secret-leaks-every-value-into-"
 type: lesson
 status: active
+title: "`kubectl create secret` leaks every value into `/proc/<pid>/cmdline` — render the manifest in-process and apply over stdin (SEC-SECRETS-001)"
 created: "2026-07-09"
 owner: manu
 category: kubernetes

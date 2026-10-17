@@ -1,7 +1,8 @@
 ---
-id: lesson-188-immutable-secrets-must-be-enforced-in-code-no
+id: "lesson-188-immutable-secrets-must-be-enforced-in-code-no"
 type: lesson
 status: active
+title: "IMMUTABLE_SECRETS must be enforced in code, not just documented"
 created: "2026-03-25"
 owner: manu
 category: identity-secrets

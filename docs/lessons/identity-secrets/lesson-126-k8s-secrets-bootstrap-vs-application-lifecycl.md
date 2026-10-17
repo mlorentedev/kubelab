@@ -1,7 +1,8 @@
 ---
-id: lesson-126-k8s-secrets-bootstrap-vs-application-lifecycl
+id: "lesson-126-k8s-secrets-bootstrap-vs-application-lifecycl"
 type: lesson
 status: active
+title: "K8s secrets: bootstrap vs application lifecycle"
 created: "2026-03-17"
 owner: manu
 category: identity-secrets

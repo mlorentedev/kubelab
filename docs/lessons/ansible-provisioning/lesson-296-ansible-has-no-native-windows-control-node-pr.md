@@ -1,7 +1,8 @@
 ---
-id: lesson-296-ansible-has-no-native-windows-control-node-pr
+id: "lesson-296-ansible-has-no-native-windows-control-node-pr"
 type: lesson
 status: active
+title: "Ansible has no native Windows control node — provision from Linux, and budget for the controller's own toolchain (ANSIBLE-028)"
 created: "2026-08-07"
 owner: manu
 category: ansible-provisioning

@@ -1,7 +1,8 @@
 ---
-id: lesson-418-a-before-after-probe-must-be-able-to-change
+id: "lesson-418-a-before-after-probe-must-be-able-to-change"
 type: lesson
 status: active
+title: "A before/after probe must be one whose state can actually change, or it passes without measuring anything"
 created: "2026-09-02"
 owner: manu
 category: process-method

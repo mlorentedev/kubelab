@@ -1,7 +1,8 @@
 ---
-id: lesson-324-ansible-s-apt-module-can-report-changed-true-
+id: "lesson-324-ansible-s-apt-module-can-report-changed-true-"
 type: lesson
 status: active
+title: "Ansible's `apt` module can report `changed: true` for two unrelated reasons that both look like \"nothing really happened\""
 created: "2026-08-14"
 owner: manu
 category: ansible-provisioning

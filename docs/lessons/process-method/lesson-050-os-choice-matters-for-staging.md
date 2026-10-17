@@ -1,7 +1,8 @@
 ---
-id: lesson-050-os-choice-matters-for-staging
+id: "lesson-050-os-choice-matters-for-staging"
 type: lesson
 status: active
+title: "OS Choice Matters for Staging"
 created: "2026-02-09"
 owner: manu
 category: process-method

@@ -1,7 +1,8 @@
 ---
-id: lesson-527-a-filter-on-daddr-misses-a-port-published-on-the-same-host
+id: "lesson-527-a-filter-on-daddr-misses-a-port-published-on-the-same-host"
 type: lesson
 status: active
+title: "An output filter on `daddr` misses a port that Docker publishes on the same host"
 created: "2026-10-07"
 owner: manu
 category: networking-dns

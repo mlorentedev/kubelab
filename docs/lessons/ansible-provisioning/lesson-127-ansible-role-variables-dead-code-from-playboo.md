@@ -1,7 +1,8 @@
 ---
-id: lesson-127-ansible-role-variables-dead-code-from-playboo
+id: "lesson-127-ansible-role-variables-dead-code-from-playboo"
 type: lesson
 status: active
+title: "Ansible role variables: dead code from playbook-side flags"
 created: "2026-03-17"
 owner: manu
 category: ansible-provisioning

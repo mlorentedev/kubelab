@@ -1,7 +1,8 @@
 ---
-id: lesson-474-a-client-that-mocks-itself-when-unconfigured-reports-success-it-never-had
+id: "lesson-474-a-client-that-mocks-itself-when-unconfigured-reports-success-it-never-had"
 type: lesson
 status: active
+title: "A client that mocks itself when unconfigured reports a success it never had"
 created: "2026-09-24"
 owner: manu
 category: observability

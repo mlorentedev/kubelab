@@ -1,7 +1,8 @@
 ---
-id: lesson-287-pick-the-ssot-lane-by-where-the-version-lives
+id: "lesson-287-pick-the-ssot-lane-by-where-the-version-lives"
 type: lesson
 status: active
+title: "Pick the SSOT lane by where the version lives, not by \"it's a custom app\" (DELIVERY-003)"
 created: "2026-06-27"
 owner: manu
 category: gitops-delivery

@@ -1,7 +1,8 @@
 ---
-id: lesson-176-release-please-only-bumps-on-fix-feat-commits
+id: "lesson-176-release-please-only-bumps-on-fix-feat-commits"
 type: lesson
 status: active
+title: "release-please only bumps on fix:/feat: commits — chore: is ignored"
 created: "2026-03-22"
 owner: manu
 category: gitops-delivery

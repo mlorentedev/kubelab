@@ -1,7 +1,8 @@
 ---
-id: lesson-531-a-graphql-api-refuses-with-200-so-an-http-retry-never-fires
+id: "lesson-531-a-graphql-api-refuses-with-200-so-an-http-retry-never-fires"
 type: lesson
 status: active
+title: "A GraphQL API refuses with 200, so an HTTP retry never fires"
 created: "2026-10-07"
 owner: manu
 category: observability

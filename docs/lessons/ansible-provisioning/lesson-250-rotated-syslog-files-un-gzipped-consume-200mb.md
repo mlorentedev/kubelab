@@ -1,7 +1,8 @@
 ---
-id: lesson-250-rotated-syslog-files-un-gzipped-consume-200mb
+id: "lesson-250-rotated-syslog-files-un-gzipped-consume-200mb"
 type: lesson
 status: active
+title: "Rotated syslog files (un-gzipped) consume 200MB+ on busy nodes — maintain role missed it"
 created: "2026-05-10"
 owner: manu
 category: ansible-provisioning

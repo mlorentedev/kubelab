@@ -1,7 +1,8 @@
 ---
-id: lesson-567-ssh-ends-an-unknown-and-a-changed-host-key-with-the-same-line
+id: "lesson-567-ssh-ends-an-unknown-and-a-changed-host-key-with-the-same-line"
 type: lesson
 status: active
+title: "ssh ends an unknown and a changed host key with the same line"
 created: "2026-10-13"
 owner: manu
 category: toolkit-tooling

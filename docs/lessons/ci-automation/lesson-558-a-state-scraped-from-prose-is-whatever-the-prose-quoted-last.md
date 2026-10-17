@@ -1,7 +1,8 @@
 ---
-id: lesson-558-a-state-scraped-from-prose-is-whatever-the-prose-quoted-last
+id: "lesson-558-a-state-scraped-from-prose-is-whatever-the-prose-quoted-last"
 type: lesson
 status: active
+title: "A state scraped from prose is whatever the prose quoted last"
 created: "2026-10-11"
 owner: manu
 category: ci-automation

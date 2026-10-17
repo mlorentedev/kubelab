@@ -1,7 +1,8 @@
 ---
-id: lesson-408-a-bounded-query-answers-about-its-bound-not-the-collection
+id: "lesson-408-a-bounded-query-answers-about-its-bound-not-the-collection"
 type: lesson
 status: active
+title: "A bounded query answers about its bound, and its answer is indistinguishable from data"
 created: "2026-08-28"
 owner: manu
 category: process-method

@@ -1,7 +1,8 @@
 ---
-id: lesson-320-a-domain-rename-is-invisible-to-grep-when-the
+id: "lesson-320-a-domain-rename-is-invisible-to-grep-when-the"
 type: lesson
 status: active
+title: "A domain rename is invisible to `grep` when the reference lives in a template string inside a Python generator"
 created: "2026-08-12"
 owner: manu
 category: toolkit-tooling

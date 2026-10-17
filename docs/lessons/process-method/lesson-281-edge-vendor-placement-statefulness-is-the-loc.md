@@ -1,7 +1,8 @@
 ---
-id: lesson-281-edge-vendor-placement-statefulness-is-the-loc
+id: "lesson-281-edge-vendor-placement-statefulness-is-the-loc"
 type: lesson
 status: active
+title: "Edge/vendor placement: statefulness is the lock-in line — and audit collisions before persisting a decision"
 created: "2026-06-19"
 owner: manu
 category: process-method

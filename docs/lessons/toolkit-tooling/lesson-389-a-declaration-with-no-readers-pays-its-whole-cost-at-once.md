@@ -1,7 +1,8 @@
 ---
-id: lesson-389-a-declaration-with-no-readers-pays-its-whole-cost-at-once
+id: "lesson-389-a-declaration-with-no-readers-pays-its-whole-cost-at-once"
 type: lesson
 status: active
+title: "A declaration with no readers costs nothing until the value matters, then breaks every copy at once"
 created: "2026-08-24"
 owner: manu
 category: toolkit-tooling

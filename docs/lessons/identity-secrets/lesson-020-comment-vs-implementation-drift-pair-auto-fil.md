@@ -1,7 +1,8 @@
 ---
-id: lesson-020-comment-vs-implementation-drift-pair-auto-fil
+id: "lesson-020-comment-vs-implementation-drift-pair-auto-fil"
 type: lesson
 status: active
+title: "Comment-vs-implementation drift — pair \"auto-filled\" comments with executable tests"
 created: "2026-05-26"
 owner: manu
 category: identity-secrets

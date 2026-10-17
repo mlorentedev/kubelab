@@ -1,7 +1,8 @@
 ---
-id: lesson-193-security-posture-divergence-between-domains
+id: "lesson-193-security-posture-divergence-between-domains"
 type: lesson
 status: active
+title: "Security posture divergence between domains"
 created: "2026-03-25"
 owner: manu
 category: edge-tls

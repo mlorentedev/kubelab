@@ -1,7 +1,8 @@
 ---
-id: lesson-156-authelia-forwardauth-must-filter-authorizatio
+id: "lesson-156-authelia-forwardauth-must-filter-authorizatio"
 type: lesson
 status: active
+title: "Authelia ForwardAuth must filter Authorization headers"
 created: "2026-03-22"
 owner: manu
 category: identity-secrets

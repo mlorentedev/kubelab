@@ -1,7 +1,8 @@
 ---
-id: lesson-309-five-candidate-triggers-eliminated-and-the-re
+id: "lesson-309-five-candidate-triggers-eliminated-and-the-re"
 type: lesson
 status: active
+title: "Five candidate triggers eliminated, and the reboot turned out to be the repair"
 created: "2026-08-11"
 owner: manu
 category: networking-dns

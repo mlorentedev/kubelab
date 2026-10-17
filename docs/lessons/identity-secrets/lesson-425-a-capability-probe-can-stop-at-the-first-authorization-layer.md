@@ -1,7 +1,8 @@
 ---
-id: lesson-425-a-capability-probe-can-stop-at-the-first-authorization-layer
+id: "lesson-425-a-capability-probe-can-stop-at-the-first-authorization-layer"
 type: lesson
 status: active
+title: "A capability probe can stop at the first authorization layer and report the whole answer"
 created: "2026-09-04"
 owner: manu
 category: identity-secrets

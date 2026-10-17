@@ -1,7 +1,8 @@
 ---
-id: lesson-390-a-control-cannot-discriminate-where-both-inputs-are-equal
+id: "lesson-390-a-control-cannot-discriminate-where-both-inputs-are-equal"
 type: lesson
 status: active
+title: "The environment you can safely test in may be the one where your control cannot tell the two answers apart"
 created: "2026-08-24"
 owner: manu
 category: process-method

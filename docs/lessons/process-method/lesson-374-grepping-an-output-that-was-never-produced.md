@@ -1,7 +1,8 @@
 ---
-id: lesson-374-grepping-an-output-that-was-never-produced
+id: "lesson-374-grepping-an-output-that-was-never-produced"
 type: lesson
 status: active
+title: "Grepping an output that was never produced"
 created: "2026-08-23"
 owner: manu
 category: process-method

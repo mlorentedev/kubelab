@@ -1,7 +1,8 @@
 ---
-id: lesson-546-mcpo-takes-its-api-key-only-on-the-command-line
+id: "lesson-546-mcpo-takes-its-api-key-only-on-the-command-line"
 type: lesson
 status: active
+title: "mcpo takes its API key only on the command line, where every user on the host can read it"
 created: "2026-10-10"
 owner: manu
 category: containers-docker

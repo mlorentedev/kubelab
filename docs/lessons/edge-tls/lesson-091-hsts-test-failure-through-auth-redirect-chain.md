@@ -1,7 +1,8 @@
 ---
-id: lesson-091-hsts-test-failure-through-auth-redirect-chain
+id: "lesson-091-hsts-test-failure-through-auth-redirect-chain"
 type: lesson
 status: active
+title: "HSTS Test Failure Through Auth Redirect Chain"
 created: "2026-03-01"
 owner: manu
 category: edge-tls

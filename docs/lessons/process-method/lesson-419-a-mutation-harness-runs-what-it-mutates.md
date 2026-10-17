@@ -1,7 +1,8 @@
 ---
-id: lesson-419-a-mutation-harness-runs-what-it-mutates
+id: "lesson-419-a-mutation-harness-runs-what-it-mutates"
 type: lesson
 status: active
+title: "A mutation harness runs what it mutates, so a mutation can do the thing the code was written to prevent"
 created: "2026-09-03"
 owner: manu
 category: process-method

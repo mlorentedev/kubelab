@@ -1,7 +1,8 @@
 ---
-id: lesson-075-2026-02-26-traefik-cannot-proxy-headscale-cus
+id: "lesson-075-2026-02-26-traefik-cannot-proxy-headscale-cus"
 type: lesson
 status: active
+title: "2026-02-26 — Traefik Cannot Proxy Headscale: Custom HTTP Upgrade Not Supported"
 created: "2026-05-01"
 owner: manu
 category: networking-dns

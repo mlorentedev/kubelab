@@ -1,7 +1,8 @@
 ---
-id: lesson-316-rebasing-a-pr-onto-another-pr-s-pre-merge-bra
+id: "lesson-316-rebasing-a-pr-onto-another-pr-s-pre-merge-bra"
 type: lesson
 status: active
+title: "Rebasing a PR onto another PR's pre-merge branch tip conflicts against the real post-squash master"
 created: "2026-08-12"
 owner: manu
 category: ci-automation

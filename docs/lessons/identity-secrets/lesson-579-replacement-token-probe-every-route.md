@@ -1,7 +1,8 @@
 ---
-id: lesson-579-replacement-token-probe-every-route
+id: "lesson-579-replacement-token-probe-every-route"
 type: lesson
 status: active
+title: "A replacement token that passes the new probe can have lost every old route"
 created: "2026-10-16"
 owner: manu
 category: identity-secrets

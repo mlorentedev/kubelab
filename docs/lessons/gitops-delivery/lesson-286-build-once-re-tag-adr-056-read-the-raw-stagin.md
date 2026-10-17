@@ -1,7 +1,8 @@
 ---
-id: lesson-286-build-once-re-tag-adr-056-read-the-raw-stagin
+id: "lesson-286-build-once-re-tag-adr-056-read-the-raw-stagin"
 type: lesson
 status: active
+title: "Build-once re-tag (ADR-056): read the raw staging pin, protect it from the prune, copy the manifest list"
 created: "2026-06-27"
 owner: manu
 category: gitops-delivery

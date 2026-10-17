@@ -1,7 +1,8 @@
 ---
-id: lesson-105-strategic-positioning-pivot-builder-over-cons
+id: "lesson-105-strategic-positioning-pivot-builder-over-cons"
 type: lesson
 status: active
+title: "Strategic Positioning Pivot — Builder Over Consultant"
 created: "2026-03-06"
 owner: manu
 category: process-method

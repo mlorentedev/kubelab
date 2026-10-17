@@ -1,7 +1,8 @@
 ---
-id: lesson-053-docker-bind-mounts-resolve-from-compose-file-
+id: "lesson-053-docker-bind-mounts-resolve-from-compose-file-"
 type: lesson
 status: active
+title: "Docker Bind Mounts Resolve from Compose File Directory"
 created: "2026-02-14"
 owner: manu
 category: containers-docker

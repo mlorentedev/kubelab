@@ -1,7 +1,8 @@
 ---
-id: lesson-357-a-guard-that-cannot-fail-reports-coverage-it-does-not-have
+id: "lesson-357-a-guard-that-cannot-fail-reports-coverage-it-does-not-have"
 type: lesson
 status: active
+title: "A guard that cannot fail is worse than no guard"
 created: "2026-08-20"
 owner: manu
 category: process-method

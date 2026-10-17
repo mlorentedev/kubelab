@@ -1,7 +1,8 @@
 ---
-id: lesson-552-a-kill-switch-that-removes-a-uid-scoped-rule-leaves-every-other-unit-of-that-uid-unconfined
+id: "lesson-552-a-kill-switch-that-removes-a-uid-scoped-rule-leaves-every-other-unit-of-that-uid-unconfined"
 type: lesson
 status: active
+title: "A kill switch that removes a uid-scoped rule leaves every other unit of that uid unconfined"
 created: "2026-10-10"
 owner: manu
 category: ansible-provisioning

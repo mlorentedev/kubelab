@@ -1,7 +1,8 @@
 ---
-id: lesson-008-a-closed-twin-issue-in-the-knowledge-repo-is-
+id: "lesson-008-a-closed-twin-issue-in-the-knowledge-repo-is-"
 type: lesson
 status: active
+title: "A CLOSED twin issue in the `knowledge` repo is not evidence the work shipped — verify master"
 created: "2026-06-23"
 owner: manu
 category: process-method

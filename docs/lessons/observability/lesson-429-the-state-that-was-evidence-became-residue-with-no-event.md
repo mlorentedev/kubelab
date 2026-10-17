@@ -1,7 +1,8 @@
 ---
-id: lesson-429-the-state-that-was-evidence-became-residue-with-no-event
+id: "lesson-429-the-state-that-was-evidence-became-residue-with-no-event"
 type: lesson
 status: active
+title: "A verification that creates a condition has no natural end"
 created: "2026-09-04"
 owner: manu
 category: observability

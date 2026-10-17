@@ -1,7 +1,8 @@
 ---
-id: lesson-409-fixing-the-error-you-got-can-leave-the-bug-you-did
+id: "lesson-409-fixing-the-error-you-got-can-leave-the-bug-you-did"
 type: lesson
 status: active
+title: "Fixing the error you got can leave the bug you did not reach"
 created: "2026-08-31"
 owner: manu
 category: ci-automation

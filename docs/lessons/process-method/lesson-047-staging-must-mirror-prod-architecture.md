@@ -1,7 +1,8 @@
 ---
-id: lesson-047-staging-must-mirror-prod-architecture
+id: "lesson-047-staging-must-mirror-prod-architecture"
 type: lesson
 status: active
+title: "Staging Must Mirror Prod Architecture"
 created: "2026-02-09"
 owner: manu
 category: process-method

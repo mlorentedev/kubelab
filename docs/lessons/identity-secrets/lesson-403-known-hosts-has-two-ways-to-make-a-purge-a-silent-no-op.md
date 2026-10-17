@@ -1,7 +1,8 @@
 ---
-id: lesson-403-known-hosts-has-two-ways-to-make-a-purge-a-silent-no-op
+id: "lesson-403-known-hosts-has-two-ways-to-make-a-purge-a-silent-no-op"
 type: lesson
 status: active
+title: "`known_hosts` has two independent ways to make a host-key purge a silent no-op"
 created: "2026-08-26"
 owner: manu
 category: identity-secrets

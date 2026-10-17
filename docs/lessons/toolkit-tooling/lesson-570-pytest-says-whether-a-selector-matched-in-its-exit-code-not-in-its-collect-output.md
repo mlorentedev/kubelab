@@ -1,7 +1,8 @@
 ---
-id: lesson-570-pytest-says-whether-a-selector-matched-in-its-exit-code-not-in-its-collect-output
+id: "lesson-570-pytest-says-whether-a-selector-matched-in-its-exit-code-not-in-its-collect-output"
 type: lesson
 status: active
+title: "pytest says whether a selector matched in its exit code, not in its collect output"
 created: "2026-10-14"
 owner: manu
 category: toolkit-tooling

@@ -1,7 +1,8 @@
 ---
-id: lesson-063-k3s-tls-san-must-be-set-before-first-start
+id: "lesson-063-k3s-tls-san-must-be-set-before-first-start"
 type: lesson
 status: active
+title: "K3s TLS SAN Must Be Set Before First Start"
 created: "2026-02-22"
 owner: manu
 category: kubernetes

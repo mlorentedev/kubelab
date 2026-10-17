@@ -1,7 +1,8 @@
 ---
-id: lesson-513-a-cloudflare-account-token-is-verified-against-the-account-not-the-user
+id: "lesson-513-a-cloudflare-account-token-is-verified-against-the-account-not-the-user"
 type: lesson
 status: active
+title: "A Cloudflare account token is verified against the account, not the user, and only a token that can edit tokens can mint one"
 created: "2026-10-03"
 owner: manu
 category: identity-secrets

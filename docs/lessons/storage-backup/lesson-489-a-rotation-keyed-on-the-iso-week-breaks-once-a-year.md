@@ -1,7 +1,8 @@
 ---
-id: lesson-489-a-rotation-keyed-on-the-iso-week-breaks-once-a-year
+id: "lesson-489-a-rotation-keyed-on-the-iso-week-breaks-once-a-year"
 type: lesson
 status: active
+title: "A rotation keyed on the ISO week breaks its coverage guarantee once a year; key it on epoch weeks"
 created: "2026-09-30"
 owner: manu
 category: storage-backup

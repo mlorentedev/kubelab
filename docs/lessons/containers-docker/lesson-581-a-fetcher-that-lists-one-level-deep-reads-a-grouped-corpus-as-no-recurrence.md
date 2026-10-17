@@ -1,7 +1,8 @@
 ---
-id: lesson-581-a-fetcher-that-lists-one-level-deep-reads-a-grouped-corpus-as-no-recurrence
+id: "lesson-581-a-fetcher-that-lists-one-level-deep-reads-a-grouped-corpus-as-no-recurrence"
 type: lesson
 status: active
+title: "A fetcher that lists one level deep reads a grouped corpus as \"no recurrence\""
 created: "2026-10-16"
 owner: manu
 category: containers-docker

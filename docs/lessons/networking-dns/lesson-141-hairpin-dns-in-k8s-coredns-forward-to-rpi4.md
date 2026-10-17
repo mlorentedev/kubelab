@@ -1,7 +1,8 @@
 ---
-id: lesson-141-hairpin-dns-in-k8s-coredns-forward-to-rpi4
+id: "lesson-141-hairpin-dns-in-k8s-coredns-forward-to-rpi4"
 type: lesson
 status: active
+title: "Hairpin DNS in K8s: CoreDNS forward to RPi4"
 created: "2026-03-21"
 owner: manu
 category: networking-dns

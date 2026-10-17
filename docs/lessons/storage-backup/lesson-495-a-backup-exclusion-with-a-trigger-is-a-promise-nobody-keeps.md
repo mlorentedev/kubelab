@@ -1,7 +1,8 @@
 ---
-id: lesson-495-a-backup-exclusion-with-a-trigger-is-a-promise-nobody-keeps
+id: "lesson-495-a-backup-exclusion-with-a-trigger-is-a-promise-nobody-keeps"
 type: lesson
 status: active
+title: "A backup exclusion with a trigger is a promise nobody keeps; only a tier is a ruling"
 created: "2026-10-01"
 owner: manu
 category: storage-backup

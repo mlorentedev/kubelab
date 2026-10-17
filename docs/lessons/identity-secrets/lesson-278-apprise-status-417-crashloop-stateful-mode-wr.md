@@ -1,7 +1,8 @@
 ---
-id: lesson-278-apprise-status-417-crashloop-stateful-mode-wr
+id: "lesson-278-apprise-status-417-crashloop-stateful-mode-wr"
 type: lesson
 status: active
+title: "Apprise `/status` 417 → CrashLoop: stateful mode write-tests `/config`, so the SOPS config can't be a read-only mount"
 created: "2026-06-16"
 owner: manu
 category: identity-secrets

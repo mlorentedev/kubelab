@@ -1,7 +1,8 @@
 ---
-id: lesson-584-a-page-is-reachable-only-if-something-targets-it-and-a-test-must-say-what
+id: "lesson-584-a-page-is-reachable-only-if-something-targets-it-and-a-test-must-say-what"
 type: lesson
 status: active
+title: "A page is reachable only if something targets it, and a test must say what"
 created: "2026-10-16"
 owner: manu
 category: edge-tls

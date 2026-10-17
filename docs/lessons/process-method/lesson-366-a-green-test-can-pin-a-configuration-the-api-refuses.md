@@ -1,7 +1,8 @@
 ---
-id: lesson-366-a-green-test-can-pin-a-configuration-the-api-refuses
+id: "lesson-366-a-green-test-can-pin-a-configuration-the-api-refuses"
 type: lesson
 status: active
+title: "A green test can pin a configuration the provider refuses"
 created: "2026-08-22"
 owner: manu
 category: process-method

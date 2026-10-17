@@ -1,7 +1,8 @@
 ---
-id: lesson-297-two-merge-implementations-over-the-same-files
+id: "lesson-297-two-merge-implementations-over-the-same-files"
 type: lesson
 status: active
+title: "Two merge implementations over the same files meant `common.enc.yaml` had two different meanings (ANSIBLE-033)"
 created: "2026-08-08"
 owner: manu
 category: ansible-provisioning

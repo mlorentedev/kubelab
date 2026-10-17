@@ -1,7 +1,8 @@
 ---
-id: lesson-338-gh-pr-edit-aborts-on-this-repo-with-an-error-
+id: "lesson-338-gh-pr-edit-aborts-on-this-repo-with-an-error-"
 type: lesson
 status: active
+title: "`gh pr edit` aborts on this repo with an error about a board, and leaves the body unchanged"
 created: "2026-08-15"
 owner: manu
 category: ci-automation

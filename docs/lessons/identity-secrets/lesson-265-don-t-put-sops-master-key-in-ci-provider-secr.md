@@ -1,7 +1,8 @@
 ---
-id: lesson-265-don-t-put-sops-master-key-in-ci-provider-secr
+id: "lesson-265-don-t-put-sops-master-key-in-ci-provider-secr"
 type: lesson
 status: active
+title: "Don't put SOPS master key in CI provider secrets — use self-hosted-runner-local key"
 created: "2026-05-23"
 owner: manu
 category: identity-secrets

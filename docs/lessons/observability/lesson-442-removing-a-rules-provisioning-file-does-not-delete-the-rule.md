@@ -1,7 +1,8 @@
 ---
-id: lesson-442-removing-a-rules-provisioning-file-does-not-delete-the-rule
+id: "lesson-442-removing-a-rules-provisioning-file-does-not-delete-the-rule"
 type: lesson
 status: active
+title: "Removing a rule's provisioning file is not deleting the rule — Grafana keeps evaluating it, and every repo-side signal says it is gone"
 created: "2026-09-03"
 owner: manu
 category: observability

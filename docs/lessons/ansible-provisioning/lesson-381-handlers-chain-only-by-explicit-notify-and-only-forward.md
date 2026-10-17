@@ -1,7 +1,8 @@
 ---
-id: lesson-381-handlers-chain-only-by-explicit-notify-and-only-forward
+id: "lesson-381-handlers-chain-only-by-explicit-notify-and-only-forward"
 type: lesson
 status: active
+title: "Ansible handlers chain only by explicit `notify`, and only forward — a handler nothing notifies is dead code shaped like a safeguard"
 created: "2026-08-23"
 owner: manu
 category: ansible-provisioning

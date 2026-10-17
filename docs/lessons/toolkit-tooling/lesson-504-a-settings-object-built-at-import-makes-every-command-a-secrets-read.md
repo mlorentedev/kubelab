@@ -1,7 +1,8 @@
 ---
-id: lesson-504-a-settings-object-built-at-import-makes-every-command-a-secrets-read
+id: "lesson-504-a-settings-object-built-at-import-makes-every-command-a-secrets-read"
 type: lesson
 status: active
+title: "A settings object built at import makes every command a secrets read"
 created: "2026-10-01"
 owner: manu
 category: toolkit-tooling

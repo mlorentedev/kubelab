@@ -1,7 +1,8 @@
 ---
-id: lesson-505-four-copies-of-one-phase-drift-in-their-guards
+id: "lesson-505-four-copies-of-one-phase-drift-in-their-guards"
 type: lesson
 status: active
+title: "Four copies of one phase drift in their guards"
 created: "2026-10-02"
 owner: manu
 category: storage-backup

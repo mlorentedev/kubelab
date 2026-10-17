@@ -1,7 +1,8 @@
 ---
-id: lesson-415-discriminate-a-refusal-by-asking-for-something-that-already-exists
+id: "lesson-415-discriminate-a-refusal-by-asking-for-something-that-already-exists"
 type: lesson
 status: active
+title: "To learn whether a credential *may* do something, ask it to do something already done"
 created: "2026-09-02"
 owner: manu
 category: identity-secrets

@@ -1,7 +1,8 @@
 ---
-id: lesson-223-hub-singleton-credentials-must-always-write-t
+id: "lesson-223-hub-singleton-credentials-must-always-write-t"
 type: lesson
 status: active
+title: "Hub singleton credentials must always write to common SOPS"
 created: "2026-03-27"
 owner: manu
 category: identity-secrets

@@ -1,7 +1,8 @@
 ---
-id: lesson-436-a-failed-call-is-not-a-refused-one
+id: "lesson-436-a-failed-call-is-not-a-refused-one"
 type: lesson
 status: active
+title: "A failed call is not a refused one, so a rollback needs a reconciliation"
 created: "2026-09-05"
 owner: manu
 category: ci-automation

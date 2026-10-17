@@ -1,7 +1,8 @@
 ---
-id: lesson-407-a-failed-auto-sync-is-not-retried-and-a-merge-is-not-a-deploy
+id: "lesson-407-a-failed-auto-sync-is-not-retried-and-a-merge-is-not-a-deploy"
 type: lesson
 status: active
+title: "A failed Argo CD auto-sync is not retried, and a merged manifest is not a deploy"
 created: "2026-08-27"
 owner: manu
 category: gitops-delivery

@@ -1,7 +1,8 @@
 ---
-id: lesson-375-a-comment-claiming-another-target-does-it-is-not-a-chain
+id: "lesson-375-a-comment-claiming-another-target-does-it-is-not-a-chain"
 type: lesson
 status: active
+title: "A comment claiming another target already does it is not a chain"
 created: "2026-08-23"
 owner: manu
 category: gitops-delivery

@@ -1,7 +1,8 @@
 ---
-id: lesson-518-poetry-caches-a-release-file-list-taken-mid-upload-forever
+id: "lesson-518-poetry-caches-a-release-file-list-taken-mid-upload-forever"
 type: lesson
 status: active
+title: "Poetry caches a release's file list forever, so a lock taken during the upload misses wheels for good"
 created: "2026-10-03"
 owner: manu
 category: toolkit-tooling

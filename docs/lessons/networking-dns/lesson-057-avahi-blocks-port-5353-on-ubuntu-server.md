@@ -1,7 +1,8 @@
 ---
-id: lesson-057-avahi-blocks-port-5353-on-ubuntu-server
+id: "lesson-057-avahi-blocks-port-5353-on-ubuntu-server"
 type: lesson
 status: active
+title: "Avahi Blocks Port 5353 on Ubuntu Server"
 created: "2026-02-21"
 owner: manu
 category: networking-dns

@@ -1,7 +1,8 @@
 ---
-id: lesson-184-t4g-micro-spot-sizing-fits-argo-cd-not-helm-u
+id: "lesson-184-t4g-micro-spot-sizing-fits-argo-cd-not-helm-u"
 type: lesson
 status: active
+title: "t4g.micro Spot sizing: fits Argo CD, not Helm upgrades"
 created: "2026-03-23"
 owner: manu
 category: kubernetes

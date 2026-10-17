@@ -1,7 +1,8 @@
 ---
-id: lesson-206-subpath-configmap-mounts-don-t-auto-update
+id: "lesson-206-subpath-configmap-mounts-don-t-auto-update"
 type: lesson
 status: active
+title: "subPath ConfigMap mounts don't auto-update"
 created: "2026-03-23"
 owner: manu
 category: kubernetes

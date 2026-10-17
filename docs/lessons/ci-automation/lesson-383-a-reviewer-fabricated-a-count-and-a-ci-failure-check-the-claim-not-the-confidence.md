@@ -1,7 +1,8 @@
 ---
-id: lesson-383-a-reviewer-fabricated-a-count-and-a-ci-failure-check-the-claim-not-the-confidence
+id: "lesson-383-a-reviewer-fabricated-a-count-and-a-ci-failure-check-the-claim-not-the-confidence"
 type: lesson
 status: active
+title: "A reviewer fabricated a count and a CI failure that never happened — check the claim, never the confidence"
 created: "2026-08-23"
 owner: manu
 category: ci-automation

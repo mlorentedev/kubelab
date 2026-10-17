@@ -1,7 +1,8 @@
 ---
-id: lesson-192-ai-knowledge-persistence-vault-is-the-record-
+id: "lesson-192-ai-knowledge-persistence-vault-is-the-record-"
 type: lesson
 status: active
+title: "AI knowledge persistence: vault is the record, MEMORY.md is cache"
 created: "2026-03-25"
 owner: manu
 category: process-method

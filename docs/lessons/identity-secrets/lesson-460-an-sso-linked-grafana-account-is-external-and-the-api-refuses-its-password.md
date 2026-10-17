@@ -1,7 +1,8 @@
 ---
-id: lesson-460-an-sso-linked-grafana-account-is-external-and-the-api-refuses-its-password
+id: "lesson-460-an-sso-linked-grafana-account-is-external-and-the-api-refuses-its-password"
 type: lesson
 status: active
+title: "An SSO-linked Grafana account is external: the API refuses its password and its role"
 created: "2026-09-24"
 owner: manu
 category: identity-secrets

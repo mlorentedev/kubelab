@@ -1,7 +1,8 @@
 ---
-id: lesson-042-task-system-initialization
+id: "lesson-042-task-system-initialization"
 type: lesson
 status: active
+title: "Task System Initialization"
 created: "2026-02-03"
 owner: manu
 category: process-method

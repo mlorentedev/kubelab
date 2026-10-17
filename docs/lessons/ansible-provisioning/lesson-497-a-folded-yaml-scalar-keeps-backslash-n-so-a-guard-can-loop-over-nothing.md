@@ -1,7 +1,8 @@
 ---
-id: lesson-497-a-folded-yaml-scalar-keeps-backslash-n-so-a-guard-can-loop-over-nothing
+id: "lesson-497-a-folded-yaml-scalar-keeps-backslash-n-so-a-guard-can-loop-over-nothing"
 type: lesson
 status: active
+title: "A folded YAML scalar keeps `'\\n'` as two characters, so a guard built on it can loop over nothing and report `skipping`"
 created: "2026-10-01"
 owner: manu
 category: ansible-provisioning

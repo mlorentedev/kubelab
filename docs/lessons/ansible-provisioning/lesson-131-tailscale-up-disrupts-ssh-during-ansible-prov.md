@@ -1,7 +1,8 @@
 ---
-id: lesson-131-tailscale-up-disrupts-ssh-during-ansible-prov
+id: "lesson-131-tailscale-up-disrupts-ssh-during-ansible-prov"
 type: lesson
 status: active
+title: "Tailscale up disrupts SSH during Ansible provisioning"
 created: "2026-03-17"
 owner: manu
 category: ansible-provisioning

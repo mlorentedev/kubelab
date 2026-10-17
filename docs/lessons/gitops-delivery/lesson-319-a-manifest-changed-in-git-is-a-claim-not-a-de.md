@@ -1,7 +1,8 @@
 ---
-id: lesson-319-a-manifest-changed-in-git-is-a-claim-not-a-de
+id: "lesson-319-a-manifest-changed-in-git-is-a-claim-not-a-de"
 type: lesson
 status: active
+title: "A manifest changed in git is a claim, not a deployed fact — nothing was reading back the live Argo CD Application"
 created: "2026-08-12"
 owner: manu
 category: gitops-delivery

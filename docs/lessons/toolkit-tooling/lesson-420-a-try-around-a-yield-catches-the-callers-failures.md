@@ -1,7 +1,8 @@
 ---
-id: lesson-420-a-try-around-a-yield-catches-the-callers-failures
+id: "lesson-420-a-try-around-a-yield-catches-the-callers-failures"
 type: lesson
 status: active
+title: "A `try` that spans a `yield` catches the *caller's* failures and reports them as its own"
 created: "2026-09-02"
 owner: manu
 category: toolkit-tooling

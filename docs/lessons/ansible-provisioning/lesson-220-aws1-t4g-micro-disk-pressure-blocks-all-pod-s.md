@@ -1,7 +1,8 @@
 ---
-id: lesson-220-aws1-t4g-micro-disk-pressure-blocks-all-pod-s
+id: "lesson-220-aws1-t4g-micro-disk-pressure-blocks-all-pod-s"
 type: lesson
 status: active
+title: "aws1 t4g.micro disk-pressure blocks all pod scheduling"
 created: "2026-03-27"
 owner: manu
 category: ansible-provisioning

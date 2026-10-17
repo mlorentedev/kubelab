@@ -1,7 +1,8 @@
 ---
-id: lesson-128-pre-flight-ssh-validation-prevents-ssh-harden
+id: "lesson-128-pre-flight-ssh-validation-prevents-ssh-harden"
 type: lesson
 status: active
+title: "Pre-flight SSH validation prevents ssh_hardening lockout"
 created: "2026-03-17"
 owner: manu
 category: ansible-provisioning

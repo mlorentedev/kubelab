@@ -1,7 +1,8 @@
 ---
-id: lesson-475-repointing-a-shared-preview-slot-without-reading-it-clobbers-another-lane
+id: "lesson-475-repointing-a-shared-preview-slot-without-reading-it-clobbers-another-lane"
 type: lesson
 status: active
+title: "Repointing a shared preview slot without reading it first clobbers another lane"
 created: "2026-09-25"
 owner: manu
 category: gitops-delivery

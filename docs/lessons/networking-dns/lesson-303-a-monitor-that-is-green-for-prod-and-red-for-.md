@@ -1,7 +1,8 @@
 ---
-id: lesson-303-a-monitor-that-is-green-for-prod-and-red-for-
+id: "lesson-303-a-monitor-that-is-green-for-prod-and-red-for-"
 type: lesson
 status: active
+title: "A monitor that is green for prod and red for staging is reporting on its own resolver, not on your infrastructure (MON-001)"
 created: "2026-08-09"
 owner: manu
 category: networking-dns

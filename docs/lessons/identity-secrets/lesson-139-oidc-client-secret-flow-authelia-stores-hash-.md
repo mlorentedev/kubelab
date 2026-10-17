@@ -1,7 +1,8 @@
 ---
-id: lesson-139-oidc-client-secret-flow-authelia-stores-hash-
+id: "lesson-139-oidc-client-secret-flow-authelia-stores-hash-"
 type: lesson
 status: active
+title: "OIDC client_secret flow: Authelia stores hash, client stores plaintext"
 created: "2026-03-21"
 owner: manu
 category: identity-secrets

@@ -1,7 +1,8 @@
 ---
-id: lesson-106-static-site-font-optimization-woff2-unused-we
+id: "lesson-106-static-site-font-optimization-woff2-unused-we"
 type: lesson
 status: active
+title: "Static Site Font Optimization — woff2, Unused Weight Removal, Preloading"
 created: "2026-03-07"
 owner: manu
 category: apps-web

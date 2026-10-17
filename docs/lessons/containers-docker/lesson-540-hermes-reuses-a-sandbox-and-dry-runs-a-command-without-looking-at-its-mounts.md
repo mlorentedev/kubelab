@@ -1,7 +1,8 @@
 ---
-id: lesson-540-hermes-reuses-a-sandbox-and-dry-runs-a-command-without-looking-at-its-mounts
+id: "lesson-540-hermes-reuses-a-sandbox-and-dry-runs-a-command-without-looking-at-its-mounts"
 type: lesson
 status: active
+title: "Hermes reuses a sandbox and dry-runs a command without looking at its mounts"
 created: "2026-10-08"
 owner: manu
 category: containers-docker

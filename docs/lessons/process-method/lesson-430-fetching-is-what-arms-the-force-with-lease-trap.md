@@ -1,7 +1,8 @@
 ---
-id: lesson-430-fetching-is-what-arms-the-force-with-lease-trap
+id: "lesson-430-fetching-is-what-arms-the-force-with-lease-trap"
 type: lesson
 status: active
+title: "Fetching is what arms the `--force-with-lease` trap"
 created: "2026-09-04"
 owner: manu
 category: process-method

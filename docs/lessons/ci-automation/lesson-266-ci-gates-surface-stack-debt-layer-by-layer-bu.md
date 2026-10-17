@@ -1,7 +1,8 @@
 ---
-id: lesson-266-ci-gates-surface-stack-debt-layer-by-layer-bu
+id: "lesson-266-ci-gates-surface-stack-debt-layer-by-layer-bu"
 type: lesson
 status: active
+title: "CI gates surface stack debt layer-by-layer — budget for cascading failures"
 created: "2026-05-23"
 owner: manu
 category: ci-automation

@@ -1,7 +1,8 @@
 ---
-id: lesson-196-homepage-allowed-hosts-required-for-next-js-1
+id: "lesson-196-homepage-allowed-hosts-required-for-next-js-1"
 type: lesson
 status: active
+title: "HOMEPAGE_ALLOWED_HOSTS required for Next.js 15.x"
 created: "2026-03-23"
 owner: manu
 category: apps-web

@@ -1,7 +1,8 @@
 ---
-id: lesson-451-one-long-lived-staging-offer-instead-of-a-pr-per-push
+id: "lesson-451-one-long-lived-staging-offer-instead-of-a-pr-per-push"
 type: lesson
 status: active
+title: "One long-lived staging offer instead of a pull request per push"
 created: "2026-09-05"
 owner: manu
 category: gitops-delivery

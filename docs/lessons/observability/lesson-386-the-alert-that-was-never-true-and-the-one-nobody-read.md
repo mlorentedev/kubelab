@@ -1,7 +1,8 @@
 ---
-id: lesson-386-the-alert-that-was-never-true-and-the-one-nobody-read
+id: "lesson-386-the-alert-that-was-never-true-and-the-one-nobody-read"
 type: lesson
 status: active
+title: "A channel with a permanent false positive is not a channel anyone reads"
 created: "2026-08-24"
 owner: manu
 category: observability

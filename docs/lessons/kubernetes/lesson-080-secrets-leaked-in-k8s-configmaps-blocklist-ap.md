@@ -1,7 +1,8 @@
 ---
-id: lesson-080-secrets-leaked-in-k8s-configmaps-blocklist-ap
+id: "lesson-080-secrets-leaked-in-k8s-configmaps-blocklist-ap"
 type: lesson
 status: active
+title: "Secrets leaked in K8s ConfigMaps — blocklist approach is fragile"
 created: "2026-02-28"
 owner: manu
 category: kubernetes

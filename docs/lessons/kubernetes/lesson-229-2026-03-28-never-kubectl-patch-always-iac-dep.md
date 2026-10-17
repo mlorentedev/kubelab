@@ -1,7 +1,8 @@
 ---
-id: lesson-229-2026-03-28-never-kubectl-patch-always-iac-dep
+id: "lesson-229-2026-03-28-never-kubectl-patch-always-iac-dep"
 type: lesson
 status: active
+title: "2026-03-28: Never kubectl patch — always IaC (deploy-argocd, deploy-k8s, deploy TARGET=vps)"
 created: "2026-05-01"
 owner: manu
 category: kubernetes

@@ -1,7 +1,8 @@
 ---
-id: lesson-548-an-egress-rule-on-the-destination-drops-the-replies-of-a-listener-owned-by-the-same-uid
+id: "lesson-548-an-egress-rule-on-the-destination-drops-the-replies-of-a-listener-owned-by-the-same-uid"
 type: lesson
 status: active
+title: "An egress rule on the destination drops the replies of a listener owned by the same uid"
 created: "2026-10-10"
 owner: manu
 category: networking-dns

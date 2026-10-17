@@ -1,7 +1,8 @@
 ---
-id: lesson-367-a-task-that-acquires-state-must-survive-the-task-that-uses-it
+id: "lesson-367-a-task-that-acquires-state-must-survive-the-task-that-uses-it"
 type: lesson
 status: active
+title: "A task that acquires state must survive the task that uses it, or the failure leaves the node worse than it found it"
 created: "2026-08-22"
 owner: manu
 category: ansible-provisioning

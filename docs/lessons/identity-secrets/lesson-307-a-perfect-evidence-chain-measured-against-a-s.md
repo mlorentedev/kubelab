@@ -1,7 +1,8 @@
 ---
-id: lesson-307-a-perfect-evidence-chain-measured-against-a-s
+id: "lesson-307-a-perfect-evidence-chain-measured-against-a-s"
 type: lesson
 status: active
+title: "A perfect evidence chain measured against a stale baseline (SEC-001)"
 created: "2026-08-09"
 owner: manu
 category: identity-secrets

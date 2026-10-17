@@ -1,7 +1,8 @@
 ---
-id: lesson-248-activating-aggressive-gc-threshold-on-a-backl
+id: "lesson-248-activating-aggressive-gc-threshold-on-a-backl"
 type: lesson
 status: active
+title: "Activating aggressive GC threshold on a backlog cluster needs manual pre-cleanup"
 created: "2026-05-10"
 owner: manu
 category: kubernetes

@@ -1,7 +1,8 @@
 ---
-id: lesson-098-coredns-template-overrides-hosts-when-both-ar
+id: "lesson-098-coredns-template-overrides-hosts-when-both-ar"
 type: lesson
 status: active
+title: "CoreDNS `template` Overrides `hosts` When Both Are in Same Zone"
 created: "2026-03-01"
 owner: manu
 category: networking-dns

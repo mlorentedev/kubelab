@@ -1,7 +1,8 @@
 ---
-id: lesson-016-a-mutable-image-tag-needs-an-explicit-imagepu
+id: "lesson-016-a-mutable-image-tag-needs-an-explicit-imagepu"
 type: lesson
 status: active
+title: "A mutable image tag needs an explicit `imagePullPolicy: Always` or it never re-pulls"
 created: "2026-06-15"
 owner: manu
 category: containers-docker

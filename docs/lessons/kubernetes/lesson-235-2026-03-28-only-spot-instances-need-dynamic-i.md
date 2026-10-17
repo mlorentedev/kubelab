@@ -1,7 +1,8 @@
 ---
-id: lesson-235-2026-03-28-only-spot-instances-need-dynamic-i
+id: "lesson-235-2026-03-28-only-spot-instances-need-dynamic-i"
 type: lesson
 status: active
+title: "2026-03-28: Only Spot instances need dynamic IP resolve — physical nodes keep hardcoded IPs"
 created: "2026-05-01"
 owner: manu
 category: kubernetes

@@ -1,7 +1,8 @@
 ---
-id: lesson-433-a-branch-that-only-improves-a-message-is-invisible-to-a-test-that-asserts-only-failure
+id: "lesson-433-a-branch-that-only-improves-a-message-is-invisible-to-a-test-that-asserts-only-failure"
 type: lesson
 status: active
+title: "A branch that only improves a message is invisible to a test that asserts only failure"
 created: "2026-09-05"
 owner: manu
 category: process-method
@@ -13,7 +14,6 @@ tags: [kubelab, process-method, verification, mutation-testing, app-config-004]
 > Number: 430 and 431 are claimed by #1648, 432 by a parallel session. Taken as 433
 > after checking both, because announcing a number is not allocating one (#1334).
 
-**Date:** 2026-09-05
 **Context:** #503 / PR #1661 — `ensure_webhook`'s post-condition
 **Category:** process-method
 

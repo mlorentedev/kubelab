@@ -1,7 +1,8 @@
 ---
-id: lesson-455-a-watch-on-a-file-name-never-fires-on-a-secret-volume
+id: "lesson-455-a-watch-on-a-file-name-never-fires-on-a-secret-volume"
 type: lesson
 status: active
+title: "A file watch keyed on the file's name never fires on a Secret volume, so \"no restart needed\" was never true"
 created: "2026-09-24"
 owner: manu
 category: kubernetes

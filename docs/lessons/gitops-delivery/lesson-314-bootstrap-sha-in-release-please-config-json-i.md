@@ -1,7 +1,8 @@
 ---
-id: lesson-314-bootstrap-sha-in-release-please-config-json-i
+id: "lesson-314-bootstrap-sha-in-release-please-config-json-i"
 type: lesson
 status: active
+title: "`bootstrap-sha` in `release-please-config.json` is a manifest-level option, not a per-package one"
 created: "2026-08-12"
 owner: manu
 category: gitops-delivery

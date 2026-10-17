@@ -1,7 +1,8 @@
 ---
-id: lesson-315-the-app-was-extracted-and-the-app-is-dead-her
+id: "lesson-315-the-app-was-extracted-and-the-app-is-dead-her"
 type: lesson
 status: active
+title: "\"The app was extracted\" and \"the app is dead here\" are different claims"
 created: "2026-08-12"
 owner: manu
 category: process-method

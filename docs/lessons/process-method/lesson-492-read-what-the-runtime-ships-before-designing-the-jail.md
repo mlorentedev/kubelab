@@ -1,7 +1,8 @@
 ---
-id: lesson-492-read-what-the-runtime-ships-before-designing-the-jail
+id: "lesson-492-read-what-the-runtime-ships-before-designing-the-jail"
 type: lesson
 status: active
+title: "Read what the agent runtime ships before designing its jail, and apply \"always-on\" to callees, not callers"
 created: "2026-09-30"
 owner: manu
 category: process-method

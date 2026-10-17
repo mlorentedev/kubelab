@@ -1,7 +1,8 @@
 ---
-id: lesson-162-sqlite-backup-requires-sqlite3-backup-api-tar
+id: "lesson-162-sqlite-backup-requires-sqlite3-backup-api-tar"
 type: lesson
 status: active
+title: "SQLite backup requires sqlite3 .backup API — tar alone risks corruption"
 created: "2026-03-22"
 owner: manu
 category: storage-backup

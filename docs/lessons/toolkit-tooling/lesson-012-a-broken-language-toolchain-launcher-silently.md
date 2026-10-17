@@ -1,7 +1,8 @@
 ---
-id: lesson-012-a-broken-language-toolchain-launcher-silently
+id: "lesson-012-a-broken-language-toolchain-launcher-silently"
 type: lesson
 status: active
+title: "A broken language-toolchain launcher silently un-wires the dev setup"
 created: "2026-06-20"
 owner: manu
 category: toolkit-tooling

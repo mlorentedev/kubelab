@@ -1,7 +1,8 @@
 ---
-id: lesson-331-a-local-kubectl-diff-against-an-argo-cd-manag
+id: "lesson-331-a-local-kubectl-diff-against-an-argo-cd-manag"
 type: lesson
 status: active
+title: "A local `kubectl diff` against an Argo CD-managed cluster describes a merge that will never happen"
 created: "2026-08-15"
 owner: manu
 category: gitops-delivery

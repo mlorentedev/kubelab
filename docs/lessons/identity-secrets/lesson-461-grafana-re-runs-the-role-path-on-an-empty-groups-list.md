@@ -1,7 +1,8 @@
 ---
-id: lesson-461-grafana-re-runs-the-role-path-on-an-empty-groups-list
+id: "lesson-461-grafana-re-runs-the-role-path-on-an-empty-groups-list"
 type: lesson
 status: active
+title: "Grafana re-runs the role path on an empty groups list, so a null guard on `groups` alone still answers from the ID token"
 created: "2026-09-24"
 owner: manu
 category: identity-secrets

@@ -1,7 +1,8 @@
 ---
-id: lesson-147-portainer-removed-k8s-native-tooling-replaces
+id: "lesson-147-portainer-removed-k8s-native-tooling-replaces"
 type: lesson
 status: active
+title: "Portainer removed — K8s native tooling replaces it"
 created: "2026-03-21"
 owner: manu
 category: process-method

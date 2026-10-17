@@ -1,7 +1,8 @@
 ---
-id: lesson-487-a-failed-review-names-its-cause-per-model
+id: "lesson-487-a-failed-review-names-its-cause-per-model"
 type: lesson
 status: active
+title: "A failed review names its cause per model; read it before filing it under a known one"
 created: "2026-09-30"
 owner: manu
 category: ci-automation

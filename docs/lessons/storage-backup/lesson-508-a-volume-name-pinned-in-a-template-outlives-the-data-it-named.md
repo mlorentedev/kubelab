@@ -1,7 +1,8 @@
 ---
-id: lesson-508-a-volume-name-pinned-in-a-template-outlives-the-data-it-named
+id: "lesson-508-a-volume-name-pinned-in-a-template-outlives-the-data-it-named"
 type: lesson
 status: active
+title: "A volume name pinned in a template outlives the data it named, and the next provision mounts the orphan"
 created: "2026-10-02"
 owner: manu
 category: storage-backup

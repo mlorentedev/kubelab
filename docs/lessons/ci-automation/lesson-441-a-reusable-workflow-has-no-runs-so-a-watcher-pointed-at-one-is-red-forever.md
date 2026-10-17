@@ -1,7 +1,8 @@
 ---
-id: lesson-441-a-reusable-workflow-has-no-runs-so-a-watcher-pointed-at-one-is-red-forever
+id: "lesson-441-a-reusable-workflow-has-no-runs-so-a-watcher-pointed-at-one-is-red-forever"
 type: lesson
 status: active
+title: "A reusable workflow has no runs of its own, so a monitor pointed at one is red forever — and the ticket said to point one at it"
 created: "2026-09-06"
 owner: manu
 category: ci-automation

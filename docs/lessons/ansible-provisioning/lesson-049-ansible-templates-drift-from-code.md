@@ -1,7 +1,8 @@
 ---
-id: lesson-049-ansible-templates-drift-from-code
+id: "lesson-049-ansible-templates-drift-from-code"
 type: lesson
 status: active
+title: "Ansible Templates Drift from Code"
 created: "2026-02-09"
 owner: manu
 category: ansible-provisioning

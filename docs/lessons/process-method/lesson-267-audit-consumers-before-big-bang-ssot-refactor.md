@@ -1,7 +1,8 @@
 ---
-id: lesson-267-audit-consumers-before-big-bang-ssot-refactor
+id: "lesson-267-audit-consumers-before-big-bang-ssot-refactor"
 type: lesson
 status: active
+title: "Audit consumers BEFORE big-bang SSOT refactors — \"move 3 values\" hid 21 references"
 created: "2026-05-23"
 owner: manu
 category: process-method

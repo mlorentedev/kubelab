@@ -1,7 +1,8 @@
 ---
-id: lesson-580-an-external-skill-named-like-a-built-in-is-installed-and-never-read
+id: "lesson-580-an-external-skill-named-like-a-built-in-is-installed-and-never-read"
 type: lesson
 status: active
+title: "A managed skill named like a Hermes built-in is installed, listed, and never read"
 created: "2026-10-16"
 owner: manu
 category: containers-docker

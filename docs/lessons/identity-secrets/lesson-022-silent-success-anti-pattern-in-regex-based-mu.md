@@ -1,7 +1,8 @@
 ---
-id: lesson-022-silent-success-anti-pattern-in-regex-based-mu
+id: "lesson-022-silent-success-anti-pattern-in-regex-based-mu"
 type: lesson
 status: active
+title: "Silent-success anti-pattern in regex-based mutation tooling"
 created: "2026-05-26"
 owner: manu
 category: identity-secrets

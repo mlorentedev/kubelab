@@ -1,7 +1,8 @@
 ---
-id: lesson-023-fail-closed-fixtures-in-security-e2e-suites
+id: "lesson-023-fail-closed-fixtures-in-security-e2e-suites"
 type: lesson
 status: active
+title: "Fail-closed fixtures in security E2E suites"
 created: "2026-05-23"
 owner: manu
 category: toolkit-tooling

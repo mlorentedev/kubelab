@@ -1,7 +1,8 @@
 ---
-id: lesson-200-cross-namespace-dns-fails-from-certain-pods
+id: "lesson-200-cross-namespace-dns-fails-from-certain-pods"
 type: lesson
 status: active
+title: "Cross-namespace DNS fails from certain pods"
 created: "2026-03-23"
 owner: manu
 category: kubernetes

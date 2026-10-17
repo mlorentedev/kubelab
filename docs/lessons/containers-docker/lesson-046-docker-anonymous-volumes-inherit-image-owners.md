@@ -1,7 +1,8 @@
 ---
-id: lesson-046-docker-anonymous-volumes-inherit-image-owners
+id: "lesson-046-docker-anonymous-volumes-inherit-image-owners"
 type: lesson
 status: active
+title: "Docker Anonymous Volumes Inherit Image Ownership"
 created: "2026-02-09"
 owner: manu
 category: containers-docker

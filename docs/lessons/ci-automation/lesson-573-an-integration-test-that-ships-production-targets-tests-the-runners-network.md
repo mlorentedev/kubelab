@@ -1,7 +1,8 @@
 ---
-id: lesson-573-an-integration-test-that-ships-production-targets-tests-the-runners-network
+id: "lesson-573-an-integration-test-that-ships-production-targets-tests-the-runners-network"
 type: lesson
 status: active
+title: "An integration test that ships production targets tests the runner's network"
 created: "2026-10-14"
 owner: manu
 category: ci-automation

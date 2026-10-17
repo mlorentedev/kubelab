@@ -1,7 +1,8 @@
 ---
-id: lesson-170-k3s-resolv-conf-must-point-to-real-upstream-o
+id: "lesson-170-k3s-resolv-conf-must-point-to-real-upstream-o"
 type: lesson
 status: active
+title: "K3s resolv-conf must point to real upstream on systemd-resolved hosts"
 created: "2026-03-22"
 owner: manu
 category: networking-dns

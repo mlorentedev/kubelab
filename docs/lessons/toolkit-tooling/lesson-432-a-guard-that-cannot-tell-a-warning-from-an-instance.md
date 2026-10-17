@@ -1,7 +1,8 @@
 ---
-id: lesson-432-a-guard-that-cannot-tell-a-warning-from-an-instance
+id: "lesson-432-a-guard-that-cannot-tell-a-warning-from-an-instance"
 type: lesson
 status: active
+title: "A file that contains its own explanation cannot be edited by a pattern that matches the explanation"
 created: "2026-09-04"
 owner: manu
 category: toolkit-tooling

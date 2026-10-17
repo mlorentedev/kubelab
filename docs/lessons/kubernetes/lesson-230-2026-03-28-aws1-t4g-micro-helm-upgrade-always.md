@@ -1,7 +1,8 @@
 ---
-id: lesson-230-2026-03-28-aws1-t4g-micro-helm-upgrade-always
+id: "lesson-230-2026-03-28-aws1-t4g-micro-helm-upgrade-always"
 type: lesson
 status: active
+title: "2026-03-28: aws1 t4g.micro Helm upgrade always causes swap thrashing — mitigate before deploy"
 created: "2026-05-01"
 owner: manu
 category: kubernetes

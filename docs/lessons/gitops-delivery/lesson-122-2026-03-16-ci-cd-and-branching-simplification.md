@@ -1,7 +1,8 @@
 ---
-id: lesson-122-2026-03-16-ci-cd-and-branching-simplification
+id: "lesson-122-2026-03-16-ci-cd-and-branching-simplification"
 type: lesson
 status: active
+title: "2026-03-16: CI/CD and Branching Simplification"
 created: "2026-05-01"
 owner: manu
 category: gitops-delivery

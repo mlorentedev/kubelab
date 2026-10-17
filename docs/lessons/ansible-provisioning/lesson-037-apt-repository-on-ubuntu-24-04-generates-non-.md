@@ -1,7 +1,8 @@
 ---
-id: lesson-037-apt-repository-on-ubuntu-24-04-generates-non-
+id: "lesson-037-apt-repository-on-ubuntu-24-04-generates-non-"
 type: lesson
 status: active
+title: "apt_repository on Ubuntu 24.04 generates non-obvious filenames"
 created: "2026-03-19"
 owner: manu
 category: ansible-provisioning

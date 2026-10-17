@@ -1,7 +1,8 @@
 ---
-id: lesson-015-staging-must-run-the-same-artifact-and-mode-a
+id: "lesson-015-staging-must-run-the-same-artifact-and-mode-a"
 type: lesson
 status: active
+title: "Staging must run the same artifact AND mode as prod, or it is not a gate"
 created: "2026-06-15"
 owner: manu
 category: process-method

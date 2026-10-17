@@ -1,7 +1,8 @@
 ---
-id: lesson-093-n8n-community-edition-has-no-native-oidc
+id: "lesson-093-n8n-community-edition-has-no-native-oidc"
 type: lesson
 status: active
+title: "N8N Community Edition Has No Native OIDC"
 created: "2026-03-01"
 owner: manu
 category: identity-secrets

@@ -1,7 +1,8 @@
 ---
-id: lesson-398-a-quoting-bug-that-widens-a-scope-does-not-announce-itself
+id: "lesson-398-a-quoting-bug-that-widens-a-scope-does-not-announce-itself"
 type: lesson
 status: active
+title: "A quoting bug that breaks a command announces itself; one that widens a scope does not"
 created: "2026-08-26"
 owner: manu
 category: identity-secrets

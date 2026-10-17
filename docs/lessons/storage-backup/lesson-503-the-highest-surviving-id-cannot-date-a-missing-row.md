@@ -1,7 +1,8 @@
 ---
-id: lesson-503-the-highest-surviving-id-cannot-date-a-missing-row
+id: "lesson-503-the-highest-surviving-id-cannot-date-a-missing-row"
 type: lesson
 status: active
+title: "A restore's highest surviving id cannot date a missing row; its `sqlite_sequence` can"
 created: "2026-10-01"
 owner: manu
 category: storage-backup

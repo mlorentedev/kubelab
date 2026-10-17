@@ -1,7 +1,8 @@
 ---
-id: lesson-336-the-adversarial-review-gate-writes-a-90mb-art
+id: "lesson-336-the-adversarial-review-gate-writes-a-90mb-art"
 type: lesson
 status: active
+title: "The adversarial-review gate writes a ~90MB artifact into the spec folder, untracked and unignored"
 created: "2026-08-15"
 owner: manu
 category: process-method

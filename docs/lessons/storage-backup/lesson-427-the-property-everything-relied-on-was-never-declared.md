@@ -1,7 +1,8 @@
 ---
-id: lesson-427-the-property-everything-relied-on-was-never-declared
+id: "lesson-427-the-property-everything-relied-on-was-never-declared"
 type: lesson
 status: active
+title: "A default nobody chose is not a decision, and four backups were relying on one"
 created: "2026-09-04"
 owner: manu
 category: storage-backup

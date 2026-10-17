@@ -1,7 +1,8 @@
 ---
-id: lesson-482-a-failed-exec-into-a-ready-pod-is-read-from-the-pod-not-the-command
+id: "lesson-482-a-failed-exec-into-a-ready-pod-is-read-from-the-pod-not-the-command"
 type: lesson
 status: active
+title: "A failed `kubectl exec` into a Ready pod is explained by the pod's record, not by the command's error"
 created: "2026-09-28"
 owner: manu
 category: kubernetes

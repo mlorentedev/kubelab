@@ -1,7 +1,8 @@
 ---
-id: lesson-563-a-wrapper-guard-is-only-as-strong-as-the-environment-it-passes-on
+id: "lesson-563-a-wrapper-guard-is-only-as-strong-as-the-environment-it-passes-on"
 type: lesson
 status: active
+title: "A wrapper's guard is only as strong as the environment it passes on"
 created: "2026-10-13"
 owner: manu
 category: toolkit-tooling

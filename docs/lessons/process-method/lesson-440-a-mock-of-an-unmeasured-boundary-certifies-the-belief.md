@@ -1,7 +1,8 @@
 ---
-id: lesson-440-a-mock-of-an-unmeasured-boundary-certifies-the-belief
+id: "lesson-440-a-mock-of-an-unmeasured-boundary-certifies-the-belief"
 type: lesson
 status: active
+title: "Running the real code against a mocked boundary tests the code and certifies the mock"
 created: "2026-09-05"
 owner: manu
 category: process-method

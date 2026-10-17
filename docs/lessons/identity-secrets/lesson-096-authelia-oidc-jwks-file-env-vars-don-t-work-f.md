@@ -1,7 +1,8 @@
 ---
-id: lesson-096-authelia-oidc-jwks-file-env-vars-don-t-work-f
+id: "lesson-096-authelia-oidc-jwks-file-env-vars-don-t-work-f"
 type: lesson
 status: active
+title: "Authelia OIDC JWKS: `_FILE` Env Vars Don't Work for Array-Indexed Keys"
 created: "2026-03-01"
 owner: manu
 category: identity-secrets

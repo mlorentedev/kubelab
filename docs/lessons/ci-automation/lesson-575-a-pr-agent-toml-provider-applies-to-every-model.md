@@ -1,7 +1,8 @@
 ---
-id: lesson-575-a-pr-agent-toml-provider-applies-to-every-model
+id: "lesson-575-a-pr-agent-toml-provider-applies-to-every-model"
 type: lesson
 status: active
+title: "A PR-Agent toml provider applies to every model, so a second provider has to override it"
 created: "2026-10-15"
 owner: manu
 category: ci-automation

@@ -1,7 +1,8 @@
 ---
-id: lesson-259-github-squash-and-merge-can-silently-drop-lat
+id: "lesson-259-github-squash-and-merge-can-silently-drop-lat"
 type: lesson
 status: active
+title: "GitHub \"Squash and merge\" can silently drop later commits on a PR — verify post-merge content, not just merge status"
 created: "2026-05-19"
 owner: manu
 category: ci-automation

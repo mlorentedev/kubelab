@@ -1,7 +1,8 @@
 ---
-id: lesson-434-when-every-normal-path-deletes-it-the-residue-is-a-counter
+id: "lesson-434-when-every-normal-path-deletes-it-the-residue-is-a-counter"
 type: lesson
 status: active
+title: "When every normal path deletes it, the leftovers are a counter"
 created: "2026-09-05"
 owner: manu
 category: ci-automation

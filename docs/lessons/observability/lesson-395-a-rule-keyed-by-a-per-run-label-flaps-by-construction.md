@@ -1,7 +1,8 @@
 ---
-id: lesson-395-a-rule-keyed-by-a-per-run-label-flaps-by-construction
+id: "lesson-395-a-rule-keyed-by-a-per-run-label-flaps-by-construction"
 type: lesson
 status: active
+title: "A rule keyed by a per-run label flaps by construction"
 created: "2026-08-25"
 owner: manu
 category: observability

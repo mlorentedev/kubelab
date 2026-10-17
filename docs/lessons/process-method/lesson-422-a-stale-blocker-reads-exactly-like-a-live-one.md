@@ -1,7 +1,8 @@
 ---
-id: lesson-422-a-stale-blocker-reads-exactly-like-a-live-one
+id: "lesson-422-a-stale-blocker-reads-exactly-like-a-live-one"
 type: lesson
 status: active
+title: "A stale blocker reads exactly like a live one, so nobody retries what a comment says is impossible"
 created: "2026-09-04"
 owner: manu
 category: process-method

@@ -1,7 +1,8 @@
 ---
-id: lesson-358-a-passing-re-run-is-not-evidence-against-a
+id: "lesson-358-a-passing-re-run-is-not-evidence-against-a"
 type: lesson
 status: active
+title: "A passing re-run is not evidence against a flake — it is what a flake looks like"
 created: "2026-08-20"
 owner: manu
 category: process-method

@@ -1,7 +1,8 @@
 ---
-id: lesson-112-usb-eth-rpi4-router-dhcp-not-responding
+id: "lesson-112-usb-eth-rpi4-router-dhcp-not-responding"
 type: lesson
 status: active
+title: "USB ETH RPi4 — router DHCP not responding"
 created: "2026-03-14"
 owner: manu
 category: ansible-provisioning

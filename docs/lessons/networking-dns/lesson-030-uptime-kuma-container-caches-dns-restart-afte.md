@@ -1,7 +1,8 @@
 ---
-id: lesson-030-uptime-kuma-container-caches-dns-restart-afte
+id: "lesson-030-uptime-kuma-container-caches-dns-restart-afte"
 type: lesson
 status: active
+title: "Uptime Kuma container caches DNS — restart after DNS changes"
 created: "2026-03-19"
 owner: manu
 category: networking-dns

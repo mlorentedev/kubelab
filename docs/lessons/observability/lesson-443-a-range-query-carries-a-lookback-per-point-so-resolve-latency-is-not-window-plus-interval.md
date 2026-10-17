@@ -1,7 +1,8 @@
 ---
-id: lesson-443-a-range-query-carries-a-lookback-per-point-so-resolve-latency-is-not-window-plus-interval
+id: "lesson-443-a-range-query-carries-a-lookback-per-point-so-resolve-latency-is-not-window-plus-interval"
 type: lesson
 status: active
+title: "A range query carries a lookback per point, so \"window plus interval\" is half the real resolve latency"
 created: "2026-09-04"
 owner: manu
 category: observability

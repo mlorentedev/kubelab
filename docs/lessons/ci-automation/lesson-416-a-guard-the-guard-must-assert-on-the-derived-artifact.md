@@ -1,7 +1,8 @@
 ---
-id: lesson-416-a-guard-the-guard-must-assert-on-the-derived-artifact
+id: "lesson-416-a-guard-the-guard-must-assert-on-the-derived-artifact"
 type: lesson
 status: active
+title: "An anti-vacuity test must assert on the value under test, not one step upstream of it"
 created: "2026-09-02"
 owner: manu
 category: ci-automation

@@ -1,7 +1,8 @@
 ---
-id: lesson-061-operational-notes-go-in-runbooks-not-the-road
+id: "lesson-061-operational-notes-go-in-runbooks-not-the-road"
 type: lesson
 status: active
+title: "Operational Notes Go in Runbooks, Not the Roadmap (repeated error 2x)"
 created: "2026-02-21"
 owner: manu
 category: process-method

@@ -1,7 +1,8 @@
 ---
-id: lesson-543-a-cloudflare-create-that-times-out-can-land-and-leave-the-record-tainted
+id: "lesson-543-a-cloudflare-create-that-times-out-can-land-and-leave-the-record-tainted"
 type: lesson
 status: active
+title: "A Cloudflare create that times out can still land, and Terraform then plans to replace it"
 created: "2026-10-08"
 owner: manu
 category: networking-dns

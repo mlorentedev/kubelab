@@ -1,7 +1,8 @@
 ---
-id: lesson-302-the-same-linter-behind-two-gates-in-different
+id: "lesson-302-the-same-linter-behind-two-gates-in-different"
 type: lesson
 status: active
+title: "The same linter behind two gates in different environments is two linters — and only the lenient one was running (CI-GATE-005/006)"
 created: "2026-08-09"
 owner: manu
 category: toolkit-tooling

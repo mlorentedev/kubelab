@@ -1,7 +1,8 @@
 ---
-id: lesson-288-migrations-retire-code-but-not-the-docs-that-
+id: "lesson-288-migrations-retire-code-but-not-the-docs-that-"
 type: lesson
 status: active
+title: "Migrations retire code but not the docs that described the old world (docs audit)"
 created: "2026-07-07"
 owner: manu
 category: process-method

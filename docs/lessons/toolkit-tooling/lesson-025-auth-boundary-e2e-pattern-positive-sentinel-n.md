@@ -1,7 +1,8 @@
 ---
-id: lesson-025-auth-boundary-e2e-pattern-positive-sentinel-n
+id: "lesson-025-auth-boundary-e2e-pattern-positive-sentinel-n"
 type: lesson
 status: active
+title: "Auth-boundary E2E pattern: positive + sentinel-negative + leak-grep triple"
 created: "2026-05-23"
 owner: manu
 category: toolkit-tooling

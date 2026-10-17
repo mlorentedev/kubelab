@@ -1,7 +1,8 @@
 ---
-id: lesson-532-a-wildcard-cors-origin-with-credentials-echoes-every-origin-and-internal-is-one-site
+id: "lesson-532-a-wildcard-cors-origin-with-credentials-echoes-every-origin-and-internal-is-one-site"
 type: lesson
 status: active
+title: "A wildcard CORS origin with credentials echoes every origin, and `.internal` is one site"
 created: "2026-10-07"
 owner: manu
 category: identity-secrets

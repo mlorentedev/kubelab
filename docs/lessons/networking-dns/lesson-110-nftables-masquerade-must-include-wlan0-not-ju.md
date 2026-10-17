@@ -1,7 +1,8 @@
 ---
-id: lesson-110-nftables-masquerade-must-include-wlan0-not-ju
+id: "lesson-110-nftables-masquerade-must-include-wlan0-not-ju"
 type: lesson
 status: active
+title: "nftables masquerade must include wlan0 (not just enx*)"
 created: "2026-03-14"
 owner: manu
 category: networking-dns

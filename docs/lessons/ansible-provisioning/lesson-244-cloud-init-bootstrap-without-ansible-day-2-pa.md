@@ -1,7 +1,8 @@
 ---
-id: lesson-244-cloud-init-bootstrap-without-ansible-day-2-pa
+id: "lesson-244-cloud-init-bootstrap-without-ansible-day-2-pa"
 type: lesson
 status: active
+title: "Cloud-init bootstrap without Ansible day-2 path is invisible technical debt"
 created: "2026-05-09"
 owner: manu
 category: ansible-provisioning

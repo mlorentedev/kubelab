@@ -1,7 +1,8 @@
 ---
-id: lesson-101-external-service-proxying-through-k3s-traefik
+id: "lesson-101-external-service-proxying-through-k3s-traefik"
 type: lesson
 status: active
+title: "External Service Proxying Through K3s Traefik (Uptime Kuma)"
 created: "2026-03-01"
 owner: manu
 category: edge-tls

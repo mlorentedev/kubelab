@@ -1,7 +1,8 @@
 ---
-id: lesson-172-deploy-vps-must-be-idempotent-skip-docker-com
+id: "lesson-172-deploy-vps-must-be-idempotent-skip-docker-com"
 type: lesson
 status: active
+title: "deploy-vps must be idempotent — skip Docker Compose Traefik when K3s is active"
 created: "2026-03-22"
 owner: manu
 category: ansible-provisioning

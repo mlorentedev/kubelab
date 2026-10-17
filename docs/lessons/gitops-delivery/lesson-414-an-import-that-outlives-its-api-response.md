@@ -1,7 +1,8 @@
 ---
-id: lesson-414-an-import-that-outlives-its-api-response
+id: "lesson-414-an-import-that-outlives-its-api-response"
 type: lesson
 status: active
+title: "An import that outlives its API response turns a verification count into a reading of the clock"
 created: "2026-09-02"
 owner: manu
 category: gitops-delivery

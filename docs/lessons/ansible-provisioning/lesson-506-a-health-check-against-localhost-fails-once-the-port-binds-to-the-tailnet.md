@@ -1,7 +1,8 @@
 ---
-id: lesson-506-a-health-check-against-localhost-fails-once-the-port-binds-to-the-tailnet
+id: "lesson-506-a-health-check-against-localhost-fails-once-the-port-binds-to-the-tailnet"
 type: lesson
 status: active
+title: "A health check against `localhost` fails once the port binds to the tailnet, and only on the first provision after"
 created: "2026-10-02"
 owner: manu
 category: ansible-provisioning

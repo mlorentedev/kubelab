@@ -1,7 +1,8 @@
 ---
-id: lesson-092-oidc-client-secret-authelia-config-vs-service
+id: "lesson-092-oidc-client-secret-authelia-config-vs-service"
 type: lesson
 status: active
+title: "OIDC Client Secret: Authelia Config vs Service Config"
 created: "2026-03-01"
 owner: manu
 category: identity-secrets

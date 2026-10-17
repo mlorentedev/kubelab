@@ -1,7 +1,8 @@
 ---
-id: lesson-332-a-retired-pvc-stays-pinned-by-completed-job-p
+id: "lesson-332-a-retired-pvc-stays-pinned-by-completed-job-p"
 type: lesson
 status: active
+title: "A retired PVC stays pinned by *completed* Job pods — and the CronJob's retention setting is what pins it"
 created: "2026-08-15"
 owner: manu
 category: storage-backup

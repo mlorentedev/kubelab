@@ -1,7 +1,8 @@
 ---
-id: lesson-271-static-registries-catalogs-tracking-ssot-valu
+id: "lesson-271-static-registries-catalogs-tracking-ssot-valu"
 type: lesson
 status: active
+title: "Static registries (catalogs) tracking SSOT values need explicit lockstep markers"
 created: "2026-05-25"
 owner: manu
 category: process-method

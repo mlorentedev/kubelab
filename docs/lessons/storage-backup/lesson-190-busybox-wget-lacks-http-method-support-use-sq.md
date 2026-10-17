@@ -1,7 +1,8 @@
 ---
-id: lesson-190-busybox-wget-lacks-http-method-support-use-sq
+id: "lesson-190-busybox-wget-lacks-http-method-support-use-sq"
 type: lesson
 status: active
+title: "busybox wget lacks HTTP method support — use sqlite3 for DB operations"
 created: "2026-03-25"
 owner: manu
 category: storage-backup

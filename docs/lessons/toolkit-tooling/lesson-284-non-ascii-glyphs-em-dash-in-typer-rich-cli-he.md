@@ -1,7 +1,8 @@
 ---
-id: lesson-284-non-ascii-glyphs-em-dash-in-typer-rich-cli-he
+id: "lesson-284-non-ascii-glyphs-em-dash-in-typer-rich-cli-he"
 type: lesson
 status: active
+title: "Non-ASCII glyphs (-> em-dash) in Typer/Rich CLI help/log strings crash `--help` on the Windows cp1252 console"
 created: "2026-06-22"
 owner: manu
 category: toolkit-tooling

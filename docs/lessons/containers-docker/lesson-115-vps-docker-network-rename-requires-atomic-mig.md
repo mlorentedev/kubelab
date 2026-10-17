@@ -1,7 +1,8 @@
 ---
-id: lesson-115-vps-docker-network-rename-requires-atomic-mig
+id: "lesson-115-vps-docker-network-rename-requires-atomic-mig"
 type: lesson
 status: active
+title: "VPS Docker network rename requires atomic migration"
 created: "2026-03-15"
 owner: manu
 category: containers-docker

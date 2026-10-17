@@ -1,7 +1,8 @@
 ---
-id: lesson-337-adding-a-role-to-a-playbook-does-not-install-
+id: "lesson-337-adding-a-role-to-a-playbook-does-not-install-"
 type: lesson
 status: active
+title: "Adding a role to a playbook does not install it on any path that never runs the playbook"
 created: "2026-08-15"
 owner: manu
 category: ansible-provisioning

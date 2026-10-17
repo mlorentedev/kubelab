@@ -1,7 +1,8 @@
 ---
-id: lesson-189-imperative-service-registration-is-a-silent-f
+id: "lesson-189-imperative-service-registration-is-a-silent-f"
 type: lesson
 status: active
+title: "Imperative service registration is a silent failure vector"
 created: "2026-03-25"
 owner: manu
 category: process-method

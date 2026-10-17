@@ -1,7 +1,8 @@
 ---
-id: lesson-365-a-lesson-with-no-mechanism-is-a-reminder-and-i-broke-mine-three-times
+id: "lesson-365-a-lesson-with-no-mechanism-is-a-reminder-and-i-broke-mine-three-times"
 type: lesson
 status: active
+title: "A lesson with no mechanism is a reminder, and I broke my own three times in one session"
 created: "2026-08-22"
 owner: manu
 category: process-method

@@ -1,7 +1,8 @@
 ---
-id: lesson-473-the-argo-cd-ui-asks-for-confirmation-before-the-server-authorizes
+id: "lesson-473-the-argo-cd-ui-asks-for-confirmation-before-the-server-authorizes"
 type: lesson
 status: active
+title: "The Argo CD UI asks for confirmation before the server authorizes, so the modal is not a permission"
 created: "2026-09-26"
 owner: manu
 category: identity-secrets

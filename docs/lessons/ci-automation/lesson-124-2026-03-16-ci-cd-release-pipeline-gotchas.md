@@ -1,7 +1,8 @@
 ---
-id: lesson-124-2026-03-16-ci-cd-release-pipeline-gotchas
+id: "lesson-124-2026-03-16-ci-cd-release-pipeline-gotchas"
 type: lesson
 status: active
+title: "2026-03-16: CI/CD Release Pipeline Gotchas"
 created: "2026-05-01"
 owner: manu
 category: ci-automation

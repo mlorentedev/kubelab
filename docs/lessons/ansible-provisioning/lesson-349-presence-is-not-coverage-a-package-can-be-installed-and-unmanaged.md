@@ -1,7 +1,8 @@
 ---
-id: lesson-349-presence-is-not-coverage-a-package-can-be-installed-and-unmanaged
+id: "lesson-349-presence-is-not-coverage-a-package-can-be-installed-and-unmanaged"
 type: lesson
 status: active
+title: "Presence is not coverage — a package can be installed on a host nothing manages"
 created: "2026-08-18"
 owner: manu
 category: ansible-provisioning

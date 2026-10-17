@@ -1,7 +1,8 @@
 ---
-id: lesson-379-rotating-a-username-is-not-rotation-it-is-a-rename
+id: "lesson-379-rotating-a-username-is-not-rotation-it-is-a-rename"
 type: lesson
 status: active
+title: "Rotating a username is not rotation, it is a rename — and an identity resolved from a secret store is one something else is entitled to change"
 created: "2026-08-23"
 owner: manu
 category: identity-secrets

@@ -1,7 +1,8 @@
 ---
-id: lesson-090-k3s-traefik-http-https-redirect-cli-args-not-
+id: "lesson-090-k3s-traefik-http-https-redirect-cli-args-not-"
 type: lesson
 status: active
+title: "K3s Traefik HTTP→HTTPS Redirect: CLI Args, Not Helm Values"
 created: "2026-03-01"
 owner: manu
 category: kubernetes

@@ -1,7 +1,8 @@
 ---
-id: lesson-216-net-003-crowdsec-bouncer-plugin-loss-is-recur
+id: "lesson-216-net-003-crowdsec-bouncer-plugin-loss-is-recur"
 type: lesson
 status: active
+title: "NET-003: CrowdSec Bouncer Plugin Loss is Recurrent"
 created: "2026-03-27"
 owner: manu
 category: edge-tls

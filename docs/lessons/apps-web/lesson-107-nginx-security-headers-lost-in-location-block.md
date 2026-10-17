@@ -1,7 +1,8 @@
 ---
-id: lesson-107-nginx-security-headers-lost-in-location-block
+id: "lesson-107-nginx-security-headers-lost-in-location-block"
 type: lesson
 status: active
+title: "nginx Security Headers Lost in Location Blocks"
 created: "2026-03-07"
 owner: manu
 category: apps-web

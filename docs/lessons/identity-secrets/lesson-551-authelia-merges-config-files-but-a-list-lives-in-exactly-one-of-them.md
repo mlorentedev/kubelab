@@ -1,7 +1,8 @@
 ---
-id: lesson-551-authelia-merges-config-files-but-a-list-lives-in-exactly-one-of-them
+id: "lesson-551-authelia-merges-config-files-but-a-list-lives-in-exactly-one-of-them"
 type: lesson
 status: active
+title: "Authelia merges config files, but a list lives in exactly one of them"
 created: "2026-09-22"
 owner: manu
 category: identity-secrets

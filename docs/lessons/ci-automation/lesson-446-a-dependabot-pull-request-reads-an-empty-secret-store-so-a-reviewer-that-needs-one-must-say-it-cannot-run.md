@@ -1,7 +1,8 @@
 ---
-id: lesson-446-a-dependabot-pull-request-reads-an-empty-secret-store-so-a-reviewer-that-needs-one-must-say-it-cannot-run
+id: "lesson-446-a-dependabot-pull-request-reads-an-empty-secret-store-so-a-reviewer-that-needs-one-must-say-it-cannot-run"
 type: lesson
 status: active
+title: "A Dependabot pull request reads an empty secret store, so a reviewer that needs a credential must say it cannot run — not fail"
 created: "2026-08-24"
 owner: manu
 category: ci-automation

@@ -1,7 +1,8 @@
 ---
-id: lesson-356-unmatched-host-pattern-is-a-warning
+id: "lesson-356-unmatched-host-pattern-is-a-warning"
 type: lesson
 status: active
+title: "An Ansible play whose `hosts:` pattern matches nothing succeeds"
 created: "2026-08-20"
 owner: manu
 category: ansible-provisioning

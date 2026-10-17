@@ -1,7 +1,8 @@
 ---
-id: lesson-454-a-sops-conflict-is-resolved-by-re-setting-the-key-not-by-merging-text
+id: "lesson-454-a-sops-conflict-is-resolved-by-re-setting-the-key-not-by-merging-text"
 type: lesson
 status: active
+title: "A SOPS file conflict is resolved by re-setting the key on upstream's file, never by merging the text"
 created: "2026-09-23"
 owner: manu
 category: identity-secrets

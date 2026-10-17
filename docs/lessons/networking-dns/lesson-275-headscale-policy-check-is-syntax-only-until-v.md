@@ -1,7 +1,8 @@
 ---
-id: lesson-275-headscale-policy-check-is-syntax-only-until-v
+id: "lesson-275-headscale-policy-check-is-syntax-only-until-v"
 type: lesson
 status: active
+title: "Headscale policy check is syntax-only until v0.29 — don't base ACL rollout safety on the tests block in v0.28"
 created: "2026-05-31"
 owner: manu
 category: networking-dns

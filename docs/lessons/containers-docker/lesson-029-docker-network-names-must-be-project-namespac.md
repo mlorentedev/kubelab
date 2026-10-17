@@ -1,7 +1,8 @@
 ---
-id: lesson-029-docker-network-names-must-be-project-namespac
+id: "lesson-029-docker-network-names-must-be-project-namespac"
 type: lesson
 status: active
+title: "Docker network names must be project-namespaced"
 created: "2026-03-15"
 owner: manu
 category: containers-docker

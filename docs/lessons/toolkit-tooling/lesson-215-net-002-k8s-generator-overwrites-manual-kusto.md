@@ -1,7 +1,8 @@
 ---
-id: lesson-215-net-002-k8s-generator-overwrites-manual-kusto
+id: "lesson-215-net-002-k8s-generator-overwrites-manual-kusto"
 type: lesson
 status: active
+title: "NET-002: K8s Generator Overwrites Manual kustomization.yaml — Prod Outage"
 created: "2026-03-27"
 owner: manu
 category: toolkit-tooling

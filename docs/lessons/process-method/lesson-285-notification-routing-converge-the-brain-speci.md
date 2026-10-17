@@ -1,7 +1,8 @@
 ---
-id: lesson-285-notification-routing-converge-the-brain-speci
+id: "lesson-285-notification-routing-converge-the-brain-speci"
 type: lesson
 status: active
+title: "Notification routing: converge the brain, specialize the egress"
 created: "2026-06-13"
 owner: manu
 category: process-method

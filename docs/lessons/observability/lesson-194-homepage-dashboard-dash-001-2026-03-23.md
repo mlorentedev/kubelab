@@ -1,7 +1,8 @@
 ---
-id: lesson-194-homepage-dashboard-dash-001-2026-03-23
+id: "lesson-194-homepage-dashboard-dash-001-2026-03-23"
 type: lesson
 status: active
+title: "Homepage Dashboard (DASH-001) — 2026-03-23"
 created: "2026-05-01"
 owner: manu
 category: observability

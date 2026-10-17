@@ -1,7 +1,8 @@
 ---
-id: lesson-055-tailscale-dns-chicken-and-egg-on-pi-hole-node
+id: "lesson-055-tailscale-dns-chicken-and-egg-on-pi-hole-node"
 type: lesson
 status: active
+title: "Tailscale DNS Chicken-and-Egg on Pi-hole Nodes"
 created: "2026-02-21"
 owner: manu
 category: networking-dns

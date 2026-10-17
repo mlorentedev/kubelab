@@ -1,7 +1,8 @@
 ---
-id: lesson-203-authelia-restart-invalidates-all-browser-sess
+id: "lesson-203-authelia-restart-invalidates-all-browser-sess"
 type: lesson
 status: active
+title: "Authelia restart invalidates all browser sessions"
 created: "2026-03-23"
 owner: manu
 category: identity-secrets

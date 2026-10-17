@@ -1,7 +1,8 @@
 ---
-id: lesson-318-kubectl-describe-pod-s-reason-field-distingui
+id: "lesson-318-kubectl-describe-pod-s-reason-field-distingui"
 type: lesson
 status: active
+title: "`kubectl describe pod`'s \"Reason\" field distinguishes OOM from a probe-triggered kill — a bare exit 137 does not"
 created: "2026-08-12"
 owner: manu
 category: kubernetes

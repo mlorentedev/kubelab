@@ -1,7 +1,8 @@
 ---
-id: lesson-535-an-on-demand-node-ships-its-first-backup-the-moment-its-timer-is-enabled
+id: "lesson-535-an-on-demand-node-ships-its-first-backup-the-moment-its-timer-is-enabled"
 type: lesson
 status: active
+title: "An on-demand node ships its first backup the moment its timer is enabled"
 created: "2026-10-07"
 owner: manu
 category: storage-backup

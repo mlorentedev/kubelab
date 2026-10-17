@@ -1,7 +1,8 @@
 ---
-id: lesson-542-ufw-does-govern-a-port-published-by-a-rootless-daemon
+id: "lesson-542-ufw-does-govern-a-port-published-by-a-rootless-daemon"
 type: lesson
 status: active
+title: "ufw does govern a port published by a rootless daemon"
 created: "2026-10-08"
 owner: manu
 category: containers-docker

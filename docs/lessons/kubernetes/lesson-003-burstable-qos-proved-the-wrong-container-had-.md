@@ -1,7 +1,8 @@
 ---
-id: lesson-003-burstable-qos-proved-the-wrong-container-had-
+id: "lesson-003-burstable-qos-proved-the-wrong-container-had-"
 type: lesson
 status: active
+title: "`Burstable` QoS proved the wrong container had a request (IDP-031)"
 created: "2026-08-17"
 owner: manu
 category: kubernetes

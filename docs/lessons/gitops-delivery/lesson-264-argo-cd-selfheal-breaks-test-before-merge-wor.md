@@ -1,7 +1,8 @@
 ---
-id: lesson-264-argo-cd-selfheal-breaks-test-before-merge-wor
+id: "lesson-264-argo-cd-selfheal-breaks-test-before-merge-wor"
 type: lesson
 status: active
+title: "Argo CD selfHeal breaks \"test-before-merge\" workflow without explicit pause"
 created: "2026-05-23"
 owner: manu
 category: gitops-delivery

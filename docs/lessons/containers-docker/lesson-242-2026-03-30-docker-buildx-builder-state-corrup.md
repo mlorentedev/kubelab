@@ -1,7 +1,8 @@
 ---
-id: lesson-242-2026-03-30-docker-buildx-builder-state-corrup
+id: "lesson-242-2026-03-30-docker-buildx-builder-state-corrup"
 type: lesson
 status: active
+title: "2026-03-30: Docker buildx builder state corruption on ephemeral runners"
 created: "2026-05-01"
 owner: manu
 category: containers-docker

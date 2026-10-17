@@ -1,7 +1,8 @@
 ---
-id: lesson-431-a-cgroup-limit-does-not-reach-what-the-bounded-process-starts
+id: "lesson-431-a-cgroup-limit-does-not-reach-what-the-bounded-process-starts"
 type: lesson
 status: active
+title: "A cgroup limit does not reach what the bounded process starts"
 created: "2026-09-04"
 owner: manu
 category: containers-docker

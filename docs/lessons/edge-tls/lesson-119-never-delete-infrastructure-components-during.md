@@ -1,7 +1,8 @@
 ---
-id: lesson-119-never-delete-infrastructure-components-during
+id: "lesson-119-never-delete-infrastructure-components-during"
 type: lesson
 status: active
+title: "Never delete infrastructure components during cleanup without verifying dependencies"
 created: "2026-03-15"
 owner: manu
 category: edge-tls

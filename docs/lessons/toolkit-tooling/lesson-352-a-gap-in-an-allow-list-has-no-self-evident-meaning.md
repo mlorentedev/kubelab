@@ -1,7 +1,8 @@
 ---
-id: lesson-352-a-gap-in-an-allow-list-has-no-self-evident-meaning
+id: "lesson-352-a-gap-in-an-allow-list-has-no-self-evident-meaning"
 type: lesson
 status: active
+title: "A gap in an allow-list has no self-evident meaning — the same absence was the control in one list and the bug in the next"
 created: "2026-08-19"
 owner: manu
 category: toolkit-tooling

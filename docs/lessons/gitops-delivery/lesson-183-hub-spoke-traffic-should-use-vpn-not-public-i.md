@@ -1,7 +1,8 @@
 ---
-id: lesson-183-hub-spoke-traffic-should-use-vpn-not-public-i
+id: "lesson-183-hub-spoke-traffic-should-use-vpn-not-public-i"
 type: lesson
 status: active
+title: "Hub↔spoke traffic should use VPN, not public IPs"
 created: "2026-03-23"
 owner: manu
 category: gitops-delivery

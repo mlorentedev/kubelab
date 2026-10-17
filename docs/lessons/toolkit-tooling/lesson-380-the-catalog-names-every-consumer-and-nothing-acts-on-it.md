@@ -1,7 +1,8 @@
 ---
-id: lesson-380-the-catalog-names-every-consumer-and-nothing-acts-on-it
+id: "lesson-380-the-catalog-names-every-consumer-and-nothing-acts-on-it"
 type: lesson
 status: active
+title: "The secret catalog already names every consumer — both readers turn that into prose for a human, and neither acts on it"
 created: "2026-08-23"
 owner: manu
 category: toolkit-tooling

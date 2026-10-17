@@ -1,7 +1,8 @@
 ---
-id: lesson-246-absorbed-specs-need-frontmatter-alignment-not
+id: "lesson-246-absorbed-specs-need-frontmatter-alignment-not"
 type: lesson
 status: active
+title: "Absorbed specs need frontmatter alignment, not just body warnings"
 created: "2026-05-10"
 owner: manu
 category: process-method

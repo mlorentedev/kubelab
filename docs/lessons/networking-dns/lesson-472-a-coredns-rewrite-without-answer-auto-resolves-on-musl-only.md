@@ -1,7 +1,8 @@
 ---
-id: lesson-472-a-coredns-rewrite-without-answer-auto-resolves-on-musl-only
+id: "lesson-472-a-coredns-rewrite-without-answer-auto-resolves-on-musl-only"
 type: lesson
 status: active
+title: "A CoreDNS regex rewrite without `answer auto` resolves on musl and fails on glibc"
 created: "2026-09-27"
 owner: manu
 category: networking-dns

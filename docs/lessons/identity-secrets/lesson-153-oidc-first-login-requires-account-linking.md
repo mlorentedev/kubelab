@@ -1,7 +1,8 @@
 ---
-id: lesson-153-oidc-first-login-requires-account-linking
+id: "lesson-153-oidc-first-login-requires-account-linking"
 type: lesson
 status: active
+title: "OIDC first login requires account linking"
 created: "2026-03-21"
 owner: manu
 category: identity-secrets

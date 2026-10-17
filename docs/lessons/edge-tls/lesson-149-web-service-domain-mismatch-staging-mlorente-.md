@@ -1,7 +1,8 @@
 ---
-id: lesson-149-web-service-domain-mismatch-staging-mlorente-
+id: "lesson-149-web-service-domain-mismatch-staging-mlorente-"
 type: lesson
 status: active
+title: "Web service domain mismatch: staging.mlorente.dev vs web.staging.kubelab.live"
 created: "2026-03-21"
 owner: manu
 category: edge-tls

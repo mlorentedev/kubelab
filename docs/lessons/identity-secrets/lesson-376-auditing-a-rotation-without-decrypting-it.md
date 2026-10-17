@@ -1,7 +1,8 @@
 ---
-id: lesson-376-auditing-a-rotation-without-decrypting-it
+id: "lesson-376-auditing-a-rotation-without-decrypting-it"
 type: lesson
 status: active
+title: "A SOPS diff answers \"did this key change\" without decrypting anything — until the file is rewritten whole"
 created: "2026-08-23"
 owner: manu
 category: identity-secrets

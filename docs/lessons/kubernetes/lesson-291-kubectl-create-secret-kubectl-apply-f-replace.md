@@ -1,7 +1,8 @@
 ---
-id: lesson-291-kubectl-create-secret-kubectl-apply-f-replace
+id: "lesson-291-kubectl-create-secret-kubectl-apply-f-replace"
 type: lesson
 status: active
+title: "`kubectl create secret | kubectl apply -f -` REPLACES the whole Secret — a partial render silently deletes keys (TOOL-018)"
 created: "2026-07-08"
 owner: manu
 category: kubernetes

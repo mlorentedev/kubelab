@@ -1,7 +1,8 @@
 ---
-id: lesson-213-headscale-node-cleanup-required-before-tailsc
+id: "lesson-213-headscale-node-cleanup-required-before-tailsc"
 type: lesson
 status: active
+title: "Headscale node cleanup required before Tailscale re-registration"
 created: "2026-03-26"
 owner: manu
 category: networking-dns

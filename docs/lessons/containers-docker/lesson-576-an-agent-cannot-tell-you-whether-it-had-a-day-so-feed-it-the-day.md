@@ -1,7 +1,8 @@
 ---
-id: lesson-576-an-agent-cannot-tell-you-whether-it-had-a-day-so-feed-it-the-day
+id: "lesson-576-an-agent-cannot-tell-you-whether-it-had-a-day-so-feed-it-the-day"
 type: lesson
 status: active
+title: "A scheduled agent cannot say whether there was activity to record, so the job feeds it the activity"
 created: "2026-10-15"
 owner: manu
 category: containers-docker

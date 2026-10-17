@@ -1,7 +1,8 @@
 ---
-id: lesson-500-n8n-cli-answers-nothing-at-log-level-warn
+id: "lesson-500-n8n-cli-answers-nothing-at-log-level-warn"
 type: lesson
 status: active
+title: "n8n's CLI answers nothing, with exit 0, at `N8N_LOG_LEVEL=warn`, and in its pod it costs a second n8n"
 created: "2026-10-01"
 owner: manu
 category: storage-backup

@@ -1,7 +1,8 @@
 ---
-id: lesson-462-a-gitea-pull-request-hook-also-delivers-comments
+id: "lesson-462-a-gitea-pull-request-hook-also-delivers-comments"
 type: lesson
 status: active
+title: "A Gitea hook subscribed to `pull_request` also delivers PR comments, and the narrow name is `pull_request_only`"
 created: "2026-09-24"
 owner: manu
 category: ci-automation

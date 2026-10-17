@@ -1,7 +1,8 @@
 ---
-id: lesson-182-k8s-1-24-serviceaccount-tokens-require-explic
+id: "lesson-182-k8s-1-24-serviceaccount-tokens-require-explic"
 type: lesson
 status: active
+title: "K8s 1.24+ ServiceAccount tokens require explicit Secret"
 created: "2026-03-23"
 owner: manu
 category: kubernetes

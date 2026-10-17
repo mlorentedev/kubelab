@@ -1,7 +1,8 @@
 ---
-id: lesson-311-nine-stateful-services-were-duplicated-across
+id: "lesson-311-nine-stateful-services-were-duplicated-across"
 type: lesson
 status: active
+title: "Nine stateful services were duplicated across environments by a packaging choice, not a decision"
 created: "2026-08-11"
 owner: manu
 category: storage-backup

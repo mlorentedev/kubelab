@@ -1,7 +1,8 @@
 ---
-id: lesson-257-ansible-pre-tasks-loading-ssot-config-must-be
+id: "lesson-257-ansible-pre-tasks-loading-ssot-config-must-be"
 type: lesson
 status: active
+title: "Ansible pre_tasks loading SSOT config MUST be tagged `[always]` for tag-selective deploys"
 created: "2026-05-19"
 owner: manu
 category: ansible-provisioning

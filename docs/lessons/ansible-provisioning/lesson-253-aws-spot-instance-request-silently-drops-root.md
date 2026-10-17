@@ -1,7 +1,8 @@
 ---
-id: lesson-253-aws-spot-instance-request-silently-drops-root
+id: "lesson-253-aws-spot-instance-request-silently-drops-root"
 type: lesson
 status: active
+title: "aws_spot_instance_request silently drops root_block_device updates — migrate to aws_instance + instance_market_options"
 created: "2026-05-11"
 owner: manu
 category: ansible-provisioning

@@ -1,7 +1,8 @@
 ---
-id: lesson-485-init-if-it-does-not-open-turns-a-deleted-backup-into-a-healthy-empty-one
+id: "lesson-485-init-if-it-does-not-open-turns-a-deleted-backup-into-a-healthy-empty-one"
 type: lesson
 status: active
+title: "\"Initialise it if it does not open\" turns a deleted backup repository into a healthy, empty one"
 created: "2026-09-30"
 owner: manu
 category: storage-backup

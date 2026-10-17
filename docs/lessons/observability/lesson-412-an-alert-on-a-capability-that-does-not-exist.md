@@ -1,7 +1,8 @@
 ---
-id: lesson-412-an-alert-on-a-capability-that-does-not-exist
+id: "lesson-412-an-alert-on-a-capability-that-does-not-exist"
 type: lesson
 status: active
+title: "An alert on a capability the system does not have fires always or never, and fixing its query only picks which"
 created: "2026-09-01"
 owner: manu
 category: observability

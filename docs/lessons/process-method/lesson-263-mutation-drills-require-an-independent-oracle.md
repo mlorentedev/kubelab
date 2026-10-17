@@ -1,7 +1,8 @@
 ---
-id: lesson-263-mutation-drills-require-an-independent-oracle
+id: "lesson-263-mutation-drills-require-an-independent-oracle"
 type: lesson
 status: active
+title: "Mutation drills require an independent oracle"
 created: "2026-05-23"
 owner: manu
 category: process-method

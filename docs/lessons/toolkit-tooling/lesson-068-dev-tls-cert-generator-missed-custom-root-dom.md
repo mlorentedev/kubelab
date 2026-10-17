@@ -1,7 +1,8 @@
 ---
-id: lesson-068-dev-tls-cert-generator-missed-custom-root-dom
+id: "lesson-068-dev-tls-cert-generator-missed-custom-root-dom"
 type: lesson
 status: active
+title: "Dev TLS cert generator missed custom root domains"
 created: "2026-02-25"
 owner: manu
 category: toolkit-tooling

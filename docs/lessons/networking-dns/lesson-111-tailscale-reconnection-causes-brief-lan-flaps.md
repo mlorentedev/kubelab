@@ -1,7 +1,8 @@
 ---
-id: lesson-111-tailscale-reconnection-causes-brief-lan-flaps
+id: "lesson-111-tailscale-reconnection-causes-brief-lan-flaps"
 type: lesson
 status: active
+title: "Tailscale reconnection causes brief LAN flaps"
 created: "2026-03-14"
 owner: manu
 category: networking-dns

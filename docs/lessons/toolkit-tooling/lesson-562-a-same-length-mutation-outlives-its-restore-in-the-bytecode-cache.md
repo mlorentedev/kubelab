@@ -1,7 +1,8 @@
 ---
-id: lesson-562-a-same-length-mutation-outlives-its-restore-in-the-bytecode-cache
+id: "lesson-562-a-same-length-mutation-outlives-its-restore-in-the-bytecode-cache"
 type: lesson
 status: active
+title: "A same-length mutation outlives its restore in the bytecode cache"
 created: "2026-10-13"
 owner: manu
 category: toolkit-tooling

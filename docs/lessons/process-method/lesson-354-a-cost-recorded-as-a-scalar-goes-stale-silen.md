@@ -1,7 +1,8 @@
 ---
-id: lesson-354-a-cost-recorded-as-a-scalar-goes-stale-silen
+id: "lesson-354-a-cost-recorded-as-a-scalar-goes-stale-silen"
 type: lesson
 status: active
+title: "A cost recorded as a scalar goes stale silently; record it as a derivation"
 created: "2026-08-20"
 owner: manu
 category: process-method

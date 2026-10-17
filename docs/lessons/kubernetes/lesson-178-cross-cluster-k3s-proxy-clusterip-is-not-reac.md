@@ -1,7 +1,8 @@
 ---
-id: lesson-178-cross-cluster-k3s-proxy-clusterip-is-not-reac
+id: "lesson-178-cross-cluster-k3s-proxy-clusterip-is-not-reac"
 type: lesson
 status: active
+title: "Cross-cluster K3s proxy: ClusterIP is NOT reachable from outside — use NodePort"
 created: "2026-03-22"
 owner: manu
 category: kubernetes

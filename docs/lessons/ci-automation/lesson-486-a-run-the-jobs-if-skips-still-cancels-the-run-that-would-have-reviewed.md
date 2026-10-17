@@ -1,7 +1,8 @@
 ---
-id: lesson-486-a-run-the-jobs-if-skips-still-cancels-the-run-that-would-have-reviewed
+id: "lesson-486-a-run-the-jobs-if-skips-still-cancels-the-run-that-would-have-reviewed"
 type: lesson
 status: active
+title: "A run the job's `if:` skips still cancels the run that would have reviewed"
 created: "2026-09-30"
 owner: manu
 category: ci-automation

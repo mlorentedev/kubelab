@@ -1,7 +1,8 @@
 ---
-id: lesson-560-a-green-dns-deploy-is-not-what-clients-resolve-until-the-cache-in-front-expires
+id: "lesson-560-a-green-dns-deploy-is-not-what-clients-resolve-until-the-cache-in-front-expires"
 type: lesson
 status: active
+title: "A green DNS deploy is not what clients resolve until the cache in front expires"
 created: "2026-10-11"
 owner: manu
 category: networking-dns

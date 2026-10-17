@@ -1,7 +1,8 @@
 ---
-id: lesson-134-2026-03-17-phase-1-provisioning-session-known
+id: "lesson-134-2026-03-17-phase-1-provisioning-session-known"
 type: lesson
 status: active
+title: "2026-03-17: Phase 1 Provisioning Session — Known Issues"
 created: "2026-05-01"
 owner: manu
 category: networking-dns

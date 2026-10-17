@@ -1,7 +1,8 @@
 ---
-id: lesson-045-plan-scope-vs-execution-capacity
+id: "lesson-045-plan-scope-vs-execution-capacity"
 type: lesson
 status: active
+title: "Plan Scope vs Execution Capacity"
 created: "2026-02-05"
 owner: manu
 category: process-method

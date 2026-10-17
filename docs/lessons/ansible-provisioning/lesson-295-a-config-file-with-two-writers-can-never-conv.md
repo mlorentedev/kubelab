@@ -1,7 +1,8 @@
 ---
-id: lesson-295-a-config-file-with-two-writers-can-never-conv
+id: "lesson-295-a-config-file-with-two-writers-can-never-conv"
 type: lesson
 status: active
+title: "A config file with two writers can never converge — idempotence is a property of the system, not of the task (ANSIBLE-028)"
 created: "2026-08-07"
 owner: manu
 category: ansible-provisioning

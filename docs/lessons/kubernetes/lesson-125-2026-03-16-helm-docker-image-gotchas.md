@@ -1,7 +1,8 @@
 ---
-id: lesson-125-2026-03-16-helm-docker-image-gotchas
+id: "lesson-125-2026-03-16-helm-docker-image-gotchas"
 type: lesson
 status: active
+title: "2026-03-16: Helm + Docker Image Gotchas"
 created: "2026-05-01"
 owner: manu
 category: kubernetes

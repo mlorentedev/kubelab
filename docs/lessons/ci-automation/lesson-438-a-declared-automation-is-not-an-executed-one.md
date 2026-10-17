@@ -1,7 +1,8 @@
 ---
-id: lesson-438-a-declared-automation-is-not-an-executed-one
+id: "lesson-438-a-declared-automation-is-not-an-executed-one"
 type: lesson
 status: active
+title: "A declared automation is not an executed one — check the route the failure actually takes"
 created: "2026-09-05"
 owner: manu
 category: ci-automation

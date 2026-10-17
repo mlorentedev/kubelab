@@ -1,7 +1,8 @@
 ---
-id: lesson-144-deploy-k8s-must-include-apply-secrets-as-prer
+id: "lesson-144-deploy-k8s-must-include-apply-secrets-as-prer"
 type: lesson
 status: active
+title: "deploy-k8s must include apply-secrets as prerequisite"
 created: "2026-03-21"
 owner: manu
 category: toolkit-tooling

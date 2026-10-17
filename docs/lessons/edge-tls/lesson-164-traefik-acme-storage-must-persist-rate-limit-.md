@@ -1,7 +1,8 @@
 ---
-id: lesson-164-traefik-acme-storage-must-persist-rate-limit-
+id: "lesson-164-traefik-acme-storage-must-persist-rate-limit-"
 type: lesson
 status: active
+title: "Traefik ACME storage MUST persist — rate limit disaster"
 created: "2026-03-22"
 owner: manu
 category: edge-tls

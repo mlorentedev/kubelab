@@ -1,7 +1,8 @@
 ---
-id: lesson-145-oidc-hashes-in-configmaps-are-not-secrets
+id: "lesson-145-oidc-hashes-in-configmaps-are-not-secrets"
 type: lesson
 status: active
+title: "OIDC hashes in ConfigMaps are NOT secrets"
 created: "2026-03-21"
 owner: manu
 category: identity-secrets

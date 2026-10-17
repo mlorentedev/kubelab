@@ -1,7 +1,8 @@
 ---
-id: lesson-228-homepage-configmap-is-ad-hoc-not-in-kustomize
+id: "lesson-228-homepage-configmap-is-ad-hoc-not-in-kustomize"
 type: lesson
 status: active
+title: "Homepage ConfigMap is ad-hoc — not in Kustomize, needs manual apply"
 created: "2026-03-27"
 owner: manu
 category: kubernetes

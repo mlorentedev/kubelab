@@ -1,7 +1,8 @@
 ---
-id: lesson-117-traefik-v3-6-does-not-support-maxbackups-maxs
+id: "lesson-117-traefik-v3-6-does-not-support-maxbackups-maxs"
 type: lesson
 status: active
+title: "Traefik v3.6 does not support maxBackups/maxSize in accessLog config"
 created: "2026-03-15"
 owner: manu
 category: edge-tls

@@ -1,7 +1,8 @@
 ---
-id: lesson-140-error-pages-middleware-must-not-intercept-400
+id: "lesson-140-error-pages-middleware-must-not-intercept-400"
 type: lesson
 status: active
+title: "error-pages middleware must NOT intercept 400-404"
 created: "2026-03-21"
 owner: manu
 category: edge-tls

@@ -1,7 +1,8 @@
 ---
-id: lesson-491-a-review-at-its-findings-cap-is-partial-by-construction
+id: "lesson-491-a-review-at-its-findings-cap-is-partial-by-construction"
 type: lesson
 status: active
+title: "A PR-Agent review at its findings cap is partial by construction, and NaN cuts any unstreamed call at about 125 s"
 created: "2026-10-01"
 owner: manu
 category: ci-automation

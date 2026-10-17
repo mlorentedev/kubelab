@@ -1,7 +1,8 @@
 ---
-id: lesson-355-rare-and-supervised-hides-what-frequent-and-
+id: "lesson-355-rare-and-supervised-hides-what-frequent-and-"
 type: lesson
 status: active
+title: "A recovery path that runs rarely and supervised hides the defects it will have when it runs often and unattended"
 created: "2026-08-20"
 owner: manu
 category: process-method

@@ -1,7 +1,8 @@
 ---
-id: lesson-333-one-placeholder-document-exiled-a-whole-manif
+id: "lesson-333-one-placeholder-document-exiled-a-whole-manif"
 type: lesson
 status: active
+title: "One placeholder document exiled a whole manifest from GitOps, and `Synced` said nothing"
 created: "2026-08-15"
 owner: manu
 category: gitops-delivery

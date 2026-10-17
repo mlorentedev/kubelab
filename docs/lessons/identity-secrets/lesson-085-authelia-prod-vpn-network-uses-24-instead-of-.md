@@ -1,7 +1,8 @@
 ---
-id: lesson-085-authelia-prod-vpn-network-uses-24-instead-of-
+id: "lesson-085-authelia-prod-vpn-network-uses-24-instead-of-"
 type: lesson
 status: active
+title: "Authelia Prod VPN Network Uses /24 Instead of /10"
 created: "2026-02-28"
 owner: manu
 category: identity-secrets

@@ -1,7 +1,8 @@
 ---
-id: lesson-005-no-matching-data-is-not-zero-it-is-nodata-and
+id: "lesson-005-no-matching-data-is-not-zero-it-is-nodata-and"
 type: lesson
 status: active
+title: "\"No matching data\" is not zero — it is NoData, and the default acts on it"
 created: "2026-08-10"
 owner: manu
 category: observability

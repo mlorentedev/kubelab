@@ -1,7 +1,8 @@
 ---
-id: lesson-233-2026-03-28-aws1-upgraded-t4g-micro-t4g-small-
+id: "lesson-233-2026-03-28-aws1-upgraded-t4g-micro-t4g-small-"
 type: lesson
 status: active
+title: "2026-03-28: aws1 upgraded t4g.micro → t4g.small (+$3.14/mo) — eliminates all OOM issues"
 created: "2026-05-01"
 owner: manu
 category: kubernetes

@@ -1,7 +1,8 @@
 ---
-id: lesson-340-tailscale-status-says-active-about-a-machine-
+id: "lesson-340-tailscale-status-says-active-about-a-machine-"
 type: lesson
 status: active
+title: "`tailscale status` says `active` about a machine that is powered off"
 created: "2026-08-16"
 owner: manu
 category: networking-dns

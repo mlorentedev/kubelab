@@ -1,7 +1,8 @@
 ---
-id: lesson-251-terraform-data-aws-ami-filter-drift-triggers-
+id: "lesson-251-terraform-data-aws-ami-filter-drift-triggers-"
 type: lesson
 status: active
+title: "Terraform data.aws_ami filter drift triggers Spot replacement on every plan"
 created: "2026-05-10"
 owner: manu
 category: ansible-provisioning

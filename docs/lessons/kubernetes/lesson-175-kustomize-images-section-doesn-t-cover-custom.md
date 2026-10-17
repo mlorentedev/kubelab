@@ -1,7 +1,8 @@
 ---
-id: lesson-175-kustomize-images-section-doesn-t-cover-custom
+id: "lesson-175-kustomize-images-section-doesn-t-cover-custom"
 type: lesson
 status: active
+title: "Kustomize images section doesn't cover custom apps automatically"
 created: "2026-03-22"
 owner: manu
 category: kubernetes

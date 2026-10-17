@@ -1,7 +1,8 @@
 ---
-id: lesson-239-2026-03-29-docker-tailscale-only-port-binding
+id: "lesson-239-2026-03-29-docker-tailscale-only-port-binding"
 type: lesson
 status: active
+title: "2026-03-29: Docker Tailscale-only port binding breaks K8s EndpointSlice + Ansible health checks"
 created: "2026-05-01"
 owner: manu
 category: ansible-provisioning

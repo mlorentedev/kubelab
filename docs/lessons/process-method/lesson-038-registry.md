@@ -1,7 +1,8 @@
 ---
-id: lesson-038-registry
+id: "lesson-038-registry"
 type: lesson
 status: active
+title: "Registry"
 created: "2026-05-01"
 owner: manu
 category: process-method

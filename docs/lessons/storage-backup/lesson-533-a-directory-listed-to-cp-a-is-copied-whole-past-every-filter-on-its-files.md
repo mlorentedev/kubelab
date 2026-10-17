@@ -1,7 +1,8 @@
 ---
-id: lesson-533-a-directory-listed-to-cp-a-is-copied-whole-past-every-filter-on-its-files
+id: "lesson-533-a-directory-listed-to-cp-a-is-copied-whole-past-every-filter-on-its-files"
 type: lesson
 status: active
+title: "A directory listed to `cp -a` is copied whole, past every filter on its files"
 created: "2026-10-07"
 owner: manu
 category: storage-backup

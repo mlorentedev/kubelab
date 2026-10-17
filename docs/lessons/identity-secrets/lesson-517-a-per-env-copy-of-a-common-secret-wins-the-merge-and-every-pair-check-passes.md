@@ -1,7 +1,8 @@
 ---
-id: lesson-517-a-per-env-copy-of-a-common-secret-wins-the-merge-and-every-pair-check-passes
+id: "lesson-517-a-per-env-copy-of-a-common-secret-wins-the-merge-and-every-pair-check-passes"
 type: lesson
 status: active
+title: "A per-env copy of a common secret wins the merge, and every check that compares a pair with itself passes"
 created: "2026-09-23"
 owner: manu
 category: identity-secrets

@@ -1,7 +1,8 @@
 ---
-id: lesson-146-service-mesh-assessment-overkill-for-single-n
+id: "lesson-146-service-mesh-assessment-overkill-for-single-n"
 type: lesson
 status: active
+title: "Service mesh assessment: overkill for single-node K3s"
 created: "2026-03-21"
 owner: manu
 category: kubernetes

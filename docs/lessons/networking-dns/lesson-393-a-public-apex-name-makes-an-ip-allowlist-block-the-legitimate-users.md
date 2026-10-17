@@ -1,7 +1,8 @@
 ---
-id: lesson-393-a-public-apex-name-makes-an-ip-allowlist-block-the-legitimate-users
+id: "lesson-393-a-public-apex-name-makes-an-ip-allowlist-block-the-legitimate-users"
 type: lesson
 status: active
+title: "An IP allow-list restricts by the address Traefik SEES, and a name in the apex zone resolves publicly even from inside the VPN"
 created: "2026-08-24"
 owner: manu
 category: networking-dns

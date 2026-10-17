@@ -1,7 +1,8 @@
 ---
-id: lesson-350-a-spec-s-scope-boundary-is-a-claim-about-a-date
+id: "lesson-350-a-spec-s-scope-boundary-is-a-claim-about-a-date"
 type: lesson
 status: active
+title: "A spec's scope boundary is a claim about a date, not a durable guarantee"
 created: "2026-08-18"
 owner: manu
 category: process-method

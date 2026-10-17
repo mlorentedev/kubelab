@@ -1,7 +1,8 @@
 ---
-id: lesson-511-restic-reports-a-refused-pack-delete-as-success
+id: "lesson-511-restic-reports-a-refused-pack-delete-as-success"
 type: lesson
 status: active
+title: "restic reports a refused pack DELETE as success, and how it reports a refused snapshot DELETE depends on its version"
 created: "2026-10-02"
 owner: manu
 category: storage-backup

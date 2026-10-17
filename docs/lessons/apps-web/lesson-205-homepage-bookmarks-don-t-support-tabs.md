@@ -1,7 +1,8 @@
 ---
-id: lesson-205-homepage-bookmarks-don-t-support-tabs
+id: "lesson-205-homepage-bookmarks-don-t-support-tabs"
 type: lesson
 status: active
+title: "Homepage bookmarks don't support tabs"
 created: "2026-03-23"
 owner: manu
 category: apps-web

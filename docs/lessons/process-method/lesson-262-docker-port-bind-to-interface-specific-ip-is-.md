@@ -1,7 +1,8 @@
 ---
-id: lesson-262-docker-port-bind-to-interface-specific-ip-is-
+id: "lesson-262-docker-port-bind-to-interface-specific-ip-is-"
 type: lesson
 status: active
+title: "Docker port bind to interface-specific IP is fragile under interface flap"
 created: "2026-05-23"
 owner: manu
 category: process-method

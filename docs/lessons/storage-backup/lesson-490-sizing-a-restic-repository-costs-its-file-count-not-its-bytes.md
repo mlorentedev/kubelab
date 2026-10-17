@@ -1,7 +1,8 @@
 ---
-id: lesson-490-sizing-a-restic-repository-costs-its-file-count-not-its-bytes
+id: "lesson-490-sizing-a-restic-repository-costs-its-file-count-not-its-bytes"
 type: lesson
 status: active
+title: "Sizing a restic repository costs its file count, not its bytes"
 created: "2026-09-30"
 owner: manu
 category: storage-backup

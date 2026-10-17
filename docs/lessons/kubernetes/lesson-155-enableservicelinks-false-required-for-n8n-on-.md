@@ -1,7 +1,8 @@
 ---
-id: lesson-155-enableservicelinks-false-required-for-n8n-on-
+id: "lesson-155-enableservicelinks-false-required-for-n8n-on-"
 type: lesson
 status: active
+title: "enableServiceLinks: false required for n8n on K8s"
 created: "2026-03-22"
 owner: manu
 category: kubernetes

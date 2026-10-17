@@ -1,7 +1,8 @@
 ---
-id: lesson-033-pi-hole-conditional-forwarding-must-include-a
+id: "lesson-033-pi-hole-conditional-forwarding-must-include-a"
 type: lesson
 status: active
+title: "Pi-hole conditional forwarding must include all CoreDNS zones"
 created: "2026-03-19"
 owner: manu
 category: networking-dns
