@@ -2292,6 +2292,24 @@ apps:
               mode: script
               schedule: "50 14 * * 1"
               script: emit-proposals.py
+            # Alert triage (spec AI-012 AC8, #2080): the script reads the last hour of the
+            # alert channels and ends with {"wakeAgent": false} when nothing was said, so a
+            # quiet hour spends no token. The turn only reads and reports; anything that
+            # changes a system goes to the operator as a proposal.
+            alert-triage:
+              mode: agent
+              schedule: "10 * * * *"
+              script: alert-activity.py
+              prompt: >-
+                The script output above lists what the fleet's alert channels said in
+                the last hour. Triage it. Group messages that describe the same problem
+                and, for each group, say in one line what is wrong, how serious it is
+                (page now, look today, or noise) and the evidence: the channel and the
+                message. Say plainly when a channel could not be read, and never call
+                an unreadable channel quiet. Propose the next step for each real
+                problem, but change nothing and run nothing that changes a system: the
+                operator approves fixes. Reply in English, under twelve lines, with the
+                most serious group first. Never repeat a credential.
 
 # Terraform state (TF-007, ADR-069). Every root keeps its state in this R2
 # bucket under `<root>/terraform.tfstate`; `make sync-terraform-backend` renders

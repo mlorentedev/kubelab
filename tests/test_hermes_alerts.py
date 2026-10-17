@@ -152,3 +152,11 @@ def test_main_without_a_token_fails_loudly(monkeypatch: pytest.MonkeyPatch, caps
     monkeypatch.setenv("HERMES_ALERT_CHANNELS", "C1:alerts")
     assert _script().main() == 1
     assert "cannot run" in capsys.readouterr().out
+
+
+def test_the_triage_job_reads_the_script_hourly_and_only_proposes() -> None:
+    job = yaml.safe_load(COMMON.read_text())["apps"]["services"]["ai"]["hermes_kubelab"]["cron"]["jobs"]["alert-triage"]
+    assert job["mode"] == "agent"
+    assert job["script"] == "alert-activity.py"
+    assert job["schedule"].split()[1:] == ["*", "*", "*", "*"], "hourly: the script reads one hour"
+    assert "change nothing" in job["prompt"], "the turn proposes; the operator approves fixes"
