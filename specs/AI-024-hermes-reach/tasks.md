@@ -33,7 +33,7 @@ created: "2026-10-16"
 ### Stage 4: the 8-hour report
 
 - [ ] [AC5] Signal script with a persisted watermark, a deterministic signal list and the Loki redactor in front
-- [ ] [AC5] Job at 06:00, 14:00 and 22:00 Denver (timezone-aware cron if supported, else fixed UTC), `wakeAgent: false` when no signal changed
+- [ ] [AC5] Job at 06:00, 14:00 and 22:00 Denver (timezone-aware cron if supported, else fixed UTC), `wakeAgent: false` only when neither a signal nor the action ledger changed
 - [ ] [AC5] Fixed template and one proposal file per suggested action in the zone
 - [ ] [AC8] Action ledger written by the actions and listed by the report
 
