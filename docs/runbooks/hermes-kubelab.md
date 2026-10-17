@@ -307,8 +307,10 @@ Traefik route (#2373) lets past Authelia only for `Bearer glsa_` on `/api/`.
   delete the old token in Grafana.
 - **Add an app**: append it to `grafana_reader.apps` in `common.yaml` and provision.
 - **Check it**: the reader is a subprocess of the gateway, so a broken script shows as a
-  missing tool, not a failed unit. Ask the agent which tools it has, then ask it for
-  the firing alerts; `hermes mcp list` inside the container names the server.
+  missing tool, not a failed unit. `docker exec` into the gateway as the agent's user and
+  run `hermes mcp test grafana`: it connects and lists the four tools (measured against
+  the pinned image, 597 ms). `hermes mcp list` shows `4 selected`. Then ask the agent for
+  the firing alerts.
 - **Residual risks**: Grafana's only datasource is Loki, so pod restarts and backup age
   are out of reach (#1727). A Viewer token also reads dashboards and alert rules,
   beyond what the four tools expose; the token, not the script, is the boundary.
