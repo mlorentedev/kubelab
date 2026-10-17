@@ -31,7 +31,7 @@ spec:
     # a header if ANY of its values matches, so a request carrying a second
     # `Authorization` header can still reach Grafana's own login. Grafana's brute-force
     # lockout, the rate limit and CrowdSec bound that.
-    - match: Host(`grafana.kubelab.live`) && PathPrefix(`/api/`) && HeadersRegexp(`Authorization`, `^Bearer glsa_[A-Za-z0-9_]+$`)
+    - match: Host(`grafana.kubelab.live`) && PathPrefix(`/api/`) && HeaderRegexp(`Authorization`, `^Bearer glsa_[A-Za-z0-9_]+$`)
       kind: Rule
       priority: 100
       middlewares:
