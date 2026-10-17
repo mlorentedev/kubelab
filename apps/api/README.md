@@ -30,9 +30,10 @@ The two unbuilt rows are the reason this service's identity matters: they have a
 ## Endpoints
 
 ```
-GET  /health           liveness
-GET  /healthz          liveness (Kubernetes-style)
-GET  /ready            readiness
+GET  /health           liveness: 200 while the process serves requests, touches nothing else
+GET  /healthz          liveness (Kubernetes-style), same handler
+GET  /ready            readiness: 503 only if the configuration does not load;
+                       Beehiiv (cached 30s) and email problems report "degraded" with 200
 
 POST /api/subscribe    newsletter subscription (Beehiiv)
 POST /api/unsubscribe  newsletter unsubscription
