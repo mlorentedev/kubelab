@@ -1,0 +1,65 @@
+[
+  {
+    "id": "AI-024-hermes-reach-f1",
+    "behavior": "A turn answers with a cited web source while the sandbox has no route out",
+    "verification": "poetry run pytest tests/test_hermes_web.py -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-024-hermes-reach-f2",
+    "behavior": "The agent answers cluster state from Grafana and names an unreadable source",
+    "verification": "poetry run pytest tests/test_hermes_grafana.py -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-024-hermes-reach-f3",
+    "behavior": "Grafana's /api/ is judged by Grafana, the UI still goes through Authelia",
+    "verification": "poetry run pytest tests/test_authelia_rules_name_routed_hosts.py tests/test_break_glass.py -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-024-hermes-reach-f4",
+    "behavior": "The agent cannot merge a PR or push to master",
+    "verification": "poetry run pytest tests/test_hermes_github.py -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-024-hermes-reach-f5",
+    "behavior": "The 8-hour report has the fixed sections and is silent when no signal changed",
+    "verification": "poetry run pytest tests/test_hermes_report.py -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-024-hermes-reach-f6",
+    "behavior": "Mail is handled by sender tier; failed authentication starts no turn",
+    "verification": "poetry run pytest tests/test_hermes_mailbox.py -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-024-hermes-reach-f7",
+    "behavior": "Mail that arrived while the gateway was down is read once",
+    "verification": "poetry run pytest tests/test_hermes_mailbox.py -q -k watermark",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-024-hermes-reach-f8",
+    "behavior": "Every outbound email and change appears in the next report's ledger",
+    "verification": "poetry run pytest tests/test_hermes_report.py -q -k ledger",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-024-hermes-reach-f9",
+    "behavior": "No credential appears in any output, log, note or report",
+    "verification": "poetry run pytest tests/test_hermes_no_secrets_in_output.py -q",
+    "state": "pending",
+    "evidence": ""
+  }
+]
