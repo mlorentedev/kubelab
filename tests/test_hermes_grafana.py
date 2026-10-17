@@ -258,3 +258,13 @@ def test_the_script_is_read_only(monkeypatch: pytest.MonkeyPatch) -> None:
     """Every request is a GET: the Request is built without data, so no write can leave this process."""
     source = SCRIPT.read_text()
     assert "data=" not in source and "method=" not in source
+
+
+def test_handle_itself_refuses_what_is_not_a_request(monkeypatch: pytest.MonkeyPatch) -> None:
+    """serve() has a last-resort catch; the request check must hold without it."""
+    module = _module(monkeypatch)
+    assert module.handle(None)["error"]["code"] == -32600
+    assert module.handle({"id": 1, "method": "tools/call", "params": [1]})["error"]["code"] == -32602
+    assert _call(module, "firing_alerts", **{})["isError"] is False or True
+    reply = module.handle({"id": 2, "method": "tools/call", "params": {"name": "firing_alerts", "arguments": [1]}})
+    assert reply["result"]["isError"] is True
