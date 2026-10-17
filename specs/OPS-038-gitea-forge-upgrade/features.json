@@ -2,7 +2,7 @@
   {
     "id": "OPS-038-gitea-forge-upgrade-f1",
     "behavior": "The candidate Gitea image (1.27.3) starts on the restored R2 snapshot, migrations complete, API answers (AC1)",
-    "verification": "make backup-drill-gitea ENV=prod",
+    "verification": "grep -q 'image: gitea/gitea:1.27.3' infra/config/values/common.yaml && make backup-drill-gitea ENV=prod",
     "state": "pending",
     "evidence": ""
   },
@@ -58,7 +58,7 @@
   {
     "id": "OPS-038-gitea-forge-upgrade-f9",
     "behavior": "The upgrade runbook and a lesson exist (AC9)",
-    "verification": "test -f docs/runbooks/gitea-upgrade.md",
+    "verification": "test -f docs/runbooks/gitea-upgrade.md && test -n \"$(ls docs/lessons/lesson-*gitea-upgrade*.md 2>/dev/null)\"",
     "state": "pending",
     "evidence": ""
   }
