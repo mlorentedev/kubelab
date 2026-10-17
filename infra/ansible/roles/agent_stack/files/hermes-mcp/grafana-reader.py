@@ -23,8 +23,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-GRAFANA = os.environ.get("GRAFANA_URL", "https://grafana.kubelab.live").rstrip("/")
-APPS = [a for a in os.environ.get("HERMES_GRAFANA_APPS", "").split(",") if a.strip()]
+# No host is written here: the role passes both from the SSOT, and an unset one is reported, never guessed.
+GRAFANA = os.environ.get("GRAFANA_URL", "").strip().rstrip("/")
+APPS = [a.strip() for a in os.environ.get("HERMES_GRAFANA_APPS", "").split(",") if a.strip()]
 WINDOWS = {"15m": 900, "1h": 3600, "6h": 21600, "24h": 86400}
 MAX_LINES = 20
 LINE_CHARS = 300
@@ -47,6 +48,8 @@ class Unavailable(Exception):
 
 def _get(path: str, params: dict[str, str] | None = None) -> object:
     """One attempt, never retried. The reason names the class of failure, never the URL or token."""
+    if not GRAFANA:
+        raise Unavailable("no Grafana URL is configured")
     url = f"{GRAFANA}{path}" + (f"?{urllib.parse.urlencode(params)}" if params else "")
     token = os.environ.get("GRAFANA_TOKEN", "")
     if not token:
@@ -136,6 +139,8 @@ def log_volume_by_app(args: dict) -> str:
         counts = dict(line.rsplit(": ", 1) for line in _count_by_container('{namespace="kubelab"}', window))
     except Unavailable as error:
         return _down("loki-volume", error)
+    if not APPS:
+        return _down("loki-volume", Unavailable("no app list is configured"))
     silent = [app for app in APPS if app not in counts]
     lines = [f"{name}: {count}" for name, count in counts.items()]
     return _report("loki-volume", [f"window: {window}", *lines, *(f"{app}: NO LOG LINES" for app in silent)])
@@ -185,11 +190,19 @@ def _listing() -> list[dict]:
     ]
 
 
+def _error(ident: object, code: int, message: str) -> dict:
+    return {"jsonrpc": "2.0", "id": ident, "error": {"code": code, "message": message}}
+
+
 def handle(message: dict) -> dict | None:
     """One JSON-RPC message in, the reply out; a notification has none."""
+    if not isinstance(message, dict):
+        return _error(None, -32600, "a request is a JSON object")
     ident, method, params = message.get("id"), message.get("method", ""), message.get("params") or {}
     if ident is None:
         return None
+    if not isinstance(params, dict):
+        return _error(ident, -32602, "params must be an object")
     if method == "initialize":
         result: dict = {
             "protocolVersion": params.get("protocolVersion", "2024-11-05"),
@@ -201,13 +214,16 @@ def handle(message: dict) -> dict | None:
     elif method == "tools/list":
         result = {"tools": _listing()}
     elif method == "tools/call" and params.get("name") in TOOLS:
+        arguments = params.get("arguments") or {}
         try:
-            text, failed = TOOLS[params["name"]][0](params.get("arguments") or {}), False
+            if not isinstance(arguments, dict):
+                raise ValueError("arguments must be an object")
+            text, failed = TOOLS[params["name"]][0](arguments), False
         except (ValueError, TypeError) as error:
             text, failed = str(error), True
         result = {"content": [{"type": "text", "text": text}], "isError": failed}
     else:
-        return {"jsonrpc": "2.0", "id": ident, "error": {"code": -32601, "message": f"no such method or tool: {method}"}}
+        return _error(ident, -32601, f"no such method or tool: {method}")
     return {"jsonrpc": "2.0", "id": ident, "result": result}
 
 
@@ -218,7 +234,9 @@ def serve(stdin=sys.stdin, stdout=sys.stdout) -> None:  # noqa: ANN001
         try:
             reply = handle(json.loads(raw))
         except json.JSONDecodeError:
-            reply = {"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "parse error"}}
+            reply = _error(None, -32700, "parse error")
+        except Exception:  # noqa: BLE001 - one bad frame must not take the four tools down
+            reply = _error(None, -32603, "internal error")
         if reply is not None:
             stdout.write(json.dumps(reply) + "\n")
             stdout.flush()

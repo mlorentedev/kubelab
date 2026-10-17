@@ -25,6 +25,7 @@ TOKEN = "glsa_" + "sentinel" + "_" + "0123456789"  # assembled, so a scanner see
 
 def _module(monkeypatch: pytest.MonkeyPatch, **env: str) -> types.ModuleType:
     monkeypatch.setenv("GRAFANA_TOKEN", env.pop("GRAFANA_TOKEN", TOKEN))
+    monkeypatch.setenv("GRAFANA_URL", env.pop("GRAFANA_URL", "https://grafana.example.test"))
     monkeypatch.setenv("HERMES_GRAFANA_APPS", env.pop("HERMES_GRAFANA_APPS", APPS))
     module = types.ModuleType("grafana_reader")
     module.__dict__["__name__"] = "grafana_reader"
@@ -90,6 +91,32 @@ def test_garbage_and_unknown_methods_are_errors_not_crashes(monkeypatch: pytest.
     first, second = (json.loads(line) for line in out.getvalue().splitlines())
     assert first["error"]["code"] == -32700
     assert second["error"]["code"] == -32601
+
+
+@pytest.mark.parametrize("frame", ["null", "7", '"text"', '[{"jsonrpc":"2.0","id":1,"method":"ping"}]', '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":[1]}', '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"firing_alerts","arguments":[1]}}'])
+def test_a_malformed_frame_is_answered_and_the_server_keeps_serving(monkeypatch: pytest.MonkeyPatch, frame: str) -> None:
+    """A frame that is valid JSON but not a request must not kill the process that holds all four tools."""
+    module = _module(monkeypatch)
+    out = io.StringIO()
+    module.serve(io.StringIO(frame + '\n{"jsonrpc":"2.0","id":8,"method":"ping"}\n'), out)
+    replies = [json.loads(line) for line in out.getvalue().splitlines()]
+    assert replies[-1] == {"jsonrpc": "2.0", "id": 8, "result": {}}, "the next request is still served"
+
+
+def test_config_that_is_missing_is_reported_not_guessed(monkeypatch: pytest.MonkeyPatch) -> None:
+    module, calls = _module(monkeypatch, GRAFANA_URL=""), []
+    _answer(monkeypatch, [], calls)
+    assert "UNAVAILABLE (no Grafana URL is configured)" in _text(_call(module, "firing_alerts"))
+    assert not calls
+    module = _module(monkeypatch, HERMES_GRAFANA_APPS="")
+    _answer(monkeypatch, _loki(("api", "5")))
+    assert "UNAVAILABLE (no app list is configured)" in _text(_call(module, "log_volume_by_app"))
+
+
+def test_an_app_list_with_spaces_still_matches_loki(monkeypatch: pytest.MonkeyPatch) -> None:
+    module = _module(monkeypatch, HERMES_GRAFANA_APPS="api, authelia")
+    _answer(monkeypatch, _loki(("api", "5"), ("authelia", "9")))
+    assert "NO LOG LINES" not in _text(_call(module, "log_volume_by_app"))
 
 
 # ---------------------------------------------------------------- the model writes no query
