@@ -2190,6 +2190,19 @@ apps:
           tool_loop_guardrails:
             hard_stop_after:
               same_tool_failure: 12
+            # A ceiling per turn, and the free tier's 1,000 credits a month is the one
+            # per month: twenty searches in one turn is already a loop.
+            loop_caps:
+              max_web_searches: 20
+          web:
+            # Spec AI-024. A pinned backend has no probe and no reroute, so a missing
+            # key surfaces Tavily's own error. Search and extract both go through it.
+            backend: tavily
+            # When Tavily fails a call, the image retries THAT call once on a keyless
+            # ring of public free tiers (Exa, Parallel, Firecrawl, Keenable). It would
+            # send the query, which may name internal hosts, to four vendors with no
+            # account. Off until the operator decides otherwise.
+            keyless_rescue: false
           sessions:
             auto_prune: true # the image's default, pinned with the retention it applies
             retention_days: 180

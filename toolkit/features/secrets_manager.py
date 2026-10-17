@@ -1069,6 +1069,23 @@ SECRET_CATALOG: list[SecretSpec] = [
         ),
         envs=("prod",),
     ),
+    # Spec AI-024: the gateway's web_search and web_extract run in the gateway, never
+    # in the sandbox (which has no network). One key; Tavily's free tier is 1,000
+    # credits a month, so the key is also the spend limit.
+    SecretSpec(
+        key_path="apps.services.ai.hermes_kubelab.tavily_api_key",
+        description="Tavily API key the hermes-kubelab gateway searches and reads the web with",
+        kind=SecretKind.EXTERNAL,
+        format_hint="tvly-…",
+        value_pattern=r"tvly-[A-Za-z0-9_-]+",
+        expiry=Expiry.NEVER,
+        services=("hermes_kubelab",),
+        rotate_note=(
+            "app.tavily.com > API keys: create a new key, `toolkit secrets set` it, re-provision ace2, "
+            "then delete the old key."
+        ),
+        envs=("prod",),
+    ),
     # =========================================================================
     # Argo CD (hub management plane — common.enc.yaml)  [TOOL-023 / audit D64]
     # =========================================================================
