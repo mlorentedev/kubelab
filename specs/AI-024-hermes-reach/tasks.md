@@ -26,7 +26,7 @@ created: "2026-10-16"
 - [ ] [AC2] PR 2a (#2393): stdio MCP server with four fixed tools (firing alerts, errors per app, log volume per app, recent errors of one app), app from a closed list, window from a closed set, Loki redactor in front
 - [ ] [AC2] PR 2a: test that an unreadable source is named with its reason in the output, never skipped, and that nothing is retried
 - [ ] [AC2] PR 2b: `mcp_servers` entry with a `tools.include` allowlist, `GRAFANA_TOKEN` fed from `hermes_kubelab.grafana_token`, the app list in `common.yaml`, the mount and install task, runbook
-- [ ] [AC2] After 2b merges: provision ace2 from a master-based tree and prove the four tools live, with a refused write through the token
+- [ ] [AC2] After 2b merges: provision ace2 from a master-based tree and prove the four tools live through the gateway (that is the stage-2 evidence); the refused write is probed through the public `Bearer glsa_` route on `grafana.kubelab.live`, so it measures the route and the token together, and it is a negative control, not proof the wiring works
 
 ### Stage 3: changes by pull request
 
