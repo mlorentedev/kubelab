@@ -133,6 +133,24 @@ def _doctor(run: Run, name: str) -> bool:
     return True
 
 
+def _stale_merge_bases(run: Run, name: str, *extra: str) -> int:
+    """How many pull requests `Recalculate merge bases` reports; 0 when the check is silent."""
+    argv = ["docker", "exec", "-u", "git", name, "gitea", "doctor", "check", "--run", "recalculate-merge-bases"]
+    _, out, _ = run([*argv, *extra])
+    pattern = BASELINE_CEILINGS["Recalculate merge bases"][0]
+    return max((int(m.group(1)) for line in out.splitlines() if (m := pattern.search(line))), default=0)
+
+
+def _rehearse_merge_base_repair(run: Run, name: str) -> None:
+    """OPS-039: run `--fix` on the restored copy and report before/after. Informational: it never fails the drill."""
+    before = _stale_merge_bases(run, name)
+    if not before:
+        return
+    _stale_merge_bases(run, name, "--fix")
+    after = _stale_merge_bases(run, name)
+    logger.info(f"probe: merge-base repair on the copy: {before} stale before, {after} after")
+
+
 def _pick_repo(run: Run, name: str, token: str, repos: list[str]) -> Optional[str]:
     """The first restored repository with issues enabled: the contract needs one to write into."""
     for full in repos:
@@ -176,6 +194,7 @@ def _merge_settings(run: Run, name: str, token: str, full: str) -> bool:
 def run_probes(run: Run, name: str, admin_user: str, repos: list[str]) -> bool:
     """True only when every probe passes. A probe that cannot run is a failure, never a pass."""
     ok = _doctor(run, name)
+    _rehearse_merge_base_repair(run, name)
     token = _mint_write_token(run, name, admin_user)
     if not token:
         logger.error("drill: CANNOT CHECK — a write token could not be minted for the upgrade probes")
