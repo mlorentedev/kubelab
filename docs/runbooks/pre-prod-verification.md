@@ -187,8 +187,8 @@ A snapshot is **crash-consistent only** (ADR-024): SQLite may be torn, so it is 
 failed cutover, not a backup (backups are `node_backup`, restic to R2). The first one,
 `kubelab-vps-2026-10-16` (image 444208685, 7.3 GB), was taken on 2026-10-16. Restoring is a Hetzner
 `rebuild` of the server from that image (it keeps the IPs and wipes the disk); that path has **not**
-been exercised. Each snapshot is billed and nothing else removes one, so the plan and `APPLY=1` both
-prune managed snapshots down to the newest 3 (OPS-036); `KEEP=N` changes that number and `NO_PRUNE=1`
+been exercised. Each snapshot is billed and nothing else removes one, so the plan lists what
+`APPLY=1` would prune down to the newest 3 (OPS-036), and `APPLY=1` does it; `KEEP=N` changes that number and `NO_PRUNE=1`
 deletes nothing. Only images labelled `managed-by=kubelab-toolkit` are ever touched, and the newest is
 the rollback point until the next replaces it.
 
