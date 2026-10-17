@@ -45,6 +45,10 @@ services:
       GITEA__database__SQLITE_JOURNAL_MODE: "WAL"
       GITEA__server__DOMAIN: "{{ gitea_domain }}"
       GITEA__server__ROOT_URL: "https://{{ gitea_domain }}/"
+      # Pinned to what 1.25 did. 1.26 made `auto` the default for new installs and the notes do not
+      # say what an existing one gets; valid on 1.27.3 are legacy, auto and never (measured in a scratch
+      # container 2026-10-17, anything else is fatal at start). 1.25.5 ignores the key.
+      GITEA__server__PUBLIC_URL_DETECTION: "legacy"
       # HTTP arrives through K3s Traefik at {{ gitea_domain }}; SSH cannot, because
       # SSH is not HTTP. The advertised clone URL therefore points at the node's
       # MagicDNS name directly, and is reachable from the tailnet only.

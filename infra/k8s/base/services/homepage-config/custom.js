@@ -543,7 +543,7 @@ var KUBELAB_SERVICES_SHARED = [
     "auth": "Built-in (OIDC)",
     "category": "Core",
     "node": "Beelink",
-    "version": "1.25.5",
+    "version": "1.27.3",
     "notes": "Git hosting \u00b7 on-demand"
   },
   {
@@ -1028,7 +1028,7 @@ var KUBELAB_SERVICES_SHARED = [
     var main = document.querySelector("main") || document.querySelector("#page_container") || document.body;
     var footer = document.createElement("div");
     footer.id = "kubelab-footer";
-    footer.textContent = "KubeLab IDP · config 37f1decb";
+    footer.textContent = "KubeLab IDP · config 2d28a503";
     main.appendChild(footer);
   }
   setTimeout(addFooter, 2000);

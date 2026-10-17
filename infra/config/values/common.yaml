@@ -1018,7 +1018,7 @@ apps:
         # the Beelink platform node. The node itself is prose, not an axis value.
         state_promotion: singleton
         location: on-demand
-        image: gitea/gitea:1.25.5
+        image: gitea/gitea:1.27.3
         domain: gitea.kubelab.live
         app_name: "KubeLab Git"
         enable_auth: false
