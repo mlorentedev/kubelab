@@ -306,6 +306,7 @@
         agent_stack_slack_app_token: "{{ gitea_secrets.apps.services.ai.hermes_kubelab.slack_app_token | default('') }}"
         agent_stack_anthropic_api_key: "{{ gitea_secrets.apps.services.ai.hermes_kubelab.anthropic_api_key | default('') }}"
         agent_stack_tavily_api_key: "{{ gitea_secrets.apps.services.ai.hermes_kubelab.tavily_api_key | default('') }}"
+        agent_stack_grafana_token: "{{ gitea_secrets.apps.services.ai.hermes_kubelab.grafana_token | default('') }}"
         # What the agent must fail to read (ADR-058 D3, spec AC2): the dev
         # user's credentials, and the system daemon's socket, which is root.
         agent_stack_dev_home: "/home/{{ config.networking.ssh_users.homelab }}"

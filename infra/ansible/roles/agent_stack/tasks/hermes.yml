@@ -250,6 +250,25 @@
            | difference(lookup('ansible.builtin.fileglob', role_path ~ '/files/hermes-scripts/*', wantlist=True) | map('basename') | list)
            | map('regex_replace', '^', agent_stack_hermes_scripts ~ '/') | list }}
 
+    # The MCP servers the gateway starts (spec AI-024 stage 2): the same shape as the job
+    # scripts, outside the data directory and read-only inside it.
+    - name: Create the MCP servers directory
+      ansible.builtin.file:
+        path: "{{ agent_stack_hermes_mcp }}"
+        state: directory
+        owner: "{{ agent_stack_agent_user }}"
+        group: "{{ agent_stack_agent_user }}"
+        mode: "0755"
+
+    - name: Install the MCP servers
+      ansible.builtin.copy:
+        src: "hermes-mcp/{{ item }}"
+        dest: "{{ agent_stack_hermes_mcp }}/{{ item }}"
+        owner: "{{ agent_stack_agent_user }}"
+        group: "{{ agent_stack_agent_user }}"
+        mode: "0644"
+      loop: "{{ lookup('ansible.builtin.fileglob', role_path ~ '/files/hermes-mcp/*', wantlist=True) | map('basename') | list }}"
+
     # The managed skills (spec AI-012 AC9). Copied from the root-owned vault mirror, owned
     # by root and mounted read-only, so the agent can use a skill and cannot change it. The
     # mirror is refreshed by its own timer; this copy is what the provision pinned.

@@ -10,7 +10,7 @@
   JSON is YAML, so `tojson` writes each value as the SSOT typed it.
 #}
 {% set ported = agent_stack_hermes.agent_config %}
-{% set role_sections = ['approvals', 'terminal', 'slack', 'unauthorized_dm_behavior', 'cron', 'model', 'delegation', 'fallback_providers', 'skills'] %}
+{% set role_sections = ['approvals', 'terminal', 'slack', 'unauthorized_dm_behavior', 'cron', 'model', 'delegation', 'fallback_providers', 'skills', 'mcp_servers'] %}
 
 model:
   provider: custom
@@ -106,6 +106,24 @@ delegation:
 {% endif %}
 skills: {{ skills | tojson }}
 
+{% if agent_stack_grafana_token | length > 0 %}
+# The cluster-state reader (spec AI-024 stage 2): a stdio MCP server the gateway starts,
+# read-only, with four fixed tools. Hermes passes it only this `env` and a safe baseline,
+# so the gateway's other variables do not reach it. `tools.include` is the allowlist: a
+# tool the script later gains stays invisible until this list names it.
+mcp_servers:
+  grafana:
+    command: python3
+    args: ["{{ agent_stack_hermes_home }}/mcp/grafana-reader.py"]
+    env:
+      GRAFANA_TOKEN: ${GRAFANA_TOKEN}
+      GRAFANA_URL: {{ agent_stack_hermes.grafana_reader.url }}
+      HERMES_GRAFANA_APPS: {{ agent_stack_hermes.grafana_reader.apps | join(',') }}
+    timeout: 30
+    tools:
+      include: {{ agent_stack_hermes.grafana_reader.tools | tojson }}
+
+{% endif %}
 # The rest of the ported harness, as `apps.services.ai.hermes_kubelab.agent_config`
 # declares it.
 {% for section, value in ported.items() if section not in role_sections %}
