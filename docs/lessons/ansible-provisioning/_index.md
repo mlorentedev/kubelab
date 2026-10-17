@@ -1,10 +1,11 @@
 # Ansible roles and node provisioning
 
-61 lessons, newest first. Back to [all categories](../_index.md).
+62 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
-| 587 | [A guard keyed on an error string breaks when the role itself changes what produced the string](lesson-587-a-guard-keyed-on-an-error-string-breaks-when-the-role-changes-what-produced-it.md) | 2026-10-17 |
+| 589 | [A file written by a subuid with mkstemp is unreadable to its host owner, and no ACL fixes it](lesson-589-a-file-written-by-a-subuid-with-mkstemp-is-unreadable-to-its-host-owner-and-no-acl-fixes-it.md) | 2026-10-17 |
+| 588 | [A guard keyed on an error string breaks when the role itself changes what produced the string](lesson-588-a-guard-keyed-on-an-error-string-breaks-when-the-role-changes-what-produced-it.md) | 2026-10-17 |
 | 583 | [A mount test that asserts the template passes a path the consumer never sees](lesson-583-a-mount-test-that-asserts-the-template-passes-a-path-the-consumer-never-sees.md) | 2026-10-16 |
 | 569 | [A host-key test through a live ControlMaster socket checks nothing](lesson-569-a-host-key-test-through-a-live-controlmaster-socket-checks-nothing.md) | 2026-10-14 |
 | 552 | [A kill switch that removes a uid-scoped rule leaves every other unit of that uid unconfined](lesson-552-a-kill-switch-that-removes-a-uid-scoped-rule-leaves-every-other-unit-of-that-uid-unconfined.md) | 2026-10-10 |

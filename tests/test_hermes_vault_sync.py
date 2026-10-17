@@ -90,14 +90,50 @@ class Vault:
         # pgrep would see every git of this user on the machine running the tests.
         self.bin.mkdir()
         self.pgrep()
+        self.state = tmp / "dockerd-rootless"
+        self.state.mkdir()
+        self.rootless_pid(4242)
+        self.nsenter_log = tmp / "nsenter.log"
+        self.nsenter()
 
     def pgrep(self, *pids: int) -> None:
         lines = "".join(f"echo {pid}\n" for pid in pids)
         (self.bin / "pgrep").write_text(f"#!/bin/sh\n{lines}exit {0 if pids else 1}\n")
         (self.bin / "pgrep").chmod(0o755)
 
+    def rootless_pid(self, pid: int | None) -> None:
+        """The pid rootlesskit records for the process that holds the daemon's user namespace."""
+        if pid is None:
+            (self.state / "child_pid").unlink(missing_ok=True)
+        else:
+            (self.state / "child_pid").write_text(f"{pid}\n")
+
+    def nsenter(self) -> None:
+        """Entering a user namespace needs the real daemon; this records the call and runs the rest.
+
+        It drops the namespace options the way the real one consumes them, so what is left is the
+        command the script re-executes.
+        """
+        (self.bin / "nsenter").write_text(
+            "#!/bin/sh\n"
+            f'echo "$*" >> "{self.tmp / "nsenter.log"}"\n'
+            f'echo "in_userns=${{VAULT_SYNC_IN_USERNS:-}}" >> "{self.tmp / "nsenter.log"}"\n'
+            'while [ "${1#-}" != "$1" ]; do case "$1" in --target) shift 2 ;; *) shift ;; esac; done\n'
+            'exec "$@"\n'
+        )
+        (self.bin / "nsenter").chmod(0o755)
+
+    def nsenter_calls(self) -> list[str]:
+        if not self.nsenter_log.exists():
+            return []
+        return [line for line in self.nsenter_log.read_text().splitlines() if not line.startswith("in_userns=")]
+
     def sync(self) -> subprocess.CompletedProcess[str]:
-        env = {**_git_env(), "PATH": f"{self.bin}:{os.environ['PATH']}"}
+        env = {
+            **_git_env(),
+            "PATH": f"{self.bin}:{os.environ['PATH']}",
+            "VAULT_SYNC_ROOTLESS_STATE": str(self.state),
+        }
         return subprocess.run([str(self.script)], capture_output=True, text=True, check=False, env=env)
 
     def other_commit(self, message: str) -> str:
@@ -335,6 +371,49 @@ def _unit(name: str) -> dict[str, list[str]]:
             key, value = line.split("=", 1)
             keys.setdefault(key, []).append(value)
     return keys
+
+
+# ----------------------------------------------------------- the gateway's user namespace
+#
+# The gateway writes MEMORY.md as a subuid with mkstemp, 0600, and renames it over the old file,
+# which keeps the mode (#2417). This user cannot read it from the host, and one unreadable file
+# fails the whole `git add`. Nothing that acts at creation time helps (a default ACL is masked
+# to `---` on a 0600 create), so the sync reads from inside the user namespace of the rootless
+# daemon: that namespace is this user's own, root there is this user on the host, and the
+# subuid's files are mapped into it. It grants nothing on the host.
+
+
+def test_the_sync_runs_inside_the_rootless_daemons_user_namespace(vault: Vault) -> None:
+    result = vault.sync()
+    assert result.returncode == 0, result.stderr
+    assert vault.nsenter_calls() == [f"--user --target 4242 {vault.script}"]
+
+
+def test_the_namespace_is_entered_once_not_in_a_loop(vault: Vault) -> None:
+    assert vault.sync().returncode == 0
+    assert (vault.tmp / "nsenter.log").read_text().splitlines()[1] == "in_userns=1"
+    assert len(vault.nsenter_calls()) == 1
+
+
+def test_a_run_without_the_daemon_fails_and_syncs_nothing(synced: Vault) -> None:
+    _write(synced.clone, f"{ZONE}/jobs/digest.md")
+    before = synced.head()
+    synced.rootless_pid(None)
+    calls = len(synced.nsenter_calls())
+    result = synced.sync()
+    assert result.returncode == 1
+    assert "rootless" in result.stderr
+    assert synced.head() == before
+    assert len(synced.nsenter_calls()) == calls
+
+
+def test_a_daemon_that_is_gone_fails_instead_of_syncing_from_the_host(synced: Vault) -> None:
+    _write(synced.clone, f"{ZONE}/jobs/digest.md")
+    before = synced.head()
+    (synced.bin / "nsenter").write_text("#!/bin/sh\necho 'nsenter: no such process' >&2\nexit 1\n")
+    result = synced.sync()
+    assert result.returncode != 0
+    assert synced.head() == before
 
 
 def test_the_unit_runs_as_the_agent_and_takes_the_token_from_systemd() -> None:
