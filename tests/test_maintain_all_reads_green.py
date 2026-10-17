@@ -34,6 +34,30 @@ def test_the_jetson_is_declared_legacy_python() -> None:
     assert nodes["jetson"].get("legacy_python") is True
 
 
+def test_the_generated_inventory_carries_legacy_python_as_a_host_var() -> None:
+    """The play reads `legacy_python` as a host var. It reaches the play only
+    through the generated inventory, so the declaration alone proves nothing."""
+    from toolkit.features.generator_ansible import AnsibleGenerator
+
+    common = yaml.safe_load(COMMON.read_text(encoding="utf-8"))
+    inventory = AnsibleGenerator()._build_inventory(
+        common["networking"], backup_sources=common.get("backup", {}).get("sources")
+    )
+    host_vars = {
+        host: hvars
+        for group in inventory["all"]["children"].values()
+        for host, hvars in (group.get("hosts") or {}).items()
+    }
+    jetson = common["networking"]["nodes"]["jetson"]
+    hostname = jetson.get("hostname", "jetson")
+
+    assert host_vars[hostname].get("legacy_python") is True, (
+        "the inventory drops legacy_python, so the play gathers facts there"
+    )
+    flagged = {h for h, v in host_vars.items() if v.get("legacy_python")}
+    assert flagged == {hostname}, f"legacy_python reaches hosts that never declared it: {flagged - {hostname}}"
+
+
 def test_a_legacy_python_host_ends_before_any_module_runs() -> None:
     play = _play()
     assert play.get("gather_facts") is False, (
@@ -52,7 +76,8 @@ def test_facts_are_gathered_explicitly_before_the_roles() -> None:
 
 
 def test_the_exclusion_names_no_host() -> None:
-    text = PLAYBOOK.read_text(encoding="utf-8")
+    # Parsed, so comments (which may name the host to explain it) are not code.
+    text = str(_play()).lower()
     assert "jetson" not in text and "jet1" not in text, "the exclusion names a host instead of reading its declaration"
 
 
