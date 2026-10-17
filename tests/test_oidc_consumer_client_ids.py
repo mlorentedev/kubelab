@@ -86,3 +86,11 @@ def test_the_compose_grafana_id_is_derived_not_declared(env: str, monkeypatch: p
     monkeypatch.setattr(manager, "_decrypt_sops", lambda _path: {})
     derived = manager.get_merged_config()["apps"]["services"]["observability"]["grafana"]["oauth_client_id"]
     assert derived == _client_for("apps.services.observability.grafana.domain")
+
+
+def test_a_stale_override_does_not_win_over_the_derivation() -> None:
+    config = _common()
+    config["apps"]["services"]["observability"]["grafana"]["oauth_client_id"] = "stale-client"
+    ConfigurationManager._inject_oidc_client_derivations(config)
+    derived = config["apps"]["services"]["observability"]["grafana"]["oauth_client_id"]
+    assert derived == _client_for("apps.services.observability.grafana.domain")

@@ -195,6 +195,8 @@ class ConfigurationManager:
         renaming the client in `apps.services.security.authelia.oidc_clients` also
         renames what the Compose Grafana presents. The other consumers keep the id in
         their own formats, and `tests/test_oidc_consumer_client_ids.py` holds them to it.
+        The value is assigned, not defaulted: a stale override in an env file must not
+        win over the client Authelia registers. A missing client fails that test in CI.
         """
         services = config.get("apps", {}).get("services", {})
         clients = services.get("security", {}).get("authelia", {}).get("oidc_clients", [])
@@ -202,7 +204,7 @@ class ConfigurationManager:
         client_id = next((c["client_id"] for c in clients if c.get("redirect", {}).get("domain") == grafana_key), None)
         grafana = services.get("observability", {}).get("grafana")
         if client_id and isinstance(grafana, dict):
-            grafana.setdefault("oauth_client_id", client_id)
+            grafana["oauth_client_id"] = client_id
 
     @staticmethod
     def _inject_contact_email_derivations(config: Dict[str, Any]) -> None:
