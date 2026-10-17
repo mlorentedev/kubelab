@@ -107,17 +107,20 @@ def vps_snapshot(
     apply: Annotated[bool, typer.Option("--apply", help="Take the snapshot; default reports the plan only")] = False,
     keep: Annotated[
         int | None,
-        typer.Option("--keep", help="Also delete managed snapshots beyond the newest N (at least 1); off by default"),
+        typer.Option("--keep", help="Keep the newest N managed snapshots, delete older ones (at least 1; default 3)"),
     ] = None,
+    no_prune: Annotated[bool, typer.Option("--no-prune", help="Delete nothing, whatever exists")] = False,
 ) -> None:
     """Snapshot the VPS through the Hetzner API: the rollback of last resort (PREP-002).
 
     Idempotent per UTC day, labelled `managed-by=kubelab-toolkit`, and only labelled
-    snapshots are ever pruned. Crash-consistent only (ADR-024), so it is not a backup.
-    Reports a plan and changes nothing without `--apply`.
+    snapshots are ever pruned: by default down to the newest 3 (OPS-036), because each
+    is billed and nothing else removes one. Crash-consistent only (ADR-024), so it is
+    not a backup. Reports a plan, prunes included, and changes nothing without `--apply`.
     """
     from toolkit.features.configuration import ConfigurationManager
     from toolkit.features.vps_snapshot import (
+        DEFAULT_KEEP,
         TOKEN_SECRET_KEY,
         WARN_ABOVE,
         HetznerClient,
@@ -132,6 +135,11 @@ def vps_snapshot(
         plan as plan_snapshot,
     )
 
+    if no_prune and keep is not None:
+        logger.error("--no-prune and --keep contradict each other: pick one")
+        raise typer.Exit(1)
+    effective_keep = None if no_prune else (DEFAULT_KEEP if keep is None else keep)
+
     cm = ConfigurationManager(env=env)
     token = cm.get_secret_by_path(TOKEN_SECRET_KEY)
     if not token:
@@ -140,7 +148,7 @@ def vps_snapshot(
 
     client = HetznerClient(token=token)
     try:
-        plan = plan_snapshot(client, cm.get_merged_config(), today=today_utc(), keep=keep)
+        plan = plan_snapshot(client, cm.get_merged_config(), today=today_utc(), keep=effective_keep)
         logger.info(f"server {plan.server_name} (id {plan.server_id}), snapshot {plan.description}")
         if not plan.exists:
             logger.info("today's snapshot does not exist yet")
@@ -153,10 +161,10 @@ def vps_snapshot(
             )
         for old in plan.prune:
             logger.info(f"would prune {old.get('description')} (id {old.get('id')})")
-        if keep is None and plan.managed_count > WARN_ABOVE:
+        if effective_keep is None and plan.managed_count > WARN_ABOVE:
             logger.warning(
                 f"{plan.managed_count} managed snapshots exist and each is billed; "
-                "pass --keep N (make vps-snapshot APPLY=1 KEEP=N) to prune the oldest"
+                "drop --no-prune (or pass --keep N) to prune the oldest"
             )
         if not apply:
             logger.info("plan only; pass --apply (make vps-snapshot APPLY=1) to take it")
