@@ -315,14 +315,63 @@ def test_the_plan_counts_what_accumulates_without_keep() -> None:
     assert p.managed_count == 4
 
 
-def test_the_command_warns_when_snapshots_pile_up_without_keep(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_command_warns_when_snapshots_pile_up_with_pruning_off(monkeypatch: pytest.MonkeyPatch) -> None:
     fake = FakeHetzner()
     for day in range(1, 5):
         fake.add_snapshot(f"kubelab-vps-2026-10-0{day}", f"2026-10-0{day}T00:00:00+00:00")
-    result = _invoke(monkeypatch, fake)
+    result = _invoke(monkeypatch, fake, "--no-prune")
     assert result.exit_code == 0, result.output
     assert "4 managed snapshots" in result.output
     assert "--keep" in result.output
+
+
+def test_the_default_retention_is_three() -> None:
+    from toolkit.features.vps_snapshot import DEFAULT_KEEP
+
+    assert DEFAULT_KEEP == 3
+
+
+def _five_old(fake: FakeHetzner) -> None:
+    for day in range(1, 6):
+        fake.add_snapshot(f"kubelab-vps-2026-10-0{day}", f"2026-10-0{day}T00:00:00+00:00")
+
+
+def test_the_plan_names_what_the_default_retention_would_prune(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = FakeHetzner()
+    _five_old(fake)
+    result = _invoke(monkeypatch, fake)
+    assert result.exit_code == 0, result.output
+    assert result.output.count("would prune") == 3, "five old + today's = six; three are kept"
+    assert "kubelab-vps-2026-10-01" in result.output
+    assert len(fake.images) == 5, "a plan deletes nothing"
+
+
+def test_apply_prunes_to_the_default_without_any_keep(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = FakeHetzner()
+    _five_old(fake)
+    foreign = fake.add_snapshot("someone-elses", "2026-09-01T00:00:00+00:00", managed=False)
+    result = _invoke(monkeypatch, fake, "--apply")
+    assert result.exit_code == 0, result.output
+    kept = {i["description"] for i in fake.images.values()}
+    assert kept == {"kubelab-vps-2026-10-04", "kubelab-vps-2026-10-05", "kubelab-vps-2026-10-16", "someone-elses"}
+    assert foreign in fake.images, "only labelled images are ever deleted"
+
+
+def test_no_prune_is_the_explicit_opt_out(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = FakeHetzner()
+    _five_old(fake)
+    result = _invoke(monkeypatch, fake, "--apply", "--no-prune")
+    assert result.exit_code == 0, result.output
+    assert len(fake.images) == 6
+    assert "would prune" not in result.output
+
+
+def test_no_prune_and_keep_together_are_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = FakeHetzner()
+    result = _invoke(monkeypatch, fake, "--apply", "--no-prune", "--keep", "2")
+    assert result.exit_code == 1, result.output
+    assert "--no-prune" in result.output
+    assert not fake.images
 
 
 def test_the_command_is_quiet_about_retention_when_few_exist(monkeypatch: pytest.MonkeyPatch) -> None:
