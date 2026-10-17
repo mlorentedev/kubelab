@@ -1,34 +1,33 @@
-# Arming envelope for the 2026-10-16 unattended run. Committed on the run branch;
+# Arming envelope for the 2026-10-17 unattended run. Committed on the run branch;
 # the run reads only the committed copy. A PR whose diff touches this file is never merged.
 version: 1
-run_id: "2026-10-16-ai012"
+run_id: "2026-10-17-ai024"
 armed_by: manu
-armed_at: 2026-10-16T08:15:00Z
-expires_at: 2026-10-16T18:15:00Z
+armed_at: 2026-10-17T04:30:00Z
+expires_at: 2026-10-17T07:30:00Z
 objective: >-
-  Land the AI-012 hermes-kubelab harness parts #2338-#2342 (alert-triage read path, Grafana bearer
-  route as a draft, skills and docs mirror, persona draft, curator host units), then unassigned quick wins.
+  Shepherd the AI-024 PRs the run opened (#2370 spec, #2373 Grafana token route) and the merged #2365
+  to a triaged state, prove #2365 live on ace2, and archive the zombie spec TOOL-009.
 scope:
   write_paths:
     - "infra/ansible/roles/agent_stack/**"
     - "infra/config/values/common.yaml"
     - "infra/config/platform.json"
-    - "infra/config/secrets/prod.enc.yaml"
     - "toolkit/features/secrets_manager.py"
-    - "tests/test_hermes_*.py"
-    - "tests/test_agent_stack_*.py"
-    - "tests/test_grafana_*.py"
-    - "specs/AI-012-hermes-harness/**"
+    - "tests/**"
+    - "specs/AI-024-hermes-reach/**"
+    - "specs/TOOL-009-cluster-operator-bootstrap/**"
+    - "specs/archive/**"
     - "docs/runbooks/hermes-kubelab.md"
     - "docs/lessons/**"
-    - "infra/k8s/base/services/grafana*.yaml"
+    - "infra/k8s/overlays/prod/patches.yaml"
+    - "infra/k8s/overlays/prod/authelia-config/**"
     - ".agent/runs/**"
   frozen_paths:
     - ".github/**"
     - "harness/**"
     - ".pr_agent.toml"
-    - "scripts/pr-agent-*"
-    - "infra/k8s/overlays/prod/**"
+    - "infra/config/secrets/**"
     - "**/AGENTS.md"
   max_files: 25
   max_loc: 400
@@ -36,17 +35,13 @@ allowed_commands: [dotf, gh, git, make, poetry, toolkit]
 queue:
   source: bitacora
   filter: >-
-    issues #2338-#2342 (AI-019..AI-023, epic #1933), then unassigned chore/bug quick wins
-    with no open PR and no peer branch
-  max_items: 8
+    PRs this run opened (#2370, #2373), live proof of #2365, TOOL-009 archive; nothing else
+  max_items: 4
 budget:
-  max_iterations: 10
-  max_minutes_per_iteration: 90
+  max_iterations: 8
+  max_minutes_per_iteration: 25
   max_consecutive_failures: 2
 authority:
-  # Merge by hand with --match-head-commit under the operator's four conditions (kubelab has no
-  # merge-grant.yml). Never: #2339 (Grafana route) and #2341 (persona), always drafts for the
-  # operator; any PR touching secret management (prod.enc.yaml, secrets_manager.py) or CI.
   merge: standing-grant
   push: true
   open_pr: true
