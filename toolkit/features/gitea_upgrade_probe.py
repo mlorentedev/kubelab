@@ -95,6 +95,8 @@ def _doctor(run: Run, name: str) -> bool:
     if rc != 0 or errors:
         logger.error(f"FAIL doctor: `gitea doctor check --all` exit {rc}, {len(errors)} error line(s)")
         # Check names and counts, never row content: doctor reports on the schema, not on the data.
+        for check in sorted({_check_of(lines, i) or "?" for i in bad}):
+            logger.error(f"     failing doctor check: {check}")
         for i in bad[:3]:
             for line in lines[max(0, i - 4) : i + 1]:
                 logger.error(f"     {line.strip()[:160]}")
