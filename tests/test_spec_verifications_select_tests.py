@@ -58,7 +58,6 @@ UNWRITTEN = frozenset(
         "GITOPS-003-f3",
         "GITOPS-003-f6",
         "OPS-030-edge-error-pages-f2",
-        "OPS-030-edge-error-pages-f4",
         "OPS-030-edge-error-pages-f5",
         "TOOL-080-forge-pr-reviewer-f8",
     }

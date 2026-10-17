@@ -26,8 +26,8 @@ created: "2026-10-16"
 - [x] [AC3] Delete `401.html`, `408.html`, `429.html`, `500.html`, `maintenance.html` and their `error_page` lines; update `tests/test_error_pages_markup.py` (page count, orphan scan)
 - [ ] [P] [AC2] Failing test `tests/test_ingressroute_error_page_coverage.py`: render both overlays, every IngressRoute carries `error-pages` or is in `edge.errors.coverage.exceptions`. Expected: FAIL on the prod gaps
 - [ ] [AC2] Declare `edge.errors.coverage.exceptions` in `common.yaml` (`headscale`, `catch-all`, `kubelab-redirect`, `brand-assets`, webhook routes, each with a reason); the test reads it with `yaml.safe_load`
-- [ ] [AC5] Failing test: built image answers JSON for `Accept: application/json` on `/errors/502.html`, `/errors/503.html`, `/errors/504.html` and on an unknown path (status unchanged), HTML otherwise
-- [ ] [AC4][AC5] `edge/errors/nginx.conf`: `map $http_accept` negotiation, `no-store`, `X-Robots-Tag`, `Retry-After` on 503/504, `access_log` on `/errors/`; JSON bodies next to the HTML pages
+- [x] [AC5] Failing test: built image answers JSON for `Accept: application/json` on `/errors/502.html`, `/errors/503.html`, `/errors/504.html` and on an unknown path (status unchanged), HTML otherwise
+- [x] [AC4][AC5] `edge/errors/nginx.conf`: `map $http_accept` negotiation, `no-store`, `X-Robots-Tag`, `Retry-After` on 503/504, `access_log` on `/errors/`; JSON bodies next to the HTML pages
 - [ ] [AC6] Apply the owner's decision: add the middleware or the exception; the coverage test goes green
 - [ ] Update `CLAUDE.md` / ADR-072 status to `accepted` when PR 1 merges
 
