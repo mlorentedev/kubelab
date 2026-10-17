@@ -20,6 +20,7 @@ from typing import Optional
 
 import pytest
 
+from toolkit.features import gitea_drill
 from toolkit.features.gitea_drill import _paginate, compare, repos_on_disk, run_drill
 
 TOKEN = "SCRATCH-TOKEN-THAT-MUST-NOT-PRINT"
@@ -155,6 +156,19 @@ class _Fake:
                 subprocess.run(["rm", "-rf", str(child)], check=True)
             return 0, "", ""
         return 0, "", ""
+
+
+@pytest.fixture(autouse=True)
+def probes(monkeypatch) -> dict:
+    """The upgrade probes have their own tests; here only that the drill runs them and obeys the answer."""
+    seen: dict = {"ok": True, "called_with": None}
+
+    def fake_probes(run, name, admin_user, repos) -> bool:
+        seen["called_with"] = (name, admin_user, repos)
+        return seen["ok"]
+
+    monkeypatch.setattr(gitea_drill, "run_probes", fake_probes)
+    return seen
 
 
 @pytest.fixture
@@ -333,3 +347,12 @@ def test_a_restore_restic_cannot_finish_fails_names_it_and_never_starts_a_server
     out = " ".join(capsys.readouterr().out.split())
     assert "restic could not restore" in out and "unable to restore" in out
     assert not any(c[:2] == ["docker", "run"] and "-d" in c for c in fake.calls)
+
+
+def test_the_upgrade_probes_run_on_the_restored_server_and_a_failure_fails_the_drill(drill, probes) -> None:
+    assert drill(_Fake()) is True
+    name, admin_user, repos = probes["called_with"]
+    assert admin_user == "manu" and repos, probes
+
+    probes["ok"] = False
+    assert drill(_Fake()) is False
