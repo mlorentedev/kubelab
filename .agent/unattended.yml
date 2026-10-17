@@ -1,0 +1,39 @@
+version: 1
+run_id: ap-20261017-kubelab-night
+armed_by: manu
+armed_at: 2026-10-17T07:36:00Z
+expires_at: 2026-10-17T17:36:00Z
+objective: Work bounded bug and chore tickets from the kubelab backlog, one PR each, and leave a report.
+scope:
+  write_paths:
+    - "toolkit/**"
+    - "tests/**"
+    - "docs/**"
+    - "scripts/**"
+    - "apps/**"
+    - "edge/**"
+    - "infra/**"
+    - "Makefile"
+    - ".agent/runs/**"
+  frozen_paths:
+    - ".github/**"
+    - "harness/**"
+    - "**/AGENTS.md"
+    - "infra/config/secrets/**"
+    - ".agent/unattended.yml"
+  max_files: 15
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make, poetry, go, python3]
+queue:
+  source: bitacora
+  filter: 'Backlog, repository kubelab, type bug or chore'
+  max_items: 6
+budget:
+  max_iterations: 8
+  max_minutes_per_iteration: 40
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant
+  push: true
+  open_pr: true
+  advisor_tier: top
