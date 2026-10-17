@@ -31,6 +31,11 @@ class FakeServer:
             out = "[1] Garbage collect LFS\nERROR\n[2] Check schema\n- [I] fine\nOK\n"
             if self.broken.get("doctor"):
                 out += "[3] Check tables\n- [E] schema mismatch\nERROR\n"
+            stale = self.broken.get("stale_merge_bases")
+            if stale is True:  # the count line is worded differently: the ceiling cannot be read
+                out += "[4] Recalculate merge bases\n- [E] 5 pull requests are stale of 370\nERROR\n"
+            elif stale:
+                out += f"[4] Recalculate merge bases\n- [E] {stale} PRs with incorrect mergebases of 370\nERROR\n"
             return 0, out, ""
         if "generate-access-token" in argv:
             return (1, "", "boom") if self.broken.get("mint") else (0, TOKEN + "\n", "")
@@ -93,3 +98,14 @@ def test_a_failing_doctor_check_is_named_by_its_header(capsys: pytest.CaptureFix
     """Doctor lists its checks as `[N] Name`; the drill must say which one failed, not only the row."""
     _run(FakeServer(doctor=True))
     assert "failing doctor check: Check tables" in capsys.readouterr().out
+
+
+def test_the_known_merge_base_count_is_tolerated_but_a_larger_one_is_not() -> None:
+    """A baseline entry excuses the count measured on the deployed version, not any count under that name."""
+    assert _run(FakeServer(stale_merge_bases=23))
+    assert not _run(FakeServer(stale_merge_bases=24))
+
+
+def test_a_baselined_check_whose_count_cannot_be_read_fails_closed() -> None:
+    """Wording drift between Gitea versions must not turn a ceiling into a blanket excuse."""
+    assert not _run(FakeServer(stale_merge_bases=True))
