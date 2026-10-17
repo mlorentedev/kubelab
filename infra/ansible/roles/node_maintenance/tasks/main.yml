@@ -102,11 +102,11 @@
   # Only what is not already held, so `_holds_created` is exactly this run's
   # additions and the release below cannot overreach.
   command: "apt-mark hold {{ item }}"
-  loop: "{{ maintenance_patch_blacklist | intersect(_installed | default([])) | difference(_holds_before.stdout_lines | default([])) }}"
+  loop: "{{ maintenance_patch_blacklist | difference(_holds_before.stdout_lines | default([])) }}"
   register: _holds_created
   changed_when: false
-  # Installed packages only, so any failure here is a hold that did not land on
-  # something running, and the next task refuses to upgrade over it.
+  # Every package, installed or not: a hold is what protects the workload, so
+  # it never waits on reading dpkg. A failure here is judged by the next task.
   failed_when: false
   when: maintenance_run_cleanup | bool and maintenance_security_updates | bool
         and ansible_facts.pkg_mgr == 'apt'
@@ -116,7 +116,10 @@
   # docker unheld on a node that runs docker is the exact outcome the hold list
   # exists to prevent — and it would have proceeded silently.
   #
-  # The loop above holds installed packages only, so every non-zero rc counts.
+  # A failed hold counts when dpkg says the package is installed. The read is
+  # used to JUDGE failures, never to choose what to hold, so a read that comes
+  # back empty can hide a failure but cannot drop a hold that would have
+  # landed. A read that errors fails the host instead (its `failed_when`).
   # Not `ansible_facts.packages`: this role never runs `package_facts`, so a
   # filter on it would match nothing and produce a guard that never fires.
   set_fact:
@@ -125,6 +128,7 @@
          | selectattr('rc', 'defined')
          | selectattr('rc', '!=', 0)
          | map(attribute='item')
+         | select('in', _installed | default([]))
          | list }}
   when: maintenance_run_cleanup | bool and maintenance_security_updates | bool
         and ansible_facts.pkg_mgr == 'apt'
@@ -167,7 +171,7 @@
   # `maintenance_patch_blacklist` minus what was already held, so an operator's
   # deliberate pin survives. The hold lasts the run, not longer — and not less.
   command: "apt-mark unhold {{ item }}"
-  loop: "{{ maintenance_patch_blacklist | intersect(_installed | default([])) | difference(_holds_before.stdout_lines | default([])) }}"
+  loop: "{{ maintenance_patch_blacklist | difference(_holds_before.stdout_lines | default([])) }}"
   changed_when: false
   failed_when: false
   when: maintenance_run_cleanup | bool and maintenance_security_updates | bool

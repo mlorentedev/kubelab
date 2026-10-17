@@ -49,15 +49,23 @@ else
     UNPROTECTED=""
 {% for pkg in maintenance_patch_blacklist %}
     if ! printf '%s\n' "$HELD_BEFORE" | grep -qx '{{ pkg }}'; then
-        # Installed packages only, read from dpkg's own state: apt's error
-        # text changes once the APT lists are gone, and this script deletes
-        # them (#2406). A package removed with its config files kept holds
-        # fine with lists and fails with "Can't select installed nor candidate
-        # version" without, which the old text match read as unprotected.
-        if dpkg-query -W -f='${db:Status-Status}' '{{ pkg }}' 2>/dev/null | grep -qx installed; then
-            if apt-mark hold '{{ pkg }}' >/dev/null 2>&1; then
-                HELD_BY_US="$HELD_BY_US {{ pkg }}"
+        # Every package is held, installed or not. A failed hold is then
+        # judged by dpkg's own state, not by apt's error text: that text
+        # changes once the APT lists are gone, and this script deletes them
+        # (#2406). A package removed with its config files kept holds fine
+        # with lists and fails with "Can't select installed nor candidate
+        # version" without. dpkg-query exits 1 for a name it has never seen
+        # (not installed, nothing to protect) and 2 on an error, which counts
+        # as unprotected: an unreadable state must not read as "not here".
+        if apt-mark hold '{{ pkg }}' >/dev/null 2>&1; then
+            HELD_BY_US="$HELD_BY_US {{ pkg }}"
+        else
+            if PKG_STATE="$(dpkg-query -W -f='${db:Status-Status}' '{{ pkg }}' 2>/dev/null)"; then
+                PKG_RC=0
             else
+                PKG_RC=$?
+            fi
+            if [ "$PKG_RC" -gt 1 ] || [ "$PKG_STATE" = installed ]; then
                 UNPROTECTED="$UNPROTECTED {{ pkg }}"
             fi
         fi
