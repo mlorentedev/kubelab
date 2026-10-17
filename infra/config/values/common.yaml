@@ -1767,7 +1767,7 @@ apps:
         session_same_site: lax
         session_inactivity: 1h
         session_expiration: 8h
-        session_remember_me: 1M
+        session_remember_me: -1 # disabled (#1813)
         regulation_max_retries: 3
         regulation_find_time: 2m
         regulation_ban_time: 5m
@@ -1972,6 +1972,9 @@ apps:
             none: "Read-only diagnostics on api@internal; the cluster credential covers inspection."
           dev-node:
             none: "On-demand developer node (ADR-058): its own access path is SSH over the tailnet."
+          # #456: Homepage has no login of its own; with the IdP down, the cockpit is
+          # one port-forward away, which is what `{}` derives.
+          homepage: {}
 
       crowdsec:
         name: crowdsec

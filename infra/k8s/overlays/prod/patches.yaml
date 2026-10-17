@@ -10,6 +10,7 @@ data:
   GF_AUTH_GENERIC_OAUTH_AUTH_URL: "https://auth.kubelab.live/api/oidc/authorization"
   GF_AUTH_GENERIC_OAUTH_TOKEN_URL: "https://auth.kubelab.live/api/oidc/token"
   GF_AUTH_GENERIC_OAUTH_API_URL: "https://auth.kubelab.live/api/oidc/userinfo"
+  GF_AUTH_SIGNOUT_REDIRECT_URL: "https://auth.kubelab.live/logout?rd=https%3A%2F%2Fgrafana.kubelab.live%2F"
   GF_LOG_LEVEL: "info"
 ---
 # Override base grafana IngressRoute with prod domain
@@ -259,8 +260,13 @@ spec:
   entryPoints:
     - websecure
   routes:
-    - match: Host(`home.kubelab.live`)
+    # #456: Homepage's widgets proxy tailnet-only Glances and Uptime Kuma to
+    # whoever asks, so the host goes through Authelia. The exception is the
+    # health probe, which answers `up` and nothing else: Uptime Kuma checks it
+    # unauthenticated, as it checks every other protected service's health path.
+    - match: Host(`home.kubelab.live`) && Path(`/api/healthcheck`)
       kind: Rule
+      priority: 100
       middlewares:
         - name: secure-headers
           namespace: kubelab
@@ -269,6 +275,23 @@ spec:
         - name: error-pages
           namespace: kubelab
         - name: crowdsec-bouncer
+          namespace: kubelab
+      services:
+        - name: homepage
+          port: 3000
+    - match: Host(`home.kubelab.live`)
+      kind: Rule
+      priority: 50
+      middlewares:
+        - name: secure-headers
+          namespace: kubelab
+        - name: rate-limit
+          namespace: kubelab
+        - name: crowdsec-bouncer
+          namespace: kubelab
+        - name: authelia
+          namespace: kubelab
+        - name: error-pages
           namespace: kubelab
       services:
         - name: homepage

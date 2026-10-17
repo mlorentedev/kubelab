@@ -17,6 +17,11 @@ log:
 
 # ---- Authentication Backend ----
 authentication_backend:
+  # #1593: no self-service reset. Every identity is an operator or machine account
+  # reset with `toolkit credentials hash-password` + `make apply-secrets`, and the
+  # flow left an unauthenticated mail-send endpoint on the portal.
+  password_reset:
+    disable: true
   file:
     # Mount uses a directory (no subPath) so K8s propagates Secret updates.
     path: /config/users/users_database.yml
@@ -43,8 +48,10 @@ totp:
 # ---- WebAuthn ----
 webauthn:
   attestation_conveyance_preference: indirect
-  user_verification: preferred
   timeout: 60s
+  # Was `webauthn.user_verification`, deprecated in 4.39.0 and not auto-mapped (#2377).
+  selection_criteria:
+    user_verification: preferred
 
 # ---- Access Control ----
 # Service distribution per ADR-012:
@@ -89,6 +96,10 @@ access_control:
       policy: one_factor
     - domain: 'traefik.kubelab.live'
       policy: one_factor
+    # #456: the operator reaches prod over its public IP, which the
+    # vpn/internal-only wildcard below would deny.
+    - domain: 'home.kubelab.live'
+      policy: one_factor
 
     # VPN users get one_factor for everything else
     - domain: '*.kubelab.live'
@@ -103,7 +114,8 @@ session:
   same_site: lax
   inactivity: 1h
   expiration: 8h
-  remember_me: 1M
+  # Disabled (#1813): a month-long rolling session outlived every bound set on sessions.
+  remember_me: -1
 
   cookies:
     - domain: kubelab.live

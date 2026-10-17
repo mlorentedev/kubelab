@@ -786,7 +786,7 @@
     "key": "prod-web-homepage-cockpit",
     "name": "Prod · Web · Homepage Cockpit",
     "type": "http",
-    "url": "https://home.kubelab.live",
+    "url": "https://home.kubelab.live/api/healthcheck",
     "hostname": null,
     "port": null,
     "interval": 60,
@@ -798,10 +798,10 @@
     "accepted_statuscodes": [
       "200-299"
     ],
-    "description": "Homepage IDP Developer Cockpit (prod). Public HTTPS. Tabs: Services, Infra, Topology, Flows, Links.",
+    "description": "Homepage IDP Developer Cockpit (prod). Probes the unauthenticated health path; the cockpit itself is behind Authelia (#456), and following a redirect would measure the portal.",
     "active": true,
     "httpBodyEncoding": "json",
-    "maxredirects": 10,
+    "maxredirects": 0,
     "notificationIDList": [
       1
     ],
