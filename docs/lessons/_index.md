@@ -7,7 +7,7 @@
 | [identity-secrets](identity-secrets/_index.md) | 81 | Authelia, OIDC, SOPS, credentials |
 | [kubernetes](kubernetes/_index.md) | 56 | Cluster, workloads, manifests |
 | [networking-dns](networking-dns/_index.md) | 53 | DNS, VPN mesh, host networking |
-| [ansible-provisioning](ansible-provisioning/_index.md) | 60 | Roles, playbooks, IaC, node setup |
+| [ansible-provisioning](ansible-provisioning/_index.md) | 61 | Roles, playbooks, IaC, node setup |
 | [process-method](process-method/_index.md) | 75 | Specs, reviews, how work is run |
 | [edge-tls](edge-tls/_index.md) | 29 | Traefik, TLS, the request path |
 | [toolkit-tooling](toolkit-tooling/_index.md) | 55 | Toolkit CLI, Make, Python, tests |

@@ -10,6 +10,7 @@ a defect this fleet has already met in another form.
 from __future__ import annotations
 
 import pathlib
+import subprocess
 
 import jinja2
 import yaml
@@ -239,25 +240,42 @@ def test_a_hold_that_fails_on_an_installed_package_stops_the_upgrade() -> None:
     """The distinction a blanket `failed_when: false` was hiding.
 
     A hold failing because the package is not installed is normal — not every
-    node runs docker or k3s. A hold failing on a package apt DOES know about
-    means the protection is not in place, and upgrading anyway restarts the
-    workload the hold exists to protect.
+    node runs docker or k3s. A hold failing on an installed package means the
+    protection is not in place, and upgrading anyway restarts the workload the
+    hold exists to protect.
 
-    Told apart by apt's own output rather than package facts: this role never
-    runs `package_facts`, so a filter on `ansible_facts.packages` would match
-    nothing on every node — a guard that can never fire. Measured on beelink:
-    `apt-mark hold docker-ce` (installed) -> rc=0; `apt-mark hold k3s` (absent)
-    -> rc=100, "Unable to locate package".
+    "Installed" is read from dpkg's own state, never from apt's error text
+    (#2406). The text depends on whether APT lists exist, and this role deletes
+    them at the end of every run. Measured in ubuntu:24.04 on 2026-10-17, for a
+    package removed with its config files kept (dpkg `config-files`):
+
+        lists present -> rc=0, "set on hold"
+        lists absent  -> rc=100, "Can't select installed nor candidate version"
+
+    The guard matched only "Unable to locate package", so it read the second as
+    an installed package it could not hold and skipped patching on beelink,
+    gcp1 and rpi3, each carrying the other Docker packaging's leftovers.
     """
     tasks = yaml.safe_load((ROLE / "tasks/main.yml").read_text(encoding="utf-8"))
     by_name = {t.get("name", ""): t for t in tasks}
 
+    installed = next((t for n, t in by_name.items() if "INSTALLED here" in n), None)
+    assert installed is not None, "nothing reads which held-list packages dpkg has installed"
+    assert "dpkg-query" in str(installed.get("command", "")), "installed state must come from dpkg, not apt output"
+
+    hold = by_name["Hold packages whose upgrade would restart a live workload"]
+    release = next(t for n, t in by_name.items() if n.startswith("Release only"))
+    assert "_installed" not in str(hold["loop"]), (
+        "what gets held depends on parsing dpkg's output, so a read that comes back empty drops every hold"
+    )
+    assert str(hold["loop"]) == str(release["loop"]), "the release must loop over exactly what the hold looped over"
+
     detect = by_name["Determine whether any hold failed on an INSTALLED package"]
     expr = str(detect["set_fact"]["_unprotected"])
-    assert "Unable to locate package" in expr, (
-        "the check does not distinguish `not installed` from `could not hold`, so "
-        "either it stops on every node missing docker or it never stops at all"
+    assert "stderr" not in expr and "Unable to locate package" not in expr, (
+        "the guard is matched on apt's error text again; that text changes with the APT lists this role deletes"
     )
+    assert "_installed" in expr, "a failed hold is not judged by dpkg's state"
     assert "ansible_facts.packages" not in expr, (
         "this role never gathers package_facts, so a filter on it matches nothing and produces a guard that cannot fire"
     )
@@ -269,7 +287,10 @@ def test_a_hold_that_fails_on_an_installed_package_stops_the_upgrade() -> None:
     )
 
     script = _render()
-    assert "Unable to locate package" in script, "the timer path lacks the distinction"
+    assert "Unable to locate package" not in script and "HOLD_ERR" not in script, (
+        "the timer path still decides from apt's error text"
+    )
+    assert "dpkg-query" in script and "db:Status-Status" in script, "the timer path does not read dpkg state"
     assert 'PATCH_STATUS="unprotected"' in script, "the timer path does not report the skip, so the node looks patched"
 
 
@@ -300,3 +321,60 @@ def test_the_gating_conditionals_yield_booleans() -> None:
         f"these conditionals test a bare list, which Ansible refuses at run time and "
         f"which strands the holds between placing and releasing them: {offenders}"
     )
+
+
+APT_MARK_STUB = """#!/bin/sh
+case "$1" in
+    showhold) exit 0 ;;
+    hold) case " $FAIL_HOLD " in *" $2 "*) exit 100 ;; esac; exit 0 ;;
+esac
+exit 0
+"""
+
+DPKG_QUERY_STUB = """#!/bin/sh
+for pkg; do :; done
+state="$(printenv "STATE_$(printf '%s' "$pkg" | tr '.-' '__')" || true)"
+case "$state" in
+    unknown) echo "dpkg-query: no packages found matching $pkg" >&2; exit 1 ;;
+    error) exit 2 ;;
+esac
+printf '%s' "$state"
+"""
+
+
+def _run_hold_block(tmp_path: pathlib.Path, fail_hold: list[str], states: dict[str, str]) -> tuple[set[str], set[str]]:
+    """Run the timer script's rendered hold block against stubbed apt-mark and dpkg-query."""
+    script = _render()
+    start = script.index('    HELD_BEFORE="$(apt-mark showhold')
+    end = script.index('    if [ -n "$UNPROTECTED" ]; then')
+    harness = "set -euo pipefail\n" + script[start:end] + 'echo "UNPROTECTED=$UNPROTECTED"\necho "HELD=$HELD_BY_US"\n'
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    for name, body in (("apt-mark", APT_MARK_STUB), ("dpkg-query", DPKG_QUERY_STUB)):
+        (bin_dir / name).write_text(body, encoding="utf-8")
+        (bin_dir / name).chmod(0o755)
+    env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "FAIL_HOLD": " ".join(fail_hold)}
+    env.update({f"STATE_{pkg.replace('.', '_').replace('-', '_')}": st for pkg, st in states.items()})
+
+    out = subprocess.run(["bash", "-c", harness], env=env, capture_output=True, text=True, check=True).stdout
+    lines = dict(line.split("=", 1) for line in out.strip().splitlines())
+    return set(lines["UNPROTECTED"].split()), set(lines["HELD"].split())
+
+
+def test_the_timer_path_judges_a_failed_hold_by_dpkg_state(tmp_path: pathlib.Path) -> None:
+    """Behaviour, not template text: each dpkg state against a failed and a landed hold."""
+    unprotected, held = _run_hold_block(
+        tmp_path,
+        fail_hold=["docker.io", "docker-ce", "k3s", "tailscale"],
+        states={
+            "docker.io": "config-files",  # the #2406 case: leftover packaging, nothing to protect
+            "docker-ce": "installed",  # a running runtime left unheld: must stop the upgrade
+            "k3s": "unknown",  # dpkg has never seen it
+            "tailscale": "error",  # dpkg-query exit 2: an unreadable state is not "absent"
+            "containerd.io": "installed",
+        },
+    )
+
+    assert unprotected == {"docker-ce", "tailscale"}
+    assert "containerd.io" in held and "docker-ce" not in held
