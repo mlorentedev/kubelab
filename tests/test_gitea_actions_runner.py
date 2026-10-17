@@ -593,7 +593,9 @@ def test_a_restart_lets_a_running_job_finish() -> None:
     assert timeout > 0, "shutdown_timeout 0s cancels running jobs on every restart"
     assert _config()["runner"]["shutdown_timeout"] == runner["shutdown_timeout"]
     grace = _runner()["stop_grace_period"]
-    assert _seconds(grace) > timeout, f"stop_grace_period {grace} must outlast shutdown_timeout {runner['shutdown_timeout']}"
+    assert _seconds(grace) > timeout, (
+        f"stop_grace_period {grace} must outlast shutdown_timeout {runner['shutdown_timeout']}"
+    )
 
 
 def test_idle_cleanup_is_enabled_and_matches_the_reaper_window() -> None:
@@ -605,7 +607,7 @@ def test_idle_cleanup_is_enabled_and_matches_the_reaper_window() -> None:
     runner_cfg = _config()["runner"]
     assert _seconds(runner_cfg["workdir_cleanup_age"]) > 0
     assert _seconds(runner_cfg["idle_cleanup_interval"]) > 0
-    reaper = yaml.safe_load((REPO_ROOT / "infra/ansible/roles/node_maintenance/defaults/main.yml").read_text())
+    reaper = yaml.safe_load((REPO / "infra/ansible/roles/node_maintenance/defaults/main.yml").read_text())
     reaper_seconds = reaper["maintenance_docker_reclaim_min_age_hours"] * 3600
     assert _seconds(runner_cfg["workdir_cleanup_age"]) == reaper_seconds, (
         "the runner's sweep and the node_maintenance reaper must agree on when a volume is stale"
