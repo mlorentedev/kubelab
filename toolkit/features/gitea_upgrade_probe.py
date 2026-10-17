@@ -138,7 +138,12 @@ def _stale_merge_bases(run: Run, name: str, *extra: str) -> int:
     argv = ["docker", "exec", "-u", "git", name, "gitea", "doctor", "check", "--run", "recalculate-merge-bases"]
     _, out, _ = run([*argv, *extra])
     pattern = BASELINE_CEILINGS["Recalculate merge bases"][0]
-    return max((int(m.group(1)) for line in out.splitlines() if (m := pattern.search(line))), default=0)
+    lines = out.splitlines()
+    summary = max((int(m.group(1)) for line in lines if (m := pattern.search(line))), default=0)
+    rows = sum(
+        "MergeBase should be" in line for line in lines
+    )  # a per-PR row, in case the summary is worded differently
+    return max(summary, rows)
 
 
 def _rehearse_merge_base_repair(run: Run, name: str) -> None:
