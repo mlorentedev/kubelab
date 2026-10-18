@@ -6,11 +6,12 @@ created: "2026-10-17"
 issue: "mlorentedev/kubelab#1926"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal, idp, product-contract, registry, delivery]
 template_version: "1.0"
+wip_override: "Operator 2026-10-17: granted over the WIP limit (20 active, limit 10). Archiving one spec would not unblock the gate; burndown tracked in #2443."
 ---
 
 # IDP-042-product-contract-registry
 
-> **DRAFT for the operator's Socratic review.** The questions under "Open questions for the operator" are real choices the ADR leaves open. Nothing below them is frozen until each has an answer. No `wip_override` is set: `dotf spec init` refused this folder (20 active specs, limit 10), so the folder was scaffolded by hand from the vault templates and the override is the operator's to grant or to withhold.
+> Operator decisions on Q1-Q8 were recorded on 2026-10-17 and are under "Decisions" below. Design point 2 and AC6 were adjusted for Q7.
 
 ## Why
 
@@ -56,7 +57,7 @@ One suspected leftover, not verified: `.github/workflows/ci-pipeline.yml:196-218
 ## Design points the proposal fixes (they follow from the ADR and the code, they are not choices)
 
 1. **The dispatched tag is an image tag, not a git ref.** CI publishes `sha-${GITHUB_SHA::7}` (`web-image-receiver.yml:71`, `promotion._SHA_TAG`). "Fetch the contract at the dispatched tag" therefore means: strip `sha-`, resolve the 7+ hex characters to a commit through the product repository's API, refuse if it does not resolve to exactly one commit, and read `kubelab.yaml` at that commit. The contract and the image come from the same commit. The commit must also be reachable from the repository's default branch, so a commit that exists only in a fork network is refused.
-2. **The registry is the trust anchor, the contract cannot widen it.** The contract is attacker-shaped data (anyone who can push to the product repo writes it). It is parsed with `yaml.safe_load`, validated with `additionalProperties: false` and anchored patterns (hostnames, names, port range, a health path starting with `/`), and then checked against the registry and the platform: the image repository must equal the registry entry's, a secret name must already exist in `SECRET_CATALOG`, a hostname may not already belong to another route. Anything else is refused with ERROR / WHY / FIX.
+2. **The registry is the trust anchor, the contract cannot widen it.** The contract is attacker-shaped data (anyone who can push to the product repo writes it). It is parsed with `yaml.safe_load`, validated with `additionalProperties: false` and anchored patterns (hostnames, names, port range, a health path starting with `/`), and then checked against the registry and the platform: the image repository must equal the one the platform derives for that product (Q7), a secret name must already exist in `SECRET_CATALOG`, a hostname may not already belong to another route. Anything else is refused with ERROR / WHY / FIX.
 3. **`api` has no remote repository** (ADR-048: the API is evolved in place). If `PLATFORM_APPS` is derived from the registry, `api` needs an entry whose forge is `in-tree` and which has no dispatch event. Otherwise `generator_k8s.py:224` and `generator_traefik.py:189` stop emitting it. `api`'s values stay hand-authored in this phase; moving `api` onto a contract belongs with IDP-043.
 4. **`errors` is not a product.** It is edge furniture on an env-agnostic semver (DELIVERY-003). The registry replaces only the `("api", "web")` tuple; `_promote_errors` and the `errors` branch of `promote()` stay, and `EDGE` in `constants.py` is untouched.
 5. **`auth: oidc` is accepted by the schema and refused by the renderer** until an OIDC client can be rendered from the contract. `toolkit/features/oidc_clients.py` is owned by another session in this lane, so this spec does not touch it. A product declaring `oidc` fails at render with an ERROR / WHY / FIX naming the follow-up; a silent deploy without its client would be worse than a refusal.
@@ -64,8 +65,8 @@ One suspected leftover, not verified: `.github/workflows/ci-pipeline.yml:196-218
 7. **`COMPONENTS` is a frozen dataclass**, so a registry-derived list cannot be a field computed at import. A cached `platform_apps()` in a new `toolkit/features/product_registry.py` replaces it; the consumers to switch are `generator_k8s.py:224`, `generator_traefik.py:189`, `promotion.py:61` and `:160`, `constants.py:77-78` (the `APPS` alias, whose one consumer is `generator_authelia.py:44`) and `tests/test_k8s_generator_secrets.py:41`.
 8. **The toolkit commands take paths, not URLs.** `toolkit product validate|render` read a contract file and the registry file as inputs and need no SOPS key (ADR-067 D8). The workflow fetches; the toolkit does not know which forge. A Gitea path later changes the workflow's fetch step and nothing else.
 9. **A contract snapshot is committed**, verbatim, next to the registry (`infra/config/products/contracts/<app>.yaml`, written by the receiver in the same PR). Without it the drift test would need the network. With it a reviewer also sees the contract diff in the staging PR.
-10. **Coexistence has a hazard.** Both receivers listen for `web-image-published`; if both are live, both run and race `deploy/staging-web`. The cutover therefore flips one registry field (`receiver: generic`) and demotes the old workflow to `workflow_dispatch` only in the same PR, and the old file is deleted only after a real dispatch has been observed (tasks.md PR 5, PR 6).
-11. **A generic workflow cannot enumerate its event types without a workflow edit per product.** `on.repository_dispatch.types` is a static list. See Q5.
+10. **Coexistence has a hazard.** Both receivers listen for `web-image-published`; if both are live, both run and race `deploy/staging-web`. The cutover therefore flips one registry field (`receiver: generic`) and demotes the old workflow to `workflow_dispatch` only in the same PR, and the old file is deleted only after a real dispatch has been observed (tasks.md PR 7, PR 8).
+11. **A generic workflow cannot enumerate its event types without a workflow edit per product.** `on.repository_dispatch.types` is a static list. The decision is Q5: omit `types`.
 
 ## Out of scope
 
@@ -77,68 +78,36 @@ One suspected leftover, not verified: `.github/workflows/ci-pipeline.yml:196-218
 - Anything on the MCP side (phase 4) and image signing (phase 5).
 - Prod auto-merge of generated PRs (ADR-067 D7). Every PR here still needs a human merge.
 
-## Risks / open questions
+## Risks
 
-Must be answered before `tasks.md` is frozen:
-
-- Q1 to Q6 below (operator).
-- **The prod lane is not designed yet** (Q4). `promote-prod.yml` re-tags the staging digest as the prod semver (ADR-056); the contract that applies to prod should be the one staging validated. The proposal here is that the prod lane reads the staging pin (`resolve_image_sha("staging", app)` already returns it), fetches the contract at that commit and renders the prod hostnames from it. That needs the operator's agreement because it changes what a prod promotion PR contains.
-
-Risks to carry:
+- **The prod lane reads the staging-validated contract.** `promote-prod.yml` re-tags the staging digest as the prod semver (ADR-056), so the contract that applies to prod is the one staging validated: the prod lane reads the staging pin (`resolve_image_sha("staging", app)` already returns it), fetches the contract at that commit and renders the prod hostnames from it. Prod stays a human decision: the PR is opened by the workflow, a human merges it.
 
 - **A contract is code that reaches a runner holding a write PAT.** Mitigated by design point 2, and by the receiver running the toolkit from the registry-trusted checkout of kubelab master, never from the product's tree.
-- **Short-sha resolution.** The API behaviour for a 7-character ref is to be measured in PR 4 (a spike, with the response recorded in `verification.md`), not assumed. If it does not resolve reliably the tag carries a longer sha or the product's CI sends the full sha as a second payload field (still data, still validated against the tag).
+- **Short-sha resolution.** The API behaviour for a 7-character ref is to be measured in PR 6 (a spike, with the response recorded in `verification.md`), not assumed. If it does not resolve reliably the tag carries a longer sha or the product's CI sends the full sha as a second payload field (still data, still validated against the tag).
 - **Rendering into hand-authored values files** (Q2) means a machine-written key sits beside human-written ones. The drift test compares only the contract-owned keys, and `tests/test_values_version_key_placement.py` already guards the `version` key's position.
 - **`web`'s dev stack still reads `common.yaml`** (`infra/ansible/playbooks/deploy-vps.yml:112-117` reads `apps.platform.web.domain` and `default_port`; dev ports differ, 4321 vs 8080). The migration must not delete a key the dev stack reads; the render targets are `staging.yaml` and `prod.yaml` only.
 - **Hostname collision.** A contract could name a host another route owns (`grafana.kubelab.live`). The collision check (design point 2) needs the full set of declared hosts, which `tests/test_declared_domains_are_served.py` already enumerates; reuse it rather than writing a second list.
 - **Cutover is only provable after merge** (AC4). The live-machine check is named in `verification.md`.
 
-## Open questions for the operator
+## Decisions
 
-Each has a recommendation. None is decided.
+Recorded from the operator's answers of 2026-10-17. The options considered are kept in one line each so the reasoning survives; where the operator's answer covered only part of a question, the rest says so.
 
-**Q1. Where does the registry live?**
-- (a) Its own file, `infra/config/products.yaml`. `ConfigurationManager` flattens `common.yaml` into `APPS_*` env vars that reach ConfigMaps (CLAUDE.md, "ConfigMaps MUST NOT contain SOPS-sourced values"), so a registry in `common.yaml` would leak into that pipeline; and D8 wants the registry as a standalone input to the toolkit.
-- (b) A key in `common.yaml` (`products:`), one fewer file.
-- (c) One file per product under `infra/config/products/<app>.yaml`, so onboarding is an added file and never an edit to a shared one.
-- Recommendation: (a) now, shaped so that (c) is a mechanical split later. It is the smallest thing that keeps the registry out of the env-var flattening.
+**Q1. Where does the registry live?** Decided 2026-10-17: its own file under `infra/config/`, `infra/config/products.yaml`. Rejected: a `products:` key in `common.yaml` (it is flattened into `APPS_*` env vars that reach ConfigMaps, and D8 wants the registry as a standalone toolkit input); one file per product (a mechanical split later if needed).
 
-**Q2. Where does a contract render to?**
-- (a) Into `apps.platform.<app>` in `values/staging.yaml` and `values/prod.yaml` (ruamel round-trip, the way `promote` already writes `version`). Generators and every existing consumer are untouched; the drift test compares the contract-owned keys.
-- (b) A generated per-product values layer that `ConfigurationManager` merges, never hand-edited (the `oidc-clients.yml` shape). Cleaner ownership, but a new merge layer in the config loader and a larger PR.
-- (c) Generators read the contract snapshot directly. Removes the intermediate copy, couples every generator to the contract format.
-- Recommendation: (a) for this phase. It keeps each PR small, and (b) can replace it later without changing the contract. Cost accepted: machine-written keys in a hand-authored file, guarded by the drift test.
+**Q2. Where does a contract render to?** Decided 2026-10-17: into `apps.platform.<app>` in `values/<env>.yaml`, the same place `promote` writes `version`, through the same ruamel round-trip. Generators and every existing consumer are untouched; the drift test compares only the contract-owned keys. Rejected: a generated per-product layer in `ConfigurationManager` (larger PR, can replace this later without changing the contract); generators reading the snapshot directly.
 
-**Q3. Schema: how is it defined, where is it published, how is it versioned?**
-- Definition: (a) a pydantic model (already a dependency) that generates the JSON Schema, committed and checked for drift; (b) a hand-authored JSON Schema file validated with the `jsonschema` library (new runtime dependency, which D8's minimal install would carry).
-- Location: (a) inside the package, `toolkit/schemas/kubelab-product.schema.json`, so the pinned git-tag install of D8 carries it; (b) repository root; (c) in-package with the `$id` set to the raw URL on `master` so product repos and editors can reference it.
-- Versioning: a required `schema_version: 1` integer in the contract; a breaking change adds `schema_version: 2` and the validator supports both until the registry says otherwise. Alternative: encode it in the `$id` path only.
-- Recommendation: pydantic-generated, in-package, `$id` pointing at the public raw URL, `schema_version` integer in the contract. One definition, no new dependency, and the published file cannot disagree with the code that enforces it.
+**Q3. Schema definition.** Decided 2026-10-17: a pydantic model (already a dependency, `^2.14.0`) that generates the JSON Schema, committed and checked for drift; no `jsonschema` dependency. The operator's answer covered the definition; the rest stays as proposed and is not contested: the file lives in the package (`toolkit/schemas/kubelab-product.schema.json`, so D8's pinned install carries it), its `$id` is the public raw URL on `master`, and the contract carries a required integer `schema_version: 1`.
 
-**Q4. How much of the prod lane is in this spec?**
-- (a) Staging only (what the acceptance names). `promote-prod.yml` keeps its `web`/`api` literals.
-- (b) Staging in the generic receiver; `promote-prod.yml` stays its own gated workflow but reads the event-to-app map and the app list from the registry (rows 7 and 8), in one small PR. The contract for prod is rendered from the staging-validated commit (see Risks). One literal stays: the `|| 'web'` fallback at `promote-prod.yml:56`, because a concurrency group is evaluated before any step can ask the registry; a test asserts the registry has exactly one app with a prod dispatch event, and the fallback goes only when event types encode the app.
-- (c) A single receiver for both lanes.
-- Recommendation: (b). Leaving row 7 as is would keep a literal `web` in a path every new product must also edit, and the "one contract plus one registry entry" definition of done would be false. (c) merges two lanes with different tag rules (`sha-*` vs semver) and different gates, for no gain.
+**Q4. Prod lane.** Decided 2026-10-17: option (b). Staging goes through the generic receiver; `promote-prod.yml` stays its own gated workflow and reads the event-to-app map and the app list from the registry (rows 7 and 8), in one small PR. Prod remains a human decision: a human merges the PR. One literal stays: the `|| 'web'` fallback at `promote-prod.yml:56`, because a concurrency group is evaluated before any step can ask the registry; a test asserts the registry has exactly one app with a prod dispatch event, and the fallback goes only when event types encode the app. Rejected: staging only (leaves a literal `web` in a path every product must edit); one receiver for both lanes (different tag rules and gates).
 
-**Q5. How does the generic workflow learn its event types?**
-- (a) Omit `types:` under `repository_dispatch`, so the workflow runs for every dispatch and the registry decides; an event type the registry does not know fails the run with ERROR / WHY / FIX, and a prod-lane event type (`*-release-published`) is skipped as "not this lane". Zero workflow edits per product. Cost: every dispatch starts a run, including ones meant for `promote-prod.yml`.
-- (b) List the types in `on:` and generate that list from the registry, with a test that fails when they differ. One workflow edit per product, derived rather than hand-written.
-- (c) Keep a hand-written list. Rejected; it is exactly the drift the contract removes.
-- Recommendation: (a). A refusal that is visible as a red run is what AC1 asks for, and (b) leaves a workflow edit in the onboarding. The extra no-op runs are cheap.
+**Q5. Event types.** Decided 2026-10-17: omit `types` under `repository_dispatch`, so the workflow runs for every dispatch and the registry decides. An event type the registry does not know fails the run in red with ERROR / WHY / FIX; a prod-lane event type (`*-release-published`) is skipped as "not this lane". Rejected: a registry-generated `types` list with a drift test (one workflow edit per product); a hand-written list. Cost accepted: every dispatch starts a run, including ones meant for `promote-prod.yml`.
 
-**Q6. Which secret names may a contract declare?**
-- (a) Only names already in `SECRET_CATALOG`; an unknown name is refused. The catalog stays operator-owned and secret values never travel.
-- (b) Register the name from the contract. A product could then widen the catalog.
-- Recommendation: (a). It is what ADR-067 D2 says ("values never appear here; the operator sets them in SOPS") and it keeps `secrets_manager.py` the single registry.
+**Q6. Secret names.** Decided 2026-10-17: only names already in `SECRET_CATALOG`; an unknown name is refused. The catalog stays operator-owned, values never travel in the contract, and a product cannot widen the catalog.
 
-**Q7. What pins a product's image repository?**
-- (a) The registry entry carries `image`, and the contract's image must equal it. One field beyond the ADR's list (app, repository, forge, event types).
-- (b) A rule: the image must sit under the platform registry namespace (`docker.io/mlorentedev/`).
-- (c) No check; the staging PR review catches it.
-- Recommendation: (a). A contract that can name any image is a supply-chain hole whose only guard would be a reviewer reading a diff; (b) still lets a product name another product's image.
+**Q7. What pins a product's image repository.** Decided 2026-10-17, and this changes the draft: **the registry has no `image` field**, so ADR-067 D2's list (app, repository, forge, event types) needs no amendment. The image is derived by the rule `<registry>/<owner>/<product>`, with an optional override in the registry entry only where the derived name is wrong. The contract still carries `image` (ADR-067 D2), and the guard in AC6 is that it equals what the platform derives (or the override), so a contract cannot point at another product's image. Two consequences the tasks pin down rather than assume: (1) the platform's own registry value is already `docker.io/mlorentedev` (`REGISTRY` in the merged config), so for the platform's namespace the rule reads `docker.io/mlorentedev/<product>`, and PR 2 fixes the exact reading in a test; (2) `web` needs the override, because its image is `kubelab-web` and the rule yields `docker.io/mlorentedev/web`. The override sits in the registry entry, not in the contract, so a product cannot grant it to itself.
 
-**Q8. Is the draft OK to proceed without a WIP override?** `dotf spec init` refused (20 active, limit 10). Options: (a) the operator grants `--over-wip-limit` with a stated reason, which I record; (b) another spec is archived or abandoned first; (c) this stays a draft on its branch. This is the operator's call and I have not invented a reason.
+**Q8. WIP limit.** Decided 2026-10-17: the operator granted `--over-wip-limit`. Reason, recorded in `wip_override`: "Operator 2026-10-17: granted over the WIP limit (20 active, limit 10). Archiving one spec would not unblock the gate; burndown tracked in #2443."
 
 ## Acceptance criteria
 
@@ -149,7 +118,7 @@ The first four are #1926's own; AC5 is #1815; AC6 and AC7 are the guards the des
 - [ ] **AC3** A test fails when anything derived from a contract drifts from it: a derived key in `values/<env>.yaml` that no longer equals the render of the committed contract snapshot, a snapshot that no longer validates, or a registry entry with no snapshot (or the reverse). The test runs offline and needs no SOPS key.
 - [ ] **AC4** `web` deploys to staging through the generic receiver (a real dispatch opens or updates `deploy/staging-web`), and `web-image-receiver.yml`, its test and its `EXPECTED` entry are deleted.
 - [ ] **AC5** (#1815) `PLATFORM_APPS` is no longer a literal; the platform apps come from the registry. `toolkit deployment promote --env staging --app <a registry product other than api/web>` succeeds on a fixture registry, and `--app <unregistered>` fails naming the registry.
-- [ ] **AC6** A contract cannot widen the registry: a different image repository, a secret name absent from `SECRET_CATALOG`, a hostname another route owns, and `auth: oidc` at render time are each refused with ERROR / WHY / FIX.
+- [ ] **AC6** A contract cannot widen the registry: an image repository other than the one derived for the product (or its registry override), a secret name absent from `SECRET_CATALOG`, a hostname another route owns, and `auth: oidc` at render time are each refused with ERROR / WHY / FIX.
 - [ ] **AC7** A tag that is not an immutable `sha-<7+ hex>`, or whose short sha does not resolve to exactly one commit on the product repository's default branch, is refused before any file is written.
 
 ## References

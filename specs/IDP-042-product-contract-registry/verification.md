@@ -5,7 +5,7 @@ created: "2026-10-17"
 
 # Verification - IDP-042-product-contract-registry
 
-> DRAFT plan. Every row below is a command that proves the criterion by its consequence. `<hash>` and outputs are filled in as each PR lands. AC4 and the receiver half of AC1 are properties of the deployed machine, not of a diff; they are marked **live** and carry the command that settles them afterwards.
+> Every row below is a command that proves the criterion by its consequence. `<hash>` and outputs are filled in as each PR lands. AC4 and the receiver half of AC1 are properties of the deployed machine, not of a diff; they are marked **live** and carry the command that settles them afterwards.
 
 ## Evidence
 
@@ -34,7 +34,7 @@ Map every acceptance criterion from `proposal.md` to concrete proof.
   - `poetry run pytest tests/test_promotion.py tests/test_product_registry.py tests/test_k8s_generator_secrets.py --no-cov -q`; the promotion test uses the fixture registry's `third` product and asserts the failure message for `ghost` names the registry file
   - No regression in the generated manifests: generate both overlays on master and on the branch and `diff -r` them. Expected: empty
 - [ ] **AC6** A contract cannot widen the registry
-  - `poetry run pytest tests/test_product_contract_guards.py --no-cov -q`: four refusals (image repository, secret name, hostname collision, `auth: oidc`), each asserting ERROR / WHY / FIX, plus the positive case for web's real contract against the real registry and catalog
+  - `poetry run pytest tests/test_product_contract_guards.py --no-cov -q`: four refusals (an image other than the derived one, secret name, hostname collision, `auth: oidc`), each asserting ERROR / WHY / FIX, plus the positive case for web's real contract against the real registry and catalog
 - [ ] **AC7** A bad tag or an unresolvable commit is refused before any file is written
   - `poetry run pytest tests/test_product_image_receiver_workflow.py --no-cov -q`: the stubbed `gh` returns zero, two, and a non-default-branch commit; in every case the test asserts a non-zero exit and an unchanged working tree (`git status --porcelain` empty)
   - The short-sha spike (PR 6) is the evidence that the real API behaves as the stub assumes: record the request and the response status here: `<fill in>`
@@ -50,7 +50,7 @@ Map every acceptance criterion from `proposal.md` to concrete proof.
 
 Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
 
-- Operator's answers to Q1-Q8 (the registry's location, the render target, the schema's definition and versioning, the prod lane, event types, secret names, image pinning, the WIP override): `<fill in once answered>`
+- Operator's answers to Q1-Q8 are recorded with their date in `proposal.md` under "Decisions" (2026-10-17). Q7 removed the registry's `image` field: the image is derived, with an override for `web` only.
 -
 
 ## Promotion candidates
@@ -58,7 +58,7 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.
 
 - [ ] Lesson for the repo's `docs/lessons/`? <yes: path / no: reason>. Candidates already visible: two receivers listening to one event race a single branch during a cutover (so the flip and the demotion share a PR); `repository_dispatch` types are a static list, so a registry-driven receiver omits them
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? <yes: path / no: reason>. Likely `no`: ADR-067 holds the decision; the answers to Q1-Q8 are recorded in this file and in the registry's header comment
+- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? <yes: path / no: reason>. Likely `no`: ADR-067 holds the decision; the answers to Q1-Q8 are recorded in `proposal.md` and in the registry's header comment
 - [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes: path / no: reason>
 
 ## Archive checklist

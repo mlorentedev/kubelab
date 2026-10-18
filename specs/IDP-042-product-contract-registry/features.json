@@ -36,7 +36,7 @@
   },
   {
     "id": "IDP-042-product-contract-registry-f6",
-    "behavior": "AC6: a contract cannot widen the registry (image, secret name, hostname collision, oidc at render)",
+    "behavior": "AC6: a contract cannot widen the registry (image other than the derived one, secret name, hostname collision, oidc at render)",
     "verification": "poetry run pytest tests/test_product_contract_guards.py --no-cov -q",
     "state": "pending",
     "evidence": ""
