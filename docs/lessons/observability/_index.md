@@ -1,9 +1,10 @@
 # Metrics, logs, dashboards and alerting
 
-29 lessons, newest first. Back to [all categories](../_index.md).
+30 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 594 | [A failure hook with no memory pages every run of a unit that keeps failing](lesson-594-a-failure-hook-with-no-memory-pages-every-run-of-a-unit-that-keeps-failing.md) | 2026-10-18 |
 | 587 | [urllib resends the Authorization header to wherever a redirect points](lesson-587-urllib-resends-the-authorization-header-to-wherever-a-redirect-points.md) | 2026-10-17 |
 | 572 | [A seed field the sync never writes is drift its plan cannot show](lesson-572-a-seed-field-the-sync-never-writes-is-drift-its-plan-cannot-show.md) | 2026-10-14 |
 | 531 | [A GraphQL API refuses with 200, so an HTTP retry never fires](lesson-531-a-graphql-api-refuses-with-200-so-an-http-retry-never-fires.md) | 2026-10-07 |
