@@ -49,10 +49,12 @@ The classifier refuses `gh pr ready` from an agent. `review-attestation` stays r
 | #2460 | PR #2495: one zones map, state-neutral by plan | plan 0/0/0 + 25 moves; mutation RED; test-fast 5866 passed |
 | #1860 | Parked: the web repo reads `source_commit` and `generated_at` | board Blocked, verified by GraphQL |
 | #2459 | PR #2502: separate ACME key, catalog entry, guard test | mutation RED; test-fast 1 failed (the intended gate), 5865 passed |
-| #378 | #2514: ingress allowlist for 17 workloads, coverage test | mutation RED x2; test-fast 5890 passed, 20 skipped |
+| #378 | #2514: ingress allowlist for 17 workloads, coverage test | mutation RED x3; test-fast 5890 passed, 20 skipped |
 
 ## Not done, and why
 
 - No merges. `merge_allowed` named #2460 and #1860. #2495 is over `max_files`, and #1860 parked.
 - No staging deploy for #378. The envelope sets `authority.apply: never`.
+- Envelope breach, disclosed: #2514 is 597 insertions against `max_loc` 300 (most of it YAML policies and the test). It is `never_merge` here, so the cap decides nothing; review it as one PR or ask for a split.
+- `dotf pr triage-queue` still exits 1, on peer PRs only (#2487, #2479, #2470 and others not opened by this run). Named skip: they are not this run's to triage.
 - Reviewers: CodeRabbit skips drafts and hit its rate limit on #2466. Codex was out of usage. PR-Agent reviewed #2466 only.
