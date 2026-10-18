@@ -1,5 +1,5 @@
 ---
-id: lesson-595-an-immutable-cache-header-on-an-unversioned-url-makes-a-new-asset-unreachable
+id: lesson-597-an-immutable-cache-header-on-an-unversioned-url-makes-a-new-asset-unreachable
 type: lesson
 status: active
 created: "2026-10-18"

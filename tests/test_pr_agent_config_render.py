@@ -20,6 +20,7 @@ The three settings this pins are load-bearing, per the proposal:
 
 from __future__ import annotations
 
+import json
 import pathlib
 import shutil
 import subprocess
@@ -29,6 +30,7 @@ import yaml
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 CONFIGMAP_PREFIX = "pr-agent-config"
+REVIEWER_POOL = REPO_ROOT / "harness" / "reviewer-pool.json"
 
 #: Every key this ConfigMap must carry, and its exact rendered string value.
 #: Values are always strings coming out of a kustomize `envs:` file — including
@@ -47,7 +49,7 @@ REQUIRED_VALUES = {
     "LITELLM__FORCE_STREAMING_CUSTOM_LLM_PROVIDER": "openai",
     "LITELLM__FORCE_STREAMING_API_BASE_SUBSTRINGS": '["api.nan.builders"]',
     "PR_REVIEWER__NUM_MAX_FINDINGS": "5",
-    "CONFIG__FALLBACK_MODELS": '["openai/deepseek-v4-flash"]',
+    "CONFIG__FALLBACK_MODELS": '["openai/deepseek-v4-flash", "openai/glm5.3-flash"]',
     "CONFIG__CUSTOM_MODEL_MAX_TOKENS": "200000",
     "CONFIG__MAX_MODEL_TOKENS": "200000",
     "CONFIG__PUBLISH_OUTPUT_PROGRESS": "false",
@@ -130,3 +132,46 @@ class TestReviewOnlyContract:
         """A bare name would never roll the pod on a config edit (lesson-404)."""
         name = _pr_agent_config()["metadata"]["name"]
         assert name != CONFIGMAP_PREFIX, f"{name!r} carries no content hash"
+
+
+def _nan_chain_from_pool() -> list[str]:
+    """The forge chain the reviewer pool implies: its NaN members that carry a
+    `pr_agent.weight`, heaviest first, the pool's own order breaking a tie.
+
+    NaN only, because this server sends every model through one api_base and
+    one custom_llm_provider (lesson-596): an Anthropic member here would reach
+    NaN as an OpenAI model. A `route: risk` member has no weight and is drawn
+    only by CI's risk route, so it is not a fallback either.
+    """
+    pool = json.loads(REVIEWER_POOL.read_text())["pool"]
+    members = [
+        (index, entry["pr_agent"])
+        for index, entry in enumerate(pool)
+        if entry.get("provider") == "nan" and "weight" in (entry.get("pr_agent") or {})
+    ]
+    members.sort(key=lambda member: (-member[1]["weight"], member[0]))
+    return [pr_agent["model"] for _, pr_agent in members]
+
+
+class TestModelChainFollowsTheReviewerPool:
+    """TOOL-117 (#2295) item 2: the forge reviewer reads the pool CI reads.
+
+    The server takes its models once at start, so it cannot draw per review as
+    CI does; the closest it gets is trying every NaN member in turn. Before this
+    the chain was hand-written and fell behind the pool: the env named one
+    fallback while the pool and CI had two.
+    """
+
+    def test_the_chain_is_the_pools_nan_members_heaviest_first(self) -> None:
+        data = _pr_agent_config().get("data") or {}
+        chain = [data["CONFIG__MODEL"], *json.loads(data["CONFIG__FALLBACK_MODELS"])]
+        expected = _nan_chain_from_pool()
+        assert chain == expected, (
+            f"the forge reviewer chain {chain} is not the reviewer pool's NaN members "
+            f"by weight {expected}. Edit infra/k8s/overlays/prod/pr-agent-config/"
+            "pr-agent.env to match harness/reviewer-pool.json."
+        )
+
+    def test_the_pool_still_has_a_nan_member_to_review_with(self) -> None:
+        """An empty derivation would make the test above compare nothing."""
+        assert _nan_chain_from_pool(), "the reviewer pool has no weighted NaN member"
