@@ -1,6 +1,6 @@
 # How the work is run: specs, reviews, knowledge
 
-75 lessons, newest first. Back to [all categories](../_index.md).
+Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|

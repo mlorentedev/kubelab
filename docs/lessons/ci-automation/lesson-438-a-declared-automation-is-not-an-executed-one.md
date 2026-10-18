@@ -132,4 +132,17 @@ as a guard that never ran, so a passing check on a healthy tree is evidence of
 nothing at all — which is why every stage above was proved by feeding it
 something broken.
 
+**Outcome (#2525, 2026-10-18)**: deriving the number did not remove the race.
+It moved it. Both hooks derive a count from the tree they can see, and neither
+sees the merge result of two lesson PRs. Each PR derived a correct count
+against its own base, and the server-side squash merged both edits to one line
+as text. Master went red twice on 2026-10-18 (596 against 598, then 598 against
+599). The fix that holds is to commit no count at all. The indexes now state
+none, `TestNoCommittedCount` fails if one comes back, and the per-row tests
+(every file has a row, every row a file, no row twice) already pin the corpus.
+The hooks keep the row order and the hazards, which need no shared line.
+
+> A derived value that is committed is still shared mutable state. If the
+> derivation cannot run on the merge result, do not commit the value.
+
 **Tags**: `#pre-commit` `#git-hooks` `#verification` `#pr-1673`

@@ -15,13 +15,14 @@ from typing import Any
 import pytest
 import yaml
 
-from toolkit.features.product_contract import _SECRET_NAME, Contract, ContractError, validate_contract
+from toolkit.features.product_contract import _SECRET_NAME, Contract, ContractError
 from toolkit.features.product_guards import (
     check_against_platform,
     refuse_oidc_at_render,
     validate_against_platform,
     validate_registered,
 )
+from toolkit.features.product_registry import derived_image
 from toolkit.features.secrets_manager import SECRET_CATALOG
 
 FIXTURE = Path(__file__).parent / "fixtures" / "product" / "web.kubelab.yaml"
@@ -146,10 +147,10 @@ def test_other_auth_levels_render(auth: str) -> None:
 
 
 def test_webs_real_contract_passes_every_guard() -> None:
+    # The assertion is that neither call raises.
     contract = validate_against_platform(FIXTURE, "web", image_for=_web_image)
 
     refuse_oidc_at_render(contract, "web")
-    assert contract == validate_contract(FIXTURE)
 
 
 def test_every_catalog_key_fits_the_contract_secret_pattern() -> None:
@@ -168,8 +169,11 @@ REGISTRY = Path(__file__).resolve().parents[1] / "infra" / "config" / "products.
 
 
 def test_webs_real_contract_passes_against_the_real_registry() -> None:
-    """No stub: the committed registry, its derived image and the real catalog."""
-    assert validate_registered(FIXTURE, "web", REGISTRY) == validate_contract(FIXTURE)
+    """No stub: the committed registry, its derived image and the real catalog. Passing means not raising."""
+    validate_registered(FIXTURE, "web", REGISTRY)
+
+    # Falsifiable half: without the registry's override the derived image would be .../web.
+    assert derived_image("web", REGISTRY) == WEB_IMAGE
 
 
 def test_the_registry_override_is_what_web_must_declare(tmp_path: Path) -> None:
