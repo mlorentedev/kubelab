@@ -22,10 +22,20 @@ Accepted — 2026-08-14. Tracks [#1013](https://github.com/mlorentedev/kubelab/i
 
 Amended 2026-09-24: D1's machine class. See the amendment below.
 Amended 2026-10-17: session policy (S1–S3). See the amendment below.
+Amended 2026-10-18: edge perimeter for Uptime Kuma (P1). See the amendment below.
 
 Complements [ADR-016](adr-016-oidc-centralized-auth.md), which decides *how* authentication is delivered (OIDC / forward-auth / bypass tiers) but never decides *who* the identities are or what privilege each one carries. This ADR fills that gap and does not supersede it.
 
 Supersedes the single-identity decision recorded on #1013 earlier the same day — see [D0](#d0--what-this-reverses-and-why).
+
+## Amendment — 2026-10-18 (P1: Uptime Kuma signs in at the edge)
+
+Tracks [#2483](https://github.com/mlorentedev/kubelab/issues/2483), under [#2482](https://github.com/mlorentedev/kubelab/issues/2482) (AUTH-020). Kuma has no SSO, so its dashboard was reachable from the internet behind only its own password, and Authelia's rule for its host was `bypass`.
+
+- **P1. A host that serves both people and machines is split at the edge, not in Authelia.** The `uptime-kuma` IngressRoute has two rules: the paths that must work with no session (status pages, the push endpoint the node backups call, badges, `/api/entry-page`, and the statics a status page loads) without the ForwardAuth, and the bare host with it. Authelia's rule for the host is `one_factor`. Authelia sees only what the ForwardAuth sends it, so a path exception written as an Authelia rule would still put every heartbeat through the IdP. `tests/test_uptime_kuma_perimeter.py` holds both rules on the rendered overlays.
+- **Kuma's own login stays on for now.** Turning it off (operator option B, 2026-10-17) waits until the perimeter has been seen working in a browser and `make monitoring-apply` is proven with it off. That is phase 2 of #2482.
+
+Whether every other app reached by people gets the same perimeter is AUTH-020's open question, not this amendment's.
 
 ## Amendment — 2026-10-17 (session policy: no app outlives the IdP)
 
