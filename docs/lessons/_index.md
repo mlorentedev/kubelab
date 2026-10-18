@@ -4,7 +4,7 @@
 
 | Category | # | Scope |
 |---|---|---|
-| [identity-secrets](identity-secrets/_index.md) | 82 | Authelia, OIDC, SOPS, credentials |
+| [identity-secrets](identity-secrets/_index.md) | 83 | Authelia, OIDC, SOPS, credentials |
 | [kubernetes](kubernetes/_index.md) | 56 | Cluster, workloads, manifests |
 | [networking-dns](networking-dns/_index.md) | 53 | DNS, VPN mesh, host networking |
 | [ansible-provisioning](ansible-provisioning/_index.md) | 62 | Roles, playbooks, IaC, node setup |
