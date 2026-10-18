@@ -13,6 +13,10 @@ cannot write (proposal design point 2):
   against the domains declared in BOTH environments, minus the product's own
   ``apps.platform.<app>.`` subtree: a staging host equal to another product's
   prod host is a collision too, and checking the union is the simpler rule.
+  Hosts in the committed manifests under ``infra/k8s/`` count too: some routes
+  (Argo CD, the Traefik dashboard, redirects) are hand-authored IngressRoutes
+  with no values declaration. A manifest host equal to one the product itself
+  declares is its own generated route.
 
 ``auth: oidc`` passes here and is refused by ``refuse_oidc_at_render``, which
 the renderer calls (design point 5): the schema accepts it, rendering cannot
@@ -21,9 +25,11 @@ honour it yet.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Iterable
 from pathlib import Path
 
+from toolkit.config.settings import PROJECT_ROOT
 from toolkit.features.declared_domains import VALUES_DIR, declared_domains
 from toolkit.features.product_contract import Contract, ContractError, validate_contract
 from toolkit.features.product_registry import RegistryError, derived_image, load_registry
@@ -32,6 +38,9 @@ ENVIRONMENTS = ("staging", "prod")
 
 #: Values subtree a product owns; declarations under it are the product's own.
 OWN_SUBTREE = "apps.platform.{app}."
+
+K8S_DIR = PROJECT_ROOT / "infra" / "k8s"
+_ROUTE_HOST = re.compile(r"Host(?:SNI)?\(`([^`]+)`\)")
 
 
 def _catalog_keys() -> frozenset[str]:
@@ -64,13 +73,28 @@ def _check_secrets(contract: Contract, catalog: frozenset[str]) -> None:
         )
 
 
-def _check_hostnames(contract: Contract, app: str, values_dir: Path) -> None:
+def _manifest_hosts(k8s_dir: Path) -> dict[str, str]:
+    """``{host: manifest path}`` for every route match in the committed manifests."""
+    hosts: dict[str, str] = {}
+    for path in sorted(k8s_dir.rglob("*.yaml")):
+        for host in _ROUTE_HOST.findall(path.read_text()):
+            hosts.setdefault(host, str(path.relative_to(k8s_dir.parent.parent)))
+    return hosts
+
+
+def _check_hostnames(contract: Contract, app: str, values_dir: Path, k8s_dir: Path) -> None:
     own = OWN_SUBTREE.format(app=app)
     owners: dict[str, str] = {}
+    own_hosts: set[str] = set()
     for env in ENVIRONMENTS:
         for key, domain in declared_domains(env, values_dir).items():
-            if not key.startswith(own):
+            if key.startswith(own):
+                own_hosts.add(domain)
+            else:
                 owners.setdefault(domain, key)
+    for host, manifest in _manifest_hosts(k8s_dir).items():
+        if host not in own_hosts:
+            owners.setdefault(host, manifest)
     for env in ENVIRONMENTS:
         host = getattr(contract.hostnames, env)
         if host in owners:
@@ -88,11 +112,12 @@ def check_against_platform(
     image_for: Callable[[str], str],
     catalog: Iterable[str] | None = None,
     values_dir: Path = VALUES_DIR,
+    k8s_dir: Path = K8S_DIR,
 ) -> None:
     """Raise ``ContractError`` on the first claim of ``contract`` the platform did not grant ``app``."""
     _check_image(contract, app, image_for)
     _check_secrets(contract, _catalog_keys() if catalog is None else frozenset(catalog))
-    _check_hostnames(contract, app, values_dir)
+    _check_hostnames(contract, app, values_dir, k8s_dir)
 
 
 def validate_against_platform(
