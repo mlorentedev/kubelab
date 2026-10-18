@@ -134,7 +134,8 @@ def test_the_jump_host_renders_the_golden_file_plus_one_trailing_match_block() -
 
 
 def test_the_forwarding_user_follows_the_inventory_user() -> None:
-    assert "Match User deployer\n" in _render({"ansible_user": "deployer", "ssh_lan_jump_targets": ["172.16.1.2"]})
+    targets = _expected_targets(_networking())
+    assert "Match User deployer\n" in _render({"ansible_user": "deployer", "ssh_lan_jump_targets": targets})
 
 
 def test_the_generator_refuses_a_second_jump_host() -> None:
