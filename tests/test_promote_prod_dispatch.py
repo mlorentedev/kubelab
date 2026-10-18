@@ -383,3 +383,17 @@ def test_a_toolkit_failure_that_is_not_json_names_its_output(tmp_path: pathlib.P
     assert code != 0
     assert out == {}
     assert "::error::" in log and "No module named 'toolkit'" in log, log
+
+
+@_needs_bash
+def test_an_answer_without_a_lane_fails_instead_of_skipping(tmp_path: pathlib.Path) -> None:
+    """Valid JSON is not enough: a missing lane reads as `null`, which is not `prod` either."""
+    code, out, log = _resolve(
+        tmp_path,
+        EVENT="repository_dispatch",
+        PAYLOAD_VERSION="1.12.0",
+        TOOLKIT=_stub_toolkit(tmp_path, '{"ok": true, "app": "web"}', 0),
+    )
+    assert code != 0, "an answer naming no lane was taken for another lane"
+    assert out == {}
+    assert "answered no lane" in log, log
