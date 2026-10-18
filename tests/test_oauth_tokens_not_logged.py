@@ -80,8 +80,9 @@ def test_each_rendered_clients_file_carries_it(env: str) -> None:
 
 
 @pytest.mark.parametrize("env_name", ["staging", "prod"])
-def test_the_dev_template_renders_it(monkeypatch: pytest.MonkeyPatch, env_name: str) -> None:
-    """Dev Compose renders clients through its own Jinja template, from the same resolver.
+def test_the_authelia_template_renders_clients_without_an_alg(monkeypatch: pytest.MonkeyPatch, env_name: str) -> None:
+    """The Authelia Jinja template (the Compose path, rendered by `toolkit config generate`
+    for every env) renders the clients from the same resolver.
 
     Rendered with the generator's own renderer (StrictUndefined) over the clients the
     resolver returns, because the resolver omits the key for a client that declares
