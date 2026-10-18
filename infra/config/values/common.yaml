@@ -2344,6 +2344,14 @@ apps:
                 problem, but change nothing and run nothing that changes a system: the
                 operator approves fixes. Reply in English, under twelve lines, with the
                 most serious group first. Never repeat a credential.
+                Messages that name different pull requests, apps, hosts or units are
+                different problems: list each by its identifier, and call two messages
+                duplicates only when the identifier matches. A line saying the script
+                cannot run, or that a channel cannot be read, is a fact to quote as it
+                is: do not guess its cause, name no configuration key, environment
+                variable or tool, and do not suggest connecting an integration, because
+                you have no Slack tool and cannot see the configuration. A problem the
+                output marks as already reported is not repeated here.
 
 # Terraform state (TF-007, ADR-069). Every root keeps its state in this R2
 # bucket under `<root>/terraform.tfstate`; `make sync-terraform-backend` renders
