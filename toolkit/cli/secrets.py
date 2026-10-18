@@ -399,7 +399,12 @@ def _declared_expiry_lines(warn_days: int) -> tuple[list[str], list[str]]:
 
     missing: list[str] = []
     expiring: list[str] = []
-    for item in declared_expiries(SECRET_CATALOG, _config):
+    try:
+        declared = list(declared_expiries(SECRET_CATALOG, _config))
+    except Exception as exc:  # noqa: BLE001 - the report never raises; a typo must read as a finding
+        logger.error(f"  declared expiries could not be read: {exc}")
+        return ["declared expiries (unreadable)"], []
+    for item in declared:
         label = f"{item.key_path} [{item.env}]"
         if item.expires_on is None:
             logger.warning(f"  {label} — no expiry recorded (secret_expiry.declared in values/{item.env}.yaml)")

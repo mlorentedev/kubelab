@@ -128,3 +128,20 @@ class TestTheReportNamesWhatIsMissing:
         monkeypatch.setattr(cli.logger, "error", MagicMock())
         missing, expiring = cli._declared_expiry_lines(90)
         assert missing == [] and len(expiring) == 4
+
+    def test_a_typo_in_a_date_is_a_finding_not_a_traceback(self, monkeypatch):
+        """`_report_expiry` never raises, so a malformed date must come back as a finding."""
+        from unittest.mock import MagicMock
+
+        import toolkit.cli.secrets as cli
+        import toolkit.features.configuration as configuration
+
+        cfg = {"secret_expiry": {"declared": {N8N_KEY: "2027-1-16", RECONCILER_KEY: "2027-01-16"}}}
+        monkeypatch.setattr(
+            configuration, "ConfigurationManager", lambda env, root: MagicMock(get_merged_config=lambda: cfg)
+        )
+        err = MagicMock()
+        monkeypatch.setattr(cli.logger, "error", err)
+        missing, expiring = cli._declared_expiry_lines(90)
+        assert missing and expiring == []
+        assert any("vikunja_api_token" in c.args[0] for c in err.call_args_list)
