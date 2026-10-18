@@ -27,8 +27,8 @@ the same `invalid_client` split that SSOT-028 measured.
 from `oidc_clients.digest_key` and the plaintext from that SECRET_CATALOG entry's `derived_from`; a
 `HUB_MANAGED` digest sends the pair to common. `tests/test_credentials_oidc_from_ssot.py` runs the generator
 with its I/O mocked in each env and compares the keys it writes against the declaration. It was red on master
-in all three envs before the change. The retired `kubelab-oidc` pair moved to the orphan baseline until the
-vaults drop it.
+in all three envs before the change. The `kubelab-oidc` pair is no longer minted; retiring it from the
+catalog and the vaults is #1777 AC3.
 
 **Rule**: Where a list of things to act on is already declared, a command must read that list and not keep
 its own copy. Read the scoping fields as well as the names: a copy that matches the names can still lose the

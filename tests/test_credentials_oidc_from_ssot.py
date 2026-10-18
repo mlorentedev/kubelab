@@ -10,8 +10,6 @@ digest key from `oidc_clients.digest_key`, and the plaintext from that spec's `d
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -86,19 +84,6 @@ def test_each_rotated_client_names_the_delivery_step_it_did_not_perform(monkeypa
     for client in oidc_clients.declared_clients(values):
         if "prod" in client["envs"]:
             assert any(client["client_id"] in note for note in notes), f"{client['client_id']}: no delivery note"
-
-
-def test_the_retired_kubelab_oidc_pair_is_an_acknowledged_orphan() -> None:
-    import yaml
-
-    baseline = yaml.safe_load(
-        (Path(__file__).resolve().parents[1] / "infra/config/orphan-secrets-baseline.yaml").read_text()
-    )
-    orphans: dict[str, Any] = baseline["orphans"]
-    for key in ("oidc_client_secret", "oidc_client_secret_hash"):
-        path = f"apps.services.security.authelia.{key}"
-        assert path not in SPECS, f"{path} is still catalogued, so audits keep demanding a secret nothing reads"
-        assert path in orphans, f"{path} must be acknowledged in the orphan baseline until SOPS drops it"
 
 
 def test_the_manual_copy_prints_hub_keys_under_common_only(
