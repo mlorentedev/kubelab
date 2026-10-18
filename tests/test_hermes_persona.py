@@ -131,4 +131,6 @@ def test_a_dry_run_does_not_write_into_a_fragments_directory_it_has_not_created(
     for name in ("Take the profile without its frontmatter", "Install the profile fragment"):
         guard = _task(name)["when"]
         guard = guard if isinstance(guard, list) else [guard]
-        assert any("ansible_check_mode" in g and "_agent_stack_hermes_persona_dirs" in g for g in guard), name
+        assert "not (ansible_check_mode and _agent_stack_hermes_persona_dirs.changed)" in guard, (
+            f"{name}: skips in a dry run that has not created the directory, and only then"
+        )
