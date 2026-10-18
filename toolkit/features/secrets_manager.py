@@ -363,27 +363,11 @@ SECRET_CATALOG: list[SecretSpec] = [
         rotate_note="All OIDC clients must re-authenticate. Restart authelia.",
     ),
     SecretSpec(
-        key_path=f"{_AUTH}.oidc_client_secret",
-        description="General Authelia OIDC client secret (plaintext)",
-        kind=SecretKind.OIDC_CLIENT_SECRET,
-        services=("authelia",),
-        rotate_note="Must also regenerate the corresponding hash.",
-    ),
-    SecretSpec(
-        key_path=f"{_AUTH}.oidc_client_secret_hash",
-        description="Argon2 hash of general OIDC client secret",
-        kind=SecretKind.ARGON2_HASH,
-        services=("authelia",),
-        derived_from=f"{_AUTH}.oidc_client_secret",
-        format_hint="$argon2id$v=19$...",
-        rotate_note="Auto-derived from oidc_client_secret.",
-    ),
-    SecretSpec(
         key_path=f"{_AUTH}.oidc_client_secret_grafana",
         description="Grafana OIDC client secret (plaintext)",
         kind=SecretKind.OIDC_CLIENT_SECRET,
         services=("authelia", "grafana"),
-        rotate_note="Must also regenerate the grafana hash.",
+        rotate_note="Its hash is regenerated with it. Reaches Grafana with `make apply-secrets ENV=<env>`.",
     ),
     SecretSpec(
         key_path=f"{_AUTH}.oidc_client_secret_grafana_hash",
@@ -413,7 +397,7 @@ SECRET_CATALOG: list[SecretSpec] = [
         description="Vikunja OIDC client secret (plaintext)",
         kind=SecretKind.OIDC_CLIENT_SECRET,
         services=("authelia", "vikunja"),
-        rotate_note="Must also regenerate the vikunja hash.",
+        rotate_note="Its hash is regenerated with it. Reaches Vikunja with `make apply-secrets ENV=<env>`.",
         envs=_VIKUNJA_ENVS,
     ),
     SecretSpec(
@@ -431,7 +415,10 @@ SECRET_CATALOG: list[SecretSpec] = [
         description="Open WebUI OIDC client secret (plaintext), delivered to ace2 by provision-ace2.yml",
         kind=SecretKind.OIDC_CLIENT_SECRET,
         services=("authelia", "open_webui"),
-        rotate_note="Must also regenerate the open_webui hash, then provision ace2 (TAGS=agent_stack).",
+        rotate_note=(
+            "Its hash is regenerated with it. "
+            "Reaches Open WebUI with `make provision NODE=ace2 ENV=prod TAGS=agent_stack`."
+        ),
         envs=("prod",),
     ),
     SecretSpec(
@@ -646,7 +633,10 @@ SECRET_CATALOG: list[SecretSpec] = [
         description="Gitea OIDC client secret for Authelia SSO (plaintext)",
         kind=SecretKind.OIDC_CLIENT_SECRET,
         services=("gitea", "authelia"),
-        rotate_note="Must also regenerate authelia.oidc_client_secret_gitea_hash.",
+        rotate_note=(
+            "Its Authelia hash is regenerated with it. "
+            "Reaches Gitea with `make provision NODE=bee ENV=prod TAGS=gitea`."
+        ),
         envs=("prod",),
     ),
     SecretSpec(

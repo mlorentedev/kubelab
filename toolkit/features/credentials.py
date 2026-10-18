@@ -361,9 +361,9 @@ class CredentialsManager:
 
     def setup_authelia_secrets(self, env: str, auto_update: bool = False, print_secrets: bool = False) -> None:
         """
-        Generates all Authelia-related secrets, including basic auth secrets.
-        Also generates Grafana admin credentials and its OIDC client secret.
-        And CrowdSec bouncer API key.
+        Generates all Authelia-related secrets, including basic auth secrets, Grafana admin
+        credentials and the CrowdSec bouncer API key, plus one OIDC client secret pair for
+        every client `oidc_clients` declares for `env` (#1777).
 
         Args:
             env: Target environment (dev, staging, prod)
@@ -447,20 +447,6 @@ class CredentialsManager:
         storage_encryption_key = secrets.token_urlsafe(64)
         logger.success("Authelia Storage Encryption key generated.")
 
-        # 7. Generate OIDC Client Secret and its hash (General Authelia client)
-        logger.info("Generating OIDC Client Secret (General Authelia client)...")
-        oidc_client_secret = secrets.token_urlsafe(64)
-        logger.success("OIDC Client Secret generated.")
-
-        logger.info("Generating OIDC Client Secret hash (Authelia 4.38+ requires hashed secrets)...")
-        try:
-            oidc_client_secret_hash = self.generate_oidc_client_secret_hash(oidc_client_secret)
-            logger.success("OIDC Client Secret hash generated.")
-        except Exception as e:
-            logger.warning(f"Could not generate OIDC client secret hash via Docker: {e}")
-            logger.warning("Using Argon2 hash from local library instead...")
-            oidc_client_secret_hash = self.generate_argon2_hash(oidc_client_secret)
-
         # 8. The OIDC signing key is not generated here (SEC-032). This step
         #    used to mint a new key on every run and write it only to a pem
         #    file, so each run drifted further from the SOPS key Authelia
@@ -475,47 +461,8 @@ class CredentialsManager:
             logger.error(f"Failed to generate Basic Auth credentials: {e}")
             raise typer.Exit(1) from e
 
-        # 10. Generate Grafana OIDC Client Secret and its hash
-        logger.info("Generating Grafana OIDC Client Secret...")
-        grafana_oidc_client_secret = secrets.token_urlsafe(64)
-        logger.success("Grafana OIDC Client Secret generated.")
-
-        logger.info("Generating Grafana OIDC Client Secret hash...")
-        try:
-            grafana_oidc_client_secret_hash = self.generate_oidc_client_secret_hash(grafana_oidc_client_secret)
-            logger.success("Grafana OIDC Client Secret hash generated.")
-        except Exception as e:
-            logger.warning(f"Could not generate Grafana OIDC client secret hash via Docker: {e}")
-            logger.warning("Using Argon2 hash from local library instead...")
-            grafana_oidc_client_secret_hash = self.generate_argon2_hash(grafana_oidc_client_secret)
-
-        # 11b. Generate Gitea OIDC Client Secret and its hash
-        logger.info("Generating Gitea OIDC Client Secret...")
-        gitea_oidc_client_secret = secrets.token_urlsafe(64)
-        logger.success("Gitea OIDC Client Secret generated.")
-
-        logger.info("Generating Gitea OIDC Client Secret hash...")
-        try:
-            gitea_oidc_client_secret_hash = self.generate_oidc_client_secret_hash(gitea_oidc_client_secret)
-            logger.success("Gitea OIDC Client Secret hash generated.")
-        except Exception as e:
-            logger.warning(f"Could not generate Gitea OIDC client secret hash via Docker: {e}")
-            logger.warning("Using Argon2 hash from local library instead...")
-            gitea_oidc_client_secret_hash = self.generate_argon2_hash(gitea_oidc_client_secret)
-
-        # 11c. Generate Argo CD OIDC Client Secret and its hash
-        logger.info("Generating Argo CD OIDC Client Secret...")
-        argocd_oidc_client_secret = secrets.token_urlsafe(64)
-        logger.success("Argo CD OIDC Client Secret generated.")
-
-        logger.info("Generating Argo CD OIDC Client Secret hash...")
-        try:
-            argocd_oidc_client_secret_hash = self.generate_oidc_client_secret_hash(argocd_oidc_client_secret)
-            logger.success("Argo CD OIDC Client Secret hash generated.")
-        except Exception as e:
-            logger.warning(f"Could not generate Argo CD OIDC client secret hash via Docker: {e}")
-            logger.warning("Using Argon2 hash from local library instead...")
-            argocd_oidc_client_secret_hash = self.generate_argon2_hash(argocd_oidc_client_secret)
+        # 10. OIDC client secrets, one pair per client the SSOT declares for this env (#1777).
+        oidc_env_secrets, oidc_hub_secrets, rotated_clients = self._mint_oidc_client_secrets(env)
 
         # 12. Generate Argo CD admin password hash (bcrypt, for Helm values)
         logger.info("Generating Argo CD admin password hash (bcrypt)...")
@@ -545,21 +492,15 @@ class CredentialsManager:
             f"{_auth}.oidc_hmac_secret": oidc_hmac_secret,
             f"{_auth}.session_secret": session_secret,
             f"{_auth}.storage_encryption_key": storage_encryption_key,
-            f"{_auth}.oidc_client_secret": oidc_client_secret,
-            f"{_auth}.oidc_client_secret_hash": oidc_client_secret_hash,
-            f"{_auth}.oidc_client_secret_grafana": grafana_oidc_client_secret,
-            f"{_auth}.oidc_client_secret_grafana_hash": grafana_oidc_client_secret_hash,
-            f"{_auth}.oidc_client_secret_gitea_hash": gitea_oidc_client_secret_hash,
             # Grafana secrets
             "apps.services.observability.grafana.admin_user": common_username,
             "apps.services.observability.grafana.admin_password": common_password,
-            # Gitea secrets
-            "apps.services.core.gitea.oidc_client_secret": gitea_oidc_client_secret,
             # CrowdSec secrets
             "apps.services.security.crowdsec.bouncer_api_key": crowdsec_bouncer_api_key,
             # Uptime Kuma secrets (SSOT: same common credentials)
             "apps.services.observability.uptime_kuma.admin_user": common_username,
             "apps.services.observability.uptime_kuma.admin_password": common_password,
+            **oidc_env_secrets,
         }
 
         # Argo CD credentials — always written to common SOPS (hub is singleton, not per-env).
@@ -569,8 +510,7 @@ class CredentialsManager:
         hub_secrets = {
             "argocd.admin_password": common_password,
             "argocd.admin_password_hash": argocd_admin_password_hash,
-            f"{_auth}.oidc_client_secret_argocd": argocd_oidc_client_secret,
-            f"{_auth}.oidc_client_secret_argocd_hash": argocd_oidc_client_secret_hash,
+            **oidc_hub_secrets,
         }
 
         # Preserve immutable secrets (storage_encryption_key, session_secret, etc.)
@@ -606,11 +546,75 @@ class CredentialsManager:
                     "still hold their old values. Rerun before deploying, or the hub and the env disagree."
                 )
             logger.success("Hub credentials (Argo CD) updated in common SOPS.")
+            self._report_undelivered_oidc(env, rotated_clients)
         else:
             self._report_secret_names(env, generated_secrets, hub_secrets)
 
         if print_secrets:
             self._print_secrets_for_manual_copy(env, {**generated_secrets, **hub_secrets})
+
+    def _mint_oidc_client_secrets(self, env: str) -> tuple[dict[str, str], dict[str, str], list[str]]:
+        """A fresh secret and digest for every OIDC client the SSOT declares for `env` (#1777).
+
+        The list is `oidc_clients`, the one Authelia's client file is rendered from, so a client
+        added there is rotated here with no edit to this method. Each client's keys come from
+        SECRET_CATALOG: the digest key from `digest_key`, the plaintext from that entry's
+        `derived_from` (Gitea's plaintext lives with Gitea). A HUB_MANAGED pair goes to
+        common.enc.yaml, the only file the hub reads (SSOT-028).
+
+        Returns the env-file keys, the hub keys, and the client ids rotated.
+        """
+        from toolkit.features import oidc_clients
+        from toolkit.features.secrets_manager import SECRET_CATALOG, SecretKind
+
+        specs = {spec.key_path: spec for spec in SECRET_CATALOG}
+        env_keys: dict[str, str] = {}
+        hub_keys: dict[str, str] = {}
+        rotated: list[str] = []
+        for client in oidc_clients.declared_clients(oidc_clients.load_values(env, self.project_root)):
+            if env not in client["envs"]:
+                continue
+            client_id = client["client_id"]
+            digest_key = oidc_clients.digest_key(client_id)
+            digest_spec = specs.get(digest_key)
+            if digest_spec is None or not digest_spec.derived_from:
+                raise oidc_clients.OidcClientError(
+                    f"OIDC client '{client_id}' has no SECRET_CATALOG entry {digest_key} naming its plaintext; "
+                    "nothing was written"
+                )
+            secret = secrets.token_urlsafe(64)
+            target = hub_keys if digest_spec.kind == SecretKind.HUB_MANAGED else env_keys
+            target[digest_spec.derived_from] = secret
+            target[digest_key] = self._oidc_client_digest(client_id, secret)
+            rotated.append(client_id)
+        return env_keys, hub_keys, rotated
+
+    def _oidc_client_digest(self, client_id: str, secret: str) -> str:
+        try:
+            return self.generate_oidc_client_secret_hash(secret)
+        except Exception as e:
+            logger.warning(f"Could not hash the {client_id} client secret via Docker ({e}); using local Argon2.")
+            return self.generate_argon2_hash(secret)
+
+    def _report_undelivered_oidc(self, env: str, rotated: list[str]) -> None:
+        """Name, per client, the delivery this command does not perform.
+
+        Writing SOPS is not landing: Authelia reads the digest from the generated
+        `oidc-clients.yml`, which must be committed (prod self-heals an uncommitted one away),
+        and each client reads its secret through its own path. Until #1356 models delivery,
+        the honest output is the list of steps still owed.
+        """
+        from toolkit.features import oidc_clients
+        from toolkit.features.secrets_manager import SECRET_CATALOG
+
+        notes = {spec.key_path: spec.rotate_note for spec in SECRET_CATALOG}
+        derived = {spec.key_path: spec.derived_from for spec in SECRET_CATALOG}
+        for client_id in rotated:
+            plaintext = derived[oidc_clients.digest_key(client_id)]
+            logger.warning(
+                f"{client_id}: rotated in SOPS only. Commit the regenerated oidc-clients.yml for {env}, "
+                f"then deliver it: {notes.get(plaintext) or 'no delivery step is catalogued'}"
+            )
 
     def _report_secret_names(self, env: str, generated: dict[str, str], hub: dict[str, str]) -> None:
         """Name, never show, what a write would change (#1733)."""
@@ -721,54 +725,16 @@ class CredentialsManager:
         logger.warning("Copy these values to your SOPS file:")
         logger.warning(f"  sops infra/config/secrets/{env}.enc.yaml\n")
 
-        print("basic_auth:")
-        print(f"    user: {secrets_dict['basic_auth.user']}")
-        print(f'    password: "{secrets_dict["basic_auth.password"]}"')
-        print(f'    credentials: "{secrets_dict["basic_auth.credentials"]}"')
-        print("apps:")
-        print("    services:")
-        print("        observability:")
-        print("            grafana:")
-        admin_user = secrets_dict["apps.services.observability.grafana.admin_user"]
-        admin_password = secrets_dict["apps.services.observability.grafana.admin_password"]
-        print(f'                admin_user: "{admin_user}"')
-        print(f'                admin_password: "{admin_password}"')
-        print("        security:")
-        print("            crowdsec:")
-        bouncer_key = secrets_dict["apps.services.security.crowdsec.bouncer_api_key"]
-        print(f'                bouncer_api_key: "{bouncer_key}"')
-        print("            authelia:")
-        _a = "apps.services.security.authelia"
-        # Find the users_*_password_hash key dynamically (matches username)
-        users_hash_key = next(
-            (k for k in secrets_dict if k.startswith(f"{_a}.users_") and k.endswith("_password_hash")),
-            None,
-        )
-        if users_hash_key:
-            users_hash = secrets_dict[users_hash_key]
-            hash_field = users_hash_key.split(".")[-1]
-            print(f'                {hash_field}: "{users_hash}"')
-        oidc_hmac = secrets_dict[f"{_a}.oidc_hmac_secret"]
-        print(f'                oidc_hmac_secret: "{oidc_hmac}"')
-        session = secrets_dict[f"{_a}.session_secret"]
-        print(f'                session_secret: "{session}"')
-        storage_key = secrets_dict[f"{_a}.storage_encryption_key"]
-        print(f'                storage_encryption_key: "{storage_key}"')
-        oidc_secret = secrets_dict[f"{_a}.oidc_client_secret"]
-        print(f'                oidc_client_secret: "{oidc_secret}"')
-        oidc_hash = secrets_dict[f"{_a}.oidc_client_secret_hash"]
-        print(f'                oidc_client_secret_hash: "{oidc_hash}"')
-        grafana_secret = secrets_dict[f"{_a}.oidc_client_secret_grafana"]
-        print(f'                oidc_client_secret_grafana: "{grafana_secret}"')
-        grafana_hash = secrets_dict[f"{_a}.oidc_client_secret_grafana_hash"]
-        print(f'                oidc_client_secret_grafana_hash: "{grafana_hash}"')
-        gitea_hash = secrets_dict[f"{_a}.oidc_client_secret_gitea_hash"]
-        print(f'                oidc_client_secret_gitea_hash: "{gitea_hash}"')
-        print("        core:")
-        print("            gitea:")
-        gitea_oidc = secrets_dict["apps.services.core.gitea.oidc_client_secret"]
-        print(f'                oidc_client_secret: "{gitea_oidc}"')
-        print("")
+        # Rendered from the keys themselves rather than a list of expected ones, so a key
+        # added to the generated set (an OIDC client, #1777) is printed without an edit here.
+        nested: dict[str, Any] = {}
+        for dotted, value in secrets_dict.items():
+            *parents, leaf = dotted.split(".")
+            node = nested
+            for part in parents:
+                node = node.setdefault(part, {})
+            node[leaf] = value
+        print(yaml.safe_dump(nested, default_flow_style=False, sort_keys=True, width=1000))
 
         logger.success("Secrets generated. Copy above to SOPS, then run 'toolkit config generate'.")
 
