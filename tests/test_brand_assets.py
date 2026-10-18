@@ -41,6 +41,7 @@ def test_logo_png_is_a_png_with_an_alpha_channel() -> None:
     assert data[:8] == PNG_MAGIC
     colour_type = data[25]
     assert colour_type == 6  # RGBA
+    assert struct.unpack(">II", data[16:24]) == (400, 400)  # apps scale it down, never up
 
 
 @pytest.mark.parametrize("name", ["logo.svg", "mark.svg", "favicon.svg"])
@@ -52,3 +53,4 @@ def test_svg_marks_use_the_brand_primary_and_no_background(name: str) -> None:
     svg = (EDGE / name).read_text(encoding="utf-8")
     assert primary.lower() in svg.lower()
     assert "<text" not in svg  # no font dependency: the mark is geometry only
+    assert "<rect" not in svg  # a filled rectangle is how a background gets drawn
