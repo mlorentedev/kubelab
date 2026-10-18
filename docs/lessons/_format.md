@@ -43,7 +43,7 @@ The heading is the lesson's claim, stated as a finding rather than a topic —
 noticed and not written down is the one that recurs.
 
 After adding a file, add its row anywhere in the category's `_index.md`. The
-`lessons-index-counts` pre-commit hook (`toolkit tools lessons-index --fix`)
+`lessons-index-order` pre-commit hook (`toolkit tools lessons-index --fix`)
 orders the rows newest first: by date, then by number within a date (#1912).
 No index states a lesson count: a count was one shared line that two lesson
 PRs rewrote from different bases, and git merged both edits without a conflict

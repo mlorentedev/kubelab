@@ -176,15 +176,15 @@ class TestTheHookIsWired:
     def test_the_hook_exists_and_fixes(self) -> None:
         cfg = yaml.safe_load(PRE_COMMIT.read_text())
         local = [r for r in cfg["repos"] if r.get("repo") == "local"]
-        hooks = [h for r in local for h in r["hooks"] if h["id"] == "lessons-index-counts"]
-        assert hooks, "the lessons-index-counts hook is not declared"
+        hooks = [h for r in local for h in r["hooks"] if h["id"] == "lessons-index-order"]
+        assert hooks, "the lessons-index-order hook is not declared"
         assert "--fix" in hooks[0]["entry"], "the hook must rewrite, not merely report"
 
     def test_the_hook_watches_the_lessons_tree(self) -> None:
         """`files:` decides whether the commit-time hook sees the change."""
         cfg = yaml.safe_load(PRE_COMMIT.read_text())
         hook = next(
-            h for r in cfg["repos"] if r.get("repo") == "local" for h in r["hooks"] if h["id"] == "lessons-index-counts"
+            h for r in cfg["repos"] if r.get("repo") == "local" for h in r["hooks"] if h["id"] == "lessons-index-order"
         )
         import re
 
@@ -210,7 +210,7 @@ class TestTheHookIsWired:
         cfg = yaml.safe_load(PRE_COMMIT.read_text())
         hooks = {h["id"]: h for r in cfg["repos"] if r.get("repo") == "local" for h in r["hooks"]}
 
-        commit_hook = hooks["lessons-index-counts"]
+        commit_hook = hooks["lessons-index-order"]
         assert commit_hook.get("stages") == ["pre-commit"]
         assert "--fix" in commit_hook["entry"]
 
