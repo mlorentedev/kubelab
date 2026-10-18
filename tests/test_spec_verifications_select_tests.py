@@ -187,7 +187,8 @@ def test_every_unwritten_entry_is_still_unwritten() -> None:
     assert not stale, "\n".join(stale)
 
 
-#: What `dotf spec init` writes into a new feature's `verification`. Pending, it is
+#: What `dotf spec init` writes into a new feature's `verification` (dotfiles repo: this regex
+#: must track it, so re-check it when that scaffold changes). Pending, it is
 #: the honest state of a criterion nobody has tried; in an archived spec it is a
 #: criterion that was closed over without ever being verified (#2308).
 SCAFFOLD_VERIFICATION = re.compile(r"^\s*echo\s+['\"]not implemented['\"]\s*&&\s*exit\s+1\s*$")
@@ -231,4 +232,6 @@ def test_the_guard_finds_a_scaffold_planted_in_an_archived_spec(tmp_path: Path) 
 
 def test_no_archived_spec_keeps_the_scaffold_verification() -> None:
     """An archived spec closed over a criterion nobody verified: the reviewer caught it once by hand (TOOL-082)."""
+    # A floor, so a moved archive or a changed layout cannot turn the guard into a no-op.
+    assert len(list(SPECS.glob("archive/*/features.json"))) >= 10
     assert not scaffold_features(SPECS)
