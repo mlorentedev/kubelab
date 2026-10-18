@@ -16,6 +16,12 @@ created: "2026-06-20"
 
 Accepted — 2026-06-20. Output of an `/architecture-session`. Builds on ADR-026 (IDP 4-layer), ADR-029 (intelligence layer), ADR-042 (reference architecture), ADR-043 (knowledge/memory plane). Gives the `kubelab-console` component spec (2026-02-21) its concrete shape and **absorbs DASH-001** (Homepage cockpit). **Retires the GitHub Projects v2 _board_ as the task surface** (see D3) while preserving GitHub/Gitea _issues_. **Supersede-candidate for the Open WebUI operator-console role** of ADR-042 (see D5). Triggers a follow-up review of the cross-project bitácora governance (issue tracking currently spans `kubelab` / `iris` / `knowledge` GitHub Projects).
 
+**Status note — 2026-10-18.** D1 (the custom Go API and Astro console) was superseded by
+[ADR-066](adr-066-self-hosted-task-platform.md) on 2026-08-27, in favour of Vikunja with n8n. The
+2026-10-01 amendment's "D1-D4, D6 and D7 are unaffected" means unaffected *by that amendment*, not
+in force. CONSOLE-002, the spec that implemented D1, D3, D4, D5 and D7, was abandoned on 2026-10-18
+(#2443). **D5 is still in force** with no implementation, and kubelab#2494 carries it.
+
 ## Amendment — 2026-10-01 (D5 default with no local provider)
 
 **A Context with no explicit policy now has no provider: explicit deny, no inference.** D5 made the default "local-only (Ollama)", and AI-007 retired Ollama on 2026-08-09 (ADR-029's amendment). Read literally, "local-only" then named a provider that does not exist, and the two ways to fill that gap point in opposite directions: route to whatever provider is configured, or route nowhere. The first silently turns a security control into a cloud default. The operator chose the second (#1968, 2026-10-01).

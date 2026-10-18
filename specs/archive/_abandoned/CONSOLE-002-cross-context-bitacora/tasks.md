@@ -5,6 +5,11 @@ created: "2026-06-20"
 
 # Tasks - CONSOLE-002-cross-context-bitacora
 
+> **Abandoned 2026-10-18 (kubelab#2443).** ADR-066 (2026-08-27) superseded ADR-050 D1, the custom
+> console this plan builds, in favour of Vikunja with n8n. PR-0 and PR-1a shipped and stay in use;
+> PR-1b onward was never started and will not be. AC4's default-deny control is carried by #2494.
+> Each open box below records its disposition.
+
 > TDD order. One task = one focused commit. Module 1 does NOT fit one atomic PR — it is a
 > sequence of ~9 PRs (each ≤ ~300 LOC prod diff per AGENTS.md). This file holds the full PR
 > roadmap plus the detailed TDD checklist for the PR currently in flight. Freeze a PR's
@@ -63,7 +68,7 @@ Notes:
 
 ---
 
-## PR-0 — `go test` CI step + first Go test harness  ← IN FLIGHT
+## PR-0 — `go test` CI step + first Go test harness  (shipped, #714)
 
 > Trigger: first step of a multi-PR sequence + touches deployed CI config (Discipline Gate).
 > The "feature" IS the test harness. No domain code.
@@ -77,7 +82,8 @@ Notes:
       `init()`): `apps/api/src/pkg/config/env_test.go`, table-driven test of the **pure** `validateConfig`
       (dev/staging/prod valid + invalid env + empty env + missing title/domain/smtp branches). ✓ 2026-06-20
 - [ ] Local verify: test passes and exercises real failure branches (run with a wrong expectation once
-      to confirm assertions execute, not just compile).
+      to confirm assertions execute, not just compile). **Disposition 2026-10-18: not recorded.** The test
+      runs in CI on every PR (`ci-pipeline.yml`, `Test API code`), but no mutation run was written down.
 
 ### Green — wire the harness into CI
 
@@ -90,11 +96,13 @@ Notes:
 
 - [x] Locally from `apps/api/src`: `go vet ./...` (OK) + `go test ./...` (`ok pkg/config 1.876s`,
       rest `no test files`) + `go build` (OK). `-race` deferred to CI (Linux); Windows lacks gcc. ✓ 2026-06-20
-- [ ] PR body notes the `go.mod` 1.23.1 vs CI/Docker 1.25 skew; defer aligning the directive to the
-      first PR that adds a dependency (PR-1/atlas or PR-4/go-git).
+- [x] PR body notes the `go.mod` 1.23.1 vs CI/Docker 1.25 skew; defer aligning the directive to the
+      first PR that adds a dependency (PR-1/atlas or PR-4/go-git). **Moot 2026-10-18:** `go.mod` now reads
+      `go 1.26.0`, aligned by later work.
 - [x] Production `.go` files unchanged — diff is CI yaml + one `_test.go` (plus the ratified spec docs,
       bundled into this PR per the "todo junto en esta rama" routing choice). ✓ 2026-06-20
 - [ ] `verification.md`: paste the CI run URL showing `Test API code` executing + passing.
+      **Disposition 2026-10-18: not recorded.** The step exists and runs on master (`ci-pipeline.yml:116`).
 
 ---
 
@@ -112,10 +120,12 @@ Notes:
 - [x] **ConfigMap deploy-concern guard** (ADR-051 D4): `_extract_app_env_vars` skips `*_IMAGE`/`*_VERSION`
       so `infra.postgres.image` does not leak into ConfigMaps. +3 tests. ✓ 2026-06-20
 - [x] Validated: configmaps regenerated (staging+prod), guard verified, unit suite no-regression. ✓ 2026-06-20
-- [ ] **Deploy-time (SOPS context):** `toolkit secrets init/edit` to generate `infra.postgres.password`, then
-      `toolkit secrets apply` before the postgres pod starts (else CrashLoop on missing `POSTGRES_PASSWORD`).
+- [x] **Deploy-time (SOPS context):** `toolkit secrets init/edit` to generate `infra.postgres.password`, then
+      `toolkit secrets apply` before the postgres pod starts (else CrashLoop on missing `POSTGRES_PASSWORD`). ✓ Confirmed 2026-10-18:
+      `toolkit secrets audit --env prod` reports `PROD — 121/121`, and `infra.postgres.password` is
+      catalogued for staging and prod. Vikunja runs on this database (ADR-066).
 
-### PR-1b — atlas schema + Go data layer (next)
+### PR-1b — atlas schema + Go data layer (never started; superseded by ADR-066)
 
 - [ ] `INFRA_DATABASE_URL`/DSN in `pkg/config/env.go` — optional (required only in prod via `validateConfig`),
       so the API still boots when unset (mirrors SMTP-optional pattern). Add `INFRA_POSTGRES_PASSWORD` to
@@ -127,6 +137,10 @@ Notes:
       `DATABASE_URL` unset so unit CI stays green).
 
 ## Closing (whole module)
+
+> Disposition 2026-10-18 for every box below: **wontfix, superseded by ADR-066.** The module was
+> never built past PR-1a, so these whole-module checks have nothing to check. The `features.json`
+> commands name `./internal/board/...`, a package that never existed.
 
 - [ ] Every acceptance criterion covered by ≥1 test
 - [ ] Every acceptance criterion has a `features.json` entry with a non-vacuous verification command

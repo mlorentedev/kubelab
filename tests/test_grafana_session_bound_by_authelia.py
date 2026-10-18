@@ -71,6 +71,27 @@ def test_grafana_signs_out_through_its_own_authelia(overlay: str) -> None:
     assert back.netloc == urlsplit(grafana["GF_SERVER_ROOT_URL"]).netloc
 
 
+OIDC_ENDPOINTS = {
+    "GF_AUTH_GENERIC_OAUTH_AUTH_URL": "/api/oidc/authorization",
+    "GF_AUTH_GENERIC_OAUTH_TOKEN_URL": "/api/oidc/token",
+    "GF_AUTH_GENERIC_OAUTH_API_URL": "/api/oidc/userinfo",
+}
+
+
+@pytest.mark.parametrize("overlay", OVERLAYS)
+@pytest.mark.parametrize("key", sorted(OIDC_ENDPOINTS))
+def test_grafana_oauth_endpoints_name_its_own_authelia(overlay: str, key: str) -> None:
+    """#2419: no OIDC consumer carries an IdP URL nothing holds to the overlay's Authelia.
+
+    A prod patch that drops one key falls back to the base, which is staging's IdP:
+    prod then sends users to staging's login and the failure surfaces only there.
+    """
+    authelia, grafana = _authelia_and_grafana(overlay)
+    portal = urlsplit(authelia["session"]["cookies"][0]["authelia_url"])
+    url = urlsplit(grafana.get(key, ""))
+    assert (url.scheme, url.netloc, url.path) == ("https", portal.netloc, OIDC_ENDPOINTS[key]), f"{overlay}: {url.geturl()!r}"
+
+
 def test_the_dev_authelia_session_matches_the_overlays() -> None:
     """Authelia against Authelia: S1's bound is one number in every environment."""
     values = yaml.safe_load((ROOT / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
