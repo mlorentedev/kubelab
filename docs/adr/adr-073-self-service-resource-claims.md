@@ -49,6 +49,7 @@ The full constraint table is kept in the operator's architecture notes. These bi
 - **C22 Every self-service write is attributable**, and can be read back afterwards.
 - **C23 Derived state is reconciled by machinery.** No human runs `--apply` after a value changes.
 - **C24 What prod pulls must be always-on.** An on-demand node is never a prod image source.
+- **C25 Shared CI services are hosted once.** A capability every repository needs is consumed by opt-in, never copied per repository.
 - **Consumer.** A developer with no platform background must be able to deploy with defaults. Every field beyond the minimum is optional.
 
 ## Considered Options
