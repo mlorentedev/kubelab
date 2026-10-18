@@ -1,0 +1,61 @@
+---
+# Arming envelope for run ap-20261018-kubelab-specs. Read from the committed copy only.
+version: 1
+run_id: "ap-20261018-kubelab-specs"
+armed_by: manu
+armed_at: 2026-10-18T08:35:00Z
+expires_at: 2026-10-18T16:35:00Z
+objective: >-
+  Archive each spec the operator classified archivable on 2026-10-18 (kubelab#2443),
+  each with an independent review and a ticket for every AC that is not shipped.
+branch: chore/autopilot-run-20261018-specs
+# Operator rulings, given 2026-10-18 before arming.
+operator_rulings:
+  TOOL-035: "archive (finished)"
+  APP-CONFIG-016: "archive (finished; record the prod evidence from #2318/#2319)"
+  DT-004: "archive (obsolete; Homepage retired #2416)"
+  CONSOLE-002: "archive as obsolete per advisor (ADR-066); ADR-050 status note; AC4 ticket"
+  TOOL-001: "archive (integrated) + ticket for the secrets audit exit code"
+  OPS-016: "amend and merge"
+  TOOL-009: "amend and merge (AC5 to iris-owned; do not rename the folder)"
+  AUTH-004: "amend and merge"
+  DELIVERY-004: "keep live; OUT of this run"
+amendment_rule: >-
+  An amendment rewords an AC to what is achievable or owned elsewhere; it never
+  deletes one. Every AC not shipped becomes a ticket linked in the same PR.
+scope:
+  write_paths:
+    - "specs/**"
+    - "docs/**"
+    - "CLAUDE.md"
+    - ".agent/runs/ap-20261018-kubelab-specs/**"
+  frozen_paths:
+    - ".github/**"
+    - "harness/**"
+    - "**/AGENTS.md"
+    - "toolkit/**"
+    - "infra/**"
+    - "apps/**"
+    - "edge/**"
+    - ".agent/unattended.yml"
+  claude_md_lines:
+    - "MIDDLEWARE_CATALOG widget-proxy anchor (DT-004)"
+    - "TOOL-001/002 backlog note (TOOL-001)"
+  max_files: 12
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make, poetry]
+queue:
+  source: bitacora
+  filter: >-
+    kubelab#2443 operator-classified specs, in this order: TOOL-035, APP-CONFIG-016,
+    DT-004, CONSOLE-002, TOOL-001, OPS-016, TOOL-009, AUTH-004
+  max_items: 8
+budget:
+  max_iterations: 10
+  max_minutes_per_iteration: 45
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant
+  push: true
+  open_pr: true
+  advisor_tier: top
