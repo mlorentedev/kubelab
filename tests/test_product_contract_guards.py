@@ -20,6 +20,7 @@ from toolkit.features.product_guards import (
     check_against_platform,
     refuse_oidc_at_render,
     validate_against_platform,
+    validate_registered,
 )
 from toolkit.features.secrets_manager import SECRET_CATALOG
 
@@ -28,7 +29,8 @@ WEB_IMAGE = "docker.io/mlorentedev/kubelab-web"
 
 
 def _web_image(app: str) -> str:
-    # Stands in for product_registry.derived_image until the registry is on master.
+    # A stub deriver keeps these guard tests independent of the registry file;
+    # the real-registry tests below cover derived_image itself.
     return {"web": WEB_IMAGE, "third": "docker.io/mlorentedev/third"}[app]
 
 
@@ -148,3 +150,32 @@ def test_every_catalog_key_fits_the_contract_secret_pattern() -> None:
     misfits = [s.key_path for s in SECRET_CATALOG if not pattern.fullmatch(s.key_path) or len(s.key_path) > 200]
 
     assert not misfits
+
+
+REGISTRY = Path(__file__).resolve().parents[1] / "infra" / "config" / "products.yaml"
+
+
+def test_webs_real_contract_passes_against_the_real_registry() -> None:
+    """No stub: the committed registry, its derived image and the real catalog."""
+    assert validate_registered(FIXTURE, "web", REGISTRY) == validate_contract(FIXTURE)
+
+
+def test_the_registry_override_is_what_web_must_declare(tmp_path: Path) -> None:
+    """Q7: without the override the rule yields .../web; the contract must carry the override's name."""
+    path = tmp_path / "kubelab.yaml"
+    path.write_text(FIXTURE.read_text().replace("kubelab-web", "web"))
+
+    with pytest.raises(ContractError) as excinfo:
+        validate_registered(path, "web", REGISTRY)
+
+    _assert_explained(excinfo.value)
+    assert WEB_IMAGE in excinfo.value.fix
+
+
+@pytest.mark.parametrize(("app", "says"), [("api", "in-tree"), ("ghost", "not a registered product")])
+def test_only_a_contract_managed_registry_entry_has_a_contract(app: str, says: str) -> None:
+    with pytest.raises(ContractError) as excinfo:
+        validate_registered(FIXTURE, app, REGISTRY)
+
+    _assert_explained(excinfo.value)
+    assert says in excinfo.value.error

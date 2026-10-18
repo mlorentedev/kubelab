@@ -26,6 +26,7 @@ from pathlib import Path
 
 from toolkit.features.declared_domains import VALUES_DIR, declared_domains
 from toolkit.features.product_contract import Contract, ContractError, validate_contract
+from toolkit.features.product_registry import RegistryError, derived_image, load_registry
 
 ENVIRONMENTS = ("staging", "prod")
 
@@ -121,3 +122,30 @@ def refuse_oidc_at_render(contract: Contract, app: str) -> None:
             "use auth: forwardauth for now, or ask the kubelab operator to register the client by hand "
             "(rendering it from the contract is a follow-up to IDP-042).",
         )
+
+
+def validate_registered(path: Path, app: str, registry: Path | None = None) -> Contract:
+    """Validate the contract at ``path`` for ``app`` against the product registry and the platform.
+
+    ``app`` must be a contract-managed registry entry: an in-tree product
+    (``api``) has no contract, and an unregistered name is not a product.
+    """
+    try:
+        product = load_registry(registry).products.get(app)
+    except RegistryError as e:
+        raise ContractError(
+            str(e), "the registry is the trust anchor every guard reads.", "fix the registry file first."
+        ) from None
+    if product is None:
+        raise ContractError(
+            f"'{app}' is not a registered product",
+            "kubelab only deploys products the operator admitted in infra/config/products.yaml.",
+            "ask the kubelab operator to add the product's registry entry.",
+        )
+    if not product.contract_managed:
+        raise ContractError(
+            f"'{app}' is in-tree, so it has no product contract",
+            "an in-tree product's configuration is hand-authored in the values files, not rendered.",
+            "validate a contract only for a product whose registry entry names a forge repository.",
+        )
+    return validate_against_platform(path, app, image_for=lambda name: derived_image(name, registry))

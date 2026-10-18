@@ -56,3 +56,29 @@ def test_an_invalid_contract_as_json(tmp_path: Path) -> None:
     assert payload["ok"] is False
     assert set(payload) == {"ok", "error", "why", "fix"}
     assert "port" in payload["error"]
+
+
+REGISTRY = Path(__file__).resolve().parents[1] / "infra" / "config" / "products.yaml"
+
+
+def test_validate_against_the_registry_exits_zero_for_web() -> None:
+    result = runner.invoke(
+        app, ["product", "validate", "--contract", str(FIXTURE), "--registry", str(REGISTRY), "--app", "web"]
+    )
+
+    assert result.exit_code == 0, result.output
+
+
+def test_validate_against_the_registry_refuses_an_in_tree_product() -> None:
+    result = runner.invoke(
+        app, ["product", "validate", "--contract", str(FIXTURE), "--registry", str(REGISTRY), "--app", "api", "--json"]
+    )
+
+    assert result.exit_code == 1
+    assert json.loads(result.stdout)["ok"] is False
+
+
+def test_registry_without_app_is_a_usage_error() -> None:
+    result = runner.invoke(app, ["product", "validate", "--contract", str(FIXTURE), "--registry", str(REGISTRY)])
+
+    assert result.exit_code == 2
