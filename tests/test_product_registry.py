@@ -30,14 +30,23 @@ class TestPlatformApps:
     def test_returns_the_products_in_registry_order(self, fixture_registry: Path) -> None:
         assert product_registry.platform_apps() == ("api", "web", "third")
 
-    def test_the_real_registry_admits_exactly_api_then_web(self) -> None:
-        """The generators iterate this list, so its order is their output order.
+    @pytest.mark.parametrize("env", ["common", "staging", "prod"])
+    def test_every_platform_block_in_the_values_is_a_registered_product(self, env: str) -> None:
+        """The generators emit only registered apps, so an unregistered block would vanish silently."""
+        declared = _platform_blocks(env)
+        assert declared, f"values/{env}.yaml declares no apps.platform block; the check would cover nothing"
+        assert set(declared) <= set(product_registry.platform_apps())
 
-        Before #1815 the list was the literal ``("api", "web")``. Deriving it must
-        not change a byte of the generated overlays, which holds only while the
-        real registry yields the same names in the same order.
+    def test_the_registry_keeps_the_order_common_yaml_declares(self) -> None:
+        """The generators iterate the registry, so its order is their output order.
+
+        Before #1815 the list was the literal ``("api", "web")``, the order of
+        ``apps.platform`` in ``common.yaml``. A product rendered only into the env
+        files (Q2) may be absent from ``common.yaml``, so the order is compared on
+        the products both name.
         """
-        assert product_registry.platform_apps() == ("api", "web")
+        common = _platform_blocks("common")
+        assert [app for app in product_registry.platform_apps() if app in common] == common
 
 
 class TestAppForEvent:
@@ -157,3 +166,8 @@ class TestDerivedImage:
             assert product_registry.derived_image(app) == deployed, app
             checked += 1
         assert checked > 0
+
+
+def _platform_blocks(env: str) -> list[str]:
+    values = yaml.safe_load((REPO / "infra" / "config" / "values" / f"{env}.yaml").read_text()) or {}
+    return list(((values.get("apps") or {}).get("platform") or {}))
