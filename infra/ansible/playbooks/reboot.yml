@@ -40,6 +40,19 @@
       meta: end_host
       when: legacy_python | default(false) | bool
 
+    # Several hosts in one run is the rolling reboot this playbook is for, and
+    # each one is still gated on its own flag. Forcing is not: with
+    # reboot_force a pattern such as NODE=all would reboot every node whether
+    # or not it needs it. Force takes exactly one host.
+    - name: Refuse a forced reboot of more than one host
+      fail:
+        msg: >-
+          reboot_force=true reboots without a pending flag, so it takes one
+          host per run; this run targets {{ ansible_play_hosts_all | length }}.
+      when:
+        - reboot_force | bool
+        - ansible_play_hosts_all | length > 1
+
     - name: Check whether a reboot is pending
       stat:
         path: /var/run/reboot-required

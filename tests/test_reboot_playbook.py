@@ -17,6 +17,7 @@ REPO = Path(__file__).resolve().parent.parent
 PLAYBOOK = REPO / "infra/ansible/playbooks/reboot.yml"
 MAKEFILE = REPO / "Makefile"
 PROD = REPO / "infra/config/values/prod.yaml"
+COMMON = REPO / "infra/config/values/common.yaml"
 
 
 def _play() -> dict:
@@ -70,10 +71,35 @@ def test_the_vps_is_refused_before_the_reboot_without_an_opt_in() -> None:
     assert _play()["vars"]["reboot_allow_vps"] is False
 
 
-def test_the_guard_keys_on_a_group_the_vps_actually_carries() -> None:
-    """The guard reads `group_names`; a renamed group would make it skip silently."""
-    vps = yaml.safe_load(PROD.read_text(encoding="utf-8"))["networking"]["vps"]
-    assert "vps" in vps["ansible_groups"]
+def test_the_guard_keys_on_a_group_the_generated_inventory_emits() -> None:
+    """The guard reads `group_names`, which comes from the GENERATED inventory,
+    not from the values file. A generator that renamed or dropped the group
+    would make the Headscale refusal skip silently, so read what it emits."""
+    from toolkit.features.generator_ansible import AnsibleGenerator
+
+    common = yaml.safe_load(COMMON.read_text(encoding="utf-8"))
+    prod = yaml.safe_load(PROD.read_text(encoding="utf-8"))
+    for networking in (
+        common["networking"],
+        {**common["networking"], "vps": {**common["networking"]["vps"], **prod["networking"]["vps"]}},
+    ):
+        inventory = AnsibleGenerator()._build_inventory(
+            networking, backup_sources=common.get("backup", {}).get("sources")
+        )
+        vps_group = inventory["all"]["children"].get("vps", {}).get("hosts") or {}
+        hostname = networking["vps"].get("hostname", "kubelab-vps")
+        assert set(vps_group) == {hostname}, (
+            f"the `vps` group holds {sorted(vps_group)}, the guard needs exactly the VPS"
+        )
+
+
+def test_a_forced_reboot_takes_exactly_one_host() -> None:
+    """`reboot_force` with a multi-host pattern (NODE=all) would reboot the fleet
+    regardless of need. The refusal must run before the reboot."""
+    guard = _index(lambda t: "fail" in t and any("ansible_play_hosts_all" in w for w in _whens(t)))
+    reboot = _index(lambda t: "reboot" in t)
+    assert guard < reboot
+    assert any("reboot_force" in w for w in _whens(_tasks()[guard]))
 
 
 def test_a_boot_that_leaves_the_flag_fails_the_run() -> None:
