@@ -53,6 +53,8 @@ created: "2026-08-11"
 
 ## Closing
 
+> Disposition 2026-10-18 (#2443): archived with AC4 to AC6 amended (see `verification.md`). `features.json` was added at archive time. `verification.md` is filled. Type checks and lint were not re-run, because the archive changes no code. The work PRs (#992, #999, #1115) ran them in CI.
+
 - [ ] Every acceptance criterion from `proposal.md` is covered by at least one test
 - [ ] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command
 - [ ] Type checks pass (`make type`)

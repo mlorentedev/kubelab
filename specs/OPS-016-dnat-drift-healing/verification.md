@@ -11,10 +11,10 @@ created: "2026-08-11"
 |----|--------|-------|
 | AC1, an unchanged seed keeps every id and deletes nothing | Met | #992 (`db436d32`), a keyed upsert diff in `toolkit/features/monitoring_diff.py`. `tests/test_monitoring_diff.py::TestDiffIsNonDestructiveOnASteadyState` and `tests/test_monitoring_integration.py::test_second_apply_is_a_no_op_and_preserves_every_id`, the latter against a real Uptime Kuma container (#999, `f30711e0`). Live, 2026-10-18: `make monitoring-apply CHECK=1` reported `Sync plan: 0 create, 0 edit, 0 delete (live=36, seed=36)` against rpi3 |
 | AC2, add, edit and remove converge in one apply | Met | `test_dropping_a_monitor_from_the_seed_deletes_exactly_that_one` and `test_renaming_a_monitor_edits_it_instead_of_recreating_it` (integration), plus `TestDiffMatching` (unit) |
-| AC3, no fixed sleep, and an unmet precondition fails | Met | The `time.sleep(3)` is replaced by a bounded poll over authoritative reads that raises (`monitoring.py`, the wait helper above `apply_monitors`). `tests/test_monitoring_apply_gate.py::test_a_monitor_that_fails_to_converge_fails_the_apply`. The remaining `time.sleep` calls are the bootstrap socket settle and the poll interval, not a guess at a precondition |
+| AC3, no fixed sleep, and an unmet precondition fails | Met; delete branch untested (#2506) | The `time.sleep(3)` is replaced by a bounded poll over authoritative reads that raises (`monitoring.py`, the wait helper above `apply_monitors`). `tests/test_monitoring_apply_gate.py::test_a_monitor_that_fails_to_converge_fails_the_apply`. The remaining `time.sleep` calls are the bootstrap socket settle and the poll interval, not a guess at a precondition |
 | AC4, an agent-port monitor for every node | Not met, carried | No agent monitor in `infra/config/uptime-kuma/monitors.json`. Owned by #963, which waits on #2450 (does Glances survive the Homepage retirement) |
-| AC5, DNAT drift is restored | Amended | #1115 (`b27321cc`) found the trigger and fixed it per role. `glances` and `agent_stack` compare `HostConfig.PortBindings` against `NetworkSettings.Ports` and recreate on divergence, and the boot units start after the Tailscale address exists. `rpi3_services` lacks the recreate and the check: #2500 |
-| AC6, headscale is never recreated | Amended, by construction | No fleet sweep exists, and each per-role recreate names only its own project |
+| AC5, DNAT drift is restored | Amended, partial | #1115 (`b27321cc`) found the trigger and fixed it per role. `glances` and `agent_stack` compare `HostConfig.PortBindings` against `NetworkSettings.Ports` and recreate on divergence, and the boot units start after the Tailscale address exists. `rpi3_services` lacks the recreate and the check: #2500. **Not run for this archive:** no off-node probe and no `changed=0` re-run on `glances`/`agent_stack`, and no test drives their drift branch. The amended claim rests on the code, `tests/test_tailscale_bound_ports_survive_boot.py` (ordering) and `tests/test_beelink_compose_unit.py` (Beelink's recreate) |
+| AC6, headscale is never recreated | Superseded | The fleet sweep it guarded was never built. Each per-role recreate names only its own project, and the `headscale` role has none |
 
 ## Test status
 
@@ -28,6 +28,22 @@ created: "2026-08-11"
   per-role fix made the sweep unnecessary. The sweep was never built, which also made AC6 moot.
 - AC4 is held for #2450 rather than built: a monitor for an agent that may be retired is work that
   gets deleted.
+
+## Review dispositions
+
+First review, `53d1aa31`, **FAIL**:
+
+1. Major, no `features.json` although `tasks.md` commits to one: applied. Added with one entry per
+   AC; AC4 to AC6 carry their tickets instead of `passing`. The guard's blindness to a missing file
+   is added to #2501.
+2. Major, the delete-convergence `raise` can be removed with the suite green: ticketed as #2506,
+   because tests are outside this archive's write scope. The same ticket covers `except Exception`
+   counting any read error as deleted.
+3. AC5's narrowed wording has no run behind it: applied. The row now says what was not run.
+4. Closing boxes unticked: applied, with a disposition in `tasks.md`.
+5. The delete-path risk had two states across contract files: applied, and `proposal.md` now marks it
+   resolved by #999.
+6. AC6 "met by construction" read as satisfied: applied, reworded to superseded.
 
 ## Promotion candidates
 
