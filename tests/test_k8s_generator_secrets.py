@@ -38,7 +38,9 @@ class TestHasSecretVars:
         """The single invariant: mount iff `<app>-secrets` is defined in the SSOT."""
         registered = {m.name for m in SECRET_DEFINITIONS}
         gen = K8sGenerator()
-        for app in platform_apps():
+        apps = platform_apps()
+        assert apps, "the registry lists no platform apps; the invariant would check nothing"
+        for app in apps:
             expected = f"{app}-secrets" in registered
             assert gen._has_secret_vars(app) is expected, (
                 f"{app}: mount decision must equal presence of {app}-secrets in SECRET_DEFINITIONS (the secrets SSOT)"
