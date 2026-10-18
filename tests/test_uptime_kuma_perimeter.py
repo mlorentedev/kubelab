@@ -45,7 +45,7 @@ PUBLIC_PATHS = {
 }
 # The admin surface: the SPA's own routes and the socket.io channel it runs on.
 ADMIN_PATHS = ("/", "/dashboard", "/socket.io/", "/settings/general", "/api/", "/metrics")
-GUARDS = {"rate-limit", "crowdsec-bouncer", "error-pages"}
+GUARDS = {"secure-headers", "rate-limit", "crowdsec-bouncer", "error-pages"}
 
 
 @cache

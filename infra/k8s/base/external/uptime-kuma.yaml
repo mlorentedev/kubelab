@@ -79,6 +79,8 @@ spec:
           Path(`/manifest.json`))
       kind: Rule
       middlewares:
+        - name: secure-headers
+          namespace: kubelab
         - name: rate-limit
           namespace: kubelab
         - name: crowdsec-bouncer
@@ -92,6 +94,8 @@ spec:
     - match: Host(`status.staging.kubelab.live`)
       kind: Rule
       middlewares:
+        - name: secure-headers
+          namespace: kubelab
         - name: rate-limit
           namespace: kubelab
         - name: crowdsec-bouncer
