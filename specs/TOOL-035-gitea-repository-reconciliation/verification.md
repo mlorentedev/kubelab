@@ -446,6 +446,21 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
   Operator decision, and it follows from the Why: migrating a repository whose CI is dead into a forge
   with no CI does not close the pain. #504's evaluation is answered by construction here.
 
+## Review dispositions (review.md, nan/glm5.3-flash, PASS-WITH-GAPS, 2026-10-18)
+
+1. Stale `tasks.md` PR3 and Closing boxes. Accepted as stale. The evidence of record for those
+   tasks is the shipped diff: `compose.yml.j2` (`GITEA__actions__ENABLED`),
+   `act-runner-config.yaml.j2` and PR #1597. The boxes are left unticked, because editing `tasks.md`
+   after the review would invalidate it.
+2. `features.json` absent. Accepted. This spec predates the per-feature file. Its ACs are verified
+   by the named tests and transcripts above, and the CI guard does not require the file.
+3. Migration PAT expiry (2026-10-27). Ticketed as kubelab#2488 (refuse before the call). The
+   `openkm-brain` migration also needs a reissued token.
+4. AC1's lost first-run transcript. Accepted as a stated gap that cannot be closed retroactively.
+   AC1 stands on the convergence run plus PR2's first `--apply`.
+5. Live claims accepted on citation. This is a standing limitation of a review with no forge
+   credentials. The live suites are named in *Test status*.
+
 ## Promotion candidates
 
 Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.
