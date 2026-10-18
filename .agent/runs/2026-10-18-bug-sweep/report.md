@@ -1,17 +1,18 @@
 # Run 2026-10-18-bug-sweep
 
-**Verdict:** ended queue-empty after 0 iterations / 0h. 0 done, 0 parked, 0 merged, 0 unmerged. Nothing is waiting on a human and nothing irreversible happened.
+**Verdict:** ended expiry after 2 iterations / ~8h: 2 done, 0 parked, 1 merged, 1 unmerged. Nothing irreversible is waiting on you; #2516 needs master green first.
 
-## Why the queue is empty
-- Board query (Backlog, kubelab, bug|chore|spec): no bug rows; no P0/P1 rows. All chore rows are P2 and fail the eligibility rules:
-  - #250-#253 cert-manager, #258-#277 Helm migrations, #270 delete base/overlays: large multi-PR epics, no plan, and ADR-021 (revised) moved custom apps to Kustomize.
-  - #248 Headscale v0.29 upgrade: not safe to run unreviewed (3 a.m. test).
-  - #285-#305 Prometheus/DOC/IDP vault-migration rows, #267, #271, #279: migrated from the old vault backlog with no body or plan.
-- #2469 (TOOL-121, the only bounded bug) already has a peer PR: #2474. Not touched.
-- Candidates #1320 (OBS-017, option B) and #1306 (OBS-016, option A) have operator decisions recorded but are large; they need a spec-sized plan, not an unattended run.
+## Waiting on you
+- #2516 (dev Compose Grafana session bound, closes #2415): ready, Tests green except three lesson-corpus-count tests that fail on master itself (index says 598, 599 files; class tracked in #2525). The fix is peer PR #2524, blocked. After #2524 lands: merge master into the branch, wait for Tests, then land under the grant. PR-Agent reviewed it twice (findings applied, triage comment posted; last review "No major issues"). Head `719d9030`.
+- PRs awaiting triage, not mine: #2464, #2463, #2457.
 
-## For the operator
-- Groom the P2 chore rows (close or give them a plan); the run cannot work them as written.
-- Peer PRs awaiting triage, not mine: #2464, #2463, #2457.
-- Housekeeping: launch worktree fix-bug-sweep to remove after the session; merged-PR worktrees still need --force until dotfiles#2750.
-- Host: wake-lock started with caffeinate for the window.
+## Landed
+- #2490 `ad45bb6d` (closes #2419): test holding Grafana's three OAuth URLs to each overlay's Authelia, mutation-proven.
+
+## Corrections to disclose
+- I merged #2490 as "unreviewed" (label plus rationale) because CodeRabbit and Codex had hit quotas and the PR-Agent `review` run showed `pending`. That run completed after the merge with "No major issues". A correcting comment is on the PR. Same mistake caught before merge on #2516 (label withdrawn). Rule for the lane: `pending` is slow, not absent; wait for it.
+
+## Queue notes
+- First pass ended queue-empty because I filtered the board's Backlog by type; the operator pointed out quick wins live in open issues outside it (565 open). Envelope widened to open bug/chore/debt issues (commit 33ab05c3).
+- Next candidates read but not started: #2308 (TOOL-119 spec guard), #2447 (totalServices derived), #2377 (Authelia deprecated keys). Not eligible: #2136 (changes the Docker pool on every node).
+- Host: wake-lock via caffeinate for the window.
