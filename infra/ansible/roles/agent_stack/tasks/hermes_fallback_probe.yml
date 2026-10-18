@@ -1,0 +1,176 @@
+---
+# =============================================================================
+# The fallback proof (spec AI-012 AC2, AI-018): fail NaN in a gateway of its own and
+# read, from that gateway's log, that the turn moved to Haiku.
+#
+# In Hermes v0.22 `hermes chat` is a client of the running gateway, so a key set on the
+# `docker exec` never reaches the model call and the turn answers on NaN: a check that
+# cannot reach the code path is green by construction (lesson-574). So the fault goes
+# into a throwaway gateway: its own HERMES_HOME, an invalid NAN_API_KEY, and Slack and
+# the API off, so no live state or channel is touched (a second Slack socket on the
+# same app token would split the live bot's events).
+#
+# Off by default: it spends a model call on each side of the switch and starts a second
+# gateway. Run it on an image bump or a rotated key:
+#   make provision NODE=ace2 ENV=prod TAGS=agent_stack EXTRA='agent_stack_fallback_probe=true'
+# =============================================================================
+
+- name: Prove the fallback on a throwaway gateway
+  when: agent_stack_fallback_probe | bool and not ansible_check_mode
+  tags: [agent_stack]
+  block:
+    - name: Remove a probe left by an interrupted run
+      ansible.builtin.command:
+        argv: [docker, rm, -f, "{{ agent_stack_fallback_probe_name }}"]
+      become_user: "{{ agent_stack_agent_user }}"
+      environment: "{{ agent_stack_agent_daemon_env }}"
+      changed_when: false
+
+    - name: Render the probe's own config
+      ansible.builtin.template:
+        src: hermes-fallback-probe-config.yaml.j2
+        dest: "{{ agent_stack_fallback_probe_config }}"
+        owner: root
+        group: root
+        mode: "0644"
+      changed_when: false
+
+    # Created, not run, so the live pool state can be put in before the gateway reads it.
+    # The env file carries the Anthropic key the fallback needs; the three Slack variables
+    # and the API are emptied after it, and the model key is made invalid.
+    - name: Create the probe gateway
+      ansible.builtin.command:
+        argv: >-
+          {{ ['docker', 'create', '--name', agent_stack_fallback_probe_name]
+             + (agent_stack_hermes_dns_servers | map('regex_replace', '^', '--dns=') | list)
+             + ['--env-file', agent_stack_hermes_env,
+                '-e', 'NAN_API_KEY=sk-deliberately-invalid',
+                '-e', 'SLACK_BOT_TOKEN=', '-e', 'SLACK_APP_TOKEN=', '-e', 'SLACK_ALLOWED_USERS=',
+                '-e', 'API_SERVER_ENABLED=false',
+                '-e', 'HERMES_HOME=' ~ agent_stack_fallback_probe_home,
+                '-v', agent_stack_fallback_probe_config ~ ':' ~ agent_stack_fallback_probe_config_mount ~ ':ro',
+                agent_stack_hermes.image, 'gateway', 'run'] }}
+      become_user: "{{ agent_stack_agent_user }}"
+      environment: "{{ agent_stack_agent_daemon_env }}"
+      changed_when: false
+      no_log: true
+
+    # Streamed container to container, so the copy of the pool's credentials never lands
+    # on the node's disk and goes away with the probe. The tar keeps the owner, which is
+    # the user the image runs as.
+    - name: Look for the live credential pool
+      ansible.builtin.command:
+        argv: [docker, exec, hermes-kubelab, test, -f, "{{ agent_stack_hermes_home }}/auth.json"]
+      become_user: "{{ agent_stack_agent_user }}"
+      environment: "{{ agent_stack_agent_daemon_env }}"
+      register: _agent_stack_fallback_pool
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Give the probe a copy of the live credential pool
+      ansible.builtin.shell:
+        executable: /bin/bash
+        cmd: >-
+          set -o pipefail;
+          docker cp hermes-kubelab:{{ agent_stack_hermes_home }}/auth.json -
+          | docker cp - {{ agent_stack_fallback_probe_name }}:{{ agent_stack_fallback_probe_home }}/
+      become_user: "{{ agent_stack_agent_user }}"
+      environment: "{{ agent_stack_agent_daemon_env }}"
+      changed_when: false
+      no_log: true
+      when: _agent_stack_fallback_pool.rc == 0 and agent_stack_fallback_probe_pool | bool
+
+    - name: Start the probe gateway
+      ansible.builtin.command:
+        argv: [docker, start, "{{ agent_stack_fallback_probe_name }}"]
+      become_user: "{{ agent_stack_agent_user }}"
+      environment: "{{ agent_stack_agent_daemon_env }}"
+      changed_when: false
+
+    # `hermes chat` answers once the gateway is up; until then it fails, so retry.
+    - name: Ask the probe one question
+      ansible.builtin.command:
+        argv:
+          - docker
+          - exec
+          - -u
+          - hermes
+          - "{{ agent_stack_fallback_probe_name }}"
+          - hermes
+          - chat
+          - -q
+          - "Reply with the single word: pong"
+          - --oneshot
+          - -Q
+      become_user: "{{ agent_stack_agent_user }}"
+      environment: "{{ agent_stack_agent_daemon_env }}"
+      register: _agent_stack_fallback_answer
+      until: _agent_stack_fallback_answer.rc == 0 or ansible_check_mode
+      ignore_errors: "{{ ansible_check_mode }}"
+      retries: 8
+      delay: 15
+      changed_when: false
+      check_mode: false
+
+    - name: Read the probe's log
+      ansible.builtin.shell:
+        executable: /bin/bash
+        cmd: >-
+          docker logs {{ agent_stack_fallback_probe_name }} 2>&1;
+          docker exec {{ agent_stack_fallback_probe_name }} sh -c "cat {{ agent_stack_fallback_probe_home }}/logs/*.log" 2>&1
+      become_user: "{{ agent_stack_agent_user }}"
+      environment: "{{ agent_stack_agent_daemon_env }}"
+      register: _agent_stack_fallback_log
+      changed_when: false
+      check_mode: false
+
+    # The gateway writes the event to its own log files under HERMES_HOME, not to the container's
+    # stdout, so both are read. What is shown on a failure is the line that decided it, never the whole log.
+    - name: Check the turn moved to Haiku and touched nothing live
+      ansible.builtin.assert:
+        that:
+          - "'pong' in (_agent_stack_fallback_answer.stdout | lower)"
+          - _agent_stack_fallback_log.stdout is search('Fallback activated')
+          - _agent_stack_fallback_log.stdout is search('anthropic')
+          - not (_agent_stack_fallback_log.stdout is search(agent_stack_fallback_probe_slack_pattern))
+        fail_msg: >-
+          The fallback did not run as proved: answer
+          {{ _agent_stack_fallback_answer.stdout | default('') | truncate(120) | to_json }},
+          log lines about it
+          {{ (_agent_stack_fallback_log.stdout_lines | select('search', '(?i)fallback|slack|anthropic') | list)[:5] | to_json }}.
+        quiet: true
+
+  # A failed probe says why from its own log: only the lines that name a problem, cut
+  # short, never the whole log.
+  rescue:
+    - name: Read what the probe logged before it failed
+      ansible.builtin.shell:
+        executable: /bin/bash
+        cmd: >-
+          docker exec {{ agent_stack_fallback_probe_name }} sh -c
+          "cat {{ agent_stack_fallback_probe_home }}/logs/*.log | grep -iE 'fallback|anthropic|nan|auth|invalid|credential|model|provider' | grep -v 'registered' | tail -25 | cut -c1-300" 2>&1
+      become_user: "{{ agent_stack_agent_user }}"
+      environment: "{{ agent_stack_agent_daemon_env }}"
+      register: _agent_stack_fallback_why
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Fail with the probe's own account
+      ansible.builtin.fail:
+        msg: "The fallback proof failed. The probe's log says: {{ _agent_stack_fallback_why.stdout_lines | default([]) | to_json }}"
+
+  always:
+    - name: Remove the probe's config
+      ansible.builtin.file:
+        path: "{{ agent_stack_fallback_probe_config }}"
+        state: absent
+      changed_when: false
+
+    - name: Remove the probe, and the copy of the pool with it
+      ansible.builtin.command:
+        argv: [docker, rm, -f, "{{ agent_stack_fallback_probe_name }}"]
+      become_user: "{{ agent_stack_agent_user }}"
+      environment: "{{ agent_stack_agent_daemon_env }}"
+      changed_when: false

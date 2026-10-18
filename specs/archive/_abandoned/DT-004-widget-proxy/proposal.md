@@ -1,7 +1,7 @@
 ---
 id: "DT-004-widget-proxy"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: abandoned # draft | implementing | verifying | archived
 created: "2026-05-20"
 issue: "kubelab#465"   # repo#NNN — GitHub issue / Project item that tracks this spec
 # NOTE: #465 is titled DASH-DT-004, not DT-004. The ids differ and both are

@@ -170,7 +170,7 @@ def test_gh_not_installed_warns_and_allows() -> None:
     assert "gh not installed" in result.stdout
 
 
-# --- the counter guard's preflight: "cannot run" is not "stale counter" ---------
+# --- the lesson guard's preflight: "cannot run" is not "rows out of order" -----
 
 
 def _preflight_source() -> str:
@@ -197,17 +197,17 @@ def _run_preflight(bin_dir: Path) -> subprocess.CompletedProcess[str]:
 
 
 def test_an_uninstalled_toolkit_is_reported_as_unchecked_not_as_stale(tmp_path: Path) -> None:
-    """The traceback exit code is 1, the checker's code for a stale counter.
+    """The traceback exit code is 1, the checker's code for rows out of order.
 
-    Before the preflight the hook printed the --fix remedy for counters that
-    were correct (2026-09-06, canon-refresh worktree with no venv).
+    Before the preflight the hook printed the --fix remedy for an index that
+    was correct (2026-09-06, canon-refresh worktree with no venv).
     """
     result = _run_preflight(_fake_poetry(tmp_path, "exit 1"))
 
     assert result.returncode == 1
     assert "cannot be imported" in result.stdout
     assert "NOT checked" in result.stdout
-    assert "counters disagree" not in result.stdout
+    assert "out of order" not in result.stdout
     assert "--fix" in result.stdout and "Do NOT run --fix" in result.stdout
 
 

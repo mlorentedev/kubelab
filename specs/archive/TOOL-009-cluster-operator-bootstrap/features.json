@@ -39,6 +39,6 @@
     "behavior": "iris SDD-034c Kubernetes adapter passes its conformance suite (Start/Stop/Status/Exec + sidecar) against the real staging cluster — the downstream validation this spec unblocks.",
     "verification": "cd ~/Projects/iris && KUBECONFIG=~/.kube/kubelab-staging-config go test ./internal/runtime/k8s/ -run TestK8sConformance -count=1",
     "state": "blocked",
-    "evidence": "fails on iris's 64-character iris.spec-hash label, rejected by the API server against this spec's CRD (re-run 2026-10-10 at iris 748d2f1); ticketed mlorentedev/iris#30"
+    "evidence": "fails on iris's 64-character iris.spec-hash label, rejected by the API server against this spec's CRD (re-run 2026-10-10 at iris 748d2f1); ticketed mlorentedev/iris#30. Amended 2026-10-18 (kubelab#2443): owned by iris#30; the cluster side is proven by the same run, whose rejection came from this spec's CRD schema"
   }
 ]

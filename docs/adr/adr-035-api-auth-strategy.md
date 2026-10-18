@@ -56,7 +56,7 @@ AI-001 forced an explicit decision: BasicAuth | Authelia ForwardAuth | X-API-Key
 | Service | Stage | Mechanism | Status |
 |---------|-------|-----------|--------|
 | Ollama public (AI-001) | 1 | X-API-Key (dtomlinson91 plugin) | **Live 2026-05-23.** PRs #190 docs, #191/#192 spec-corrections, #193 toolkit+Ansible, #194 SOPS seed, #195 prod IngressRoute, #196 DNS, #198 RateLimit MVP (SEC-AI-001), #199 ace2 host networking (ANSIBLE-025). E2E verified: `ollama.kubelab.live` — 403 sin auth, 200 con `X-API-Key`/`Bearer`, rate-limit 60/min burst 10, in-flight cap 2. |
-| widget-proxy (DT-004) | 1 | X-API-Key, same plugin | Pending spec impl |
+| widget-proxy (DT-004) | 1 | X-API-Key, same plugin | **Abandoned 2026-10-18** (#2443): its only consumer, the Homepage cockpit, was retired (#2416). Never built |
 | Pollex public (AI-004) | 1 | X-API-Key, same plugin | Pending |
 | kubelab-memory RAG (future) | 2 | OIDC client_credentials + JWT | When L1 service lands |
 | Argo CD / Gitea / Grafana / Authelia UI | n/a | Authelia OIDC (browser SSO) | Already deployed |

@@ -213,7 +213,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit tools certs status` | Show certificate status for an environment. |
 | `toolkit tools cli-reference` | Keep the README's command table equal to the command tree it describes. |
 | `toolkit tools delivery-health` | Refuse a delivery workflow whose newest run never started. |
-| `toolkit tools lessons-index` | Derive the lesson index counters from the files on disk, and order each category's rows newest first (by date, then by number within a date, #1912). |
+| `toolkit tools lessons-index` | Order each category's lesson rows newest first (by date, then by number within a date, #1912), after refusing a corpus a rewrite would hide. |
 | `toolkit tools mutate` | Run the test unmutated, apply one replacement, run it again, restore the file. |
 | `toolkit tools review-attestation` | Report whether a PR was actually reviewed, and refuse it if not. |
 | `toolkit tools spec-gate` | Refuse a PR that closes a spec's issue without archiving the spec. |
