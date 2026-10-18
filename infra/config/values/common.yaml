@@ -897,6 +897,9 @@ apps:
       auth_level: bypass
       default_port: 8080
       health_path: /health
+      # Liveness stays on /health (constant 200); readiness probes /ready, which is 503
+      # only when configuration does not load (kubelab#1736, #2386).
+      readiness_path: /ready
       site_title: mlorentedev
       # SMTP config moved to `infra.smtp.*` (ADR-036, SSOT-012 PR #3).
       # API source code reads `INFRA_SMTP_USER`, `INFRA_SMTP_PASS`,

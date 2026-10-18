@@ -27,6 +27,7 @@ class K8sGenerator(BaseGenerator):
             "VERSION",
             "DEFAULT_PORT",
             "HEALTH_PATH",
+            "READINESS_PATH",
             "ENABLE_AUTH",
             "AUTH_LEVEL",
             "ENABLE_COMPRESS",
@@ -151,6 +152,19 @@ class K8sGenerator(BaseGenerator):
         logger.success("K8s configuration validation passed")
         return True
 
+    def _health_paths(self, env_vars: dict[str, str], component: str) -> tuple[str | None, str | None]:
+        """Return (liveness path, readiness path) for a component.
+
+        Liveness is `health_path`. Readiness is `readiness_path` when the app declares
+        one and falls back to `health_path`, so only apps that distinguish "alive" from
+        "ready" (api: `/health` vs `/ready`) render different probes. Keeping them apart
+        matters: a dependency problem behind readiness must take the pod out of rotation,
+        never restart it.
+        """
+        health_path = self._find_var(env_vars, component, "HEALTH_PATH")
+        readiness_path = self._find_var(env_vars, component, "READINESS_PATH") or health_path
+        return health_path, readiness_path
+
     def _find_var(self, env_vars: dict[str, str], component: str, suffix: str) -> str | None:
         """Find variable value for a component by searching hierarchical paths.
 
@@ -232,7 +246,7 @@ class K8sGenerator(BaseGenerator):
                 continue
 
             version = self._find_var(env_vars, component, "VERSION") or "latest"
-            health_path = self._find_var(env_vars, component, "HEALTH_PATH")
+            health_path, readiness_path = self._health_paths(env_vars, component)
             enable_auth_val = self._find_var(env_vars, component, "ENABLE_AUTH")
             enable_auth = bool(enable_auth_val and enable_auth_val.lower() in ("true", "1", "yes"))
 
@@ -260,6 +274,7 @@ class K8sGenerator(BaseGenerator):
                     "port": int(port),
                     "domain": domain,
                     "health_path": health_path,
+                    "readiness_path": readiness_path,
                     "enable_auth": enable_auth,
                     "has_secrets": has_secrets,
                     "env_vars": app_env_vars,
