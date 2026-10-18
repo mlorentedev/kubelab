@@ -1,11 +1,11 @@
 # Run 2026-10-18-hermes
 
-run 2026-10-18-hermes: ended queue-empty after 1 iteration / about 5h (window 10:40Z to 18:40Z) - 1 done, 2 parked, 1 merged-pending, 0 irreversible. Nothing landed in prod from this run.
+run 2026-10-18-hermes: ended queue-empty after 1 iteration / about 5h (window 10:40Z to 18:40Z) - 1 done and merged, 2 parked, 0 irreversible. Nothing landed in prod from this run.
 
 ## Waiting on you (irreversible first)
 
 - Nothing irreversible. Nothing was applied to ace2 beyond the probe containers, each removed by the task's `always` block (provision recap changed=0 on every run).
-- #2487 (fix #2380): persona fragment tasks skip in a dry run whose directory is not created yet. Triaged (one applied, two declined with reasons). Merge by hand with the head-SHA guard once Tests is green; no ace2 apply is needed beyond the next provision.
+- #2487 (fix #2380) merged by the grant at `fee2304` (six conditions held: Tests green on the head, clean, two triage tables, no grant file touched). Dry-run-only change, so no ace2 apply was needed.
 - #2299 parked (Blocked): the codified fallback probe builds and starts a throwaway gateway on ace2 but `hermes chat` answers `invalid_params` on every retry, so the fallback is never exercised. Options: (A) bisect with a minimal config in the throwaway to tell "probe lacks mounts" from "fallback chain broken in the live config" (recommended); (B) keep the manual runbook sequence and close as won't-do. Work is on branch `feat/hermes-fallback-probe`, off by default, no PR.
 - #2175 not claimed: a decision ticket and the top-tier advisor dispatch was refused (this machine has no declared identity in `machine.json`). Options A (healthcheck plus systemd watcher through the notify fabric, recommended) or B (Uptime Kuma push monitor) are on the issue.
 
