@@ -100,9 +100,8 @@ class VikunjaClient:
         return self._request("POST", f"/projects/{project_id}/teams/{team_id}", json={"permission": permission})
 
     def get_labels(self) -> list[dict[str, Any]]:
-        """Fetch all task labels."""
-        data = self._request("GET", "/labels")
-        return data if isinstance(data, list) else []
+        """Fetch every task label; the 8 defaults plus the area vocabulary already near one page."""
+        return self._get_all("/labels")
 
     def create_label(self, title: str, hex_color: str = "") -> dict[str, Any]:
         """Create a new label."""
