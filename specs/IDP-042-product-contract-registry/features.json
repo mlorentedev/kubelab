@@ -23,7 +23,7 @@
   {
     "id": "IDP-042-product-contract-registry-f4",
     "behavior": "AC4: the old web receiver is deleted and nothing live references it (the live dispatch is settled by the command in verification.md)",
-    "verification": "test ! -e .github/workflows/web-image-receiver.yml && poetry run pytest tests/test_delivery_health.py tests/test_product_image_receiver_workflow.py --no-cov -q",
+    "verification": "test ! -e .github/workflows/web-image-receiver.yml && poetry run pytest tests/test_delivery_health.py tests/test_product_image_receiver_workflow.py tests/test_product_ready.py --no-cov -q",
     "state": "pending",
     "evidence": ""
   },
@@ -36,7 +36,7 @@
   },
   {
     "id": "IDP-042-product-contract-registry-f6",
-    "behavior": "AC6: a contract cannot widen the registry (image other than the derived one, secret name, hostname collision, oidc at render)",
+    "behavior": "AC6: a contract cannot widen the registry (image other than the derived one, secret name, hostname collision, oidc at render, any contract-named repository)",
     "verification": "poetry run pytest tests/test_product_contract_guards.py --no-cov -q",
     "state": "pending",
     "evidence": ""
