@@ -72,10 +72,10 @@ Branch `feat/idp-042-contract-render`. Commit prefix `feat(toolkit):`. Depends o
 
 Branch `feat/idp-042-contract-guards`. Commit prefix `feat(toolkit):`. Depends on PR 1 and PR 2.
 
-- [ ] [AC6] Failing tests `tests/test_product_contract_guards.py`, one per refusal, each asserting ERROR / WHY / FIX: the contract's `image` differs from `derived_image(app)` (Q7); a secret name absent from `SECRET_CATALOG` (Q6); a contract that names a repository (`repository`, `repo`, `source`, `remote`), which must be refused even when the value equals the registry's own, since the contract is not where the repository comes from; a hostname that another declared route owns (use the enumeration in `tests/test_declared_domains_are_served.py`); `auth: oidc` at render. Expected: FAIL
+- [x] [AC6] Failing tests `tests/test_product_contract_guards.py`, one per refusal, each asserting ERROR / WHY / FIX: the contract's `image` differs from `derived_image(app)` (Q7); a secret name absent from `SECRET_CATALOG` (Q6); a contract that names a repository (`repository`, `repo`, `source`, `remote`), which must be refused even when the value equals the registry's own, since the contract is not where the repository comes from; a hostname that another declared route owns (use the enumeration in `tests/test_declared_domains_are_served.py`); `auth: oidc` at render. Expected: FAIL
 - [ ] [AC6] `toolkit/features/product_guards.py` and `--registry` on `toolkit product validate`; reuse the existing host enumeration instead of writing a second list. Expected: PASS
 - [ ] [AC6] One positive test: web's real contract passes every guard against the real registry and the real catalog. Expected: PASS
-- [ ] [AC6] Failing then passing test: every `key_path` in `SECRET_CATALOG`, including the ones built per node (`access_key_path(node)` and siblings), matches the contract's secret-name pattern (`_SECRET_NAME` in `product_contract.py`, PR 1), so a real catalog key can never fail the schema before the catalog check sees it. Expected: PASS, or the pattern widens in the same commit
+- [x] [AC6] Failing then passing test: every `key_path` in `SECRET_CATALOG`, including the ones built per node (`access_key_path(node)` and siblings), matches the contract's secret-name pattern (`_SECRET_NAME` in `product_contract.py`, PR 1), so a real catalog key can never fail the schema before the catalog check sees it. Expected: PASS, or the pattern widens in the same commit
 
 ### PR 5 — The remaining literals read the registry (about 120 lines)
 
