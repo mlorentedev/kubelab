@@ -12,6 +12,7 @@ HMAC, so a registered hook would answer 403 on every event.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -32,6 +33,13 @@ DEFAULT_LABELS = {
     "priority:P3": "#3498db",
 }
 
+#: One colour for every `area:*` label: an area names where a task came from, and a colour per area
+#: would make forty of them compete with the type and priority colours that carry meaning.
+AREA_COLOR = "#7f8c8d"
+
+#: The AREA segment of the spec `idPattern` (cli/internal/spec/spec.go): upper-case segments, digits allowed.
+_AREA_SEGMENT = re.compile(r"^[A-Z]+[0-9]*(-[A-Z]+[0-9]*)*$")
+
 
 class ReconcileError(Exception):
     """The declaration cannot be applied; nothing further was written."""
@@ -45,6 +53,18 @@ class VikunjaDeclaration:
     team_name: str
     team_right: str
     members: tuple[str, ...]
+    areas: tuple[str, ...] = ()
+
+
+def _areas_from(vikunja: dict[str, Any]) -> tuple[str, ...]:
+    areas = tuple(vikunja.get("labels", {}).get("areas", ()))
+    for area in areas:
+        if not isinstance(area, str) or not _AREA_SEGMENT.match(area):
+            raise ReconcileError(f"labels.areas entry {area!r} is not an AREA segment (e.g. OPS, APP-CONFIG)")
+    for area in sorted(set(areas)):
+        if areas.count(area) > 1:
+            raise ReconcileError(f"labels.areas lists {area!r} twice")
+    return areas
 
 
 def declaration_from_config(config: dict[str, Any]) -> VikunjaDeclaration:
@@ -62,6 +82,7 @@ def declaration_from_config(config: dict[str, Any]) -> VikunjaDeclaration:
         team_name=team["name"],
         team_right=team["right"],
         members=members,
+        areas=_areas_from(vikunja),
     )
 
 
@@ -96,7 +117,7 @@ class VikunjaReconciler:
         project_ids, projects_created = self._reconcile_projects(declaration.projects)
         team_id, team_created, members_added = self._reconcile_team(declaration)
         shares_changed = self._reconcile_shares(project_ids, team_id, RIGHTS[declaration.team_right])
-        labels_created = self._reconcile_labels()
+        labels_created = self._reconcile_labels(declaration.areas)
 
         result = ReconcileResult(
             projects_created=projects_created,
@@ -179,11 +200,12 @@ class VikunjaReconciler:
                 changed += 1
         return changed
 
-    def _reconcile_labels(self) -> int:
+    def _reconcile_labels(self, areas: tuple[str, ...] = ()) -> int:
         existing = {lbl.get("title", ""): lbl for lbl in self.client.get_labels()}
         created = 0
 
-        for label_title, color in DEFAULT_LABELS.items():
+        wanted = {**DEFAULT_LABELS, **{f"area:{area}": AREA_COLOR for area in areas}}
+        for label_title, color in wanted.items():
             if label_title not in existing:
                 logger.info(f"Creating missing Vikunja label: {label_title} ({color})")
                 self.client.create_label(title=label_title, hex_color=color)
