@@ -96,14 +96,16 @@ repos:
         language: system
         pass_filenames: false
 
-      # Derive the lesson index counters instead of trusting what was typed.
+      # Order the lesson index rows newest first, and refuse a corpus that a
+      # rewrite would hide (duplicate numbers, a lesson removed from HEAD).
       #
-      # The counters are shared mutable state that every lesson PR writes, and
-      # git merges the line as text without raising a conflict -- so a branch
-      # correct when authored is wrong the moment another lesson PR merges
-      # first (#1649). Four collisions in two days across three parallel
-      # sessions; one merge produced a self-consistent lie, a counter that
-      # balanced while the row indexing a real lesson had been dropped.
+      # Until #2525 this hook also derived lesson COUNTS. A count was shared
+      # mutable state that every lesson PR wrote, and git merges the line as
+      # text without raising a conflict -- so a branch correct when authored
+      # was wrong the moment another lesson PR merged first (#1649). Deriving
+      # it moved the race rather than removing it: no hook sees the merge
+      # result of two PRs. The indexes now state no count. The history below
+      # is kept because the same routes still apply to row order.
       #
       # TWO stages, and the second is not belt-and-braces -- it covers the case
       # the first structurally cannot.

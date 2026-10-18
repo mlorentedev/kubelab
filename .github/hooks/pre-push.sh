@@ -75,9 +75,11 @@ check_merged_branch "${1:-origin}"
 # Guard: the lesson indexes must be in order and the corpus free of hazards.
 #
 # Until #2525 the indexes stated lesson counts, and this guard existed for
-# them; the indexes no longer state any count, so a merge has nothing to race
-# on. What remains is row order and the hazards below. The history stays
-# because it explains why a MERGE needs a push-time check at all.
+# them. The indexes no longer state any count, so there is no shared line to
+# race on. Rows can still land out of order through a merge (two PRs inserting
+# at the top of one category merge cleanly), and that is what exit 1 catches,
+# along with the hazards below. The history stays because it explains why a
+# MERGE needs a push-time check at all.
 #
 # The pre-commit hook checks the indexes when a lesson is WRITTEN. It structurally
 # cannot see a lesson that arrived by MERGE: measured 2026-09-05, git does not
