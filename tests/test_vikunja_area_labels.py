@@ -79,10 +79,17 @@ def test_the_declaration_reads_the_areas() -> None:
     assert declaration_from_config(_config(["OPS", "TF"])).areas == ("OPS", "TF")
 
 
-@pytest.mark.parametrize("bad", ["ops", "OPS NNN", "OPS-", "area:OPS", ""])
+@pytest.mark.parametrize("bad", ["ops", "OPS NNN", "OPS-", "area:OPS", "", "OPS\n"])
 def test_a_value_that_is_not_an_area_segment_is_refused(bad: str) -> None:
     with pytest.raises(ReconcileError, match="not an AREA segment"):
         declaration_from_config(_config([bad]))
+
+
+def test_an_empty_areas_key_is_refused_not_a_traceback() -> None:
+    config = _config([])
+    config["apps"]["services"]["core"]["vikunja"]["labels"]["areas"] = None
+    with pytest.raises(ReconcileError, match="declared but empty"):
+        declaration_from_config(config)
 
 
 def test_a_duplicate_area_is_refused() -> None:

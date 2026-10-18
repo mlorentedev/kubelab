@@ -57,9 +57,13 @@ class VikunjaDeclaration:
 
 
 def _areas_from(vikunja: dict[str, Any]) -> tuple[str, ...]:
-    areas = tuple(vikunja.get("labels", {}).get("areas", ()))
+    raw = (vikunja.get("labels") or {}).get("areas", ())
+    if raw is None:
+        raise ReconcileError("labels.areas is declared but empty; list the areas or remove the key")
+    areas = tuple(raw)
     for area in areas:
-        if not isinstance(area, str) or not _AREA_SEGMENT.match(area):
+        # fullmatch: `$` also matches before a trailing newline, which would mint a label no filter finds
+        if not isinstance(area, str) or not _AREA_SEGMENT.fullmatch(area):
             raise ReconcileError(f"labels.areas entry {area!r} is not an AREA segment (e.g. OPS, APP-CONFIG)")
     for area in sorted(set(areas)):
         if areas.count(area) > 1:
