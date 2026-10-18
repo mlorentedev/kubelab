@@ -96,6 +96,15 @@ services:
       GITEA__api__ENABLE_SWAGGER: "false"
       GITEA__openid__ENABLE_OPENID_SIGNIN: "false"
       GITEA__openid__ENABLE_OPENID_SIGNUP: "false"
+      # ADR-071: the sign-in page hands straight over to Authelia. Gitea 1.27
+      # redirects to the sole OAuth2 source only when no other sign-in method is
+      # on (`performAutoLoginOAuth2`): the password form and passkeys both default
+      # to true, and either one keeps the extra "Sign in with Authelia" click.
+      # API and git basic auth is a separate key, declared on: break-glass and
+      # the toolkit use it (tests/test_gitea_signs_in_through_authelia.py).
+      GITEA__service__ENABLE_PASSWORD_SIGNIN_FORM: "false"
+      GITEA__service__ENABLE_PASSKEY_AUTHENTICATION: "false"
+      GITEA__service__ENABLE_BASIC_AUTHENTICATION: "true"
       GITEA__log__MODE: "console"
       GITEA__log__LEVEL: "Info"
       # Actions is ENABLED BY DEFAULT (`modules/setting/actions.go` sets

@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from toolkit.features import promotion, registry
+from toolkit.features import platform_manifest, promotion, registry
 
 _VALUES = """\
 # top-of-file comment must survive a round-trip edit
@@ -138,15 +138,119 @@ edge:
 """
 
 
+# common.yaml mixes indented and flush block sequences and carries lines longer
+# than ruamel's default width. No ruamel dump config reproduces both, so a
+# round-trip rewrote ~250 lines of the real file on every promotion (#2430).
+_COMMON_MIXED = """\
+# common values
+registry: docker.io/mlorentedev
+ci:
+  required_contexts:
+    - Validate
+    - Tests
+edge:
+  errors:
+    image_name: kubelab-errors
+    version: "1.1.1"  # SSOT for the errors image tag
+    coverage:
+      exceptions:
+        - route: headscale
+          reason: "Tailscale control protocol (Noise); a branded page is not a valid response"
+networking:
+  zones:
+  - staging.kubelab.live
+"""
+
+
 class TestPromoteErrors:
     """errors rides the single-SSOT sync lane, not the per-env overlay (DELIVERY-003)."""
 
-    def _write_common(self, root: Path) -> Path:
+    @pytest.fixture(autouse=True)
+    def _platform_manifest(self, monkeypatch: pytest.MonkeyPatch) -> MagicMock:
+        # Never let a test reach the real generator: its default paths are the repo's own files.
+        self.manifest_sync = MagicMock(return_value=0)
+        monkeypatch.setattr(platform_manifest, "sync", self.manifest_sync)
+        return self.manifest_sync
+
+    def _write_common(self, root: Path, body: str = _COMMON) -> Path:
         d = root / "infra" / "config" / "values"
         d.mkdir(parents=True, exist_ok=True)
         path = d / "common.yaml"
-        path.write_text(_COMMON)
+        path.write_text(body)
         return path
+
+    def test_changes_only_the_version_line(self, env_patched, monkeypatch) -> None:
+        root, _ = env_patched
+        common = self._write_common(root, _COMMON_MIXED)
+        monkeypatch.setattr(promotion, "tag_exists", MagicMock(return_value=True))
+        monkeypatch.setattr(promotion.sync_k8s_images, "sync", MagicMock(return_value=0))
+
+        promotion.promote("prod", "errors", "1.2.0")
+
+        expected = _COMMON_MIXED.replace('version: "1.1.1"', 'version: "1.2.0"')
+        assert common.read_text() == expected
+
+    def test_regenerates_platform_manifest(self, env_patched, monkeypatch) -> None:
+        # platform.json records common.yaml's blob hash, so any edit to it is drift
+        # until the manifest is regenerated in the same change.
+        root, _ = env_patched
+        common = self._write_common(root)
+        monkeypatch.setattr(promotion, "tag_exists", MagicMock(return_value=True))
+        monkeypatch.setattr(promotion.sync_k8s_images, "sync", MagicMock(return_value=0))
+
+        promotion.promote("prod", "errors", "1.2.0")
+
+        self.manifest_sync.assert_called_once_with(
+            output_path=root / "infra" / "config" / "platform.json", config_path=common
+        )
+
+    def test_refuses_a_missing_version_key(self, env_patched, monkeypatch) -> None:
+        root, _ = env_patched
+        body = _COMMON.replace('    version: "1.1.1"  # SSOT for the errors image tag\n', "")
+        common = self._write_common(root, body)
+        monkeypatch.setattr(promotion, "tag_exists", MagicMock(return_value=True))
+
+        with pytest.raises(ValueError, match="edge.errors.version"):
+            promotion.promote("prod", "errors", "1.2.0")
+        assert common.read_text() == body
+
+    @pytest.mark.parametrize("value", ['""', ""])
+    def test_refuses_an_empty_version(self, env_patched, monkeypatch, value: str) -> None:
+        root, _ = env_patched
+        body = _COMMON.replace('"1.1.1"', value)
+        common = self._write_common(root, body)
+        monkeypatch.setattr(promotion, "tag_exists", MagicMock(return_value=True))
+
+        with pytest.raises(ValueError, match="missing or empty"):
+            promotion.promote("prod", "errors", "1.2.0")
+        assert common.read_text() == body
+
+    def test_a_retry_at_the_same_version_still_resyncs(self, env_patched, monkeypatch) -> None:
+        # A run whose sync failed already wrote the SSOT; the retry must repair the derived files.
+        root, _ = env_patched
+        common = self._write_common(root)
+        monkeypatch.setattr(promotion, "tag_exists", MagicMock(return_value=True))
+        k8s_sync = MagicMock(return_value=0)
+        monkeypatch.setattr(promotion.sync_k8s_images, "sync", k8s_sync)
+
+        promotion.promote("prod", "errors", "1.1.1")
+
+        assert common.read_text() == _COMMON
+        k8s_sync.assert_called_once()
+        self.manifest_sync.assert_called_once()
+
+    @pytest.mark.parametrize("failing", ["kustomization", "manifest"])
+    def test_a_failed_sync_fails_the_promotion(self, env_patched, monkeypatch, failing: str) -> None:
+        root, _ = env_patched
+        self._write_common(root)
+        monkeypatch.setattr(promotion, "tag_exists", MagicMock(return_value=True))
+        monkeypatch.setattr(
+            promotion.sync_k8s_images, "sync", MagicMock(return_value=1 if failing == "kustomization" else 0)
+        )
+        self.manifest_sync.return_value = 1 if failing == "manifest" else 0
+
+        with pytest.raises(RuntimeError, match="errors set to 1.2.0"):
+            promotion.promote("prod", "errors", "1.2.0")
 
     def test_writes_edge_version_and_syncs(self, env_patched, monkeypatch) -> None:
         root, generator = env_patched

@@ -145,13 +145,12 @@ EXPECTATIONS: dict[str, ServiceExpectation] = {
     # Homepage cockpit (DASH-001). Registered here after #967: home.kubelab.live was
     # advertised by the dashboard and by the DASH-001 docs but no prod route ever existed,
     # and nothing failed because the service had no entry at all.
-    # NOTE: this entry cannot fail yet — there is no apps.services.*.homepage block with
-    # domain + health_path in any values file, so _extract_service_configs() never yields
-    # it and every env reports "homepage not in <env> config". CANNOT CHECK, not OK.
+    # Behind Authelia since #2402 (#456): its widgets proxy tailnet-only services, so
+    # an anonymous `/` answers 302 to the portal. Only `/api/healthcheck` bypasses it,
+    # and that is what Uptime Kuma probes. Retirement is decided on #2416.
     "homepage": ServiceExpectation(
-        content_type="text/html",
-        body_contains="<html",
-        auth_protected=False,  # Dashboard is unauthenticated — no Authelia middleware on the IngressRoute
+        health_status=(200, 302),
+        auth_protected=True,
         skip_in_envs=("dev",),  # Not in the dev Docker Compose stack (absent from dev.yaml)
     ),
     # -- Security --
