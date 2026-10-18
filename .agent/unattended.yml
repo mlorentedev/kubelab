@@ -1,0 +1,39 @@
+# Arming envelope for one unattended run. The run reads the committed copy only.
+version: 1
+run_id: "20261018-claims"
+armed_by: manu
+armed_at: 2026-10-18T08:32:15Z
+expires_at: 2026-10-18T16:32:15Z
+objective: "Advance epic kubelab#2449: triage PR #2466 and open PRs for #2460, #1860, #2459 and #378."
+scope:
+  write_paths:
+    - "infra/terraform/dns/**"
+    - "infra/config/values/**"
+    - "infra/k8s/**"
+    - "infra/ansible/**"
+    - "toolkit/**"
+    - "tests/**"
+    - "docs/**"
+    - "specs/**"
+    - "Makefile"
+    - ".agent/runs/20261018-claims/**"
+  frozen_paths: [".github/**", "harness/**", "**/AGENTS.md", "**/*.enc.yaml", ".agent/unattended.yml"]
+  max_files: 12
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make, poetry, jq]
+queue:
+  source: bitacora
+  filter: "#2466 (triage only), #2460, #1860, #2459 (PR only, never merged), #378 (PR only, never merged, no staging deploy)"
+  max_items: 5
+  merge_allowed: ["#2460", "#1860"]
+  never_merge: ["#2466", "#2459", "#378"]
+budget:
+  max_iterations: 8
+  max_minutes_per_iteration: 60
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant
+  push: true
+  open_pr: true
+  advisor_tier: top
+  apply: never          # no terraform apply, no make deploy/provision, no secrets set, no token mint
