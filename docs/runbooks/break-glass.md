@@ -86,6 +86,14 @@ and SSO users never get a password. It is seeded on an empty database by
 on-demand (ADR-028): with the node off, there is nothing to break into, and
 `--group break-glass` skips it instead of failing the other rotations.
 
+### Uptime Kuma
+
+`make break-glass SVC=uptime-kuma ENV=prod` prints the RPi3's tailnet address, derived
+from the route's EndpointSlice; open `/dashboard` there, not at `status.kubelab.live`,
+whose admin surface is behind Authelia (#2483). Kuma's own login still guards it: the
+username and password are `apps.services.observability.uptime_kuma.admin_user` and
+`admin_password` in SOPS. The RPi3 is always-on (ADR-028).
+
 ### Authelia itself
 
 `KUBECONFIG=~/.kube/kubelab-<env>-config kubectl -n kubelab ...`: logs, rollout
