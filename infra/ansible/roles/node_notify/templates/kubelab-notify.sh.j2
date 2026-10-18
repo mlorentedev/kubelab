@@ -98,7 +98,7 @@ BODY_TAIL="$(journalctl -b -u "$UNIT" -n {{ node_notify_journal_lines }} --no-pa
 # legitimate state here -- it yields an empty result and the neutral wording.
 UNIT_RESULT="$(systemctl show -p Result "$UNIT" 2>/dev/null | cut -d= -f2 || true)"
 
-# Incident state: `<count> <first> <last>` (consecutive failures, epoch of the
+# Incident state: `<count> <first> <last>` (failures since the first page, epoch of the
 # first, epoch of the last page that was delivered). The unit name is already
 # restricted to the characters a unit name can hold, so it is a safe file name.
 # A state older than the TTL is a finished incident that nobody closed (a unit
@@ -124,6 +124,10 @@ if [ "$MODE" = recovered ]; then
   # Every successful run of a wired unit lands here; only the one that ends an
   # incident says anything.
   [ "$COUNT" -gt 0 ] || exit 0
+  # A hand run while the unit still fails must not close its incident.
+  if [ -n "$UNIT_RESULT" ] && [ "$UNIT_RESULT" != success ]; then
+    exit 0
+  fi
   KIND=recovered
 elif [ -n "$UNIT_RESULT" ] && [ "$UNIT_RESULT" != success ]; then
   COUNT=$((COUNT + 1))
@@ -177,7 +181,7 @@ print(json.dumps({
     'title': (
         f'{unit} recovered on {{ inventory_hostname }} after {count} failed runs'
         if kind == 'recovered'
-        else f'{unit} still failing on {{ inventory_hostname }} ({count} consecutive failures)'
+        else f'{unit} still failing on {{ inventory_hostname }} ({count} failures since the first page)'
         if kind == 'again'
         else f'{unit} failed on {{ inventory_hostname }}'
         if failed

@@ -135,6 +135,14 @@ def test_a_success_after_failures_sends_one_recovery_and_clears_the_state(node: 
     assert "failed" in node.titles()[-1] and len(node.titles()) == 3, "a new incident pages again"
 
 
+def test_a_hand_run_of_the_recovery_mode_while_the_unit_fails_closes_nothing(node: Node) -> None:
+    node.run()
+    node.run()
+    assert node.run("--recovered").returncode == 0
+    assert len(node.titles()) == 1, "a false recovery page"
+    assert (node.state / UNIT).exists(), "the open incident was discarded"
+
+
 def test_a_success_with_nothing_failing_sends_nothing(node: Node) -> None:
     node.set_result("success")
     assert node.run("--recovered").returncode == 0
@@ -185,11 +193,13 @@ def test_the_state_outlives_the_reminder() -> None:
     assert TTL > REMINDER
 
 
-def test_the_vault_sync_unit_closes_its_incidents() -> None:
+@pytest.mark.parametrize("template", ["vault-sync.service.j2", "vault-mirror.service.j2", "docs-mirror.service.j2"])
+def test_the_frequent_agent_stack_units_close_their_incidents(template: str) -> None:
+    """Timers that fire every few minutes would otherwise silence a flap for the whole reminder window."""
     from tests.test_agent_stack_role import _environment, _resolved
 
     env = _environment()
-    unit = env.get_template("vault-sync.service.j2").render(**_resolved(env))
+    unit = env.get_template(template).render(**_resolved(env))
     assert "OnFailure=kubelab-notify@%n.service" in unit
     assert "OnSuccess=kubelab-notify-recovered@%n.service" in unit
 
