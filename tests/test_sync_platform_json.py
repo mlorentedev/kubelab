@@ -317,7 +317,7 @@ apps:
 
         # Direct calculation from empty config: staging + prod + shared, no offset
         count = platform_manifest.compute_total_services({})
-        assert count == 35
+        assert count == 33
 
     def test_total_services_counts_every_table_and_nothing_else(self) -> None:
         # The manifest publishes the shared services (Gitea, Argo CD, Headscale...)

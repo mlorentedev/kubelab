@@ -21,10 +21,8 @@ REPO = pathlib.Path(__file__).resolve().parent.parent
 RULES_DIR = REPO / "infra/k8s/base/services/grafana-alerting"
 PREFIX = "https://github.com/mlorentedev/kubelab/blob/master/"
 REPO_LINK = re.compile(r"https://github\.com/mlorentedev/kubelab/(?:blob|tree|raw)/([^/\s\"'`)<>]+)/([^\s\"'`)<>]+)")
-# What ships links into this repo: manifests (homepage, alert rules) and the toolkit.
+# What ships links into this repo: manifests (alert rules, ...) and the toolkit.
 LINK_SOURCES = ("infra/k8s", "toolkit")
-# The template the homepage is rendered from, where #1524's broken link lived.
-HOMEPAGE_TEMPLATE = "infra/k8s/base/services/homepage-templates/services.yaml.j2"
 
 
 def _github_anchor(heading: str) -> str:
@@ -72,14 +70,8 @@ def _repo_links() -> list:
 
 
 def test_shipped_pages_link_into_the_repo() -> None:
-    """A floor, so the parametrised test below cannot pass by finding nothing.
-
-    The homepage template is named on its own: a count alone stays green if a change
-    to the suffixes or the sources stops reading the file the regression was in.
-    """
-    sources = {param.values[0] for param in _repo_links()}
+    """A floor, so the parametrised test below cannot pass by finding nothing."""
     assert len(_repo_links()) >= 10
-    assert HOMEPAGE_TEMPLATE in sources
 
 
 @pytest.mark.parametrize("source,target", _repo_links())

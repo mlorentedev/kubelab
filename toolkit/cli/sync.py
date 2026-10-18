@@ -3,7 +3,6 @@
 Wraps standalone sync scripts under a unified CLI with drift detection (ADR-027).
 
 Usage:
-    toolkit sync homepage              Sync Homepage config
     toolkit sync images                Sync K8s image tags
     toolkit sync oidc --env staging    Generate the OIDC client file
     toolkit sync all --env staging     Run all syncs
@@ -31,19 +30,6 @@ app = typer.Typer(
     help="Sync generated files from SSOT (common.yaml, SOPS).",
     no_args_is_help=True,
 )
-
-# Dynamic patterns to normalize before comparison (ADR-027).
-# These values change between runs regardless of SSOT changes.
-HOMEPAGE_DYNAMIC_PATTERNS: list[tuple[str, str]] = [
-    (r"synced \d{4}-\d{2}-\d{2} \u00b7 [a-f0-9]{7,}", "synced DATE HASH"),
-    (r'"today": "\d{4}-\d{2}-\d{2}"', '"today": "DATE"'),
-    (r'"traefik_cluster_ip": "\d+\.\d+\.\d+\.\d+"', '"traefik_cluster_ip": "IP"'),
-    # SVGs are base64-encoded from external mermaid.ink — not SSOT-derived.
-    # `*` (not `+`): a transient fetch failure emits an empty payload rather
-    # than dropping the key (TOOL-020), so both must normalize equal.
-    (r'"data:image/svg\+xml;base64,[A-Za-z0-9+/=]*"', '"data:image/svg+xml;base64,SVG_BASE64"'),
-]
-
 
 # A drifted generated file is usually a few lines out; a regenerated-from-scratch
 # one is thousands, and dumping that into a CI log buries the signal it exists
@@ -210,19 +196,6 @@ def _sops_available() -> bool:
         return False
 
 
-def _get_homepage_output_dir() -> Path:
-    """Homepage config output directory."""
-    return settings.project_root / "infra/k8s/base/services/homepage-config"
-
-
-def _get_homepage_output_files() -> list[Path]:
-    """Collect all files in the homepage-config directory."""
-    output_dir = _get_homepage_output_dir()
-    if not output_dir.exists():
-        return []
-    return sorted(f for f in output_dir.iterdir() if f.is_file())
-
-
 def _get_oidc_output_files() -> list[Path]:
     """Target files for the OIDC client generator (SSOT-017).
 
@@ -240,32 +213,6 @@ def _run_oidc_sync(env: str) -> int:
     from toolkit.features import oidc_clients
 
     return oidc_clients.sync_env(env)
-
-
-@app.command()
-def homepage(
-    check: Annotated[bool, typer.Option("--check", help="Check for drift without modifying files")] = False,
-) -> None:
-    """Sync Homepage config from common.yaml + templates."""
-    from toolkit.scripts import sync_homepage_config
-
-    if check:
-        output_files = _get_homepage_output_files()
-        if not output_files:
-            logger.warning("homepage: no output files found — directory missing?")
-            return
-        if not _run_with_check(
-            output_files,
-            sync_homepage_config.main,
-            "homepage",
-            HOMEPAGE_DYNAMIC_PATTERNS,
-            output_dir=_get_homepage_output_dir(),
-        ):
-            raise typer.Exit(1)
-    else:
-        result = sync_homepage_config.main()
-        if result != 0:
-            raise typer.Exit(result)
 
 
 @app.command()
@@ -475,36 +422,13 @@ def sync_all(
 ) -> None:
     """Run all sync operations.
 
-    homepage, images, oidc, branding, platform-json, r2-watcher-targets, terraform-backend.
+    images, oidc, branding, platform-json, r2-watcher-targets, terraform-backend.
     """
     failures: list[str] = []
 
     logger.section("Sync All" + (" — check mode" if check else ""))
 
-    # 1. Homepage
-    try:
-        from toolkit.scripts import sync_homepage_config
-
-        if check:
-            output_files = _get_homepage_output_files()
-            if not output_files:
-                logger.warning("homepage: no output files found — directory missing?")
-            elif not _run_with_check(
-                output_files,
-                sync_homepage_config.main,
-                "homepage",
-                HOMEPAGE_DYNAMIC_PATTERNS,
-                output_dir=_get_homepage_output_dir(),
-            ):
-                failures.append("homepage")
-        else:
-            if sync_homepage_config.main() != 0:
-                failures.append("homepage")
-    except Exception as e:
-        logger.error(f"homepage sync crashed: {e}")
-        failures.append("homepage")
-
-    # 2. Images
+    # 1. Images
     try:
         from toolkit.scripts import sync_k8s_images
 
@@ -522,7 +446,7 @@ def sync_all(
         logger.error(f"images sync crashed: {e}")
         failures.append("images")
 
-    # 3. OIDC (SOPS-dependent)
+    # 2. OIDC (SOPS-dependent)
     try:
         if check:
             if not _sops_available():
@@ -539,7 +463,7 @@ def sync_all(
         logger.error(f"oidc sync crashed: {e}")
         failures.append("oidc")
 
-    # 4. Branding
+    # 3. Branding
     try:
         from toolkit.scripts import sync_branding
 
@@ -554,7 +478,7 @@ def sync_all(
         logger.error(f"branding sync crashed: {e}")
         failures.append("branding")
 
-    # 5. Platform Manifest (issue #1347)
+    # 4. Platform Manifest (issue #1347)
     try:
         from toolkit.features import platform_manifest
 
@@ -569,7 +493,7 @@ def sync_all(
         logger.error(f"platform-json sync crashed: {e}")
         failures.append("platform-json")
 
-    # 6. R2 watcher targets (BACKUP-055)
+    # 5. R2 watcher targets (BACKUP-055)
     try:
         if not _sync_r2_watcher_targets(check=check):
             failures.append("r2-watcher-targets")
