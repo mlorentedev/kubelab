@@ -5,6 +5,22 @@ created: "2026-06-20"
 
 # Verification - CONSOLE-002-cross-context-bitacora
 
+## Abandoned
+
+Abandoned 2026-10-18 (kubelab#2443) as **superseded**. ADR-066 (accepted 2026-08-27) rejected the
+custom Go API and Astro console that ADR-050 D1 had specified, "heavy maintenance debt", and adopted
+Vikunja with n8n multi-forge sync and Slack ChatOps as the bitácora. That covers this spec's board
+and forge adapter (AC3) with off-the-shelf parts. The Context entity and its append-only history
+(AC1, AC2) were part of the rejected console build and have no replacement.
+
+What shipped is still in use, so it is not lost:
+- PR-0 (#714): the Go test harness, `go test -race ./...` in CI.
+- PR-1a (#720): Postgres on K3s, `infra.postgres` SSOT, ADR-051. Vikunja now runs on it (ADR-066).
+
+**AC4 is a security control, and it is carried, not dropped.** ADR-050 D5 (per-context LLM routing,
+default-deny, amended 2026-10-01) stays in force without an implementation. It moves to kubelab#2494,
+where the home is still to be decided.
+
 ## Evidence
 
 Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
@@ -51,9 +67,9 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 
 Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.
 
-- [ ] Lesson for the repo's `docs/lessons.md`? <yes / no - one line of what>
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? <yes / no - one line of what>
-- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes / no - one line>
+- [x] Lesson for the repo's `docs/lessons/`? no: superseded by a recorded decision (ADR-066); the reason above is the record
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: ADR-066 already records the decision; ADR-050 gains a status note in the same PR
+- [x] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. no: one project
 
 ## Archive checklist
 
