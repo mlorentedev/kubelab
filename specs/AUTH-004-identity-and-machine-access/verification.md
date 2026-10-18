@@ -9,13 +9,27 @@ created: "2026-08-15"
 
 Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
 
-- [ ] Criterion 1 (identity resolves from `apps.auth.identities`) -> Part 1, not started
-- [ ] Criterion 2 (`operator` is refused what the superadmin can do) -> Part 2, not started
-- [ ] Criterion 3 (SSO onboarding creates an account with no manual step) -> Part 2, gated on R1. **Measured failing 2026-08-23 (R1a): the flow parks at `/user/link_account`.** The baseline is now a transcript rather than an assumption, so Part 2 has something to demonstrate a change against.
-- [x] Criterion 4 (unauthenticated registration refused) -> **demonstrated 2026-08-23**, both surfaces refused at the handler (403). **Conditional on the current flags**: it must be re-demonstrated if Part 2 changes `DISABLE_REGISTRATION`, because that is the flag it currently rests on.
-- [ ] Criterion 5 (bot account, scoped token, both halves of the scope proven) -> Part 3, not started
-- [ ] Criterion 6 (test fails when admin identity resolves from anything else) -> Part 1, not started
-- [ ] Criterion 7 (break-glass drill) -> Part 4, not started
+Summary rewritten 2026-10-18 for the archive (#2443). The dated sections below are the record; this
+list points into them.
+
+- [x] Criterion 1 (identity resolves from `apps.auth.identities`) -> #1390, #1451, #1514. Live: Grafana,
+  MinIO and Authelia on 2026-08-24, Gitea on 2026-09-01 (sections below), prod on 2026-09-24. MinIO was
+  retired since (OPS-023). Re-read 2026-10-18: `make auth-review ENV=prod`, every row `OK`.
+- [ ] Criterion 2 (`operator` is refused what the superadmin can do) -> **amended, carried by #2505**.
+  #1853 took `operator` out of `admins`. `make auth-review ENV=prod` on 2026-10-18 reads `operator` as
+  `users` / `user` / `Editor` and `manu` as admin. The refusal from a live `operator` session is not recorded.
+- [x] Criterion 3 (SSO onboarding creates an account with no manual step) -> #1809, 2026-09-24 prod, check (b).
+  The 2026-08-23 measured failure is the baseline it was demonstrated against.
+- [x] Criterion 4 (unauthenticated registration refused) -> demonstrated 2026-08-23 and **re-demonstrated
+  2026-09-24** after Part 2 changed the flags (check (d), `POST /user/sign_up` -> 403).
+- [x] Criterion 5 (bot account, scoped token, both halves of the scope proven) -> **amended**. Provisioned from
+  Ansible (#1437). Both scope halves were shown on a clean account ("AC5, both halves"). "Login prohibited"
+  is reworded because Gitea's flag kills the token (R4 addendum). The recorded Authelia refusal is #2504.
+- [x] Criterion 6 (test fails when admin identity resolves from anything else) -> `tests/test_admin_identity_ssot.py`
+  (#1390), demonstrated red against the `BASIC_AUTH_USER` mapping first.
+- [ ] Criterion 7 (break-glass drill) -> **amended, carried by #2503**. The declaration, derived coverage
+  (`tests/test_break_glass.py`), `make break-glass` and rotation shipped. The drill with the IdP down has
+  not run.
 
 ## Open questions, settled
 
@@ -794,3 +808,15 @@ In the same browser session, now authenticated to Authelia as `manu`, with no pa
 ### Staging
 
 The operator logged in to Grafana and Vikunja staging as `manu`. Grafana linked the SSO login to the existing local admin (still one `manu`), and the email moved to `manu@mlorente.dev`. It could not have been `apps.contact.email`: `operator` holds that address, and Grafana keeps email unique across users.
+
+## Promotion candidates
+
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/process-method/lesson-382-a-control-returning-the-same-code-as-the-real-attempt-measured-nothing.md
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? yes: docs/adr/adr-062-platform-identity-model.md
+- [x] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. no: the identity model is this fleet's
+
+## Archive checklist
+
+- [ ] `proposal.md` frontmatter set to `status: archived`
+- [ ] Folder moved to `specs/archive/`
+- [ ] #1013 closed with the PR link, naming #2503, #2504 and #2505 as the carried remainder
