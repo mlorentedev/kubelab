@@ -18,7 +18,7 @@ from __future__ import annotations
 import re
 from functools import lru_cache
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, NamedTuple
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError, field_validator, model_validator
@@ -154,12 +154,29 @@ def platform_apps(path: Path | None = None) -> tuple[str, ...]:
     return tuple(load_registry(path).products)
 
 
+Lane = Literal["staging", "prod"]
+
+
+class EventRoute(NamedTuple):
+    """Where a dispatch event type goes: which app, and which lane's workflow acts on it."""
+
+    app: str
+    lane: Lane
+
+
 def app_for_event(event: str, path: Path | None = None) -> str:
     """The app that owns a dispatch event type. The payload never names the app (AC1)."""
+    return event_route(event, path).app
+
+
+def event_route(event: str, path: Path | None = None) -> EventRoute:
+    """The app and lane a dispatch event type maps to; ``UnknownEventError`` names the registry."""
     resolved = Path(path) if path is not None else registry_path()
     for name, product in load_registry(resolved).products.items():
-        if event in (product.events.staging, product.events.prod):
-            return name
+        if event == product.events.staging:
+            return EventRoute(app=name, lane="staging")
+        if event == product.events.prod:
+            return EventRoute(app=name, lane="prod")
     raise UnknownEventError(
         f"event type '{event}' is not mapped to any product in {resolved}; "
         "a product is admitted by adding its entry to the registry"

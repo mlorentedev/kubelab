@@ -75,6 +75,26 @@ class TestAppForEvent:
     def test_maps_a_prod_event_to_its_app(self, fixture_registry: Path) -> None:
         assert product_registry.app_for_event("web-release-published") == "web"
 
+    @pytest.mark.parametrize(
+        ("event", "app", "lane"),
+        [("web-image-published", "web", "staging"), ("web-release-published", "web", "prod")],
+    )
+    def test_the_route_names_the_lane_the_event_belongs_to(
+        self, fixture_registry: Path, event: str, app: str, lane: str
+    ) -> None:
+        """One app owns both lanes' events, so the app alone cannot tell a workflow which lane fired."""
+        assert product_registry.event_route(event) == product_registry.EventRoute(app=app, lane=lane)
+
+    def test_exactly_one_product_dispatches_to_the_prod_lane(self) -> None:
+        """``promote-prod.yml`` keeps ``|| 'web'`` in its concurrency group (Q4).
+
+        The group is evaluated before any step can ask the registry, so the fallback
+        names the one product whose release dispatches a prod promotion. A second
+        such product would share web's group under a name that is no longer true.
+        """
+        prod = [app for app, product in product_registry.load_registry().products.items() if product.events.prod]
+        assert prod == ["web"]
+
     def test_an_unmapped_event_is_refused_naming_the_registry(self, fixture_registry: Path) -> None:
         with pytest.raises(UnknownEventError, match=r"ghost-image-published.*registry\.yaml"):
             product_registry.app_for_event("ghost-image-published")
