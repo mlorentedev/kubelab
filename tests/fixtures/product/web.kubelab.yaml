@@ -1,0 +1,13 @@
+# web's product contract (ADR-067 D2), hand-written from apps.platform.web in
+# infra/config/values/common.yaml and the staging/prod overrides in
+# values/staging.yaml and values/prod.yaml. port is the K8s container port
+# (nginx, 8080); 4321 is the Astro dev server and never reaches a cluster.
+schema_version: 1
+image: docker.io/mlorentedev/kubelab-web
+port: 8080
+health_path: /
+hostnames:
+  staging: staging.mlorente.dev
+  prod: mlorente.dev
+auth: public
+secrets: []
