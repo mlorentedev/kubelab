@@ -24,6 +24,10 @@ from toolkit.main import app
 WEB = SNAPSHOT_DIR / "web.yaml"
 ENVS = ("staging", "prod")
 
+#: Pinned here, not read from CONTRACT_KEYS: a mapping that lost an entry would
+#: otherwise compare one key fewer and still report "all compared".
+OWNED_KEYS = {"default_port", "health_path", "domain", "enable_auth", "auth_level", "image_name"}
+
 
 @pytest.mark.parametrize("env", ENVS)
 def test_the_web_snapshot_matches_the_values(env: str, capsys: pytest.CaptureFixture[str]) -> None:
@@ -31,7 +35,8 @@ def test_the_web_snapshot_matches_the_values(env: str, capsys: pytest.CaptureFix
     print(f"compared {compared} contract-owned keys for web/{env}")
 
     assert not differences, f"web/{env}: {differences}"
-    assert compared == len(CONTRACT_KEYS)
+    assert set(CONTRACT_KEYS) == OWNED_KEYS
+    assert compared == len(OWNED_KEYS)
     assert f"compared {len(CONTRACT_KEYS)} contract-owned keys" in capsys.readouterr().out
 
 
