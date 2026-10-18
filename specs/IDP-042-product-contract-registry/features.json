@@ -1,0 +1,51 @@
+[
+  {
+    "id": "IDP-042-product-contract-registry-f1",
+    "behavior": "AC1: an event type the registry does not map is refused, and a payload naming another app changes nothing",
+    "verification": "poetry run pytest tests/test_product_registry.py tests/test_product_image_receiver_workflow.py --no-cov -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "IDP-042-product-contract-registry-f2",
+    "behavior": "AC2: a contract that fails the schema is refused with ERROR / WHY / FIX naming the field",
+    "verification": "poetry run pytest tests/test_product_contract.py tests/test_product_contract_schema.py --no-cov -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "IDP-042-product-contract-registry-f3",
+    "behavior": "AC3: derived values, the committed contract snapshot and the registry cannot drift apart, offline and without SOPS",
+    "verification": "env -u SOPS_AGE_KEY_FILE poetry run pytest tests/test_product_contract_drift.py --no-cov -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "IDP-042-product-contract-registry-f4",
+    "behavior": "AC4: the old web receiver is deleted and nothing live references it (the live dispatch is settled by the command in verification.md)",
+    "verification": "test ! -e .github/workflows/web-image-receiver.yml && poetry run pytest tests/test_delivery_health.py tests/test_product_image_receiver_workflow.py tests/test_product_ready.py --no-cov -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "IDP-042-product-contract-registry-f5",
+    "behavior": "AC5: PLATFORM_APPS is derived from the registry and a registered third product promotes",
+    "verification": "test -z \"$(git grep -n 'PLATFORM_APPS' -- toolkit | grep -v '^toolkit/config/constants.py.*#')\" && poetry run pytest tests/test_promotion.py tests/test_product_registry.py tests/test_k8s_generator_secrets.py --no-cov -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "IDP-042-product-contract-registry-f6",
+    "behavior": "AC6: a contract cannot widen the registry (image other than the derived one, secret name, hostname collision, oidc at render, any contract-named repository)",
+    "verification": "poetry run pytest tests/test_product_contract_guards.py --no-cov -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "IDP-042-product-contract-registry-f7",
+    "behavior": "AC7: a non-sha tag or an unresolvable, ambiguous or off-branch commit is refused before any file is written",
+    "verification": "poetry run pytest tests/test_product_image_receiver_workflow.py --no-cov -q -k 'tag or commit'",
+    "state": "pending",
+    "evidence": ""
+  }
+]

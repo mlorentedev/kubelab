@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.6](https://github.com/mlorentedev/kubelab/compare/api-v1.1.5...api-v1.1.6) (2026-10-18)
+
+
+### Bug Fixes
+
+* **api:** bump x/crypto and x/net past the HIGH CVEs the Trivy gate reports ([#2429](https://github.com/mlorentedev/kubelab/issues/2429)) ([7d09373](https://github.com/mlorentedev/kubelab/commit/7d0937312a7a819e1d5c03abed35a3e55db32108))
+* **api:** honest liveness and readiness probes ([#2387](https://github.com/mlorentedev/kubelab/issues/2387)) ([ddd3bc4](https://github.com/mlorentedev/kubelab/commit/ddd3bc4c997577804db30269abb46452738115d9))
+
 ## [1.1.5](https://github.com/mlorentedev/kubelab/compare/api-v1.1.4...api-v1.1.5) (2026-08-25)
 
 

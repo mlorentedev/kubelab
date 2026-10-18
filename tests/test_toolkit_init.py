@@ -1,7 +1,7 @@
 """toolkit forces UTF-8 stdout/stderr at import time (TOOL-020).
 
 Windows' default console codepage (cp1252) can't encode characters like
-`→`, used in bare `print()` calls (e.g. sync_homepage_config.py) that
+`→`, used in bare `print()` calls (e.g. the retired sync_homepage_config.py) that
 bypass the Rich-backed logger. Without a fix, that raises
 UnicodeEncodeError before a sync even reaches comparison — the exact
 crash reproduced in process-audit-2026-07-07.md.

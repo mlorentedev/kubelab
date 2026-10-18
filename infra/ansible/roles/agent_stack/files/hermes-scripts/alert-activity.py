@@ -3,7 +3,9 @@
 
 The data for the hourly triage. It runs inside the gateway before the job's turn,
 because the gateway holds the Slack bot token and the agent's tools do not: the
-token is read from the gateway's environment and never reaches the output. Hermes
+token is read from the gateway's environment and never reaches the output. It is read
+as `HERMES_ALERT_SLACK_TOKEN`, a second name for the bot token, because Hermes strips
+`SLACK_BOT_TOKEN` from every job script's environment (lesson-592). Hermes
 injects the output into the turn and cuts it at 8000 characters, so the report
 stays under that.
 
@@ -56,11 +58,25 @@ def _clean(text: object) -> str:
     return one_line if len(one_line) <= MESSAGE_CHARS else one_line[:MESSAGE_CHARS] + "..."
 
 
+def _block_texts(blocks: object) -> list[str]:
+    """The readable strings of Block Kit blocks: header and section text, section fields, context elements."""
+    out: list[str] = []
+    for block in blocks if isinstance(blocks, list) else []:
+        if not isinstance(block, dict):
+            continue
+        for item in [block.get("text"), *(block.get("fields") or []), *(block.get("elements") or [])]:
+            if isinstance(item, dict) and item.get("text"):
+                out.append(str(item["text"]))
+    return out
+
+
 def _text(message: dict) -> str:
-    """An alert's body: the text, else what its attachments say (Grafana and CI post those)."""
-    parts = [message.get("text") or ""]
+    """An alert's body: the text, else what its attachments and blocks say (Grafana, CI and Argo CD post those).
+    Slack's `fallback` is a last resort: for a blocks-only attachment it is the placeholder "[no preview available]"."""
+    parts = [message.get("text") or "", *_block_texts(message.get("blocks"))]
     for attachment in message.get("attachments") or []:
-        parts += [attachment.get("title") or "", attachment.get("text") or attachment.get("fallback") or ""]
+        body = [attachment.get("title") or "", attachment.get("text") or "", *_block_texts(attachment.get("blocks"))]
+        parts += body if any(body) else [attachment.get("fallback") or ""]
     return " ".join(part for part in parts if part)
 
 
@@ -113,7 +129,7 @@ def report(token: str, pairs: list[tuple[str, str]], now: float, read=fetch) -> 
 
 
 def main() -> int:
-    token = os.environ.get("SLACK_BOT_TOKEN", "")
+    token = os.environ.get("HERMES_ALERT_SLACK_TOKEN", "")
     pairs = channels(os.environ.get("HERMES_ALERT_CHANNELS", ""))
     if not token or not pairs:
         print("alert-activity: no Slack token or no alert channel configured; the triage cannot run.")

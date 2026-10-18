@@ -1,9 +1,10 @@
 # Docker, Compose and image builds
 
-28 lessons, newest first. Back to [all categories](../_index.md).
+29 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 592 | [Hermes's children do not see what the gateway sees: a container-only path and a stripped token](lesson-592-hermes-children-do-not-see-what-the-gateway-sees-a-container-only-path-and-a-stripped-token.md) | 2026-10-17 |
 | 582 | [Hermes injects a job's script output into its prompt, so a record parser cannot use the Prompt section](lesson-582-hermes-injects-a-jobs-script-output-into-its-prompt-so-a-record-parser-cannot-use-the-prompt-section.md) | 2026-10-16 |
 | 581 | [A fetcher that lists one level deep reads a grouped corpus as "no recurrence"](lesson-581-a-fetcher-that-lists-one-level-deep-reads-a-grouped-corpus-as-no-recurrence.md) | 2026-10-16 |
 | 580 | [A managed skill named like a Hermes built-in is installed, listed, and never read](lesson-580-an-external-skill-named-like-a-built-in-is-installed-and-never-read.md) | 2026-10-16 |

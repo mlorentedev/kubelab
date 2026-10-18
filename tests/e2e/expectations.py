@@ -141,18 +141,6 @@ EXPECTATIONS: dict[str, ServiceExpectation] = {
         body_contains="<html",
     ),
     # blog: removed 2026-03-15
-    # -- Dashboard --
-    # Homepage cockpit (DASH-001). Registered here after #967: home.kubelab.live was
-    # advertised by the dashboard and by the DASH-001 docs but no prod route ever existed,
-    # and nothing failed because the service had no entry at all.
-    # Behind Authelia since #2402 (#456): its widgets proxy tailnet-only services, so
-    # an anonymous `/` answers 302 to the portal. Only `/api/healthcheck` bypasses it,
-    # and that is what Uptime Kuma probes. Retirement is decided on #2416.
-    "homepage": ServiceExpectation(
-        health_status=(200, 302),
-        auth_protected=True,
-        skip_in_envs=("dev",),  # Not in the dev Docker Compose stack (absent from dev.yaml)
-    ),
     # -- Security --
     "authelia": ServiceExpectation(
         content_type="text/html",
