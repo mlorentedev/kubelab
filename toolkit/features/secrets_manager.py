@@ -925,12 +925,40 @@ SECRET_CATALOG: list[SecretSpec] = [
         key_path="apps.services.automation.n8n.vikunja_api_token",
         description="Vikunja API token for n8n automation workflows",
         kind=SecretKind.EXTERNAL,
-        expiry=Expiry.NEVER,
+        # Vikunja gives every API token an expiry chosen at mint, so NEVER was wrong.
+        # PROVIDER is not available either: an API token is refused on `GET /tokens`
+        # (401, measured on prod 2026-10-18), and the only credential that could call
+        # it is a user session, which SOPS does not hold (Authelia keeps only hashes).
+        expiry=Expiry.DECLARED,
         services=("n8n", "vikunja"),
-        rotate_note="Update API token in Vikunja and redeploy n8n.",
+        rotate_note=(
+            "Minted by the `operator` account in Vikunja (Settings, API tokens), one token "
+            "per scope set and env, every permission group selected explicitly (tasks, "
+            "project views and buckets, task comments). Write the expiry chosen at mint in "
+            "`secret_expiry.declared` of infra/config/values/<env>.yaml, then "
+            "`toolkit secrets set` it and `make apply-secrets` to restart n8n."
+        ),
         # Vikunja mints `tk_` + 40 hex (measured in staging and prod, 2026-09-27).
         value_pattern=r"tk_[0-9a-f]{40}",
         # Dev runs no Vikunja, and no dev workload reads this value.
+        envs=("staging", "prod"),
+    ),
+    SecretSpec(
+        key_path="apps.services.core.vikunja.reconciler_api_token",
+        description="Vikunja API token for `toolkit sync vikunja` (projects, teams, shares, labels)",
+        kind=SecretKind.EXTERNAL,
+        # Same reasoning as the n8n token above: a mandatory expiry set at mint, and no
+        # way to ask Vikunja for it with the token itself. Used only by the toolkit,
+        # so no service restarts when it rotates.
+        expiry=Expiry.DECLARED,
+        rotate_note=(
+            "Minted by the `operator` account in Vikunja (Settings, API tokens), with the "
+            "projects, project teams, teams and labels groups selected explicitly (create, "
+            "read, write; webhooks are not needed). Write the expiry chosen at mint in "
+            "`secret_expiry.declared` of infra/config/values/<env>.yaml, then "
+            "`toolkit secrets set` it for the env."
+        ),
+        value_pattern=r"tk_[0-9a-f]{40}",
         envs=("staging", "prod"),
     ),
     # APP-CONFIG-018 (leaving-denver#225): the sale's daily digest. The whole

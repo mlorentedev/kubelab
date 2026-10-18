@@ -17,7 +17,7 @@ import getpass
 import os
 import subprocess
 import sys
-from typing import TYPE_CHECKING, Annotated, Optional
+from typing import TYPE_CHECKING, Annotated, Any, Optional
 
 import typer
 
@@ -383,6 +383,42 @@ def dig_across(configs: list[dict[str, object]], path: str) -> str:
     return ""
 
 
+def _declared_expiry_lines(warn_days: int) -> tuple[list[str], list[str]]:
+    """Report every DECLARED credential: its recorded expiry, or the absence of one.
+
+    Returns (missing, expiring) key labels. A missing date is a finding, not a skip:
+    a credential nobody wrote a date for reads exactly like one that cannot expire.
+    """
+    from toolkit.config.settings import settings as _settings
+    from toolkit.features.configuration import ConfigurationManager
+    from toolkit.features.secret_expiry import declared_expiries
+    from toolkit.features.secrets_manager import SECRET_CATALOG
+
+    def _config(env: str) -> dict[str, Any]:
+        return ConfigurationManager(env, _settings.project_root).get_merged_config()
+
+    missing: list[str] = []
+    expiring: list[str] = []
+    try:
+        declared = list(declared_expiries(SECRET_CATALOG, _config))
+    except Exception as exc:  # noqa: BLE001 - the report never raises; a typo must read as a finding
+        logger.error(f"  declared expiries could not be read: {exc}")
+        return ["declared expiries (unreadable)"], []
+    for item in declared:
+        label = f"{item.key_path} [{item.env}]"
+        if item.expires_on is None:
+            logger.warning(f"  {label} — no expiry recorded (secret_expiry.declared in values/{item.env}.yaml)")
+            missing.append(label)
+            continue
+        line = f"  {label} — expires {item.expires_on:%Y-%m-%d} ({item.days_left}d, recorded, not asked)"
+        if (item.days_left or 0) < warn_days:
+            logger.error(line)
+            expiring.append(label)
+        else:
+            logger.info(line)
+    return missing, expiring
+
+
 def _report_expiry(warn_days: int) -> None:
     """Ask each issuer, report, and never raise. Shared with `check-expiry`."""
     from datetime import datetime, timezone
@@ -418,6 +454,8 @@ def _report_expiry(warn_days: int) -> None:
         days = (expires - datetime.now(timezone.utc)).days
         line = f"  {spec.key_path} — expires {expires:%Y-%m-%d} ({days}d)"
         logger.error(line) if days < warn_days else logger.info(line)
+
+    _declared_expiry_lines(warn_days)
 
 
 def _print_audit_result(result: AuditResult) -> None:
@@ -832,6 +870,11 @@ def check_expiry(
             expiring.append(spec.key_path)
         else:
             logger.success(line)
+
+    # --- Credentials whose expiry only their operator knows --------------------
+    declared_missing, declared_expiring = _declared_expiry_lines(warn_days)
+    expiring.extend(declared_expiring)
+    unreachable.extend(declared_missing)  # a date nobody recorded is a check that could not run
 
     # --- Headscale, which is asked for all its keys at once -------------------
     try:
