@@ -25,3 +25,4 @@
 | 11:08 | CI | GitHub-hosted runners queued across all PRs; PR-Agent pending; CodeRabbit and Codex rate limited |
 | 11:11 | AUTH-004 | review PASS WITH GAPS (agy/gemini-3.8-flash-high): 3 Majors carried by #2503-#2505, 2 Minors declined (closing checklist; mypy gate covers toolkit/ only), 1 applied by archive; archived; PR #2509 (pushed fast-forward after a force push was refused) |
 | 11:15 | CONSOLE-002 | re-review PASS-WITH-GAPS: launcher base -> dotfiles#1727, #2501 corrected by comment, item 2 reworded, route boxes ticked by hand, live Vikunja claim passed to #2443; archived --abandoned; PR #2510 |
+| 11:35 | TOOL-009 | review PASS-WITH-GAPS: attribution corrected in verification.md, T9 kept blocked on iris#30, knowledge#118 already closed (checklist -> comment); archived; spec-gate test hardcodes TOOL-009 as the cross-repo spec, tests/ frozen -> parked, draft PR #2515 with options A (expect set()) / B (keep active) |
