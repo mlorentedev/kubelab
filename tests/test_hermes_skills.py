@@ -17,7 +17,10 @@ from tests.test_hermes_config import HERMES, _config, _render
 
 ROLE = Path(__file__).resolve().parent.parent / "infra/ansible/roles/agent_stack"
 SKILLS = HERMES["skills"]
-MOUNT = "/managed-skills"
+# The same path on the host and in the gateway: the sandbox's `docker run` is answered by the
+# host's daemon, which resolves a bind source on the HOST. `/managed-skills` existed only inside
+# the gateway, and every sandbox (terminal, read_file, search_files) failed with exit 126.
+MOUNT = "/var/lib/hermes-kubelab/hermes-skills"
 
 
 def _flat(items: list[dict]) -> list[dict]:
@@ -51,6 +54,13 @@ def test_the_declared_skills_are_names_of_one_directory_each() -> None:
 def test_the_gateway_reads_the_managed_skills_as_an_external_directory() -> None:
     config = _config(agent_stack_vault_configured=True)
     assert config["skills"]["external_dirs"] == [MOUNT]
+
+
+def test_the_gateway_sees_the_skills_at_the_path_the_host_daemon_will_resolve() -> None:
+    """Hermes copies an external dir into each sandbox as `-v <dir>:...`, so the dir is a host path."""
+    [volume] = [v for v in yaml.safe_load(_compose())["services"]["hermes"]["volumes"] if v.startswith(MOUNT)]
+    source, target, mode = volume.split(":")
+    assert source == target == MOUNT and mode == "ro"
 
 
 def test_without_the_vault_there_is_no_external_directory_to_point_at() -> None:

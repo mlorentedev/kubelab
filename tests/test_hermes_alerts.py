@@ -18,8 +18,12 @@ import yaml
 from tests.test_agent_stack_role import COMMON, ROLE, _environment, _resolved
 
 SCRIPT = ROLE / "files/hermes-scripts/alert-activity.py"
-SLACK = yaml.safe_load(COMMON.read_text())["apps"]["services"]["ai"]["hermes_kubelab"]["slack"]
+HERMES = yaml.safe_load(COMMON.read_text())["apps"]["services"]["ai"]["hermes_kubelab"]
+SLACK = HERMES["slack"]
 TOKENS = {"agent_stack_slack_bot_token": "xoxb-sentinel", "agent_stack_slack_app_token": "xapp-sentinel"}
+# Hermes v0.22.1 builds a job script's environment with `build_subprocess_env`, which drops these two
+# names whatever `env_passthrough` says (`_ALWAYS_STRIP_FOLDED`, measured on ace2 2026-10-17, lesson-592).
+STRIPPED_FROM_JOB_SCRIPTS = ("SLACK_BOT_TOKEN", "SLACK_APP_TOKEN")
 NOW = datetime(2026, 10, 16, 9, 0, tzinfo=UTC).timestamp()
 PAIRS = [("C1", "alerts"), ("C2", "ops-log")]
 
@@ -67,6 +71,24 @@ def test_the_gateway_gets_the_channels_only_with_slack() -> None:
     assert [tuple(pair.split(":")) for pair in value.split(",")] == [
         (c["id"], c["name"]) for c in SLACK["alert_channels"]
     ]
+
+
+def test_the_script_reads_its_token_under_a_name_hermes_hands_to_a_job_script() -> None:
+    """The gateway holds SLACK_BOT_TOKEN, and Hermes strips it from every child it spawns, so a script
+    that reads that name sees an empty string and the hourly triage reports a config gap forever."""
+    source = SCRIPT.read_text()
+    for name in STRIPPED_FROM_JOB_SCRIPTS:
+        assert f'"{name}"' not in source, f"{name} never reaches a job script"
+    env = _env(**TOKENS)
+    assert env["HERMES_ALERT_SLACK_TOKEN"] == TOKENS["agent_stack_slack_bot_token"]
+    assert "HERMES_ALERT_SLACK_TOKEN" in source
+
+
+def test_the_script_token_exists_only_with_slack_and_channels() -> None:
+    assert "HERMES_ALERT_SLACK_TOKEN" not in _env(), "no Slack, no token"
+    assert "HERMES_ALERT_SLACK_TOKEN" not in _env(**TOKENS, agent_stack_hermes={**HERMES, "slack": {**SLACK, "alert_channels": []}}), (
+        "a token for a script nothing runs is a credential for nothing"
+    )
 
 
 def test_the_channels_do_not_widen_what_the_agent_answers() -> None:
@@ -148,7 +170,7 @@ def test_the_token_is_never_printed() -> None:
 
 
 def test_main_without_a_token_fails_loudly(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
-    monkeypatch.delenv("SLACK_BOT_TOKEN", raising=False)
+    monkeypatch.delenv("HERMES_ALERT_SLACK_TOKEN", raising=False)
     monkeypatch.setenv("HERMES_ALERT_CHANNELS", "C1:alerts")
     assert _script().main() == 1
     assert "cannot run" in capsys.readouterr().out

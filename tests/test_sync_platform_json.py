@@ -317,16 +317,14 @@ apps:
 
         # Direct calculation from empty config: staging + prod + shared, no offset
         count = platform_manifest.compute_total_services({})
-        assert count == 35
+        assert count == 33
 
     def test_total_services_counts_every_table_and_nothing_else(self) -> None:
         # The manifest publishes the shared services (Gitea, Argo CD, Headscale...)
         # beside the total, so a total that drops them contradicts its own page, and
         # a constant added on top is a number nobody derived.
-        from toolkit.scripts.sync_homepage_config import build_service_tables
-
         config = yaml.safe_load(platform_manifest.COMMON_YAML_PATH.read_text(encoding="utf-8"))
-        stg, prd, shared = build_service_tables(config)
+        stg, prd, shared = platform_manifest.build_service_tables(config)
         assert platform_manifest.compute_total_services(config) == len(stg) + len(prd) + len(shared)
 
     def test_resolve_node_status_offline(self, tmp_path: Path) -> None:

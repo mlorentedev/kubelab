@@ -33,7 +33,7 @@ DOCS = [REPO / "docs/runbooks", REPO / "docs/troubleshooting", REPO / "docs/arch
 
 # Architecture files that do not describe the running system, each with why.
 NOT_CURRENT = {
-    "docs/architecture/dash-001-homepage-cockpit.md": "dated snapshot of the cockpit's first inventory",
+    "docs/architecture/dash-001-homepage-cockpit.md": "dated snapshot of the cockpit's first inventory; Homepage retired (#2416)",
     "docs/architecture/components/kubelab-console.md": "design doc for a product with no code yet",
     "docs/architecture/diagram.md": "#825, still draws OpenClaw, PicoClaw and Prometheus",
     "docs/architecture/infra/dns-cloudflare.md": "historical zone export of 2025-08-30",

@@ -745,6 +745,330 @@ def project_services() -> list[dict[str, Any]]:
     return [_project_single_service(d) for d in SERVICE_CATALOG_DEFAULTS]
 
 
+def hub_node(config: dict[str, Any]) -> tuple[str, str]:
+    """The hub's name and the address to show for it, from the SSOT.
+
+    `clusters.hub.node` is what says which machine is the Argo CD hub, and it is
+    the single value the AWS->GCP cutover flips. Before this, four places in the
+    Homepage generator (where this lived until #2416) spelled "aws1" as a literal
+    -- a topology diagram, a flow diagram, an ASCII table and a service row -- so
+    the cutover was four edits nobody would connect to each other, in a file
+    whose whole job was to describe the fleet accurately.
+
+    Address prefers the recorded IP and falls back to MagicDNS, which is the
+    opposite of `generator_ansible` and deliberately so: these tables are read by
+    a human looking for an address, and one of them is literally titled "IP
+    reference". aws1 therefore renders exactly as it did before this change.
+
+    gcp1 has NO recorded IP at all -- a MIG rotates it on every preemption, so
+    `networking.gcp` declines to cache one -- and falls back to
+    `gcp1.kubelab.internal`, which is its stable identity.
+    """
+    name = config.get("clusters", {}).get("hub", {}).get("node", "")
+    networking = config.get("networking", {})
+    block = networking.get(name)
+    if not isinstance(block, dict):
+        block = networking.get("nodes", {}).get(name, {})
+        # Cloud nodes sit at the top level keyed by provider, not by hostname.
+        if not block:
+            for candidate in networking.values():
+                if isinstance(candidate, dict) and candidate.get("hostname") == name:
+                    block = candidate
+                    break
+    addr = block.get("tailscale_ip") or block.get("tailscale_dns") or "?"
+    return name or "?", str(addr)
+
+
+def build_service_tables(
+    config: dict[str, Any],
+) -> tuple[list[dict[str, str]], list[dict[str, str]], list[dict[str, str]]]:
+    """Build staging, prod, and shared service lists from common.yaml SSOT."""
+    hub_name, _hub_addr = hub_node(config)
+    base = config.get("global", {}).get("base_domain", "kubelab.live")
+    apps = config.get("apps", {})
+    services = apps.get("services", {})
+    platform = apps.get("platform", {})
+
+    def _auth(svc: dict[str, Any], override: str = "") -> str:
+        if override:
+            return override
+        return "Authelia" if svc.get("auth_level") == "one_factor" else "Public"
+
+    def _ver(image_str: str) -> str:
+        """Extract version tag from image string like 'authelia/authelia:4.39.15'."""
+        if ":" in image_str:
+            tag = image_str.rsplit(":", 1)[1]
+            # Clean up common prefixes/suffixes
+            tag = tag.lstrip("v")
+            if tag.startswith("RELEASE."):
+                tag = tag[8:18]  # YYYY-MM-DD
+            if tag.endswith("-alpine"):
+                tag = tag[:-7]
+            return tag
+        return ""
+
+    def _svc(
+        name: str,
+        url: str,
+        health: str,
+        auth: str,
+        cat: str,
+        node: str,
+        notes: str = "",
+        version: str = "",
+    ) -> dict[str, str]:
+        return {
+            "name": name,
+            "url": url,
+            "health": health,
+            "auth": auth,
+            "category": cat,
+            "node": node,
+            "version": version,
+            "notes": notes,
+        }
+
+    def _env_services(env: str) -> list[dict[str, str]]:
+        prefix = f"staging.{base}" if env == "staging" else base
+        ml = "staging.mlorente.dev" if env == "staging" else "mlorente.dev"
+        nd = "ace1" if env == "staging" else "VPS"
+
+        api = platform.get("api", {})
+        authelia = services.get("security", {}).get("authelia", {})
+        crowdsec = services.get("security", {}).get("crowdsec", {})
+        traefik = services.get("core", {}).get("traefik", {})
+        n8n = services.get("automation", {}).get("n8n", {})
+        grafana = services.get("observability", {}).get("grafana", {})
+        loki = services.get("observability", {}).get("loki", {})
+
+        return [
+            _svc(
+                "API",
+                f"https://api.{prefix}",
+                f"https://api.{prefix}" + api.get("health_path", "/health"),
+                _auth(api),
+                "Platform",
+                nd,
+                "REST API",
+                version=api.get("version", ""),
+            ),
+            _svc(
+                "Web",
+                f"https://{ml}",
+                f"https://{ml}",
+                "Public",
+                "Platform",
+                nd,
+                "Frontend",
+                version=platform.get("web", {}).get("version", ""),
+            ),
+            _svc(
+                "Authelia",
+                f"https://auth.{prefix}",
+                f"https://auth.{prefix}" + authelia.get("health_path", "/api/health"),
+                "Public (IdP)",
+                "Security",
+                nd,
+                "SSO / Login",
+                version=_ver(authelia.get("image", "")),
+            ),
+            _svc(
+                "CrowdSec",
+                f"https://crowdsec.{prefix}",
+                f"https://crowdsec.{prefix}" + crowdsec.get("health_path", "/health"),
+                _auth(crowdsec),
+                "Security",
+                nd,
+                "WAF / LAPI",
+                version=_ver(crowdsec.get("image", "")),
+            ),
+            _svc(
+                "Traefik",
+                f"https://traefik.{prefix}/dashboard/",
+                f"https://traefik.{prefix}/dashboard/",
+                _auth(traefik),
+                "Core",
+                nd,
+                "Dashboard",
+                version=config.get("k3s", {}).get("traefik_version", "3.x"),
+            ),
+            _svc(
+                "n8n",
+                f"https://n8n.{prefix}",
+                f"https://n8n.{prefix}" + n8n.get("health_path", "/healthz"),
+                "Authelia" if env == "prod" else "Built-in",
+                "Core",
+                nd,
+                "Automation",
+                version=_ver(n8n.get("image", "")),
+            ),
+            _svc(
+                "Grafana",
+                f"https://grafana.{prefix}",
+                f"https://grafana.{prefix}" + grafana.get("health_path", "/api/health"),
+                _auth(grafana),
+                "Observability",
+                nd,
+                "Dashboards",
+                version=_ver(grafana.get("image", "")) or "latest",
+            ),
+            _svc(
+                "Loki",
+                f"https://loki.{prefix}",
+                f"https://loki.{prefix}" + loki.get("health_path", "/ready"),
+                _auth(loki),
+                "Observability",
+                nd,
+                "Log aggregation",
+                version=_ver(loki.get("image", "")),
+            ),
+            _svc(
+                "Apprise",
+                "http://apprise.kubelab.svc:8000",
+                "http://apprise.kubelab.svc:8000/health",
+                "Internal",
+                "Core",
+                nd,
+                "Notification gateway",
+                version="1.5.0",
+            ),
+            _svc(
+                "PostgreSQL",
+                "postgres.kubelab.svc:5432",
+                "postgres.kubelab.svc:5432",
+                "Internal",
+                "Data",
+                nd,
+                "Platform DB",
+                version="17-alpine",
+            ),
+            _svc(
+                "Redis",
+                "redis.kubelab.svc:6379",
+                "redis.kubelab.svc:6379",
+                "Internal",
+                "Data",
+                nd,
+                "Session cache",
+                version="7-alpine",
+            ),
+            _svc(
+                "Vector",
+                "vector.kubelab.svc:8686",
+                "vector.kubelab.svc:8686",
+                "Internal",
+                "Observability",
+                nd,
+                "Log pipeline agent",
+                version="DaemonSet",
+            ),
+            _svc(
+                "SRE Watchers",
+                "-",
+                "-",
+                "Internal",
+                "Observability",
+                nd,
+                "Quota / R2 / Disk",
+                version="CronJobs",
+            ),
+        ]
+
+    staging = _env_services("staging")
+    prod = _env_services("prod")
+    prod.append(_svc("kubelab.live", f"https://{base}", f"https://{base}", "-", "Core", "VPS", "301 → mlorente.dev"))
+
+    headscale = services.get("core", {}).get("headscale", {})
+    uptime_kuma = services.get("observability", {}).get("uptime_kuma", {})
+    gitea = services.get("core", {}).get("gitea", {})
+
+    shared = [
+        # Gitea moved out of the per-environment list when ADR-061 classified it
+        # `singleton`: there is exactly one instance, on one apex name, so a
+        # `gitea.staging.*` tile would advertise a host that no longer resolves —
+        # the same failure #1027 fixed for Pi-hole after its apex rename.
+        _svc(
+            "Gitea",
+            f"https://gitea.{base}",
+            f"https://gitea.{base}" + gitea.get("health_path", "/api/healthz"),
+            "Built-in (OIDC)",
+            "Core",
+            "Beelink",
+            "Git hosting · on-demand",
+            version=_ver(gitea.get("image", "")),
+        ),
+        _svc(
+            "Argo CD",
+            f"https://argo.{base}",
+            f"https://argo.{base}",
+            "Authelia",
+            "Core",
+            hub_name,
+            "GitOps hub",
+            version="2.14",
+        ),
+        _svc(
+            "Headscale",
+            f"https://vpn.{base}",
+            f"https://vpn.{base}/health",
+            "Built-in",
+            "Network",
+            "VPS",
+            "VPN mesh",
+            version=_ver(headscale.get("image", "")),
+        ),
+        _svc(
+            "Uptime Kuma",
+            f"https://status.{base}",
+            f"https://status.{base}",
+            "Public",
+            "Observability",
+            "RPi3",
+            "Status page",
+            version=_ver(uptime_kuma.get("image", "")),
+        ),
+        _svc(
+            "Pi-hole",
+            f"https://pihole.{base}",
+            f"https://pihole.{base}/admin/",
+            "Built-in (v6)",
+            "Network",
+            "RPi4",
+            "DNS filtering",
+            version="v6",
+        ),
+        _svc(
+            "Pollex",
+            "http://100.64.0.8:8000",
+            "http://100.64.0.8:8000",
+            "Tailscale",
+            "AI",
+            "Jetson",
+            "Edge AI · on-demand",
+        ),
+    ]
+    # AI-009 (ADR-068): the link is the public name people use (#2135); the
+    # health probe reads ace2 directly over the tailnet, so a dead route and a
+    # dead node read apart. Absent from the SSOT, absent here.
+    open_webui = services.get("ai", {}).get("open_webui", {})
+    if open_webui:
+        direct = f"{open_webui['scheme']}://{open_webui['host']}:{open_webui['default_port']}"
+        shared.append(
+            _svc(
+                "Open WebUI",
+                f"https://{open_webui['domain']}",
+                f"{direct}{open_webui['health_path']}",
+                "Authelia (OIDC)",
+                "AI",
+                "ace2",
+                "Chat over NaN models · on-demand",
+                version=_ver(open_webui.get("image", "")),
+            )
+        )
+
+    return staging, prod, shared
+
+
 def compute_total_services(config: dict[str, Any]) -> int:
     """Count every service row the platform tables publish: staging, prod and shared.
 
@@ -757,8 +1081,6 @@ def compute_total_services(config: dict[str, Any]) -> int:
     """
     if "total_services" in config.get("apps", {}).get("platform", {}):
         return int(config["apps"]["platform"]["total_services"])
-
-    from toolkit.scripts.sync_homepage_config import build_service_tables
 
     stg, prd, shared = build_service_tables(config)
     return len(stg) + len(prd) + len(shared)
