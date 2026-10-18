@@ -7,8 +7,8 @@ one fails here rather than shipping open.
 
 The allowlist is also checked against the callers the repository names: an
 in-cluster `host:port` in a workload's ConfigMaps or pod spec, in a Traefik
-Middleware, or in an n8n workflow must be allowed by the policy of the pod it
-reaches. A new caller without a rule is a connection refused in staging, and
+Middleware, or in an n8n workflow, and every IngressRoute backend, must be
+allowed by the policy of the pod it reaches. A new caller without a rule is a connection refused in staging, and
 this finds it before the deploy does.
 
 Static: it renders both overlays and reads no cluster. Whether kube-router
