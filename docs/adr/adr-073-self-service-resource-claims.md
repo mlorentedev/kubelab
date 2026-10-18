@@ -49,7 +49,7 @@ The full constraint table is kept in the operator's architecture notes. These bi
 - **C22 Every self-service write is attributable**, and can be read back afterwards.
 - **C23 Derived state is reconciled by machinery.** No human runs `--apply` after a value changes.
 - **C24 What prod pulls must be always-on.** An on-demand node is never a prod image source.
-- **C25 Shared CI services are hosted once.** A capability every repository needs is consumed by opt-in, never copied per repository.
+- **C25 Shared CI services have one implementation.** A capability every repository needs is declared once and run at a pinned version, never copied per repository.
 - **Consumer.** A developer with no platform background must be able to deploy with defaults. Every field beyond the minimum is optional.
 
 ## Considered Options
@@ -174,7 +174,7 @@ No platform in the teardown makes generated credentials unreadable to the worklo
 | `oidc` | an Authelia client per product, its secret born at render time | owner request |
 | `object-storage` | a bucket per product with a bucket-scoped token, S3-generic interface | owner request |
 | `redis` | one small instance per product namespace, never Authelia's | owner request |
-| `review` | the PR reviewer as a hosted service (D12), one webhook receiver per forge, the model pool declared once | demand |
+| `review` | the PR reviewer (D12): one route command, run by each forge's consumer, the model pool declared once | demand |
 
 The demand counts came from the operator's product inventory. Types marked *owner request* did not meet the rule of three, and are recorded as the operator's call.
 
@@ -201,16 +201,18 @@ Deferred: SMTP, queues. n8n is not a resource: it is not multi-tenant, and the n
 - **The receiver opens the kubelab PR.**
 - **A portal is another read adapter over the same library (ADR-067 D1), and its writes stay PRs.** It follows the industry shape: a catalog of products with owners, a page per product that links into the existing tools (Argo CD, Grafana, logs, runbooks), and golden-path actions that open PRs. It never rebuilds those tools' interfaces. ADR-050 D1 places it in the console served by the Go API, which fires ADR-067's option-E trigger ("a consumer needs REST"). That question gets its own ADR, once the data this ADR defines exists.
 
-### D12. Shared CI services are hosted once, never copied per repository
+### D12. Shared CI services have one implementation, never a copy per repository
 
-- **The problem, measured.** Today the reviewer's weighted model pool, its route script and its workflow are copied into each GitHub repository that uses them. The forge's reviewer is a separate webhook pod with one fixed model and no pool (#2295). Every new repository means another copy, and the copies drift.
-- **The rule.** A capability every repository needs (the reviewer first; later the review attestation and the knowledge gate) runs as a platform service. A repository opts in, by a `review:` claim or by the receiver registering the forge webhook. It never carries the pool, the routing logic or the provider keys.
-- **The shape** is the hosted-bot pattern the industry uses for review bots: an app installed per repository, configured centrally. It is not a reusable workflow, which still puts a caller file and the provider keys in every repository, and copies drift (C7, C22).
-  - **One receiver per forge**, in webhook mode, on an always-on node (C24).
-  - **The pool is read from one SSOT** and drawn per request.
+- **The problem, measured.** Today the reviewer's weighted model pool is read by a route script copied into each GitHub repository that uses it. The forge's reviewer is a separate webhook pod with a fixed chain and no draw (#2295). Every new repository means another copy, and the copies drift (C7).
+- **The rule.** A capability every repository needs (the reviewer first; later the review attestation and the knowledge gate) has one declaration and one implementation. Each consumer runs that implementation at a pinned version. No repository carries the pool or the routing logic.
+- **The shape for the reviewer** is the owner's decision on #2295 (2026-10-18):
+  - **The draw lives in `dotf`.** A `dotf review route` command is the only reader of the pool.
+  - **Each forge runs that command.** On GitHub a reusable workflow calls it; the Gitea webhook pod runs the same binary, pinned to `DOTF_VERSION`. The route script is deleted, not ported.
+  - **The pool file is delivered** to every consumer with a drift check (dotfiles#2439).
+  - **The Anthropic allowlist moves into the command with its test**, so a consumer that reads only the pool can never spend on a model outside it.
   - **The publish guard** reports a run that published nothing as a failure, not as silence (#1957).
-- **Per-forge adapter.** The forge plugin of `forge-ci` registers the webhook and maps the repository. Whether a forge's adapter can set the model per request, rather than per process, is checked in the first implementation PR.
-- **Precondition for multi-forge.** The review attestation must read the hosted reviewer's comments on every forge it judges.
+- **Where the platform takes over.** A product's `review:` claim makes the receiver wire the forge side: on GitHub the caller workflow, on Gitea the webhook. The author writes neither by hand.
+- **Precondition for multi-forge.** The review attestation must read the reviewer's comments on every forge it judges.
 
 ## Consequences
 
@@ -238,6 +240,7 @@ Deferred: SMTP, queues. n8n is not a resource: it is not multi-tenant, and the n
   - D2 gains the `resources:` block, the optional `env:` map and `host:` per domain policy.
   - D5's NetworkPolicy becomes a precondition of the first claim.
   - D5's per-product SOPS recipient is scoped to the tenant repository.
+  - D4's tenant boundary is the forge organization: one organization per tenant, whether the tenant is the operator's employer or a client. Actions secrets, runners and packages are shared across an organization, so a team scoped to one repository does not isolate a tenant.
 - **ADR-038:** the trigger it deferred on is fired. "A product sets its own secret values and the platform applies them with no operator step" replaces the dead Image Updater condition. This closes #1613.
 - **ADR-014:** Phase 2 (Sealed Secrets) is adopted for product-owned secrets only. Operator secrets stay on SOPS.
 - **IDP-042:** open question 7 is corrected by D7. This is a spec note, not an ADR amendment.
