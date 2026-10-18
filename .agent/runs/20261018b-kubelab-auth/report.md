@@ -1,10 +1,10 @@
 # Run 20261018b-kubelab-auth
 
-**Verdict:** run 20261018b-kubelab-auth ended `queue-empty` after 2 items, 22:58Z to about 00:00Z. Results: 1 done, 1 parked, 0 merged, 1 unmerged. **Irreversible:** nothing. No prod, SOPS, Ansible or Terraform change was made.
+**Verdict:** run 20261018b-kubelab-auth ended `queue-empty` after 2 items, 22:58Z to about 00:00Z. Results: 1 done, 1 parked, 1 merged, 0 unmerged. **Irreversible:** nothing. No prod, SOPS, Ansible or Terraform change was made.
 
 ## Waiting on you
 
-1. **#2534 (closes #2522)** refuses an OIDC secret pair whose halves disagree on HUB_MANAGED. It is open and green apart from Tests, which fails on master's lesson count (601 files, the index says 600) and not on this change. Peer PR #2531 fixes the count for good by no longer committing derived counts. After #2531 lands: merge master into the branch, triage the PR-Agent review, then `dotf pr land 2534`.
+1. **#2534 (closes #2522) is merged** as `15429040` under the standing grant, after #2531 fixed master's lesson count. PR-Agent ran twice: both THEORETICAL findings were applied in `9d70bc45`, and the re-review found nothing. `dotf pr triage-queue --pr 2534` exited 0. To revert, open a revert PR of `15429040`. Nothing is deployed: `credentials generate` is an operator command.
 2. **#2492 is parked as Blocked**, with two options on the ticket:
    - (A) Fix the tests now, with a visible skip while `/ready` answers 404, naming the floor api >= 1.1.6.
    - (B) Promote the API to 1.1.6 in prod first, then rewrite both tests plainly.
@@ -15,14 +15,14 @@
 
 | Item | Result | Evidence |
 |---|---|---|
-| #2522 | PR #2534 | New tests were red before the fix (`1 failed, 11 passed`) and green after (`40 passed` across the credential suites). Mutating the catalog kind made the catalog test RED; disabling the guard made the run-guard test RED. |
+| #2522 | PR #2534 (merged `15429040`) | New tests were red before the fix (`1 failed, 11 passed`) and green after (`40 passed` across the credential suites). Mutating the catalog kind made the catalog test RED; disabling the guard made the run-guard test RED. |
 | #2492 | parked (Blocked) | Prod values declare `apps.platform.api.version: 1.1.0`. `/ready` reports `beehiiv` and `email`; the test's `{database, external_services, email, cache}` matches no handler. |
 
 ## Worktree sweep
 
 There is one consolidated list, owned by feat-idp-042-product-registry-7c in its handoff and disarm report, agreed with fix-bug-sweep-0d and feat-idp-042-contract-schema-9d. This lane's entries in it:
 - `fix-kuma-perimeter-2483` and `fix-oidc-mint-from-ssot-1777` are removable.
-- `fix-oidc-pair-hub-agree-2522` stays until #2534 lands.
+- `fix-oidc-pair-hub-agree-2522` is removable (#2534 merged).
 - This worktree is removable once this report is pushed.
 - The launch dir `fix-sso-signout-1813` is removable after the session ends.
 
