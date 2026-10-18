@@ -6,6 +6,7 @@ Description=The repository's read-only docs mirror
 Wants=network-online.target
 After=network-online.target
 OnFailure=kubelab-notify@%n.service
+OnSuccess=kubelab-notify-recovered@%n.service
 
 [Service]
 Type=oneshot

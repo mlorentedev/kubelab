@@ -151,7 +151,7 @@ cached build and reports no change.
 The agent writes files; it never commits. Its sandbox sees the vault clone
 read-only at `/vault` and only `/vault/80_agents/hermes-kubelab/` writable.
 `hermes-kubelab-vault-sync.service` commits that zone as `hermes-kubelab` and
-pushes it. A failed run pages through `kubelab-notify@`.
+pushes it. A failed run pages through `kubelab-notify@` once per incident: the first failure, a reminder with the count each hour, and one recovery page when the next run succeeds (#2423).
 
 - **Is it syncing?** `journalctl -u hermes-kubelab-vault-sync -n 20` on ace2,
   and `git -C ~/Projects/knowledge log --author=hermes-kubelab -3` on any
