@@ -1,0 +1,45 @@
+# Arming envelope for the overnight IDP-042 run of the registry lane.
+# The operator split the lane on 2026-10-18: this run owns PR 2 (#2470) and PR 5.
+# PR 1, PR 3 and PR 4 belong to the contract-schema lane (chore/autopilot-run-20261018-idp042).
+# Any PR touching .github/** is opened and never merged (always-human floor).
+version: 1
+run_id: "2026-10-18-idp042-registry"
+armed_by: manu
+armed_at: 2026-10-18T08:34:04Z
+expires_at: 2026-10-18T16:34:04Z
+objective: "Land IDP-042 PR 2 (#2470) and the #2469 fix (#2474), then open IDP-042 PR 5 (registry-derived literals)."
+scope:
+  write_paths:
+    - "toolkit/**"
+    - "tests/**"
+    - "infra/config/**"
+    - "specs/IDP-042-product-contract-registry/tasks.md"
+    - "Makefile"
+    - ".github/workflows/promote-prod.yml"
+    - "docs/lessons/**"
+    - ".agent/runs/**"
+  frozen_paths:
+    - ".github/merge-grant.yml"
+    - ".github/workflows/release*.yml"
+    - "harness/**"
+    - "**/AGENTS.md"
+    - "**/*.enc.yaml"
+    - ".agent/unattended.yml"
+    - "toolkit/features/oidc_clients.py"
+    - "toolkit/features/credentials.py"
+  max_files: 10
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make, poetry]
+queue:
+  source: bitacora
+  filter: 'IDP-042 (#1926) items owned by this lane: #2470, #2474, PR 5 of specs/IDP-042-product-contract-registry/tasks.md'
+  max_items: 3
+budget:
+  max_iterations: 8
+  max_minutes_per_iteration: 25
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant
+  push: true
+  open_pr: true
+  advisor_tier: top
