@@ -26,6 +26,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, Validation
 from toolkit.config.settings import settings
 
 REGISTRY_RELPATH = Path("infra") / "config" / "products.yaml"
+COMMON_VALUES_RELPATH = Path("infra") / "config" / "values" / "common.yaml"
 
 # App names key the flattened values (``APPS_PLATFORM_<NAME>_*``), so they are
 # limited to what an env-var segment can carry without translation.
@@ -163,3 +164,32 @@ def app_for_event(event: str, path: Path | None = None) -> str:
         f"event type '{event}' is not mapped to any product in {resolved}; "
         "a product is admitted by adding its entry to the registry"
     )
+
+
+def platform_registry() -> str:
+    """The platform's image registry (``registry`` in ``common.yaml``), read without SOPS."""
+    path = settings.project_root / COMMON_VALUES_RELPATH
+    value = (yaml.safe_load(path.read_text()) or {}).get("registry")
+    if not value:
+        raise RegistryError(f"{path}: no top-level `registry` to derive product images from")
+    return str(value)
+
+
+def derived_image(app: str, path: Path | None = None) -> str:
+    """The image repository the platform derives for a product (Q7): ``<registry>/<image_name or app>``.
+
+    The platform registry already ends in the owner (``docker.io/mlorentedev``), so
+    the rule ``<registry>/<owner>/<product>`` reads ``<registry>/<product>``. A
+    contract's ``image`` must equal this; an in-tree product has no contract, and its
+    hand-authored image (``kubelab-api``) is not what the rule yields, so it refuses.
+    """
+    resolved = Path(path) if path is not None else registry_path()
+    product = load_registry(resolved).products.get(app)
+    if product is None:
+        raise RegistryError(f"'{app}' is not a registered product in {resolved}")
+    if not product.contract_managed:
+        raise RegistryError(
+            f"'{app}' is in-tree in {resolved}: its image is hand-authored in apps.platform.{app}.image_name, "
+            "not derived from a contract"
+        )
+    return f"{platform_registry()}/{product.image_name or app}"
