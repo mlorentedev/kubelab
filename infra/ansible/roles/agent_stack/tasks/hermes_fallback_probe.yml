@@ -48,7 +48,7 @@
                 '-e', 'SLACK_BOT_TOKEN=', '-e', 'SLACK_APP_TOKEN=', '-e', 'SLACK_ALLOWED_USERS=',
                 '-e', 'API_SERVER_ENABLED=false',
                 '-e', 'HERMES_HOME=' ~ agent_stack_fallback_probe_home,
-                '-v', agent_stack_fallback_probe_config ~ ':' ~ agent_stack_fallback_probe_home ~ '/config.yaml:ro',
+                '-v', agent_stack_fallback_probe_config ~ ':' ~ agent_stack_fallback_probe_config_mount ~ ':ro',
                 agent_stack_hermes.image, 'gateway', 'run'] }}
       become_user: "{{ agent_stack_agent_user }}"
       environment: "{{ agent_stack_agent_daemon_env }}"
@@ -66,6 +66,7 @@
       register: _agent_stack_fallback_pool
       changed_when: false
       failed_when: false
+      check_mode: false
 
     - name: Give the probe a copy of the live credential pool
       ansible.builtin.shell:
@@ -105,10 +106,12 @@
       become_user: "{{ agent_stack_agent_user }}"
       environment: "{{ agent_stack_agent_daemon_env }}"
       register: _agent_stack_fallback_answer
-      until: _agent_stack_fallback_answer.rc == 0
+      until: _agent_stack_fallback_answer.rc == 0 or ansible_check_mode
+      ignore_errors: "{{ ansible_check_mode }}"
       retries: 8
       delay: 15
       changed_when: false
+      check_mode: false
 
     - name: Read the probe's log
       ansible.builtin.shell:
@@ -120,6 +123,7 @@
       environment: "{{ agent_stack_agent_daemon_env }}"
       register: _agent_stack_fallback_log
       changed_when: false
+      check_mode: false
 
     # The gateway writes the event to its own log files under HERMES_HOME, not to the container's
     # stdout, so both are read. What is shown on a failure is the line that decided it, never the whole log.
@@ -151,6 +155,7 @@
       register: _agent_stack_fallback_why
       changed_when: false
       failed_when: false
+      check_mode: false
 
     - name: Fail with the probe's own account
       ansible.builtin.fail:

@@ -228,6 +228,7 @@ agent_stack_fallback_probe_name: hermes-fallback-probe
 # Copy the live gateway's credential pool into the probe, so the proof sees the state it runs on.
 agent_stack_fallback_probe_pool: true
 agent_stack_fallback_probe_home: /opt/probe-home
+agent_stack_fallback_probe_config_mount: "{{ agent_stack_fallback_probe_home }}/config.yaml"
 agent_stack_fallback_probe_config: "{{ agent_stack_agent_home }}/hermes-fallback-probe-config.yaml"
 # A line the probe's log must not carry: it opened a Slack connection.
 agent_stack_fallback_probe_slack_pattern: '(?i)slack[^\n]*(connected|socket mode|authenticated|starting)'
