@@ -6,8 +6,9 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+import yaml
 
-from toolkit.features import platform_manifest, promotion, registry
+from toolkit.features import platform_manifest, product_registry, promotion, registry
 
 _VALUES = """\
 # top-of-file comment must survive a round-trip edit
@@ -126,6 +127,49 @@ class TestPromote:
     def test_rejects_dev_env(self, env_patched) -> None:
         with pytest.raises(ValueError, match="staging|prod"):
             promotion.promote("dev", "web", "1.2.0")
+
+
+FIXTURE_REGISTRY = Path(__file__).parent / "fixtures" / "product" / "registry.yaml"
+
+
+class TestPromoteReadsTheRegistry:
+    """#1815: the apps ``promote`` accepts are the registry's, not a literal tuple."""
+
+    @pytest.fixture(autouse=True)
+    def _fixture_registry(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(product_registry, "registry_path", lambda: FIXTURE_REGISTRY)
+
+    def test_promotes_a_registered_product_other_than_api_and_web(self, env_patched, monkeypatch) -> None:
+        root, generator = env_patched
+        values = _write_values(root)
+        promotion.ConfigurationManager.return_value.get_env_vars.return_value["APPS_PLATFORM_THIRD_IMAGE_NAME"] = (
+            "third"
+        )
+        _mock_registry(monkeypatch, 200)
+
+        promotion.promote("staging", "third", "sha-abc1234")
+
+        third = yaml.safe_load(values.read_text())["apps"]["platform"]["third"]
+        assert third["version"] == "sha-abc1234"
+        generator.return_value.generate.assert_called_once_with("staging")
+
+    def test_refuses_an_unregistered_product_naming_the_registry(self, env_patched) -> None:
+        root, generator = env_patched
+        _write_values(root)
+
+        with pytest.raises(ValueError, match=r"ghost.*fixtures/product/registry\.yaml"):
+            promotion.promote("staging", "ghost", "sha-abc1234")
+        generator.return_value.generate.assert_not_called()
+
+    def test_resolve_image_sha_accepts_a_registered_product(self, env_patched) -> None:
+        root, _ = env_patched
+        _write_values(root, "apps:\n  platform:\n    third:\n      version: sha-abc1234\n")
+
+        assert promotion.resolve_image_sha("staging", "third") == "sha-abc1234"
+
+    def test_resolve_image_sha_refuses_an_unregistered_product(self, env_patched) -> None:
+        with pytest.raises(ValueError, match=r"ghost.*fixtures/product/registry\.yaml"):
+            promotion.resolve_image_sha("staging", "ghost")
 
 
 _COMMON = """\

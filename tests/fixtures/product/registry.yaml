@@ -1,0 +1,21 @@
+# Fixture registry for tests/test_product_registry.py and tests/test_promotion.py.
+# Same shape as infra/config/products.yaml, plus a third product that the real
+# registry does not admit, so a test can prove the platform apps come from the
+# file rather than from a literal (#1815).
+products:
+  api:
+    forge: in-tree
+  web:
+    repository: mlorentedev/web
+    forge: github
+    receiver: legacy
+    image_name: kubelab-web
+    events:
+      staging: web-image-published
+      prod: web-release-published
+  third:
+    repository: mlorentedev/third
+    forge: github
+    receiver: generic
+    events:
+      staging: third-image-published

@@ -1408,6 +1408,51 @@ apps:
           members:
             - superadmin
             - operator
+        # The `area:<AREA>` labels `make sync-vikunja` makes exist (APP-CONFIG-021, #2480):
+        # the filterable form of the AREA prefix every task title carries (ADR-066 D6).
+        # These are the areas used by at least ten issues across kubelab, dotfiles and
+        # knowledge (counted 2026-10-18); the long tail is created on demand by the paths
+        # that read a title, the importer (#2465) and the issue-to-task path (#1684).
+        # Each entry must be an AREA segment of the spec idPattern; a test refuses the rest.
+        labels:
+          areas:
+            - AI
+            - ANSIBLE
+            - APP-CONFIG
+            - AUTH
+            - BACKUP
+            - BUG
+            - CI
+            - CI-GATE
+            - CLI
+            - DASH
+            - DASH-DT
+            - DEBT
+            - DELIVERY
+            - DOCS
+            - DX
+            - GUARD
+            - HARNESS
+            - HERMES
+            - IDEAS
+            - IDP
+            - MEMORY
+            - NOTIFY
+            - OBS
+            - OPS
+            - PLAT
+            - REFACTOR
+            - SDD
+            - SEC
+            - SSOT
+            - TEST
+            - TF
+            - TOOL
+            - TOOLKIT
+            - VAULT
+            - VPN
+            - VPN-ACL
+            - WIN
         resources:
           cpu_limit: "0.5"
           memory_limit: "256M"
@@ -1943,6 +1988,14 @@ apps:
             email: breakglass@kubelab.live
             secret: apps.services.ai.open_webui.admin_password
           loki: {}
+          uptime-kuma:
+            # The private path only (#2483): the EndpointSlice address over the tailnet
+            # (RPi3), never the public route or the IdP. Not an account form: Kuma's own
+            # login (SOPS `admin_user`/`admin_password`, kept in step by `credentials
+            # generate`) still guards the dashboard until phase 2 of #2482 turns it off,
+            # and declaring it here would pull that password into `--group break-glass`,
+            # which has no Kuma reconciler.
+            path: /dashboard
           vikunja:
             none: "Task board, not a 3 AM service (ADR-028): it waits for the IdP to come back."
           n8n:
@@ -2344,6 +2397,14 @@ apps:
                 problem, but change nothing and run nothing that changes a system: the
                 operator approves fixes. Reply in English, under twelve lines, with the
                 most serious group first. Never repeat a credential.
+                Messages that name different pull requests, apps, hosts or units are
+                different problems: list each by its identifier, and call two messages
+                duplicates only when the identifier matches. A line saying the script
+                cannot run, or that a channel cannot be read, is a fact to quote as it
+                is: do not guess its cause, name no configuration key, environment
+                variable or tool, and do not suggest connecting an integration, because
+                you have no Slack tool and cannot see the configuration. A problem the
+                output marks as already reported is not repeated here.
 
 # Terraform state (TF-007, ADR-069). Every root keeps its state in this R2
 # bucket under `<root>/terraform.tfstate`; `make sync-terraform-backend` renders

@@ -168,7 +168,9 @@
       changed_when: false
       check_mode: false
       diff: false
-      when: _agent_stack_hermes_profile.stat.exists | default(false)
+      when:
+        - _agent_stack_hermes_profile.stat.exists | default(false)
+        - not (ansible_check_mode and _agent_stack_hermes_persona_dirs.changed)
 
     - name: Install the profile fragment
       ansible.builtin.copy:
@@ -179,7 +181,9 @@
         group: root
         mode: "0644"
       diff: false
-      when: _agent_stack_hermes_profile.stat.exists | default(false)
+      when:
+        - _agent_stack_hermes_profile.stat.exists | default(false)
+        - not (ansible_check_mode and _agent_stack_hermes_persona_dirs.changed)
 
     - name: Remove the profile fragment when the mirror has none
       ansible.builtin.file:
