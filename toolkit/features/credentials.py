@@ -551,7 +551,8 @@ class CredentialsManager:
             self._report_secret_names(env, generated_secrets, hub_secrets)
 
         if print_secrets:
-            self._print_secrets_for_manual_copy(env, {**generated_secrets, **hub_secrets})
+            self._print_secrets_for_manual_copy(f"{env}.enc.yaml", generated_secrets)
+            self._print_secrets_for_manual_copy("common.enc.yaml", hub_secrets)
 
     def _mint_oidc_client_secrets(self, env: str) -> tuple[dict[str, str], dict[str, str], list[str]]:
         """A fresh secret and digest for every OIDC client the SSOT declares for `env` (#1777).
@@ -611,10 +612,10 @@ class CredentialsManager:
         derived = {spec.key_path: spec.derived_from for spec in SECRET_CATALOG}
         for client_id in rotated:
             plaintext = derived[oidc_clients.digest_key(client_id)]
-            logger.warning(
-                f"{client_id}: rotated in SOPS only. Commit the regenerated oidc-clients.yml for {env}, "
-                f"then deliver it: {notes.get(plaintext) or 'no delivery step is catalogued'}"
-            )
+            # Dev has no rendered client file: Compose renders Authelia's config at generate time.
+            commit = "" if env == "dev" else f"Commit the regenerated oidc-clients.yml for {env}, then deliver it: "
+            delivery = notes.get(plaintext) or "no delivery step is catalogued"
+            logger.warning(f"{client_id}: rotated in SOPS only. {commit}{delivery}")
 
     def _report_secret_names(self, env: str, generated: dict[str, str], hub: dict[str, str]) -> None:
         """Name, never show, what a write would change (#1733)."""
@@ -719,11 +720,15 @@ class CredentialsManager:
             logger.warning(f"Could not update Uptime Kuma password: {e}")
             logger.warning("Update manually or ensure RPi3 is reachable via Tailscale.")
 
-    def _print_secrets_for_manual_copy(self, env: str, secrets_dict: dict[str, str]) -> None:
-        """Print generated secrets in YAML format for manual copy to SOPS."""
-        logger.section(f"Generated Secrets for {env.upper()}")
-        logger.warning("Copy these values to your SOPS file:")
-        logger.warning(f"  sops infra/config/secrets/{env}.enc.yaml\n")
+    def _print_secrets_for_manual_copy(self, file_name: str, secrets_dict: dict[str, str]) -> None:
+        """Print one SOPS file's generated secrets as YAML, for manual copy into that file.
+
+        One call per file, never a merged dict: hub keys copied into an env file shadow
+        common's for that env (SSOT-028, #1789).
+        """
+        logger.section(f"Generated secrets for {file_name}")
+        logger.warning("Copy these values to that SOPS file:")
+        logger.warning(f"  sops infra/config/secrets/{file_name}\n")
 
         # Rendered from the keys themselves rather than a list of expected ones, so a key
         # added to the generated set (an OIDC client, #1777) is printed without an edit here.

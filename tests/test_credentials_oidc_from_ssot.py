@@ -99,3 +99,35 @@ def test_the_retired_kubelab_oidc_pair_is_an_acknowledged_orphan() -> None:
         path = f"apps.services.security.authelia.{key}"
         assert path not in SPECS, f"{path} is still catalogued, so audits keep demanding a secret nothing reads"
         assert path in orphans, f"{path} must be acknowledged in the orphan baseline until SOPS drops it"
+
+
+def test_the_manual_copy_prints_hub_keys_under_common_only(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Printed under the env file's header, the Argo CD pair would be copied into the shadow SSOT-028 removed."""
+    from toolkit.features import credentials
+
+    cm = MagicMock()
+    cm.get_merged_config.return_value = {"apps": {"auth": {"identities": {"operator": "operator"}}}}
+    monkeypatch.setattr(credentials, "ConfigurationManager", MagicMock(return_value=cm))
+    answers = iter(["operator", "Passw0rdForTests"])
+    monkeypatch.setattr(credentials.typer, "prompt", lambda *a, **k: next(answers))
+    manager = credentials.CredentialsManager()
+    for name, fake in {
+        "_read_existing_secrets": lambda env: {},
+        "generate_argon2_hash": lambda s: "$argon2id$fake",
+        "generate_oidc_client_secret_hash": lambda s: "$argon2id$fake",
+        "generate_bcrypt_hash": lambda s: "$2b$fake",
+        "_generate_htpasswd_bcrypt_hash": lambda u, p: "u:$2y$fake",
+    }.items():
+        monkeypatch.setattr(manager, name, fake)
+
+    manager.setup_authelia_secrets("prod", print_secrets=True)
+
+    out = capsys.readouterr().out
+    _, env_header, rest = out.partition("Generated secrets for prod.enc.yaml")
+    env_block, hub_header, hub_block = rest.partition("Generated secrets for common.enc.yaml")
+    assert env_header and hub_header, "each file gets its own block"
+    assert "oidc_client_secret_grafana" in env_block
+    assert "oidc_client_secret_argocd" not in env_block
+    assert "oidc_client_secret_argocd" in hub_block
