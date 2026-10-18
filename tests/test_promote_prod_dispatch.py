@@ -307,6 +307,15 @@ def test_an_unknown_app_on_the_manual_path_is_refused(tmp_path: pathlib.Path) ->
 
 
 @_needs_bash
+@pytest.mark.parametrize("app", ["we", "ap", ""])
+def test_a_part_of_a_product_name_is_not_a_product(tmp_path: pathlib.Path, app: str) -> None:
+    """The registry match is on the whole name: `we` is not `web`."""
+    code, out, _ = _resolve(tmp_path, EVENT="workflow_dispatch", INPUT_APP=app, INPUT_VERSION="1.1.1")
+    assert code != 0, f"{app!r} was accepted as a product"
+    assert out == {}
+
+
+@_needs_bash
 def test_an_event_type_the_registry_does_not_map_fails_loudly(tmp_path: pathlib.Path) -> None:
     """AC1: a product absent from the registry is refused, in red, on the run page."""
     code, out, log = _resolve(

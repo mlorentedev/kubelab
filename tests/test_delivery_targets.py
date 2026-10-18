@@ -129,6 +129,14 @@ def test_an_app_the_platform_does_not_have_is_refused() -> None:
     assert not _dispatched(proc)
 
 
+def test_a_part_of_a_product_name_is_not_a_product() -> None:
+    """The match is on the whole line: `we` is not `web`."""
+    proc = _make("promote-prod", "APP=we", "VERSION=1.12.0")
+    assert proc.returncode == 2
+    assert "Unknown APP" in proc.stdout
+    assert not _dispatched(proc)
+
+
 @pytest.mark.parametrize("app", product_registry.platform_apps())
 def test_every_registered_product_is_dispatched(app: str) -> None:
     proc = _make("promote-prod", f"APP={app}", "VERSION=1.12.0")
