@@ -86,6 +86,17 @@ def test_the_environment_variable_the_contact_point_names_is_one_grafana_receive
     assert (ref["name"], ref["key"]) == ("grafana-admin", "n8n-webhook-secret")
 
 
+@pytest.mark.parametrize("env", ENVS)
+def test_a_missing_webhook_secret_does_not_keep_grafana_from_starting(env: str) -> None:
+    """The key is written by `apply-secrets`, a separate operator step from the merge. A required
+    reference makes the new pod wait in CreateContainerConfigError, and with the Recreate strategy
+    and Argo's auto-sync that is Grafana, and the page with it, down until the step is run (r2512 F1).
+    Optional, the pod starts, the bearer expands to nothing and n8n refuses the call."""
+    entry = next(e for e in _grafana_env(env) if e["name"] == "N8N_WEBHOOK_SECRET")
+
+    assert entry["valueFrom"]["secretKeyRef"].get("optional") is True
+
+
 def test_the_secret_is_the_one_the_workflows_inbound_credential_will_be_built_from() -> None:
     """Every n8n webhook is authenticated by the notify secret (`Header Auth`, imported from SOPS).
     Grafana sends the same value, so the two can only disagree if one side reads another key."""
