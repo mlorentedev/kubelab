@@ -1,60 +1,46 @@
 version: 1
-run_id: "20261018-kubelab-auth"
+run_id: "20261018b-kubelab-auth"
 armed_by: manu
-armed_at: 2026-10-18T08:27:32Z
-expires_at: 2026-10-18T16:27:32Z
+armed_at: 2026-10-18T22:58:00Z
+expires_at: 2026-10-19T00:58:00Z
 objective: >-
-  Put the Authelia perimeter in front of Uptime Kuma's admin paths (operator option B,
-  phase 1 only), then continue epic #2390 in its published order (comment 6231198297).
+  Close the two plan-ready auth-epic follow-ups (#2522, then #2492) under the standing grant,
+  then sweep worktrees and hand off so the next session starts from a clean, stable point.
 scope:
   write_paths:
     - "toolkit/**"
     - "tests/**"
     - "docs/**"
-    - "specs/**"
-    - "infra/k8s/**"
-    - "infra/config/values/**"
-    - "infra/config/uptime-kuma/**"
     - "*.md"
   frozen_paths:
     - ".github/**"
     - "harness/**"
     - "**/AGENTS.md"
     - ".agent/unattended.yml"
-    - "infra/config/secrets/**"
-    - "infra/terraform/**"
-    - "infra/ansible/**"
-    - "infra/helm/**"
-  max_files: 25
+    - "infra/**"
+    - "apps/**"
+  max_files: 10
   max_loc: 300
-allowed_commands: [dotf, gh, git, make, poetry, python, pytest, ruff, toolkit, kubectl, curl]
+allowed_commands: [dotf, gh, git, make, poetry, python, pytest, ruff, toolkit]
 queue:
   source: bitacora
   filter: >-
-    (1) Uptime Kuma perimeter phase 1: Authelia ForwardAuth on the admin paths, public
-    paths (status pages, push heartbeats, badges, entry-page, assets) left open, Authelia
-    rule one_factor, break-glass entry, self-check monitor moved to a public path. Kuma's
-    own auth stays on (phase 2 waits for the operator to verify the perimeter).
-    (2) Then epic #2390's published order, steps marked [S]: #1777, #1355, #1356 (in that
-    order, all in credentials.py). OUT of this run, parked as proposals on the umbrella
-    ticket: Kuma phase 2 (disable Kuma auth), Argo CD cold-visit route (needs
-    make deploy-argocd, owner-gated), Gitea perimeter (peer lane owns Gitea, #2375),
-    Open WebUI auto-redirect (Ansible on ace2 + browser sign-out test), Vikunja perimeter
-    (peer PR #2464 in the same subsystem), Authelia branding (no logo file). Nothing that
-    needs a SOPS write or an Ansible run. kubectl read-only or through make targets.
-  max_items: 4
+    (1) #2522 refuse an OIDC secret pair whose halves disagree on HUB_MANAGED (toolkit guard
+    plus test). (2) #2492 e2e API health tests; must keep make test-e2e green in BOTH staging
+    (api with /ready) and prod (api 1.1.0, no /ready) this session, or park with two options.
+    Nothing that needs a SOPS write, an Ansible run, a promotion or a prod deploy.
+  max_items: 2
 budget:
-  max_iterations: 8
-  max_minutes_per_iteration: 60
+  max_iterations: 4
+  max_minutes_per_iteration: 50
   max_consecutive_failures: 2
 authority:
   merge: standing-grant
   merge_basis: >-
-    .github/merge-grant.yml on master (grant: prs-the-agent-opened). Conditions on one
-    head commit: peers coordinated, CI green, no conflicts, `## Review triage` posted,
-    `dotf pr triage-queue --pr N` clear; land with `dotf pr land N`. Owner 2026-10-17:
-    prod-affecting merges allowed when the conditions hold; staging validated by
-    consequence first, prod verified after merge, revert PR if prod breaks.
+    .github/merge-grant.yml on master. Conditions on one head commit: peers coordinated, CI
+    green, no conflicts, `## Review triage` posted, `dotf pr triage-queue --pr N` clear; land
+    with `dotf pr land N`. Operator 2026-10-18 ~22:55Z: finish PRs I open that are green, clean
+    and triaged; end with handoff and a worktree sweep (commands for finished ones only).
   push: true
   open_pr: true
   advisor_tier: top
