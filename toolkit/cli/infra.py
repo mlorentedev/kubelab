@@ -1144,9 +1144,10 @@ def k8s_deploy(
     # Server-side apply, used identically by the dry-run and the real apply below
     # (OPS-015 / #938). Client-side apply stores a full copy of every object in its
     # `last-applied-configuration` annotation to compute future three-way merges,
-    # and that annotation is capped at 262144 bytes. The generated homepage
-    # ConfigMap exceeds it, which blocked this path and Argo CD alike. SSA keeps
-    # ownership in `metadata.managedFields` and writes no such annotation.
+    # and that annotation is capped at 262144 bytes. The generated Homepage
+    # ConfigMap (retired by #2416) exceeded it, which blocked this path and Argo CD
+    # alike. SSA keeps ownership in `metadata.managedFields` and writes no such
+    # annotation.
     #
     # `--force-conflicts` is the documented pattern for a declarative pipeline
     # taking ownership, not a workaround: every object already in the cluster

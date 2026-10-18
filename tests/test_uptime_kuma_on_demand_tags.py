@@ -100,7 +100,6 @@ UNRESOLVED_PAGING = {
     "home-iot-smart-plug-co",
     "infra-vpn-headscale",
     "prod-api-api-kubelab-live",
-    "prod-web-homepage-cockpit",
     "prod-web-kubelab-live",
     "prod-web-mlorente-dev",
     "services-auth-argo-cd",

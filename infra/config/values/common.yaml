@@ -1704,16 +1704,6 @@ apps:
           cpu_reservation: "0.25"
           memory_reservation: 256M
 
-      homepage:
-        name: homepage
-        domain: home.kubelab.live
-        default_port: 3000
-        health_path: /
-        enable_auth: false
-        # Pinned, not :latest — v2.0.0 (2026-08-14) bumped Next.js to a release
-        # that rejects kubelet's pod-IP-addressed probes as an invalid Host.
-        image: ghcr.io/gethomepage/homepage:v1.13.2
-
       uptime_kuma:
         name: uptime-kuma
         domain: status.kubelab.live
@@ -1993,9 +1983,6 @@ apps:
             none: "Read-only diagnostics on api@internal; the cluster credential covers inspection."
           dev-node:
             none: "On-demand developer node (ADR-058): its own access path is SSH over the tailnet."
-          # #456: Homepage has no login of its own; with the IdP down, the cockpit is
-          # one port-forward away, which is what `{}` derives.
-          homepage: {}
 
       crowdsec:
         name: crowdsec
@@ -2151,7 +2138,7 @@ apps:
         # labels them in Loki (the workloads of prod's `kubelab` namespace).
         grafana_reader:
           url: https://grafana.kubelab.live # apps.services.observability.grafana.domain
-          apps: [api, apprise, authelia, crowdsec, errors, grafana, homepage, loki, n8n, postgres, redis, vector, vikunja]
+          apps: [api, apprise, authelia, crowdsec, errors, grafana, loki, n8n, postgres, redis, vector, vikunja]
           tools: [firing_alerts, errors_by_app, log_volume_by_app, recent_errors]
         # Run through the agent's daemon at every provision, with a memory and a
         # CPU limit, to prove the sandbox Hermes executes commands in can start.
