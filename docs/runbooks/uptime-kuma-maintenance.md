@@ -25,8 +25,7 @@ Monitors exported from Uptime Kuma group these external probes (see
 backup JSON for the live list):
 
 - All prod public ingresses behind VPS Traefik (`*.kubelab.live`):
-  api, web, grafana, authelia, gitea, n8n, argocd, vpn (Headscale UI),
-  homepage.
+  api, web, grafana, authelia, gitea, n8n, argocd, vpn (Headscale UI).
 - TLS certificate expiry notifications (`expiryNotification: true`)
   for the 20 HTTPS monitors registered in OPS-005.
 - `vpn.kubelab.live` reachability (public-IP path, not Tailscale, per

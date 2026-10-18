@@ -85,5 +85,5 @@ master branch  → kubectl apply -k overlays/prod → K3s VPS
 - [Architecture snapshot of 2026-03-22](current-state-2026-03-22.md) (historical)
 - [Platform architecture diagram](diagram.md)
 - [Versioning strategy](versioning-strategy.md)
-- [DASH-001: Homepage cockpit](dash-001-homepage-cockpit.md)
-- [Homepage endpoints tab plan](plans/2026-03-26-homepage-endpoints-tab.md)
+- [DASH-001: Homepage cockpit](dash-001-homepage-cockpit.md) (historical; Homepage retired by #2416)
+- [Homepage endpoints tab plan](plans/2026-03-26-homepage-endpoints-tab.md) (historical)

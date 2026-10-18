@@ -83,7 +83,7 @@ Personal Internal Developer Platform (IDP) — a hybrid-cloud infrastructure pow
 
 ### Self-hosted services
 
-Grafana, Loki, Vector, Authelia, CrowdSec, Gitea, n8n, Redis, PostgreSQL, Apprise, Homepage. Argo CD runs on the GCP hub. Pi-hole and Uptime Kuma are external, reached through K3s EndpointSlices.
+Grafana, Loki, Vector, Authelia, CrowdSec, Gitea, n8n, Redis, PostgreSQL, Apprise. Argo CD runs on the GCP hub. Pi-hole and Uptime Kuma are external, reached through K3s EndpointSlices.
 
 ## Project Structure
 
