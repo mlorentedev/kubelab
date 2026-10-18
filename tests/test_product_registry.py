@@ -37,6 +37,17 @@ class TestPlatformApps:
         assert declared, f"values/{env}.yaml declares no apps.platform block; the check would cover nothing"
         assert set(declared) <= set(product_registry.platform_apps())
 
+    @pytest.mark.parametrize("env", ["staging", "prod"])
+    def test_every_registered_product_has_a_platform_block_in_each_cluster_env(self, env: str) -> None:
+        """The other direction: the generators skip an app with no image, domain or port.
+
+        A product admitted to the registry before its ``apps.platform.<app>`` block
+        exists would be iterated and then dropped with a debug line, never deployed.
+        """
+        declared = set(_platform_blocks("common")) | set(_platform_blocks(env))
+        missing = [app for app in product_registry.platform_apps() if app not in declared]
+        assert not missing, f"registered but absent from apps.platform in common.yaml + {env}.yaml: {missing}"
+
     def test_the_registry_keeps_the_order_common_yaml_declares(self) -> None:
         """The generators iterate the registry, so its order is their output order.
 
