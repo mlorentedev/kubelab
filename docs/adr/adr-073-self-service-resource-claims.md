@@ -6,7 +6,7 @@ owner: manu
 date: "2026-10-18"
 issue: "kubelab#2449"
 tags: [architecture, decision, platform, product-contract, resource-claims, secrets, gitops, self-service]
-depends_on: [adr-014-secrets-management-strategy, adr-038-secret-delivery-paths, adr-042-reference-architecture, adr-046-gitops-delivery-promotion-strategy, adr-049-edge-object-storage-placement-doctrine, adr-050-cross-context-command-center, adr-067-product-contract-and-agent-access]
+depends_on: [adr-014-secrets-management-strategy, adr-038-secret-delivery-paths, adr-042-reference-architecture, adr-046-gitops-delivery-promotion-strategy, adr-049-edge-object-storage-placement-doctrine, adr-050-cross-context-command-center, adr-062-platform-identity-model, adr-067-product-contract-and-agent-access]
 created: "2026-10-18"
 ---
 
@@ -14,7 +14,7 @@ created: "2026-10-18"
 
 ## Status
 
-Proposed, 2026-10-18. It is the output of an architecture session on kubelab#2449. Once accepted, it extends [ADR-067](adr-067-product-contract-and-agent-access.md) D2 (the product contract) and D5 (tenancy). It also fires the deferred decision in [ADR-038](adr-038-secret-delivery-paths.md) and scopes [ADR-014](adr-014-secrets-management-strategy.md)'s Phase 2. The amendment notes on those ADRs are added in the same PR once the decision is accepted, not before.
+Proposed, 2026-10-18. It is the output of an architecture session on kubelab#2449. Once accepted, it extends [ADR-067](adr-067-product-contract-and-agent-access.md) D2 (the product contract), D4 (the tenant boundary) and D5 (tenancy), and [ADR-062](adr-062-platform-identity-model.md) D2 (per-product roles). It also fires the deferred decision in [ADR-038](adr-038-secret-delivery-paths.md) and scopes [ADR-014](adr-014-secrets-management-strategy.md)'s Phase 2. The amendment notes on those ADRs are added in the same PR once the decision is accepted, not before.
 
 ## Context
 
@@ -22,7 +22,7 @@ ADR-067 gives a product a contract, `kubelab.yaml`, covering its image, port, he
 
 What exists, measured on 2026-10-18:
 
-- **Cluster Secrets are applied by hand.** `make apply-secrets` decrypts SOPS with the operator's key and runs `kubectl` (`toolkit/cli/infra.py:k8s_apply_secrets`). Argo CD decrypts nothing. `deploy-k8s` chains `apply-secrets`, `apply-middleware-secrets` and `provision-postgres-tenant`. Each is an operator step that a claimed resource would inherit.
+- **Cluster Secrets are applied by hand.** `make apply-secrets` decrypts SOPS with the operator's key and runs `kubectl` (`toolkit/cli/infra.py:k8s_apply_secrets`). Argo CD decrypts nothing. `deploy-k8s` chains `apply-secrets` and `provision-postgres-tenant`, two operator steps that a claimed resource would inherit. It also chains `apply-middleware-secrets`, which has no consumer since AI-007 emptied `MIDDLEWARE_CATALOG`.
 - **A database tenant is provisioned imperatively.** `k8s_provision_postgres_tenant` runs `kubectl exec` as the superuser, with the password read from SOPS.
 - **Backups are global.** One `pg_dumpall` cannot restore a single product's database.
 - **DNS has no apply path in CI.** `infra/terraform/dns/records_kubelab.tf` creates one record per service from `services.json`, and `make tf-dns-apply` is run by hand. Terraform manages two zones. A third zone the operator holds is on Cloudflare but outside IaC (#2460).
@@ -201,7 +201,7 @@ Deferred: SMTP, queues. n8n is not a resource: it is not multi-tenant, and the n
 - **For the product's author and the author's agent:** the JSON Schema, `toolkit contract validate` in the product's CI with errors that name the fix, and the read-only MCP of ADR-067 D6.
 - **The receiver opens the kubelab PR.** In staging it merges unattended (D13).
 - **A portal is another read adapter over the same library (ADR-067 D1), and its writes stay PRs.** It follows the industry shape: a catalog of products with owners, a page per product that links into the existing tools (Argo CD, Grafana, logs, runbooks), and golden-path actions that open PRs. It never rebuilds those tools' interfaces. ADR-050 D1 places it in the console served by the Go API, which fires ADR-067's option-E trigger ("a consumer needs REST"). That question gets its own ADR, once the data this ADR defines exists.
-- **The boundary between the two languages is data, not calls.** ADR-034 keeps the toolkit in Python and the API in Go. The console reads schema'd files the toolkit writes to git (the registry, `platform.json`, rendered state) and never calls Python. A stale generated file must fail CI, so #1860 is a precondition of that ADR. A piece that must ship as one binary into a foreign environment (a product's CI, a pod) goes to Go on its own, as the review draw did (#2295). It is never a port of the toolkit.
+- **The boundary between the two languages is data, not calls.** ADR-034 keeps the toolkit in Python and the API in Go. The console reads schema'd files the toolkit writes to git (the registry, `platform.json`, rendered state) and never calls Python. A stale generated file must fail CI, so #1860 is a precondition of the console ADR (#2477). It does not gate this ADR's implementation, where only the toolkit reads what the toolkit writes. A piece that must ship as one binary into a foreign environment (a product's CI, a pod) goes to Go on its own, as the review draw did (#2295). It is never a port of the toolkit.
 
 ### D12. Shared CI services have one implementation, never a copy per repository
 
@@ -224,6 +224,7 @@ Self-service that waits on the operator's merge is not self-service: per-deploy 
 - **(b) Scope enforced by construction.** The gate refuses any path outside the product's staging directory, and any kind outside an allowlist: no RBAC, no cluster-scoped object, no other product's namespace. `allow_auto_merge` stays `false`. A dedicated identity merges with the head SHA pinned.
 - **(c) Declared in a file, with tests on both halves.** The class definition and the merging actor's condition live in one committed file. Tests fail if either widens. The class matches on content and identity, never on a branch name.
 - **(d) Production excluded.** A prod promotion, and any change that runs a delete Job (D6), is always merged by a human.
+- **Open before acceptance: a sealed file cannot be re-rendered.** D5 keeps an existing `SealedSecret`, and sealing is random, so (a)'s byte comparison agrees with any ciphertext already in the PR's tree and cannot fail on the files that carry credentials. The owner picks one: **(A)** seal only the generated random values and render every derived output (host, port, database and user names) in clear, so it is byte-compared; a sealed file is checked by structure only (strict scope, the namespace, name and keys the claim derives), and may be added but never changed unattended, so a rotation goes to a human. **(B)** keep every PR that adds or changes a `SealedSecret` out of the class, so the first claim of a credential and each rotation are merged by a human, and only re-renders that touch no sealed file merge unattended. (A) keeps a new claim unattended, but whoever can push to the PR branch could choose a credential's value, so it also needs the receiver to be the branch's only pusher. (B) is safe by construction and reintroduces the per-claim wait D13 exists to remove.
 
 ### D14. Owners are declared in the contract; per-product access is triggered
 
@@ -242,7 +243,7 @@ Self-service that waits on the operator's merge is not self-service: per-deploy 
 **Positive**
 
 - A product gets a database, a volume, a route, an identity client, a bucket and a cache from its own repository, with no kubelab PR written by hand and no value typed by the operator.
-- The three manual steps of `deploy-k8s` stop being in the path of a claimed resource.
+- The operator steps of `deploy-k8s` (`apply-secrets`, `provision-postgres-tenant`) stop being in the path of a claimed resource.
 - The blueprint runs on another instance by swapping the implementation table: a client brings its own forge, DNS, storage and registry.
 - Every pattern adopted has a named industry precedent, so the design can be explained without inventing vocabulary.
 
