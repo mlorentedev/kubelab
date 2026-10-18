@@ -42,6 +42,16 @@
     "(changed lines, or the label). scripts/pr-agent-route.sh holds the allowlist of",
     "Anthropic models CI may spend on, so an edit here cannot route CI onto another.",
     "",
+    "kubelab only (owner decision 2026-10-18, #1957): each NaN member's `pr_agent` block carries a",
+    "`forge_rank`, the order in which the forge's own reviewer (deploy/pr-agent) tries its models.",
+    "That server cannot draw per review as CI does, so it needs an order, and `weight` is not one:",
+    "it is a spending share, and it put mimo-v2.6-flash first, the model whose long reasoning is",
+    "most often cut at about 600 s (lesson-601). `forge_rank` puts the fast model first (deepseek,",
+    "then glm, then mimo). CI never reads it and no weight moved for it. dotfiles' copy has no such",
+    "key: when re-porting this file, keep it, and tests/test_pr_agent_config_render.py will say so",
+    "if it is lost. The consumers ignore unknown keys (dotf's reader is a plain json decode,",
+    "scripts/pr-agent-route.sh selects fields with jq).",
+    "",
     "Entries are model IDS, not tool names, and that distinction is load-bearing:",
     "`agy` also serves claude-opus-4-6-thinking and claude-sonnet-4-6, so pinning",
     "the tool would guarantee nothing. Pinning the id does.",
@@ -80,7 +90,8 @@
       "vendor": "deepseek",
       "pr_agent": {
         "model": "openai/deepseek-v4-flash",
-        "weight": 19
+        "weight": 19,
+        "forge_rank": 1
       },
       "why": "1M context and a mandatory reasoning chain — roughly 4x slower than qwen3.6 on trivial prompts, which is the correct trade for a gate that runs once per spec. Exercised: BUG-074 round 3 re-ran the mutation battery itself rather than trusting the spec's table. kubelab, 2026-08-21 (#1205): under PR-Agent this model returned a 200 with an EMPTY body, spending its output on reasoning (4m15s of silence on #1202, run 32440498259), which is why it is not PR-Agent's primary here either."
     },
@@ -103,7 +114,8 @@
       "vendor": "xiaomi",
       "pr_agent": {
         "model": "openai/mimo-v2.6-flash",
-        "weight": 27
+        "weight": 27,
+        "forge_rank": 3
       },
       "why": "Re-admitted 2026-09-30 on the bar this file requires, not renamed in. NaN retired its predecessor mimo-v2.5 that day: it hung, then answered 401 'This API key does not have access to the requested model' (AI-045, mlorentedev/dotfiles#1763). mimo-v2.5 had been admitted 2026-08-20 on a planted-defect test, and the successor was given the same one: the `((count++))` exit-status-1 case under `set -e` from this repo's prohibited-pattern table. mimo-v2.6-flash found it in 21 s and 772 completion tokens, named a failing input (count=0), and gave the fix (`count=$((count + 1))`). deepseek-v4-flash, run on the same prompt, found the same defect in 9 s. That is agreement on one planted defect, not a quality ranking, and it is stated as that. It stays a SECOND fallback, after the provider-diverse one, because provider diversity remains the stronger property. Profile: 1M context, reasoning chain, which is this pool's line against qwen3.6 and gemma4 at 262K.",
       "operational_note": "Reasoning models here emit reasoning_content BEFORE content. Under-provisioning max_tokens returns an empty body with finish_reason=length and no error — the same shape as a review that silently did not happen (lesson 213). Provision generously and check finish_reason. NaN recommends max_tokens >= 300 for this model and publishes a per-model concurrency limit of 5."
@@ -119,6 +131,7 @@
       "pr_agent": {
         "model": "openai/glm5.3-flash",
         "weight": 19,
+        "forge_rank": 2,
         "reasoning_effort": "low"
       },
       "why": "Admitted 2026-08-29 by owner decision (HARNESS-093, mlorentedev/dotfiles#1370) to spread reviews across NaN's PER-MODEL concurrency buckets and exercise more than one model on the gate. What IS established: reasoning-class by profile — pi-nan-provider's snapshot marks glm5.3-flash reasoning: true with a 1M context, the line this pool draws (dotfiles tests/pi-nan-package.bats holds it). What is NOT established: a calibration against a review of known outcome (e.g. CLI-050 round 1's real Major); recorded here so nobody reads this entry as measured equivalence to deepseek. Drawn at random like every member; --reviewer names it deliberately."
