@@ -36,6 +36,24 @@ Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`.
 - [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: the forward-only rule applies ADR-066 D4 as written; nothing here amends it
 - [x] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. no: n8n runs only in kubelab
 
+## Review dispositions
+
+Review `review.md` (nan/glm5.3-flash, PASS, reviewed `01504607`):
+
+1. The Evidence lines cite pre-squash SHAs (`77091a87`, `02d0c667`, `a5b54762`) that no longer
+   resolve: noted, not rewritten. #1885 squash-merged them as `11659c28`, which is the durable
+   reference for all six criteria. The named tests carry the traceability.
+2. `features.json` evidence was captured at `34a5e789`, not the reviewed HEAD: answered. The review
+   re-ran every feature's verification command at `01504607` and got 96 passed. Neither commit in
+   between touches n8n.
+3. The launcher's diff spans merged master history, and later specs (#2319, #2349) added the
+   Doing-bucket move: no action. The attribution note stands in `review.md`.
+4. A title such as `TOOL-035-legacy` would match key `TOOL-035`: declined. Keyed titles follow
+   `AREA-NNN: title`, and the not-a-digit rule covers the case that occurs. Revisit only if that
+   convention changes.
+5. A redelivered signed `opened` event adds a second comment: accepted risk, recorded in the
+   proposal's Risks.
+
 ## Archive checklist
 
 - [ ] `proposal.md` frontmatter set to `status: archived`
