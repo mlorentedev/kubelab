@@ -1,13 +1,13 @@
 # Run 2026-10-18-idp042-registry
 
-run 2026-10-18-idp042-registry ended RESULT_REASON after 3 items / ~8h (armed 08:34Z, envelope expiry 16:34Z): 3 done, 0 parked, MERGED_COUNT merged, UNMERGED_COUNT unmerged.
+run 2026-10-18-idp042-registry ended envelope-expiry after 3 items / ~8h (armed 08:34Z, envelope expiry 16:34Z): 2 done, 0 parked, 1 merged, 2 unmerged.
 
-**What is waiting on a human, and is anything in it irreversible?** OUTCOME_2470_LINE PR 5 waits on your review and merge, because it touches `.github/workflows/promote-prod.yml`, which the grant excludes.
+**What is waiting on a human, and is anything in it irreversible?** #2470 (registry, closes #1815) is ready but unlanded: head `b6ce4dd9` waits on its ~19-minute `Tests`, and every reviewer finding is already disposed in three triage comments. Land it with `dotf pr triage-queue --pr 2470` then `dotf pr land 2470` once that head is green. PR 5 waits on your review and merge, because it touches `.github/workflows/promote-prod.yml`, which the grant excludes.
 
 ## Waiting on you, irreversible first
 
-1. **Landed (irreversible):** #2474 merged at `ac4b2831` under the standing grant (fixes #2469; `toolkit config generate` exits 0 for staging and prod again). LANDED_2470
-2. **PR 5 (IDP-042 literals from the registry): PR5_LINK, open, operator merge only.** It touches `promote-prod.yml`. Two judgment calls are listed in its body:
+1. **Landed (irreversible):** #2474 merged at `ac4b2831` under the standing grant (fixes #2469; `toolkit config generate` exits 0 for staging and prod again). #2470 is NOT landed. Its `Tests` failed on `2dd05b16` with 3 lesson-index tests (`596 lessons, 598 files`), a stale count in the master the CI merge ref picked up, not this diff. Current master declares 598, and `b6ce4dd9` merges it in. The re-run finishes after the envelope, so the run stopped there rather than landing out of window.
+2. **PR 5 (IDP-042 literals from the registry): #2526 (draft, stacked on #2470: base `feat/idp-042-product-registry`; after #2470 squash-merges, `git rebase --onto origin/master 0b62c16f` plus a force-push, then retarget to master), open, operator merge only.** It touches `promote-prod.yml`. Two judgment calls are listed in its body:
    - (a) with `types` gone, every dispatch starts the workflow, and staging events end green as "not this lane";
    - (b) `inputs.app` loses its dropdown.
 
@@ -49,4 +49,4 @@ None.
 
 ## Next action
 
-NEXT_ACTION
+When `b6ce4dd9` is green on #2470: `dotf pr triage-queue --pr 2470` and `dotf pr land 2470`. Then rebase #2526 onto master (`git rebase --onto origin/master 0b62c16f`), push, mark it ready, review and merge it yourself. The peer session (`feat-idp-042-contract-schema`, PR 4 #2486 and PR 3 #2520) waits on #2470 too.
