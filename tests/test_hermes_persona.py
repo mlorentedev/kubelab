@@ -120,3 +120,15 @@ def test_a_changed_persona_recreates_the_gateway() -> None:
 def test_the_persona_is_joined_before_the_gateway_is_started() -> None:
     names = [t.get("name") for t in _tasks()]
     assert names.index("Join the persona") < names.index("Start hermes-kubelab")
+
+
+def test_a_dry_run_does_not_write_into_a_fragments_directory_it_has_not_created() -> None:
+    """Check mode only reports the directory as created, so a task writing into it has nowhere to land (#2380).
+
+    The join already waited for the directory; the two tasks that stage and install the
+    profile fragment must wait for it too, or `CHECK=1` fails before it previews anything.
+    """
+    for name in ("Take the profile without its frontmatter", "Install the profile fragment"):
+        guard = _task(name)["when"]
+        guard = guard if isinstance(guard, list) else [guard]
+        assert any("ansible_check_mode" in g and "_agent_stack_hermes_persona_dirs" in g for g in guard), name
