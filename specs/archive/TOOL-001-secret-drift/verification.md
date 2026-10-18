@@ -12,7 +12,8 @@ Archived as **integrated** by this change, 2026-10-18 (kubelab#2443). It covers 
 prod, is covered by a different design: `toolkit secrets audit` (`make secrets-audit`) checks each
 environment against `SECRET_CATALOG`, the registry of which secret each env must have. That replaces
 the pairwise compare. A catalogued key missing from prod is reported against prod whether or not
-staging has it, and a key in no catalog entry fails the audit as an orphan.
+staging has it, and a new key in no catalog entry fails the audit as an orphan. Uncatalogued keys
+already in the orphan baseline do not fail it, and #584 carries them.
 
 Three criteria were never met. They are carried in kubelab#2499, not dropped.
 
@@ -23,7 +24,7 @@ Each acceptance criterion from `proposal.md`, mapped to where it now lives:
 | AC | Status | Where |
 |----|--------|-------|
 | 1. Exits 0 when the envs agree | Integrated | `toolkit secrets audit`, which exits 0 on a clean report |
-| 2. A staging-only key is listed and exits 1 | Partial | Listed under `Missing` for the env that lacks it (`_print_audit_result`). An uncatalogued key exits 1 as an orphan (`tests/test_orphan_secrets_ratchet.py`). A **catalogued** missing key exits 0, which is #2499. A cross-env diff for keys outside the catalog is #584 |
+| 2. A staging-only key is listed and exits 1 | Partial | Listed under `Missing` for the env that lacks it (`_print_audit_result`). A new uncatalogued key, one not in the orphan baseline, exits 1 (`tests/test_orphan_secrets_ratchet.py`). A **catalogued** missing key exits 0, which is #2499. A cross-env diff for keys outside the catalog is #584 |
 | 3. Never prints a value | Integrated | Key paths only. At the CLI boundary: `tests/test_secrets_value_shape.py::test_the_cli_fails_on_a_malformed_secret_and_names_only_the_key` asserts the value never reaches the output. In the walker: `tests/test_secrets_orphan_audit.py::TestItCannotLeakValues` (#1699) |
 | 4. Decryption failure is a clear error with exit 2 | Not met | `_decrypt_sops` (`configuration.py:85-107`) logs and returns `{}`, so the audit reports every key missing and exits 0. That is established by reading the code: no test drives it, because the closest one patches `_decrypt_sops` away. #2499 adds the test with the fix |
 | 5. `--format json` | Not met | #2499 |
@@ -32,7 +33,7 @@ Each acceptance criterion from `proposal.md`, mapped to where it now lives:
 ## Test status
 
 - No code changes under this spec. The tests named above are on master.
-- No regressions: this archive changes only this spec folder and one CLAUDE.md line.
+- No regressions: this archive changes only this spec folder, one CLAUDE.md line and the pointer in lesson-163.
 
 ## Decisions made during implementation
 
