@@ -1,0 +1,96 @@
+{
+  "$defs": {
+    "Hostnames": {
+      "additionalProperties": false,
+      "description": "The public hostname of the product in each kubelab environment.",
+      "properties": {
+        "prod": {
+          "description": "Hostname served by the prod cluster, e.g. example.dev.",
+          "maxLength": 253,
+          "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]([a-z0-9-]{0,61}[a-z0-9])?$",
+          "title": "Prod",
+          "type": "string"
+        },
+        "staging": {
+          "description": "Hostname served by the staging cluster, e.g. staging.example.dev.",
+          "maxLength": 253,
+          "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]([a-z0-9-]{0,61}[a-z0-9])?$",
+          "title": "Staging",
+          "type": "string"
+        }
+      },
+      "required": [
+        "staging",
+        "prod"
+      ],
+      "title": "Hostnames",
+      "type": "object"
+    }
+  },
+  "$id": "https://raw.githubusercontent.com/mlorentedev/kubelab/master/toolkit/schemas/kubelab-product.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "What a product declares about itself to be deployed on kubelab.",
+  "properties": {
+    "auth": {
+      "description": "public: no auth; forwardauth: Authelia in front of every request; oidc: the app is an OIDC client.",
+      "enum": [
+        "public",
+        "forwardauth",
+        "oidc"
+      ],
+      "title": "Auth",
+      "type": "string"
+    },
+    "health_path": {
+      "description": "HTTP path that answers 2xx when the container is healthy.",
+      "maxLength": 256,
+      "pattern": "^/[A-Za-z0-9._~/-]*$",
+      "title": "Health Path",
+      "type": "string"
+    },
+    "hostnames": {
+      "$ref": "#/$defs/Hostnames"
+    },
+    "image": {
+      "description": "Image repository without tag or digest; kubelab pins the tag it deploys.",
+      "maxLength": 255,
+      "pattern": "^[a-z0-9]+([.-][a-z0-9]+)*(:[0-9]+)?(/[a-z0-9]+([._-][a-z0-9]+)*)+$",
+      "title": "Image",
+      "type": "string"
+    },
+    "port": {
+      "description": "Port the container listens on inside the cluster.",
+      "maximum": 65535,
+      "minimum": 1,
+      "title": "Port",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": 1,
+      "description": "Version of this schema the contract is written against.",
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "secrets": {
+      "description": "Names of the secrets the product expects. Values never appear here; the operator sets them.",
+      "items": {
+        "maxLength": 200,
+        "pattern": "^[a-z0-9_]+(\\.[a-z0-9_]+)*$",
+        "type": "string"
+      },
+      "title": "Secrets",
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "image",
+    "port",
+    "health_path",
+    "hostnames",
+    "auth"
+  ],
+  "title": "kubelab product contract",
+  "type": "object"
+}

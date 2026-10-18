@@ -20,7 +20,10 @@ is generated from it and a test keeps the two equal.
 
 from __future__ import annotations
 
+import argparse
+import json
 from collections.abc import Hashable
+from importlib.resources import files
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
@@ -28,6 +31,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError, field_validator
 from pydantic_core import ErrorDetails
 
+SCHEMA_RESOURCE = ("schemas", "kubelab-product.schema.json")
 SCHEMA_ID = "https://raw.githubusercontent.com/mlorentedev/kubelab/master/toolkit/schemas/kubelab-product.schema.json"
 
 #: Keys a contract might use to say where it lives. None is in the schema, so
@@ -224,3 +228,31 @@ def validate_contract(path: Path) -> Contract:
         return Contract.model_validate(data)
     except ValidationError as e:
         raise _refusal(path, e) from None
+
+
+def schema_text() -> str:
+    """The JSON Schema generated from ``Contract``, serialised the way it is committed."""
+    return json.dumps(Contract.model_json_schema(), indent=2, sort_keys=True) + "\n"
+
+
+def schema_path() -> Path:
+    """The committed schema inside the installed package (ADR-067 D8: a pinned install carries it)."""
+    return Path(str(files("toolkit").joinpath(*SCHEMA_RESOURCE)))
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="python -m toolkit.features.product_contract")
+    parser.add_argument("--write-schema", action="store_true", help="regenerate the committed JSON Schema")
+    args = parser.parse_args(argv)
+    if not args.write_schema:
+        parser.print_help()
+        return 2
+    path = schema_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(schema_text())
+    print(path)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
