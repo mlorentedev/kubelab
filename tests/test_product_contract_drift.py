@@ -117,9 +117,7 @@ def test_render_check_passes_on_the_committed_tree(env: str) -> None:
     assert f"compared {len(CONTRACT_KEYS)} contract-owned keys for web/{env}" in result.output
 
 
-def test_render_check_exits_one_and_names_the_drifted_keys(
-    values_copy: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_render_check_exits_one_and_names_the_drifted_keys(values_copy: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _edit_web(values_copy, "prod", "default_port", 9090)
     monkeypatch.setattr(product_render, "VALUES_DIR", values_copy)
 

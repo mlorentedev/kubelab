@@ -152,7 +152,8 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit obs slack` | Read or post messages to Slack incident channels. |
 | `toolkit obs triage` | Execute the 4-step automated SRE triage pipeline. |
 | `toolkit obs watcher-run` | Run a CronJob once now, print its log, and delete the Job. |
-| `toolkit product` | Validate kubelab.yaml product contracts (ADR-067). |
+| `toolkit product` | Validate and render kubelab.yaml product contracts (ADR-067). |
+| `toolkit product render` | Render a contract into apps.platform.<app>; without a flag, print the contract-owned keys. |
 | `toolkit product validate` | Validate a product contract against the kubelab.yaml schema; exit 1 if it is refused. |
 | `toolkit registry` | Container registry maintenance (tag pruning). |
 | `toolkit registry prune` | Prune ephemeral image tags (ADR-046). |
