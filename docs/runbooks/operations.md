@@ -20,14 +20,6 @@ git push   # ArgoCD detects change → syncs staging + prod automatically
 
 Verify: `https://argo.kubelab.live` → both Applications should be Synced + Healthy.
 
-## On change: Homepage config
-
-```bash
-make sync-homepage          # regenerate config files from SSOT
-git add -A && git commit    # commit generated files
-git push                    # ArgoCD applies via configMapGenerator hash suffix
-```
-
 ## On change: Security headers / Traefik middleware
 
 K8s (staging + prod): ArgoCD auto-syncs from Git.
@@ -225,8 +217,7 @@ make provision NODE=jetson ENV=prod
 | Situation | Command |
 |-----------|---------|
 | Pushed code to master | Nothing — ArgoCD syncs |
-| Changed Homepage config | `make sync-homepage` + commit + push |
-| Changed common.yaml values | `make sync-homepage` + `make sync-k8s-images` + commit + push |
+| Changed common.yaml values | `make sync-k8s-images` + commit + push |
 | Changed SOPS secrets | `make apply-secrets ENV=x` |
 | Changed Cloudflare DNS | `make tf-dns-apply` |
 | Changed VPS Traefik config | `make deploy TARGET=vps ENV=prod` |
