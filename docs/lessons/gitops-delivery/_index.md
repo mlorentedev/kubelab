@@ -1,6 +1,6 @@
 # Argo CD, releases and image promotion
 
-33 lessons, newest first. Back to [all categories](../_index.md).
+Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|

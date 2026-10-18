@@ -1,6 +1,6 @@
 # Docker, Compose and image builds
 
-30 lessons, newest first. Back to [all categories](../_index.md).
+Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
