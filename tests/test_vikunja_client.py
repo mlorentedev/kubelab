@@ -86,6 +86,14 @@ def test_get_labels_returns_list(client: VikunjaClient) -> None:
     assert labels[0]["title"] == "type:spec"
 
 
+def test_get_labels_reads_every_page(client: VikunjaClient) -> None:
+    """Past one page the reconciler would re-create every label it could not see, forever."""
+    full_page = [{"id": i, "title": f"l{i}"} for i in range(PAGE_SIZE)]
+    client.session.request.side_effect = [_ok(full_page), _ok([{"id": 99, "title": "last"}])]
+
+    assert len(client.get_labels()) == PAGE_SIZE + 1
+
+
 def test_create_label_success(client: VikunjaClient) -> None:
     mock_resp = MagicMock()
     mock_resp.ok = True
