@@ -207,6 +207,38 @@ spec:
   entryPoints:
     - websecure
   routes:
+    # Public without a session (#2483): status pages, the push endpoint every node's
+    # backup heartbeat calls, badges, and the statics a status page loads.
+    - match: >-
+        Host(`status.kubelab.live`) && (
+          PathPrefix(`/status/`) ||
+          PathPrefix(`/api/status-page/`) ||
+          PathPrefix(`/api/push/`) ||
+          PathPrefix(`/api/badge/`) ||
+          PathPrefix(`/assets/`) ||
+          PathPrefix(`/upload/`) ||
+          Path(`/api/entry-page`) ||
+          Path(`/robots.txt`) ||
+          Path(`/favicon.ico`) ||
+          Path(`/icon.svg`) ||
+          Path(`/icon-192x192.png`) ||
+          Path(`/icon-512x512.png`) ||
+          Path(`/apple-touch-icon.png`) ||
+          Path(`/manifest.json`))
+      kind: Rule
+      middlewares:
+        - name: secure-headers
+          namespace: kubelab
+        - name: rate-limit
+          namespace: kubelab
+        - name: crowdsec-bouncer
+          namespace: kubelab
+        - name: error-pages
+          namespace: kubelab
+      services:
+        - name: uptime-kuma
+          port: 3001
+    # Everything else is Kuma's admin surface: Authelia first (AUTH-020).
     - match: Host(`status.kubelab.live`)
       kind: Rule
       middlewares:
@@ -217,6 +249,8 @@ spec:
         - name: crowdsec-bouncer
           namespace: kubelab
         - name: error-pages
+          namespace: kubelab
+        - name: authelia
           namespace: kubelab
       services:
         - name: uptime-kuma
