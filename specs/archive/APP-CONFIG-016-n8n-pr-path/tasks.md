@@ -42,9 +42,9 @@ Order: the static class guards first, since they need no fixture. Then the node 
 ## Deploy and verify
 
 - [x] Tell `kubelab-backup-health-wt-0e` (owner of #1859), then `make import-n8n ENV=staging` from this branch, then `make n8n-probe ENV=staging` ✓ 2026-09-27
-- [ ] PR as draft, triage, then ready. The operator merges
-- [ ] Prod: `make import-n8n ENV=prod`, then `make n8n-probe ENV=prod`
-- [ ] #1692 and #1659 closed with evidence, or left open with what remains
+- [x] PR as draft, triage, then ready. The operator merges ✓ #1885, merged 2026-09-29
+- [x] Prod: `make import-n8n ENV=prod`, then `make n8n-probe ENV=prod` ✓ import by the operator 2026-10-16 (#2318); probe exit 0 on 2026-10-18 (`verification.md`)
+- [x] #1692 and #1659 closed with evidence, or left open with what remains ✓ 2026-10-18: #1692 is closed. #1659 (OBS-028) stays open, because this spec only made the answer body name `status` and the rest of OBS-028 is its own work
 
 ## Closing
 
