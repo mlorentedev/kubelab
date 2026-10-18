@@ -63,7 +63,6 @@ UNWRITTEN = frozenset(
         "GITOPS-003-f3",
         "GITOPS-003-f6",
         "IDP-042-product-contract-registry-f1",
-        "IDP-042-product-contract-registry-f2",
         "IDP-042-product-contract-registry-f3",
         "IDP-042-product-contract-registry-f4",
         "IDP-042-product-contract-registry-f5",

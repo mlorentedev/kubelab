@@ -151,7 +151,7 @@ cached build and reports no change.
 The agent writes files; it never commits. Its sandbox sees the vault clone
 read-only at `/vault` and only `/vault/80_agents/hermes-kubelab/` writable.
 `hermes-kubelab-vault-sync.service` commits that zone as `hermes-kubelab` and
-pushes it. A failed run pages through `kubelab-notify@`.
+pushes it. A failed run pages through `kubelab-notify@` once per incident: the first failure, a reminder with the count each hour, and one recovery page when the next run succeeds (#2423).
 
 - **Is it syncing?** `journalctl -u hermes-kubelab-vault-sync -n 20` on ace2,
   and `git -C ~/Projects/knowledge log --author=hermes-kubelab -3` on any
@@ -183,6 +183,8 @@ Jobs are declared in `apps.services.ai.hermes_kubelab.cron` (`common.yaml`) and 
 - **Scripts** ship from the role into a directory mounted read-only over `<data>/scripts/`. They run in the gateway, which sees `HERMES_HOME` and not `/vault`.
 - **Delivery** defaults to `slack:<home_channel>`, failures included.
 - **Run one now**: `hermes cron run <id>` inside the gateway, as the `hermes` user; it fires at the next tick, within a minute. `hermes cron list` prints text only; read `cron/jobs.json` for status.
+- **The alert triage says each problem once** (#2461): `alert-activity.py` keeps `HERMES_HOME/state/alert-activity.json` (hashes of what it handed to the agent) and leaves out a message, an unreadable channel or its own misconfiguration that it reported in the last six hours, then says it again after six. A quiet or fully repeated hour ends with `{"wakeAgent": false}`. To make it report everything again, delete that file; the next run recreates it.
+- **A gateway start logs `[config-migrate] ERROR: Read-only file system: .../config.yaml` and `docker_config_migrate.py failed; continuing`.** Expected: the image tries to migrate a config that is mounted read-only on purpose (the declared posture, lesson-549). Harmless; making it writable would drop the posture.
 - **The digest** (`kubelab:digest`, a script job) reports the gateway, the sidecar, the sandbox count, the disk and the month's usage per model and provider. A stopped container or an unreachable Docker is its first line; it never prints nothing, because a no-agent job with empty stdout sends nothing.
 - **A job's commands** are checked against the approvals under `cron_mode: deny`: test them with `hermes approvals test --env-type local` before declaring the job.
 

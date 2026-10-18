@@ -28,6 +28,15 @@
     mode: "0644"
   notify: Reload systemd
 
+- name: Install fleet recovery template unit
+  template:
+    src: kubelab-notify-recovered@.service.j2
+    dest: "/etc/systemd/system/{{ node_notify_recovered_unit_name }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd
+
 # NOTE: the single-purpose notifier this replaces is removed by
 # `node_maintenance`, not here, and the reason is ordering rather than
 # ownership. Removing it from this role would delete the unit file while

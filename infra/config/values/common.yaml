@@ -340,6 +340,14 @@ networking:
       # down. Both DHCP-reserved on the home router.
       lan_ip: "172.16.1.1"
       wifi_lan_ip: "10.0.0.131"
+      # The LAN jump host: the one node whose sshd forwards a TCP connection on
+      # to the inner-LAN nodes, so the `*-lan` SSH aliases (ProxyJump rpi4) work.
+      # Every other node keeps `AllowTcpForwarding no`. The forwards are limited
+      # to port 22 of the other nodes whose lan_ip is inside networking.lan_cidr;
+      # the inventory generator derives that list (host var ssh_lan_jump_targets)
+      # and refuses a second flagged node. Takes effect when the ssh_hardening
+      # role runs on this node: `make provision NODE=rpi4 ENV=prod TAGS=ssh`.
+      lan_jump: true
       ansible_groups: ["gateway", "dns_hosts", "docker_hosts"]
       dashboard:
         display_name: "RPi4"
@@ -889,6 +897,9 @@ apps:
       auth_level: bypass
       default_port: 8080
       health_path: /health
+      # Liveness stays on /health (constant 200); readiness probes /ready, which is 503
+      # only when configuration does not load (kubelab#1736, #2386).
+      readiness_path: /ready
       site_title: mlorentedev
       # SMTP config moved to `infra.smtp.*` (ADR-036, SSOT-012 PR #3).
       # API source code reads `INFRA_SMTP_USER`, `INFRA_SMTP_PASS`,
@@ -2333,6 +2344,14 @@ apps:
                 problem, but change nothing and run nothing that changes a system: the
                 operator approves fixes. Reply in English, under twelve lines, with the
                 most serious group first. Never repeat a credential.
+                Messages that name different pull requests, apps, hosts or units are
+                different problems: list each by its identifier, and call two messages
+                duplicates only when the identifier matches. A line saying the script
+                cannot run, or that a channel cannot be read, is a fact to quote as it
+                is: do not guess its cause, name no configuration key, environment
+                variable or tool, and do not suggest connecting an integration, because
+                you have no Slack tool and cannot see the configuration. A problem the
+                output marks as already reported is not repeated here.
 
 # Terraform state (TF-007, ADR-069). Every root keeps its state in this R2
 # bucket under `<root>/terraform.tfstate`; `make sync-terraform-backend` renders

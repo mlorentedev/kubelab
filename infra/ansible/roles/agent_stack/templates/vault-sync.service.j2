@@ -13,6 +13,9 @@ Requisite=agent-stack-egress.service
 PartOf=agent-stack-egress.service
 After=network-online.target agent-stack-egress.service
 OnFailure=kubelab-notify@%n.service
+# Closes the incident the line above opened: one page when this unit recovers
+# (#2423). Quiet when nothing was failing; needs systemd >= 249 (ace2 runs 255).
+OnSuccess=kubelab-notify-recovered@%n.service
 
 [Service]
 Type=oneshot
