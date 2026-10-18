@@ -21,10 +21,11 @@ from pathlib import Path
 from typing import Any
 
 from ruamel.yaml import YAML
+from ruamel.yaml.comments import CommentedMap
 
-from toolkit.config.constants import COMPONENTS
 from toolkit.config.settings import settings
 from toolkit.core.logging import logger
+from toolkit.features import product_registry
 from toolkit.features.configuration import ConfigurationManager
 from toolkit.features.generator_k8s import K8sGenerator
 from toolkit.features.registry import tag_exists
@@ -49,6 +50,15 @@ def _load_values_doc(env: str) -> tuple[YAML, Path, Any]:
     return yaml, path, yaml.load(path.read_text())
 
 
+def _require_platform_app(app: str, reason: str) -> None:
+    """Refuse an app the product registry does not admit (#1815), naming the registry file."""
+    apps = product_registry.platform_apps()
+    if app not in apps:
+        raise ValueError(
+            f"App '{app}' is not a platform app: {product_registry.registry_path()} admits {apps}; {reason}"
+        )
+
+
 def resolve_image_sha(env: str, app: str) -> str:
     """Return the immutable ``sha-<short>`` pinned for a platform app in ``values/<env>.yaml``.
 
@@ -60,11 +70,7 @@ def resolve_image_sha(env: str, app: str) -> str:
     not an immutable ``sha-<short>`` tag (still ``dev``, a semver, etc.) — refusing
     to promote bytes the environment never ran (incident #666 / kubelab#679).
     """
-    if app not in COMPONENTS.PLATFORM_APPS:
-        raise ValueError(
-            f"App '{app}' is not a platform app {COMPONENTS.PLATFORM_APPS}; "
-            "edge services (e.g. errors) are not on the build-once sha lane"
-        )
+    _require_platform_app(app, "edge services (e.g. errors) are not on the build-once sha lane")
     _, path, data = _load_values_doc(env)
     version = (data.get("apps") or {}).get("platform", {}).get(app, {}).get("version")
     if not version:
@@ -188,11 +194,7 @@ def promote(env: str, app: str, version: str) -> None:
         return
     if env == "dev":
         raise ValueError("Promotion targets K8s environments (staging|prod), not dev")
-    if app not in COMPONENTS.PLATFORM_APPS:
-        raise ValueError(
-            f"App '{app}' is not a platform app {COMPONENTS.PLATFORM_APPS}; "
-            "edge services (e.g. errors) are not promoted via this command"
-        )
+    _require_platform_app(app, "edge services (e.g. errors) are not promoted via this command")
 
     registry, image_name = _resolve_image(env, app)
 
@@ -207,8 +209,10 @@ def promote(env: str, app: str, version: str) -> None:
 
     yaml, values_path, data = _load_values_doc(env)
 
-    platform = data.setdefault("apps", {}).setdefault("platform", {})
-    app_cfg = platform.setdefault(app, {})
+    platform = data.setdefault("apps", CommentedMap()).setdefault("platform", CommentedMap())
+    # A ruamel map, not `{}`: a product promoted for the first time has no block
+    # yet, and the insert below needs one (#1815).
+    app_cfg = platform.setdefault(app, CommentedMap())
     previous = app_cfg.get("version", "(inherited)")
     if previous == version:
         logger.info(f"{env}: {app} already at {version}; nothing to do")
