@@ -28,3 +28,6 @@
 | 11:35 | TOOL-009 | review PASS-WITH-GAPS: attribution corrected in verification.md, T9 kept blocked on iris#30, knowledge#118 already closed (checklist -> comment); archived; spec-gate test hardcodes TOOL-009 as the cross-repo spec, tests/ frozen -> parked, draft PR #2515 with options A (expect set()) / B (keep active) |
 | 11:38 | TOOL-035 | PR-Agent on #2489: dangling reference applied (01a12a78), AC1 evidence wording declined (contract set; gap already in verification.md); triage posted |
 | 11:45 | OPS-016 | re-review PASS WITH GAPS: Major (THEORETICAL) stays on #2506, features.json provenance recorded, live CHECK=1 re-run 0/0/0 (live=36, seed=36), Closing boxes declined (contract); archived; PR #2518 |
+| 15:35 | #2489 | PR-Agent re-run on 01a12a78 triaged (addendum); landed 01a12a7; #1076 closed -> #2485; #1389 commented (stays open) |
+| 15:40 | PR-Agent | 6 reviews triaged: #2496 (ADR-057 stale "widget-proxy did" applied bb66429a), #2507 (orphan claim narrowed to new keys + scope line, 3eba804d), the rest declined as contract-set edits or digest concerns covered by the green Spec archive check; follow-ups on dotfiles#1727 and #2506 |
+| 15:45 | land | #2497 bb74d11, #2509 36e514e, #2510 32dd8d4, #2518 12453fc; #1013 and #711 closed with carriers named, #1871 closed by #2497, #959 commented |
