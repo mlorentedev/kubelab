@@ -14,10 +14,17 @@ common.yaml. `SLACK_ALLOWED_CHANNELS` governs what the agent answers and not thi
 read (measured on ace2, 2026-10-16). With nothing to triage the last line is
 {"wakeAgent": false}, and Hermes skips the turn and the token spend. A channel that
 cannot be read is reported in the output and never counts as quiet.
+
+A problem is said once and then again every six hours while it lasts (#2423 did the
+same for the fleet's failed units): a message whose text matches one already handed to
+the agent inside that window is left out, so a persistent alert, or a persistent
+misconfiguration of this very script, does not become a report an hour. The memory is a
+small file under `HERMES_HOME/state`; without one the script reports everything.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -27,11 +34,13 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import UTC, datetime
+from pathlib import Path
 
 WINDOW = 3600  # the job runs hourly
 LIMIT = 100
 MESSAGE_CHARS = 400
 BUDGET = 7000
+REPEAT = 6 * 3600  # a problem already reported is said again after this long
 NOTHING = '{"wakeAgent": false}'
 API = "https://slack.com/api/conversations.history"
 # A credential in an alert must not reach the digest or the vault.
@@ -41,6 +50,45 @@ SECRETS = re.compile(
     r"|glsa_[A-Za-z0-9_]+|(?i:bearer)\s+[A-Za-z0-9._~+/-]{20,}"
     r"|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"
 )
+
+
+# Clock times differ between two posts of one alert ("Started: 2026-10-18 04:21:20 +0000 UTC")
+# and say nothing about which problem it is; PR numbers, hosts and apps do, and stay.
+TIMES = re.compile(r"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2})?(?: ?[+-]\d{4})?(?: UTC)?|\b\d{2}:\d{2}:\d{2}\b")
+
+
+def _fingerprint(*parts: str) -> str:
+    return hashlib.sha1("|".join(parts).encode(), usedforsecurity=False).hexdigest()[:16]
+
+
+def load_seen(path: Path | None, now: float) -> dict[str, float]:
+    """Fingerprint -> when it was last handed to the agent, inside the window; empty when unreadable."""
+    if path is None:
+        return {}
+    try:
+        raw = json.loads(path.read_text())
+        return {k: float(v) for k, v in raw.items() if now - float(v) < REPEAT}
+    except (OSError, ValueError, AttributeError):
+        return {}
+
+
+def save_seen(path: Path | None, seen: dict[str, float]) -> None:
+    """Best effort: a memory that cannot be written costs a repeated report, never a lost one."""
+    if path is None:
+        return
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(seen))
+        tmp.replace(path)
+    except OSError:
+        pass
+
+
+def _is_new(seen: dict[str, float] | None, key: str, now: float) -> bool:
+    """True when `key` was not reported inside the window. Marking it is the caller's, once it is shown."""
+    last = None if seen is None else seen.get(key)
+    return last is None or now - last >= REPEAT
 
 
 def channels(raw: str) -> list[tuple[str, str]]:
@@ -91,50 +139,95 @@ def fetch(token: str, channel: str, oldest: float) -> list[dict]:
     return body.get("messages", [])
 
 
-def report(token: str, pairs: list[tuple[str, str]], now: float, read=fetch) -> str:
+def report(
+    token: str, pairs: list[tuple[str, str]], now: float, read=fetch, seen: dict[str, float] | None = None
+) -> str:
+    """The hour's report. `seen` is the memory of what was already said: it is read and updated in place."""
     stamp = datetime.fromtimestamp(now, UTC).strftime("%Y-%m-%d %H:%M UTC")
-    sections: list[tuple[str, list[str]]] = []
+    sections: list[tuple[str, list[tuple[str, str]]]] = []
+    marks: list[str] = []
     unreadable: list[str] = []
+    repeated = 0
     for ident, name in pairs:
         try:
             messages = read(token, ident, now - WINDOW)
         except (OSError, RuntimeError, ValueError) as error:  # urllib.error.URLError is an OSError
-            unreadable.append(f"#{name} ({ident}): cannot be read ({_clean(type(error).__name__ + ': ' + str(error))})")
+            key = _fingerprint("unreadable", ident, type(error).__name__)
+            if _is_new(seen, key, now):
+                marks.append(key)
+                unreadable.append(
+                    f"#{name} ({ident}): cannot be read ({_clean(type(error).__name__ + ': ' + str(error))})"
+                )
+            else:
+                repeated += 1
             continue
         lines = []
         for message in sorted(messages, key=lambda m: float(m.get("ts", 0))):
             body = _clean(_text(message))
-            if body:
+            key = _fingerprint(ident, TIMES.sub("", body))
+            if body and not _is_new(seen, key, now):
+                repeated += 1
+            elif body:
                 when = datetime.fromtimestamp(float(message.get("ts", 0)), UTC).strftime("%H:%M")
-                lines.append(f"- {when} {body}")
+                lines.append((key, f"- {when} {body}"))
         if lines:
             sections.append((name, lines))
 
     if not sections and not unreadable:
-        return f"No alert in the last hour.\n{NOTHING}"
+        return f"No new alert in the last hour.\n{NOTHING}"
 
     out = [f"Alert channels, the hour before {stamp}.", *unreadable]
+    if repeated:
+        out.append(
+            f"({repeated} more message(s) repeat something already reported in the last "
+            f"{REPEAT // 3600} hours and are left out.)"
+        )
     used = sum(len(line) + 1 for line in out)
     for name, lines in sections:
         out += ["", f"## #{name}"]
         used += len(name) + 5
-        for index, line in enumerate(lines):
+        for index, (key, line) in enumerate(lines):
             if used + len(line) + 1 > BUDGET:
                 left = len(lines) - index
                 out.append(f"({left} more in #{name} not shown)")
                 break
             out.append(line)
+            marks.append(key)
             used += len(line) + 1
+    if seen is not None:
+        seen.update(dict.fromkeys(marks, now))
     return "\n".join(out)
+
+
+def _state_path() -> Path | None:
+    """`HERMES_HOME/state/alert-activity.json`. A job script's environment is scrubbed, so when HERMES_HOME
+    does not arrive, the home is where the role mounts this directory: `<home>/scripts/`."""
+    home = os.environ.get("HERMES_HOME", "")
+    if not home:
+        here = Path(__file__).resolve().parent
+        home = str(here.parent) if here.name == "scripts" else ""
+    return Path(home) / "state" / "alert-activity.json" if home else None
 
 
 def main() -> int:
     token = os.environ.get("HERMES_ALERT_SLACK_TOKEN", "")
     pairs = channels(os.environ.get("HERMES_ALERT_CHANNELS", ""))
+    now = time.time()
+    path = _state_path()
+    seen = load_seen(path, now)
     if not token or not pairs:
+        # Said once, then every REPEAT: an hourly copy of one configuration error is noise.
+        key = _fingerprint("misconfigured")
+        if not _is_new(seen, key, now):
+            print(f"alert-activity: still not configured (reported earlier).\n{NOTHING}")
+            return 0
+        seen[key] = now
+        save_seen(path, seen)
         print("alert-activity: no Slack token or no alert channel configured; the triage cannot run.")
         return 1
-    print(report(token, pairs, time.time()))
+    text = report(token, pairs, now, seen=seen)
+    save_seen(path, seen)
+    print(text)
     return 0
 
 
