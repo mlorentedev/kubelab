@@ -1,0 +1,51 @@
+# Arming envelope for the 2026-10-18 Hermes run (operator asleep, 8h). Committed on the run branch;
+# the run reads only the committed copy. A PR whose diff touches this file is never merged.
+version: 1
+run_id: "2026-10-18-hermes"
+armed_by: manu
+armed_at: 2026-10-18T10:40:00Z
+expires_at: 2026-10-18T18:40:00Z
+objective: >-
+  Close the small, planned hermes-kubelab follow-ups (#2380, #2175, #2299) and verify the alert-triage
+  memory (#2461, merged and applied) live; leave anything needing a decision parked with two options.
+scope:
+  write_paths:
+    - "infra/ansible/roles/agent_stack/**"
+    - "infra/ansible/roles/node_notify/**"
+    - "infra/config/uptime-kuma/**"
+    - "infra/config/values/common.yaml"
+    - "infra/config/platform.json"
+    - "Makefile"
+    - "tests/**"
+    - "specs/AI-*/**"
+    - "docs/runbooks/hermes-kubelab.md"
+    - "docs/lessons/**"
+    - ".agent/runs/**"
+  frozen_paths:
+    - ".github/**"
+    - "harness/**"
+    - ".pr_agent.toml"
+    - "infra/config/secrets/**"
+    - "infra/config/values/*.enc.yaml"
+    - "infra/k8s/**"
+    - "infra/terraform/**"
+    - "**/AGENTS.md"
+  max_files: 25
+  max_loc: 400
+allowed_commands: [dotf, gh, git, make, poetry, toolkit, ssh]
+queue:
+  source: bitacora
+  filter: >-
+    hermes-kubelab follow-ups only: #2380, #2175, #2299. Applying a merged change to ace2 is
+    `make provision NODE=ace2 ENV=prod TAGS=agent_stack` and nothing else on any host. ssh is read-only.
+    Nothing touching Headscale ACLs (#2189), prod ingress, SOPS, the merge grant, or AI-024 stages 3-5.
+  max_items: 3
+budget:
+  max_iterations: 8
+  max_minutes_per_iteration: 45
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant
+  push: true
+  open_pr: true
+  advisor_tier: top
