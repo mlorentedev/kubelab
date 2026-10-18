@@ -198,7 +198,7 @@ Deferred: SMTP, queues. n8n is not a resource: it is not multi-tenant, and the n
 ### D11. Surfaces
 
 - **For the product's author and the author's agent:** the JSON Schema, `toolkit contract validate` in the product's CI with errors that name the fix, and the read-only MCP of ADR-067 D6.
-- **The receiver opens the kubelab PR.**
+- **The receiver opens the kubelab PR.** In staging it merges unattended (D13).
 - **A portal is another read adapter over the same library (ADR-067 D1), and its writes stay PRs.** It follows the industry shape: a catalog of products with owners, a page per product that links into the existing tools (Argo CD, Grafana, logs, runbooks), and golden-path actions that open PRs. It never rebuilds those tools' interfaces. ADR-050 D1 places it in the console served by the Go API, which fires ADR-067's option-E trigger ("a consumer needs REST"). That question gets its own ADR, once the data this ADR defines exists.
 
 ### D12. Shared CI services have one implementation, never a copy per repository
@@ -213,6 +213,15 @@ Deferred: SMTP, queues. n8n is not a resource: it is not multi-tenant, and the n
   - **The publish guard** reports a run that published nothing as a failure, not as silence (#1957).
 - **Where the platform takes over.** A product's `review:` claim makes the receiver wire the forge side: on GitHub the caller workflow, on Gitea the webhook. The author writes neither by hand.
 - **Precondition for multi-forge.** The review attestation must read the reviewer's comments on every forge it judges.
+
+### D13. The receiver's staging PRs merge unattended; prod and destruction stay human
+
+Self-service that waits on the operator's merge is not self-service: per-deploy PRs measured 11 to 19 hours of latency (#1619). The receiver's staging PRs are the "diff nobody wrote" class, and they merge without a human under all four conditions of that exception:
+
+- **(a) Machine-generated and machine-verified.** The receiver renders the diff from the product's declaration. A gate re-renders it from the same declaration at the PR's head and compares the two byte for byte, after the validator and admission checks (D8, D10) pass. Any difference fails closed.
+- **(b) Scope enforced by construction.** The gate refuses any path outside the product's staging directory, and any kind outside an allowlist: no RBAC, no cluster-scoped object, no other product's namespace. `allow_auto_merge` stays `false`. A dedicated identity merges with the head SHA pinned.
+- **(c) Declared in a file, with tests on both halves.** The class definition and the merging actor's condition live in one committed file. Tests fail if either widens. The class matches on content and identity, never on a branch name.
+- **(d) Production excluded.** A prod promotion, and any change that runs a delete Job (D6), is always merged by a human.
 
 ## Consequences
 
