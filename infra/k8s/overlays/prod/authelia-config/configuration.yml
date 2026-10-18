@@ -82,8 +82,6 @@ access_control:
       policy: bypass
     - domain: 'api.kubelab.live'
       policy: bypass
-    - domain: 'status.kubelab.live'
-      policy: bypass
 
     # OIDC-enabled services (bypass forward-auth — OIDC handles login)
     - domain: 'gitea.kubelab.live'
@@ -95,6 +93,10 @@ access_control:
     - domain: 'grafana.kubelab.live'
       policy: one_factor
     - domain: 'traefik.kubelab.live'
+      policy: one_factor
+    # Uptime Kuma's admin surface (#2483). Its status pages and push endpoint have
+    # their own IngressRoute rule with no ForwardAuth, so they never reach this.
+    - domain: 'status.kubelab.live'
       policy: one_factor
 
     # VPN users get one_factor for everything else

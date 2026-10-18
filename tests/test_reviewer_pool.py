@@ -90,3 +90,38 @@ def test_the_risk_predicate_is_the_owner_decided_one() -> None:
     risk = POOL["pr_agent_risk"]
     assert risk["min_changed_lines"] == 1500
     assert risk["label"] == "deep-review"
+
+
+#: CI's spending shares by model (ADR-070: "starting weights"). The forge reviewer's order is
+#: `forge_rank`, a separate key, and must never be bought by moving one of these.
+CI_WEIGHTS = {
+    "openai/mimo-v2.6-flash": 27,
+    "openai/deepseek-v4-flash": 19,
+    "openai/glm5.3-flash": 19,
+    "anthropic/claude-haiku-5-5": 35,
+}
+
+
+def test_the_ci_weights_are_what_they_were_before_the_forge_had_an_order_of_its_own() -> None:
+    weights = {m["pr_agent"]["model"]: m["pr_agent"]["weight"] for m in PR_AGENT_MEMBERS if "weight" in m["pr_agent"]}
+    assert weights == CI_WEIGHTS
+
+
+def test_forge_rank_numbers_the_nan_chain_one_to_n_and_nothing_else() -> None:
+    """The forge server tries its members in `forge_rank` order. Only a NaN member with a weight is
+    in that chain (lesson-596: one api_base for every model), so only those carry a rank, each
+    once, with no gap that would read as a member that was meant to be there."""
+    chain = [m for m in PR_AGENT_MEMBERS if m.get("provider") == "nan" and "weight" in m["pr_agent"]]
+    ranked = [m for m in PR_AGENT_MEMBERS if "forge_rank" in m["pr_agent"]]
+
+    assert [m["id"] for m in ranked] == [m["id"] for m in chain]
+    assert sorted(m["pr_agent"]["forge_rank"] for m in ranked) == list(range(1, len(chain) + 1))
+    assert all(isinstance(m["pr_agent"]["forge_rank"], int) for m in ranked)
+
+
+def test_the_file_declares_that_forge_rank_is_kubelabs_alone() -> None:
+    """dotfiles' copy has no such key. Ported by hand until TOOL-117 (#2295), the copies drift one way
+    or the other the next time someone syncs; the note is what tells that person it is on purpose."""
+    notes = " ".join(POOL["$comment"])
+    assert "forge_rank" in notes
+    assert "kubelab only" in notes

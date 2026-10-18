@@ -88,6 +88,9 @@ access_control:
       policy: one_factor
     - domain: 'loki.staging.kubelab.live'
       policy: one_factor
+    # Uptime Kuma's admin surface (#2483); its public paths skip the ForwardAuth.
+    - domain: 'status.staging.kubelab.live'
+      policy: one_factor
 
     # Internal network catch-all
     - domain: '*.staging.kubelab.live'

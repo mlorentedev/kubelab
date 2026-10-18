@@ -1,0 +1,44 @@
+[
+  {
+    "id": "OPS-016-dnat-drift-healing-f1",
+    "behavior": "Applying an unchanged seed twice keeps every monitor id and performs zero deletes on the second run",
+    "verification": "poetry run pytest tests/test_monitoring_diff.py --no-cov -q -k TestDiffIsNonDestructiveOnASteadyState",
+    "state": "passing",
+    "evidence": "2026-10-18: passes (part of the 63-test run). Integration twin test_second_apply_is_a_no_op_and_preserves_every_id (#999) needs Docker. Live: make monitoring-apply CHECK=1 against rpi3 -> 0 create, 0 edit, 0 delete (live=36, seed=36)"
+  },
+  {
+    "id": "OPS-016-dnat-drift-healing-f2",
+    "behavior": "A seed that adds, edits and removes one monitor each converges in one apply and leaves untouched ids stable",
+    "verification": "poetry run pytest tests/test_monitoring_diff.py --no-cov -q -k TestDiffMatching",
+    "state": "passing",
+    "evidence": "2026-10-18: passes. Integration: test_dropping_a_monitor_from_the_seed_deletes_exactly_that_one, test_renaming_a_monitor_edits_it_instead_of_recreating_it (#999)"
+  },
+  {
+    "id": "OPS-016-dnat-drift-healing-f3",
+    "behavior": "apply_monitors uses no fixed sleep and exits non-zero when live state fails to reach its precondition",
+    "verification": "poetry run pytest tests/test_monitoring_apply_gate.py --no-cov -q",
+    "state": "passing",
+    "evidence": "2026-10-18: passes; covers a monitor that fails to converge. The delete-convergence branch (_assert_deleted) has no test that makes it fire: #2506"
+  },
+  {
+    "id": "OPS-016-dnat-drift-healing-f4",
+    "behavior": "Every node publishing an agent port has an HTTP monitor derived from common.yaml",
+    "verification": "none: not built",
+    "state": "blocked",
+    "evidence": "Amended 2026-10-18: carried by #963, which waits on #2450 (whether Glances survives)"
+  },
+  {
+    "id": "OPS-016-dnat-drift-healing-f5",
+    "behavior": "A Tailscale-bound stack starts after its address exists and is recreated when its requested port bindings are not in effect",
+    "verification": "poetry run pytest tests/test_tailscale_bound_ports_survive_boot.py tests/test_beelink_compose_unit.py --no-cov -q",
+    "state": "partial",
+    "evidence": "Amended 2026-10-18 to the per-role fix of #1115. The tests cover unit ordering and Beelink's --force-recreate. No test drives the glances/agent_stack drift branch, and no off-node probe or changed=0 re-run was recorded for this archive. rpi3_services lacks both: #2500"
+  },
+  {
+    "id": "OPS-016-dnat-drift-healing-f6",
+    "behavior": "The drift repair never recreates the headscale compose project",
+    "verification": "none: superseded",
+    "state": "blocked",
+    "evidence": "Superseded 2026-10-18: the fleet sweep this guarded was never built (#1115 fixed the trigger per role), so there is nothing to test. No headscale role task recreates its project"
+  }
+]

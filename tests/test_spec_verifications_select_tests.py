@@ -57,7 +57,6 @@ UNWRITTEN = frozenset(
         "AI-024-hermes-reach-f7",
         "AI-024-hermes-reach-f8",
         "AI-024-hermes-reach-f9",
-        "APP-CONFIG-013-vikunja-shared-projects-f7",
         "BACKUP-057-f1",
         "BACKUP-057-f7",
         "GITOPS-003-f2",
@@ -185,3 +184,53 @@ def test_every_unwritten_entry_is_still_unwritten() -> None:
         if not (returncode == USAGE_ERROR and "not found:" in output):
             stale.append(f"{feature_id}: its tests collect now (exit {returncode})")
     assert not stale, "\n".join(stale)
+
+
+#: What `dotf spec init` writes into a new feature's `verification` (dotfiles repo: this regex
+#: must track it, so re-check it when that scaffold changes). Pending, it is
+#: the honest state of a criterion nobody has tried; in an archived spec it is a
+#: criterion that was closed over without ever being verified (#2308).
+SCAFFOLD_VERIFICATION = re.compile(r"^\s*echo\s+['\"]not implemented['\"]\s*&&\s*exit\s+1\s*$")
+
+
+def scaffold_features(spec_root: Path) -> list[str]:
+    """Ids of the features, in archived specs under `spec_root`, still carrying the scaffold."""
+    found = []
+    for path in sorted(spec_root.glob("archive/*/features.json")):
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+        # One old archive wraps its list as {"spec": ..., "features": [...]}.
+        for feature in loaded["features"] if isinstance(loaded, dict) else loaded:
+            if SCAFFOLD_VERIFICATION.match(feature.get("verification", "")):
+                found.append(f"{path.parent.name}: {feature['id']}")
+    return found
+
+
+@pytest.mark.parametrize(
+    ("verification", "is_scaffold"),
+    [
+        ("echo 'not implemented' && exit 1", True),
+        ('echo "not implemented" && exit 1', True),
+        ("poetry run pytest tests/test_x.py -q", False),
+        ("echo 'not implemented yet' && exit 1", False),
+    ],
+)
+def test_the_scaffold_is_recognised_by_its_shape(verification: str, is_scaffold: bool) -> None:
+    assert bool(SCAFFOLD_VERIFICATION.match(verification)) is is_scaffold
+
+
+def test_the_guard_finds_a_scaffold_planted_in_an_archived_spec(tmp_path: Path) -> None:
+    spec = tmp_path / "archive" / "X-001"
+    spec.mkdir(parents=True)
+    features = [
+        {"id": "X-001-f1", "verification": "poetry run pytest tests/x.py"},
+        {"id": "X-001-f2", "verification": "echo 'not implemented' && exit 1"},
+    ]
+    (spec / "features.json").write_text(json.dumps(features), encoding="utf-8")
+    assert scaffold_features(tmp_path) == ["X-001: X-001-f2"]
+
+
+def test_no_archived_spec_keeps_the_scaffold_verification() -> None:
+    """An archived spec closed over a criterion nobody verified: the reviewer caught it once by hand (TOOL-082)."""
+    # A floor, so a moved archive or a changed layout cannot turn the guard into a no-op.
+    assert len(list(SPECS.glob("archive/*/features.json"))) >= 10
+    assert not scaffold_features(SPECS)

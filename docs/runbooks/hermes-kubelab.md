@@ -76,24 +76,17 @@ from another network logs `[UFW BLOCK] ... DPT=8642` in `journalctl -k`
 - **Prove it still works** (after an image bump, or a rotated key). In v0.22
   `hermes chat` is a client of the gateway, so a per-launch `NAN_API_KEY` or
   `--api-key` never reaches the model call and the turn answers on NaN
-  (lesson-574). Fail NaN in a throwaway gateway instead, with its own
-  `HERMES_HOME` and Slack and the API off, so no live state or channel is
-  touched. On ace2, as the agent's user against its rootless daemon:
-  1. `docker run -d --rm --name hermes-fallback-probe --dns 1.1.1.1 --env-file
-     /var/lib/hermes-kubelab/hermes.env -e NAN_API_KEY=sk-deliberately-invalid
-     -e SLACK_BOT_TOKEN= -e SLACK_APP_TOKEN= -e SLACK_ALLOWED_USERS= -e
-     API_SERVER_ENABLED=false -e HERMES_HOME=/opt/probe-home -v
-     /var/lib/hermes-kubelab/hermes-config.yaml:/opt/probe-home/config.yaml:ro
-     <the pinned image> gateway run`, then wait about 45 s.
-  2. `docker exec -u hermes hermes-fallback-probe hermes chat -q "Reply with
-     the single word: pong"`. Expect `Model fallback: ... authentication
-     failed; using claude-haiku-5-5 via anthropic.` and the answer `pong`.
-  3. `docker rm -f hermes-fallback-probe`.
-  To prove it against the live pool state too, copy `auth.json` (and the rendered
-  config) into a scratch directory owned by the container's `hermes` uid and mount
-  that as `HERMES_HOME`; delete the copy afterwards. Codifying this is AI-018 (#2299).
-  A `400 credit balance is too low` instead of `pong` means the key is being
-  sent as OAuth again.
+  (lesson-574). The role fails NaN in a throwaway gateway of its own instead, with
+  its own `HERMES_HOME`, Slack and the API off (the pool copy can be skipped with `agent_stack_fallback_probe_pool=false`), and a copy of the live `auth.json`
+  streamed in from the running gateway (never written to the node's disk):
+  `make provision NODE=ace2 ENV=prod TAGS=agent_stack EXTRA='agent_stack_fallback_probe=true'`
+  (tasks `hermes_fallback_probe.yml`, spec AI-018, lesson-603). The probe runs on a config of its own, the model and the fallback chain only, which a test ties to the live template. It asks one question, then
+  asserts the answer `pong`, `Fallback activated` and `anthropic` in the probe's
+  own logs (container output and `$HERMES_HOME/logs`), and no Slack connection in it; the probe is removed whatever the
+  outcome. A `400 credit balance is too low` instead of `pong` means the key is
+  being sent as OAuth again. Not covered yet: the second case from #2299, a
+  **pinned** turn (a cron job pinned by model, and a delegated child) failing NaN
+  and staying on it with no `Fallback activated`.
 - **No command scanner.** v0.22 removed the bundled tirith scanner. What
   remains is the sandbox with no network (`terminal.docker_network: false`) and
   Hermes's own approval patterns. Do not re-add `security.tirith_*`: upgrading
@@ -183,6 +176,8 @@ Jobs are declared in `apps.services.ai.hermes_kubelab.cron` (`common.yaml`) and 
 - **Scripts** ship from the role into a directory mounted read-only over `<data>/scripts/`. They run in the gateway, which sees `HERMES_HOME` and not `/vault`.
 - **Delivery** defaults to `slack:<home_channel>`, failures included.
 - **Run one now**: `hermes cron run <id>` inside the gateway, as the `hermes` user; it fires at the next tick, within a minute. `hermes cron list` prints text only; read `cron/jobs.json` for status.
+- **The alert triage says each problem once** (#2461): `alert-activity.py` keeps `HERMES_HOME/state/alert-activity.json` (hashes of what it handed to the agent) and leaves out a message, an unreadable channel or its own misconfiguration that it reported in the last six hours, then says it again after six. A quiet or fully repeated hour ends with `{"wakeAgent": false}`. To make it report everything again, delete that file; the next run recreates it.
+- **A gateway start logs `[config-migrate] ERROR: Read-only file system: .../config.yaml` and `docker_config_migrate.py failed; continuing`.** Expected: the image tries to migrate a config that is mounted read-only on purpose (the declared posture, lesson-549). Harmless; making it writable would drop the posture.
 - **The digest** (`kubelab:digest`, a script job) reports the gateway, the sidecar, the sandbox count, the disk and the month's usage per model and provider. A stopped container or an unreachable Docker is its first line; it never prints nothing, because a no-agent job with empty stdout sends nothing.
 - **A job's commands** are checked against the approvals under `cron_mode: deny`: test them with `hermes approvals test --env-type local` before declaring the job.
 
