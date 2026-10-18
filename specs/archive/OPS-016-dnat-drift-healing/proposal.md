@@ -1,7 +1,7 @@
 ---
 id: "OPS-016-dnat-drift-healing"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-08-11"
 issue: "kubelab#959"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
