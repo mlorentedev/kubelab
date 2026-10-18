@@ -667,3 +667,8 @@
     - name: Reconcile the scheduled jobs
       ansible.builtin.import_tasks: hermes_jobs.yml
       when: agent_stack_slack_configured | bool
+
+    # The proof comes after the reconcile: it needs the live gateway's pool to copy and
+    # changes nothing on the node.
+    - name: Prove the fallback
+      ansible.builtin.import_tasks: hermes_fallback_probe.yml
