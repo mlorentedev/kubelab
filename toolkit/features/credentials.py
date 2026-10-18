@@ -35,7 +35,6 @@ _AUTH_PREFIX = "apps.services.security.authelia"
 IMMUTABLE_SECRETS: set[str] = {
     f"{_AUTH_PREFIX}.storage_encryption_key",
     f"{_AUTH_PREFIX}.session_secret",
-    f"{_AUTH_PREFIX}.jwt_secret_reset_password",
     f"{_AUTH_PREFIX}.oidc_hmac_secret",
 }
 
@@ -448,11 +447,6 @@ class CredentialsManager:
         storage_encryption_key = secrets.token_urlsafe(64)
         logger.success("Authelia Storage Encryption key generated.")
 
-        # 6. Generate JWT Secret for password reset
-        logger.info("Generating JWT Secret for password reset...")
-        jwt_secret_reset_password = secrets.token_urlsafe(64)
-        logger.success("JWT Secret for password reset generated.")
-
         # 7. Generate OIDC Client Secret and its hash (General Authelia client)
         logger.info("Generating OIDC Client Secret (General Authelia client)...")
         oidc_client_secret = secrets.token_urlsafe(64)
@@ -551,7 +545,6 @@ class CredentialsManager:
             f"{_auth}.oidc_hmac_secret": oidc_hmac_secret,
             f"{_auth}.session_secret": session_secret,
             f"{_auth}.storage_encryption_key": storage_encryption_key,
-            f"{_auth}.jwt_secret_reset_password": jwt_secret_reset_password,
             f"{_auth}.oidc_client_secret": oidc_client_secret,
             f"{_auth}.oidc_client_secret_hash": oidc_client_secret_hash,
             f"{_auth}.oidc_client_secret_grafana": grafana_oidc_client_secret,
@@ -761,8 +754,6 @@ class CredentialsManager:
         print(f'                session_secret: "{session}"')
         storage_key = secrets_dict[f"{_a}.storage_encryption_key"]
         print(f'                storage_encryption_key: "{storage_key}"')
-        jwt_secret = secrets_dict[f"{_a}.jwt_secret_reset_password"]
-        print(f'                jwt_secret_reset_password: "{jwt_secret}"')
         oidc_secret = secrets_dict[f"{_a}.oidc_client_secret"]
         print(f'                oidc_client_secret: "{oidc_secret}"')
         oidc_hash = secrets_dict[f"{_a}.oidc_client_secret_hash"]

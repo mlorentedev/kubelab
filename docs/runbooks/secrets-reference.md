@@ -96,13 +96,11 @@ There is no `*.oidc-jwks.pem`. The OIDC signing key is `apps.services.security.a
 |-----|------|--------|----------|
 | `apps.services.security.authelia.session_secret` | random_token | Base64 URL-safe | authelia |
 | `apps.services.security.authelia.storage_encryption_key` | random_token | Base64 URL-safe | authelia |
-| `apps.services.security.authelia.jwt_secret_reset_password` | random_token | Base64 URL-safe | authelia |
 
 **How to change**: `toolkit secrets init --env <env>` (auto-generates).
 **What breaks**:
 - `session_secret`: Invalidates all active sessions. Users must re-login.
 - `storage_encryption_key`: **DANGEROUS** — existing DB becomes unreadable. Must reset Authelia data.
-- `jwt_secret_reset_password`: Invalidates pending password reset links.
 
 ### 3. Authelia — User Passwords
 

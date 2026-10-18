@@ -57,8 +57,6 @@ spec:
               value: /run/secrets/session_secret
             - name: AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE
               value: /run/secrets/storage_encryption_key
-            - name: AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET_FILE
-              value: /run/secrets/jwt_secret
             - name: AUTHELIA_NOTIFIER_SMTP_PASSWORD_FILE
               value: /run/secrets/smtp_password
             - name: AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET_FILE
