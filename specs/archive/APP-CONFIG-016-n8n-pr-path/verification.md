@@ -56,7 +56,7 @@ Review `review.md` (nan/glm5.3-flash, PASS, reviewed `01504607`):
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/APP-CONFIG-016-n8n-pr-path/` -> `specs/archive/APP-CONFIG-016-n8n-pr-path/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/APP-CONFIG-016-n8n-pr-path/` -> `specs/archive/APP-CONFIG-016-n8n-pr-path/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] Promotions above executed (if any)
