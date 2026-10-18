@@ -16,3 +16,9 @@
 - First pass ended queue-empty because I filtered the board's Backlog by type; the operator pointed out quick wins live in open issues outside it (565 open). Envelope widened to open bug/chore/debt issues (commit 33ab05c3).
 - Next candidates read but not started: #2308 (TOOL-119 spec guard), #2447 (totalServices derived), #2377 (Authelia deprecated keys). Not eligible: #2136 (changes the Docker pool on every node).
 - Host: wake-lock via caffeinate for the window.
+
+## Addendum (after the operator's follow-up)
+- #2516 (`411cdea1`) and #2529 (`3ec88483`) merged after #2527 fixed the lesson counter on master. No PR of this session is open.
+- #2291 claimed and released with findings (the export's `httpBodyEncoding` rule needs one real export; options A/B on the ticket). #2447 and #2377 not started: they need an owner decision.
+- Worktree sweep done: 47 listed. Proposed for removal: merged-PR, clean, no unique commits. Kept: open PRs, live sessions' launch dirs, `chore-autopilot-run-20261018-vk` (2 unpushed report commits).
+- `fix-bug-sweep` (launch dir) carries an uncommitted `infra/config/secrets/staging.enc.yaml` change (3 lines) that is not this session's; do not discard it without checking.
