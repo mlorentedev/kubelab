@@ -55,6 +55,7 @@ help:
 	@echo "Infrastructure (Ansible):"
 	@echo "  make provision NODE=x ENV=y  Provision a node (NODE=ace1|ace2|aws1|bee|rpi3|rpi4|jetson|vps, ENV=staging|prod|hub) [TAGS=tag1,tag2] [EXTRA='k=v']"
 	@echo "  make maintain NODE=x         Disk cleanup (NODE=aws1|ace1|ace2|beelink|vps|all) [TIMER=1] [TAGS=tag1,tag2]"
+	@echo "  make reboot NODE=x ENV=y     Reboot a node only if it has a pending reboot, one host at a time [EXTRA='reboot_force=true reboot_allow_vps=true'] [CHECK=1]"
 	@echo "  make node-reclaim NODE=x     Remove orphaned buildx builders + CI job volumes over SSH [APPLY=1] (works at 0 bytes free, where Ansible cannot)"
 	@echo "  make deploy TARGET=x ENV=y  Deploy services (TARGET=vps|dns|k3s|harden-nodes)"
 	@echo "  make backup ENV=x           Backup VPS volumes (default: prod)"
@@ -1042,6 +1043,17 @@ maintain:
 	else \
 		$(TOOLKIT) infra ansible run -p maintain -e $(_ENV) -l $(NODE) $(_TIMER) $(_TAGS) $(_CHECK); \
 	fi
+
+# Reboot the nodes `make maintain` reported as needing it. The playbook skips
+# hosts with no pending reboot, takes one host at a time, and refuses the VPS
+# (Headscale) unless EXTRA='reboot_allow_vps=true'. No inline logic here.
+.PHONY: reboot
+reboot:
+	@test -n "$(NODE)" || (echo "Usage: make reboot NODE=ace1|ace2|beelink|gcp1|vps|rpi3|rpi4 [ENV=staging|prod|hub] [EXTRA='reboot_force=true reboot_allow_vps=true'] [CHECK=1]" && exit 1)
+	$(eval _ENV := $(or $(filter staging prod hub,$(ENV)),staging))
+	$(eval _EXTRA := $(if $(EXTRA),--extra-vars "$(EXTRA)",))
+	$(eval _CHECK := $(if $(CHECK),--check,))
+	@$(TOOLKIT) infra ansible run -p reboot -e $(_ENV) -l $(NODE) $(_EXTRA) $(_CHECK)
 
 # Emergency reclaim for the residue `make maintain` structurally cannot reach
 # (OPS-024/#1657). Two reasons it is a separate path and not a tag on that one:
