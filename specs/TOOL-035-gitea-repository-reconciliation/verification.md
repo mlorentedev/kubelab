@@ -13,9 +13,9 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - [x] AC2 (undeclared is reported, never deleted) -> `890f6f56` / `test_the_plan_has_no_deletion_field` (structural, over `dataclasses.fields`)
 - [x] AC3 (issues and pull requests carry over) -> `personal/resume`, counts under *AC3 — `resume` migrated*
 - [x] AC4 (`hefesto` owns nothing) -> live listing under *AC1/AC4 measured on prod*, printed by the reconcile itself
-- [ ] AC5 (migration credential scoped and checked both ways) -> both transcripts
-- [ ] AC6 (`ci.yml`'s six jobs green on `act_runner`) -> run URL
-- [ ] AC7 (`act_runner` registration idempotent) -> `changed=0` transcript
+- [x] AC5 (migration credential scoped and checked both ways) -> both transcripts under *AC5 — the migration credential, checked by consequence*
+- [x] AC6 (`ci.yml`'s six jobs green on `act_runner`) -> `personal/resume` run 9, sha `3b1c0629`, recorded in https://github.com/mlorentedev/kubelab/issues/1076#issuecomment-5536451906; accepted loss under *AC6 — the three workflows that do not port*
+- [x] AC7 (`act_runner` registration idempotent) -> `changed=10` then `changed=0`, runner `kubelab-bee-gitea` online, PR #1597, https://github.com/mlorentedev/kubelab/issues/1076#issuecomment-5520924042
 
 ## Baselines measured before any change (2026-08-27)
 
@@ -415,11 +415,25 @@ that expired 2026-08-23. The key this repository stores is the healthy one (veri
 prefixes, never values), so nothing is broken — but it reddens `check-expiry` permanently, and a
 control that always fails stops being read. Filed as #1485 (VPN-014).
 
+## AC6 — the three workflows that do not port (accepted loss)
+
+Risk 4 measured three of `resume`'s five workflows as non-portable, because each one speaks the
+GitHub API as a platform. Each is recorded here with what replaces it:
+
+| workflow | outcome on Gitea | where it is tracked |
+|---|---|---|
+| `release.yml` (release-please) | no replacement yet | kubelab#1624 (TOOL-061), open |
+| `add-to-project.yml` | dropped on Gitea | parked in `personal/resume#260` (Gitea) |
+| `bitacora-status.yml` | dropped on Gitea | parked in `personal/resume#260` (Gitea) |
+
 ## Test status
 
-- Test suite: `<command> -> <output / coverage %>`
-- Manual smoke test: what was exercised, what was observed
-- No regressions in existing test suite: yes / no (if no, document)
+- Test suite: `tests/test_gitea_repo_reconcile.py`, `tests/test_gitea_repo_execute.py`,
+  `tests/test_gitea_actions_runner.py`, `tests/test_secret_expiry_lookup.py` on master, run by CI on
+  every PR. Live: `tests/infra/test_gitea_runner_registered_live.py`,
+  `tests/infra/test_gitea_anonymous_surface_live.py`.
+- Manual smoke test: the prod reconcile, migration and runner transcripts above.
+- No regressions in existing test suite: yes (CI green on #1597 and on every later master build).
 
 ## Decisions made during implementation
 
@@ -436,13 +450,12 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 
 Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.
 
-- [ ] Lesson for the repo's `docs/lessons/`? Likely yes — the portability line for Gitea Actions is
-      "does the action talk to the GitHub API as a platform, or only to the runner", which predicts
-      the outcome better than any compatibility list.
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? Possibly — ADR-065 left "what must be
-      true before the GitHub copy is retired" open, and Risk 3 (which forge accepts a merge during the
-      pilot) is the first half of that answer.
-- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. Probably no.
+- [x] Lesson for the repo's `docs/lessons/`? yes: `docs/lessons/ci-automation/lesson-598-a-workflow-ports-to-gitea-unless-it-uses-github-as-a-platform.md`
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: Risk 3's answer is an operator
+      decision for the pilot window, recorded in `tasks.md`. "What must be true before the GitHub copy
+      is retired" belongs to the cutover of each repository, and the ts-bridge cutover is carried on
+      its own ticket (see the archive checklist), not decided here.
+- [x] New pattern candidate for `00_meta/patterns/`? no: it has happened in one project only.
 
 ## Archive checklist
 
