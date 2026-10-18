@@ -48,12 +48,12 @@ Three observable changes, one per ticket in the chain:
 
 ## Acceptance criteria
 
-- [ ] AC1 — Running `make monitoring-apply` twice with an unchanged seed leaves every monitor's `id` identical across both runs, and performs zero deletes on the second.
-- [ ] AC2 — With a seed edited to add one monitor, change one monitor's interval, and remove one monitor, a single apply converges the live instance to the seed and leaves the `id` of every untouched monitor unchanged.
-- [ ] AC3 — `apply_monitors` contains no fixed `sleep`, and exits non-zero when the live state fails to reach its expected precondition instead of logging SUCCESS and continuing.
-- [ ] AC4 — Every node in `networking.nodes.*` publishing an agent port has a corresponding HTTP monitor in the seed, asserted by a test that reads `common.yaml`; stopping that port makes the monitor report down within one interval.
-- [ ] AC5 — Against a node with its `DOCKER` nat chain deliberately flushed, the drift task restores every published port (probed over HTTP from off-node); re-run on the now-healthy node reports `changed=0`.
-- [ ] AC6 — The drift task never recreates the headscale compose project, asserted by a test rather than by a comment.
+- [x] AC1 — Running `make monitoring-apply` twice with an unchanged seed leaves every monitor's `id` identical across both runs, and performs zero deletes on the second.
+- [x] AC2 — With a seed edited to add one monitor, change one monitor's interval, and remove one monitor, a single apply converges the live instance to the seed and leaves the `id` of every untouched monitor unchanged.
+- [x] AC3 — `apply_monitors` contains no fixed `sleep`, and exits non-zero when the live state fails to reach its expected precondition instead of logging SUCCESS and continuing.
+- [ ] AC4 — Every node in `networking.nodes.*` publishing an agent port has a corresponding HTTP monitor in the seed, asserted by a test that reads `common.yaml`; stopping that port makes the monitor report down within one interval. **Amended 2026-10-18 (#2443): not met, and owned elsewhere.** No agent-port monitor was ever seeded. #963 carries this criterion. Whether Glances, the only agent, survives the Homepage retirement is #2450, so the monitor is not built before that decision.
+- [ ] AC5 — Against a node with its `DOCKER` nat chain deliberately flushed, the drift task restores every published port (probed over HTTP from off-node); re-run on the now-healthy node reports `changed=0`. **Amended 2026-10-18 (#2443):** #1115 found the trigger, a boot race in which dockerd publishes a Tailscale-bound port before the address exists. So the repair moved from a fleet-wide nat-table sweep into each role that binds a Tailscale address. Its unit starts after the address exists and recreates on start, and `glances` and `agent_stack` compare requested against in-effect bindings at provision and recreate on divergence. `rpi3_services` has neither the recreate nor the check: #2500.
+- [ ] AC6 — The drift task never recreates the headscale compose project, asserted by a test rather than by a comment. **Amended 2026-10-18 (#2443): met by construction, not by a test.** No fleet sweep was built, so no task enumerates compose projects. Each per-role recreate names its own project only, and the `headscale` role has none.
 
 ## References
 
