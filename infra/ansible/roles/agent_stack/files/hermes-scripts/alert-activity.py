@@ -68,7 +68,7 @@ def load_seen(path: Path | None, now: float) -> dict[str, float]:
     try:
         raw = json.loads(path.read_text())
         return {k: float(v) for k, v in raw.items() if now - float(v) < REPEAT}
-    except (OSError, ValueError, AttributeError):
+    except (OSError, ValueError, AttributeError, TypeError):
         return {}
 
 
@@ -101,8 +101,12 @@ def channels(raw: str) -> list[tuple[str, str]]:
     return pairs
 
 
+def _redact(text: object) -> str:
+    return " ".join(SECRETS.sub("[redacted]", str(text)).split())
+
+
 def _clean(text: object) -> str:
-    one_line = " ".join(SECRETS.sub("[redacted]", str(text)).split())
+    one_line = _redact(text)
     return one_line if len(one_line) <= MESSAGE_CHARS else one_line[:MESSAGE_CHARS] + "..."
 
 
@@ -148,12 +152,14 @@ def report(
     marks: list[str] = []
     unreadable: list[str] = []
     repeated = 0
+    pending: set[str] = set()  # fingerprints already in this report
     for ident, name in pairs:
         try:
             messages = read(token, ident, now - WINDOW)
         except (OSError, RuntimeError, ValueError) as error:  # urllib.error.URLError is an OSError
             key = _fingerprint("unreadable", ident, type(error).__name__)
-            if _is_new(seen, key, now):
+            if key not in pending and _is_new(seen, key, now):
+                pending.add(key)
                 marks.append(key)
                 unreadable.append(
                     f"#{name} ({ident}): cannot be read ({_clean(type(error).__name__ + ': ' + str(error))})"
@@ -163,11 +169,15 @@ def report(
             continue
         lines = []
         for message in sorted(messages, key=lambda m: float(m.get("ts", 0))):
-            body = _clean(_text(message))
-            key = _fingerprint(ident, TIMES.sub("", body))
-            if body and not _is_new(seen, key, now):
+            full = _redact(_text(message))
+            body = _clean(full)
+            # The fingerprint reads the whole text, not the 400 characters shown: the part that tells two
+            # alerts apart can come after the cut. A copy already in this report counts as said.
+            key = _fingerprint(ident, TIMES.sub("", full))
+            if body and (key in pending or not _is_new(seen, key, now)):
                 repeated += 1
             elif body:
+                pending.add(key)
                 when = datetime.fromtimestamp(float(message.get("ts", 0)), UTC).strftime("%H:%M")
                 lines.append((key, f"- {when} {body}"))
         if lines:
@@ -179,7 +189,7 @@ def report(
     out = [f"Alert channels, the hour before {stamp}.", *unreadable]
     if repeated:
         out.append(
-            f"({repeated} more message(s) repeat something already reported in the last "
+            f"({repeated} more message(s) repeat something shown here or reported in the last "
             f"{REPEAT // 3600} hours and are left out.)"
         )
     used = sum(len(line) + 1 for line in out)

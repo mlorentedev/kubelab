@@ -245,7 +245,7 @@ def test_a_new_alert_is_reported_and_says_how_many_were_left_out() -> None:
     both = [_alert(559, "05:21"), _alert(576, "05:21")]
     out = script.report("t", PAIRS, NOW + 3600, read=_reader({"C1": both, "C2": []}), seen=seen)
     assert "pulls/576" in out and "pulls/559" not in out
-    assert "1 more message(s) repeat something already reported" in out
+    assert "1 more message(s) repeat something shown here or reported" in out
 
 
 def test_an_alert_that_outlasts_the_window_is_said_again() -> None:
@@ -334,3 +334,28 @@ def test_the_memory_lives_next_to_the_scripts_directory_when_hermes_home_is_scru
     exec(compile(SCRIPT.read_text(), str(scripts / "alert-activity.py"), "exec"), module.__dict__)  # noqa: S102
     assert module._state_path() == tmp_path / "state" / "alert-activity.json"
     assert _script()._state_path() is None, "run from the repo, the memory must not land in the role's files/"
+
+
+def test_copies_of_one_alert_inside_the_same_hour_are_shown_once() -> None:
+    """Grafana reposts a firing alert every 15 minutes: four copies are one problem, not four."""
+    script = _script()
+    copies = [_alert(559, f"04:{m}") | {"ts": f"{NOW - (60 - int(m)) * 60:.6f}"} for m in ("06", "21", "36", "51")]
+    out = script.report("t", PAIRS, NOW, read=_reader({"C1": copies, "C2": []}), seen={})
+    assert out.count("pulls/559") == 1 and "3 more message(s) repeat" in out
+
+
+def test_two_alerts_that_differ_only_after_the_displayed_text_are_two_alerts() -> None:
+    script = _script()
+    seen: dict[str, float] = {}
+    long_prefix = "reviewer failed " + "x" * 500
+    script.report("t", PAIRS, NOW, read=_reader({"C1": [_message(long_prefix + " pulls/559")], "C2": []}), seen=seen)
+    out = script.report(
+        "t", PAIRS, NOW + 3600, read=_reader({"C1": [_message(long_prefix + " pulls/576")], "C2": []}), seen=seen
+    )
+    assert "wakeAgent" not in out, "a different alert was suppressed because its difference was past the cut"
+
+
+def test_a_null_timestamp_in_the_memory_is_unreadable_state(tmp_path) -> None:
+    path = tmp_path / "state.json"
+    path.write_text('{"hash": null}')
+    assert _script().load_seen(path, NOW) == {}
