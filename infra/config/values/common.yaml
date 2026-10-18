@@ -668,7 +668,7 @@ edge:
   errors:
     name: errors
     image_name: kubelab-errors
-    version: "1.2.0"
+    version: "1.2.1"
     port: 8080
     health_path: /health
     # Routes that deliberately do NOT carry the `error-pages` middleware (ADR-072).

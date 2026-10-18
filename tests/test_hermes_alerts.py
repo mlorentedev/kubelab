@@ -86,9 +86,9 @@ def test_the_script_reads_its_token_under_a_name_hermes_hands_to_a_job_script() 
 
 def test_the_script_token_exists_only_with_slack_and_channels() -> None:
     assert "HERMES_ALERT_SLACK_TOKEN" not in _env(), "no Slack, no token"
-    assert "HERMES_ALERT_SLACK_TOKEN" not in _env(**TOKENS, agent_stack_hermes={**HERMES, "slack": {**SLACK, "alert_channels": []}}), (
-        "a token for a script nothing runs is a credential for nothing"
-    )
+    assert "HERMES_ALERT_SLACK_TOKEN" not in _env(
+        **TOKENS, agent_stack_hermes={**HERMES, "slack": {**SLACK, "alert_channels": []}}
+    ), "a token for a script nothing runs is a credential for nothing"
 
 
 def test_the_channels_do_not_widen_what_the_agent_answers() -> None:
@@ -138,6 +138,32 @@ def test_an_attachment_only_alert_is_read() -> None:
     attachments = [{"title": "[FIRING] DiskFull", "text": "ace1 at 96%"}]
     out = _script().report("t", PAIRS, NOW, read=_reader({"C1": [_message("", attachments=attachments)], "C2": []}))
     assert "DiskFull" in out and "96%" in out
+
+
+def test_a_block_kit_attachment_is_read_not_its_placeholder() -> None:
+    """Argo CD's webhook posts blocks and Slack fills `fallback` with a placeholder (measured on #deployments,
+    2026-10-17): reporting that made the triage ask what a healthy sync said."""
+    blocks = [
+        {"type": "header", "text": {"type": "plain_text", "text": "Sync Succeeded"}},
+        {
+            "type": "section",
+            "fields": [
+                {"type": "mrkdwn", "text": "*App:*\nkubelab-prod"},
+                {"type": "mrkdwn", "text": "*Revision:*\n92c0d03"},
+            ],
+        },
+        {"type": "context", "elements": [{"type": "mrkdwn", "text": "<https://argo.example/app|Open>"}]},
+    ]
+    attachments = [{"blocks": blocks, "fallback": "[no preview available]"}]
+    out = _script().report("t", PAIRS, NOW, read=_reader({"C1": [_message("", attachments=attachments)], "C2": []}))
+    assert "Sync Succeeded" in out and "kubelab-prod" in out and "92c0d03" in out
+    assert "no preview available" not in out
+
+
+def test_the_placeholder_is_only_a_last_resort() -> None:
+    attachments = [{"fallback": "[no preview available]"}]
+    out = _script().report("t", PAIRS, NOW, read=_reader({"C1": [_message("", attachments=attachments)], "C2": []}))
+    assert "no preview available" in out, "a message with nothing else still shows up"
 
 
 @pytest.mark.parametrize(
