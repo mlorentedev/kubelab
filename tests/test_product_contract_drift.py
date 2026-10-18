@@ -18,7 +18,17 @@ from typer.testing import CliRunner
 
 from toolkit.features import product_render
 from toolkit.features.product_contract import ContractError, validate_contract
-from toolkit.features.product_render import CONTRACT_KEYS, SNAPSHOT_DIR, VALUES_DIR, drift, write
+from toolkit.features.product_guards import validate_registered
+from toolkit.features.product_registry import load_registry
+from toolkit.features.product_render import (
+    CONTRACT_KEYS,
+    SNAPSHOT_DIR,
+    VALUES_DIR,
+    drift,
+    snapshot_exempt,
+    snapshot_gaps,
+    write,
+)
 from toolkit.main import app
 
 WEB = SNAPSHOT_DIR / "web.yaml"
@@ -145,3 +155,40 @@ def test_render_refuses_oidc(tmp_path: Path) -> None:
 
 def test_render_takes_check_or_write_not_both() -> None:
     assert _render("--env", "prod", "--check", "--write").exit_code == 2
+
+
+FIXTURE_REGISTRY = Path(__file__).parent / "fixtures" / "product" / "registry.yaml"
+
+
+def test_every_contract_managed_entry_has_a_snapshot_and_every_snapshot_an_entry() -> None:
+    assert snapshot_gaps() == ([], [])
+
+
+def test_every_committed_snapshot_passes_the_registry_guards() -> None:
+    """A registry edit (image override, an entry turned in-tree) that no snapshot follows is drift too."""
+    for snapshot in sorted(SNAPSHOT_DIR.glob("*.yaml")):
+        validate_registered(snapshot, snapshot.stem)
+
+
+def test_a_contract_managed_entry_without_a_snapshot_is_drift(tmp_path: Path) -> None:
+    """Fixture registry: `api` in-tree, `web` and `third` on GitHub; only web has a snapshot."""
+    shutil.copy(WEB, tmp_path / "web.yaml")
+
+    missing, orphaned = snapshot_gaps(FIXTURE_REGISTRY, tmp_path)
+
+    assert missing == ["third"]
+    assert orphaned == []
+
+
+def test_a_snapshot_without_a_contract_managed_entry_is_drift(tmp_path: Path) -> None:
+    for name in ("web", "third", "ghost", "api"):
+        shutil.copy(WEB, tmp_path / f"{name}.yaml")
+
+    assert snapshot_gaps(FIXTURE_REGISTRY, tmp_path) == ([], ["api", "ghost"])
+
+
+def test_the_exempt_set_is_exactly_the_in_tree_entries() -> None:
+    products = load_registry(FIXTURE_REGISTRY).products
+    in_tree = {name for name, product in products.items() if product.forge == "in-tree"}
+
+    assert snapshot_exempt(FIXTURE_REGISTRY) == in_tree == {"api"}

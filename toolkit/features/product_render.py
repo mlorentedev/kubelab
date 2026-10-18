@@ -28,6 +28,7 @@ from toolkit.config.settings import PROJECT_ROOT
 from toolkit.features.declared_domains import VALUES_DIR
 from toolkit.features.product_contract import Contract
 from toolkit.features.product_guards import refuse_oidc_at_render
+from toolkit.features.product_registry import load_registry
 
 SNAPSHOT_DIR = PROJECT_ROOT / "infra" / "config" / "products" / "contracts"
 
@@ -44,7 +45,16 @@ CONTRACT_KEYS: dict[str, Callable[[Contract, str], Any]] = {
     "image_name": lambda c, env: c.image.rsplit("/", 1)[1],
 }
 
-__all__ = ["CONTRACT_KEYS", "SNAPSHOT_DIR", "VALUES_DIR", "drift", "rendered", "write"]
+__all__ = [
+    "CONTRACT_KEYS",
+    "SNAPSHOT_DIR",
+    "VALUES_DIR",
+    "drift",
+    "rendered",
+    "snapshot_exempt",
+    "snapshot_gaps",
+    "write",
+]
 
 
 def rendered(
@@ -101,3 +111,16 @@ def write(contract: Contract, app: str, env: str, *, values_dir: Path = VALUES_D
     with path.open("w") as handle:
         ruamel.dump(doc, handle)
     return list(differences)
+
+
+def snapshot_exempt(registry: Path | None = None) -> set[str]:
+    """Registry entries that have no snapshot by design: in-tree products, whose values are hand-authored."""
+    return {name for name, product in load_registry(registry).products.items() if not product.contract_managed}
+
+
+def snapshot_gaps(registry: Path | None = None, snapshot_dir: Path = SNAPSHOT_DIR) -> tuple[list[str], list[str]]:
+    """Return ``(contract-managed entries with no snapshot, snapshots with no contract-managed entry)``."""
+    products = load_registry(registry).products
+    managed = {name for name, product in products.items() if product.contract_managed}
+    snapshots = {path.stem for path in snapshot_dir.glob("*.yaml")}
+    return sorted(managed - snapshots), sorted(snapshots - managed)
