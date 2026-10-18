@@ -1,0 +1,43 @@
+# Arming envelope for the 2026-10-18 run. The run reads the COMMITTED copy only.
+version: 1
+run_id: "2026-10-18-vk"
+armed_by: manu
+armed_at: 2026-10-18T08:35:00Z
+expires_at: 2026-10-18T16:35:00Z
+branch: chore/autopilot-run-20261018-vk
+objective: "Land #2475, disposition #2464, ship Vikunja area labels, each through triage; no prod work, no 2.7.0 upgrade."
+scope:
+  write_paths:
+    - "toolkit/**"
+    - "tests/**"
+    - "docs/**"
+    - "specs/**"
+    - "edge/errors/html/brand/**"
+    - "infra/k8s/base/services/vikunja-config/**"
+    - "infra/k8s/base/services/authelia-assets/**"
+    - "infra/k8s/overlays/prod/vikunja-config/**"
+    - ".agent/runs/**"
+  frozen_paths:
+    - ".github/**"
+    - "harness/**"
+    - "**/AGENTS.md"
+    - ".agent/unattended.yml"
+    - "**/*.enc.yaml"
+    - "infra/ansible/**"
+    - "infra/terraform/**"
+  max_files: 14
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make, poetry, uv]
+queue:
+  source: bitacora
+  filter: "Vikunja as tracker (APP-CONFIG-*, dotfiles#1424) plus the operator's own open PRs #2475 and #2464"
+  max_items: 4
+budget:
+  max_iterations: 6
+  max_minutes_per_iteration: 60
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant     # .github/merge-grant.yml on master: prs-the-agent-opened, release-please excluded
+  push: true
+  open_pr: true
+  advisor_tier: top
