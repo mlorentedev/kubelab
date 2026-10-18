@@ -1,39 +1,48 @@
 # Arming envelope for one unattended run. The run reads the committed copy only.
 version: 1
-run_id: "20261018-claims"
+run_id: "20261018-finish"
 armed_by: manu
-armed_at: 2026-10-18T08:32:15Z
-expires_at: 2026-10-18T16:32:15Z
-objective: "Advance epic kubelab#2449: triage PR #2466 and open PRs for #2460, #1860, #2459 and #378."
+armed_at: 2026-10-18T22:58:00Z
+expires_at: 2026-10-19T02:00:00Z
+objective: >-
+  Land the three PRs this lane opened (#2495, #2502, #2514) once each is green,
+  clean and triaged, then sweep worktrees and hand off.
 scope:
   write_paths:
     - "infra/terraform/dns/**"
-    - "infra/config/values/**"
     - "infra/k8s/**"
     - "infra/ansible/**"
+    # only the operator's own `secrets set` of cloudflare.acme_dns_token, committed on #2502's branch
+    - "infra/config/secrets/common.enc.yaml"
     - "toolkit/**"
     - "tests/**"
     - "docs/**"
-    - "specs/**"
-    - "Makefile"
-    - ".agent/runs/20261018-claims/**"
-  frozen_paths: [".github/**", "harness/**", "**/AGENTS.md", "**/*.enc.yaml", ".agent/unattended.yml"]
-  max_files: 12
-  max_loc: 300
+    - "CLAUDE.md"
+    - ".agent/runs/20261018-finish/**"
+  frozen_paths: [".github/**", "harness/**", "**/AGENTS.md", ".agent/unattended.yml"]
+  max_files: 14      # #2495 already carries 13; review fixes add none
+  max_loc: 300       # #2514 is 597 insertions, disclosed in run 20261018-claims; review fixes stay small
 allowed_commands: [dotf, gh, git, make, poetry, jq]
 queue:
-  source: bitacora
-  filter: "#2466 (triage only), #2460, #1860, #2459 (PR only, never merged), #378 (PR only, never merged, no staging deploy)"
-  max_items: 5
-  merge_allowed: ["#2460", "#1860"]
-  never_merge: ["#2466", "#2459", "#378"]
+  source: explicit
+  filter: "#2495, #2502, #2514 (this lane's PRs) only"
+  max_items: 3
+  merge_allowed: ["#2495", "#2502", "#2514"]
+  merge_conditions:
+    "#2495": "HSTS off for imagesensortool.com (operator 2026-10-18); merge does not apply Terraform"
+    "#2502": "only after the operator has stored cloudflare.acme_dns_token and Tests is green; no provision"
+    "#2514": >-
+      only after the staging check in its PR body passes; staging returned to master
+      either way; prod e2e after merge, revert PR on failure
 budget:
-  max_iterations: 8
-  max_minutes_per_iteration: 60
+  max_iterations: 6
+  max_minutes_per_iteration: 45
   max_consecutive_failures: 2
 authority:
   merge: standing-grant
   push: true
-  open_pr: true
+  open_pr: true      # a revert PR for #2514 only
   advisor_tier: top
-  apply: never          # no terraform apply, no make deploy/provision, no secrets set, no token mint
+  # make argo-set-revision APP=kubelab-staging + read-only checks;
+  # no terraform apply, no provision, no secrets set, no token mint
+  apply: staging-repoint-only
