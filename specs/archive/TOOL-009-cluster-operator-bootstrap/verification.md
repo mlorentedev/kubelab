@@ -40,6 +40,19 @@ Written on 2026-10-10 during DEBT-019 (#2034): the implementation merged on 2026
 | 5 | Minor, REAL: the Makefile said the hub EndpointSlice render lived in `_deploy-argocd-helm` | Fixed in #2167: it names `make argocd-repoint`. |
 | 6 | Question: archive with AC5 tracked on iris#30, or hold? | Archive, with AC5 amended. See row 1. |
 
+## Review dispositions
+
+Review of 2026-10-18 (`review.md`, PASS-WITH-GAPS, nan/glm5.3-flash, reviewed at `bb811962`):
+
+1. The AC5 amendment and f6 attribute the 64-character refusal to "that CRD's schema". Applied
+   here, as a correction outside the contract set: the 63-character cap is the API server's
+   built-in `metadata.labels` validation. The conclusion stands, because the request reaches
+   that validation only when the CRD is served (an unknown kind answers 404). The contract text is
+   not edited, since that would stale this review.
+2. `tasks.md` T9 stays unticked, "blocked on mlorentedev/iris#30": declined to reword. That is
+   the honest state, and the amended AC5 names the same owner. knowledge#118 was already
+   closed, so the archive checklist now asks for a comment with the PR link instead of a close.
+
 ## Promotion candidates
 
 - [x] Lesson for the repo's `docs/lessons/`? no: the one correction here (a vacuous verification command) is the shape lesson-545 records for fakes, and this file records the instance.
@@ -48,6 +61,6 @@ Written on 2026-10-10 during DEBT-019 (#2034): the implementation merged on 2026
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved to `specs/archive/`
-- [ ] Tracking issue mlorentedev/knowledge#118 closed with the PR link, naming iris#30 as the open remainder (ADR-018)
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved to `specs/archive/`
+- [ ] Tracking issue mlorentedev/knowledge#118 (already closed) gets a comment with the PR link, naming iris#30 as the open remainder (ADR-018)

@@ -1,7 +1,7 @@
 ---
 id: "TOOL-009-cluster-operator-bootstrap"
 type: spec
-status: implementing # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-06-16"
 issue: "mlorentedev/knowledge#118"
 tags: [spec, proposal, toolkit, k8s, bootstrap, operators, ssot, argocd]
