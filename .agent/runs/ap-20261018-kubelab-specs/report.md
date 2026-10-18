@@ -3,7 +3,7 @@
 **Verdict:** the run ended on time (expiry 16:35Z), after about 8 hours.
 
 - Spec PRs merged: 5 of 8 (TOOL-035, APP-CONFIG-016, AUTH-004, CONSOLE-002, OPS-016).
-- Unmerged: 2 (DT-004, TOOL-001). Both are triaged and waiting only on CI after the master fix, #2524.
+- Unmerged: 2 (DT-004, TOOL-001). Both are triaged and waiting only on CI after the master fix, #2527.
 - Parked: 1 (TOOL-009).
 - DELIVERY-004 was out of scope by the operator's ruling.
 
@@ -13,11 +13,11 @@
 
 Nothing irreversible is pending. Every merge has landed, and no prod mutation ran. The prod commands this run executed were all read-only: `auth-review`, `secrets audit`, `monitoring-apply CHECK=1` and `n8n-probe`.
 
-1. **#2524: master is red until it lands.** `docs/lessons/_index.md` says 596 lessons, but 598 files exist. Two lesson tests fail on every PR.
+1. **#2527: master is red until it lands.** `docs/lessons/_index.md` says 596 lessons, but 598 files exist. Two lesson tests fail on every PR.
    - Cause: #2489 (this run) and #2513 (a peer) each added a lesson against their own base. Git merged the shared counter line without a conflict.
    - The recurrence of the #1649 class is filed as #2525, with two options: (A) stop committing the total; (B) re-derive the count on the merge result in the land path.
-   - If #2524 is not merged when you read this: CI green → triage → `dotf pr land 2524`.
-2. **#2496 (DT-004) and #2507 (TOOL-001):** triaged, with `dotf pr triage-queue --pr N` clear. Their only red check is the master defect above. After #2524 merges:
+   - If #2527 is not merged when you read this: CI green → triage → `dotf pr land 2524`.
+2. **#2496 (DT-004) and #2507 (TOOL-001):** triaged, with `dotf pr triage-queue --pr N` clear. Their only red check is the master defect above. After #2527 merges:
    1. Merge master into each branch.
    2. Wait for CI and triage PR-Agent's re-run.
    3. Run `dotf pr land N`.
@@ -80,4 +80,8 @@ Comments were also added to dotfiles#1727 (launcher base, abandoned-mode templat
 
 ## Next action
 
-Land #2524 (if it is still open), then #2496 and #2507. Then answer #2515 A or B.
+Land #2527 (if it is still open), then #2496 and #2507. Then answer #2515 A or B.
+
+## Self-correction
+
+#2524 was opened with `dotf forge pr create` from the launch directory. Its head was therefore `chore/autopilot-run-20261017-idp`, a run-report branch that carries `.agent/unattended.yml` and is never merged. PR-Agent caught it. #2524 is closed, and the recount is #2527, opened with an explicit `--head`. No merge happened from the wrong branch. Lesson for the protocol: always pass `--head` (or run from the target worktree in the same command), because the shell resets to the launch directory between calls.
