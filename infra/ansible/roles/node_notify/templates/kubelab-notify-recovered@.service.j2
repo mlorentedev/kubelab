@@ -1,0 +1,13 @@
+# {{ ansible_managed }}
+[Unit]
+# A unit that declares `OnSuccess=kubelab-notify-recovered@%n.service` (systemd
+# >= 249) starts this after each successful run. The script says nothing unless
+# the unit had an open incident, so a healthy unit costs one quiet process.
+Description=KubeLab recovery notification for %i (#2423)
+
+[Service]
+Type=oneshot
+ExecStart={{ node_notify_script_path }} --recovered %i
+TimeoutStartSec=45
+StandardOutput=journal
+StandardError=journal
