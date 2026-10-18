@@ -155,6 +155,7 @@ DECLARED = {
     "bot": "write:repository,write:user,write:organization",
     "admin": "read:admin,write:organization,read:repository,read:user",
     "reviewer": "write:issue,read:repository",
+    "review_notice": "write:issue",
 }
 
 
@@ -169,7 +170,17 @@ def _all_converged() -> dict[tuple[str, str], FakeResponse]:
         [
             _listing("hefesto", DECLARED["bot"], "bot"),
             _listing("manu", DECLARED["admin"], "admin"),
-            _listing("argos", DECLARED["reviewer"], "reviewer"),
+            # One account, two tokens: the listing is per user, so it carries both.
+            (
+                ("GET", "/users/argos/tokens"),
+                FakeResponse(
+                    200,
+                    [
+                        _token(ROTATABLE_TOKENS["reviewer"].token_name, DECLARED["reviewer"].split(",")),
+                        _token(ROTATABLE_TOKENS["review_notice"].token_name, DECLARED["review_notice"].split(","), 2),
+                    ],
+                ),
+            ),
         ]
     )
 
