@@ -1,6 +1,6 @@
 # Metrics, logs, dashboards and alerting
 
-32 lessons, newest first. Back to [all categories](../_index.md).
+Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
