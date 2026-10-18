@@ -17,8 +17,8 @@ created: "2026-10-17"
 
 - [x] Operator answers Q1-Q8 in `proposal.md` (Q8: the WIP override for this spec, recorded as `wip_override`)
 - [ ] `/spec check IDP-042-product-contract-registry` returns PASS
-- [ ] Branch for PR 1 created from master: `feat/idp-042-contract-schema` (worktree outside the repo, `make worktree-init` run once)
-- [ ] `proposal.md` carries no `[AGENT-DRAFT]` / `[AGENT-SUGGESTION]` tag
+- [x] Branch for PR 1 created from master: `feat/idp-042-contract-schema` (worktree outside the repo, `make worktree-init` run once)
+- [x] `proposal.md` carries no `[AGENT-DRAFT]` / `[AGENT-SUGGESTION]` tag
 
 ## Implementation
 
@@ -37,12 +37,12 @@ PR 1 and PR 2 are independent and can be written in parallel. PR 5 may land at a
 
 Branch `feat/idp-042-contract-schema`. Commit prefix `feat(toolkit):`.
 
-- [ ] [AC2] Failing test `tests/test_product_contract.py`: a valid contract (web's, hand-written from `values/staging.yaml:44-54` and `common.yaml:949-960`) validates; each of these is refused, naming the field: unknown top-level key, port `0` and `70000`, a hostname with a scheme or uppercase, a health path without a leading `/`, `auth: admin`, `schema_version` absent or `2`, a secret name with a space, and a contract that carries `repository`, `repo`, `source` or `remote` (refused as unknown keys, with a message that says the repository comes from the registry). Run: `poetry run pytest tests/test_product_contract.py --no-cov -q`. Expected: FAIL, `ModuleNotFoundError: toolkit.features.product_contract`
-- [ ] [AC2] Failing test, same file: a refusal renders three labelled lines `ERROR:`, `WHY:`, `FIX:`, and `ERROR` names the contract path and field. Expected: FAIL
-- [ ] [AC2] `toolkit/features/product_contract.py`: pydantic model (`extra="forbid"`, anchored patterns), `validate_contract(path) -> Contract`, `ContractError(error, why, fix)`. Run the file's tests. Expected: PASS
-- [ ] [AC2] [P] Failing then passing test `tests/test_product_contract_schema.py`: `toolkit/schemas/kubelab-product.schema.json` equals `Contract.model_json_schema()` serialised with sorted keys, and carries `$id`. Generate the file with `poetry run python -m toolkit.features.product_contract --write-schema`. Expected: FAIL (file absent), then PASS
-- [ ] [AC2] `toolkit/cli/product.py`: `toolkit product validate --contract PATH [--json]`, exit 1 with the three-line error (or a JSON object with `error`, `why`, `fix`). Wire it into the CLI entry. Test with `typer.testing.CliRunner` for exit code and JSON shape. Expected: PASS
-- [ ] Offline check: `poetry run toolkit product validate --contract tests/fixtures/product/web.kubelab.yaml --json` prints `{"ok": true, ...}` and exits 0; no SOPS key, no network
+- [x] [AC2] Failing test `tests/test_product_contract.py`: a valid contract (web's, hand-written from `values/staging.yaml:44-54` and `common.yaml:949-960`) validates; each of these is refused, naming the field: unknown top-level key, port `0` and `70000`, a hostname with a scheme or uppercase, a health path without a leading `/`, `auth: admin`, `schema_version` absent or `2`, a secret name with a space, and a contract that carries `repository`, `repo`, `source` or `remote` (refused as unknown keys, with a message that says the repository comes from the registry). Run: `poetry run pytest tests/test_product_contract.py --no-cov -q`. Expected: FAIL, `ModuleNotFoundError: toolkit.features.product_contract`
+- [x] [AC2] Failing test, same file: a refusal renders three labelled lines `ERROR:`, `WHY:`, `FIX:`, and `ERROR` names the contract path and field. Expected: FAIL
+- [x] [AC2] `toolkit/features/product_contract.py`: pydantic model (`extra="forbid"`, anchored patterns), `validate_contract(path) -> Contract`, `ContractError(error, why, fix)`. Run the file's tests. Expected: PASS
+- [x] [AC2] [P] Failing then passing test `tests/test_product_contract_schema.py`: `toolkit/schemas/kubelab-product.schema.json` equals `Contract.model_json_schema()` serialised with sorted keys, and carries `$id`. Generate the file with `poetry run python -m toolkit.features.product_contract --write-schema`. Expected: FAIL (file absent), then PASS
+- [x] [AC2] `toolkit/cli/product.py`: `toolkit product validate --contract PATH [--json]`, exit 1 with the three-line error (or a JSON object with `error`, `why`, `fix`). Wire it into the CLI entry. Test with `typer.testing.CliRunner` for exit code and JSON shape. Expected: PASS
+- [x] Offline check: `poetry run toolkit product validate --contract tests/fixtures/product/web.kubelab.yaml --json` prints `{"ok": true, ...}` and exits 0; no SOPS key, no network
 
 ### PR 2 — Registry and `PLATFORM_APPS` derived from it (about 280 lines; this is #1815)
 
@@ -75,6 +75,7 @@ Branch `feat/idp-042-contract-guards`. Commit prefix `feat(toolkit):`. Depends o
 - [ ] [AC6] Failing tests `tests/test_product_contract_guards.py`, one per refusal, each asserting ERROR / WHY / FIX: the contract's `image` differs from `derived_image(app)` (Q7); a secret name absent from `SECRET_CATALOG` (Q6); a contract that names a repository (`repository`, `repo`, `source`, `remote`), which must be refused even when the value equals the registry's own, since the contract is not where the repository comes from; a hostname that another declared route owns (use the enumeration in `tests/test_declared_domains_are_served.py`); `auth: oidc` at render. Expected: FAIL
 - [ ] [AC6] `toolkit/features/product_guards.py` and `--registry` on `toolkit product validate`; reuse the existing host enumeration instead of writing a second list. Expected: PASS
 - [ ] [AC6] One positive test: web's real contract passes every guard against the real registry and the real catalog. Expected: PASS
+- [ ] [AC6] Failing then passing test: every `key_path` in `SECRET_CATALOG`, including the ones built per node (`access_key_path(node)` and siblings), matches the contract's secret-name pattern (`_SECRET_NAME` in `product_contract.py`, PR 1), so a real catalog key can never fail the schema before the catalog check sees it. Expected: PASS, or the pattern widens in the same commit
 
 ### PR 5 — The remaining literals read the registry (about 120 lines)
 
