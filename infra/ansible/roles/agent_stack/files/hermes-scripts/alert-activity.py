@@ -3,7 +3,9 @@
 
 The data for the hourly triage. It runs inside the gateway before the job's turn,
 because the gateway holds the Slack bot token and the agent's tools do not: the
-token is read from the gateway's environment and never reaches the output. Hermes
+token is read from the gateway's environment and never reaches the output. It is read
+as `HERMES_ALERT_SLACK_TOKEN`, a second name for the bot token, because Hermes strips
+`SLACK_BOT_TOKEN` from every job script's environment (lesson-592). Hermes
 injects the output into the turn and cuts it at 8000 characters, so the report
 stays under that.
 
@@ -113,7 +115,7 @@ def report(token: str, pairs: list[tuple[str, str]], now: float, read=fetch) -> 
 
 
 def main() -> int:
-    token = os.environ.get("SLACK_BOT_TOKEN", "")
+    token = os.environ.get("HERMES_ALERT_SLACK_TOKEN", "")
     pairs = channels(os.environ.get("HERMES_ALERT_CHANNELS", ""))
     if not token or not pairs:
         print("alert-activity: no Slack token or no alert channel configured; the triage cannot run.")
