@@ -809,6 +809,19 @@ In the same browser session, now authenticated to Authelia as `manu`, with no pa
 
 The operator logged in to Grafana and Vikunja staging as `manu`. Grafana linked the SSO login to the existing local admin (still one `manu`), and the email moved to `manu@mlorente.dev`. It could not have been `apps.contact.email`: `operator` holds that address, and Grafana keeps email unique across users.
 
+## Review dispositions
+
+Review of 2026-10-18 (`review.md`, verdict PASS WITH GAPS, reviewer agy/gemini-3.8-flash-high, reviewed at `7422ce26`):
+
+| Finding | Disposition |
+|---|---|
+| Major: AC2 refusal not recorded in a live session | Ticketed: #2505 carries it, as the amended AC2 states. |
+| Major: AC5 refusal at Authelia unprobed, no static guard against a machine identity in the users list | Ticketed: #2504 carries both the probe and the guard. |
+| Major: AC7 IdP-down drill not run | Ticketed: #2503 carries `drill-idp-down`. |
+| Minor: Closing checklist in `tasks.md` unticked | Declined: the disposition note above that checklist states what archives and what is carried. Ticking it now would change the reviewed contract. |
+| Minor: `status: implementing` before archive | Applied by `dotf spec archive`. |
+| Minor: 18 mypy errors in two test files under strict mode | Declined: the repo's mypy gate covers `toolkit/` only (`.pre-commit-config.yaml` hook `files: ^toolkit/`, `make` target `mypy toolkit`). Extending the gate to `tests/` is a repo-wide choice, not a gap in this spec. |
+
 ## Promotion candidates
 
 - [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/process-method/lesson-382-a-control-returning-the-same-code-as-the-real-attempt-measured-nothing.md
@@ -817,6 +830,6 @@ The operator logged in to Grafana and Vikunja staging as `manu`. Grafana linked 
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved to `specs/archive/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved to `specs/archive/`
 - [ ] #1013 closed with the PR link, naming #2503, #2504 and #2505 as the carried remainder
