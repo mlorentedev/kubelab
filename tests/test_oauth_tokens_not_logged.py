@@ -21,6 +21,7 @@ Two layers, each tested here:
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -102,7 +103,10 @@ def test_the_dev_template_renders_it(monkeypatch: pytest.MonkeyPatch, env_name: 
     source = env.loader.get_source(env, template_name)[0]  # type: ignore[union-attr]
     lists = {"apps": [], "authelia_users": [], "trusted_cidrs": [], "oidc_clients": clients}
     context = {name: "unset" for name in meta.find_undeclared_variables(env.parse(source))} | lists
-    rendered = yaml.safe_load(env.get_template(template_name).render(context))
+    text = env.get_template(template_name).render(context)
+    # The JWKS key is left as Authelia's own template expression, which Authelia
+    # expands at load time; until then the line is not YAML.
+    rendered = yaml.safe_load(re.sub(r"\{\{ secret [^}]*\}\}", "authelia-secret", text))
 
     emitted = {c["client_id"]: c for c in rendered["identity_providers"]["oidc"]["clients"]}
     assert emitted["grafana"][_ALG] == _declared("grafana")[_ALG]
