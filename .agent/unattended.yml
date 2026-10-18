@@ -1,8 +1,8 @@
 version: 1
 run_id: "2026-10-18-bug-sweep"
 armed_by: manu
-armed_at: 2026-10-18T08:27:50Z
-expires_at: 2026-10-18T16:27:50Z
+armed_at: 2026-10-18T10:32:38Z
+expires_at: 2026-10-18T18:32:38Z
 objective: "Land bounded bug/chore tickets from the kubelab Backlog, one PR each."
 scope:
   write_paths: ["apps/**", "toolkit/**", "tests/**", "infra/k8s/**", "infra/config/**", "docs/**"]
@@ -12,8 +12,8 @@ scope:
 allowed_commands: [dotf, gh, git, make, poetry]
 queue:
   source: bitacora
-  filter: 'repo kubelab, Backlog, type bug|chore, P0..P3'
-  max_items: 5
+  filter: 'kubelab open bug/chore/debt issues, bounded; widened by the operator 2026-10-18'
+  max_items: 8
 budget:
   max_iterations: 8
   max_minutes_per_iteration: 25
