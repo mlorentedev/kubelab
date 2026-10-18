@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from toolkit.config import settings as settings_module
 from toolkit.features import product_registry
 from toolkit.features.product_registry import RegistryError, UnknownEventError
 
@@ -66,6 +67,25 @@ class TestPlatformApps:
         """
         common = list(_platform_blocks("common"))
         assert [app for app in product_registry.platform_apps() if app in common] == common
+
+
+class TestReadingBuildsNoSettings:
+    """Reading a YAML file must not load the configuration it does not need.
+
+    ``settings`` is lazy: its first attribute builds ``ConfigurationManager``, which
+    checks for sops, exports every value into ``os.environ`` and, without sops,
+    prints a warning on stdout. That warning corrupted ``app-for-event --json``
+    in CI, where sops is not installed.
+    """
+
+    def test_no_registry_read_builds_the_settings(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def refuse(*_args: object, **_kwargs: object) -> None:
+            raise AssertionError("the registry built the platform settings")
+
+        monkeypatch.setattr(settings_module, "get_settings", refuse)
+        product_registry.platform_apps()
+        product_registry.event_route("web-release-published")
+        product_registry.derived_image("web")
 
 
 class TestAppForEvent:

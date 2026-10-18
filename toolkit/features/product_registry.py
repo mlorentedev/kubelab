@@ -23,7 +23,7 @@ from typing import Annotated, Any, Literal, NamedTuple
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError, field_validator, model_validator
 
-from toolkit.config.settings import settings
+from toolkit.config.settings import PROJECT_ROOT
 
 REGISTRY_RELPATH = Path("infra") / "config" / "products.yaml"
 COMMON_VALUES_RELPATH = Path("infra") / "config" / "values" / "common.yaml"
@@ -125,7 +125,7 @@ class _UniqueKeyLoader(yaml.SafeLoader):
 
 
 def registry_path() -> Path:
-    return settings.project_root / REGISTRY_RELPATH
+    return PROJECT_ROOT / REGISTRY_RELPATH
 
 
 def load_registry(path: Path | None = None) -> Registry:
@@ -185,7 +185,7 @@ def event_route(event: str, path: Path | None = None) -> EventRoute:
 
 def platform_registry() -> str:
     """The platform's image registry (``registry`` in ``common.yaml``), read without SOPS."""
-    path = settings.project_root / COMMON_VALUES_RELPATH
+    path = PROJECT_ROOT / COMMON_VALUES_RELPATH
     value = (yaml.safe_load(path.read_text()) or {}).get("registry")
     if not value:
         raise RegistryError(f"{path}: no top-level `registry` to derive product images from")

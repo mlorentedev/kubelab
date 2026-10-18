@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -124,3 +126,37 @@ def test_an_unmapped_event_as_json(fixture_registry: Path) -> None:
     payload = json.loads(result.stdout)
     assert payload["ok"] is False
     assert set(payload) == {"ok", "error", "why", "fix"}
+
+
+def _toolkit_without_sops(tmp_path: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    """Run the toolkit as a workflow step does on a hosted runner: no sops on PATH.
+
+    ``CliRunner`` shares this process's already-built state, so only a fresh
+    interpreter shows what the first read of the registry prints. PATH holds the
+    interpreter's own directory and nothing else, which is CI's case on every host.
+    """
+    return subprocess.run(  # noqa: S603
+        [sys.executable, "-m", "toolkit.main", "product", *args],
+        cwd=tmp_path,
+        env={"PATH": str(Path(sys.executable).parent)},
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+
+
+def test_app_for_event_json_is_the_only_stdout_without_sops(tmp_path: Path) -> None:
+    """``promote-prod.yml`` pipes this into ``jq``. A ``[WARNING]`` line before the
+    object read as a staging event there, and every release was skipped green."""
+    result = _toolkit_without_sops(tmp_path, "app-for-event", "web-release-published", "--json")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.count("\n") == 1, result.stdout
+    assert json.loads(result.stdout)["lane"] == "prod"
+
+
+def test_product_list_prints_only_the_products_without_sops(tmp_path: Path) -> None:
+    result = _toolkit_without_sops(tmp_path, "list")
+
+    assert result.returncode == 0, result.stderr
+    assert tuple(result.stdout.splitlines()) == product_registry.platform_apps()
