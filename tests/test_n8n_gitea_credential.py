@@ -149,3 +149,28 @@ def test_a_reference_that_disagrees_with_the_registry_is_refused(
     assert ok is False
     assert "workflow:gitea-notifier" not in kubectl.order()
     assert "is not imported by anything" in " ".join(capsys.readouterr().out.split())
+
+
+def test_a_failed_smtp_import_does_not_hold_back_a_workflow_that_only_needs_the_gitea_credential(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Each shared credential is imported on its own. In one batch a bad SMTP relay would have taken
+    the Gitea credential down with it, and the failed-review notice with it, for a reason that has
+    nothing to do with Gitea."""
+    import subprocess
+
+    class _FailsSmtp(_Kubectl):
+        def __call__(self, cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+            if cmd[1] == "exec" and '"type": "smtp"' in (kwargs.get("input") or ""):
+                raise subprocess.CalledProcessError(1, cmd, stderr="import failed")
+            return super().__call__(cmd, **kwargs)
+
+    spec = _notifier(tmp_path)
+    vault = _with_token()
+    vault["apps"]["services"]["automation"]["notify"]["webhook_secret"] = NOTIFY_HEADER
+
+    ok, kubectl = _run(vault=vault, kubectl=_FailsSmtp(), catalog=[spec], root=tmp_path, monkeypatch=monkeypatch)
+
+    assert ok is False, "the run still reports the SMTP failure"
+    assert "credential:gitea-review-notice" in kubectl.order()
+    assert "workflow:gitea-notifier" in kubectl.order()

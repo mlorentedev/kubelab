@@ -503,11 +503,12 @@ def _import_shared_credentials(env: str, cm: ConfigurationManager, dry_run: bool
         logger.info(f"[DRY-RUN] Would import shared credential(s) {names} (cluster not touched)")
         return result
     logger.info(f"Importing shared credential(s) {names}")
-    # Same namespace and pod for all of them, by construction: they are one n8n.
-    payload = _dump([entry for _, entry in rendered])
-    if not _exec_stdin_import(env, rendered[0][0], "import:credentials", "n8n-cred", payload):
-        logger.error(f"  Shared credential import failed ({names}) — workflows that use it are held back")
-        for cred, _ in rendered:
+    # One `import:credentials` per credential, so one that fails holds back the workflows that
+    # use IT and not those using another. Same namespace and pod for all of them, by
+    # construction: they are one n8n.
+    for cred, entry in rendered:
+        if not _exec_stdin_import(env, cred, "import:credentials", "n8n-cred", _dump([entry])):
+            logger.error(f"  Shared credential import failed ('{cred.name}') — workflows that use it are held back")
             result[cred.credential_id] = False
     return result
 
