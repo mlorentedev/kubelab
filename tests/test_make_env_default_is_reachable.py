@@ -167,6 +167,8 @@ ENV_TARGETS: dict[str, tuple[str, str]] = {
     "maintain-notify-test": ("-e", "staging"),
     "benchmark-disk": ("-e", "staging"),
     "wait-node-ready": ("-e", "staging"),
+    # Added with the target (#2435): same `staging prod hub` filter.
+    "reboot": ("-e", "staging"),
     # Invisible again until FILTER_FORM learned the `$(if ...)` spelling. The
     # second one is the whole argument for widening it: `drill-pvc-unbound` was
     # written the day before this guard, cites #1644 in its own comment, and was

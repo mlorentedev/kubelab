@@ -36,7 +36,6 @@ IMAGE_SOURCES = [
     "apps.services.observability.grafana.image",
     "apps.services.observability.loki.image",
     "apps.services.observability.loki.vector_image",
-    "apps.services.observability.homepage.image",
     "apps.services.security.authelia.image",
     "apps.services.security.authelia.redis_image",
     "apps.services.security.crowdsec.image",
