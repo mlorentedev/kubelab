@@ -12,6 +12,8 @@ from pathlib import Path
 
 import yaml
 
+from tests.test_hermes_fallback import KEY, _render
+
 ROLE = Path(__file__).resolve().parent.parent / "infra/ansible/roles/agent_stack"
 
 
@@ -57,7 +59,8 @@ def test_the_primary_is_failed_in_a_gateway_that_touches_nothing_live() -> None:
     for emptied in ("SLACK_BOT_TOKEN=", "SLACK_APP_TOKEN=", "SLACK_ALLOWED_USERS=", "API_SERVER_ENABLED=false"):
         assert f"'{emptied}'" in create, f"{emptied} must be set for the probe"
     assert "HERMES_HOME=" in create and "agent_stack_fallback_probe_home" in create, "its own home, not the live one"
-    assert ":ro" in create, "the rendered config is mounted read-only"
+    assert ":ro" in create, "the probe's config is mounted read-only"
+    assert "agent_stack_fallback_probe_config" in create and "agent_stack_hermes_config" not in create
     assert "agent_stack_hermes_home" not in create, "the live data directory is never mounted"
     assert "--env-file" in create, "the fallback key comes from the live env file"
 
@@ -83,3 +86,20 @@ def test_the_assertion_reads_the_event_not_just_the_answer() -> None:
     assert "pong" in that
     assert "agent_stack_fallback_probe_slack_pattern" in that and "not (" in that, "no Slack connection opened"
     assert "anthropic" in that
+
+
+def test_the_probes_own_config_carries_the_live_chain_and_nothing_else() -> None:
+    """The probe cannot prove a chain it does not share with the gateway."""
+    live = yaml.safe_load(_render("hermes-config.yaml.j2", **KEY))
+    probe = yaml.safe_load(_render("hermes-fallback-probe-config.yaml.j2", **KEY))
+    assert set(probe) == {"model", "fallback_providers"}
+    assert probe["fallback_providers"] == live["fallback_providers"]
+    assert {k: probe["model"][k] for k in ("provider", "base_url", "key_env", "default")} == {
+        k: live["model"][k] for k in ("provider", "base_url", "key_env", "default")
+    }
+
+
+def test_the_probe_reads_the_event_where_the_gateway_writes_it() -> None:
+    """The line is in HERMES_HOME's log files, not on the container's stdout (measured on ace2)."""
+    read = _text(_task("Read the probe's log"))
+    assert "/logs/*.log" in read

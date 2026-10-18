@@ -77,12 +77,12 @@ from another network logs `[UFW BLOCK] ... DPT=8642` in `journalctl -k`
   `hermes chat` is a client of the gateway, so a per-launch `NAN_API_KEY` or
   `--api-key` never reaches the model call and the turn answers on NaN
   (lesson-574). The role fails NaN in a throwaway gateway of its own instead, with
-  its own `HERMES_HOME`, Slack and the API off, and a copy of the live `auth.json`
+  its own `HERMES_HOME`, Slack and the API off (the pool copy can be skipped with `agent_stack_fallback_probe_pool=false`), and a copy of the live `auth.json`
   streamed in from the running gateway (never written to the node's disk):
   `make provision NODE=ace2 ENV=prod TAGS=agent_stack EXTRA='agent_stack_fallback_probe=true'`
-  (tasks `hermes_fallback_probe.yml`, spec AI-018; **not yet working**, see #2299). It asks one question, then
+  (tasks `hermes_fallback_probe.yml`, spec AI-018, lesson-603). The probe runs on a config of its own, the model and the fallback chain only, which a test ties to the live template. It asks one question, then
   asserts the answer `pong`, `Fallback activated` and `anthropic` in the probe's
-  own log, and no Slack connection in it; the probe is removed whatever the
+  own logs (container output and `$HERMES_HOME/logs`), and no Slack connection in it; the probe is removed whatever the
   outcome. A `400 credit balance is too low` instead of `pong` means the key is
   being sent as OAuth again. Not covered yet: the second case from #2299, a
   **pinned** turn (a cron job pinned by model, and a delegated child) failing NaN
