@@ -189,7 +189,7 @@
             traefik_acme_server: "{{ config.edge.traefik.acme_server | default('https://acme-v02.api.letsencrypt.org/directory') }}"
             traefik_dns_provider: "{{ config.edge.traefik.dns_provider }}"
             traefik_dns_delay_before_check: "{{ config.edge.traefik.dns_delay_before_check }}"
-            traefik_cf_dns_api_token: "{{ _secrets.cloudflare.api_token }}"
+            traefik_cf_dns_api_token: "{{ _secrets.cloudflare.acme_dns_token }}"
             traefik_acme_domains:
               - main: "mlorente.dev"
                 sans:
@@ -299,7 +299,7 @@
         k3s_traefik_acme_email: "{{ config.edge.traefik.acme_email | default(config.apps.contact.email, true) }}"
         k3s_traefik_acme_dns_provider: "{{ config.edge.traefik.dns_provider }}"
         k3s_traefik_acme_dns_resolvers: "{{ config.edge.traefik.dns_resolver_1 }},{{ config.edge.traefik.dns_resolver_2 }}"
-        k3s_traefik_acme_cloudflare_token: "{{ secrets.cloudflare.api_token }}"
+        k3s_traefik_acme_cloudflare_token: "{{ secrets.cloudflare.acme_dns_token }}"
         k3s_fetch_kubeconfig: true
         k3s_kubeconfig_local_path: "~/.kube/kubelab-{{ deploy_env }}-config"
         k3s_api_address: "{{ ansible_host }}"

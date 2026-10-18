@@ -49,6 +49,13 @@ The Cloudflare API token is stored in SOPS (`infra/config/secrets/common.enc.yam
 Required token permissions:
 - Zone: DNS: Edit
 - Zone: Zone: Read
+- Zone: Zone Settings: Edit (`zone_settings.tf`)
+
+This token is Terraform's only. Traefik's ACME DNS-01 resolvers read their own,
+`cloudflare.acme_dns_token` (Zone: DNS: Edit on the zones the cluster issues for),
+so reading the in-cluster `cloudflare-api-token` Secret cannot edit zone settings.
+`tests/test_acme_token_split.py` fails if any Ansible file names the Terraform token
+again (#2459).
 
 ## Running it
 
