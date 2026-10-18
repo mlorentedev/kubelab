@@ -200,7 +200,7 @@ class VikunjaReconciler:
                 changed += 1
         return changed
 
-    def _reconcile_labels(self, areas: tuple[str, ...] = ()) -> int:
+    def _reconcile_labels(self, areas: tuple[str, ...]) -> int:
         existing = {lbl.get("title", ""): lbl for lbl in self.client.get_labels()}
         created = 0
 
