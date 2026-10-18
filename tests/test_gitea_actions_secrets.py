@@ -41,6 +41,8 @@ from toolkit.features.secrets_manager import (
 
 RESUME = "personal/resume"
 PREFIX = "apps.services.core.gitea.actions_secrets.personal.resume"
+IMAGESENSORTOOL = "personal/imagesensortool"
+IST_PREFIX = "apps.services.core.gitea.actions_secrets.personal.imagesensortool"
 VALUE = "1//a-refresh-token-that-must-never-be-printed"
 
 # Every SOPS-authored value a forge repository receives as an Actions secret.
@@ -54,6 +56,10 @@ EXPECTED_DELIVERED = {
     # fae-brain's eval workflow calls the NaN API with the one NAN_API_KEY the
     # operator holds, so it reuses PR-Agent's copy rather than a second one (#2133).
     ("apps.services.automation.pr_agent.nan_api_key", "teledyne/fae-brain"),
+    # imagesensortool's image workflow logs in to the forge's container registry
+    # to push the site image; the per-job GITEA_TOKEN cannot write packages.
+    (f"{IST_PREFIX}.registry_user", IMAGESENSORTOOL),
+    (f"{IST_PREFIX}.registry_token", IMAGESENSORTOOL),
 }
 
 
@@ -329,6 +335,8 @@ LEAVES = ("gdrive_oauth_client_id", "gdrive_oauth_client_secret", "gdrive_oauth_
 # fae-brain's one delivered secret. Always valued below, so the tests about
 # resume's four read as they did before it was declared.
 NAN = "NAN_API_KEY"
+# imagesensortool's two, likewise always valued.
+IST = ("REGISTRY_USER", "REGISTRY_TOKEN")
 
 
 def _merged(**values: str) -> dict[str, Any]:
@@ -342,7 +350,12 @@ def _merged(**values: str) -> dict[str, Any]:
                     "gitea": {
                         "domain": "gitea.example.invalid",
                         "admin_password": "pw",
-                        "actions_secrets": {"personal": {"resume": resume}},
+                        "actions_secrets": {
+                            "personal": {
+                                "resume": resume,
+                                "imagesensortool": {"registry_user": "manu", "registry_token": f"{VALUE}-ist"},
+                            }
+                        },
                     }
                 },
             },
@@ -378,7 +391,7 @@ def test_plan_only_writes_nothing_and_never_prints_a_value(monkeypatch: pytest.M
     result = _invoke(monkeypatch, _merged(**{leaf: VALUE for leaf in LEAVES}), forge)
     assert result.exit_code == 0, result.output
     assert forge.puts == []
-    assert result.output.count("(create, from") == len(LEAVES) + 1
+    assert result.output.count("(create, from") == len(LEAVES) + 1 + len(IST)
     assert VALUE not in result.output
 
 
@@ -390,11 +403,13 @@ def test_apply_writes_every_target_to_its_own_repository_and_a_second_run_has_no
     result = _invoke(monkeypatch, config, forge, "--apply")
     assert result.exit_code == 0, result.output
     assert sorted(p[:3] for p in forge.puts) == sorted(
-        [("personal", "resume", leaf.upper()) for leaf in LEAVES] + [("teledyne", "fae-brain", NAN)]
+        [("personal", "resume", leaf.upper()) for leaf in LEAVES]
+        + [("teledyne", "fae-brain", NAN)]
+        + [("personal", "imagesensortool", name) for name in IST]
     )
     assert VALUE not in result.output
 
-    second = _CliForge(live={leaf.upper() for leaf in LEAVES} | {NAN})
+    second = _CliForge(live={leaf.upper() for leaf in LEAVES} | {NAN, *IST})
     rerun = _invoke(monkeypatch, config, second, "--apply")
     assert rerun.exit_code == 0, rerun.output
     assert second.puts == [], "changed=0 on re-run"
@@ -402,22 +417,22 @@ def test_apply_writes_every_target_to_its_own_repository_and_a_second_run_has_no
 
 def test_an_undeclared_live_secret_is_printed_and_left_alone_by_the_cli(monkeypatch: pytest.MonkeyPatch) -> None:
     """AC5 end to end: the planner test pins the tuple, this pins the row the operator reads."""
-    forge = _CliForge(live={leaf.upper() for leaf in LEAVES} | {NAN, "HAND_SET_TOKEN"})
+    forge = _CliForge(live={leaf.upper() for leaf in LEAVES} | {NAN, *IST, "HAND_SET_TOKEN"})
     result = _invoke(monkeypatch, _merged(**{leaf: VALUE for leaf in LEAVES}), forge, "--apply")
     assert result.exit_code == 0, result.output
     rows = [line for line in result.output.splitlines() if "HAND_SET_TOKEN" in line]
     assert rows, result.output
     # One row per repository the catalog names; Rich wraps the tail at the terminal width.
-    assert {row.split()[1] for row in rows} == {RESUME, "teledyne/fae-brain"}
+    assert {row.split()[1] for row in rows} == {RESUME, "teledyne/fae-brain", IMAGESENSORTOOL}
     assert all("not declared in the catalog" in row for row in rows)
     assert forge.puts == []
 
 
 def test_force_re_pushes_what_the_forge_already_has(monkeypatch: pytest.MonkeyPatch) -> None:
-    forge = _CliForge(live={leaf.upper() for leaf in LEAVES} | {NAN})
+    forge = _CliForge(live={leaf.upper() for leaf in LEAVES} | {NAN, *IST})
     result = _invoke(monkeypatch, _merged(**{leaf: VALUE for leaf in LEAVES}), forge, "--apply", "--force")
     assert result.exit_code == 0, result.output
-    assert len(forge.puts) == len(LEAVES) + 1
+    assert len(forge.puts) == len(LEAVES) + 1 + len(IST)
 
 
 def test_a_missing_value_is_named_never_written_and_fails_the_run(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -427,7 +442,7 @@ def test_a_missing_value_is_named_never_written_and_fails_the_run(monkeypatch: p
     assert result.exit_code == 1
     assert "GDRIVE_OAUTH_REFRESH_TOKEN" in result.output
     assert "GDRIVE_OAUTH_REFRESH_TOKEN" not in {p[2] for p in forge.puts}
-    assert len(forge.puts) == 4, "resume's three valued secrets and fae-brain's one still land"
+    assert len(forge.puts) == 4 + len(IST), "every other valued secret still lands"
 
 
 def test_plan_only_also_fails_when_a_value_is_missing(monkeypatch: pytest.MonkeyPatch) -> None:

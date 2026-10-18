@@ -174,13 +174,10 @@ networking:
     tailscale_ip: "100.64.0.2"
     ansible_groups: ["vps", "docker_hosts"]  # prod.yaml adds k3s_servers
     docker_network: "kubelab"  # Migrated from "proxy" by traefik_vps role (ADR-020 Phase 2b)
-    # Homepage cockpit tile (SSOT-005). Consumed by sync_homepage_config.build_node_list.
+    # The node's display name, read by platform_manifest. The rest of this block
+    # was the Homepage tile, retired with Homepage (#2416).
     dashboard:
       display_name: "VPS"
-      order: 2
-      icon: mdi-cloud
-      description: "Prod · 8GB"
-      widget: glances
     backup:
       root: "/opt/backups"
       retention: 3
@@ -224,13 +221,11 @@ networking:
     tailscale_ip: "100.64.0.7"
     tailscale_dns: "aws1.kubelab.internal"
     k3s_version: "v1.34.4+k3s1"  # Match spoke versions
-    # NO `dashboard:` key, and its absence is the fix for DASH-010 rather than an
-    # omission. The tile pinged `https://argo.kubelab.live` — the same URL gcp1's
-    # tile pings — so once aws1 was destroyed it did not go red, it stayed GREEN
-    # forever, reporting the GCP hub's health under the name of a machine that no
-    # longer exists. A monitor that lies green is worse than one that falls over:
-    # the red gets fixed, the green gets believed. Restore this block alongside a
-    # host, never ahead of one.
+    # NO `dashboard:` key, on purpose (DASH-010): the Homepage tile it carried
+    # pinged the URL gcp1's tile pinged, so after aws1 was destroyed it stayed
+    # green under the name of a machine that no longer existed. Homepage is
+    # retired (#2416); give the block back its `display_name` alongside a host,
+    # never ahead of one.
   # GCP management plane (ADR-063 — supersedes ADR-023 §3.1's choice of AWS).
   #
   # `aws` above is DORMANT, not pending deletion — the comment here used to say it
@@ -298,14 +293,9 @@ networking:
     managed_spokes:
     - "staging"
     - "prod"
-    # Homepage cockpit tile (SSOT-005). widget=ping mirrors aws1's (ADR-033).
+    # The node's display name, read by platform_manifest (see networking.vps).
     dashboard:
       display_name: "gcp1"
-      order: 6
-      icon: mdi-cloud-outline
-      description: "Hub · e2-small · 2vCPU · 2GB"
-      widget: ping
-      ping_url: "https://argo.kubelab.live"
   nodes:
     # ADR-023 Phase 1: bare metal MiniPCs replace Proxmox VMs
     # Old k3s_server (.10), k3s_agent_1 (.11), k3s_agent_2 (.12) removed
@@ -318,11 +308,6 @@ networking:
       lan_ip: "172.16.1.2"
       lan_interface: "enp1s0"
       ansible_groups: ["k3s_servers", "docker_hosts", "minipc"]
-      dashboard:
-        order: 1
-        icon: mdi-server
-        description: "Staging · 12GB"
-        widget: glances
     ace2:
       # ADR-028 tier. Machine-readable projection of the topology the ADR
       # narrates; consumed by the backup trigger model (BACKUP-044).
@@ -341,11 +326,6 @@ networking:
         name: br-open-webui
         subnet: "172.30.250.0/24"
         gateway: "172.30.250.1"
-      dashboard:
-        order: 5
-        icon: mdi-server
-        description: "Dev node · 12GB"
-        widget: glances
     rpi4:
       # ADR-028 tier. Machine-readable projection of the topology the ADR
       # narrates; consumed by the backup trigger model (BACKUP-044).
@@ -363,10 +343,6 @@ networking:
       ansible_groups: ["gateway", "dns_hosts", "docker_hosts"]
       dashboard:
         display_name: "RPi4"
-        order: 3
-        icon: mdi-raspberry-pi
-        description: "DNS · 8GB"
-        widget: glances
     rpi3:
       # ADR-028 tier. Machine-readable projection of the topology the ADR
       # narrates; consumed by the backup trigger model (BACKUP-044).
@@ -382,10 +358,6 @@ networking:
       ansible_groups: ["monitoring", "docker_hosts"]
       dashboard:
         display_name: "RPi3"
-        order: 4
-        icon: mdi-raspberry-pi
-        description: "Monitor · 1GB"
-        widget: glances
     beelink:
       # ADR-028 tier. Machine-readable projection of the topology the ADR
       # narrates; consumed by the backup trigger model (BACKUP-044).
@@ -397,10 +369,6 @@ networking:
       ansible_groups: ["platform_nodes", "docker_hosts"]  # ADR-028: Gitea + CI runners + Glances
       dashboard:
         display_name: "Beelink"
-        order: 7
-        icon: mdi-desktop-tower
-        description: "Platform · N95 · 8GB"
-        widget: glances
     jetson:
       # ADR-028 tier. Machine-readable projection of the topology the ADR
       # narrates; consumed by the backup trigger model (BACKUP-044).
@@ -412,11 +380,6 @@ networking:
       legacy_python: true
       dashboard:
         display_name: "Jetson"
-        order: 8
-        icon: mdi-chip
-        description: "Pollex · ARM · 4GB"
-        widget: glances
-        glances_version: 4
 
 # ===========================================================================
 # INFRASTRUCTURE & DOCKER
@@ -705,7 +668,7 @@ edge:
   errors:
     name: errors
     image_name: kubelab-errors
-    version: "1.2.0"
+    version: "1.2.1"
     port: 8080
     health_path: /health
     # Routes that deliberately do NOT carry the `error-pages` middleware (ADR-072).
@@ -926,6 +889,9 @@ apps:
       auth_level: bypass
       default_port: 8080
       health_path: /health
+      # Liveness stays on /health (constant 200); readiness probes /ready, which is 503
+      # only when configuration does not load (kubelab#1736, #2386).
+      readiness_path: /ready
       site_title: mlorentedev
       # SMTP config moved to `infra.smtp.*` (ADR-036, SSOT-012 PR #3).
       # API source code reads `INFRA_SMTP_USER`, `INFRA_SMTP_PASS`,
@@ -2025,7 +1991,7 @@ apps:
         # off, it answers the error page.
         domain: chat.kubelab.live
         # Plain HTTP on the tailnet, at ace2's MagicDNS name (spec R8), for the
-        # server-side probes (Uptime Kuma, the homepage), and one of the origins
+        # server-side probes (Uptime Kuma), and one of the origins
         # Open WebUI admits. Break-glass uses ace2's tailnet IP from the
         # EndpointSlice instead, which is admitted too (#2202).
         # MagicDNS names a node by its Headscale given-name, which for ace2 is

@@ -128,6 +128,7 @@ _VIKUNJA_ENVS = ("staging", "prod")
 
 # -- Forge Actions secrets (TOOL-062) --
 _FORGE_RESUME = "apps.services.core.gitea.actions_secrets.personal.resume"
+_FORGE_IST = "apps.services.core.gitea.actions_secrets.personal.imagesensortool"
 _GDRIVE_ROTATE = (
     "Re-mint with resume's `scripts/get_drive_refresh_token.py` (browser consent; the consent "
     "screen must be In production or the token dies in 7 days), `toolkit secrets set <key> --env "
@@ -829,6 +830,32 @@ SECRET_CATALOG: list[SecretSpec] = [
         expiry=Expiry.NEVER,
         envs=("prod",),
         forge_actions=("personal/resume",),
+    ),
+    # imagesensortool's image workflow pushes the site image to the forge's
+    # container registry; the per-job GITEA_TOKEN cannot write packages.
+    SecretSpec(
+        key_path=f"{_FORGE_IST}.registry_user",
+        description="Forge account the image workflow logs in to the container registry as",
+        # Not a credential: the account that owns registry_token.
+        kind=SecretKind.EXTERNAL,
+        services=("gitea_actions",),
+        rotate_note="Changes only with registry_token's owner: set both, then push with `--force`.",
+        expiry=Expiry.NEVER,
+        envs=("prod",),
+        forge_actions=("personal/imagesensortool",),
+    ),
+    SecretSpec(
+        key_path=f"{_FORGE_IST}.registry_token",
+        description="Forge access token, package read/write only, that pushes the imagesensortool image",
+        kind=SecretKind.EXTERNAL,
+        services=("gitea_actions",),
+        rotate_note=(
+            "Mint a new token (package read/write, nothing else) as registry_user, `toolkit secrets "
+            "set <key> --env prod --stdin`, push with `--force`, then delete the old token in the forge."
+        ),
+        expiry=Expiry.NEVER,
+        envs=("prod",),
+        forge_actions=("personal/imagesensortool",),
     ),
     # =========================================================================
     # Vikunja (IDP-035)
