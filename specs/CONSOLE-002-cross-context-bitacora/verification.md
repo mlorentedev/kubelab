@@ -63,6 +63,21 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
   Python 3.12.8 (CI parity). `sops` is not installed locally → secret-bearing generators/tests are skipped, which
   is why generating `infra.postgres.password` and the 11 SOPS tests are deferred to a SOPS-enabled context.
 
+## Review dispositions
+
+First review, `fbb35c75`, nan/qwen3.8-flash: **FAIL**. Every finding applied before the re-review:
+
+1. `features.json` f4 still said the default was local-only (Ollama), against the 2026-10-01
+   amendment: applied. It now reads no provider, request refused. State stays `pending`.
+2. `tasks.md` still read as live work: applied. A supersession header, a disposition on every open
+   box, and the PR-1a deploy step ticked with prod audit evidence.
+3. The `features.json` commands name a package that never existed, and the guard reads only pytest:
+   ticketed as #2501. The commands are left as written; the spec never ran them.
+4. The archive checklist pointed at the non-abandoned destination: applied.
+5. The launcher resolves a base about 1000 commits back for a two-file change: not this repo's
+   defect. It belongs to the dotfiles review launcher, and #2443's reviews all show it.
+6. PR-1a's open deploy box: confirmed and ticked (`PROD — 121/121`, 2026-10-18).
+
 ## Promotion candidates
 
 Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.
@@ -73,7 +88,6 @@ Before archiving, flag what (if anything) should be promoted to the vault. If al
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/CONSOLE-002-cross-context-bitacora/` -> `specs/archive/CONSOLE-002-cross-context-bitacora/`
-- [ ] Backlog entry in vault `11-tasks.md` ticked with PR link
-- [ ] Promotions above executed (if any)
+- [ ] `proposal.md` frontmatter set to `status: abandoned` (by `dotf spec archive --abandoned`)
+- [ ] Folder moved: `specs/CONSOLE-002-cross-context-bitacora/` -> `specs/archive/_abandoned/CONSOLE-002-cross-context-bitacora/`
+- [ ] Tracking issue #711 closed as superseded, pointing at ADR-066 and #2494
