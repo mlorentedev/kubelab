@@ -145,3 +145,17 @@ def test_a_duplicate_key_is_refused(tmp_path: Path) -> None:
 
     assert "port" in excinfo.value.error
     assert "duplicate" in excinfo.value.error.lower()
+
+
+def test_a_refusal_renders_error_why_and_fix(tmp_path: Path) -> None:
+    """The run page is read by a product author, not by us: say what, why and how to fix (AC2)."""
+    path = _write(tmp_path, _set("port", 0))
+
+    with pytest.raises(ContractError) as excinfo:
+        validate_contract(path)
+
+    lines = str(excinfo.value).splitlines()
+    assert [line.split(":", 1)[0] for line in lines] == ["ERROR", "WHY", "FIX"]
+    assert str(path) in lines[0]
+    assert "port" in lines[0]
+    assert all(line.split(":", 1)[1].strip() for line in lines)
