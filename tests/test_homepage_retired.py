@@ -76,3 +76,34 @@ def test_no_overlay_renders_it(overlay: str) -> None:
         if doc and doc.get("metadata", {}).get("name", "").startswith("homepage")
     ]
     assert names == []
+
+
+def _node_blocks(config: dict) -> dict[str, dict]:
+    networking = config["networking"]
+    blocks = {name: networking[name] for name in ("vps", "aws", "gcp") if name in networking}
+    blocks.update(networking["nodes"])
+    return blocks
+
+
+def test_node_tiles_keep_only_the_name_the_platform_manifest_reads() -> None:
+    # Each node carried a Homepage tile: order, icon, description, widget. With
+    # Homepage gone only `display_name` has a reader (platform_manifest names a
+    # node from it), so the rest is configuration describing nothing.
+    leftovers = {
+        name: sorted(set(block["dashboard"]) - {"display_name"})
+        for name, block in _node_blocks(_common()).items()
+        if isinstance(block, dict) and set(block.get("dashboard") or {}) - {"display_name"}
+    }
+    assert leftovers == {}
+
+
+def test_no_vault_keeps_a_homepage_secret_path() -> None:
+    # Key names are plaintext in a SOPS file, so this reads no secret.
+    vaults = sorted((ROOT / "infra/config/secrets").glob("*.enc.yaml"))
+    assert vaults, "no SOPS vaults found; the layout changed"
+    holders = [
+        v.name
+        for v in vaults
+        if "dashboard" in ((yaml.safe_load(v.read_text(encoding="utf-8")) or {}).get("apps", {}).get("services", {}))
+    ]
+    assert holders == []
