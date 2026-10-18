@@ -1,9 +1,10 @@
 # Traefik, TLS and the request path
 
-29 lessons, newest first. Back to [all categories](../_index.md).
+30 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 597 | [An immutable cache header on an unversioned URL makes a new asset unreachable](lesson-597-an-immutable-cache-header-on-an-unversioned-url-makes-a-new-asset-unreachable.md) | 2026-10-18 |
 | 585 | [An Authelia bypass cannot see the Authorization header, and a Traefik v2 matcher is no route at all](lesson-585-an-authelia-bypass-cannot-see-the-authorization-header-and-a-traefik-v2-matcher-is-no-route-at-all.md) | 2026-10-17 |
 | 584 | [A page is reachable only if something targets it, and a test must say what](lesson-584-a-page-is-reachable-only-if-something-targets-it-and-a-test-must-say-what.md) | 2026-10-16 |
 | 406 | [An explicit Traefik priority can rank below one that is absent](lesson-406-an-explicit-traefik-priority-can-rank-below-one-that-is-absent.md) | 2026-08-27 |

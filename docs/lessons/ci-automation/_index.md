@@ -29,6 +29,7 @@
 | 416 | [An anti-vacuity test must assert on the value under test, not one step upstream of it](lesson-416-a-guard-the-guard-must-assert-on-the-derived-artifact.md) | 2026-09-02 |
 | 411 | [A review guard's two documented failure causes were not exhaustive — a third, structural one hid behind an identical error](lesson-411-a-review-guard-s-two-known-causes-are-not-exhaustive.md) | 2026-09-01 |
 | 409 | [Fixing the error you got can leave the bug you did not reach](lesson-409-fixing-the-error-you-got-can-leave-the-bug-you-did.md) | 2026-08-31 |
+| 598 | [A workflow ports to Gitea Actions unless it uses GitHub as a platform](lesson-598-a-workflow-ports-to-gitea-unless-it-uses-github-as-a-platform.md) | 2026-08-27 |
 | 445 | [A hint step guarded by a bare `failure()` names a cause it never observed — and a named cause gets acted on](lesson-445-a-hint-guarded-by-a-bare-failure-names-a-cause-it-never-observed.md) | 2026-08-25 |
 | 446 | [A Dependabot pull request reads an empty secret store, so a reviewer that needs a credential must say it cannot run — not fail](lesson-446-a-dependabot-pull-request-reads-an-empty-secret-store-so-a-reviewer-that-needs-one-must-say-it-cannot-run.md) | 2026-08-24 |
 | 383 | [A reviewer fabricated a count and a CI failure — check the claim, not the confidence](lesson-383-a-reviewer-fabricated-a-count-and-a-ci-failure-check-the-claim-not-the-confidence.md) | 2026-08-23 |
