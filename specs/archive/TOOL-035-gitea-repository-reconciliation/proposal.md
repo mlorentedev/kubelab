@@ -1,7 +1,7 @@
 ---
 id: "TOOL-035-gitea-repository-reconciliation"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-08-27"
 issue: "kubelab#1076"
 tags: [spec, proposal, gitea, forge, ci, migration]

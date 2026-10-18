@@ -474,7 +474,7 @@ Before archiving, flag what (if anything) should be promoted to the vault. If al
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/TOOL-035-gitea-repository-reconciliation/` -> `specs/archive/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/TOOL-035-gitea-repository-reconciliation/` -> `specs/archive/`
 - [ ] Bitácora board tickets moved to Done / closed with PR links (ADR-018): #1076, #1389, #504
-- [ ] Promotions above executed (if any)
+- [x] Promotions above executed (if any)
