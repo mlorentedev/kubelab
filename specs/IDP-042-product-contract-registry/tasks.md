@@ -41,8 +41,8 @@ Branch `feat/idp-042-contract-schema`. Commit prefix `feat(toolkit):`.
 - [x] [AC2] Failing test, same file: a refusal renders three labelled lines `ERROR:`, `WHY:`, `FIX:`, and `ERROR` names the contract path and field. Expected: FAIL
 - [x] [AC2] `toolkit/features/product_contract.py`: pydantic model (`extra="forbid"`, anchored patterns), `validate_contract(path) -> Contract`, `ContractError(error, why, fix)`. Run the file's tests. Expected: PASS
 - [x] [AC2] [P] Failing then passing test `tests/test_product_contract_schema.py`: `toolkit/schemas/kubelab-product.schema.json` equals `Contract.model_json_schema()` serialised with sorted keys, and carries `$id`. Generate the file with `poetry run python -m toolkit.features.product_contract --write-schema`. Expected: FAIL (file absent), then PASS
-- [ ] [AC2] `toolkit/cli/product.py`: `toolkit product validate --contract PATH [--json]`, exit 1 with the three-line error (or a JSON object with `error`, `why`, `fix`). Wire it into the CLI entry. Test with `typer.testing.CliRunner` for exit code and JSON shape. Expected: PASS
-- [ ] Offline check: `poetry run toolkit product validate --contract tests/fixtures/product/web.kubelab.yaml --json` prints `{"ok": true, ...}` and exits 0; no SOPS key, no network
+- [x] [AC2] `toolkit/cli/product.py`: `toolkit product validate --contract PATH [--json]`, exit 1 with the three-line error (or a JSON object with `error`, `why`, `fix`). Wire it into the CLI entry. Test with `typer.testing.CliRunner` for exit code and JSON shape. Expected: PASS
+- [x] Offline check: `poetry run toolkit product validate --contract tests/fixtures/product/web.kubelab.yaml --json` prints `{"ok": true, ...}` and exits 0; no SOPS key, no network
 
 ### PR 2 — Registry and `PLATFORM_APPS` derived from it (about 280 lines; this is #1815)
 
