@@ -18,16 +18,26 @@ moment a key is re-minted, and it drifts silently in the safe-looking direction:
 it keeps saying "fine" about a key that was replaced with a shorter-lived one.
 This repository has that failure written down three times over; a date in a
 config file would be the fourth.
+
+THE ONE EXCEPTION is `Expiry.DECLARED`, for an issuer that fixes an expiry at mint
+and gives the holder no way to read it back (a Vikunja API token is refused on
+`GET /tokens`, and the only credential that could call it is a user session that
+SOPS does not hold). There a recorded date is the only date that exists, so it is
+recorded once per env, where the operator who chose it can see it, and an env with
+no date is reported as a finding. It still drifts if a token is re-minted without
+updating it; that is why the rotate note of every DECLARED entry names the file.
+Nothing that CAN be asked may use it.
 """
 
 from __future__ import annotations
 
 import re
 import subprocess
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from enum import Enum
-from typing import NoReturn
+from typing import Any, NoReturn
 
 
 class Expiry(str, Enum):
@@ -43,6 +53,13 @@ class Expiry(str, Enum):
     # Not yet assessed. The default deliberately: a new catalog entry should
     # show up as unclassified rather than quietly assumed immortal.
     UNKNOWN = "unknown"
+    # Issued by a service that fixes the expiry at mint, but gives the holder no way
+    # to read it back: the one date lives where the operator who chose it wrote it
+    # down, `secret_expiry.declared.<key_path>` in `values/<env>.yaml` (a date is not
+    # a secret). Not PROVIDER, because nothing we hold can ask; not UNKNOWN, because
+    # somebody did decide. A DECLARED entry with no date for an env that needs it is
+    # a finding, never a skip.
+    DECLARED = "declared"
 
 
 @dataclass(frozen=True)
@@ -292,6 +309,52 @@ def expire_headscale_preauthkey(ssh_target: str, key_id: str, container: str = "
     )
     if result.returncode != 0:
         raise ExpiryUnavailableError(f"could not expire pre-auth key {key_id}: {result.stderr.strip()}")
+
+
+@dataclass(frozen=True)
+class DeclaredExpiry:
+    """One DECLARED credential in one environment, with the date its operator recorded."""
+
+    key_path: str
+    env: str
+    expires_on: date | None
+
+    @property
+    def days_left(self) -> int | None:
+        return None if self.expires_on is None else (self.expires_on - date.today()).days
+
+
+def declared_expiries(specs: Iterable[Any], config_for_env: Callable[[str], Mapping[str, Any]]) -> list[DeclaredExpiry]:
+    """The recorded expiry of every DECLARED secret, once per env that needs it.
+
+    Dates live in `secret_expiry.declared` of each environment's values file, keyed
+    by the secret's full `key_path`. An env with no recorded date yields
+    `expires_on=None`: the caller reports that as a finding rather than skipping,
+    because a credential nobody wrote a date for is indistinguishable from one that
+    cannot expire. A malformed date raises, naming the key.
+    """
+    found: list[DeclaredExpiry] = []
+    for spec in specs:
+        if resolve_expiry(spec) is not Expiry.DECLARED:
+            continue
+        key_path = spec.key_path
+        for env in spec.envs:
+            raw = ((config_for_env(env).get("secret_expiry") or {}).get("declared") or {}).get(key_path)
+            found.append(DeclaredExpiry(key_path, env, _as_date(key_path, env, raw)))
+    return found
+
+
+def _as_date(key_path: str, env: str, raw: object) -> date | None:
+    if raw in (None, ""):
+        return None
+    if isinstance(raw, datetime):
+        return raw.date()
+    if isinstance(raw, date):
+        return raw
+    try:
+        return date.fromisoformat(str(raw))
+    except ValueError as exc:
+        raise ValueError(f"secret_expiry.declared[{key_path!r}] in {env} is not an ISO date: {raw!r}") from exc
 
 
 def resolve_expiry(spec: object) -> Expiry:
