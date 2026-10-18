@@ -284,13 +284,6 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("authelia",),
         rotate_note="DANGEROUS: existing DB becomes unreadable. Must reset Authelia data.",
     ),
-    SecretSpec(
-        key_path=f"{_AUTH}.jwt_secret_reset_password",
-        description="JWT signing key for password reset emails",
-        kind=SecretKind.RANDOM_TOKEN,
-        services=("authelia",),
-        rotate_note="Invalidates pending password reset links.",
-    ),
     # =========================================================================
     # Authelia — User Password Hashes
     # =========================================================================

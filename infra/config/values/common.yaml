@@ -1799,7 +1799,6 @@ apps:
         regulation_find_time: 2m
         regulation_ban_time: 5m
         notifier_disable_startup_check: false
-        jwt_secret_reset_password: some_dummy_secret_for_jwt_reset
         # SSOT-017 / ADR-040 §1: the ONLY declaration of an OIDC client. The K8s
         # client files (`oidc-clients.yml`, base = staging, prod overlay) and the
         # Compose dev config are generated from this list by `toolkit sync oidc`;

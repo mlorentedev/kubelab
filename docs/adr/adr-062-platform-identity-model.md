@@ -40,7 +40,7 @@ Where each app stands on 2026-10-17:
 | App | S2 | S3 |
 |---|---|---|
 | Grafana | `login_maximum_lifetime_duration` / `login_maximum_inactive_lifetime_duration` | `GF_AUTH_SIGNOUT_REDIRECT_URL` (both K8s overlays; the dev Compose Grafana is still open, #2415) |
-| Argo CD | open: lands with `make deploy-argocd` (owner) | open: `oidc.config.logoutURL`, same deploy |
+| Argo CD | the ID token's lifespan (Authelia default, 1h): no `refreshTokenThreshold`, no `offline_access`, no custom lifespan. `users.session.duration` binds only the local `admin` | `oidc.config.logoutURL`. Both held by `tests/test_argocd_session_bound_by_authelia.py`; they reach the hub only through `make deploy-argocd` |
 | Vikunja | open: `service.jwtttl` (default 3 days), after #2320 | open: key unverified in 1.0.0 |
 | Gitea | open: `SESSION_LIFE_TIME` / `LOGIN_REMEMBER_DAYS`, set by Ansible | none: Gitea has no sign-out redirect, so S2 is its only bound |
 

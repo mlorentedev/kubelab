@@ -50,7 +50,6 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
         keys={
             "session_secret": "APPS_SERVICES_SECURITY_AUTHELIA_SESSION_SECRET",
             "storage_encryption_key": "APPS_SERVICES_SECURITY_AUTHELIA_STORAGE_ENCRYPTION_KEY",
-            "jwt_secret": "APPS_SERVICES_SECURITY_AUTHELIA_JWT_SECRET_RESET_PASSWORD",
             # SMTP password from shared infra namespace (ADR-036, SSOT-012 PR #3).
             "smtp_password": "INFRA_SMTP_PASS",
             "oidc_hmac_secret": "APPS_SERVICES_SECURITY_AUTHELIA_OIDC_HMAC_SECRET",

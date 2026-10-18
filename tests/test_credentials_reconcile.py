@@ -70,7 +70,6 @@ class TestAffectedServiceResolution:
             "apps.services.security.authelia.oidc_hmac_secret",
             "apps.services.security.authelia.session_secret",
             "apps.services.security.authelia.storage_encryption_key",
-            "apps.services.security.authelia.jwt_secret_reset_password",
             "apps.services.security.authelia.oidc_client_secret",
             "apps.services.security.authelia.oidc_client_secret_hash",
             "apps.services.observability.grafana.admin_user",
@@ -94,16 +93,13 @@ class TestImmutableSecrets:
     """Verify IMMUTABLE_SECRETS protection logic."""
 
     def test_immutable_secrets_defined(self) -> None:
-        assert len(IMMUTABLE_SECRETS) == 4
+        assert len(IMMUTABLE_SECRETS) == 3
 
     def test_storage_encryption_key_is_immutable(self) -> None:
         assert "apps.services.security.authelia.storage_encryption_key" in IMMUTABLE_SECRETS
 
     def test_session_secret_is_immutable(self) -> None:
         assert "apps.services.security.authelia.session_secret" in IMMUTABLE_SECRETS
-
-    def test_jwt_secret_is_immutable(self) -> None:
-        assert "apps.services.security.authelia.jwt_secret_reset_password" in IMMUTABLE_SECRETS
 
     def test_oidc_hmac_is_immutable(self) -> None:
         assert "apps.services.security.authelia.oidc_hmac_secret" in IMMUTABLE_SECRETS
@@ -115,14 +111,12 @@ class TestImmutableSecrets:
             "apps.services.security.authelia.storage_encryption_key": "NEW_VALUE",
             "apps.services.security.authelia.session_secret": "NEW_VALUE",
             "apps.services.security.authelia.oidc_hmac_secret": "NEW_VALUE",
-            "apps.services.security.authelia.jwt_secret_reset_password": "NEW_VALUE",
             "basic_auth.user": "manu",
         }
         existing = {
             "apps.services.security.authelia.storage_encryption_key": "EXISTING_KEY",
             "apps.services.security.authelia.session_secret": "EXISTING_SESSION",
             "apps.services.security.authelia.oidc_hmac_secret": "EXISTING_HMAC",
-            "apps.services.security.authelia.jwt_secret_reset_password": "EXISTING_JWT",
         }
         result = cm._preserve_immutable(generated, existing)
 
@@ -130,7 +124,6 @@ class TestImmutableSecrets:
         assert result["apps.services.security.authelia.storage_encryption_key"] == "EXISTING_KEY"
         assert result["apps.services.security.authelia.session_secret"] == "EXISTING_SESSION"
         assert result["apps.services.security.authelia.oidc_hmac_secret"] == "EXISTING_HMAC"
-        assert result["apps.services.security.authelia.jwt_secret_reset_password"] == "EXISTING_JWT"
         # Non-immutable secrets use new values
         assert result["basic_auth.user"] == "manu"
 
