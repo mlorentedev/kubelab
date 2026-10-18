@@ -28,8 +28,11 @@ from typing import Any
 
 import pytest
 import yaml
+from jinja2 import meta
 
+from toolkit.core.templating import TemplateRenderer
 from toolkit.features import oidc_clients
+from toolkit.features.configuration import ConfigurationManager
 
 REPO = Path(__file__).resolve().parent.parent
 COMMON = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
@@ -75,10 +78,35 @@ def test_each_rendered_clients_file_carries_it(env: str) -> None:
     assert grafana.get(_ALG) == _declared("grafana")[_ALG]
 
 
-def test_the_dev_template_renders_it() -> None:
-    """Dev Compose renders clients through its own Jinja template, from the same resolver."""
-    template = (REPO / "infra/config/authelia/templates/configuration.yml.j2").read_text()
-    assert f"client.{_ALG}" in template
+@pytest.mark.parametrize("env_name", ["staging", "prod"])
+def test_the_dev_template_renders_it(monkeypatch: pytest.MonkeyPatch, env_name: str) -> None:
+    """Dev Compose renders clients through its own Jinja template, from the same resolver.
+
+    Rendered with the generator's own renderer (StrictUndefined) over the clients the
+    resolver returns, because the resolver omits the key for a client that declares
+    none. A truth test on that missing key raised, and `toolkit config generate`
+    failed for staging and prod while a text search of the template stayed green
+    (#2469). Dev declares only grafana, so it never took that path.
+    """
+    manager = ConfigurationManager(env_name, REPO)
+    monkeypatch.setattr(manager, "_decrypt_sops", lambda _path: {})
+    clients = [
+        {**client, "client_secret_hash": "unset-digest"}
+        for client in oidc_clients.resolve_clients(manager.get_merged_config(), env_name)
+    ]
+    without = [c["client_id"] for c in clients if _ALG not in c]
+    assert without, "every client declares the alg; the missing-key path would go untested"
+
+    env = TemplateRenderer(REPO / "infra/config/authelia/templates").env
+    template_name = "configuration.yml.j2"
+    source = env.loader.get_source(env, template_name)[0]  # type: ignore[union-attr]
+    lists = {"apps": [], "authelia_users": [], "trusted_cidrs": [], "oidc_clients": clients}
+    context = {name: "unset" for name in meta.find_undeclared_variables(env.parse(source))} | lists
+    rendered = yaml.safe_load(env.get_template(template_name).render(context))
+
+    emitted = {c["client_id"]: c for c in rendered["identity_providers"]["oidc"]["clients"]}
+    assert emitted["grafana"][_ALG] == _declared("grafana")[_ALG]
+    assert all(_ALG not in emitted[client_id] for client_id in without)
 
 
 # --------------------------------------------------------------------------- Vector
