@@ -71,7 +71,9 @@ def test_a_secret_absent_from_the_catalog_is_refused() -> None:
 
 
 def test_a_catalogued_secret_is_accepted() -> None:
-    key = SECRET_CATALOG[0].key_path
+    # Named, not SECRET_CATALOG[0]: the case must not change with the catalog's order.
+    key = "infra.smtp.pass"
+    assert key in {spec.key_path for spec in SECRET_CATALOG}
 
     check_against_platform(_contract(secrets=[key]), "web", image_for=_web_image)
 
@@ -96,6 +98,16 @@ def test_a_hostname_owned_in_the_other_environment_is_refused() -> None:
     _assert_explained(err)
     assert "mlorente.dev" in err.error
     assert "apps.platform.web" in err.why
+
+
+@pytest.mark.parametrize("host", ["argo.kubelab.live", "traefik.staging.kubelab.live"])
+def test_a_hostname_only_a_hand_written_route_serves_is_refused(host: str) -> None:
+    """Some IngressRoutes are hand-authored manifests with no values declaration; they own their host too."""
+    err = _refused(_contract(hostnames={"staging": "staging.mlorente.dev", "prod": host}))
+
+    _assert_explained(err)
+    assert host in err.error
+    assert "infra/k8s/" in err.why
 
 
 def test_a_product_may_keep_the_hostnames_it_already_declares() -> None:
