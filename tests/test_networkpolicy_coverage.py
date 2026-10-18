@@ -130,6 +130,16 @@ def _callers(overlay: str) -> set[tuple[str, str, int]]:
         for host, port in ADDRESS.findall(text):
             if host in services and host != caller:
                 found.add((caller, host, int(port)))
+    # Every IngressRoute backend is a Traefik caller. A Service without a
+    # selector is an EndpointSlice outside the cluster, which no policy covers.
+    selected = {d["metadata"]["name"]: d for d in docs if d["kind"] == "Service" and d["spec"].get("selector")}
+    for route in (d for d in docs if d["kind"] == "IngressRoute"):
+        for backend in (b for r in route["spec"]["routes"] for b in r.get("services", [])):
+            svc = selected.get(backend["name"])
+            if svc is None:
+                continue
+            port = next(p["port"] for p in svc["spec"]["ports"] if backend["port"] in (p["port"], p.get("name")))
+            found.add(("traefik", backend["name"], port))
     return found
 
 
@@ -146,7 +156,7 @@ def test_the_render_measured_what_it_judges(overlay: str) -> None:
     """A render that found nothing would pass every check below."""
     assert len(_workloads(overlay)) >= 15
     assert len(_policies(overlay)) >= 15
-    assert len(_callers(overlay)) >= 8
+    assert len(_callers(overlay)) >= 14
 
 
 @pytest.mark.parametrize("overlay", OVERLAYS)
