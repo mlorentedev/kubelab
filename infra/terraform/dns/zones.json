@@ -1,6 +1,7 @@
 {
   "imagesensortool.com": {
     "key": "imagesensortool",
+    "hsts": false,
     "records": []
   },
   "kubelab.live": {

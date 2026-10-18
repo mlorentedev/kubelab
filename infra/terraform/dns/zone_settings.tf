@@ -1,6 +1,9 @@
 # -----------------------------------------------------------------------------
 # Zone settings — TLS, HSTS, OCSP (SEC-AUDIT-001, 002, 006), one per zone
 #
+# HSTS is on unless the zone says `"hsts": false` in zones.json: a zone that
+# serves nothing yet must not preload a policy browsers keep for a year.
+#
 # NOTE: API token needs Zone:Zone Settings:Edit permission.
 # Update token in Cloudflare dashboard, then:
 #   toolkit secrets set cloudflare.api_token <new-token> --env common
@@ -17,10 +20,10 @@ resource "cloudflare_zone_settings_override" "zone" {
     always_use_https = "on"
 
     security_header {
-      enabled            = true
-      max_age            = 31536000
-      include_subdomains = true
-      preload            = true
+      enabled            = try(each.value.hsts, true)
+      max_age            = try(each.value.hsts, true) ? 31536000 : 0
+      include_subdomains = try(each.value.hsts, true)
+      preload            = try(each.value.hsts, true)
       nosniff            = true
     }
   }

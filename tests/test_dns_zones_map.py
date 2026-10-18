@@ -90,3 +90,15 @@ def test_every_public_apex_in_the_config_is_in_the_map() -> None:
 def test_the_guard_sees_the_zones_it_must() -> None:
     """A walk that finds nothing passes vacuously; pin what it must find."""
     assert {"kubelab.live", "mlorente.dev"} <= {_apex(h) for h in _public_hosts(_configs())}
+
+
+def _serves(apex: str, zone: dict[str, Any]) -> bool:
+    services = json.loads((DNS / "services.json").read_text())
+    return bool(zone["records"]) or any(s["zone"] == zone["key"] for s in services)
+
+
+def test_a_zone_that_serves_nothing_does_not_preload_hsts() -> None:
+    """HSTS with `preload` reaches browser lists that keep it for a year; a zone
+    with no records has made no decision about TLS to pin."""
+    pinned = sorted(apex for apex, z in ZONES.items() if not _serves(apex, z) and z.get("hsts", True))
+    assert not pinned, f'zones that serve nothing but send HSTS with preload (set "hsts": false): {pinned}'

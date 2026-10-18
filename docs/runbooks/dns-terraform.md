@@ -9,16 +9,17 @@ owner: manu
 
 # DNS Management with Terraform (Cloudflare)
 
-> Manages A/CNAME records for `kubelab.live` and `mlorente.dev` via Terraform + Cloudflare provider.
+> Manages A/CNAME records for every zone in `zones.json` via Terraform + Cloudflare provider.
 
 ## Architecture
 
 ```
-services.json    ← single source of truth (service list)
+zones.json       ← managed zones (apex → key, the zone's own records)
+services.json    ← service list
      ↓
-main.tf          ← parses JSON, filters by zone + environment, resolves target
+main.tf          ← parses both, filters by environment, resolves target
      ↓
-records_*.tf     ← for_each creates A records per service
+records.tf       ← for_each creates one record per FQDN
 zone_settings.tf ← TLS/HSTS zone settings + CAA records (not from services.json)
      ↓
 Cloudflare API   ← via cloudflare/cloudflare provider ~> 4.0
@@ -58,7 +59,8 @@ A zone is one entry in `zones.json`, keyed by its apex (#2460):
   optional `content`, which defaults to the VPS IP).
 - The zone gets the TLS/HSTS settings and the CAA set of every other zone,
   with nothing else to write. HSTS is sent with `includeSubdomains` and
-  `preload`, so decide that before the first apply.
+  `preload`; a zone that serves nothing yet sets `"hsts": false` (as
+  `imagesensortool.com` does) until it does.
 
 The zone must already exist in the Cloudflare account and be readable with the
 DNS token, because Terraform looks it up by name. Then `make tf-dns-plan` shows
@@ -93,7 +95,7 @@ restore and unlocking are in `docs/runbooks/terraform-state.md`.
 | Field | Values | Notes |
 |-------|--------|-------|
 | `name` | subdomain name | Creates `name.kubelab.live` or `name.mlorente.dev` |
-| `zone` | `"kubelab"` or `"mlorente"` | Which domain to create the record under |
+| `zone` | a `key` from `zones.json` | Which domain to create the record under |
 | `proxied` | `true` / `false` | See proxied decision matrix below |
 | `environments` | `["prod"]` | Must include `"prod"` for the record to be created |
 | `target` | node name (optional) | Points the record at `networking.nodes.<name>.tailscale_ip` (via the `node_tailscale_ips` map in `main.tf`) instead of `var.vps_ip`. Absent → unchanged VPS behavior. Used by VPN-only-reachable services with a publicly-resolvable name, e.g. `pihole` → `ace1` (OPS-022). |
@@ -276,7 +278,7 @@ make tf-dns-plan     # Review what will be created
 make tf-dns-apply    # Create all records
 ```
 
-This creates every record in one pass: root + www + CAA records (both zones, from `zone_settings.tf`) plus every entry in `services.json`. No imports needed. Record count isn't fixed — see `terraform state list` after apply for the live count instead of trusting a number written down here.
+This creates every record in one pass: each zone's own records + CAA records (every zone in `zones.json`) plus every entry in `services.json`. No imports needed. Record count isn't fixed — see `terraform state list` after apply for the live count instead of trusting a number written down here.
 
 ### Step 4b: Adopt existing records (state rebuild)
 
@@ -376,22 +378,22 @@ make tf-state-list ROOT=dns
 ```
 
 `services.json` is the SSOT for which service records exist; `zone_settings.tf`
-separately owns the root/CAA records for both zones (not services.json-driven).
+and `zone_settings.tf` own each zone's own records and CAA set (not services.json-driven).
 
-### Fixed records (both zones, from `zone_settings.tf` + `records_*.tf` — rarely change)
+### Fixed records (from `zones.json` + `zone_settings.tf` — rarely change)
 
 | Record | Zone | Type | Notes |
 |--------|------|------|-------|
 | @ (root) | kubelab.live | A | `var.vps_ip` |
 | www | kubelab.live | CNAME → kubelab.live | |
 | @ (root) | mlorente.dev | A | `var.vps_ip` |
-| CAA (Let's Encrypt, DigiCert, Google) | both zones | CAA | 3 per zone, restricts cert issuance (SEC-AUDIT-004) |
+| CAA (Let's Encrypt, DigiCert, Google) | every zone | CAA | 3 per zone, restricts cert issuance (SEC-AUDIT-004) |
 
 ### Service records — snapshot as of 2026-08-12, verify against `services.json`
 
 **kubelab.live** (13 entries in `services.json`, all zone=kubelab, counted 2026-09-28): `api` (proxied), `status`, `auth`, `vpn`, `grafana`, `gitea`, `n8n`, `pr-agent`, `traefik`, `argo`, `pihole` (`target: ace1` — resolves to a Tailscale IP, not `var.vps_ip`; OPS-022), `home`, `tasks`.
 
-**mlorente.dev**: zero entries in `services.json` today — only the fixed root + CAA records above exist for this zone. (The `mlorente_svc` `for_each` is empty until a service targets this zone again.)
+**mlorente.dev**: zero entries in `services.json` today — only the fixed root + CAA records above exist for this zone. `imagesensortool.com` has no records and HSTS off until it serves something.
 
 ### NOT managed by Terraform
 
