@@ -12,7 +12,7 @@ Authelia 4.39 has no RP-initiated or back-channel logout, so two things are ours
 The bound Authelia enforces is the `session` block of each overlay's EMITTED
 authelia-config, so that is what this reads. Nothing in K8s reads the common.yaml
 `session_*` values (the dev Authelia template does), so the dev Authelia is held to
-the same numbers. The dev Compose Grafana carries no bound yet: #2415.
+the same numbers. The dev Compose Grafana derives the same three values from the loader variables.
 """
 
 from __future__ import annotations
@@ -102,3 +102,26 @@ def test_the_dev_authelia_session_matches_the_overlays() -> None:
             session["expiration"],
             session["inactivity"],
         ), f"common.yaml and {overlay} disagree on the session bound"
+
+
+DEV_GRAFANA_COMPOSE = ROOT / "infra/stacks/services/observability/grafana/compose.base.yml"
+DEV_GRAFANA_DERIVED = {
+    "GF_AUTH_LOGIN_MAXIMUM_LIFETIME_DURATION": "${APPS_SERVICES_SECURITY_AUTHELIA_SESSION_EXPIRATION}",
+    "GF_AUTH_LOGIN_MAXIMUM_INACTIVE_LIFETIME_DURATION": "${APPS_SERVICES_SECURITY_AUTHELIA_SESSION_INACTIVITY}",
+    "GF_AUTH_SIGNOUT_REDIRECT_URL": (
+        "https://${APPS_SERVICES_SECURITY_AUTHELIA_DOMAIN}/logout"
+        "?rd=https%3A%2F%2F${APPS_SERVICES_OBSERVABILITY_GRAFANA_DOMAIN}%2F"
+    ),
+}
+
+
+@pytest.mark.parametrize("key", sorted(DEV_GRAFANA_DERIVED))
+def test_the_dev_compose_grafana_derives_the_bound_from_the_loader(key: str) -> None:
+    """#2415: the dev Grafana runs on Grafana's 30d/7d defaults unless it carries these three.
+
+    Each is a reference to a loader variable, never a literal, so the dev Authelia's
+    numbers stay the only place the bound is written.
+    """
+    compose = yaml.safe_load(DEV_GRAFANA_COMPOSE.read_text(encoding="utf-8"))
+    env = dict(item.split("=", 1) for item in compose["services"]["grafana"]["environment"] if isinstance(item, str))
+    assert env.get(key) == DEV_GRAFANA_DERIVED[key]
