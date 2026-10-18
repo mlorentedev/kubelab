@@ -13,9 +13,13 @@ from pathlib import Path
 
 import pytest
 import yaml
+from click.testing import Result
+from typer.testing import CliRunner
 
+from toolkit.features import product_render
 from toolkit.features.product_contract import ContractError, validate_contract
 from toolkit.features.product_render import CONTRACT_KEYS, SNAPSHOT_DIR, VALUES_DIR, drift, write
+from toolkit.main import app
 
 WEB = SNAPSHOT_DIR / "web.yaml"
 ENVS = ("staging", "prod")
@@ -99,3 +103,42 @@ def test_write_inserts_a_missing_key_before_version_and_changes_nothing_else(val
     assert len(updated) == len(original) + 1
     position = updated.index(added[0])
     assert updated[position + 1].strip().startswith("version:")
+
+
+def _render(*args: str) -> Result:
+    return CliRunner().invoke(app, ["product", "render", "--contract", str(WEB), *args])
+
+
+@pytest.mark.parametrize("env", ENVS)
+def test_render_check_passes_on_the_committed_tree(env: str) -> None:
+    result = _render("--env", env, "--check")
+
+    assert result.exit_code == 0, result.output
+    assert f"compared {len(CONTRACT_KEYS)} contract-owned keys for web/{env}" in result.output
+
+
+def test_render_check_exits_one_and_names_the_drifted_keys(
+    values_copy: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _edit_web(values_copy, "prod", "default_port", 9090)
+    monkeypatch.setattr(product_render, "VALUES_DIR", values_copy)
+
+    result = _render("--env", "prod", "--check")
+
+    assert result.exit_code == 1
+    assert "default_port" in result.output
+
+
+def test_render_refuses_oidc(tmp_path: Path) -> None:
+    contract = tmp_path / "web.yaml"
+    contract.write_text(WEB.read_text().replace("auth: public", "auth: oidc"))
+
+    result = CliRunner().invoke(app, ["product", "render", "--contract", str(contract), "--env", "prod"])
+
+    assert result.exit_code == 1
+    assert "ERROR:" in result.output
+    assert "oidc" in result.output
+
+
+def test_render_takes_check_or_write_not_both() -> None:
+    assert _render("--env", "prod", "--check", "--write").exit_code == 2
