@@ -14,9 +14,9 @@ exists — deterministic, SOPS-independent, and impossible to silently diverge.
 
 from __future__ import annotations
 
-from toolkit.config.constants import COMPONENTS
 from toolkit.features.generator_k8s import K8sGenerator
 from toolkit.features.k8s_secrets import SECRET_DEFINITIONS
+from toolkit.features.product_registry import platform_apps
 
 
 class TestHasSecretVars:
@@ -38,7 +38,7 @@ class TestHasSecretVars:
         """The single invariant: mount iff `<app>-secrets` is defined in the SSOT."""
         registered = {m.name for m in SECRET_DEFINITIONS}
         gen = K8sGenerator()
-        for app in COMPONENTS.PLATFORM_APPS:
+        for app in platform_apps():
             expected = f"{app}-secrets" in registered
             assert gen._has_secret_vars(app) is expected, (
                 f"{app}: mount decision must equal presence of {app}-secrets in SECRET_DEFINITIONS (the secrets SSOT)"
