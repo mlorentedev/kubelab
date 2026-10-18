@@ -1,9 +1,10 @@
 # CI workflows, gates and the GitHub surface
 
-47 lessons, newest first. Back to [all categories](../_index.md).
+49 lessons, newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 601 | [A reviewer that sends no max_tokens inherits the provider's completion cap, and loses the review to its own reasoning](lesson-601-a-reviewer-that-sends-no-max-tokens-inherits-the-providers-completion-cap-and-loses-the-review-to-its-own-reasoning.md) | 2026-10-18 |
 | 596 | [A PR-Agent server reviews every model through one provider, so its fallback chain cannot mix NaN and Anthropic](lesson-596-a-pr-agent-server-reviews-every-model-through-one-provider.md) | 2026-10-18 |
 | 575 | [A PR-Agent toml provider applies to every model, so a second provider has to override it](lesson-575-a-pr-agent-toml-provider-applies-to-every-model.md) | 2026-10-15 |
 | 573 | [An integration test that ships production targets tests the runner's network](lesson-573-an-integration-test-that-ships-production-targets-tests-the-runners-network.md) | 2026-10-14 |
@@ -28,6 +29,7 @@
 | 416 | [An anti-vacuity test must assert on the value under test, not one step upstream of it](lesson-416-a-guard-the-guard-must-assert-on-the-derived-artifact.md) | 2026-09-02 |
 | 411 | [A review guard's two documented failure causes were not exhaustive — a third, structural one hid behind an identical error](lesson-411-a-review-guard-s-two-known-causes-are-not-exhaustive.md) | 2026-09-01 |
 | 409 | [Fixing the error you got can leave the bug you did not reach](lesson-409-fixing-the-error-you-got-can-leave-the-bug-you-did.md) | 2026-08-31 |
+| 598 | [A workflow ports to Gitea Actions unless it uses GitHub as a platform](lesson-598-a-workflow-ports-to-gitea-unless-it-uses-github-as-a-platform.md) | 2026-08-27 |
 | 445 | [A hint step guarded by a bare `failure()` names a cause it never observed — and a named cause gets acted on](lesson-445-a-hint-guarded-by-a-bare-failure-names-a-cause-it-never-observed.md) | 2026-08-25 |
 | 446 | [A Dependabot pull request reads an empty secret store, so a reviewer that needs a credential must say it cannot run — not fail](lesson-446-a-dependabot-pull-request-reads-an-empty-secret-store-so-a-reviewer-that-needs-one-must-say-it-cannot-run.md) | 2026-08-24 |
 | 383 | [A reviewer fabricated a count and a CI failure — check the claim, not the confidence](lesson-383-a-reviewer-fabricated-a-count-and-a-ci-failure-check-the-claim-not-the-confidence.md) | 2026-08-23 |

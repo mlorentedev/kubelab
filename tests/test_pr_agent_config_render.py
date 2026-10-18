@@ -31,6 +31,8 @@ import yaml
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 CONFIGMAP_PREFIX = "pr-agent-config"
 REVIEWER_POOL = REPO_ROOT / "harness" / "reviewer-pool.json"
+#: The completion cap NaN applies to a request that sends no `max_tokens`.
+NAN_DEFAULT_COMPLETION_CAP = 32768
 
 #: Every key this ConfigMap must carry, and its exact rendered string value.
 #: Values are always strings coming out of a kustomize `envs:` file — including
@@ -52,6 +54,7 @@ REQUIRED_VALUES = {
     "CONFIG__FALLBACK_MODELS": '["openai/deepseek-v4-flash", "openai/glm5.3-flash"]',
     "CONFIG__CUSTOM_MODEL_MAX_TOKENS": "200000",
     "CONFIG__MAX_MODEL_TOKENS": "200000",
+    "CONFIG__MAX_OUTPUT_TOKENS": "65536",
     "CONFIG__PUBLISH_OUTPUT_PROGRESS": "false",
     "GITEA__PR_COMMANDS": '["/review"]',
     "GITEA__PUSH_COMMANDS": '["/review"]',
@@ -117,6 +120,21 @@ class TestReviewOnlyContract:
         assert "CONFIG__MAX_MODEL_TOKENS" in data, "the prompt cap falls back to PR-Agent's 32000 default"
         assert data["CONFIG__MAX_MODEL_TOKENS"] == data.get("CONFIG__CUSTOM_MODEL_MAX_TOKENS"), (
             "the prompt cap and the model budget disagree, so the smaller one silently wins"
+        )
+
+    def test_the_output_cap_is_above_the_providers_default(self) -> None:
+        """Left unset, PR-Agent sends no `max_tokens` and NaN cuts every completion at
+        32768 tokens, reasoning included. A flash model whose reasoning runs past that
+        ends with `finish_reason: length` and no content, and the review is lost
+        (TOOL-093, #1957). Measured 2026-10-18: deepseek-v4-flash stopped at exactly
+        32768 with no `max_tokens` and finished at 41445 with 100000. A cap at or below
+        the default would pass a presence check and change nothing on the wire.
+        """
+        data = _pr_agent_config().get("data") or {}
+        cap = int(data.get("CONFIG__MAX_OUTPUT_TOKENS", "0"))
+        assert cap > NAN_DEFAULT_COMPLETION_CAP, (
+            f"CONFIG__MAX_OUTPUT_TOKENS={cap} does not raise NaN's {NAN_DEFAULT_COMPLETION_CAP}-token default; "
+            "PR-Agent treats 0 as unset, so this would restore the length failure"
         )
 
     def test_no_repo_setting_key_is_present(self) -> None:
