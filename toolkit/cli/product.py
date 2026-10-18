@@ -63,10 +63,10 @@ def app_for_event(
     """
     try:
         route = product_registry.event_route(event)
-    except product_registry.UnknownEventError as e:
+    except product_registry.UnknownEventError:
         refusal = {
             "error": f"event type '{event}' is not mapped to any product",
-            "why": str(e),
+            "why": "the registry alone says which event type means which app; the dispatch payload never names it",
             "fix": f"admit the product, or add the event type to its entry, in {product_registry.registry_path()}",
         }
         if as_json:
