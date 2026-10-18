@@ -972,16 +972,6 @@ def build_service_tables(
                 "Quota / R2 / Disk",
                 version="CronJobs",
             ),
-            _svc(
-                "Homepage",
-                f"https://home.{prefix}",
-                f"https://home.{prefix}",
-                "Public",
-                "Core",
-                nd,
-                "This dashboard",
-                version="latest",
-            ),
         ]
 
     staging = _env_services("staging")

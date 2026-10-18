@@ -67,7 +67,6 @@ help:
 	@echo "  make monitoring-status   Check Uptime Kuma status on RPi3"
 	@echo ""
 	@echo "Kubernetes:"
-	@echo "  make sync-homepage      Sync Homepage config from common.yaml"
 	@echo "  make sync-k8s-images    Sync image tags from common.yaml to kustomization.yaml"
 	@echo "  make sync-oidc-hashes ENV=x  Generate oidc-clients.yml from the SSOT + SOPS digests"
 	@echo "  make validate-sync      Check for drift in generated files (ADR-027)"
@@ -1532,14 +1531,6 @@ tf-compute-plan:
 
 tf-compute-apply:
 	@$(_TF) compute apply $(_TF_ALLOW)
-
-# sync-homepage regenerates config files from SSOT. Deployment happens via
-# `make deploy-k8s` — configMapGenerator hash suffix auto-triggers rolling update.
-# No more manual kubectl create/apply/restart (DASH-DT-002, RELIAB-002 pattern).
-.PHONY: sync-homepage
-sync-homepage:
-	@$(TOOLKIT) sync homepage
-	@echo "✓ Homepage config regenerated. Run 'make deploy-k8s ENV=x' to deploy."
 
 .PHONY: sync-branding
 sync-branding: ## Sync master brand CSS from common.yaml SSOT (ADR-071)
