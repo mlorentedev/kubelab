@@ -2,12 +2,13 @@
 
 from typing import Any
 
-from toolkit.config.constants import COMPONENTS, PATH_STRUCTURES, VALIDATION_RULES
+from toolkit.config.constants import PATH_STRUCTURES, VALIDATION_RULES
 from toolkit.core.logging import logger
 from toolkit.core.templating import create_renderer
 from toolkit.features.configuration import ConfigurationManager
 from toolkit.features.generator_base import BaseGenerator
 from toolkit.features.k8s_secrets import SECRET_DEFINITIONS
+from toolkit.features.product_registry import platform_apps
 
 
 class K8sGenerator(BaseGenerator):
@@ -235,7 +236,7 @@ class K8sGenerator(BaseGenerator):
         }
 
         apps = []
-        for component in COMPONENTS.PLATFORM_APPS:
+        for component in platform_apps():
             image_name = self._find_var(env_vars, component, "IMAGE_NAME")
             domain = self._find_var(env_vars, component, "DOMAIN")
             port = self._find_var(env_vars, component, "DEFAULT_PORT")

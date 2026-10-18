@@ -39,7 +39,7 @@ It is the L1-platform Go API (single binary), hosted in kubelab, consumed by pro
 
 ### D2 — Modular monolith at current scale
 
-One deployable, with clean internal domain modules (`newsletter/`, `llm/`, `knowledge/`, …), each with its own service boundary. This is ADR-029's "single binary at current scale" — **not** a microservice per capability. ADR-034 (language-per-service) stands: spin a *separate* service only when a distinct boundary or language genuinely demands it (as `widget-proxy` did), never by reflex.
+One deployable, with clean internal domain modules (`newsletter/`, `llm/`, `knowledge/`, …), each with its own service boundary. This is ADR-029's "single binary at current scale" — **not** a microservice per capability. ADR-034 (language-per-service) stands: spin a *separate* service only when a distinct boundary or language genuinely demands it (as `widget-proxy` was planned to, before DT-004 was abandoned), never by reflex.
 
 ### D3 — The platform/product boundary rule (the test)
 
