@@ -185,7 +185,7 @@ class TestModelChainFollowsTheReviewerPool:
     fallback while the pool and CI had two.
     """
 
-    def test_the_chain_is_the_pools_nan_members_heaviest_first(self) -> None:
+    def test_the_chain_is_the_pools_nan_members_in_forge_rank_order(self) -> None:
         data = _pr_agent_config().get("data") or {}
         chain = [data["CONFIG__MODEL"], *json.loads(data["CONFIG__FALLBACK_MODELS"])]
         expected = _nan_chain_from_pool()

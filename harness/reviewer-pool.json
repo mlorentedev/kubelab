@@ -93,7 +93,7 @@
         "weight": 19,
         "forge_rank": 1
       },
-      "why": "1M context and a mandatory reasoning chain — roughly 4x slower than qwen3.6 on trivial prompts, which is the correct trade for a gate that runs once per spec. Exercised: BUG-074 round 3 re-ran the mutation battery itself rather than trusting the spec's table. kubelab, 2026-08-21 (#1205): under PR-Agent this model returned a 200 with an EMPTY body, spending its output on reasoning (4m15s of silence on #1202, run 32440498259), which is why it is not PR-Agent's primary here either."
+      "why": "1M context and a mandatory reasoning chain — roughly 4x slower than qwen3.6 on trivial prompts, which is the correct trade for a gate that runs once per spec. Exercised: BUG-074 round 3 re-ran the mutation battery itself rather than trusting the spec's table. kubelab, 2026-08-21 (#1205): under PR-Agent this model returned a 200 with an EMPTY body, spending its output on reasoning (4m15s of silence on #1202, run 32440498259), the same shape as the 32768-token completion cap NaN applies when no max_tokens is sent (#1957, lesson-601). The forge reviewer now sends max_tokens 65536 (#2479) and tries this model first (forge_rank 1); CI's draw is unchanged."
     },
     {
       "id": "agy/gemini-3.8-flash-high",
