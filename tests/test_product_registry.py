@@ -79,6 +79,21 @@ class TestAppForEvent:
         with pytest.raises(UnknownEventError, match=r"ghost-image-published.*registry\.yaml"):
             product_registry.app_for_event("ghost-image-published")
 
+    def test_the_committed_web_entry_matches_what_web_sends(self) -> None:
+        """The fixture proves the mapping; this pins the committed registry's one real remote product.
+
+        Its event types and repository are a two-repo agreement: mlorentedev/web's CI
+        dispatches these types to this repository. Rename one side and GitHub still
+        answers 204, then drops the event, so nothing errors. The staging type is also
+        the one ``web-image-receiver.yml`` listens for.
+        """
+        web = product_registry.load_registry().products["web"]
+        assert (web.repository, web.forge, web.receiver) == ("mlorentedev/web", "github", "legacy")
+        assert (web.events.staging, web.events.prod) == ("web-image-published", "web-release-published")
+        receiver = yaml.safe_load((REPO / ".github" / "workflows" / "web-image-receiver.yml").read_text())
+        triggers = receiver.get("on") or receiver.get(True)
+        assert web.events.staging in triggers["repository_dispatch"]["types"]
+
 
 class TestLoadRefuses:
     def test_an_event_type_claimed_by_two_apps(self, tmp_path: Path) -> None:
