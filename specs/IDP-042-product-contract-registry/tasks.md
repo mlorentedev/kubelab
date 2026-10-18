@@ -17,7 +17,7 @@ created: "2026-10-17"
 
 - [x] Operator answers Q1-Q8 in `proposal.md` (Q8: the WIP override for this spec, recorded as `wip_override`)
 - [ ] `/spec check IDP-042-product-contract-registry` returns PASS
-- [ ] Branch for PR 1 created from master: `feat/idp-042-contract-schema` (worktree outside the repo, `make worktree-init` run once)
+- [x] Branch for PR 1 created from master: `feat/idp-042-contract-schema` (worktree outside the repo, `make worktree-init` run once)
 - [ ] `proposal.md` carries no `[AGENT-DRAFT]` / `[AGENT-SUGGESTION]` tag
 
 ## Implementation
@@ -37,9 +37,9 @@ PR 1 and PR 2 are independent and can be written in parallel. PR 5 may land at a
 
 Branch `feat/idp-042-contract-schema`. Commit prefix `feat(toolkit):`.
 
-- [ ] [AC2] Failing test `tests/test_product_contract.py`: a valid contract (web's, hand-written from `values/staging.yaml:44-54` and `common.yaml:949-960`) validates; each of these is refused, naming the field: unknown top-level key, port `0` and `70000`, a hostname with a scheme or uppercase, a health path without a leading `/`, `auth: admin`, `schema_version` absent or `2`, a secret name with a space, and a contract that carries `repository`, `repo`, `source` or `remote` (refused as unknown keys, with a message that says the repository comes from the registry). Run: `poetry run pytest tests/test_product_contract.py --no-cov -q`. Expected: FAIL, `ModuleNotFoundError: toolkit.features.product_contract`
-- [ ] [AC2] Failing test, same file: a refusal renders three labelled lines `ERROR:`, `WHY:`, `FIX:`, and `ERROR` names the contract path and field. Expected: FAIL
-- [ ] [AC2] `toolkit/features/product_contract.py`: pydantic model (`extra="forbid"`, anchored patterns), `validate_contract(path) -> Contract`, `ContractError(error, why, fix)`. Run the file's tests. Expected: PASS
+- [x] [AC2] Failing test `tests/test_product_contract.py`: a valid contract (web's, hand-written from `values/staging.yaml:44-54` and `common.yaml:949-960`) validates; each of these is refused, naming the field: unknown top-level key, port `0` and `70000`, a hostname with a scheme or uppercase, a health path without a leading `/`, `auth: admin`, `schema_version` absent or `2`, a secret name with a space, and a contract that carries `repository`, `repo`, `source` or `remote` (refused as unknown keys, with a message that says the repository comes from the registry). Run: `poetry run pytest tests/test_product_contract.py --no-cov -q`. Expected: FAIL, `ModuleNotFoundError: toolkit.features.product_contract`
+- [x] [AC2] Failing test, same file: a refusal renders three labelled lines `ERROR:`, `WHY:`, `FIX:`, and `ERROR` names the contract path and field. Expected: FAIL
+- [x] [AC2] `toolkit/features/product_contract.py`: pydantic model (`extra="forbid"`, anchored patterns), `validate_contract(path) -> Contract`, `ContractError(error, why, fix)`. Run the file's tests. Expected: PASS
 - [ ] [AC2] [P] Failing then passing test `tests/test_product_contract_schema.py`: `toolkit/schemas/kubelab-product.schema.json` equals `Contract.model_json_schema()` serialised with sorted keys, and carries `$id`. Generate the file with `poetry run python -m toolkit.features.product_contract --write-schema`. Expected: FAIL (file absent), then PASS
 - [ ] [AC2] `toolkit/cli/product.py`: `toolkit product validate --contract PATH [--json]`, exit 1 with the three-line error (or a JSON object with `error`, `why`, `fix`). Wire it into the CLI entry. Test with `typer.testing.CliRunner` for exit code and JSON shape. Expected: PASS
 - [ ] Offline check: `poetry run toolkit product validate --contract tests/fixtures/product/web.kubelab.yaml --json` prints `{"ok": true, ...}` and exits 0; no SOPS key, no network

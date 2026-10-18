@@ -78,6 +78,7 @@ REFUSED = [
     pytest.param(_set("port", 70000), "port", id="port-above-range"),
     # YAML hands "8080" over as a string and true as a bool; neither may be coerced.
     pytest.param(_set("port", "8080"), "port", id="port-as-string"),
+    pytest.param(_set("port", True), "port", id="port-as-bool"),
     pytest.param(_host("staging", "https://staging.mlorente.dev"), "hostnames.staging", id="hostname-with-scheme"),
     pytest.param(_host("prod", "Mlorente.dev"), "hostnames.prod", id="hostname-uppercase"),
     pytest.param(_host("staging", "localhost"), "hostnames.staging", id="hostname-single-label"),
@@ -159,3 +160,14 @@ def test_a_refusal_renders_error_why_and_fix(tmp_path: Path) -> None:
     assert str(path) in lines[0]
     assert "port" in lines[0]
     assert all(line.split(":", 1)[1].strip() for line in lines)
+
+
+def test_a_python_object_tag_is_refused_not_constructed(tmp_path: Path) -> None:
+    """The duplicate-key loader extends SafeLoader; it must not gain any unsafe constructor."""
+    path = tmp_path / "kubelab.yaml"
+    path.write_text("schema_version: !!python/object/apply:os.getcwd []\n")
+
+    with pytest.raises(ContractError) as excinfo:
+        validate_contract(path)
+
+    assert "not valid YAML" in excinfo.value.error
