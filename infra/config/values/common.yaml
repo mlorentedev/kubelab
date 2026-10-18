@@ -1988,6 +1988,14 @@ apps:
             email: breakglass@kubelab.live
             secret: apps.services.ai.open_webui.admin_password
           loki: {}
+          uptime-kuma:
+            # The private path only (#2483): the EndpointSlice address over the tailnet
+            # (RPi3), never the public route or the IdP. Not an account form: Kuma's own
+            # login (SOPS `admin_user`/`admin_password`, kept in step by `credentials
+            # generate`) still guards the dashboard until phase 2 of #2482 turns it off,
+            # and declaring it here would pull that password into `--group break-glass`,
+            # which has no Kuma reconciler.
+            path: /dashboard
           vikunja:
             none: "Task board, not a 3 AM service (ADR-028): it waits for the IdP to come back."
           n8n:

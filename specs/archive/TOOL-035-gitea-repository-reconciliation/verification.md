@@ -13,9 +13,9 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - [x] AC2 (undeclared is reported, never deleted) -> `890f6f56` / `test_the_plan_has_no_deletion_field` (structural, over `dataclasses.fields`)
 - [x] AC3 (issues and pull requests carry over) -> `personal/resume`, counts under *AC3 — `resume` migrated*
 - [x] AC4 (`hefesto` owns nothing) -> live listing under *AC1/AC4 measured on prod*, printed by the reconcile itself
-- [ ] AC5 (migration credential scoped and checked both ways) -> both transcripts
-- [ ] AC6 (`ci.yml`'s six jobs green on `act_runner`) -> run URL
-- [ ] AC7 (`act_runner` registration idempotent) -> `changed=0` transcript
+- [x] AC5 (migration credential scoped and checked both ways) -> both transcripts under *AC5 — the migration credential, checked by consequence*
+- [x] AC6 (`ci.yml`'s six jobs green on `act_runner`) -> `personal/resume` run 9, sha `3b1c0629`, recorded in https://github.com/mlorentedev/kubelab/issues/1076#issuecomment-5536451906; accepted loss under *AC6 — the three workflows that do not port*
+- [x] AC7 (`act_runner` registration idempotent) -> `changed=10` then `changed=0`, runner `kubelab-bee-gitea` online, PR #1597, https://github.com/mlorentedev/kubelab/issues/1076#issuecomment-5520924042
 
 ## Baselines measured before any change (2026-08-27)
 
@@ -415,11 +415,25 @@ that expired 2026-08-23. The key this repository stores is the healthy one (veri
 prefixes, never values), so nothing is broken — but it reddens `check-expiry` permanently, and a
 control that always fails stops being read. Filed as #1485 (VPN-014).
 
+## AC6 — the three workflows that do not port (accepted loss)
+
+Risk 4 measured three of `resume`'s five workflows as non-portable, because each one speaks the
+GitHub API as a platform. Each is recorded here with what replaces it:
+
+| workflow | outcome on Gitea | where it is tracked |
+|---|---|---|
+| `release.yml` (release-please) | no replacement yet | kubelab#1624 (TOOL-061), open |
+| `add-to-project.yml` | dropped on Gitea | parked in `personal/resume#260` (Gitea) |
+| `bitacora-status.yml` | dropped on Gitea | parked in `personal/resume#260` (Gitea) |
+
 ## Test status
 
-- Test suite: `<command> -> <output / coverage %>`
-- Manual smoke test: what was exercised, what was observed
-- No regressions in existing test suite: yes / no (if no, document)
+- Test suite: `tests/test_gitea_repo_reconcile.py`, `tests/test_gitea_repo_execute.py`,
+  `tests/test_gitea_actions_runner.py`, `tests/test_secret_expiry_lookup.py` on master, run by CI on
+  every PR. Live: `tests/infra/test_gitea_runner_registered_live.py`,
+  `tests/infra/test_gitea_anonymous_surface_live.py`.
+- Manual smoke test: the prod reconcile, migration and runner transcripts above.
+- No regressions in existing test suite: yes (CI green on #1597 and on every later master build).
 
 ## Decisions made during implementation
 
@@ -432,21 +446,35 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
   Operator decision, and it follows from the Why: migrating a repository whose CI is dead into a forge
   with no CI does not close the pain. #504's evaluation is answered by construction here.
 
+## Review dispositions (review.md, nan/glm5.3-flash, PASS-WITH-GAPS, 2026-10-18)
+
+1. Stale `tasks.md` PR3 and Closing boxes. Accepted as stale. The evidence of record for those
+   tasks is the shipped diff: `compose.yml.j2` (`GITEA__actions__ENABLED`),
+   `act-runner-config.yaml.j2` and PR #1597. The boxes are left unticked, because editing `tasks.md`
+   after the review would invalidate it.
+2. `features.json` absent. Accepted. This spec predates the per-feature file. Its ACs are verified
+   by the named tests and transcripts above, and the CI guard does not require the file.
+3. Migration PAT expiry (2026-10-27). Ticketed as kubelab#2488 (refuse before the call). The
+   `openkm-brain` migration also needs a reissued token.
+4. AC1's lost first-run transcript. Accepted as a stated gap that cannot be closed retroactively.
+   AC1 stands on the convergence run plus PR2's first `--apply`.
+5. Live claims accepted on citation. This is a standing limitation of a review with no forge
+   credentials. The live suites are named in *Test status*.
+
 ## Promotion candidates
 
 Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.
 
-- [ ] Lesson for the repo's `docs/lessons/`? Likely yes — the portability line for Gitea Actions is
-      "does the action talk to the GitHub API as a platform, or only to the runner", which predicts
-      the outcome better than any compatibility list.
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? Possibly — ADR-065 left "what must be
-      true before the GitHub copy is retired" open, and Risk 3 (which forge accepts a merge during the
-      pilot) is the first half of that answer.
-- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. Probably no.
+- [x] Lesson for the repo's `docs/lessons/`? yes: `docs/lessons/ci-automation/lesson-598-a-workflow-ports-to-gitea-unless-it-uses-github-as-a-platform.md`
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: Risk 3's answer is an operator
+      decision for the pilot window, recorded in `tasks.md`. "What must be true before the GitHub copy
+      is retired" belongs to the cutover of each repository, and the ts-bridge cutover is carried on
+      its own ticket (#2485), not decided here.
+- [x] New pattern candidate for `00_meta/patterns/`? no: it has happened in one project only.
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/TOOL-035-gitea-repository-reconciliation/` -> `specs/archive/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/TOOL-035-gitea-repository-reconciliation/` -> `specs/archive/`
 - [ ] Bitácora board tickets moved to Done / closed with PR links (ADR-018): #1076, #1389, #504
-- [ ] Promotions above executed (if any)
+- [x] Promotions above executed (if any)
