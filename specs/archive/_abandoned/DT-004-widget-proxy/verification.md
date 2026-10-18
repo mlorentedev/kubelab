@@ -62,7 +62,7 @@ Before archiving, flag what (if anything) should be promoted to the vault. If al
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/DT-004-widget-proxy/` -> `specs/archive/DT-004-widget-proxy/`
+- [x] `proposal.md` frontmatter set to `status: abandoned` (by `dotf spec archive --abandoned`)
+- [x] Folder moved: `specs/DT-004-widget-proxy/` -> `specs/archive/_abandoned/DT-004-widget-proxy/`
 - [ ] Tracking issue #465 closed as abandoned, pointing at #2416 (task state is on the board, ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] Promotions above executed (if any)
