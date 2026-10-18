@@ -6,7 +6,7 @@ owner: manu
 date: "2026-10-18"
 issue: "kubelab#2449"
 tags: [architecture, decision, platform, product-contract, resource-claims, secrets, gitops, self-service]
-depends_on: [adr-014-secrets-management-strategy, adr-038-secret-delivery-paths, adr-042-reference-architecture, adr-046-gitops-delivery-promotion-strategy, adr-049-edge-object-storage-placement, adr-050-cross-context-command-center, adr-067-product-contract-and-agent-access]
+depends_on: [adr-014-secrets-management-strategy, adr-038-secret-delivery-paths, adr-042-reference-architecture, adr-046-gitops-delivery-promotion-strategy, adr-049-edge-object-storage-placement-doctrine, adr-050-cross-context-command-center, adr-067-product-contract-and-agent-access]
 created: "2026-10-18"
 ---
 
@@ -204,7 +204,7 @@ Deferred: SMTP, queues. n8n is not a resource: it is not multi-tenant, and the n
 
 - **The problem, measured.** Today the reviewer's weighted model pool, its route script and its workflow are copied into each GitHub repository that uses them. The forge's reviewer is a separate webhook pod with one fixed model and no pool (#2295). Every new repository means another copy, and the copies drift.
 - **The rule.** A capability every repository needs (the reviewer first; later the review attestation and the knowledge gate) runs as a platform service. A repository opts in, by a `review:` claim or by the receiver registering the forge webhook. It never carries the pool, the routing logic or the provider keys.
-- **The shape** is the hosted-bot pattern the industry uses for review bots: an app installed per repository, configured centrally. It is not a reusable workflow, which still puts a caller file and the provider keys in every repository (C2, C22).
+- **The shape** is the hosted-bot pattern the industry uses for review bots: an app installed per repository, configured centrally. It is not a reusable workflow, which still puts a caller file and the provider keys in every repository, and copies drift (C7, C22).
   - **One receiver per forge**, in webhook mode, on an always-on node (C24).
   - **The pool is read from one SSOT** and drawn per request.
   - **The publish guard** reports a run that published nothing as a failure, not as silence (#1957).
