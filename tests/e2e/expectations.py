@@ -161,6 +161,15 @@ EXPECTATIONS: dict[str, ServiceExpectation] = {
         health_status=(200, 302),
         skip_in_envs=("prod",),  # Internal-only in prod (no public IngressRoute)
     ),
+    "uptime_kuma": ServiceExpectation(
+        # #2483: the admin surface sits behind Authelia; status pages and the push
+        # endpoint every node's backup heartbeat calls do not. A bad push token gets
+        # Kuma's own 404, never a redirect to the portal.
+        health_status=(200, 302),
+        auth_protected=True,
+        api_endpoints={"/api/entry-page": (200,), "/api/push/not-a-token": (404,)},
+        skip_in_envs=("dev",),  # not behind Traefik in the dev Compose stack
+    ),
     # -- Core --
     "traefik": ServiceExpectation(
         health_status=(200, 302),
