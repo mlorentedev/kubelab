@@ -1,10 +1,12 @@
-"""The lesson index counters must be derived, and the deriver must actually derive.
+"""The lesson index row order is derived, and the deriver must actually derive.
 
-`tests/test_lesson_index_integrity.py` already asserts the counters match the
-files. It is the red light. This file is about the thing that keeps them from
-going wrong in the first place (#1649), and about the deriver itself -- because
-a reconciler that found nothing would satisfy every "counters match" test in the
-repo while doing nothing at all.
+The indexes stated counts until #2525: a total, a column and a heading per
+category, derived by this tool since #1649. A derived count is still a shared
+line, and two PRs that each add a lesson merge their edits to it as text with
+no conflict, so master broke twice on 2026-10-18. The counts are gone, and
+`tests/test_lesson_index_integrity.py` asserts the rows instead and refuses a
+count that comes back. What is left to derive is each category's row order,
+plus the hazards that make a rewrite the wrong operation.
 
 Every fixture here builds a lesson tree in tmp_path rather than reading the real
 one: a test that only ever sees a correct corpus cannot tell "agrees" from
@@ -31,15 +33,13 @@ PRE_COMMIT = REPO_ROOT / ".pre-commit-config.yaml"
 PRE_PUSH = REPO_ROOT / ".github" / "hooks" / "pre-push.sh"
 
 
-def _tree(root: pathlib.Path, categories: dict[str, int], total: int | None = None) -> pathlib.Path:
-    """A miniature lessons tree whose declared numbers are whatever we say."""
+def _tree(root: pathlib.Path, categories: dict[str, int]) -> pathlib.Path:
+    """A miniature lessons tree with `categories[slug]` lessons in each category."""
     root.mkdir(parents=True, exist_ok=True)
-    rows = "\n".join(f"| [{slug}]({slug}/_index.md) | {n} | Scope for {slug} |" for slug, n in categories.items())
-    stated = sum(categories.values()) if total is None else total
+    rows = "\n".join(f"| [{slug}]({slug}/_index.md) | Scope for {slug} |" for slug in categories)
     (root / "_index.md").write_text(
-        "# Lessons\n\n"
-        f"{stated} lessons, one file each. Newest: 2026-01-01. Open a category for its list.\n\n"
-        "| Category | # | Scope |\n|---|---|---|\n" + rows + "\n",
+        "# Lessons\n\nOne file per lesson. Open a category for its list.\n\n"
+        "| Category | Scope |\n|---|---|\n" + rows + "\n",
         encoding="utf-8",
     )
     n = 100
@@ -51,13 +51,12 @@ def _tree(root: pathlib.Path, categories: dict[str, int], total: int | None = No
             n += 1
             fname = f"lesson-{n}-a-lesson.md"
             (cat / fname).write_text("---\nid: x\n---\nbody\n", encoding="utf-8")
-            # One fixed date across the fixture: the header below states the
-            # same one, so a tree built here is internally consistent and any
-            # fix the deriver reports is about a count, not about the date.
+            # One fixed date across the fixture, so the order within it comes
+            # from the number alone.
             lines.append(f"| {n} | [A lesson]({fname}) | 2026-01-01 |")
         lines.reverse()  # newest first: one date, so the higher number leads
         (cat / "_index.md").write_text(
-            f"# {slug}\n\n{declared} lessons, newest first. Back to [all categories](../_index.md).\n\n"
+            f"# {slug}\n\nNewest first. Back to [all categories](../_index.md).\n\n"
             "| # | Lesson | Date |\n|---|---|---|\n" + "\n".join(lines) + "\n",
             encoding="utf-8",
         )
@@ -71,43 +70,34 @@ class TestTheDeriverActuallyDerives:
         root = _tree(tmp_path / "lessons", {"alpha": 3, "beta": 2})
         assert lessons_index.reconcile(root) == []
 
-    def test_a_wrong_total_is_found(self, tmp_path: pathlib.Path) -> None:
-        root = _tree(tmp_path / "lessons", {"alpha": 3, "beta": 2}, total=99)
-        fixes = lessons_index.reconcile(root)
-        assert fixes, "a total of 99 over 5 files was not detected"
-        assert any("5 lessons" in f.now for f in fixes)
+    def test_a_new_lesson_touches_only_its_own_row(self, tmp_path: pathlib.Path) -> None:
+        """The property #2525 is for: adding a lesson writes no shared line.
 
-    def test_a_wrong_category_count_is_found(self, tmp_path: pathlib.Path) -> None:
-        root = _tree(tmp_path / "lessons", {"alpha": 3, "beta": 2})
-        cat = root / "alpha" / "_index.md"
-        cat.write_text(cat.read_text().replace("3 lessons, newest first", "7 lessons, newest first"))
-        assert any(f.path == cat for f in lessons_index.reconcile(root))
-
-    def test_the_arrival_of_one_lesson_moves_three_counters(self, tmp_path: pathlib.Path) -> None:
-        """The real scenario: a merge brings a lesson in and touches no counter.
-
-        Three numbers go stale at once -- the total, that category's column in
-        the top-level table, and the category's own heading. A deriver that
-        fixed only the total would leave the other two, and the integrity test
-        would still go red.
+        Two PRs that each add a lesson then edit disjoint lines of the indexes,
+        so git either merges them correctly or raises a conflict. It can no
+        longer merge two stale copies of one number into a wrong one.
         """
         root = _tree(tmp_path / "lessons", {"alpha": 3, "beta": 2})
-        (root / "alpha" / "lesson-900-arrived-by-merge.md").write_text("---\nid: x\n---\n")
-        fixes = lessons_index.reconcile(root)
-        assert len(fixes) == 3, f"expected total + column + heading, got {[str(f) for f in fixes]}"
+        (root / "alpha" / "lesson-900-arrived.md").write_text("---\nid: x\n---\n")
+        index = root / "alpha" / "_index.md"
+        _set_rows(index, ["| 900 | [Arrived](lesson-900-arrived.md) | 2026-02-01 |", *_rows(index)])
+        assert lessons_index.reconcile(root) == []
 
     def test_applying_makes_a_second_run_clean(self, tmp_path: pathlib.Path) -> None:
         """Idempotence, and the property the hook depends on: a commit that
         triggers a rewrite must not trigger another one forever."""
-        root = _tree(tmp_path / "lessons", {"alpha": 3, "beta": 2}, total=99)
+        root = _tree(tmp_path / "lessons", {"alpha": 3, "beta": 2})
+        _reverse_rows(root / "alpha" / "_index.md")
         assert lessons_index.reconcile(root, apply=True)
         assert lessons_index.reconcile(root) == []
 
     def test_check_mode_does_not_write(self, tmp_path: pathlib.Path) -> None:
-        root = _tree(tmp_path / "lessons", {"alpha": 3, "beta": 2}, total=99)
-        before = (root / "_index.md").read_text()
-        lessons_index.reconcile(root, apply=False)
-        assert (root / "_index.md").read_text() == before
+        root = _tree(tmp_path / "lessons", {"alpha": 3, "beta": 2})
+        index = root / "alpha" / "_index.md"
+        _reverse_rows(index)
+        before = index.read_text()
+        assert lessons_index.reconcile(root, apply=False)
+        assert index.read_text() == before
 
 
 def _rows(index: pathlib.Path) -> list[str]:
@@ -117,6 +107,10 @@ def _rows(index: pathlib.Path) -> list[str]:
 def _set_rows(index: pathlib.Path, rows: list[str]) -> None:
     head = [line for line in index.read_text().splitlines() if not lessons_index.LESSON_ROW.match(line)]
     index.write_text("\n".join(head + rows) + "\n")
+
+
+def _reverse_rows(index: pathlib.Path) -> None:
+    _set_rows(index, list(reversed(_rows(index))))
 
 
 class TestTheRowsAreOrderedNotHandPlaced:
@@ -173,15 +167,7 @@ class TestTheDeriverReadsTheRealCorpus:
         """If this fails, the committed indexes are stale — run
         `toolkit tools lessons-index --fix`."""
         fixes = lessons_index.reconcile(REAL_LESSONS)
-        assert not fixes, "committed indexes disagree with the files (counters or row order):\n" + "\n".join(
-            str(f) for f in fixes
-        )
-
-    def test_the_newest_date_comes_from_rows_not_mtimes(self) -> None:
-        """mtime records when a file was last touched — a rebase or a typo fix
-        moves it — while the index is stating when the newest lesson was
-        written. Reading mtimes would make the date drift on every checkout."""
-        assert lessons_index.newest_date(REAL_LESSONS) is not None
+        assert not fixes, "committed indexes are out of row order:\n" + "\n".join(str(f) for f in fixes)
 
 
 class TestTheHookIsWired:
@@ -256,72 +242,22 @@ class TestTheHookIsWired:
         )
 
 
-@pytest.mark.parametrize(
-    "line,expected",
-    [
-        ("433 lessons, one file each. Newest: 2026-09-05. Open a category for its list.", True),
-        ("| [observability](observability/_index.md) | 17 | Metrics, logs, alerting |", False),
-        ("New lessons: see [`_format.md`](_format.md) — one file per lesson, appended", False),
-    ],
-)
-def test_the_total_pattern_matches_only_the_total(line: str, expected: bool) -> None:
-    """A pattern loose enough to match prose would rewrite the prose."""
-    assert bool(lessons_index.TOTAL_LINE.match(line)) is expected
-
-
-class TestTheRewriteOnlyTouchesTheNumbers:
-    """It rewrites a line it does not own the whole of.
-
-    Raised in review: the pattern is anchored at the start and the replacement
-    was built from a fixed template, so any wording added after the date would
-    be discarded — once, invisibly, on somebody else's edit. The deriver has no
-    business editing prose.
-    """
-
-    def test_trailing_prose_survives(self, tmp_path: pathlib.Path) -> None:
-        root = _tree(tmp_path / "lessons", {"alpha": 3}, total=99)
-        top = root / "_index.md"
-        top.write_text(
-            top.read_text().replace(
-                "Open a category for its list.",
-                "Open a category for its list. Counts are derived; do not edit by hand.",
-            )
-        )
-        lessons_index.reconcile(root, apply=True)
-        line = next(ln for ln in top.read_text().splitlines() if "lessons, one file each" in ln)
-        assert line.startswith("3 lessons, one file each."), line
-        assert line.endswith("Counts are derived; do not edit by hand."), (
-            f"the rewrite dropped wording it does not own: {line!r}"
-        )
-
-    def test_an_empty_corpus_does_not_write_the_word_none(self, tmp_path: pathlib.Path) -> None:
-        """Also raised in review, and already handled — pinned so it stays that
-        way. `newest_date` returns None with no rows, and the committed date is
-        kept rather than interpolated."""
-        root = tmp_path / "lessons"
-        root.mkdir()
-        (root / "_index.md").write_text(
-            "# Lessons\n\n0 lessons, one file each. Newest: 2026-01-01. Open a category for its list.\n"
-        )
-        assert lessons_index.newest_date(root) is None
-        lessons_index.reconcile(root, apply=True)
-        assert "None" not in (root / "_index.md").read_text()
-
-
 # =============================================================================
 # #1678 AC5 — the gate must refuse what it cannot fix
 # =============================================================================
 #
-# The counters are not the only way this corpus goes wrong, and for two other
-# conditions recounting is not merely useless, it is the operation that hides
-# them. Both were measured on 2026-09-05:
+# Two conditions make a rewrite of the indexes the operation that hides a
+# defect. Both were measured on 2026-09-05, when the indexes still held counts:
 #
 #   - two branches each took the number 439 from the same master (#1683, #1695);
-#     `--fix` would write the larger total and report success over a corpus with
+#     `--fix` wrote the larger total and reported success over a corpus with
 #     two lesson 439s;
 #   - a `git reset --soft` onto a moved base staged the deletion of a peer's
 #     lesson, and the pre-commit hook adjusted the counters DOWNWARD and printed
 #     `Passed`.
+#
+# The counts are gone (#2525), but `--fix` still rewrites row order, so both
+# hazards still refuse before anything is written.
 #
 # Every test below builds its own tree. The git ones build a real repository,
 # because the distinction they turn on -- HEAD versus the index -- does not
@@ -351,17 +287,16 @@ def _repo_with_lessons(tmp_path: pathlib.Path, names: dict[str, list[str]]) -> p
         rows = []
         for fname in files:
             (lessons / category / fname).write_text("---\nid: x\n---\nbody\n", encoding="utf-8")
-            rows.append(f"| 1 | [A lesson]({fname}) | 2026-01-01 |")
+            number = lessons_index.LESSON_NAME.match(fname).group("number")  # type: ignore[union-attr]
+            rows.append(f"| {number} | [A lesson]({fname}) | 2026-01-01 |")
+        rows.sort(key=lambda r: int(r.split("|")[1]), reverse=True)  # newest first, so the fixture is clean
         (lessons / category / "_index.md").write_text(
-            f"# {category}\n\n{len(files)} lessons, newest first.\n\n"
-            "| # | Lesson | Date |\n|---|---|---|\n" + "\n".join(rows) + "\n",
+            f"# {category}\n\nNewest first.\n\n| # | Lesson | Date |\n|---|---|---|\n" + "\n".join(rows) + "\n",
             encoding="utf-8",
         )
-    total = sum(len(f) for f in names.values())
-    rows = "\n".join(f"| [{c}]({c}/_index.md) | {len(f)} | Scope |" for c, f in names.items())
+    rows = "\n".join(f"| [{c}]({c}/_index.md) | Scope |" for c in names)
     (lessons / "_index.md").write_text(
-        f"# Lessons\n\n{total} lessons, one file each. Newest: 2026-01-01. Open a category.\n\n"
-        "| Category | # | Scope |\n|---|---|---|\n" + rows + "\n",
+        "# Lessons\n\nOne file per lesson. Open a category.\n\n| Category | Scope |\n|---|---|\n" + rows + "\n",
         encoding="utf-8",
     )
     _git(repo, "init", "-q", "-b", "main")
@@ -392,7 +327,7 @@ class TestADuplicatedNumberIsRefused:
         assert lessons_index.number_collisions(lessons) == {}
         assert lessons_index.hazards(lessons) == []
 
-    def test_it_is_a_hazard_not_a_counter_fix(self, tmp_path: pathlib.Path) -> None:
+    def test_it_is_a_hazard_not_a_fix(self, tmp_path: pathlib.Path) -> None:
         lessons = _repo_with_lessons(
             tmp_path,
             {"alpha": ["lesson-439-a-ceiling.md"], "beta": ["lesson-439-a-mock.md"]},
@@ -403,27 +338,27 @@ class TestADuplicatedNumberIsRefused:
         assert "439" in found[0].detail
 
     def test_fix_writes_nothing_on_a_colliding_tree(self, tmp_path: pathlib.Path) -> None:
-        """The whole point of AC5: a stale counter AND a collision at once.
+        """The whole point of AC5: something `--fix` would rewrite AND a collision.
 
-        `--fix` here would make the total correct and leave two lesson 439s in
-        place, then report success. The counters must come out untouched.
+        `--fix` here would tidy the row order, leave two lesson 439s in place,
+        and report success. The index must come out untouched.
         """
         lessons = _repo_with_lessons(
             tmp_path,
-            {"alpha": ["lesson-439-a-ceiling.md"], "beta": ["lesson-439-a-mock.md"]},
+            {"alpha": ["lesson-438-a-gate.md", "lesson-439-a-ceiling.md"], "beta": ["lesson-439-a-mock.md"]},
         )
-        top = lessons / "_index.md"
-        top.write_text(top.read_text().replace("2 lessons, one file each", "7 lessons, one file each"))
-        before = top.read_text()
+        index = lessons / "alpha" / "_index.md"
+        _reverse_rows(index)
+        before = index.read_text()
 
         result = runner.invoke(tools_app, ["lessons-index", "--root", str(lessons), "--fix"])
 
         assert result.exit_code == 2, result.output
-        assert top.read_text() == before, "the counters were rewritten over a colliding corpus"
+        assert index.read_text() == before, "the index was rewritten over a colliding corpus"
 
 
 class TestALessonThatHeadHasAndTheTreeDoesNotIsRefused:
-    """Measured on this very branch: the counters were adjusted DOWNWARD and passed."""
+    """Measured 2026-09-05: the counters were adjusted DOWNWARD and passed."""
 
     def test_a_deleted_lesson_is_found(self, tmp_path: pathlib.Path) -> None:
         lessons = _repo_with_lessons(tmp_path, {"alpha": ["lesson-1-one.md", "lesson-2-two.md"]})
@@ -500,13 +435,13 @@ class TestALessonThatHeadHasAndTheTreeDoesNotIsRefused:
     def test_fix_writes_nothing_when_a_lesson_disappeared(self, tmp_path: pathlib.Path) -> None:
         lessons = _repo_with_lessons(tmp_path, {"alpha": ["lesson-1-one.md", "lesson-2-two.md"]})
         (lessons / "alpha" / "lesson-2-two.md").unlink()
-        top = lessons / "_index.md"
-        before = top.read_text()
+        index = lessons / "alpha" / "_index.md"
+        before = index.read_text()
 
         result = runner.invoke(tools_app, ["lessons-index", "--root", str(lessons), "--fix"])
 
         assert result.exit_code == 2, result.output
-        assert top.read_text() == before, "the counters were adjusted downward over a shrunken corpus"
+        assert index.read_text() == before, "the index was rewritten over a shrunken corpus"
 
     def test_allow_removal_opens_the_door(self, tmp_path: pathlib.Path) -> None:
         """A deliberate deletion must have an exit, or the gate gets --no-verify'd."""
@@ -516,28 +451,27 @@ class TestALessonThatHeadHasAndTheTreeDoesNotIsRefused:
         assert lessons_index.hazards(lessons, allow_removal=True) == []
 
         result = runner.invoke(tools_app, ["lessons-index", "--root", str(lessons), "--fix", "--allow-removal"])
-        assert result.exit_code == 1, result.output  # counters rewritten
-        assert "1 lessons, one file each" in (lessons / "_index.md").read_text()
+        assert result.exit_code == 0, result.output  # not refused, and nothing to reorder
 
 
 def test_the_first_fix_after_a_resolved_conflict_exits_1_once_then_0(tmp_path: pathlib.Path) -> None:
     """#2294: the sequence `checkout --theirs && add`, then `lessons-index --fix`.
 
-    A resolved merge leaves a counter that no longer matches the files. The first
+    A resolved merge can leave rows out of order. The first
     `--fix` rewrites it and exits 1 on purpose (pre-commit's rule for a hook that
     modified files); the second finds nothing and exits 0. The `Unmerged files`
     refusal that was blamed on this command is pre-commit's, raised by the global
     post-checkout hook while paths were unmerged, and is closed in dotfiles#2493.
     """
     lessons = _repo_with_lessons(tmp_path, {"alpha": ["lesson-1-one.md", "lesson-2-two.md"]})
-    top = lessons / "_index.md"
-    top.write_text(top.read_text().replace("2 lessons, one file each", "99 lessons, one file each"), encoding="utf-8")
+    index = lessons / "alpha" / "_index.md"
+    _reverse_rows(index)
 
     first = runner.invoke(tools_app, ["lessons-index", "--root", str(lessons), "--fix"])
     assert first.exit_code == 1, first.output
     assert "rewrote" in first.output
     assert "Unmerged" not in first.output
-    assert "2 lessons, one file each" in top.read_text()
+    assert [r.split(" | ")[0] for r in _rows(index)] == ["| 2", "| 1"]
 
     second = runner.invoke(tools_app, ["lessons-index", "--root", str(lessons), "--fix"])
     assert second.exit_code == 0, second.output
@@ -616,7 +550,7 @@ class TestTheHookTellsTheFailuresApart:
         the command that hides it."""
         script = PRE_PUSH.read_text(encoding="utf-8")
         hint = "toolkit tools lessons-index --fix && git commit -a --amend --no-edit"
-        assert hint in script, "the hint for the stale-counter case has gone missing"
+        assert hint in script, "the hint for the row-order case has gone missing"
         before_hint, _, _ = script.partition(hint)
         assert 'if [ "$lessons_rc" -eq 1 ]' in before_hint, (
             "the --fix hint is reachable without the exit-code-1 branch above it"

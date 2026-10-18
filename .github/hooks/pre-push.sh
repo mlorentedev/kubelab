@@ -72,9 +72,14 @@ check_merged_branch() {
 check_merged_branch "${1:-origin}"
 
 # ---------------------------------------------------------------------------
-# Guard: the lesson index counters must match the files being pushed.
+# Guard: the lesson indexes must be in order and the corpus free of hazards.
 #
-# The pre-commit hook derives them when a lesson is WRITTEN. It structurally
+# Until #2525 the indexes stated lesson counts, and this guard existed for
+# them; the indexes no longer state any count, so a merge has nothing to race
+# on. What remains is row order and the hazards below. The history stays
+# because it explains why a MERGE needs a push-time check at all.
+#
+# The pre-commit hook checks the indexes when a lesson is WRITTEN. It structurally
 # cannot see a lesson that arrived by MERGE: measured 2026-09-05, git does not
 # run pre-commit for a merge that resolves cleanly -- `Merge made by the 'ort'
 # strategy`, no hook output, 433 files and 432 declared. That is the route all
@@ -98,10 +103,10 @@ check_merged_branch "${1:-origin}"
 #
 # The exit code is read rather than merely tested, because the `--fix` hint
 # below is WRONG for two of the three failures and following it there makes the
-# defect invisible (#1678 AC5). Exit 1 is a stale counter, which --fix is exactly
-# right for. Exit 2 is a hazard -- a duplicated lesson number, or a lesson that
-# HEAD has and the tree does not -- where recounting produces a correct total
-# over a broken corpus. Exit 3 is CANNOT CHECK: the question went unanswered,
+# defect invisible (#1678 AC5). Exit 1 is rows out of order, which --fix is
+# exactly right for. Exit 2 is a hazard -- a duplicated lesson number, or a
+# lesson that HEAD has and the tree does not -- where a rewrite reports success over a
+# broken corpus. Exit 3 is CANNOT CHECK: the question went unanswered,
 # and an unanswered question is not a pass.
 #
 # Run ONCE and show the output, instead of running silently and then again to
@@ -111,8 +116,8 @@ check_merged_branch "${1:-origin}"
 # Preflight: can the tool run AT ALL in this checkout? A fresh worktree has no
 # venv, so `poetry run -- toolkit` dies with PackageNotFoundError before the
 # check starts -- and an uncaught Python exception exits 1, the SAME code the
-# checker uses for "stale counter". Measured 2026-09-06 on a canon-refresh
-# worktree: the hook printed the --fix remedy for counters that were correct.
+# checker uses for "rows out of order". Measured 2026-09-06 on a canon-refresh
+# worktree: the hook printed the --fix remedy for an index that was correct.
 # Ask the cheap question first, in a function so the test suite can exercise
 # it with a fake `poetry` on PATH, the way check_merged_branch is tested.
 toolkit_can_run() {
@@ -120,11 +125,11 @@ toolkit_can_run() {
 }
 if ! toolkit_can_run; then
   echo ""
-  echo "[ERROR] toolkit cannot be imported in this checkout, so the lesson counters"
+  echo "[ERROR] toolkit cannot be imported in this checkout, so the lesson indexes"
   echo "        were NOT checked -- and an unanswered question is not a pass."
   echo ""
   echo "        Fresh worktree or new machine: run \`poetry install\` here and push again."
-  echo "        Do NOT run --fix: it would write counters nobody has checked."
+  echo "        Do NOT run --fix: it would rewrite indexes nobody has checked."
   exit 1
 fi
 lessons_rc=0
@@ -132,18 +137,17 @@ poetry run -- toolkit tools lessons-index --check || lessons_rc=$?
 if [ "$lessons_rc" -ne 0 ]; then
   echo ""
   if [ "$lessons_rc" -eq 1 ]; then
-    echo "[ERROR] The lesson index counters disagree with the files on disk."
+    echo "[ERROR] Lesson index rows are out of order (newest first, #1912)."
     echo ""
-    echo "        Usually this means a merge brought a lesson in without touching"
-    echo "        the counters — git merges that line as text and raises no conflict."
+    echo "        Usually a merge or a hand edit placed a row; --fix reorders it."
     echo ""
     echo "          toolkit tools lessons-index --fix && git commit -a --amend --no-edit"
   elif [ "$lessons_rc" -eq 2 ]; then
-    echo "[ERROR] The lesson corpus is not in a state where the counters mean anything."
+    echo "[ERROR] The lesson corpus is not in a state where a rewrite is safe."
     echo ""
     echo "        The remedy is the one printed above, which is specific to what was"
-    echo "        found. Do NOT reach for --fix here: it would make the counters agree"
-    echo "        and leave the defect in place, which is the trap this guard exists"
+    echo "        found. Do NOT reach for --fix here: it would report success and"
+    echo "        leave the defect in place, which is the trap this guard exists"
     echo "        to close. See #1678 AC5."
   else
     # Exit 3 gets its own words because exit 2 prints a per-hazard remedy and
@@ -155,7 +159,7 @@ if [ "$lessons_rc" -ne 0 ]; then
     echo "        The reason is printed above; nothing about the corpus has been"
     echo "        verified either way. Make the question answerable (git on PATH, run"
     echo "        from inside the repository) and push again. --fix is not the answer"
-    echo "        here either: it would write counters nobody has checked."
+    echo "        here either: it would rewrite indexes nobody has checked."
   fi
   echo ""
   exit 1

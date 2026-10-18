@@ -154,7 +154,7 @@ repos:
       # red `Tests`. Closing the route needs something neither stage can be --
       # tracked as #1678, whose AC4 is exactly that gap.
       - id: lessons-index-counts
-        name: Derive lesson index counters and row order from the files
+        name: Order lesson index rows newest first
         entry: poetry run -- toolkit tools lessons-index --fix
         language: system
         files: '^docs/lessons/.*\.md$'
@@ -163,7 +163,7 @@ repos:
 
       # Lesson numbering and index integrity, the toolchain-free guard shared
       # across repos (scripts/check-lessons.sh, also run by repo-hygiene.yml).
-      # Complements lessons-index-counts: that one derives the counters, this
+      # Complements lessons-index-counts: that one orders the rows, this
       # one refuses duplicate numbers and rows that point nowhere.
       - id: check-lessons
         name: Lesson numbering and index integrity
