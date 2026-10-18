@@ -73,6 +73,10 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
             # OBS-019: read by `toolkit obs alerts` via `kubectl get secret`,
             # never mounted into the Grafana pod itself.
             "alerts-ro-token": "APPS_SERVICES_OBSERVABILITY_GRAFANA_ALERTS_RO_TOKEN",
+            # TOOL-093: the n8n webhook secret, which Grafana sends as the bearer of its
+            # `forge-review-failed` contact point. The same value every n8n webhook is
+            # authenticated with, so the two sides cannot hold different ones.
+            "n8n-webhook-secret": "APPS_SERVICES_AUTOMATION_NOTIFY_WEBHOOK_SECRET",
         },
     ),
     SecretMapping(

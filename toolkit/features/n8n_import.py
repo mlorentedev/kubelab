@@ -38,6 +38,7 @@ from typing import Any
 
 from toolkit.core.logging import logger
 from toolkit.features.configuration import ConfigurationManager
+from toolkit.features.gitea_tokens import ROTATABLE_TOKENS
 from toolkit.features.k8s_kubeconfig import output_path
 
 # n8n Header Auth credential shape. The webhook node compares the incoming header
@@ -113,10 +114,13 @@ class SharedCredential:
     """n8n credential name, neutral on purpose (never a product's)."""
 
     type: str
-    """n8n credential type; `smtp` is the only one rendered today."""
+    """n8n credential type: `smtp`, or `httpHeaderAuth` rendered as a Bearer header."""
 
     envs: frozenset[str]
     """Envs where it is imported."""
+
+    secret_key_path: str = ""
+    """SOPS dotted path of the Bearer secret. Used by `httpHeaderAuth` only; `smtp` reads `_SMTP_PATHS`."""
 
     namespace: str = _NAMESPACE
     deployment: str = _DEPLOYMENT
@@ -133,7 +137,18 @@ KUBELAB_SMTP = SharedCredential(
     envs=frozenset({"prod"}),
 )
 
-N8N_SHARED_CREDENTIALS: list[SharedCredential] = [KUBELAB_SMTP]
+# What a workflow calls the Gitea API with to comment on a PR whose review failed
+# (TOOL-093, #1957). The token is the comment-only one minted for n8n, named by the
+# rotation registry so rotating it and importing it can never read different keys.
+GITEA_REVIEW_NOTICE = SharedCredential(
+    credential_id="c9000000-0000-4000-8000-000000000002",
+    name="gitea-review-notice",
+    type=_CREDENTIAL_TYPE,
+    envs=frozenset({"prod"}),
+    secret_key_path=ROTATABLE_TOKENS["review_notice"].secret_key,
+)
+
+N8N_SHARED_CREDENTIALS: list[SharedCredential] = [KUBELAB_SMTP, GITEA_REVIEW_NOTICE]
 
 # The `infra.smtp.*` values `kubelab-smtp` is rendered from (ADR-036): the same
 # relay the API and Authelia use, so there is no second copy to drift.
@@ -387,7 +402,11 @@ def read_workflow_ids(workflow: dict[str, Any]) -> tuple[str, str | None]:
     if not workflow_id:
         raise ValueError("workflow JSON has no root 'id' — required for idempotent upsert (TOOL-009)")
 
-    ids = {r.id for r in read_credential_refs(workflow) if r.type == _CREDENTIAL_TYPE and r.id}
+    # A shared credential is referenced from a node but is not the workflow's own: a
+    # workflow with its webhook credential and a shared Gitea one would otherwise read as
+    # two that disagree.
+    shared_ids = {c.credential_id for c in N8N_SHARED_CREDENTIALS}
+    ids = {r.id for r in read_credential_refs(workflow) if r.type == _CREDENTIAL_TYPE and r.id not in shared_ids}
     if len(ids) > 1:
         raise ValueError(f"httpHeaderAuth nodes disagree on the credential id {sorted(ids)}; only one can exist in n8n")
     return str(workflow_id), (ids.pop() if ids else None)
@@ -495,6 +514,12 @@ def _import_shared_credentials(env: str, cm: ConfigurationManager, dry_run: bool
 
 def _render_shared(cred: SharedCredential, cm: ConfigurationManager) -> dict[str, Any] | None:
     """The `import:credentials` entry for `cred`, or None (logged) if a value is absent."""
+    if cred.type == _CREDENTIAL_TYPE:
+        secret = cm.get_secret_by_path(cred.secret_key_path)
+        if not secret:
+            logger.error(f"  Missing SOPS value at {cred.secret_key_path!r} — cannot import '{cred.name}'")
+            return None
+        return _header_auth_entry(cred.credential_id, cred.name, secret)
     if cred.type != _SMTP_TYPE:
         logger.error(f"  Shared credential '{cred.name}' has type '{cred.type}', which this importer cannot render")
         return None
@@ -524,7 +549,7 @@ def _unimported_references(
     credential of this env that imported, under the same id and name. Anything else
     imports without complaint and fails at the workflow's first execution.
     """
-    shared = {c.credential_id: c for c in N8N_SHARED_CREDENTIALS if env in c.envs and c.type == _SMTP_TYPE}
+    shared = {c.credential_id: c for c in N8N_SHARED_CREDENTIALS if env in c.envs}
     problems = []
     for ref in refs:
         if ref.type == _CREDENTIAL_TYPE and spec.secret_key_path and ref.name == spec.credential_name:

@@ -114,6 +114,14 @@ spec:
                 secretKeyRef:
                   name: grafana-admin
                   key: oidc-client-secret
+            # The bearer of the `forge-review-failed` contact point (TOOL-093). Not a
+            # GF_ setting: Grafana expands `$N8N_WEBHOOK_SECRET` in the alerting
+            # provisioning file from its own environment.
+            - name: N8N_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin
+                  key: n8n-webhook-secret
           volumeMounts:
             - name: data
               mountPath: /var/lib/grafana
