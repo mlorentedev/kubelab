@@ -18,7 +18,7 @@ created: "2026-10-17"
 - [x] Operator answers Q1-Q8 in `proposal.md` (Q8: the WIP override for this spec, recorded as `wip_override`)
 - [ ] `/spec check IDP-042-product-contract-registry` returns PASS
 - [x] Branch for PR 1 created from master: `feat/idp-042-contract-schema` (worktree outside the repo, `make worktree-init` run once)
-- [ ] `proposal.md` carries no `[AGENT-DRAFT]` / `[AGENT-SUGGESTION]` tag
+- [x] `proposal.md` carries no `[AGENT-DRAFT]` / `[AGENT-SUGGESTION]` tag
 
 ## Implementation
 
