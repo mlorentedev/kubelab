@@ -125,12 +125,20 @@ class _DuplicateKeyError(Exception):
         self.line = line
 
 
+class _MergeKeyError(Exception):
+    def __init__(self, line: int) -> None:
+        super().__init__(line)
+        self.line = line
+
+
 class _UniqueKeyLoader(yaml.SafeLoader):
-    """``SafeLoader`` that refuses a mapping declaring the same key twice."""
+    """``SafeLoader`` that refuses a mapping declaring the same key twice, or merging another one in."""
 
     def construct_mapping(self, node: yaml.MappingNode, deep: bool = False) -> dict[Hashable, Any]:
         seen: set[Hashable] = set()
         for key_node, _ in node.value:
+            if key_node.tag == "tag:yaml.org,2002:merge":
+                raise _MergeKeyError(key_node.start_mark.line + 1)
             key = self.construct_object(key_node, deep=deep)
             if isinstance(key, Hashable):
                 if key in seen:
@@ -204,6 +212,12 @@ def load_document(path: Path) -> dict[str, Any]:
             f"{path}: field '{e.key}' is declared twice (duplicate key at line {e.line})",
             "YAML keeps only the last value, so a reader of the first one would be misled about what deploys.",
             f"keep a single '{e.key}' key.",
+        ) from None
+    except _MergeKeyError as e:
+        raise ContractError(
+            f"{path}: a YAML merge key '<<' is used at line {e.line}",
+            "an explicit key silently overrides a merged one, so a reader of the merged block would be misled.",
+            "write every field out; a contract is short enough not to need anchors.",
         ) from None
     except yaml.YAMLError as e:
         raise ContractError(

@@ -171,3 +171,29 @@ def test_a_python_object_tag_is_refused_not_constructed(tmp_path: Path) -> None:
         validate_contract(path)
 
     assert "not valid YAML" in excinfo.value.error
+
+
+def test_a_merge_key_is_refused(tmp_path: Path) -> None:
+    """``<<`` lets an explicit key silently override a merged one; refused by name, not by accident."""
+    path = tmp_path / "kubelab.yaml"
+    path.write_text("defaults: &d\n  port: 8080\n<<: *d\n" + FIXTURE.read_text())
+
+    with pytest.raises(ContractError) as excinfo:
+        validate_contract(path)
+
+    assert "merge key" in excinfo.value.error
+    assert "line 3" in excinfo.value.error
+
+
+@pytest.mark.parametrize(
+    "image",
+    [
+        "docker.io/mlorentedev/kubelab-web",
+        "ghcr.io/owner/app",
+        "localhost:5000/app",
+        "registry.example.com/team/sub/app_name",
+        "docker.io/library/nginx",
+    ],
+)
+def test_image_repositories_in_common_forms_are_accepted(tmp_path: Path, image: str) -> None:
+    assert validate_contract(_write(tmp_path, _set("image", image))).image == image
