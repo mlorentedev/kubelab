@@ -116,12 +116,17 @@ spec:
                   key: oidc-client-secret
             # The bearer of the `forge-review-failed` contact point (TOOL-093). Not a
             # GF_ setting: Grafana expands `$N8N_WEBHOOK_SECRET` in the alerting
-            # provisioning file from its own environment.
+            # provisioning file from its own environment. `optional`: the key arrives with
+            # `apply-secrets`, not with the image, and a pod that waits for it
+            # (CreateContainerConfigError, Recreate strategy) takes Grafana, and the page,
+            # down until an operator runs it. Without the key the bearer is empty and n8n
+            # refuses the call; the page still goes out.
             - name: N8N_WEBHOOK_SECRET
               valueFrom:
                 secretKeyRef:
                   name: grafana-admin
                   key: n8n-webhook-secret
+                  optional: true
           volumeMounts:
             - name: data
               mountPath: /var/lib/grafana

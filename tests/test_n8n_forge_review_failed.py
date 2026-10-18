@@ -45,7 +45,7 @@ PR = f"https://{DOMAIN}/personal/imagesensortool/pulls/29"
 STARTS_AT = "2026-10-18T10:59:50Z"
 MARKER = f"<!-- forge-review-failed:{STARTS_AT} -->"
 
-TERMINALS = {"Post Comment", "Nothing To Post"}
+TERMINALS = {"Comment Posted", "Nothing To Post"}
 
 
 def _workflow() -> dict[str, Any]:
@@ -145,6 +145,7 @@ def test_a_bad_alert_in_a_group_does_not_cost_the_good_one_its_comment():
         ("a fragment", _alert(labels={"pr": f"{PR}#issuecomment-1"})),
         ("a path traversal", _alert(labels={"pr": f"https://{DOMAIN}/personal/../admin/pulls/1"})),
         ("a dot-dot repo name", _alert(labels={"pr": f"https://{DOMAIN}/personal/../pulls/1"})),
+        ("a dot-dot owner name", _alert(labels={"pr": f"https://{DOMAIN}/../proj/pulls/1"})),
         ("a trailing path", _alert(labels={"pr": f"{PR}/files"})),
         ("plain http", _alert(labels={"pr": PR.replace("https", "http")})),
         ("no pr label", {**_alert(), "labels": {"alertname": "x"}}),
@@ -222,6 +223,26 @@ def test_every_path_ends_in_a_node_that_emits_an_item():
 
     assert ends == TERMINALS
     assert _node("Nothing To Post")["type"] == "n8n-nodes-base.noOp"  # always passes its input through
+
+
+def test_a_gitea_refusal_fails_the_run_so_grafana_hears_a_500_and_sends_again():
+    """With `onError: continueRegularOutput` (or any of its relatives) on Post Comment all the other
+    tests stay green, a refused post ends in an item, and the notice is dropped behind a 200 with no
+    retry. The failure path is the error path: nothing on the Gitea nodes may swallow it."""
+    swallowing = ("onError", "continueOnFail", "alwaysOutputData", "retryOnFail")
+    for node in _workflow()["nodes"]:
+        assert not any(key in node for key in swallowing), node["name"]
+        assert not re.search(r"neverError|ignoreHttpStatusErrors", json.dumps(node["parameters"])), node["name"]
+
+
+def test_the_answer_to_grafana_is_not_gitea_s_comment():
+    """A webhook returns its last node's items; Post Comment's are Gitea's comment JSON, with the
+    posting account's user object. The posting path ends in a node that answers with a fixed body."""
+    connections = _workflow()["connections"]
+
+    assert [c["node"] for c in connections["Post Comment"]["main"][0]] == ["Comment Posted"]
+    out = run_code_node(node_js(WORKFLOW, "Comment Posted"), [{"json": {"id": 4, "user": {"login": "reviewer"}}}])
+    assert out == [{"posted": True}]
 
 
 def test_both_ways_of_having_nothing_to_post_reach_the_noop():

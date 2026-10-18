@@ -191,6 +191,19 @@
         500,
         160
       ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Answer Grafana with a fixed acknowledgement. A webhook returns its last node's items, and\n// Post Comment's are Gitea's comment JSON, user object included.\nreturn $input.all().map(() => ({ json: { posted: true } }));"
+      },
+      "id": "e6000000-0000-4000-8000-000000000009",
+      "name": "Comment Posted",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        940,
+        -200
+      ]
     }
   ],
   "connections": {
@@ -268,6 +281,17 @@
         [
           {
             "node": "Nothing To Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post Comment": {
+      "main": [
+        [
+          {
+            "node": "Comment Posted",
             "type": "main",
             "index": 0
           }
