@@ -8,4 +8,4 @@
 | 3 | 10:55-12:00 | IDP-042 PR 4 (#2486) | f6 removed from UNWRITTEN after CI flagged it; Tests green on head | `gh pr checks 2486`: Tests pass (18m58s) |
 | 4 | 11:00-11:20 | IDP-042 PR 3 (local, stacked on PR 4) | render, snapshot, drift test, CLI written | `pytest tests/test_product_contract_drift.py`: 13 passed; three drift mutations RED |
 | - | 12:00-15:31 | (host) | session hit its usage limit again; no work in this window | resumed 15:31Z |
-| 5 | 15:31-15:50 | IDP-042 PR 3 (#2520) | owned keys pinned (mapping mutation RED), findings recorded, draft opened on base `feat/idp-042-contract-guards` | `make mutate` mapping entry: RED |
+| 5 | 15:31-15:40 | IDP-042 PR 3 (#2520) | owned keys pinned (mapping mutation RED), findings recorded, draft opened on base `feat/idp-042-contract-guards` | `make mutate` mapping entry: RED |

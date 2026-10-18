@@ -13,7 +13,8 @@ What is waiting on a human: two draft PRs, both blocked on the peer's #2470 (PR 
    - add `--registry PATH --app NAME` inside `validate` in `toolkit/cli/product.py` (the peer's PR 5 appends commands after it);
    - switch the positive test from the stub deriver to the real registry;
    - mark ready, triage, then land under the grant.
-3. **#2520 (PR 3, render and drift), draft, stacked on #2486.** After #2486 lands, rebase onto master and add the snapshot-completeness check (needs the registry), plus its mutation.
+3. **#2520 (PR 3, render and drift), draft, stacked on #2486.** After #2486 squash-merges, rebase with `git rebase --onto master feat/idp-042-contract-guards` (a plain rebase replays PR 4's commits and conflicts on every file), retarget the PR base to `master`, and add the snapshot-completeness check (needs the registry) plus its mutation.
+   - `--app` defaults to the contract file's stem, which is right for `contracts/<app>.yaml` and wrong for a fetched `kubelab.yaml`; the receiver (PR 6) must pass `--app` explicitly.
    - One task stays open: running the drift test with `SOPS_AGE_KEY_FILE` unset. That command was refused by this session's permission settings.
    - PR 3 changes no `infra/config/values` file, so it is eligible for the grant once green and triaged.
 
