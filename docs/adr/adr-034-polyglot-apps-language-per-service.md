@@ -41,7 +41,7 @@ The decision is per-service, not per-monorepo. Reviewing the spec at SDD `init` 
 |---------|----------|--------|
 | `apps/api` (existed before this ADR) | Go (Gin) | HTTP API, low footprint, stdlib net/http strong |
 | `apps/web` (existed) | JS framework | Site generation |
-| `apps/widget-proxy` (DASH-DT-004) | Go | Lightweight HTTP proxy, ~5 MB scratch image, fits sweet spot |
+| `apps/widget-proxy` (DASH-DT-004) | Go | Lightweight HTTP proxy, ~5 MB scratch image, fits sweet spot. **Abandoned 2026-10-18**, never built: the Homepage cockpit it served was retired (#2416) |
 | `toolkit/*` | Python | CLI + generators + orchestration, not user-facing services |
 
 Future entries: append a row when a new service is added; link the spec/PR.
@@ -54,6 +54,6 @@ Future entries: append a row when a new service is added; link the spec/PR.
 
 ## References
 
-- DASH-DT-004 spec at `specs/DT-004-widget-proxy/proposal.md` (first BLOCKER resolved by this ADR).
+- DASH-DT-004 spec at `specs/archive/_abandoned/DT-004-widget-proxy/proposal.md` (first BLOCKER resolved by this ADR; abandoned 2026-10-18).
 - `apps/api/src/go.mod` — precedent.
 - CLAUDE.md "Workflow rules" — adds this ADR as the canonical answer to "which language for app X".

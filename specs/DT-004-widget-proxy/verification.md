@@ -20,24 +20,37 @@ plugin stays registered for its remaining anchor, Pollex public (AI-004).
 
 ## Evidence
 
-Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
-
-- [ ] Criterion 1 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 2 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 3 -> commit `<hash>` / test `<name>`
+No acceptance criterion was implemented, so none maps to a commit. The evidence for the abandonment
+itself, as checked by the independent review on 2026-10-18:
+- #2416 closed, #2446 and #2451 merged.
+- `grep -rIl widget-proxy` finds no code, manifest or route outside specs and ADRs.
+- `toolkit/features/k8s_middlewares.py` declares `MIDDLEWARE_CATALOG: list[MiddlewareSpec] = []`.
 
 ## Test status
 
-- Test suite: `<command> -> <output / coverage %>`
-- Manual smoke test: what was exercised, what was observed
-- No regressions in existing test suite: yes / no (if no, document)
+- Test suite: not applicable, no code was written. `tests/test_homepage_retired.py` guards the
+  premise that made this spec obsolete.
+- No regressions: the archive changes only docs (this spec, ADR-034, ADR-035, CLAUDE.md).
 
 ## Decisions made during implementation
 
-Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
+- Abandoned rather than rescoped: the server-side health check has no other consumer once the
+  Homepage tiles are gone, and Uptime Kuma already probes the same services.
 
--
--
+## Review dispositions
+
+Review `review.md` (nan/deepseek-v4-flash, PASS-WITH-GAPS, reviewed `0556cbae`):
+
+1. Template placeholders in Evidence, Test status and Decisions: applied, the sections above.
+2. ADR-034 still lists `apps/widget-proxy` and a spec path that moves on archive: applied. The row
+   is marked abandoned and the reference points at `specs/archive/_abandoned/`.
+3. `tasks.md` names a `features.json` that does not exist: declined. The spec predates the
+   `features.json` contract and was abandoned before implementation, so no feature list would ever
+   be read. `tasks.md` is in the contract set, and a ticket for an archived spec would track nothing.
+4. The checklist step aimed at the vault `11-tasks.md`: applied. Task state lives on the board
+   (ADR-018), so the step now reads "close #465".
+5. #465 still open: applied. It is closed as abandoned, with a pointer to #2416, once this merges.
+6. "stays registered for them" in CLAUDE.md, left over from a two-item list: applied.
 
 ## Promotion candidates
 
@@ -51,5 +64,5 @@ Before archiving, flag what (if anything) should be promoted to the vault. If al
 
 - [ ] `proposal.md` frontmatter set to `status: archived`
 - [ ] Folder moved: `specs/DT-004-widget-proxy/` -> `specs/archive/DT-004-widget-proxy/`
-- [ ] Backlog entry in vault `11-tasks.md` ticked with PR link
+- [ ] Tracking issue #465 closed as abandoned, pointing at #2416 (task state is on the board, ADR-018)
 - [ ] Promotions above executed (if any)
