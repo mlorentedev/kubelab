@@ -92,6 +92,14 @@ def test_an_empty_areas_key_is_refused_not_a_traceback() -> None:
         declaration_from_config(config)
 
 
+@pytest.mark.parametrize("scalar", ["OPS", 7])
+def test_a_scalar_areas_value_is_refused_not_split_into_characters(scalar: object) -> None:
+    config = _config([])
+    config["apps"]["services"]["core"]["vikunja"]["labels"]["areas"] = scalar
+    with pytest.raises(ReconcileError, match="must be a list"):
+        declaration_from_config(config)
+
+
 def test_a_duplicate_area_is_refused() -> None:
     with pytest.raises(ReconcileError, match="twice"):
         declaration_from_config(_config(["OPS", "OPS"]))

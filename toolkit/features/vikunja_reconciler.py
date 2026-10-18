@@ -60,6 +60,8 @@ def _areas_from(vikunja: dict[str, Any]) -> tuple[str, ...]:
     raw = (vikunja.get("labels") or {}).get("areas", ())
     if raw is None:
         raise ReconcileError("labels.areas is declared but empty; list the areas or remove the key")
+    if not isinstance(raw, (list, tuple)):
+        raise ReconcileError(f"labels.areas must be a list of AREA segments, got {type(raw).__name__}")
     areas = tuple(raw)
     for area in areas:
         # fullmatch: `$` also matches before a trailing newline, which would mint a label no filter finds
