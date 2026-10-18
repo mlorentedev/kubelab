@@ -7,6 +7,7 @@ client so no network is touched.
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -140,3 +141,25 @@ class TestPrune:
         prune(["api", "web"], "kubelab", retention=15, dry_run=False, client=client)
         repos = {call.args[0] for call in client.list_tags.call_args_list}
         assert repos == {"kubelab-api", "kubelab-web"}
+
+
+class TestPruneCliDefault:
+    """With no ``--apps``, the prune covers every registered product plus ``errors`` (IDP-042)."""
+
+    def test_a_third_registered_product_is_pruned_by_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from typer.testing import CliRunner
+
+        from toolkit.cli import registry as registry_cli
+        from toolkit.features import product_registry
+        from toolkit.main import app
+
+        fixture = Path(__file__).parent / "fixtures" / "product" / "registry.yaml"
+        monkeypatch.setattr(product_registry, "registry_path", lambda: fixture)
+        monkeypatch.setattr(registry_cli.promotion, "read_pinned_version", lambda env, app_name: None)
+        seen: list[list[str]] = []
+        monkeypatch.setattr(registry_cli.registry, "prune", lambda apps, *args, **kwargs: seen.append(apps) or 0)
+
+        result = CliRunner().invoke(app, ["registry", "prune", "--dry-run"])
+
+        assert result.exit_code == 0, result.output
+        assert seen == [["api", "web", "third", "errors"]]
