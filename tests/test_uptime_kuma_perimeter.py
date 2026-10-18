@@ -23,7 +23,17 @@ import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-HOSTS = {"staging": "status.staging.kubelab.live", "prod": "status.kubelab.live"}
+ENVS = ("staging", "prod")
+
+
+def _host(env: str) -> str:
+    """The Kuma host, read from the values SSOT (`apps.services.observability.uptime_kuma.domain`)."""
+    from toolkit.features.oidc_clients import load_values
+
+    return load_values(env)["apps"]["services"]["observability"]["uptime_kuma"]["domain"]
+
+
+HOSTS = {env: _host(env) for env in ENVS}
 AUTHELIA = {
     "staging": ROOT / "infra/k8s/base/services/authelia-config/configuration.yml",
     "prod": ROOT / "infra/k8s/overlays/prod/authelia-config/configuration.yml",
