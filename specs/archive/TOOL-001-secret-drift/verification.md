@@ -64,6 +64,6 @@ Review `review.md` (nan/deepseek-v4-flash, **PASS**, reviewed `d1131364`). Six m
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/TOOL-001-secret-drift/` -> `specs/archive/TOOL-001-secret-drift/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/TOOL-001-secret-drift/` -> `specs/archive/TOOL-001-secret-drift/`
 - [ ] Tracking issue #520 closed as integrated, pointing at #2499 and #584
