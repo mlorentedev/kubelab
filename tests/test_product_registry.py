@@ -113,3 +113,9 @@ products:
         path = _write(tmp_path, "products:\n  api:\n    forge: gitlab\n")
         with pytest.raises(RegistryError, match=str(path)):
             product_registry.load_registry(path)
+
+    def test_a_repeated_product_key(self, tmp_path: Path) -> None:
+        """A second ``web:`` would silently replace the first under a plain safe_load."""
+        body = "products:\n  web:\n    forge: in-tree\n  web:\n    forge: in-tree\n"
+        with pytest.raises(RegistryError, match="duplicate key 'web'"):
+            product_registry.load_registry(_write(tmp_path, body))
