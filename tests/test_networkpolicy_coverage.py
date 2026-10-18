@@ -74,8 +74,9 @@ def _labels(workload: dict[str, Any]) -> dict[str, str]:
 
 
 def _selects(selector: dict[str, Any], labels: dict[str, str]) -> bool:
-    match = selector.get("matchLabels", {})
-    return bool(match) and all(labels.get(k) == v for k, v in match.items())
+    """Kubernetes semantics: an empty selector selects every pod."""
+    assert "matchExpressions" not in selector, f"matchExpressions is not modelled here: {selector}"
+    return all(labels.get(k) == v for k, v in selector.get("matchLabels", {}).items())
 
 
 def _policies(overlay: str) -> list[dict[str, Any]]:
@@ -111,11 +112,17 @@ def _allowed(overlay: str, source: str, target: dict[str, Any], port: int) -> bo
     return False
 
 
+def _workflows() -> list[Path]:
+    return sorted(WORKFLOWS.rglob("*.json"))
+
+
 def _callers(overlay: str) -> set[tuple[str, str, int]]:
     """(caller, Service, Service port) for every in-cluster address the
     repository names, with the caller that uses it."""
     docs = _render(overlay)
-    services = {d["metadata"]["name"] for d in docs if d["kind"] == "Service"}
+    # A `host:port` counts only on a port its Service declares: an image tag in
+    # a ConfigMap (`postgres:16`) is not a caller.
+    ports = {d["metadata"]["name"]: {p["port"] for p in d["spec"]["ports"]} for d in docs if d["kind"] == "Service"}
     configmaps = {d["metadata"]["name"]: json.dumps(d.get("data", {})) for d in docs if d["kind"] == "ConfigMap"}
     texts: list[tuple[str, str]] = []
     for name, workload in _workloads(overlay).items():
@@ -124,11 +131,11 @@ def _callers(overlay: str) -> set[tuple[str, str, int]]:
         texts.append((name, pod))
         texts += [(name, text) for cm, text in configmaps.items() if f'"{cm}"' in pod]
     texts += [("traefik", json.dumps(d["spec"])) for d in docs if d["kind"] == "Middleware"]
-    texts += [("n8n", f.read_text()) for f in sorted(WORKFLOWS.glob("*.json"))]
+    texts += [("n8n", f.read_text()) for f in _workflows()]
     found = set()
     for caller, text in texts:
         for host, port in ADDRESS.findall(text):
-            if host in services and host != caller:
+            if int(port) in ports.get(host, set()) and host != caller:
                 found.add((caller, host, int(port)))
     # Every IngressRoute backend is a Traefik caller. A Service without a
     # selector is an EndpointSlice outside the cluster, which no policy covers.
@@ -157,6 +164,16 @@ def test_the_render_measured_what_it_judges(overlay: str) -> None:
     assert len(_workloads(overlay)) >= 15
     assert len(_policies(overlay)) >= 15
     assert len(_callers(overlay)) >= 14
+    # Each source is measured on its own, so losing one cannot hide behind the others.
+    assert len(_workflows()) >= 5, "the n8n workflows are no longer where this test reads them"
+    assert any(caller == "n8n" for caller, _, _ in _callers(overlay))
+
+
+def test_an_empty_selector_selects_every_pod() -> None:
+    """A namespace default-deny (`podSelector: {}`) must count as covering every
+    workload, not read as a policy that selects nothing."""
+    assert _selects({}, {NAME: "anything"})
+    assert not _selects({"matchLabels": {NAME: "web"}}, {NAME: "api"})
 
 
 @pytest.mark.parametrize("overlay", OVERLAYS)
