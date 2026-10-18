@@ -36,10 +36,10 @@ def _is_oidc_client_key(key: str) -> bool:
     return "oidc_client_secret" in key
 
 
-def _run(env: str, monkeypatch: pytest.MonkeyPatch) -> tuple[set[str], list[str]]:
+def _run(env: str, monkeypatch: pytest.MonkeyPatch, written: set[str] | None = None) -> tuple[set[str], list[str]]:
     from toolkit.features import credentials
 
-    written: set[str] = set()
+    written = set() if written is None else written
     cm = MagicMock()
     cm.get_merged_config.return_value = {"apps": {"auth": {"identities": {"operator": "operator"}}}}
     cm.batch_update_secrets.side_effect = lambda data, secret_file_path=None: written.update(data) or True
@@ -126,8 +126,9 @@ def _is_hub(key: str) -> bool:
 @pytest.mark.parametrize("env", ENVS)
 def test_every_declared_pair_agrees_on_hub_managed(env: str) -> None:
     """#2522: the pair goes to one file, so a digest and plaintext that disagree put one half in the wrong one."""
-    values = oidc_clients.load_values(env)
-    for client in oidc_clients.declared_clients(values):
+    clients = oidc_clients.declared_clients(oidc_clients.load_values(env))
+    assert clients, f"{env}: no declared OIDC client, so this check would compare nothing"
+    for client in clients:
         digest = oidc_clients.digest_key(client["client_id"])
         plaintext = SPECS[digest].derived_from
         assert _is_hub(digest) == _is_hub(plaintext), (
@@ -147,5 +148,7 @@ def test_a_mixed_pair_is_refused_before_anything_is_written(monkeypatch: pytest.
     ]
     monkeypatch.setattr(secrets_manager, "SECRET_CATALOG", mixed)
 
+    written: set[str] = set()
     with pytest.raises(oidc_clients.OidcClientError, match="HUB_MANAGED"):
-        _run("prod", monkeypatch)
+        _run("prod", monkeypatch, written)
+    assert written == set(), f"keys written before the refusal: {sorted(written)}"
