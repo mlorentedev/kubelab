@@ -81,11 +81,11 @@ Branch `feat/idp-042-contract-guards`. Commit prefix `feat(toolkit):`. Depends o
 
 Branch `feat/idp-042-literals-from-registry`. Commit prefix `feat(toolkit):`. Depends on PR 2.
 
-- [ ] [AC5] (Q4 b) Extend `tests/test_promote_prod_dispatch.py` so the event-to-app map and the `inputs.app` options are asserted against the registry, then make `promote-prod.yml` resolve the app with `toolkit product app-for-event` (lines 34-35, 42, 93, 101-104 lose their literals; the `|| 'web'` at line 56 stays, because the concurrency group is evaluated before any step can call the toolkit, and a test asserts the registry has exactly one app with a prod dispatch event so the fallback cannot go stale silently). Keep the "app comes from the event type" and "payload never interpolated" tests unchanged and green. 
-- [ ] [AC5] `toolkit product list --json` and `toolkit product app-for-event EVENT` (thin adapters over `product_registry`, test with `CliRunner`); the next two items and the first one use them
-- [ ] [AC5] [P] `Makefile:969,971`: derive the allowed `APP` values from `toolkit product list --json`; test with the existing `GH`-overridable harness in `tests/` for `promote-prod` (an unregistered `APP` exits 2)
-- [ ] [AC5] [P] `toolkit/cli/registry.py:23`: the default `--apps` becomes the registry's apps plus `errors`; `tests/test_registry_prune.py` gains a case for a third product
-- [ ] Record in the PR body the `ci-pipeline.yml:196-218` leftover question; file a ticket if no caller passes `app: web`
+- [x] [AC5] (Q4 b) Extend `tests/test_promote_prod_dispatch.py` so the event-to-app map and the `inputs.app` options are asserted against the registry, then make `promote-prod.yml` resolve the app with `toolkit product app-for-event` (lines 34-35, 42, 93, 101-104 lose their literals; the `|| 'web'` at line 56 stays, because the concurrency group is evaluated before any step can call the toolkit, and a test asserts the registry has exactly one app with a prod dispatch event so the fallback cannot go stale silently). Keep the "app comes from the event type" and "payload never interpolated" tests unchanged and green. 
+- [x] [AC5] `toolkit product list --json` and `toolkit product app-for-event EVENT` (thin adapters over `product_registry`, test with `CliRunner`); the next two items and the first one use them
+- [x] [AC5] [P] `Makefile:969,971`: derive the allowed `APP` values from `toolkit product list --json`; test with the existing `GH`-overridable harness in `tests/` for `promote-prod` (an unregistered `APP` exits 2)
+- [x] [AC5] [P] `toolkit/cli/registry.py:23`: the default `--apps` becomes the registry's apps plus `errors`; `tests/test_registry_prune.py` gains a case for a third product
+- [x] Record in the PR body the `ci-pipeline.yml:196-218` leftover question; file a ticket if no caller passes `app: web`
 
 ### PR 6 — The generic receiver, dormant for web (about 300 lines)
 
