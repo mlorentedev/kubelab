@@ -45,7 +45,7 @@ None.
 - No consecutive failures.
 - max_loc held: PR 5 adds about 105 executable non-test lines.
 - **Host:** `caffeinate` held the Mac awake on AC power for the whole window.
-- **Gap:** roughly 11:20Z to 15:30Z went to a claude.ai usage limit, not to host sleep. Nothing ran in that gap, which is why #2470 landed late in the window.
+- **Gap:** roughly 11:20Z to 15:30Z went to a claude.ai usage limit, not to host sleep. Nothing ran in that gap, which is why #2470 did not land inside the window.
 
 ## Next action
 
