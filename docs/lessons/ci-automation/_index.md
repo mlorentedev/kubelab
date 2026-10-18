@@ -1,6 +1,6 @@
 # CI workflows, gates and the GitHub surface
 
-50 lessons, newest first. Back to [all categories](../_index.md).
+Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
