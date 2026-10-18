@@ -385,9 +385,16 @@ def test_every_read_uses_a_store_that_holds_that_secret(playbook: str, play: dic
     assert checked, f"{playbook}: no read from {sorted(stores)} found, so the parser stopped matching"
     layers = _store_layers(play)
     overridden, run_envs = _run_envs()
+    written = _writes()
     wrong: list[str] = []
     for store, path in checked:
         env_var, merges_common = layers[store]
+        if written.get(path) == env_var:
+            # The role mints this key under the env this store is built from, so
+            # absence from the committed files is its first state, not a wrong
+            # store: the mint gate exists for exactly that. The store match is
+            # asserted by `test_every_written_secret_is_read_from_the_store_it_was_written_to`.
+            continue
         env = declared.get(env_var)
         if not isinstance(env, str):
             wrong.append(f"{store}.{path}: the play declares no `{env_var}` in its vars")

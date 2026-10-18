@@ -744,6 +744,25 @@ SECRET_CATALOG: list[SecretSpec] = [
         envs=("prod",),
     ),
     SecretSpec(
+        key_path="apps.services.core.gitea.review_notice_token",
+        description=(
+            "Comment-only Gitea API token on the reviewer's account (apps.auth.identities.reviewer); "
+            "write:issue, used by the n8n workflow that tells a PR its review failed (TOOL-093)"
+        ),
+        # EXTERNAL for the reason `bot_token` gives: only Gitea honours what it mints.
+        kind=SecretKind.EXTERNAL,
+        services=("gitea", "n8n"),
+        rotate_note=(
+            "`make gitea-rotate-token TOKEN=review_notice ENV=prod APPLY=1` (revoke, then unset), then "
+            "`make provision NODE=bee ENV=prod TAGS=gitea` to re-mint, then `make import-n8n` so the "
+            "workflow's credential carries the new value. The mint task is gated on this key being "
+            "absent; never mint a second token by hand."
+        ),
+        # NEVER, for the reason measured on `bot_token`: Gitea's token API has no expiry field.
+        expiry=Expiry.NEVER,
+        envs=("prod",),
+    ),
+    SecretSpec(
         key_path="apps.services.core.gitea.github_migration_token",
         description=(
             "Fine-grained GitHub PAT that Gitea's migration endpoint uses to READ "

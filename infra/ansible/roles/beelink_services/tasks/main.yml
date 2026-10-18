@@ -397,6 +397,47 @@
   no_log: true
   tags: [gitea]
 
+# --- PR reviewer: the failure-notice token (TOOL-093, #1957) -------------------
+# n8n comments on a PR whose review failed. A token of its own, not the reviewer's:
+# the workflow is behind a public route, so it holds `write:issue` and nothing it
+# could read code with. Same account (`gitea_reviewer_user`), so the comment has the
+# author a review would; a distinct token name, since Gitea refuses two of one name.
+
+- name: Mint the review-notice token on the reviewer account
+  # Gated on the recorded secret being absent and `argv`, for the reasons the
+  # reviewer's mint task above records.
+  command:
+    argv:
+      - docker
+      - exec
+      - gitea
+      - su
+      - git
+      - -c
+      - >-
+        gitea admin user generate-access-token
+        --username {{ gitea_reviewer_user }}
+        --token-name kubelab-review-notice
+        --scopes {{ gitea_review_notice_scopes }}
+        --raw
+  register: _gitea_review_notice_token
+  when: gitea_reviewer_user | length > 0 and not gitea_review_notice_token
+  changed_when: _gitea_review_notice_token.rc == 0
+  no_log: true
+  tags: [gitea]
+
+- name: Record the review-notice token in SOPS
+  # Controller-side, over STDIN, never argv -- as the reviewer token's record task.
+  command: "{{ playbook_dir }}/../../../.venv/bin/toolkit secrets set apps.services.core.gitea.review_notice_token --env {{ gitea_identity_env }} --stdin"
+  args:
+    stdin: "{{ _gitea_review_notice_token.stdout }}"
+  delegate_to: localhost
+  become: false
+  when: gitea_reviewer_user | length > 0 and not gitea_review_notice_token
+  changed_when: true
+  no_log: true
+  tags: [gitea]
+
 - name: Mint the Gitea Actions runner registration token
   # GATED, and the gate is load-bearing in a way the bot token's is not.
   #
