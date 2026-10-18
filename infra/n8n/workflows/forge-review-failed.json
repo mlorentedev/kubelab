@@ -1,0 +1,279 @@
+{
+  "id": "d6000000-0000-4000-8000-000000000001",
+  "name": "forge-review-failed",
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "description": "TOOL-093: Grafana alert 'forge reviewer failed' -> one Gitea comment on the pull request saying the review did not run and how to retry. Deduplicated by a marker carrying the alert's startsAt."
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "forge-review-failed",
+        "authentication": "headerAuth",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "e6000000-0000-4000-8000-000000000001",
+      "name": "Webhook Ingress",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -600,
+        0
+      ],
+      "webhookId": "w6000000-0000-4000-8000-000000000001",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "c6000000-0000-4000-8000-000000000001",
+          "name": "forge-review-failed-webhook"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Turn Grafana's firing `tool093-reviewer-failed` alerts into one item per pull request.\n//\n// Grafana's stock webhook body is `{status, alerts: [{status, labels, startsAt, ruleUID, ...}]}`,\n// one entry per alert instance in the group, and `labels.pr` is the URL PR-Agent was working on\n// (`sum by (pr)` in the rule). A group is re-sent whole when another PR joins it, so an alert\n// can arrive again with the same `startsAt`: the marker below is how a repeat is recognised.\n//\n// Everything that reaches a Gitea URL below was matched against a strict pattern first. The\n// bearer already limits callers to Grafana; this keeps a label that is not a pull request of\n// THIS forge from ever becoming a request path. (The task runner's sandbox has no `URL`, hence\n// the pattern rather than a parsed origin.)\nconst ORIGIN = 'https://RESOLVE_GITEA_DOMAIN';\nconst RULE_UID = 'tool093-reviewer-failed';\nconst STARTS_AT = /^\\d{4}-\\d{2}-\\d{2}T[\\d:.]+Z$/;\nconst PR_URL = /^(https?:\\/\\/[A-Za-z0-9.:-]+)\\/([A-Za-z0-9._-]+)\\/([A-Za-z0-9._-]+)\\/pulls\\/(\\d+)$/;\n\nconst body = $json.body ?? {};\nconst out = [];\nfor (const alert of Array.isArray(body.alerts) ? body.alerts : []) {\n  if (alert.status !== 'firing' || alert.ruleUID !== RULE_UID) continue;\n  if (!STARTS_AT.test(String(alert.startsAt ?? ''))) continue;\n  const m = String(alert.labels?.pr ?? '').match(PR_URL);\n  if (!m || m[1].toLowerCase() !== ORIGIN) continue;\n  if (/^\\.+$/.test(m[2]) || /^\\.+$/.test(m[3])) continue;  // `..` is a path segment, not a name\n  out.push({\n    json: {\n      origin: ORIGIN,\n      owner: m[2],\n      repo: m[3],\n      index: m[4],\n      marker: `<!-- forge-review-failed:${alert.startsAt} -->`,\n      since: alert.startsAt,\n    },\n  });\n}\n// A webhook answers with its last node's items, and none at all is a 500 that Grafana would retry\n// as a failed notification. Nothing to comment on still has to be a clean, empty answer.\nreturn out.length ? out : [{ json: { skip: true } }];"
+      },
+      "id": "e6000000-0000-4000-8000-000000000002",
+      "name": "Parse Alerts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -380,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "6c1a1f0e-3f5b-5d0e-9a51-0000000000a2",
+              "leftValue": "={{ $json.skip !== true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e6000000-0000-4000-8000-000000000007",
+      "name": "Any Pull Request?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -160,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.origin }}/api/v1/repos/{{ $json.owner }}/{{ $json.repo }}/issues/{{ $json.index }}/comments?since={{ $json.since }}&limit=50",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "e6000000-0000-4000-8000-000000000003",
+      "name": "Read PR Comments",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        60,
+        -100
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "c9000000-0000-4000-8000-000000000002",
+          "name": "gitea-review-notice"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Say it once per failure: comment only if no comment on the PR carries this alert's marker.\n// Only comments updated since the alert began are listed (`since`): the marker of THIS failure can\n// only be in one of those, and it keeps a long thread from pushing it onto a second page.\n//\n// The GET runs with `fullResponse`, so its output is ONE item per pull request whose `body` is the\n// whole comment list. Without it an HTTP node emits one item per array element (nothing at all for\n// a PR with no comments, which would end the run before the first notice is ever posted).\nconst res = $input.item.json;\nconst pr = $('Parse Alerts').item.json;\nconst comments = Array.isArray(res.body) ? res.body : null;\nif (comments === null) {\n  throw new Error(`could not read the comments of ${pr.owner}/${pr.repo}#${pr.index} (status ${res.statusCode})`);\n}\nconst already = comments.some((c) => typeof c.body === 'string' && c.body.includes(pr.marker));\nconst comment = [\n  '**The automated review did not run for this pull request.**',\n  '',\n  'The reviewer failed on every model it tried, so no review will be posted here on its own. ' +\n    'Push a commit to retry; a `/review` comment is ignored.',\n  '',\n  'The operator has been alerted.',\n  '',\n  pr.marker,\n].join('\\n');\nreturn { json: { ...pr, post: !already, comment } };"
+      },
+      "id": "e6000000-0000-4000-8000-000000000004",
+      "name": "Already Told?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        280,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "6c1a1f0e-3f5b-5d0e-9a51-0000000000a1",
+              "leftValue": "={{ $json.post }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e6000000-0000-4000-8000-000000000005",
+      "name": "Needs Comment?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        500,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.origin }}/api/v1/repos/{{ $json.owner }}/{{ $json.repo }}/issues/{{ $json.index }}/comments",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ body: $json.comment }) }}"
+      },
+      "id": "e6000000-0000-4000-8000-000000000006",
+      "name": "Post Comment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        -200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "c9000000-0000-4000-8000-000000000002",
+          "name": "gitea-review-notice"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "e6000000-0000-4000-8000-000000000008",
+      "name": "Nothing To Post",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        500,
+        160
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Ingress": {
+      "main": [
+        [
+          {
+            "node": "Parse Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Alerts": {
+      "main": [
+        [
+          {
+            "node": "Any Pull Request?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any Pull Request?": {
+      "main": [
+        [
+          {
+            "node": "Read PR Comments",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Nothing To Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read PR Comments": {
+      "main": [
+        [
+          {
+            "node": "Already Told?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Already Told?": {
+      "main": [
+        [
+          {
+            "node": "Needs Comment?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Comment?": {
+      "main": [
+        [
+          {
+            "node": "Post Comment",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Nothing To Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {}
+}

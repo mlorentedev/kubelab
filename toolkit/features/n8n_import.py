@@ -192,6 +192,15 @@ N8N_IMPORT_CATALOG: list[N8nImportSpec] = [
         credential_name="agent-dispatcher-webhook",
         envs=frozenset({"staging", "prod"}),
     ),
+    # TOOL-093, #1957. Grafana's `forge-review-failed` contact point posts here, with the same
+    # webhook secret every n8n webhook is authenticated with; the workflow comments on the PR
+    # with the shared `gitea-review-notice` credential. Prod only: PR-Agent runs there.
+    N8nImportSpec(
+        workflow_path=Path("infra/n8n/workflows/forge-review-failed.json"),
+        secret_key_path="apps.services.automation.notify.webhook_secret",
+        credential_name="forge-review-failed-webhook",
+        envs=frozenset({"prod"}),
+    ),
     # APP-CONFIG-018, leaving-denver#225. The sale ends 2026-11-09. REMOVING IT is this
     # entry, the JSON, and the `sale_digest` SOPS block and its SECRET_CATALOG entries
     # (README: "Removing the sale"). `kubelab-smtp` below is not the sale's and stays.
@@ -248,6 +257,8 @@ PLACEHOLDER_SSOT: dict[str, str] = {
     "RESOLVE_VIKUNJA_IN_PROGRESS_BUCKET": "apps.services.core.vikunja.in_progress_bucket",
     # The From of any workflow sending through `kubelab-smtp`: the relay's own account.
     "RESOLVE_KUBELAB_SMTP_FROM": "infra.smtp.user",
+    # The forge's host, so the workflow that comments on its pull requests accepts only a URL of this forge.
+    "RESOLVE_GITEA_DOMAIN": "apps.services.core.gitea.domain",
     # The sale digest's own values; SOPS-resident, hence never logged below.
     "RESOLVE_SALE_DIGEST_TO": "apps.services.automation.n8n.sale_digest.recipient",
 }
