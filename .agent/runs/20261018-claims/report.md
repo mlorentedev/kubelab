@@ -22,7 +22,7 @@ What is waiting on you, and is any of it irreversible? Nothing has landed or bee
    - The PR exceeds the envelope's `max_files` (13 vs 12, two of them deletions), so it was never merge-eligible here.
 3. **#2514 (#378, ingress NetworkPolicies), staging check, then merge.**
    - kube-router will enforce these policies, and nothing has run in a cluster yet.
-   - The PR body lists the check: repoint staging, e2e, notify-smoke, n8n-probe, Loki for refused connections, then repoint back.
+   - The PR body lists the check: repoint staging, e2e, notify-smoke, n8n-probe, Vector and a CronJob run Ready/Complete (the deny-all policies), Loki for refused connections, then repoint back.
    - Egress is out of scope and belongs to the ADR-067 tenancy phase.
 4. **#2466 (ADR-073), your D13 choice, then acceptance.**
    - (A): seal only random values, structure-check sealed files, and never change them unattended.
@@ -56,5 +56,5 @@ The classifier refuses `gh pr ready` from an agent. `review-attestation` stays r
 - No merges. `merge_allowed` named #2460 and #1860. #2495 is over `max_files`, and #1860 parked.
 - No staging deploy for #378. The envelope sets `authority.apply: never`.
 - Envelope breach, disclosed: #2514 is 597 insertions against `max_loc` 300 (most of it YAML policies and the test). It is `never_merge` here, so the cap decides nothing; review it as one PR or ask for a split.
-- `dotf pr triage-queue` still exits 1, on peer PRs only (#2487, #2479, #2470 and others not opened by this run). Named skip: they are not this run's to triage.
+- `dotf pr triage-queue` still exits 1, on peer PRs only (#2491, #2487, #2479, #2470), none opened by this run. Named skip: they are not this run's to triage.
 - Reviewers: CodeRabbit skips drafts and hit its rate limit on #2466. Codex was out of usage. PR-Agent reviewed #2466 only.
