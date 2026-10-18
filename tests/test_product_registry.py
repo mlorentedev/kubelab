@@ -12,6 +12,8 @@ from toolkit.features.product_registry import RegistryError, UnknownEventError
 
 REPO = Path(__file__).resolve().parents[1]
 FIXTURE = Path(__file__).parent / "fixtures" / "product" / "registry.yaml"
+# What generator_k8s reads before it emits an app; any one absent and it skips it.
+DEPLOY_FIELDS = ("image_name", "domain", "default_port")
 
 
 @pytest.fixture
@@ -38,15 +40,21 @@ class TestPlatformApps:
         assert set(declared) <= set(product_registry.platform_apps())
 
     @pytest.mark.parametrize("env", ["staging", "prod"])
-    def test_every_registered_product_has_a_platform_block_in_each_cluster_env(self, env: str) -> None:
+    def test_every_registered_product_deploys_in_each_cluster_env(self, env: str) -> None:
         """The other direction: the generators skip an app with no image, domain or port.
 
         A product admitted to the registry before its ``apps.platform.<app>`` block
-        exists would be iterated and then dropped with a debug line, never deployed.
+        carries those three would be iterated and then dropped with a debug line,
+        never deployed. A block alone is not enough: a first ``promote`` writes one
+        holding only ``version``.
         """
-        declared = set(_platform_blocks("common")) | set(_platform_blocks(env))
-        missing = [app for app in product_registry.platform_apps() if app not in declared]
-        assert not missing, f"registered but absent from apps.platform in common.yaml + {env}.yaml: {missing}"
+        common, overlay = _platform_blocks("common"), _platform_blocks(env)
+        missing = {}
+        for app in product_registry.platform_apps():
+            block = {**(common.get(app) or {}), **(overlay.get(app) or {})}
+            if absent := [field for field in DEPLOY_FIELDS if not block.get(field)]:
+                missing[app] = absent
+        assert not missing, f"registered, but common.yaml + {env}.yaml lack what generator_k8s needs: {missing}"
 
     def test_the_registry_keeps_the_order_common_yaml_declares(self) -> None:
         """The generators iterate the registry, so its order is their output order.
@@ -56,7 +64,7 @@ class TestPlatformApps:
         files (Q2) may be absent from ``common.yaml``, so the order is compared on
         the products both name.
         """
-        common = _platform_blocks("common")
+        common = list(_platform_blocks("common"))
         assert [app for app in product_registry.platform_apps() if app in common] == common
 
 
@@ -179,6 +187,6 @@ class TestDerivedImage:
         assert checked > 0
 
 
-def _platform_blocks(env: str) -> list[str]:
+def _platform_blocks(env: str) -> dict[str, dict]:
     values = yaml.safe_load((REPO / "infra" / "config" / "values" / f"{env}.yaml").read_text()) or {}
-    return list(((values.get("apps") or {}).get("platform") or {}))
+    return dict((values.get("apps") or {}).get("platform") or {})
