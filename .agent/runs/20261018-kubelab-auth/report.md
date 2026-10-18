@@ -49,4 +49,4 @@ The irreversible items come first.
 
 ## Host
 
-A `caffeinate -i` wake-lock held for the whole window. **The window was only partly covered:** a claude.ai usage-limit gap stopped the run from about 08:50Z to 10:30Z.
+A `caffeinate -i` wake-lock held for the whole window. **The window was only partly covered:** two claude.ai usage-limit gaps stopped the run, from about 08:50Z to 10:30Z and from about 12:00Z to 15:30Z. While the run was stopped, nothing waiting on it was acted on. Both PRs sat green, triaged and unmerged until 15:36Z.
