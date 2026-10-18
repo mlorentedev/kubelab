@@ -606,7 +606,7 @@
     "key": "services-monitoring-uptime-kuma-prod",
     "name": "Services · Monitoring · Uptime Kuma Prod",
     "type": "http",
-    "url": "https://status.kubelab.live",
+    "url": "https://status.kubelab.live/api/entry-page",
     "hostname": null,
     "port": null,
     "interval": 300,
@@ -618,10 +618,10 @@
     "accepted_statuscodes": [
       "200-299"
     ],
-    "description": "Uptime Kuma self-check (prod status page). SSOT: apps.services.observability.uptime_kuma.domain.",
+    "description": "Uptime Kuma self-check on a public path that skips Authelia (#2483). No redirects followed, so a gated answer reads DOWN instead of the portal 200. SSOT: apps.services.observability.uptime_kuma.domain.",
     "active": true,
     "httpBodyEncoding": "json",
-    "maxredirects": 10,
+    "maxredirects": 0,
     "notificationIDList": [
       1
     ],
