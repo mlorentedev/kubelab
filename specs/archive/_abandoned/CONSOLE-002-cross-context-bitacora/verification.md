@@ -69,14 +69,26 @@ First review, `fbb35c75`, nan/qwen3.8-flash: **FAIL**. Every finding applied bef
 
 1. `features.json` f4 still said the default was local-only (Ollama), against the 2026-10-01
    amendment: applied. It now reads no provider, request refused. State stays `pending`.
-2. `tasks.md` still read as live work: applied. A supersession header, a disposition on every open
-   box, and the PR-1a deploy step ticked with prod audit evidence.
+2. `tasks.md` still read as live work: applied. A supersession header, a disposition for every open
+   box (two inline, the rest per section), and the PR-1a deploy step ticked with prod audit evidence.
 3. The `features.json` commands name a package that never existed, and the guard reads only pytest:
    ticketed as #2501. The commands are left as written; the spec never ran them.
 4. The archive checklist pointed at the non-abandoned destination: applied.
 5. The launcher resolves a base about 1000 commits back for a two-file change: not this repo's
-   defect. It belongs to the dotfiles review launcher, and #2443's reviews all show it.
+   defect. It belongs to the dotfiles review launcher, tracked as dotfiles#1727, and
+   #2443's reviews all show it.
 6. PR-1a's open deploy box: confirmed and ticked (`PROD — 121/121`, 2026-10-18).
+
+Re-review, `67479fdf`, nan/qwen3.8-flash: **PASS-WITH-GAPS**.
+
+1. Launcher base disposition named no ticket: applied, dotfiles#1727 (item 5 above).
+2. #2501 calls the spec archived before it was: applied with a comment on #2501 when this PR opens.
+3. "A disposition on every open box" overstated the granularity: applied, item 2 reworded.
+   `tasks.md` is not edited, because its section notes are the record.
+4. Abandoned archive leaves the route boxes unticked: accepted. They are ticked by hand after the
+   move, in the same PR.
+5. Vikunja on this database is verified at manifest and secret level only: passed to #2443's
+   close check, which owns the live claim.
 
 ## Promotion candidates
 
@@ -88,6 +100,6 @@ Before archiving, flag what (if anything) should be promoted to the vault. If al
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: abandoned` (by `dotf spec archive --abandoned`)
-- [ ] Folder moved: `specs/CONSOLE-002-cross-context-bitacora/` -> `specs/archive/_abandoned/CONSOLE-002-cross-context-bitacora/`
+- [x] `proposal.md` frontmatter set to `status: abandoned` (by `dotf spec archive --abandoned`)
+- [x] Folder moved: `specs/CONSOLE-002-cross-context-bitacora/` -> `specs/archive/_abandoned/CONSOLE-002-cross-context-bitacora/`
 - [ ] Tracking issue #711 closed as superseded, pointing at ADR-066 and #2494
