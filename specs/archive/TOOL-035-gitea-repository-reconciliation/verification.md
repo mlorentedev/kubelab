@@ -469,7 +469,7 @@ Before archiving, flag what (if anything) should be promoted to the vault. If al
 - [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: Risk 3's answer is an operator
       decision for the pilot window, recorded in `tasks.md`. "What must be true before the GitHub copy
       is retired" belongs to the cutover of each repository, and the ts-bridge cutover is carried on
-      its own ticket (see the archive checklist), not decided here.
+      its own ticket (#2485), not decided here.
 - [x] New pattern candidate for `00_meta/patterns/`? no: it has happened in one project only.
 
 ## Archive checklist
