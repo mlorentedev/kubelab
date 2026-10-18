@@ -1,7 +1,7 @@
 ---
 id: "CONSOLE-002-cross-context-bitacora"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: abandoned # draft | implementing | verifying | archived
 created: "2026-06-20"
 issue: "kubelab#711"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
