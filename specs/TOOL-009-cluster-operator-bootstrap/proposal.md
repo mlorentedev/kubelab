@@ -80,17 +80,22 @@ ADR-047, *without* changing the (correct, least-privilege) architecture.
 
 ## Acceptance criteria
 
-- [ ] `cluster_bootstrap:` exists in `common.yaml` with `agent-sandbox` (versioned) and `coredns-custom`
+- [x] `cluster_bootstrap:` exists in `common.yaml` with `agent-sandbox` (versioned) and `coredns-custom`
       (render + optional) entries; versions/render maps are the SSOT.
-- [ ] `toolkit infra k8s deploy --env staging` applies every `cluster_bootstrap` entry (server-side),
+- [x] `toolkit infra k8s deploy --env staging` applies every `cluster_bootstrap` entry (server-side),
       dry-run-validated, with the dead `_get_traefik_config_path()` removed and no `RESOLVE_*`
       substitution shell left in the Makefile (all 3 sites on the render primitive).
-- [ ] agent-sandbox `sandboxes.agents.x-k8s.io` CRD (v1beta1) + controller are Ready in
+- [x] agent-sandbox `sandboxes.agents.x-k8s.io` CRD (v1beta1) + controller are Ready in
       `agent-sandbox-system` after `make deploy-k8s ENV=staging`.
-- [ ] `make sync-operators` refreshes a vendored manifest from the SSOT version (versioned entries only).
+- [x] `make sync-operators` refreshes a vendored manifest from the SSOT version (versioned entries only).
 - [ ] iris `go test ./internal/runtime/k8s/ -run TestK8sConformance` passes against staging
       (Start/Stop/Status/Exec + sidecar) — the SDD-034c validation.
-- [ ] Toolkit unit tests cover the render primitive + the `cluster_bootstrap` apply loop and pass via `make test`.
+      **Amended 2026-10-18 (kubelab#2443): the iris half is owned by iris, not by this spec.** This spec's
+      part is that the staging API server validates a `Sandbox` against the installed CRD, and the
+      2026-10-10 run proves it: the server refused iris's 64-character `iris.spec-hash` label *by that
+      CRD's schema*. The conformance pass itself is mlorentedev/iris#30, a fix in iris's adapter, and
+      this criterion is closed when that run passes there, not here.
+- [x] Toolkit unit tests cover the render primitive + the `cluster_bootstrap` apply loop and pass via `make test`.
 
 ## References
 
