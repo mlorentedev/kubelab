@@ -22,7 +22,7 @@
   },
   {
     "id": "CONSOLE-002-cross-context-bitacora-f4",
-    "behavior": "A Context with no explicit provider policy resolves to local-only (Ollama); adding a cloud-provider grant flips the resolution (default-deny enforced by test)",
+    "behavior": "A Context with no explicit provider policy resolves to no provider and the request is refused; an explicit cloud-provider grant for that context flips the resolution (default-deny enforced by test, ADR-050 D5 as amended 2026-10-01; carried by kubelab#2494)",
     "verification": "cd apps/api/src && go test -race ./internal/board/... -run TestResolveContextPolicyDefaultDeny",
     "state": "pending",
     "evidence": ""

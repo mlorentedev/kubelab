@@ -1,7 +1,7 @@
 ---
 id: "TOOL-035-gitea-repository-reconciliation"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-08-27"
 issue: "kubelab#1076"
 tags: [spec, proposal, gitea, forge, ci, migration]
@@ -66,10 +66,9 @@ its checks and they pass — which is what the migration was always for.
    Gitea the account that creates an organization becomes its owner. Creating orgs as the bot and
    creating them as the superadmin are different systems; decide which, and if it is the bot, decide
    what demotes it afterwards and whether that step is idempotent. Do not write the reconciler
-   against a guess. `[AGENT-DRAFT — review before archive]` The fallback proposed in `tasks.md`
-   (organizations created by the superadmin, the bot added to a write team) is an agent suggestion,
-   not a settled answer — it is what D1 implies, but nothing has been measured against the live
-   instance yet.
+   against a guess. **Settled 2026-08-27 against the live instance** (`verification.md`, *Risk 1*;
+   `tasks.md` Setup): the superadmin creates organizations and the bot creates repositories inside
+   them, enforced by `actor_for_org_creation() is Actor.SUPERADMIN`.
 2. **[MUST RESOLVE BEFORE CODE] The migration endpoint needs a GitHub credential reaching outward
    from the Beelink.** Carrying issues and pull requests means Gitea authenticates *to GitHub* — a
    second forge credential, on an on-demand homelab node, with `repo` scope on private repositories.
@@ -80,10 +79,11 @@ its checks and they pass — which is what the migration was always for.
    D4 keeps the GitHub copy authoritative until cutover, which is a clean rollback plan for code and
    an ambiguous one for five open pull requests: merging in one forge does not close the other.
    Measured 2026-08-27 — all five have `isCrossRepository: false`, so every head branch is fetchable
-   and the migration itself is unobstructed. `[AGENT-DRAFT — review before archive]` The framing that
-   follows is the agent's, not the operator's: the question is procedural rather than technical —
-   which forge accepts a merge during the pilot window — and it should be answered before the
-   migration rather than after. Confirm or replace this reading.
+   and the migration itself is unobstructed. The question is procedural rather than technical:
+   which forge accepts a merge during the pilot window. **The operator answered it on 2026-08-28**
+   (`tasks.md` Setup, Risk 3): Gitea accepts merges from the migration onward, and GitHub is the
+   frozen rollback snapshot. The assumption it rested on, that migrated pull requests arrive
+   mergeable, was measured true on 2026-09-02 (5/5 `mergeable=True`).
 4. **Three of `resume`'s five workflows cannot run on Gitea, and the split is structural rather than
    a compatibility gap.** Measured 2026-08-27 by reading all five. Marketplace availability is *not*
    the constraint people expect — Gitea resolves `uses:` against github.com by default, so
@@ -119,33 +119,32 @@ its checks and they pass — which is what the migration was always for.
 
 ## Acceptance criteria
 
-> `[AGENT-DRAFT — review before archive]` The seven criteria below are the agent's, derived from
-> ADR-065 and #1076 rather than dictated. Two were operator decisions and are not drafts: AC3's
-> metadata scope and AC6's existence as a criterion at all. Accept, edit or delete the rest — the
-> archive lock holds until this tag is gone.
+> The seven criteria were drafted from ADR-065 and #1076. AC3's metadata scope and AC6's existence
+> were operator decisions. The operator accepted the set by approving the archive on 2026-10-18
+> (kubelab#2443). Each criterion is ticked below with a pointer to its evidence in `verification.md`.
 
-- [ ] **AC1** — Declaring an organization and a repository in `common.yaml` and running the reconcile
+- [x] **AC1** — ✓ (`verification.md` *AC1/AC4 measured on prod*) — Declaring an organization and a repository in `common.yaml` and running the reconcile
       command creates them in Gitea; running it a second time reports no change. Verified by a live
       reconcile transcript, not a config diff.
-- [ ] **AC2** — A repository present in Gitea but absent from the declaration is **reported and not
+- [x] **AC2** — ✓ (`test_the_plan_has_no_deletion_field`; live stray `personal/zz-stray` reported and kept) — A repository present in Gitea but absent from the declaration is **reported and not
       deleted**. Demonstrated against a repository created for the purpose, then removed by hand.
-- [ ] **AC3** — After migrating `resume`, its 28 open issues and 5 open pull requests are present in
+- [x] **AC3** — ✓ (`verification.md` *AC3 — `resume` migrated*: 165/165 PRs, 5/5 open, 28/28 open issues) — After migrating `resume`, its 28 open issues and 5 open pull requests are present in
       Gitea with their titles and numbers, and every pull request's head branch resolves. Verified by
       counting through Gitea's API against the GitHub counts recorded here, not by opening the UI.
       **The issue figure read `20` until 2026-08-31 and was wrong** — it came from `gh issue list
       --limit 20`, so it measured the flag rather than the repository (lesson-408). Recounted by
       paginating to exhaustion and excluding `pull_request` entries, which the REST issues endpoint
       returns alongside issues.
-- [ ] **AC4** — After a full reconcile, `hefesto` owns no repository and no organization, per ADR-065
+- [x] **AC4** — ✓ (`verification.md` *AC1/AC4 measured on prod*: `hefesto owns: (none)`) — After a full reconcile, `hefesto` owns no repository and no organization, per ADR-065
       D1. Verified by the API listing what the account owns and finding it empty.
-- [ ] **AC5** — The GitHub credential used by the migration is scoped, stored in SOPS, registered in
+- [x] **AC5** — ✓ (`verification.md` *AC5*: 200 on the grant, 404 and 403 outside it) — The GitHub credential used by the migration is scoped, stored in SOPS, registered in
       `SECRET_CATALOG`, and checked by consequence: an authenticated call returns 200, and a call
       outside its scope is refused. Both halves captured — a token that works proves only half.
-- [ ] **AC6** — A push to `resume` in Gitea triggers `ci.yml` on `act_runner` and **all six jobs
+- [x] **AC6** — ✓ (#1076 comment 2026-09-04 (run 9, six jobs green); the three non-portable workflows are recorded in `verification.md`) — A push to `resume` in Gitea triggers `ci.yml` on `act_runner` and **all six jobs
       pass** — the same six that have completed in three seconds with an empty `steps` array since
       2026-08-11. The three workflows Risk 4 measured as non-portable are recorded as a named,
       accepted loss with their replacement (or their absence) stated, not quietly dropped.
-- [ ] **AC7** — The `act_runner` registration is idempotent from Ansible (`changed=0` on re-run) and
+- [x] **AC7** — ✓ (#1076 comment 2026-09-03: `changed=10` then `changed=0`) — The `act_runner` registration is idempotent from Ansible (`changed=0` on re-run) and
       its resource limits follow ADR-030.
 
 ## References
