@@ -9,3 +9,4 @@
 | 4 | 11:00-11:20 | IDP-042 PR 3 (local, stacked on PR 4) | render, snapshot, drift test, CLI written | `pytest tests/test_product_contract_drift.py`: 13 passed; three drift mutations RED |
 | - | 12:00-15:31 | (host) | session hit its usage limit again; no work in this window | resumed 15:31Z |
 | 5 | 15:31-15:40 | IDP-042 PR 3 (#2520) | owned keys pinned (mapping mutation RED), findings recorded, draft opened on base `feat/idp-042-contract-guards` | `make mutate` mapping entry: RED |
+| 6 | 15:40-16:15 | IDP-042 PR 4 wiring | written, left UNCOMMITTED until #2470 is on master; handoff and journal written | peer reported at ~16:12Z that #2470 cannot land within either run's window |

@@ -6,9 +6,10 @@ What is waiting on a human: two draft PRs, both blocked on the peer's #2470 (PR 
 
 ## Waiting on you
 
-1. **#2470 (peer lane `feat-idp-042-product-registry-7c`, PR 2).** CLEAN and green at 15:32Z, waiting on its own PR-Agent re-review. PR 4 and PR 3 cannot land before it.
+1. **#2470 (peer lane `feat-idp-042-product-registry-7c`, PR 2): land it first.** The peer merged master into it as `b6ce4dd9` (Tests had gone red on master's stale lesson count, since fixed) and triaged every PR-Agent finding, but its own run expired before Tests finished. Once `b6ce4dd9` is green: `dotf pr triage-queue --pr 2470`, then `dotf pr land 2470`. PR 4, PR 3 and the peer's PR 5 (#2526, stacked) all wait on it.
 2. **#2486 (PR 4, contract guards), draft.** Tests are green on its head. After #2470 lands:
    - rebase onto master;
+   - commit the UNCOMMITTED wiring already in the `feat-idp-042-contract-guards` worktree (`validate_registered`, `--registry/--app`, real-registry tests in both test files); it imports `product_registry`, so it cannot be committed before the rebase;
    - wire `derived_image()` for contract-managed entries only (`Product.contract_managed`);
    - add `--registry PATH --app NAME` inside `validate` in `toolkit/cli/product.py` (the peer's PR 5 appends commands after it);
    - switch the positive test from the stub deriver to the real registry;
