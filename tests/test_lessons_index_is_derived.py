@@ -433,9 +433,15 @@ class TestALessonThatHeadHasAndTheTreeDoesNotIsRefused:
         assert lessons_index.removed_lessons(lessons) == ["alpha/lesson-1-a-mock.md"]
 
     def test_fix_writes_nothing_when_a_lesson_disappeared(self, tmp_path: pathlib.Path) -> None:
-        lessons = _repo_with_lessons(tmp_path, {"alpha": ["lesson-1-one.md", "lesson-2-two.md"]})
+        """Reverse the rows first, so `--fix` has something it WOULD rewrite.
+
+        Over an index already in order the rewrite is a no-op, and the
+        assertion below would pass even if the rewrite ran before the refusal.
+        """
+        lessons = _repo_with_lessons(tmp_path, {"alpha": ["lesson-1-one.md", "lesson-2-two.md", "lesson-3-three.md"]})
         (lessons / "alpha" / "lesson-2-two.md").unlink()
         index = lessons / "alpha" / "_index.md"
+        _reverse_rows(index)
         before = index.read_text()
 
         result = runner.invoke(tools_app, ["lessons-index", "--root", str(lessons), "--fix"])
