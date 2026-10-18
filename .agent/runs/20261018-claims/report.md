@@ -38,7 +38,7 @@ What is waiting on you, and is any of it irreversible? Nothing has landed or bee
 The classifier refuses `gh pr ready` from an agent. `review-attestation` stays red on the drafts until a reviewer runs:
 
 ```
-! gh pr ready 2495 --repo mlorentedev/kubelab && gh pr ready 2502 --repo mlorentedev/kubelab && gh pr ready #2514 --repo mlorentedev/kubelab
+! gh pr ready 2495 --repo mlorentedev/kubelab && gh pr ready 2502 --repo mlorentedev/kubelab && gh pr ready 2514 --repo mlorentedev/kubelab
 ```
 
 ## Done
