@@ -37,10 +37,12 @@ import yaml
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 SERVICES_JSON = REPO_ROOT / "infra/terraform/dns/services.json"
+ZONES_JSON = REPO_ROOT / "infra/terraform/dns/zones.json"
 VALUES = REPO_ROOT / "infra/config/values"
 
-#: Zone apexes the DNS module manages, by its `zone` key.
-ZONE_APEX = {"kubelab": "kubelab.live", "mlorente": "mlorente.dev"}
+#: Zone apexes the DNS module manages, by its `zone` key, read from the module.
+ZONES = json.loads(ZONES_JSON.read_text())
+ZONE_APEX = {zone["key"]: apex for apex, zone in ZONES.items()}
 
 #: Domains served by something outside the Terraform DNS module -- a name
 #: resolved by split DNS, or an internal-only TLD a public record would be wrong
@@ -58,9 +60,10 @@ def _declared_dns_names() -> set[str]:
         apex = ZONE_APEX[r["zone"]]
         name = r["name"]
         names.add(apex if name in ("@", apex) else f"{name}.{apex}")
-    # The apex itself and `www` are declared as their own resources in the
-    # module rather than as entries in services.json.
-    names.update({"kubelab.live", "www.kubelab.live", "mlorente.dev"})
+    # Each zone's own records (the apex, `www`) live in zones.json.
+    for apex, zone in ZONES.items():
+        for r in zone["records"]:
+            names.add(apex if r["name"] == apex else f"{r['name']}.{apex}")
     return names
 
 

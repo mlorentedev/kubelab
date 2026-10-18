@@ -1,0 +1,15 @@
+{
+  "kubelab.live": {
+    "key": "kubelab",
+    "records": [
+      {"name": "kubelab.live", "type": "A", "proxied": true},
+      {"name": "www", "type": "CNAME", "content": "kubelab.live", "proxied": true}
+    ]
+  },
+  "mlorente.dev": {
+    "key": "mlorente",
+    "records": [
+      {"name": "mlorente.dev", "type": "A", "proxied": false}
+    ]
+  }
+}
