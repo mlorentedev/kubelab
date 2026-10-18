@@ -22,7 +22,9 @@ app = typer.Typer(
 def promote(
     app_name: Annotated[
         str,
-        typer.Option("--app", "-a", help="App to promote (api|web|errors)"),
+        typer.Option(
+            "--app", "-a", help="App to promote: a registered product (see infra/config/products.yaml), or errors"
+        ),
     ],
     version: Annotated[
         str,
@@ -30,14 +32,17 @@ def promote(
     ],
     env: Annotated[
         str | None,
-        typer.Option("--env", "-e", help="Environment (staging|prod); required for api/web, ignored for errors"),
+        typer.Option(
+            "--env", "-e", help="Environment (staging|prod); required for a registered product, ignored for errors"
+        ),
     ] = None,
 ) -> None:
     """
     Promote an app to an immutable image tag (ADR-046 D6).
 
-    Verifies the tag exists in the registry, then: api/web set apps.platform.<app>.version
-    in values/<env>.yaml and regenerate the overlay (staging tracks SHA, prod tracks semver);
+    Verifies the tag exists in the image registry, then: a registered product (see
+    infra/config/products.yaml) sets apps.platform.<app>.version in values/<env>.yaml
+    and regenerates the overlay (staging tracks SHA, prod tracks semver);
     errors sets the single edge.errors.version in common.yaml and re-syncs the kustomization
     (env-agnostic single SSOT, DELIVERY-003).
     """
@@ -45,7 +50,7 @@ def promote(
         logger.section(f"Promote errors -> {version}")
     else:
         if not env:
-            logger.error("--env is required for platform apps (api|web)")
+            logger.error("--env is required for a registered product (see infra/config/products.yaml)")
             raise typer.Exit(1)
         logger.section(f"Promote {app_name} -> {version} ({env.upper()})")
         validate_environment_config(env)
@@ -66,7 +71,7 @@ def image_tag(
     ],
     app_name: Annotated[
         str,
-        typer.Option("--app", "-a", help="Platform app (api|web)"),
+        typer.Option("--app", "-a", help="A registered product (see infra/config/products.yaml)"),
     ],
 ) -> None:
     """

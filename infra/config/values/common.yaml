@@ -1414,6 +1414,51 @@ apps:
           members:
             - superadmin
             - operator
+        # The `area:<AREA>` labels `make sync-vikunja` makes exist (APP-CONFIG-021, #2480):
+        # the filterable form of the AREA prefix every task title carries (ADR-066 D6).
+        # These are the areas used by at least ten issues across kubelab, dotfiles and
+        # knowledge (counted 2026-10-18); the long tail is created on demand by the paths
+        # that read a title, the importer (#2465) and the issue-to-task path (#1684).
+        # Each entry must be an AREA segment of the spec idPattern; a test refuses the rest.
+        labels:
+          areas:
+            - AI
+            - ANSIBLE
+            - APP-CONFIG
+            - AUTH
+            - BACKUP
+            - BUG
+            - CI
+            - CI-GATE
+            - CLI
+            - DASH
+            - DASH-DT
+            - DEBT
+            - DELIVERY
+            - DOCS
+            - DX
+            - GUARD
+            - HARNESS
+            - HERMES
+            - IDEAS
+            - IDP
+            - MEMORY
+            - NOTIFY
+            - OBS
+            - OPS
+            - PLAT
+            - REFACTOR
+            - SDD
+            - SEC
+            - SSOT
+            - TEST
+            - TF
+            - TOOL
+            - TOOLKIT
+            - VAULT
+            - VPN
+            - VPN-ACL
+            - WIN
         resources:
           cpu_limit: "0.5"
           memory_limit: "256M"

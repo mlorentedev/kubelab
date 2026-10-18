@@ -1,0 +1,27 @@
+# Product registry (ADR-067 D2, IDP-042). The products kubelab admits, in the
+# order the generators emit them; read by toolkit/features/product_registry.py.
+#
+# A product absent from this file is refused: `toolkit deployment promote`
+# names this file, and a dispatch event type nobody claims maps to no app.
+# The registry is the trust anchor for a product's contract (`kubelab.yaml`),
+# so nothing here is ever taken from the contract.
+#
+# Fields:
+#   forge       github | gitea | in-tree. in-tree (api, ADR-048) has no remote
+#               repository and receives no dispatch; its values stay hand-authored.
+#   repository  owner/name on the forge; where the contract is fetched from.
+#   receiver    legacy (its own receiver workflow) | generic (product-image-receiver).
+#   events      repository_dispatch event types per lane. Never renamed: GitHub
+#               accepts a dispatch nobody listens for with a 204 and drops it.
+#   image_name  only where the derived image (<registry>/<app>) is wrong.
+products:
+  api:
+    forge: in-tree
+  web:
+    repository: mlorentedev/web
+    forge: github
+    receiver: legacy
+    image_name: kubelab-web
+    events:
+      staging: web-image-published
+      prod: web-release-published
