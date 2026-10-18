@@ -16,7 +16,7 @@ Nothing irreversible is pending. Every merge has landed, and no prod mutation ra
 1. **#2527: master is red until it lands.** `docs/lessons/_index.md` says 596 lessons, but 598 files exist. Two lesson tests fail on every PR.
    - Cause: #2489 (this run) and #2513 (a peer) each added a lesson against their own base. Git merged the shared counter line without a conflict.
    - The recurrence of the #1649 class is filed as #2525, with two options: (A) stop committing the total; (B) re-derive the count on the merge result in the land path.
-   - If #2527 is not merged when you read this: CI green → triage → `dotf pr land 2524`.
+   - If #2527 is not merged when you read this: CI green → triage → `dotf pr land 2527`.
 2. **#2496 (DT-004) and #2507 (TOOL-001):** triaged, with `dotf pr triage-queue --pr N` clear. Their only red check is the master defect above. After #2527 merges:
    1. Merge master into each branch.
    2. Wait for CI and triage PR-Agent's re-run.
@@ -44,9 +44,9 @@ Nothing irreversible is pending. Every merge has landed, and no prod mutation ra
 | AUTH-004 | #2509 | `36e514e` | #2503, #2504, #2505; #1013 closed |
 | CONSOLE-002 | #2510 | `32dd8d4` | #2494, #2501; #711 closed as superseded (ADR-066) |
 | OPS-016 | #2518 | `12453fc` | #2500, #2506; #959 commented |
-| DT-004 | #2496 | pending (item 2 above) | #465, then #2416 |
-| TOOL-001 | #2507 | pending (item 2 above) | #2499, #584, #520 |
-| TOOL-009 | #2515 | parked (item 3 above) | iris#30 |
+| DT-004 | #2496 | `6a043d8b` | #465 closed, pointing at #2416 |
+| TOOL-001 | #2507 | `5057c267` | #520 closed, pointing at #2499 and #584 |
+| TOOL-009 | #2515 | pending: operator marks it ready | iris#30 |
 
 Every archive had an independent `dotf spec review`. Each is PASS or PASS WITH GAPS, and each finding is dispositioned in its `verification.md`. Every amendment rewords an acceptance criterion and deletes none.
 
@@ -81,6 +81,14 @@ Comments were also added to dotfiles#1727 (launcher base, abandoned-mode templat
 ## Next action
 
 Land #2527 (if it is still open), then #2496 and #2507. Then answer #2515 A or B.
+
+## After the operator returned (2026-10-18, 17:00–20:30Z)
+
+- #2527 landed at `b4d9f847`, and master's lesson count went green.
+- #2496 (DT-004) and #2507 (TOOL-001) were merged at 20:01Z after master was merged into each. #465 and #520 are closed with pointers.
+- #2515: the operator chose option A. `tests/test_spec_gate.py` now expects `set()`; 68 tests pass. The PR is still a draft, waiting on `gh pr ready 2515`.
+- #2531 closes #2525 with option A (operator): the indexes state no lesson count, `TestNoCommittedCount` refuses one coming back, the hook is renamed `lessons-index-order` (operator approved), and lesson-438 records the outcome. It is still a draft, waiting on `gh pr ready 2531`. `make test-fast` passed at `12d651cd`: 5915 tests.
+- `gh pr ready` failed twice for the operator with GitHub's secondary rate limit, while ten `gh` pollers from parallel sessions were running. Primary GraphQL quota was 4846/5000 at the time.
 
 ## Self-correction
 
