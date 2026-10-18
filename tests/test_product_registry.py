@@ -5,10 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import yaml
 
 from toolkit.features import product_registry
 from toolkit.features.product_registry import RegistryError, UnknownEventError
 
+REPO = Path(__file__).resolve().parents[1]
 FIXTURE = Path(__file__).parent / "fixtures" / "product" / "registry.yaml"
 
 
@@ -119,3 +121,39 @@ products:
         body = "products:\n  web:\n    forge: in-tree\n  web:\n    forge: in-tree\n"
         with pytest.raises(RegistryError, match="duplicate key 'web'"):
             product_registry.load_registry(_write(tmp_path, body))
+
+
+class TestDerivedImage:
+    """Q7: the registry has no ``image`` field; the image is derived, with an override."""
+
+    def test_the_platform_registry_already_carries_the_owner(self) -> None:
+        # `<registry>/<owner>/<product>` reads as `<registry>/<product>` here,
+        # because the platform's registry value already ends in the owner.
+        assert product_registry.platform_registry() == "docker.io/mlorentedev"
+
+    def test_a_product_without_an_override_is_registry_slash_app(self, fixture_registry: Path) -> None:
+        assert product_registry.derived_image("third") == "docker.io/mlorentedev/third"
+
+    def test_the_override_replaces_the_app_name(self, fixture_registry: Path) -> None:
+        assert product_registry.derived_image("web") == "docker.io/mlorentedev/kubelab-web"
+
+    def test_an_in_tree_product_has_no_derived_image(self, fixture_registry: Path) -> None:
+        """api's image is hand-authored (kubelab-api); the rule would say `api`, so it refuses."""
+        with pytest.raises(RegistryError, match="in-tree"):
+            product_registry.derived_image("api")
+
+    def test_an_unregistered_product_is_refused_naming_the_registry(self, fixture_registry: Path) -> None:
+        with pytest.raises(RegistryError, match=r"ghost.*registry\.yaml"):
+            product_registry.derived_image("ghost")
+
+    def test_each_real_product_derives_the_image_its_values_deploy(self) -> None:
+        """The override and ``apps.platform.<app>.image_name`` must name one image."""
+        common = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text())
+        checked = 0
+        for app, product in product_registry.load_registry().products.items():
+            if not product.contract_managed:
+                continue
+            deployed = f"{common['registry']}/{common['apps']['platform'][app]['image_name']}"
+            assert product_registry.derived_image(app) == deployed, app
+            checked += 1
+        assert checked > 0
