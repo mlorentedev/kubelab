@@ -12,7 +12,7 @@ created: "2026-09-27"
 - [x] AC3 (no event read from a response) -> commits `77091a87` (red), `02d0c667` (green); `tests/test_n8n_event_reads.py`, slack `xfail(strict)` against #1877. Mutation: restoring `$json.taskId` in `Append PR URL Comment` turned it red
 - [x] AC4 (no dead `options.continueOnFail`) -> commits `77091a87`, `02d0c667`; `tests/test_n8n_http_error_handling.py`, slack `xfail(strict)` against #1877. Mutation: re-adding the option turned it red
 - [x] AC5 (write keeps the task) -> commit `02d0c667`; `test_the_update_body_is_the_task_with_only_done_changed`, `test_the_writes_read_the_event_from_the_extractor`
-- [x] AC6 (signed merge probe, staging) -> commit `a5b54762`; `tests/test_n8n_probe.py` (7 new tests); live `make n8n-probe ENV=staging` on 2026-09-27 after `make import-n8n ENV=staging` from this branch: `signed forge merged PR (APP-CONFIG-016 AC6): task 9 done, description intact, PR comment present`, all six probes ok, `n8n webhook probe passed`. Prod runs after merge
+- [x] AC6 (signed merge probe, staging) -> commit `a5b54762`; `tests/test_n8n_probe.py` (7 new tests); live `make n8n-probe ENV=staging` on 2026-09-27 after `make import-n8n ENV=staging` from this branch: `signed forge merged PR (APP-CONFIG-016 AC6): task 9 done, description intact, PR comment present`, all six probes ok, `n8n webhook probe passed`. **Prod, 2026-10-18:** `make n8n-probe ENV=prod` exit 0 against the workflows the operator imported on 2026-10-16 (#2318): `signed forge merged PR (APP-CONFIG-016 AC6): task 35 done, description intact`, `n8n webhook probe passed`. The probe deletes its own tasks
 
 ## Test status
 
