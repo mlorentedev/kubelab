@@ -63,12 +63,6 @@ EXEMPTIONS: dict[str, str] = {
         "middleware itself before any backend is reached. The redirect target "
         "carries the full chain."
     ),
-    "uptime-kuma": (
-        "External service on RPi3 bare metal via Service + EndpointSlice. Deviation "
-        "predates this test and is unverified — kept exempt rather than reordered "
-        "because the route is not reachable from CI to prove the change safe. "
-        "Tracked in #1097."
-    ),
     "headscale": (
         "Carries the Noise protocol over a forced HTTP/1.1 TLSOption "
         "(`headscale-http11`) and is the only route in the repo with that "
