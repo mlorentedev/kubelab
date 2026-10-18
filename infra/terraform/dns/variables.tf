@@ -4,16 +4,6 @@ variable "cloudflare_api_token" {
   sensitive   = true
 }
 
-variable "zone_id_kubelab" {
-  description = "Cloudflare Zone ID for kubelab.live"
-  type        = string
-}
-
-variable "zone_id_mlorente" {
-  description = "Cloudflare Zone ID for mlorente.dev"
-  type        = string
-}
-
 variable "vps_ip" {
   description = "VPS public IP address (Hetzner)"
   type        = string
