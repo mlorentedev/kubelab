@@ -1,0 +1,48 @@
+# Arming envelope for the unattended run of 2026-10-18 (autopilot skill §1.4).
+# The run reads this file from the committed copy on chore/autopilot-run-20261018-idp042 only.
+version: 1
+run_id: "20261018-idp042"
+armed_by: manu
+armed_at: 2026-10-18T08:33:00Z
+expires_at: 2026-10-18T16:33:00Z
+objective: >-
+  Land IDP-042 PR 1 (#2457), then implement PR 4 (contract guards) and PR 3
+  (render + drift test) once PR 2 (#2470, peer session) is on master.
+scope:
+  write_paths:
+    - "toolkit/**"
+    - "tests/**"
+    - "specs/IDP-042-product-contract-registry/**"
+    - "infra/config/products/**"
+    - "infra/config/values/**"   # PR 3 only; a PR that changes a value here is opened, never merged
+    - "docs/lessons/**"
+    - ".agent/runs/20261018-idp042/**"
+  frozen_paths:
+    - ".github/**"
+    - "harness/**"
+    - "**/AGENTS.md"
+    - "**/CLAUDE.md"
+    - "Makefile"
+    - "infra/config/secrets/**"
+    - "toolkit/features/oidc_clients.py"
+    - "toolkit/features/credentials.py"
+    - ".agent/unattended.yml"
+  max_files: 12
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make, poetry]
+queue:
+  source: bitacora
+  filter: >-
+    IDP-042 (#1926): PR 1 land, PR 4, PR 3; PR 5 opened without merge only if
+    the peer session has not started it. PR 2 and PR 5 belong to
+    feat-idp-042-product-registry-7c.
+  max_items: 4
+budget:
+  max_iterations: 8
+  max_minutes_per_iteration: 60
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant   # .github/merge-grant.yml on master; never for a PR touching values, workflows or this file
+  push: true
+  open_pr: true
+  advisor_tier: top
