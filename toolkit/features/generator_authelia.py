@@ -7,6 +7,7 @@ from toolkit.core.logging import logger
 from toolkit.core.templating import create_renderer
 from toolkit.features.configuration import ConfigurationManager, UserPasswordHashMissing, resolve_user_identity
 from toolkit.features.generator_base import BaseGenerator
+from toolkit.features.product_registry import platform_apps
 
 
 class AutheliaGenerator(BaseGenerator):
@@ -41,7 +42,7 @@ class AutheliaGenerator(BaseGenerator):
             # Build apps list with full metadata (similar to TraefikGenerator)
             apps = []
             all_components = [
-                *COMPONENTS.APPS,
+                *platform_apps(),
                 *COMPONENTS.ALL_SERVICES,
             ]
             for component in all_components:

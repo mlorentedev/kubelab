@@ -39,13 +39,13 @@ class Components:
     """Component definitions.
 
     Note: These match the hierarchical structure in common.yaml:
-    - PLATFORM_APPS: apps.platform.*
     - EDGE: edge.*
     - SERVICES_*: apps.services.*.*
     """
 
-    # Platform apps (apps.platform.*)
-    PLATFORM_APPS: Sequence[str] = ("api", "web")
+    # The platform apps (apps.platform.*) are not listed here: they are the
+    # products admitted by infra/config/products.yaml, read through
+    # toolkit.features.product_registry.platform_apps() (#1815, IDP-042).
 
     # Edge services (edge.*)
     EDGE: Sequence[str] = ("traefik", "errors", "dns-gateway", "cloudflared")
@@ -70,12 +70,6 @@ class Components:
     # still plans local inference once a GPU node exists; an empty tuple simply
     # contributes nothing to ALL_SERVICES.
     SERVICES_AI: Sequence[str] = ()
-
-    # Legacy compatibility alias
-    @property
-    def APPS(self) -> Sequence[str]:
-        """Alias for PLATFORM_APPS for backward compatibility."""
-        return self.PLATFORM_APPS
 
     @property
     def ALL_SERVICES(self) -> tuple[str, ...]:
