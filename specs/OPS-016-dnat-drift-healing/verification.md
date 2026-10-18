@@ -45,6 +45,24 @@ First review, `53d1aa31`, **FAIL**:
    resolved by #999.
 6. AC6 "met by construction" read as satisfied: applied, reworded to superseded.
 
+Second review, `0690f54a`, **PASS WITH GAPS**:
+
+1. Major (THEORETICAL), the delete-convergence `raise` still has no test that fails without it:
+   ticketed, #2506, as in round 1. Tests stay outside this archive's write scope.
+2. Minor, `features.json` states set to `passing` by the implementer rather than a harness run:
+   applied as a record. The implementer set f1 to f3 by hand in `0690f54a`, after running each
+   entry's `verification` command to exit 0. No harness run exists, because `dotf spec` has no
+   verify subcommand. The reviewer re-ran all three commands to exit 0. The missing provenance
+   check belongs with the guard gaps in #2501.
+3. Minor, the live `CHECK=1` claim behind AC1 had no transcript: applied. It was re-run against
+   rpi3 on 2026-10-18: `make monitoring-apply CHECK=1` printed `Sync plan: 0 create, 0 edit,
+   0 delete (live=36, seed=36)` and `CHECK: nothing written`. The Docker-gated integration tests
+   (#999) were not re-run and stay UNVERIFIED for this archive.
+4. Minor, the Closing boxes are uniformly unticked: declined. `tasks.md` is in the contract set,
+   and its note already explains each box. Type checks and lint were not re-run because the
+   archive changes no code.
+5. Question, who set `passing`: answered in item 2.
+
 ## Promotion candidates
 
 Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.

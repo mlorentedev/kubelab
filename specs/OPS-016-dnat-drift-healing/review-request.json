@@ -1,12 +1,12 @@
 {
-  "reviewed_sha": "53d1aa31232150d87f9b011fd91f49e38f6a8a3a",
-  "reviewer": "nan/deepseek-v4-flash",
-  "requested_at": "2026-10-18T10:58:35Z",
+  "reviewed_sha": "0690f54a924a4b338c66be1e7708c76874c02551",
+  "reviewer": "nan/mimo-v2.6-flash",
+  "requested_at": "2026-10-18T11:05:53Z",
   "review_digest_before": "",
   "base_sha": "68b35a573c4709a61c5a60b142065540c9db3923",
   "contract_digests": {
-    "features.json": "",
-    "proposal.md": "f0c94e9096fa35f29198d5266c32b994c2fa4af72b94f7621cb6a208bdbf4a36",
-    "tasks.md": "5e59f18f6983682ec07d1fc594cfec189e5b9a2d0bced2de236672bb80fb23b8"
+    "features.json": "7e301018c1b2d2e314cdfad3693b153cc236869f0b8a5c937f2e9adb56348c68",
+    "proposal.md": "e47bfbb188ba0be1fd9e2393de29f740bb7359829e7ebca5c0d17d47951f938c",
+    "tasks.md": "fc714059e60dbf480682f7512765e0673c88a2a775dada0931e3ab6c8a39c1af"
   }
 }
