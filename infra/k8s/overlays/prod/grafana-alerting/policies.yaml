@@ -24,3 +24,27 @@ policies:
     group_wait: 30s
     group_interval: 5m
     repeat_interval: 4h
+    routes:
+      # TOOL-093 (#1957): tell the PR's author as well as the operator.
+      #
+      # THE FIRST ROUTE IS THE ROOT'S OWN RECEIVER AGAIN, ON PURPOSE. In an
+      # Alertmanager tree the root's receiver is only the fallback for an alert no child
+      # matches: `continue` on the second route lets the walk reach further SIBLINGS, it
+      # does not also notify the parent. Without this entry the failure alert would stop
+      # reaching the operator the day the route below is added. Measured on grafana-oss
+      # 13.0.2 on 2026-10-18: with only the second route, the alert reached n8n and the
+      # tier's receiver got nothing. `tests/test_forge_review_failed_route.py` walks the
+      # rendered tree and fails if either receiver goes missing.
+      #
+      # Matched by alertname, which Grafana sets to the rule's title; the test derives the
+      # title from the rule, so a rename cannot orphan the routes. The rule stays firing
+      # for its 15 minute window, so the long repeat keeps one failure from being two
+      # comments.
+      - receiver: apprise-page
+        object_matchers:
+          - ["alertname", "=", "Forge reviewer failed to review a pull request"]
+        continue: true
+      - receiver: forge-review-failed
+        object_matchers:
+          - ["alertname", "=", "Forge reviewer failed to review a pull request"]
+        repeat_interval: 24h

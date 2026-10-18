@@ -116,6 +116,22 @@ def _rendered_receiver(cm: dict) -> str:
     return policies["policies"][0]["receiver"]
 
 
+def _without_tier(policy: dict) -> dict:
+    """The policy minus the tier: the root receiver, and any route that repeats it.
+
+    A route that mirrors the root's receiver (TOOL-093: the failure alert must still
+    page when a second route is added) carries the tier too, so it varies per
+    environment exactly as the root does and is compared without it.
+    """
+    tier = policy["receiver"]
+    out = {k: v for k, v in policy.items() if k not in ("receiver", "routes")}
+    out["routes"] = [
+        {k: v for k, v in route.items() if k != "receiver"} if route["receiver"] == tier else route
+        for route in policy.get("routes", [])
+    ]
+    return out
+
+
 class TestRenderedAlertTier:
     """Read the emitted manifest, never the patch."""
 
@@ -157,10 +173,8 @@ class TestRenderedAlertTier:
         staging = yaml.safe_load(_alerting_configmap("staging")["data"]["policies.yaml"])
         prod = yaml.safe_load(_alerting_configmap("prod")["data"]["policies.yaml"])
 
-        s_policy = dict(staging["policies"][0])
-        p_policy = dict(prod["policies"][0])
-        s_policy.pop("receiver")
-        p_policy.pop("receiver")
+        s_policy = _without_tier(staging["policies"][0])
+        p_policy = _without_tier(prod["policies"][0])
 
         assert s_policy == p_policy, (
             "The staging and prod notification policies differ in a field other than "

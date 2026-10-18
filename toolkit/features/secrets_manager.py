@@ -1651,17 +1651,21 @@ SECRET_CATALOG: list[SecretSpec] = [
     ),
     # Shared secret for the n8n /webhook/notify ingress (NOTIFY-001 criterion #4).
     # Lives in the n8n encrypted credential store (Header Auth, ADR-044 webhook-auth);
-    # SOPS holds the canonical copy for recovery/rotation. No K8s SECRET_DEFINITIONS
-    # mapping — n8n reads it from its own credential, not from an env var.
+    # SOPS holds the canonical copy for recovery/rotation. n8n reads it from its own
+    # credential, not from an env var; Grafana is the one K8s consumer (TOOL-093), as the
+    # bearer of its `forge-review-failed` contact point, through `grafana-admin`.
     # Staging and prod n8n each hold their OWN separately-configured credential
     # (different values, one per env file) — this key is env-scoped by design.
     SecretSpec(
         key_path="apps.services.automation.notify.webhook_secret",
         description="Shared secret authenticating POSTs to the n8n /webhook/notify ingress",
         kind=SecretKind.RANDOM_TOKEN,
-        services=("n8n",),
+        services=("n8n", "grafana"),
         format_hint="opaque bearer token; sources send 'Authorization: Bearer <token>'",
-        rotate_note="Regenerate, paste into the n8n 'notify-webhook' Header Auth credential, update every source.",
+        rotate_note=(
+            "Regenerate, paste into the n8n 'notify-webhook' Header Auth credential, update every source, "
+            "and `make apply-secrets` so Grafana (the forge-review-failed contact point's bearer) reads it."
+        ),
         envs=("staging", "prod"),
     ),
     # ANSIBLE-035: fleet-wide copy of the PROD n8n webhook token specifically,
