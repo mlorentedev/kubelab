@@ -1,5 +1,5 @@
 ---
-id: lesson-597-a-reviewer-that-sends-no-max-tokens-inherits-the-providers-completion-cap-and-loses-the-review-to-its-own-reasoning
+id: lesson-601-a-reviewer-that-sends-no-max-tokens-inherits-the-providers-completion-cap-and-loses-the-review-to-its-own-reasoning
 type: lesson
 status: active
 created: "2026-10-18"
