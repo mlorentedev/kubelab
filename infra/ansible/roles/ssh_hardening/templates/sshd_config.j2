@@ -40,3 +40,13 @@ AcceptEnv LANG LC_*
 
 # Use PAM
 UsePAM yes
+{% if ssh_lan_jump_targets | length > 0 %}
+
+# LAN jump host: the operator's `*-lan` SSH aliases reach the inner-LAN nodes
+# through this node (ProxyJump), which needs a TCP forward. Only the SSH port of
+# the declared nodes is open to it; agent forwarding stays off. Match blocks
+# apply to the end of the file, so this one must stay last.
+Match User {{ ansible_user }}
+    AllowTcpForwarding yes
+    PermitOpen {% for target in ssh_lan_jump_targets %}{{ target }}:{{ ssh_port }}{{ ' ' if not loop.last else '\n' }}{% endfor %}
+{% endif %}

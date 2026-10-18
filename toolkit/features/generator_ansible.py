@@ -1,5 +1,6 @@
 """Ansible configuration generator — produces inventory from SSOT (common.yaml)."""
 
+import ipaddress
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -235,9 +236,47 @@ class AnsibleGenerator(BaseGenerator):
 
         all_nodes.extend(self._hub_nodes(networking))
 
+        jump_targets = self._lan_jump_targets(networking)
         for node_key, node in networking.get("nodes", {}).items():
-            all_nodes.append(self._homelab_node(node_key, node, networking, bootstrap))
+            entry = self._homelab_node(node_key, node, networking, bootstrap)
+            if node_key in jump_targets:
+                entry["ssh_lan_jump_targets"] = jump_targets[node_key]
+            all_nodes.append(entry)
         return all_nodes
+
+    @staticmethod
+    def _lan_jump_targets(networking: dict[str, Any]) -> dict[str, list[str]]:
+        """The LAN jump host, if one is declared, mapped to the addresses it may forward to.
+
+        `networking.nodes.<key>.lan_jump: true` declares the node whose sshd lets
+        the operator's account open a TCP forward to the other inner-LAN nodes (the
+        `*-lan` aliases are ProxyJump through it). The targets are derived, never
+        listed: every other node whose `lan_ip` is inside `networking.lan_cidr`.
+        A node on another segment (rpi3 sits on the WiFi side) is not behind the
+        jump, so it is not in the list, and the jump host never forwards to itself.
+
+        Fails generation rather than thinning, like `_derived_groups`: two flagged
+        nodes would silently open forwarding on both, and a jump with no target
+        would render a `PermitOpen` that permits nothing while reading as done.
+        """
+        nodes = networking.get("nodes", {})
+        jumps = [key for key, node in nodes.items() if (node or {}).get("lan_jump")]
+        if not jumps:
+            return {}
+        if len(jumps) > 1:
+            raise ValueError(f"networking.nodes declares more than one lan_jump host ({', '.join(jumps)}); exactly one")
+        lan = ipaddress.ip_network(networking["lan_cidr"])
+        targets = [
+            node["lan_ip"]
+            for key, node in nodes.items()
+            if key != jumps[0] and node.get("lan_ip") and ipaddress.ip_address(node["lan_ip"]) in lan
+        ]
+        if not targets:
+            raise ValueError(
+                f"networking.nodes.{jumps[0]}.lan_jump is set but no other node has a lan_ip inside "
+                f"networking.lan_cidr ({lan}); there is nothing to jump to"
+            )
+        return {jumps[0]: targets}
 
     def _hub_nodes(self, networking: dict[str, Any]) -> list[dict[str, Any]]:
         """The cloud hub nodes, each from its own provider block."""
@@ -327,6 +366,10 @@ class AnsibleGenerator(BaseGenerator):
             host_vars["lan_ip"] = node["lan_ip"]
         if node.get("legacy_python"):
             host_vars["legacy_python"] = True
+        # Set on the LAN jump host alone; `ssh_hardening` renders its forwarding
+        # block from it and every other host keeps the role's empty default.
+        if node.get("ssh_lan_jump_targets"):
+            host_vars["ssh_lan_jump_targets"] = node["ssh_lan_jump_targets"]
         # A node replaced by design cannot be pinned; it alone keeps TOFU (#1261).
         host_key_args = TOFU_SSH_ARGS if node.get("ephemeral") else pinned_args
         # bastion: mesh-only nodes (no public path) jump through the VPS; the VPS
