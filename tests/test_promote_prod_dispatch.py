@@ -336,3 +336,50 @@ def test_a_staging_lane_event_is_skipped_as_not_this_lane(tmp_path: pathlib.Path
     assert code == 0, log
     assert out == {"skip": "true"}
     assert "not this lane" in log
+
+
+def _stub_toolkit(tmp_path: pathlib.Path, route_stdout: str, route_code: int) -> str:
+    """A toolkit whose `app-for-event` answers `route_stdout`; `list` answers the registry."""
+    stub = tmp_path / "toolkit-stub"
+    products = "\n".join(product_registry.platform_apps())
+    stub.write_text(
+        "#!/usr/bin/env bash\n"
+        f'if [ "$2" = list ]; then printf "%s\\n" "{products}"; exit 0; fi\n'
+        f"cat <<'ROUTE'\n{route_stdout}\nROUTE\n"
+        f"exit {route_code}\n"
+    )
+    stub.chmod(0o755)
+    return str(stub)
+
+
+@_needs_bash
+def test_an_answer_that_is_not_json_fails_instead_of_skipping(tmp_path: pathlib.Path) -> None:
+    """A warning printed before the object once made `jq .lane` read nothing.
+
+    Nothing equals `prod`, so the release was treated as a staging event and the
+    run ended green, promoting nothing: the failure this workflow exists to end.
+    """
+    polluted = '[WARNING] SOPS is not installed.\n{"ok": true, "event": "x", "app": "web", "lane": "prod"}'
+    code, out, log = _resolve(
+        tmp_path,
+        EVENT="repository_dispatch",
+        PAYLOAD_VERSION="1.12.0",
+        TOOLKIT=_stub_toolkit(tmp_path, polluted, 0),
+    )
+    assert code != 0, "an unreadable answer was taken for another lane"
+    assert out == {}
+    assert "[WARNING] SOPS is not installed." in log, "the error must show what the toolkit answered"
+
+
+@_needs_bash
+def test_a_toolkit_failure_that_is_not_json_names_its_output(tmp_path: pathlib.Path) -> None:
+    """The ERROR/WHY/FIX annotation needs the CLI's JSON; anything else is shown raw."""
+    code, out, log = _resolve(
+        tmp_path,
+        EVENT="repository_dispatch",
+        PAYLOAD_VERSION="1.12.0",
+        TOOLKIT=_stub_toolkit(tmp_path, "ModuleNotFoundError: No module named 'toolkit'", 1),
+    )
+    assert code != 0
+    assert out == {}
+    assert "::error::" in log and "No module named 'toolkit'" in log, log

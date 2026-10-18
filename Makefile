@@ -970,7 +970,7 @@ promote-prod: ## Open the prod promotion PR for an app at a released semver tag 
 	@test -n "$(APP)" && test -n "$(VERSION)" || { \
 		echo "Usage: make promote-prod APP=<product> VERSION=1.12.0"; exit 2; }
 	@products="$$($(PRODUCT_LIST))" || { echo "Cannot read the product registry (infra/config/products.yaml)"; exit 2; }; \
-	printf '%s\n' $$products | grep -qxF '$(APP)' || { \
+	printf '%s\n' $$products | grep -qxF -- '$(APP)' || { \
 		echo "Unknown APP '$(APP)' — expected one of:" $$products; exit 2; }
 	@[[ "$(VERSION)" =~ ^[0-9]+\.[0-9]+\.[0-9]+$$ ]] || { \
 		echo "VERSION '$(VERSION)' is not an immutable semver tag such as 1.12.0."; \

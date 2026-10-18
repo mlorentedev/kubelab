@@ -137,6 +137,14 @@ def test_a_part_of_a_product_name_is_not_a_product() -> None:
     assert not _dispatched(proc)
 
 
+def test_an_app_that_looks_like_a_grep_option_is_not_a_product() -> None:
+    """Without `--`, `-vweb` reaches grep as `-v -w -e b` and every product matches."""
+    proc = _make("promote-prod", "APP=-vweb", "VERSION=1.12.0")
+    assert proc.returncode == 2
+    assert "Unknown APP" in proc.stdout
+    assert not _dispatched(proc)
+
+
 @pytest.mark.parametrize("app", product_registry.platform_apps())
 def test_every_registered_product_is_dispatched(app: str) -> None:
     proc = _make("promote-prod", f"APP={app}", "VERSION=1.12.0")

@@ -100,10 +100,21 @@ jobs:
               # application is promoted to production, and the payload surface
               # stays at exactly one field.
               if ! route="$($TOOLKIT product app-for-event "$EVENT_TYPE" --json)"; then
-                echo "::error::$(jq -r '"\(.error). \(.why) FIX: \(.fix)"' <<<"$route")"
+                # The CLI's own refusal is JSON; anything else (an import
+                # error, a missing poetry) is shown as it came.
+                reason="$(jq -er '"\(.error). \(.why) FIX: \(.fix)"' <<<"$route" 2>/dev/null)" \
+                  || reason="toolkit product app-for-event failed: ${route}"
+                echo "::error::${reason}"
                 exit 1
               fi
-              if [ "$(jq -r .lane <<<"$route")" != prod ]; then
+              # An answer that is not one JSON object must fail here. Read
+              # leniently, its lane would be empty, which is not `prod`, and a
+              # release would end green as "not this lane".
+              if ! lane="$(jq -er .lane <<<"$route" 2>/dev/null)"; then
+                echo "::error::toolkit product app-for-event answered no lane: ${route}"
+                exit 1
+              fi
+              if [ "$lane" != prod ]; then
                 echo "Event type '${EVENT_TYPE}' belongs to the staging lane: not this lane, nothing to promote"
                 echo "skip=true" >> "$GITHUB_OUTPUT"
                 exit 0
