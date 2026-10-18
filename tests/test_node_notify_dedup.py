@@ -43,8 +43,11 @@ class Node:
         self.script.chmod(0o700)
         self._shim("systemctl", 'printf "Result=%s\\n" "$(cat "$NODE_RESULT")"')
         self._shim("journalctl", 'echo "unit output"')
-        self._shim("curl", 'cat >/dev/null; d=""; while [ $# -gt 0 ]; do [ "$1" = -d ] && d="$2"; shift; done;'
-                   ' printf "%s\\n" "$d" >> "$NODE_SENT"; exit "$(cat "$NODE_CURL_EXIT" 2>/dev/null || echo 0)"')
+        self._shim(
+            "curl",
+            'cat >/dev/null; d=""; while [ $# -gt 0 ]; do [ "$1" = -d ] && d="$2"; shift; done;'
+            ' printf "%s\\n" "$d" >> "$NODE_SENT"; exit "$(cat "$NODE_CURL_EXIT" 2>/dev/null || echo 0)"',
+        )
         self.set_result("exit-code")
 
     def _shim(self, name: str, body: str) -> None:
@@ -63,7 +66,9 @@ class Node:
             "NODE_SENT": str(self.sent),
             "NODE_CURL_EXIT": str(self.curl_exit),
         }
-        return subprocess.run(["bash", str(self.script), *args, unit], capture_output=True, text=True, env=env, timeout=60)
+        return subprocess.run(
+            ["bash", str(self.script), *args, unit], capture_output=True, text=True, env=env, timeout=60
+        )
 
     def titles(self) -> list[str]:
         if not self.sent.exists():
