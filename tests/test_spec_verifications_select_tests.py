@@ -57,7 +57,6 @@ UNWRITTEN = frozenset(
         "AI-024-hermes-reach-f7",
         "AI-024-hermes-reach-f8",
         "AI-024-hermes-reach-f9",
-        "APP-CONFIG-013-vikunja-shared-projects-f7",
         "BACKUP-057-f1",
         "BACKUP-057-f7",
         "GITOPS-003-f2",
