@@ -189,6 +189,7 @@ Deferred: SMTP, queues. n8n is not a resource: it is not multi-tenant, and the n
 - **Capacity is admitted, not discovered.** The receiver refuses a claim when the sum of the namespaces' quotas would exceed the node's allocatable capacity.
 - **NetworkPolicy (#378) lands before the first claim is admitted.** It moves from ADR-067 D5's list to a dependency of this ADR.
 - **There is a runbook for each operation:** restore, rotate, purge and add a domain.
+- **A platform-operations dashboard in Grafana** is fed by the metrics above: restore verification, orphans, admission refusals and claims per product. Grafana is the operations pane; it is not the catalog, it holds no ownership and it opens no PRs.
 
 **Triggered:**
 
@@ -200,6 +201,7 @@ Deferred: SMTP, queues. n8n is not a resource: it is not multi-tenant, and the n
 - **For the product's author and the author's agent:** the JSON Schema, `toolkit contract validate` in the product's CI with errors that name the fix, and the read-only MCP of ADR-067 D6.
 - **The receiver opens the kubelab PR.** In staging it merges unattended (D13).
 - **A portal is another read adapter over the same library (ADR-067 D1), and its writes stay PRs.** It follows the industry shape: a catalog of products with owners, a page per product that links into the existing tools (Argo CD, Grafana, logs, runbooks), and golden-path actions that open PRs. It never rebuilds those tools' interfaces. ADR-050 D1 places it in the console served by the Go API, which fires ADR-067's option-E trigger ("a consumer needs REST"). That question gets its own ADR, once the data this ADR defines exists.
+- **The boundary between the two languages is data, not calls.** ADR-034 keeps the toolkit in Python and the API in Go. The console reads schema'd files the toolkit writes to git (the registry, `platform.json`, rendered state) and never calls Python. A stale generated file must fail CI, so #1860 is a precondition of that ADR. A piece that must ship as one binary into a foreign environment (a product's CI, a pod) goes to Go on its own, as the review draw did (#2295). It is never a port of the toolkit.
 
 ### D12. Shared CI services have one implementation, never a copy per repository
 
@@ -222,6 +224,18 @@ Self-service that waits on the operator's merge is not self-service: per-deploy 
 - **(b) Scope enforced by construction.** The gate refuses any path outside the product's staging directory, and any kind outside an allowlist: no RBAC, no cluster-scoped object, no other product's namespace. `allow_auto_merge` stays `false`. A dedicated identity merges with the head SHA pinned.
 - **(c) Declared in a file, with tests on both halves.** The class definition and the merging actor's condition live in one committed file. Tests fail if either widens. The class matches on content and identity, never on a branch name.
 - **(d) Production excluded.** A prod promotion, and any change that runs a delete Job (D6), is always merged by a human.
+
+### D14. Owners are declared in the contract; per-product access is triggered
+
+- **Now.** The contract gains `owners: [identity]`. A test fails unless each owner resolves to a declared identity (`apps.auth.identities`). For a private product, the owners are declared in its tenant repository (D4).
+- **The user store stays where it is.** The declared identities and their SOPS hashes, read by Authelia's file backend, are the single source (C7). No second database is added; the missing piece is a view. Until the console exists, a toolkit read command and the read-only MCP give that view, beside `make auth-review`.
+- **Triggered by the first team member:**
+  - a group per product, derived from `owners:`;
+  - an Argo CD AppProject role per product. Demotion lags by up to the access-token lifetime;
+  - Grafana folder permissions per product. Whether the OSS edition can map OIDC groups to teams is checked first; if not, a reconciler applies them through the API, as `make auth-review` does;
+  - a forge team, which exists only for repositories owned by an organization (C26).
+- **Also triggered:** an identity store with an admin UI behind Authelia, when onboarding becomes self-service. Today, adding a person is an operator edit of the users file followed by `apply-secrets`.
+- **This amends ADR-062 D2**, whose tiers are global today.
 
 ## Consequences
 
@@ -252,6 +266,7 @@ Self-service that waits on the operator's merge is not self-service: per-deploy 
   - D4's tenant boundary is the forge organization: one organization per tenant, whether the tenant is the operator's employer or a client. Actions secrets, runners and packages are shared across an organization, so a team scoped to one repository does not isolate a tenant.
 - **ADR-038:** the trigger it deferred on is fired. "A product sets its own secret values and the platform applies them with no operator step" replaces the dead Image Updater condition. This closes #1613.
 - **ADR-014:** Phase 2 (Sealed Secrets) is adopted for product-owned secrets only. Operator secrets stay on SOPS.
+- **ADR-062:** D2's global tiers gain per-product roles, under D14's trigger.
 - **IDP-042:** open question 7 is corrected by D7. This is a spec note, not an ADR amendment.
 
 Two ADRs are left unamended. The reasons are recorded here so the silence is not read as an oversight:
