@@ -220,3 +220,15 @@ _agent_stack_hermes_jobs_declared:
   name_prefix: "{{ agent_stack_hermes.cron.name_prefix }}"
   default_deliver: "slack:{{ agent_stack_hermes.slack.home_channel.id }}"
   jobs: "{{ agent_stack_hermes.cron.jobs }}"
+
+# The fallback proof (spec AI-018): a throwaway gateway with NaN failed on purpose, off
+# unless a run asks for it (see tasks/hermes_fallback_probe.yml).
+agent_stack_fallback_probe: false
+agent_stack_fallback_probe_name: hermes-fallback-probe
+# Copy the live gateway's credential pool into the probe, so the proof sees the state it runs on.
+agent_stack_fallback_probe_pool: true
+agent_stack_fallback_probe_home: /opt/probe-home
+agent_stack_fallback_probe_config_mount: "{{ agent_stack_fallback_probe_home }}/config.yaml"
+agent_stack_fallback_probe_config: "{{ agent_stack_agent_home }}/hermes-fallback-probe-config.yaml"
+# A line the probe's log must not carry: it opened a Slack connection.
+agent_stack_fallback_probe_slack_pattern: '(?i)slack[^\n]*(connected|socket mode|authenticated|starting)'

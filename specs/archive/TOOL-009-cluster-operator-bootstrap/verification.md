@@ -13,12 +13,12 @@ Written on 2026-10-10 during DEBT-019 (#2034): the implementation merged on 2026
 - [x] AC2 (deploy applies every entry; dead `_get_traefik_config_path()` removed; no `RESOLVE_*` substitution shell in the Makefile) -> #676 / f2: the grep for `_get_traefik_config_path` in `toolkit/` and for `s/RESOLVE_` in the Makefile are both clean; every remaining render site calls `toolkit infra k8s render-apply` (`argocd-repoint`, `RESOLVE_GCP1_TAILSCALE_IP`); `deploy-external` is gone (`Makefile:716`). Tests: `tests/test_k8s_render.py`, `tests/test_cluster_bootstrap.py`, 25 passed.
 - [x] AC3 (agent-sandbox CRD v1beta1 and controller Ready) -> f5: `sandboxes.agents.x-k8s.io` serves `v1beta1` and `agent-sandbox-controller` is rolled out, in staging (114 days old) and in prod (57 days).
 - [x] AC4 (`make sync-operators` refreshes the vendored manifest from the SSOT version) -> f4: the target runs and `git diff --exit-code infra/k8s/cluster/` is clean, so the vendored file matches the pinned `v0.5.0rc1`.
-- [ ] AC5 (iris `TestK8sConformance` against staging) -> **ticketed in the consumer: mlorentedev/iris#30**, open since 2026-06-18. Re-run on 2026-10-10 at iris `748d2f1`: every Start-based subtest fails with `metadata.labels: Invalid value: "<64 hex>": must be no more than 63 characters`. The API server validated the `Sandbox` against the CRD this spec installed and refused iris's own `iris.spec-hash` label, so the cluster side this spec owns is proven by the same run, and the conformance is blocked on iris's adapter.
+- [x] AC5, **amended 2026-10-18** (iris `TestK8sConformance` against staging) -> **owned by the consumer: mlorentedev/iris#30**, still open on 2026-10-18, open since 2026-06-18. Re-run on 2026-10-10 at iris `748d2f1`: every Start-based subtest fails with `metadata.labels: Invalid value: "<64 hex>": must be no more than 63 characters`. The API server validated the `Sandbox` against the CRD this spec installed and refused iris's own `iris.spec-hash` label, so the cluster side this spec owns is proven by the same run, and the conformance is blocked on iris's adapter.
 - [x] AC6 (unit tests for the render primitive and the loop) -> `tests/test_k8s_render.py`, `tests/test_cluster_bootstrap.py`, 25 passed; both run in `make test`.
 
 ## Test status
 
-- `pytest tests/test_k8s_render.py tests/test_cluster_bootstrap.py` -> 25 passed (2026-10-10).
+- `pytest tests/test_k8s_render.py tests/test_cluster_bootstrap.py` -> 25 passed (2026-10-10). Re-run 2026-10-18 after #2167 added the loop tests: 34 passed.
 - Live, read-only, 2026-10-10: CRD versions and controller rollout status in staging and prod.
 - No regressions in existing test suite: yes.
 
@@ -33,12 +33,25 @@ Written on 2026-10-10 during DEBT-019 (#2034): the implementation merged on 2026
 
 | # | Finding | Disposition |
 |---|---|---|
-| 1 | Major, REAL: AC5 unmet, iris `TestK8sConformance` fails against staging on the 64-character `iris.spec-hash` label | Open, not archivable. The fix is iris#30, in the iris repository, which is being worked on the operator's new machine. The operator chooses: land iris#30 and record the passing conformance run here, or amend AC5 (a contract edit, so a new review round). |
+| 1 | Major, REAL: AC5 unmet, iris `TestK8sConformance` fails against staging on the 64-character `iris.spec-hash` label | **Amended (operator ruling, 2026-10-18, #2443).** AC5 is reworded: this spec owns the cluster side, which the same run proves, and iris#30 owns the conformance pass. The contract edit is why a second review round ran. |
 | 2 | Major, THEORETICAL: `render_and_apply` rendered only `if entry.render:`, so a placeholder with no map reached `kubectl` verbatim | Fixed in #2167: rendering is unconditional, `test_a_placeholder_with_no_render_map_is_never_applied` covers the required and optional branches, and `make mutate` restoring the `if` went red. Lesson-547. |
 | 3 | Major, THEORETICAL: `_apply_cluster_bootstrap` was never executed by a test | Fixed in #2167: `test_the_loop_applies_every_entry_in_declared_order` and `test_the_loop_stops_at_the_first_hard_failure` drive it over the real `common.yaml`; `make mutate` turning the early return into `continue` went red. |
 | 4 | Minor, REAL: the proposal and T2 say `--dry-run=server`; the code validates client-side, and `k8s_dry_run`'s comment claimed a server dry-run | Comment fixed in #2167. The contract wording stays as written because the review was signed against it; this row is the correction of record: validation is client-side, for the reason `_kubectl_apply` gives (a server dry-run cannot validate an object whose namespace the same manifest creates). |
 | 5 | Minor, REAL: the Makefile said the hub EndpointSlice render lived in `_deploy-argocd-helm` | Fixed in #2167: it names `make argocd-repoint`. |
-| 6 | Question: archive with AC5 tracked on iris#30, or hold? | Hold. See row 1. |
+| 6 | Question: archive with AC5 tracked on iris#30, or hold? | Archive, with AC5 amended. See row 1. |
+
+## Review dispositions
+
+Review of 2026-10-18 (`review.md`, PASS-WITH-GAPS, nan/glm5.3-flash, reviewed at `bb811962`):
+
+1. The AC5 amendment and f6 attribute the 64-character refusal to "that CRD's schema". Applied
+   here, as a correction outside the contract set: the 63-character cap is the API server's
+   built-in `metadata.labels` validation. The conclusion stands, because the request reaches
+   that validation only when the CRD is served (an unknown kind answers 404). The contract text is
+   not edited, since that would stale this review.
+2. `tasks.md` T9 stays unticked, "blocked on mlorentedev/iris#30": declined to reword. That is
+   the honest state, and the amended AC5 names the same owner. knowledge#118 was already
+   closed, so the archive checklist now asks for a comment with the PR link instead of a close.
 
 ## Promotion candidates
 
@@ -48,6 +61,6 @@ Written on 2026-10-10 during DEBT-019 (#2034): the implementation merged on 2026
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved to `specs/archive/`
-- [ ] Bitácora ticket closed with PR link (ADR-018)
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved to `specs/archive/`
+- [ ] Tracking issue mlorentedev/knowledge#118 (already closed) gets a comment with the PR link, naming iris#30 as the open remainder (ADR-018)

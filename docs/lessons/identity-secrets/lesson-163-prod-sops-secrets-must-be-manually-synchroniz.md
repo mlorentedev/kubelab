@@ -17,4 +17,6 @@ tags: [kubelab, identity-secrets]
 **Solution:** Manually ran `sops edit prod.enc.yaml` and added the missing Gitea secrets (copied values from staging where appropriate). Created backlog items TOOL-001 (secret drift detection) and TOOL-002 (secret sync tool) for automation.
 
 **Rule:** After adding any new secret to staging SOPS, immediately add a placeholder or copy to prod SOPS. Use `toolkit secrets list --env staging` vs `--env prod` to compare. Automate this with TOOL-001/TOOL-002.
+
+**Update 2026-10-18:** TOOL-001 was archived as integrated (#2443). `make secrets-audit` checks each env against `SECRET_CATALOG` and replaces the pairwise compare. It still exits 0 on a missing catalogued key, which is #2499. TOOL-002 is #521.
 **Tags:** `#sops` `#secrets` `#environments` `#operations`
