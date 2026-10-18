@@ -33,7 +33,7 @@ from __future__ import annotations
 import json
 import pathlib
 
-import yaml
+from toolkit.features.declared_domains import declared_domains
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 SERVICES_JSON = REPO_ROOT / "infra/terraform/dns/services.json"
@@ -64,29 +64,6 @@ def _declared_dns_names() -> set[str]:
     return names
 
 
-def _declared_domains(env: str) -> dict[str, str]:
-    """Every `<key>: <domain>` a service declares, merged common -> env."""
-    found: dict[str, str] = {}
-    for source in ("common", env):
-        path = VALUES / f"{source}.yaml"
-        if not path.exists():
-            continue
-        config = yaml.safe_load(path.read_text()) or {}
-        _walk(config.get("apps", {}), found)
-    return found
-
-
-def _walk(node: object, found: dict[str, str], path: str = "apps") -> None:
-    if not isinstance(node, dict):
-        return
-    for key, value in node.items():
-        here = f"{path}.{key}"
-        if key.endswith("domain") and isinstance(value, str) and value:
-            found[here] = value
-        else:
-            _walk(value, found, here)
-
-
 def test_every_declared_public_domain_has_a_dns_record() -> None:
     """A declared `domain` with no DNS record can never answer a health probe.
 
@@ -110,7 +87,7 @@ def test_every_declared_public_domain_has_a_dns_record() -> None:
     # the skip set was empty, so nothing was relying on it.
     undeclared = {
         key: domain
-        for key, domain in _declared_domains(env).items()
+        for key, domain in declared_domains(env, VALUES).items()
         if domain not in dns and domain not in EXTERNALLY_MANAGED
     }
     assert not undeclared, (
