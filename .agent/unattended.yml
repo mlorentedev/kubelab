@@ -1,22 +1,23 @@
-# Arming envelope for the overnight IDP-042 run of the registry lane.
-# The operator split the lane on 2026-10-18: this run owns PR 2 (#2470) and PR 5.
-# PR 1, PR 3 and PR 4 belong to the contract-schema lane (chore/autopilot-run-20261018-idp042).
-# Any PR touching .github/** is opened and never merged (always-human floor).
+# Arming envelope for the short close-out run of the IDP-042 registry lane.
+# The operator stepped away for about two hours on 2026-10-18 and asked for a
+# stable, clean point for tomorrow: finish the PRs this lane opened, sweep the
+# worktrees with the peer sessions, and hand off. No new tickets.
+# #2526 touches .github/workflows/promote-prod.yml, so it is never merged here.
 version: 1
-run_id: "2026-10-18-idp042-registry"
+run_id: "2026-10-18-registry-close"
 armed_by: manu
-armed_at: 2026-10-18T08:34:04Z
-expires_at: 2026-10-18T16:34:04Z
-objective: "Land IDP-042 PR 2 (#2470) and the #2469 fix (#2474), then open IDP-042 PR 5 (registry-derived literals)."
+armed_at: 2026-10-18T22:55:00Z
+expires_at: 2026-10-19T00:55:00Z
+objective: >-
+  Leave the IDP-042 registry lane at a stable, clean point: #2526 ready and triaged,
+  finished worktrees listed for removal, handoff written.
 scope:
   write_paths:
-    - "toolkit/**"
     - "tests/**"
-    - "infra/config/**"
-    - "specs/IDP-042-product-contract-registry/tasks.md"
+    - "toolkit/**"
     - "Makefile"
     - ".github/workflows/promote-prod.yml"
-    - "docs/lessons/**"
+    - "specs/IDP-042-product-contract-registry/tasks.md"
     - ".agent/runs/**"
   frozen_paths:
     - ".github/merge-grant.yml"
@@ -27,19 +28,21 @@ scope:
     - ".agent/unattended.yml"
     - "toolkit/features/oidc_clients.py"
     - "toolkit/features/credentials.py"
-  max_files: 10
+  max_files: 12
   max_loc: 300
 allowed_commands: [dotf, gh, git, make, poetry]
 queue:
   source: bitacora
-  filter: 'IDP-042 (#1926) items owned by this lane: #2470, #2474, PR 5 of specs/IDP-042-product-contract-registry/tasks.md'
-  max_items: 3
+  filter: >-
+    PRs this lane opened: #2526 (IDP-042 PR 5). The worktree sweep is report-only:
+    commands for the operator, nothing removed by the run.
+  max_items: 1
 budget:
-  max_iterations: 8
+  max_iterations: 4
   max_minutes_per_iteration: 25
   max_consecutive_failures: 2
 authority:
-  merge: standing-grant
+  merge: never
   push: true
-  open_pr: true
+  open_pr: false
   advisor_tier: top
