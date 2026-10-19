@@ -213,7 +213,8 @@ These live in `common.enc.yaml` and are shared across ALL environments:
 
 | Key | Kind | Services |
 |-----|------|----------|
-| `cloudflare.api_token` | external | Terraform DNS |
+| `cloudflare.api_token` | external | Terraform DNS (no node receives it) |
+| `cloudflare.acme_dns_token` | external | Traefik ACME DNS-01 (Zone:DNS:Edit only) |
 | `dockerhub.username` | external | CI/CD image push |
 | `dockerhub.token` | external | CI/CD image push |
 | `hetzner.api_token` | external | VPS management |

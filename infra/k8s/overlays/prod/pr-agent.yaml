@@ -168,3 +168,31 @@ spec:
           port: 3000
   tls:
     certResolver: letsencrypt
+---
+# Ingress from Traefik only (NET-002, #378): the forge's webhook arrives
+# through IngressRoute pr-agent.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pr-agent-ingress
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: pr-agent
+    app.kubernetes.io/part-of: kubelab
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: pr-agent
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - protocol: TCP
+          port: 3000

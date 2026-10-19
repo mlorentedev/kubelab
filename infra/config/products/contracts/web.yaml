@@ -1,0 +1,13 @@
+# Snapshot of web's kubelab.yaml (IDP-042, ADR-067 D2): the contract kubelab
+# last rendered into apps.platform.web. Written by the receiver from the
+# product repository at the built commit; edit it there, not here.
+# `toolkit product render --contract <this> --env <env> --check` fails on drift.
+schema_version: 1
+image: docker.io/mlorentedev/kubelab-web
+port: 8080
+health_path: /
+hostnames:
+  staging: staging.mlorente.dev
+  prod: mlorente.dev
+auth: public
+secrets: []

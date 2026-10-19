@@ -1,0 +1,16 @@
+# {{ ansible_managed }}
+# The fallback proof's own config (spec AI-018): the model and the fallback chain of
+# hermes-config.yaml.j2 and nothing else, so the throwaway gateway needs none of the
+# mounts the live one does (sandbox socket, scripts, MCP servers, persona, skills).
+# tests/test_hermes_fallback_probe.py fails if the two chains differ.
+model:
+  provider: custom
+  base_url: {{ agent_stack_nan_api_base_url }}
+  key_env: NAN_API_KEY
+  default: {{ agent_stack_hermes.models.default }}
+{% if agent_stack_anthropic_api_key | length > 0 %}
+
+fallback_providers:
+  - provider: anthropic
+    model: {{ agent_stack_hermes.models.fallback }}
+{% endif %}

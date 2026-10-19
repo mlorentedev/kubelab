@@ -456,6 +456,7 @@ def _cloudflare_verify_expiry(path: str, token: str, timeout: float) -> datetime
 # and we cannot find out when" is a finding, not a blank line.
 PROVIDER_CHECKS = {
     "cloudflare.api_token": cloudflare_token_expiry,
+    "cloudflare.acme_dns_token": cloudflare_token_expiry,
     # A user token from My Profile, so the same verify endpoint answers for it.
     "cloudflare.r2_admin_token": cloudflare_token_expiry,
     # An account token (Manage Account > Account API Tokens), so it is verified
