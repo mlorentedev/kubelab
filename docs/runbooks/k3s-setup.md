@@ -40,7 +40,7 @@ not embedded etcd. Namespace for workloads: `kubelab`. K3s version SSOT:
   during provisioning. See [headscale-setup](headscale-setup.md).
 - Controller (workstation) has the repo, Poetry env (`make setup`), SOPS age key,
   and the SSH key authorized on the node.
-- Cloudflare ACME token in SOPS (`cloudflare.acme_dns_token`, Zone:DNS:Edit only) for Traefik ACME DNS-01.
+- Cloudflare ACME token in SOPS (`cloudflare.acme_dns_token`, Zone:DNS:Edit only) for Traefik ACME DNS-01. `make acme-token-scope` asks Cloudflare what it may do: 403 on zone settings is the expected answer.
   It is not the Terraform token (`cloudflare.api_token`), which no node receives (#2459).
 
 ## Install: full node provisioning

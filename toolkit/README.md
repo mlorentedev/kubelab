@@ -158,6 +158,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit registry` | Container registry maintenance (tag pruning). |
 | `toolkit registry prune` | Prune ephemeral image tags (ADR-046). |
 | `toolkit secrets` | Unified secrets management (SOPS vaults, K8s secrets, audit). |
+| `toolkit secrets acme-token-scope` | Ask Cloudflare what the ACME DNS-01 token may do on each issuing zone (#2459). |
 | `toolkit secrets apply` | Decrypt SOPS secrets and apply as K8s Secrets to the cluster. |
 | `toolkit secrets audit` | Audit secrets completeness across environments. |
 | `toolkit secrets catalog` | List all secrets in the catalog with descriptions. |

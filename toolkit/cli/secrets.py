@@ -908,6 +908,52 @@ def check_expiry(
     logger.success(f"{len(keys)} provider-issued credentials, none expiring within {warn_days} days")
 
 
+@app.command("acme-token-scope")
+def acme_token_scope() -> None:
+    """Ask Cloudflare what the ACME DNS-01 token may do on each issuing zone (#2459).
+
+    Every request is a GET; the token is used, never printed. Expected per
+    zone: found by name, DNS records readable, zone settings refused with 403.
+
+    The zones are the `main` names of `edge.traefik.acme_domains`, the apexes
+    the cluster's certificates are issued for. That list is what the VPS
+    Traefik role reads; K3s Traefik issues per IngressRoute host, under the
+    same apexes today.
+
+    Exits 1 when a probe answers differently (a 200 on zone settings means the
+    token is broader than DNS), 2 when Cloudflare cannot be asked.
+    """
+    from toolkit.features.acme_token_scope import ScopeUncheckableError, probe_acme_token
+    from toolkit.features.configuration import ConfigurationManager
+
+    logger.section("ACME DNS-01 token scope")
+    token = _provider_value_lookup()("cloudflare.acme_dns_token")
+    if not token:
+        logger.error("cloudflare.acme_dns_token is absent from SOPS")
+        raise typer.Exit(2)
+    domains = ConfigurationManager("common", settings.project_root).get_merged_config()["edge"]["traefik"][
+        "acme_domains"
+    ]
+
+    try:
+        probes = probe_acme_token(token, [d["main"] for d in domains])
+    except ScopeUncheckableError as exc:
+        logger.error(f"CANNOT CHECK: {exc}")
+        raise typer.Exit(2) from exc
+
+    for p in probes:
+        line = f"{p.zone}  {p.action}: HTTP {p.got} (expected {p.expected})"
+        if p.ok:
+            logger.success(line)
+        else:
+            logger.error(line)
+    wrong = [p for p in probes if not p.ok]
+    if wrong:
+        logger.error(f"{len(wrong)} probe(s) answered differently than an ACME-only token should")
+        raise typer.Exit(1)
+    logger.success(f"{len(probes)} probes as expected: the token reaches DNS on its zones and nothing more")
+
+
 @app.command("preauth-keys")
 def preauth_keys(
     expire: Annotated[
