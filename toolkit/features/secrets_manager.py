@@ -754,6 +754,25 @@ SECRET_CATALOG: list[SecretSpec] = [
         envs=("prod",),
     ),
     SecretSpec(
+        key_path="apps.services.core.gitea.review_notice_token",
+        description=(
+            "Comment-only Gitea API token on the reviewer's account (apps.auth.identities.reviewer); "
+            "write:issue, used by the n8n workflow that tells a PR its review failed (TOOL-093)"
+        ),
+        # EXTERNAL for the reason `bot_token` gives: only Gitea honours what it mints.
+        kind=SecretKind.EXTERNAL,
+        services=("gitea", "n8n"),
+        rotate_note=(
+            "`make gitea-rotate-token TOKEN=review_notice ENV=prod APPLY=1` (revoke, then unset), then "
+            "`make provision NODE=bee ENV=prod TAGS=gitea` to re-mint, then `make import-n8n` so the "
+            "workflow's credential carries the new value. The mint task is gated on this key being "
+            "absent; never mint a second token by hand."
+        ),
+        # NEVER, for the reason measured on `bot_token`: Gitea's token API has no expiry field.
+        expiry=Expiry.NEVER,
+        envs=("prod",),
+    ),
+    SecretSpec(
         key_path="apps.services.core.gitea.github_migration_token",
         description=(
             "Fine-grained GitHub PAT that Gitea's migration endpoint uses to READ "
@@ -1681,17 +1700,21 @@ SECRET_CATALOG: list[SecretSpec] = [
     ),
     # Shared secret for the n8n /webhook/notify ingress (NOTIFY-001 criterion #4).
     # Lives in the n8n encrypted credential store (Header Auth, ADR-044 webhook-auth);
-    # SOPS holds the canonical copy for recovery/rotation. No K8s SECRET_DEFINITIONS
-    # mapping — n8n reads it from its own credential, not from an env var.
+    # SOPS holds the canonical copy for recovery/rotation. n8n reads it from its own
+    # credential, not from an env var; Grafana is the one K8s consumer (TOOL-093), as the
+    # bearer of its `forge-review-failed` contact point, through `grafana-admin`.
     # Staging and prod n8n each hold their OWN separately-configured credential
     # (different values, one per env file) — this key is env-scoped by design.
     SecretSpec(
         key_path="apps.services.automation.notify.webhook_secret",
         description="Shared secret authenticating POSTs to the n8n /webhook/notify ingress",
         kind=SecretKind.RANDOM_TOKEN,
-        services=("n8n",),
+        services=("n8n", "grafana"),
         format_hint="opaque bearer token; sources send 'Authorization: Bearer <token>'",
-        rotate_note="Regenerate, paste into the n8n 'notify-webhook' Header Auth credential, update every source.",
+        rotate_note=(
+            "Regenerate, paste into the n8n 'notify-webhook' Header Auth credential, update every source, "
+            "and `make apply-secrets` so Grafana (the forge-review-failed contact point's bearer) reads it."
+        ),
         envs=("staging", "prod"),
     ),
     # ANSIBLE-035: fleet-wide copy of the PROD n8n webhook token specifically,

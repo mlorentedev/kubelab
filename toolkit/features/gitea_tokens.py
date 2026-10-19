@@ -78,6 +78,13 @@ ROTATABLE_TOKENS: dict[str, RotatableToken] = {
         token_name="kubelab-reviewer",
         identity="reviewer",
     ),
+    # The token n8n comments with when a review fails (TOOL-093, #1957): a second
+    # token on the reviewer's account, so the comment has the author a review would.
+    "review_notice": RotatableToken(
+        secret_key="apps.services.core.gitea.review_notice_token",
+        token_name="kubelab-review-notice",
+        identity="reviewer",
+    ),
 }
 
 #: What the reviewer's token must hold -- exactly, not at least. The requirement is a
@@ -86,6 +93,13 @@ ROTATABLE_TOKENS: dict[str, RotatableToken] = {
 #: (`specs/TOOL-080-forge-pr-reviewer/verification.md`). `write:issue` posts and edits
 #: the review comment; `read:repository` reads the PR, its files, diff and commits.
 REVIEWER_SCOPES: frozenset[str] = frozenset({"write:issue", "read:repository"})
+
+#: What the review-notice token must hold -- exactly. A decision, not a measurement:
+#: the owner chose on 2026-10-18 that n8n gets a token of its own that can write
+#: comments and nothing else, because the workflow sits behind a public route. The
+#: measurement that makes it sufficient is the reviewer's own (`POST issues/{n}/comments`
+#: answers 201 to `write:issue` alone); reading the PR is not part of the job.
+REVIEW_NOTICE_SCOPES: frozenset[str] = frozenset({"write:issue"})
 
 
 @dataclass(frozen=True)

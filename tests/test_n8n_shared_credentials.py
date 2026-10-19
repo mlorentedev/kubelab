@@ -66,7 +66,8 @@ RECIPIENT = "recipient-sentinel@example.test"
 SMTP_PASS = "SMTP-PASS-SENTINEL-2263"
 SMTP_USER = "relay-sentinel@example.test"
 NOTIFY_HEADER = "NOTIFY-HEADER-SENTINEL-7730"
-SENTINELS = (TOKEN, RECIPIENT, SMTP_PASS, SMTP_USER, NOTIFY_HEADER)
+GITEA_NOTICE = "GITEA-NOTICE-SENTINEL-5538"
+SENTINELS = (TOKEN, RECIPIENT, SMTP_PASS, SMTP_USER, NOTIFY_HEADER, GITEA_NOTICE)
 
 
 # ── Fakes ─────────────────────────────────────────────────────────────────────
@@ -79,6 +80,8 @@ def _vault() -> dict[str, Any]:
         "infra": {"smtp": {"user": SMTP_USER, "pass": SMTP_PASS}},
         "apps": {
             "services": {
+                # The shared Gitea credential is imported on every prod run, so the vault holds its token.
+                "core": {"gitea": {"review_notice_token": GITEA_NOTICE}},
                 "automation": {
                     "notify": {"webhook_secret": NOTIFY_HEADER},
                     "n8n": {
@@ -493,7 +496,7 @@ class TestSharedLifecycle:
             monkeypatch=monkeypatch,
         )
         assert ok
-        assert [c["name"] for c in kubectl.credentials()] == ["kubelab-smtp"]
+        assert [c["name"] for c in kubectl.credentials()] == ["kubelab-smtp", "gitea-review-notice"]
 
     def test_removing_the_sale_leaves_the_shared_credential_in_place(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """2026-11-09: delete the sale's catalog entry and its JSON. What stays must
@@ -601,7 +604,7 @@ class TestNoWorkflowInTheEnv:
         """The docstring's promise: removing the last user leaves the credential in place."""
         ok, kubectl = _run(catalog=[], monkeypatch=monkeypatch)
         assert ok
-        assert [c["name"] for c in kubectl.credentials()] == ["kubelab-smtp"]
+        assert [c["name"] for c in kubectl.credentials()] == ["kubelab-smtp", "gitea-review-notice"]
         assert not kubectl.workflows()
 
     def test_nothing_is_restarted_for_a_credential_alone(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -612,4 +615,4 @@ class TestNoWorkflowInTheEnv:
     def test_a_credential_that_cannot_render_fails_the_run(self, monkeypatch: pytest.MonkeyPatch) -> None:
         ok, kubectl = _run(vault=_without(_vault(), "infra.smtp.pass"), catalog=[], monkeypatch=monkeypatch)
         assert not ok
-        assert not kubectl.credentials()
+        assert "kubelab-smtp" not in [c["name"] for c in kubectl.credentials()]

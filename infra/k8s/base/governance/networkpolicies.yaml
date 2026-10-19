@@ -231,7 +231,8 @@ spec:
         - protocol: TCP
           port: 3100
 ---
-# IngressRoute n8n (webhooks and the editor).
+# IngressRoute n8n (webhooks and the editor), and the Grafana contact point
+# that posts to http://n8n:5678/webhook/forge-review-failed.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -253,6 +254,9 @@ spec:
           podSelector:
             matchLabels:
               app.kubernetes.io/name: traefik
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: grafana
       ports:
         - protocol: TCP
           port: 5678

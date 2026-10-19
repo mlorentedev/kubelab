@@ -286,6 +286,10 @@
         gitea_reviewer_email: "{{ gitea_config.apps.auth.identities.reviewer | default('') }}@{{ gitea_config.apps.services.core.gitea.domain }}"
         gitea_reviewer_scopes: "{{ gitea_config.apps.services.core.gitea.token_scopes.reviewer }}"
         gitea_reviewer_token: "{{ gitea_secrets.apps.services.core.gitea.reviewer_token | default('') }}"
+        # TOOL-093 -- a second token on the reviewer's account, for n8n's failure
+        # comment. Narrower than the one above, minted and gated the same way.
+        gitea_review_notice_scopes: "{{ gitea_config.apps.services.core.gitea.token_scopes.review_notice }}"
+        gitea_review_notice_token: "{{ gitea_secrets.apps.services.core.gitea.review_notice_token | default('') }}"
         # The superadmin's API token (TOOL-035). Minted by the same mechanism and
         # gated the same way. Two reasons it exists, and only the first is obvious:
         # Gitea puts the creating account in a new organization's `Owners` team, so

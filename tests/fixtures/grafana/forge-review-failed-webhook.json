@@ -1,0 +1,59 @@
+{
+  "captured_from": "Grafana 13.0.2 (grafana/grafana-oss:13.0.2) delivering to a webhook contact point provisioned the way contact-points.yaml provisions forge-review-failed, for an always-firing rule that carries a `pr` label. Nothing is edited except ruleUID, which is the committed rule's (the rig's own rule had another).",
+  "headers": {
+    "content-type": "application/json",
+    "authorization": "Bearer <N8N_WEBHOOK_SECRET>"
+  },
+  "body": {
+    "receiver": "forge-review-failed",
+    "status": "firing",
+    "alerts": [
+      {
+        "status": "firing",
+        "labels": {
+          "alertname": "Forge reviewer failed to review a pull request",
+          "grafana_folder": "kubelab",
+          "pr": "https://gitea.kubelab.live/personal/imagesensortool/pulls/29"
+        },
+        "annotations": {
+          "summary": "PR-Agent logged Failed to review PR"
+        },
+        "startsAt": "2026-10-18T10:59:50Z",
+        "endsAt": "0001-01-01T00:00:00Z",
+        "generatorURL": "http://localhost:3000/alerting/grafana/rig-always/view?orgId=1",
+        "fingerprint": "34b517e54bcd1a87",
+        "silenceURL": "http://localhost:3000/alerting/silence/new?alertmanager=grafana&matcher=__alert_rule_uid__%3Drig-always&matcher=pr%3Dhttps%3A%2F%2Fgitea.kubelab.live%2Fpersonal%2Fimagesensortool%2Fpulls%2F29&orgId=1",
+        "dashboardURL": "",
+        "panelURL": "",
+        "ruleUID": "tool093-reviewer-failed",
+        "values": {
+          "A": 1,
+          "C": 1
+        },
+        "valueString": "[ var='A' labels={} type='math' value=1 ], [ var='C' labels={} type='threshold' value=1 ]",
+        "orgId": 1
+      }
+    ],
+    "groupLabels": {
+      "alertname": "Forge reviewer failed to review a pull request",
+      "grafana_folder": "kubelab"
+    },
+    "commonLabels": {
+      "alertname": "Forge reviewer failed to review a pull request",
+      "grafana_folder": "kubelab",
+      "pr": "https://gitea.kubelab.live/personal/imagesensortool/pulls/29"
+    },
+    "commonAnnotations": {
+      "summary": "PR-Agent logged Failed to review PR"
+    },
+    "externalURL": "http://localhost:3000/",
+    "appVersion": "13.0.2",
+    "version": "1",
+    "groupKey": "{}:{alertname=\"Forge reviewer failed to review a pull request\", grafana_folder=\"kubelab\"}",
+    "truncatedAlerts": 0,
+    "orgId": 1,
+    "title": "[FIRING:1] Forge reviewer failed to review a pull request kubelab (https://gitea.kubelab.live/personal/imagesensortool/pulls/29)",
+    "state": "alerting",
+    "message": "**Firing**\n\nValue: A=1, C=1\nLabels:\n - alertname = Forge reviewer failed to review a pull request\n - grafana_folder = kubelab\n - pr = https://gitea.kubelab.live/personal/imagesensortool/pulls/29\nAnnotations:\n - summary = PR-Agent logged Failed to review PR\nSource: http://localhost:3000/alerting/grafana/rig-always/view?orgId=1\nSilence: http://localhost:3000/alerting/silence/new?alertmanager=grafana&matcher=__alert_rule_uid__%3Drig-always&matcher=pr%3Dhttps%3A%2F%2Fgitea.kubelab.live%2Fpersonal%2Fimagesensortool%2Fpulls%2F29&orgId=1\n"
+  }
+}
