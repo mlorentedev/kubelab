@@ -9,13 +9,15 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+import yaml
 
+from toolkit.features import product_render
 from toolkit.features.product_contract import ContractError, validate_contract
 from toolkit.features.product_guards import validate_registered
 
 app = typer.Typer(
     name="product",
-    help="Validate kubelab.yaml product contracts (ADR-067).",
+    help="Validate and render kubelab.yaml product contracts (ADR-067).",
     no_args_is_help=True,
 )
 
@@ -47,3 +49,44 @@ def validate(
         typer.echo(json.dumps({"ok": True, "contract": str(contract), "schema_version": parsed.schema_version}))
     else:
         typer.echo(f"OK: {contract} is a valid kubelab product contract (schema_version {parsed.schema_version})")
+
+
+@app.command()
+def render(
+    contract: Annotated[Path, typer.Option("--contract", help="Path to a kubelab.yaml contract")],
+    env: Annotated[str, typer.Option("--env", help="staging or prod")],
+    product: Annotated[
+        str | None,
+        typer.Option("--app", help="Registered product; required unless the contract is a committed snapshot"),
+    ] = None,
+    check: Annotated[bool, typer.Option("--check", help="Exit 1 if the values drift from the contract")] = False,
+    write: Annotated[bool, typer.Option("--write", help="Correct the drifted keys in values/<env>.yaml")] = False,
+) -> None:
+    """Render a contract into apps.platform.<app>; without a flag, print the contract-owned keys."""
+    if check and write:
+        raise typer.BadParameter("pass --check or --write, not both")
+    if env not in ("staging", "prod"):
+        raise typer.BadParameter(f"--env must be staging or prod, got {env!r}")
+    if product is None and contract.resolve().parent != product_render.SNAPSHOT_DIR.resolve():
+        # A product repository's contract is kubelab.yaml, whose stem names no app.
+        raise typer.BadParameter(
+            "--app is required unless the contract is a snapshot in infra/config/products/contracts/"
+        )
+    name = product or contract.stem
+    try:
+        parsed = validate_contract(contract)
+        if write:
+            changed = product_render.write(parsed, name, env, values_dir=product_render.VALUES_DIR)
+            typer.echo(f"{name}/{env}: wrote {', '.join(changed)}" if changed else f"{name}/{env}: nothing to write")
+        elif check:
+            differences, compared = product_render.drift(parsed, name, env, values_dir=product_render.VALUES_DIR)
+            typer.echo(f"compared {compared} contract-owned keys for {name}/{env}")
+            for key, (want, have) in differences.items():
+                typer.echo(f"DRIFT {key}: contract renders {want!r}, values have {have!r}")
+            if differences:
+                raise typer.Exit(1)
+        else:
+            typer.echo(yaml.safe_dump(product_render.rendered(parsed, name, env), sort_keys=False), nl=False)
+    except ContractError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1) from None
