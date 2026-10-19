@@ -57,6 +57,9 @@ def http_get(path: str, token: str, timeout: float = 15.0) -> tuple[int, dict[st
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return resp.status, json.loads(resp.read().decode())
     except urllib.error.HTTPError as exc:
+        # A rate limit or a server error says nothing about the token's scope.
+        if exc.code == 429 or exc.code >= 500:
+            raise ScopeUncheckableError(f"Cloudflare answered HTTP {exc.code} on {path}") from exc
         return exc.code, {}
     except Exception as exc:  # noqa: BLE001 - any other failure is "cannot check"
         raise ScopeUncheckableError(f"Cloudflare could not be reached: {exc}") from exc

@@ -915,8 +915,8 @@ def acme_token_scope() -> None:
     Every request is a GET; the token is used, never printed. Expected per
     zone: found by name, DNS records readable, zone settings refused with 403.
 
-    The zones are the `main` names of `edge.traefik.acme_domains`, the apexes
-    the cluster's certificates are issued for. That list is what the VPS
+    The zones are the `main` names of `edge.traefik.acme_domains` in staging
+    and prod, the apexes the clusters' certificates are issued for. That list is what the VPS
     Traefik role reads; K3s Traefik issues per IngressRoute host, under the
     same apexes today.
 
@@ -931,12 +931,15 @@ def acme_token_scope() -> None:
     if not token:
         logger.error("cloudflare.acme_dns_token is absent from SOPS")
         raise typer.Exit(2)
-    domains = ConfigurationManager("common", settings.project_root).get_merged_config()["edge"]["traefik"][
-        "acme_domains"
-    ]
+    # Both clusters, each with its own overrides merged: a zone only one env
+    # issues for must still be probed.
+    zones: list[str] = []
+    for env in ("staging", "prod"):
+        merged = ConfigurationManager(env, settings.project_root).get_merged_config()
+        zones += [d["main"] for d in merged["edge"]["traefik"]["acme_domains"] if d["main"] not in zones]
 
     try:
-        probes = probe_acme_token(token, [d["main"] for d in domains])
+        probes = probe_acme_token(token, zones)
     except ScopeUncheckableError as exc:
         logger.error(f"CANNOT CHECK: {exc}")
         raise typer.Exit(2) from exc

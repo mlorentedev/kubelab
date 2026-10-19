@@ -68,6 +68,37 @@ def test_a_token_cloudflare_does_not_accept_cannot_be_checked() -> None:
         probe_acme_token("t", ["kubelab.live"], get=_api(**{_key("/user/tokens/verify"): (401, {})}))
 
 
+@pytest.mark.parametrize("code", [429, 503])
+def test_a_rate_limit_or_server_error_cannot_check_rather_than_failing_scope(
+    monkeypatch: pytest.MonkeyPatch, code: int
+) -> None:
+    """A 429 or 5xx says nothing about scope, so it must not read as a wrong answer."""
+    import urllib.error
+    import urllib.request
+
+    from toolkit.features.acme_token_scope import http_get
+
+    def refuse(req: object, timeout: float) -> None:
+        raise urllib.error.HTTPError("u", code, "x", {}, None)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(urllib.request, "urlopen", refuse)
+    with pytest.raises(ScopeUncheckableError):
+        http_get("/zones/z1/settings", "t")
+
+
+def test_a_403_is_an_answer_not_an_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    import urllib.error
+    import urllib.request
+
+    from toolkit.features.acme_token_scope import http_get
+
+    def refuse(req: object, timeout: float) -> None:
+        raise urllib.error.HTTPError("u", 403, "x", {}, None)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(urllib.request, "urlopen", refuse)
+    assert http_get("/zones/z1/settings", "t") == (403, {})
+
+
 def test_the_probed_zones_are_the_issuing_apexes() -> None:
     """The CLI probes `edge.traefik.acme_domains[].main`; it must keep naming zones."""
     common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
