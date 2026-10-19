@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/mlorentedev/kubelab/compare/errors-v1.2.1...errors-v1.3.0) (2026-10-19)
+
+
+### Features
+
+* **errors:** replace the brand mark with the node-graph logo ([#2475](https://github.com/mlorentedev/kubelab/issues/2475)) ([a8d74eb](https://github.com/mlorentedev/kubelab/commit/a8d74eb15bebe47312a78b1576b58e00fdfb23f8))
+
 ## [1.2.1](https://github.com/mlorentedev/kubelab/compare/errors-v1.2.0...errors-v1.2.1) (2026-10-17)
 
 
