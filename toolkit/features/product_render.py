@@ -26,7 +26,7 @@ from ruamel.yaml import YAML
 
 from toolkit.config.settings import PROJECT_ROOT
 from toolkit.features.declared_domains import VALUES_DIR
-from toolkit.features.product_contract import Contract
+from toolkit.features.product_contract import Contract, ContractError
 from toolkit.features.product_guards import refuse_oidc_at_render
 from toolkit.features.product_registry import load_registry
 
@@ -99,7 +99,14 @@ def write(contract: Contract, app: str, env: str, *, values_dir: Path = VALUES_D
     ruamel = YAML()
     ruamel.preserve_quotes = True
     doc = ruamel.load(path.read_text())
-    block = doc["apps"]["platform"][app]
+    block = ((doc.get("apps") or {}).get("platform") or {}).get(app)
+    if block is None:
+        raise ContractError(
+            f"values/{env}.yaml has no apps.platform.{app} block to write into",
+            "render owns six keys of an existing block; the block itself, with the version promote owns, "
+            "is created when the product is onboarded.",
+            f"add apps.platform.{app} to values/{env}.yaml through the onboarding recipe, then render again.",
+        )
     for key, (value, _) in differences.items():
         if key in block:
             block[key] = value

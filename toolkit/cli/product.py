@@ -56,7 +56,8 @@ def render(
     contract: Annotated[Path, typer.Option("--contract", help="Path to a kubelab.yaml contract")],
     env: Annotated[str, typer.Option("--env", help="staging or prod")],
     product: Annotated[
-        str | None, typer.Option("--app", help="Registered product; defaults to the contract file's stem")
+        str | None,
+        typer.Option("--app", help="Registered product; required unless the contract is a committed snapshot"),
     ] = None,
     check: Annotated[bool, typer.Option("--check", help="Exit 1 if the values drift from the contract")] = False,
     write: Annotated[bool, typer.Option("--write", help="Correct the drifted keys in values/<env>.yaml")] = False,
@@ -66,6 +67,11 @@ def render(
         raise typer.BadParameter("pass --check or --write, not both")
     if env not in ("staging", "prod"):
         raise typer.BadParameter(f"--env must be staging or prod, got {env!r}")
+    if product is None and contract.resolve().parent != product_render.SNAPSHOT_DIR.resolve():
+        # A product repository's contract is kubelab.yaml, whose stem names no app.
+        raise typer.BadParameter(
+            "--app is required unless the contract is a snapshot in infra/config/products/contracts/"
+        )
     name = product or contract.stem
     try:
         parsed = validate_contract(contract)

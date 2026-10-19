@@ -146,7 +146,7 @@ def test_render_refuses_oidc(tmp_path: Path) -> None:
     contract = tmp_path / "web.yaml"
     contract.write_text(WEB.read_text().replace("auth: public", "auth: oidc"))
 
-    result = CliRunner().invoke(app, ["product", "render", "--contract", str(contract), "--env", "prod"])
+    result = CliRunner().invoke(app, ["product", "render", "--contract", str(contract), "--env", "prod", "--app", "web"])
 
     assert result.exit_code == 1
     assert "ERROR:" in result.output
@@ -192,3 +192,47 @@ def test_the_exempt_set_is_exactly_the_in_tree_entries() -> None:
     in_tree = {name for name, product in products.items() if product.forge == "in-tree"}
 
     assert snapshot_exempt(FIXTURE_REGISTRY) == in_tree == {"api"}
+
+
+def test_write_refuses_an_app_with_no_values_block(values_copy: Path) -> None:
+    """--check reports six drifts here; --write must refuse with ERROR / WHY / FIX, not raise KeyError."""
+    path = values_copy / "prod.yaml"
+    data = yaml.safe_load(path.read_text())
+    del data["apps"]["platform"]["web"]
+    path.write_text(yaml.safe_dump(data))
+
+    assert drift(validate_contract(WEB), "web", "prod", values_dir=values_copy)[1] == len(OWNED_KEYS)
+    with pytest.raises(ContractError) as excinfo:
+        write(validate_contract(WEB), "web", "prod", values_dir=values_copy)
+    assert [line.split(":", 1)[0] for line in str(excinfo.value).splitlines()] == ["ERROR", "WHY", "FIX"]
+    assert "apps.platform.web" in excinfo.value.error
+
+
+def test_render_needs_app_for_a_contract_outside_the_snapshots(tmp_path: Path) -> None:
+    """A product repository's file is kubelab.yaml; its stem names no app."""
+    contract = tmp_path / "kubelab.yaml"
+    shutil.copy(WEB, contract)
+
+    def invoke(*args: str) -> Result:
+        return CliRunner().invoke(app, ["product", "render", "--contract", str(contract), "--env", "prod", *args])
+
+    assert invoke("--check").exit_code == 2
+    assert invoke("--check", "--app", "web").exit_code == 0
+
+
+def test_every_auth_level_in_the_values_is_one_the_contract_can_render() -> None:
+    """`forwardauth` renders as one_factor; a stronger policy in the values would be lowered by --write."""
+    renderable = set(product_render._AUTH_LEVEL.values())
+    found = set()
+    for env_file in VALUES_DIR.glob("*.yaml"):
+        platform = ((yaml.safe_load(env_file.read_text()) or {}).get("apps") or {}).get("platform") or {}
+        found |= {block["auth_level"] for block in platform.values() if isinstance(block, dict) and "auth_level" in block}
+
+    assert found
+    assert found <= renderable, f"auth levels the contract cannot express: {found - renderable}"
+
+
+def test_the_committed_registry_exempts_exactly_its_in_tree_entries() -> None:
+    products = load_registry().products
+
+    assert snapshot_exempt() == {name for name, product in products.items() if product.forge == "in-tree"}
