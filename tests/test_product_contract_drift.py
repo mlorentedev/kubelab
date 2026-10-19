@@ -223,12 +223,19 @@ def test_render_needs_app_for_a_contract_outside_the_snapshots(tmp_path: Path) -
 def test_every_auth_level_in_the_values_is_one_the_contract_can_render() -> None:
     """`forwardauth` renders as one_factor; a stronger policy in the values would be lowered by --write."""
     renderable = set(product_render._AUTH_LEVEL.values())
-    found = set()
-    for env_file in VALUES_DIR.glob("*.yaml"):
-        platform = ((yaml.safe_load(env_file.read_text()) or {}).get("apps") or {}).get("platform") or {}
-        found |= {block["auth_level"] for block in platform.values() if isinstance(block, dict) and "auth_level" in block}
+    found: set[str] = set()
 
-    assert found
+    def walk(node: object) -> None:
+        if isinstance(node, dict):
+            if isinstance(node.get("auth_level"), str):
+                found.add(node["auth_level"])
+            for child in node.values():
+                walk(child)
+
+    for env_file in VALUES_DIR.glob("*.yaml"):
+        walk((yaml.safe_load(env_file.read_text()) or {}).get("apps"))
+
+    assert {"bypass", "one_factor"} <= found
     assert found <= renderable, f"auth levels the contract cannot express: {found - renderable}"
 
 
