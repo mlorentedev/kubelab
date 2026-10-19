@@ -120,9 +120,12 @@ def _callers(overlay: str) -> set[tuple[str, str, int]]:
     """(caller, Service, Service port) for every in-cluster address the
     repository names, with the caller that uses it."""
     docs = _render(overlay)
+    # A Service without a selector is an EndpointSlice outside the cluster,
+    # which no policy covers, so only selected Services are targets.
+    selected = {d["metadata"]["name"]: d for d in docs if d["kind"] == "Service" and d["spec"].get("selector")}
     # A `host:port` counts only on a port its Service declares: an image tag in
     # a ConfigMap (`postgres:16`) is not a caller.
-    ports = {d["metadata"]["name"]: {p["port"] for p in d["spec"]["ports"]} for d in docs if d["kind"] == "Service"}
+    ports = {name: {p["port"] for p in svc["spec"]["ports"]} for name, svc in selected.items()}
     configmaps = {d["metadata"]["name"]: json.dumps(d.get("data", {})) for d in docs if d["kind"] == "ConfigMap"}
     texts: list[tuple[str, str]] = []
     for name, workload in _workloads(overlay).items():
@@ -137,17 +140,27 @@ def _callers(overlay: str) -> set[tuple[str, str, int]]:
         for host, port in ADDRESS.findall(text):
             if int(port) in ports.get(host, set()) and host != caller:
                 found.add((caller, host, int(port)))
-    # Every IngressRoute backend is a Traefik caller. A Service without a
-    # selector is an EndpointSlice outside the cluster, which no policy covers.
-    selected = {d["metadata"]["name"]: d for d in docs if d["kind"] == "Service" and d["spec"].get("selector")}
-    for route in (d for d in docs if d["kind"] == "IngressRoute"):
-        for backend in (b for r in route["spec"]["routes"] for b in r.get("services", [])):
-            svc = selected.get(backend["name"])
-            if svc is None:
-                continue
-            port = next(p["port"] for p in svc["spec"]["ports"] if backend["port"] in (p["port"], p.get("name")))
-            found.add(("traefik", backend["name"], port))
+    # Every IngressRoute backend, and every Service a Middleware sends to, is a
+    # Traefik caller.
+    for backend in _route_backends(overlay) + _middleware_backends(overlay):
+        svc = selected.get(backend["name"])
+        if svc is None:
+            continue
+        port = next(p["port"] for p in svc["spec"]["ports"] if backend["port"] in (p["port"], p.get("name")))
+        found.add(("traefik", backend["name"], port))
     return found
+
+
+def _route_backends(overlay: str) -> list[dict[str, Any]]:
+    routes = (d for d in _render(overlay) if d["kind"] == "IngressRoute")
+    return [b for route in routes for r in route["spec"]["routes"] for b in r.get("services", [])]
+
+
+def _middleware_backends(overlay: str) -> list[dict[str, Any]]:
+    """The error-pages Middleware names its Service as `{name, port}`, which
+    the `host:port` scan cannot read."""
+    middlewares = (d for d in _render(overlay) if d["kind"] == "Middleware")
+    return [m["spec"]["errors"]["service"] for m in middlewares if "errors" in m["spec"]]
 
 
 def _target(overlay: str, service: str, port: int) -> tuple[dict[str, Any], int]:
@@ -167,6 +180,7 @@ def test_the_render_measured_what_it_judges(overlay: str) -> None:
     # Each source is measured on its own, so losing one cannot hide behind the others.
     assert len(_workflows()) >= 5, "the n8n workflows are no longer where this test reads them"
     assert any(caller == "n8n" for caller, _, _ in _callers(overlay))
+    assert _middleware_backends(overlay), "the error-pages Middleware no longer names a Service where this test reads it"
 
 
 def test_an_empty_selector_selects_every_pod() -> None:
