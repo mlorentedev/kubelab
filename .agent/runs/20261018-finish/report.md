@@ -5,7 +5,7 @@ run 20261018-finish ended goal-done after about 1h15m: 2 merged (#2495, #2502), 
 ## Waiting on you, irreversible first
 
 1. **#2502 merged (`ac1a2c5d`).** Nothing reaches a node until you provision. In this order:
-   1. `make provision NODE=ace1 ENV=staging`, then the VPS (`make provision NODE=vps ENV=prod`).
+   1. `make provision NODE=ace1 ENV=staging TAGS=k3s`, then the VPS (`make provision NODE=vps ENV=prod TAGS=k3s`).
    2. Check that a zone-settings call with the in-cluster token returns 403 (it holds DNS: Edit only).
    3. Issue a staging cert for a new host through DNS-01.
    4. Rotate `cloudflare.api_token`. Until then the old token still exists on the nodes.
@@ -16,7 +16,7 @@ run 20261018-finish ended goal-done after about 1h15m: 2 merged (#2495, #2502), 
    - Check first that the `kubelab-terraform` token can still edit DNS records: in the Cloudflare list it shows only Zone Settings and Zone.
 3. **#2537 (docs, follow-up to #2495), open for you.** Two live docs still named `records_kubelab.tf`/`records_mlorente.tf`. It is not in this run's `merge_allowed`.
 
-1. **#2514 (#378, ingress NetworkPolicies): not merged, on purpose.**
+4. **#2514 (#378, ingress NetworkPolicies): not merged, on purpose.**
    - The staging check passed every step except `n8n-probe` (PR comment issuecomment-6256369624). The probe could not run because staging Vikunja is stuck in `wait-for-idp` (`bad address 'auth.staging.kubelab.live'`, 7h+, #1783, comment issuecomment-6256369817).
    - So n8n → vikunja:3456 and a fresh vikunja → postgres connection are not measured. Merging would deploy to prod through `selfHeal` with that path unproven.
    - To unblock: fix #1783, then `make argo-set-revision APP=kubelab-staging REV=feat/issue-378-netpol-ingress`, then `make n8n-probe ENV=staging`, then `make argo-set-revision APP=kubelab-staging REV=master`. The PR body carries the same recipe.
