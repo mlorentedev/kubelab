@@ -1281,10 +1281,21 @@ SECRET_CATALOG: list[SecretSpec] = [
     SecretSpec(
         key_path="cloudflare.api_token",
         expiry=Expiry.PROVIDER,
-        description="Cloudflare DNS API token (ACME certs + Terraform DNS)",
+        description="Cloudflare API token for Terraform DNS (records + zone settings); no node receives it",
         kind=SecretKind.EXTERNAL,
-        services=("traefik", "terraform"),
-        rotate_note="Re-provision K3s nodes (Ansible) + `make tf-dns-apply`. Both read from SOPS.",
+        services=("terraform",),
+        rotate_note="`make tf-dns-plan` reads it from SOPS through the runner; nothing else to redeploy.",
+    ),
+    # #2459: Traefik's ACME DNS-01 resolvers get their own token, Zone:DNS:Edit
+    # on the zones they issue for and nothing else, so a read of the in-cluster
+    # Secret cannot edit zone settings or reach a zone the cluster does not serve.
+    SecretSpec(
+        key_path="cloudflare.acme_dns_token",
+        expiry=Expiry.PROVIDER,
+        description="Cloudflare API token for ACME DNS-01 (Zone:DNS:Edit only), read by Traefik",
+        kind=SecretKind.EXTERNAL,
+        services=("traefik",),
+        rotate_note="Re-provision the K3s nodes (Ansible, k3s_server role) and the VPS; both read it from SOPS.",
     ),
     # BACKUP-057: the only credential that manages the R2 node buckets and their
     # lock rules, so the only one that can lift a lock. The DNS token above was

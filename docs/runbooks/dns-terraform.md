@@ -9,16 +9,17 @@ owner: manu
 
 # DNS Management with Terraform (Cloudflare)
 
-> Manages A/CNAME records for `kubelab.live` and `mlorente.dev` via Terraform + Cloudflare provider.
+> Manages A/CNAME records for every zone in `zones.json` via Terraform + Cloudflare provider.
 
 ## Architecture
 
 ```
-services.json    ← single source of truth (service list)
+zones.json       ← managed zones (apex → key, the zone's own records)
+services.json    ← service list
      ↓
-main.tf          ← parses JSON, filters by zone + environment, resolves target
+main.tf          ← parses both, filters by environment, resolves target
      ↓
-records_*.tf     ← for_each creates A records per service
+records.tf       ← for_each creates one record per FQDN
 zone_settings.tf ← TLS/HSTS zone settings + CAA records (not from services.json)
      ↓
 Cloudflare API   ← via cloudflare/cloudflare provider ~> 4.0
@@ -33,16 +34,38 @@ SOPS (common.enc.yaml) → cloudflare.api_token → toolkit _get_terraform_env()
 
 ```
 infra/terraform/dns/
-  main.tf              # Provider config, data sources (zone lookups), locals (JSON parsing + target resolution)
-  variables.tf         # cloudflare_api_token (sensitive), zone IDs, vps_ip (rendered), dns_ttl
-  records_kubelab.tf   # Root A (@), www CNAME, service A records via for_each
-  records_mlorente.tf  # Root A, service A records via for_each
-  zone_settings.tf     # TLS/HSTS zone settings + CAA records (SEC-AUDIT-001/002/004/006) — not services.json-driven
-  outputs.tf           # Service URLs, record counts
+  main.tf              # Provider config, zone lookups by name, locals (JSON parsing + target resolution)
+  variables.tf         # cloudflare_api_token (sensitive), vps_ip (rendered), dns_ttl
+  zones.json           # Every managed zone, keyed by apex: its short key and its own records (apex, www)
+  records.tf           # One cloudflare_record per FQDN, from zones.json and services.json
+  zone_settings.tf     # TLS/HSTS settings + CAA records per zone (SEC-AUDIT-001/002/004/006)
+  moved.tf             # State moves from the per-zone resources (#2460)
+  outputs.tf           # Record URLs, record count
   services.json        # Service catalog: name, zone, proxied, environments, target (optional)
-  dns.tfvars           # Zone IDs, TTL (the VPS IP is rendered from common.yaml)
+  dns.tfvars           # TTL (the VPS IP is rendered from common.yaml)
   .terraform.lock.hcl  # Provider lock (committed)
 ```
+
+## Add a zone
+
+A zone is one entry in `zones.json`, keyed by its apex (#2460):
+
+```json
+"example.com": {"key": "example", "records": []}
+```
+
+- `key` is the short name `services.json` entries use in their `zone` field.
+- `records` are the zone's own A/CNAME records (`name`, `type`, `proxied`,
+  optional `content`, which defaults to the VPS IP).
+- The zone gets the TLS/HSTS settings and the CAA set of every other zone,
+  with nothing else to write. HSTS is sent with `includeSubdomains` and
+  `preload`; a zone that serves nothing yet sets `"hsts": false` (as
+  `imagesensortool.com` does) until it does.
+
+The zone must already exist in the Cloudflare account and be readable with the
+DNS token, because Terraform looks it up by name. Then `make tf-dns-plan` shows
+creates only, and `make tf-dns-apply` lands them. `tests/test_dns_zones_map.py`
+fails when the config names a public apex the map does not declare.
 
 ## State
 
@@ -72,7 +95,7 @@ restore and unlocking are in `docs/runbooks/terraform-state.md`.
 | Field | Values | Notes |
 |-------|--------|-------|
 | `name` | subdomain name | Creates `name.kubelab.live` or `name.mlorente.dev` |
-| `zone` | `"kubelab"` or `"mlorente"` | Which domain to create the record under |
+| `zone` | a `key` from `zones.json` | Which domain to create the record under |
 | `proxied` | `true` / `false` | See proxied decision matrix below |
 | `environments` | `["prod"]` | Must include `"prod"` for the record to be created |
 | `target` | node name (optional) | Points the record at `networking.nodes.<name>.tailscale_ip` (via the `node_tailscale_ips` map in `main.tf`) instead of `var.vps_ip`. Absent → unchanged VPS behavior. Used by VPN-only-reachable services with a publicly-resolvable name, e.g. `pihole` → `ace1` (OPS-022). |
@@ -236,8 +259,9 @@ curl -s "https://api.cloudflare.com/client/v4/zones" \
 # {"name": "mlorente.dev", "id": "4d0a0cf660577b845df5df982ad834a9"}
 ```
 
-Update `dns.tfvars` with the zone IDs, and `networking.vps.public_ip` in
-`common.yaml` if the VPS IP changed.
+Zones are looked up by name from `zones.json`, so no ID is copied anywhere. The
+IDs are needed only for the imports below. Update `networking.vps.public_ip`
+in `common.yaml` if the VPS IP changed.
 
 ### Step 3: Store the token
 
@@ -254,7 +278,7 @@ make tf-dns-plan     # Review what will be created
 make tf-dns-apply    # Create all records
 ```
 
-This creates every record in one pass: root + www + CAA records (both zones, from `zone_settings.tf`) plus every entry in `services.json`. No imports needed. Record count isn't fixed — see `terraform state list` after apply for the live count instead of trusting a number written down here.
+This creates every record in one pass: each zone's own records + CAA records (every zone in `zones.json`) plus every entry in `services.json`. No imports needed. Record count isn't fixed — see `terraform state list` after apply for the live count instead of trusting a number written down here.
 
 ### Step 4b: Adopt existing records (state rebuild)
 
@@ -274,34 +298,21 @@ curl -s "https://api.cloudflare.com/client/v4/zones/$KUBELAB_ZONE/dns_records" \
 curl -s "https://api.cloudflare.com/client/v4/zones/$MLORENTE_ZONE/dns_records" \
   -H "Authorization: Bearer $CF_TOKEN" | jq '.result[] | {name, id, type, content}'
 
-# 2. Import root + CAA records (zone_settings.tf; not services.json-driven)
+# 2. Import each zone's settings, its records and its CAA set. Addresses are
+#    keyed by FQDN (records) and by apex/issuer (CAA); `make tf-state-list
+#    ROOT=dns` on any healthy copy shows the full list.
 terraform import -var-file=dns.tfvars \
-  'cloudflare_record.kubelab_root' "$KUBELAB_ZONE/<RECORD_ID>"
+  'cloudflare_zone_settings_override.zone["kubelab.live"]' "$KUBELAB_ZONE"
 terraform import -var-file=dns.tfvars \
-  'cloudflare_record.kubelab_www' "$KUBELAB_ZONE/<RECORD_ID>"
+  'cloudflare_record.record["kubelab.live"]' "$KUBELAB_ZONE/<RECORD_ID>"
 terraform import -var-file=dns.tfvars \
-  'cloudflare_record.mlorente_root' "$MLORENTE_ZONE/<RECORD_ID>"
+  'cloudflare_record.record["www.kubelab.live"]' "$KUBELAB_ZONE/<RECORD_ID>"
 terraform import -var-file=dns.tfvars \
-  'cloudflare_record.kubelab_caa_letsencrypt' "$KUBELAB_ZONE/<RECORD_ID>"
+  'cloudflare_record.record["api.kubelab.live"]' "$KUBELAB_ZONE/<RECORD_ID>"
 terraform import -var-file=dns.tfvars \
-  'cloudflare_record.kubelab_caa_digicert' "$KUBELAB_ZONE/<RECORD_ID>"
-terraform import -var-file=dns.tfvars \
-  'cloudflare_record.kubelab_caa_google' "$KUBELAB_ZONE/<RECORD_ID>"
-terraform import -var-file=dns.tfvars \
-  'cloudflare_record.mlorente_caa_letsencrypt' "$MLORENTE_ZONE/<RECORD_ID>"
-terraform import -var-file=dns.tfvars \
-  'cloudflare_record.mlorente_caa_digicert' "$MLORENTE_ZONE/<RECORD_ID>"
-terraform import -var-file=dns.tfvars \
-  'cloudflare_record.mlorente_caa_google' "$MLORENTE_ZONE/<RECORD_ID>"
-
-# 3. Import service records (for_each uses service name as key — check
-#    services.json for the current list; mlorente has zero entries today,
-#    so the mlorente_svc for_each is empty and needs no imports)
-terraform import -var-file=dns.tfvars \
-  'cloudflare_record.kubelab_svc["api"]' "$KUBELAB_ZONE/<RECORD_ID>"
-terraform import -var-file=dns.tfvars \
-  'cloudflare_record.kubelab_svc["gitea"]' "$KUBELAB_ZONE/<RECORD_ID>"
-# ... repeat for each service in services.json
+  'cloudflare_record.caa["kubelab.live/letsencrypt.org"]' "$KUBELAB_ZONE/<RECORD_ID>"
+# ... repeat for every record in zones.json and services.json, every
+#    issuer (letsencrypt.org, digicert.com, pki.goog), and every zone
 
 # 4. Verify zero drift
 terraform plan -var-file=dns.tfvars
@@ -367,22 +378,22 @@ make tf-state-list ROOT=dns
 ```
 
 `services.json` is the SSOT for which service records exist; `zone_settings.tf`
-separately owns the root/CAA records for both zones (not services.json-driven).
+and `zone_settings.tf` own each zone's own records and CAA set (not services.json-driven).
 
-### Fixed records (both zones, from `zone_settings.tf` + `records_*.tf` — rarely change)
+### Fixed records (from `zones.json` + `zone_settings.tf` — rarely change)
 
 | Record | Zone | Type | Notes |
 |--------|------|------|-------|
 | @ (root) | kubelab.live | A | `var.vps_ip` |
 | www | kubelab.live | CNAME → kubelab.live | |
 | @ (root) | mlorente.dev | A | `var.vps_ip` |
-| CAA (Let's Encrypt, DigiCert, Google) | both zones | CAA | 3 per zone, restricts cert issuance (SEC-AUDIT-004) |
+| CAA (Let's Encrypt, DigiCert, Google) | every zone | CAA | 3 per zone, restricts cert issuance (SEC-AUDIT-004) |
 
 ### Service records — snapshot as of 2026-08-12, verify against `services.json`
 
 **kubelab.live** (13 entries in `services.json`, all zone=kubelab, counted 2026-09-28): `api` (proxied), `status`, `auth`, `vpn`, `grafana`, `gitea`, `n8n`, `pr-agent`, `traefik`, `argo`, `pihole` (`target: ace1` — resolves to a Tailscale IP, not `var.vps_ip`; OPS-022), `home`, `tasks`.
 
-**mlorente.dev**: zero entries in `services.json` today — only the fixed root + CAA records above exist for this zone. (The `mlorente_svc` `for_each` is empty until a service targets this zone again.)
+**mlorente.dev**: zero entries in `services.json` today — only the fixed root + CAA records above exist for this zone. `imagesensortool.com` has no records and HSTS off until it serves something.
 
 ### NOT managed by Terraform
 
