@@ -43,7 +43,12 @@ def test_read_workflow_ids_on_all_catalog_workflows() -> None:
 
         workflow_id, credential_id = read_workflow_ids(data)
         assert workflow_id, f"Workflow {spec.workflow_path.name} must have a valid root id"
-        if spec.workflow_path.name in {"notify-router.json", "agent-dispatcher.json", "sale-metrics-daily-digest.json"}:
+        if spec.workflow_path.name in {
+            "notify-router.json",
+            "agent-dispatcher.json",
+            "sale-metrics-daily-digest.json",
+            "forge-review-failed.json",
+        }:
             assert credential_id is not None, f"Workflow {spec.workflow_path.name} must have a credential id"
         else:
             # multi-forge and slack handle authentication via code node (HMAC)
