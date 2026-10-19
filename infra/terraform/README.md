@@ -90,9 +90,10 @@ managed records. A stale enumeration generates work in the wrong direction, whic
 is the same failure the `domain:` declarations in `infra/config/values/` produced
 (see `tests/test_declared_domains_are_served.py`). Do not re-add a table here.
 
-Each zone gets the records its `zones.json` entry lists (a root record, and `www`
-as a CNAME for `kubelab.live`) plus one A record per `services.json` entry in that
-zone, all declared by the single `for_each` resource in `records.tf`. So:
+Each zone gets the records its `zones.json` entry lists, which may be none (today a
+root record for `kubelab.live` and `mlorente.dev`, plus `www` as a CNAME for
+`kubelab.live`), and one A record per `services.json` entry in that zone, all
+declared by the single `for_each` resource in `records.tf`. So:
 
 ```bash
 # What is actually declared, per zone:
