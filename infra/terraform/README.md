@@ -1,6 +1,6 @@
 # Terraform DNS — Cloudflare
 
-Manages DNS records for `kubelab.live` and `mlorente.dev` via the Cloudflare provider.
+Manages DNS records for every zone in `dns/zones.json` via the Cloudflare provider.
 
 ## Structure
 
@@ -9,8 +9,9 @@ infra/terraform/
   dns/
     main.tf              # Provider, data sources, locals
     variables.tf         # Input variables
-    records_kubelab.tf   # kubelab.live root + service records
-    records_mlorente.tf  # mlorente.dev root + service records
+    records.tf           # Every zone's own records + service records, one per FQDN
+    zones.json           # Managed zones: apex -> key, own records, HSTS opt-out
+    moved.tf             # State moves from the old per-zone resources
     zone_settings.tf     # Per-zone Cloudflare settings
     outputs.tf           # Service URLs and record counts
     services.json        # Data-driven service catalog
@@ -23,9 +24,9 @@ infra/terraform/
 ## How it works
 
 1. `services.json` defines all services with `name`, `zone`, `proxied`, and `environments` fields
-2. `main.tf` parses `services.json` and filters by zone + environment
-3. `records_*.tf` create A records via `for_each` from the filtered service list
-4. Root records (`@`, `www`) are defined explicitly outside the loop
+2. `zones.json` declares each zone and its own records (`@`, `www`)
+3. `main.tf` parses both and filters services by environment
+4. `records.tf` creates one record per FQDN via a single `for_each`
 
 ## Adding a new service
 
@@ -49,6 +50,13 @@ The Cloudflare API token is stored in SOPS (`infra/config/secrets/common.enc.yam
 Required token permissions:
 - Zone: DNS: Edit
 - Zone: Zone: Read
+- Zone: Zone Settings: Edit (`zone_settings.tf`)
+
+This token is Terraform's only. Traefik's ACME DNS-01 resolvers read their own,
+`cloudflare.acme_dns_token` (Zone: DNS: Edit on the zones the cluster issues for),
+so reading the in-cluster `cloudflare-api-token` Secret cannot edit zone settings.
+`tests/test_acme_token_split.py` fails if any Ansible file names the Terraform token
+again (#2459).
 
 ## Running it
 
@@ -91,13 +99,12 @@ zone, declared as a single `for_each` resource — `records_kubelab.tf` also add
 python3 -c "import json;[print(r['zone'],r['name'],r['proxied']) for r in json.load(open('dns/services.json'))]"
 
 # What Terraform will manage, counted by the module itself:
-toolkit infra terraform run dns output -- kubelab_record_count   # root + www + kubelab.live services
-toolkit infra terraform run dns output -- mlorente_record_count  # root + mlorente.dev services
-toolkit infra terraform run dns output -- kubelab_service_urls   # the resulting https:// names
+toolkit infra terraform run dns output -- record_count   # every managed A/CNAME record
+toolkit infra terraform run dns output -- record_urls    # each record's https:// name
 ```
 
 `mlorente.dev` currently declares **no** service entries — the module manages its
-root record only. `staging.*` names are absent from both zones by design: they
+root record only. `staging.*` names are absent from every zone by design: they
 resolve over the VPN through Headscale split DNS to RPi4 CoreDNS, never publicly.
 
 **Not managed** by Terraform (manual/third-party): MX (Zoho), CNAME (SendGrid, Beehiiv, Cloudflare tunnels), TXT (SPF, DKIM, DMARC, domain verification).

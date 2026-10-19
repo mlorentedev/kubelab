@@ -19,15 +19,12 @@ provider "cloudflare" {
 }
 
 # -----------------------------------------------------------------------------
-# Data sources — zone lookups
+# Data sources — one lookup per zone in zones.json, by name
 # -----------------------------------------------------------------------------
 
-data "cloudflare_zone" "kubelab" {
-  zone_id = var.zone_id_kubelab
-}
-
-data "cloudflare_zone" "mlorente" {
-  zone_id = var.zone_id_mlorente
+data "cloudflare_zone" "zone" {
+  for_each = local.zones
+  name     = each.key
 }
 
 # -----------------------------------------------------------------------------
@@ -35,6 +32,13 @@ data "cloudflare_zone" "mlorente" {
 # -----------------------------------------------------------------------------
 
 locals {
+  # Every Cloudflare zone this root manages, keyed by apex (#2460). Adding a
+  # zone is one entry here: its settings, CAA set and apex records follow.
+  zones = jsondecode(file("${path.module}/zones.json"))
+
+  # services.json names a zone by its short key; an unknown key is a hard error.
+  zone_apex = { for apex, z in local.zones : z.key => apex }
+
   services = jsondecode(file("${path.module}/services.json"))
 
   # Node-name -> Tailscale IP, consumed by services.json's optional "target"
@@ -56,15 +60,34 @@ locals {
     })
   ]
 
-  kubelab_services = {
-    for svc in local.services_resolved :
-    svc.name => svc
-    if svc.zone == "kubelab" && contains(svc.environments, "prod")
-  }
+  # One map of every record, keyed by FQDN: each zone's own records, then the
+  # prod services. Every element is built with the same attributes so the
+  # two lists unify into one type.
+  zone_records = flatten([
+    for apex, z in local.zones : [
+      for r in z.records : {
+        apex    = apex
+        name    = r.name
+        type    = r.type
+        content = try(r.content, var.vps_ip)
+        proxied = r.proxied
+      }
+    ]
+  ])
 
-  mlorente_services = {
-    for svc in local.services_resolved :
-    svc.name => svc
-    if svc.zone == "mlorente" && contains(svc.environments, "prod")
+  service_records = [
+    for svc in local.services_resolved : {
+      apex    = local.zone_apex[svc.zone]
+      name    = svc.name
+      type    = "A"
+      content = svc.content
+      proxied = svc.proxied
+    }
+    if contains(svc.environments, "prod")
+  ]
+
+  records = {
+    for r in concat(local.zone_records, local.service_records) :
+    (r.name == r.apex ? r.apex : "${r.name}.${r.apex}") => r
   }
 }

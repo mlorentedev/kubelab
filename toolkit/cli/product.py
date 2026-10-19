@@ -15,6 +15,7 @@ import typer
 
 from toolkit.features import product_registry
 from toolkit.features.product_contract import ContractError, validate_contract
+from toolkit.features.product_guards import validate_registered
 
 app = typer.Typer(
     name="product",
@@ -27,10 +28,19 @@ app = typer.Typer(
 def validate(
     contract: Annotated[Path, typer.Option("--contract", help="Path to a kubelab.yaml contract")],
     as_json: Annotated[bool, typer.Option("--json", help="Print one JSON object instead of text")] = False,
+    registry: Annotated[
+        Path | None, typer.Option("--registry", help="Also check against this product registry (needs --app)")
+    ] = None,
+    product: Annotated[str | None, typer.Option("--app", help="The registered product the contract belongs to")] = None,
 ) -> None:
-    """Validate a product contract against the kubelab.yaml schema; exit 1 if it is refused."""
+    """Validate a product contract against the schema, and with --registry against the platform; exit 1 if refused."""
+    if (registry is None) != (product is None):
+        raise typer.BadParameter("--registry and --app go together: the contract does not name its product")
     try:
-        parsed = validate_contract(contract)
+        if registry is not None and product is not None:
+            parsed = validate_registered(contract, product, registry)
+        else:
+            parsed = validate_contract(contract)
     except ContractError as e:
         if as_json:
             typer.echo(json.dumps({"ok": False, **e.as_dict()}))

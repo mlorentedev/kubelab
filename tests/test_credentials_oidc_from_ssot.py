@@ -10,12 +10,13 @@ digest key from `oidc_clients.digest_key`, and the plaintext from that spec's `d
 
 from __future__ import annotations
 
+import dataclasses
 from unittest.mock import MagicMock
 
 import pytest
 
 from toolkit.features import oidc_clients
-from toolkit.features.secrets_manager import SECRET_CATALOG
+from toolkit.features.secrets_manager import SECRET_CATALOG, SecretKind
 
 ENVS = ("dev", "staging", "prod")
 SPECS = {s.key_path: s for s in SECRET_CATALOG}
@@ -35,10 +36,10 @@ def _is_oidc_client_key(key: str) -> bool:
     return "oidc_client_secret" in key
 
 
-def _run(env: str, monkeypatch: pytest.MonkeyPatch) -> tuple[set[str], list[str]]:
+def _run(env: str, monkeypatch: pytest.MonkeyPatch, written: set[str] | None = None) -> tuple[set[str], list[str]]:
     from toolkit.features import credentials
 
-    written: set[str] = set()
+    written = set() if written is None else written
     cm = MagicMock()
     cm.get_merged_config.return_value = {"apps": {"auth": {"identities": {"operator": "operator"}}}}
     cm.batch_update_secrets.side_effect = lambda data, secret_file_path=None: written.update(data) or True
@@ -116,3 +117,38 @@ def test_the_manual_copy_prints_hub_keys_under_common_only(
     assert "oidc_client_secret_grafana" in env_block
     assert "oidc_client_secret_argocd" not in env_block
     assert "oidc_client_secret_argocd" in hub_block
+
+
+def _is_hub(key: str) -> bool:
+    return SPECS[key].kind == SecretKind.HUB_MANAGED
+
+
+@pytest.mark.parametrize("env", ENVS)
+def test_every_declared_pair_agrees_on_hub_managed(env: str) -> None:
+    """#2522: the pair goes to one file, so a digest and plaintext that disagree put one half in the wrong one."""
+    clients = oidc_clients.declared_clients(oidc_clients.load_values(env))
+    assert clients, f"{env}: no declared OIDC client, so this check would compare nothing"
+    for client in clients:
+        digest = oidc_clients.digest_key(client["client_id"])
+        plaintext = SPECS[digest].derived_from
+        assert _is_hub(digest) == _is_hub(plaintext), (
+            f"{client['client_id']}: {digest} and {plaintext} disagree on HUB_MANAGED"
+        )
+
+
+def test_a_mixed_pair_is_refused_before_anything_is_written(monkeypatch: pytest.MonkeyPatch) -> None:
+    """#2522: a HUB_MANAGED digest whose plaintext is per-env must stop the run, not pick one file for both."""
+    from toolkit.features import secrets_manager
+
+    plaintext = oidc_clients.digest_key("argocd")
+    plaintext = SPECS[plaintext].derived_from
+    mixed = [
+        dataclasses.replace(s, kind=SecretKind.OIDC_CLIENT_SECRET) if s.key_path == plaintext else s
+        for s in SECRET_CATALOG
+    ]
+    monkeypatch.setattr(secrets_manager, "SECRET_CATALOG", mixed)
+
+    written: set[str] = set()
+    with pytest.raises(oidc_clients.OidcClientError, match="HUB_MANAGED"):
+        _run("prod", monkeypatch, written)
+    assert written == set(), f"keys written before the refusal: {sorted(written)}"

@@ -155,7 +155,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit product` | Validate kubelab.yaml product contracts and read the product registry (ADR-067). |
 | `toolkit product app-for-event` | Name the app a dispatch event type belongs to; exit 1 if the registry maps it to none. |
 | `toolkit product list` | List the registered products, in registry order. |
-| `toolkit product validate` | Validate a product contract against the kubelab.yaml schema; exit 1 if it is refused. |
+| `toolkit product validate` | Validate a product contract against the schema, and with --registry against the platform; exit 1 if refused. |
 | `toolkit registry` | Container registry maintenance (tag pruning). |
 | `toolkit registry prune` | Prune ephemeral image tags (ADR-046). |
 | `toolkit secrets` | Unified secrets management (SOPS vaults, K8s secrets, audit). |

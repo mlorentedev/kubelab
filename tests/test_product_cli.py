@@ -62,15 +62,41 @@ def test_an_invalid_contract_as_json(tmp_path: Path) -> None:
     assert "port" in payload["error"]
 
 
+REGISTRY = Path(__file__).resolve().parents[1] / "infra" / "config" / "products.yaml"
+
+
+def test_validate_against_the_registry_exits_zero_for_web() -> None:
+    result = runner.invoke(
+        app, ["product", "validate", "--contract", str(FIXTURE), "--registry", str(REGISTRY), "--app", "web"]
+    )
+
+    assert result.exit_code == 0, result.output
+
+
+def test_validate_against_the_registry_refuses_an_in_tree_product() -> None:
+    result = runner.invoke(
+        app, ["product", "validate", "--contract", str(FIXTURE), "--registry", str(REGISTRY), "--app", "api", "--json"]
+    )
+
+    assert result.exit_code == 1
+    assert json.loads(result.stdout)["ok"] is False
+
+
+def test_registry_without_app_is_a_usage_error() -> None:
+    result = runner.invoke(app, ["product", "validate", "--contract", str(FIXTURE), "--registry", str(REGISTRY)])
+
+    assert result.exit_code == 2
+
+
 # --- the registry adapters (IDP-042 PR 5) -------------------------------------
 
-REGISTRY = Path(__file__).parent / "fixtures" / "product" / "registry.yaml"
+FIXTURE_REGISTRY = Path(__file__).parent / "fixtures" / "product" / "registry.yaml"
 
 
 @pytest.fixture
 def fixture_registry(monkeypatch: pytest.MonkeyPatch) -> Path:
-    monkeypatch.setattr(product_registry, "registry_path", lambda: REGISTRY)
-    return REGISTRY
+    monkeypatch.setattr(product_registry, "registry_path", lambda: FIXTURE_REGISTRY)
+    return FIXTURE_REGISTRY
 
 
 def test_list_prints_the_registered_products_as_a_json_array(fixture_registry: Path) -> None:
@@ -116,7 +142,7 @@ def test_an_unmapped_event_exits_one_with_error_why_fix(fixture_registry: Path) 
     assert result.exit_code == 1
     lines = result.stderr.splitlines()
     assert [line.split(":", 1)[0] for line in lines] == ["ERROR", "WHY", "FIX"]
-    assert "ghost-image-published" in lines[0] and str(REGISTRY) in result.stderr
+    assert "ghost-image-published" in lines[0] and str(FIXTURE_REGISTRY) in result.stderr
 
 
 def test_an_unmapped_event_as_json(fixture_registry: Path) -> None:

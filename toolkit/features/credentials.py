@@ -583,8 +583,17 @@ class CredentialsManager:
                     f"OIDC client '{client_id}' has no SECRET_CATALOG entry {digest_key} naming its plaintext; "
                     "nothing was written"
                 )
+            hub = digest_spec.kind == SecretKind.HUB_MANAGED
+            plaintext_spec = specs.get(digest_spec.derived_from)
+            if plaintext_spec is None or (plaintext_spec.kind == SecretKind.HUB_MANAGED) != hub:
+                # The pair goes to one file, so a mixed pair would put one half where its
+                # consumer does not read it (#2522).
+                raise oidc_clients.OidcClientError(
+                    f"OIDC client '{client_id}': {digest_key} and {digest_spec.derived_from} disagree on "
+                    "HUB_MANAGED (or the plaintext is not catalogued); nothing was written"
+                )
             secret = secrets.token_urlsafe(64)
-            target = hub_keys if digest_spec.kind == SecretKind.HUB_MANAGED else env_keys
+            target = hub_keys if hub else env_keys
             target[digest_spec.derived_from] = secret
             target[digest_key] = self._oidc_client_digest(client_id, secret)
             rotated.append(client_id)
