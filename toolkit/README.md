@@ -153,7 +153,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit obs triage` | Execute the 4-step automated SRE triage pipeline. |
 | `toolkit obs watcher-run` | Run a CronJob once now, print its log, and delete the Job. |
 | `toolkit product` | Validate kubelab.yaml product contracts (ADR-067). |
-| `toolkit product validate` | Validate a product contract against the kubelab.yaml schema; exit 1 if it is refused. |
+| `toolkit product validate` | Validate a product contract against the schema, and with --registry against the platform; exit 1 if refused. |
 | `toolkit registry` | Container registry maintenance (tag pruning). |
 | `toolkit registry prune` | Prune ephemeral image tags (ADR-046). |
 | `toolkit secrets` | Unified secrets management (SOPS vaults, K8s secrets, audit). |

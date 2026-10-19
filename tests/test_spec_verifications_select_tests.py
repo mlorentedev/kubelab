@@ -65,7 +65,6 @@ UNWRITTEN = frozenset(
         "IDP-042-product-contract-registry-f1",
         "IDP-042-product-contract-registry-f3",
         "IDP-042-product-contract-registry-f4",
-        "IDP-042-product-contract-registry-f6",
         "IDP-042-product-contract-registry-f7",
         "TOOL-080-forge-pr-reviewer-f8",
     }
