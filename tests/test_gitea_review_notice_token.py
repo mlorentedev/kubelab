@@ -94,7 +94,7 @@ def test_it_is_minted_once_with_the_declared_grant_on_the_reviewer_account() -> 
     assert "review_notice_token" in str(task.get("when") or ""), "an ungated mint issues a new live token every run"
     command = " ".join(task["command"]["argv"])
     assert "--username {{ gitea_reviewer_user }}" in command
-    assert "--token-name kubelab-review-notice" in command
+    assert f"--token-name {ROTATABLE_TOKENS['review_notice'].token_name}" in command
     assert "--scopes {{ gitea_review_notice_scopes }}" in command
 
 
@@ -106,20 +106,21 @@ def test_it_is_recorded_over_stdin_under_its_own_key() -> None:
     assert "review_notice_token" in str(task.get("when") or "")
 
 
-def test_a_notice_token_minted_as_wide_as_the_reviewers_reads_as_drift() -> None:
+def test_a_notice_token_minted_wider_than_declared_reads_as_drift() -> None:
     """The live check separates the two tokens of one account by NAME, not by account.
 
-    `GET /users/{u}/tokens` lists both under the reviewer. Matching on the account
-    would let a notice token minted with the reviewer's grant read as converged.
+    `GET /users/{u}/tokens` lists both under the reviewer. The two tokens carry
+    different extra scopes, so a check that picks the first token or merges both
+    reports a different set than the one minted under the notice token's name.
     """
     from toolkit.features.gitea_tokens import ScopeVerdict, check_token_scopes
 
     listing = [
         {"id": 1, "name": ROTATABLE_TOKENS["reviewer"].token_name, "scopes": ["write:issue", "read:repository"]},
-        {"id": 2, "name": ROTATABLE_TOKENS["review_notice"].token_name, "scopes": ["write:issue", "read:repository"]},
+        {"id": 2, "name": ROTATABLE_TOKENS["review_notice"].token_name, "scopes": ["write:issue", "write:repository"]},
     ]
 
     result = check_token_scopes("review_notice", "write:issue", listing)
 
     assert result.verdict is ScopeVerdict.UNDECLARED
-    assert result.undeclared == frozenset({"read:repository"})
+    assert result.undeclared == frozenset({"write:repository"})

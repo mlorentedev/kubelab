@@ -74,7 +74,7 @@ def test_the_credential_is_a_bearer_header_built_from_the_token_the_registry_nam
 ) -> None:
     """The SOPS path is the rotation registry's, not a second copy: rotating the token
     and importing the credential can never read different keys."""
-    assert _gitea().secret_key_path == TOKEN_PATH
+    assert _gitea().secret_key_path == "apps.services.core.gitea.review_notice_token"
 
     ok, kubectl = _run(vault=_with_token(), monkeypatch=monkeypatch)
 
