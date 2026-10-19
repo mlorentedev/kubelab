@@ -8,8 +8,8 @@ owner: manu
 ---
 
 > **Historical snapshot.** A Cloudflare zone export for `mlorente.dev` taken on 2025-08-30, kept
-> for the record. DNS is Terraform-managed now: `infra/terraform/dns/` (`services.json` for
-> `kubelab.live`, `records_mlorente.tf` for `mlorente.dev`). Read the zone from there, not from here.
+> for the record. DNS is Terraform-managed now: `infra/terraform/dns/` (`zones.json` for each zone's
+> own records and settings, `services.json` for the service records). Read the zone from there, not from here.
 
 ;;  
 ;; Domain:     mlorente.dev.  
