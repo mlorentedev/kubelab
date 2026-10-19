@@ -27,6 +27,8 @@ import sys
 import pytest
 import yaml
 
+from toolkit.features import product_registry
+
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 PROMOTE = REPO_ROOT / ".github/workflows/promote-prod.yml"
 
@@ -45,6 +47,10 @@ EVENT_TYPE = "web-release-published"
 # The app the event type means. Deliberately NOT read from client_payload: the
 # fewer sender-controlled fields decide what runs, the smaller the surface.
 DISPATCH_APP = "web"
+
+# What the resolve step calls to ask the registry. The job runs it through
+# poetry; the harness runs the same CLI from this interpreter.
+TOOLKIT = f"{sys.executable} -m toolkit.main"
 
 
 def _load() -> dict:
@@ -72,12 +78,20 @@ def _step(step_id: str) -> dict:
 
 
 def test_the_workflow_listens_for_the_event_a_web_release_fires() -> None:
-    types = _triggers().get("repository_dispatch", {}).get("types", [])
-    assert EVENT_TYPE in types, (
-        f"promote-prod.yml listens for {types!r}, but web fires {EVENT_TYPE!r}. "
-        f"A dispatch whose type no workflow declares is accepted by GitHub with a "
-        f"204 and then dropped — the sender sees success and prod never promotes, "
-        f"which is the failure this change exists to end, reintroduced."
+    """The workflow takes every dispatch and the registry decides (Q5), so the
+    event web fires must be the registry's prod event for web."""
+    triggers = _triggers()
+    assert "repository_dispatch" in triggers, "promote-prod.yml no longer listens for dispatches"
+    types = (triggers["repository_dispatch"] or {}).get("types")
+    assert types is None, (
+        f"promote-prod.yml filters dispatches to {types!r}; the registry is what maps an "
+        f"event type to an app, and a filter here is a second list to keep in step with it"
+    )
+    route = product_registry.event_route(EVENT_TYPE)
+    assert route == product_registry.EventRoute(app=DISPATCH_APP, lane="prod"), (
+        f"web fires {EVENT_TYPE!r}, but the registry routes it to {route}. A dispatch "
+        f"the registry does not route to the prod lane is skipped or refused, and prod "
+        f"never promotes, which is the failure #1585 ended, reintroduced."
     )
 
 
@@ -87,7 +101,10 @@ def test_the_manual_dispatch_path_survives_unchanged() -> None:
     able to start this by hand."""
     inputs = _triggers().get("workflow_dispatch", {}).get("inputs", {})
     assert set(inputs) == {"app", "version"}, f"the manual inputs changed: {sorted(inputs)}"
-    assert inputs["app"]["options"] == ["web", "api"]
+    # A free string, validated against the registry by the resolve step: a choice
+    # list here would be a copy of the registry that a new product has to edit.
+    assert "options" not in inputs["app"]
+    assert "products.yaml" in inputs["app"]["description"]
     assert inputs["app"]["required"] is True
     assert inputs["version"]["required"] is True
 
@@ -101,6 +118,11 @@ def test_a_dispatch_serialises_against_a_manual_promote_of_the_same_app() -> Non
     different groups and race each other's `git push` on the same branch name.
     """
     group = str(_load()["concurrency"]["group"])
+    prod_lane = [app for app, entry in product_registry.load_registry().products.items() if entry.events.prod]
+    assert prod_lane == [DISPATCH_APP], (
+        f"the fallback names {DISPATCH_APP!r}, but the products with a prod dispatch event "
+        f"are {prod_lane}; the fallback is only true while exactly that one exists (Q4)"
+    )
     assert f"|| '{DISPATCH_APP}'" in group, (
         f"the concurrency group is {group!r}; on a repository_dispatch `inputs` is "
         f"empty, so it must fall back to {DISPATCH_APP!r} rather than to nothing"
@@ -144,6 +166,32 @@ def test_the_promote_and_pr_steps_consume_the_resolved_values() -> None:
         assert "inputs." not in env, f"{step_id} still reads a raw input; it is empty on a dispatch"
 
 
+def test_every_step_after_the_resolve_is_skipped_for_another_lane() -> None:
+    """Without a `types` filter every staging dispatch starts this workflow too.
+
+    The resolve step answers `skip=true` for those, and nothing after it may run:
+    a promote with an empty app would fail red on a run that had nothing to do.
+    """
+    steps = _steps()
+    after = steps[next(i for i, s in enumerate(steps) if s.get("id") == "target") + 1 :]
+    assert after, "no step follows the resolve step"
+    for step in after:
+        assert step.get("if") == "steps.target.outputs.skip != 'true'", (
+            f"step {step.get('name')!r} runs for a dispatch of another lane"
+        )
+
+
+def test_the_resolve_step_names_no_product() -> None:
+    """The app comes from the registry on both paths (#1815): admitting a product
+    is a registry entry, not an edit to this script."""
+    script = str(_step("target")["run"])
+    assert "product app-for-event" in script and "product list" in script
+    for app in product_registry.platform_apps():
+        assert f"app={app}" not in script and f"{app}|" not in script and f"|{app}" not in script, (
+            f"the resolve step still spells {app!r}"
+        )
+
+
 # --- the validation step, executed ------------------------------------------
 
 _needs_bash = pytest.mark.skipif(shutil.which("bash") is None, reason="the step is a bash script")
@@ -165,6 +213,8 @@ def _resolve(tmp_path: pathlib.Path, **env_overrides: str) -> tuple[int, dict[st
         "PATH": os.pathsep.join([str(pathlib.Path(sys.executable).parent), os.environ["PATH"]]),
         "GITHUB_OUTPUT": str(output),
         **{key: "" for key in (step.get("env") or {})},
+        "EVENT_TYPE": EVENT_TYPE,
+        "TOOLKIT": TOOLKIT,
         **env_overrides,
     }
     proc = subprocess.run(  # noqa: S603
@@ -254,3 +304,112 @@ def test_an_unknown_app_on_the_manual_path_is_refused(tmp_path: pathlib.Path) ->
     assert code != 0
     assert out == {}
     assert "::error::" in log
+
+
+@_needs_bash
+@pytest.mark.parametrize("app", ["we", "ap", ""])
+def test_a_part_of_a_product_name_is_not_a_product(tmp_path: pathlib.Path, app: str) -> None:
+    """The registry match is on the whole name: `we` is not `web`."""
+    code, out, _ = _resolve(tmp_path, EVENT="workflow_dispatch", INPUT_APP=app, INPUT_VERSION="1.1.1")
+    assert code != 0, f"{app!r} was accepted as a product"
+    assert out == {}
+
+
+@_needs_bash
+def test_an_event_type_the_registry_does_not_map_fails_loudly(tmp_path: pathlib.Path) -> None:
+    """AC1: a product absent from the registry is refused, in red, on the run page."""
+    code, out, log = _resolve(
+        tmp_path, EVENT="repository_dispatch", EVENT_TYPE="ghost-release-published", PAYLOAD_VERSION="1.12.0"
+    )
+    assert code != 0
+    assert out == {}
+    assert "::error::" in log and "ghost-release-published" in log
+
+
+@_needs_bash
+def test_a_staging_lane_event_is_skipped_as_not_this_lane(tmp_path: pathlib.Path) -> None:
+    """Every dispatch starts this workflow (no `types`), including the staging one
+    the receiver acts on. It ends green and promotes nothing."""
+    code, out, log = _resolve(
+        tmp_path, EVENT="repository_dispatch", EVENT_TYPE="web-image-published", PAYLOAD_VERSION="sha-f98a705"
+    )
+    assert code == 0, log
+    assert out == {"skip": "true"}
+    assert "not this lane" in log
+
+
+def _stub_toolkit(tmp_path: pathlib.Path, route_stdout: str, route_code: int, list_code: int = 0) -> str:
+    """A toolkit whose `app-for-event` answers `route_stdout`; `list` answers the registry."""
+    stub = tmp_path / "toolkit-stub"
+    products = "\n".join(product_registry.platform_apps())
+    stub.write_text(
+        "#!/usr/bin/env bash\n"
+        f'if [ "$2" = list ]; then [ {list_code} = 0 ] || {{ echo "registry unreadable"; exit {list_code}; }}; '
+        f'printf "%s\\n" "{products}"; exit 0; fi\n'
+        f"cat <<'ROUTE'\n{route_stdout}\nROUTE\n"
+        f"exit {route_code}\n"
+    )
+    stub.chmod(0o755)
+    return str(stub)
+
+
+@_needs_bash
+def test_an_answer_that_is_not_json_fails_instead_of_skipping(tmp_path: pathlib.Path) -> None:
+    """A warning printed before the object once made `jq .lane` read nothing.
+
+    Nothing equals `prod`, so the release was treated as a staging event and the
+    run ended green, promoting nothing: the failure this workflow exists to end.
+    """
+    polluted = '[WARNING] SOPS is not installed.\n{"ok": true, "event": "x", "app": "web", "lane": "prod"}'
+    code, out, log = _resolve(
+        tmp_path,
+        EVENT="repository_dispatch",
+        PAYLOAD_VERSION="1.12.0",
+        TOOLKIT=_stub_toolkit(tmp_path, polluted, 0),
+    )
+    assert code != 0, "an unreadable answer was taken for another lane"
+    assert out == {}
+    assert "[WARNING] SOPS is not installed." in log, "the error must show what the toolkit answered"
+
+
+@_needs_bash
+def test_a_toolkit_failure_that_is_not_json_names_its_output(tmp_path: pathlib.Path) -> None:
+    """The ERROR/WHY/FIX annotation needs the CLI's JSON; anything else is shown raw."""
+    code, out, log = _resolve(
+        tmp_path,
+        EVENT="repository_dispatch",
+        PAYLOAD_VERSION="1.12.0",
+        TOOLKIT=_stub_toolkit(tmp_path, "ModuleNotFoundError: No module named 'toolkit'", 1),
+    )
+    assert code != 0
+    assert out == {}
+    assert "::error::" in log and "No module named 'toolkit'" in log, log
+
+
+@_needs_bash
+def test_an_answer_without_a_lane_fails_instead_of_skipping(tmp_path: pathlib.Path) -> None:
+    """Valid JSON is not enough: a missing lane reads as `null`, which is not `prod` either."""
+    code, out, log = _resolve(
+        tmp_path,
+        EVENT="repository_dispatch",
+        PAYLOAD_VERSION="1.12.0",
+        TOOLKIT=_stub_toolkit(tmp_path, '{"ok": true, "app": "web"}', 0),
+    )
+    assert code != 0, "an answer naming no lane was taken for another lane"
+    assert out == {}
+    assert "answered no lane" in log, log
+
+
+@_needs_bash
+def test_a_product_list_failure_names_itself(tmp_path: pathlib.Path) -> None:
+    """The manual path reads only `product list`; its failure must annotate the run too."""
+    code, out, log = _resolve(
+        tmp_path,
+        EVENT="workflow_dispatch",
+        INPUT_APP="web",
+        INPUT_VERSION="1.12.0",
+        TOOLKIT=_stub_toolkit(tmp_path, "{}", 0, list_code=1),
+    )
+    assert code != 0
+    assert out == {}
+    assert "::error::toolkit product list failed: registry unreadable" in log, log

@@ -962,15 +962,16 @@ rotate-spoke-token:
 # also arrive from somewhere this Makefile never ran.
 GH ?= gh
 DELIVERY_REPO ?= mlorentedev/kubelab
+# The products APP may name, one per line, from infra/config/products.yaml.
+PRODUCT_LIST ?= $(TOOLKIT) product list
 
 .PHONY: promote-prod
 promote-prod: ## Open the prod promotion PR for an app at a released semver tag (ADR-046)
 	@test -n "$(APP)" && test -n "$(VERSION)" || { \
-		echo "Usage: make promote-prod APP=web|api VERSION=1.12.0"; exit 2; }
-	@case "$(APP)" in \
-		web|api) ;; \
-		*) echo "Unknown APP '$(APP)' — expected web or api"; exit 2 ;; \
-	esac
+		echo "Usage: make promote-prod APP=<product> VERSION=1.12.0"; exit 2; }
+	@products="$$($(PRODUCT_LIST))" || { echo "Cannot read the product registry (infra/config/products.yaml)"; exit 2; }; \
+	printf '%s\n' $$products | grep -qxF -- '$(APP)' || { \
+		echo "Unknown APP '$(APP)' — expected one of:" $$products; exit 2; }
 	@[[ "$(VERSION)" =~ ^[0-9]+\.[0-9]+\.[0-9]+$$ ]] || { \
 		echo "VERSION '$(VERSION)' is not an immutable semver tag such as 1.12.0."; \
 		echo "Prod ships released semver only: no leading v, no mutable alias, no sha-* staging tag."; \

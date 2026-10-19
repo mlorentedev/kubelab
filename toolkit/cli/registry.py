@@ -5,7 +5,7 @@ from typing import Annotated
 import typer
 
 from toolkit.core.logging import logger
-from toolkit.features import promotion, registry
+from toolkit.features import product_registry, promotion, registry
 from toolkit.features.registry import SHA_TAG_PREFIX
 
 app = typer.Typer(
@@ -18,9 +18,13 @@ app = typer.Typer(
 @app.command()
 def prune(
     apps: Annotated[
-        str,
-        typer.Option("--apps", help="Comma-separated app names (repo = <prefix>-<app>)"),
-    ] = "api,web,errors",
+        str | None,
+        typer.Option(
+            "--apps",
+            help="Comma-separated app names (repo = <prefix>-<app>); default: every product in "
+            "infra/config/products.yaml, plus errors",
+        ),
+    ] = None,
     retention: Annotated[
         int,
         typer.Option("--retention", "-n", help="Keep this many most-recent sha-* tags per app"),
@@ -42,7 +46,12 @@ def prune(
     is never touched. Needs ``DOCKERHUB_USERNAME``/``DOCKERHUB_TOKEN`` in the env.
     """
     logger.section(f"Registry Prune{' (dry-run)' if dry_run else ''}")
-    app_list = [a.strip() for a in apps.split(",") if a.strip()]
+    # errors is an edge service, not a product, so the registry does not list it.
+    app_list = (
+        [a.strip() for a in apps.split(",") if a.strip()]
+        if apps is not None
+        else [*product_registry.platform_apps(), "errors"]
+    )
     # Never prune a sha referenced by a committed overlay (ADR-056 prune guard):
     # gather the per-app sha pins from every env's values and protect them.
     protected: dict[str, set[str]] = {}

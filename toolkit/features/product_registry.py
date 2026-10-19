@@ -18,12 +18,12 @@ from __future__ import annotations
 import re
 from functools import lru_cache
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, NamedTuple
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError, field_validator, model_validator
 
-from toolkit.config.settings import settings
+from toolkit.config.settings import PROJECT_ROOT
 
 REGISTRY_RELPATH = Path("infra") / "config" / "products.yaml"
 COMMON_VALUES_RELPATH = Path("infra") / "config" / "values" / "common.yaml"
@@ -125,7 +125,7 @@ class _UniqueKeyLoader(yaml.SafeLoader):
 
 
 def registry_path() -> Path:
-    return settings.project_root / REGISTRY_RELPATH
+    return PROJECT_ROOT / REGISTRY_RELPATH
 
 
 def load_registry(path: Path | None = None) -> Registry:
@@ -154,12 +154,29 @@ def platform_apps(path: Path | None = None) -> tuple[str, ...]:
     return tuple(load_registry(path).products)
 
 
+Lane = Literal["staging", "prod"]
+
+
+class EventRoute(NamedTuple):
+    """Where a dispatch event type goes: which app, and which lane's workflow acts on it."""
+
+    app: str
+    lane: Lane
+
+
 def app_for_event(event: str, path: Path | None = None) -> str:
     """The app that owns a dispatch event type. The payload never names the app (AC1)."""
+    return event_route(event, path).app
+
+
+def event_route(event: str, path: Path | None = None) -> EventRoute:
+    """The app and lane a dispatch event type maps to; ``UnknownEventError`` names the registry."""
     resolved = Path(path) if path is not None else registry_path()
     for name, product in load_registry(resolved).products.items():
-        if event in (product.events.staging, product.events.prod):
-            return name
+        if event == product.events.staging:
+            return EventRoute(app=name, lane="staging")
+        if event == product.events.prod:
+            return EventRoute(app=name, lane="prod")
     raise UnknownEventError(
         f"event type '{event}' is not mapped to any product in {resolved}; "
         "a product is admitted by adding its entry to the registry"
@@ -168,7 +185,7 @@ def app_for_event(event: str, path: Path | None = None) -> str:
 
 def platform_registry() -> str:
     """The platform's image registry (``registry`` in ``common.yaml``), read without SOPS."""
-    path = settings.project_root / COMMON_VALUES_RELPATH
+    path = PROJECT_ROOT / COMMON_VALUES_RELPATH
     value = (yaml.safe_load(path.read_text()) or {}).get("registry")
     if not value:
         raise RegistryError(f"{path}: no top-level `registry` to derive product images from")
