@@ -48,6 +48,7 @@ help:
 	@echo "  make secrets-hash ENV=x Hash all OIDC client secrets"
 	@echo "  make secrets-show KEY=x SECRETS_ENV=y  Show a decrypted secret (default: common)"
 	@echo "  make secrets-audit      Audit secrets across all environments"
+	@echo "  make acme-token-scope   Ask Cloudflare what the ACME DNS-01 token may do (read-only)"
 	@echo "  make dev-full-reset     Full teardown + rebuild + restart"
 	@echo "  make dev-app APP=x      Start Astro app dev server (site)"
 	@echo "  make build-app APP=x    Build Astro app (static output)"
@@ -520,6 +521,12 @@ secrets-show:
 .PHONY: secrets-audit
 secrets-audit:
 	@$(TOOLKIT) secrets audit
+
+# Read-only: GETs against the Cloudflare API with the ACME token, which is used
+# and never printed. 403 on zone settings is the expected answer (#2459).
+.PHONY: acme-token-scope
+acme-token-scope:
+	@$(TOOLKIT) secrets acme-token-scope
 
 # Plan only. `APPLY=1` is what creates organizations and repositories for real —
 # opt-in because the first run mutates a live forge (TOOL-035, #1076).
