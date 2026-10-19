@@ -1,9 +1,10 @@
 # CI workflows, gates and the GitHub surface
 
-49 lessons, newest first. Back to [all categories](../_index.md).
+Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 602 | [A spending weight is not an order, so a chain derived from it put the slowest model first](lesson-602-a-spending-weight-is-not-an-order-so-a-chain-derived-from-it-put-the-slowest-model-first.md) | 2026-10-18 |
 | 601 | [A reviewer that sends no max_tokens inherits the provider's completion cap, and loses the review to its own reasoning](lesson-601-a-reviewer-that-sends-no-max-tokens-inherits-the-providers-completion-cap-and-loses-the-review-to-its-own-reasoning.md) | 2026-10-18 |
 | 596 | [A PR-Agent server reviews every model through one provider, so its fallback chain cannot mix NaN and Anthropic](lesson-596-a-pr-agent-server-reviews-every-model-through-one-provider.md) | 2026-10-18 |
 | 575 | [A PR-Agent toml provider applies to every model, so a second provider has to override it](lesson-575-a-pr-agent-toml-provider-applies-to-every-model.md) | 2026-10-15 |

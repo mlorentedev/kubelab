@@ -33,14 +33,16 @@ from __future__ import annotations
 import json
 import pathlib
 
-import yaml
+from toolkit.features.declared_domains import declared_domains
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 SERVICES_JSON = REPO_ROOT / "infra/terraform/dns/services.json"
+ZONES_JSON = REPO_ROOT / "infra/terraform/dns/zones.json"
 VALUES = REPO_ROOT / "infra/config/values"
 
-#: Zone apexes the DNS module manages, by its `zone` key.
-ZONE_APEX = {"kubelab": "kubelab.live", "mlorente": "mlorente.dev"}
+#: Zone apexes the DNS module manages, by its `zone` key, read from the module.
+ZONES = json.loads(ZONES_JSON.read_text())
+ZONE_APEX = {zone["key"]: apex for apex, zone in ZONES.items()}
 
 #: Domains served by something outside the Terraform DNS module -- a name
 #: resolved by split DNS, or an internal-only TLD a public record would be wrong
@@ -58,33 +60,11 @@ def _declared_dns_names() -> set[str]:
         apex = ZONE_APEX[r["zone"]]
         name = r["name"]
         names.add(apex if name in ("@", apex) else f"{name}.{apex}")
-    # The apex itself and `www` are declared as their own resources in the
-    # module rather than as entries in services.json.
-    names.update({"kubelab.live", "www.kubelab.live", "mlorente.dev"})
+    # Each zone's own records (the apex, `www`) live in zones.json.
+    for apex, zone in ZONES.items():
+        for r in zone["records"]:
+            names.add(apex if r["name"] == apex else f"{r['name']}.{apex}")
     return names
-
-
-def _declared_domains(env: str) -> dict[str, str]:
-    """Every `<key>: <domain>` a service declares, merged common -> env."""
-    found: dict[str, str] = {}
-    for source in ("common", env):
-        path = VALUES / f"{source}.yaml"
-        if not path.exists():
-            continue
-        config = yaml.safe_load(path.read_text()) or {}
-        _walk(config.get("apps", {}), found)
-    return found
-
-
-def _walk(node: object, found: dict[str, str], path: str = "apps") -> None:
-    if not isinstance(node, dict):
-        return
-    for key, value in node.items():
-        here = f"{path}.{key}"
-        if key.endswith("domain") and isinstance(value, str) and value:
-            found[here] = value
-        else:
-            _walk(value, found, here)
 
 
 def test_every_declared_public_domain_has_a_dns_record() -> None:
@@ -110,7 +90,7 @@ def test_every_declared_public_domain_has_a_dns_record() -> None:
     # the skip set was empty, so nothing was relying on it.
     undeclared = {
         key: domain
-        for key, domain in _declared_domains(env).items()
+        for key, domain in declared_domains(env, VALUES).items()
         if domain not in dns and domain not in EXTERNALLY_MANAGED
     }
     assert not undeclared, (

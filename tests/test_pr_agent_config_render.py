@@ -43,7 +43,7 @@ REQUIRED_VALUES = {
     "CONFIG__GIT_PROVIDER": "gitea",
     "GITEA__URL": "https://gitea.kubelab.live",
     "OPENAI__API_BASE": "https://api.nan.builders/v1",
-    "CONFIG__MODEL": "openai/mimo-v2.6-flash",
+    "CONFIG__MODEL": "openai/deepseek-v4-flash",
     "CONFIG__RETRY_SAME_MODEL_ON_TIMEOUT": "false",
     "CONFIG__NUM_RETRIES": "0",
     "CONFIG__AI_TIMEOUT": "360",
@@ -51,7 +51,7 @@ REQUIRED_VALUES = {
     "LITELLM__FORCE_STREAMING_CUSTOM_LLM_PROVIDER": "openai",
     "LITELLM__FORCE_STREAMING_API_BASE_SUBSTRINGS": '["api.nan.builders"]',
     "PR_REVIEWER__NUM_MAX_FINDINGS": "5",
-    "CONFIG__FALLBACK_MODELS": '["openai/deepseek-v4-flash", "openai/glm5.3-flash"]',
+    "CONFIG__FALLBACK_MODELS": '["openai/glm5.3-flash", "openai/mimo-v2.6-flash"]',
     "CONFIG__CUSTOM_MODEL_MAX_TOKENS": "200000",
     "CONFIG__MAX_MODEL_TOKENS": "200000",
     "CONFIG__MAX_OUTPUT_TOKENS": "65536",
@@ -154,7 +154,12 @@ class TestReviewOnlyContract:
 
 def _nan_chain_from_pool() -> list[str]:
     """The forge chain the reviewer pool implies: its NaN members that carry a
-    `pr_agent.weight`, heaviest first, the pool's own order breaking a tie.
+    `pr_agent.weight`, in `pr_agent.forge_rank` order.
+
+    `forge_rank` exists only in kubelab's copy of the pool (it is declared in the
+    file's `$comment` as a divergence from dotfiles'). The CI draw is by `weight`
+    and never reads it; the forge server cannot draw, so it tries members in turn
+    and needs an order, which the weights are not: they are a spending share.
 
     NaN only, because this server sends every model through one api_base and
     one custom_llm_provider (lesson-596): an Anthropic member here would reach
@@ -163,12 +168,12 @@ def _nan_chain_from_pool() -> list[str]:
     """
     pool = json.loads(REVIEWER_POOL.read_text())["pool"]
     members = [
-        (index, entry["pr_agent"])
-        for index, entry in enumerate(pool)
+        entry["pr_agent"]
+        for entry in pool
         if entry.get("provider") == "nan" and "weight" in (entry.get("pr_agent") or {})
     ]
-    members.sort(key=lambda member: (-member[1]["weight"], member[0]))
-    return [pr_agent["model"] for _, pr_agent in members]
+    members.sort(key=lambda pr_agent: pr_agent["forge_rank"])
+    return [pr_agent["model"] for pr_agent in members]
 
 
 class TestModelChainFollowsTheReviewerPool:
@@ -180,15 +185,26 @@ class TestModelChainFollowsTheReviewerPool:
     fallback while the pool and CI had two.
     """
 
-    def test_the_chain_is_the_pools_nan_members_heaviest_first(self) -> None:
+    def test_the_chain_is_the_pools_nan_members_in_forge_rank_order(self) -> None:
         data = _pr_agent_config().get("data") or {}
         chain = [data["CONFIG__MODEL"], *json.loads(data["CONFIG__FALLBACK_MODELS"])]
         expected = _nan_chain_from_pool()
         assert chain == expected, (
             f"the forge reviewer chain {chain} is not the reviewer pool's NaN members "
-            f"by weight {expected}. Edit infra/k8s/overlays/prod/pr-agent-config/"
+            f"by forge_rank {expected}. Edit infra/k8s/overlays/prod/pr-agent-config/"
             "pr-agent.env to match harness/reviewer-pool.json."
         )
+
+    def test_the_fast_model_reviews_first(self) -> None:
+        """Owner decision 2026-10-18 (#1957): the chain is ordered by `forge_rank`, not by CI's
+        spending weight, because the weight put mimo first, and mimo is the model a review
+        most often loses to the ~600 s clock (lesson-601). deepseek answers the same review in
+        about two minutes. The pin is the order's reason, so a re-port of the pool cannot
+        quietly bring the weight order back."""
+        data = _pr_agent_config().get("data") or {}
+
+        assert data["CONFIG__MODEL"] == "openai/deepseek-v4-flash"
+        assert json.loads(data["CONFIG__FALLBACK_MODELS"])[-1] == "openai/mimo-v2.6-flash"
 
     def test_the_pool_still_has_a_nan_member_to_review_with(self) -> None:
         """An empty derivation would make the test above compare nothing."""

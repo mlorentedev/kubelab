@@ -441,7 +441,7 @@ def mutate_cmd(
 
 
 # =============================================================================
-# LESSON INDEX COUNTERS (#1649)
+# LESSON INDEX ROW ORDER (#1649, #1912, #2525)
 # =============================================================================
 
 
@@ -453,36 +453,36 @@ def lessons_index(
     ] = Path("docs/lessons"),
     fix: Annotated[
         bool,
-        typer.Option("--fix/--check", help="Rewrite the counters and row order, or only report what disagrees"),
+        typer.Option("--fix/--check", help="Rewrite the row order, or only report what is out of order"),
     ] = False,
     allow_removal: Annotated[
         bool,
         typer.Option("--allow-removal", help="A lesson committed at HEAD is meant to be gone from the tree"),
     ] = False,
 ) -> None:
-    """Derive the lesson index counters from the files on disk, and order each
-    category's rows newest first (by date, then by number within a date, #1912).
+    """Order each category's lesson rows newest first (by date, then by number
+    within a date, #1912), after refusing a corpus a rewrite would hide.
 
-    The counters are shared mutable state that every lesson PR writes, and git
-    merges the line as text without raising a conflict — so a branch that was
-    correct when authored is wrong the moment another lesson PR merges first
-    (#1649). Deriving them at author time is not enough; that is what failed.
+    The indexes state no lesson count since #2525: a count was a shared line
+    that two lesson PRs rewrote from different bases and git merged as text
+    without a conflict. The row tests in `tests/test_lesson_index_integrity.py`
+    guard the corpus instead.
 
     Run with --fix from the pre-commit hook, --check from anywhere.
 
     Exit codes, because the hooks branch on them and a caller must be able to
     tell the three failures apart (#1678 AC5):
 
-      0  the corpus is safe to count and the counters agree
-      1  the counters disagree (--check), or were rewritten (--fix)
-      2  a HAZARD: recounting is the wrong operation and nothing was written
+      0  the corpus is safe to touch and the rows are in order
+      1  rows are out of order (--check), or were reordered (--fix)
+      2  a HAZARD: a rewrite is the wrong operation and nothing was written
       3  CANNOT CHECK: the question went unanswered, which is not a pass
     """
     from toolkit.features import lessons_index as index
 
-    # Hazards first. `--fix` over a colliding or shrunken corpus produces a
-    # correct counter and a broken corpus, and then reports success — the exact
-    # trap #1678 AC5 names. Refusing has to happen before anything is written.
+    # Hazards first. `--fix` over a colliding or shrunken corpus tidies the
+    # indexes and reports success over a broken corpus — the exact trap
+    # #1678 AC5 names. Refusing has to happen before anything is written.
     try:
         found = index.hazards(root, allow_removal=allow_removal)
     except index.CannotCheck as exc:
@@ -494,28 +494,28 @@ def lessons_index(
         for hazard in found:
             logger.error(str(hazard))
         logger.error(
-            f"{root}: refusing to touch the counters — {len(found)} hazard(s). "
-            "Recounting here would make the total agree and leave the defect in place."
+            f"{root}: refusing to touch the indexes — {len(found)} hazard(s). "
+            "A rewrite here would report success and leave the defect in place."
         )
         raise typer.Exit(2)
 
     fixes = index.reconcile(root, apply=fix)
 
     if not fixes:
-        logger.success(f"{root}: counters and row order already match the files")
+        logger.success(f"{root}: every category is in row order")
         return
 
     for f in fixes:
         logger.info(str(f))
 
     if fix:
-        logger.success(f"{root}: rewrote {len(fixes)} line(s) (counters or row order) from the files")
+        logger.success(f"{root}: rewrote {len(fixes)} line(s) (row order) from the files")
         # Exit 1 is not a failure to fix: a hook that modified files fails by pre-commit's
         # convention, so the next step is to stage the rewrite and run again (#2294).
         logger.info("Exiting 1 on purpose, the pre-commit convention for a hook that modified files: stage and re-run.")
         raise typer.Exit(1)
 
-    logger.error(f"{root}: {len(fixes)} line(s) (counters or row order) disagree with the files — run with --fix")
+    logger.error(f"{root}: {len(fixes)} row(s) out of order — run with --fix")
     raise typer.Exit(1)
 
 

@@ -1,8 +1,7 @@
 """DEBT-012 (#1469): a lesson with no index row is a lesson nobody will find.
 
 `docs/lessons/_format.md` ends with an instruction — *"After adding a file, add
-its row to the category's `_index.md` and bump the count"* — and nothing checked
-that it happened. Two ways it silently does not:
+its row to the category's `_index.md`"* — and nothing checked that it happened. Two ways it silently does not:
 
 1. **A clean merge drops a row.** Recorded in lesson-401: two branches both
    top-inserted into the same `_index.md` table, git merged them with no
@@ -20,6 +19,14 @@ also close this, and is rejected deliberately: the category indexes carry a
 curated order and titles that are sometimes shortened relative to the lesson's
 own heading. A generator flattens both. This keeps the file hand-written and
 only refuses to let it drift.
+
+**Why the indexes state no count (#2525).** They used to: a total, a column per
+category and a heading per category. Each was a shared mutable line that every
+lesson PR rewrote. Two PRs that each added a lesson merged their edits as text
+with no conflict, and master broke twice on 2026-10-18. The three row tests
+below already pin the count (every file has a row, every row has a file, no row
+twice), so a stated number checked nothing they do not. `TestNoCommittedCount`
+keeps one from coming back.
 """
 
 from __future__ import annotations
@@ -32,10 +39,11 @@ import pytest
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 LESSONS = REPO_ROOT / "docs" / "lessons"
 
-#: `NN lessons, ...` on the category index's summary line, and the same shape at
-#: the top level. Matched rather than parsed as Markdown: the count is prose, and
-#: prose is what drifts.
+#: `NN lessons, ...`: the summary-line shape the indexes used before #2525.
 _COUNT = re.compile(r"^(\d+) lessons\b", re.M)
+
+#: `| [slug](slug/_index.md) | 56 | Scope |`: the top-level count column before #2525.
+_CATEGORY_COUNT = re.compile(r"^\|\s*\[[a-z-]+\]\([a-z-]+/_index\.md\)\s*\|\s*\d+\s*\|", re.M)
 
 #: A table row's link target: `| 402 | [title](lesson-402-....md) | date |`
 _ROW_TARGET = re.compile(r"\]\((lesson-[^)]+\.md)\)")
@@ -51,16 +59,6 @@ def _lesson_files(category: pathlib.Path) -> set[str]:
 
 def _rows(category: pathlib.Path) -> list[str]:
     return _ROW_TARGET.findall((category / "_index.md").read_text())
-
-
-def _stated_count(index: pathlib.Path) -> int:
-    counts = _COUNT.findall(index.read_text())
-    assert counts, f"{index.relative_to(REPO_ROOT)} has no 'N lessons' summary line"
-    # A conflict resolved by keeping both sides keeps two summary lines, and
-    # `lessons-index --fix` then corrects both, so the count alone still agrees
-    # (lesson-537).
-    assert len(counts) == 1, f"{index.relative_to(REPO_ROOT)} states its count {len(counts)} times"
-    return int(counts[0])
 
 
 def test_there_are_categories_to_check() -> None:
@@ -89,28 +87,35 @@ class TestOneCategory:
         dupes = {name for name in rows if rows.count(name) > 1}
         assert not dupes, f"{category.name}/_index.md lists twice: {', '.join(sorted(dupes))}"
 
-    def test_the_stated_count_matches_the_files(self, category: pathlib.Path) -> None:
-        stated = _stated_count(category / "_index.md")
-        actual = len(_lesson_files(category))
-        assert stated == actual, f"{category.name}/_index.md says {stated} lessons, {actual} files exist"
+
+class TestNoCommittedCount:
+    """A count written into an index is the shared line that broke master (#2525)."""
+
+    @pytest.mark.parametrize(
+        "index",
+        [LESSONS / "_index.md", *(c / "_index.md" for c in _categories())],
+        ids=lambda p: p.parent.name,
+    )
+    def test_no_index_states_a_lesson_count(self, index: pathlib.Path) -> None:
+        stated = _COUNT.findall(index.read_text())
+        assert not stated, (
+            f"{index.relative_to(REPO_ROOT)} states a lesson count ({stated[0]}). Two PRs that each add "
+            "a lesson rewrite that line from different bases and merge with no conflict (#2525). "
+            "The row tests already pin the count, so drop the number."
+        )
+
+    def test_the_top_level_table_has_no_count_column(self) -> None:
+        rows = _CATEGORY_COUNT.findall((LESSONS / "_index.md").read_text())
+        assert not rows, f"docs/lessons/_index.md has a per-category count again: {rows[0]!r} (#2525)"
+
+    def test_the_guard_matches_the_shapes_it_replaced(self) -> None:
+        """Guards the guard: both patterns still recognise the lines they were written for."""
+        assert _COUNT.findall("598 lessons, one file each. Newest: 2026-10-18.\n")
+        assert _COUNT.findall("56 lessons, newest first. Back to [all categories](../_index.md).\n")
+        assert _CATEGORY_COUNT.findall("| [kubernetes](kubernetes/_index.md) | 56 | Cluster |\n")
 
 
 class TestTopLevelIndex:
-    def test_the_total_matches_every_file(self) -> None:
-        stated = _stated_count(LESSONS / "_index.md")
-        actual = sum(len(_lesson_files(c)) for c in _categories())
-        assert stated == actual, f"docs/lessons/_index.md says {stated} lessons, {actual} files exist"
-
-    def test_each_categorys_number_matches_its_own_index(self) -> None:
-        """The top level restates every category's count; both copies must agree."""
-        text = (LESSONS / "_index.md").read_text()
-        for category in _categories():
-            row = re.search(rf"\|\s*\[{re.escape(category.name)}\]\([^)]+\)\s*\|\s*(\d+)\s*\|", text)
-            assert row, f"docs/lessons/_index.md has no row for category {category.name}"
-            assert int(row.group(1)) == len(_lesson_files(category)), (
-                f"top-level index says {row.group(1)} for {category.name}, {len(_lesson_files(category))} files exist"
-            )
-
     def test_every_category_directory_appears(self) -> None:
         """A whole category missing from the top level hides all of its lessons at once."""
         text = (LESSONS / "_index.md").read_text()

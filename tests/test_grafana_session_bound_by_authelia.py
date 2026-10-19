@@ -12,11 +12,12 @@ Authelia 4.39 has no RP-initiated or back-channel logout, so two things are ours
 The bound Authelia enforces is the `session` block of each overlay's EMITTED
 authelia-config, so that is what this reads. Nothing in K8s reads the common.yaml
 `session_*` values (the dev Authelia template does), so the dev Authelia is held to
-the same numbers. The dev Compose Grafana carries no bound yet: #2415.
+the same numbers. The dev Compose Grafana derives the same three values from the loader variables.
 """
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -25,6 +26,8 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 import yaml
+
+from toolkit.features.configuration import ConfigurationManager
 
 ROOT = Path(__file__).resolve().parents[1]
 OVERLAYS = ("staging", "prod")
@@ -89,7 +92,9 @@ def test_grafana_oauth_endpoints_name_its_own_authelia(overlay: str, key: str) -
     authelia, grafana = _authelia_and_grafana(overlay)
     portal = urlsplit(authelia["session"]["cookies"][0]["authelia_url"])
     url = urlsplit(grafana.get(key, ""))
-    assert (url.scheme, url.netloc, url.path) == ("https", portal.netloc, OIDC_ENDPOINTS[key]), f"{overlay}: {url.geturl()!r}"
+    assert (url.scheme, url.netloc, url.path) == ("https", portal.netloc, OIDC_ENDPOINTS[key]), (
+        f"{overlay}: {url.geturl()!r}"
+    )
 
 
 def test_the_dev_authelia_session_matches_the_overlays() -> None:
@@ -102,3 +107,51 @@ def test_the_dev_authelia_session_matches_the_overlays() -> None:
             session["expiration"],
             session["inactivity"],
         ), f"common.yaml and {overlay} disagree on the session bound"
+
+
+DEV_GRAFANA_COMPOSE = ROOT / "infra/stacks/services/observability/grafana/compose.base.yml"
+DEV_GRAFANA_DERIVED = {
+    "GF_AUTH_LOGIN_MAXIMUM_LIFETIME_DURATION": "${APPS_SERVICES_SECURITY_AUTHELIA_SESSION_EXPIRATION}",
+    "GF_AUTH_LOGIN_MAXIMUM_INACTIVE_LIFETIME_DURATION": "${APPS_SERVICES_SECURITY_AUTHELIA_SESSION_INACTIVITY}",
+    "GF_AUTH_SIGNOUT_REDIRECT_URL": (
+        "https://${APPS_SERVICES_SECURITY_AUTHELIA_DOMAIN}/logout"
+        "?rd=https%3A%2F%2F${APPS_SERVICES_OBSERVABILITY_GRAFANA_DOMAIN}%2F"
+    ),
+}
+
+
+@pytest.mark.parametrize("key", sorted(DEV_GRAFANA_DERIVED))
+def test_the_dev_compose_grafana_derives_the_bound_from_the_loader(key: str) -> None:
+    """#2415: the dev Grafana runs on Grafana's 30d/7d defaults unless it carries these three.
+
+    Each is a reference to a loader variable, never a literal, so the dev Authelia's
+    numbers stay the only place the bound is written.
+    """
+    compose = yaml.safe_load(DEV_GRAFANA_COMPOSE.read_text(encoding="utf-8"))
+    env = dict(item.split("=", 1) for item in compose["services"]["grafana"]["environment"] if isinstance(item, str))
+    assert env.get(key) == DEV_GRAFANA_DERIVED[key]
+
+
+def test_the_dev_compose_references_resolve_in_the_loader() -> None:
+    """Every variable the dev Compose Grafana names is exported by the loader, as a duration or a host.
+
+    Compose turns an unknown variable into an empty string, which Grafana reads as
+    "unset" and falls back to 30d/7d: the bound would be gone while the reference
+    strings above stay green. This resolves them the way the loader does.
+    """
+    values = ROOT / "infra/config/values"
+    manager = ConfigurationManager("dev")
+    merged = manager._deep_update(
+        yaml.safe_load((values / "common.yaml").read_text(encoding="utf-8")),
+        yaml.safe_load((values / "dev.yaml").read_text(encoding="utf-8")) or {},
+    )
+    exported = manager._flatten_dict(merged)
+    names = {m for v in DEV_GRAFANA_DERIVED.values() for m in re.findall(r"\$\{(\w+)\}", v)}
+    assert names, "no loader variable is referenced"
+    for name in names:
+        assert exported.get(name), f"{name} is not exported by the dev loader"
+    for name in (
+        "APPS_SERVICES_SECURITY_AUTHELIA_SESSION_EXPIRATION",
+        "APPS_SERVICES_SECURITY_AUTHELIA_SESSION_INACTIVITY",
+    ):
+        assert re.fullmatch(r"\d+[smhd]", exported[name]), f"{name}={exported[name]!r} is not a Grafana duration"

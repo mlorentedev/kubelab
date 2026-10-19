@@ -93,7 +93,7 @@
         traefik_acme_server: "{{ config.edge.traefik.acme_server | default('https://acme-v02.api.letsencrypt.org/directory') }}"
         traefik_dns_provider: "{{ config.edge.traefik.dns_provider }}"
         traefik_dns_delay_before_check: "{{ config.edge.traefik.dns_delay_before_check }}"
-        traefik_cf_dns_api_token: "{{ secrets.cloudflare.api_token }}"
+        traefik_cf_dns_api_token: "{{ secrets.cloudflare.acme_dns_token }}"
         traefik_acme_domains:
           - main: "mlorente.dev"
             sans:
