@@ -48,7 +48,9 @@ def prune(
     logger.section(f"Registry Prune{' (dry-run)' if dry_run else ''}")
     # errors is an edge service, not a product, so the registry does not list it.
     app_list = (
-        [a.strip() for a in apps.split(",") if a.strip()] if apps else [*product_registry.platform_apps(), "errors"]
+        [a.strip() for a in apps.split(",") if a.strip()]
+        if apps is not None
+        else [*product_registry.platform_apps(), "errors"]
     )
     # Never prune a sha referenced by a committed overlay (ADR-056 prune guard):
     # gather the per-app sha pins from every env's values and protect them.

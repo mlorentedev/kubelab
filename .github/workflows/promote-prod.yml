@@ -127,7 +127,10 @@ jobs:
               version="$INPUT_VERSION"
               ;;
           esac
-          products="$($TOOLKIT product list)"
+          if ! products="$($TOOLKIT product list)"; then
+            echo "::error::toolkit product list failed: ${products}"
+            exit 1
+          fi
           if ! grep -qxF -- "$app" <<<"$products"; then
             echo "::error::Unknown app '${app}' — expected a product in infra/config/products.yaml: ${products//$'\n'/ }"
             exit 1

@@ -338,13 +338,14 @@ def test_a_staging_lane_event_is_skipped_as_not_this_lane(tmp_path: pathlib.Path
     assert "not this lane" in log
 
 
-def _stub_toolkit(tmp_path: pathlib.Path, route_stdout: str, route_code: int) -> str:
+def _stub_toolkit(tmp_path: pathlib.Path, route_stdout: str, route_code: int, list_code: int = 0) -> str:
     """A toolkit whose `app-for-event` answers `route_stdout`; `list` answers the registry."""
     stub = tmp_path / "toolkit-stub"
     products = "\n".join(product_registry.platform_apps())
     stub.write_text(
         "#!/usr/bin/env bash\n"
-        f'if [ "$2" = list ]; then printf "%s\\n" "{products}"; exit 0; fi\n'
+        f'if [ "$2" = list ]; then [ {list_code} = 0 ] || {{ echo "registry unreadable"; exit {list_code}; }}; '
+        f'printf "%s\\n" "{products}"; exit 0; fi\n'
         f"cat <<'ROUTE'\n{route_stdout}\nROUTE\n"
         f"exit {route_code}\n"
     )
@@ -397,3 +398,18 @@ def test_an_answer_without_a_lane_fails_instead_of_skipping(tmp_path: pathlib.Pa
     assert code != 0, "an answer naming no lane was taken for another lane"
     assert out == {}
     assert "answered no lane" in log, log
+
+
+@_needs_bash
+def test_a_product_list_failure_names_itself(tmp_path: pathlib.Path) -> None:
+    """The manual path reads only `product list`; its failure must annotate the run too."""
+    code, out, log = _resolve(
+        tmp_path,
+        EVENT="workflow_dispatch",
+        INPUT_APP="web",
+        INPUT_VERSION="1.12.0",
+        TOOLKIT=_stub_toolkit(tmp_path, "{}", 0, list_code=1),
+    )
+    assert code != 0
+    assert out == {}
+    assert "::error::toolkit product list failed: registry unreadable" in log, log

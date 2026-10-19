@@ -163,3 +163,24 @@ class TestPruneCliDefault:
 
         assert result.exit_code == 0, result.output
         assert seen == [["api", "web", "third", "errors"]]
+
+    @pytest.mark.parametrize("given", ["", " , "])
+    def test_an_explicitly_empty_apps_prunes_nothing(self, monkeypatch: pytest.MonkeyPatch, given: str) -> None:
+        """Omitted means every product; empty means none, as it did before the default moved.
+
+        A caller interpolating an empty variable (``--apps "$APPS"``) must not widen
+        into a prune of every registered product.
+        """
+        from typer.testing import CliRunner
+
+        from toolkit.cli import registry as registry_cli
+        from toolkit.main import app
+
+        monkeypatch.setattr(registry_cli.promotion, "read_pinned_version", lambda env, app_name: None)
+        seen: list[list[str]] = []
+        monkeypatch.setattr(registry_cli.registry, "prune", lambda apps, *args, **kwargs: seen.append(apps) or 0)
+
+        result = CliRunner().invoke(app, ["registry", "prune", "--apps", given, "--dry-run"])
+
+        assert result.exit_code == 0, result.output
+        assert seen == [[]]
