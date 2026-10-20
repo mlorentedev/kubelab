@@ -154,6 +154,47 @@ def test_an_unmapped_event_as_json(fixture_registry: Path) -> None:
     assert set(payload) == {"ok", "error", "why", "fix"}
 
 
+@pytest.mark.parametrize(
+    ("product", "expected"),
+    [
+        ("third", {"forge": "github", "repository": "mlorentedev/third", "receiver": "generic"}),
+        ("web", {"forge": "github", "repository": "mlorentedev/web", "receiver": "legacy"}),
+        ("api", {"forge": "in-tree", "repository": None, "receiver": None}),
+    ],
+)
+def test_show_names_where_a_product_comes_from(fixture_registry: Path, product: str, expected: dict) -> None:
+    """The receiver's one source for the repository it fetches from and whether it acts (PR 6)."""
+    result = runner.invoke(app, ["product", "show", product, "--json"])
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout) == {"ok": True, "app": product, **expected}
+
+
+def test_show_prints_the_entry_as_text(fixture_registry: Path) -> None:
+    result = runner.invoke(app, ["product", "show", "third"])
+
+    assert result.exit_code == 0, result.output
+    assert result.stdout.splitlines() == ["forge: github", "repository: mlorentedev/third", "receiver: generic"]
+
+
+def test_show_refuses_an_unregistered_product_with_error_why_fix(fixture_registry: Path) -> None:
+    result = runner.invoke(app, ["product", "show", "ghost"])
+
+    assert result.exit_code == 1
+    lines = result.stderr.splitlines()
+    assert [line.split(":", 1)[0] for line in lines] == ["ERROR", "WHY", "FIX"]
+    assert "ghost" in lines[0] and str(FIXTURE_REGISTRY) in result.stderr
+
+
+def test_show_refuses_an_unregistered_product_as_json(fixture_registry: Path) -> None:
+    result = runner.invoke(app, ["product", "show", "ghost", "--json"])
+
+    assert result.exit_code == 1
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is False
+    assert set(payload) == {"ok", "error", "why", "fix"}
+
+
 def _toolkit_without_sops(tmp_path: Path, *args: str) -> subprocess.CompletedProcess[str]:
     """Run the toolkit as a workflow step does on a hosted runner: no sops on PATH.
 
@@ -186,3 +227,12 @@ def test_product_list_prints_only_the_products_without_sops(tmp_path: Path) -> N
 
     assert result.returncode == 0, result.stderr
     assert tuple(result.stdout.splitlines()) == product_registry.platform_apps()
+
+
+def test_show_json_is_the_only_stdout_without_sops(tmp_path: Path) -> None:
+    """The receiver pipes this into ``jq``, on a runner without sops."""
+    result = _toolkit_without_sops(tmp_path, "show", "web", "--json")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.count("\n") == 1, result.stdout
+    assert json.loads(result.stdout)["repository"] == "mlorentedev/web"
