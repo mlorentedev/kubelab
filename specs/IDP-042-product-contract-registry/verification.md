@@ -41,7 +41,14 @@ Map every acceptance criterion from `proposal.md` to concrete proof.
   - `poetry run pytest tests/test_product_contract_guards.py --no-cov -q`: five refusals (an image other than the derived one, secret name, hostname collision, `auth: oidc`, a contract-named repository), each asserting ERROR / WHY / FIX, plus the positive case for web's real contract against the real registry and catalog
 - [ ] **AC7** A bad tag or an unresolvable commit is refused before any file is written
   - `poetry run pytest tests/test_product_image_receiver_workflow.py --no-cov -q`: the stubbed `gh` returns zero, two, and a non-default-branch commit; in every case the test asserts a non-zero exit and an unchanged working tree (`git status --porcelain` empty)
-  - The short-sha spike (PR 6) is the evidence that the real API behaves as the stub assumes: record the request and the response status here: `<fill in>`
+  - The short-sha spike (PR 6) is the evidence that the real API behaves as the stub assumes. Measured 2026-10-19 with `gh api` against `mlorentedev/web` (default branch `master`, 249 commits), staging pin `sha-b9874f2`:
+    - `GET repos/mlorentedev/web/commits/b9874f2` -> 200, `.sha` = `b9874f2f693dd41ee4e1985cb88b0645ac59f996` (40 hex, starting with the short sha)
+    - `GET .../commits/0000000` (unknown) -> 422 `No commit found for SHA: 0000000`
+    - `GET .../commits/8748` (ambiguous: `87486966...` and `87481f3b...` both exist) -> 422 with the **same** message as an unknown sha. The API cannot tell ambiguous from unknown, so the receiver refuses both with one message naming both causes. A 7-hex prefix is ambiguous far less often than this 4-hex one, but the refusal does not depend on that
+    - `GET .../compare/master...b9874f2` -> `identical`; `compare/master...<an older master commit>` -> `behind` (`behind_by: 4`); `compare/master...<the head of docs/web-161-agents-stack>` -> `ahead` (`ahead_by: 2`). On the default branch means `identical` or `behind`; `ahead` and `diverged` are refused
+    - `GET repos/mlorentedev/web` -> `.default_branch` = `master`, so the receiver reads the default branch from the API rather than assuming `main`
+    - `GET .../contents/.nvmrc?ref=<full sha>` with `Accept: application/vnd.github.raw` -> 200, the file body. `.../contents/kubelab.yaml?ref=<full sha>` -> 404: web carries no contract yet, which is the external dependency before PR 7
+    - `github.event.action` carrying the event type on a `repository_dispatch` is GitHub's documented behaviour and is what `promote-prod.yml` already reads (`EVENT_TYPE: ${{ github.event.action }}`); it cannot be measured without sending a dispatch, which needs the operator's token
 
 ## Test status
 
