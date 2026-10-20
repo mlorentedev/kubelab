@@ -262,8 +262,8 @@ class TestRetiredCloudNodes:
         saying so, and an inventory quietly missing a node is the shape of every
         failure this session catalogued.
 
-        Asserted against stdout rather than `caplog`: the toolkit's logger writes
-        directly, so a caplog-based assertion passes vacuously — it observes a
+        Asserted against capsys rather than `caplog`: the toolkit's logger writes
+        to stderr directly (#2536), so a caplog-based assertion passes vacuously — it observes a
         channel nothing is emitted on, which would be its own instance of the
         defect being guarded.
         """

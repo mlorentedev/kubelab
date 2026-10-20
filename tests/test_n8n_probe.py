@@ -440,7 +440,7 @@ def test_the_unsigned_probes_send_no_signature_and_no_auth() -> None:
 def test_a_signed_event_the_cluster_rejects_fails_and_names_the_secret_divergence(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    # The project logger renders through Rich to stdout, not through `logging`,
+    # The project logger renders through Rich to stderr, not through `logging`,
     # so capsys is the surface; every assertion is on a single token Rich cannot wrap.
     cluster = _Cluster(signed_creates=False)
     assert _run(cluster) is False

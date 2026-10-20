@@ -134,7 +134,7 @@ class TestRunWithCheck:
 
         assert _run_with_check([f], sync_fn, "test") is False
 
-        # The project logger renders through Rich to stdout, not through the
+        # The project logger renders through Rich to stderr, not through the
         # `logging` module, so caplog sees nothing here — capsys is the surface
         # a CI log actually shows.
         report = "".join(capsys.readouterr())
