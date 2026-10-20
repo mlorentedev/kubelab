@@ -442,6 +442,17 @@ def test_a_contract_that_names_another_repository_changes_no_fetch(tmp_path: pat
 
 
 @_needs_bash
+def test_a_contract_valid_alone_is_still_checked_against_the_registry(tmp_path: pathlib.Path) -> None:
+    """The schema accepts any image; only the registry knows it is not web's (design point 2)."""
+    body = WEB_CONTRACT.read_text().replace("mlorentedev/kubelab-web", "mlorentedev/kubelab-api")
+    code, log, _, snapshot = _fetch(tmp_path, body)
+
+    assert code != 0, log
+    assert "ERROR" in log
+    assert not snapshot.exists()
+
+
+@_needs_bash
 def test_a_product_without_a_contract_at_the_commit_fails(tmp_path: pathlib.Path) -> None:
     code, log, _, snapshot = _fetch(tmp_path, None)
 
