@@ -1,5 +1,5 @@
 ---
-id: lesson-604-a-logger-that-writes-to-stdout-makes-every-json-command-one-warning-from-corrupt
+id: lesson-605-a-logger-that-writes-to-stdout-makes-every-json-command-one-warning-from-corrupt
 type: lesson
 status: active
 created: "2026-10-18"
