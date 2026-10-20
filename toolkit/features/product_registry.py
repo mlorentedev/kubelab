@@ -46,6 +46,10 @@ class UnknownEventError(RegistryError):
     """A dispatch event type that no registered product claims."""
 
 
+class UnknownProductError(RegistryError):
+    """An app name that the registry does not admit."""
+
+
 class Events(BaseModel):
     """The ``repository_dispatch`` event types a product's CI sends, per lane."""
 
@@ -183,6 +187,15 @@ def event_route(event: str, path: Path | None = None) -> EventRoute:
     )
 
 
+def product(app: str, path: Path | None = None) -> Product:
+    """The registry entry for ``app``; ``UnknownProductError`` names the registry file."""
+    resolved = Path(path) if path is not None else registry_path()
+    entry = load_registry(resolved).products.get(app)
+    if entry is None:
+        raise UnknownProductError(f"'{app}' is not a registered product in {resolved}")
+    return entry
+
+
 def platform_registry() -> str:
     """The platform's image registry (``registry`` in ``common.yaml``), read without SOPS."""
     path = PROJECT_ROOT / COMMON_VALUES_RELPATH
@@ -201,12 +214,10 @@ def derived_image(app: str, path: Path | None = None) -> str:
     hand-authored image (``kubelab-api``) is not what the rule yields, so it refuses.
     """
     resolved = Path(path) if path is not None else registry_path()
-    product = load_registry(resolved).products.get(app)
-    if product is None:
-        raise RegistryError(f"'{app}' is not a registered product in {resolved}")
-    if not product.contract_managed:
+    entry = product(app, resolved)
+    if not entry.contract_managed:
         raise RegistryError(
             f"'{app}' is in-tree in {resolved}: its image is hand-authored in apps.platform.{app}.image_name, "
             "not derived from a contract"
         )
-    return f"{platform_registry()}/{product.image_name or app}"
+    return f"{platform_registry()}/{entry.image_name or app}"

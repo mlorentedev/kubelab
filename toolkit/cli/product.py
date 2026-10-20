@@ -130,3 +130,29 @@ def app_for_event(
         typer.echo(json.dumps({"ok": True, "event": event, "app": route.app, "lane": route.lane}))
     else:
         typer.echo(route.app)
+
+
+@app.command("show")
+def show(
+    name: Annotated[str, typer.Argument(help="A registered product")],
+    as_json: Annotated[bool, typer.Option("--json", help="Print the entry as one JSON object")] = False,
+) -> None:
+    """Print where a product comes from: its forge, repository and receiver; exit 1 if unregistered."""
+    try:
+        entry = product_registry.product(name)
+    except product_registry.UnknownProductError:
+        refusal = {
+            "error": f"'{name}' is not a registered product",
+            "why": "the registry alone admits a product, and names the repository its contract is fetched from",
+            "fix": f"admit the product with an entry in {product_registry.registry_path()}",
+        }
+        if as_json:
+            typer.echo(json.dumps({"ok": False, **refusal}))
+        else:
+            typer.echo("\n".join(f"{key.upper()}: {value}" for key, value in refusal.items()), err=True)
+        raise typer.Exit(1) from None
+    fields = {"forge": entry.forge, "repository": entry.repository, "receiver": entry.receiver}
+    if as_json:
+        typer.echo(json.dumps({"ok": True, "app": name, **fields}))
+    else:
+        typer.echo("\n".join(f"{key}: {value}" for key, value in fields.items() if value is not None))

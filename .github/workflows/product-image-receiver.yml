@@ -1,0 +1,358 @@
+---
+name: Product Image Receiver
+
+# The generic cross-repo receiver (ADR-067, IDP-042). A product's CI publishes an
+# immutable `sha-<short>` image and fires a `repository_dispatch`. Here the
+# registry (infra/config/products.yaml) says which app the event type means and
+# which repository its contract (`kubelab.yaml`) is fetched from; the contract is
+# read at the image's own commit, validated against the registry and the
+# platform, rendered into values/staging.yaml, and offered as one long-lived
+# staging PR per app, exactly as web-image-receiver.yml does for web.
+#
+# THE REGISTRY DECIDES (Q5). `repository_dispatch` declares no `types`: every
+# dispatch starts a run, an event type the registry does not know fails in red,
+# and a prod-lane event (`*-release-published`) is skipped as "not this lane".
+# Nothing is taken from the payload but `tag`, and nothing from the contract
+# names where it comes from or where the result goes.
+#
+# DORMANT FOR A LEGACY PRODUCT. While a product is `receiver: legacy` its own
+# workflow owns `deploy/staging-<app>`, and two writers would race it (design
+# point 10). A dispatch for it is skipped here; a manual run may only be a dry
+# run, which is how the cutover is rehearsed.
+#
+# Two jobs, for two reasons. The resolve job holds no write grant, so "refused
+# before any file is written" (AC7) holds by construction. And the promote job
+# can serialise per APP: a group on `github.event.action` is empty on a manual
+# run, which would let a manual re-promote race a dispatch of the same app.
+#
+# Opened with RELEASE_PLEASE_TOKEN (a PAT), NOT GITHUB_TOKEN: a PR opened by
+# GITHUB_TOKEN does not trigger `on: pull_request`, so its required checks would
+# never run and it could never be merged. GITHUB_TOKEN reads the product
+# repository, which is enough while products are public.
+
+on:
+  repository_dispatch:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: A product registered in infra/config/products.yaml
+        type: string
+        required: true
+      tag:
+        description: An immutable image tag, sha-<7+ hex> of a commit on the product's default branch
+        type: string
+        required: true
+      dry_run:
+        description: Validate and render only; push nothing and open no PR
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    name: Resolve the product, the tag and the commit
+    runs-on: ${{ fromJSON(vars.RUNNER_DOCKER || '"ubuntu-latest"') }}
+    outputs:
+      skip: ${{ steps.target.outputs.skip }}
+      app: ${{ steps.target.outputs.app }}
+      repository: ${{ steps.target.outputs.repository }}
+      tag: ${{ steps.target.outputs.tag }}
+      sha: ${{ steps.target.outputs.sha }}
+      dry_run: ${{ steps.target.outputs.dry_run }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
+        with:
+          python-version: '3.12'
+
+      - name: Install toolkit
+        run: |
+          python -m pip install "poetry>=1.8,<2.0"
+          poetry install --only main
+
+      # Every value reaches the script through `env:`, never `${{ }}` inside it:
+      # client_payload is arbitrary JSON from the sender, and `${{ }}` in a `run:`
+      # is textual substitution before bash ever sees it.
+      - name: Resolve the app, its repository and the commit
+        id: target
+        env:
+          EVENT: ${{ github.event_name }}
+          # On a repository_dispatch, `action` is the event_type the sender POSTed.
+          EVENT_TYPE: ${{ github.event.action }}
+          PAYLOAD_TAG: ${{ github.event.client_payload.tag }}
+          INPUT_APP: ${{ inputs.app }}
+          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+          REF: ${{ github.ref }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GH_TOKEN: ${{ github.token }}
+          TOOLKIT: poetry run toolkit
+        run: |
+          set -euo pipefail
+          refuse() {
+            printf 'ERROR: %s\nWHY: %s\nFIX: %s\n' "$1" "$2" "$3"
+            echo "::error::$1"
+            exit 1
+          }
+          skip() {
+            echo "::notice::$1"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+          # Sets `answer`. The CLI's own refusal is JSON and is passed on as its
+          # three parts; anything else (an import error, a missing poetry) is
+          # shown as it came. Never called inside $(), where `exit` would only
+          # leave the subshell.
+          ask() {
+            if ! answer="$($TOOLKIT product "$@" --json)"; then
+              if jq -e .error <<<"$answer" >/dev/null 2>&1; then
+                refuse "$(jq -r .error <<<"$answer")" "$(jq -r .why <<<"$answer")" "$(jq -r .fix <<<"$answer")"
+              fi
+              refuse "toolkit product $* failed" "it answered: ${answer}" "fix the toolkit or the registry on master"
+            fi
+          }
+          # A field that is absent, or an answer that is not one JSON object,
+          # fails here. Read leniently, an empty lane or receiver would decide
+          # the run (#2526).
+          field() {
+            jq -er --arg key "$1" '.[$key] // empty' <<<"$answer" 2>/dev/null
+          }
+          # stdout is gh's answer; stderr (an upgrade notice, an HTTP error) is
+          # read only when the call failed, or a notice would become the answer.
+          gh_err="$(mktemp)"
+
+          case "$EVENT" in
+            repository_dispatch)
+              ask app-for-event "$EVENT_TYPE"
+              if ! app="$(field app)" || ! lane="$(field lane)"; then
+                refuse "toolkit named no app or lane for '${EVENT_TYPE}'" "it answered: ${answer}" \
+                  "fix toolkit product app-for-event on master"
+              fi
+              if [ "$lane" != staging ]; then
+                skip "Event type '${EVENT_TYPE}' belongs to the ${lane} lane: not this lane, nothing to receive"
+              fi
+              tag="$PAYLOAD_TAG"
+              manual=false
+              dry_run=false
+              ;;
+            workflow_dispatch)
+              app="$INPUT_APP"
+              tag="$INPUT_TAG"
+              manual=true
+              dry_run="$([ "$INPUT_DRY_RUN" = false ] && echo false || echo true)"
+              # Both checkouts take the run's branch. From any other branch, its
+              # unmerged commits would ride the force-push to deploy/staging-<app>
+              # and its own registry would decide the legacy check.
+              if [ "$dry_run" = false ] && [ "$REF" != "refs/heads/${DEFAULT_BRANCH}" ]; then
+                refuse "a write run must start from ${DEFAULT_BRANCH}, not ${REF}" \
+                  "the branch it starts from is what gets pushed to deploy/staging-${app}" \
+                  "start it from ${DEFAULT_BRANCH}, or run it with dry_run=true"
+              fi
+              ;;
+            *)
+              refuse "unexpected trigger '${EVENT}'" "this workflow runs on repository_dispatch and workflow_dispatch" \
+                "start it with one of those"
+              ;;
+          esac
+
+          ask show "$app"
+          if ! forge="$(field forge)"; then
+            refuse "toolkit named no forge for '${app}'" "it answered: ${answer}" "fix toolkit product show on master"
+          fi
+          if [ "$forge" != github ]; then
+            refuse "'${app}' is not received from a GitHub repository (forge: ${forge})" \
+              "an in-tree product receives no image dispatch (ADR-048), and the fetch below reads the GitHub API" \
+              "promote it with toolkit deployment promote --env staging --app ${app}"
+          fi
+          if ! repository="$(field repository)" || ! receiver="$(field receiver)"; then
+            refuse "toolkit named no repository or receiver for '${app}'" "it answered: ${answer}" \
+              "fix toolkit product show on master"
+          fi
+          if [ "$receiver" = legacy ]; then
+            if [ "$manual" = false ]; then
+              skip "'${app}' is receiver: legacy; its own workflow receives this dispatch"
+            fi
+            if [ "$dry_run" != true ]; then
+              refuse "'${app}' is received by its legacy workflow, so this run may not write deploy/staging-${app}" \
+                "two receivers writing one branch race each other (IDP-042 design point 10)" \
+                "run with dry_run=true, or move the product to receiver: generic in infra/config/products.yaml"
+            fi
+          fi
+
+          # An immutable sha tag and nothing else; the shape is promotion._SHA_TAG's.
+          # The hex becomes an API path, a git ref and a branch title.
+          if [[ ! "$tag" =~ ^sha-[0-9a-f]{7,}$ ]]; then
+            refuse "unexpected tag '${tag}'" "staging tracks only immutable sha-<7+ hex> tags (ADR-046)" \
+              "dispatch the tag the product's CI published"
+          fi
+          short="${tag#sha-}"
+
+          # The spike (verification.md, AC7): GitHub answers 422 for an unknown and
+          # an ambiguous short sha alike, so one refusal names both.
+          if ! sha="$(gh api "repos/${repository}/commits/${short}" --jq .sha 2>"$gh_err")"; then
+            refuse "tag '${tag}' does not resolve to exactly one commit of ${repository}" \
+              "GitHub answers the same for an unknown and an ambiguous short sha: $(cat "$gh_err")" \
+              "dispatch the tag of a commit on the default branch, with more hex digits if two commits share them"
+          fi
+          if [[ ! "$sha" =~ ^[0-9a-f]{40}$ || "$sha" != "$short"* ]]; then
+            refuse "tag '${tag}' resolved to '${sha}', which is not a commit starting with ${short}" \
+              "the contract must be read at the image's own commit" "dispatch the tag the product's CI published"
+          fi
+          if ! default_branch="$(gh api "repos/${repository}" --jq .default_branch 2>"$gh_err")"; then
+            refuse "cannot read the default branch of ${repository}" "it answered: $(cat "$gh_err")" \
+              "re-run once the API answers"
+          fi
+          if ! status="$(gh api "repos/${repository}/compare/${default_branch}...${sha}" --jq .status 2>"$gh_err")"; then
+            refuse "cannot compare ${sha} with ${repository}'s ${default_branch}" "it answered: $(cat "$gh_err")" \
+              "re-run once the API answers"
+          fi
+          # identical: the branch's head. behind: merged, and the branch moved on.
+          # ahead or diverged: a commit the product never merged, or a fork's.
+          case "$status" in
+            identical | behind) ;;
+            *)
+              refuse "commit ${sha} is not on ${repository}'s default branch ${default_branch} (compare: ${status})" \
+                "the image and the contract must come from a commit the product merged" \
+                "dispatch the tag of a commit on ${default_branch}"
+              ;;
+          esac
+
+          {
+            echo "skip=false"
+            echo "app=${app}"
+            echo "repository=${repository}"
+            echo "tag=${tag}"
+            echo "sha=${sha}"
+            echo "dry_run=${dry_run}"
+          } >> "$GITHUB_OUTPUT"
+
+  promote:
+    name: Receive ${{ needs.resolve.outputs.app }} ${{ needs.resolve.outputs.tag }} → staging
+    needs: resolve
+    if: needs.resolve.outputs.skip != 'true'
+    runs-on: ${{ fromJSON(vars.RUNNER_DOCKER || '"ubuntu-latest"') }}
+    permissions:
+      contents: write
+      pull-requests: write
+    # One writer per app branch among this workflow's runs: a manual run and a
+    # dispatch of the same app land in the same group. cancel-in-progress: false,
+    # never kill a run mid-push. A legacy receiver is a different workflow and
+    # shares no group; the registry flag keeps the two apart, which is why PR 7
+    # flips `receiver: generic` and removes the old trigger in one change.
+    concurrency:
+      group: product-receiver-${{ needs.resolve.outputs.app }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
+        with:
+          python-version: '3.12'
+
+      - name: Install toolkit
+        run: |
+          python -m pip install "poetry>=1.8,<2.0"
+          poetry install --only main
+
+      # The contract is fetched outside the tree and copied in only once it has
+      # passed, so a refused contract leaves nothing to commit. It is validated
+      # by the toolkit of this checkout, never by anything in the product's tree.
+      # The checkout is the default branch: a dispatch always runs there, and the
+      # resolve job refuses a write run started from anywhere else.
+      - name: Fetch and validate the contract at the commit
+        id: contract
+        env:
+          APP: ${{ needs.resolve.outputs.app }}
+          REPOSITORY: ${{ needs.resolve.outputs.repository }}
+          SHA: ${{ needs.resolve.outputs.sha }}
+          GH_TOKEN: ${{ github.token }}
+          TOOLKIT: poetry run toolkit
+        run: |
+          set -euo pipefail
+          fetched="${RUNNER_TEMP}/kubelab.yaml"
+          if ! gh api -H "Accept: application/vnd.github.raw" \
+              "repos/${REPOSITORY}/contents/kubelab.yaml?ref=${SHA}" > "$fetched"; then
+            printf 'ERROR: %s\nWHY: %s\nFIX: %s\n' "${REPOSITORY} has no readable kubelab.yaml at ${SHA}" \
+              "a product is deployed only from the contract committed with its image (ADR-067)" \
+              "add kubelab.yaml at the root of ${REPOSITORY} and publish a new image"
+            echo "::error::${REPOSITORY} has no readable kubelab.yaml at ${SHA}"
+            exit 1
+          fi
+          if ! $TOOLKIT product validate --contract "$fetched" --registry infra/config/products.yaml --app "$APP"; then
+            echo "::error::the kubelab.yaml of ${REPOSITORY} at ${SHA} was refused; ERROR / WHY / FIX above"
+            exit 1
+          fi
+          cp "$fetched" "infra/config/products/contracts/${APP}.yaml"
+
+      - name: Render the contract and promote the tag
+        env:
+          APP: ${{ needs.resolve.outputs.app }}
+          TAG: ${{ needs.resolve.outputs.tag }}
+          TOOLKIT: poetry run toolkit
+        run: |
+          set -euo pipefail
+          $TOOLKIT product render --contract "infra/config/products/contracts/${APP}.yaml" --app "$APP" \
+            --env staging --write
+          $TOOLKIT deployment promote --env staging --app "$APP" --version "$TAG"
+
+      - name: Show what the dry run would offer
+        if: needs.resolve.outputs.dry_run == 'true'
+        run: |
+          git status --short
+          git diff --stat
+
+      - name: Open or update the staging deploy PR
+        id: open-pr
+        if: needs.resolve.outputs.dry_run != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          APP: ${{ needs.resolve.outputs.app }}
+          REPOSITORY: ${{ needs.resolve.outputs.repository }}
+          TAG: ${{ needs.resolve.outputs.tag }}
+        run: |
+          git config user.name "kubelab-bot"
+          git config user.email "bot@kubelab.live"
+          git add infra/config/values/staging.yaml infra/k8s/overlays/staging/ \
+            "infra/config/products/contracts/${APP}.yaml"
+          if git diff --staged --quiet; then
+            echo "No staging changes to promote (${APP} already at ${TAG})"; exit 0
+          fi
+
+          # One stable branch per app, force-updated to the newest sha, with its PR
+          # created once and patched thereafter (DELIVERY-005, #1645). The reasons
+          # for each line below are in web-image-receiver.yml, which this mirrors:
+          # the lookup runs before the push so a failure leaves the offer and its
+          # title agreeing, and `--force` is safe because the job is the branch's
+          # only writer this group admits.
+          BRANCH="deploy/staging-${APP}"
+          TITLE="chore(staging): deploy ${APP} ${TAG}"
+          BODY="Staging promotion of \`${APP}\` to \`${TAG}\` (ADR-046, cross-repo dispatch from ${REPOSITORY}).
+
+          The contract snapshot \`infra/config/products/contracts/${APP}.yaml\` is the product's
+          \`kubelab.yaml\` at that commit, so its diff is part of this review.
+
+          This pull request is long-lived: every image dispatch force-updates it to
+          the newest \`sha-*\` and rewrites this title. Merging it moves staging;
+          leaving it open keeps staging where it is (ADR-037)."
+
+          PR=$(gh api \
+            "repos/${GITHUB_REPOSITORY}/pulls?state=open&head=${GITHUB_REPOSITORY%%/*}:${BRANCH}" \
+            --jq '.[0].number // ""')
+
+          git checkout -B "$BRANCH"
+          git commit -m "$TITLE"
+          git push origin "$BRANCH" --force
+
+          if [ -n "$PR" ]; then
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/pulls/${PR}" \
+              -f title="$TITLE" -f body="$BODY" --jq '.html_url'
+          else
+            gh api -X POST "repos/${GITHUB_REPOSITORY}/pulls" \
+              -f title="$TITLE" -f head="$BRANCH" -f base="master" \
+              -f body="$BODY" --jq '.html_url'
+          fi
