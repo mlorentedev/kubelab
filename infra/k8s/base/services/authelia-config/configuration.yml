@@ -152,7 +152,7 @@ notifier:
 identity_providers:
   oidc:
     hmac_secret: '' # Injected via AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET_FILE
-    issuer_private_key: '' # Injected via AUTHELIA_IDENTITY_PROVIDERS_OIDC_ISSUER_PRIVATE_KEY_FILE
+    # jwks: in oidc-jwks.yml, read from the Secret by the template filter (#2377).
     # clients: generated into oidc-clients.yml by `toolkit sync oidc` from
     # apps.services.security.authelia.oidc_clients (SSOT-017). The whole list
     # lives there because Authelia merges config files but not lists across them.
