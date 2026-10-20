@@ -1506,6 +1506,29 @@ def _missing_known_hosts_file(inventory: Path) -> Path | None:
     return None if path.is_file() else path
 
 
+def _refuse_if_behind_master(ansible_dir: Path, *, force: bool) -> None:
+    """OPS-041: a run from a checkout that has not merged master's changes puts the older declaration back."""
+    from toolkit.features import provision_freshness
+
+    try:
+        behind = provision_freshness.paths_behind_master(ansible_dir)
+    except provision_freshness.FreshnessError as exc:
+        # Ask degrades to deny: a checkout that cannot be compared with master is not known to be current.
+        if force:
+            logger.warning(f"Could not compare with {provision_freshness.MASTER_REF} (FORCE=1, continuing): {exc}")
+            return
+        logger.error(f"Could not compare this checkout with {provision_freshness.MASTER_REF}: {exc}")
+        logger.info("Fix the git state, or FORCE=1 to run without the check")
+        raise typer.Exit(1) from None
+    if not behind:
+        return
+    if force:
+        logger.warning(f"FORCE=1: running although {len(behind)} rendered files are behind master")
+        return
+    logger.error(provision_freshness.refusal_message(behind))
+    raise typer.Exit(1) from None
+
+
 @ansible_app.command("run")
 def ansible_run(
     playbook: Annotated[str, typer.Option("--playbook", "-p", help="Playbook name (without .yml)")],
@@ -1525,6 +1548,16 @@ def ansible_run(
     ] = "mesh",
     skip_generate: Annotated[
         bool, typer.Option("--skip-generate", help="Use the inventory on disk as it is (no regeneration)")
+    ] = False,
+    require_fresh: Annotated[
+        bool,
+        typer.Option(
+            "--require-fresh",
+            help="Refuse when this checkout is behind origin/master on what Ansible renders (OPS-041)",
+        ),
+    ] = False,
+    force: Annotated[
+        bool, typer.Option("--force", help="Run although --require-fresh found the checkout behind master")
     ] = False,
 ) -> None:
     """Run an Ansible playbook against an inventory generated for this run.
@@ -1548,6 +1581,9 @@ def ansible_run(
     if not playbook_path.exists():
         logger.error(f"Playbook not found: {playbook_path}")
         raise typer.Exit(1) from None
+
+    if require_fresh and not check:
+        _refuse_if_behind_master(ansible_dir, force=force)
 
     if not skip_generate:
         from toolkit.features.generator_ansible import ansible_generator
