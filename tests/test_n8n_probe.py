@@ -440,17 +440,17 @@ def test_the_unsigned_probes_send_no_signature_and_no_auth() -> None:
 def test_a_signed_event_the_cluster_rejects_fails_and_names_the_secret_divergence(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    # The project logger renders through Rich to stdout, not through `logging`,
+    # The project logger renders through Rich to stderr, not through `logging`,
     # so capsys is the surface; every assertion is on a single token Rich cannot wrap.
     cluster = _Cluster(signed_creates=False)
     assert _run(cluster) is False
-    assert FORGE_SECRET_KEY in capsys.readouterr().out
+    assert FORGE_SECRET_KEY in "".join(capsys.readouterr())
 
 
 def test_a_failed_cleanup_fails_the_probe_and_names_the_task(capsys: pytest.CaptureFixture[str]) -> None:
     cluster = _Cluster(delete_status=500)
     assert _run(cluster) is False
-    assert f"task {cluster.deleted[0]}" in " ".join(capsys.readouterr().out.split())
+    assert f"task {cluster.deleted[0]}" in " ".join("".join(capsys.readouterr()).split())
 
 
 def test_a_201_without_a_task_id_fails_and_still_deletes_the_task(capsys: pytest.CaptureFixture[str]) -> None:
@@ -460,7 +460,7 @@ def test_a_201_without_a_task_id_fails_and_still_deletes_the_task(capsys: pytest
     cluster = _Cluster(omit_task_id=True)
     assert _run(cluster) is False
     assert cluster.deleted == list(cluster.tasks)
-    assert "without a taskId" in capsys.readouterr().out
+    assert "without a taskId" in "".join(capsys.readouterr())
 
 
 def test_a_missing_forge_secret_fails_before_any_request() -> None:
@@ -472,14 +472,14 @@ def test_a_missing_forge_secret_fails_before_any_request() -> None:
 def test_the_secret_never_reaches_the_log(capsys: pytest.CaptureFixture[str]) -> None:
     cluster = _Cluster(signed_creates=False)
     _run(cluster)
-    assert _SECRET not in capsys.readouterr().out
+    assert _SECRET not in "".join(capsys.readouterr())
 
 
 def test_the_1712_defect_open_gates_fails_the_probe(capsys: pytest.CaptureFixture[str]) -> None:
     """Gates that route unsigned requests to TRUE, as before the fix, must not pass."""
     cluster = _Cluster(open_gates=True)
     assert _run(cluster) is False
-    out = " ".join(capsys.readouterr().out.split())
+    out = " ".join("".join(capsys.readouterr()).split())
     assert "Find Task for Issue" in out
     assert "Lookup Vikunja Projects" in out
 
@@ -551,7 +551,7 @@ def test_a_merge_that_did_not_land_whole_fails_and_still_cleans_up(
 ) -> None:
     cluster = _Cluster(**defect)
     assert _run(cluster) is False
-    out = " ".join(capsys.readouterr().out.split())
+    out = " ".join("".join(capsys.readouterr()).split())
     assert "merged PR" in out and named in out
     assert list(cluster.tasks) == cluster.deleted
 
@@ -559,7 +559,7 @@ def test_a_merge_that_did_not_land_whole_fails_and_still_cleans_up(
 def test_a_failed_pr_delivery_fails_and_still_deletes_its_task(capsys: pytest.CaptureFixture[str]) -> None:
     cluster = _Cluster(pr_status=500)
     assert _run(cluster) is False
-    assert "HTTP 500" in " ".join(capsys.readouterr().out.split())
+    assert "HTTP 500" in " ".join("".join(capsys.readouterr()).split())
     assert list(cluster.tasks) == cluster.deleted
 
 
@@ -567,7 +567,7 @@ def test_a_gate_stop_must_name_its_status(capsys: pytest.CaptureFixture[str]) ->
     """#1659 AC1: the forge's delivery log is the only cheap observer of a stop."""
     cluster = _Cluster(gate_answer=None)
     assert _run(cluster) is False
-    assert "ignored" in capsys.readouterr().out
+    assert "ignored" in "".join(capsys.readouterr())
 
 
 # ── Signed Slack command (#2304) ──────────────────────────────────────────────
@@ -641,14 +641,14 @@ def test_a_task_that_lands_in_the_wrong_project_fails_the_probe(capsys: pytest.C
     """#1877: every Slack task went to project 1, whatever the command named."""
     cluster = _Cluster(slack_lands_in=1)
     assert _run(cluster) is False
-    assert f"expected {_PROJECT_ID}" in " ".join(capsys.readouterr().out.split())
+    assert f"expected {_PROJECT_ID}" in " ".join("".join(capsys.readouterr()).split())
     assert sorted(cluster.deleted) == sorted(cluster.tasks), "even the misplaced task is cleaned up"
 
 
 def test_an_unknown_project_that_creates_a_task_fails_and_deletes_it(capsys: pytest.CaptureFixture[str]) -> None:
     cluster = _Cluster(slack_creates_for_unknown=True)
     assert _run(cluster) is False
-    out = " ".join(capsys.readouterr().out.split())
+    out = " ".join("".join(capsys.readouterr()).split())
     assert "created for a project that does not exist" in out
     assert sorted(cluster.deleted) == sorted(cluster.tasks)
 
@@ -656,13 +656,13 @@ def test_an_unknown_project_that_creates_a_task_fails_and_deletes_it(capsys: pyt
 def test_an_unknown_project_whose_error_is_in_another_node_fails_the_probe(capsys: pytest.CaptureFixture[str]) -> None:
     cluster = _Cluster(unknown_fails_in="Parse Slack Command")
     assert _run(cluster) is False
-    assert "not a failure of" in " ".join(capsys.readouterr().out.split())
+    assert "not a failure of" in " ".join("".join(capsys.readouterr()).split())
 
 
 def test_a_declared_project_that_vikunja_does_not_have_fails_naming_it(capsys: pytest.CaptureFixture[str]) -> None:
     cluster = _Cluster(projects={9: "Elsewhere"})
     assert _run(cluster) is False
-    assert "not among the 1 project(s)" in " ".join(capsys.readouterr().out.split())
+    assert "not among the 1 project(s)" in " ".join("".join(capsys.readouterr()).split())
 
 
 @pytest.mark.parametrize(
@@ -675,7 +675,7 @@ def test_a_missing_input_fails_the_signed_slack_probe_without_aborting_the_other
 ) -> None:
     cluster = _Cluster()
     assert _run(cluster, cm=cm) is False
-    assert needs in capsys.readouterr().out
+    assert needs in "".join(capsys.readouterr())
     assert any(u.endswith("agent-dispatcher") for u, _, _ in cluster.posts), "the other probes still ran"
 
 
@@ -724,7 +724,7 @@ def test_an_open_that_did_not_move_the_task_fails_and_still_cleans_up(
 ) -> None:
     cluster = _Cluster(**defect)
     assert _run(cluster) is False
-    out = " ".join(capsys.readouterr().out.split())
+    out = " ".join("".join(capsys.readouterr()).split())
     assert "opened PR" in out and named in out
     assert list(cluster.tasks) == cluster.deleted
 
@@ -741,13 +741,13 @@ def test_a_task_already_in_doing_cannot_prove_the_move(capsys: pytest.CaptureFix
     clock = _Clock()
     ok = run_n8n_probe("staging", cm=_cm(), post=cluster.post, exec_node=seeded, clock=clock, sleep=clock.sleep)
     assert ok is False
-    assert "already in" in " ".join(capsys.readouterr().out.split())
+    assert "already in" in " ".join("".join(capsys.readouterr()).split())
 
 
 def test_a_missing_bucket_declaration_fails_only_the_open_probe(capsys: pytest.CaptureFixture[str]) -> None:
     cluster = _Cluster()
     assert _run(cluster, _cm(bucket=None)) is False
-    out = " ".join(capsys.readouterr().out.split())
+    out = " ".join("".join(capsys.readouterr()).split())
     assert IN_PROGRESS_BUCKET_KEY in out
     assert len([e for e in _pr_posts(cluster) if e["action"] == "opened"]) == 0
     assert any(e["action"] == "closed" for e in _pr_posts(cluster)), "the other probes still ran"
@@ -765,5 +765,5 @@ def test_a_failed_open_delivery_fails_and_still_deletes_its_task(capsys: pytest.
     clock = _Clock()
     ok = run_n8n_probe("staging", cm=_cm(), post=failing, exec_node=cluster.exec_node, clock=clock, sleep=clock.sleep)
     assert ok is False
-    assert "HTTP 500" in " ".join(capsys.readouterr().out.split())
+    assert "HTTP 500" in " ".join("".join(capsys.readouterr()).split())
     assert list(cluster.tasks) == cluster.deleted

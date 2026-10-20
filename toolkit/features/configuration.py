@@ -1,3 +1,4 @@
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -89,7 +90,7 @@ class ConfigurationManager:
             return {}
 
         # Check if sops is installed
-        if subprocess.run(["which", "sops"], capture_output=True).returncode != 0:
+        if shutil.which("sops") is None:
             self._get_logger().warning("SOPS is not installed. Skipping secret decryption.")
             return {}
 
@@ -336,7 +337,7 @@ class ConfigurationManager:
 
     def _check_sops(self) -> bool:
         """Check if SOPS is installed."""
-        if subprocess.run(["which", "sops"], capture_output=True).returncode != 0:
+        if shutil.which("sops") is None:
             self._get_logger().error("SOPS is not installed.")
             return False
         return True

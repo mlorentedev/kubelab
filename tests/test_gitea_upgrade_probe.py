@@ -86,7 +86,7 @@ def test_the_token_is_only_ever_sent_to_the_scratch_container(caplog: pytest.Log
 
 def test_a_failing_doctor_check_is_named_in_the_output(capsys: pytest.CaptureFixture[str]) -> None:
     _run(FakeServer(doctor=True))
-    assert "schema mismatch" in capsys.readouterr().out
+    assert "schema mismatch" in "".join(capsys.readouterr())
 
 
 def test_the_lfs_collection_error_the_deployed_version_also_has_is_not_a_failure() -> None:
@@ -97,7 +97,7 @@ def test_the_lfs_collection_error_the_deployed_version_also_has_is_not_a_failure
 def test_a_failing_doctor_check_is_named_by_its_header(capsys: pytest.CaptureFixture[str]) -> None:
     """Doctor lists its checks as `[N] Name`; the drill must say which one failed, not only the row."""
     _run(FakeServer(doctor=True))
-    assert "failing doctor check: Check tables" in capsys.readouterr().out
+    assert "failing doctor check: Check tables" in "".join(capsys.readouterr())
 
 
 def test_a_stale_merge_base_fails_the_drill() -> None:

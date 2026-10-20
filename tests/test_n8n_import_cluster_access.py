@@ -35,7 +35,7 @@ def test_no_kubectl_fails_the_run_and_says_so(
     kubeconfig = tmp_path / "config"
     kubeconfig.touch()
     assert _run_import(monkeypatch, absent, kubeconfig) is False
-    out = capsys.readouterr().out
+    out = "".join(capsys.readouterr())
     assert "kubectl is not on PATH" in out
     assert "Traceback" not in out
 
@@ -48,7 +48,7 @@ def test_a_missing_kubeconfig_is_named(
 
     missing = tmp_path / "absent-config"
     assert _run_import(monkeypatch, refused, missing) is False
-    out = "".join(capsys.readouterr().out.split())
+    out = "".join("".join(capsys.readouterr()).split())
     assert f"kubeconfigmissingat{missing}" in out
 
 
@@ -69,7 +69,7 @@ def test_every_kubectl_call_reports_a_missing_kubectl(
 
     monkeypatch.setattr(n8n_import.subprocess, "run", absent)
     assert n8n_import._run(["kubectl", "rollout", "status", "deploy/n8n"], env="prod") is False
-    assert "kubectl is not on PATH" in capsys.readouterr().out
+    assert "kubectl is not on PATH" in "".join(capsys.readouterr())
 
 
 def _guarded(call: ast.Call, parents: dict[ast.AST, ast.AST]) -> bool:

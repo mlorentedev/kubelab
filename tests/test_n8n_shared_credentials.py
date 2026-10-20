@@ -365,7 +365,7 @@ class TestProdRun:
         SOPS-resident, so that put them on the terminal."""
         ok, _ = _run(monkeypatch=monkeypatch)
         assert ok
-        out = capsys.readouterr().out
+        out = "".join(capsys.readouterr())
         for sentinel in SENTINELS:
             assert sentinel not in out
         assert "RESOLVE_SALE_DIGEST_TO" in out, "the log should still name what it resolved"
@@ -378,7 +378,7 @@ class TestProdRun:
         stdout on success, stderr on failure. A CLI that echoes its input would carry
         every secret in the payload to the terminal through either one."""
         _run(kubectl=_Kubectl(fail_kind=fail_kind, echo=True), monkeypatch=monkeypatch)
-        out = capsys.readouterr().out
+        out = "".join(capsys.readouterr())
         for sentinel in SENTINELS:
             assert sentinel not in out
 
@@ -389,7 +389,7 @@ class TestProdRun:
         short = "Zq9w"
         vault = _deep_update(_vault(), {"infra": {"smtp": {"pass": short}}})
         _run(vault=vault, kubectl=_Kubectl(fail_kind="credentials", echo=True), monkeypatch=monkeypatch)
-        assert short not in capsys.readouterr().out
+        assert short not in "".join(capsys.readouterr())
 
 
 class TestFailsClosed:
@@ -400,7 +400,7 @@ class TestFailsClosed:
         path = SALE_PATHS[name]
         ok, kubectl = _run(vault=_without(_vault(), path), monkeypatch=monkeypatch)
         assert ok is False
-        assert path in " ".join(capsys.readouterr().out.split())
+        assert path in " ".join("".join(capsys.readouterr()).split())
         assert _sale_doc()["name"] not in " ".join(kubectl.order()), "the digest must not import half-configured"
 
     def test_the_other_workflows_still_import_when_the_digest_cannot(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -416,7 +416,7 @@ class TestFailsClosed:
         vault = _without(_vault(), SMTP_PATHS[name])
         ok, kubectl = _run(vault=vault, monkeypatch=monkeypatch)
         assert ok is False
-        assert SMTP_PATHS[name] in " ".join(capsys.readouterr().out.split())
+        assert SMTP_PATHS[name] in " ".join("".join(capsys.readouterr()).split())
         assert "credential:kubelab-smtp" not in kubectl.order()
         assert _sale_doc()["name"] not in " ".join(kubectl.order()), (
             "a workflow must not land pointing at a credential n8n lacks"
@@ -447,7 +447,7 @@ class TestFailsClosed:
         )
         ok, kubectl = _run(catalog=[spec], root=tmp_path, monkeypatch=monkeypatch)
         assert ok is False
-        assert "someone-elses-smtp" in capsys.readouterr().out
+        assert "someone-elses-smtp" in "".join(capsys.readouterr())
         assert kubectl.workflows() == []
 
     def test_a_shared_credential_referenced_under_the_wrong_id_is_refused(

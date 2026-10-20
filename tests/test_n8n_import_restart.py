@@ -102,14 +102,14 @@ def test_no_live_pod_fails_the_run_without_an_exec(capsys: pytest.CaptureFixture
     assert _import(kubectl) is False
     assert kubectl.of("exec") == []
     assert kubectl.of("rollout restart") == [], "nothing imported, nothing to restart"
-    assert "no Ready n8n pod" in " ".join(capsys.readouterr().out.split())
+    assert "no Ready n8n pod" in " ".join("".join(capsys.readouterr()).split())
 
 
 def test_a_failed_workflow_fails_the_run_and_the_others_still_go_live(capsys: pytest.CaptureFixture[str]) -> None:
     kubectl = _Kubectl([_pod(READY)], fail="multi-forge-sync")
     assert _import(kubectl) is False
     assert len(kubectl.of("rollout restart")) == 1, "the workflows that imported still need the restart"
-    out = " ".join(capsys.readouterr().out.split())
+    out = " ".join("".join(capsys.readouterr()).split())
     assert f"pod/{READY}" in out, "a failing exec must name the pod it ran against"
 
 
@@ -135,7 +135,7 @@ def test_a_failed_exec_reports_why_the_container_last_died(capsys: pytest.Captur
     ]
     kubectl = _Kubectl([pod], fail="multi-forge-sync")
     assert _import(kubectl) is False
-    out = " ".join(capsys.readouterr().out.split())
+    out = " ".join("".join(capsys.readouterr()).split())
     assert "restarts=1" in out
     assert "OOMKilled" in out
 
@@ -154,6 +154,6 @@ def test_an_unreadable_pod_list_is_not_reported_as_no_ready_pod(capsys: pytest.C
     kubectl = _Unreachable([])
     assert _import(kubectl) is False
     assert kubectl.of("exec") == []
-    out = " ".join(capsys.readouterr().out.split())
+    out = " ".join("".join(capsys.readouterr()).split())
     assert "Unable to connect to the server" in out
     assert "no Ready n8n pod" not in out

@@ -154,7 +154,7 @@ def drill(tmp_path: Path, monkeypatch):
 def test_a_good_dump_passes_names_the_snapshot_and_cleans_up(drill, tmp_path: Path, capsys) -> None:
     fake = _Fake()
     assert drill(fake) is True
-    out = capsys.readouterr().out
+    out = "".join(capsys.readouterr())
     assert "abc12345" in out and "trailer" in out
     assert SECRET not in out
     assert not fake.dump_path.parent.exists()
@@ -176,7 +176,7 @@ def test_a_container_that_fails_to_start_is_still_removed_with_its_volume(drill,
     """`docker run -d` can create the container and then fail to start it."""
     fake = _Fake(run_rc=125)
     assert drill(fake) is False
-    assert "did not start" in capsys.readouterr().out
+    assert "did not start" in "".join(capsys.readouterr())
     assert _removes_container_and_volume(fake)
 
 
@@ -184,7 +184,7 @@ def test_a_complete_restore_that_leaves_its_data_behind_fails(drill, capsys) -> 
     """`docker rm` failing must not pass silently: the volume holds the restored dump."""
     fake = _Fake(rm_fails=True)
     assert drill(fake) is False
-    out = " ".join(capsys.readouterr().out.split())  # the logger wraps long lines
+    out = " ".join("".join(capsys.readouterr()).split())  # the logger wraps long lines
     assert "restores completely" in out  # the restore itself was fine
     assert "still on this machine" in out and "volume pgvol" in out
     assert not fake.dump_path.parent.exists()  # the file goes even when the container does not
@@ -194,20 +194,20 @@ def test_a_container_left_behind_fails_even_without_a_volume(drill, capsys) -> N
     """Each leftover is read back on its own; a container with no volume still holds the load's files."""
     fake = _Fake(rm_fails=True, volume="")
     assert drill(fake) is False
-    out = " ".join(capsys.readouterr().out.split())  # the logger wraps long lines
+    out = " ".join("".join(capsys.readouterr()).split())  # the logger wraps long lines
     assert "container pgdrill-" in out
 
 
 def test_live_with_no_tables_is_cannot_check_not_a_pass(drill, capsys) -> None:
     """Every check is per table live has; zero tables would compare nothing and pass (lesson-416)."""
     assert drill(_Fake(live_tables=False)) is False
-    assert "CANNOT CHECK" in capsys.readouterr().out
+    assert "CANNOT CHECK" in "".join(capsys.readouterr())
 
 
 def test_a_restic_failure_is_quoted_and_kept_out_of_the_dump(drill, capsys) -> None:
     fake = _Fake(dump_rc=1)
     assert drill(fake) is False
-    assert "repository is locked" in capsys.readouterr().out
+    assert "repository is locked" in "".join(capsys.readouterr())
     assert not any(c[:2] == ["docker", "run"] for c in fake.calls)
 
 
@@ -231,14 +231,14 @@ def test_a_dump_without_its_trailer_fails_before_any_container_starts(drill, cap
     fake = _Fake(trailer=False)
     assert drill(fake) is False
     assert not any(c[:2] == ["docker", "run"] for c in fake.calls)
-    assert "trailer" in capsys.readouterr().out
+    assert "trailer" in "".join(capsys.readouterr())
     assert not fake.dump_path.parent.exists()
 
 
 def test_a_statement_that_did_not_load_fails_and_is_counted_not_printed(drill, capsys) -> None:
     fake = _Fake(load_rc=1)
     assert drill(fake) is False
-    out = capsys.readouterr().out
+    out = "".join(capsys.readouterr())
     assert "1 statement" in out
     assert SECRET not in out
     assert _removes_container_and_volume(fake)
@@ -260,6 +260,6 @@ def test_a_complete_restore_that_leaves_the_dump_on_disk_fails(drill, capsys, mo
     monkeypatch.setattr("toolkit.features.restore_drill.shutil.rmtree", lambda *a, **k: None)
     fake = _Fake()
     assert drill(fake) is False
-    out = " ".join(capsys.readouterr().out.split())
+    out = " ".join("".join(capsys.readouterr()).split())
     assert "restores completely" in out
     assert "a full dump of the cluster, delete it now" in out

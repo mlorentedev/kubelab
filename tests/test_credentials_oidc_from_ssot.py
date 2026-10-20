@@ -11,6 +11,7 @@ digest key from `oidc_clients.digest_key`, and the plaintext from that spec's `d
 from __future__ import annotations
 
 import dataclasses
+import sys
 from unittest.mock import MagicMock
 
 import pytest
@@ -108,6 +109,9 @@ def test_the_manual_copy_prints_hub_keys_under_common_only(
     }.items():
         monkeypatch.setattr(manager, name, fake)
 
+    # The headers are logged (stderr) and the values printed (stdout): read them in the
+    # order the operator's terminal shows them, as `2>&1` would.
+    monkeypatch.setattr(sys, "stderr", sys.stdout)
     manager.setup_authelia_secrets("prod", print_secrets=True)
 
     out = capsys.readouterr().out
