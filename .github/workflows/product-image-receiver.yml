@@ -86,6 +86,8 @@ jobs:
           INPUT_APP: ${{ inputs.app }}
           INPUT_TAG: ${{ inputs.tag }}
           INPUT_DRY_RUN: ${{ inputs.dry_run }}
+          REF: ${{ github.ref }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           GH_TOKEN: ${{ github.token }}
           TOOLKIT: poetry run toolkit
         run: |
@@ -141,6 +143,14 @@ jobs:
               tag="$INPUT_TAG"
               manual=true
               dry_run="$([ "$INPUT_DRY_RUN" = false ] && echo false || echo true)"
+              # Both checkouts take the run's branch. From any other branch, its
+              # unmerged commits would ride the force-push to deploy/staging-<app>
+              # and its own registry would decide the legacy check.
+              if [ "$dry_run" = false ] && [ "$REF" != "refs/heads/${DEFAULT_BRANCH}" ]; then
+                refuse "a write run must start from ${DEFAULT_BRANCH}, not ${REF}" \
+                  "the branch it starts from is what gets pushed to deploy/staging-${app}" \
+                  "start it from ${DEFAULT_BRANCH}, or run it with dry_run=true"
+              fi
               ;;
             *)
               refuse "unexpected trigger '${EVENT}'" "this workflow runs on repository_dispatch and workflow_dispatch" \
@@ -227,9 +237,11 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    # One writer per app branch: a manual run and a dispatch of the same app land
-    # in the same group. cancel-in-progress: false, never kill a run mid-push.
-    # This is also what makes the bare `--force` below safe.
+    # One writer per app branch among this workflow's runs: a manual run and a
+    # dispatch of the same app land in the same group. cancel-in-progress: false,
+    # never kill a run mid-push. A legacy receiver is a different workflow and
+    # shares no group; the registry flag keeps the two apart, which is why PR 7
+    # flips `receiver: generic` and removes the old trigger in one change.
     concurrency:
       group: product-receiver-${{ needs.resolve.outputs.app }}
       cancel-in-progress: false
@@ -249,8 +261,9 @@ jobs:
 
       # The contract is fetched outside the tree and copied in only once it has
       # passed, so a refused contract leaves nothing to commit. It is validated
-      # by the toolkit of this checkout (kubelab master), never by anything in
-      # the product's tree.
+      # by the toolkit of this checkout, never by anything in the product's tree.
+      # The checkout is the default branch: a dispatch always runs there, and the
+      # resolve job refuses a write run started from anywhere else.
       - name: Fetch and validate the contract at the commit
         id: contract
         env:
@@ -315,7 +328,7 @@ jobs:
           # for each line below are in web-image-receiver.yml, which this mirrors:
           # the lookup runs before the push so a failure leaves the offer and its
           # title agreeing, and `--force` is safe because the job is the branch's
-          # only writer.
+          # only writer this group admits.
           BRANCH="deploy/staging-${APP}"
           TITLE="chore(staging): deploy ${APP} ${TAG}"
           BODY="Staging promotion of \`${APP}\` to \`${TAG}\` (ADR-046, cross-repo dispatch from ${REPOSITORY}).

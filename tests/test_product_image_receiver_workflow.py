@@ -226,12 +226,16 @@ def _manual(tmp_path: pathlib.Path, toolkit: str, app: str, dry_run: str = "fals
         tmp_path,
         "resolve",
         "target",
-        EVENT="workflow_dispatch",
-        INPUT_APP=app,
-        INPUT_TAG=f"sha-{SHORT}",
-        INPUT_DRY_RUN=dry_run,
-        TOOLKIT=toolkit,
-        **env,
+        **{
+            "EVENT": "workflow_dispatch",
+            "INPUT_APP": app,
+            "INPUT_TAG": f"sha-{SHORT}",
+            "INPUT_DRY_RUN": dry_run,
+            "REF": "refs/heads/master",
+            "DEFAULT_BRANCH": "master",
+            "TOOLKIT": toolkit,
+            **env,
+        },
     )
 
 
@@ -308,6 +312,29 @@ def test_a_manual_dry_run_of_a_legacy_product_proceeds(tmp_path: pathlib.Path, t
 
     assert code == 0, log
     assert out["app"] == "web" and out["repository"] == "mlorentedev/web" and out["dry_run"] == "true"
+
+
+@_needs_bash
+@_needs_jq
+def test_a_manual_write_run_from_another_branch_is_refused(tmp_path: pathlib.Path, toolkit_stub: str) -> None:
+    """Both checkouts take the run's branch: from a feature branch, its unmerged commits
+    would ride the force-push to deploy/staging-<app>, and its registry would decide."""
+    code, out, log, calls = _manual(tmp_path, toolkit_stub, "third", REF="refs/heads/feat/x")
+
+    assert code != 0
+    assert out == {}
+    assert "ERROR: " in log and "master" in log
+    assert calls == []
+
+
+@_needs_bash
+@_needs_jq
+def test_a_manual_dry_run_from_another_branch_proceeds(tmp_path: pathlib.Path, toolkit_stub: str) -> None:
+    """Rehearsing a branch's receiver is what a dry run is for; it pushes nothing."""
+    code, out, log, _ = _manual(tmp_path, toolkit_stub, "third", dry_run="true", REF="refs/heads/feat/x")
+
+    assert code == 0, log
+    assert out["dry_run"] == "true"
 
 
 def test_a_manual_run_is_a_dry_run_unless_told_otherwise() -> None:
@@ -443,13 +470,24 @@ def test_an_invalid_contract_fails_with_error_why_fix_and_writes_nothing(tmp_pat
     assert not snapshot.exists()
 
 
+def test_the_contract_is_fetched_from_where_the_registry_says() -> None:
+    """AC6: the fetch reads its repository from the resolve job, which took it from the registry.
+
+    Asserted on the step text: the contract is read only after the fetch returns, so no
+    contract body could change the recorded calls, and a runtime check would hold for
+    any implementation.
+    """
+    step = _step("promote", "contract")
+    assert step["env"]["REPOSITORY"] == "${{ needs.resolve.outputs.repository }}"
+    assert step["env"]["SHA"] == "${{ needs.resolve.outputs.sha }}"
+    assert re.findall(r"repos/[^\s\"]*", step["run"]) == ["repos/${REPOSITORY}/contents/kubelab.yaml?ref=${SHA}"]
+
+
 @_needs_bash
-def test_a_contract_that_names_another_repository_changes_no_fetch(tmp_path: pathlib.Path) -> None:
-    """AC6: the registry names where the contract comes from; the contract cannot redirect it."""
-    code, log, calls, snapshot = _fetch(tmp_path, WEB_CONTRACT.read_text() + "repository: evil/fork\n")
+def test_a_contract_that_names_a_repository_is_refused(tmp_path: pathlib.Path) -> None:
+    code, log, _, snapshot = _fetch(tmp_path, WEB_CONTRACT.read_text() + "repository: evil/fork\n")
 
     assert code != 0, log
-    assert all("repos/mlorentedev/web/" in call for call in calls), calls
     assert not snapshot.exists()
 
 
