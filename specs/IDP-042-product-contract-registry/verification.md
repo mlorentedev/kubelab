@@ -62,7 +62,9 @@ Map every acceptance criterion from `proposal.md` to concrete proof.
 Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
 
 - Operator's answers to Q1-Q8 are recorded with their date in `proposal.md` under "Decisions" (2026-10-17). Q7 removed the registry's `image` field: the image is derived, with an override for `web` only.
--
+- PR 6, operator 2026-10-19: the receiver is two jobs. `resolve` holds no write grant and refuses before anything is written (AC7); `promote` runs in `concurrency.group: product-receiver-${{ needs.resolve.outputs.app }}`. The task's group on `github.event.action` is empty on a manual run, so a manual re-promote and a dispatch of one app could both force-push `deploy/staging-<app>`.
+- PR 6: a dispatch for a `receiver: legacy` product is skipped with a notice; a manual run of one proceeds only as a dry run and is refused otherwise, because its legacy workflow still writes the branch (design point 10). `dry_run` defaults to `true`, and only an explicit `false` leaves it, so a manual run that omits the box writes nothing.
+- PR 6 adds `toolkit product show APP [--json]` for forge, repository and receiver, rather than widening `app-for-event`, so a manual run (which has no event type) asks the same command. The contract is fetched to `$RUNNER_TEMP` and copied into the tree only after `validate --registry --app` passes.
 
 ## Promotion candidates
 
