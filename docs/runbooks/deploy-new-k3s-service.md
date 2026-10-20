@@ -56,7 +56,7 @@ If the service needs JWKS and it does not exist yet:
 toolkit secrets jwks --env staging
 ```
 
-> **Gotcha — Authelia OIDC JWKS key injection**: Use `issuer_private_key` (NOT `jwks[0].key`) in Authelia's configuration.yml. The `_FILE` env var suffix only works for flat config keys, not array-indexed ones. Set `AUTHELIA_IDENTITY_PROVIDERS_OIDC_ISSUER_PRIVATE_KEY_FILE=/run/secrets/oidc_jwks_key` to inject from a K8s Secret mount. See lesson `[2026-03-01] Authelia OIDC JWKS` in `90-lessons.md`.
+> **Gotcha — Authelia OIDC JWKS key injection**: the signing key is `jwks[0].key`, read from the K8s Secret mount by Authelia's template filter in `authelia-config/oidc-jwks.yml` (`X_AUTHELIA_CONFIG_FILTERS=template`). A `_FILE` env var only fills flat config keys, not list elements. See lesson-096 and #2377.
 
 ### 2. Create K8s Manifest
 

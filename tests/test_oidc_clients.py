@@ -253,7 +253,12 @@ def test_authelia_config_split(env: str) -> None:
     container = dep["spec"]["template"]["spec"]["containers"][0]
     [config_env] = [e["value"] for e in container["env"] if e["name"] == "X_AUTHELIA_CONFIG"]
     mounted = {m["mountPath"] for m in container["volumeMounts"] if m["name"] == "config"}
-    assert config_env.split(",") == ["/config/configuration.yml", f"/config/{oidc_clients.CLIENTS_FILE_NAME}"]
+    # The signing key's file comes last (#2377); the config and the client list keep their order.
+    assert config_env.split(",") == [
+        "/config/configuration.yml",
+        f"/config/{oidc_clients.CLIENTS_FILE_NAME}",
+        "/config/oidc-jwks.yml",
+    ]
     assert set(config_env.split(",")) <= mounted, "Authelia is told to load a file that is not mounted"
 
 

@@ -25,11 +25,12 @@ resources:
 
 # Override base authelia-config with prod-specific domains, policies, OIDC clients.
 # Hash suffix triggers auto rolling restart on change (SECRET-RELOAD-001a refactor).
-# Replaces the base-generated authelia-config ConfigMap.
+# Merges over the base-generated authelia-config ConfigMap: these two files replace the
+# base's, and the env-agnostic oidc-jwks.yml carries through from base (#2377).
 configMapGenerator:
   - name: authelia-config
     namespace: kubelab
-    behavior: replace
+    behavior: merge
     files:
       - authelia-config/configuration.yml
       - authelia-config/oidc-clients.yml
