@@ -123,7 +123,8 @@ class TestSpokeUrlCLI:
 
         This is not fastidiousness. The first version of this command resolved
         through `ConfigurationManager`, which prints "[WARNING] SOPS is not
-        installed" to stdout -- Rich's default Console is stdout, not stderr.
+        installed" to stdout -- the logger used Rich's default Console, which is
+        stdout (it writes to stderr since #2536).
         On a workstation sops is installed and nothing appeared; on a runner it
         is not, and `register-spoke` would have written a two-line warning
         banner plus the URL into a cluster secret's `server` field. Green

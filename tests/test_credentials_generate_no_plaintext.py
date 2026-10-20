@@ -100,7 +100,7 @@ def test_the_default_names_every_key_and_shows_no_value(
     out = _flat("".join(capsys.readouterr()))
     values = _secret_values(generated)
     assert len(values) >= 10, "the run generated too few secrets for this check to mean anything"
-    assert not [v for v in values if _flat(v) in out], "a generated secret value reached stdout"
+    assert not [v for v in values if _flat(v) in out], "a generated secret value reached the output"
     missing = [k for k in generated if _flat(k) not in out]
     assert not missing, f"the default path did not name {missing}"
 
