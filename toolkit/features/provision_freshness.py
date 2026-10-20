@@ -20,8 +20,9 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-#: What an Ansible run renders: the playbooks and roles, and the values they read.
-RENDERED_PATHS = ("infra/ansible", "infra/config/values")
+#: What an Ansible run renders: the playbooks and roles, the values they read, and the code that
+#: turns the values into the inventory (a change to its host vars reaches a node the same way).
+RENDERED_PATHS = ("infra/ansible", "infra/config/values", "toolkit/features/generator_ansible.py")
 
 MASTER_REF = "origin/master"
 

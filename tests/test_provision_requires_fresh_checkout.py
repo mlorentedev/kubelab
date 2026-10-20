@@ -71,6 +71,11 @@ def test_a_branch_behind_on_the_values_is_named(clone: Path) -> None:
     assert provision_freshness.paths_behind_master(clone) == ["infra/config/values/common.yaml"]
 
 
+def test_a_branch_behind_on_the_inventory_generator_is_named(clone: Path) -> None:
+    _advance_master(clone, "toolkit/features/generator_ansible.py", "HOST_VARS = ['ssh_lan_jump_targets']\n")
+    assert provision_freshness.paths_behind_master(clone) == ["toolkit/features/generator_ansible.py"]
+
+
 def test_a_change_to_something_ansible_does_not_render_is_not_a_reason_to_refuse(clone: Path) -> None:
     _advance_master(clone, "docs/lessons/x.md", "unrelated\n")
     assert provision_freshness.paths_behind_master(clone) == []
