@@ -134,10 +134,10 @@ class TestRunWithCheck:
 
         assert _run_with_check([f], sync_fn, "test") is False
 
-        # The project logger renders through Rich to stdout, not through the
+        # The project logger renders through Rich to stderr, not through the
         # `logging` module, so caplog sees nothing here — capsys is the surface
         # a CI log actually shows.
-        report = capsys.readouterr().out
+        report = "".join(capsys.readouterr())
         assert '-  "total": 33' in report, "the committed value is missing from the diff"
         assert '+  "total": 35' in report, "the generated value is missing from the diff"
 
@@ -161,7 +161,7 @@ class TestRunWithCheck:
 
         # The normalizer folds this, so the gate itself must stay green.
         assert result is True
-        assert "drift detected" not in capsys.readouterr().out
+        assert "drift detected" not in "".join(capsys.readouterr())
 
     def test_the_diff_hides_what_the_check_itself_ignores(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -183,7 +183,7 @@ class TestRunWithCheck:
         patterns = [(r'"today": "\d{4}-\d{2}-\d{2}"', '"today": "DATE"')]
         assert _run_with_check([f], sync_fn, "test", dynamic_patterns=patterns) is False
 
-        report = capsys.readouterr().out
+        report = "".join(capsys.readouterr())
         assert '"total": 35' in report, "the real change is missing from the diff"
         assert "2026-09-06" not in report, (
             "the diff shows a value the gate normalizes away — it is rendering raw bytes, "
@@ -203,7 +203,7 @@ class TestRunWithCheck:
 
         assert _run_with_check([f], sync_fn, "test") is False
 
-        report = capsys.readouterr().out
+        report = "".join(capsys.readouterr())
         assert "diff truncated" in report, "an 800-line diff went to the log unbounded"
         assert report.count("new-") < 400, "the cap did not bound the output"
 

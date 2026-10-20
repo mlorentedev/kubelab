@@ -81,8 +81,10 @@ class FileNotFoundError(PlatformError):
         self.file_path = file_path
 
 
-# Global console instance
+# A command's data (tables, diffs, passed-through output) goes to stdout; the logger's
+# diagnostics go to stderr, so a warning never lands in output a caller parses (#2536).
 console = Console()
+err_console = Console(stderr=True)
 
 
 class PlatformLogger:
@@ -100,7 +102,7 @@ class PlatformLogger:
             return  # Already configured
 
         handler = RichHandler(
-            console=console,
+            console=err_console,
             rich_tracebacks=True,
             show_path=False,
             show_time=False,
@@ -126,34 +128,34 @@ class PlatformLogger:
 
     def info(self, message: str, **kwargs: Any) -> None:
         """Log info message with blue prefix."""
-        console.print(f"[blue][INFO][/blue] {message}", **kwargs)
+        err_console.print(f"[blue][INFO][/blue] {message}", **kwargs)
 
     def success(self, message: str, **kwargs: Any) -> None:
         """Log success message with green prefix."""
-        console.print(f"[green][SUCCESS][/green] {message}", **kwargs)
+        err_console.print(f"[green][SUCCESS][/green] {message}", **kwargs)
 
     def warning(self, message: str, **kwargs: Any) -> None:
         """Log warning message with yellow prefix."""
-        console.print(f"[yellow][WARNING][/yellow] {message}", **kwargs)
+        err_console.print(f"[yellow][WARNING][/yellow] {message}", **kwargs)
 
     def error(self, message: str, **kwargs: Any) -> None:
         """Log error message with red prefix."""
-        console.print(f"[red][ERROR][/red] {message}", **kwargs)
+        err_console.print(f"[red][ERROR][/red] {message}", **kwargs)
 
     def critical(self, message: str, **kwargs: Any) -> None:
         """Log critical message and exit."""
-        console.print(f"[bold red][CRITICAL][/bold red] {message}", **kwargs)
+        err_console.print(f"[bold red][CRITICAL][/bold red] {message}", **kwargs)
         sys.exit(1)
 
     def section(self, title: str) -> None:
         """Print a section header."""
-        console.print(f"\n[bold cyan]{'=' * 60}[/bold cyan]")
-        console.print(f"[bold cyan]{title.center(60)}[/bold cyan]")
-        console.print(f"[bold cyan]{'=' * 60}[/bold cyan]\n")
+        err_console.print(f"\n[bold cyan]{'=' * 60}[/bold cyan]")
+        err_console.print(f"[bold cyan]{title.center(60)}[/bold cyan]")
+        err_console.print(f"[bold cyan]{'=' * 60}[/bold cyan]\n")
 
     def subsection(self, title: str) -> None:
         """Print a subsection header."""
-        console.print(f"\n[bold blue]--- {title} ---[/bold blue]\n")
+        err_console.print(f"\n[bold blue]--- {title} ---[/bold blue]\n")
 
     def confirm(
         self,
@@ -178,7 +180,7 @@ class PlatformLogger:
         return Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
-            console=console,
+            console=err_console,
             transient=True,
         )
 

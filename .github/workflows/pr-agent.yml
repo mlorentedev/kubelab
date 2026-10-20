@@ -537,7 +537,7 @@ jobs:
             && steps.route.outputs.first == 'anthropic'
         timeout-minutes: 8
         continue-on-error: true
-        uses: The-PR-Agent/pr-agent@8e5a9295973b24af4b70cafd0b660a230811ef9e  # v0.47.0
+        uses: The-PR-Agent/pr-agent@981344be2755e303df501e18e3f60b848a188a80  # v0.48.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # The only inference credential this step holds; NaN's is not here.
@@ -620,7 +620,7 @@ jobs:
         # Resolved 2026-08-19 from `repos/The-PR-Agent/pr-agent/git/ref/tags/v0.42.0`.
         # Bump it deliberately, by re-resolving the tag you intend — never by
         # editing the comment.
-        uses: The-PR-Agent/pr-agent@8e5a9295973b24af4b70cafd0b660a230811ef9e  # v0.47.0
+        uses: The-PR-Agent/pr-agent@981344be2755e303df501e18e3f60b848a188a80  # v0.48.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # NaN is OpenAI-compatible, so LiteLLM reaches it through the OpenAI
@@ -714,7 +714,7 @@ jobs:
             && steps.published_after_nan.outputs.published == 'false'
         timeout-minutes: 8
         continue-on-error: true
-        uses: The-PR-Agent/pr-agent@8e5a9295973b24af4b70cafd0b660a230811ef9e  # v0.47.0
+        uses: The-PR-Agent/pr-agent@981344be2755e303df501e18e3f60b848a188a80  # v0.48.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # The only inference credential this step holds; NaN's is not here.

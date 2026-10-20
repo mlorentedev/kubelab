@@ -11,6 +11,7 @@ digest key from `oidc_clients.digest_key`, and the plaintext from that spec's `d
 from __future__ import annotations
 
 import dataclasses
+import sys
 from unittest.mock import MagicMock
 
 import pytest
@@ -108,6 +109,9 @@ def test_the_manual_copy_prints_hub_keys_under_common_only(
     }.items():
         monkeypatch.setattr(manager, name, fake)
 
+    # The headers are logged (stderr) and the values printed (stdout): read them in the
+    # order the operator's terminal shows them, as `2>&1` would.
+    monkeypatch.setattr(sys, "stderr", sys.stdout)
     manager.setup_authelia_secrets("prod", print_secrets=True)
 
     out = capsys.readouterr().out
@@ -152,3 +156,24 @@ def test_a_mixed_pair_is_refused_before_anything_is_written(monkeypatch: pytest.
     with pytest.raises(oidc_clients.OidcClientError, match="HUB_MANAGED"):
         _run("prod", monkeypatch, written)
     assert written == set(), f"keys written before the refusal: {sorted(written)}"
+
+
+# Catalogued OIDC secrets that belong to no declared client, each with the ticket that
+# retires it. The kubelab-oidc pair sat here unnoticed until #1777 AC3 removed it.
+UNDECLARED_OIDC_ENTRIES = {
+    "apps.services.core.vikunja.oidc_client_secret": "#2508: stale copy of authelia.oidc_client_secret_vikunja",
+}
+
+
+def test_every_catalogued_oidc_secret_belongs_to_a_declared_client() -> None:
+    declared: set[str] = set()
+    for env in ENVS:
+        for client in oidc_clients.declared_clients(oidc_clients.load_values(env)):
+            digest = oidc_clients.digest_key(client["client_id"])
+            declared |= {digest, SPECS[digest].derived_from}
+    catalogued = {key for key in SPECS if "oidc_client_secret" in key}
+    assert catalogued, "no OIDC secret is catalogued, so this check would compare nothing"
+    orphans = sorted(catalogued - declared - set(UNDECLARED_OIDC_ENTRIES))
+    assert not orphans, f"catalogued OIDC secrets no declared client uses: {orphans}"
+    stale = sorted(set(UNDECLARED_OIDC_ENTRIES) - catalogued)
+    assert not stale, f"exceptions that are no longer catalogued, drop them: {stale}"

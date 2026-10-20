@@ -38,6 +38,7 @@ from typing import Any
 
 from toolkit.core.logging import logger
 from toolkit.features.configuration import ConfigurationManager
+from toolkit.features.gitea_tokens import ROTATABLE_TOKENS
 from toolkit.features.k8s_kubeconfig import output_path
 
 # n8n Header Auth credential shape. The webhook node compares the incoming header
@@ -113,10 +114,13 @@ class SharedCredential:
     """n8n credential name, neutral on purpose (never a product's)."""
 
     type: str
-    """n8n credential type; `smtp` is the only one rendered today."""
+    """n8n credential type: `smtp`, or `httpHeaderAuth` rendered as a Bearer header."""
 
     envs: frozenset[str]
     """Envs where it is imported."""
+
+    secret_key_path: str = ""
+    """SOPS dotted path of the Bearer secret. Used by `httpHeaderAuth` only; `smtp` reads `_SMTP_PATHS`."""
 
     namespace: str = _NAMESPACE
     deployment: str = _DEPLOYMENT
@@ -133,7 +137,18 @@ KUBELAB_SMTP = SharedCredential(
     envs=frozenset({"prod"}),
 )
 
-N8N_SHARED_CREDENTIALS: list[SharedCredential] = [KUBELAB_SMTP]
+# What a workflow calls the Gitea API with to comment on a PR whose review failed
+# (TOOL-093, #1957). The token is the comment-only one minted for n8n, named by the
+# rotation registry so rotating it and importing it can never read different keys.
+GITEA_REVIEW_NOTICE = SharedCredential(
+    credential_id="c9000000-0000-4000-8000-000000000002",
+    name="gitea-review-notice",
+    type=_CREDENTIAL_TYPE,
+    envs=frozenset({"prod"}),
+    secret_key_path=ROTATABLE_TOKENS["review_notice"].secret_key,
+)
+
+N8N_SHARED_CREDENTIALS: list[SharedCredential] = [KUBELAB_SMTP, GITEA_REVIEW_NOTICE]
 
 # The `infra.smtp.*` values `kubelab-smtp` is rendered from (ADR-036): the same
 # relay the API and Authelia use, so there is no second copy to drift.
@@ -176,6 +191,15 @@ N8N_IMPORT_CATALOG: list[N8nImportSpec] = [
         secret_key_path="apps.services.automation.notify.webhook_secret",
         credential_name="agent-dispatcher-webhook",
         envs=frozenset({"staging", "prod"}),
+    ),
+    # TOOL-093, #1957. Grafana's `forge-review-failed` contact point posts here, with the same
+    # webhook secret every n8n webhook is authenticated with; the workflow comments on the PR
+    # with the shared `gitea-review-notice` credential. Prod only: PR-Agent runs there.
+    N8nImportSpec(
+        workflow_path=Path("infra/n8n/workflows/forge-review-failed.json"),
+        secret_key_path="apps.services.automation.notify.webhook_secret",
+        credential_name="forge-review-failed-webhook",
+        envs=frozenset({"prod"}),
     ),
     # APP-CONFIG-018, leaving-denver#225. The sale ends 2026-11-09. REMOVING IT is this
     # entry, the JSON, and the `sale_digest` SOPS block and its SECRET_CATALOG entries
@@ -233,6 +257,8 @@ PLACEHOLDER_SSOT: dict[str, str] = {
     "RESOLVE_VIKUNJA_IN_PROGRESS_BUCKET": "apps.services.core.vikunja.in_progress_bucket",
     # The From of any workflow sending through `kubelab-smtp`: the relay's own account.
     "RESOLVE_KUBELAB_SMTP_FROM": "infra.smtp.user",
+    # The forge's host, so the workflow that comments on its pull requests accepts only a URL of this forge.
+    "RESOLVE_GITEA_DOMAIN": "apps.services.core.gitea.domain",
     # The sale digest's own values; SOPS-resident, hence never logged below.
     "RESOLVE_SALE_DIGEST_TO": "apps.services.automation.n8n.sale_digest.recipient",
 }
@@ -387,7 +413,11 @@ def read_workflow_ids(workflow: dict[str, Any]) -> tuple[str, str | None]:
     if not workflow_id:
         raise ValueError("workflow JSON has no root 'id' — required for idempotent upsert (TOOL-009)")
 
-    ids = {r.id for r in read_credential_refs(workflow) if r.type == _CREDENTIAL_TYPE and r.id}
+    # A shared credential is referenced from a node but is not the workflow's own: a
+    # workflow with its webhook credential and a shared Gitea one would otherwise read as
+    # two that disagree.
+    shared_ids = {c.credential_id for c in N8N_SHARED_CREDENTIALS}
+    ids = {r.id for r in read_credential_refs(workflow) if r.type == _CREDENTIAL_TYPE and r.id not in shared_ids}
     if len(ids) > 1:
         raise ValueError(f"httpHeaderAuth nodes disagree on the credential id {sorted(ids)}; only one can exist in n8n")
     return str(workflow_id), (ids.pop() if ids else None)
@@ -484,17 +514,24 @@ def _import_shared_credentials(env: str, cm: ConfigurationManager, dry_run: bool
         logger.info(f"[DRY-RUN] Would import shared credential(s) {names} (cluster not touched)")
         return result
     logger.info(f"Importing shared credential(s) {names}")
-    # Same namespace and pod for all of them, by construction: they are one n8n.
-    payload = _dump([entry for _, entry in rendered])
-    if not _exec_stdin_import(env, rendered[0][0], "import:credentials", "n8n-cred", payload):
-        logger.error(f"  Shared credential import failed ({names}) — workflows that use it are held back")
-        for cred, _ in rendered:
+    # One `import:credentials` per credential, so one that fails holds back the workflows that
+    # use IT and not those using another. Same namespace and pod for all of them, by
+    # construction: they are one n8n.
+    for cred, entry in rendered:
+        if not _exec_stdin_import(env, cred, "import:credentials", "n8n-cred", _dump([entry])):
+            logger.error(f"  Shared credential import failed ('{cred.name}') — workflows that use it are held back")
             result[cred.credential_id] = False
     return result
 
 
 def _render_shared(cred: SharedCredential, cm: ConfigurationManager) -> dict[str, Any] | None:
     """The `import:credentials` entry for `cred`, or None (logged) if a value is absent."""
+    if cred.type == _CREDENTIAL_TYPE:
+        secret = cm.get_secret_by_path(cred.secret_key_path)
+        if not secret:
+            logger.error(f"  Missing SOPS value at {cred.secret_key_path!r} — cannot import '{cred.name}'")
+            return None
+        return _header_auth_entry(cred.credential_id, cred.name, secret)
     if cred.type != _SMTP_TYPE:
         logger.error(f"  Shared credential '{cred.name}' has type '{cred.type}', which this importer cannot render")
         return None
@@ -524,7 +561,7 @@ def _unimported_references(
     credential of this env that imported, under the same id and name. Anything else
     imports without complaint and fails at the workflow's first execution.
     """
-    shared = {c.credential_id: c for c in N8N_SHARED_CREDENTIALS if env in c.envs and c.type == _SMTP_TYPE}
+    shared = {c.credential_id: c for c in N8N_SHARED_CREDENTIALS if env in c.envs}
     problems = []
     for ref in refs:
         if ref.type == _CREDENTIAL_TYPE and spec.secret_key_path and ref.name == spec.credential_name:

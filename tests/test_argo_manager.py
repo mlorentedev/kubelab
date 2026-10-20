@@ -139,10 +139,10 @@ class TestArgoSetRevisionCLI:
                 ["argo", "set-revision", "--app", "kubelab-staging", "--rev", "master"],
             )
 
-        assert result.exit_code == 0, result.stdout
-        assert "fix/dash-ui-cosmetic" in result.stdout
-        assert "master" in result.stdout
-        assert "OutOfSync" in result.stdout
+        assert result.exit_code == 0, result.output
+        assert "fix/dash-ui-cosmetic" in result.output
+        assert "master" in result.output
+        assert "OutOfSync" in result.output
         feature.assert_called_once()
 
     def test_missing_app_exits_nonzero(self) -> None:
@@ -158,8 +158,8 @@ class TestArgoSetRevisionCLI:
             result = runner.invoke(app, ["argo", "set-revision", "--app", "ghost", "--rev", "master"])
 
         assert result.exit_code != 0
-        assert "ghost" in result.stdout
-        assert "not found" in result.stdout.lower()
+        assert "ghost" in result.output
+        assert "not found" in result.output.lower()
 
     def test_missing_required_args_exits_nonzero(self) -> None:
         from typer.testing import CliRunner
@@ -224,8 +224,8 @@ class TestArgoCheckDriftCLI:
             MagicMock(return_value=DriftCheckResult(clean=True, diff="")),
         ):
             result = runner.invoke(app, ["argo", "check-drift"])
-        assert result.exit_code == 0, result.stdout
-        assert "no drift" in result.stdout.lower()
+        assert result.exit_code == 0, result.output
+        assert "no drift" in result.output.lower()
 
     def test_drift_found_exits_1_and_prints_diff(self) -> None:
         from typer.testing import CliRunner
@@ -239,8 +239,8 @@ class TestArgoCheckDriftCLI:
         ):
             result = runner.invoke(app, ["argo", "check-drift"])
         assert result.exit_code == 1
-        assert "selfHeal" in result.stdout
-        assert "deploy-apps" in result.stdout
+        assert "selfHeal" in result.output
+        assert "deploy-apps" in result.output
 
     def test_hub_unreachable_exits_2_not_0(self) -> None:
         from typer.testing import CliRunner
@@ -254,7 +254,7 @@ class TestArgoCheckDriftCLI:
         ):
             result = runner.invoke(app, ["argo", "check-drift"])
         assert result.exit_code == 2, "hub-unreachable must be distinguishable from both clean(0) and drift(1)"
-        assert "cannot check" in result.stdout.lower()
+        assert "cannot check" in result.output.lower()
 
 
 def _app_on(revision: str) -> str:

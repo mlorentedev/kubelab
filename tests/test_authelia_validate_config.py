@@ -59,31 +59,34 @@ def _require_docker() -> None:
         pytest.skip("docker not on PATH: cannot run Authelia (a skip is CANNOT CHECK, not OK)")
 
 
-def _dummy_secrets(secrets_dir: Path, container: dict[str, Any]) -> list[str]:
-    """One file per `_FILE` variable the Deployment declares; returns the `-e` flags.
+# A file the template filter reads: `{{ secret "/run/secrets/<key>" }}` (#2377).
+SECRET_REF = re.compile(r'\{\{\s*secret\s+"/run/secrets/([^"]+)"')
 
-    The values are throwaway. The OIDC issuer key has to be a real RSA key, because
-    Authelia parses it; everything else is only required to exist.
+
+def _dummy_secrets(secrets_dir: Path, config: dict[str, str], container: dict[str, Any]) -> list[str]:
+    """One file per `_FILE` variable and per `secret` template reference; returns the `-e` flags.
+
+    The values are throwaway. The templated OIDC signing key has to be a real RSA key,
+    because Authelia parses it; everything else is only required to exist.
     """
     flags: list[str] = []
     for env in container["env"]:
         name, value = env["name"], env.get("value", "")
-        if name == "X_AUTHELIA_CONFIG":
+        if name.startswith("X_AUTHELIA_"):
             flags += ["-e", f"{name}={value}"]
         elif name.endswith("_FILE"):
             target = secrets_dir / Path(value).name
-            if name.endswith("ISSUER_PRIVATE_KEY_FILE"):
-                key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-                target.write_bytes(
-                    key.private_bytes(
-                        serialization.Encoding.PEM,
-                        serialization.PrivateFormat.PKCS8,
-                        serialization.NoEncryption(),
-                    )
-                )
-            else:
-                target.write_text(f"dummy-{target.name}-" + "x" * 40, encoding="utf-8")
+            target.write_text(f"dummy-{target.name}-" + "x" * 40, encoding="utf-8")
             flags += ["-e", f"{name}={value}"]
+    for name in {n for text in config.values() for n in SECRET_REF.findall(text)}:
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        (secrets_dir / name).write_bytes(
+            key.private_bytes(
+                serialization.Encoding.PEM,
+                serialization.PrivateFormat.PKCS8,
+                serialization.NoEncryption(),
+            )
+        )
     return flags
 
 
@@ -97,7 +100,7 @@ def _validate(root: Path, config: dict[str, str], container: dict[str, Any]) -> 
     secrets_dir.mkdir(parents=True, exist_ok=True)
     for filename, text in config.items():
         (config_dir / filename).write_text(text, encoding="utf-8")
-    flags = _dummy_secrets(secrets_dir, container)
+    flags = _dummy_secrets(secrets_dir, config, container)
     return subprocess.run(
         [
             "docker",
@@ -163,11 +166,7 @@ def test_the_validated_image_is_the_pinned_one() -> None:
 # #2377: validate-config exits 0 on a deprecated key and only warns, so nothing noticed them
 # until a release dropped one. Each remaining key names the ticket that removes it.
 DEPRECATED_KEY = re.compile(r"configuration key '([^']+)' is deprecated")
-TOLERATED_DEPRECATIONS = {
-    # `_FILE` env vars cannot fill an array element, so moving to `jwks` needs a file path
-    # for the key first (lesson-096). #2377 part 2.
-    "identity_providers.oidc.issuer_private_key",
-}
+TOLERATED_DEPRECATIONS: set[str] = set()
 
 
 @pytest.mark.integration
@@ -179,13 +178,24 @@ def test_the_rendered_config_uses_no_new_deprecated_key(overlay: str, docker_mou
     text = done.stdout + done.stderr
     parsed = DEPRECATED_KEY.findall(text)
     # Guard the guard: a pattern that matches nothing would pass every config. Every
-    # line that mentions a deprecation must be one it parsed, and a key the config
-    # still uses must be seen.
+    # line that mentions a deprecation must be one it parsed, and the positive control
+    # below proves the pattern hears a live warning.
     assert text.lower().count("deprecat") == len(parsed), f"unparsed deprecation output:\n{text}"
-    if "issuer_private_key" in files["configuration.yml"]:
-        assert "identity_providers.oidc.issuer_private_key" in parsed, f"pattern missed a live warning:\n{text}"
     deprecated = set(parsed)
-    assert deprecated <= TOLERATED_DEPRECATIONS, f"{overlay} uses deprecated keys: {sorted(deprecated - TOLERATED_DEPRECATIONS)}"
+    assert deprecated <= TOLERATED_DEPRECATIONS, (
+        f"{overlay} uses deprecated keys: {sorted(deprecated - TOLERATED_DEPRECATIONS)}"
+    )
+
+
+@pytest.mark.integration
+def test_the_deprecation_pattern_sees_a_live_warning(docker_mount_dir: Path) -> None:
+    """With no deprecated key left, the gate above passes on silence; this proves it can hear one."""
+    _require_docker()
+    files, container = _authelia(_render("staging"))
+    document = yaml.safe_load(files["configuration.yml"])
+    document["webauthn"]["user_verification"] = "preferred"  # deprecated since 4.39.0
+    done = _validate(docker_mount_dir, {**files, "configuration.yml": yaml.safe_dump(document)}, container)
+    assert "webauthn.user_verification" in DEPRECATED_KEY.findall(done.stdout + done.stderr), done.stdout + done.stderr
 
 
 @pytest.mark.parametrize("overlay", OVERLAYS)

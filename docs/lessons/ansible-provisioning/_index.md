@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 604 | [A provision applies the checkout, so a branch behind master rolls the node back without failing](lesson-604-a-provision-applies-the-checkout-so-a-branch-behind-master-rolls-the-node-back-without-failing.md) | 2026-10-17 |
 | 589 | [A file written by a subuid with mkstemp is unreadable to its host owner, and no ACL fixes it](lesson-589-a-file-written-by-a-subuid-with-mkstemp-is-unreadable-to-its-host-owner-and-no-acl-fixes-it.md) | 2026-10-17 |
 | 588 | [A guard keyed on an error string breaks when the role itself changes what produced the string](lesson-588-a-guard-keyed-on-an-error-string-breaks-when-the-role-changes-what-produced-it.md) | 2026-10-17 |
 | 583 | [A mount test that asserts the template passes a path the consumer never sees](lesson-583-a-mount-test-that-asserts-the-template-passes-a-path-the-consumer-never-sees.md) | 2026-10-16 |

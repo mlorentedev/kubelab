@@ -85,3 +85,29 @@ contactPoints:
                     "title" (printf "%s: %s" .Status .CommonLabels.alertname)
                     "body"  (tmpl.Exec "apprise.body" .)
                   | data.ToJSON -}}
+
+  # The PR author's channel (TOOL-093, #1957). When PR-Agent cannot review, it logs
+  # `Failed to review PR` and publishes nothing, so from the PR it looks like a
+  # reviewer that never ran. This sends the same alert to the n8n workflow that
+  # comments on the PR, so the author is told and can push to retry.
+  #
+  # No `payload.template`: Grafana's stock body already carries what the workflow
+  # reads (`alerts[].labels.pr`, the PR URL), and a custom template fails at
+  # delivery, not at provisioning (see the note on the contact points above).
+  #
+  # The bearer is the n8n webhook secret, read from the pod's environment: Grafana
+  # expands `$NAME` in provisioning files, so no value sits in this ConfigMap. The
+  # variable is defined in grafana.yaml; a name the pod lacks expands to nothing and
+  # every delivery is refused with a 403. Measured on grafana-oss 13.0.2, 2026-10-18.
+  # Resolved notifications are off: a second POST for a PR that has not changed.
+  - orgId: 1
+    name: forge-review-failed
+    receivers:
+      - uid: forge-review-failed
+        type: webhook
+        disableResolveMessage: true
+        settings:
+          url: http://n8n:5678/webhook/forge-review-failed
+          httpMethod: POST
+          authorization_scheme: Bearer
+          authorization_credentials: $N8N_WEBHOOK_SECRET

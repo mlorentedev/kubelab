@@ -2,6 +2,9 @@
 
 They read files and print results: no SOPS key, no network, no forge. The
 receiver workflow fetches the contract; these commands only judge it (D8).
+``list`` and ``app-for-event`` answer from the product registry
+(``infra/config/products.yaml``) for the callers that cannot import it: the
+Makefile and the workflows.
 """
 
 import json
@@ -11,13 +14,13 @@ from typing import Annotated
 import typer
 import yaml
 
-from toolkit.features import product_render
+from toolkit.features import product_registry, product_render
 from toolkit.features.product_contract import ContractError, validate_contract
 from toolkit.features.product_guards import validate_registered
 
 app = typer.Typer(
     name="product",
-    help="Validate and render kubelab.yaml product contracts (ADR-067).",
+    help="Validate and render kubelab.yaml product contracts, and read the product registry (ADR-067).",
     no_args_is_help=True,
 )
 
@@ -90,3 +93,66 @@ def render(
     except ContractError as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(1) from None
+
+
+@app.command("list")
+def list_products(
+    as_json: Annotated[bool, typer.Option("--json", help="Print a JSON array instead of one name per line")] = False,
+) -> None:
+    """List the registered products, in registry order."""
+    apps = product_registry.platform_apps()
+    typer.echo(json.dumps(list(apps)) if as_json else "\n".join(apps))
+
+
+@app.command("app-for-event")
+def app_for_event(
+    event: Annotated[str, typer.Argument(help="A repository_dispatch event type")],
+    as_json: Annotated[bool, typer.Option("--json", help="Print the app and its lane as one JSON object")] = False,
+) -> None:
+    """Name the app a dispatch event type belongs to; exit 1 if the registry maps it to none.
+
+    The app comes from the event type, never from the dispatch payload (AC1).
+    """
+    try:
+        route = product_registry.event_route(event)
+    except product_registry.UnknownEventError:
+        refusal = {
+            "error": f"event type '{event}' is not mapped to any product",
+            "why": "the registry alone says which event type means which app; the dispatch payload never names it",
+            "fix": f"admit the product, or add the event type to its entry, in {product_registry.registry_path()}",
+        }
+        if as_json:
+            typer.echo(json.dumps({"ok": False, **refusal}))
+        else:
+            typer.echo("\n".join(f"{key.upper()}: {value}" for key, value in refusal.items()), err=True)
+        raise typer.Exit(1) from None
+    if as_json:
+        typer.echo(json.dumps({"ok": True, "event": event, "app": route.app, "lane": route.lane}))
+    else:
+        typer.echo(route.app)
+
+
+@app.command("show")
+def show(
+    name: Annotated[str, typer.Argument(help="A registered product")],
+    as_json: Annotated[bool, typer.Option("--json", help="Print the entry as one JSON object")] = False,
+) -> None:
+    """Print where a product comes from: its forge, repository and receiver; exit 1 if unregistered."""
+    try:
+        entry = product_registry.product(name)
+    except product_registry.UnknownProductError:
+        refusal = {
+            "error": f"'{name}' is not a registered product",
+            "why": "the registry alone admits a product, and names the repository its contract is fetched from",
+            "fix": f"admit the product with an entry in {product_registry.registry_path()}",
+        }
+        if as_json:
+            typer.echo(json.dumps({"ok": False, **refusal}))
+        else:
+            typer.echo("\n".join(f"{key.upper()}: {value}" for key, value in refusal.items()), err=True)
+        raise typer.Exit(1) from None
+    fields = {"forge": entry.forge, "repository": entry.repository, "receiver": entry.receiver}
+    if as_json:
+        typer.echo(json.dumps({"ok": True, "app": name, **fields}))
+    else:
+        typer.echo("\n".join(f"{key}: {value}" for key, value in fields.items() if value is not None))

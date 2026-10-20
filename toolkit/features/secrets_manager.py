@@ -362,26 +362,6 @@ SECRET_CATALOG: list[SecretSpec] = [
         format_hint="PEM-encoded RSA private key",
         rotate_note="All OIDC clients must re-authenticate. Restart authelia.",
     ),
-    # The `kubelab-oidc` pair. No Authelia config registers that client and nothing reads
-    # these keys; `credentials generate` stopped minting them in #1777. They stay catalogued
-    # only until the vaults drop them, because an uncatalogued key fails `secrets audit`
-    # unless the orphan baseline lists it (#1777 AC3).
-    SecretSpec(
-        key_path=f"{_AUTH}.oidc_client_secret",
-        description="Retired kubelab-oidc client secret (plaintext); no consumer",
-        kind=SecretKind.OIDC_CLIENT_SECRET,
-        services=("authelia",),
-        rotate_note="No consumer: retire it (#1777 AC3) rather than rotate it.",
-    ),
-    SecretSpec(
-        key_path=f"{_AUTH}.oidc_client_secret_hash",
-        description="Argon2 hash of the retired kubelab-oidc client secret; no consumer",
-        kind=SecretKind.ARGON2_HASH,
-        services=("authelia",),
-        derived_from=f"{_AUTH}.oidc_client_secret",
-        format_hint="$argon2id$v=19$...",
-        rotate_note="No consumer: retire it with oidc_client_secret (#1777 AC3).",
-    ),
     SecretSpec(
         key_path=f"{_AUTH}.oidc_client_secret_grafana",
         description="Grafana OIDC client secret (plaintext)",
@@ -750,6 +730,25 @@ SECRET_CATALOG: list[SecretSpec] = [
         # owner-level pusher a declared rotation date as its compensating control; this
         # token is read-only on code, like the bot's is admin-free, and follows the
         # bot's rule instead.
+        expiry=Expiry.NEVER,
+        envs=("prod",),
+    ),
+    SecretSpec(
+        key_path="apps.services.core.gitea.review_notice_token",
+        description=(
+            "Comment-only Gitea API token on the reviewer's account (apps.auth.identities.reviewer); "
+            "write:issue, used by the n8n workflow that tells a PR its review failed (TOOL-093)"
+        ),
+        # EXTERNAL for the reason `bot_token` gives: only Gitea honours what it mints.
+        kind=SecretKind.EXTERNAL,
+        services=("gitea", "n8n"),
+        rotate_note=(
+            "`make gitea-rotate-token TOKEN=review_notice ENV=prod APPLY=1` (revoke, then unset), then "
+            "`make provision NODE=bee ENV=prod TAGS=gitea` to re-mint, then `make import-n8n` so the "
+            "workflow's credential carries the new value. The mint task is gated on this key being "
+            "absent; never mint a second token by hand."
+        ),
+        # NEVER, for the reason measured on `bot_token`: Gitea's token API has no expiry field.
         expiry=Expiry.NEVER,
         envs=("prod",),
     ),
@@ -1681,17 +1680,21 @@ SECRET_CATALOG: list[SecretSpec] = [
     ),
     # Shared secret for the n8n /webhook/notify ingress (NOTIFY-001 criterion #4).
     # Lives in the n8n encrypted credential store (Header Auth, ADR-044 webhook-auth);
-    # SOPS holds the canonical copy for recovery/rotation. No K8s SECRET_DEFINITIONS
-    # mapping — n8n reads it from its own credential, not from an env var.
+    # SOPS holds the canonical copy for recovery/rotation. n8n reads it from its own
+    # credential, not from an env var; Grafana is the one K8s consumer (TOOL-093), as the
+    # bearer of its `forge-review-failed` contact point, through `grafana-admin`.
     # Staging and prod n8n each hold their OWN separately-configured credential
     # (different values, one per env file) — this key is env-scoped by design.
     SecretSpec(
         key_path="apps.services.automation.notify.webhook_secret",
         description="Shared secret authenticating POSTs to the n8n /webhook/notify ingress",
         kind=SecretKind.RANDOM_TOKEN,
-        services=("n8n",),
+        services=("n8n", "grafana"),
         format_hint="opaque bearer token; sources send 'Authorization: Bearer <token>'",
-        rotate_note="Regenerate, paste into the n8n 'notify-webhook' Header Auth credential, update every source.",
+        rotate_note=(
+            "Regenerate, paste into the n8n 'notify-webhook' Header Auth credential, update every source, "
+            "and `make apply-secrets` so Grafana (the forge-review-failed contact point's bearer) reads it."
+        ),
         envs=("staging", "prod"),
     ),
     # ANSIBLE-035: fleet-wide copy of the PROD n8n webhook token specifically,

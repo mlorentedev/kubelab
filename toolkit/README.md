@@ -152,12 +152,16 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit obs slack` | Read or post messages to Slack incident channels. |
 | `toolkit obs triage` | Execute the 4-step automated SRE triage pipeline. |
 | `toolkit obs watcher-run` | Run a CronJob once now, print its log, and delete the Job. |
-| `toolkit product` | Validate and render kubelab.yaml product contracts (ADR-067). |
+| `toolkit product` | Validate and render kubelab.yaml product contracts, and read the product registry (ADR-067). |
+| `toolkit product app-for-event` | Name the app a dispatch event type belongs to; exit 1 if the registry maps it to none. |
+| `toolkit product list` | List the registered products, in registry order. |
 | `toolkit product render` | Render a contract into apps.platform.<app>; without a flag, print the contract-owned keys. |
+| `toolkit product show` | Print where a product comes from: its forge, repository and receiver; exit 1 if unregistered. |
 | `toolkit product validate` | Validate a product contract against the schema, and with --registry against the platform; exit 1 if refused. |
 | `toolkit registry` | Container registry maintenance (tag pruning). |
 | `toolkit registry prune` | Prune ephemeral image tags (ADR-046). |
 | `toolkit secrets` | Unified secrets management (SOPS vaults, K8s secrets, audit). |
+| `toolkit secrets acme-token-scope` | Ask Cloudflare what the ACME DNS-01 token may do on each issuing zone (#2459). |
 | `toolkit secrets apply` | Decrypt SOPS secrets and apply as K8s Secrets to the cluster. |
 | `toolkit secrets audit` | Audit secrets completeness across environments. |
 | `toolkit secrets catalog` | List all secrets in the catalog with descriptions. |

@@ -1,0 +1,10 @@
+---
+# The OIDC signing key (#2377). Authelia's template filter (X_AUTHELIA_CONFIG_FILTERS)
+# reads it from the authelia-secrets mount, since a `_FILE` env var cannot fill a list
+# element (lesson-096). Its own file because this line is not YAML until Authelia
+# renders it, and tests load configuration.yml as YAML. Env-agnostic: prod inherits it.
+# No key_id: Authelia derives the kid from the key, so the one clients cached holds.
+identity_providers:
+  oidc:
+    jwks:
+      - key: {{ secret "/run/secrets/oidc_jwks_key" | mindent 10 "|" | msquote }}

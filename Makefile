@@ -48,6 +48,7 @@ help:
 	@echo "  make secrets-hash ENV=x Hash all OIDC client secrets"
 	@echo "  make secrets-show KEY=x SECRETS_ENV=y  Show a decrypted secret (default: common)"
 	@echo "  make secrets-audit      Audit secrets across all environments"
+	@echo "  make acme-token-scope   Ask Cloudflare what the ACME DNS-01 token may do (read-only)"
 	@echo "  make dev-full-reset     Full teardown + rebuild + restart"
 	@echo "  make dev-app APP=x      Start Astro app dev server (site)"
 	@echo "  make build-app APP=x    Build Astro app (static output)"
@@ -521,6 +522,12 @@ secrets-show:
 secrets-audit:
 	@$(TOOLKIT) secrets audit
 
+# Read-only: GETs against the Cloudflare API with the ACME token, which is used
+# and never printed. 403 on zone settings is the expected answer (#2459).
+.PHONY: acme-token-scope
+acme-token-scope:
+	@$(TOOLKIT) secrets acme-token-scope
+
 # Plan only. `APPLY=1` is what creates organizations and repositories for real —
 # opt-in because the first run mutates a live forge (TOOL-035, #1076).
 .PHONY: gitea-reconcile
@@ -962,15 +969,16 @@ rotate-spoke-token:
 # also arrive from somewhere this Makefile never ran.
 GH ?= gh
 DELIVERY_REPO ?= mlorentedev/kubelab
+# The products APP may name, one per line, from infra/config/products.yaml.
+PRODUCT_LIST ?= $(TOOLKIT) product list
 
 .PHONY: promote-prod
 promote-prod: ## Open the prod promotion PR for an app at a released semver tag (ADR-046)
 	@test -n "$(APP)" && test -n "$(VERSION)" || { \
-		echo "Usage: make promote-prod APP=web|api VERSION=1.12.0"; exit 2; }
-	@case "$(APP)" in \
-		web|api) ;; \
-		*) echo "Unknown APP '$(APP)' — expected web or api"; exit 2 ;; \
-	esac
+		echo "Usage: make promote-prod APP=<product> VERSION=1.12.0"; exit 2; }
+	@products="$$($(PRODUCT_LIST))" || { echo "Cannot read the product registry (infra/config/products.yaml)"; exit 2; }; \
+	printf '%s\n' $$products | grep -qxF -- '$(APP)' || { \
+		echo "Unknown APP '$(APP)' — expected one of:" $$products; exit 2; }
 	@[[ "$(VERSION)" =~ ^[0-9]+\.[0-9]+\.[0-9]+$$ ]] || { \
 		echo "VERSION '$(VERSION)' is not an immutable semver tag such as 1.12.0."; \
 		echo "Prod ships released semver only: no leading v, no mutable alias, no sha-* staging tag."; \
@@ -990,6 +998,7 @@ registry-prune: ## Prune stale sha-* image tags now, off the weekly schedule (DR
 # Usage:
 #   make provision NODE=ace1 ENV=staging                  Normal (uses Tailscale IP)
 #   make provision NODE=ace1 ENV=staging BOOTSTRAP=1      First run (uses LAN IP from common.yaml)
+#   make provision NODE=bee ENV=prod FORCE=1              Run although this checkout is behind origin/master (OPS-041)
 #   make provision NODE=ace2 ENV=staging TRANSPORT=bastion  From a non-mesh controller (TOOL-016, jump via VPS)
 #   make deploy TARGET=vps ENV=prod
 #   make deploy TARGET=k3s ENV=staging
@@ -997,13 +1006,15 @@ registry-prune: ## Prune stale sha-* image tags now, off the weekly schedule (DR
 
 .PHONY: provision
 provision:
-	@test -n "$(NODE)" || (echo "Usage: make provision NODE=<x, for infra/ansible/playbooks/provision-<x>.yml> [ENV=staging|prod|hub] [BOOTSTRAP=1] [TRANSPORT=bastion] [CHECK=1] [ASK_PASS=1] [TAGS=tag1,tag2] [EXTRA='k=v k2=v2']" && exit 1)
+	@test -n "$(NODE)" || (echo "Usage: make provision NODE=<x, for infra/ansible/playbooks/provision-<x>.yml> [ENV=staging|prod|hub] [BOOTSTRAP=1] [TRANSPORT=bastion] [CHECK=1] [ASK_PASS=1] [TAGS=tag1,tag2] [EXTRA='k=v k2=v2'] [FORCE=1]" && exit 1)
 	$(eval _ENV := $(or $(filter staging prod hub,$(ENV)),staging))
 	$(eval _K := $(if $(ASK_PASS),-K,))
 	$(eval _TAGS := $(if $(TAGS),--tags $(TAGS),))
 	$(eval _BOOT := $(if $(BOOTSTRAP),--bootstrap,))
 	$(eval _TRANSPORT := $(if $(TRANSPORT),--transport $(TRANSPORT),))
 	$(eval _CHECK := $(if $(CHECK),--check,))
+	# Refuse a checkout behind origin/master on what Ansible renders; only FORCE=1 overrides, FORCE=0 does not (OPS-041).
+	$(eval _FRESH := --require-fresh $(if $(filter 1,$(FORCE)),--force,))
 	# EXTRA passes Ansible extra-vars through for role switches that must be
 	# opted into per run rather than defaulted on -- e.g. a role that reboots
 	# the host. Without it the only way to set one is a raw ansible-playbook
@@ -1020,7 +1031,7 @@ provision:
 	# and a success would hide that.
 	@if [ -n "$(BOOTSTRAP)" ] || [ -n "$(TRANSPORT)" ]; then \
 		echo "=== Inventory for this run: $(if $(BOOTSTRAP),LAN IPs,mesh)$(if $(TRANSPORT), via $(TRANSPORT),) ==="; \
-		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_BOOT) $(_TRANSPORT) $(_K) $(_TAGS) $(_CHECK) $(_EXTRA); \
+		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_BOOT) $(_TRANSPORT) $(_K) $(_TAGS) $(_CHECK) $(_EXTRA) $(_FRESH); \
 		_exit=$$?; \
 		echo "=== Restoring: inventory with mesh Tailscale IPs ==="; \
 		$(TOOLKIT) infra ansible generate --env $(_ENV); \
@@ -1028,7 +1039,7 @@ provision:
 		[ $$_exit -ne 0 ] && exit $$_exit; \
 		exit $$_restore; \
 	else \
-		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_K) $(_TAGS) $(_CHECK) $(_EXTRA); \
+		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_K) $(_TAGS) $(_CHECK) $(_EXTRA) $(_FRESH); \
 	fi
 
 .PHONY: maintain

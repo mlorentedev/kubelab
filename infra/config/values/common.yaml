@@ -1091,6 +1091,12 @@ apps:
           # `REVIEWER_SCOPES`. Its account is in each organization's `reviewers`
           # team (read), never in `reconcilers`.
           reviewer: "write:issue,read:repository"
+          # The comment n8n posts when a review fails (TOOL-093, #1957), pinned by
+          # EQUALITY like the reviewer's. The workflow is behind a public route, so
+          # its token can write a comment and cannot read the code the comment is
+          # about. It is a second token on the reviewer's account; `tests/
+          # test_gitea_review_notice_token.py` ties it to `REVIEW_NOTICE_SCOPES`.
+          review_notice: "write:issue"
         # Repository organization (ADR-065, TOOL-035 #1076). Reconciled by
         # `toolkit.features.gitea_repos`: declared-and-missing is created,
         # existing-and-undeclared is REPORTED and never removed.

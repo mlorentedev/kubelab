@@ -252,7 +252,7 @@ def _started(fake: _Fake) -> bool:
 
 
 def _out(capsys) -> str:
-    return " ".join(capsys.readouterr().out.split())
+    return " ".join("".join(capsys.readouterr()).split())
 
 
 # --- compare ---------------------------------------------------------------

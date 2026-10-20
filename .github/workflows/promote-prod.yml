@@ -24,22 +24,24 @@ name: Promote Prod
 # REMEMBERING and not the GATE: a human still reviews and merges the PR, Argo CD
 # still syncs afterwards, ADR-046 is unchanged and auto-merge stays forbidden.
 # `workflow_dispatch` remains the path for a re-promote, a rollback, or `api`.
+#
+# THE REGISTRY DECIDES (IDP-042, #1815). Which apps exist and which event type
+# means which app are read from infra/config/products.yaml, not spelled here.
+# `repository_dispatch` therefore declares no `types`: every dispatch starts a
+# run, one whose event type the registry routes to the staging lane is skipped
+# as "not this lane", and one it does not know fails in red.
 on:
   workflow_dispatch:
     inputs:
       app:
-        description: Platform app to promote
-        type: choice
-        options:
-          - web
-          - api
+        description: A product registered in infra/config/products.yaml (web, api, ...)
+        type: string
         required: true
       version:
         description: 'Immutable semver image tag (e.g. 1.1.1) — must already exist in the registry'
         type: string
         required: true
   repository_dispatch:
-    types: [web-release-published]
 
 permissions:
   contents: write
@@ -52,6 +54,9 @@ permissions:
 # the `inputs` context is empty, so the bare form degrades to `promote-prod-`
 # and an automated promote would sit in a different group from a human promoting
 # web at the same moment — two runs racing a force-push to one branch name.
+# It is the one product name left in this file: the group is evaluated before
+# any step can ask the registry, and a test fails the day a second product has
+# a prod dispatch event (Q4).
 concurrency:
   group: promote-prod-${{ inputs.app || 'web' }}
   cancel-in-progress: false
@@ -79,18 +84,42 @@ jobs:
         id: target
         env:
           EVENT: ${{ github.event_name }}
+          # On a repository_dispatch, `action` is the event_type the sender POSTed.
+          EVENT_TYPE: ${{ github.event.action }}
           INPUT_APP: ${{ inputs.app }}
           INPUT_VERSION: ${{ inputs.version }}
           PAYLOAD_VERSION: ${{ github.event.client_payload.version }}
+          TOOLKIT: poetry run toolkit
         run: |
           set -euo pipefail
           case "$EVENT" in
             repository_dispatch)
-              # The app comes from the EVENT TYPE, not the payload:
-              # `web-release-published` means web. The sender does not get to
-              # choose which application is promoted to production, and the
-              # payload surface stays at exactly one field.
-              app=web
+              # The app comes from the EVENT TYPE, through the registry, not the
+              # payload: `web-release-published` means web because
+              # products.yaml says so. The sender does not get to choose which
+              # application is promoted to production, and the payload surface
+              # stays at exactly one field.
+              if ! route="$($TOOLKIT product app-for-event "$EVENT_TYPE" --json)"; then
+                # The CLI's own refusal is JSON; anything else (an import
+                # error, a missing poetry) is shown as it came.
+                reason="$(jq -er '"\(.error). \(.why) FIX: \(.fix)"' <<<"$route" 2>/dev/null)" \
+                  || reason="toolkit product app-for-event failed: ${route}"
+                echo "::error::${reason}"
+                exit 1
+              fi
+              # An answer that is not one JSON object must fail here. Read
+              # leniently, its lane would be empty, which is not `prod`, and a
+              # release would end green as "not this lane".
+              if ! lane="$(jq -er .lane <<<"$route" 2>/dev/null)"; then
+                echo "::error::toolkit product app-for-event answered no lane: ${route}"
+                exit 1
+              fi
+              if [ "$lane" != prod ]; then
+                echo "Event type '${EVENT_TYPE}' belongs to the staging lane: not this lane, nothing to promote"
+                echo "skip=true" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+              app="$(jq -r .app <<<"$route")"
               version="$PAYLOAD_VERSION"
               ;;
             *)
@@ -98,10 +127,14 @@ jobs:
               version="$INPUT_VERSION"
               ;;
           esac
-          case "$app" in
-            web|api) ;;
-            *) echo "::error::Unknown app '${app}' — expected web or api"; exit 1 ;;
-          esac
+          if ! products="$($TOOLKIT product list)"; then
+            echo "::error::toolkit product list failed: ${products}"
+            exit 1
+          fi
+          if ! grep -qxF -- "$app" <<<"$products"; then
+            echo "::error::Unknown app '${app}' — expected a product in infra/config/products.yaml: ${products//$'\n'/ }"
+            exit 1
+          fi
           # An immutable semver tag and nothing else. This value becomes a
           # command-line argument, a registry lookup and a git branch name.
           #
@@ -119,6 +152,7 @@ jobs:
           echo "Promoting ${app} to ${version} (trigger: ${EVENT})"
       - name: Promote app to prod
         id: promote
+        if: steps.target.outputs.skip != 'true'
         env:
           APP: ${{ steps.target.outputs.app }}
           VERSION: ${{ steps.target.outputs.version }}
@@ -126,6 +160,7 @@ jobs:
           poetry run toolkit deployment promote --env prod --app "$APP" --version "$VERSION"
       - name: Open prod promotion PR
         id: open-pr
+        if: steps.target.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           APP: ${{ steps.target.outputs.app }}

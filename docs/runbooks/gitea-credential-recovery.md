@@ -133,6 +133,12 @@ make provision NODE=bee ENV=prod                 # mint the replacement
 `TOKEN=admin` rotates the superadmin's `kubelab-reconciler` instead of the bot's
 `kubelab-provisioning`. Plan-only without `APPLY=1`, because `--apply` opens the outage below.
 
+`TOKEN=reviewer` rotates the PR reviewer's token, and `TOKEN=review_notice` the comment-only token on
+the same account that n8n uses to tell a PR its review failed (TOOL-093). That second one holds
+`write:issue` alone; after re-minting it, run `make import-n8n` so the workflow's credential carries
+the new value. Both live on one account, so a listing shows two tokens there and the scope check tells
+them apart by name.
+
 **Order is revoke-then-unset, and it is not arbitrary.** The two failure modes are not symmetric:
 revoke-then-failed-unset leaves the bot down *loudly*, with the remedy printed on screen;
 unset-then-failed-revoke leaves the gate open while the old token is still live, so the next

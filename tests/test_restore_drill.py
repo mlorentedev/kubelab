@@ -18,7 +18,7 @@ GOOD = {"short_id": "a59acffe", "time": "2026-10-02T00:01:11Z", "hostname": "kub
 
 
 def _out(capsys) -> str:
-    return " ".join(capsys.readouterr().out.split())
+    return " ".join("".join(capsys.readouterr()).split())
 
 
 def _restic(rc: int, out: str, calls: list | None = None):

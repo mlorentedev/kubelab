@@ -22,8 +22,11 @@ from __future__ import annotations
 import pathlib
 import shutil
 import subprocess
+import sys
 
 import pytest
+
+from toolkit.features import product_registry
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -42,12 +45,17 @@ STUB = "echo"
 # changes them into.
 STUBBED = ("GH", "POETRY", "TOOLKIT")
 
+# The one real command the harness lets through: the read-only registry query
+# `promote-prod` validates APP against (IDP-042). It writes nothing, and it is
+# set here rather than left to the Makefile because TOOLKIT is stubbed above.
+PRODUCT_LIST = f"PRODUCT_LIST={sys.executable} -m toolkit.main product list"
+
 pytestmark = pytest.mark.skipif(shutil.which("make") is None, reason="make is not installed")
 
 
 def _make(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(  # noqa: S603
-        ["make", *args, *(f"{var}={STUB}" for var in STUBBED)],
+        ["make", *args, *(f"{var}={STUB}" for var in STUBBED), PRODUCT_LIST],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
@@ -118,6 +126,51 @@ def test_an_app_the_platform_does_not_have_is_refused() -> None:
     proc = _make("promote-prod", "APP=errors", "VERSION=1.0.0")
     assert proc.returncode != 0
     assert "Unknown APP" in proc.stdout
+    assert not _dispatched(proc)
+
+
+def test_a_part_of_a_product_name_is_not_a_product() -> None:
+    """The match is on the whole line: `we` is not `web`."""
+    proc = _make("promote-prod", "APP=we", "VERSION=1.12.0")
+    assert proc.returncode == 2
+    assert "Unknown APP" in proc.stdout
+    assert not _dispatched(proc)
+
+
+def test_an_app_that_looks_like_a_grep_option_is_not_a_product() -> None:
+    """Without `--`, `-vweb` reaches grep as `-v -w -e b` and every product matches."""
+    proc = _make("promote-prod", "APP=-vweb", "VERSION=1.12.0")
+    assert proc.returncode == 2
+    assert "Unknown APP" in proc.stdout
+    assert not _dispatched(proc)
+
+
+@pytest.mark.parametrize("app", product_registry.platform_apps())
+def test_every_registered_product_is_dispatched(app: str) -> None:
+    proc = _make("promote-prod", f"APP={app}", "VERSION=1.12.0")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert f"-f app={app} " in proc.stdout
+
+
+def test_the_allowed_apps_are_read_from_the_registry() -> None:
+    """No product name is spelled in the recipe: admitting one is a registry entry (#1815)."""
+    recipe = (REPO_ROOT / "Makefile").read_text().split("\npromote-prod:", 1)[1].split("\n\n", 1)[0]
+    assert "$(PRODUCT_LIST)" in recipe
+    for app in product_registry.platform_apps():
+        assert app not in recipe.replace("$(APP)", ""), f"the promote-prod recipe still names {app!r}"
+
+
+def test_an_unreadable_registry_is_refused_as_such() -> None:
+    """A failed query must not read as "Unknown APP", which would send the operator after a typo."""
+    proc = subprocess.run(  # noqa: S603
+        ["make", "promote-prod", "APP=web", "VERSION=1.12.0", *(f"{var}={STUB}" for var in STUBBED), "PRODUCT_LIST=false"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert proc.returncode == 2
+    assert "Cannot read the product registry" in proc.stdout
     assert not _dispatched(proc)
 
 
