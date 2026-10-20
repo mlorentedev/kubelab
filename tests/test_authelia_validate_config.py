@@ -178,8 +178,8 @@ def test_the_rendered_config_uses_no_new_deprecated_key(overlay: str, docker_mou
     text = done.stdout + done.stderr
     parsed = DEPRECATED_KEY.findall(text)
     # Guard the guard: a pattern that matches nothing would pass every config. Every
-    # line that mentions a deprecation must be one it parsed, and a key the config
-    # still uses must be seen.
+    # line that mentions a deprecation must be one it parsed, and the positive control
+    # below proves the pattern hears a live warning.
     assert text.lower().count("deprecat") == len(parsed), f"unparsed deprecation output:\n{text}"
     deprecated = set(parsed)
     assert deprecated <= TOLERATED_DEPRECATIONS, (
