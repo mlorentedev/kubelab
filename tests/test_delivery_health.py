@@ -45,6 +45,7 @@ def _resolve(uses: str) -> dict[str, Any] | None:
 #: level up. See `delivery_health.SELF`.
 EXPECTED = {
     "delivery-health.yml",
+    "product-image-receiver.yml",
     "promote-prod.yml",
     "release.yml",
     "staging-deploy.yml",
