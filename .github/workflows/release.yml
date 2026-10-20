@@ -5,6 +5,13 @@ on:
   push:
     branches: [master]
   workflow_dispatch:
+    inputs:
+      # #2558: re-run the API publish for the current release when its release run failed.
+      # A flag, not a version: publishing an older version would move `:latest` backwards.
+      republish_api:
+        description: Re-publish the API image for the current release (.release-please-manifest.json)
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -42,15 +49,28 @@ jobs:
   publish-api:
     name: Publish API (re-tag staging digest)
     needs: release-please
-    if: needs.release-please.outputs.api_release_created == 'true'
+    if: >-
+      needs.release-please.outputs.api_release_created == 'true' ||
+      (github.event_name == 'workflow_dispatch' && inputs.republish_api)
     runs-on: ${{ fromJSON(vars.RUNNER_DOCKER || '"ubuntu-latest"') }}
     permissions:
       contents: read
     env:
       REGISTRY_PREFIX: ${{ vars.REGISTRY_PREFIX || 'kubelab' }}
-      VERSION: ${{ needs.release-please.outputs.api_version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+      - name: Resolve the version to publish
+        id: version
+        env:
+          RELEASED: ${{ needs.release-please.outputs.api_version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # A release run publishes what release-please just released. A re-publish
+          # (#2558) takes the current release from the manifest, and only if it exists.
+          VERSION="${RELEASED:-$(jq -r '."apps/api"' .release-please-manifest.json)}"
+          gh release view "api-v${VERSION}" --json tagName > /dev/null
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
         with:
           python-version: '3.12'
@@ -61,7 +81,11 @@ jobs:
       - name: Resolve staging-validated sha
         id: sha
         run: |
-          SHA="$(poetry run toolkit deployment image-tag --env staging --app api)"
+          # The toolkit logs to stdout (#2536), so on failure the reason is in $SHA.
+          if ! SHA="$(poetry run toolkit deployment image-tag --env staging --app api)"; then
+            echo "::error::Could not resolve the staging-validated api tag: $SHA"
+            exit 1
+          fi
           echo "Staging-validated tag for api: $SHA"
           echo "tag=$SHA" >> "$GITHUB_OUTPUT"
       - name: Login registry
@@ -73,6 +97,7 @@ jobs:
       - name: Re-tag digest as semver (build-once)
         env:
           SHA: ${{ steps.sha.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
           REGISTRY="${{ secrets.DOCKERHUB_USERNAME }}/${REGISTRY_PREFIX}-api"
