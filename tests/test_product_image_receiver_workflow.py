@@ -119,9 +119,9 @@ def test_the_tag_guard_is_the_shape_the_promotion_accepts() -> None:
 
 
 def test_the_branch_is_keyed_on_the_app() -> None:
+    """One branch per app, assigned once: a second assignment keyed on the tag is #1645."""
     body = _step("promote", "open-pr")["run"]
-    assert 'BRANCH="deploy/staging-${APP}"' in body
-    assert "${TAG}" not in body.split('BRANCH="', 1)[1].split('"', 1)[0], "a branch per tag is #1645"
+    assert re.findall(r"\bBRANCH=\S*", body) == ['BRANCH="deploy/staging-${APP}"']
 
 
 # --- the resolve step, executed -------------------------------------------------
