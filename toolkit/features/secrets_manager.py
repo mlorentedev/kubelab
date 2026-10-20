@@ -362,26 +362,6 @@ SECRET_CATALOG: list[SecretSpec] = [
         format_hint="PEM-encoded RSA private key",
         rotate_note="All OIDC clients must re-authenticate. Restart authelia.",
     ),
-    # The `kubelab-oidc` pair. No Authelia config registers that client and nothing reads
-    # these keys; `credentials generate` stopped minting them in #1777. They stay catalogued
-    # only until the vaults drop them, because an uncatalogued key fails `secrets audit`
-    # unless the orphan baseline lists it (#1777 AC3).
-    SecretSpec(
-        key_path=f"{_AUTH}.oidc_client_secret",
-        description="Retired kubelab-oidc client secret (plaintext); no consumer",
-        kind=SecretKind.OIDC_CLIENT_SECRET,
-        services=("authelia",),
-        rotate_note="No consumer: retire it (#1777 AC3) rather than rotate it.",
-    ),
-    SecretSpec(
-        key_path=f"{_AUTH}.oidc_client_secret_hash",
-        description="Argon2 hash of the retired kubelab-oidc client secret; no consumer",
-        kind=SecretKind.ARGON2_HASH,
-        services=("authelia",),
-        derived_from=f"{_AUTH}.oidc_client_secret",
-        format_hint="$argon2id$v=19$...",
-        rotate_note="No consumer: retire it with oidc_client_secret (#1777 AC3).",
-    ),
     SecretSpec(
         key_path=f"{_AUTH}.oidc_client_secret_grafana",
         description="Grafana OIDC client secret (plaintext)",
