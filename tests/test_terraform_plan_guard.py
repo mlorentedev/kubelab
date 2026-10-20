@@ -102,7 +102,7 @@ def _apply(plan: dict, **kwargs: object) -> tuple[int, _Terraform]:
 
 def test_a_refused_plan_exits_non_zero_names_the_taint_and_never_applies(capsys: pytest.CaptureFixture[str]) -> None:
     rc, fake = _apply(_plan(CREATE, TAINTED))
-    out = capsys.readouterr().out
+    out = "".join(capsys.readouterr())
     assert rc == 1 and "apply" not in fake.verbs
     assert "replace_because_tainted" in out
     assert "tf-untaint" in out

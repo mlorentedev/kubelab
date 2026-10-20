@@ -200,7 +200,7 @@ def _torn_down(fake: _Fake) -> bool:
 def test_a_good_restore_passes_names_the_snapshot_and_cleans_up(drill, capsys) -> None:
     fake = _Fake()
     assert drill(fake) is True
-    out = capsys.readouterr().out
+    out = "".join(capsys.readouterr())
     assert "beaa6d4b" in out and "restores Gitea completely" in out
     assert TOKEN not in out and "do-not-print" not in out
     assert _torn_down(fake)
@@ -217,7 +217,7 @@ def test_the_restored_server_has_no_network_and_runs_the_pinned_image(drill) -> 
 def test_a_corrupt_repository_fails_names_it_and_never_starts_a_server(drill, capsys) -> None:
     fake = _Fake(fsck_bad="resume.git")
     assert drill(fake) is False
-    assert "personal/resume: git fsck --full failed" in capsys.readouterr().out
+    assert "personal/resume: git fsck --full failed" in "".join(capsys.readouterr())
     assert not any(c[:2] == ["docker", "run"] and "-d" in c for c in fake.calls)
     assert _torn_down(fake)
 
@@ -225,21 +225,21 @@ def test_a_corrupt_repository_fails_names_it_and_never_starts_a_server(drill, ca
 def test_a_server_that_fails_to_start_is_still_removed_with_its_volumes(drill, capsys) -> None:
     fake = _Fake(run_rc=125)
     assert drill(fake) is False
-    assert "did not start" in capsys.readouterr().out
+    assert "did not start" in "".join(capsys.readouterr())
     assert _torn_down(fake)
 
 
 def test_a_server_that_never_answers_fails(drill, capsys) -> None:
     fake = _Fake(ready=False)
     assert drill(fake) is False
-    assert "did not answer" in capsys.readouterr().out
+    assert "did not answer" in "".join(capsys.readouterr())
     assert _torn_down(fake)
 
 
 def test_a_restored_head_live_does_not_know_fails(drill, capsys) -> None:
     fake = _Fake(heads={"manu/ImageSensorTool": {"main": "a1"}, "personal/resume": {"main": "forged"}})
     assert drill(fake) is False
-    assert "personal/resume" in capsys.readouterr().out
+    assert "personal/resume" in "".join(capsys.readouterr())
     assert _torn_down(fake)
 
 
@@ -247,7 +247,7 @@ def test_a_restored_head_live_does_not_know_fails(drill, capsys) -> None:
 def test_live_that_cannot_be_read_or_lists_nothing_is_cannot_check(drill, capsys, live) -> None:
     fake = _Fake()
     assert drill(fake, live) is False
-    assert "CANNOT CHECK" in capsys.readouterr().out
+    assert "CANNOT CHECK" in "".join(capsys.readouterr())
     assert not any(c[:2] == ["restic"] and "restore" in c for c in fake.calls)
 
 
@@ -278,14 +278,14 @@ def test_a_scratch_read_that_fails_is_cannot_check(drill, capsys) -> None:
         return original(argv, env=env)
 
     assert drill(failing) is False
-    assert "CANNOT CHECK" in capsys.readouterr().out
+    assert "CANNOT CHECK" in "".join(capsys.readouterr())
 
 
 def test_a_complete_restore_whose_container_is_left_behind_fails(drill, capsys) -> None:
     """`docker rm` failing must not pass silently: the container holds the restored forge."""
     fake = _Fake(rm_fails=True)
     assert drill(fake) is False
-    out = " ".join(capsys.readouterr().out.split())  # the logger wraps long lines
+    out = " ".join("".join(capsys.readouterr()).split())  # the logger wraps long lines
     assert "restores Gitea completely" in out  # the restore itself was fine
     assert "still on this machine" in out and "container giteadrill-" in out
     assert not fake.workdir.exists()  # the directory goes even when the container does not
@@ -298,7 +298,7 @@ def test_a_complete_restore_that_leaves_its_data_on_disk_fails(drill, capsys, mo
     fake = _Fake()
     assert drill(fake) is False
     assert fake.workdir is not None and fake.workdir.exists()
-    out = " ".join(capsys.readouterr().out.split())
+    out = " ".join("".join(capsys.readouterr()).split())
     assert "restores Gitea completely" in out
     assert "could not remove" in out and "delete it now" in out
 
@@ -311,7 +311,7 @@ def test_a_complete_restore_that_leaves_its_data_on_disk_fails(drill, capsys, mo
 def test_no_readable_snapshot_is_cannot_check(drill, capsys, snapshots) -> None:
     fake = _Fake(snapshots=snapshots)
     assert drill(fake) is False
-    out = " ".join(capsys.readouterr().out.split())
+    out = " ".join("".join(capsys.readouterr()).split())
     assert "CANNOT CHECK" in out and "no snapshot readable in" in out
     assert not any(c[:1] == ["restic"] and "restore" in c for c in fake.calls)
 
@@ -344,7 +344,7 @@ def test_a_restore_restic_cannot_finish_fails_names_it_and_never_starts_a_server
         return original(argv, env=env)
 
     assert drill(failing) is False
-    out = " ".join(capsys.readouterr().out.split())
+    out = " ".join("".join(capsys.readouterr()).split())
     assert "restic could not restore" in out and "unable to restore" in out
     assert not any(c[:2] == ["docker", "run"] and "-d" in c for c in fake.calls)
 

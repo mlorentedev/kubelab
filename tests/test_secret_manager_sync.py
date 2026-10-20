@@ -172,7 +172,7 @@ class TestADryRunSaysSo:
             patch("toolkit.features.configuration.ConfigurationManager") as cm,
         ):
             cm.return_value.get_merged_config.return_value = {"networking": {"gcp": {"project_id": "p"}}}
-            return CliRunner().invoke(app, argv).stdout
+            return CliRunner().invoke(app, argv).output
 
     def test_dry_run_uses_the_future_tense(self) -> None:
         out = self._render(dry_run=True)

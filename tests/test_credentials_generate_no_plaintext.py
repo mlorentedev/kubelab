@@ -97,7 +97,7 @@ def test_the_default_names_every_key_and_shows_no_value(
 
     manager.setup_authelia_secrets("prod")
 
-    out = _flat(capsys.readouterr().out)
+    out = _flat("".join(capsys.readouterr()))
     values = _secret_values(generated)
     assert len(values) >= 10, "the run generated too few secrets for this check to mean anything"
     assert not [v for v in values if _flat(v) in out], "a generated secret value reached stdout"
@@ -113,7 +113,7 @@ def test_values_are_printed_only_when_asked(
 
     manager.setup_authelia_secrets("prod", print_secrets=True)
 
-    out = _flat(capsys.readouterr().out)
+    out = _flat("".join(capsys.readouterr()))
     assert any(_flat(v) in out for v in _secret_values(generated)), "--print-secrets printed no value"
 
 
@@ -148,7 +148,7 @@ def test_a_failed_write_raises_and_prints_nothing(
     # the service is reconciled then, whatever happens to the hub write after it.
     assert bool(manager.reconciled) is (names == "common.enc.yaml"), manager.reconciled
 
-    out = _flat(capsys.readouterr().out)
+    out = _flat("".join(capsys.readouterr()))
     assert not [v for v in _secret_values(generated) if _flat(v) in out], "a failed write printed a secret"
 
 

@@ -127,7 +127,7 @@ def test_only_a_full_commit_id_reaches_the_remote_shell(sha) -> None:
 def test_each_exit_class_is_reported_as_itself(capsys, rc, expected, named) -> None:
     ok = drill_remote.run_remote("gitea", _gitea_inputs(), target=TARGET, sha=SHA, stream=_Stream(rc))
     assert ok is expected
-    out = " ".join(capsys.readouterr().out.split())
+    out = " ".join("".join(capsys.readouterr()).split())
     if named:
         assert named in out
     assert not [s for s in _all_secrets() if s in out]
@@ -180,7 +180,7 @@ def test_a_tree_origin_cannot_reproduce_refuses_before_any_ssh(monkeypatch, caps
     monkeypatch.setattr(gitea_drill, "resolve_inputs", lambda env, root: resolved.append(env) or _gitea_inputs())
     ok = drill_remote.drill_on_host("gitea", env="prod", host="ace2", project_root=REPO, git=git, stream=stream)
     assert ok is False
-    out = " ".join(capsys.readouterr().out.split())
+    out = " ".join("".join(capsys.readouterr()).split())
     assert "CANNOT CHECK" in out and named in out
     assert not stream.calls, "nothing may reach the host"
     assert not resolved, "SOPS is not opened for a run that cannot happen"
@@ -212,7 +212,7 @@ def test_a_host_the_config_cannot_place_is_cannot_check(monkeypatch, capsys, val
     assert not drill_remote.drill_on_host(
         "gitea", env="prod", host="ace2", project_root=REPO, git=_git(), stream=stream
     )
-    out = " ".join(capsys.readouterr().out.split())
+    out = " ".join("".join(capsys.readouterr()).split())
     assert "CANNOT CHECK" in out and named in out
     assert not stream.calls
 

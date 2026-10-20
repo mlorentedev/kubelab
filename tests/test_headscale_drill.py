@@ -271,7 +271,7 @@ def _started(fake: _Fake) -> bool:
 def test_a_good_restore_passes_names_the_snapshot_and_cleans_up(drill, capsys) -> None:
     fake = _Fake()
     assert drill(fake) is True
-    out = " ".join(capsys.readouterr().out.split())
+    out = " ".join("".join(capsys.readouterr()).split())
     assert "46f892f1" in out and "restores Headscale completely" in out
     assert "noise key: match" in out and "DERP key: match" in out
     assert "NOISE-KEY" not in out and "DERP-KEY" not in out and "mkey:" not in out
@@ -291,7 +291,7 @@ def test_the_restored_server_has_no_network_runs_as_the_caller_and_the_image_it_
 def test_a_capture_missing_a_file_fails_names_it_and_never_starts_a_server(drill, capsys, missing) -> None:
     fake = _Fake(missing=missing)
     assert drill(fake) is False
-    assert missing in capsys.readouterr().out
+    assert missing in "".join(capsys.readouterr())
     assert not _started(fake)
     assert _torn_down(fake)
 
@@ -299,7 +299,7 @@ def test_a_capture_missing_a_file_fails_names_it_and_never_starts_a_server(drill
 def test_a_corrupt_database_fails_and_never_starts_a_server(drill, capsys) -> None:
     fake = _Fake(corrupt_db=True)
     assert drill(fake) is False
-    assert "db.sqlite" in capsys.readouterr().out
+    assert "db.sqlite" in "".join(capsys.readouterr())
     assert not _started(fake)
     assert _torn_down(fake)
 
@@ -308,7 +308,7 @@ def test_a_corrupt_database_fails_and_never_starts_a_server(drill, capsys) -> No
 def test_a_key_that_differs_from_live_fails(drill, capsys, kwarg, label) -> None:
     fake = _Fake(**{kwarg: "privkey:SOMETHING-ELSE"})
     assert drill(fake) is False
-    out = " ".join(capsys.readouterr().out.split())
+    out = " ".join("".join(capsys.readouterr()).split())
     assert f"{label}: mismatch" in out
     assert "SOMETHING-ELSE" not in out
     assert _torn_down(fake)
@@ -317,21 +317,21 @@ def test_a_key_that_differs_from_live_fails(drill, capsys, kwarg, label) -> None
 def test_a_server_that_fails_to_start_is_still_removed(drill, capsys) -> None:
     fake = _Fake(run_rc=125)
     assert drill(fake) is False
-    assert "did not start" in capsys.readouterr().out
+    assert "did not start" in "".join(capsys.readouterr())
     assert _torn_down(fake)
 
 
 def test_a_server_that_never_answers_fails(drill, capsys) -> None:
     fake = _Fake(ready=False)
     assert drill(fake) is False
-    assert "did not answer" in capsys.readouterr().out
+    assert "did not answer" in "".join(capsys.readouterr())
     assert _torn_down(fake)
 
 
 def test_a_node_missing_from_the_restore_fails_and_is_named(drill, capsys) -> None:
     fake = _Fake(restored_nodes=[_node(2, "kubelab-vps", "mkey:v")])
     assert drill(fake) is False
-    assert "gcp1 (id 64)" in capsys.readouterr().out
+    assert "gcp1 (id 64)" in "".join(capsys.readouterr())
     assert _torn_down(fake)
 
 
@@ -346,14 +346,14 @@ def test_a_node_missing_from_the_restore_fails_and_is_named(drill, capsys) -> No
 )
 def test_live_that_cannot_be_read_is_cannot_check(drill, capsys, fake) -> None:
     assert drill(fake) is False
-    assert "CANNOT CHECK" in capsys.readouterr().out
+    assert "CANNOT CHECK" in "".join(capsys.readouterr())
     assert not any(c[:1] == ["restic"] and "restore" in c for c in fake.calls)
 
 
 def test_live_nodes_without_machine_keys_are_cannot_check(drill, capsys) -> None:
     fake = _Fake(live_nodes=[_node(2, "kubelab-vps", "")], restored_nodes=[_node(2, "kubelab-vps", "")])
     assert drill(fake) is False
-    out = " ".join(capsys.readouterr().out.split())
+    out = " ".join("".join(capsys.readouterr()).split())
     assert "CANNOT CHECK — live Headscale nodes could not be read: kubelab-vps has no machine_key" in out
     assert not any(c[:1] == ["restic"] and "restore" in c for c in fake.calls)
 
@@ -361,7 +361,7 @@ def test_live_nodes_without_machine_keys_are_cannot_check(drill, capsys) -> None
 def test_restored_nodes_without_machine_keys_are_cannot_check(drill, capsys) -> None:
     fake = _Fake(restored_nodes=[_node(2, "kubelab-vps", ""), _node(64, "gcp1", "mkey:g")])
     assert drill(fake) is False
-    out = " ".join(capsys.readouterr().out.split())
+    out = " ".join("".join(capsys.readouterr()).split())
     assert "CANNOT CHECK — the restored server's lists could not be read: kubelab-vps has no machine_key" in out
     assert _torn_down(fake)
 
@@ -369,7 +369,7 @@ def test_restored_nodes_without_machine_keys_are_cannot_check(drill, capsys) -> 
 def test_no_readable_snapshot_is_cannot_check(drill, capsys) -> None:
     fake = _Fake(snapshots="[]")
     assert drill(fake) is False
-    assert "CANNOT CHECK" in capsys.readouterr().out
+    assert "CANNOT CHECK" in "".join(capsys.readouterr())
 
 
 def test_the_drill_restores_the_path_the_capture_stages() -> None:
@@ -382,21 +382,21 @@ def test_the_drill_restores_the_path_the_capture_stages() -> None:
 def test_a_complete_restore_that_leaves_its_container_behind_fails(drill, capsys) -> None:
     fake = _Fake(rm_fails=True)
     assert drill(fake) is False
-    assert "still on this machine" in capsys.readouterr().out
+    assert "still on this machine" in "".join(capsys.readouterr())
 
 
 def test_a_complete_restore_that_leaves_the_keys_on_disk_fails(drill, capsys, monkeypatch) -> None:
     monkeypatch.setattr("toolkit.features.restore_drill.shutil.rmtree", lambda *a, **k: None)
     fake = _Fake()
     assert drill(fake) is False
-    assert "private keys, delete it now" in " ".join(capsys.readouterr().out.split())
+    assert "private keys, delete it now" in " ".join("".join(capsys.readouterr()).split())
 
 
 @pytest.mark.parametrize("exec_out", ["", "WRN something\n[]", json.dumps([{"given_name": "no-id"}])])
 def test_a_restored_list_that_cannot_be_read_is_cannot_check(drill, capsys, exec_out) -> None:
     fake = _Fake(exec_out=exec_out)
     assert drill(fake) is False
-    assert "CANNOT CHECK" in capsys.readouterr().out
+    assert "CANNOT CHECK" in "".join(capsys.readouterr())
     assert _torn_down(fake)
 
 
@@ -434,7 +434,7 @@ def test_the_drill_runs_the_image_volume_and_pool_the_ssot_declares(monkeypatch)
 def test_a_restored_user_list_that_fails_is_cannot_check_even_with_valid_output(drill, capsys) -> None:
     fake = _Fake(users_rc=1)
     assert drill(fake) is False
-    assert "CANNOT CHECK" in capsys.readouterr().out
+    assert "CANNOT CHECK" in "".join(capsys.readouterr())
     assert _torn_down(fake)
 
 
@@ -465,7 +465,7 @@ def test_read_live_returns_nodes_users_and_key_hashes() -> None:
 )
 def test_read_live_names_what_it_could_not_read(capsys, fake, named) -> None:
     assert read_live(fake, "manu@vps", "headscale_headscale_data") is None
-    out = " ".join(capsys.readouterr().out.split())
+    out = " ".join("".join(capsys.readouterr()).split())
     assert "CANNOT CHECK" in out and named in out
 
 
@@ -485,7 +485,7 @@ def test_run_drill_compares_against_the_given_state_and_opens_no_connection(tmp_
         sleep=lambda s: None,
         clock=lambda: float(next(ticks)),
     )
-    assert ok is True, capsys.readouterr().out
+    assert ok is True, "".join(capsys.readouterr())
     assert not [c for c in fake.calls if c[:1] == ["ssh"]], "the restore half must never reach the VPS"
 
 

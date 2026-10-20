@@ -211,7 +211,7 @@ class TestAnAbsentRegistrationIsAStateNotAFault:
             "an unregistered spoke failed the run. During the migration gcp1 holds "
             "no prod secret by design, so this would be red every time it runs."
         )
-        assert "prod" in result.stdout, "the unregistered spoke was not even reported"
+        assert "prod" in result.output, "the unregistered spoke was not even reported"
 
     def test_a_refused_credential_still_exits_nonzero(self) -> None:
         """The exemption must stay narrow: only the absent case, never a real fault."""

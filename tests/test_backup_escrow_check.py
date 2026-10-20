@@ -99,7 +99,7 @@ def test_an_output_format_it_cannot_read_is_not_reported_as_a_missing_password(
         return rc, out.replace("len=", "length: "), err
 
     assert be.check(NODES, secret=_sops().get, run=reformatted) is False
-    out = capsys.readouterr().out + caplog.text
+    out = "".join(capsys.readouterr()) + caplog.text
     assert "output format changed" in out
     assert "MISSING in the escrow" not in out
 
@@ -118,7 +118,7 @@ def test_a_renamed_password_field_is_not_diagnosed_as_an_empty_entry_alone(
         return rc, out.replace("data.login.password", "data.login.secret"), err
 
     assert be.check(NODES, secret=_sops().get, run=renamed) is False
-    out = capsys.readouterr().out + caplog.text
+    out = "".join(capsys.readouterr()) + caplog.text
     assert "data.login.password" in out
     assert "renamed" in out
 
@@ -127,7 +127,7 @@ def test_an_unreadable_escrow_fails_it_and_says_so(capsys: pytest.CaptureFixture
     escrow = Escrow()
     escrow.fail[be.escrow_id("beelink")] = (1, "bw serve: vault is locked")
     assert _check(escrow) is False
-    assert "dotf secrets unlock" in capsys.readouterr().out
+    assert "dotf secrets unlock" in "".join(capsys.readouterr())
 
 
 def test_a_password_missing_from_sops_fails_it() -> None:

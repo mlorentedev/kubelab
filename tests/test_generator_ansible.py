@@ -269,4 +269,4 @@ class TestRetiredCloudNodes:
         """
         AnsibleGenerator()._build_inventory(_networking())
 
-        assert "networking.aws is retired" in capsys.readouterr().out, "a retired node left the inventory silently"
+        assert "networking.aws is retired" in "".join(capsys.readouterr()), "a retired node left the inventory silently"

@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 604 | [A logger that writes to stdout makes every `--json` command one warning from corrupt](lesson-604-a-logger-that-writes-to-stdout-makes-every-json-command-one-warning-from-corrupt.md) | 2026-10-18 |
 | 590 | [A ruamel round-trip is lossless only for files written in one sequence style](lesson-590-a-ruamel-round-trip-is-lossless-only-for-files-written-in-one-sequence-style.md) | 2026-10-17 |
 | 570 | [pytest says whether a selector matched in its exit code, not in its collect output](lesson-570-pytest-says-whether-a-selector-matched-in-its-exit-code-not-in-its-collect-output.md) | 2026-10-14 |
 | 567 | [ssh ends an unknown and a changed host key with the same line](lesson-567-ssh-ends-an-unknown-and-a-changed-host-key-with-the-same-line.md) | 2026-10-13 |

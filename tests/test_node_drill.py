@@ -121,7 +121,7 @@ def _drill(fake: _Fake, sources: Optional[dict] = None) -> bool:
 
 
 def _said(capsys) -> str:
-    return " ".join(capsys.readouterr().out.split())
+    return " ".join("".join(capsys.readouterr()).split())
 
 
 def test_a_whole_restore_passes_and_says_what_it_checked(capsys) -> None:
@@ -146,7 +146,7 @@ def test_the_restore_reads_the_staged_source_and_never_a_live_path() -> None:
 
 def test_no_file_content_reaches_the_output(capsys) -> None:
     assert _drill(_Fake())
-    assert CONTENT not in capsys.readouterr().out
+    assert CONTENT not in "".join(capsys.readouterr())
 
 
 def test_a_corrupt_database_fails_by_name(capsys) -> None:

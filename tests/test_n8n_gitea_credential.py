@@ -102,7 +102,7 @@ def test_a_missing_token_fails_the_run_naming_the_path_and_leaving_the_others(
     The credentials that do not depend on it still land."""
     ok, kubectl = _run(vault=_without(_with_token(), TOKEN_PATH), monkeypatch=monkeypatch)
 
-    out = " ".join(capsys.readouterr().out.split())
+    out = " ".join("".join(capsys.readouterr()).split())
     assert ok is False
     assert TOKEN_PATH in out
     assert "credential:gitea-review-notice" not in kubectl.order()
@@ -115,7 +115,7 @@ def test_the_token_travels_on_stdin_never_argv_nor_the_terminal(
     _, kubectl = _run(vault=_with_token(), kubectl=_Kubectl(echo=True), monkeypatch=monkeypatch)
 
     assert TOKEN not in " ".join(" ".join(c) for c in kubectl.calls)
-    assert TOKEN not in capsys.readouterr().out
+    assert TOKEN not in "".join(capsys.readouterr())
 
 
 def test_a_workflow_with_its_own_webhook_credential_and_this_one_imports(
@@ -148,7 +148,7 @@ def test_a_reference_that_disagrees_with_the_registry_is_refused(
 
     assert ok is False
     assert "workflow:gitea-notifier" not in kubectl.order()
-    assert "is not imported by anything" in " ".join(capsys.readouterr().out.split())
+    assert "is not imported by anything" in " ".join("".join(capsys.readouterr()).split())
 
 
 def test_a_failed_smtp_import_does_not_hold_back_a_workflow_that_only_needs_the_gitea_credential(

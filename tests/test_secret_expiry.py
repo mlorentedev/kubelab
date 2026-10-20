@@ -226,7 +226,7 @@ class TestExpiryIsPartOfTheAudit:
         monkeypatch.setattr(cli, "_report_expiry", called)
         monkeypatch.setattr(cli, "_get_manager", MagicMock())
         result = CliRunner().invoke(cli.app, ["audit", "--env", "prod"])
-        assert called.called, f"the audit did not check expiry:\n{result.stdout}"
+        assert called.called, f"the audit did not check expiry:\n{result.output}"
 
     def test_an_unreachable_issuer_does_not_fail_the_audit(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """The audit's subject is which secrets are PRESENT. A network problem
@@ -241,8 +241,8 @@ class TestExpiryIsPartOfTheAudit:
         monkeypatch.setattr(cli, "_report_expiry", MagicMock(side_effect=RuntimeError("no network")))
         monkeypatch.setattr(cli, "_get_manager", MagicMock())
         result = CliRunner().invoke(cli.app, ["audit", "--env", "prod"])
-        assert result.exit_code == 0, result.stdout
-        assert "expiry not checked" in result.stdout
+        assert result.exit_code == 0, result.output
+        assert "expiry not checked" in result.output
 
 
 class TestTheSshTargetComesFromTheSSOT:

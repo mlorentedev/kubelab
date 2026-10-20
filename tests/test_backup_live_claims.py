@@ -81,33 +81,33 @@ def test_every_live_claim_ruled_passes(tmp_path: Path) -> None:
 def test_an_unruled_live_claim_fails_and_is_named(tmp_path: Path, capsys) -> None:
     run = _Run(0, _pvc_list(("kubelab", "n8n-data"), ("kube-system", "traefik")))
     assert check_claim_rulings(CONFIG, _kubeconfig(tmp_path), run) is False
-    assert "kube-system/traefik" in capsys.readouterr().out
+    assert "kube-system/traefik" in "".join(capsys.readouterr())
 
 
 def test_a_missing_kubeconfig_is_cannot_check_not_a_pass(tmp_path: Path, capsys) -> None:
     run = _Run(0, _pvc_list())
     assert check_claim_rulings(CONFIG, tmp_path / "absent", run) is False
-    assert "CANNOT CHECK" in capsys.readouterr().out
+    assert "CANNOT CHECK" in "".join(capsys.readouterr())
     assert run.calls == []
 
 
 def test_an_unreadable_cluster_is_cannot_check_not_a_pass(tmp_path: Path, capsys) -> None:
     run = _Run(1, "", "Unable to connect to the server")
     assert check_claim_rulings(CONFIG, _kubeconfig(tmp_path), run) is False
-    assert "CANNOT CHECK" in capsys.readouterr().out
+    assert "CANNOT CHECK" in "".join(capsys.readouterr())
 
 
 def test_an_empty_answer_is_cannot_check_not_a_pass(tmp_path: Path, capsys) -> None:
     """A cluster with state always has claims; zero means the read went wrong (lesson-416)."""
     assert check_claim_rulings(CONFIG, _kubeconfig(tmp_path), _Run(0, _pvc_list())) is False
-    assert "CANNOT CHECK" in capsys.readouterr().out
+    assert "CANNOT CHECK" in "".join(capsys.readouterr())
 
 
 def test_a_cluster_node_with_no_backups_declared_is_reported_and_skipped(tmp_path: Path, capsys) -> None:
     config = {**CONFIG, "backup": {"sources": {}, "excluded": {}}}
     run = _Run(0, _pvc_list(("kubelab", "n8n-data")))
     assert check_claim_rulings(config, _kubeconfig(tmp_path), run) is True
-    assert "declares no backups" in capsys.readouterr().out
+    assert "declares no backups" in "".join(capsys.readouterr())
     assert run.calls == []
 
 

@@ -189,7 +189,7 @@ class TestRunRefusesWithoutThePinnedFile:
         self._inventory(ansible_dir, missing, as_list=as_list)
         with pytest.raises(typer.Exit):
             self._run(monkeypatch)
-        out = "".join(capsys.readouterr().out.split())  # the console wraps long lines
+        out = "".join("".join(capsys.readouterr()).split())  # the console wraps long lines
         assert "".join(str(missing).split()) in out and "dotfiles" in out
 
     @pytest.mark.parametrize("as_list", [False, True], ids=["string", "list"])

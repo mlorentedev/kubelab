@@ -97,7 +97,7 @@ class TestSpokeUrlCLI:
 
         result = CliRunner().invoke(app, ["argo", "spoke-url", "--env", "staging"])
 
-        assert result.exit_code == 0, result.stdout
+        assert result.exit_code == 0, result.output
         assert result.stdout.strip() == expected
 
     def test_an_unknown_env_exits_nonzero_and_names_it(self) -> None:
@@ -108,7 +108,7 @@ class TestSpokeUrlCLI:
         result = CliRunner().invoke(app, ["argo", "spoke-url", "--env", "ghost"])
 
         assert result.exit_code != 0
-        assert "ghost" in result.stdout
+        assert "ghost" in result.output
 
     def test_missing_env_option_exits_nonzero(self) -> None:
         from typer.testing import CliRunner
