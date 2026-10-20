@@ -998,6 +998,7 @@ registry-prune: ## Prune stale sha-* image tags now, off the weekly schedule (DR
 # Usage:
 #   make provision NODE=ace1 ENV=staging                  Normal (uses Tailscale IP)
 #   make provision NODE=ace1 ENV=staging BOOTSTRAP=1      First run (uses LAN IP from common.yaml)
+#   make provision NODE=bee ENV=prod FORCE=1              Run although this checkout is behind origin/master (OPS-041)
 #   make provision NODE=ace2 ENV=staging TRANSPORT=bastion  From a non-mesh controller (TOOL-016, jump via VPS)
 #   make deploy TARGET=vps ENV=prod
 #   make deploy TARGET=k3s ENV=staging
@@ -1005,13 +1006,15 @@ registry-prune: ## Prune stale sha-* image tags now, off the weekly schedule (DR
 
 .PHONY: provision
 provision:
-	@test -n "$(NODE)" || (echo "Usage: make provision NODE=<x, for infra/ansible/playbooks/provision-<x>.yml> [ENV=staging|prod|hub] [BOOTSTRAP=1] [TRANSPORT=bastion] [CHECK=1] [ASK_PASS=1] [TAGS=tag1,tag2] [EXTRA='k=v k2=v2']" && exit 1)
+	@test -n "$(NODE)" || (echo "Usage: make provision NODE=<x, for infra/ansible/playbooks/provision-<x>.yml> [ENV=staging|prod|hub] [BOOTSTRAP=1] [TRANSPORT=bastion] [CHECK=1] [ASK_PASS=1] [TAGS=tag1,tag2] [EXTRA='k=v k2=v2'] [FORCE=1]" && exit 1)
 	$(eval _ENV := $(or $(filter staging prod hub,$(ENV)),staging))
 	$(eval _K := $(if $(ASK_PASS),-K,))
 	$(eval _TAGS := $(if $(TAGS),--tags $(TAGS),))
 	$(eval _BOOT := $(if $(BOOTSTRAP),--bootstrap,))
 	$(eval _TRANSPORT := $(if $(TRANSPORT),--transport $(TRANSPORT),))
 	$(eval _CHECK := $(if $(CHECK),--check,))
+	# Refuse a checkout behind origin/master on what Ansible renders; only FORCE=1 overrides, FORCE=0 does not (OPS-041).
+	$(eval _FRESH := --require-fresh $(if $(filter 1,$(FORCE)),--force,))
 	# EXTRA passes Ansible extra-vars through for role switches that must be
 	# opted into per run rather than defaulted on -- e.g. a role that reboots
 	# the host. Without it the only way to set one is a raw ansible-playbook
@@ -1028,7 +1031,7 @@ provision:
 	# and a success would hide that.
 	@if [ -n "$(BOOTSTRAP)" ] || [ -n "$(TRANSPORT)" ]; then \
 		echo "=== Inventory for this run: $(if $(BOOTSTRAP),LAN IPs,mesh)$(if $(TRANSPORT), via $(TRANSPORT),) ==="; \
-		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_BOOT) $(_TRANSPORT) $(_K) $(_TAGS) $(_CHECK) $(_EXTRA); \
+		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_BOOT) $(_TRANSPORT) $(_K) $(_TAGS) $(_CHECK) $(_EXTRA) $(_FRESH); \
 		_exit=$$?; \
 		echo "=== Restoring: inventory with mesh Tailscale IPs ==="; \
 		$(TOOLKIT) infra ansible generate --env $(_ENV); \
@@ -1036,7 +1039,7 @@ provision:
 		[ $$_exit -ne 0 ] && exit $$_exit; \
 		exit $$_restore; \
 	else \
-		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_K) $(_TAGS) $(_CHECK) $(_EXTRA); \
+		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_K) $(_TAGS) $(_CHECK) $(_EXTRA) $(_FRESH); \
 	fi
 
 .PHONY: maintain
