@@ -128,6 +128,7 @@ def test_the_branch_is_keyed_on_the_app() -> None:
 
 _GH_STUB = """#!/usr/bin/env bash
 echo "$*" >> "$GH_CALLS"
+if [ -n "${STUB_NOISE:-}" ]; then echo "$STUB_NOISE" >&2; fi
 case "$*" in
   *"/commits/"*)
       if [ -n "${STUB_COMMIT_ERROR:-}" ]; then
@@ -249,6 +250,17 @@ def test_a_dispatch_resolves_the_app_its_repository_and_the_commit(tmp_path: pat
         "dry_run": "false",
     }
     assert calls and all(" repos/mlorentedev/third" in call for call in calls), calls
+    assert os.listdir(tmp_path / "work") == [], "the resolve step wrote a file"
+
+
+@_needs_bash
+@_needs_jq
+def test_a_notice_gh_prints_on_stderr_is_not_read_as_its_answer(tmp_path: pathlib.Path, toolkit_stub: str) -> None:
+    """gh announces upgrades on stderr; captured with the answer, a valid tag would read as no commit."""
+    code, out, log, _ = _dispatch(tmp_path, toolkit_stub, STUB_NOISE="A new release of gh is available: 2.0 -> 3.0")
+
+    assert code == 0, log
+    assert out["sha"] == FULL
     assert os.listdir(tmp_path / "work") == [], "the resolve step wrote a file"
 
 

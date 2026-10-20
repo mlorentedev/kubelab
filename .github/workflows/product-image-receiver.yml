@@ -118,6 +118,9 @@ jobs:
           field() {
             jq -er --arg key "$1" '.[$key] // empty' <<<"$answer" 2>/dev/null
           }
+          # stdout is gh's answer; stderr (an upgrade notice, an HTTP error) is
+          # read only when the call failed, or a notice would become the answer.
+          gh_err="$(mktemp)"
 
           case "$EVENT" in
             repository_dispatch)
@@ -179,21 +182,21 @@ jobs:
 
           # The spike (verification.md, AC7): GitHub answers 422 for an unknown and
           # an ambiguous short sha alike, so one refusal names both.
-          if ! sha="$(gh api "repos/${repository}/commits/${short}" --jq .sha 2>&1)"; then
+          if ! sha="$(gh api "repos/${repository}/commits/${short}" --jq .sha 2>"$gh_err")"; then
             refuse "tag '${tag}' does not resolve to exactly one commit of ${repository}" \
-              "GitHub answers the same for an unknown and an ambiguous short sha: ${sha}" \
+              "GitHub answers the same for an unknown and an ambiguous short sha: $(cat "$gh_err")" \
               "dispatch the tag of a commit on the default branch, with more hex digits if two commits share them"
           fi
           if [[ ! "$sha" =~ ^[0-9a-f]{40}$ || "$sha" != "$short"* ]]; then
             refuse "tag '${tag}' resolved to '${sha}', which is not a commit starting with ${short}" \
               "the contract must be read at the image's own commit" "dispatch the tag the product's CI published"
           fi
-          if ! default_branch="$(gh api "repos/${repository}" --jq .default_branch 2>&1)"; then
-            refuse "cannot read the default branch of ${repository}" "it answered: ${default_branch}" \
+          if ! default_branch="$(gh api "repos/${repository}" --jq .default_branch 2>"$gh_err")"; then
+            refuse "cannot read the default branch of ${repository}" "it answered: $(cat "$gh_err")" \
               "re-run once the API answers"
           fi
-          if ! status="$(gh api "repos/${repository}/compare/${default_branch}...${sha}" --jq .status 2>&1)"; then
-            refuse "cannot compare ${sha} with ${repository}'s ${default_branch}" "it answered: ${status}" \
+          if ! status="$(gh api "repos/${repository}/compare/${default_branch}...${sha}" --jq .status 2>"$gh_err")"; then
+            refuse "cannot compare ${sha} with ${repository}'s ${default_branch}" "it answered: $(cat "$gh_err")" \
               "re-run once the API answers"
           fi
           # identical: the branch's head. behind: merged, and the branch moved on.
