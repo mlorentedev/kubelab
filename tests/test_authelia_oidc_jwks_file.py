@@ -22,6 +22,8 @@ from typing import Any
 import pytest
 import yaml
 
+from toolkit.features.k8s_secrets import SECRET_DEFINITIONS
+
 REPO = Path(__file__).resolve().parent.parent
 OVERLAYS = ("staging", "prod")
 JWKS_FILE = "oidc-jwks.yml"
@@ -71,7 +73,9 @@ def test_the_kid_stays_derived(overlay: str) -> None:
     """
     files, _ = _authelia(overlay)
     text = files[JWKS_FILE]
-    assert not re.search(r"^\s*(- )?key_id:", text, re.MULTILINE), f"{overlay}: a key_id would change the kid clients cached"
+    assert not re.search(r"^\s*(- )?key_id:", text, re.MULTILINE), (
+        f"{overlay}: a key_id would change the kid clients cached"
+    )
     assert len(re.findall(r"^\s*- key:", text, re.MULTILINE)) == 1, f"{overlay}: expected exactly one signing key"
 
 
@@ -82,5 +86,15 @@ def test_the_template_reads_a_key_the_secret_carries(overlay: str) -> None:
     assert len(paths) == 1, f"{overlay}: expected one secret reference, found {paths}"
     directory, name = paths[0].rsplit("/", 1)
     assert directory == "/run/secrets", f"{overlay}: {paths[0]} is not under the Secret mount"
-    secret_keys = (REPO / "toolkit/features/k8s_secrets.py").read_text()
-    assert f'"{name}":' in secret_keys, f"{overlay}: the authelia-secrets Secret has no key {name!r}"
+    # The keys apply-secrets writes into the Secret mounted at /run/secrets, read from the
+    # mapping itself rather than by grepping its source.
+    mapping = next(m for m in SECRET_DEFINITIONS if m.name == "authelia-secrets")
+    assert name in mapping.keys, f"{overlay}: the authelia-secrets Secret has no key {name!r}"
+
+
+@pytest.mark.parametrize("overlay", OVERLAYS)
+def test_only_the_key_file_holds_template_syntax(overlay: str) -> None:
+    """The filter renders every loaded file, so a literal `{{` elsewhere would be evaluated."""
+    files, _ = _authelia(overlay)
+    templated = sorted(n for n, text in files.items() if "{{" in text or "}}" in text)
+    assert templated == [JWKS_FILE], f"{overlay}: template syntax outside {JWKS_FILE}: {templated}"
