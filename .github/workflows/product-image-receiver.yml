@@ -7,7 +7,7 @@ name: Product Image Receiver
 # which repository its contract (`kubelab.yaml`) is fetched from; the contract is
 # read at the image's own commit, validated against the registry and the
 # platform, rendered into values/staging.yaml, and offered as one long-lived
-# staging PR per app, exactly as web-image-receiver.yml does for web.
+# staging PR per app.
 #
 # THE REGISTRY DECIDES (Q5). `repository_dispatch` declares no `types`: every
 # dispatch starts a run, an event type the registry does not know fails in red,
@@ -323,12 +323,12 @@ jobs:
             echo "No staging changes to promote (${APP} already at ${TAG})"; exit 0
           fi
 
-          # One stable branch per app, force-updated to the newest sha, with its PR
-          # created once and patched thereafter (DELIVERY-005, #1645). The reasons
-          # for each line below are in web-image-receiver.yml, which this mirrors:
-          # the lookup runs before the push so a failure leaves the offer and its
-          # title agreeing, and `--force` is safe because the job is the branch's
-          # only writer this group admits.
+          # ONE STABLE BRANCH PER APP, not one per sha (DELIVERY-005, #1645).
+          # Keying the branch on the sha minted a pull request per image: of 104
+          # `chore(staging): deploy` PRs, 67 were closed as superseded and one was
+          # a genuine "hold staging". One long-lived offer, force-updated to the
+          # newest sha, keeps the gate (ADR-037): merging moves staging, leaving it
+          # open keeps staging where it is. `allow_auto_merge` stays false.
           BRANCH="deploy/staging-${APP}"
           TITLE="chore(staging): deploy ${APP} ${TAG}"
           BODY="Staging promotion of \`${APP}\` to \`${TAG}\` (ADR-046, cross-repo dispatch from ${REPOSITORY}).
@@ -340,14 +340,30 @@ jobs:
           the newest \`sha-*\` and rewrites this title. Merging it moves staging;
           leaving it open keeps staging where it is (ADR-037)."
 
+          # The lookup runs BEFORE the push. The title must name the sha on offer,
+          # because someone merges a long-lived PR by its title; pushing first and
+          # then failing to reach the API would leave new content under an old
+          # title. Asked first, a failure ends the step (`bash -e`) with the
+          # remote untouched.
           PR=$(gh api \
             "repos/${GITHUB_REPOSITORY}/pulls?state=open&head=${GITHUB_REPOSITORY%%/*}:${BRANCH}" \
             --jq '.[0].number // ""')
 
           git checkout -B "$BRANCH"
           git commit -m "$TITLE"
+
+          # `--force`, NOT `--force-with-lease`. `actions/checkout` fetches only
+          # the ref it checks out, so there is no remote-tracking value for the
+          # branch and a lease is refused with `(stale info)`; fetching first to
+          # arm it makes it compare against what was just fetched (lesson-430).
+          # What protects the branch is that nothing else writes it: this job is
+          # serialised per app (`product-receiver-<app>`) and the ref is
+          # machine-owned.
           git push origin "$BRANCH" --force
 
+          # `state=open` above is what makes a closed PR recoverable: a PR closed
+          # to hold staging reads as absent, so the next image opens a fresh one.
+          # Closing means "not now", never "never again".
           if [ -n "$PR" ]; then
             gh api -X PATCH "repos/${GITHUB_REPOSITORY}/pulls/${PR}" \
               -f title="$TITLE" -f body="$BODY" --jq '.html_url'
