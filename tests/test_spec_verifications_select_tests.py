@@ -62,7 +62,6 @@ UNWRITTEN = frozenset(
         "GITOPS-003-f2",
         "GITOPS-003-f3",
         "GITOPS-003-f6",
-        "IDP-042-product-contract-registry-f4",
         "TOOL-080-forge-pr-reviewer-f8",
     }
 )

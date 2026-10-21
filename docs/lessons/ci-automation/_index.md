@@ -5,6 +5,7 @@ Newest first. Back to [all categories](../_index.md).
 | # | Lesson | Date |
 |---|---|---|
 | 608 | [A workflow that stages a tool's output by name misses the file the tool learns to write](lesson-608-a-workflow-that-stages-a-tools-output-by-name-misses-the-file-the-tool-learns-to-write.md) | 2026-10-20 |
+| 607 | [Two receivers on one dispatch event race one branch, so the flip and the demotion ship together](lesson-607-two-receivers-on-one-dispatch-event-race-one-branch-so-the-flip-and-the-demotion-ship-together.md) | 2026-10-20 |
 | 602 | [A spending weight is not an order, so a chain derived from it put the slowest model first](lesson-602-a-spending-weight-is-not-an-order-so-a-chain-derived-from-it-put-the-slowest-model-first.md) | 2026-10-18 |
 | 601 | [A reviewer that sends no max_tokens inherits the provider's completion cap, and loses the review to its own reasoning](lesson-601-a-reviewer-that-sends-no-max-tokens-inherits-the-providers-completion-cap-and-loses-the-review-to-its-own-reasoning.md) | 2026-10-18 |
 | 600 | [Node runs an n8n Code node that the pinned runtime rejects, and an empty last node answers the caller 500](lesson-600-node-runs-an-n8n-code-node-that-the-pinned-runtime-rejects-and-an-empty-last-node-answers-the-caller-500.md) | 2026-10-18 |

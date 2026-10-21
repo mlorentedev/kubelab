@@ -155,6 +155,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit product` | Validate and render kubelab.yaml product contracts, and read the product registry (ADR-067). |
 | `toolkit product app-for-event` | Name the app a dispatch event type belongs to; exit 1 if the registry maps it to none. |
 | `toolkit product list` | List the registered products, in registry order. |
+| `toolkit product ready` | Check the contract at the commit staging runs, as the generic receiver would; exit 1 if it would refuse. |
 | `toolkit product render` | Render a contract into apps.platform.<app>; without a flag, print the contract-owned keys. |
 | `toolkit product show` | Print where a product comes from: its forge, repository and receiver; exit 1 if unregistered. |
 | `toolkit product validate` | Validate a product contract against the schema, and with --registry against the platform; exit 1 if refused. |
