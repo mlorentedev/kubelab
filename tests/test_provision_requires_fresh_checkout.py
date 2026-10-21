@@ -214,7 +214,9 @@ def _provision_commands(*extra: str) -> str:
         check=False,
     )
     assert done.returncode == 0, done.stderr
-    return "\n".join(line for line in done.stdout.splitlines() if "infra ansible run" in line)
+    commands = "\n".join(line for line in done.stdout.splitlines() if "infra ansible run" in line)
+    assert commands, "no `infra ansible run` line in the dry run, so a negative check would pass on nothing"
+    return commands
 
 
 def test_make_provision_always_asks_for_the_guard() -> None:
@@ -230,5 +232,36 @@ def test_force_zero_or_empty_does_not_override(value: str) -> None:
 
 def test_force_one_overrides() -> None:
     commands = _provision_commands("FORCE=1")
+    assert "--require-fresh" in commands
+    assert "--force" in commands
+
+
+def _deploy_commands(*extra: str) -> str:
+    done = subprocess.run(
+        ["make", "-n", "deploy", "TARGET=vps", "ENV=prod", *extra],
+        cwd=_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert done.returncode == 0, done.stderr
+    commands = "\n".join(line for line in done.stdout.splitlines() if "infra ansible run" in line)
+    assert commands, "no `infra ansible run` line in the dry run, so a negative check would pass on nothing"
+    return commands
+
+
+def test_make_deploy_always_asks_for_the_guard() -> None:
+    commands = _deploy_commands()
+    assert "--require-fresh" in commands
+    assert "--force" not in commands
+
+
+@pytest.mark.parametrize("value", ["0", ""])
+def test_deploy_force_zero_or_empty_does_not_override(value: str) -> None:
+    assert "--force" not in _deploy_commands(f"FORCE={value}")
+
+
+def test_deploy_force_one_overrides() -> None:
+    commands = _deploy_commands("FORCE=1")
     assert "--require-fresh" in commands
     assert "--force" in commands
