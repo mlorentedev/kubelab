@@ -36,9 +36,12 @@ def test_a_dispatch_can_republish_the_current_release() -> None:
     # A flag, not a free-text version: a re-publish of an older version would move
     # `:latest` backwards, so the only version it can publish is the current release.
     assert inputs["republish_api"]["type"] == "boolean"
-    condition = _job()["if"]
-    assert "api_release_created == 'true'" in condition, "the normal release path is gone"
-    assert "inputs.republish_api" in condition and "workflow_dispatch" in condition
+    # The whole expression, not its parts: an `&&` in place of the `||` keeps every
+    # substring and disables the re-publish path (#2564 review).
+    assert " ".join(_job()["if"].split()) == (
+        "needs.release-please.outputs.api_release_created == 'true' || "
+        "(github.event_name == 'workflow_dispatch' && inputs.republish_api)"
+    )
 
 
 def test_a_republish_takes_the_manifest_version_and_requires_its_release() -> None:
