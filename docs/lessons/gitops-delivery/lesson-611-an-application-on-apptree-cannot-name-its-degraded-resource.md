@@ -26,26 +26,33 @@ you could see, so they got the blame.
 
 Neither half of that blame holds:
 
-- Argo CD v3.4.1's `resource_customizations/batch/CronJob/health.lua` judges
-  only the last execution. A CronJob is `Degraded` when it has no active Job
-  and `lastSuccessfulTime < lastScheduleTime`. Retained Jobs never enter the
-  check.
-- The Jobs are children of the CronJob, not managed resources, so they do not
-  count towards the Application's health.
+- The hub overrides CronJob health. `infra/helm/argocd/values.yaml` sets
+  `resource.customizations.health.batch_CronJob` to always return `Healthy`,
+  which replaces upstream's last-execution rule
+  (`resource_customizations/batch/CronJob/health.lua` at v3.4.1). A CronJob
+  here cannot be `Degraded` at all.
+- `resource.customizations.health.batch_Job` grades a Job `Degraded` once it
+  has a failure. But a Job created by a CronJob is a child in the resource
+  tree, not a managed resource. Argo CD computes the Application's health from
+  managed resources only, so a failed Job colours its node in the UI and never
+  the Application.
 
-On 2026-10-21 all three CronJobs were healthy by that rule. The single
-managed workload failing was the `vikunja` Deployment, with `Available=False`
-and `ProgressDeadlineExceeded` (#1783).
+On 2026-10-21 the single managed workload failing was the `vikunja`
+Deployment, with `Available=False` and `ProgressDeadlineExceeded` (#1783).
+The three CronJobs had also succeeded at their last runs: every
+`lastSuccessfulTime` was at or after its `lastScheduleTime`.
 
 **Solution**: To diagnose a `Degraded` Application on `appTree`, read the
 managed kinds on the spoke and apply Argo's own health rule to each. Do not
 guess from what the Application lists. The toolkit already has read helpers
 for this: `cronjob_run.get_cronjob` for each CronJob's `lastScheduleTime` and
 `lastSuccessfulTime`, and `_run_kubectl get deploy` for the Deployment
-`Available`/`Progressing` conditions. Before proposing a fix, check the
-resource kind's health rule at the Argo CD version the hub runs
-(`resource_customizations/<group>/<kind>/health.lua` at that tag). That
-rule, not a plausible story about history limits, is what decides health.
+`Available`/`Progressing` conditions. Before proposing a fix, read the
+health rule that actually applies. Check this repo's
+`resource.customizations.health.*` first, then upstream's
+`resource_customizations/<group>/<kind>/health.lua` at the hub's version.
+Also check whether the kind is managed at all. That, not a plausible story
+about history limits, is what decides health.
 
 **Related**: lesson-609 (Application health is deliberately not a condition of
 `make verify-product`), #2580, #1783.
