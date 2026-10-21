@@ -1,0 +1,35 @@
+version: 1
+run_id: ap-20261021-kubelab-idp042
+armed_by: manu
+armed_at: 2026-10-21T14:45:00Z
+expires_at: 2026-10-21T21:00:00Z
+objective: "Close IDP-042 follow-up debt that needs no operator decision, and prepare the IDP-042 closeout."
+scope:
+  write_paths:
+    ["toolkit/**", "tests/**", "docs/**", "specs/**", "infra/config/**", ".agent/runs/**"]
+  frozen_paths:
+    - ".github/**"
+    - "harness/**"
+    - "**/AGENTS.md"
+    - "CLAUDE.md"
+    - "infra/config/secrets/**"
+    - "toolkit/features/oidc_clients.py"
+    - "toolkit/features/credentials.py"
+  max_files: 10
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make, poetry]
+queue:
+  source: bitacora
+  filter: >-
+    IDP-042 follow-ups #2574 #2572 #2571 #2511 (#2573 excluded: OIDC lane, ADR-073),
+    plus the #1926 closeout review
+  max_items: 5
+budget:
+  max_iterations: 8
+  max_minutes_per_iteration: 40
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant
+  push: true
+  open_pr: true
+  advisor_tier: top
