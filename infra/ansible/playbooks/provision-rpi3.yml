@@ -168,12 +168,15 @@
       # here. Sharing node_maintenance's tag makes the unsafe scoping
       # unreachable rather than merely documented, which is the difference
       # between a rule and a comment. Asserted in tests/test_node_notify_role.py.
-      tags: [maintenance]
+      # `services` and `uptime_kuma` too: rpi3_services' allowlist unit pages
+      # through this template (#2482), so `TAGS=uptime_kuma` must install it, and
+      # node_maintenance with it, as `agent_stack` does on ace2.
+      tags: [maintenance, services, uptime_kuma]
 
     # ANSIBLE-035: install-only (maintenance_run_cleanup: false) — cleanup
     # runs on the timer's own weekly schedule, not synchronously on every
     # provisioning run. See roles/node_maintenance/defaults/main.yml.
     - role: ../roles/node_maintenance
-      tags: [maintenance]
+      tags: [maintenance, services, uptime_kuma]
       vars:
         maintenance_run_cleanup: false
