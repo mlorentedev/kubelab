@@ -249,6 +249,10 @@ class TestVerify:
         verdict, lines = _run([_app(sync="OutOfSync", phase="Failed", op_revision=HEAD, message=msg)], [SERVED_OK])
         assert verdict is Verdict.FAILED
         assert any(msg in line for line in lines)
+        # The deadline path also ends FAILED with the message; only this one
+        # returns without waiting and names the manual re-sync.
+        assert not any("deadline" in line for line in lines)
+        assert any("make sync-app" in line for line in lines)
 
     def test_never_synced_at_head_is_red_at_the_deadline_with_the_message(self) -> None:
         msg = "Skipping auto-sync: failed previous sync attempt"
