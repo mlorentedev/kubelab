@@ -9,22 +9,21 @@ created: "2026-08-27"
 >
 > **Inline markers**: `[P]` — no dependency on another unchecked task; `[AC<n>]` — helps satisfy acceptance criterion `<n>` in `proposal.md` (lets `/spec check` map coverage deterministically).
 >
-> **Shape**: five atomic PRs, each ≤300 LOC, in the order below. PR1 and PR2 are independent of the hook measurement; PR3 is not.
+> **Shape**: five atomic PRs, each ≤300 LOC. **Order revised 2026-10-20 with the operator: PR4 first** (unblocked, offline-testable), then PR1 → PR2 once the PAT exists, PR3 once web#435 serves `commit` on staging, PR5 with PR1's token.
 
 ## Setup
 
-- [ ] Branch created from master: `feat/gitops-003-argo-sync-smoke-test` (worktree `kubelab-gitops003-wt`)
+- [x] ✓ 2026-10-20 Branch created from master: `feat/gitops-003-verify-staging` (worktree `worktrees/kubelab/feat-gitops-003-verify-staging`) for PR4
 - [x] `proposal.md` is complete and acceptance criteria are testable
 - [x] Risk 1 resolved — measured 2026-08-27 from an ephemeral pod on `ace1`: both the hairpin and `traefik.kube-system.svc` reach the API; **decision: service + `--connect-to`** (recorded in `proposal.md`, Risks §1).
-- [ ] Risk 2 resolved — PAT (fine-grained, `statuses:write` on kubelab, expiry set) vs GitHub App. Record the decision and the rotation path.
+- [x] ✓ 2026-08-28 Risk 2 resolved — fine-grained PAT (`statuses:write` on kubelab, expiry set), SOPS + `make apply-secrets ENV=prod`, no Argo CD restart (#1478 comment). Minting it is an operator step, still pending 2026-10-20.
 - [x] Risk 3 resolved — measured 2026-08-27: `timeout.reconciliation=120s`; merge→sync lag over 7 syncs = 0–6 min → **N = 10 min** (recorded in `proposal.md`).
 
 ## Implementation
 
 ### PR1 — Argo CD publishes a commit status per sync (AC1, AC5)
 
-- [ ] [P] [AC5] Write failing test: render `trigger.on-sync-succeeded` / `on-sync-failed` with `operationState == nil` and with an empty `syncResult`; assert no expr-lang error and no false fire
-- [ ] [AC5] Guard the trigger expressions so the test passes
+- [x] ✓ 2026-08-22 [AC5] Nil guard and per-revision `oncePer` (`?.`, nil-safe for an empty `syncResult`) landed with #1276, held structurally by `tests/test_argocd_notification_triggers.py`
 - [ ] [AC1] Write failing test: `template.github-status-*` renders a `POST /repos/mlorentedev/kubelab/statuses/<revision>` body with `state`, `context: argocd/<app>`, `description` (≤140 chars, from `operationState.message`), `target_url`
 - [ ] [AC1] Add `service.webhook.github` + the two templates + subscriptions to `infra/helm/argocd/values.yaml`; token placeholder in the SOPS-managed notifications secret (lesson-013: applied by `toolkit secrets apply`, never by Argo)
 - [ ] [AC1] Apply on the hub (`make deploy-argocd` path), sync, and verify by consequence: `gh api repos/mlorentedev/kubelab/commits/<head>/status` shows `argocd/kubelab-staging`
@@ -33,7 +32,7 @@ created: "2026-08-27"
 
 - [ ] [P] [AC2] Write failing tests for `toolkit infra argo wait-status --sha --context --timeout`: `success` → 0; `failure` → non-zero with the description printed; no status after timeout → non-zero with "no status arrived" (GitHub API simulated)
 - [ ] [AC2] Implement `wait-status` in `toolkit/features/argo_manager.py`
-- [ ] [AC2] Add `.github/workflows/deploy-verify.yml`: `on: push` to `master`, paths `infra/k8s/overlays/{staging,prod}/**`, one job per touched env, timeout N; failure message links the runbook section (AC7)
+- [ ] [AC2] Add `.github/workflows/deploy-verify.yml`, one job per touched env, timeout N; failure message links the runbook section (AC7). **Trigger: NOT `on: push`.** Per Manu's decision on #1619 (2026-10-20) staging deploy PRs will be merged by a workflow, and a merge made with `GITHUB_TOKEN` starts no `on: push` workflow, so the check would silently never run after an unattended merge, the one case it is the compensating control for. Use `on: status` (the `argocd/kubelab-<env>` status Argo posts with its PAT does start workflows) plus a `schedule` sweep for the no-status case, or `workflow_run`; and a test asserting the trigger is not `push` alone
 - [ ] [AC2] Real runs recorded in `verification.md`: replay against `1489265` (red) and the next healthy merge (green)
 
 ### PR3 — `PostSync` hook probes the route (AC3) — blocked on Setup/Risk 1
@@ -42,12 +41,12 @@ created: "2026-08-27"
 - [ ] [AC3] Extend `toolkit/features/generator_k8s.py` + `infra/k8s/templates/` so the test passes; regenerate both overlays (drift gate stays clean)
 - [ ] [AC3] Real run on staging recorded in `verification.md`: healthy → `Succeeded`, Job gone; forced failure (point the probe at `/`, which is nginx) → `Failed` + status `failure`
 
-### PR4 — operator path (AC4, AC7)
+### PR4 — operator path (AC4, AC7) — first, `feat/gitops-003-verify-staging`
 
-- [ ] [P] [AC4] Write failing test for `toolkit infra argo verify-web --env`: exit 0 only on `Synced` at `origin/master` HEAD + `Succeeded` + `text/plain`; else non-zero printing `operationState.message`
-- [ ] [AC4] Implement it; add `make verify-web ENV=staging|prod` (uses the ADR-052 kubeconfig)
-- [ ] [AC7] Runbook section "deploy-verify is red": read the message → `make sync-app` → `make restart-argocd` only on a repeated panic; link it from lesson-407 and from the workflow failure message
-- [ ] [AC4] Run `make verify-web` in both envs today; paste the output in `verification.md`
+- [x] ✓ 2026-10-20 [P] [AC4] Write failing tests `tests/test_product_verify.py`: the Application classification (Synced at HEAD + Succeeded → ready; a failed operation at HEAD → failed at once with its message; a sync revision behind HEAD → wait), the served-payload classification (`commit` match, mismatch, `"local"`, absent → not verifiable; semver against `version`), the pinned tag read from the rendered overlay, the host from the contract with in-tree/unregistered apps refused, and the loop's exit codes 0/1/2/3 against a fake clock
+- [x] ✓ 2026-10-20 [AC4] Implement `toolkit/features/product_verify.py` + `toolkit infra argo verify-product --app --env --timeout`; add `make verify-product APP=<app> ENV=staging|prod` (hub kubeconfig, ADR-052)
+- [x] ✓ 2026-10-20 [AC4] Run `make verify-product APP=web` in both envs; paste the output in `verification.md` (expected 2026-10-20: exit 3 in both, web#435 not shipped)
+- [ ] [AC7] Runbook section "deploy-verify is red" (moves to PR2, where the workflow that links it is born)
 
 ### PR5 — the token cannot expire silently (AC6)
 

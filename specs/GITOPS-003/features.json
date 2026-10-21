@@ -22,8 +22,8 @@
   },
   {
     "id": "GITOPS-003-f4",
-    "behavior": "make verify-web ENV=staging exits 0 only when the Application is Synced at origin/master HEAD, Succeeded, and a malformed POST /api/subscribe answers 400 text/plain",
-    "verification": "make verify-web ENV=staging",
+    "behavior": "make verify-product APP=<app> ENV=<env> exits 0 only when kubelab-<env> is Synced at origin/master HEAD with operationState Succeeded and the contract host's /version.json serves the pinned tag; 1 on failure, 2 when it cannot check, 3 when commit is absent (not verifiable yet)",
+    "verification": "poetry run pytest tests/test_product_verify.py -q --no-cov && make verify-product APP=web ENV=staging",
     "state": "pending",
     "evidence": ""
   },

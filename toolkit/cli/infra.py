@@ -628,6 +628,60 @@ def argo_hub_resume(
         logger.warning("dry-run — nothing was changed")
 
 
+@argo_app.command("verify-product")
+def argo_verify_product(
+    app: Annotated[str, typer.Option("--app", "-a", help="A contract-managed product in infra/config/products.yaml")],
+    env: Annotated[str, typer.Option("--env", "-e", help="staging or prod")],
+    timeout: Annotated[float, typer.Option("--timeout", help="Seconds to wait for both consequences")] = 600.0,
+    kubeconfig: Annotated[
+        str,
+        typer.Option("--kubeconfig", help="Hub kubeconfig path (env: KUBECONFIG_HUB)", envvar="KUBECONFIG_HUB"),
+    ] = str(output_path("hub")),
+) -> None:
+    """Verify a product is deployed at origin/master HEAD by consequence (GITOPS-003, #1478).
+
+    Waits until kubelab-<env> is Synced at HEAD with its last operation
+    Succeeded, then until https://<contract host>/version.json serves the tag
+    pinned at HEAD. Exit 0 = verified, 1 = failed (a failed operation at HEAD,
+    or no match by the deadline), 2 = the hub, the host or the expected state
+    could not be read, 3 = the host serves no `commit` (not verifiable yet,
+    never a pass).
+    """
+    import subprocess
+
+    from toolkit.features import product_verify as pv
+
+    if env not in ("staging", "prod"):
+        logger.error("--env must be staging or prod")
+        raise typer.Exit(int(pv.Verdict.CANNOT_CHECK))
+    logger.section(f"verify-product — {app} on kubelab-{env} at origin/master")
+    try:
+        head = pv.origin_head()
+        tag, url = pv.targets_at(head, app, env)
+    except (subprocess.CalledProcessError, KeyError, ValueError) as exc:
+        logger.error(f"CANNOT CHECK: the expected state at origin/master could not be read: {exc}")
+        raise typer.Exit(int(pv.Verdict.CANNOT_CHECK)) from exc
+    logger.info(f"HEAD {head[:7]}: expecting {url} to serve {tag}")
+
+    verdict, lines = pv.verify(
+        head=head,
+        tag=tag,
+        read_app=lambda: pv.read_application(f"kubelab-{env}", kubeconfig),
+        fetch_served=lambda: pv.fetch_version_json(url),
+        timeout=timeout,
+    )
+    report = logger.success if verdict is pv.Verdict.VERIFIED else logger.error
+    for line in lines:
+        report(f"  {line}")
+    if verdict is pv.Verdict.VERIFIED:
+        logger.success(f"VERIFIED: {app} on kubelab-{env} serves {tag} at {head[:7]}")
+    elif verdict is pv.Verdict.NOT_VERIFIABLE:
+        logger.warning(f"NOT VERIFIABLE YET: {app} serves no `commit` in {pv.VERSION_PATH}. This is not a pass.")
+    else:
+        logger.error(f"{verdict.name}: {app} on kubelab-{env} is not verified at {head[:7]}")
+    raise typer.Exit(int(verdict))
+
+
 @argo_app.command("check-spokes")
 def argo_check_spokes(
     kubeconfig: Annotated[
