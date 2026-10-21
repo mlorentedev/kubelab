@@ -48,9 +48,14 @@ class Declaration:
     name: str
     check: str
     env: str
-    files: tuple[str, ...]
+    values_file: str
+    overlay_files: tuple[str, ...]
     version_path: tuple[str, ...]
     tag_pattern: re.Pattern[str]
+
+    @property
+    def files(self) -> tuple[str, ...]:
+        return (self.values_file, *self.overlay_files)
 
 
 @dataclass(frozen=True)
@@ -74,15 +79,18 @@ def load_declaration(path: Path) -> Declaration:
         raise DeclarationError(f"cannot read the mechanical declaration from {path}: {exc}") from exc
     if not isinstance(block, dict):
         raise DeclarationError(f"{path} declares no `mechanical` block")
-    name, check, env, tag_pattern = (block.get(k) for k in ("name", "check", "env", "tag_pattern"))
-    files, version_path = block.get("files"), block.get("version_path")
-    if not all(isinstance(v, str) and v for v in (name, check, env, tag_pattern)) or not all(
-        isinstance(v, list) and v and all(isinstance(i, str) and i for i in v) for v in (files, version_path)
+    name, check, env, values_file, tag_pattern = (
+        block.get(k) for k in ("name", "check", "env", "values_file", "tag_pattern")
+    )
+    overlay_files, version_path = block.get("overlay_files"), block.get("version_path")
+    if not all(isinstance(v, str) and v for v in (name, check, env, values_file, tag_pattern)) or not all(
+        isinstance(v, list) and v and all(isinstance(i, str) and i for i in v) for v in (overlay_files, version_path)
     ):
         raise DeclarationError(
-            f"{path}: `mechanical` needs non-empty name, check, env, tag_pattern, files[] and version_path[]"
+            f"{path}: `mechanical` needs non-empty name, check, env, values_file, overlay_files[], "
+            "tag_pattern and version_path[]"
         )
-    assert isinstance(files, list) and isinstance(version_path, list) and isinstance(tag_pattern, str)
+    assert isinstance(overlay_files, list) and isinstance(version_path, list) and isinstance(tag_pattern, str)
     if "{app}" not in version_path:
         raise DeclarationError(f"{path}: `mechanical.version_path` must name the app as `{{app}}`")
     try:
@@ -93,7 +101,8 @@ def load_declaration(path: Path) -> Declaration:
         name=str(name),
         check=str(check),
         env=str(env),
-        files=tuple(files),
+        values_file=str(values_file),
+        overlay_files=tuple(overlay_files),
         version_path=tuple(version_path),
         tag_pattern=pattern,
     )
@@ -139,7 +148,7 @@ def classify_diff(
     if any(c.get("status") != "modified" for c in changes):
         return Shape(NOT_MECHANICAL, "a declared file was added, removed or renamed, not modified")
 
-    values_path, *overlay_paths = decl.files
+    values_path, overlay_paths = decl.values_file, decl.overlay_files
     try:
         values = _leaves(yaml.safe_load(before[values_path]), yaml.safe_load(after[values_path]))
         overlay: list[tuple[tuple[Any, ...], Any, Any]] = []

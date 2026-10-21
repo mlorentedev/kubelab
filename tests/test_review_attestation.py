@@ -234,11 +234,11 @@ class TestExempt:
     def test_the_staging_files_alone_no_longer_exempt(self, registry: dict) -> None:
         """DELIVERY-004 (#1619): the file-only staging signature exempted ANY change
         confined to the two files. Staging now needs the deploy-shape verdict."""
-        files = [{"path": p} for p in registry["mechanical"]["files"]]
+        files = [{"path": p} for p in [registry["mechanical"]["values_file"], *registry["mechanical"]["overlay_files"]]]
         assert classify(pr(files=files), registry).state == "pending"
 
     def test_a_mechanical_verdict_at_the_head_sha_exempts(self, registry: dict) -> None:
-        files = [{"path": p} for p in registry["mechanical"]["files"]]
+        files = [{"path": p} for p in [registry["mechanical"]["values_file"], *registry["mechanical"]["overlay_files"]]]
         shape = {"verdict": "mechanical", "head_sha": "a" * 40, "reason": "web x -> y"}
         v = classify(pr(files=files, headRefOid="a" * 40), registry, shape)
         assert v.state == "exempt"
@@ -257,7 +257,7 @@ class TestExempt:
     )
     def test_any_other_verdict_does_not_exempt(self, registry: dict, shape) -> None:
         """A verdict about another commit says nothing about this one."""
-        files = [{"path": p} for p in registry["mechanical"]["files"]]
+        files = [{"path": p} for p in [registry["mechanical"]["values_file"], *registry["mechanical"]["overlay_files"]]]
         assert classify(pr(files=files, headRefOid="a" * 40), registry, shape).state == "pending"
 
     def test_a_proper_subset_of_a_signature_is_not_exempt(self, registry: dict) -> None:
@@ -444,7 +444,7 @@ def test_no_reviewer_is_named_in_the_module() -> None:
     # registry, never in either module that applies it.
     for module in ("review_attestation.py", "deploy_shape.py"):
         code = (REPO_ROOT / "toolkit/features" / module).read_text(encoding="utf-8").casefold()
-        for path in registry["mechanical"]["files"]:
+        for path in [registry["mechanical"]["values_file"], *registry["mechanical"]["overlay_files"]]:
             assert path.casefold() not in code, f"{path} is hardcoded in {module}; it belongs in the registry"
 
 

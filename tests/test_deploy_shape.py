@@ -219,7 +219,7 @@ class TestDeclaration:
 
     @pytest.mark.parametrize(
         "block",
-        [None, {}, {"env": "staging"}, {"env": "staging", "files": [], "version_path": [], "tag_pattern": ""}],
+        [None, {}, {"env": "staging"}, {"env": "staging", "values_file": "", "overlay_files": [], "version_path": [], "tag_pattern": ""}],
     )
     def test_a_malformed_declaration_refuses(self, tmp_path: pathlib.Path, block: Any) -> None:
         import json

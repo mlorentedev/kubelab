@@ -113,8 +113,8 @@
     "name": "staging deploy (single app)",
     "check": "deploy-shape",
     "env": "staging",
-    "files": [
-      "infra/config/values/staging.yaml",
+    "values_file": "infra/config/values/staging.yaml",
+    "overlay_files": [
       "infra/k8s/overlays/staging/generated/deployments.yaml"
     ],
     "version_path": [
@@ -124,6 +124,6 @@
       "version"
     ],
     "tag_pattern": "^sha-[0-9a-f]{7,40}$",
-    "why": "The class a generated staging deploy PR belongs to (DELIVERY-004, #1619; operator decision 2026-10-20, conditions (a)-(d)). It replaces the file-only `staging deploy (single app)` exempt signature, which exempted ANY change confined to these two files, a resource limit or an image repository included. Membership is decided by toolkit/features/deploy_shape.py from master's code: exactly these files, both modified; one values leaf, `version_path` with `{app}` an entry of infra/config/products.yaml, moving to a tag matching `tag_pattern`; overlay changes only in `image` leaves from <repo>:<old> to <repo>:<new>; and the tag's commit on the product's default branch. The check publishes the verdict for people to see; review-attestation and the merge job recompute it rather than reading the check, because a PR can publish a check of the same name. Staging only: prod keeps its operator merge and its own signature (#1741). Widening any field here widens what merges without a human, so tests pin every one of them."
+    "why": "The class a generated staging deploy PR belongs to (DELIVERY-004, #1619; operator decision 2026-10-20, conditions (a)-(d)). It replaces the file-only `staging deploy (single app)` exempt signature, which exempted ANY change confined to these two files, a resource limit or an image repository included. `values_file` takes the one-leaf rule and `overlay_files` the image-only rule; they are separate keys so that no list order decides which file gets which. Membership is decided by toolkit/features/deploy_shape.py from master's code: exactly these files, both modified; one values leaf, `version_path` with `{app}` an entry of infra/config/products.yaml, moving to a tag matching `tag_pattern`; overlay changes only in `image` leaves from <repo>:<old> to <repo>:<new>; and the tag's commit on the product's default branch. The check publishes the verdict for people to see; review-attestation and the merge job recompute it rather than reading the check, because a PR can publish a check of the same name. Staging only: prod keeps its operator merge and its own signature (#1741). Widening any field here widens what merges without a human, so tests pin every one of them."
   }
 }

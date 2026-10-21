@@ -103,3 +103,15 @@ jobs:
             -f "output[summary]=${reason:-no verdict was written}" \
             -f details_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" >/dev/null
           echo "deploy-shape: ${conclusion} (${reason:-no verdict})"
+
+      # Fails the JOB only when the predicate could not answer, as
+      # review-attestation does: `not-mechanical` is a verdict and lives in the
+      # check-run; `unknown` is the gate malfunctioning, and a green job over it
+      # would deliver "could not tell" as silence.
+      - name: Fail the run only when the shape could not be judged
+        env:
+          CODE: ${{ steps.judge.outputs.code }}
+        run: |
+          if [ "$CODE" = "0" ] || [ "$CODE" = "1" ]; then exit 0; fi
+          echo "::error::deploy-shape could not judge this PR (exit ${CODE:-none})"
+          exit 2
