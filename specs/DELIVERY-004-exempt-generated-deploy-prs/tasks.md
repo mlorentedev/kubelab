@@ -27,8 +27,8 @@ created: "2026-09-04"
 
 ## PR 2 — widening tests (AC4, AC5)
 
-- [ ] [AC4] Golden test on the `mechanical` declaration; mutation proof per field.
-- [ ] [AC5] Prod unreachable: predicate refuses prod files and semver tags; declaration admits only `staging`.
+- [x] [AC4] Golden test on the `mechanical` declaration; mutation proof per field ✓ 2026-10-21
+- [x] [AC5] Prod unreachable: predicate refuses prod files and semver tags; declaration admits only `staging` ✓ 2026-10-21
 
 ## PR 3 — the merge step, switch off (AC6)
 
