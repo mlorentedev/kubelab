@@ -157,7 +157,12 @@ The operator's (a)-(d) are the contract; each AC names which it proves.
 - [ ] **AC7** — The switch flips in its own PR only after: GITOPS-003's PR 2
   (`deploy-verify.yml` on `status` + schedule, with the `argocd/kubelab-staging` status)
   and #2584 have landed, and several green assert-only runs on real deploy PRs are
-  linked on #1619. Rollback is reverting that PR.
+  linked on #1619. Rollback is reverting that PR. State on 2026-10-21: #2584 closed by
+  #2591 (`verify-product` exits 4 when a later merge supersedes the tag); `toolkit infra
+  argo wait-status` landed with #2590. Still missing: #2594, which makes Argo CD post the
+  `argocd/<app>` statuses (operator PAT pending), and `deploy-verify.yml` itself. Until
+  #2594 lands, every wait on an `argocd/*` context exits 1 by design, so no run can be
+  green yet.
 - [ ] **AC8** — Measurement, not promise: whether CodeRabbit and Codex still spend quota
   on deploy PRs, reported on #1619.
 
