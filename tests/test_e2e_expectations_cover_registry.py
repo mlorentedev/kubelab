@@ -53,3 +53,33 @@ def test_the_expectation_agrees_with_the_contract_on_authentication(snapshot: pa
         f"{snapshot.stem}: the contract says auth: {auth}, "
         f"tests/e2e/expectations.py says auth_protected={EXPECTATIONS[snapshot.stem].auth_protected}"
     )
+
+
+def test_an_unreachable_target_skips_only_the_tests_under_tests_e2e(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The skip once matched "e2e" anywhere in the path, so it also skipped this file, and every
+    test of a checkout whose directory name contains it, silently."""
+    from tests.e2e import conftest as e2e_conftest
+
+    class _Item:
+        def __init__(self, path: pathlib.Path) -> None:
+            self.path = path
+            self.markers: list[pytest.MarkDecorator] = []
+
+        def add_marker(self, marker: pytest.MarkDecorator) -> None:
+            self.markers.append(marker)
+
+    class _Config:
+        def getoption(self, name: str, default: str = "") -> str:
+            return "staging"
+
+    monkeypatch.setattr(e2e_conftest, "_CONNECTIVITY_DOMAINS", {"staging": "probe.invalid"})
+    monkeypatch.setattr(e2e_conftest, "_can_resolve", lambda host: False)
+    inside = _Item(e2e_conftest._E2E_DIR / "test_health.py")
+    outside = _Item(tmp_path / "wt-e2e-ticket" / "tests" / "test_e2e_named.py")
+
+    e2e_conftest.pytest_collection_modifyitems(_Config(), [inside, outside])  # type: ignore[arg-type]
+
+    assert len(inside.markers) == 1
+    assert outside.markers == []
