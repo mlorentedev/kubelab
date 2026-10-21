@@ -2,11 +2,14 @@
 
 They read files and print results: no SOPS key, no network, no forge. The
 receiver workflow fetches the contract; these commands only judge it (D8).
+``ready`` is the one exception: the operator's gate before a product moves to
+the generic receiver reads the product repository through ``gh``.
 ``list`` and ``app-for-event`` answer from the product registry
 (``infra/config/products.yaml``) for the callers that cannot import it: the
 Makefile and the workflows.
 """
 
+import dataclasses
 import json
 from pathlib import Path
 from typing import Annotated
@@ -14,7 +17,7 @@ from typing import Annotated
 import typer
 import yaml
 
-from toolkit.features import product_registry, product_render
+from toolkit.features import product_ready, product_registry, product_render
 from toolkit.features.product_contract import ContractError, validate_contract
 from toolkit.features.product_guards import validate_registered
 
@@ -156,3 +159,23 @@ def show(
         typer.echo(json.dumps({"ok": True, "app": name, **fields}))
     else:
         typer.echo("\n".join(f"{key}: {value}" for key, value in fields.items() if value is not None))
+
+
+@app.command("ready")
+def ready(
+    name: Annotated[str, typer.Option("--app", help="A registered product with a remote repository")],
+    as_json: Annotated[bool, typer.Option("--json", help="Print one JSON object instead of text")] = False,
+) -> None:
+    """Check the contract at the commit staging runs, as the generic receiver would; exit 1 if it would refuse."""
+    try:
+        answer = product_ready.check_ready(name)
+    except ContractError as e:
+        if as_json:
+            typer.echo(json.dumps({"ok": False, **e.as_dict()}))
+        else:
+            typer.echo(str(e), err=True)
+        raise typer.Exit(1) from None
+    if as_json:
+        typer.echo(json.dumps({"ok": True, **dataclasses.asdict(answer)}))
+    else:
+        typer.echo(f"OK: {answer.repository} carries a valid kubelab.yaml at {answer.tag} ({answer.sha})")
