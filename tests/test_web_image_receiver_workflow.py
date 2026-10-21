@@ -65,6 +65,20 @@ def _executable_lines() -> str:
     return "\n".join(line for line in _step()["run"].splitlines() if not line.strip().startswith("#"))
 
 
+# --- the cutover (IDP-042 PR 7) ------------------------------------------------
+
+
+def test_the_dispatch_no_longer_reaches_this_workflow() -> None:
+    """web is `receiver: generic`; two receivers on one event would race `deploy/staging-web`.
+
+    `workflow_dispatch` stays only so the file is a valid workflow until PR 8 deletes it.
+    It carries no tag, so the guard below refuses a manual run before the promotion.
+    """
+    workflow = yaml.safe_load(RECEIVER.read_text(encoding="utf-8"))
+    triggers = workflow.get("on", workflow.get(True))
+    assert set(triggers) == {"workflow_dispatch"}, triggers
+
+
 # --- what the change removes -------------------------------------------------
 
 
