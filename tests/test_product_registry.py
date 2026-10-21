@@ -124,15 +124,32 @@ class TestAppForEvent:
 
         Its event types and repository are a two-repo agreement: mlorentedev/web's CI
         dispatches these types to this repository. Rename one side and GitHub still
-        answers 204, then drops the event, so nothing errors. The staging type is also
-        the one ``web-image-receiver.yml`` listens for.
+        answers 204, then drops the event, so nothing errors.
         """
         web = product_registry.load_registry().products["web"]
-        assert (web.repository, web.forge, web.receiver) == ("mlorentedev/web", "github", "legacy")
+        assert (web.repository, web.forge, web.receiver) == ("mlorentedev/web", "github", "generic")
         assert (web.events.staging, web.events.prod) == ("web-image-published", "web-release-published")
-        receiver = yaml.safe_load((REPO / ".github" / "workflows" / "web-image-receiver.yml").read_text())
-        triggers = receiver.get("on") or receiver.get(True)
-        assert web.events.staging in triggers["repository_dispatch"]["types"]
+
+    def test_every_staging_event_has_exactly_one_receiver(self) -> None:
+        """A legacy product is received by the one workflow that lists its event; a generic one by none.
+
+        The generic receiver lists no `types`, so it sees every event and skips a legacy
+        product. A workflow that still lists a generic product's event would race it for
+        `deploy/staging-<app>`, which is why the flip and the demotion share PR 7.
+        """
+        listening: dict[str, list[str]] = {}
+        # GitHub runs both extensions; a `.yaml` listener missed here is the race itself.
+        workflows = REPO / ".github" / "workflows"
+        for path in sorted([*workflows.glob("*.yml"), *workflows.glob("*.yaml")]):
+            workflow = yaml.safe_load(path.read_text())
+            dispatch = (workflow.get("on") or workflow.get(True) or {}).get("repository_dispatch") or {}
+            for event in dispatch.get("types", []) if isinstance(dispatch, dict) else []:
+                listening.setdefault(event, []).append(path.name)
+        for name, entry in product_registry.load_registry().products.items():
+            if entry.events is None or entry.events.staging is None:
+                continue
+            expected = 1 if entry.receiver == "legacy" else 0
+            assert len(listening.get(entry.events.staging, [])) == expected, (name, listening)
 
 
 class TestLoadRefuses:

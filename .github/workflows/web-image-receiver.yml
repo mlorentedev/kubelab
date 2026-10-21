@@ -19,10 +19,16 @@ name: Web Image Receiver
 # PRs against one genuine decline (DELIVERY-005, #1645).
 #
 # Prod promotion is unchanged — the existing gated promote-prod.yml.
+#
+# RETIRED by IDP-042 PR 7: web is `receiver: generic`, so product-image-receiver.yml
+# acts on web-image-published, and this workflow no longer listens for it. Two
+# receivers on one event would race `deploy/staging-web`, so the demotion and the
+# registry flip ship together and a `git revert` of that PR restores both.
+# `workflow_dispatch` only keeps the file a valid workflow until PR 8 deletes it;
+# a manual run carries no tag, so the guard refuses it before the promotion.
 
 on:
-  repository_dispatch:
-    types: [web-image-published]
+  workflow_dispatch:
 
 permissions:
   contents: write

@@ -20,7 +20,7 @@ products:
   web:
     repository: mlorentedev/web
     forge: github
-    receiver: legacy
+    receiver: generic
     image_name: kubelab-web
     events:
       staging: web-image-published

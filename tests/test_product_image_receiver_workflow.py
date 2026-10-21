@@ -33,6 +33,7 @@ from toolkit.main import app as toolkit_app
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 RECEIVER = REPO_ROOT / ".github/workflows/product-image-receiver.yml"
 FIXTURE_REGISTRY = REPO_ROOT / "tests/fixtures/product/registry.yaml"
+COMMITTED_REGISTRY = REPO_ROOT / "infra/config/products.yaml"
 WEB_CONTRACT = REPO_ROOT / "tests/fixtures/product/web.kubelab.yaml"
 
 SHORT = "b9874f2"
@@ -150,10 +151,9 @@ _TOOLKIT_QUESTIONS = [
 ] + [["product", "show", name, "--json"] for name in ("api", "web", "third", "ghost")]
 
 
-@pytest.fixture
-def toolkit_stub(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> str:
-    """A toolkit that answers exactly what the real CLI answers for the fixture registry."""
-    monkeypatch.setattr(product_registry, "registry_path", lambda: FIXTURE_REGISTRY)
+def _toolkit_answering_for(registry: pathlib.Path, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> str:
+    """A toolkit that answers exactly what the real CLI answers for ``registry``."""
+    monkeypatch.setattr(product_registry, "registry_path", lambda: registry)
     answers = {}
     for argv in _TOOLKIT_QUESTIONS:
         result = CliRunner().invoke(toolkit_app, argv)
@@ -172,6 +172,17 @@ def toolkit_stub(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> str
     )
     stub.chmod(0o755)
     return str(stub)
+
+
+@pytest.fixture
+def toolkit_stub(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> str:
+    return _toolkit_answering_for(FIXTURE_REGISTRY, tmp_path, monkeypatch)
+
+
+@pytest.fixture
+def committed_toolkit_stub(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> str:
+    """The same, for infra/config/products.yaml: what the receiver decides on master."""
+    return _toolkit_answering_for(COMMITTED_REGISTRY, tmp_path, monkeypatch)
 
 
 def _run(
@@ -296,12 +307,23 @@ def test_a_prod_lane_event_is_not_this_lane(tmp_path: pathlib.Path, toolkit_stub
 @_needs_bash
 @_needs_jq
 def test_a_legacy_product_dispatch_is_left_to_its_own_receiver(tmp_path: pathlib.Path, toolkit_stub: str) -> None:
-    """Design point 10: while web is `receiver: legacy`, only the old workflow acts on its event."""
+    """Design point 10: a `receiver: legacy` product (web, in the fixture) is acted on by its own workflow only."""
     code, out, log, calls = _dispatch(tmp_path, toolkit_stub, event="web-image-published")
 
     assert code == 0, log
     assert out == {"skip": "true"}
     assert "legacy" in log and calls == []
+
+
+@_needs_bash
+@_needs_jq
+def test_web_is_received_here_on_master(tmp_path: pathlib.Path, committed_toolkit_stub: str) -> None:
+    """The cutover (PR 7): the committed registry makes web generic, so its staging event is acted on here."""
+    code, out, log, calls = _dispatch(tmp_path, committed_toolkit_stub, event="web-image-published")
+
+    assert code == 0, log
+    assert (out["skip"], out["app"], out["repository"], out["dry_run"]) == ("false", "web", "mlorentedev/web", "false")
+    assert calls and all(" repos/mlorentedev/web" in call for call in calls), calls
 
 
 @_needs_bash
