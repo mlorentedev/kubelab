@@ -1,0 +1,55 @@
+version: 1
+run_id: ap-20261021-kubelab-gitops
+armed_by: manu
+armed_at: 2026-10-21T14:41:08Z
+expires_at: 2026-10-21T20:41:08Z
+objective: >-
+  Advance GITOPS-003 delivery verification without the operator:
+  wait-status (PR2a), OPS-043 watcher Job TTL, GITOPS-007 superseded verdict,
+  and PR1 notification templates as a draft.
+scope:
+  write_paths:
+    - "toolkit/features/argo_manager.py"
+    - "toolkit/features/github_status*.py"
+    - "toolkit/cli/infra.py"
+    - "toolkit/README.md"
+    - "tests/test_argo_*.py"
+    - "tests/test_argocd_notification_triggers.py"
+    - "tests/test_*watcher*.py"
+    - "tests/test_cronjob*.py"
+    - "infra/k8s/base/**"
+    - "infra/helm/argocd/values.yaml"
+    - "toolkit/features/secrets_manager.py"
+    - "Makefile"
+    - "docs/lessons/**"
+    - "docs/runbooks/**"
+    - ".agent/runs/**"
+    - "specs/GITOPS-003/**"
+    - "toolkit/features/product_verify.py"
+    - "tests/test_product_verify.py"
+  frozen_paths:
+    - ".github/**"
+    - "harness/**"
+    - "infra/config/secrets/**"
+    - "infra/k8s/overlays/**"
+    - "**/AGENTS.md"
+    - ".agent/unattended.yml"
+  max_files: 10
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make, poetry, kubectl-via-make]
+queue:
+  source: bitacora
+  filter: >-
+    GITOPS-003 (#1478) PR2a wait-status; #2580 OPS-043; #2584 GITOPS-007;
+    GITOPS-003 PR1 (draft, never merged)
+  max_items: 4
+budget:
+  max_iterations: 6
+  max_minutes_per_iteration: 60
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant
+  merge_excluded: ["GITOPS-003 PR1", "any PR touching .github/** or infra/helm/argocd/**"]
+  push: true
+  open_pr: true
+  advisor_tier: top
