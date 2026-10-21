@@ -202,24 +202,30 @@ class ConfigurationManager:
         - `apps.services.core.gitea.admin_user`: the superadmin, which the Ansible
           path already uses. The Compose Gitea reads this key.
 
-        Assigned, not defaulted, like `oauth_client_id`: the vaults still hold copies
-        that `credentials generate` wrote until #1356, and prod's names the operator
-        (#2493). A username is not a secret, so no vault may decide it.
+        Assigned, not defaulted, like `oauth_client_id`: the vaults held copies that
+        `credentials generate` wrote until #1356, and prod's named the operator
+        (#2493). A username is not a secret, so no vault may decide it, and with no
+        declaration the key is dropped rather than left to whatever else set it.
         """
         from toolkit.features import break_glass
+
+        def assign(service: Any, username: str) -> None:
+            if not isinstance(service, dict):
+                return
+            if username:
+                service["admin_user"] = username
+            else:
+                service.pop("admin_user", None)
 
         apps = config.get("apps", {})
         observability = apps.get("services", {}).get("observability", {})
         grafana = (break_glass.declarations(config).get("grafana")) or {}
-        if isinstance(observability.get("grafana"), dict) and ("login" in grafana or "identity" in grafana):
-            observability["grafana"]["admin_user"] = break_glass.account_login(grafana, config)
-        superadmin = apps.get("auth", {}).get("identities", {}).get("superadmin")
-        if isinstance(observability.get("uptime_kuma"), dict) and superadmin:
-            observability["uptime_kuma"]["admin_user"] = superadmin
+        declared = "login" in grafana or "identity" in grafana
+        assign(observability.get("grafana"), break_glass.account_login(grafana, config) if declared else "")
+        superadmin = apps.get("auth", {}).get("identities", {}).get("superadmin") or ""
+        assign(observability.get("uptime_kuma"), superadmin)
         # The Compose Gitea's admin, the superadmin as on the Ansible path.
-        gitea = apps.get("services", {}).get("core", {}).get("gitea")
-        if isinstance(gitea, dict) and superadmin:
-            gitea["admin_user"] = superadmin
+        assign(apps.get("services", {}).get("core", {}).get("gitea"), superadmin)
 
     @staticmethod
     def _inject_oidc_client_derivations(config: Dict[str, Any]) -> None:

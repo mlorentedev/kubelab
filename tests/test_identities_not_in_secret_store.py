@@ -114,6 +114,18 @@ class TestTheConfigDerivesEachAdminUsername:
         assert observability["grafana"]["admin_user"] == GRAFANA_BREAK_GLASS
         assert observability["uptime_kuma"]["admin_user"] == IDENTITIES["superadmin"]
 
+    def test_an_undeclared_identity_drops_the_vault_copy(self) -> None:
+        """Assigned, not defaulted: with no declaration, the stale copy must not survive either."""
+        config = _declared()
+        config["apps"]["services"]["core"] = {"gitea": {"admin_user": IDENTITIES["operator"]}}
+        del config["apps"]["auth"]["identities"]["superadmin"]
+        del config["apps"]["services"]["security"]["authelia"]["break_glass"]["grafana"]
+        ConfigurationManager._inject_identity_derivations(config)
+        services = config["apps"]["services"]
+        assert "admin_user" not in services["observability"]["grafana"]
+        assert "admin_user" not in services["observability"]["uptime_kuma"]
+        assert "admin_user" not in services["core"]["gitea"]
+
     @pytest.mark.parametrize("env", ["dev", "staging", "prod"])
     def test_the_merged_config_runs_the_derivation(self, env: str) -> None:
         """The real loader over the real declarations, whatever the vault holds or lacks."""
@@ -142,9 +154,10 @@ class TestKumaLogsInAsItsAccount:
         assert monitoring._get_kuma_creds(Path("."))["username"] == IDENTITIES["superadmin"]
 
     def test_a_missing_identity_stops_before_any_login(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """No declared superadmin means no username: say so, never try Kuma with an empty name."""
-        config = self._merged()
-        del config["apps"]["services"]["observability"]["uptime_kuma"]["admin_user"]
+        """No declared superadmin: the vault's stale name is not used, and Kuma is never tried."""
+        config = _declared()
+        del config["apps"]["auth"]["identities"]["superadmin"]
+        ConfigurationManager._inject_identity_derivations(config)
         cm = MagicMock()
         cm.get_merged_config.return_value = config
         cm.secrets_path = Path("/nonexistent")
