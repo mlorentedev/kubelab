@@ -8,7 +8,9 @@ ready for the operator's merge, with triage and lessons. Envelope: `merge: never
 1. **Merge #2593** (PR 1). `deploy-shape` is red on its own head by construction: the workflow runs
    master's toolkit, which does not have the command yet. Disclosed in the PR body. The first PR
    opened after the merge shows the real verdict.
-2. **Rebase #2596** (PR 2, stacked on #2593) onto master, then `gh pr ready 2596`.
+2. **Rebase #2596** (PR 2, stacked on #2593) onto master, then `gh pr ready 2596`. It is behind
+   `6c28429f` on PR 1; the run could not force-push the rebase (permission denied), so the
+   stack is left for the operator as planned.
 3. **AC3:** once a `neutral` run of `deploy-shape` is seen passing protection on an ordinary PR,
    add `deploy-shape` to `ci.branch_protection` required contexts in `common.yaml` and reconcile.
 4. **Approve or amend the PR 3 design** (merge step, switched off). It lives in the spec's
@@ -33,6 +35,13 @@ ready for the operator's merge, with triage and lessons. Envelope: `merge: never
   bounds).
 - SEC-017 follow-up posted on dotfiles#2836 (issuecomment-6319703866): the merge step's
   `RELEASE_PLEASE_TOKEN` moves to the App identity.
+
+## Defect found and fixed
+
+- `Tests` went red on #2593 at `80dcd84b`: three `test_deploy_shape.py` fixtures bumped web to
+  `sha-9d79e52`, the tag #2581 then pinned on master, so on the merge commit the bump changed
+  nothing. Fixed in `6c28429f` with a synthetic tag and a test that fails if a committed pin ever
+  matches it. Verified against master's staging files (92 passed) and the branch's own.
 
 ## Disclosures
 
