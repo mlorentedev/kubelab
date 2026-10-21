@@ -185,8 +185,47 @@ class ConfigurationManager:
 
         # 6. SSOT-027: OIDC client ids come from the client list, not a second key.
         self._inject_oidc_client_derivations(config)
+        # 7. #1356: admin usernames come from the identity declaration, not a vault.
+        self._inject_identity_derivations(config)
 
         return config
+
+    @staticmethod
+    def _inject_identity_derivations(config: Dict[str, Any]) -> None:
+        """#1356 (option B): fill each service's admin username from the declaration.
+
+        - `apps.services.observability.grafana.admin_user`: Grafana's break-glass
+          login, the same account `k8s_secrets` gives the K8s Grafana. The Compose
+          Grafana reads this key.
+        - `apps.services.observability.uptime_kuma.admin_user`: the superadmin, the
+          one account Uptime Kuma has.
+        - `apps.services.core.gitea.admin_user`: the superadmin, which the Ansible
+          path already uses. The Compose Gitea reads this key.
+
+        Assigned, not defaulted, like `oauth_client_id`: the vaults held copies that
+        `credentials generate` wrote until #1356, and prod's named the operator
+        (#2493). A username is not a secret, so no vault may decide it, and with no
+        declaration the key is dropped rather than left to whatever else set it.
+        """
+        from toolkit.features import break_glass
+
+        def assign(service: Any, username: str) -> None:
+            if not isinstance(service, dict):
+                return
+            if username:
+                service["admin_user"] = username
+            else:
+                service.pop("admin_user", None)
+
+        apps = config.get("apps", {})
+        observability = apps.get("services", {}).get("observability", {})
+        grafana = (break_glass.declarations(config).get("grafana")) or {}
+        declared = "login" in grafana or "identity" in grafana
+        assign(observability.get("grafana"), break_glass.account_login(grafana, config) if declared else "")
+        superadmin = apps.get("auth", {}).get("identities", {}).get("superadmin") or ""
+        assign(observability.get("uptime_kuma"), superadmin)
+        # The Compose Gitea's admin, the superadmin as on the Ansible path.
+        assign(apps.get("services", {}).get("core", {}).get("gitea"), superadmin)
 
     @staticmethod
     def _inject_oidc_client_derivations(config: Dict[str, Any]) -> None:
