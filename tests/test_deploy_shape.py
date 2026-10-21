@@ -33,7 +33,11 @@ REGISTRY_PATH = REPO_ROOT / DEFAULT_REGISTRY
 VALUES = "infra/config/values/staging.yaml"
 OVERLAY = "infra/k8s/overlays/staging/generated/deployments.yaml"
 CONTRACT = "infra/config/products/contracts/web.yaml"
-NEW = "sha-9d79e52"
+# A tag no pin carries: a real one (#2581's sha-9d79e52, as this file first used)
+# lands on master, the bump becomes a no-op, and every fixture reads "0 values
+# changed" on the merge commit CI tests.
+SHORT = "0ddba11"
+NEW = f"sha-{SHORT}"
 
 
 @pytest.fixture(scope="module")
@@ -89,6 +93,10 @@ def changes(*paths: str, status: str = "modified") -> list[dict]:
 
 
 class TestMechanical:
+    @pytest.mark.parametrize("app", ["web", "api"])
+    def test_the_fixture_tag_is_not_a_committed_pin(self, app: str) -> None:
+        assert current_version(app) != NEW, f"{app} is pinned to {NEW}; pick another SHORT"
+
     @pytest.mark.parametrize("app", ["web", "api"])
     def test_a_version_only_bump_is_mechanical(self, decl, apps, app: str) -> None:
         before, after = bump(app, NEW)
@@ -248,7 +256,7 @@ class TestDeclaration:
 REPO = "mlorentedev/kubelab"
 HEAD = "a" * 40
 BASE = "b" * 40
-FULL = "9d79e52" + "c" * 33
+FULL = SHORT + "c" * 33
 
 
 class FakeApi:
@@ -276,7 +284,7 @@ def routes_for(app: str, product_repo: str, compare: str = "behind") -> dict[str
     r: dict[str, Any] = {
         f"repos/{REPO}/pulls/7/files?per_page=100": changes(VALUES, OVERLAY),
         f"repos/{REPO}/compare/master...{HEAD}": {"merge_base_commit": {"sha": BASE}},
-        f"repos/{product_repo}/commits/9d79e52": {"sha": FULL},
+        f"repos/{product_repo}/commits/{SHORT}": {"sha": FULL},
         f"repos/{product_repo}": {"default_branch": "master"},
         f"repos/{product_repo}/compare/master...{FULL}": {"status": compare},
     }
@@ -308,12 +316,12 @@ class TestEvaluate:
 
     def test_a_tag_resolving_to_another_commit_is_refused(self, decl, products) -> None:
         routes = routes_for("web", "mlorentedev/web")
-        routes["repos/mlorentedev/web/commits/9d79e52"] = {"sha": "f" * 40}
+        routes[f"repos/mlorentedev/web/commits/{SHORT}"] = {"sha": "f" * 40}
         assert evaluate(7, REPO, FakeApi(routes), decl, products).verdict == "not-mechanical"
 
     def test_an_api_failure_is_unknown(self, decl, products) -> None:
         routes = routes_for("web", "mlorentedev/web")
-        routes["repos/mlorentedev/web/commits/9d79e52"] = RuntimeError("HTTP 502")
+        routes[f"repos/mlorentedev/web/commits/{SHORT}"] = RuntimeError("HTTP 502")
         assert evaluate(7, REPO, FakeApi(routes), decl, products).verdict == "unknown"
 
     def test_a_head_that_moved_while_reading_is_unknown(self, decl, products) -> None:
