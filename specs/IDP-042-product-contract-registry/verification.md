@@ -27,7 +27,19 @@ Map every acceptance criterion from `proposal.md` to concrete proof.
 - [ ] **AC4** `web` deploys to staging through the generic receiver, and its old receiver is deleted
   - Offline, PR 7 and PR 8: `poetry run pytest tests/test_product_image_receiver_workflow.py tests/test_delivery_health.py --no-cov -q`; and `test -e .github/workflows/web-image-receiver.yml && echo PRESENT || echo ABSENT`. Expected after PR 8: `ABSENT`; `git grep -n 'web-image-receiver' -- . ':!specs' ':!docs/lessons'` prints no live reference
   - The web contract: https://github.com/mlorentedev/web/pull/476 (`kubelab.yaml` at the root; the kubelab snapshot is its bytes at `901dcd4f`)
-  - Before PR 7 leaves draft: `poetry run toolkit product ready --app web --json; echo "exit=$?"` against the live repository. Expected: `exit=0`, and the JSON names the staging pin and the contract's commit. Paste it in the PR body: `<fill in>`
+  - Before PR 7 leaves draft: `poetry run toolkit product ready --app web --json; echo "exit=$?"` against the live repository. Expected: `exit=0`, and the JSON names the staging pin and the contract's commit. Pasted in #2566 on 2026-10-21, after #2567 moved staging to `sha-7ebd808` (web#476's merge):
+
+    ```
+    $ poetry run toolkit product ready --app web --json; echo "exit=$?"
+    {"ok": true, "app": "web", "repository": "mlorentedev/web", "tag": "sha-7ebd808", "sha": "7ebd8088948cba69453ebe4623d482610a787ca3"}
+    exit=0
+    ```
+
+    Dry run on GitHub's runner from master, https://github.com/mlorentedev/kubelab/actions/runs/39532563387 (success). Steps:
+    - fetch: `OK: .../kubelab.yaml is a valid kubelab product contract (schema_version 1)`
+    - render: `web/staging: nothing to write`
+    - promote: `staging: web already at sha-7ebd808; nothing to do`
+    - would offer: only `infra/config/products/contracts/web.yaml`, the header comment this PR already syncs
   - **Live**, after PR 7 merges and before PR 8 is opened. A diff cannot show this, because it is a property of GitHub's event routing and of the web repository's CI. Push a trivial commit to `mlorentedev/web` master, then:
     - `gh run list --repo mlorentedev/kubelab --workflow product-image-receiver.yml --limit 3 --json conclusion,event,createdAt` shows a `success` run of event `repository_dispatch`
     - `gh api 'repos/mlorentedev/kubelab/pulls?state=open&head=mlorentedev:deploy/staging-web' --jq '.[0] | {number, title}'` shows the new sha in the title
