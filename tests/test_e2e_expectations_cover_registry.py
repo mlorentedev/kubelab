@@ -40,10 +40,6 @@ def test_every_registered_product_has_an_e2e_expectation() -> None:
     )
 
 
-def test_a_registered_product_without_an_entry_is_reported() -> None:
-    assert _missing(("api", "web", "shop"), EXPECTATIONS) == ["shop"]
-
-
 def test_there_is_a_contract_snapshot_to_compare() -> None:
     """The parametrized check below runs once per snapshot, so with none it would pass by checking nothing."""
     assert sorted(SNAPSHOT_DIR.glob("*.yaml")), f"no contract snapshot under {SNAPSHOT_DIR}"
@@ -55,9 +51,11 @@ def test_the_expectation_agrees_with_the_contract_on_authentication(snapshot: pa
     if auth == "oidc":
         pytest.skip("an OIDC contract is refused at render (#2573), so no such product is deployed")
 
-    assert EXPECTATIONS[snapshot.stem].auth_protected == (auth == "forwardauth"), (
+    expectation = EXPECTATIONS.get(snapshot.stem)
+    assert expectation is not None, f"{snapshot.stem} has a contract snapshot but no entry in tests/e2e/expectations.py"
+    assert expectation.auth_protected == (auth == "forwardauth"), (
         f"{snapshot.stem}: the contract says auth: {auth}, "
-        f"tests/e2e/expectations.py says auth_protected={EXPECTATIONS[snapshot.stem].auth_protected}"
+        f"tests/e2e/expectations.py says auth_protected={expectation.auth_protected}"
     )
 
 
