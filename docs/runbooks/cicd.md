@@ -90,6 +90,8 @@ RC scheme, no CalVer bundle (see [ADR-059](../adr/adr-059-retire-calver-release-
 `web` has no build trigger in this repo — its source and CI live in `mlorentedev/web`; a
 `repository_dispatch` (`web-image-published`) is what reaches `product-image-receiver.yml` here.
 
+Changes to `infra/config/values/*.yaml` do NOT trigger app rebuilds (GitOps pull model).
+
 ### Receiving a product from its own repository (ADR-067, IDP-042)
 
 `product-image-receiver.yml` lists no dispatch `types`: the registry decides. Onboarding a
@@ -112,7 +114,6 @@ registry, renders it into `values/staging.yaml`, snapshots it at
 PR. A manual `workflow_dispatch` defaults to `dry_run: true`. Before moving an existing product
 to `receiver: generic`, `toolkit product ready --app <app>` must exit 0. A Gitea-hosted product
 is not received yet (IDP-044, #1928); prod stays `promote-prod.yml`.
-Changes to `infra/config/values/*.yaml` do NOT trigger app rebuilds (GitOps pull model).
 
 ## Required GitHub secrets
 
