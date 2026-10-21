@@ -1,5 +1,5 @@
 ---
-id: lesson-608-synced-at-head-is-read-from-sync-revision-not-from-the-last-operation
+id: lesson-609-synced-at-head-is-read-from-sync-revision-not-from-the-last-operation
 type: lesson
 status: active
 created: "2026-10-20"

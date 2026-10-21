@@ -29,7 +29,7 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 ## Decisions made during implementation
 
 - Product-agnostic, decided with the operator 2026-10-20: host and image from the contract snapshot, `/version.json` a platform convention; no contract schema change (IDP-042 untouched).
-- "Synced at HEAD" is `sync.revision`, not the last operation's revision; Application health is not a condition (lesson-608).
+- "Synced at HEAD" is `sync.revision`, not the last operation's revision; Application health is not a condition (lesson-609).
 - `commit` compared by strict equality with the tag minus `sha-`; a prefix match would accept a truncated answer.
 - A missing `commit` keeps waiting until the deadline (an old pod may answer during a rollout), then exits 3.
 
@@ -37,7 +37,7 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 
 Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.
 
-- [x] Lesson for the repo's `docs/lessons/`? yes: lesson-608 (Synced at HEAD is `sync.revision`); lesson-407 already holds the incident
+- [x] Lesson for the repo's `docs/lessons/`? yes: lesson-609 (Synced at HEAD is `sync.revision`); lesson-407 already holds the incident
 - [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? <yes / no - one line of what>
 - [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes / no - one line>
 
