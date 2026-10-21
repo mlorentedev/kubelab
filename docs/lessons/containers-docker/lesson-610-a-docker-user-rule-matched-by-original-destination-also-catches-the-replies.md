@@ -1,5 +1,5 @@
 ---
-id: lesson-609-a-docker-user-rule-matched-by-original-destination-also-catches-the-replies
+id: lesson-610-a-docker-user-rule-matched-by-original-destination-also-catches-the-replies
 type: lesson
 status: active
 created: "2026-10-21"
