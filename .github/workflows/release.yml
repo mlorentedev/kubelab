@@ -66,6 +66,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          # The re-tag reads the staging pin from the checked-out ref, so only master's
+          # pin may become a semver tag. A dispatch from a branch fails here, loudly.
+          if [ "$GITHUB_REF" != "refs/heads/master" ]; then
+            echo "::error::publish-api runs from master only, not $GITHUB_REF"
+            exit 1
+          fi
           # A release run publishes what release-please just released. A re-publish
           # (#2558) takes the current release from the manifest, and only if it exists.
           VERSION="${RELEASED:-$(jq -r '."apps/api"' .release-please-manifest.json)}"

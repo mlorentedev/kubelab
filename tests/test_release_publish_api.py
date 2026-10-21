@@ -58,3 +58,11 @@ def test_a_failed_tag_lookup_prints_its_reason() -> None:
     script = _step("sha")["run"]
     assert "if ! SHA=" in script, "a bare SHA=\"$(...)\" exits on failure with the reason inside the variable"
     assert "::error::" in script and "$SHA" in script.split("::error::", 1)[1].split("\n", 1)[0]
+
+
+def test_only_masters_pin_can_become_a_semver_tag() -> None:
+    """A dispatch can run on any ref, and the pin is read from the checked-out one (#2564 review)."""
+    script = _step("version")["run"]
+    guard = script.index('"$GITHUB_REF" != "refs/heads/master"')
+    assert guard < script.index("gh release view"), "the ref check must run before anything is resolved"
+    assert "exit 1" in script[guard : guard + 200], "a branch dispatch must fail, not skip"
