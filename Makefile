@@ -85,6 +85,7 @@ help:
 	@echo "  make register-spoke ENV=x      Register spoke cluster in Argo CD hub"
 	@echo "  make unregister-spoke ENV=x    Remove spoke from Argo CD hub"
 	@echo "  make argo-set-revision APP=x REV=y  Patch Application targetRevision (preview/patch-back)"
+	@echo "  make verify-product APP=x ENV=y  Verify a product is live at origin/master HEAD (Argo + version.json)"
 	@echo "  make restore-window APP=x ENV=y [END=1]  Pause auto-sync and stop one app for a data restore"
 	@echo "  make check-spokes              Verify registered spokes are reachable"
 	@echo "  make hub-pause HUB=<kubecfg>   Stop one hub reconciling (reversible; keeps its state)"
@@ -857,6 +858,15 @@ sync-app:
 	@echo "=== Triggering sync for $(APP) ==="
 	@kubectl --kubeconfig $(HUB_KUBECONFIG) -n argocd patch application $(APP) --type merge -p '{"operation":{"initiatedBy":{"username":"makefile"},"sync":{"revision":"HEAD"}}}'
 	@echo "✓ Sync triggered for $(APP)"
+
+# Verify a product is live at origin/master HEAD by consequence (GITOPS-003):
+# Synced + Succeeded on the hub, then /version.json serving the pinned tag.
+# Exit 3 = not verifiable yet (no `commit` served), never a pass. Run on the mesh.
+# Usage: make verify-product APP=web ENV=staging|prod [TIMEOUT=600]
+.PHONY: verify-product
+verify-product:
+	@test -n "$(APP)" -a -n "$(ENV)" || (echo "Usage: make verify-product APP=web ENV=staging|prod [TIMEOUT=600]" && exit 2)
+	@$(TOOLKIT) infra argo verify-product --app $(APP) --env $(ENV) --kubeconfig $(HUB_KUBECONFIG) $(if $(TIMEOUT),--timeout $(TIMEOUT),)
 
 # Register a spoke cluster in Argo CD hub (scoped RBAC, not cluster-admin)
 # Usage: make register-spoke ENV=staging|prod
