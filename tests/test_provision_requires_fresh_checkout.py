@@ -214,7 +214,9 @@ def _provision_commands(*extra: str) -> str:
         check=False,
     )
     assert done.returncode == 0, done.stderr
-    return "\n".join(line for line in done.stdout.splitlines() if "infra ansible run" in line)
+    commands = "\n".join(line for line in done.stdout.splitlines() if "infra ansible run" in line)
+    assert commands, "no `infra ansible run` line in the dry run, so a negative check would pass on nothing"
+    return commands
 
 
 def test_make_provision_always_asks_for_the_guard() -> None:
@@ -243,7 +245,9 @@ def _deploy_commands(*extra: str) -> str:
         check=False,
     )
     assert done.returncode == 0, done.stderr
-    return "\n".join(line for line in done.stdout.splitlines() if "infra ansible run" in line)
+    commands = "\n".join(line for line in done.stdout.splitlines() if "infra ansible run" in line)
+    assert commands, "no `infra ansible run` line in the dry run, so a negative check would pass on nothing"
+    return commands
 
 
 def test_make_deploy_always_asks_for_the_guard() -> None:
