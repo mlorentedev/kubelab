@@ -32,7 +32,7 @@ created: "2026-08-27"
 
 - [ ] [P] [AC2] Write failing tests for `toolkit infra argo wait-status --sha --context --timeout`: `success` → 0; `failure` → non-zero with the description printed; no status after timeout → non-zero with "no status arrived" (GitHub API simulated)
 - [ ] [AC2] Implement `wait-status` in `toolkit/features/argo_manager.py`
-- [ ] [AC2] Add `.github/workflows/deploy-verify.yml`: `on: push` to `master`, paths `infra/k8s/overlays/{staging,prod}/**`, one job per touched env, timeout N; failure message links the runbook section (AC7)
+- [ ] [AC2] Add `.github/workflows/deploy-verify.yml`, one job per touched env, timeout N; failure message links the runbook section (AC7). **Trigger: NOT `on: push`.** Per Manu's decision on #1619 (2026-10-20) staging deploy PRs will be merged by a workflow, and a merge made with `GITHUB_TOKEN` starts no `on: push` workflow, so the check would silently never run after an unattended merge, the one case it is the compensating control for. Use `on: status` (the `argocd/kubelab-<env>` status Argo posts with its PAT does start workflows) plus a `schedule` sweep for the no-status case, or `workflow_run`; and a test asserting the trigger is not `push` alone
 - [ ] [AC2] Real runs recorded in `verification.md`: replay against `1489265` (red) and the next healthy merge (green)
 
 ### PR3 — `PostSync` hook probes the route (AC3) — blocked on Setup/Risk 1
