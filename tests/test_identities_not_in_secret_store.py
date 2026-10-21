@@ -21,9 +21,13 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
+import yaml
 
 from toolkit.features import credentials, monitoring
 from toolkit.features.configuration import ConfigurationManager
+from toolkit.features.secrets_manager import SECRET_CATALOG, SecretKind
+
+REPO = Path(__file__).resolve().parent.parent
 
 IDENTITIES = {"superadmin": "declared-superadmin", "operator": "declared-operator"}
 GRAFANA_BREAK_GLASS = "declared-breakglass"
@@ -57,7 +61,6 @@ def _declared() -> dict[str, Any]:
                 },
             },
         },
-        "networking": {"nodes": {"rpi3": {"tailscale_ip": "100.64.0.6"}}},
     }
 
 
@@ -111,9 +114,16 @@ class TestTheConfigDerivesEachAdminUsername:
         assert observability["grafana"]["admin_user"] == GRAFANA_BREAK_GLASS
         assert observability["uptime_kuma"]["admin_user"] == IDENTITIES["superadmin"]
 
-    def test_the_merged_config_runs_the_derivation(self) -> None:
-        source = Path(ConfigurationManager.get_merged_config.__code__.co_filename).read_text()
-        assert "self._inject_identity_derivations(config)" in source
+    @pytest.mark.parametrize("env", ["dev", "staging", "prod"])
+    def test_the_merged_config_runs_the_derivation(self, env: str) -> None:
+        """The real loader over the real declarations, whatever the vault holds or lacks."""
+        common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
+        superadmin = common["apps"]["auth"]["identities"]["superadmin"]
+        login = common["apps"]["services"]["security"]["authelia"]["break_glass"]["grafana"]["login"]
+        services = ConfigurationManager(env, REPO).get_merged_config()["apps"]["services"]
+        assert services["observability"]["grafana"]["admin_user"] == login
+        assert services["observability"]["uptime_kuma"]["admin_user"] == superadmin
+        assert services["core"]["gitea"]["admin_user"] == superadmin
 
 
 class TestKumaLogsInAsItsAccount:
@@ -174,3 +184,29 @@ class TestTheCatalogRefusesIdentities:
         config["apps"]["services"]["core"] = {"gitea": {"admin_user": IDENTITIES["operator"]}}
         ConfigurationManager._inject_identity_derivations(config)
         assert config["apps"]["services"]["core"]["gitea"]["admin_user"] == IDENTITIES["superadmin"]
+
+
+def _key_paths(node: Any, prefix: str = "") -> list[str]:
+    if not isinstance(node, dict):
+        return [prefix]
+    return [p for k, v in node.items() for p in _key_paths(v, f"{prefix}.{k}" if prefix else str(k))]
+
+
+@pytest.mark.parametrize("vault", sorted((REPO / "infra/config/secrets").glob("*.enc.yaml")), ids=lambda p: p.name)
+def test_no_vault_holds_a_username(vault: Path) -> None:
+    """SOPS leaves key names in plaintext, so this needs no age key and runs in CI (#2493).
+
+    Allowed: a third-party account name registered as EXTERNAL, and an orphan the
+    baseline already tracks with its own plan (`infra.smtp.user`, the SMTP relay).
+    """
+    from toolkit.features.secrets_manager import baselined_orphans
+
+    external = {s.key_path for s in SECRET_CATALOG if s.kind == SecretKind.EXTERNAL} | set(baselined_orphans())
+    doc = {k: v for k, v in (yaml.safe_load(vault.read_text()) or {}).items() if k != "sops"}
+    held = [
+        path
+        for path in _key_paths(doc)
+        if (leaf := path.rsplit(".", 1)[-1]) in ("user", "username") or leaf.endswith(("_user", "_username"))
+        if path not in external
+    ]
+    assert not held, f"{vault.name} holds usernames, which resolve from apps.auth.identities: {held}"
