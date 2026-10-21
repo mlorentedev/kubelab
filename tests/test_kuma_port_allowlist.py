@@ -95,11 +95,30 @@ def test_kuma_itself_is_not_an_allowed_source() -> None:
     assert _config()["networking"]["nodes"]["rpi3"]["tailscale_ip"] not in allowed_sources()
 
 
+def _published() -> dict[str, Any]:
+    """The address and port the playbook hands the role, rendered from common.yaml."""
+    role = _role_vars()
+    return {"tailscale_ip": _render(role["tailscale_ip"]), "uptime_kuma_port": int(_render(role["uptime_kuma_port"]))}
+
+
+def _jump() -> str:
+    p = _published()
+    return f"-p tcp -m conntrack --ctorigdst {p['tailscale_ip']} --ctorigdstport {p['uptime_kuma_port']} -j {CHAIN}"
+
+
 def _rules() -> list[str]:
     template = (ROLE / "templates/kuma-allowlist.rules.j2").read_text()
     text = Environment(undefined=StrictUndefined, trim_blocks=True, lstrip_blocks=True).from_string(template)
-    rendered = text.render(ansible_managed="managed", uptime_kuma_allowed_sources=allowed_sources())
+    rendered = text.render(ansible_managed="managed", uptime_kuma_allowed_sources=allowed_sources(), **_published())
     return [line for line in rendered.splitlines() if line and not line.startswith("#")]
+
+
+def test_the_published_address_is_rpi3s_and_the_port_kumas() -> None:
+    config = _config()
+    assert _published() == {
+        "tailscale_ip": config["networking"]["nodes"]["rpi3"]["tailscale_ip"],
+        "uptime_kuma_port": config["apps"]["services"]["observability"]["uptime_kuma"]["default_port"],
+    }
 
 
 def test_the_chain_returns_for_each_source_then_logs_and_drops() -> None:
@@ -112,7 +131,7 @@ def test_the_chain_returns_for_each_source_then_logs_and_drops() -> None:
     # reach the chain too, sourced from the container. Applied without this line
     # on 2026-10-21, it dropped every reply and took status.kubelab.live down.
     assert rules[2] == f"-A {CHAIN} -m conntrack --ctdir REPLY -j RETURN"
-    body = rules[3:-1]
+    body = [r for r in rules[3:-1] if r.startswith(f"-A {CHAIN}")]
     returns = [r for r in body if r.endswith("-j RETURN")]
     assert sorted(returns) == sorted(f"-A {CHAIN} -s {src}/32 -j RETURN" for src in allowed_sources())
     assert body[: len(returns)] == returns, "every RETURN must come before the drop"
@@ -120,24 +139,33 @@ def test_the_chain_returns_for_each_source_then_logs_and_drops() -> None:
     assert body[-1] == f"-A {CHAIN} -j DROP"
 
 
+def test_the_jump_lands_in_the_same_transaction_as_the_chain() -> None:
+    """All or nothing: a start that fails half-way never leaves a chain no packet reaches (#2582 review)."""
+    rules = _rules()
+    assert rules[-2] == f"-I DOCKER-USER 1 {_jump()}", "the jump must be the restore's last rule, before COMMIT"
+    assert "-i " not in _jump(), "an interface match would let any other path in"
+
+
 def _unit() -> str:
     template = (ROLE / "templates/kubelab-kuma-allowlist.service.j2").read_text()
     return Environment(undefined=StrictUndefined).from_string(template).render(
-        ansible_managed="managed", rpi3_deploy_dir="/opt/monitoring", tailscale_ip="100.64.0.6", uptime_kuma_port=3001
+        ansible_managed="managed", rpi3_deploy_dir="/opt/monitoring", **_published()
     )
 
 
-def test_the_unit_follows_docker() -> None:
+def test_the_unit_follows_docker_and_pages_on_failure() -> None:
     unit = _unit()
     # Docker owns DOCKER-USER: start after it, restart and stop with it.
     for line in ("After=docker.service", "PartOf=docker.service", "WantedBy=docker.service"):
         assert line in unit, line
     assert "RemainAfterExit=yes" in unit
+    # A failed start leaves the port open to the tailnet, so it must tell someone.
+    assert "OnFailure=kubelab-notify@%n.service" in unit
 
 
-def test_the_jump_matches_the_published_address_from_any_interface() -> None:
+def test_the_unit_removes_every_jump_before_adding_one_and_on_stop() -> None:
     unit = _unit()
-    jump = "-p tcp -m conntrack --ctorigdst 100.64.0.6 --ctorigdstport 3001 -j KUMA-ALLOW"
-    assert f"iptables -w -C DOCKER-USER {jump} || iptables -w -I DOCKER-USER 1 {jump}" in unit
-    assert "-i " not in unit, "an interface match would let any other path in"
-    assert f"iptables -w -D DOCKER-USER {jump}" in unit, "stopping the unit must remove the jump it added"
+    remove = f"while iptables -w -D DOCKER-USER {_jump()} 2>/dev/null; do :; done"
+    assert f"ExecStartPre=/bin/sh -c '{remove}'" in unit, "a restart must not stack a second jump"
+    assert f"ExecStop=/bin/sh -c '{remove}'" in unit, "stopping the unit must remove the jump it added"
+    assert "ExecStart=/usr/sbin/iptables-restore -w 5 --noflush /opt/monitoring/kuma-allowlist.rules" in unit
