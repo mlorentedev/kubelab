@@ -185,8 +185,35 @@ class ConfigurationManager:
 
         # 6. SSOT-027: OIDC client ids come from the client list, not a second key.
         self._inject_oidc_client_derivations(config)
+        # 7. #1356: admin usernames come from the identity declaration, not a vault.
+        self._inject_identity_derivations(config)
 
         return config
+
+    @staticmethod
+    def _inject_identity_derivations(config: Dict[str, Any]) -> None:
+        """#1356 (option B): fill each service's admin username from the declaration.
+
+        - `apps.services.observability.grafana.admin_user`: Grafana's break-glass
+          login, the same account `k8s_secrets` gives the K8s Grafana. The Compose
+          Grafana reads this key.
+        - `apps.services.observability.uptime_kuma.admin_user`: the superadmin, the
+          one account Uptime Kuma has.
+
+        Assigned, not defaulted, like `oauth_client_id`: the vaults still hold copies
+        that `credentials generate` wrote until #1356, and prod's names the operator
+        (#2493). A username is not a secret, so no vault may decide it.
+        """
+        from toolkit.features import break_glass
+
+        apps = config.get("apps", {})
+        observability = apps.get("services", {}).get("observability", {})
+        grafana = (break_glass.declarations(config).get("grafana")) or {}
+        if isinstance(observability.get("grafana"), dict) and ("login" in grafana or "identity" in grafana):
+            observability["grafana"]["admin_user"] = break_glass.account_login(grafana, config)
+        superadmin = apps.get("auth", {}).get("identities", {}).get("superadmin")
+        if isinstance(observability.get("uptime_kuma"), dict) and superadmin:
+            observability["uptime_kuma"]["admin_user"] = superadmin
 
     @staticmethod
     def _inject_oidc_client_derivations(config: Dict[str, Any]) -> None:
