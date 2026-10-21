@@ -177,7 +177,8 @@ jobs:
         run: |
           git config user.name "kubelab-bot"
           git config user.email "bot@kubelab.live"
-          git add infra/config/values/common.yaml infra/k8s/base/kustomization.yaml
+          # Exactly promotion.ERRORS_PROMOTION_FILES (tests/test_release_promote_errors.py, #2552).
+          git add infra/config/values/common.yaml infra/k8s/base/kustomization.yaml infra/config/platform.json
           if git diff --staged --quiet; then
             echo "errors already pinned to ${ERRORS_VERSION}; nothing to open"; exit 0
           fi

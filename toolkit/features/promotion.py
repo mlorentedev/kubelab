@@ -35,6 +35,15 @@ from toolkit.scripts import sync_k8s_images
 # web-image-receiver rejects anything else, so staging only ever pins this shape.
 _SHA_TAG = re.compile(r"^sha-[0-9a-f]{7,}$")
 
+# Every file ``promote --app errors`` writes, repo-relative. release.yml's
+# promote-errors job stages exactly these, so a file added here and not there
+# fails tests/test_release_promote_errors.py instead of opening a red PR (#2552).
+ERRORS_PROMOTION_FILES = (
+    "infra/config/values/common.yaml",
+    "infra/k8s/base/kustomization.yaml",
+    "infra/config/platform.json",
+)
+
 
 def _load_values_doc(env: str) -> tuple[YAML, Path, Any]:
     """Load ``values/<env>.yaml`` comment-preservingly. Returns ``(yaml, path, data)``.
@@ -153,9 +162,10 @@ def _promote_errors(version: str) -> None:
     from toolkit.features import platform_manifest
 
     root = settings.project_root
-    if sync_k8s_images.sync(common_path, root / "infra" / "k8s" / "base" / "kustomization.yaml") != 0:
+    _, kustomization, manifest = (root / p for p in ERRORS_PROMOTION_FILES)
+    if sync_k8s_images.sync(common_path, kustomization) != 0:
         raise RuntimeError(f"errors set to {version}, but the kustomization failed to re-sync")
-    if platform_manifest.sync(output_path=root / "infra" / "config" / "platform.json", config_path=common_path) != 0:
+    if platform_manifest.sync(output_path=manifest, config_path=common_path) != 0:
         raise RuntimeError(f"errors set to {version}, but platform.json failed to regenerate")
     logger.success(f"Promoted errors to {version}; kustomization and platform.json re-synced")
 
