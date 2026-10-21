@@ -64,6 +64,11 @@ class TestLatestStatus:
         statuses = [_status("pending", updated="2026-10-21T10:00:00Z"), _status("success", updated="2026-10-21T10:05:00Z")]
         assert latest_status(statuses, CONTEXT)["state"] == "success"
 
+    def test_within_one_second_the_list_order_decides(self) -> None:
+        # Timestamps have one-second resolution; pending and success can share one.
+        statuses = [_status("success"), _status("pending")]
+        assert latest_status(statuses, CONTEXT)["state"] == "success"
+
     def test_other_contexts_are_ignored(self) -> None:
         statuses = [_status("success", context="argocd/kubelab-prod"), _status("failure")]
         assert latest_status(statuses, CONTEXT)["state"] == "failure"
