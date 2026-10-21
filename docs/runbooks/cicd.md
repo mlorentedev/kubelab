@@ -97,15 +97,27 @@ Changes to `infra/config/values/*.yaml` do NOT trigger app rebuilds (GitOps pull
 `product-image-receiver.yml` lists no dispatch `types`: the registry decides. Onboarding a
 GitHub-hosted product takes three changes, in this order:
 
-1. **kubelab, registry first:** an entry in `infra/config/products.yaml` (`repository`,
-   `forge: github`, `receiver: generic`, `events.staging` and `events.prod`), plus whatever the
-   contract will name that kubelab does not allow yet (a hostname route, a secret in SOPS). A
-   product absent from the registry is refused, and event types are never renamed afterwards:
-   GitHub answers 204 to a dispatch nobody listens for and drops it.
-2. **The product, its contract:** `kubelab.yaml` at the repository root
-   (`toolkit/schemas/kubelab-product.schema.json`); `toolkit product validate --contract <file> --registry
-   infra/config/products.yaml --app <app>` checks it from a kubelab checkout.
-3. **The product, its dispatch:** CI publishes an immutable `sha-<short>` image and sends
+1. **The contract, written first:** `kubelab.yaml` for the product
+   (`toolkit/schemas/kubelab-product.schema.json`). Both repositories commit it byte for byte,
+   so the kubelab change can be validated before the product carries it.
+2. **kubelab, one PR:** all four pieces land together, because the drift tests
+   (`tests/test_product_contract_drift.py`) fail on a registry entry with no snapshot and on
+   values that disagree with it.
+   - The registry entry in `infra/config/products.yaml`: `repository`, `forge: github`,
+     `receiver: generic`, `events.staging` and `events.prod`.
+   - The snapshot `infra/config/products/contracts/<app>.yaml`, which is the contract itself.
+   - An `apps.platform.<app>` block in `values/staging.yaml` and in `values/prod.yaml`, with
+     its contract-owned keys written by
+     `toolkit product render --contract infra/config/products/contracts/<app>.yaml --env <env> --write`.
+   - Whatever the contract names that kubelab does not allow yet, such as a hostname route or
+     a secret in SOPS.
+
+   `toolkit product validate --contract <file> --registry infra/config/products.yaml --app <app>`
+   checks the contract against all of it. A product absent from the registry is refused.
+   Event types are never renamed afterwards: GitHub answers 204 to a dispatch nobody listens
+   for, and drops it.
+3. **The product, its contract and dispatch:** the same `kubelab.yaml` at the repository root,
+   and CI that publishes an immutable `sha-<short>` image and sends
    `repository_dispatch` with `event_type: <events.staging>` and `client_payload: {tag}`.
 
 The receiver fetches `kubelab.yaml` at the image's own commit, validates it against the
