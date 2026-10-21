@@ -79,6 +79,16 @@ class TestClassifyApplication:
         assert state.failed
         assert msg in state.summary
 
+    def test_an_operation_that_errored_before_any_result_is_judged_by_its_requested_revision(self) -> None:
+        # A panic leaves no syncResult. An automated operation still names the
+        # resolved sha it was asked for, not "HEAD": read live on both hub
+        # Applications on 2026-10-21 (initiatedBy.automated, operation.sync.revision
+        # equal to syncResult.revision, a 40-hex sha).
+        app = _app(sync="OutOfSync", phase="Error", op_revision=HEAD, message="panic")
+        del app["status"]["operationState"]["syncResult"]
+        state = classify_application(app, HEAD)
+        assert state.failed
+
     def test_a_failed_operation_at_an_older_revision_waits(self) -> None:
         # A new revision gets its own automated attempt, so a failure left over
         # from an older one is not yet this merge's verdict.
