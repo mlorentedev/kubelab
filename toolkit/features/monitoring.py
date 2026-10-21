@@ -95,6 +95,12 @@ def _get_kuma_creds(project_root: Path) -> dict[str, str]:
     username = svc.get("admin_user", "")
     password = uk_secrets.get("admin_password", "")
 
+    if not username:
+        logger.error(
+            "Uptime Kuma admin_user was not derived: declare apps.auth.identities.superadmin in common.yaml (#1356)"
+        )
+        raise SystemExit(1)
+
     if not password:
         logger.error(
             "Uptime Kuma admin_password not found in SOPS. "

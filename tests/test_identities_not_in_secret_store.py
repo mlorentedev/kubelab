@@ -141,6 +141,19 @@ class TestKumaLogsInAsItsAccount:
         monkeypatch.setattr(monitoring, "ConfigurationManager", MagicMock(return_value=cm))
         assert monitoring._get_kuma_creds(Path("."))["username"] == IDENTITIES["superadmin"]
 
+    def test_a_missing_identity_stops_before_any_login(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """No declared superadmin means no username: say so, never try Kuma with an empty name."""
+        config = self._merged()
+        del config["apps"]["services"]["observability"]["uptime_kuma"]["admin_user"]
+        cm = MagicMock()
+        cm.get_merged_config.return_value = config
+        cm.secrets_path = Path("/nonexistent")
+        vault = {"admin_password": "x"}
+        cm._decrypt_sops.return_value = {"apps": {"services": {"observability": {"uptime_kuma": vault}}}}
+        monkeypatch.setattr(monitoring, "ConfigurationManager", MagicMock(return_value=cm))
+        with pytest.raises(SystemExit):
+            monitoring._get_kuma_creds(Path("."))
+
     def test_the_rotation_logs_in_as_kumas_account(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import uptime_kuma_api
 
