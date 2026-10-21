@@ -143,13 +143,19 @@ def test_the_jump_lands_in_the_same_transaction_as_the_chain() -> None:
     """All or nothing: a start that fails half-way never leaves a chain no packet reaches (#2582 review)."""
     rules = _rules()
     assert rules[-2] == f"-I DOCKER-USER 1 {_jump()}", "the jump must be the restore's last rule, before COMMIT"
-    assert "-i " not in _jump(), "an interface match would let any other path in"
+    assert "-i " not in rules[-2], "an interface match would let any other path in"
+
+
+def _deploy_dir() -> str:
+    """Where the role writes the rules file: the play's value if it sets one, else the role default."""
+    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text())
+    return str(_role_vars().get("rpi3_deploy_dir", defaults["rpi3_deploy_dir"]))
 
 
 def _unit() -> str:
     template = (ROLE / "templates/kubelab-kuma-allowlist.service.j2").read_text()
     return Environment(undefined=StrictUndefined).from_string(template).render(
-        ansible_managed="managed", rpi3_deploy_dir="/opt/monitoring", **_published()
+        ansible_managed="managed", rpi3_deploy_dir=_deploy_dir(), **_published()
     )
 
 
@@ -168,4 +174,5 @@ def test_the_unit_removes_every_jump_before_adding_one_and_on_stop() -> None:
     remove = f"while iptables -w -D DOCKER-USER {_jump()} 2>/dev/null; do :; done"
     assert f"ExecStartPre=/bin/sh -c '{remove}'" in unit, "a restart must not stack a second jump"
     assert f"ExecStop=/bin/sh -c '{remove}'" in unit, "stopping the unit must remove the jump it added"
-    assert "ExecStart=/usr/sbin/iptables-restore -w 5 --noflush /opt/monitoring/kuma-allowlist.rules" in unit
+    restore = f"ExecStart=/usr/sbin/iptables-restore -w 5 --noflush {_deploy_dir()}/kuma-allowlist.rules"
+    assert restore in unit, "the unit must load the file the role templates"
