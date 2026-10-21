@@ -54,7 +54,7 @@ def _declared() -> dict[str, Any]:
                         }
                     }
                 },
-                # The stale copies a vault holds today: prod names the operator for Kuma.
+                # A stale copy as the vaults held one until #1356: prod named the operator for Kuma.
                 "observability": {
                     "grafana": {"admin_user": IDENTITIES["operator"]},
                     "uptime_kuma": {"admin_user": IDENTITIES["operator"], "default_port": 3001},
