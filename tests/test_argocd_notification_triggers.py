@@ -32,6 +32,7 @@ point of a guard over a fix.
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -124,3 +125,90 @@ def test_a_trigger_dedupes_per_revision_not_per_condition(name: str):
             "hash instead of the revision — the second deploy of a different revision "
             "is suppressed as 'already sent'."
         )
+
+
+# --- GITOPS-003 AC1: the commit status Argo CD posts per sync ----------------
+#
+# `toolkit infra argo wait-status` reads it, so its shape is a contract: the
+# status must land on the synced sha, under `argocd/<app>`, with a description
+# GitHub accepts. The templates are Go text/template with sprig, rendered by
+# the notifications controller; these tests hold their structure without one.
+
+GITHUB_TEMPLATES = ("template.github-status-success", "template.github-status-failure")
+GITHUB_TRIGGERS = ("trigger.on-sync-succeeded-github", "trigger.on-sync-failed-github")
+_ACTION = re.compile(r"\{\{.*?\}\}", re.DOTALL)
+
+
+def _notifications() -> dict:
+    return yaml.safe_load(VALUES.read_text())["notifications"]
+
+
+def _github_webhook(name: str) -> dict:
+    return yaml.safe_load(_notifications()["templates"][name])["webhook"]["github"]
+
+
+def test_a_recipient_is_sent_only_templates_written_for_it():
+    """A trigger subscribed for `slack` must send Slack templates, and so on.
+
+    A template with no `webhook.<recipient>` section sent to that recipient is
+    behaviour nothing here can test, so the pairing is held instead.
+    """
+    notifications = _notifications()
+    templates = {name.removeprefix("template."): yaml.safe_load(body) for name, body in notifications["templates"].items()}
+    for subscription in notifications["subscriptions"]:
+        for recipient in subscription["recipients"]:
+            for trigger in subscription["triggers"]:
+                for entry in yaml.safe_load(notifications["triggers"][f"trigger.{trigger}"]):
+                    for template in entry["send"]:
+                        assert recipient in templates[template].get("webhook", {}), (
+                            f"{trigger} sends {template} to {recipient!r}, which has no webhook.{recipient} section"
+                        )
+
+
+def test_the_github_triggers_are_subscribed_to_the_github_service():
+    notifications = _notifications()
+    assert "service.webhook.github" in notifications["notifiers"]
+    subscribed = {t for s in notifications["subscriptions"] if "github" in s["recipients"] for t in s["triggers"]}
+    assert subscribed == {name.removeprefix("trigger.") for name in GITHUB_TRIGGERS}
+
+
+@pytest.mark.parametrize("name", GITHUB_TEMPLATES)
+def test_the_status_lands_on_the_operation_revision_never_on_sync_result(name: str):
+    """The failure status fires exactly when `syncResult` may be nil.
+
+    An operation that errors before producing a result (the 2026-08-27 panic)
+    has no `syncResult`, and Go templates on an unstructured map fail on
+    `.syncResult.revision` there. An automated sync carries the resolved sha in
+    `operation.sync.revision` (measured on both Applications, GITOPS-003). A
+    manual sync from the UI is unverified: a non-sha there gets a 422 from
+    GitHub, and only the notifications log says so.
+    """
+    webhook = _github_webhook(name)
+    assert webhook["method"] == "POST"
+    assert webhook["path"] == "/repos/mlorentedev/kubelab/statuses/{{.app.status.operationState.operation.sync.revision}}"
+    assert "syncResult" not in _notifications()["templates"][name]
+
+
+@pytest.mark.parametrize("name", GITHUB_TRIGGERS)
+def test_the_github_triggers_dedupe_on_the_operation_revision(name: str):
+    for entry in yaml.safe_load(_notifications()["triggers"][name]):
+        assert entry["oncePer"] == "app.status.operationState?.operation?.sync?.revision"
+
+
+@pytest.mark.parametrize(("name", "state"), [(GITHUB_TEMPLATES[0], "success"), (GITHUB_TEMPLATES[1], "failure")])
+def test_the_status_body_is_json_with_exactly_the_status_fields(name: str, state: str):
+    body = _github_webhook(name)["body"]
+    actions = _ACTION.findall(body)
+    # An action inside a string becomes text, the bare one (description) a string,
+    # so what parses is the body's own structure.
+    parsed = json.loads(_ACTION.sub(lambda m: '"x"' if "toJson" in m.group() else "x", body))
+    assert set(parsed) == {"state", "context", "description", "target_url"}
+    assert parsed["state"] == state
+    assert '"context": "argocd/{{.app.metadata.name}}"' in body
+    assert parsed["target_url"].startswith("https://argo.kubelab.live/applications/argocd/")
+    (description,) = [a for a in actions if "operationState.message" in a]
+    # Unquoted in the body: `toJson` supplies the quotes and escapes the message.
+    assert f'"description": {description}' in body
+    assert "trunc 140" in description and description.rstrip("} ").endswith("toJson")
+    # `default` before `trunc`: a nil message would make trunc fail the render.
+    assert description.index("default") < description.index("trunc")

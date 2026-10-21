@@ -1212,6 +1212,25 @@ SECRET_CATALOG: list[SecretSpec] = [
         envs=("prod",),
         sync_to_secret_manager=True,
     ),
+    # GITOPS-003 AC1: Argo CD posts `argocd/<app>` commit statuses with it, which
+    # `toolkit infra argo wait-status` reads. Delivered by `make deploy-argocd`
+    # only: it is not in Secret Manager, so a hub rebuilt from cloud-init posts no
+    # statuses until that path is added (GITOPS-003 tasks.md, PR1).
+    SecretSpec(
+        key_path="argocd.github_status_token",
+        expiry=Expiry.PROVIDER,
+        description="Fine-grained GitHub PAT, Commit statuses write on kubelab only (Argo CD notifications)",
+        kind=SecretKind.EXTERNAL,
+        services=("argocd",),
+        format_hint="fine-grained PAT (github_pat_…), statuses:write on kubelab, expiry set",
+        rotate_note=(
+            "Mint a new fine-grained token (Settings > Developer settings > Fine-grained tokens), "
+            "repository access `mlorentedev/kubelab` only, Commit statuses: Read and write. "
+            "`toolkit secrets set argocd.github_status_token --env common --stdin`, "
+            "then `make deploy-argocd`, then revoke the old one."
+        ),
+        envs=("prod",),
+    ),
     SecretSpec(
         key_path="argocd.github_webhook_secret",
         expiry=Expiry.NEVER,

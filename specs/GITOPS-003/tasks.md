@@ -24,8 +24,9 @@ created: "2026-08-27"
 ### PR1 — Argo CD publishes a commit status per sync (AC1, AC5)
 
 - [x] ✓ 2026-08-22 [AC5] Nil guard and per-revision `oncePer` (`?.`, nil-safe for an empty `syncResult`) landed with #1276, held structurally by `tests/test_argocd_notification_triggers.py`
-- [ ] [AC1] Write failing test: `template.github-status-*` renders a `POST /repos/mlorentedev/kubelab/statuses/<revision>` body with `state`, `context: argocd/<app>`, `description` (≤140 chars, from `operationState.message`), `target_url`
-- [ ] [AC1] Add `service.webhook.github` + the two templates + subscriptions to `infra/helm/argocd/values.yaml`; token placeholder in the SOPS-managed notifications secret (lesson-013: applied by `toolkit secrets apply`, never by Argo)
+- [x] ✓ 2026-10-21 [AC1] Write failing test: `template.github-status-*` renders a `POST /repos/mlorentedev/kubelab/statuses/<revision>` body with `state`, `context: argocd/<app>`, `description` (≤140 chars, from `operationState.message`), `target_url`
+- [x] ✓ 2026-10-21 [AC1] Add `service.webhook.github` + the two templates + subscriptions to `infra/helm/argocd/values.yaml`. The token (`argocd.github_status_token`, common SOPS) reaches the notifications secret the way the Slack webhook does, `make deploy-argocd`'s Helm `--set`, not `toolkit secrets apply` as first planned: that is the measured path for this secret
+- [ ] [AC1] Hub rebuild path: add `argocd.github_status_token` to Secret Manager (`sync_to_secret_manager`, `infra/terraform/gcp` secret ids, cloud-init `--set-file`, `tests/test_secret_manager_sync.py`). Until then a hub recreated from cloud-init posts no statuses, and `wait-status` reports "no status arrived"
 - [ ] [AC1] Apply on the hub (`make deploy-argocd` path), sync, and verify by consequence: `gh api repos/mlorentedev/kubelab/commits/<head>/status` shows `argocd/kubelab-staging`
 
 ### PR2 — `deploy-verify.yml` waits for the status (AC2)

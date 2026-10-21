@@ -474,4 +474,6 @@ PROVIDER_CHECKS = {
     "apps.services.core.gitea.github_migration_token": github_pat_expiry,
     # hermes-kubelab's vault token: fine-grained, Contents on the vault repository only.
     "apps.services.ai.hermes_kubelab.github_token": github_pat_expiry,
+    # Argo CD's commit-status token (GITOPS-003): fine-grained, Commit statuses on kubelab only.
+    "argocd.github_status_token": github_pat_expiry,
 }
