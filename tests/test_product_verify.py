@@ -125,6 +125,14 @@ class TestClassifyServed:
         assert classify_served({"version": "1.16.0", "commit": "7ebd808"}, "1.16.0")[0] is Served.MATCH
         assert classify_served({"version": "1.15.2", "commit": "7ebd808"}, "1.16.0")[0] is Served.MISMATCH
 
+    def test_a_full_length_commit_is_a_mismatch_that_names_the_convention(self) -> None:
+        # Strict by design, but a producer emitting the 40-hex sha must read as a
+        # convention breach, not as "another commit is running" (PR-Agent on #2579).
+        full = "7ebd808" + "0" * 33
+        outcome, detail = classify_served({"version": "1.16.0", "commit": full}, "sha-7ebd808")
+        assert outcome is Served.MISMATCH
+        assert "convention" in detail
+
     def test_the_detail_names_both_sides(self) -> None:
         _, detail = classify_served({"version": "1.16.0", "commit": "1234567"}, "sha-7ebd808")
         assert "1234567" in detail and "7ebd808" in detail
@@ -167,8 +175,14 @@ class TestPinnedTag:
     def test_the_committed_staging_overlay_pins_web(self) -> None:
         from pathlib import Path
 
+        import yaml
+
         text = Path("infra/k8s/overlays/staging/generated/deployments.yaml").read_text()
-        assert pinned_tag(text, "kubelab-web").startswith("sha-")
+        # The overlay pins api and web, both `sha-*`: read web's own Deployment
+        # independently, or a function returning api's tag would pass (PR-Agent on #2579).
+        web = next(d for d in yaml.safe_load_all(text) if d and d["metadata"]["name"] == "web")
+        expected = web["spec"]["template"]["spec"]["containers"][0]["image"].rsplit(":", 1)[1]
+        assert pinned_tag(text, "kubelab-web") == expected
 
 
 class FakeClock:
@@ -302,6 +316,8 @@ class TestTargetsAt:
         seen: list[tuple[str, str]] = []
         tag, url = targets_at(HEAD, "web", "staging", self._show_worktree(seen))
         assert tag.startswith("sha-")
+        # Mirrors `hostnames.staging` in infra/config/products/contracts/web.yaml: a
+        # literal keeps the assertion from being circular; a hostname rename edits both.
         assert url == "https://staging.mlorente.dev/version.json"
         assert "infra/config/products/contracts/web.yaml" in {path for _, path in seen}
         assert not any(path.startswith("infra/config/values/") for _, path in seen)

@@ -116,9 +116,14 @@ def classify_served(payload: dict[str, Any], tag: str) -> tuple[Served, str]:
     # Strict equality: the convention fixes `commit` as the tag minus `sha-`, so
     # a prefix match would accept a truncated or differently built answer.
     # "local" (built without the arg) is simply another value, and a mismatch.
-    served = payload["commit"]
-    detail = f"serves commit {served!r}, expected {sha.group(1)!r}"
-    return (Served.MATCH if served == sha.group(1) else Served.MISMATCH), detail
+    served = str(payload["commit"])
+    expected = sha.group(1)
+    detail = f"serves commit {served!r}, expected {expected!r}"
+    if served != expected and (served.startswith(expected) or expected.startswith(served)):
+        # Same commit, other length: the producer breaks the convention, which is
+        # a different fix from "another image is running".
+        detail += "; same commit at another length, so the producer breaks the convention (tag minus `sha-`)"
+    return (Served.MATCH if served == expected else Served.MISMATCH), detail
 
 
 def pinned_tag(deployments_yaml: str, image_name: str) -> str:
