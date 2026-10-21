@@ -140,3 +140,19 @@ def test_the_text_form_prints_the_three_lines_on_stderr(gh, monkeypatch: pytest.
     assert result.exit_code == 1
     assert result.stdout == ""
     assert [line.split(":", 1)[0] for line in result.stderr.splitlines()] == ["ERROR", "WHY", "FIX"]
+
+
+def test_a_product_on_another_forge_asks_github_nothing(gh, tmp_path: pathlib.Path) -> None:
+    """A Gitea repository name sent to `gh api` would be answered by GitHub, about someone else's repository."""
+    from toolkit.features import product_ready
+    from toolkit.features.product_contract import ContractError
+
+    registry = tmp_path / "registry.yaml"
+    registry.write_text(
+        (REPO_ROOT / "tests/fixtures/product/registry.yaml").read_text()
+        + "  forged:\n    repository: mlorentedev/forged\n    forge: gitea\n    receiver: generic\n"
+        "    events:\n      staging: forged-image-published\n"
+    )
+    with pytest.raises(ContractError, match="forge: gitea"):
+        product_ready.check_ready("forged", registry=registry)
+    assert gh() == []
