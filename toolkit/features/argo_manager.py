@@ -177,8 +177,14 @@ class WaitStatus(IntEnum):
 
 
 def latest_status(statuses: list[dict[str, Any]], context: str) -> dict[str, Any] | None:
-    """The newest status of ``context``; GitHub lists a commit's statuses newest first."""
-    return next((s for s in statuses if s.get("context") == context), None)
+    """The newest status of ``context``, by ``updated_at``.
+
+    GitHub lists a commit's statuses newest first, but the order is not relied
+    on: a stale `pending` taken for the latest would wait out a healthy sync.
+    `max` keeps the first of equal timestamps, so the list order breaks ties.
+    """
+    matches = [s for s in statuses if s.get("context") == context]
+    return max(matches, key=lambda s: s.get("updated_at") or "", default=None)
 
 
 def fetch_statuses(repo: str, sha: str) -> list[dict[str, Any]]:
@@ -220,14 +226,18 @@ def wait_status(
     Argo CD wrote from `operationState.message`. `pending` and no status keep
     waiting; at the deadline they are red with different words, because "Argo
     never posted" and "the sync never finished" have different fixes. An API
-    failure is retried, and is CANNOT_CHECK only if it is the last observation.
+    failure is retried, and is CANNOT_CHECK only if it is the last observation;
+    the line then also says what the status was when it was last read.
     """
     deadline = now() + timeout
+    seen = ""
     while True:
         try:
             status = latest_status(fetch(), context)
         except StatusFetchError as exc:
             verdict, line = WaitStatus.CANNOT_CHECK, f"statuses could not be read: {exc}"
+            if seen:
+                line += f"; last read: {seen}"
         else:
             if status is None:
                 verdict, line = WaitStatus.FAILED, f"no status arrived for {context}"
@@ -239,6 +249,7 @@ def wait_status(
                 if state in ("failure", "error"):
                     return WaitStatus.FAILED, line
                 verdict, line = WaitStatus.FAILED, f"{context} still pending: {description}"
+            seen = line
         if now() >= deadline:
             return verdict, f"{line} (deadline of {timeout:.0f}s reached)"
         sleep(poll)

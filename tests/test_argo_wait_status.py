@@ -60,6 +60,10 @@ class TestLatestStatus:
         statuses = [_status("success", updated="2026-10-21T10:05:00Z"), _status("pending")]
         assert latest_status(statuses, CONTEXT)["state"] == "success"
 
+    def test_the_newest_by_timestamp_wins_whatever_the_list_order(self) -> None:
+        statuses = [_status("pending", updated="2026-10-21T10:00:00Z"), _status("success", updated="2026-10-21T10:05:00Z")]
+        assert latest_status(statuses, CONTEXT)["state"] == "success"
+
     def test_other_contexts_are_ignored(self) -> None:
         statuses = [_status("success", context="argocd/kubelab-prod"), _status("failure")]
         assert latest_status(statuses, CONTEXT)["state"] == "failure"
@@ -108,6 +112,11 @@ class TestWaitStatus:
         verdict, line, _, _ = _run([StatusFetchError("HTTP 502")], timeout=30)
         assert verdict is WaitStatus.CANNOT_CHECK and int(verdict) == 2
         assert "HTTP 502" in line
+
+    def test_an_outage_after_pending_says_what_was_last_read(self) -> None:
+        verdict, line, _, _ = _run([[_status("pending", description="syncing")], StatusFetchError("HTTP 502")], timeout=30)
+        assert verdict is WaitStatus.CANNOT_CHECK
+        assert "HTTP 502" in line and "still pending: syncing" in line
 
     def test_a_transient_api_error_is_retried(self) -> None:
         verdict, _, _, calls = _run([StatusFetchError("HTTP 502"), [_status("success")]])
