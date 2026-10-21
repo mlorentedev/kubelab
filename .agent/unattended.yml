@@ -1,0 +1,25 @@
+version: 1
+run_id: ap-20261021-kubelab-forge
+armed_by: manu
+armed_at: 2026-10-21T14:45:00Z
+expires_at: 2026-10-21T20:45:00Z
+objective: "Carry CONSOLE-004 from the merged ADR to follow-up tickets and a gated spec, with no feature code."
+scope:
+  write_paths: ["specs/CONSOLE-004-*/**", "docs/**", ".agent/**"]
+  frozen_paths: [".github/**", "harness/**", "**/AGENTS.md", "infra/config/secrets/**"]
+  max_files: 8
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make, poetry, rg]
+queue:
+  source: bitacora
+  filter: 'CONSOLE-004 (#2570): ADR-066 amendment follow-through'
+  max_items: 6
+budget:
+  max_iterations: 8
+  max_minutes_per_iteration: 25
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant
+  push: true
+  open_pr: true
+  advisor_tier: top
