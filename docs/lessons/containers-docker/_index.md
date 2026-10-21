@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 609 | [A DOCKER-USER rule matched by original destination also catches the replies](lesson-609-a-docker-user-rule-matched-by-original-destination-also-catches-the-replies.md) | 2026-10-21 |
 | 603 | [A throwaway gateway that mounts the live config fails for reasons the check never meant to test](lesson-603-a-probe-that-borrows-the-live-config-needs-the-live-mounts-or-its-own-minimal-one.md) | 2026-10-18 |
 | 592 | [Hermes's children do not see what the gateway sees: a container-only path and a stripped token](lesson-592-hermes-children-do-not-see-what-the-gateway-sees-a-container-only-path-and-a-stripped-token.md) | 2026-10-17 |
 | 582 | [Hermes injects a job's script output into its prompt, so a record parser cannot use the Prompt section](lesson-582-hermes-injects-a-jobs-script-output-into-its-prompt-so-a-record-parser-cannot-use-the-prompt-section.md) | 2026-10-16 |

@@ -85,8 +85,8 @@ networking:
   #
   # ufw is kept in step for defence in depth, but do NOT mistake it for the
   # control: a ufw rule CANNOT restrict a published port (#959 — Docker's DNAT
-  # runs in PREROUTING, before ufw's filter chains, and DOCKER-USER is empty on
-  # every node in the fleet). That gap is precisely why SEC-005 happened.
+  # runs in PREROUTING, before ufw's filter chains, and DOCKER-USER holds
+  # no rule for it). That gap is precisely why SEC-005 happened.
   #
   # Editing this list changes what prod accepts from the internet. Removing an
   # entry is enforced at the cloud edge and WILL drop live traffic — unlike the

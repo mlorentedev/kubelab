@@ -17,7 +17,7 @@ services:
     ports:
       # Bound to the Tailscale IP, never 0.0.0.0. A published port is governed by
       # its bind address and nothing else: Docker's DNAT is evaluated before ufw's
-      # filter chains and DOCKER-USER is empty on every node in this fleet, so an
+      # filter chains and DOCKER-USER holds no rule for this port, so an
       # interface-scoped ufw rule on a published port is decoration.
       - "{{ tailscale_ip }}:{{ gitea_http_port }}:3000"
       # Container port 22, not {{ gitea_ssh_port }}: the official image runs OpenSSH

@@ -2,7 +2,7 @@
 
 #959 established the rule that a published port is governed by its bind address
 and nothing else, because Docker's DNAT is evaluated before ufw's filter chains
-and DOCKER-USER is empty fleet-wide. The remedy it prescribes -- bind to
+and DOCKER-USER held no rule (rpi3 now keeps one for Kuma, #2482). The remedy it prescribes -- bind to
 `{{ tailscale_ip }}` instead of publishing bare -- is correct about reachability
 and introduces a SECOND problem it does not mention.
 
