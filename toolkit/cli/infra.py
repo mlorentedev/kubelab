@@ -645,7 +645,8 @@ def argo_verify_product(
     pinned at HEAD. Exit 0 = verified, 1 = failed (a failed operation at HEAD,
     or no match by the deadline), 2 = the hub, the host or the expected state
     could not be read, 3 = the host serves no `commit` (not verifiable yet,
-    never a pass).
+    never a pass), 4 = a later merge synced while waiting pins another tag
+    (superseded: verify that promotion instead).
     """
     import subprocess
 
@@ -668,6 +669,8 @@ def argo_verify_product(
         tag=tag,
         read_app=lambda: pv.read_application(f"kubelab-{env}", kubeconfig),
         fetch_served=lambda: pv.fetch_version_json(url),
+        descends=lambda rev: pv.descends_from(head, rev, fetch=True),
+        tag_at=lambda rev: pv.targets_at(rev, app, env)[0],
         timeout=timeout,
     )
     report = logger.success if verdict is pv.Verdict.VERIFIED else logger.error
@@ -675,6 +678,8 @@ def argo_verify_product(
         report(f"  {line}")
     if verdict is pv.Verdict.VERIFIED:
         logger.success(f"VERIFIED: {app} on kubelab-{env} serves {tag} at {head[:7]}")
+    elif verdict is pv.Verdict.SUPERSEDED:
+        logger.warning(f"SUPERSEDED: a later merge replaced {tag} on kubelab-{env}. This is not a pass; rerun.")
     elif verdict is pv.Verdict.NOT_VERIFIABLE:
         logger.warning(f"NOT VERIFIABLE YET: {app} serves no `commit` in {pv.VERSION_PATH}. This is not a pass.")
     else:

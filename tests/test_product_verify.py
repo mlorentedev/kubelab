@@ -21,6 +21,7 @@ from toolkit.features.product_verify import (
     Verdict,
     classify_application,
     classify_served,
+    descends_from,
     pinned_tag,
     targets_at,
     verify,
@@ -28,6 +29,7 @@ from toolkit.features.product_verify import (
 
 HEAD = "ed5747f5ecfc11306a4d34a5e0cb0f71c82a2c25"
 OLDER = "4ab30833f72e6b7ec622d39dcd61715d4f933ea3"
+NEWER = "9c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d"
 
 
 def _app(
@@ -104,7 +106,7 @@ class TestClassifyApplication:
         assert not state.ready and not state.failed
 
     def test_degraded_health_is_not_a_condition(self) -> None:
-        # Staging was Degraded on 2026-10-20 by unrelated Jobs; web's own
+        # Staging was Degraded on 2026-10-20 by vikunja (#1783); web's own
         # health is judged by what it serves, not by the whole Application.
         assert classify_application(_app(health="Degraded"), HEAD).ready
 
@@ -206,9 +208,26 @@ class FakeClock:
         self.t += seconds
 
 
-def _run(apps: list[Any], served: list[Any], timeout: float = 30, tag: str = "sha-7ebd808"):
-    """Run verify() against scripted answers; the last answer repeats."""
+def _run(
+    apps: list[Any],
+    served: list[Any],
+    timeout: float = 30,
+    tag: str = "sha-7ebd808",
+    tags_at: dict[str, Any] | None = None,
+):
+    """Run verify() against scripted answers; the last answer repeats.
+
+    ``tags_at`` maps a revision newer than HEAD to the tag it pins (or an
+    exception to raise); a revision absent from it does not descend from HEAD.
+    """
     clock = FakeClock()
+    tags_at = tags_at or {}
+
+    def tag_at(rev: str) -> str:
+        item = tags_at[rev]
+        if isinstance(item, Exception):
+            raise item
+        return item
 
     def answer(script: list[Any]):
         def call() -> Any:
@@ -224,6 +243,8 @@ def _run(apps: list[Any], served: list[Any], timeout: float = 30, tag: str = "sh
         tag=tag,
         read_app=answer(apps),
         fetch_served=answer(served),
+        descends=lambda rev: rev in tags_at,
+        tag_at=tag_at,
         timeout=timeout,
         poll=10,
         now=clock.now,
@@ -312,7 +333,91 @@ class TestVerify:
 
     def test_exit_codes_are_stable(self) -> None:
         # Makefile and runbook callers branch on these numbers.
-        assert [v.value for v in Verdict] == [0, 1, 2, 3]
+        assert [v.value for v in Verdict] == [0, 1, 2, 3, 4]
+
+
+class TestMasterMovesDuringThePoll:
+    """GITOPS-007 (#2584): HEAD is read once, and another merge may land while the check polls."""
+
+    def test_a_newer_commit_pinning_the_same_tag_still_verifies_the_promotion(self) -> None:
+        # B landed and Argo synced it, but B did not touch this app's pin:
+        # what HEAD promised is what B serves.
+        verdict, lines = _run([_app(revision=NEWER, op_revision=NEWER)], [SERVED_OK], tags_at={NEWER: "sha-7ebd808"})
+        assert verdict is Verdict.VERIFIED, lines
+
+    def test_a_newer_commit_pinning_another_tag_supersedes_the_promotion(self) -> None:
+        served: list[Any] = []
+
+        def fetch() -> Any:
+            served.append(1)
+            return SERVED_OK
+
+        clock = FakeClock()
+        verdict, lines = verify(
+            head=HEAD,
+            tag="sha-7ebd808",
+            read_app=lambda: _app(revision=NEWER, op_revision=NEWER),
+            fetch_served=fetch,
+            descends=lambda rev: rev == NEWER,
+            tag_at=lambda rev: "sha-1111111",
+            timeout=30,
+            poll=10,
+            now=clock.now,
+            sleep=clock.sleep,
+        )
+        # Neither a pass under B's tag nor a red: the promotion can no longer be observed.
+        assert verdict is Verdict.SUPERSEDED
+        assert served == [] and clock.t == 0
+        assert any("sha-1111111" in line and "sha-7ebd808" in line for line in lines)
+
+    def test_a_failed_operation_at_an_accepted_newer_commit_is_red_at_once(self) -> None:
+        app = _app(sync="OutOfSync", revision=NEWER, phase="Failed", op_revision=NEWER, message="hook failed")
+        verdict, lines = _run([app], [SERVED_OK], tags_at={NEWER: "sha-7ebd808"})
+        assert verdict is Verdict.FAILED
+        assert not any("deadline" in line for line in lines)
+
+    def test_an_older_sync_revision_still_waits(self) -> None:
+        # OLDER does not descend from HEAD: the merge has not been synced yet.
+        verdict, lines = _run([_app(revision=OLDER)], [SERVED_OK], tags_at={NEWER: "sha-7ebd808"})
+        assert verdict is Verdict.FAILED
+        assert any("deadline" in line for line in lines)
+
+    def test_an_unreadable_newer_pin_cannot_check(self) -> None:
+        verdict, _ = _run([_app(revision=NEWER, op_revision=NEWER)], [SERVED_OK], tags_at={NEWER: ValueError("gone")})
+        assert verdict is Verdict.CANNOT_CHECK
+
+
+class TestDescendsFrom:
+    @pytest.fixture
+    def repo(self, tmp_path, monkeypatch: pytest.MonkeyPatch):
+        import subprocess
+
+        def git(*args: str) -> str:
+            return subprocess.run(["git", *args], cwd=tmp_path, capture_output=True, text=True, check=True).stdout
+
+        git("init", "-q")
+        git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "a")
+        a = git("rev-parse", "HEAD").strip()
+        git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "b")
+        b = git("rev-parse", "HEAD").strip()
+        monkeypatch.chdir(tmp_path)
+        return a, b
+
+    def test_a_child_descends_from_its_parent(self, repo) -> None:
+        a, b = repo
+        assert descends_from(a, b)
+
+    def test_a_parent_does_not_descend_from_its_child(self, repo) -> None:
+        a, b = repo
+        assert not descends_from(b, a)
+
+    def test_a_commit_does_not_descend_from_itself(self, repo) -> None:
+        a, _ = repo
+        assert not descends_from(a, a)
+
+    def test_an_unknown_revision_does_not_descend(self, repo) -> None:
+        a, _ = repo
+        assert not descends_from(a, "f" * 40)
 
 
 class TestTargetsAt:

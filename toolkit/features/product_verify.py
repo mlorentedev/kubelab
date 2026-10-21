@@ -24,7 +24,8 @@ any contract-managed product in the registry (ADR-067):
 
 The host is read only once the Application is ready, so a match can never be
 the previous deploy answering. Health of the whole Application is not a
-condition: staging was Degraded on 2026-10-20 by Jobs unrelated to web.
+condition: staging was Degraded on 2026-10-20 by the `vikunja` Deployment
+(ProgressDeadlineExceeded, #1783), unrelated to web.
 
 Every input is read from `origin/master`, never the worktree (lesson-479).
 """
@@ -57,6 +58,7 @@ class Verdict(IntEnum):
     FAILED = 1
     CANNOT_CHECK = 2
     NOT_VERIFIABLE = 3
+    SUPERSEDED = 4
 
 
 class Served(Enum):
@@ -143,6 +145,21 @@ def git_show(rev: str, path: str) -> str:
     return subprocess.run(["git", "show", f"{rev}:{path}"], capture_output=True, text=True, check=True).stdout
 
 
+def descends_from(head: str, rev: str, fetch: bool = False) -> bool:
+    """True when ``rev`` is a strict descendant of ``head``: a later master, not the same or an older one.
+
+    ``fetch`` first fetches origin/master, so a commit merged while polling is
+    known locally. An unknown ``rev`` is not a descendant, so the caller waits
+    for it instead of judging it.
+    """
+    if rev == head:
+        return False
+    if fetch:
+        subprocess.run(["git", "fetch", "--quiet", "origin", "master"], capture_output=True, text=True, check=False)
+    proc = subprocess.run(["git", "merge-base", "--is-ancestor", head, rev], capture_output=True, text=True)
+    return proc.returncode == 0
+
+
 def origin_head() -> str:
     """Fetch, then the sha of origin/master: the commit Argo CD should be at."""
     subprocess.run(["git", "fetch", "--quiet", "origin", "master"], capture_output=True, text=True, check=True)
@@ -225,12 +242,35 @@ def fetch_version_json(url: str, timeout: float = 10.0) -> dict[str, Any]:
     return payload
 
 
+class _Superseded(Exception):
+    """The Application is at a later master that pins another tag."""
+
+
+def _judged_revision(
+    app: dict[str, Any],
+    head: str,
+    tag: str,
+    descends: Callable[[str], bool],
+    tag_at: Callable[[str], str] | None,
+) -> str:
+    """The revision the Application is judged at: HEAD, or a later master that keeps the same tag."""
+    synced = ((app.get("status") or {}).get("sync") or {}).get("revision")
+    if not synced or synced == head or tag_at is None or not descends(synced):
+        return head
+    newer = tag_at(synced)
+    if newer != tag:
+        raise _Superseded(f"the Application is synced at {synced[:7]}, which pins {newer}, not {tag} as {head[:7]} did")
+    return synced
+
+
 def verify(
     *,
     head: str,
     tag: str,
     read_app: Callable[[], dict[str, Any]],
     fetch_served: Callable[[], dict[str, Any]],
+    descends: Callable[[str], bool] = lambda rev: False,
+    tag_at: Callable[[str], str] | None = None,
     timeout: float = DEFAULT_TIMEOUT,
     poll: float = DEFAULT_POLL,
     now: Callable[[], float] = time.monotonic,
@@ -242,15 +282,29 @@ def verify(
     CANNOT_CHECK, a payload without `commit` is NOT_VERIFIABLE, anything else
     (not synced, another commit served, an HTTP error) is FAILED. The
     Application's summary, with `operationState.message`, is in every report.
+
+    HEAD is read once, but master can move while this polls (GITOPS-007,
+    #2584). When the Application is at a revision that ``descends`` from HEAD,
+    the tag that revision pins (``tag_at``) decides: the same tag means the
+    promotion is still the one live, so that revision is judged instead of
+    HEAD; another tag means a later merge replaced it, which is SUPERSEDED at
+    once. That is not a pass under the new tag and not red: the promotion asked
+    about can no longer be observed, and the newer one has its own check.
     """
     deadline = now() + timeout
     app_line = "Application not read"
     while True:
         verdict, served_line = Verdict.FAILED, "host not read: the Application is not ready at HEAD"
         try:
-            state = classify_application(read_app(), head)
+            app = read_app()
+            target = _judged_revision(app, head, tag, descends, tag_at)
+            state = classify_application(app, target)
         except HubUnreachableError as exc:
             verdict, app_line = Verdict.CANNOT_CHECK, f"hub unreachable: {exc}"
+        except _Superseded as exc:
+            return Verdict.SUPERSEDED, [str(exc), "a later merge replaced this promotion; verify that one instead"]
+        except (subprocess.CalledProcessError, KeyError, ValueError) as exc:
+            verdict, app_line = Verdict.CANNOT_CHECK, f"the pin at the synced revision could not be read: {exc}"
         else:
             app_line = state.summary
             if state.failed:
