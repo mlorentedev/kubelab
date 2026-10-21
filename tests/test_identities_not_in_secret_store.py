@@ -143,3 +143,34 @@ class TestKumaLogsInAsItsAccount:
 
         credentials.CredentialsManager()._reconcile_external_credentials("new-pass", "old-pass")
         api.login.assert_called_with(IDENTITIES["superadmin"], "old-pass")
+
+
+class TestTheCatalogRefusesIdentities:
+    """The catalog half: a username cannot be registered as a secret, so no tool can rotate one."""
+
+    @pytest.mark.parametrize(
+        "key_path",
+        ["basic_auth.user", "apps.services.observability.grafana.admin_user", "apps.x.admin_username"],
+    )
+    def test_an_identity_key_is_refused(self, key_path: str) -> None:
+        from toolkit.features.secrets_manager import SecretKind, SecretSpec
+
+        with pytest.raises(ValueError, match="identity"):
+            SecretSpec(key_path=key_path, description="a username", kind=SecretKind.PASSWORD)
+
+    def test_a_password_hash_named_after_a_user_is_not_an_identity(self) -> None:
+        from toolkit.features.secrets_manager import SecretKind, SecretSpec
+
+        SecretSpec(key_path="a.users_x_password_hash", description="hash", kind=SecretKind.ARGON2_HASH)
+
+    def test_a_third_party_account_name_is_allowed(self) -> None:
+        """EXTERNAL values are typed in and delivered, never minted, so no rotation renames them."""
+        from toolkit.features.secrets_manager import SecretKind, SecretSpec
+
+        SecretSpec(key_path="dockerhub.username", description="Docker Hub account", kind=SecretKind.EXTERNAL)
+
+    def test_the_compose_gitea_admin_is_the_superadmin(self) -> None:
+        config = _declared()
+        config["apps"]["services"]["core"] = {"gitea": {"admin_user": IDENTITIES["operator"]}}
+        ConfigurationManager._inject_identity_derivations(config)
+        assert config["apps"]["services"]["core"]["gitea"]["admin_user"] == IDENTITIES["superadmin"]
