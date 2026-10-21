@@ -101,6 +101,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit infra argo set-revision` | Patch an Argo CD Application's spec.source.targetRevision. |
 | `toolkit infra argo spoke-url` | Print one spoke's K3s apiserver URL, resolved from the SSOT (#1215). |
 | `toolkit infra argo unregister-spoke` | Detach ONE hub from ONE spoke, without pruning the spoke. |
+| `toolkit infra argo verify-product` | Verify a product is deployed at origin/master HEAD by consequence (GITOPS-003, #1478). |
 | `toolkit infra headscale` | Headscale VPN ACL policy + mesh probe (ADR-041) |
 | `toolkit infra headscale policy-check` | Render policy.hujson from the SSOT and validate it with `headscale policy check` (Docker). |
 | `toolkit infra headscale probe` | Probe the preserved mesh flows after a policy reload (auto-revert gate, ADR-041). |
