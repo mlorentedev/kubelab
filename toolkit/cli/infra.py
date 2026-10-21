@@ -682,6 +682,28 @@ def argo_verify_product(
     raise typer.Exit(int(verdict))
 
 
+@argo_app.command("wait-status")
+def argo_wait_status(
+    sha: Annotated[str, typer.Option("--sha", help="Commit whose Argo CD status to wait for")],
+    context: Annotated[str, typer.Option("--context", help="Status context, e.g. argocd/kubelab-staging")],
+    timeout: Annotated[float, typer.Option("--timeout", help="Seconds to wait for a settled status")] = 600.0,
+    repo: Annotated[str, typer.Option("--repo", help="owner/name the status is posted on")] = "mlorentedev/kubelab",
+) -> None:
+    """Wait for the commit status Argo CD posts per sync (GITOPS-003 AC2, #1478).
+
+    Reads `gh api repos/<repo>/commits/<sha>/statuses`, so it runs anywhere gh is
+    authenticated: no mesh, no hub kubeconfig. Exit 0 = success, 1 = failure or
+    error (with Argo's message), no status arrived, or still pending at the
+    deadline, 2 = the statuses could not be read.
+    """
+    from toolkit.features import argo_manager as am
+
+    logger.section(f"wait-status — {context} on {sha[:7]}")
+    verdict, line = am.wait_status(context=context, fetch=lambda: am.fetch_statuses(repo, sha), timeout=timeout)
+    (logger.success if verdict is am.WaitStatus.SUCCESS else logger.error)(f"{verdict.name}: {line}")
+    raise typer.Exit(int(verdict))
+
+
 @argo_app.command("check-spokes")
 def argo_check_spokes(
     kubeconfig: Annotated[
