@@ -143,6 +143,12 @@ class TestValues:
         shape = classify_diff(changes(VALUES, OVERLAY), before, after, apps, decl)
         assert shape.verdict == "not-mechanical"
 
+    def test_a_change_after_the_version_ends_it_too(self, decl, apps) -> None:
+        """The leaf walk meets the version first here, so only a count catches this."""
+        before, after = bump("web", NEW, values_extra=lambda t: t + "zz_rides_along: true\n")
+        shape = classify_diff(changes(VALUES, OVERLAY), before, after, apps, decl)
+        assert shape.verdict == "not-mechanical"
+
     def test_an_app_the_registry_does_not_admit_is_refused(self, decl) -> None:
         before, after = bump("web", NEW)
         shape = classify_diff(changes(VALUES, OVERLAY), before, after, ("api",), decl)
