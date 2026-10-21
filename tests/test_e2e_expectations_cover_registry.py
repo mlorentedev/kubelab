@@ -31,6 +31,7 @@ def _missing(apps: tuple[str, ...], expectations: dict[str, ServiceExpectation])
 
 
 def test_every_registered_product_has_an_e2e_expectation() -> None:
+    assert platform_apps(), "the product registry names no product: nothing was checked"
     assert _missing(platform_apps(), EXPECTATIONS) == [], (
         "ERROR: a product in infra/config/products.yaml has no entry in tests/e2e/expectations.py\n"
         "WHY: the content, security-header and auth e2e suites parametrize over that dict, "
@@ -41,6 +42,11 @@ def test_every_registered_product_has_an_e2e_expectation() -> None:
 
 def test_a_registered_product_without_an_entry_is_reported() -> None:
     assert _missing(("api", "web", "shop"), EXPECTATIONS) == ["shop"]
+
+
+def test_there_is_a_contract_snapshot_to_compare() -> None:
+    """The parametrized check below runs once per snapshot, so with none it would pass by checking nothing."""
+    assert sorted(SNAPSHOT_DIR.glob("*.yaml")), f"no contract snapshot under {SNAPSHOT_DIR}"
 
 
 @pytest.mark.parametrize("snapshot", sorted(SNAPSHOT_DIR.glob("*.yaml")), ids=lambda path: path.stem)
