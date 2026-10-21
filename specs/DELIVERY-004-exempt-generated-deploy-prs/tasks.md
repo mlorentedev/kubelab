@@ -16,14 +16,14 @@ created: "2026-09-04"
 
 ## PR 1 — `deploy-shape`, assert-only (AC1, AC2, AC3 declaration)
 
-- [ ] [AC1] Failing tests for the pure predicate: each of the four conditions refused on its own; #2576/#2581 shapes accepted; contract-change shape and prod files refused.
-- [ ] [AC1] `toolkit/features/deploy_shape.py`: pure `classify()` + an API reader (gh) that fails closed.
-- [ ] [AC2] `mechanical` block in `harness/review-attestation.json`; extend the no-policy-in-module test to both modules.
-- [ ] [AC1] `toolkit tools deploy-shape` CLI: JSON verdict, exit 0 mechanical / 1 not mechanical / 2 unknown.
-- [ ] [AC1] `.github/workflows/deploy-shape.yml`: master's code, check-run `success`/`neutral`/`failure`.
-- [ ] [AC2] `review-attestation`: drop the file-only staging signature; exempt on a recomputed `mechanical` at the attested head sha.
+- [x] [AC1] Failing tests for the pure predicate: each of the four conditions refused on its own; #2576/#2581 shapes accepted; contract-change shape and prod files refused.
+- [x] [AC1] `toolkit/features/deploy_shape.py`: pure `classify()` + an API reader (gh) that fails closed.
+- [x] [AC2] `mechanical` block in `harness/review-attestation.json`; extend the no-policy-in-module test to both modules.
+- [x] [AC1] `toolkit tools deploy-shape` CLI: JSON verdict, exit 0 mechanical / 1 not mechanical / 2 unknown.
+- [x] [AC1] `.github/workflows/deploy-shape.yml`: master's code, check-run `success`/`neutral`/`failure`.
+- [x] [AC2] `review-attestation`: drop the file-only staging signature; exempt on a recomputed `mechanical` at the attested head sha.
 - [ ] [AC3] Measure a neutral run against protection on a real PR, then add `deploy-shape` to `required_contexts` (operator reconciles live).
-- [ ] Lesson in `docs/lessons/`.
+- [x] Lesson in `docs/lessons/` (lesson-610) ✓ 2026-10-21
 
 ## PR 2 — widening tests (AC4, AC5)
 

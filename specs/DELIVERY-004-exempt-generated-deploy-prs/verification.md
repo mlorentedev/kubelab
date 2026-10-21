@@ -7,24 +7,26 @@ created: "2026-09-03"
 
 ## Evidence
 
-Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
-
-- [ ] Criterion 1 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 2 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 3 -> commit `<hash>` / test `<name>`
+- AC1 (PR 1): `tests/test_deploy_shape.py` (38 tests). Live, 2026-10-21, `toolkit tools deploy-shape --pr N`:
+  - #2581 exit 0 `mechanical`: web sha-f55a8c0 -> sha-9d79e52, head `5f8dec3e`
+  - #2576 exit 0 `mechanical`: web sha-7ebd808 -> sha-f55a8c0, head `cfa843dd`
+  - #2579 (human PR) exit 1 `not-mechanical`: file set
+- AC2 (PR 1): `tests/test_review_attestation.py` (`test_the_staging_files_alone_no_longer_exempt`,
+  `test_a_mechanical_verdict_at_the_head_sha_exempts`, `test_any_other_verdict_does_not_exempt`,
+  `test_no_reviewer_is_named_in_the_module` extended to both modules).
+- Mutation proofs (`make mutate`, each RED): `len(values) != 1` -> `< 1`; exact file set -> subset;
+  attestation head-sha equality -> `True`; provenance compare -> `False`. The first one survived until
+  `test_a_change_after_the_version_ends_it_too` was added.
 
 ## Test status
 
-- Test suite: `<command> -> <output / coverage %>`
-- Manual smoke test: what was exercised, what was observed
-- No regressions in existing test suite: yes / no (if no, document)
+- `make test`: 6406 passed, 2 failed before fixes (pinned `gh pr view` field list, stale toolkit README); both fixed, targeted rerun green.
 
 ## Decisions made during implementation
 
-Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
-
--
--
+- Operator 2026-10-21: attestation adopts the content predicate in PR 1; every registry app is in the class (api proven against this repository); names `deploy-shape`.
+- Check-run, not commit status: only a check-run can answer `neutral` for a normal PR.
+- Consumers recompute from master's code; the check is visible, not authoritative.
 
 ## Promotion candidates
 
