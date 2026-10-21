@@ -41,7 +41,7 @@ There is no RC scheme (`-rc.N` was dropped — see `ci-cleanup.yml`'s comment an
 | Stage | Tag | Produced by | Mutable? |
 |---|---|---|---|
 | Feature/fix/hotfix/chore branch (pre-merge preview) | `sha-<short>` | `ci-pipeline.yml` → `ci-publish.yml` on the PR | No — one tag per commit |
-| Staging (continuous, every merge to `master`) | `sha-<short>` | `staging-deploy.yml` (`api`) / `web-image-receiver.yml` (`web`, cross-repo dispatch) | No |
+| Staging (continuous, every merge to `master`) | `sha-<short>` | `staging-deploy.yml` (`api`) / `product-image-receiver.yml` (`web`, cross-repo dispatch) | No |
 | Prod (`api`) | `X.Y.Z` + `:latest` | `release.yml`'s `publish-api` job — **re-tags** the staging-validated `sha-<short>` digest, never rebuilds ([ADR-056](../adr/adr-056-build-once-monorepo-apps.md), build-once) | No |
 | Prod (`errors`) | `X.Y.Z` | `release.yml`'s `publish-errors` job — rebuilds; `errors` is edge infra, explicitly out of the build-once staging-sha lane | No |
 | Prod (`web`) | `X.Y.Z` | Built in `mlorentedev/web`'s own CI, promoted here via `promote-prod.yml` | No |
@@ -78,7 +78,7 @@ produced here anymore.
 |---|---|
 | `ci-pipeline.yml` | Per-PR: builds the `sha-<short>` preview tag for the changed app(s) |
 | `release.yml` | release-please: cuts `api-vX.Y.Z`/`errors-vX.Y.Z`, re-tags (`api`) or rebuilds (`errors`), auto-promotes `errors` |
-| `staging-deploy.yml` / `web-image-receiver.yml` | Continuous staging promotion (`api` / `web`) |
+| `staging-deploy.yml` / `product-image-receiver.yml` | Continuous staging promotion (`api` / `web`) |
 | `promote-prod.yml` | Manual gated prod promotion (`api`/`web`) |
 | `ci-cleanup.yml` | Weekly janitor — prunes old `sha-*` tags, never touches prod semver |
 
