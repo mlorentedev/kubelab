@@ -246,6 +246,10 @@ class _Superseded(Exception):
     """The Application is at a later master that pins another tag."""
 
 
+class _PinUnreadable(Exception):
+    """The tag a later master pins could not be read from git."""
+
+
 def _judged_revision(
     app: dict[str, Any],
     head: str,
@@ -257,7 +261,10 @@ def _judged_revision(
     synced = ((app.get("status") or {}).get("sync") or {}).get("revision")
     if not synced or synced == head or tag_at is None or not descends(synced):
         return head
-    newer = tag_at(synced)
+    try:
+        newer = tag_at(synced)
+    except (subprocess.CalledProcessError, KeyError, ValueError, yaml.YAMLError) as exc:
+        raise _PinUnreadable(str(exc)) from exc
     if newer != tag:
         raise _Superseded(f"the Application is synced at {synced[:7]}, which pins {newer}, not {tag} as {head[:7]} did")
     return synced
@@ -303,7 +310,7 @@ def verify(
             verdict, app_line = Verdict.CANNOT_CHECK, f"hub unreachable: {exc}"
         except _Superseded as exc:
             return Verdict.SUPERSEDED, [str(exc), "a later merge replaced this promotion; verify that one instead"]
-        except (subprocess.CalledProcessError, KeyError, ValueError) as exc:
+        except _PinUnreadable as exc:
             verdict, app_line = Verdict.CANNOT_CHECK, f"the pin at the synced revision could not be read: {exc}"
         else:
             app_line = state.summary

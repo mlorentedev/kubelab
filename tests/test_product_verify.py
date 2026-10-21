@@ -386,6 +386,17 @@ class TestMasterMovesDuringThePoll:
         verdict, _ = _run([_app(revision=NEWER, op_revision=NEWER)], [SERVED_OK], tags_at={NEWER: ValueError("gone")})
         assert verdict is Verdict.CANNOT_CHECK
 
+    def test_a_contract_removed_at_the_newer_commit_cannot_check(self) -> None:
+        gone = NoContractError("'web' has no product contract")
+        verdict, _ = _run([_app(revision=NEWER, op_revision=NEWER)], [SERVED_OK], tags_at={NEWER: gone})
+        assert verdict is Verdict.CANNOT_CHECK
+
+    def test_a_reader_bug_is_not_reported_as_an_unreadable_pin(self) -> None:
+        # Only the pin read is a "could not be read"; a KeyError from reading the
+        # Application is a bug, and polling to the deadline would hide it.
+        with pytest.raises(KeyError):
+            _run([KeyError("status")], [SERVED_OK], tags_at={NEWER: "sha-7ebd808"})
+
 
 class TestDescendsFrom:
     @pytest.fixture
