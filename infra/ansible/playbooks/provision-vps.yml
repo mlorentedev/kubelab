@@ -452,7 +452,7 @@
     # for K3s, and that role's dist-upgrade/package churn isn't something to
     # add as a drive-by). NOTE what this does NOT cover: a Docker-published
     # port bypasses this rule entirely — DNAT happens in PREROUTING, before
-    # ufw's INPUT chain, and DOCKER-USER is empty fleet-wide (#959). Glances
+    # ufw's INPUT chain, and DOCKER-USER holds no rule for it (#959). Glances
     # is only actually restricted by its compose bind address
     # (tailscale_ip:port:port in roles/glances), not by this ufw rule.
     - name: Allow Glances port on Tailscale interface
