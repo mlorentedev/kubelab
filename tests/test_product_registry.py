@@ -138,7 +138,9 @@ class TestAppForEvent:
         `deploy/staging-<app>`, which is why the flip and the demotion share PR 7.
         """
         listening: dict[str, list[str]] = {}
-        for path in sorted((REPO / ".github" / "workflows").glob("*.yml")):
+        # GitHub runs both extensions; a `.yaml` listener missed here is the race itself.
+        workflows = REPO / ".github" / "workflows"
+        for path in sorted([*workflows.glob("*.yml"), *workflows.glob("*.yaml")]):
             workflow = yaml.safe_load(path.read_text())
             dispatch = (workflow.get("on") or workflow.get(True) or {}).get("repository_dispatch") or {}
             for event in dispatch.get("types", []) if isinstance(dispatch, dict) else []:
