@@ -251,16 +251,29 @@ class TestPromoteErrors:
     def test_writes_exactly_the_files_it_declares(self, env_patched, monkeypatch) -> None:
         # release.yml stages ERRORS_PROMOTION_FILES; a file promote writes outside
         # that list reaches the runner's tree and never the PR (#2552).
+        # Observed on disk, not from the mocks' arguments, so a direct write in
+        # _promote_errors counts too (#2568 review).
         root, _ = env_patched
         self._write_common(root)
         monkeypatch.setattr(promotion, "tag_exists", MagicMock(return_value=True))
-        k8s_sync = MagicMock(return_value=0)
-        monkeypatch.setattr(promotion.sync_k8s_images, "sync", k8s_sync)
 
+        def _writes(path: Path) -> int:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("synced\n")
+            return 0
+
+        monkeypatch.setattr(promotion.sync_k8s_images, "sync", lambda _common, out: _writes(out))
+        self.manifest_sync.side_effect = lambda output_path, config_path: _writes(output_path)
+
+        def _tree() -> dict[str, bytes]:
+            return {p.relative_to(root).as_posix(): p.read_bytes() for p in root.rglob("*") if p.is_file()}
+
+        before = _tree()
         promotion.promote("prod", "errors", "1.2.0")
+        after = _tree()
 
-        written = {*k8s_sync.call_args.args, *self.manifest_sync.call_args.kwargs.values()}
-        assert {p.relative_to(root).as_posix() for p in written} == set(promotion.ERRORS_PROMOTION_FILES)
+        changed = {p for p in after if before.get(p) != after[p]}
+        assert changed == set(promotion.ERRORS_PROMOTION_FILES)
 
     def test_refuses_a_missing_version_key(self, env_patched, monkeypatch) -> None:
         root, _ = env_patched
