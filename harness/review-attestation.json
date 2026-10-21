@@ -100,14 +100,6 @@
         "why": "Observed 4 times across the full release history, replayed 2026-08-19. An earlier draft of this entry called it unobserved and declared 'by construction' — that was written from a 4-PR sample and the backtest refuted it. Two shapes are deliberately NOT declared: 5 releases of apps/web/* (web moved to its own repo, ADR-053, so the shape is dead) and one 2-file errors release predating version.txt. Both correctly refuse rather than exempt; adding signatures for shapes that can no longer occur would widen the exemption for nothing."
       },
       {
-        "name": "staging deploy (single app)",
-        "files": [
-          "infra/config/values/staging.yaml",
-          "infra/k8s/overlays/staging/generated/deployments.yaml"
-        ],
-        "why": "The staging half of ADR-046's promote-then-PR mechanism. `toolkit deployment promote --env staging` writes apps.platform.<app>.version and regenerates the overlay; the config-drift gate (ADR-027) then guarantees the second file byte-for-byte against the generator, so neither line is something a reviewer could act on. Measured 2026-09-04 on five consecutive real PRs — #1560, #1582, #1590, #1601, #1617 — each carrying exactly these two paths and no other. DELIVERY-004 / #1619."
-      },
-      {
         "name": "prod promote (single app)",
         "files": [
           "infra/config/values/prod.yaml",
@@ -116,5 +108,22 @@
         "why": "The prod half, identical in shape and equally unreviewable. Measured on #1618. Exempting it does NOT weaken the prod gate, because that gate was never a review gate: promote-prod.yml is workflow_dispatch, it refuses any non-semver tag (line 107), and what the operator supplies at that merge is the DECISION TO PROMOTE, not an inspection of two generated lines. ADR-046 D3 already draws exactly this line — staging is Continuous Deployment, prod is Continuous Delivery — so prod loses the reviewer round-trip it never benefited from and keeps the human merge that is its actual control. DELIVERY-004 / #1619."
       }
     ]
+  },
+  "mechanical": {
+    "name": "staging deploy (single app)",
+    "check": "deploy-shape",
+    "env": "staging",
+    "files": [
+      "infra/config/values/staging.yaml",
+      "infra/k8s/overlays/staging/generated/deployments.yaml"
+    ],
+    "version_path": [
+      "apps",
+      "platform",
+      "{app}",
+      "version"
+    ],
+    "tag_pattern": "^sha-[0-9a-f]{7,40}$",
+    "why": "The class a generated staging deploy PR belongs to (DELIVERY-004, #1619; operator decision 2026-10-20, conditions (a)-(d)). It replaces the file-only `staging deploy (single app)` exempt signature, which exempted ANY change confined to these two files, a resource limit or an image repository included. Membership is decided by toolkit/features/deploy_shape.py from master's code: exactly these files, both modified; one values leaf, `version_path` with `{app}` an entry of infra/config/products.yaml, moving to a tag matching `tag_pattern`; overlay changes only in `image` leaves from <repo>:<old> to <repo>:<new>; and the tag's commit on the product's default branch. The check publishes the verdict for people to see; review-attestation and the merge job recompute it rather than reading the check, because a PR can publish a check of the same name. Staging only: prod keeps its operator merge and its own signature (#1741). Widening any field here widens what merges without a human, so tests pin every one of them."
   }
 }

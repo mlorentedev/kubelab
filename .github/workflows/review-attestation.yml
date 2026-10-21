@@ -289,8 +289,22 @@ jobs:
         run: |
           set -euo pipefail
           gh pr view "$NUMBER" \
-            --json number,state,labels,body,comments,reviews,author,files \
+            --json number,state,labels,body,comments,reviews,author,files,headRefOid \
             > pr-payload.json
+
+      # DELIVERY-004 (#1619). A staging deploy is exempt only when the
+      # deploy-shape predicate, recomputed here from master's code, says
+      # `mechanical` for the head sha in the payload. The `deploy-shape` check
+      # publishes the same verdict for people to read; it is not read here,
+      # because a PR can publish a check of that name itself. Any exit code is
+      # fine: no verdict file, or any other verdict, only means no exemption.
+      - name: Judge the deploy shape
+        if: steps.pr.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NUMBER: ${{ steps.pr.outputs.number }}
+        run: |
+          poetry run toolkit tools deploy-shape --pr "$NUMBER" --out "$RUNNER_TEMP/deploy-shape.json" || true
 
       - name: Classify
         id: attest
@@ -298,7 +312,8 @@ jobs:
         run: |
           set +e
           state_file="$RUNNER_TEMP/attestation-state"
-          out="$(poetry run toolkit tools review-attestation --payload-file pr-payload.json --state-file "$state_file" 2>&1)"
+          out="$(poetry run toolkit tools review-attestation --payload-file pr-payload.json --state-file "$state_file" \
+            --shape-file "$RUNNER_TEMP/deploy-shape.json" 2>&1)"
           code=$?
           set -e
           printf '%s\n' "$out"
