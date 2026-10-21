@@ -17,9 +17,10 @@ nobody was offered; on a stable branch the ref is *meant* to persist, so there i
 nothing to roll back and no reconciliation to get wrong.
 
 These tests EXECUTE the shipped step against a real bare git remote with `gh`
-stubbed. The step runs only on `repository_dispatch` from another repository, so
-CI cannot exercise it on the branch that changes it — "CI green" is not the claim
-anyone needs here.
+stubbed. The step ran only on `repository_dispatch` from another repository, so
+CI could not exercise it on the branch that changes it — "CI green" was not the
+claim anyone needed. Since IDP-042 PR 7 it receives no dispatch at all; the file
+stays until PR 8 deletes the workflow.
 """
 
 from __future__ import annotations
