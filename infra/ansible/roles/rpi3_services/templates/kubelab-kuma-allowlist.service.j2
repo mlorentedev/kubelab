@@ -1,0 +1,19 @@
+# {{ ansible_managed }}
+# Restricts Uptime Kuma's published port to its allowlist (#2482). Docker owns
+# DOCKER-USER and its rules live only in the kernel, so the chain is re-applied
+# whenever Docker starts: after a reboot and after a daemon restart.
+# Stopping this unit removes the jump, which opens the port again (rollback).
+[Unit]
+Description=Uptime Kuma port allowlist
+After=docker.service
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/iptables-restore -w 5 --noflush {{ rpi3_deploy_dir }}/kuma-allowlist.rules
+ExecStart=/bin/sh -c 'iptables -w -C DOCKER-USER -p tcp -m conntrack --ctorigdst {{ tailscale_ip }} --ctorigdstport {{ uptime_kuma_port }} -j KUMA-ALLOW || iptables -w -I DOCKER-USER 1 -p tcp -m conntrack --ctorigdst {{ tailscale_ip }} --ctorigdstport {{ uptime_kuma_port }} -j KUMA-ALLOW'
+ExecStop=/bin/sh -c 'while iptables -w -D DOCKER-USER -p tcp -m conntrack --ctorigdst {{ tailscale_ip }} --ctorigdstport {{ uptime_kuma_port }} -j KUMA-ALLOW 2>/dev/null; do :; done'
+
+[Install]
+WantedBy=docker.service

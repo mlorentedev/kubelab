@@ -151,6 +151,14 @@ networking:
     homelab: "manu"
     cloud: "deployer"
 
+  # The operator's own machines on the tailnet. Not nodes: nothing provisions
+  # them and no inventory names them. Declared so a service that admits the
+  # operator by address derives it from here (#2482: Uptime Kuma's direct port,
+  # reached by `make monitoring-apply` and break-glass).
+  operator_workstations:
+    - name: mac
+      tailscale_ip: "100.64.0.15"
+
   vps:
     # ADR-028 tier. Machine-readable projection of the topology the ADR
     # narrates; consumed by the backup trigger model (BACKUP-044).

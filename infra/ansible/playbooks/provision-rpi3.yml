@@ -133,6 +133,15 @@
         restart_policy: "{{ config.global.restart_policy }}"
         # Consumed by the compose port bind (see the comment in the template).
         tailscale_ip: "{{ config.networking.nodes.rpi3.tailscale_ip }}"
+        # Who may open the published port (#2482): the node of each Argo CD spoke,
+        # whose Traefik routes status.* here (base/external/uptime-kuma.yaml), and
+        # the operator's workstations. Derived, never listed. Plain Jinja filters
+        # only, so tests/test_kuma_port_allowlist.py renders it without Ansible.
+        uptime_kuma_allowed_sources: >-
+          {{ (dict(config.networking.nodes, vps=config.networking.vps).items()
+              | selectattr('0', 'in', config.argocd.spokes.values() | map(attribute='node') | list)
+              | map(attribute='1.tailscale_ip') | list)
+             + (config.networking.operator_workstations | map(attribute='tailscale_ip') | list) }}
 
     - role: ../roles/glances
       tags: [monitoring, glances]

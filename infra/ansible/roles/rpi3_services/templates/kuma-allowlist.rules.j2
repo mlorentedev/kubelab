@@ -1,0 +1,17 @@
+# {{ ansible_managed }}
+# Who may open Uptime Kuma's published port (#2482). Loaded with
+# `iptables-restore --noflush` by kubelab-kuma-allowlist.service: declaring the
+# chain empties it in the same transaction, so a re-apply replaces the list and
+# never leaves it empty in between. The unit adds the DOCKER-USER jump.
+*filter
+:KUMA-ALLOW - [0:0]
+# The jump matches the connection's ORIGINAL destination, which Kuma's replies
+# share, so they arrive here too with the container as source. Judge only the
+# client's direction: without this line every reply was dropped (2026-10-21).
+-A KUMA-ALLOW -m conntrack --ctdir REPLY -j RETURN
+{% for source in uptime_kuma_allowed_sources %}
+-A KUMA-ALLOW -s {{ source }}/32 -j RETURN
+{% endfor %}
+-A KUMA-ALLOW -m limit --limit 6/min -j LOG --log-prefix "kuma-allowlist drop: "
+-A KUMA-ALLOW -j DROP
+COMMIT
