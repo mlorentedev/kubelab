@@ -2459,8 +2459,8 @@ class SecretsManager:
 
         The module docstring has promised `rotate (regenerate + propagate)` since
         it was written and nothing implemented it, so the only way to change one
-        credential was `credentials generate`, which rewrites 24 prod secrets and
-        2 hub secrets at once. That is why `rotate_note` entries describe
+        credential was `credentials generate`, which rewrites 17 prod secrets and
+        4 hub secrets at once (counted 2026-10-21, #1454). That is why `rotate_note` entries describe
         procedures in prose: with no verb to carry them, a note is all there is,
         and `aws.headscale_preauth_key` sat unrotated from March to August.
 
