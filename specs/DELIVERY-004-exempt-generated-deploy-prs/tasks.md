@@ -32,8 +32,34 @@ created: "2026-09-04"
 
 ## PR 3 — the merge step, switch off (AC6)
 
-- [ ] [AC6] Merge job: recompute, `gh pr merge --squash --match-head-commit`, `RELEASE_PLEASE_TOKEN`, switch default off.
-- [ ] [AC4] Tests pin the job's `if:` and merge command.
+Design recorded 2026-10-21; not built in the run that wrote it, because it was outside that
+run's envelope. The operator approves this design before it is built.
+
+- [ ] [AC6] `toolkit tools deploy-merge --pr N`, tested against a fake API like `evaluate()`. The
+  workflow stays thin. It refuses unless all of these hold at one head sha read once, and re-read
+  before merging:
+  - the switch is on (a `merge` key in the `mechanical` block);
+  - `evaluate()` says `mechanical`;
+  - every context in `ci.branch_protection."mlorentedev/kubelab".master.required_contexts` (read from
+    common.yaml, never hardcoded) reports success / neutral / skipped on that sha, checking both
+    commit statuses (`review-attestation` is one) and check-runs;
+  - `mergeable_state == clean`.
+  Then exactly `gh pr merge N --squash --match-head-commit <sha>`. A `--match-head-commit`
+  refusal means the receiver force-pushed mid-run: report it as superseded, exit 0.
+- [ ] [AC6] Identity: `RELEASE_PLEASE_TOKEN` on the merge step only, so push workflows fire after the
+  merge (`check-config-drift`, `ci`, `ci-cleanup`, `release`, `repo-hygiene`); reads use
+  `GITHUB_TOKEN`. Measured 2026-10-21: `enforce_admins` is `true` and approvals required are `0`, so
+  the owner's PAT is gated by the required checks and needs no approval. The job's own checks are
+  still the primary gate.
+- [ ] [AC6] Trigger: enumerate open non-draft PRs against master and judge each one. Never read the
+  event payload, which sidesteps #1184's context loss and keeps branch names out of the grant.
+  `workflow_run` on the required workflows completing, plus a schedule sweep and `workflow_dispatch`.
+  One repo-wide concurrency group, `cancel-in-progress: false`.
+- [ ] [AC4] `MERGERS` in `tests/test_deploy_shape_widening.py` gains the workflow and its single merge
+  line. When PR 3 adds the `merge` key, `test_no_field_was_added` goes red, and when PR 4 flips it,
+  `test_each_field_is_the_approved_one` goes red. That is the design: each change to the switch is
+  one reviewed diff of the test and the declaration together. Never "fix" the test alone.
+- CI workflow path, so it is never landed under a standing grant.
 
 ## PR 4 — the flip (AC7)
 
@@ -41,7 +67,7 @@ created: "2026-09-04"
 
 ## Closing
 
-- [ ] [AC8] Reviewer quota measurement posted on #1619.
+- [x] [AC8] Reviewer quota measured 2026-10-21: on #2576 and #2581 CodeRabbit ran a full review ("No actionable comments"), and Codex attempted one and hit its usage limit. Both still spend quota on deploy PRs. pr-agent skips them. Posted on #1619.
 - [ ] Follow-up on dotfiles#2836: swap the PAT for the App.
 - [ ] Gap on the prod signature recorded on #1741.
 - [ ] Independent adversarial review before archive.
