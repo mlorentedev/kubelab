@@ -248,6 +248,20 @@ class TestPromoteErrors:
             output_path=root / "infra" / "config" / "platform.json", config_path=common
         )
 
+    def test_writes_exactly_the_files_it_declares(self, env_patched, monkeypatch) -> None:
+        # release.yml stages ERRORS_PROMOTION_FILES; a file promote writes outside
+        # that list reaches the runner's tree and never the PR (#2552).
+        root, _ = env_patched
+        self._write_common(root)
+        monkeypatch.setattr(promotion, "tag_exists", MagicMock(return_value=True))
+        k8s_sync = MagicMock(return_value=0)
+        monkeypatch.setattr(promotion.sync_k8s_images, "sync", k8s_sync)
+
+        promotion.promote("prod", "errors", "1.2.0")
+
+        written = {*k8s_sync.call_args.args, *self.manifest_sync.call_args.kwargs.values()}
+        assert {p.relative_to(root).as_posix() for p in written} == set(promotion.ERRORS_PROMOTION_FILES)
+
     def test_refuses_a_missing_version_key(self, env_patched, monkeypatch) -> None:
         root, _ = env_patched
         body = _COMMON.replace('    version: "1.1.1"  # SSOT for the errors image tag\n', "")
