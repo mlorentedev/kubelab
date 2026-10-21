@@ -43,9 +43,9 @@ created: "2026-08-27"
 
 ### PR4 — operator path (AC4, AC7) — first, `feat/gitops-003-verify-staging`
 
-- [ ] [P] [AC4] Write failing tests `tests/test_product_verify.py`: the Application classification (Synced at HEAD + Succeeded → ready; a failed operation at HEAD → failed at once with its message; a sync revision behind HEAD → wait), the served-payload classification (`commit` match, mismatch, `"local"`, absent → not verifiable; semver against `version`), the pinned tag read from the rendered overlay, the host from the contract with in-tree/unregistered apps refused, and the loop's exit codes 0/1/2/3 against a fake clock
-- [ ] [AC4] Implement `toolkit/features/product_verify.py` + `toolkit infra argo verify-product --app --env --timeout`; add `make verify-product APP=<app> ENV=staging|prod` (hub kubeconfig, ADR-052)
-- [ ] [AC4] Run `make verify-product APP=web` in both envs; paste the output in `verification.md` (expected 2026-10-20: exit 3 in both, web#435 not shipped)
+- [x] ✓ 2026-10-20 [P] [AC4] Write failing tests `tests/test_product_verify.py`: the Application classification (Synced at HEAD + Succeeded → ready; a failed operation at HEAD → failed at once with its message; a sync revision behind HEAD → wait), the served-payload classification (`commit` match, mismatch, `"local"`, absent → not verifiable; semver against `version`), the pinned tag read from the rendered overlay, the host from the contract with in-tree/unregistered apps refused, and the loop's exit codes 0/1/2/3 against a fake clock
+- [x] ✓ 2026-10-20 [AC4] Implement `toolkit/features/product_verify.py` + `toolkit infra argo verify-product --app --env --timeout`; add `make verify-product APP=<app> ENV=staging|prod` (hub kubeconfig, ADR-052)
+- [x] ✓ 2026-10-20 [AC4] Run `make verify-product APP=web` in both envs; paste the output in `verification.md` (expected 2026-10-20: exit 3 in both, web#435 not shipped)
 - [ ] [AC7] Runbook section "deploy-verify is red" (moves to PR2, where the workflow that links it is born)
 
 ### PR5 — the token cannot expire silently (AC6)

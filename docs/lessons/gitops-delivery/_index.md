@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 608 | ["Synced at HEAD" is read from `sync.revision`, not from the last operation's revision](lesson-608-synced-at-head-is-read-from-sync-revision-not-from-the-last-operation.md) | 2026-10-20 |
 | 606 | [A publish job gated on `release_created` has no retry, and it failed silently for five releases](lesson-606-a-publish-gated-on-release-created-has-no-retry-and-failed-silently-for-five-releases.md) | 2026-10-20 |
 | 554 | [A staging Secret applied from a branch outlives its merge, because Argo CD reverts the branch's manifests but never its Secrets](lesson-554-a-staging-secret-applied-from-a-branch-outlives-its-merge.md) | 2026-10-10 |
 | 501 | [Re-enabling Argo CD auto-sync starts a sync by itself, and an explicit one sent after it can overwrite it](lesson-501-re-enabling-argo-cd-auto-sync-starts-a-sync-an-explicit-one-can-overwrite.md) | 2026-10-01 |
