@@ -255,11 +255,11 @@ def _judged_revision(
     head: str,
     tag: str,
     descends: Callable[[str], bool],
-    tag_at: Callable[[str], str] | None,
+    tag_at: Callable[[str], str],
 ) -> str:
     """The revision the Application is judged at: HEAD, or a later master that keeps the same tag."""
     synced = ((app.get("status") or {}).get("sync") or {}).get("revision")
-    if not synced or synced == head or tag_at is None or not descends(synced):
+    if not synced or synced == head or not descends(synced):
         return head
     try:
         newer = tag_at(synced)
@@ -276,8 +276,8 @@ def verify(
     tag: str,
     read_app: Callable[[], dict[str, Any]],
     fetch_served: Callable[[], dict[str, Any]],
-    descends: Callable[[str], bool] = lambda rev: False,
-    tag_at: Callable[[str], str] | None = None,
+    descends: Callable[[str], bool],
+    tag_at: Callable[[str], str],
     timeout: float = DEFAULT_TIMEOUT,
     poll: float = DEFAULT_POLL,
     now: Callable[[], float] = time.monotonic,
@@ -309,7 +309,11 @@ def verify(
         except HubUnreachableError as exc:
             verdict, app_line = Verdict.CANNOT_CHECK, f"hub unreachable: {exc}"
         except _Superseded as exc:
-            return Verdict.SUPERSEDED, [str(exc), "a later merge replaced this promotion; verify that one instead"]
+            return Verdict.SUPERSEDED, [
+                str(exc),
+                classify_application(app, head).summary,
+                "a later merge replaced this promotion; verify that one instead",
+            ]
         except _PinUnreadable as exc:
             verdict, app_line = Verdict.CANNOT_CHECK, f"the pin at the synced revision could not be read: {exc}"
         else:

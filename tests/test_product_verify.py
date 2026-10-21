@@ -323,6 +323,8 @@ class TestVerify:
             tag="sha-7ebd808",
             read_app=lambda: _app(revision=OLDER),
             fetch_served=fetch,
+            descends=lambda rev: False,
+            tag_at=lambda rev: "sha-7ebd808",
             timeout=30,
             poll=10,
             now=clock.now,
@@ -356,7 +358,7 @@ class TestMasterMovesDuringThePoll:
         verdict, lines = verify(
             head=HEAD,
             tag="sha-7ebd808",
-            read_app=lambda: _app(revision=NEWER, op_revision=NEWER),
+            read_app=lambda: _app(revision=NEWER, op_revision=NEWER, message="pre-sync hook ran"),
             fetch_served=fetch,
             descends=lambda rev: rev == NEWER,
             tag_at=lambda rev: "sha-1111111",
@@ -369,6 +371,8 @@ class TestMasterMovesDuringThePoll:
         assert verdict is Verdict.SUPERSEDED
         assert served == [] and clock.t == 0
         assert any("sha-1111111" in line and "sha-7ebd808" in line for line in lines)
+        # Like every other non-zero exit, it carries the operation message.
+        assert any("pre-sync hook ran" in line for line in lines)
 
     def test_a_failed_operation_at_an_accepted_newer_commit_is_red_at_once(self) -> None:
         app = _app(sync="OutOfSync", revision=NEWER, phase="Failed", op_revision=NEWER, message="hook failed")
@@ -406,7 +410,7 @@ class TestDescendsFrom:
         def git(*args: str) -> str:
             return subprocess.run(["git", *args], cwd=tmp_path, capture_output=True, text=True, check=True).stdout
 
-        git("init", "-q")
+        git("init", "-q", "-b", "master")
         git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "a")
         a = git("rev-parse", "HEAD").strip()
         git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "b")
@@ -429,6 +433,24 @@ class TestDescendsFrom:
     def test_an_unknown_revision_does_not_descend(self, repo) -> None:
         a, _ = repo
         assert not descends_from(a, "f" * 40)
+
+    def test_fetch_makes_a_commit_merged_while_polling_known(self, repo, tmp_path, monkeypatch) -> None:
+        # The check runs from a checkout; the commit Argo synced landed on origin
+        # after the check started, so it is unknown until fetched.
+        import subprocess
+
+        _, b = repo
+        clone = tmp_path / "clone"
+        subprocess.run(["git", "clone", "-q", str(tmp_path), str(clone)], check=True)
+        subprocess.run(
+            ["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "c"],
+            cwd=tmp_path,
+            check=True,
+        )
+        c = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmp_path, capture_output=True, text=True).stdout.strip()
+        monkeypatch.chdir(clone)
+        assert not descends_from(b, c)
+        assert descends_from(b, c, fetch=True)
 
 
 class TestTargetsAt:
