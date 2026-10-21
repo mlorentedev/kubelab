@@ -45,7 +45,7 @@ def _unresolvable(snapshot_dir: pathlib.Path, records: set[str]) -> list[str]:
                 "WHY: the receiver deploys to the contract's hostname, but Cloudflare records are hand-written "
                 "in infra/terraform/dns, so the product would be served at a name nobody can resolve\n"
                 f"FIX: add {host} to infra/terraform/dns/zones.json (a zone's own record) or services.json "
-                "(a prod service), and apply the DNS root"
+                "(a prod service), then `make tf-dns-plan` and `make tf-dns-apply`"
             )
     return messages
 
@@ -58,6 +58,10 @@ def _committed() -> set[str]:
 
 
 def test_every_committed_prod_hostname_has_a_public_record() -> None:
+    hosts = [(yaml.safe_load(p.read_text()).get("hostnames") or {}).get("prod") for p in SNAPSHOT_DIR.glob("*.yaml")]
+    assert [host for host in hosts if host], (
+        f"no snapshot under {SNAPSHOT_DIR} names a prod hostname: nothing was checked"
+    )
     assert _unresolvable(SNAPSHOT_DIR, _committed()) == []
 
 
@@ -78,6 +82,14 @@ def test_a_staging_hostname_needs_no_public_record(tmp_path: pathlib.Path) -> No
     (tmp_path / "web.yaml").write_text(yaml.safe_dump(contract))
 
     assert _unresolvable(tmp_path, _committed()) == []
+
+
+def test_main_tf_still_keys_records_the_way_this_test_does() -> None:
+    """`_public_records` re-implements two expressions of `main.tf`; if either changes, so must it."""
+    main_tf = (DNS / "main.tf").read_text()
+
+    assert '(r.name == r.apex ? r.apex : "${r.name}.${r.apex}") => r' in main_tf
+    assert 'if contains(svc.environments, "prod")' in main_tf
 
 
 def test_records_are_keyed_the_way_main_tf_keys_them() -> None:
