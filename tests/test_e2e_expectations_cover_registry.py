@@ -1,0 +1,55 @@
+"""Every registered product is probed by the e2e suite (#2572).
+
+The e2e probes read a product's domain and `health_path` from the merged config,
+which the generic receiver renders from the product's contract, so those are
+already derived. What is not derived is the entry in `tests/e2e/expectations.py`:
+the content, security-header and auth suites parametrize over its keys, so a
+product admitted to `infra/config/products.yaml` without an entry is silently
+left out of all three.
+
+The entry stays hand-written on purpose. What it asserts (`content_type`,
+`body_contains`, an API's JSON keys) is something the contract has no field
+for, so it cannot be derived. These tests make a missing entry fail offline, and
+hold the one property both sides do declare, whether the product sits behind
+Authelia, to agree.
+"""
+
+from __future__ import annotations
+
+import pathlib
+
+import pytest
+import yaml
+
+from tests.e2e.expectations import EXPECTATIONS, ServiceExpectation
+from toolkit.features.product_registry import platform_apps
+from toolkit.features.product_render import SNAPSHOT_DIR
+
+
+def _missing(apps: tuple[str, ...], expectations: dict[str, ServiceExpectation]) -> list[str]:
+    return [app for app in apps if app not in expectations]
+
+
+def test_every_registered_product_has_an_e2e_expectation() -> None:
+    assert _missing(platform_apps(), EXPECTATIONS) == [], (
+        "ERROR: a product in infra/config/products.yaml has no entry in tests/e2e/expectations.py\n"
+        "WHY: the content, security-header and auth e2e suites parametrize over that dict, "
+        "so the product is never probed\n"
+        "FIX: add a ServiceExpectation for it, keyed by its registry name"
+    )
+
+
+def test_a_registered_product_without_an_entry_is_reported() -> None:
+    assert _missing(("api", "web", "shop"), EXPECTATIONS) == ["shop"]
+
+
+@pytest.mark.parametrize("snapshot", sorted(SNAPSHOT_DIR.glob("*.yaml")), ids=lambda path: path.stem)
+def test_the_expectation_agrees_with_the_contract_on_authentication(snapshot: pathlib.Path) -> None:
+    auth = yaml.safe_load(snapshot.read_text())["auth"]
+    if auth == "oidc":
+        pytest.skip("an OIDC contract is refused at render (#2573), so no such product is deployed")
+
+    assert EXPECTATIONS[snapshot.stem].auth_protected == (auth == "forwardauth"), (
+        f"{snapshot.stem}: the contract says auth: {auth}, "
+        f"tests/e2e/expectations.py says auth_protected={EXPECTATIONS[snapshot.stem].auth_protected}"
+    )
