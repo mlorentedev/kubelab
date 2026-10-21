@@ -1,0 +1,29 @@
+version: 1
+run_id: "20261021-kubelab-auth"
+armed_by: manu
+armed_at: 2026-10-21T14:40:00Z
+expires_at: 2026-10-21T22:40:00Z
+objective: >-
+  Advance auth epic #2390 without the operator: land #2582, publish api 1.1.6 (#2558),
+  and work the operator-decided tickets (#1356 B, #2492 B) up to what needs the operator.
+scope:
+  # infra/config/secrets/** only through `toolkit secrets` (unset/set), never by hand.
+  write_paths: ["infra/ansible/**", "infra/config/**", "infra/k8s/**", "toolkit/**",
+                "tests/**", "docs/**", "CLAUDE.md", ".agent/runs/**"]
+  frozen_paths: [".github/**", "harness/**", "**/AGENTS.md", ".agent/unattended.yml"]
+  max_files: 15
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make, poetry, curl, ssh-readonly]
+queue:
+  source: bitacora
+  filter: "epic #2390 (AUTH-019/AUTH-020) and tickets it names: #2582, #2558, #1356, #2492, #2482"
+  max_items: 5
+budget:
+  max_iterations: 8
+  max_minutes_per_iteration: 60
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant
+  push: true
+  open_pr: true
+  advisor_tier: top
