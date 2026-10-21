@@ -1,0 +1,43 @@
+version: 1
+run_id: "ap-20261021-kubelab-delivery004"
+armed_by: manu
+armed_at: 2026-10-21T14:38:43Z
+expires_at: 2026-10-21T22:38:43Z
+objective: >-
+  DELIVERY-004 (#1619) PR 1 (deploy-shape, assert-only) and PR 2 (widening tests)
+  opened ready for the operator's merge, with triage and lessons.
+scope:
+  write_paths:
+    - "toolkit/features/deploy_shape.py"
+    - "toolkit/features/review_attestation.py"
+    - "toolkit/cli/tools.py"
+    - "tests/**"
+    - "specs/DELIVERY-004-exempt-generated-deploy-prs/**"
+    - "docs/lessons/**"
+    - ".github/workflows/deploy-shape.yml"
+    - ".github/workflows/review-attestation.yml"
+    - "harness/review-attestation.json"
+    - ".agent/runs/**"
+  frozen_paths:
+    - ".github/merge-grant.yml"
+    - ".github/workflows/product-image-receiver.yml"
+    - ".github/workflows/promote-prod.yml"
+    - "infra/config/values/**"
+    - "**/AGENTS.md"
+    - "**/CLAUDE.md"
+  max_files: 12
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make, poetry]
+queue:
+  source: bitacora
+  filter: "#1619 DELIVERY-004 and defects found while working it"
+  max_items: 3
+budget:
+  max_iterations: 8
+  max_minutes_per_iteration: 45
+  max_consecutive_failures: 2
+authority:
+  merge: never          # operator: Manu merges every PR in this lane
+  push: true
+  open_pr: true
+  advisor_tier: top
