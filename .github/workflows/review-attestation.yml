@@ -312,8 +312,16 @@ jobs:
         run: |
           set +e
           state_file="$RUNNER_TEMP/attestation-state"
+          # Passed only when a verdict was written. The workflow runs from the PR
+          # and the toolkit from master, so while a master without
+          # `deploy-shape` meets a PR carrying this step, the flag must not reach
+          # a CLI that does not know it (DELIVERY-004 PR 1, its own run).
+          shape_args=()
+          if [ -s "$RUNNER_TEMP/deploy-shape.json" ]; then
+            shape_args=(--shape-file "$RUNNER_TEMP/deploy-shape.json")
+          fi
           out="$(poetry run toolkit tools review-attestation --payload-file pr-payload.json --state-file "$state_file" \
-            --shape-file "$RUNNER_TEMP/deploy-shape.json" 2>&1)"
+            "${shape_args[@]}" 2>&1)"
           code=$?
           set -e
           printf '%s\n' "$out"
