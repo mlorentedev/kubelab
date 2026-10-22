@@ -69,9 +69,18 @@ Map every acceptance criterion from `proposal.md` to concrete proof.
 
 ## Test status
 
-- Test suite: `make test-fast` -> `<output / coverage %>` after each PR
-- Manual smoke test: the PR 6 dry run (`gh workflow run product-image-receiver.yml -f app=web -f tag=<sha> -f dry_run=true`) and the PR 7 live proof above
-- No regressions in existing test suite: yes / no (if no, document)
+- Test suite: on `addba106` (master with #2624), the round-3 reviewer ran `poetry run pytest -m "not e2e and not infra and not integration" -q --no-cov` and got `6449 passed, 20 skipped, 212 deselected`. It also ran `make lint` (clean) and `poetry run mypy toolkit` (no issues in 142 source files)
+- Manual smoke test: the PR 6 dry run (`gh workflow run product-image-receiver.yml -f app=web -f tag=<sha> -f dry_run=true`), the PR 7 live proof above, and the prod no-op run 39725586157 for #2624
+- No regressions in existing test suite: yes. The same run had 0 failures
+- `/spec check`, 2026-10-22: PASS. AC1 to AC7 are each named by Implementation tasks: AC1 4 times, AC2 6, AC3 9, AC4 7, AC5 8, AC6 5, AC7 3. Thirteen tasks name no AC, and each still traces to one or is housekeeping:
+  - to AC2: PR 1's validate check;
+  - to AC6: PR 3's `auth: oidc` refusal;
+  - to AC7: PR 6's short-sha spike;
+  - to AC4: PR 6's dry run, the web contract (external dependency), PR 7's live proof and PR 8's doc sweep;
+  - to AC3: the prod snapshot bootstrap;
+  - housekeeping: the leftover-question ticket in PR 5 and the re-review.
+
+  No orphans
 - Mutation checks above were run on a clean tree via `make mutate`, never by editing and reverting by hand
 
 ## Decisions made during implementation
@@ -87,9 +96,9 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.
 
-- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/ci-automation/lesson-607-two-receivers-on-one-dispatch-event-race-one-branch-so-the-flip-and-the-demotion-ship-together.md
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? <yes: path / no: reason>. Likely `no`: ADR-067 holds the decision; the answers to Q1-Q8 are recorded in `proposal.md` and in the registry's header comment
-- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes: path / no: reason>
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/ci-automation/lesson-607-two-receivers-on-one-dispatch-event-race-one-branch-so-the-flip-and-the-demotion-ship-together.md, docs/lessons/ci-automation/lesson-612-a-skip-that-matches-a-word-in-the-path-also-skips-every-checkout-named-after-it.md, docs/lessons/gitops-delivery/lesson-616-one-snapshot-for-two-envs-that-advance-separately-makes-the-slower-one-drift.md
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: ADR-067 already decides that a product's contract travels with its image, and ADR-056 that a release is a digest re-tag; the prod snapshot applies both. The answers to Q1-Q8 are recorded in the proposal and in the registry's header comment
+- [x] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. no: the per-consumer snapshot rule (lesson-616) has been seen in this project only; promote it if a second project keeps one committed copy for two consumers
 
 ## Archive checklist
 
@@ -111,3 +120,17 @@ Round 1 (`nan/mimo-v2.6-flash`) stopped on a 429 concurrency limit before giving
 | Two generic products force-push deploy branches that rewrite the same staging files | Minor / SPECULATIVE | Ticketed: #2611 |
 
 AC1 stays unticked: its live half (an unmapped dispatch) is run by the operator.
+
+## Closeout review, 2026-10-22 (round 3, `nan/qwen3.8-flash`, on `addba106`): PASS-WITH-GAPS
+
+The round-2 Major is closed. The reviewer applied five mutations of its own to the #2624 fix, and named tests failed under every one. The contract digests were the same before and after the ticks below, so the verdict still holds.
+
+| Finding | Severity / reality | Disposition |
+|---|---|---|
+| The `tasks.md` Closing block, PR 7's live-proof box and two promotion lines were unfilled | Minor / REAL | Applied. The boxes the evidence supports are ticked; ticks do not change the `tasks.md` digest (`233b5f05…` before and after). All three promotion lines are answered, and `/spec check` is recorded under Test status. |
+| No written recovery when `release-contract` refuses an emergency rollback | Minor / THEORETICAL | Applied. `docs/runbooks/cicd.md` names the path: `git revert` of the promotion PR. The workflow keeps no bypass. |
+| `_prove_image` looks for `sha-<7 hex>`, but the receiver accepts `sha-<7+ hex>` | Minor / THEORETICAL | Ticketed: #2627 (IDP-054). It is latent because web publishes 7-hex tags. |
+| `tag_digest` returns `None` for any non-`docker.io` host, and the FIX then points at a tag that exists | Minor / THEORETICAL | Ticketed: #2627 (IDP-054), together with private images. IDP-053 (#2449) is told it meets this limit on both lanes. |
+| No static test ties `contracts/prod/<app>.yaml` to the prod `version` pin | Minor / SPECULATIVE | Declined, accepted limit. Only `promote-prod` writes the pin and the snapshot, and it writes both in one PR. A hand edit of `version` alone is caught live, because `verify-product` reads `hostnames.prod` from the prod snapshot (`TestTargetsAt::test_prod_reads_the_prod_snapshot_not_the_staging_one`). A static tie would need the release commit, which only the forge knows, so it could not run offline. |
+| The prod snapshot inherits a header naming the staging path; the DNS test's wording reads as covering both directories | Minor / SPECULATIVE | Applied for the header. `cicd.md` marks the prod snapshot machine-owned, and the snapshot stays a byte copy. Declined for the DNS test: it checks the staging snapshot on purpose, because the record has to exist before prod cuts over (the reviewer agrees this is correct). |
+| Question: AC1's live unmapped-dispatch half | — | The operator runs it before the archive, with the command in the AC1 row. |
