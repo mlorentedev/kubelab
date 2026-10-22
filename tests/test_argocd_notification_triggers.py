@@ -135,7 +135,9 @@ def test_a_trigger_dedupes_per_revision_not_per_condition(name: str):
 # the notifications controller; these tests hold their structure without one.
 
 GITHUB_TEMPLATES = ("template.github-status-success", "template.github-status-failure")
-GITHUB_TRIGGERS = ("trigger.on-sync-succeeded-github", "trigger.on-sync-failed-github")
+GITHUB_TRIGGERS = ("trigger.on-synced-github", "trigger.on-sync-failed-github")
+SUCCESS_PATH = "/repos/mlorentedev/kubelab/statuses/{{.app.status.sync.revision}}"
+FAILURE_PATH = "/repos/mlorentedev/kubelab/statuses/{{.app.status.operationState.operation.sync.revision}}"
 _ACTION = re.compile(r"\{\{.*?\}\}", re.DOTALL)
 
 
@@ -172,8 +174,39 @@ def test_the_github_triggers_are_subscribed_to_the_github_service():
     assert subscribed == {name.removeprefix("trigger.") for name in GITHUB_TRIGGERS}
 
 
-@pytest.mark.parametrize("name", GITHUB_TEMPLATES)
-def test_the_status_lands_on_the_operation_revision_never_on_sync_result(name: str):
+def test_success_lands_on_every_revision_argo_reports_synced():
+    """Green means the cluster is at this sha, not that an operation ran (AC2).
+
+    A commit whose render does not change (a comment, a doc) moves
+    `sync.revision` without starting an operation, so a success keyed on the
+    operation never reaches it and the scheduled sweep would read "no status"
+    as red. Measured 2026-10-22: the first live status came from a
+    drift-correcting operation, not from a merge.
+    """
+    triggers = _notifications()["triggers"]
+    senders = [
+        (name, entry)
+        for name, body in triggers.items()
+        for entry in yaml.safe_load(body)
+        if "github-status-success" in entry["send"]
+    ]
+    assert len(senders) == 1, f"exactly one trigger may post success, found {[n for n, _ in senders]}"
+    name, entry = senders[0]
+    assert name == "trigger.on-synced-github"
+    assert entry["when"] == "app.status.sync.status == 'Synced'"
+    assert entry["oncePer"] == "app.status.sync.revision"
+    assert _github_webhook("template.github-status-success")["path"] == SUCCESS_PATH
+
+
+def test_success_reads_nothing_from_the_last_operation():
+    """On a no-op revision the last operation belongs to an older commit.
+
+    Its message, or its revision, would describe a sync that is not this one.
+    """
+    assert "operationState" not in _notifications()["templates"]["template.github-status-success"]
+
+
+def test_failure_lands_on_the_operation_revision_never_on_sync_result():
     """The failure status fires exactly when `syncResult` may be nil.
 
     An operation that errors before producing a result (the 2026-08-27 panic)
@@ -183,16 +216,12 @@ def test_the_status_lands_on_the_operation_revision_never_on_sync_result(name: s
     manual sync from the UI is unverified: a non-sha there gets a 422 from
     GitHub, and only the notifications log says so.
     """
-    webhook = _github_webhook(name)
+    webhook = _github_webhook("template.github-status-failure")
     assert webhook["method"] == "POST"
-    assert webhook["path"] == "/repos/mlorentedev/kubelab/statuses/{{.app.status.operationState.operation.sync.revision}}"
-    assert "syncResult" not in _notifications()["templates"][name]
-
-
-@pytest.mark.parametrize("name", GITHUB_TRIGGERS)
-def test_the_github_triggers_dedupe_on_the_operation_revision(name: str):
-    for entry in yaml.safe_load(_notifications()["triggers"][name]):
-        assert entry["oncePer"] == "app.status.operationState?.operation?.sync?.revision"
+    assert webhook["path"] == FAILURE_PATH
+    assert "syncResult" not in _notifications()["templates"]["template.github-status-failure"]
+    (entry,) = yaml.safe_load(_notifications()["triggers"]["trigger.on-sync-failed-github"])
+    assert entry["oncePer"] == "app.status.operationState?.operation?.sync?.revision"
 
 
 @pytest.mark.parametrize(("name", "state"), [(GITHUB_TEMPLATES[0], "success"), (GITHUB_TEMPLATES[1], "failure")])
@@ -206,9 +235,10 @@ def test_the_status_body_is_json_with_exactly_the_status_fields(name: str, state
     assert parsed["state"] == state
     assert '"context": "argocd/{{.app.metadata.name}}"' in body
     assert parsed["target_url"].startswith("https://argo.kubelab.live/applications/argocd/")
-    (description,) = [a for a in actions if "operationState.message" in a]
+    (description,) = [a for a in actions if "toJson" in a]
     # Unquoted in the body: `toJson` supplies the quotes and escapes the message.
     assert f'"description": {description}' in body
     assert "trunc 140" in description and description.rstrip("} ").endswith("toJson")
-    # `default` before `trunc`: a nil message would make trunc fail the render.
-    assert description.index("default") < description.index("trunc")
+    if "operationState.message" in description:
+        # `default` before `trunc`: a nil message would make trunc fail the render.
+        assert description.index("default") < description.index("trunc")

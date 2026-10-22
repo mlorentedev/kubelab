@@ -123,14 +123,17 @@ notifications:
       - when: app.status.operationState != nil and app.status.operationState.phase in ['Succeeded']
         send: [app-sync-succeeded]
         oncePer: app.status.operationState?.syncResult?.revision
-    # The GitHub triggers key on `operation.sync.revision`, not `syncResult`: a
-    # failed operation often has no syncResult at all (the 2026-08-27 panic), and
-    # an automated sync carries the resolved sha there. Separate triggers from
-    # the Slack ones, so each recipient gets only templates written for it.
-    trigger.on-sync-succeeded-github: |
-      - when: app.status.operationState != nil and app.status.operationState.phase in ['Succeeded']
+    # Success keys on the revision Argo reports Synced, not on an operation: a
+    # commit whose render does not change moves `sync.revision` without starting
+    # one, and green means "the cluster is at this sha" (GITOPS-003 AC2). Failure
+    # keys on `operation.sync.revision`, not `syncResult`: a failed operation
+    # often has no syncResult at all (the 2026-08-27 panic), and an automated
+    # sync carries the resolved sha there. Separate triggers from the Slack
+    # ones, so each recipient gets only templates written for it.
+    trigger.on-synced-github: |
+      - when: app.status.sync.status == 'Synced'
         send: [github-status-success]
-        oncePer: app.status.operationState?.operation?.sync?.revision
+        oncePer: app.status.sync.revision
     trigger.on-sync-failed-github: |
       - when: app.status.operationState != nil and app.status.operationState.phase in ['Error', 'Failed']
         send: [github-status-failure]
@@ -187,10 +190,10 @@ notifications:
       webhook:
         github:
           method: POST
-          path: /repos/mlorentedev/kubelab/statuses/{{.app.status.operationState.operation.sync.revision}}
+          path: /repos/mlorentedev/kubelab/statuses/{{.app.status.sync.revision}}
           body: |
             {"state": "success", "context": "argocd/{{.app.metadata.name}}",
-             "description": {{.app.status.operationState.message | default "sync succeeded" | trunc 140 | toJson}},
+             "description": {{printf "Synced at %s" (.app.status.sync.revision | trunc 7) | trunc 140 | toJson}},
              "target_url": "https://argo.kubelab.live/applications/argocd/{{.app.metadata.name}}"}
     template.github-status-failure: |
       webhook:
@@ -211,7 +214,7 @@ notifications:
     - recipients:
         - github
       triggers:
-        - on-sync-succeeded-github
+        - on-synced-github
         - on-sync-failed-github
 
 applicationSet:
