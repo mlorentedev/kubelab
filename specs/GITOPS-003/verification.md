@@ -38,7 +38,7 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
   - `status` path: every Argo status since the merge started a green run, e.g. `8582fe5` (runs 39739407800, 39739409861), `681c30e`, `0a11015`. Statuses from other contexts start runs whose jobs are skipped, as the workflow header says.
   - `workflow_dispatch` replay of `1489265` (a commit that never got an Argo status), env staging, timeout 30 → run 39742730971 **failure**: `FAILED: no status arrived for argocd/kubelab-staging (deadline of 30s reached)`, then `##[error]Runbook: .../gitops-delivery-promotion.md#deploy-verify-is-red`.
   - Replay of `4c9cda6`, env prod → run 39742733932 **success**: `SUCCESS: argocd/kubelab-prod is success: Synced at 4c9cda6`.
-  - Not yet seen: a `schedule` run. None by 08:07Z (the 07:37 and 08:07 slots), with 53 runs queued on the account; GitHub delays or drops scheduled runs under load. AC2 stays open until the first sweep is read.
+  - Not yet seen: a `schedule` run. None by 08:07Z (the 07:37 and 08:07 slots), Not a one-off backlog: scheduled runs in this repository start 4 to 9.5 h late every day (delivery-health and config-drift, 10 days measured), so the sweep's latency is hours, not N. Tracked in #2645; AC2 stays open until it is decided and the first sweep is read.
 
 ## Decisions made during implementation
 

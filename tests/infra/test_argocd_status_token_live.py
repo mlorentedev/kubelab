@@ -16,7 +16,10 @@ decision of its own (#2644); until then a lost grant shows only as
 
 A 401 is a failure here, never a skip: it is the expired or revoked token this
 check exists to catch. A token with no expiry fails too: the credential decision
-(`specs/GITOPS-003/proposal.md`) requires one. Only an unreachable GitHub or a
+(`specs/GITOPS-003/proposal.md`) requires one, and a token class that sends no
+expiry header (a GitHub App installation token) lands there too, on purpose.
+Only a GitHub that cannot be asked (unreachable, or answering an error other
+than 401, which `secret_expiry` raises as `ExpiryUnavailableError`) or a
 workstation that cannot decrypt SOPS skips, because a check that could not run
 must not read as a pass.
 
