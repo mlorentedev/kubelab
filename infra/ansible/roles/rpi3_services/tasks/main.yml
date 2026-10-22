@@ -86,6 +86,59 @@
   when: not (ansible_check_mode and not _rpi3_unit_file.stat.exists)
   tags: [boot]
 
+# --- Port allowlist: who may open the published port (#2482) ---
+# The bind keeps Kuma off every interface but the tailnet; this keeps it off every
+# tailnet machine but the ones that need it. ufw cannot do it (Docker's DNAT runs
+# first), so the rules go in DOCKER-USER, re-applied by a unit whenever Docker starts.
+- name: Template the Kuma port allowlist rules
+  template:
+    src: kuma-allowlist.rules.j2
+    dest: "{{ rpi3_deploy_dir }}/kuma-allowlist.rules"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  register: _kuma_allowlist_rules
+  tags: [allowlist]
+
+- name: Check whether the Kuma allowlist unit is already installed
+  stat:
+    path: /etc/systemd/system/kubelab-kuma-allowlist.service
+  register: _kuma_allowlist_unit_file
+  tags: [allowlist]
+
+- name: Install the Kuma allowlist unit
+  template:
+    src: kubelab-kuma-allowlist.service.j2
+    dest: /etc/systemd/system/kubelab-kuma-allowlist.service
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  register: _kuma_allowlist_unit
+  tags: [allowlist]
+
+# Restarted only when a rendered file changed, so a re-run reports changed=0.
+# Same --check guard as the stack unit above (#1983).
+- name: Apply the Kuma allowlist and enable it with Docker
+  systemd:
+    name: kubelab-kuma-allowlist.service
+    enabled: true
+    daemon_reload: true
+    state: "{{ 'restarted' if (_kuma_allowlist_rules.changed or _kuma_allowlist_unit.changed) else 'started' }}"
+  become: true
+  when: not (ansible_check_mode and not _kuma_allowlist_unit_file.stat.exists)
+  tags: [allowlist]
+
+- name: Verify the allowlist jump is in DOCKER-USER
+  command: >-
+    iptables -w -C DOCKER-USER -p tcp -m conntrack --ctorigdst {{ tailscale_ip }}
+    --ctorigdstport {{ uptime_kuma_port }} -j KUMA-ALLOW
+  become: true
+  changed_when: false
+  when: not ansible_check_mode
+  tags: [allowlist]
+
 - name: Pull service images
   command: docker compose -f {{ rpi3_deploy_dir }}/compose.yml pull
   changed_when: false

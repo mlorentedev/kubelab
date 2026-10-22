@@ -645,7 +645,8 @@ def argo_verify_product(
     pinned at HEAD. Exit 0 = verified, 1 = failed (a failed operation at HEAD,
     or no match by the deadline), 2 = the hub, the host or the expected state
     could not be read, 3 = the host serves no `commit` (not verifiable yet,
-    never a pass).
+    never a pass), 4 = a later merge synced while waiting pins another tag
+    (superseded: verify that promotion instead).
     """
     import subprocess
 
@@ -668,6 +669,8 @@ def argo_verify_product(
         tag=tag,
         read_app=lambda: pv.read_application(f"kubelab-{env}", kubeconfig),
         fetch_served=lambda: pv.fetch_version_json(url),
+        descends=lambda rev: pv.descends_from(head, rev, fetch=True),
+        tag_at=lambda rev: pv.targets_at(rev, app, env)[0],
         timeout=timeout,
     )
     report = logger.success if verdict is pv.Verdict.VERIFIED else logger.error
@@ -675,10 +678,34 @@ def argo_verify_product(
         report(f"  {line}")
     if verdict is pv.Verdict.VERIFIED:
         logger.success(f"VERIFIED: {app} on kubelab-{env} serves {tag} at {head[:7]}")
+    elif verdict is pv.Verdict.SUPERSEDED:
+        logger.warning(f"SUPERSEDED: a later merge replaced {tag} on kubelab-{env}. This is not a pass; rerun.")
     elif verdict is pv.Verdict.NOT_VERIFIABLE:
         logger.warning(f"NOT VERIFIABLE YET: {app} serves no `commit` in {pv.VERSION_PATH}. This is not a pass.")
     else:
         logger.error(f"{verdict.name}: {app} on kubelab-{env} is not verified at {head[:7]}")
+    raise typer.Exit(int(verdict))
+
+
+@argo_app.command("wait-status")
+def argo_wait_status(
+    sha: Annotated[str, typer.Option("--sha", help="Commit whose Argo CD status to wait for")],
+    context: Annotated[str, typer.Option("--context", help="Status context, e.g. argocd/kubelab-staging")],
+    timeout: Annotated[float, typer.Option("--timeout", help="Seconds to wait for a settled status")] = 600.0,
+    repo: Annotated[str, typer.Option("--repo", help="owner/name the status is posted on")] = "mlorentedev/kubelab",
+) -> None:
+    """Wait for the commit status Argo CD posts per sync (GITOPS-003 AC2, #1478).
+
+    Reads `gh api repos/<repo>/commits/<sha>/statuses`, so it runs anywhere gh is
+    authenticated: no mesh, no hub kubeconfig. Exit 0 = success, 1 = failure or
+    error (with Argo's message), no status arrived, or still pending at the
+    deadline, 2 = the statuses could not be read.
+    """
+    from toolkit.features import argo_manager as am
+
+    logger.section(f"wait-status — {context} on {sha[:7]}")
+    verdict, line = am.wait_status(context=context, fetch=lambda: am.fetch_statuses(repo, sha), timeout=timeout)
+    (logger.success if verdict is am.WaitStatus.SUCCESS else logger.error)(f"{verdict.name}: {line}")
     raise typer.Exit(int(verdict))
 
 

@@ -33,8 +33,9 @@ attempt per revision (lesson-407). A failure at an older revision is not this
 merge's verdict yet.
 
 Also measured the same day: `status.health` of `kubelab-staging` was `Degraded`
-because of failed `disk-watcher`/`r2-backup-watcher` Jobs and a Vikunja pod
-stuck in init, none of them the product being verified. Application-wide health
+because of the `vikunja` Deployment stuck in init (`ProgressDeadlineExceeded`,
+#1783), not the product being verified. (This lesson first also blamed the
+retained failed watcher Jobs; lesson-611 shows they cannot degrade it.) Application-wide health
 as a condition would have blocked every staging verification.
 
 **Solution**: `toolkit/features/product_verify.py:classify_application`:

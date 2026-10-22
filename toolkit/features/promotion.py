@@ -32,7 +32,7 @@ from toolkit.features.registry import tag_exists
 from toolkit.scripts import sync_k8s_images
 
 # Immutable CI build tag: ``sha-${GITHUB_SHA::7}`` (see staging-deploy.yml). The
-# web-image-receiver rejects anything else, so staging only ever pins this shape.
+# product-image-receiver rejects anything else, so staging only ever pins this shape.
 _SHA_TAG = re.compile(r"^sha-[0-9a-f]{7,}$")
 
 # Every file ``promote --app errors`` writes, repo-relative. release.yml's
