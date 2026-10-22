@@ -10,12 +10,12 @@ created: "2026-08-27"
 Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
 
 - [x] AC1 -> PR1 (#2594) and its amendment (#2613): live statuses below
-- [ ] AC2 -> PR2
+- [ ] AC2 -> PR2 (#2615, merged `8582fe5`): `status` path and replay proven live below; the prod `schedule` sweep has not run yet
 - [ ] AC3 -> PR3, after web#435 serves `commit` on staging
 - [x] AC4 -> PR4 (#2579) and GITOPS-007 (#2584, `fix/gitops-007-superseded`): `tests/test_product_verify.py` (48 tests); live runs below
 - [x] AC5 -> #1276, `tests/test_argocd_notification_triggers.py`
 - [x] AC6 -> PR5: `tests/infra/test_argocd_status_token_live.py`; live run below
-- [ ] AC7 -> PR2 (#2615): runbook section `deploy-verify is red`, linked from lesson-407 and every failure annotation
+- [x] AC7 -> PR2 (#2615): runbook section `deploy-verify is red`, linked from lesson-407 and every failure annotation; seen live in the red replay below
 
 ## Test status
 
@@ -34,6 +34,11 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
   - `poetry run pytest tests/infra/test_argocd_status_token_live.py -m infra --override-ini="addopts=" -q` → `2 passed`.
   - Mutation, by hand (the fixture returning a bogus `github_pat_` string, tree committed first, restored with `git checkout HEAD --`) → `2 failed`, neither skipped: a 401 fails with the rotation message and the expiry read raises `CredentialRejectedError`. `make mutate` could not run it: an `infra`-marked test is deselected by `pyproject` `addopts`, pytest exits 5 and the tool reports a red baseline (#2637).
   - Who runs it: nothing schedules `tests/infra` or `secrets check-expiry` (#1248). The loud signal for an expired token is `deploy-verify`'s prod sweep going red on "no status arrived" (#2615); this check names the cause.
+- Live, 2026-10-22, AC2 after #2615 merged (`8582fe5`, 07:16Z):
+  - `status` path: every Argo status since the merge started a green run, e.g. `8582fe5` (runs 39739407800, 39739409861), `681c30e`, `0a11015`. Statuses from other contexts start runs whose jobs are skipped, as the workflow header says.
+  - `workflow_dispatch` replay of `1489265` (a commit that never got an Argo status), env staging, timeout 30 → run 39742730971 **failure**: `FAILED: no status arrived for argocd/kubelab-staging (deadline of 30s reached)`, then `##[error]Runbook: .../gitops-delivery-promotion.md#deploy-verify-is-red`.
+  - Replay of `4c9cda6`, env prod → run 39742733932 **success**: `SUCCESS: argocd/kubelab-prod is success: Synced at 4c9cda6`.
+  - Not yet seen: a `schedule` run. None by 08:07Z (the 07:37 and 08:07 slots), with 53 runs queued on the account; GitHub delays or drops scheduled runs under load. AC2 stays open until the first sweep is read.
 
 ## Decisions made during implementation
 
