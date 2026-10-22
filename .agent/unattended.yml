@@ -1,0 +1,34 @@
+version: 1
+run_id: "ap-20261022-kubelab-delivery004"
+armed_by: manu
+armed_at: 2026-10-22T07:47:00Z
+expires_at: 2026-10-22T17:47:00Z
+objective: >-
+  Move DELIVERY-004 (#1619) toward its flip: PR 2 (#2596) ready and triaged,
+  live deploy-shape evidence recorded, AC3 prepared, nothing merged.
+scope:
+  write_paths:
+    - "specs/DELIVERY-004-exempt-generated-deploy-prs/**"
+    - "tests/test_deploy_shape*.py"
+    - "toolkit/features/deploy_shape.py"
+    - "toolkit/cli/tools.py"
+    - "infra/config/values/common.yaml"
+    - "docs/lessons/**"
+    - ".agent/runs/**"
+  frozen_paths: [".github/**", "harness/**", "**/AGENTS.md", ".agent/unattended.yml", "promote-prod.yml"]
+  max_files: 8
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make]
+queue:
+  source: bitacora
+  filter: "DELIVERY-004 (#1619) and tickets it spawns"
+  max_items: 4
+budget:
+  max_iterations: 6
+  max_minutes_per_iteration: 30
+  max_consecutive_failures: 2
+authority:
+  merge: never
+  push: true
+  open_pr: true
+  advisor_tier: top
