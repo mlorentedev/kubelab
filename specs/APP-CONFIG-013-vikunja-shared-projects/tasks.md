@@ -12,8 +12,8 @@ created: "2026-10-15"
 ## Setup
 
 - [x] Branch `fix/tasks-vikunja` already exists in this worktree; `make worktree-init` done
-- [ ] `proposal.md` is complete and acceptance criteria are testable
-- [ ] No open questions left in `proposal.md` that block code (the token and the `manu` verification are rollout-time, not code-time)
+- [x] `proposal.md` is complete and acceptance criteria are testable ✓ 2026-10-16
+- [x] No open questions left in `proposal.md` that block code (the token and the `manu` verification are rollout-time, not code-time) ✓ 2026-10-16
 
 ## Implementation
 
@@ -42,17 +42,24 @@ created: "2026-10-15"
 - [x] Owner, in an `operator` session (staging done 2026-10-16; prod pending): mint the reconciler token selecting every group explicitly (`projects`, `projects_teams`, `teams`, `labels`: create/read/write; webhooks not needed); `toolkit secrets set ... --env staging|prod`
 - [x] Read-only consequence check (staging: `/projects`, `/teams`, `/labels` all 200): `GET /teams` with the new token answers 200 (confirms the route group is assignable)
 - [x] [AC2][AC3][AC4] `make sync-vikunja ENV=staging` (2026-10-16: 0 projects, 1 team, 1 member, 1 share, 8 labels; second run `changed=0`), read back projects/team/shares, re-run for `changed=0`
-- [ ] [AC2][AC3][AC4] Same on prod
-- [ ] [AC7] Verify as `manu` (read-only token from their session, or the browser); record how in `verification.md`
+- [x] [AC2][AC3][AC4] Same on prod ✓ 2026-10-18 (Bitacora adopted, 1 team, 1 member, 1 share, 8 labels; second run `changed=0`; issue #1701 comment of 2026-10-18)
+- [ ] [AC7] Verify as `manu` (read-only token from their session, or the browser); record how in `verification.md` — **not done; superseded by CONSOLE-005 #2587 (2026-10-22)**
 
 ## Closing
+
+> Disposition 2026-10-22: archived as superseded by CONSOLE-005 (#2587), which retires Vikunja under the ADR-066 amendment (#2575, merged). The code and the prod rollout are done (#2324, #2331, #2464; prod `changed=0` on 2026-10-18). AC7 (verify as `manu` in prod) and AC9 (honest token-expiry class) stay unmet because both concern a service that is about to be deleted; neither is marked passing. Unticked boxes:
+> - AC7 task (Rollout): not done, for that reason.
+> - "Every acceptance criterion is covered by at least one test" and "matching entry in `features.json` with a non-vacuous verification command": AC7 has no test (it was an observation) and AC9 has tests but an unmet class; their entries are `blocked`/superseded with `verification: none: superseded`, so the boxes are not claimed.
+> - Type checks and lint: not re-run, because this archive changes no code. The work PRs ran them in CI.
+> - "No unrelated changes in the diff": a statement about a PR diff; the archive changes only this spec folder, and no single PR of this spec is claimed to close it.
+> - "PR opened with `Closes #1701`": the work shipped as #2324, #2331 and #2464, none closing #1701, which is still open; the operator closes it with the archive, pointing at #2587.
 
 - [ ] Every acceptance criterion from `proposal.md` is covered by at least one test
 - [ ] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command
 - [ ] Type checks pass
 - [ ] Lint passes
 - [ ] No unrelated changes in the diff (no scope creep)
-- [ ] `verification.md` filled in; lesson written if the swagger-fixture technique proves out
+- [x] `verification.md` filled in; lesson written if the swagger-fixture technique proves out ✓ 2026-10-22 (lesson-578)
 - [ ] PR opened with `Closes #1701`, `## Knowledge` section and `## Review triage` comment
 
 ## Machine-readable features

@@ -11,6 +11,8 @@ wip_override: "Production defect in daily use: tasks created by Slack and forge 
 
 # APP-CONFIG-013: Vikunja projects are declared, reconciled, and shared with every human
 
+Superseded 2026-10-22 by CONSOLE-005 (#2587), which retires Vikunja; archived with AC7 and AC9 unmet for that reason.
+
 ## Why
 
 <!-- from issue #1701: APP-CONFIG-013: sync-vikunja passes no token and reconciles a removed endpoint, so no project has ever been created -->

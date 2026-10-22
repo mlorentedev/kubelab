@@ -13,33 +13,39 @@ created: "2026-10-16"
 
 ## Setup
 
-- [ ] Branch created from main: `feat/OPS-030-edge-error-pages`
-- [ ] `proposal.md` is complete and acceptance criteria are testable
-- [ ] No open questions left in `proposal.md` "Risks / open questions"
+- [x] Branch created from main: the work landed on per-PR branches (`fix/edge-error-pages-reachability`, `fix/edge-error-pages-coverage`, `fix/edge-error-pages-negotiation`) instead of one `feat/OPS-030-edge-error-pages` ✓ 2026-10-17
+- [x] `proposal.md` is complete and acceptance criteria are testable ✓ 2026-10-16
+- [x] No open questions left in `proposal.md` "Risks / open questions" ✓ 2026-10-17 (the prod gaps were decided per route in #2361)
 
 ## Implementation
 
 > Three PRs, in this order. PR 1 is tests and deletions, PR 2 the nginx/image change (`fix:` so release-please builds it), PR 3 the owner-decided prod coverage.
 
-- [x] [AC6] Owner decides, per prod route without `error-pages` (`argocd`, `authelia`, `loki`, `vikunja`, `n8n`): add the middleware or declare the exception. Record it on #1753
-- [x] [P] [AC1] Failing test `tests/test_error_pages_reachable.py`: every `errors/*.html` is targeted by a Middleware status range, an nginx `error_page` or the catch-all. Expected: FAIL on 401, 408, 429, 500, maintenance
-- [x] [AC3] Delete `401.html`, `408.html`, `429.html`, `500.html`, `maintenance.html` and their `error_page` lines; update `tests/test_error_pages_markup.py` (page count, orphan scan)
-- [x] [P] [AC2] Failing test `tests/test_error_pages_coverage.py`: render both overlays, every IngressRoute carries `error-pages` or is in `edge.errors.coverage.exceptions`. Expected: FAIL on the prod gaps
-- [x] [AC2] Declare `edge.errors.coverage.exceptions` in `common.yaml` (`headscale`, `catch-all`, `kubelab-redirect`, `brand-assets`, webhook routes, each with a reason); the test reads it with `yaml.safe_load`
-- [x] [AC5] Failing test: built image answers JSON for `Accept: application/json` on `/errors/502.html`, `/errors/503.html`, `/errors/504.html` and on an unknown path (status unchanged), HTML otherwise
-- [x] [AC4][AC5] `edge/errors/nginx.conf`: `map $http_accept` negotiation, `no-store`, `X-Robots-Tag`, `Retry-After` on 503/504, `access_log` on `/errors/`; JSON bodies next to the HTML pages
-- [x] [AC6] Apply the owner's decision: add the middleware or the exception; the coverage test goes green
-- [x] Update `CLAUDE.md` / ADR-072 status to `accepted` when PR 1 merges
+- [x] [AC6] Owner decides, per prod route without `error-pages` (`argocd`, `authelia`, `loki`, `vikunja`, `n8n`): add the middleware or declare the exception. Record it on #1753 ✓ 2026-10-17: decided in #2361 (merge `ae331d1c`), recorded in its body and in ADR-072 decision 6, not as a comment on #1753
+- [x] [P] [AC1] Failing test `tests/test_error_pages_reachable.py`: every `errors/*.html` is targeted by a Middleware status range, an nginx `error_page` or the catch-all. Expected: FAIL on 401, 408, 429, 500, maintenance ✓ 2026-10-17 (#2360)
+- [x] [AC3] Delete `401.html`, `408.html`, `429.html`, `500.html`, `maintenance.html` and their `error_page` lines; update `tests/test_error_pages_markup.py` (page count, orphan scan) ✓ 2026-10-17 (#2360)
+- [x] [P] [AC2] Failing test `tests/test_error_pages_coverage.py`: render both overlays, every IngressRoute carries `error-pages` or is in `edge.errors.coverage.exceptions`. Expected: FAIL on the prod gaps ✓ 2026-10-17 (#2361)
+- [x] [AC2] Declare `edge.errors.coverage.exceptions` in `common.yaml` (`headscale`, `catch-all`, `kubelab-redirect`, `brand-assets`, webhook routes, each with a reason); the test reads it with `yaml.safe_load` ✓ 2026-10-17 (#2361)
+- [x] [AC5] Failing test: built image answers JSON for `Accept: application/json` on `/errors/502.html`, `/errors/503.html`, `/errors/504.html` and on an unknown path (status unchanged), HTML otherwise ✓ 2026-10-17 (#2371)
+- [x] [AC4][AC5] `edge/errors/nginx.conf`: `map $http_accept` negotiation, `no-store`, `X-Robots-Tag`, `Retry-After` on 503/504, `access_log` on `/errors/`; JSON bodies next to the HTML pages ✓ 2026-10-17 (#2371; `access_log` is the inherited http-level one, see Closing)
+- [x] [AC6] Apply the owner's decision: add the middleware or the exception; the coverage test goes green ✓ 2026-10-17 (#2361)
+- [x] Update `CLAUDE.md` / ADR-072 status to `accepted` when PR 1 merges ✓ 2026-10-17 (ADR-072 reads Accepted, #2360; the `CLAUDE.md` rule on the new-IngressRoute exception is in place)
 
 ## Closing
 
+> Disposition 2026-10-22 (archive): all implementation PRs merged (#2336, #2346, #2360, #2361, #2371). The h1, robots and orphaned-asset items of #1753 landed in #2336 and #2346, ahead of this spec. Unticked boxes and where they are carried:
+> - Every AC covered by a test: AC4's `access_log` clause is not asserted by any test. `access_log` is on for `/errors/` by inheritance (`edge/errors/nginx.conf:22`) and no `access_log off` sits in those locations, but removing that inheritance would leave the suite green. Carried by #2617 (OPS-044).
+> - Type checks, lint and scope: not re-run, because the archive changes no code. The work PRs ran them in CI.
+> - The CrowdSec ban page (ADR-072 phase 2, out of scope here) is carried by #2368.
+> - #1753 stays open only because nothing closed it; every item in it has landed.
+
 - [ ] Every acceptance criterion from `proposal.md` is covered by at least one test
-- [ ] Every acceptance criterion has a matching entry in `features.json` (see below) with a non-vacuous verification command
+- [x] Every acceptance criterion has a matching entry in `features.json` (see below) with a non-vacuous verification command
 - [ ] Type checks pass
 - [ ] Lint passes
 - [ ] No unrelated changes in the diff (no scope creep)
-- [ ] `verification.md` filled in
-- [ ] PR opened referencing this spec folder
+- [x] `verification.md` filled in
+- [x] PR opened referencing this spec folder
 
 ## Machine-readable features
 

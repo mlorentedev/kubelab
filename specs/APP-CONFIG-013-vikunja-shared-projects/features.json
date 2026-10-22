@@ -3,49 +3,49 @@
     "id": "APP-CONFIG-013-vikunja-shared-projects-f1",
     "behavior": "AC1: sync vikunja authenticates from SOPS, never via argv or stdout, and fails closed naming the key",
     "verification": "poetry run pytest tests/test_sync_vikunja_cli.py -q",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "2026-10-22: `poetry run pytest -q --no-cov tests/test_sync_vikunja_cli.py` -> 6 passed (worktree root). Merged: #2331 (87f548b6). Live: make sync-vikunja ENV=staging and ENV=prod ran with nothing exported (issue #1701 comments 2026-10-16 and https://github.com/mlorentedev/kubelab/issues/1701#issuecomment-6243987329)"
   },
   {
     "id": "APP-CONFIG-013-vikunja-shared-projects-f2",
     "behavior": "AC2/AC5: the client calls only endpoints present in Vikunja's swagger fixture, creates or adopts declared projects, and never calls /namespaces",
     "verification": "poetry run pytest tests/test_vikunja_client.py tests/test_vikunja_reconciler.py -q",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "2026-10-22: `poetry run pytest -q --no-cov tests/test_vikunja_client.py tests/test_vikunja_reconciler.py tests/test_vikunja_api_contract.py` -> 47 passed. Merged: #2324 (9eafa564). Prod, 2026-10-18: Bitacora (project 2) adopted, none created (https://github.com/mlorentedev/kubelab/issues/1701#issuecomment-6243987329)"
   },
   {
     "id": "APP-CONFIG-013-vikunja-shared-projects-f3",
     "behavior": "AC3/AC4: the team has exactly the declared human members, every project is shared with it, and a re-run changes nothing",
     "verification": "poetry run pytest tests/test_vikunja_reconciler.py -q -k 'team or share or idempotent'",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "2026-10-22: `poetry run pytest -q --no-cov tests/test_vikunja_reconciler.py -k 'team or share or idempotent'` -> 3 passed. Merged: #2324. Prod, 2026-10-18: 1 team, 1 member, 1 share, second run changed=0 (https://github.com/mlorentedev/kubelab/issues/1701#issuecomment-6243987329). Staging 2026-10-16: same, second run changed=0"
   },
   {
     "id": "APP-CONFIG-013-vikunja-shared-projects-f4",
     "behavior": "AC6: the declared projects, team and members live in common.yaml and are consistent with the identities and default_project",
     "verification": "poetry run pytest tests/test_vikunja_ssot.py -q",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "2026-10-22: `poetry run pytest -q --no-cov tests/test_vikunja_ssot.py` -> 4 passed. Merged: #2324 (declaration in common.yaml)"
   },
   {
     "id": "APP-CONFIG-013-vikunja-shared-projects-f5",
     "behavior": "AC7: Bitacora and its tasks are visible to manu in prod (observed live, recorded in verification.md)",
-    "verification": "grep -q 'AC7 observed' specs/APP-CONFIG-013-vikunja-shared-projects/verification.md",
-    "state": "pending",
-    "evidence": ""
+    "verification": "none: superseded",
+    "state": "blocked",
+    "evidence": "SUPERSEDED 2026-10-22, not met: the service is retired by CONSOLE-005 #2587 (ADR-066 amendment, #2575 32247509). Staging was seen by the owner in the browser on 2026-10-16; prod was never observed as manu. Verifying a board that is about to be deleted buys nothing"
   },
   {
     "id": "APP-CONFIG-013-vikunja-shared-projects-f6",
     "behavior": "AC8: the reconciler registers no webhook",
     "verification": "poetry run pytest tests/test_vikunja_reconciler.py -q -k webhook",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "2026-10-22: `poetry run pytest -q --no-cov tests/test_vikunja_reconciler.py -k webhook` -> 1 passed (test_the_reconciler_never_registers_a_webhook). Merged: #2324. Ticket for the signature mismatch: #2326 (APP-CONFIG-019)"
   },
   {
     "id": "APP-CONFIG-013-vikunja-shared-projects-f7",
     "behavior": "AC9: the reconciler token is an EXTERNAL SecretSpec for staging and prod with an honest expiry (never NEVER)",
-    "verification": "poetry run pytest tests/test_vikunja_reconciler_token_spec.py -q",
-    "state": "pending",
-    "evidence": ""
+    "verification": "none: superseded",
+    "state": "blocked",
+    "evidence": "SUPERSEDED 2026-10-22, not met: the service is retired by CONSOLE-005 #2587. The code half landed in #2464 (99c65d6b): SecretSpec kind=EXTERNAL for staging/prod and Expiry.DECLARED, 15 tests pass in tests/test_vikunja_reconciler_token_spec.py. The expiry class itself was never closed: no declared expiry date is recorded per env in values/<env>.yaml, so it stays unmet and is not marked passing"
   }
 ]

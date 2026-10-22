@@ -2,64 +2,64 @@
   {
     "id": "OPS-038-gitea-forge-upgrade-f1",
     "behavior": "The candidate Gitea image (1.27.3) starts on the restored R2 snapshot, migrations complete, API answers (AC1)",
-    "verification": "grep -q 'image: gitea/gitea:1.27.3' infra/config/values/common.yaml && make backup-drill-gitea ENV=prod",
-    "state": "pending",
-    "evidence": ""
+    "verification": "grep -q 'image: gitea/gitea:1.27.3' infra/config/values/common.yaml && poetry run pytest -q --no-cov tests/test_gitea_drill.py tests/test_gitea_upgrade_probe.py",
+    "state": "passing",
+    "evidence": "2026-10-22: pin is on master (PR #2381, 1bf91076, merged 2026-10-17); the grep and the 50 tests of its verification command pass from the worktree root. The drill itself (make backup-drill-gitea ENV=prod HOST=ace2) needs ace2 and R2 and was not re-run: its result is recorded on #2375 (https://github.com/mlorentedev/kubelab/issues/2375#issuecomment-6230892745): the restore drill on snapshot 13893d74 passed on 1.25.5 (baseline) and on 1.27.3"
   },
   {
     "id": "OPS-038-gitea-forge-upgrade-f2",
     "behavior": "gitea doctor check --all is clean on the restored copy and PUBLIC_URL_DETECTION is pinned in app.ini (AC2)",
-    "verification": "echo 'not implemented' && exit 1",
-    "state": "pending",
-    "evidence": ""
+    "verification": "poetry run pytest -q --no-cov tests/test_gitea_upgrade_probe.py tests/test_gitea_public_url_pin.py",
+    "state": "passing",
+    "evidence": "2026-10-22: tests pass. PUBLIC_URL_DETECTION is pinned to legacy in the compose template (PR #2381, tests/test_gitea_public_url_pin.py). The doctor probe is in PR #2379 (809a9269) and passed on 1.27.3. Qualification: 'Garbage collect LFS' reports an error on 1.25.5 and 1.27.3 alike and is excluded by name as a measured baseline (KNOWN_BASELINE_FAILURES, lesson-586); 1.27.3 reported fewer doctor errors than 1.25.5 (PR #2408, 2e2587ca, also removed the stale-merge-base exclusion after 1.27.3)"
   },
   {
     "id": "OPS-038-gitea-forge-upgrade-f3",
     "behavior": "The dotf forge API contract (issue comments, issue and pull create/edit) works on the restored copy (AC3)",
-    "verification": "echo 'not implemented' && exit 1",
-    "state": "pending",
-    "evidence": ""
+    "verification": "poetry run pytest -q --no-cov tests/test_gitea_upgrade_probe.py",
+    "state": "passing",
+    "evidence": "2026-10-22: tests pass. The REST contract probe (issue create, comment with html_url, edit) landed in PR #2379 (809a9269) and ran inside the restored scratch server on 1.25.5 and 1.27.3 alike: nothing dotf forge calls changed (lesson-586). Pull create/comment/edit was not exercised on the live 1.27.3 forge: see f5"
   },
   {
     "id": "OPS-038-gitea-forge-upgrade-f4",
     "behavior": "Authelia OIDC login and update-oauth work on the restored copy (AC4)",
-    "verification": "echo 'not implemented' && exit 1",
-    "state": "pending",
-    "evidence": ""
+    "verification": "none: live check; the drill has no network",
+    "state": "passing",
+    "evidence": "2026-10-22: the drill runs with no network, so this was checked on the live forge instead (docs/runbooks/gitea-upgrade.md step 2.4). #2375 comment 2026-10-17T08:05 (https://github.com/mlorentedev/kubelab/issues/2375#issuecomment-6231535448) records OIDC login verified on 1.27.3. make provision NODE=bee ENV=prod TAGS=gitea runs gitea-bootstrap.sh (update-oauth, never delete+add) and finished changed=0 on its second run (comment 6230892745)"
   },
   {
     "id": "OPS-038-gitea-forge-upgrade-f5",
     "behavior": "Repository merge settings apply with read-back and the PR-Agent app works against the new server (AC5)",
-    "verification": "echo 'not implemented' && exit 1",
-    "state": "pending",
-    "evidence": ""
+    "verification": "poetry run pytest -q --no-cov tests/test_gitea_upgrade_probe.py",
+    "state": "partial",
+    "evidence": "2026-10-22: merge settings half is proven: PATCH with has_pull_requests applied and read back on the restored copy on 1.25.5 and 1.27.3 (PR #2379, lesson-586). Not proven: the PR-Agent app (pragent/pr-agent:0.45.0-gitea_app) against the 1.27.3 server, and live PR create/comment/edit; #2375 comment 6230892745 lists both as not yet verified and no later comment records them. No ticket tracks this check; nearest are #1823 (forge reviewer) and #2467 (forge reviewer fallback)"
   },
   {
     "id": "OPS-038-gitea-forge-upgrade-f6",
     "behavior": "Runner token generation works and act_runner 0.2.13 connects to the new server, or OPS-034 is sequenced first (AC6)",
-    "verification": "echo 'not implemented' && exit 1",
-    "state": "pending",
-    "evidence": ""
+    "verification": "none: live check on the Beelink",
+    "state": "passing",
+    "evidence": "2026-10-22: #2375 comment 2026-10-17T18:43 (https://github.com/mlorentedev/kubelab/issues/2375#issuecomment-6238815197): run 1521 on personal/imagesensortool completed with success, so act_runner 0.2.13 picks up and finishes a job on 1.27.3. Provisioning uses gitea actions generate-runner-token; gitea-prune-runners found 1 registered runner, all declared (comment 6230892745). OPS-034 then moved the runner to gitea/runner 4.1.0 (PR #2425, b2f13282)"
   },
   {
     "id": "OPS-038-gitea-forge-upgrade-f7",
     "behavior": "The live upgrade is applied through provision-bee after a fresh node backup and a re-run reports changed=0 (AC7)",
-    "verification": "echo 'not implemented' && exit 1",
-    "state": "pending",
-    "evidence": ""
+    "verification": "none: live provision on the Beelink",
+    "state": "passing",
+    "evidence": "2026-10-22: #2375 comment 2026-10-17T06:52 (https://github.com/mlorentedev/kubelab/issues/2375#issuecomment-6230892745): fresh backup-node snapshot 13893d74 first; make provision NODE=bee ENV=prod TAGS=gitea first run changed=4, second run changed=0; /api/healthz 200; tests/infra/test_gitea_anonymous_surface_live.py 5 passed. Merged as PR #2381 (1bf91076)"
   },
   {
     "id": "OPS-038-gitea-forge-upgrade-f8",
     "behavior": "A second push to the same branch cancels the first run, including one already running on the runner (AC8)",
-    "verification": "echo 'not implemented' && exit 1",
-    "state": "pending",
-    "evidence": ""
+    "verification": "none: not measured",
+    "state": "blocked",
+    "evidence": "2026-10-22: carried to #2063 (OPS-034, step 3), open. #2375 comment 6238815197 measured only pickup and parsing of a concurrency block (run 1521, success). Not measured: a queued run cancelled by a newer push, and a running job cancelled (needs Gitea Runner >= 2.0.0; the runner is now gitea/runner 4.1.0 after PR #2425, so the precondition is met but the two-push measurement was never taken). Operator decision 2026-10-22: archive OPS-038 and move this half to #2063. No forge workflow declares concurrency yet"
   },
   {
     "id": "OPS-038-gitea-forge-upgrade-f9",
     "behavior": "The upgrade runbook and a lesson exist (AC9)",
     "verification": "test -f docs/runbooks/gitea-upgrade.md && find docs/lessons -name 'lesson-*upgrade*.md' | grep -q .",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "2026-10-22: verification command exits 0 from the worktree root. Runbook docs/runbooks/gitea-upgrade.md and docs/lessons/storage-backup/lesson-586-an-upgrade-probe-needs-the-same-run-on-the-deployed-version.md, both added by PR #2381 (1bf91076)"
   }
 ]
