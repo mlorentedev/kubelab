@@ -14,11 +14,12 @@ Map every acceptance criterion from `proposal.md` to concrete proof.
 - [ ] **AC1** A product absent from the registry is refused; a payload naming another app changes nothing
   - Offline, PR 2 and PR 6: `poetry run pytest tests/test_product_registry.py tests/test_product_image_receiver_workflow.py --no-cov -q`. The receiver test executes the shipped resolve step with `gh` stubbed and asserts: an unmapped event type exits non-zero with ERROR / WHY / FIX; a payload carrying `app`, `repo` or `image` produces the same branch, the same files and the same app as one carrying only `tag`; `client_payload.app` appears nowhere in the workflow text; no step interpolates `client_payload` into a script
   - **Live**, after PR 7: dispatch an event type that no registry entry maps (`gh api repos/mlorentedev/kubelab/dispatches -f event_type=ghost-image-published -f 'client_payload[tag]=sha-0000000'`, run by the operator, who holds the dispatch token) and then `gh run list --repo mlorentedev/kubelab --workflow product-image-receiver.yml --limit 1 --json conclusion,displayTitle`. Expected: `failure`, and `git status`/`gh pr list` show nothing opened
-- [ ] **AC2** A contract that fails the schema fails the receiver with ERROR / WHY / FIX
+- [x] **AC2** A contract that fails the schema fails the receiver with ERROR / WHY / FIX
   - PR 1: `poetry run pytest tests/test_product_contract.py tests/test_product_contract_schema.py --no-cov -q`; every refusal case asserts the three labelled lines and the field name
   - PR 6: the stubbed-`gh` receiver test feeds an invalid contract body and asserts non-zero exit and the three lines in the step output
   - By hand, offline: `poetry run toolkit product validate --contract tests/fixtures/product/invalid-port.kubelab.yaml --json; echo "exit=$?"`. Expected: JSON with `error`, `why`, `fix`, `exit=1`
-- [ ] **AC3** A test fails if anything derived from a contract drifts from it
+  - Run 2026-10-22 on master `d7a0d8db`. The fixture did not exist until the closeout review found that, and it is now committed (`port: 70000`). Output: `{"ok": false, "error": "tests/fixtures/product/invalid-port.kubelab.yaml: field 'port': Input should be less than or equal to 65535", "why": "the value does not meet the constraint the schema declares for this field.", "fix": "set port to the container's listening port, an integer from 1 to 65535 (not quoted). Schema: ..."}`, `exit=1`
+- [x] **AC3** A test fails if anything derived from a contract drifts from it
   - `env -u SOPS_AGE_KEY_FILE poetry run pytest tests/test_product_contract_drift.py --no-cov -q`. Expected: PASS, offline
   - Not vacuous: the test prints `compared N contract-owned keys for web/<env>` and asserts N equals the size of the schema-to-values mapping; one more mutation empties the mapping (`make mutate FILE=toolkit/features/product_render.py FROM=<the mapping entry> TO=<nothing> TEST=tests/test_product_contract_drift.py`) and must go red. `api` (forge `in-tree`) is exempt from the snapshot check by an explicit, tested rule; a `github` entry without a snapshot is not
   - Proof that it can fail, one mutation per direction, each on a clean committed tree: `make mutate FILE=infra/config/values/staging.yaml FROM='default_port: 8080' TO='default_port: 8081' TEST=tests/test_product_contract_drift.py`; the same for editing the snapshot into an invalid one, and for deleting a snapshot while its registry entry remains. Expected: each exits 0, meaning the test went red (a collection error is not red)
@@ -48,14 +49,14 @@ Map every acceptance criterion from `proposal.md` to concrete proof.
     - `product-image-receiver.yml`: run 39537825940 (03:18Z) and run 39540892119 (03:51Z), both `repository_dispatch` `web-image-published`, both `success`. In 39540892119 the `Fetch and validate the contract at the commit`, `Render the contract and promote the tag` and `Open or update the staging deploy PR` steps all succeeded, and the dry-run step was skipped
     - `deploy/staging-web`: #2576 `chore(staging): deploy web sha-f55a8c0`, merged by the operator at 03:47Z as `75702f21`; then #2581 `chore(staging): deploy web sha-9d79e52`, open, touching only `values/staging.yaml` and the generated staging deployment
     - `web-image-receiver.yml`: the latest run is 39529776394 at 01:52Z, before the flip. Its sibling 39529776414 is the product receiver on the same dispatch, which skipped web because web was still `legacy` then. There is no run at 03:18Z or 03:51Z, so after the flip exactly one receiver acted on each dispatch
-- [ ] **AC5** (#1815) `PLATFORM_APPS` is derived; a third registered product promotes
+- [x] **AC5** (#1815) `PLATFORM_APPS` is derived; a third registered product promotes
   - `git grep -n 'PLATFORM_APPS' -- toolkit tests` prints nothing but a removal comment
   - `poetry run pytest tests/test_promotion.py tests/test_product_registry.py tests/test_k8s_generator_secrets.py --no-cov -q`; the promotion test uses the fixture registry's `third` product and asserts the failure message for `ghost` names the registry file
   - No regression in the generated manifests: generate both overlays on master and on the branch and `diff -r` them. Expected: empty
-- [ ] **AC6** A contract cannot widen the registry
+- [x] **AC6** A contract cannot widen the registry
   - A contract that names a repository (`repository`, `repo`, `source`, `remote`) is refused, and the receiver test shows every fetch targets the registry's repository only (`tests/test_product_contract.py`, `tests/test_product_contract_guards.py`, `tests/test_product_image_receiver_workflow.py`)
   - `poetry run pytest tests/test_product_contract_guards.py --no-cov -q`: five refusals (an image other than the derived one, secret name, hostname collision, `auth: oidc`, a contract-named repository), each asserting ERROR / WHY / FIX, plus the positive case for web's real contract against the real registry and catalog
-- [ ] **AC7** A bad tag or an unresolvable commit is refused before any file is written
+- [x] **AC7** A bad tag or an unresolvable commit is refused before any file is written
   - `poetry run pytest tests/test_product_image_receiver_workflow.py --no-cov -q`: the stubbed `gh` returns zero, two, and a non-default-branch commit; in every case the test asserts a non-zero exit and an unchanged working tree (`git status --porcelain` empty)
   - The short-sha spike (PR 6) is the evidence that the real API behaves as the stub assumes. Measured 2026-10-19 with `gh api` against `mlorentedev/web` (default branch `master`, 249 commits), staging pin `sha-b9874f2`:
     - `GET repos/mlorentedev/web/commits/b9874f2` -> 200, `.sha` = `b9874f2f693dd41ee4e1985cb88b0645ac59f996` (40 hex, starting with the short sha)
@@ -97,3 +98,16 @@ Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`.
 - [ ] Folder moved: `specs/IDP-042-product-contract-registry/` -> `specs/archive/IDP-042-product-contract-registry/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018); #1815 closed with the PR that removed the literal; the epic #1931 checklist ticked for both
 - [ ] Promotions above executed (if any)
+
+## Closeout review, 2026-10-22 (round 2, `nan/deepseek-v4-flash`, on `d7a0d8db`): FAIL
+
+Round 1 (`nan/mimo-v2.6-flash`) stopped on a 429 concurrency limit before giving a verdict. Its provisional file is `review-round1.md`.
+
+| Finding | Severity / reality | Disposition |
+|---|---|---|
+| A contract change to a prod-owned key (`port`, `health_path`, `auth`, `hostnames.prod`) cannot land. The receiver renders staging only, nothing renders prod, and §Risks says the prod lane does. | Major / REAL | Confirmed by reading: `product-image-receiver.yml` renders `--env staging` only, and `promote-prod.yml` has no render step. The fix shape needs the operator's decision before any code is written. |
+| AC2's by-hand command names a fixture that does not exist | Minor / REAL | Fixed: `tests/fixtures/product/invalid-port.kubelab.yaml` added, and the command was run (output above). |
+| `site_domain` / `site_url` mirror `domain` and nothing ties them to it | Minor / THEORETICAL | Ticketed: #2610 |
+| Two generic products force-push deploy branches that rewrite the same staging files | Minor / SPECULATIVE | Ticketed: #2611 |
+
+AC1 stays unticked: its live half (an unmapped dispatch) is run by the operator.
