@@ -1,7 +1,7 @@
 ---
 id: "OPS-038-gitea-forge-upgrade"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-10-16"
 issue: "mlorentedev/kubelab#2375"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
