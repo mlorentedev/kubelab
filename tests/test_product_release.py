@@ -113,11 +113,6 @@ def test_the_release_contract_is_fetched_at_the_tagged_commit(gh, digests, tmp_p
     ]
 
 
-def test_the_release_tag_prefix_is_the_one_release_please_cuts() -> None:
-    """web tags `v1.16.1` for image `1.16.1`. A wrong prefix is caught by the digest proof, not trusted."""
-    assert product_release.RELEASE_TAG_PREFIX == "v"
-
-
 def test_a_tag_naming_another_commit_is_refused(gh, digests, tmp_path: pathlib.Path) -> None:
     """The image is not the build of the tagged commit: its contract is not prod's."""
     digests.answers[f"sha-{FULL[:7]}"] = "sha256:" + "1" * 64

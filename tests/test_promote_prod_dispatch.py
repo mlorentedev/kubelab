@@ -27,7 +27,7 @@ import sys
 import pytest
 import yaml
 
-from toolkit.features import product_registry
+from toolkit.features import product_registry, product_render
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 PROMOTE = REPO_ROOT / ".github/workflows/promote-prod.yml"
@@ -417,7 +417,7 @@ def test_a_product_list_failure_names_itself(tmp_path: pathlib.Path) -> None:
 
 # --- the release's contract renders prod (IDP-042 closeout) ------------------
 
-PROD_SNAPSHOT_DIR = "infra/config/products/contracts/prod"
+PROD_SNAPSHOT_DIR = str(product_render.snapshot_path("web", "prod").parent.relative_to(REPO_ROOT))
 
 
 def _contract(tmp_path: pathlib.Path, forge: str, release_answer: str, release_code: int = 0):

@@ -2,7 +2,7 @@
 id: lesson-616-one-snapshot-for-two-envs-that-advance-separately-makes-the-slower-one-drift
 type: lesson
 status: active
-created: "2026-10-22"
+created: "2026-10-21"
 owner: manu
 category: gitops-delivery
 tags: [kubelab, gitops-delivery, idp-042, product-contract, drift]
@@ -34,7 +34,7 @@ it: the drift tests, `render`'s `--app` inference, `snapshot_gaps` and `verify-p
 and then `product render --env prod --write`. The command resolves the release tag `v<version>`
 to a commit on the product's repository. It then requires `<image>:<version>` and
 `<image>:sha-<commit7>` to share one digest, so the tag is proven, not trusted. Only after that
-does it fetch and validate `kubelab.yaml` at the commit. Live on 2026-10-22: `1.16.1` →
+does it fetch and validate `kubelab.yaml` at the commit. Live on 2026-10-21: `1.16.1` →
 `661a205a`, digest `sha256:95482d9a…` on both tags. The prod snapshot it wrote is byte-equal
 to the staging one. `tests/test_product_contract_drift.py::test_a_contract_change_to_a_prod_owned_key_leaves_the_tree_green`
 holds both halves, and it goes red under `make mutate` when prod is pointed back at the flat
