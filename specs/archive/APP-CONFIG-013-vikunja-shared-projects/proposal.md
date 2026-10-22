@@ -1,7 +1,7 @@
 ---
 id: "APP-CONFIG-013-vikunja-shared-projects"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-10-15"
 issue: "mlorentedev/kubelab#1701"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
