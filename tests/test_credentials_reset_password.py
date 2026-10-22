@@ -55,10 +55,11 @@ class TestTheKeyResolvesFromTheIdentity:
     def test_the_real_declarations_resolve(self, env: str) -> None:
         merged = ConfigurationManager(env, REPO).get_merged_config()
         identities = merged["apps"]["auth"]["identities"]
-        for user in merged["apps"]["services"]["security"]["authelia"]["users"]:
-            if "identity" in user:
-                key = credentials.authelia_password_hash_key(user["identity"], merged)
-                assert key == f"{AUTH}.users_{identities[user['identity']]}_password_hash"
+        named = [u["identity"] for u in merged["apps"]["services"]["security"]["authelia"]["users"] if "identity" in u]
+        assert named, f"{env} declares no Authelia login by identity: the target could reset nothing there"
+        for identity in named:
+            key = credentials.authelia_password_hash_key(identity, merged)
+            assert key == f"{AUTH}.users_{identities[identity]}_password_hash"
 
 
 class TestTheCli:
