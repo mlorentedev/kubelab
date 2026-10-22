@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 611 | [An Application on `appTree` cannot name its Degraded resource, and a retained failed Job never degrades it](lesson-611-an-application-on-apptree-cannot-name-its-degraded-resource.md) | 2026-10-21 |
 | 609 | ["Synced at HEAD" is read from `sync.revision`, not from the last operation's revision](lesson-609-synced-at-head-is-read-from-sync-revision-not-from-the-last-operation.md) | 2026-10-20 |
 | 606 | [A publish job gated on `release_created` has no retry, and it failed silently for five releases](lesson-606-a-publish-gated-on-release-created-has-no-retry-and-failed-silently-for-five-releases.md) | 2026-10-20 |
 | 554 | [A staging Secret applied from a branch outlives its merge, because Argo CD reverts the branch's manifests but never its Secrets](lesson-554-a-staging-secret-applied-from-a-branch-outlives-its-merge.md) | 2026-10-10 |

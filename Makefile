@@ -861,7 +861,8 @@ sync-app:
 
 # Verify a product is live at origin/master HEAD by consequence (GITOPS-003):
 # Synced + Succeeded on the hub, then /version.json serving the pinned tag.
-# Exit 3 = not verifiable yet (no `commit` served), never a pass. Run on the mesh.
+# Exit 3 = not verifiable yet (no `commit` served), never a pass; 4 = superseded by a
+# later merge that pins another tag. Run on the mesh.
 # Usage: make verify-product APP=web ENV=staging|prod [TIMEOUT=600]
 .PHONY: verify-product
 verify-product:

@@ -1,6 +1,6 @@
 """One long-lived staging offer, force-updated — never a queue of pull requests.
 
-DELIVERY-005 (#1645). `web-image-receiver.yml` used to key its branch on the
+DELIVERY-005 (#1645). web's old receiver (`web-image-receiver.yml`) used to key its branch on the
 promoted sha, so every web push minted a new branch and therefore a new pull
 request. Measured over every `chore(staging): deploy` PR this repository has had:
 104 opened, 35 merged, 68 closed — and 67 of those closes were superseded by a
@@ -21,11 +21,9 @@ stubbed. The step runs only on `repository_dispatch` from another repository, so
 CI cannot exercise it on the branch that changes it — "CI green" is not the claim
 anyone needs here.
 
-Moved here from `test_web_image_receiver_workflow.py` by IDP-042 PR 7, and run
-against BOTH receivers: the legacy one and the generic `product-image-receiver.yml`,
-whose `open-pr` step copies it. The generic step had only its branch name tested
-until then (PR-Agent on #2559). IDP-042 PR 8 deletes the legacy receiver and its
-entry in `RECEIVERS`.
+IDP-042 PR 7 moved them here and ran them against both receivers while web was cut
+over; PR 8 deleted the old one, so `RECEIVERS` holds the generic `open-pr` step of
+`product-image-receiver.yml` alone. A receiver added later gets an entry, not a copy.
 """
 
 from __future__ import annotations
@@ -53,13 +51,8 @@ def _workflow(name: str) -> dict:
     return yaml.safe_load((REPO_ROOT / ".github/workflows" / name).read_text(encoding="utf-8"))
 
 
-def _legacy_step() -> dict:
-    """Found by a distinctive substring of its `name:`; a rename errors instead of skipping."""
-    steps = _workflow("web-image-receiver.yml")["jobs"]["promote-web"]["steps"]
-    return next(s for s in steps if "staging deploy PR" in s.get("name", ""))
-
-
 def _generic_step() -> dict:
+    """Found by its `id:`; a rename errors instead of skipping."""
     steps = _workflow("product-image-receiver.yml")["jobs"]["promote"]["steps"]
     return next(s for s in steps if s.get("id") == "open-pr")
 
@@ -75,7 +68,6 @@ class Receiver:
 
 
 RECEIVERS = {
-    "legacy": Receiver(_legacy_step, "deploy/staging-web", {}),
     "generic": Receiver(
         _generic_step,
         "deploy/staging-web",

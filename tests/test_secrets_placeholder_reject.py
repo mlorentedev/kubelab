@@ -42,14 +42,14 @@ class TestIsPlaceholder:
 
 class TestAuditRejectsPlaceholders:
     def test_placeholder_value_is_missing_not_present(self) -> None:
-        # basic_auth.user is a catalog secret in every env; feed it a placeholder and
-        # basic_auth.password a real value via a mocked decrypt.
-        fake = {"basic_auth": {"user": "REPLACE_WITH_SOPS_VALUE", "password": "a-real-password"}}
+        # basic_auth.credentials is a catalog secret in every env; feed it a placeholder
+        # and basic_auth.password a real value via a mocked decrypt.
+        fake = {"basic_auth": {"credentials": "REPLACE_WITH_SOPS_VALUE", "password": "a-real-password"}}
         with patch.object(ConfigurationManager, "_decrypt_sops", return_value=fake):
             result = SecretsManager(PROJECT_ROOT).audit("staging")
 
-        assert "basic_auth.user" in result.missing, "a placeholder must be reported missing"
-        assert "basic_auth.user" not in result.present
+        assert "basic_auth.credentials" in result.missing, "a placeholder must be reported missing"
+        assert "basic_auth.credentials" not in result.present
         assert "basic_auth.password" in result.present, "a real value must stay present"
 
 

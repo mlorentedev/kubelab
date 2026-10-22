@@ -119,10 +119,10 @@ Branch `feat/idp-042-web-cutover`. Commit prefix `feat(ci):`. Depends on PR 6 an
 
 Branch `chore/idp-042-delete-web-receiver`. Commit prefix `chore(ci):`. Only after PR 7's live proof is recorded.
 
-- [ ] [AC4] Delete `.github/workflows/web-image-receiver.yml` and `tests/test_web_image_receiver_workflow.py`; remove `web-image-receiver.yml` from `EXPECTED` in `tests/test_delivery_health.py:46-52`. Run `make test-fast`. Expected: PASS, and `git grep -n 'web-image-receiver' -- . ':!specs' ':!docs/lessons'` returns nothing but historical comments
-- [ ] Update `docs/runbooks/cicd.md:39,91,203,222` to the generic receiver and the onboarding recipe (contract + registry entry + the product's dispatch step)
-- [ ] Confirm `docs/adr/adr-053-platform-product-repos.md` §2 already carries its "Amended by ADR-067" note (ADR-067 promised it) and say in the PR that the generic receiver now exists; update the `CLAUDE.md` bullets that name `web-image-receiver`
-- [ ] File follow-up tickets with their root cause: DNS from contract hostnames (row 12), e2e expectations from the contract, OIDC client rendering, `platform_manifest.py:863`, the `ci-pipeline.yml` leftover if confirmed
+- [x] ✓ 2026-10-21 (its open-pr rationale moved into `product-image-receiver.yml`; `tests/test_receiver_pr_step.py` keeps the generic entry only) [AC4] Delete `.github/workflows/web-image-receiver.yml` and `tests/test_web_image_receiver_workflow.py`; remove `web-image-receiver.yml` from `EXPECTED` in `tests/test_delivery_health.py:46-52`. Run `make test-fast`. Expected: PASS, and `git grep -n 'web-image-receiver' -- . ':!specs' ':!docs/lessons'` returns nothing but historical comments
+- [x] ✓ 2026-10-21 (also `README.md`, `apps/README.md`, `docs/architecture/versioning-strategy.md`) Update `docs/runbooks/cicd.md:39,91,203,222` to the generic receiver and the onboarding recipe (contract + registry entry + the product's dispatch step)
+- [x] ✓ 2026-10-21 (ADR-053:20 carries it; no `CLAUDE.md` bullet names `web-image-receiver`) Confirm `docs/adr/adr-053-platform-product-repos.md` §2 already carries its "Amended by ADR-067" note (ADR-067 promised it) and say in the PR that the generic receiver now exists; update the `CLAUDE.md` bullets that name `web-image-receiver`
+- [x] ✓ 2026-10-21 (#2571 DNS, #2572 e2e, #2573 OIDC, #2574 platform manifest; `ci-pipeline.yml` is the existing #2399) File follow-up tickets with their root cause: DNS from contract hostnames (row 12), e2e expectations from the contract, OIDC client rendering, `platform_manifest.py:863`, the `ci-pipeline.yml` leftover if confirmed
 
 ## Closing
 
