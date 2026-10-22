@@ -96,7 +96,7 @@ func TestGitHubReaderFollowsPagesAndSendsSince(t *testing.T) {
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("page") == "2" {
-			_, _ = w.Write([]byte("[]"))
+			_, _ = w.Write([]byte(`[{"number":9001,"title":"second page","state":"open","html_url":"u","updated_at":"2026-10-02T00:00:00Z","user":{"login":"a"}}]`))
 			return
 		}
 		sawSince = r.URL.Query().Get("since")
@@ -108,8 +108,11 @@ func TestGitHubReaderFollowsPagesAndSendsSince(t *testing.T) {
 	since := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
 	items, err := (&forge.GitHub{BaseURL: srv.URL}).ListItems(context.Background(),
 		forge.Source{Forge: "github", Owner: "o", Repo: "r"}, since)
-	if err != nil || len(items) != 3 {
-		t.Fatalf("items=%d err=%v", len(items), err)
+	if err != nil || len(items) != 4 {
+		t.Fatalf("want the 3 first-page items and the 1 second-page item, got %d (err=%v)", len(items), err)
+	}
+	if last := items[len(items)-1]; last.Number != 9001 {
+		t.Fatalf("the second page was not read last: %+v", last)
 	}
 	if sawSince != "2026-10-01T00:00:00Z" {
 		t.Fatalf("since was %q", sawSince)
