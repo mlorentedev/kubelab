@@ -67,8 +67,9 @@ def authelia_password_hash_key(identity: str, config: dict[str, Any]) -> str:
     decision. Anything else raises, naming the keys that would work.
     """
     users = config.get("apps", {}).get("services", {}).get("security", {}).get("authelia", {}).get("users") or []
-    valid = sorted({str(u["identity"]) for u in users if isinstance(u, dict) and u.get("identity")})
-    username = resolve_user_identity({"identity": identity}, config) if identity in valid else ""
+    named = {str(u["identity"]): u for u in users if isinstance(u, dict) and u.get("identity")}
+    valid = sorted(named)
+    username = resolve_user_identity(named[identity], config) if identity in named else ""
     if not username:
         raise ValueError(f"'{identity}' names no Authelia login. Use one of: {', '.join(valid) or 'none declared'}")
     return f"apps.services.security.authelia.users_{username}_password_hash"
@@ -316,6 +317,11 @@ class CredentialsManager:
         logger.info("")
         logger.warning("SOPS is modified but not committed — the change reaches nothing until it lands.")
         logger.info(f"  git add {sops_file} && git commit")
+        if env == "dev":
+            # apply-secrets takes staging or prod only; the Compose Authelia mounts
+            # the users file that config-generate renders from SOPS.
+            logger.info("  make config-generate ENV=dev    # render the Compose users file, then restart Authelia")
+            return
         logger.info(f"  make apply-secrets ENV={env}    # deliver it to the cluster")
         logger.info("")
         # No reader picks up a Secret volume update by itself here: Authelia's

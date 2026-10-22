@@ -124,3 +124,24 @@ class TestTheMakeTarget:
         makefile = (REPO / "Makefile").read_text()
         block = makefile.split("credentials-reset-password:", 1)[1].split("\n\n", 1)[0]
         assert "$(USER)" not in block, block
+
+
+class TestTheNextStepNamesTheEnvsDelivery:
+    """`apply-secrets` takes staging or prod only; dev's Compose reads the users file `config-generate` renders."""
+
+    @pytest.mark.parametrize(
+        ("env", "say", "never"),
+        [
+            ("dev", "make config-generate ENV=dev", "apply-secrets"),
+            ("prod", "make apply-secrets ENV=prod", "config-generate"),
+        ],
+    )
+    def test_the_hint_matches_the_env(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str], env: str, say: str, never: str
+    ) -> None:
+        from tests.test_hash_password_never_prints import _install
+
+        _install(monkeypatch, succeed=True, tmp_path=tmp_path).update_hashed_secret(key_path=f"{AUTH}.users_x_password_hash", env=env)
+        out = "".join(capsys.readouterr())
+        assert say in out, out
+        assert never not in out, out

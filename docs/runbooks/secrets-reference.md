@@ -118,7 +118,8 @@ There is no `*.oidc-jwks.pem`. The OIDC signing key is `apps.services.security.a
 ```bash
 make credentials-reset-password ENV=<env> IDENTITY=operator    # an identity key of apps.auth.identities (#909)
 git add infra/config/secrets/<env>.enc.yaml && git commit    # SOPS is modified, not committed
-make apply-secrets ENV=<env>
+make apply-secrets ENV=<env>        # staging or prod
+make config-generate ENV=dev        # dev instead: renders the Compose users file, then restart Authelia
 ```
 
 The command **writes the hash into SOPS itself** and never prints it (#934, fixed
