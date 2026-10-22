@@ -71,7 +71,12 @@ runners instead of letting stale builds occupy the fleet.
 ## Docker registry
 
 - **Registry**: `mlorentedev/kubelab-{app}` (e.g., `mlorentedev/kubelab-api`)
-- **Config variable**: `vars.REGISTRY_PREFIX` (default: `kubelab`)
+- **Config variable**: `vars.REGISTRY_PREFIX` (default: `kubelab`). It names where `ci-publish.yml`
+  and `release.yml` push images, and nothing else (#563).
+- **Where each app's repository is read from**: the config, never the prefix. That means
+  `apps.platform.<app>.image_name` for an in-tree app, the product registry (`derived_image`)
+  for a contract-managed product, and `edge.errors.image_name` for errors. The generators deploy
+  from these, and `toolkit registry prune` (`ci-cleanup.yml`) prunes them (#2511).
 
 ## Versioning
 

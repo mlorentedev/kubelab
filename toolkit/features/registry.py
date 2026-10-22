@@ -18,10 +18,15 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
 import httpx
+import yaml
 
+from toolkit.config.settings import PROJECT_ROOT
 from toolkit.core.logging import logger
+from toolkit.features import product_registry
 
 _HUB = "https://hub.docker.com/v2"
 SHA_TAG_PREFIX = "sha-"  # immutable per-commit staging tag scheme (ADR-046)
@@ -149,15 +154,43 @@ class DockerHubClient:
         return False
 
 
+def image_repositories(
+    apps: list[str], common: dict[str, Any] | None = None, registry: Path | None = None
+) -> dict[str, str]:
+    """The Docker Hub repository each app is deployed from (#2511), keyed by app.
+
+    The same sources the generators read: ``derived_image`` for a contract-managed
+    product, ``apps.platform.<app>.image_name`` for an in-tree one, and
+    ``edge.errors.image_name`` for errors. A repository is a name under the hub
+    namespace, so only the last segment of an image is kept.
+    """
+    if common is None:
+        common = yaml.safe_load((PROJECT_ROOT / product_registry.COMMON_VALUES_RELPATH).read_text()) or {}
+    repos: dict[str, str] = {}
+    for app in apps:
+        if app == "errors":
+            name = ((common.get("edge") or {}).get("errors") or {}).get("image_name")
+            key = "edge.errors.image_name"
+        elif product_registry.product(app, registry).contract_managed:
+            name = product_registry.derived_image(app, registry).rsplit("/", 1)[1]
+            key = "the product registry"
+        else:
+            name = (((common.get("apps") or {}).get("platform") or {}).get(app) or {}).get("image_name")
+            key = f"apps.platform.{app}.image_name"
+        if not name:
+            raise ValueError(f"No image repository for '{app}': {key} is not set")
+        repos[app] = name
+    return repos
+
+
 def prune(
-    apps: list[str],
-    registry_prefix: str,
+    repos: dict[str, str],
     retention: int,
     dry_run: bool,
     client: DockerHubClient | None = None,
     protected: dict[str, set[str]] | None = None,
 ) -> int:
-    """Prune stale tags for each ``<registry_prefix>-<app>`` repo.
+    """Prune stale tags in each app's repository (``repos`` maps app -> repo).
 
     ``protected`` maps app -> sha tags pinned by a committed overlay; those are
     never deleted (ADR-056 prune guard). Returns the count deleted (or, in
@@ -166,8 +199,7 @@ def prune(
     client = client or DockerHubClient.from_env()
     protected = protected or {}
     total = 0
-    for app in apps:
-        repo = f"{registry_prefix}-{app}"
+    for app, repo in repos.items():
         tags = client.list_tags(repo)
         keep = protected.get(app, set())
         stale = select_stale_tags(tags, retention, protected=keep)
