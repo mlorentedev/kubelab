@@ -45,7 +45,9 @@ def test_never_triggered_by_push(wf: dict) -> None:
 
 def test_the_status_job_judges_only_argo_contexts_and_the_commit_the_status_is_about(wf: dict) -> None:
     job = wf["jobs"]["on-status"]
-    assert "startsWith(github.event.context, 'argocd/kubelab-')" in job["if"]
+    # Exact, not a substring: the job-level filter cannot be executed here, so
+    # any edit to it must fail this test and be re-read.
+    assert job["if"] == "github.event_name == 'status' && startsWith(github.event.context, 'argocd/kubelab-')
     step_env = _step(job, "Read the status Argo CD posted")["env"]
     # For a status event github.sha is the default branch tip, not the commit.
     assert step_env["SHA"] == "${{ github.event.sha }}"

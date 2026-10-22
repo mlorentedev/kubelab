@@ -38,7 +38,9 @@ name: Deploy Verify
 on:
   status:
   schedule:
-    - cron: '*/30 * * * *'
+    # Off the top of the hour: GitHub delays or drops scheduled runs at
+    # minute zero under load.
+    - cron: '7,37 * * * *'
   workflow_dispatch:
     inputs:
       sha:
