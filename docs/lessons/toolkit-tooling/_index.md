@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 614 | [A Make variable named like an environment variable is never unset](lesson-614-a-make-variable-named-like-an-environment-variable-is-never-unset.md) | 2026-10-21 |
 | 605 | [A logger that writes to stdout makes every `--json` command one warning from corrupt](lesson-605-a-logger-that-writes-to-stdout-makes-every-json-command-one-warning-from-corrupt.md) | 2026-10-18 |
 | 590 | [A ruamel round-trip is lossless only for files written in one sequence style](lesson-590-a-ruamel-round-trip-is-lossless-only-for-files-written-in-one-sequence-style.md) | 2026-10-17 |
 | 570 | [pytest says whether a selector matched in its exit code, not in its collect output](lesson-570-pytest-says-whether-a-selector-matched-in-its-exit-code-not-in-its-collect-output.md) | 2026-10-14 |

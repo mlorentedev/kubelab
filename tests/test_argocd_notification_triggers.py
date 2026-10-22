@@ -32,6 +32,7 @@ point of a guard over a fix.
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -71,12 +72,18 @@ def test_a_trigger_reading_operation_state_guards_against_nil(name: str):
     """A dereference of `operationState` must be guarded by `!= nil` in the SAME clause.
 
     Per-clause, not per-trigger: a trigger with two `when:` entries where only
-    one is guarded still goes blind on the other.
+    one is guarded still goes blind on the other. `operationState == nil or`
+    guards the same way, by short-circuit: the success trigger reads the phase
+    only when an operation exists (evaluated with expr-lang v1.17.6 on nil,
+    absent, Succeeded, Failed and Running).
     """
     for when in _when_clauses(_triggers()[name]):
         if not _DEREFERENCE.search(when):
             continue
-        assert "operationState != nil" in when, (
+        guards = [i for i in (when.find("operationState != nil"), when.find("operationState == nil or")) if i >= 0]
+        # The guard must come BEFORE the first dereference: expr-lang
+        # short-circuits left to right, so a guard after it guards nothing.
+        assert guards and min(guards) < _DEREFERENCE.search(when).start(), (
             f"trigger {name!r} dereferences operationState without guarding it:\n"
             f"  {when}\n"
             "expr-lang raises on nil, and a raised expression is a SKIPPED trigger — "
@@ -124,3 +131,134 @@ def test_a_trigger_dedupes_per_revision_not_per_condition(name: str):
             "hash instead of the revision — the second deploy of a different revision "
             "is suppressed as 'already sent'."
         )
+
+
+# --- GITOPS-003 AC1: the commit status Argo CD posts per sync ----------------
+#
+# `toolkit infra argo wait-status` reads it, so its shape is a contract: the
+# status must land on the synced sha, under `argocd/<app>`, with a description
+# GitHub accepts. The templates are Go text/template with sprig, rendered by
+# the notifications controller; these tests hold their structure without one.
+
+GITHUB_TEMPLATES = ("template.github-status-success", "template.github-status-failure")
+GITHUB_TRIGGERS = ("trigger.on-synced-github", "trigger.on-sync-failed-github")
+SUCCESS_PATH = "/repos/mlorentedev/kubelab/statuses/{{.app.status.sync.revision}}"
+FAILURE_PATH = "/repos/mlorentedev/kubelab/statuses/{{.app.status.operationState.operation.sync.revision}}"
+_ACTION = re.compile(r"\{\{.*?\}\}", re.DOTALL)
+
+
+def _notifications() -> dict:
+    return yaml.safe_load(VALUES.read_text())["notifications"]
+
+
+def _github_webhook(name: str) -> dict:
+    return yaml.safe_load(_notifications()["templates"][name])["webhook"]["github"]
+
+
+def test_a_recipient_is_sent_only_templates_written_for_it():
+    """A trigger subscribed for `slack` must send Slack templates, and so on.
+
+    A template with no `webhook.<recipient>` section sent to that recipient is
+    behaviour nothing here can test, so the pairing is held instead.
+    """
+    notifications = _notifications()
+    templates = {name.removeprefix("template."): yaml.safe_load(body) for name, body in notifications["templates"].items()}
+    for subscription in notifications["subscriptions"]:
+        for recipient in subscription["recipients"]:
+            for trigger in subscription["triggers"]:
+                for entry in yaml.safe_load(notifications["triggers"][f"trigger.{trigger}"]):
+                    for template in entry["send"]:
+                        assert recipient in templates[template].get("webhook", {}), (
+                            f"{trigger} sends {template} to {recipient!r}, which has no webhook.{recipient} section"
+                        )
+
+
+def test_the_github_triggers_are_subscribed_to_the_github_service():
+    notifications = _notifications()
+    assert "service.webhook.github" in notifications["notifiers"]
+    subscribed = {t for s in notifications["subscriptions"] if "github" in s["recipients"] for t in s["triggers"]}
+    assert subscribed == {name.removeprefix("trigger.") for name in GITHUB_TRIGGERS}
+
+
+def test_success_lands_on_every_revision_argo_reports_synced():
+    """Green means the cluster is at this sha, not that an operation ran (AC2).
+
+    A commit whose render does not change (a comment, a doc) moves
+    `sync.revision` without starting an operation, so a success keyed on the
+    operation never reaches it and the scheduled sweep would read "no status"
+    as red. Measured 2026-10-22: the first live status came from a
+    drift-correcting operation, not from a merge.
+    """
+    triggers = _notifications()["triggers"]
+    senders = [
+        (name, entry)
+        for name, body in triggers.items()
+        for entry in yaml.safe_load(body)
+        if "github-status-success" in entry["send"]
+    ]
+    assert len(senders) == 1, f"exactly one trigger may post success, found {[n for n, _ in senders]}"
+    name, entry = senders[0]
+    assert name == "trigger.on-synced-github"
+    assert entry["when"] == (
+        "app.status.sync.status == 'Synced' and (app.status.operationState == nil or "
+        "app.status.operationState.phase == 'Succeeded')"
+    )
+    assert entry["oncePer"] == "app.status.sync.revision"
+    assert _github_webhook("template.github-status-success")["path"] == SUCCESS_PATH
+
+
+def test_success_is_withheld_while_the_last_operation_did_not_succeed():
+    """A failed PostSync hook leaves the app Synced: success must not bury the failure.
+
+    Both triggers would otherwise post for the same sha, and the newer status
+    wins. Running is withheld too, so success lands once the operation ends.
+    """
+    when = yaml.safe_load(_notifications()["triggers"]["trigger.on-synced-github"])[0]["when"]
+    assert "app.status.operationState.phase == 'Succeeded'" in when
+    assert "operationState == nil or" in when
+
+
+def test_success_reads_nothing_from_the_last_operation():
+    """On a no-op revision the last operation belongs to an older commit.
+
+    Its message, or its revision, would describe a sync that is not this one.
+    """
+    assert "operationState" not in _notifications()["templates"]["template.github-status-success"]
+
+
+def test_failure_lands_on_the_operation_revision_never_on_sync_result():
+    """The failure status fires exactly when `syncResult` may be nil.
+
+    An operation that errors before producing a result (the 2026-08-27 panic)
+    has no `syncResult`, and Go templates on an unstructured map fail on
+    `.syncResult.revision` there. An automated sync carries the resolved sha in
+    `operation.sync.revision` (measured on both Applications, GITOPS-003). A
+    manual sync from the UI is unverified: a non-sha there gets a 422 from
+    GitHub, and only the notifications log says so.
+    """
+    webhook = _github_webhook("template.github-status-failure")
+    assert webhook["method"] == "POST"
+    assert webhook["path"] == FAILURE_PATH
+    assert "syncResult" not in _notifications()["templates"]["template.github-status-failure"]
+    (entry,) = yaml.safe_load(_notifications()["triggers"]["trigger.on-sync-failed-github"])
+    assert entry["oncePer"] == "app.status.operationState?.operation?.sync?.revision"
+
+
+@pytest.mark.parametrize(("name", "state"), [(GITHUB_TEMPLATES[0], "success"), (GITHUB_TEMPLATES[1], "failure")])
+def test_the_status_body_is_json_with_exactly_the_status_fields(name: str, state: str):
+    body = _github_webhook(name)["body"]
+    actions = _ACTION.findall(body)
+    # An action inside a string becomes text, the bare one (description) a string,
+    # so what parses is the body's own structure.
+    parsed = json.loads(_ACTION.sub(lambda m: '"x"' if "toJson" in m.group() else "x", body))
+    assert set(parsed) == {"state", "context", "description", "target_url"}
+    assert parsed["state"] == state
+    assert '"context": "argocd/{{.app.metadata.name}}"' in body
+    assert parsed["target_url"].startswith("https://argo.kubelab.live/applications/argocd/")
+    (description,) = [a for a in actions if "toJson" in a]
+    # Unquoted in the body: `toJson` supplies the quotes and escapes the message.
+    assert f'"description": {description}' in body
+    assert "trunc 140" in description and description.rstrip("} ").endswith("toJson")
+    if "operationState.message" in description:
+        # `default` before `trunc`: a nil message would make trunc fail the render.
+        assert description.index("default") < description.index("trunc")

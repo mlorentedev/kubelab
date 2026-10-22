@@ -77,6 +77,8 @@ spec:
   failedJobsHistoryLimit: 3
   jobTemplate:
     spec:
+      # A day, then gone: the history limits bound the count, not the age (OPS-043).
+      ttlSecondsAfterFinished: 86400
       backoffLimit: 1
       activeDeadlineSeconds: 60
       template:

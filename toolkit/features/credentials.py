@@ -17,7 +17,7 @@ from toolkit.config.constants import AUTHELIA_CONFIG, PATH_STRUCTURES
 from toolkit.config.settings import PROJECT_ROOT, settings
 from toolkit.core.logging import logger
 from toolkit.core.sops import age_key_env
-from toolkit.features.configuration import ConfigurationManager
+from toolkit.features.configuration import ConfigurationManager, resolve_user_identity
 from toolkit.features.docker_service import DockerService
 
 # Mapping from secret key prefix to service component names that need restarting
@@ -55,6 +55,24 @@ class CredentialsWriteFailed(Exception):
     Raised instead of printing the values as a fallback: a failed write that
     dumps every secret to stdout is the exposure #1733 removes.
     """
+
+
+def authelia_password_hash_key(identity: str, config: dict[str, Any]) -> str:
+    """The SOPS key of one Authelia login's password hash, named by its identity key (#909).
+
+    `identity` is a KEY of `apps.auth.identities` that an Authelia user entry names
+    in `identity:`, never a username: the username resolves through
+    `resolve_user_identity`, as in both generators. There is no default, since more
+    than one user names an identity and which account a recovery resets is a
+    decision. Anything else raises, naming the keys that would work.
+    """
+    users = config.get("apps", {}).get("services", {}).get("security", {}).get("authelia", {}).get("users") or []
+    named = {str(u["identity"]): u for u in users if isinstance(u, dict) and u.get("identity")}
+    valid = sorted(named)
+    username = resolve_user_identity(named[identity], config) if identity in named else ""
+    if not username:
+        raise ValueError(f"'{identity}' names no Authelia login. Use one of: {', '.join(valid) or 'none declared'}")
+    return f"apps.services.security.authelia.users_{username}_password_hash"
 
 
 def _refuse_identities(generated: dict[str, str], config: dict[str, Any]) -> None:
@@ -299,6 +317,11 @@ class CredentialsManager:
         logger.info("")
         logger.warning("SOPS is modified but not committed — the change reaches nothing until it lands.")
         logger.info(f"  git add {sops_file} && git commit")
+        if env == "dev":
+            # apply-secrets takes staging or prod only; the Compose Authelia mounts
+            # the users file that config-generate renders from SOPS.
+            logger.info("  make config-generate ENV=dev    # render the Compose users file, then restart Authelia")
+            return
         logger.info(f"  make apply-secrets ENV={env}    # deliver it to the cluster")
         logger.info("")
         # No reader picks up a Secret volume update by itself here: Authelia's

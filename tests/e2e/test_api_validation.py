@@ -55,9 +55,13 @@ class TestAPIValidation:
 
 
 class TestAPIHealthStructure:
-    """GET /health must return well-structured JSON with expected keys."""
+    """The API's probes keep the shapes #2387 gave them (api >= 1.1.6).
 
-    def test_health_json_keys(
+    /health is liveness only and touches no dependency, so a Beehiiv outage never
+    restarts a healthy pod. /ready names the dependencies it checked.
+    """
+
+    def test_health_is_a_liveness_answer(
         self,
         services_by_name: dict[str, ServiceHealthConfig],
         http_client: httpx.Client,
@@ -71,10 +75,11 @@ class TestAPIHealthStructure:
         assert r.status_code == 200
 
         data = r.json()
-        for key in ("service", "status", "version", "timestamp", "checks"):
-            assert key in data, f"/health missing key '{key}'"
+        # Exact keys: a liveness body that grows checks again has started to probe dependencies.
+        assert set(data) == {"service", "status", "timestamp"}, f"/health body: {sorted(data)}"
+        assert data["status"] == "alive"
 
-    def test_health_check_components(
+    def test_ready_reports_each_dependency(
         self,
         services_by_name: dict[str, ServiceHealthConfig],
         http_client: httpx.Client,
@@ -84,11 +89,11 @@ class TestAPIHealthStructure:
         if not svc:
             pytest.skip("API not in config")
 
-        r = http_client.get(f"https://{svc.domain}/health")
-        assert r.status_code == 200
+        r = http_client.get(f"https://{svc.domain}/ready")
+        assert r.status_code == 200, f"/ready answered {r.status_code}: the API's configuration does not load"
 
         data = r.json()
-        checks = data.get("checks", [])
-        component_names = {c["component"] for c in checks}
-        expected = {"database", "external_services", "email", "cache"}
-        assert expected.issubset(component_names), f"Missing health check components: {expected - component_names}"
+        # A degraded dependency still answers 200 and keeps the pod in rotation.
+        assert data["status"] in {"ready", "degraded"}, data
+        components = {c["component"] for c in data.get("checks", [])}
+        assert components == {"beehiiv", "email"}, f"/ready components: {sorted(components)}"
