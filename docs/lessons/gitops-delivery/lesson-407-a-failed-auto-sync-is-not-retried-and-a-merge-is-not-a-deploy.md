@@ -45,7 +45,8 @@ POST https://staging.mlorente.dev/api/subscribe  -> 400 text/plain   (malformed 
 ```
 
 The guard — the receiver waiting for `Synced` at the merge SHA and probing the
-route — is #1478.
+route — is #1478. When `deploy-verify.yml` goes red, follow
+[the runbook section](../../runbooks/gitops-delivery-promotion.md#deploy-verify-is-red).
 
 **Rule**: A merged manifest is a claim; `Synced` at the merge SHA is the fact,
 and only the route answering is the proof. Two things about Argo CD change how

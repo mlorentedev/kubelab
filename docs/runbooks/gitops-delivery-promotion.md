@@ -47,6 +47,27 @@ Pre-merge preview (optional): a feature-branch CI build also produces `sha-<pr-s
 - **Pod not picking up a new mutable tag** → only relevant for legacy mutable tags; `sha-*`/semver are immutable so a tag change always forces a pull. The generator sets `imagePullPolicy: Always` only for `dev`/`latest`/`*-rc.*`.
 - **Staging drifted from `master`** → expected within ≤1 sync cycle for out-of-band `make deploy-k8s` applies (selfHeal:false). The next `staging-deploy.yml` PR merge re-aligns it.
 
+## deploy-verify is red
+
+`deploy-verify.yml` (GITOPS-003, #1478) reads the commit status Argo CD posts as `argocd/kubelab-<env>`. A merge is not a deploy: Argo makes one automated attempt per revision and does not retry a failed one ([lesson-407](../lessons/gitops-delivery/lesson-407-a-failed-auto-sync-is-not-retried-and-a-merge-is-not-a-deploy.md)).
+
+First read which red it is, from the run's error annotation:
+
+- **A failure description** (the `Argo CD status` job, or `wait-status` printing `failure`/`error`): the sync at that commit failed, and the text is Argo's `operationState.message`.
+- **`no status arrived`** (the prod sweep, or a replay): master HEAD has been merged for over 10 minutes and Argo posted nothing for it. This is also what follows a failed sync: Argo withholds success while the last operation did not succeed, and a later commit that changes no manifest starts no new operation. So read the last operation first (step 1): a failure there, at an older commit, is the cause.
+
+Then:
+
+1. Read the message on the hub: `make verify-product APP=<app> ENV=<env>` prints the Application's last operation with its `operationState.message`.
+2. Fix the cause the message names, then start the sync Argo will not retry by itself: `make sync-app APP=kubelab-<env>`.
+3. Only if the same controller panic repeats after a sync: `make restart-argocd`.
+
+Not a deploy failure, so check these before step 1:
+
+- **Staging repointed**: `make argo-set-revision` points `kubelab-staging` at a branch, so master commits get no staging status until it is pointed back at `master`.
+- **ace1 off**: staging is on-demand. While its node is off nothing syncs, so a staging replay reports `no status arrived`. The scheduled sweep checks prod only for this reason.
+- **The token expired**: Argo posts with `argocd.github_status_token`. With it expired, no env gets any status, and `make secrets-audit` / the expiry check names it.
+
 ## References
 
 - [ADR-046](../adr/adr-046-gitops-delivery-promotion-strategy.md) — the decision + the PR-per-update amendment.
