@@ -1,0 +1,45 @@
+# Arming envelope for one unattended run. The run reads the committed copy only.
+version: 1
+run_id: "ap-20261022-kubelab-idp"
+armed_by: manu
+armed_at: 2026-10-22T07:37:00Z
+expires_at: 2026-10-22T15:30:00Z
+objective: >-
+  Land #2628 and work the IDP-042 follow-ups (#2610, #2627, #2611) that pass the
+  3 a.m. test, under the standing grant.
+scope:
+  write_paths:
+    - "tests/**"
+    - "toolkit/features/product_*.py"
+    - "toolkit/features/registry.py"
+    - "toolkit/cli/product.py"
+    - "toolkit/README.md"
+    - "infra/config/values/*.yaml"
+    - "specs/IDP-042-product-contract-registry/**"
+    - "docs/lessons/**"
+    - "docs/runbooks/cicd.md"
+    - ".agent/runs/**"
+  frozen_paths:
+    - ".github/**"
+    - "harness/**"
+    - "**/AGENTS.md"
+    - "**/CLAUDE.md"
+    - "toolkit/features/oidc_clients.py"
+    - "toolkit/features/credentials.py"
+    - "infra/config/secrets/**"
+  max_files: 8
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make, poetry]
+queue:
+  source: bitacora
+  filter: "IDP-042 follow-ups: #2610, #2627, #2611"
+  max_items: 3
+budget:
+  max_iterations: 6
+  max_minutes_per_iteration: 45
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant
+  push: true
+  open_pr: true
+  advisor_tier: top
