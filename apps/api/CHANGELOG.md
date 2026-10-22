@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.0](https://github.com/mlorentedev/kubelab/compare/api-v1.1.6...api-v1.2.0) (2026-10-22)
+
+
+### Features
+
+* **api:** read GitHub issues and pull requests behind a forge-neutral reader ([#2635](https://github.com/mlorentedev/kubelab/issues/2635)) ([7fb1b01](https://github.com/mlorentedev/kubelab/commit/7fb1b01d7768b23bd405fb8fd62573d75dca4bee))
+* **api:** verify forge webhook signatures in constant time ([#2636](https://github.com/mlorentedev/kubelab/issues/2636)) ([a359705](https://github.com/mlorentedev/kubelab/commit/a3597053c5818211c373e6d960747123f7653345))
+
 ## [1.1.6](https://github.com/mlorentedev/kubelab/compare/api-v1.1.5...api-v1.1.6) (2026-10-18)
 
 
