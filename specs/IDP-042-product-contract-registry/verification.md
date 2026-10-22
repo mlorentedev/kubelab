@@ -99,13 +99,13 @@ Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`.
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018); #1815 closed with the PR that removed the literal; the epic #1931 checklist ticked for both
 - [ ] Promotions above executed (if any)
 
-## Closeout review, 2026-10-22 (round 2, `nan/deepseek-v4-flash`, on `d7a0d8db`): FAIL
+## Closeout review, 2026-10-21 (round 2, `nan/deepseek-v4-flash`, on `d7a0d8db`): FAIL
 
 Round 1 (`nan/mimo-v2.6-flash`) stopped on a 429 concurrency limit before giving a verdict. Its provisional file is `review-round1.md`.
 
 | Finding | Severity / reality | Disposition |
 |---|---|---|
-| A contract change to a prod-owned key (`port`, `health_path`, `auth`, `hostnames.prod`) cannot land. The receiver renders staging only, nothing renders prod, and §Risks says the prod lane does. | Major / REAL | Confirmed by reading: `product-image-receiver.yml` renders `--env staging` only, and `promote-prod.yml` has no render step. The fix shape needs the operator's decision before any code is written. |
+| A contract change to a prod-owned key (`port`, `health_path`, `auth`, `hostnames.prod`) cannot land. The receiver renders staging only, nothing renders prod, and §Risks says the prod lane does. | Major / REAL | Fix in #2624 (operator chose option A, inside IDP-042, 2026-10-21). Confirmed by reading: `product-image-receiver.yml` renders `--env staging` only, and `promote-prod.yml` had no render step. Each env now renders from its own snapshot: `contracts/prod/<app>.yaml` is written by `promote-prod` from `kubelab.yaml` at the release commit, and that commit is proven by digest. Named test: `tests/test_product_contract_drift.py::test_a_contract_change_to_a_prod_owned_key_leaves_the_tree_green`, which goes red under `make mutate` when prod reads the flat file. Live no-op run: 39725586157. The second review runs after #2624 merges. |
 | AC2's by-hand command names a fixture that does not exist | Minor / REAL | Fixed: `tests/fixtures/product/invalid-port.kubelab.yaml` added, and the command was run (output above). |
 | `site_domain` / `site_url` mirror `domain` and nothing ties them to it | Minor / THEORETICAL | Ticketed: #2610 |
 | Two generic products force-push deploy branches that rewrite the same staging files | Minor / SPECULATIVE | Ticketed: #2611 |
