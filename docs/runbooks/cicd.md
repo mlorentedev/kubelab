@@ -100,7 +100,7 @@ GitHub-hosted product takes three changes, in this order:
 1. **The contract, written first:** `kubelab.yaml` for the product
    (`toolkit/schemas/kubelab-product.schema.json`). Both repositories commit it byte for byte,
    so the kubelab change can be validated before the product carries it.
-2. **kubelab, one PR:** all four pieces land together, because the drift tests
+2. **kubelab, one PR:** all five pieces land together, because the drift tests
    (`tests/test_product_contract_drift.py`) fail on a registry entry with no snapshot and on
    values that disagree with it.
    - The registry entry in `infra/config/products.yaml`: `repository`, `forge: github`,
@@ -111,6 +111,11 @@ GitHub-hosted product takes three changes, in this order:
      `toolkit product render --contract infra/config/products/contracts/<app>.yaml --env <env> --write`.
    - Whatever the contract names that kubelab does not allow yet, such as a hostname route or
      a secret in SOPS.
+   - A public DNS record for the contract's prod hostname, in `infra/terraform/dns/zones.json`
+     (a zone's own record) or `services.json` (a prod service).
+     `tests/test_dns_contract_hostnames.py` refuses a snapshot whose prod hostname has none.
+     The record exists in Cloudflare only after `make tf-dns-plan` and `make tf-dns-apply`.
+     The staging hostname needs no record: staging DNS is VPN-only split DNS.
 
    `toolkit product validate --contract <file> --registry infra/config/products.yaml --app <app>`
    checks the contract against all of it. A product absent from the registry is refused.
