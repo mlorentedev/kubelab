@@ -507,11 +507,17 @@ ci:
         # `Tests` runs unconditionally on every pull request (ci.yml has no `if:`
         # and no paths filter on it), so requiring it costs no extra CI minutes —
         # only the latency of waiting for a job that was already running.
+        # `deploy-shape` is the check-run that deploy-shape.yml publishes, NOT its
+        # job ("Judge the diff shape"), which fails only when nothing could be judged.
+        # The check-run carries all three verdicts: success (a mechanical staging
+        # deploy), neutral (any other PR; GitHub counts neutral as passing) and
+        # failure (unknown, fail closed). DELIVERY-004 AC3, #1619.
         required_contexts:
           - Validate
           - Detect Changes
           - review-attestation
           - Tests
+          - deploy-shape
     # web (mlorentedev/web) is a product repository (ADR-053) whose protection
     # was hand-set and recorded only in its own ADR-057. The values are that
     # ADR's, verified against the live object on 2026-09-23:
