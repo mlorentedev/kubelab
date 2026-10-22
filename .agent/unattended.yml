@@ -1,0 +1,37 @@
+version: 1
+run_id: ap-20261022-kubelab-console004
+armed_by: manu
+armed_at: 2026-10-22T07:36:00Z
+expires_at: 2026-10-22T15:30:00Z
+objective: Land the CONSOLE-004 docs PRs and open slice 1 of the forge task view as reviewed draft PRs.
+scope:
+  write_paths:
+    - "specs/CONSOLE-004-forge-task-view/**"
+    - "docs/**"
+    - "apps/api/src/internal/forge/**"
+    - "apps/api/src/go.mod"
+    - "apps/api/src/go.sum"
+  frozen_paths:
+    - ".github/**"
+    - "harness/**"
+    - "**/AGENTS.md"
+    - ".agent/unattended.yml"
+    - "infra/config/secrets/**"
+    - "infra/k8s/**"
+    - "infra/ansible/**"
+  max_files: 12
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make, go, poetry, python3]
+queue:
+  source: bitacora
+  filter: 'epic CONSOLE-004 (#2570) and its open PRs #2623 #2631 #2633 #2634'
+  max_items: 4
+budget:
+  max_iterations: 6
+  max_minutes_per_iteration: 40
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant
+  push: true
+  open_pr: true
+  advisor_tier: top
