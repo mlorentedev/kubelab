@@ -10,7 +10,12 @@ import (
 	"time"
 )
 
-const githubPerPage = 100
+const (
+	githubPerPage = 100
+	// githubMaxPages bounds a listing so a server that always answers with a next
+	// link cannot keep the reader looping: 100 pages of 100 is 10,000 items.
+	githubMaxPages = 100
+)
 
 // GitHub reads a repository through the issues endpoint, which lists pull
 // requests too. BaseURL is the API root (https://api.github.com); Token is
@@ -49,11 +54,22 @@ func (g *GitHub) ListItems(ctx context.Context, src Source, since time.Time) ([]
 	}
 	next := fmt.Sprintf("%s/repos/%s/%s/issues?%s", g.BaseURL, src.Owner, src.Repo, q.Encode())
 
+	base, err := url.Parse(g.BaseURL)
+	if err != nil {
+		return nil, &SourceError{Source: src, Err: fmt.Errorf("parse base url: %w", err)}
+	}
+
 	var items []Item
-	for next != "" {
+	for pages := 0; next != ""; pages++ {
+		if pages == githubMaxPages {
+			return nil, &SourceError{Source: src, Err: fmt.Errorf("more than %d pages", githubMaxPages)}
+		}
 		page, link, err := g.page(ctx, next)
 		if err != nil {
 			return nil, &SourceError{Source: src, Err: err}
+		}
+		if link != "" && !sameOrigin(base, link) {
+			return nil, &SourceError{Source: src, Err: fmt.Errorf("next page points off %s", base.Host)}
 		}
 		for _, raw := range page {
 			items = append(items, raw.neutral(src))
@@ -116,4 +132,11 @@ func (r githubItem) neutral(src Source) Item {
 		it.Labels = append(it.Labels, l.Name)
 	}
 	return it
+}
+
+// sameOrigin reports whether link has the scheme and host of base. The token is
+// attached to every request, so a next link naming another host must not be followed.
+func sameOrigin(base *url.URL, link string) bool {
+	u, err := url.Parse(link)
+	return err == nil && u.Scheme == base.Scheme && u.Host == base.Host
 }

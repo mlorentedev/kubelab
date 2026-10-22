@@ -134,3 +134,43 @@ func TestGitHubReaderSendsTheTokenOnlyWhenSet(t *testing.T) {
 		t.Fatalf("sent %q", auth)
 	}
 }
+
+func TestGitHubReaderNeverFollowsAPageOffItsHost(t *testing.T) {
+	var elsewhere int
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		elsewhere++
+		_, _ = w.Write([]byte("[]"))
+	}))
+	defer other.Close()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Link", `<`+other.URL+`/steal>; rel="next"`)
+		_, _ = w.Write([]byte("[]"))
+	}))
+	defer srv.Close()
+
+	_, err := (&forge.GitHub{BaseURL: srv.URL, Token: "t"}).ListItems(context.Background(),
+		forge.Source{Forge: "github", Owner: "o", Repo: "r"}, time.Time{})
+	var se *forge.SourceError
+	if !errors.As(err, &se) {
+		t.Fatalf("want a SourceError, got %v", err)
+	}
+	if elsewhere != 0 {
+		t.Fatalf("the reader followed a next link to another host %d time(s)", elsewhere)
+	}
+}
+
+func TestGitHubReaderStopsAtThePageCap(t *testing.T) {
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Link", `<`+srv.URL+r.URL.Path+`>; rel="next"`)
+		_, _ = w.Write([]byte("[]"))
+	}))
+	defer srv.Close()
+
+	_, err := (&forge.GitHub{BaseURL: srv.URL}).ListItems(context.Background(),
+		forge.Source{Forge: "github", Owner: "o", Repo: "r"}, time.Time{})
+	var se *forge.SourceError
+	if !errors.As(err, &se) {
+		t.Fatalf("an endless listing must end in a SourceError, got %v", err)
+	}
+}
