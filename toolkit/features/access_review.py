@@ -39,6 +39,7 @@ never touched: removing an account is a decision, not a reconciliation.
 
 from __future__ import annotations
 
+import shutil
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -544,6 +545,161 @@ def _live_argocd_oidc_config() -> str:
     return result.stdout
 
 
+#: (subject, action, resource, object, allowed): what ADR-062 D2 says each tier may do
+#: in Argo CD, asked of Argo CD's own evaluator so a policy is judged the way the hub
+#: judges it, not by reading the CSV. One matrix for the CI test over the shipped file
+#: and for the review over the served one (#1876), so the two cannot diverge.
+ARGOCD_RBAC_CASES: list[tuple[str, str, str, str, bool]] = [
+    (ADMIN_GROUP, "delete", "applications", "*/*", True),
+    (ADMIN_GROUP, "update", "repositories", "*", True),
+    (OPERATOR_GROUP, "get", "applications", "*/*", True),
+    (OPERATOR_GROUP, "sync", "applications", "*/*", True),
+    (OPERATOR_GROUP, "action/apps/Deployment/restart", "applications", "kubelab/prod", True),
+    (OPERATOR_GROUP, "get", "logs", "*/*", True),
+    (OPERATOR_GROUP, "create", "applications", "*/*", False),
+    (OPERATOR_GROUP, "update", "applications", "*/*", False),
+    (OPERATOR_GROUP, "delete", "applications", "*/*", False),
+    (OPERATOR_GROUP, "exec", "exec", "*/*", False),
+    (OPERATOR_GROUP, "update", "repositories", "*", False),
+    (OPERATOR_GROUP, "update", "clusters", "*", False),
+    (OPERATOR_GROUP, "update", "projects", "*", False),
+    (OPERATOR_GROUP, "update", "accounts", "*", False),
+    ("e2e", "get", "applications", "*/*", True),
+    ("e2e", "sync", "applications", "*/*", False),
+]
+
+#: The subject each tier is asked as. The viewer tier is anyone in neither group, so
+#: its answers come from `policy.default`; `e2e` is such a subject.
+ARGOCD_TIER_SUBJECTS = {ADMIN: ADMIN_GROUP, OPERATOR: OPERATOR_GROUP, VIEWER: "e2e"}
+
+#: `argocd admin settings rbac can` builds a Kubernetes client before it reads
+#: `--policy-file`, and prompts for a username when the user entry is empty. It never
+#: connects, so a config that points nowhere is enough.
+_OFFLINE_KUBECONFIG = """apiVersion: v1
+kind: Config
+clusters: [{name: none, cluster: {server: "https://127.0.0.1:1"}}]
+users: [{name: none, user: {token: none}}]
+contexts: [{name: none, context: {cluster: none, user: none, namespace: argocd}}]
+current-context: none
+"""
+
+
+def argocd_image(values: dict[str, Any]) -> str:
+    """The image the hub runs: the chart's `appVersion`, declared next to its pin."""
+    return f"quay.io/argoproj/argocd:{values['argocd']['app_version']}"
+
+
+def argocd_rbac_disagreements(
+    policy_csv: str, default_role: str, image: str, work_dir: Path
+) -> list[tuple[str, str, str, str, bool]]:
+    """The cases of ARGOCD_RBAC_CASES on which Argo CD's evaluator disagrees with the tier.
+
+    WORK_DIR is bind-mounted into the container, so it must be under $HOME: Colima
+    and Docker Desktop share nothing else, and an empty mount makes every case No.
+    """
+    import os
+    import subprocess
+
+    (work_dir / "policy.csv").write_text(policy_csv)
+    (work_dir / "kubeconfig").write_text(_OFFLINE_KUBECONFIG)
+    # One container for every case: `can` exits 0 for Yes and 1 for No.
+    script = "".join(
+        f"argocd admin settings rbac can '{s}' '{a}' '{r}' '{o}' --policy-file /w/policy.csv"
+        f" --default-role '{default_role}' >/dev/null 2>&1; echo $?\n"
+        for s, a, r, o, _ in ARGOCD_RBAC_CASES
+    )
+    out = subprocess.run(
+        # The image runs as uid 999, which cannot enter a 0700 temporary directory.
+        ["docker", "run", "--rm", "--user", f"{os.getuid()}:{os.getgid()}"]
+        + ["-e", "KUBECONFIG=/w/kubeconfig", "-v", f"{work_dir}:/w:ro"]
+        + [image, "sh", "-c", script],
+        capture_output=True,
+        text=True,
+        timeout=180,
+        check=False,
+    )
+    codes = out.stdout.split()
+    if len(codes) != len(ARGOCD_RBAC_CASES):
+        raise ReviewError(f"Argo CD's evaluator gave {len(codes)} answers for {len(ARGOCD_RBAC_CASES)} cases")
+    return [case for case, code in zip(ARGOCD_RBAC_CASES, codes, strict=True) if (code == "0") != case[-1]]
+
+
+def argocd_tier_findings(disagreements: list[tuple[str, str, str, str, bool]]) -> list[Finding]:
+    """One finding per tier: `ok`, or `drift` naming the first case the policy answers wrongly."""
+    findings = []
+    for tier, subject in ARGOCD_TIER_SUBJECTS.items():
+        wrong = [c for c in disagreements if c[0] == subject]
+        if not wrong:
+            findings.append(Finding("argocd", tier, tier, "live policy", "ok"))
+            continue
+        _s, action, resource, obj, allowed = wrong[0]
+        verdict = "refused" if allowed else "allowed"
+        findings.append(
+            Finding(
+                "argocd",
+                tier,
+                tier,
+                "live policy",
+                "drift",
+                f"{verdict} {action} {resource} {obj} ({len(wrong)} wrong)",
+            )
+        )
+    return findings
+
+
+def _live_argocd_rbac() -> tuple[str, str]:
+    """`policy.csv` and `policy.default` as the hub serves them, only true after `make deploy-argocd`."""
+    import json
+    import subprocess
+
+    from toolkit.features.k8s_kubeconfig import output_path
+
+    try:
+        result = subprocess.run(
+            [
+                "kubectl",
+                "--kubeconfig",
+                str(output_path("hub")),
+                "-n",
+                "argocd",
+                "get",
+                "configmap",
+                "argocd-rbac-cm",
+                "-o",
+                "jsonpath={.data}",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=KUBECTL_TIMEOUT_S,
+        )
+    except subprocess.TimeoutExpired:
+        raise ReviewError(f"the hub's argocd-rbac-cm is unreadable: no answer in {KUBECTL_TIMEOUT_S}s") from None
+    if result.returncode != 0:
+        raise ReviewError(f"the hub's argocd-rbac-cm is unreadable: {result.stderr.strip()}")
+    data = json.loads(result.stdout or "{}")
+    return data.get("policy.csv", ""), data.get("policy.default", "")
+
+
+def _argocd_policy_findings(values: dict[str, Any]) -> list[Finding]:
+    """Each tier judged on the policy the hub serves, by the pinned image's evaluator."""
+    import tempfile
+
+    if shutil.which("docker") is None:
+        return [
+            Finding("argocd", "*", None, "live policy", "failed", "docker not on PATH: cannot check the live policy")
+        ]
+    try:
+        policy_csv, default_role = _live_argocd_rbac()
+        base = Path.home() / ".cache" / "kubelab-auth-review"
+        base.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=base) as work_dir:
+            wrong = argocd_rbac_disagreements(policy_csv, default_role, argocd_image(values), Path(work_dir))
+    except ReviewError as exc:
+        return [Finding("argocd", "*", None, "live policy", "failed", str(exc))]
+    return argocd_tier_findings(wrong)
+
+
 def review_env(env: str, project_root: Path, apply: bool, log: Callable[[str], None]) -> list[Finding]:
     """Review every app that holds a tier in ENV, over its break-glass path."""
     from toolkit.features.oidc_clients import load_values
@@ -619,4 +775,5 @@ def _argocd_findings(env: str, values: dict[str, Any]) -> list[Finding]:
     except ReviewError as exc:
         return [Finding("argocd", "*", None, "unreadable", "failed", str(exc))]
     status = "bounded" if bound.startswith("groups from UserInfo") else "failed"
-    return [Finding("argocd", "*", None, "groups claim", status, f"no user database; {bound}")]
+    groups = Finding("argocd", "*", None, "groups claim", status, f"no user database; {bound}")
+    return [groups, *_argocd_policy_findings(values)]
