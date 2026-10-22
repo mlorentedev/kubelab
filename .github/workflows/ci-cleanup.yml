@@ -54,9 +54,10 @@ jobs:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
           RETENTION: ${{ vars.SHA_TAG_RETENTION || '15' }}
-          PREFIX: ${{ vars.REGISTRY_PREFIX || 'kubelab' }}
           DRY_RUN: ${{ inputs.dry_run || 'false' }}
+        # Each app's repository comes from the config the generators deploy
+        # from, not from a prefix (#2511).
         run: |
-          ARGS=(--retention "$RETENTION" --registry-prefix "$PREFIX")
+          ARGS=(--retention "$RETENTION")
           [ "$DRY_RUN" = "true" ] && ARGS+=(--dry-run)
           poetry run toolkit registry prune "${ARGS[@]}"
