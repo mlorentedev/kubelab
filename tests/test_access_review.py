@@ -973,3 +973,21 @@ def test_kubectl_output_that_is_not_json_is_a_review_error(monkeypatch: pytest.M
     monkeypatch.setattr(subprocess, "run", garbled)
     with pytest.raises(ReviewError, match="argocd-rbac-cm"):
         access_review._live_argocd_rbac()
+
+
+def test_the_rbac_reader_takes_both_keys_from_the_configmap_object(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`-o json` is a documented format; a jsonpath over a whole map is the printer's choice."""
+    import json
+
+    from toolkit.features import access_review
+
+    seen: list[list[str]] = []
+
+    def kubectl(argv: list[str], **_k: object) -> subprocess.CompletedProcess[str]:
+        seen.append(argv)
+        body = {"kind": "ConfigMap", "data": {"policy.csv": "p, a", "policy.default": "role:readonly"}}
+        return subprocess.CompletedProcess(argv, 0, json.dumps(body), "")
+
+    monkeypatch.setattr(subprocess, "run", kubectl)
+    assert access_review._live_argocd_rbac() == ("p, a", "role:readonly")
+    assert seen[0][-2:] == ["-o", "json"]

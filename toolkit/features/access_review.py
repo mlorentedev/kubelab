@@ -673,7 +673,7 @@ def _live_argocd_rbac() -> tuple[str, str]:
                 "configmap",
                 "argocd-rbac-cm",
                 "-o",
-                "jsonpath={.data}",
+                "json",
             ],
             capture_output=True,
             text=True,
@@ -685,7 +685,7 @@ def _live_argocd_rbac() -> tuple[str, str]:
     if result.returncode != 0:
         raise ReviewError(f"the hub's argocd-rbac-cm is unreadable: {result.stderr.strip()}")
     try:
-        data = json.loads(result.stdout or "{}")
+        data = json.loads(result.stdout or "{}").get("data") or {}
     except json.JSONDecodeError:
         raise ReviewError("the hub's argocd-rbac-cm is unreadable: kubectl did not answer JSON") from None
     return data.get("policy.csv", ""), data.get("policy.default", "")
