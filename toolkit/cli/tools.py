@@ -315,6 +315,14 @@ def review_attestation(
             "than parsing the log, which quotes reviewer notices (#2208).",
         ),
     ] = None,
+    shape_file: Annotated[
+        Path | None,
+        typer.Option(
+            "--shape-file",
+            help="The `deploy-shape --out` verdict for this PR. Missing or unreadable means "
+            "no exemption from it, never an error: the PR falls back to needing a review.",
+        ),
+    ] = None,
 ) -> None:
     """Report whether a PR was actually reviewed, and refuse it if not.
 
@@ -328,7 +336,13 @@ def review_attestation(
     try:
         reg = att.load_registry(registry)
         payload = json.loads(payload_file.read_text(encoding="utf-8"))
-        verdict = att.classify(payload, reg)
+        shape = None
+        if shape_file is not None:
+            try:
+                shape = json.loads(shape_file.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                logger.warning(f"review attestation: no deploy-shape verdict ({exc}); not exempting on it")
+        verdict = att.classify(payload, reg, shape)
     except (att.RegistryError, att.PayloadError, OSError, json.JSONDecodeError) as exc:
         logger.error(f"review attestation: {exc}")
         logger.error("Cannot determine whether this PR was reviewed, so it is NOT treated as reviewed.")
@@ -356,6 +370,50 @@ def review_attestation(
         "Proceeding on an unreviewed PR is allowed. Proceeding silently is not."
     )
     raise typer.Exit(1)
+
+
+@app.command("deploy-shape")
+def deploy_shape_cmd(
+    pr: Annotated[int, typer.Option("--pr", help="Pull request number")],
+    repo: Annotated[str, typer.Option("--repo", envvar="GITHUB_REPOSITORY", help="owner/name")],
+    registry: Annotated[Path, typer.Option("--registry", help="Registry declaring the class")] = Path(
+        "harness/review-attestation.json"
+    ),
+    products: Annotated[Path, typer.Option("--products", help="Product registry")] = Path("infra/config/products.yaml"),
+    out: Annotated[Path | None, typer.Option("--out", help="Write the verdict here as JSON")] = None,
+) -> None:
+    """Judge whether a PR is a mechanical staging deploy (DELIVERY-004, #1619).
+
+    Exits 0 mechanical, 1 not mechanical, 2 unknown. Run it from the default
+    branch's tree: the PR is read only through the API.
+    """
+    from toolkit.features import deploy_shape as ds
+    from toolkit.features.product_registry import load_registry as load_products
+
+    # Every failure to load is `unknown`, as in `evaluate`: an exception that
+    # escaped here would exit 1, which the workflow publishes as `neutral`.
+    try:
+        decl = ds.load_declaration(registry)
+        admitted = load_products(products).products
+    except Exception as exc:  # noqa: BLE001 — a file that cannot be read is no verdict
+        shape = ds.Shape(ds.UNKNOWN, f"cannot load the declaration: {exc}")
+    else:
+        shape = ds.evaluate(pr, repo, ds.GhApi(), decl, admitted)
+    if out is not None:
+        try:
+            out.write_text(json.dumps(shape.as_dict()) + "\n", encoding="utf-8")
+        except OSError as exc:
+            logger.error(f"deploy-shape: cannot write {out}: {exc}")
+            raise typer.Exit(2) from exc
+    message = f"deploy-shape: {shape.verdict} — {shape.reason}"
+    if shape.verdict == ds.MECHANICAL:
+        logger.success(message)
+        raise typer.Exit(0)
+    if shape.verdict == ds.NOT_MECHANICAL:
+        logger.info(message)
+        raise typer.Exit(1)
+    logger.error(message)
+    raise typer.Exit(2)
 
 
 # =============================================================================

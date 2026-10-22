@@ -180,8 +180,14 @@ def exempt_signature(pr: dict[str, Any], registry: dict[str, Any]) -> str | None
     return None
 
 
-def classify(pr: dict[str, Any], registry: dict[str, Any]) -> Verdict:
-    """Decide the PR's review state. Pure — no IO, no network."""
+def classify(pr: dict[str, Any], registry: dict[str, Any], shape: dict[str, Any] | None = None) -> Verdict:
+    """Decide the PR's review state. Pure — no IO, no network.
+
+    `shape` is the deploy-shape verdict for this PR, recomputed by the caller from
+    master's code (`toolkit tools deploy-shape`). It exempts only when it says
+    `mechanical` for the very head sha this payload carries: a verdict about
+    another commit says nothing about this one.
+    """
     if not isinstance(pr, dict):
         raise PayloadError("PR payload is not an object")
 
@@ -252,6 +258,14 @@ def classify(pr: dict[str, Any], registry: dict[str, Any]) -> Verdict:
     # tooling in this repository opens per-app releases whose file sets vary. The
     # strictness is kept and each real shape is declared instead: a shape nobody
     # declared produces a red PR asking for one, never a silent exemption.
+    if (
+        isinstance(shape, dict)
+        and shape.get("verdict") == "mechanical"
+        and shape.get("head_sha")
+        and shape.get("head_sha") == pr.get("headRefOid")
+    ):
+        return Verdict("exempt", True, f"mechanical deploy at {shape['head_sha'][:7]}: {shape.get('reason', '')}")
+
     matched = exempt_signature(pr, registry)
     if matched:
         return Verdict(
