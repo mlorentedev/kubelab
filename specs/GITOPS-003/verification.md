@@ -14,7 +14,7 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - [ ] AC3 -> PR3, after web#435 serves `commit` on staging
 - [x] AC4 -> PR4 (#2579) and GITOPS-007 (#2584, `fix/gitops-007-superseded`): `tests/test_product_verify.py` (48 tests); live runs below
 - [x] AC5 -> #1276, `tests/test_argocd_notification_triggers.py`
-- [ ] AC6 -> PR5
+- [x] AC6 -> PR5: `tests/infra/test_argocd_status_token_live.py`; live run below
 - [ ] AC7 -> PR2 (#2615): runbook section `deploy-verify is red`, linked from lesson-407 and every failure annotation
 
 ## Test status
@@ -30,6 +30,10 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - Live, 2026-10-22, AC1 after #2613 (`4d16f35`) and `make deploy-argocd` from a checkout at master: master HEAD `4c9cda6` (#2624) touches no file under `infra/k8s/`, so it is a revision whose render is unchanged in both envs (the lesson-615 case).
   - `toolkit infra argo wait-status --sha 4c9cda64b8108163fe4cbaef58cd3f673e9ead13 --context argocd/kubelab-prod --timeout 300` → `SUCCESS: argocd/kubelab-prod is success: Synced at 4c9cda6`.
   - `gh api repos/mlorentedev/kubelab/commits/4c9cda64.../statuses`: `argocd/kubelab-prod success "Synced at 4c9cda6"` 06:42:49Z and `argocd/kubelab-staging success "Synced at 4c9cda6"` 06:42:50Z (new template), after `argocd/kubelab-prod success "successfully synced (all tasks run)"` 06:40:46Z from the old operation-keyed trigger, during the Authelia restart that `deploy-argocd` runs.
+- Live, 2026-10-22, AC6, branch `feat/gitops-003-status-token-live`:
+  - `poetry run pytest tests/infra/test_argocd_status_token_live.py -m infra --override-ini="addopts=" -q` → `2 passed`.
+  - Mutation, by hand (the fixture returning a bogus `github_pat_` string, tree committed first, restored with `git checkout HEAD --`) → `2 failed`, neither skipped: a 401 fails with the rotation message and the expiry read raises `CredentialRejectedError`. `make mutate` could not run it: an `infra`-marked test is deselected by `pyproject` `addopts`, pytest exits 5 and the tool reports a red baseline (#2637).
+  - Who runs it: nothing schedules `tests/infra` or `secrets check-expiry` (#1248). The loud signal for an expired token is `deploy-verify`'s prod sweep going red on "no status arrived" (#2615); this check names the cause.
 
 ## Decisions made during implementation
 
