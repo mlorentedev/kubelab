@@ -72,7 +72,9 @@ runners instead of letting stale builds occupy the fleet.
 
 - **Registry**: `mlorentedev/kubelab-{app}` (e.g., `mlorentedev/kubelab-api`)
 - **Config variable**: `vars.REGISTRY_PREFIX` (default: `kubelab`). It names where `ci-publish.yml`
-  and `release.yml` push images, and nothing else (#563).
+  and `release.yml` push images, and nothing else (#563). Leave it unset: a value other than
+  `kubelab` sends images where nothing deploys or prunes. `tests/test_registry_prune.py` pins the
+  default to the repositories below.
 - **Where each app's repository is read from**: the config, never the prefix. That means
   `apps.platform.<app>.image_name` for an in-tree app, the product registry (`derived_image`)
   for a contract-managed product, and `edge.errors.image_name` for errors. The generators deploy
