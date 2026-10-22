@@ -30,14 +30,14 @@ created: "2026-10-16"
 - [x] [AC6] Check `generate-runner-token` and act_runner 0.2.13 against the scratch server; if it fails, sequence OPS-034 first ✓ 2026-10-17 (run 1521 succeeded on act_runner 0.2.13 against 1.27.3, #2375 comment 2026-10-17T18:43; OPS-034 then moved the runner to 4.1.0, #2425)
 - [x] [AC9] Write `docs/runbooks/gitea-upgrade.md` (rehearsal, rollback by snapshot restore, window) and a lesson ✓ 2026-10-17 (#2381; lesson-586)
 - [x] [AC7] Tell `review-cli-119-8d`, `feat-2550-lane-reconcile-47`, `fix-bug-sweep-fc` the window; fresh `make backup-node NODE=bee ENV=prod`; `make provision NODE=bee ENV=prod TAGS=gitea`; re-run for `changed=0` ✓ 2026-10-17 (the peer notice itself was not recorded anywhere; the backup, provision and re-run were: snapshot `13893d74`, `changed=4` then `changed=0`, #2375 comment 2026-10-17T06:52)
-- [ ] [AC8] Measure the cancellation live with two quick pushes; record on #2375; add `concurrency` to forge workflows if none declares it -- **not done; carried by #2063 (OPS-034 step 3), 2026-10-22**
+- [ ] [AC8] Measure the cancellation live with two quick pushes; record on #2375; add `concurrency` to forge workflows if none declares it -- **not done; carried by #2619 (OPS-045), 2026-10-22 (an earlier draft named #2063, OPS-034, which is about leaked job volumes and does not hold the measurement; archive review round 1)**
 
 ## Closing
 
 > Disposition 2026-10-22: archived by operator decision after the live upgrade to Gitea 1.27.3 (2026-10-17). Boxes left unticked:
 > - **No open questions left in the proposal** (Setup): all but one were answered by the rehearsal and the live upgrade. The open one is whether the PR-Agent app works against 1.27.3 (see AC5 below).
 > - **AC5 probe, PR-Agent half** (Implementation): the merge-settings read-back is proven (#2379), the PR-Agent app was not checked against the 1.27.3 server and no later comment on #2375 records it. Carried to #1823 (issuecomment-6331149403), the forge reviewer ticket.
-> - **AC8 measurement** (Implementation): carried by #2063 (OPS-034, step 3), open. The runner is now `gitea/runner` 4.1.0 (#2425), which meets the Runner >= 2.0.0 precondition for cancelling a running job, but the two-push measurement was never taken. "Add `concurrency` to forge workflows if none declares it" travels with it: none does.
+> - **AC8 measurement** (Implementation): carried by #2619 (OPS-045), open (an earlier draft named #2063, OPS-034, which is about leaked job volumes and does not hold the measurement; archive review round 1). The runner is now `gitea/runner` 4.1.0 (#2425), which meets the Runner >= 2.0.0 precondition for cancelling a running job, but the two-push measurement was never taken. "Add `concurrency` to forge workflows if none declares it" travels with it: none does.
 > - **Every acceptance criterion covered by at least one test**: AC2, AC3 and the merge-settings half of AC5 have unit and drill tests; AC4, AC6 and AC7 were measured live (no test), AC8 is unmeasured. The live checks are recorded on #2375 and in `features.json`.
 > - **Type checks and lint**: not re-run, because the archive changes only the spec folder. The work PRs (#2379, #2381) ran them in CI.
 > - **No unrelated changes in the diff**: not asserted here; each work PR was reviewed on its own diff.

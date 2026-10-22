@@ -47,3 +47,9 @@ Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`.
 - [ ] Folder moved: `specs/APP-CONFIG-013-vikunja-shared-projects/` -> `specs/archive/APP-CONFIG-013-vikunja-shared-projects/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
 - [ ] Promotions above executed (if any)
+
+## Archive review dispositions (`agy/gemini-3.8-flash-high`, PASS-WITH-GAPS)
+
+- Minor, f2's command omits `tests/test_vikunja_api_contract.py`, and f3's `-k` filter misses the idempotence test: accepted. All 47 tests pass, and CONSOLE-005 (#2587) deletes them with Vikunja.
+- Minor, `status: draft`: `dotf spec archive` rewrites it.
+- Minor, AC7 and AC9 unmet: superseded by #2587, as recorded above.

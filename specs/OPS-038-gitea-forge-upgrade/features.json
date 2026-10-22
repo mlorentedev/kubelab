@@ -32,7 +32,7 @@
     "behavior": "Repository merge settings apply with read-back and the PR-Agent app works against the new server (AC5)",
     "verification": "poetry run pytest -q --no-cov tests/test_gitea_upgrade_probe.py",
     "state": "partial",
-    "evidence": "2026-10-22: merge settings half is proven: PATCH with has_pull_requests applied and read back on the restored copy on 1.25.5 and 1.27.3 (PR #2379, lesson-586). Not proven: the PR-Agent app (pragent/pr-agent:0.45.0-gitea_app) against the 1.27.3 server, and live PR create/comment/edit; #2375 comment 6230892745 lists both as not yet verified and no later comment records them. No ticket tracks this check; nearest are #1823 (forge reviewer) and #2467 (forge reviewer fallback)"
+    "evidence": "2026-10-22: merge settings half is proven: PATCH with has_pull_requests applied and read back on the restored copy on 1.25.5 and 1.27.3 (PR #2379, lesson-586). Not proven: the PR-Agent app (pragent/pr-agent:0.45.0-gitea_app) against the 1.27.3 server, and live PR create/comment/edit; #2375 comment 6230892745 lists both as not yet verified and no later comment records them. Tracked on #1823 (issuecomment-6331149403)"
   },
   {
     "id": "OPS-038-gitea-forge-upgrade-f6",
@@ -53,7 +53,7 @@
     "behavior": "A second push to the same branch cancels the first run, including one already running on the runner (AC8)",
     "verification": "none: not measured",
     "state": "blocked",
-    "evidence": "2026-10-22: carried to #2063 (OPS-034, step 3), open. #2375 comment 6238815197 measured only pickup and parsing of a concurrency block (run 1521, success). Not measured: a queued run cancelled by a newer push, and a running job cancelled (needs Gitea Runner >= 2.0.0; the runner is now gitea/runner 4.1.0 after PR #2425, so the precondition is met but the two-push measurement was never taken). Operator decision 2026-10-22: archive OPS-038 and move this half to #2063. No forge workflow declares concurrency yet"
+    "evidence": "2026-10-22: carried to #2619 (OPS-045), open; an earlier draft named #2063, which does not hold the measurement. #2375 comment 6238815197 measured only pickup and parsing of a concurrency block (run 1521, success). Not measured: a queued run cancelled by a newer push, and a running job cancelled (needs Gitea Runner >= 2.0.0; the runner is now gitea/runner 4.1.0 after PR #2425, so the precondition is met but the two-push measurement was never taken). Operator decision 2026-10-22: archive OPS-038 and move this half to #2063. No forge workflow declares concurrency yet"
   },
   {
     "id": "OPS-038-gitea-forge-upgrade-f9",

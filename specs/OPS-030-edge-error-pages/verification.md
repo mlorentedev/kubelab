@@ -43,3 +43,11 @@ Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`.
 - [ ] Folder moved: `specs/OPS-030-edge-error-pages/` -> `specs/archive/OPS-030-edge-error-pages/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
 - [ ] Promotions above executed (if any)
+
+## Archive review dispositions (`agy/gemini-3.8-flash-high`, PASS WITH GAPS)
+
+- Major (theoretical), no test asserts `access_log` on `/errors/`: ticketed as #2617 (OPS-044).
+- Minor, lint and type findings in `tests/test_error_pages_nginx.py`: ticketed as #2621 (OPS-046); the tests directory is not linted (#1292).
+- Minor, dead `error_page 502/503/504` in `edge/errors/nginx.conf`: ticketed as #2621 (OPS-046).
+- Minor, the 403 page's JSON twin answers 404: owned by #2368 (ban page phase 2).
+- Minor (theoretical), the middleware scan reads raw YAML instead of rendered overlays: ticketed as #2621 (OPS-046).
