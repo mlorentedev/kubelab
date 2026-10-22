@@ -131,3 +131,11 @@ apps:
       # FAIL forever, and it invites someone to "fix" that by publishing the
       # very surface #1389 and #675 argue should stay unexposed.
       # Guarded by tests/test_declared_domains_are_served.py.
+
+secret_expiry:
+  declared:
+    # Approximate: Vikunja shows no expiry date, so these are the earliest plausible
+    # (minted on or after 2026-10-16, n8n token 1 month, reconciler token 1 year).
+    # Vikunja itself is being retired (CONSOLE-005), so exactness is not worth a lookup.
+    apps.services.automation.n8n.vikunja_api_token: "2026-11-15"
+    apps.services.core.vikunja.reconciler_api_token: "2027-10-15"
