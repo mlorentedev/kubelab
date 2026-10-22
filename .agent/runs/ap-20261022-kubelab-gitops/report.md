@@ -2,13 +2,13 @@
 
 - Armed 2026-10-22T07:40Z, envelope `36557d42`, expires 15:40Z. Host: caffeinate armed for 12h.
 - Objective: close GITOPS-003 AC6 (the Argo commit-status token checked by consequence from tests/infra).
-- Verdict: **AC6 in code and green live; #2638 lands once its CI and the review round on `945902e3` are triaged. #2614 merged.**
+- Verdict: **objective met.** #2638 merged `1981f641` (AC6), #2639 merged `55529920` (#2614 closed). Run ended: queue spent (2 of 2 items).
 
 ## Items (max 2)
 
 | # | Item | PR | State |
 |---|---|---|---|
-| 1 | GITOPS-003 AC6, status token live check | #2638 | open at `945902e3`, CodeRabbit findings applied or ticketed, CI running |
+| 1 | GITOPS-003 AC6, status token live check | #2638 | **merged `1981f641`** under the grant after 4 review rounds (CodeRabbit + PR-Agent; Codex had no quota) |
 | 2 | #2614, delivery-health watches deploy-verify (option B) | #2639 | **merged `55529920`** under the grant |
 
 ## Evidence
@@ -41,9 +41,9 @@
 - The AC2 tick waits on #2645: the first prod sweep has not arrived.
 - The hub-rebuild path for `argocd.github_status_token` (Secret Manager, terraform gcp, cloud-init) is still unticked; it is outside this envelope (`infra/**` is frozen).
 - #2580 A/B (from the previous run).
-- Removable worktrees: feat-gitops-003-wait-status, fix-gitops-007-superseded, feat-gitops-003-status-per-synced-revision, feat-gitops-003-deploy-verify, fix-delivery-health-watch-deploy-verify (merged); feat-gitops-003-status-token-live once #2638 lands.
+- Removable worktrees: feat-gitops-003-wait-status, fix-gitops-007-superseded, feat-gitops-003-status-per-synced-revision, feat-gitops-003-deploy-verify, fix-delivery-health-watch-deploy-verify (merged); feat-gitops-003-status-token-live (merged).
 
 ## Budget
 
-- Items: 2 of 2. Iterations: 3 of 4. Consecutive failures: 0.
+- Items: 2 of 2. Iterations: 4 of 4. Consecutive failures: 0.
 - GitHub: hosted runners were backlogged (53 queued), and the GraphQL quota ran out once (08:32Z reset).
