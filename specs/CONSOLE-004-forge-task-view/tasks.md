@@ -1,0 +1,99 @@
+---
+tags: [spec, tasks, templates]
+created: "2026-10-21"
+---
+
+# Tasks - CONSOLE-004-forge-task-view
+
+> TDD order. One task = one focused commit. Tick as you go. Reorder freely while spec is in `draft` state; freeze once you start `implementing`.
+>
+> **Inline markers** (optional, additive — borrowed from `github/spec-kit`, adapt-not-adopt per #141):
+> - `[P]` — this task has **no dependency on another unchecked task**, so it is safe to run in parallel (fan out to a `Workflow`, or just batch). TDD chains (test → implement → refactor of the *same* behavior) are sequential and must NOT carry `[P]`; independent behaviors can.
+> - `[AC<n>]` — this task helps satisfy **acceptance criterion #`<n>`** from `proposal.md`. Lets `/spec check` map coverage deterministically; omit it and the check falls back to semantic judgment.
+
+## Setup
+
+- [ ] Branch created from master: `feat/CONSOLE-004-forge-task-view`
+- [ ] `proposal.md` is complete and acceptance criteria are testable
+- [ ] No open questions left in `proposal.md` "Risks / open questions"
+
+## Decisions before code
+
+- [ ] Record where the UI is served (leaning towards the `apps/api` binary), and correct A2 and A8 in the ADR (A2 defers it to ADR-074, A8 says "on Gitea alone")
+- [ ] Name the forge-neutral `common.yaml` key for the label set (shared with CONSOLE-006, #2588), the `area:` to repository map with its `knowledge` fallback, the hourly GitHub call ceiling, the staleness bound that raises the alert, and the e2e latency bound
+
+## Implementation
+
+> Slices are PR-sized and ship in this order: read queue (1, 2), writes (3), operations (4, 5), end to end (6). Each slice is a draft PR until reviewers have run.
+
+### 1. Read model and adapters
+
+- [ ] [P] [AC1] Contract tests for one read-adapter interface against recorded GitHub and Gitea responses
+- [ ] [AC1] Atlas migration in the `infra.postgres` tenant: items, event table, per-source `as_of` and reachability
+- [ ] [AC1] Implement the Gitea and GitHub adapters to make the contract tests pass
+- [ ] [AC1] Regression test: a source that is down renders unreachable with its last read time, never empty
+- [ ] [P] [AC4] Webhook receiver: reject an invalid HMAC, store the event before projecting it
+- [ ] [AC4] Test: the same delivery twice projects once
+- [ ] [AC4] Periodic reconcile per source under the hourly call ceiling, with a guard test that counts calls
+- [ ] [AC1] Queue endpoint with the inbox reason (author, requested reviewer, failing CI, waiting on me)
+
+### 2. Access and UI
+
+- [ ] [AC3] Authelia in front of the route; 401 without a credential
+- [ ] [AC3] Machine token in SOPS and `SECRET_CATALOG`, accepted on the create write only; test that every other route refuses it
+- [ ] [AC1] Queue page, with each source's freshness visible
+
+### 3. Narrow writes
+
+- [ ] [AC2] Outbox with an idempotency key; a write is pending until the forge confirms
+- [ ] [AC2] Create (repository chosen by `area:`, `knowledge` fallback), label, assign, close and reopen
+- [ ] [AC2] Test that no merge, review or reviewer-request route exists
+- [ ] [AC2] Audit row for every write
+
+### 4. Observability
+
+- [ ] [P] [AC6] Structured log events for freshness, webhook failures, reconcile duration and outbox depth, through Vector to Loki
+- [ ] [AC6] Read-only Postgres role on a counts-only view, a Grafana datasource, and the dashboard (throughput, queue age, time to first review, time with a red CI, items by status, priority and area)
+- [ ] [AC6] Grafana alert for a source not read within the declared bound
+- [ ] [AC6] NetworkPolicy rule for Grafana to Postgres (NET-002) and the dashboard shown with no private titles
+
+### 5. Operations
+
+- [ ] [P] [AC7] Declare the read model in the Postgres backup coverage and rehearse one restore
+- [ ] [AC7] Test that the read model rebuilds from the forges alone
+- [ ] [AC7] Runbook: rebuild, restore, rotate tokens; token expiry dates in the SOPS catalog
+
+### 6. End to end
+
+- [ ] [AC5] Probe target: an issue opened on Gitea and on GitHub appears in the queue within the bound, and a `status:*` label added from the queue is read back from the forge
+- [ ] Hand CONSOLE-007 (#2586) the create write and its token; its own probe covers Slack
+
+## Closing
+
+- [ ] Every acceptance criterion from `proposal.md` is covered by at least one test
+- [ ] Every acceptance criterion has a matching entry in `features.json` (see below) with a non-vacuous verification command
+- [ ] Type checks pass
+- [ ] Lint passes
+- [ ] No unrelated changes in the diff (no scope creep)
+- [ ] `verification.md` filled in
+- [ ] PR opened referencing this spec folder
+
+## Machine-readable features
+
+This spec emits a sibling `features.json` (alongside this file) following [[pattern-feature-list-as-primitive]]. The JSON is the harness-facing contract: each acceptance criterion maps to ≥1 feature with `id`, `behavior`, `verification` (executable command), `state` (lifecycle), and `evidence` (harness-captured output).
+
+**Pass-state gating:** the agent CANNOT write `"state": "passing"` — only the harness, after running `verification` and capturing exit code 0, may set that terminal state. Reviewers must reject PRs where features.json contains `passing` entries with empty `evidence`.
+
+Minimal `features.json` skeleton (drop into `<repo>/specs/CONSOLE-004-forge-task-view/features.json`):
+
+```json
+[
+  {
+    "id": "CONSOLE-004-forge-task-view-f1",
+    "behavior": "<one-line copy of an acceptance criterion>",
+    "verification": "<single shell command; exit 0 means pass>",
+    "state": "pending",
+    "evidence": ""
+  }
+]
+```
