@@ -125,13 +125,19 @@ notifications:
         oncePer: app.status.operationState?.syncResult?.revision
     # Success keys on the revision Argo reports Synced, not on an operation: a
     # commit whose render does not change moves `sync.revision` without starting
-    # one, and green means "the cluster is at this sha" (GITOPS-003 AC2). Failure
+    # one, and green means "the cluster is at this sha" (GITOPS-003 AC2). It is
+    # withheld while the last operation is running or did not succeed: a failed
+    # PostSync hook leaves the app Synced, and a success posted after the
+    # failure would bury it. Failure
     # keys on `operation.sync.revision`, not `syncResult`: a failed operation
     # often has no syncResult at all (the 2026-08-27 panic), and an automated
     # sync carries the resolved sha there. Separate triggers from the Slack
     # ones, so each recipient gets only templates written for it.
     trigger.on-synced-github: |
-      - when: app.status.sync.status == 'Synced'
+      - when: >-
+          app.status.sync.status == 'Synced' and
+          (app.status.operationState == nil or
+          app.status.operationState.phase == 'Succeeded')
         send: [github-status-success]
         oncePer: app.status.sync.revision
     trigger.on-sync-failed-github: |

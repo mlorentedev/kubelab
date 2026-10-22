@@ -30,7 +30,10 @@ layer up.
 (`trigger.on-synced-github`) fires when `app.status.sync.status == 'Synced'`,
 `oncePer: app.status.sync.revision`, and the template posts to
 `.app.status.sync.revision`: every revision Argo reports synced gets one
-success, operation or not. Failure keeps the operation's revision, because a
+success, operation or not. It is withheld while the last operation is running
+or did not succeed (`operationState == nil or phase == 'Succeeded'`): a failed
+PostSync hook leaves the app Synced, and a success posted after the failure
+would bury it (PR-Agent on #2613). Failure keeps the operation's revision, because a
 failed operation is about the commit that operation ran. The success template
 reads nothing from `operationState`, so it cannot describe a stale operation.
 `tests/test_argocd_notification_triggers.py` holds both shapes.

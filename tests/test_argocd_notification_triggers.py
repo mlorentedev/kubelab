@@ -72,12 +72,15 @@ def test_a_trigger_reading_operation_state_guards_against_nil(name: str):
     """A dereference of `operationState` must be guarded by `!= nil` in the SAME clause.
 
     Per-clause, not per-trigger: a trigger with two `when:` entries where only
-    one is guarded still goes blind on the other.
+    one is guarded still goes blind on the other. `operationState == nil or`
+    guards the same way, by short-circuit: the success trigger reads the phase
+    only when an operation exists (evaluated with expr-lang v1.17.6 on nil,
+    absent, Succeeded, Failed and Running).
     """
     for when in _when_clauses(_triggers()[name]):
         if not _DEREFERENCE.search(when):
             continue
-        assert "operationState != nil" in when, (
+        assert "operationState != nil" in when or "operationState == nil or" in when, (
             f"trigger {name!r} dereferences operationState without guarding it:\n"
             f"  {when}\n"
             "expr-lang raises on nil, and a raised expression is a SKIPPED trigger — "
@@ -193,9 +196,23 @@ def test_success_lands_on_every_revision_argo_reports_synced():
     assert len(senders) == 1, f"exactly one trigger may post success, found {[n for n, _ in senders]}"
     name, entry = senders[0]
     assert name == "trigger.on-synced-github"
-    assert entry["when"] == "app.status.sync.status == 'Synced'"
+    assert entry["when"] == (
+        "app.status.sync.status == 'Synced' and (app.status.operationState == nil or "
+        "app.status.operationState.phase == 'Succeeded')"
+    )
     assert entry["oncePer"] == "app.status.sync.revision"
     assert _github_webhook("template.github-status-success")["path"] == SUCCESS_PATH
+
+
+def test_success_is_withheld_while_the_last_operation_did_not_succeed():
+    """A failed PostSync hook leaves the app Synced: success must not bury the failure.
+
+    Both triggers would otherwise post for the same sha, and the newer status
+    wins. Running is withheld too, so success lands once the operation ends.
+    """
+    when = yaml.safe_load(_notifications()["triggers"]["trigger.on-synced-github"])[0]["when"]
+    assert "app.status.operationState.phase == 'Succeeded'" in when
+    assert "operationState == nil or" in when
 
 
 def test_success_reads_nothing_from_the_last_operation():
