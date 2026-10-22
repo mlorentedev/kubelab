@@ -689,10 +689,12 @@ _deploy-argocd-helm: _require-hub-reachable
 	OIDC_SECRET=$$(ENV=dev $(POETRY) run toolkit secrets show apps.services.security.authelia.oidc_client_secret_argocd --env common 2>/dev/null | tail -1) && \
 	SLACK_WEBHOOK=$$(ENV=dev $(POETRY) run toolkit secrets show argocd.slack_webhook_url --env common 2>/dev/null | tail -1) && \
 	GH_WEBHOOK_SECRET=$$(ENV=dev $(POETRY) run toolkit secrets show argocd.github_webhook_secret --env common 2>/dev/null | tail -1) && \
+	GH_STATUS_TOKEN=$$(ENV=dev $(POETRY) run toolkit secrets show argocd.github_status_token --env common 2>/dev/null | tail -1) && \
 	test -n "$$ARGOCD_HASH"       || { echo "FATAL: argocd.admin_password_hash decrypted empty — refusing to install Argo CD with a blank admin password (check SOPS age key)" >&2; exit 1; } && \
 	test -n "$$OIDC_SECRET"       || { echo "FATAL: oidc_client_secret_argocd decrypted empty — refusing to install Argo CD with blank OIDC (check SOPS age key)" >&2; exit 1; } && \
 	test -n "$$SLACK_WEBHOOK"     || { echo "FATAL: argocd.slack_webhook_url decrypted empty — refusing to install (check SOPS age key)" >&2; exit 1; } && \
 	test -n "$$GH_WEBHOOK_SECRET" || { echo "FATAL: argocd.github_webhook_secret decrypted empty — refusing to install (check SOPS age key)" >&2; exit 1; } && \
+	test -n "$$GH_STATUS_TOKEN"   || { echo "FATAL: argocd.github_status_token decrypted empty — refusing to install without the commit-status token (GITOPS-003; mint it per its catalog entry)" >&2; exit 1; } && \
 	ARGOCD_CHART=$$($(TOOLKIT) config get argocd.chart_version) && \
 	test -n "$$ARGOCD_CHART" || { echo "FATAL: argocd.chart_version missing from common.yaml — refusing to install an unpinned chart" >&2; exit 1; } && \
 	helm upgrade --install argocd argo/argo-cd \
@@ -703,6 +705,7 @@ _deploy-argocd-helm: _require-hub-reachable
 		--set "configs.secret.argocdServerAdminPassword=$$ARGOCD_HASH" \
 		--set "configs.secret.extra.oidc\.authelia\.clientSecret=$$OIDC_SECRET" \
 		--set "notifications.secret.items.slack-webhook-url=$$SLACK_WEBHOOK" \
+		--set "notifications.secret.items.github-status-token=$$GH_STATUS_TOKEN" \
 		--set "configs.secret.githubSecret=$$GH_WEBHOOK_SECRET" \
 		--timeout 10m
 	@echo "$$(date): Helm upgrade done" >> /tmp/argocd-timing.log
