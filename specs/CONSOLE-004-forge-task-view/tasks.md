@@ -32,10 +32,18 @@ created: "2026-10-21"
 ### 1. Read model and adapters
 
 - [ ] [P] [AC1] Contract tests for one read-adapter interface against recorded GitHub and Gitea responses
+  - [x] ✓ 2026-10-22 Reader interface, unreachable-source error and the contract runner, with the recorded GitHub fixture (#2635)
+  - [ ] Record a Gitea fixture from the live forge (needs a token behind Authelia) and run the same contract against it
+  - [ ] Pin the request in the contract: path, `state=all` and `per_page=100` are asserted, so dropping one goes red (PR-Agent finding on #2635)
+  - [ ] Make the shared contract forge-neutral: the expected item numbers and counts come in as parameters instead of the GitHub fixture's, together with the Gitea fixture (PR-Agent finding on #2635)
 - [ ] [AC1] Atlas migration in the `infra.postgres` tenant: items, event table, per-source `as_of` and reachability
 - [ ] [AC1] Implement the Gitea and GitHub adapters to make the contract tests pass
+  - [x] ✓ 2026-10-22 GitHub adapter: pagination, `since`, token only when set and never sent to another host (#2635)
+  - [ ] Gitea adapter
 - [ ] [AC1] Regression test: a source that is down renders unreachable with its last read time, never empty
 - [ ] [P] [AC4] Webhook receiver: reject an invalid HMAC, store the event before projecting it
+  - [x] ✓ 2026-10-22 Signature verification for both forges, GitHub `sha256=` prefix and Gitea bare hex (#2636)
+  - [ ] Receiver endpoint and the event store
 - [ ] [AC4] Test: the same delivery twice projects once
 - [ ] [AC4] Periodic reconcile per source every 10 minutes under the hourly call ceiling, with a guard test that counts calls
 - [ ] [AC1] Queue endpoint with the inbox reason (author, requested reviewer, failing CI, waiting on me)
