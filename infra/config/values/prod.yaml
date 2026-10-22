@@ -66,7 +66,7 @@ apps:
       domain: api.kubelab.live
       site_domain: kubelab.live
       site_url: https://kubelab.live
-      version: 1.1.0
+      version: 1.1.6
     # blog: removed here too, 2026-09-01. `common.yaml` has recorded it as
     # killed since 2026-03-15 ("blog: removed — killed"), but this prod-only
     # override outlived the deletion and kept `services health` probing a
