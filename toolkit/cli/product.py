@@ -2,8 +2,9 @@
 
 They read files and print results: no SOPS key, no network, no forge. The
 receiver workflow fetches the contract; these commands only judge it (D8).
-``ready`` is the one exception: the operator's gate before a product moves to
-the generic receiver reads the product repository through ``gh``.
+``ready`` and ``release-contract`` are the exceptions: the operator's gate
+before a product moves to the generic receiver, and the prod promotion's fetch of
+the release's contract, read the product repository through ``gh``.
 ``list`` and ``app-for-event`` answer from the product registry
 (``infra/config/products.yaml``) for the callers that cannot import it: the
 Makefile and the workflows.
@@ -17,7 +18,7 @@ from typing import Annotated
 import typer
 import yaml
 
-from toolkit.features import product_ready, product_registry, product_render
+from toolkit.features import product_ready, product_registry, product_release, product_render
 from toolkit.features.product_contract import ContractError, validate_contract
 from toolkit.features.product_guards import validate_registered
 
@@ -73,10 +74,11 @@ def render(
         raise typer.BadParameter("pass --check or --write, not both")
     if env not in ("staging", "prod"):
         raise typer.BadParameter(f"--env must be staging or prod, got {env!r}")
-    if product is None and contract.resolve().parent != product_render.SNAPSHOT_DIR.resolve():
+    snapshots = {product_render.snapshot_path(contract.stem, e).resolve() for e in ("staging", "prod")}
+    if product is None and contract.resolve() not in snapshots:
         # A product repository's contract is kubelab.yaml, whose stem names no app.
         raise typer.BadParameter(
-            "--app is required unless the contract is a snapshot in infra/config/products/contracts/"
+            "--app is required unless the contract is a snapshot in infra/config/products/contracts/[prod/]"
         )
     name = product or contract.stem
     try:
@@ -179,3 +181,25 @@ def ready(
         typer.echo(json.dumps({"ok": True, **dataclasses.asdict(answer)}))
     else:
         typer.echo(f"OK: {answer.repository} carries a valid kubelab.yaml at {answer.tag} ({answer.sha})")
+
+
+@app.command("release-contract")
+def release_contract(
+    name: Annotated[str, typer.Option("--app", help="A registered product with a remote repository")],
+    version: Annotated[str, typer.Option("--version", help="The released semver tag prod is promoted to")],
+    out: Annotated[Path, typer.Option("--out", help="Where to write the contract once it is accepted")],
+    as_json: Annotated[bool, typer.Option("--json", help="Print one JSON object instead of text")] = False,
+) -> None:
+    """Fetch the contract at the release's commit, proven by digest, and write it to --out; exit 1 if refused."""
+    try:
+        release = product_release.fetch_release_contract(name, version, out)
+    except ContractError as e:
+        if as_json:
+            typer.echo(json.dumps({"ok": False, **e.as_dict()}))
+        else:
+            typer.echo(str(e), err=True)
+        raise typer.Exit(1) from None
+    if as_json:
+        typer.echo(json.dumps({"ok": True, **dataclasses.asdict(release), "contract": str(out)}))
+    else:
+        typer.echo(f"OK: {out} is the kubelab.yaml of {release.repository} {version} ({release.sha}, {release.digest})")

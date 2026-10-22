@@ -124,6 +124,15 @@ Branch `chore/idp-042-delete-web-receiver`. Commit prefix `chore(ci):`. Only aft
 - [x] ✓ 2026-10-21 (ADR-053:20 carries it; no `CLAUDE.md` bullet names `web-image-receiver`) Confirm `docs/adr/adr-053-platform-product-repos.md` §2 already carries its "Amended by ADR-067" note (ADR-067 promised it) and say in the PR that the generic receiver now exists; update the `CLAUDE.md` bullets that name `web-image-receiver`
 - [x] ✓ 2026-10-21 (#2571 DNS, #2572 e2e, #2573 OIDC, #2574 platform manifest; `ci-pipeline.yml` is the existing #2399) File follow-up tickets with their root cause: DNS from contract hostnames (row 12), e2e expectations from the contract, OIDC client rendering, `platform_manifest.py:863`, the `ci-pipeline.yml` leftover if confirmed
 
+### Closeout fix — prod renders the release's contract (review FAIL 2026-10-21, Major)
+
+- [x] ✓ 2026-10-22 [AC3] Failing tests first: `tests/test_product_contract_drift.py::test_a_contract_change_to_a_prod_owned_key_leaves_the_tree_green` (edit `port` and `hostnames.prod` in the staging snapshot, render staging, both envs clean; copy to the prod snapshot, render prod, both clean), `test_a_prod_snapshot_edited_without_a_render_is_drift`, and the per-env `snapshot_gaps` cases (a prod pin with no prod snapshot, a prod snapshot prod does not pin). Expected: FAIL (`snapshot_path` absent)
+- [x] ✓ 2026-10-22 [AC3] `toolkit/features/product_render.py`: `snapshot_path(app, env)` (staging `<app>.yaml`, prod `prod/<app>.yaml`); `snapshot_gaps(..., env=)`, where prod needs a snapshot once `values/prod.yaml` pins the app; threaded through `render`'s `--app` inference and `product_verify.targets_at`
+- [x] ✓ 2026-10-22 [AC7] `toolkit product release-contract` (`toolkit/features/product_release.py`, tests `tests/test_product_release.py`): the tag `v<version>` resolves to a commit, `<image>:<version>` and `<image>:sha-<commit7>` must share a digest (`registry.tag_digest`), the contract at that commit is validated against the registry, then written; every refusal writes nothing
+- [x] ✓ 2026-10-22 [AC3] `.github/workflows/promote-prod.yml`: step `contract` before `promote` (in-tree apps skip it), and the open-pr step stages `infra/config/products/contracts/prod/`. Tests in `tests/test_promote_prod_dispatch.py` run the step with a stubbed toolkit
+- [x] ✓ 2026-10-22 Bootstrap `infra/config/products/contracts/prod/web.yaml` with the command itself against the live release `1.16.1` (`661a205a`, digest equal on both tags); byte-equal to the staging snapshot
+- [ ] After merge, re-run `dotf spec review IDP-042-product-contract-registry` (a reviewer that is not the implementer)
+
 ## Closing
 
 - [ ] Every acceptance criterion from `proposal.md` is covered by at least one test (AC4 additionally by the live check in PR 7)

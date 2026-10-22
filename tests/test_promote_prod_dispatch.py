@@ -413,3 +413,93 @@ def test_a_product_list_failure_names_itself(tmp_path: pathlib.Path) -> None:
     assert code != 0
     assert out == {}
     assert "::error::toolkit product list failed: registry unreadable" in log, log
+
+
+# --- the release's contract renders prod (IDP-042 closeout) ------------------
+
+PROD_SNAPSHOT_DIR = "infra/config/products/contracts/prod"
+
+
+def _contract(tmp_path: pathlib.Path, forge: str, release_answer: str, release_code: int = 0):
+    """Run the contract step with a toolkit stub that logs every call; return (code, log, calls)."""
+    calls = tmp_path / "toolkit_calls"
+    stub = tmp_path / "toolkit-contract-stub"
+    stub.write_text(
+        "#!/usr/bin/env bash\n"
+        f'echo "$*" >> "{calls}"\n'
+        'case "$2" in\n'
+        f"  show) echo '{{\"ok\": true, \"app\": \"x\", \"forge\": \"{forge}\"}}' ;;\n"
+        f"  release-contract) cat <<'ANSWER'\n{release_answer}\nANSWER\n    exit {release_code} ;;\n"
+        "  render) ;;\n"
+        '  *) echo "unexpected toolkit call: $*" >&2; exit 1 ;;\n'
+        "esac\n"
+    )
+    stub.chmod(0o755)
+    calls.touch()
+    step = _step("contract")
+    env = {
+        "PATH": os.environ["PATH"],
+        **{key: "" for key in (step.get("env") or {})},
+        "APP": "web",
+        "VERSION": "1.16.1",
+        "TOOLKIT": f"{stub} ",
+    }
+    proc = subprocess.run(  # noqa: S603
+        ["bash", "-c", step["run"]], cwd=tmp_path, env=env, capture_output=True, text=True, timeout=60
+    )
+    return proc.returncode, proc.stdout + proc.stderr, calls.read_text().splitlines()
+
+
+def test_the_release_contract_is_rendered_before_the_promotion() -> None:
+    """The receiver renders staging only; without this step prod drifts from any contract change."""
+    ids = [step.get("id") for step in _steps()]
+    assert ids.index("target") < ids.index("contract") < ids.index("promote") < ids.index("open-pr")
+    env = str(_step("contract").get("env", {}))
+    assert "steps.target.outputs.app" in env and "steps.target.outputs.version" in env
+    assert "inputs." not in env
+
+
+def test_the_promotion_pr_carries_the_prod_snapshot() -> None:
+    """Values rendered from a snapshot the PR leaves behind would be the Major again: drift red on merge."""
+    assert f"{PROD_SNAPSHOT_DIR}/" in str(_step("open-pr")["run"])
+
+
+@_needs_bash
+def test_a_contract_managed_app_renders_prod_from_its_release(tmp_path: pathlib.Path) -> None:
+    code, log, calls = _contract(tmp_path, "github", '{"ok": true}')
+
+    assert code == 0, log
+    assert calls == [
+        "product show web --json",
+        f"product release-contract --app web --version 1.16.1 --out {PROD_SNAPSHOT_DIR}/web.yaml --json",
+        f"product render --contract {PROD_SNAPSHOT_DIR}/web.yaml --app web --env prod --write",
+    ]
+
+
+@_needs_bash
+def test_an_in_tree_app_skips_the_render(tmp_path: pathlib.Path) -> None:
+    """`api`'s prod values are hand-authored (ADR-048): there is no contract to fetch."""
+    code, log, calls = _contract(tmp_path, "in-tree", "{}")
+
+    assert code == 0, log
+    assert calls == ["product show web --json"]
+    assert "in-tree" in log
+
+
+@_needs_bash
+def test_a_refused_release_contract_fails_in_red_and_renders_nothing(tmp_path: pathlib.Path) -> None:
+    refusal = '{"ok": false, "error": "digests differ", "why": "not the build of v1.16.1", "fix": "retag"}'
+    code, log, calls = _contract(tmp_path, "github", refusal, release_code=1)
+
+    assert code != 0
+    assert "::error::digests differ. not the build of v1.16.1 FIX: retag" in log, log
+    assert not any(call.startswith("product render") for call in calls)
+
+
+@_needs_bash
+def test_a_release_failure_that_is_not_json_names_its_output(tmp_path: pathlib.Path) -> None:
+    code, log, calls = _contract(tmp_path, "github", "Traceback: boom", release_code=1)
+
+    assert code != 0
+    assert "::error::toolkit product release-contract failed: Traceback: boom" in log, log
+    assert not any(call.startswith("product render") for call in calls)

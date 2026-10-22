@@ -13,6 +13,11 @@ key that is right in ``common.yaml`` is not copied into every env.
 ``enable_auth: false`` / ``auth_level: bypass``; ``forwardauth`` is
 ``enable_auth: true`` / ``auth_level: one_factor``, the only Authelia policy any
 app uses today. ``oidc`` is refused before rendering (``refuse_oidc_at_render``).
+
+Each env renders from its own snapshot (``snapshot_path``), because the two envs
+run different commits of the product: staging the newest image the receiver
+took, prod the release a human promoted. One shared snapshot made every contract
+change to a prod-owned key turn prod's drift check red with nothing to correct it.
 """
 
 from __future__ import annotations
@@ -53,6 +58,7 @@ __all__ = [
     "rendered",
     "snapshot_exempt",
     "snapshot_gaps",
+    "snapshot_path",
     "write",
 ]
 
@@ -120,14 +126,52 @@ def write(contract: Contract, app: str, env: str, *, values_dir: Path = VALUES_D
     return list(differences)
 
 
+def snapshot_path(app: str, env: str, snapshot_dir: Path = SNAPSHOT_DIR) -> Path:
+    """The snapshot ``env`` renders ``app`` from.
+
+    Staging's is the flat ``<app>.yaml``: the receiver writes it from each image's
+    commit, and it is the path the product's own contract header names. Prod's is
+    ``prod/<app>.yaml``, written by the prod promotion from the release's commit;
+    it lags staging by however many images have not been released yet.
+    """
+    return _env_dir(env, snapshot_dir) / f"{app}.yaml"
+
+
+def _env_dir(env: str, snapshot_dir: Path) -> Path:
+    if env == "staging":
+        return snapshot_dir
+    if env == "prod":
+        return snapshot_dir / "prod"
+    raise ValueError(f"no contract snapshot for env {env!r}: only staging and prod render from a contract")
+
+
+def _pinned(env: str, values_dir: Path) -> set[str]:
+    data = yaml.safe_load((values_dir / f"{env}.yaml").read_text()) or {}
+    platform = (data.get("apps") or {}).get("platform") or {}
+    return {app for app, block in platform.items() if isinstance(block, dict) and "version" in block}
+
+
 def snapshot_exempt(registry: Path | None = None) -> set[str]:
     """Registry entries that have no snapshot by design: in-tree products, whose values are hand-authored."""
     return {name for name, product in load_registry(registry).products.items() if not product.contract_managed}
 
 
-def snapshot_gaps(registry: Path | None = None, snapshot_dir: Path = SNAPSHOT_DIR) -> tuple[list[str], list[str]]:
-    """Return ``(contract-managed entries with no snapshot, snapshots with no contract-managed entry)``."""
+def snapshot_gaps(
+    registry: Path | None = None,
+    snapshot_dir: Path = SNAPSHOT_DIR,
+    *,
+    env: str = "staging",
+    values_dir: Path = VALUES_DIR,
+) -> tuple[list[str], list[str]]:
+    """Return ``(entries that need a snapshot and have none, snapshots no entry needs)`` for ``env``.
+
+    Every contract-managed entry needs a staging snapshot: onboarding writes it.
+    A prod snapshot is needed once ``values/prod.yaml`` pins the app, which is
+    what its first prod promotion does; before that the app does not run in prod.
+    """
     products = load_registry(registry).products
-    managed = {name for name, product in products.items() if product.contract_managed}
-    snapshots = {path.stem for path in snapshot_dir.glob("*.yaml")}
-    return sorted(managed - snapshots), sorted(snapshots - managed)
+    needed = {name for name, product in products.items() if product.contract_managed}
+    if env == "prod":
+        needed &= _pinned(env, values_dir)
+    snapshots = {path.stem for path in _env_dir(env, snapshot_dir).glob("*.yaml")}
+    return sorted(needed - snapshots), sorted(snapshots - needed)

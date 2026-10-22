@@ -87,6 +87,26 @@ def tag_exists(registry: str, image_name: str, tag: str) -> bool | None:
     return resp.status_code == 200
 
 
+def tag_digest(registry: str, image_name: str, tag: str) -> str | None:
+    """The manifest digest a tag names, or ``None`` when it cannot be read (absent tag, no registry, not Docker Hub).
+
+    Unlike ``tag_exists`` this never answers "skip": a caller proving two tags are
+    one image treats ``None`` as no proof.
+    """
+    if not registry.startswith("docker.io/"):
+        return None
+    namespace = registry.split("/", 1)[1]
+    try:
+        resp = httpx.get(f"{_HUB}/repositories/{namespace}/{image_name}/tags/{tag}", timeout=15.0)
+    except httpx.HTTPError as exc:
+        logger.warning(f"Could not reach registry to read the digest of {image_name}:{tag} ({exc})")
+        return None
+    if resp.status_code != 200:
+        return None
+    digest = resp.json().get("digest")
+    return digest if isinstance(digest, str) and digest.startswith("sha256:") else None
+
+
 class DockerHubClient:
     """Minimal authenticated Docker Hub v2 client (login, list, delete)."""
 
