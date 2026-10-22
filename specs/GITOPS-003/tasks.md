@@ -52,8 +52,8 @@ created: "2026-08-27"
 
 ### PR5 — the token cannot expire silently (AC6)
 
-- [ ] [P] [AC6] Write failing `tests/infra` check: the notifications token answers an authenticated `GET /rate_limit` with 200
-- [ ] [AC6] Implement it (read the token via the same SOPS path as `secrets apply`; never print it)
+- [x] ✓ 2026-10-22 [P] [AC6] Write failing `tests/infra` check: the notifications token answers an authenticated GET with 200. **Done as** `GET /repos/mlorentedev/kubelab/commits/master/statuses`, not `/rate_limit`: `/rate_limit` answers 200 for any valid token, which says nothing about kubelab. The check proves validity and stated expiry only: kubelab is public, so the GET answers 200 for any valid token whatever it may write. The write grant is not verified; that probe is #2644
+- [x] ✓ 2026-10-22 [AC6] Implement it (read the token via the same SOPS path as `secrets apply`; never print it): `tests/infra/test_argocd_status_token_live.py`, plus the stated expiry through `secret_expiry.github_pat_expiry`, the function `toolkit secrets check-expiry` already maps to this key
 
 ## Closing
 
