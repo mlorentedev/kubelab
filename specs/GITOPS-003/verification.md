@@ -14,7 +14,7 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - [ ] AC3 -> PR3, after web#435 serves `commit` on staging
 - [x] AC4 -> PR4 (#2579) and GITOPS-007 (#2584, `fix/gitops-007-superseded`): `tests/test_product_verify.py` (48 tests); live runs below
 - [x] AC5 -> #1276, `tests/test_argocd_notification_triggers.py`
-- [x] AC6 -> PR5: `tests/infra/test_argocd_status_token_live.py`; live run below
+- [x] AC6 -> PR5: `tests/infra/test_argocd_status_token_live.py` proves the token still authenticates and has a future expiry; live run below. Not covered: the write grant (#2644)
 - [x] AC7 -> PR2 (#2615): runbook section `deploy-verify is red`, linked from lesson-407 and every failure annotation; seen live in the red replay below
 
 ## Test status
