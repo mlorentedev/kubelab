@@ -19,8 +19,11 @@ created: "2026-10-21"
 
 ## Decisions before code
 
-- [ ] Record where the UI is served (leaning towards the `apps/api` binary), and correct A2 and A8 in the ADR (A2 defers it to ADR-074, A8 says "on Gitea alone")
-- [ ] Name the forge-neutral `common.yaml` key for the label set (shared with CONSOLE-006, #2588), the `area:` to repository map with its `knowledge` fallback, the hourly GitHub call ceiling, the staleness bound that raises the alert, and the e2e latency bound
+- [x] ✓ 2026-10-22 UI is served from the `apps/api` binary (ADR-057 D2; Authelia already fronts the route). The ADR corrections to A2 and A8 are in #2623
+- [x] ✓ 2026-10-22 Label set lives at `infra.forge.labels` (ADR-036: read by more than one component), shared with CONSOLE-006 (#2588), with an `area_repos` map and `fallback: knowledge`
+- [x] ✓ 2026-10-22 GitHub is read with a GitHub App installation token (its own rate pool, not shared with a user PAT); the ceiling is 1000 calls per hour, a conservative start to tighten after measurement
+- [x] ✓ 2026-10-22 Reconcile runs every 10 minutes per source and the alert fires when a source has not been read for 20 minutes. The period and the bound are one decision: `as_of` only advances on a successful read, so a bound shorter than the period would fire every cycle
+- [x] ✓ 2026-10-22 End-to-end bound is 60 seconds from a forge event to the queue, generous and to be tightened after measurement. The e2e command must drive the webhook path, since reconcile would hide a missed webhook inside that window
 
 ## Implementation
 
@@ -34,7 +37,7 @@ created: "2026-10-21"
 - [ ] [AC1] Regression test: a source that is down renders unreachable with its last read time, never empty
 - [ ] [P] [AC4] Webhook receiver: reject an invalid HMAC, store the event before projecting it
 - [ ] [AC4] Test: the same delivery twice projects once
-- [ ] [AC4] Periodic reconcile per source under the hourly call ceiling, with a guard test that counts calls
+- [ ] [AC4] Periodic reconcile per source every 10 minutes under the hourly call ceiling, with a guard test that counts calls
 - [ ] [AC1] Queue endpoint with the inbox reason (author, requested reviewer, failing CI, waiting on me)
 
 ### 2. Access and UI
@@ -62,6 +65,7 @@ created: "2026-10-21"
 
 - [ ] [P] [AC7] Declare the read model in the Postgres backup coverage and rehearse one restore
 - [ ] [AC7] Test that the read model rebuilds from the forges alone
+- [ ] [AC4] [AC7] Create the GitHub App for the read adapter, store its credential in SOPS with a catalog entry and a recorded expiry
 - [ ] [AC7] Runbook: rebuild, restore, rotate tokens; token expiry dates in the SOPS catalog
 
 ### 6. End to end
