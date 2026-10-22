@@ -1,7 +1,7 @@
 """Render a product contract into ``apps.platform.<app>`` and detect drift (IDP-042 AC3, Q2).
 
-A contract owns six keys of its app's values block, listed in ``CONTRACT_KEYS``
-with the function that derives each from the contract. Every other key
+A contract owns the keys of its app's values block listed in ``CONTRACT_KEYS``,
+each with the function that derives it from the contract. Every other key
 (``version`` above all, which ``promote`` owns) is left alone.
 
 Drift is judged on ``values/<env>.yaml`` merged over ``common.yaml`` at the app
@@ -44,6 +44,10 @@ CONTRACT_KEYS: dict[str, Callable[[Contract, str], Any]] = {
     "default_port": lambda c, env: c.port,
     "health_path": lambda c, env: c.health_path,
     "domain": lambda c, env: getattr(c.hostnames, env),
+    # The same hostname under the names the site reads (#2610). Only staging and
+    # prod render, and both serve https.
+    "site_domain": lambda c, env: getattr(c.hostnames, env),
+    "site_url": lambda c, env: f"https://{getattr(c.hostnames, env)}",
     "enable_auth": lambda c, env: c.auth != "public",
     "auth_level": lambda c, env: _AUTH_LEVEL[c.auth],
     # The guard has already pinned the repository to <registry>/<image_name>.
@@ -109,7 +113,7 @@ def write(contract: Contract, app: str, env: str, *, values_dir: Path = VALUES_D
     if block is None:
         raise ContractError(
             f"values/{env}.yaml has no apps.platform.{app} block to write into",
-            "render owns six keys of an existing block; the block itself, with the version promote owns, "
+            "render owns the CONTRACT_KEYS of an existing block; the block itself, with the version promote owns, "
             "is created when the product is onboarded.",
             f"add apps.platform.{app} to values/{env}.yaml through the onboarding recipe, then render again.",
         )
