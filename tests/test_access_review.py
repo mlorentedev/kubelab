@@ -820,7 +820,9 @@ def test_argo_cd_rbac_lets_users_operate_and_never_administer(docker_mount_dir: 
     hub with (#1876), so the shipped file and the served one answer the same questions."""
     _docker_or_skip()
     rbac = _shipped_rbac()
-    wrong = argocd_rbac_disagreements(rbac["policy.csv"], rbac["policy.default"], argocd_image(COMMON), docker_mount_dir)
+    wrong = argocd_rbac_disagreements(
+        rbac["policy.csv"], rbac["policy.default"], argocd_image(COMMON), docker_mount_dir
+    )
     assert not wrong, f"Argo CD disagrees with the declared tiers on: {wrong}"
 
 
@@ -876,7 +878,9 @@ def test_this_module_keeps_no_matrix_of_its_own() -> None:
     tuples = [
         n
         for n in ast.walk(tree)
-        if isinstance(n, ast.Tuple) and len(n.elts) == 5 and isinstance(n.elts[-1], ast.Constant)
+        if isinstance(n, ast.Tuple)
+        and len(n.elts) == 5
+        and isinstance(n.elts[-1], ast.Constant)
         and isinstance(n.elts[-1].value, bool)
     ]
     assert not tuples, "an RBAC case is written here; add it to ARGOCD_RBAC_CASES instead"
@@ -935,3 +939,37 @@ def test_an_unreadable_rbac_configmap_is_failed(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(access_review, "_live_argocd_rbac", unreadable)
     findings = access_review._argocd_findings("prod", COMMON)
     assert [(f.user, f.status) for f in findings[1:]] == [("*", "failed")]
+
+
+def test_an_evaluator_that_does_not_answer_is_a_review_error(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A slow pull or a hung daemon is a `failed` row, never a traceback."""
+    from toolkit.features import access_review
+
+    def hung(*_a: object, **_k: object) -> None:
+        raise subprocess.TimeoutExpired("docker", 180)
+
+    monkeypatch.setattr(subprocess, "run", hung)
+    with pytest.raises(ReviewError, match="no answer in 180s"):
+        access_review.argocd_rbac_disagreements("", "role:readonly", "img", tmp_path)
+
+
+def test_a_container_that_never_starts_names_docker_s_error(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from toolkit.features import access_review
+
+    def refused(*_a: object, **_k: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess([], 125, "", "pull access denied\n")
+
+    monkeypatch.setattr(subprocess, "run", refused)
+    with pytest.raises(ReviewError, match="pull access denied"):
+        access_review.argocd_rbac_disagreements("", "role:readonly", "img", tmp_path)
+
+
+def test_kubectl_output_that_is_not_json_is_a_review_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    from toolkit.features import access_review
+
+    def garbled(*_a: object, **_k: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess([], 0, "map[policy.csv:p]", "")
+
+    monkeypatch.setattr(subprocess, "run", garbled)
+    with pytest.raises(ReviewError, match="argocd-rbac-cm"):
+        access_review._live_argocd_rbac()

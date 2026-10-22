@@ -572,6 +572,9 @@ ARGOCD_RBAC_CASES: list[tuple[str, str, str, str, bool]] = [
 #: its answers come from `policy.default`; `e2e` is such a subject.
 ARGOCD_TIER_SUBJECTS = {ADMIN: ADMIN_GROUP, OPERATOR: OPERATOR_GROUP, VIEWER: "e2e"}
 
+#: The first run pulls the image, which can take most of this on a slow link.
+EVALUATOR_TIMEOUT_S = 180
+
 #: `argocd admin settings rbac can` builds a Kubernetes client before it reads
 #: `--policy-file`, and prompts for a username when the user entry is empty. It never
 #: connects, so a config that points nowhere is enough.
@@ -608,19 +611,23 @@ def argocd_rbac_disagreements(
         f" --default-role '{default_role}' >/dev/null 2>&1; echo $?\n"
         for s, a, r, o, _ in ARGOCD_RBAC_CASES
     )
-    out = subprocess.run(
-        # The image runs as uid 999, which cannot enter a 0700 temporary directory.
-        ["docker", "run", "--rm", "--user", f"{os.getuid()}:{os.getgid()}"]
-        + ["-e", "KUBECONFIG=/w/kubeconfig", "-v", f"{work_dir}:/w:ro"]
-        + [image, "sh", "-c", script],
-        capture_output=True,
-        text=True,
-        timeout=180,
-        check=False,
-    )
+    try:
+        out = subprocess.run(
+            # The image runs as uid 999, which cannot enter a 0700 temporary directory.
+            ["docker", "run", "--rm", "--user", f"{os.getuid()}:{os.getgid()}"]
+            + ["-e", "KUBECONFIG=/w/kubeconfig", "-v", f"{work_dir}:/w:ro"]
+            + [image, "sh", "-c", script],
+            capture_output=True,
+            text=True,
+            timeout=EVALUATOR_TIMEOUT_S,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        raise ReviewError(f"Argo CD's evaluator gave no answer in {EVALUATOR_TIMEOUT_S}s") from None
     codes = out.stdout.split()
     if len(codes) != len(ARGOCD_RBAC_CASES):
-        raise ReviewError(f"Argo CD's evaluator gave {len(codes)} answers for {len(ARGOCD_RBAC_CASES)} cases")
+        why = f": {out.stderr.strip()}" if out.returncode != 0 else ""
+        raise ReviewError(f"Argo CD's evaluator gave {len(codes)} answers for {len(ARGOCD_RBAC_CASES)} cases{why}")
     return [case for case, code in zip(ARGOCD_RBAC_CASES, codes, strict=True) if (code == "0") != case[-1]]
 
 
@@ -677,7 +684,10 @@ def _live_argocd_rbac() -> tuple[str, str]:
         raise ReviewError(f"the hub's argocd-rbac-cm is unreadable: no answer in {KUBECTL_TIMEOUT_S}s") from None
     if result.returncode != 0:
         raise ReviewError(f"the hub's argocd-rbac-cm is unreadable: {result.stderr.strip()}")
-    data = json.loads(result.stdout or "{}")
+    try:
+        data = json.loads(result.stdout or "{}")
+    except json.JSONDecodeError:
+        raise ReviewError("the hub's argocd-rbac-cm is unreadable: kubectl did not answer JSON") from None
     return data.get("policy.csv", ""), data.get("policy.default", "")
 
 

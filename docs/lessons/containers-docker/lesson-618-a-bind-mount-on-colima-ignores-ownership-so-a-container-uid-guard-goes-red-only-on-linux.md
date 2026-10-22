@@ -19,8 +19,10 @@ answers No.
 **Problem**: `make mutate` removed `--user`, and the integration test stayed
 green on the Mac. Colima shares `$HOME` into its VM through a mount that does
 not enforce the host's owner and mode, so uid 999 reads the 0700 directory
-anyway. On a Linux runner the bind mount keeps the host's uid and mode, and the
-same mutant answers No to every case.
+anyway. On a Linux host a bind mount keeps the host's uid and mode, which is
+why the flag exists (the comment it carried in the test it moved from). The
+Linux half was not measured in this change: CI runs the test with the flag, and
+a green run there says nothing about the mutant.
 
 **Solution**: Keep `--user`. The guard is the integration test as CI runs it:
 `make test` includes the `integration` marker, on a Linux runner. The mutation
