@@ -73,7 +73,8 @@ def test_the_sweep_budget_is_the_measured_n(wf: dict) -> None:
 def test_failure_messages_link_a_runbook_section_that_exists(wf: dict) -> None:
     anchor = wf["env"]["RUNBOOK"].split("#", 1)[1]
     assert wf["env"]["RUNBOOK"].split("/blob/master/", 1)[1].split("#")[0] == str(RUNBOOK.relative_to(REPO_ROOT))
-    headings = [re.sub(r"[^a-z0-9 -]", "", h.lower()).replace(" ", "-") for h in re.findall(r"^## (.+)$", RUNBOOK.read_text(), re.M)]
+    titles = re.findall(r"^## (.+)$", RUNBOOK.read_text(), re.M)
+    headings = [re.sub(r"[^a-z0-9 -]", "", t.lower()).replace(" ", "-") for t in titles]
     assert anchor in headings
 
 
