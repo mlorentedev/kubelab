@@ -90,8 +90,16 @@ def _get_kuma_creds(project_root: Path) -> dict[str, str]:
     secrets = cm._decrypt_sops(cm.secrets_path / "common.enc.yaml") or {}
     uk_secrets = secrets.get("apps", {}).get("services", {}).get("observability", {}).get("uptime_kuma", {})
 
-    username = uk_secrets.get("admin_user", "admin")
+    # The username is derived from the identity declaration (#1356), never read
+    # from the vault: a username is not a secret, and the vault copies disagreed.
+    username = svc.get("admin_user", "")
     password = uk_secrets.get("admin_password", "")
+
+    if not username:
+        logger.error(
+            "Uptime Kuma admin_user was not derived: declare apps.auth.identities.superadmin in common.yaml (#1356)"
+        )
+        raise SystemExit(1)
 
     if not password:
         logger.error(

@@ -17,7 +17,7 @@ from toolkit.config.constants import AUTHELIA_CONFIG, PATH_STRUCTURES
 from toolkit.config.settings import PROJECT_ROOT, settings
 from toolkit.core.logging import logger
 from toolkit.core.sops import age_key_env
-from toolkit.features.configuration import ConfigurationManager
+from toolkit.features.configuration import ConfigurationManager, resolve_user_identity
 from toolkit.features.docker_service import DockerService
 
 # Mapping from secret key prefix to service component names that need restarting
@@ -55,6 +55,45 @@ class CredentialsWriteFailed(Exception):
     Raised instead of printing the values as a fallback: a failed write that
     dumps every secret to stdout is the exposure #1733 removes.
     """
+
+
+def authelia_password_hash_key(identity: str, config: dict[str, Any]) -> str:
+    """The SOPS key of one Authelia login's password hash, named by its identity key (#909).
+
+    `identity` is a KEY of `apps.auth.identities` that an Authelia user entry names
+    in `identity:`, never a username: the username resolves through
+    `resolve_user_identity`, as in both generators. There is no default, since more
+    than one user names an identity and which account a recovery resets is a
+    decision. Anything else raises, naming the keys that would work.
+    """
+    users = config.get("apps", {}).get("services", {}).get("security", {}).get("authelia", {}).get("users") or []
+    named = {str(u["identity"]): u for u in users if isinstance(u, dict) and u.get("identity")}
+    valid = sorted(named)
+    username = resolve_user_identity(named[identity], config) if identity in named else ""
+    if not username:
+        raise ValueError(f"'{identity}' names no Authelia login. Use one of: {', '.join(valid) or 'none declared'}")
+    return f"apps.services.security.authelia.users_{username}_password_hash"
+
+
+def _refuse_identities(generated: dict[str, str], config: dict[str, Any]) -> None:
+    """Refuse a generated set that holds a declared identity as a value (#1356).
+
+    A username in the vault is one the next rotation rewrites: on 2026-08-23 that
+    renamed Gitea's only admin and took prod SSO down. Identities live in
+    `apps.auth.identities` and in the break-glass declaration, both plaintext.
+    """
+    from toolkit.features import break_glass
+
+    names = {str(v) for v in (config.get("apps", {}).get("auth", {}).get("identities", {}) or {}).values()}
+    for decl in break_glass.declarations(config).values():
+        if "login" in decl or "identity" in decl:
+            names.add(break_glass.account_login(decl, config))
+    held = sorted(key for key, value in generated.items() if value in names)
+    if held:
+        raise CredentialsWriteFailed(
+            f"nothing was written: {', '.join(held)} would store a declared identity in SOPS. "
+            "Usernames resolve from apps.auth.identities (#1356)."
+        )
 
 
 class AuthConfig(TypedDict):
@@ -278,6 +317,11 @@ class CredentialsManager:
         logger.info("")
         logger.warning("SOPS is modified but not committed — the change reaches nothing until it lands.")
         logger.info(f"  git add {sops_file} && git commit")
+        if env == "dev":
+            # apply-secrets takes staging or prod only; the Compose Authelia mounts
+            # the users file that config-generate renders from SOPS.
+            logger.info("  make config-generate ENV=dev    # render the Compose users file, then restart Authelia")
+            return
         logger.info(f"  make apply-secrets ENV={env}    # deliver it to the cluster")
         logger.info("")
         # No reader picks up a Secret volume update by itself here: Authelia's
@@ -390,12 +434,9 @@ class CredentialsManager:
         # Default from the identity SSOT (AUTH-004 C1, ADR-062 D3). Was
         # `apps.auth.admin_username`, which this replaces.
         #
-        # Note what this prompt still conflates, because it is a live defect and
-        # not this change's to fix: one answer becomes BOTH the Authelia login
-        # and `basic_auth.user`, a Traefik machine credential. That coupling is
-        # what turned a rotation into a rename on 2026-08-23 (#1352). It is now
-        # harmless for Grafana, which no longer reads basic_auth,
-        # but the prompt should be split, tracked with #1355.
+        # The answer names the Authelia login and the user inside the Traefik
+        # htpasswd hash. It is never stored on its own: `basic_auth.user` was, and
+        # rotating it renamed Gitea's only admin on 2026-08-23 (#1352, #1356).
         cm = ConfigurationManager(env, self.project_root)
         merged_config = cm.get_merged_config()
         identities = merged_config.get("apps", {}).get("auth", {}).get("identities", {}) or {}
@@ -484,7 +525,6 @@ class CredentialsManager:
         # Key paths MUST match the structure in common.yaml (apps.services.security.authelia.*)
         _auth = "apps.services.security.authelia"
         generated_secrets = {
-            "basic_auth.user": common_username,
             "basic_auth.password": common_password,
             "basic_auth.credentials": basic_auth_credentials_hash,
             # Authelia secrets
@@ -492,13 +532,13 @@ class CredentialsManager:
             f"{_auth}.oidc_hmac_secret": oidc_hmac_secret,
             f"{_auth}.session_secret": session_secret,
             f"{_auth}.storage_encryption_key": storage_encryption_key,
-            # Grafana secrets
-            "apps.services.observability.grafana.admin_user": common_username,
+            # Grafana secrets. Its admin username is derived from the break-glass
+            # declaration, like every username here (#1356).
             "apps.services.observability.grafana.admin_password": common_password,
             # CrowdSec secrets
             "apps.services.security.crowdsec.bouncer_api_key": crowdsec_bouncer_api_key,
-            # Uptime Kuma secrets (SSOT: same common credentials)
-            "apps.services.observability.uptime_kuma.admin_user": common_username,
+            # Uptime Kuma secrets (SSOT: same common credentials). Its account is the
+            # superadmin, derived in the merged config (#1356).
             "apps.services.observability.uptime_kuma.admin_password": common_password,
             **oidc_env_secrets,
         }
@@ -517,6 +557,7 @@ class CredentialsManager:
         # These MUST NOT be overwritten — doing so destroys Authelia state.
         generated_secrets = self._preserve_immutable(generated_secrets, existing_secrets)
         generated_secrets = self.preserve_break_glass(generated_secrets, existing_secrets)
+        _refuse_identities({**generated_secrets, **hub_secrets}, merged_config)
 
         if auto_update:
             # Batch update: single decrypt/encrypt cycle
@@ -536,7 +577,7 @@ class CredentialsManager:
             # {env}.enc.yaml from this point on. Reconcile it before the hub write,
             # so a failure there cannot leave the file and the service disagreeing.
             old_uk_password = existing_secrets.get("apps.services.observability.uptime_kuma.admin_password", "")
-            self._reconcile_external_credentials(common_username, common_password, old_uk_password)
+            self._reconcile_external_credentials(common_password, old_uk_password)
 
             # Hub credentials → always common SOPS (Argo CD hub is singleton)
             common_sops = self.project_root / PATH_STRUCTURES.CONFIG_SECRETS_DIR / "common.enc.yaml"
@@ -689,7 +730,7 @@ class CredentialsManager:
 
         logger.success(f"Reconciliation complete. Restarted {len(affected_services)} service(s).")
 
-    def _reconcile_external_credentials(self, username: str, new_password: str, old_password: str = "") -> None:
+    def _reconcile_external_credentials(self, new_password: str, old_password: str = "") -> None:
         """Reconcile credentials for services with their own auth system (not K8s Secrets).
 
         These services manage their own user database and need API calls to update
@@ -710,6 +751,9 @@ class CredentialsManager:
             host = node.get("tailscale_ip", "")
             port = svc.get("default_port", 3001)
             url = f"http://{host}:{port}"
+            # Kuma's one account, derived from the identity declaration (#1356). The
+            # generator's prompt answer named the operator, so this login used to fail.
+            username = svc.get("admin_user", "")
 
             logger.info(f"Updating Uptime Kuma password at {url}...")
             api = UptimeKumaApi(url)

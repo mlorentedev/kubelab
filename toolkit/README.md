@@ -102,6 +102,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit infra argo spoke-url` | Print one spoke's K3s apiserver URL, resolved from the SSOT (#1215). |
 | `toolkit infra argo unregister-spoke` | Detach ONE hub from ONE spoke, without pruning the spoke. |
 | `toolkit infra argo verify-product` | Verify a product is deployed at origin/master HEAD by consequence (GITOPS-003, #1478). |
+| `toolkit infra argo wait-status` | Wait for the commit status Argo CD posts per sync (GITOPS-003 AC2, #1478). |
 | `toolkit infra headscale` | Headscale VPN ACL policy + mesh probe (ADR-041) |
 | `toolkit infra headscale policy-check` | Render policy.hujson from the SSOT and validate it with `headscale policy check` (Docker). |
 | `toolkit infra headscale probe` | Probe the preserved mesh flows after a policy reload (auto-revert gate, ADR-041). |
@@ -157,6 +158,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit product app-for-event` | Name the app a dispatch event type belongs to; exit 1 if the registry maps it to none. |
 | `toolkit product list` | List the registered products, in registry order. |
 | `toolkit product ready` | Check the contract at the commit staging runs, as the generic receiver would; exit 1 if it would refuse. |
+| `toolkit product release-contract` | Fetch the contract at the release's commit, proven by digest, and write it to --out; exit 1 if refused. |
 | `toolkit product render` | Render a contract into apps.platform.<app>; without a flag, print the contract-owned keys. |
 | `toolkit product show` | Print where a product comes from: its forge, repository and receiver; exit 1 if unregistered. |
 | `toolkit product validate` | Validate a product contract against the schema, and with --registry against the platform; exit 1 if refused. |

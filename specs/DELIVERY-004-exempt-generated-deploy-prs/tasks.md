@@ -23,7 +23,7 @@ created: "2026-09-04"
 - [x] [AC1] `.github/workflows/deploy-shape.yml`: master's code, check-run `success`/`neutral`/`failure`.
 - [x] [AC2] `review-attestation`: drop the file-only staging signature; exempt on a recomputed `mechanical` at the attested head sha.
 - [ ] [AC3] Measure a neutral run against protection on a real PR, then add `deploy-shape` to `required_contexts` (operator reconciles live).
-- [x] Lesson in `docs/lessons/` (lesson-610) ✓ 2026-10-21
+- [x] Lesson in `docs/lessons/` (lesson-613) ✓ 2026-10-21
 
 ## PR 2 — widening tests (AC4, AC5)
 

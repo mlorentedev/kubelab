@@ -49,7 +49,6 @@ EXPECTED = {
     "promote-prod.yml",
     "release.yml",
     "staging-deploy.yml",
-    "web-image-receiver.yml",
 }
 
 
@@ -68,8 +67,10 @@ def test_the_derived_set_is_exactly_the_delivery_lanes():
     # the set and the test stays green. That is the predicate being redundant,
     # not the test being vacuous — the first attempt at this mutation cut only
     # `ci-publish.yml` from `staging-deploy.yml` and proved nothing. Mutate a
-    # single-route lane (`promote-prod.yml`, `web-image-receiver.yml`, which
-    # reach it only through `deployment promote`) and this goes red.
+    # single-route lane (`promote-prod.yml`, which reaches it only through
+    # `deployment promote`) and this goes red. `product-image-receiver.yml` is
+    # not one: its refusal text names `toolkit deployment promote` too, so
+    # cutting its call alone stays green (measured with `make mutate`).
     got = set(dh.watched(_load, sorted(WORKFLOWS.glob("*.y*ml")), _resolve))
     assert got == EXPECTED, (
         f"derived {sorted(got)}, expected {sorted(EXPECTED)}.\n\n"

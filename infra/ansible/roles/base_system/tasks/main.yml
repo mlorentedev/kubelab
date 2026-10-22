@@ -170,8 +170,8 @@
 # tailscale0 interface only, never fleet-wide like firewall_allowed_ports
 # above. NOTE what this does NOT cover: a Docker-published port bypasses
 # these rules entirely. Docker's DNAT happens in PREROUTING, before ufw's
-# INPUT chain ever sees the packet, and DOCKER-USER is empty fleet-wide
-# (#959) — so for a containerised service, the bind address
+# INPUT chain ever sees the packet, and DOCKER-USER holds no
+# rule for it (#959; rpi3 keeps one for Kuma alone, #2482) — so for a containerised service, the bind address
 # (`{{ tailscale_ip }}:port:port` in its compose file) is the only real
 # access control, not this list. These rules matter for anything that
 # listens directly on the host instead.

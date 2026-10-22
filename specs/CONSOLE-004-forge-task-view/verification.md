@@ -1,9 +1,9 @@
 ---
 tags: [spec, verification, templates]
-created: "2026-10-16"
+created: "2026-10-21"
 ---
 
-# Verification - OPS-038-gitea-forge-upgrade
+# Verification - CONSOLE-004-forge-task-view
 
 ## Evidence
 
@@ -37,6 +37,6 @@ Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`.
 ## Archive checklist
 
 - [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/OPS-038-gitea-forge-upgrade/` -> `specs/archive/OPS-038-gitea-forge-upgrade/`
+- [ ] Folder moved: `specs/CONSOLE-004-forge-task-view/` -> `specs/archive/CONSOLE-004-forge-task-view/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
 - [ ] Promotions above executed (if any)

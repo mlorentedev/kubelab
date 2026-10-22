@@ -15,6 +15,10 @@ from toolkit.features.configuration import ConfigurationManager
 from toolkit.features.health_check import HealthChecker, ServiceHealthConfig
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
+#: Only tests under this directory are skipped when the target is unreachable.
+#: Matching "e2e" anywhere in the path also skipped every test of a checkout
+#: whose own path contains it (a worktree named after an e2e ticket, for one).
+_E2E_DIR = Path(__file__).resolve().parent
 
 
 def _build_connectivity_domains() -> dict[str, str]:
@@ -230,12 +234,12 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     if not _can_resolve(probe_host):
         skip = pytest.mark.skip(reason=f"DNS resolution failed for {probe_host} — is VPN active?")
         for item in items:
-            if "e2e" in str(item.fspath):
+            if item.path.resolve().is_relative_to(_E2E_DIR):
                 item.add_marker(skip)
         return
 
     if not _can_connect(probe_host):
         skip = pytest.mark.skip(reason=f"Cannot connect to {probe_host}:443 — is the environment up?")
         for item in items:
-            if "e2e" in str(item.fspath):
+            if item.path.resolve().is_relative_to(_E2E_DIR):
                 item.add_marker(skip)

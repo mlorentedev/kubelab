@@ -1,5 +1,5 @@
 ---
-id: lesson-610-an-exemption-keyed-on-which-files-changed-exempts-whatever-those-files-say
+id: lesson-613-an-exemption-keyed-on-which-files-changed-exempts-whatever-those-files-say
 type: lesson
 status: active
 created: "2026-10-21"

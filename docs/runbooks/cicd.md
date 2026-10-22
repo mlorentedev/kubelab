@@ -36,7 +36,7 @@ flowchart LR
     PR["PR: feature/*, fix/*,<br/>hotfix/*, chore/*"] --> CI["ci.yml<br/>validate + test + detect-changes<br/>(api, errors)"]
     CI --> BUILD["ci-pipeline.yml → ci-publish.yml<br/>build sha-&lt;short&gt; preview image"]
     BUILD --> MERGE["squash-merge to master<br/>(protected, 0 reviews, admins enforced)"]
-    MERGE --> SD["staging-deploy.yml (api)<br/>web-image-receiver.yml (web, cross-repo)<br/>build sha-&lt;short&gt; + open deploy PR"]
+    MERGE --> SD["staging-deploy.yml (api)<br/>product-image-receiver.yml (web and any registered product, cross-repo)<br/>build sha-&lt;short&gt; + open deploy PR"]
     SD --> AS["Argo CD staging<br/>selfHeal: false (ADR-037)"]
     MERGE --> RP["release.yml (release-please)<br/>api-vX.Y.Z / errors-vX.Y.Z"]
     RP -->|"api: re-tag staging digest<br/>(ADR-056 build-once)"| PP["promote-prod.yml<br/>manual dispatch, human-gated"]
@@ -71,7 +71,14 @@ runners instead of letting stale builds occupy the fleet.
 ## Docker registry
 
 - **Registry**: `mlorentedev/kubelab-{app}` (e.g., `mlorentedev/kubelab-api`)
-- **Config variable**: `vars.REGISTRY_PREFIX` (default: `kubelab`)
+- **Config variable**: `vars.REGISTRY_PREFIX` (default: `kubelab`). It names where `ci-publish.yml`
+  and `release.yml` push images, and nothing else (#563). Leave it unset: a value other than
+  `kubelab` sends images where nothing deploys or prunes. `tests/test_registry_prune.py` pins the
+  default to the repositories below.
+- **Where each app's repository is read from**: the config, never the prefix. That means
+  `apps.platform.<app>.image_name` for an in-tree app, the product registry (`derived_image`)
+  for a contract-managed product, and `edge.errors.image_name` for errors. The generators deploy
+  from these, and `toolkit registry prune` (`ci-cleanup.yml`) prunes them (#2511).
 
 ## Versioning
 
@@ -88,8 +95,64 @@ RC scheme, no CalVer bundle (see [ADR-059](../adr/adr-059-retire-calver-release-
 | `errors` | `edge/errors/**` |
 
 `web` has no build trigger in this repo — its source and CI live in `mlorentedev/web`; a
-`repository_dispatch` (`web-image-published`) is what reaches `web-image-receiver.yml` here.
+`repository_dispatch` (`web-image-published`) is what reaches `product-image-receiver.yml` here.
+
 Changes to `infra/config/values/*.yaml` do NOT trigger app rebuilds (GitOps pull model).
+
+### Receiving a product from its own repository (ADR-067, IDP-042)
+
+`product-image-receiver.yml` lists no dispatch `types`: the registry decides. Onboarding a
+GitHub-hosted product takes three changes, in this order:
+
+1. **The contract, written first:** `kubelab.yaml` for the product
+   (`toolkit/schemas/kubelab-product.schema.json`). Both repositories commit it byte for byte,
+   so the kubelab change can be validated before the product carries it.
+2. **kubelab, one PR:** all five pieces land together, because the drift tests
+   (`tests/test_product_contract_drift.py`) fail on a registry entry with no snapshot and on
+   values that disagree with it.
+   - The registry entry in `infra/config/products.yaml`: `repository`, `forge: github`,
+     `receiver: generic`, `events.staging` and `events.prod`.
+   - The snapshot `infra/config/products/contracts/<app>.yaml`, which is the contract itself.
+     It is staging's: prod renders from its own `contracts/prod/<app>.yaml`, which the first
+     prod promotion writes (see below), so onboarding adds none.
+   - An `apps.platform.<app>` block in `values/staging.yaml` and in `values/prod.yaml`, with
+     its contract-owned keys written by
+     `toolkit product render --contract infra/config/products/contracts/<app>.yaml --env <env> --write`.
+   - Whatever the contract names that kubelab does not allow yet, such as a hostname route or
+     a secret in SOPS.
+   - A public DNS record for the contract's prod hostname, in `infra/terraform/dns/zones.json`
+     (a zone's own record) or `services.json` (a prod service).
+     `tests/test_dns_contract_hostnames.py` refuses a snapshot whose prod hostname has none.
+     The record exists in Cloudflare only after `make tf-dns-plan` and `make tf-dns-apply`.
+     The staging hostname needs no record: staging DNS is VPN-only split DNS.
+
+   `toolkit product validate --contract <file> --registry infra/config/products.yaml --app <app>`
+   checks the contract against all of it. A product absent from the registry is refused.
+   Event types are never renamed afterwards: GitHub answers 204 to a dispatch nobody listens
+   for, and drops it.
+3. **The product, its contract and dispatch:** the same `kubelab.yaml` at the repository root,
+   and CI that publishes an immutable `sha-<short>` image and sends
+   `repository_dispatch` with `event_type: <events.staging>` and `client_payload: {tag}`.
+
+The receiver fetches `kubelab.yaml` at the image's own commit, validates it against the
+registry, renders it into `values/staging.yaml`, snapshots it at
+`infra/config/products/contracts/<app>.yaml`, and force-updates the one `deploy/staging-<app>`
+PR. A manual `workflow_dispatch` defaults to `dry_run: true`. Before moving an existing product
+to `receiver: generic`, `toolkit product ready --app <app>` must exit 0. A Gitea-hosted product
+is not received yet (IDP-044, #1928); prod stays `promote-prod.yml`.
+
+Prod renders the contract of the release it ships, not the staging snapshot. The staging
+deploy PR is long-lived, so the staging snapshot can be ahead of or behind any release.
+`promote-prod.yml` runs
+`toolkit product release-contract --app <app> --version <v> --out infra/config/products/contracts/prod/<app>.yaml`.
+That resolves the release tag `v<version>` to a commit, refuses unless `<image>:<version>` and
+`<image>:sha-<commit7>` are one digest, and writes the validated `kubelab.yaml` of that commit.
+Then `product render --env prod --write` renders it, and the snapshot goes into the promotion
+PR with the values. A release older than its product's `kubelab.yaml` is refused, rollbacks
+included. An in-tree app (`api`) skips the step. The drift tests compare each environment
+with its own snapshot, so a contract change to a prod-owned key is red nowhere: staging takes
+it on the staging deploy PR, and prod on the next promotion of a release that carries it
+(lesson-616).
 
 ## Required GitHub secrets
 
@@ -200,7 +263,7 @@ Token was created with Read-only permissions. Regenerate with **Read, Write, Del
 
 The PR was opened with `GITHUB_TOKEN` instead of `RELEASE_PLEASE_TOKEN` — a `GITHUB_TOKEN`-opened
 PR does not trigger `on: pull_request` workflows, so required checks never run and it can't be
-merged. Every automated PR-opening step (`staging-deploy.yml`, `web-image-receiver.yml`,
+merged. Every automated PR-opening step (`staging-deploy.yml`, `product-image-receiver.yml`,
 `promote-prod.yml`, `release.yml`'s `promote-errors` job) must use `secrets.RELEASE_PLEASE_TOKEN`
 for its checkout/push/`gh pr create` steps.
 
@@ -219,7 +282,7 @@ duplicated here to avoid the two docs drifting apart.
 | `ci-publish.yml` | Reusable: Docker build + push + Trivy scan + build-completion notify (ADR-044) |
 | `release.yml` | release-please: cuts `api`/`errors` semver; re-tags (`api`, ADR-056) or rebuilds (`errors`); auto-opens the `errors` prod-pin PR (DELIVERY-003) |
 | `staging-deploy.yml` | Continuous staging delivery for `api` — builds `sha-<short>` on every `master` push touching `apps/**`, opens the deploy PR |
-| `web-image-receiver.yml` | Cross-repo receiver for `web` (ADR-053) — `repository_dispatch` from `mlorentedev/web` triggers the same staging promotion + PR, with coalescing of stale open PRs |
+| `product-image-receiver.yml` | Generic cross-repo receiver (ADR-067) — the registry maps a `repository_dispatch` to a product; validates its `kubelab.yaml` at the image's commit and force-updates one `deploy/staging-<app>` PR |
 | `promote-prod.yml` | Manual `workflow_dispatch` — gated prod promotion for `api`/`web` |
 | `ci-cleanup.yml` | Weekly cron (Mondays 04:00 UTC) — prunes old `sha-*` tags via `toolkit registry prune`; never touches prod semver |
 | `check-config-drift.yml` | PR/push/nightly — generator-vs-committed-file drift gate (CI-GATE-002/003), image-sync check, Headscale ACL validation, Windows `toolkit sync` parity |

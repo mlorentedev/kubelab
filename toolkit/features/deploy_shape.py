@@ -75,7 +75,7 @@ def load_declaration(path: Path) -> Declaration:
     """Read the `mechanical` block, failing closed on any missing or empty field."""
     try:
         block = json.loads(path.read_text(encoding="utf-8")).get("mechanical")
-    except (OSError, json.JSONDecodeError, AttributeError) as exc:
+    except (OSError, ValueError, AttributeError) as exc:  # ValueError: bad JSON or bytes
         raise DeclarationError(f"cannot read the mechanical declaration from {path}: {exc}") from exc
     if not isinstance(block, dict):
         raise DeclarationError(f"{path} declares no `mechanical` block")

@@ -11,7 +11,7 @@ apps/
 ```
 
 Error pages live in `edge/errors/` (edge service, not an app).
-The web app was extracted to its own repository (ADR-053); its images arrive via the `web-image-receiver` workflow.
+The web app was extracted to its own repository (ADR-053); its images arrive via the generic `product-image-receiver` workflow (ADR-067).
 
 ## Development
 

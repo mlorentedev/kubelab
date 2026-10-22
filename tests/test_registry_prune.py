@@ -13,7 +13,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from toolkit.features import registry
-from toolkit.features.registry import DockerHubClient, TagInfo, prune, select_stale_tags
+from toolkit.features.registry import DockerHubClient, TagInfo, image_repositories, prune, select_stale_tags
 
 
 def _tag(name: str, ts: str = "2026-01-01T00:00:00Z") -> TagInfo:
@@ -57,6 +57,39 @@ class TestSelectStaleTags:
         stale = select_stale_tags(tags, retention=0, protected={"sha-old0000"})
         assert "sha-old0000" not in stale
         assert "sha-new1111" in stale
+
+
+class TestTagDigest:
+    """A digest proves two tags are one image, so every unreadable answer is None, never a skip."""
+
+    DIGEST = "sha256:" + "a" * 64
+
+    def test_reads_the_tag_digest_anonymously(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        get = MagicMock(return_value=MagicMock(status_code=200, **{"json.return_value": {"digest": self.DIGEST}}))
+        monkeypatch.setattr(registry.httpx, "get", get)
+
+        assert registry.tag_digest("docker.io/ns", "kubelab-web", "1.16.1") == self.DIGEST
+        assert get.call_args.args[0] == "https://hub.docker.com/v2/repositories/ns/kubelab-web/tags/1.16.1"
+
+    @pytest.mark.parametrize(
+        "response",
+        [
+            MagicMock(status_code=404),
+            MagicMock(status_code=200, **{"json.return_value": {}}),
+            MagicMock(status_code=200, **{"json.return_value": {"digest": "md5:nope"}}),
+        ],
+        ids=["absent tag", "no digest", "not a sha256 digest"],
+    )
+    def test_an_unusable_answer_is_none(self, monkeypatch: pytest.MonkeyPatch, response: MagicMock) -> None:
+        monkeypatch.setattr(registry.httpx, "get", MagicMock(return_value=response))
+        assert registry.tag_digest("docker.io/ns", "kubelab-web", "1.16.1") is None
+
+    def test_an_unreachable_registry_is_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(registry.httpx, "get", MagicMock(side_effect=registry.httpx.ConnectError("down")))
+        assert registry.tag_digest("docker.io/ns", "kubelab-web", "1.16.1") is None
+
+    def test_a_registry_other_than_docker_hub_is_none(self) -> None:
+        assert registry.tag_digest("ghcr.io/ns", "kubelab-web", "1.16.1") is None
 
 
 class TestDockerHubClient:
@@ -124,23 +157,84 @@ class TestPrune:
 
     def test_dry_run_deletes_nothing(self) -> None:
         client = self._client([_tag("sha-a", "t1"), _tag("sha-b", "t2"), _tag("sha-c", "t3")])
-        n = prune(["api"], "kubelab", retention=1, dry_run=True, client=client)
+        n = prune({"api": "kubelab-api"}, retention=1, dry_run=True, client=client)
         client.delete_tag.assert_not_called()
         assert n == 2  # two stale would be deleted
 
     def test_deletes_stale_keeps_newest_and_semver(self) -> None:
         tags = [_tag("sha-a", "t1"), _tag("sha-b", "t3"), _tag("sha-c", "t2"), _tag("1.0.0", "t9")]
         client = self._client(tags)
-        n = prune(["api"], "kubelab", retention=1, dry_run=False, client=client)
+        n = prune({"api": "kubelab-api"}, retention=1, dry_run=False, client=client)
         deleted = {call.args[1] for call in client.delete_tag.call_args_list}
         assert n == 2
         assert deleted == {"sha-a", "sha-c"}  # sha-b (newest) and 1.0.0 (semver) kept
 
-    def test_repo_name_uses_prefix(self) -> None:
+    def test_lists_the_repository_it_is_given(self) -> None:
         client = self._client([])
-        prune(["api", "web"], "kubelab", retention=15, dry_run=False, client=client)
+        prune({"api": "kubelab-api", "third": "third"}, retention=15, dry_run=False, client=client)
         repos = {call.args[0] for call in client.list_tags.call_args_list}
-        assert repos == {"kubelab-api", "kubelab-web"}
+        assert repos == {"kubelab-api", "third"}
+
+
+FIXTURE_REGISTRY = Path(__file__).parent / "fixtures" / "product" / "registry.yaml"
+
+
+class TestImageRepositories:
+    """Each app is pruned in the repository it is deployed from (#2511), never in ``<prefix>-<app>``."""
+
+    def test_the_committed_set_is_the_three_kubelab_repositories(self) -> None:
+        from toolkit.features.product_registry import platform_apps
+
+        assert image_repositories([*platform_apps(), "errors"]) == {
+            "api": "kubelab-api",
+            "web": "kubelab-web",
+            "errors": "kubelab-errors",
+        }
+
+    def test_a_product_with_no_image_name_override_is_pruned_in_its_derived_repository(self) -> None:
+        assert image_repositories(["third"], registry=FIXTURE_REGISTRY) == {"third": "third"}
+
+    def test_a_contract_managed_override_wins(self) -> None:
+        assert image_repositories(["web"], registry=FIXTURE_REGISTRY) == {"web": "kubelab-web"}
+
+    def test_an_in_tree_app_with_no_image_name_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="apps.platform.api.image_name"):
+            image_repositories(["api"], common={"apps": {"platform": {}}})
+
+    def test_a_name_carrying_a_namespace_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="not a bare name"):
+            image_repositories(["api"], common={"apps": {"platform": {"api": {"image_name": "other/kubelab-api"}}}})
+
+    @pytest.mark.parametrize(
+        ("workflow", "app"), [("ci-publish.yml", "api"), ("ci-publish.yml", "errors"), ("release.yml", "api")]
+    )
+    def test_the_publish_default_pushes_where_the_prune_looks(self, workflow: str, app: str) -> None:
+        """Publish still names its repository `<REGISTRY_PREFIX>-<app>` (#563); its default must match."""
+        import re
+
+        from toolkit.config.settings import PROJECT_ROOT
+
+        text = (PROJECT_ROOT / ".github" / "workflows" / workflow).read_text()
+        match = re.search(r"REGISTRY_PREFIX: \$\{\{ vars\.REGISTRY_PREFIX \|\| '([^']+)' \}\}", text)
+        assert match, f"{workflow} no longer declares REGISTRY_PREFIX's default"
+        assert f"{match.group(1)}-{app}" == image_repositories([app])[app]
+
+    def test_errors_without_an_image_name_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="edge.errors.image_name"):
+            image_repositories(["errors"], common={"edge": {}})
+
+    def test_no_env_overrides_an_image_name(self) -> None:
+        """Repositories are read from common.yaml alone, which holds only if no env moves one."""
+        import yaml
+
+        from toolkit.config.settings import PROJECT_ROOT
+
+        for env in ("staging", "prod"):
+            values = yaml.safe_load((PROJECT_ROOT / f"infra/config/values/{env}.yaml").read_text()) or {}
+            platform = (values.get("apps") or {}).get("platform") or {}
+            moved = [app for app, block in platform.items() if "image_name" in (block or {})]
+            assert moved == [], f"values/{env}.yaml overrides image_name for {moved}"
+            assert "image_name" not in ((values.get("edge") or {}).get("errors") or {})
 
 
 class TestPruneCliDefault:
@@ -156,13 +250,17 @@ class TestPruneCliDefault:
         fixture = Path(__file__).parent / "fixtures" / "product" / "registry.yaml"
         monkeypatch.setattr(product_registry, "registry_path", lambda: fixture)
         monkeypatch.setattr(registry_cli.promotion, "read_pinned_version", lambda env, app_name: None)
-        seen: list[list[str]] = []
-        monkeypatch.setattr(registry_cli.registry, "prune", lambda apps, *args, **kwargs: seen.append(apps) or 0)
+        seen_repos: list[dict[str, str]] = []
+        monkeypatch.setattr(
+            registry_cli.registry, "prune", lambda repos, *args, **kwargs: seen_repos.append(repos) or 0
+        )
 
         result = CliRunner().invoke(app, ["registry", "prune", "--dry-run"])
 
         assert result.exit_code == 0, result.output
-        assert seen == [["api", "web", "third", "errors"]]
+        assert seen_repos == [
+            {"api": "kubelab-api", "web": "kubelab-web", "third": "third", "errors": "kubelab-errors"}
+        ]
 
     @pytest.mark.parametrize("given", ["", " , "])
     def test_an_explicitly_empty_apps_prunes_nothing(self, monkeypatch: pytest.MonkeyPatch, given: str) -> None:
@@ -177,10 +275,10 @@ class TestPruneCliDefault:
         from toolkit.main import app
 
         monkeypatch.setattr(registry_cli.promotion, "read_pinned_version", lambda env, app_name: None)
-        seen: list[list[str]] = []
-        monkeypatch.setattr(registry_cli.registry, "prune", lambda apps, *args, **kwargs: seen.append(apps) or 0)
+        seen: list[dict[str, str]] = []
+        monkeypatch.setattr(registry_cli.registry, "prune", lambda repos, *args, **kwargs: seen.append(repos) or 0)
 
         result = CliRunner().invoke(app, ["registry", "prune", "--apps", given, "--dry-run"])
 
         assert result.exit_code == 0, result.output
-        assert seen == [[]]
+        assert seen == [{}]

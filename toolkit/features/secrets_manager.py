@@ -119,6 +119,20 @@ class SecretSpec:
     # being quietly assumed immortal.
     expiry: Expiry = Expiry.UNKNOWN
 
+    def __post_init__(self) -> None:
+        # A username is not a secret, and an entry the toolkit mints is one
+        # `credentials generate` and `rotate` may rewrite: on 2026-08-23 rotating
+        # `basic_auth.user` renamed Gitea's only admin. Identities live in
+        # `apps.auth.identities` (#1356). EXTERNAL is exempt: a third-party account
+        # name (Docker Hub, a registry) is typed in by the operator and delivered,
+        # never minted, so no rotation can rename it.
+        leaf = self.key_path.rsplit(".", 1)[-1]
+        named_as_identity = leaf in ("user", "username") or leaf.endswith(("_user", "_username"))
+        if named_as_identity and self.kind != SecretKind.EXTERNAL:
+            raise ValueError(
+                f"{self.key_path} names an identity, not a secret: declare it in apps.auth.identities (#1356)"
+            )
+
 
 # -- Authelia base path shortcut --
 _AUTH = "apps.services.security.authelia"
@@ -244,14 +258,6 @@ SECRET_CATALOG: list[SecretSpec] = [
     # Basic Auth (Traefik)
     # =========================================================================
     SecretSpec(
-        key_path="basic_auth.user",
-        description="Username for Traefik basic auth",
-        kind=SecretKind.PASSWORD,
-        services=("traefik",),
-        format_hint="Plain text username",
-        rotate_note="Regenerate Traefik config, restart traefik",
-    ),
-    SecretSpec(
         key_path="basic_auth.password",
         description="Password for Traefik basic auth",
         kind=SecretKind.PASSWORD,
@@ -266,7 +272,7 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("traefik",),
         derived_from="basic_auth.password",
         format_hint="user:$2y$... (htpasswd bcrypt)",
-        rotate_note="Auto-derived from basic_auth.user + basic_auth.password",
+        rotate_note="Auto-derived from the prompted username + basic_auth.password",
     ),
     # =========================================================================
     # Authelia — Session & Storage
@@ -446,13 +452,6 @@ SECRET_CATALOG: list[SecretSpec] = [
     # =========================================================================
     # Grafana
     # =========================================================================
-    SecretSpec(
-        key_path="apps.services.observability.grafana.admin_user",
-        description="Grafana admin username",
-        kind=SecretKind.PASSWORD,
-        services=("grafana",),
-        rotate_note="Login with new username after restart.",
-    ),
     SecretSpec(
         key_path="apps.services.observability.grafana.admin_password",
         description="Grafana admin password",
@@ -1211,6 +1210,25 @@ SECRET_CATALOG: list[SecretSpec] = [
         rotate_note="Re-create the webhook in Slack, update common.enc.yaml, then `make deploy-argocd`.",
         envs=("prod",),
         sync_to_secret_manager=True,
+    ),
+    # GITOPS-003 AC1: Argo CD posts `argocd/<app>` commit statuses with it, which
+    # `toolkit infra argo wait-status` reads. Delivered by `make deploy-argocd`
+    # only: it is not in Secret Manager, so a hub rebuilt from cloud-init posts no
+    # statuses until that path is added (GITOPS-003 tasks.md, PR1).
+    SecretSpec(
+        key_path="argocd.github_status_token",
+        expiry=Expiry.PROVIDER,
+        description="Fine-grained GitHub PAT, Commit statuses write on kubelab only (Argo CD notifications)",
+        kind=SecretKind.EXTERNAL,
+        services=("argocd",),
+        format_hint="fine-grained PAT (github_pat_…), statuses:write on kubelab, expiry set",
+        rotate_note=(
+            "Mint a new fine-grained token (Settings > Developer settings > Fine-grained tokens), "
+            "repository access `mlorentedev/kubelab` only, Commit statuses: Read and write. "
+            "`toolkit secrets set argocd.github_status_token --env common --stdin`, "
+            "then `make deploy-argocd`, then revoke the old one."
+        ),
+        envs=("prod",),
     ),
     SecretSpec(
         key_path="argocd.github_webhook_secret",
@@ -2460,8 +2478,8 @@ class SecretsManager:
 
         The module docstring has promised `rotate (regenerate + propagate)` since
         it was written and nothing implemented it, so the only way to change one
-        credential was `credentials generate`, which rewrites 24 prod secrets and
-        2 hub secrets at once. That is why `rotate_note` entries describe
+        credential was `credentials generate`, which rewrites 17 prod secrets and
+        4 hub secrets at once (counted 2026-10-21, #1454). That is why `rotate_note` entries describe
         procedures in prose: with no verb to carry them, a note is all there is,
         and `aws.headscale_preauth_key` sat unrotated from March to August.
 

@@ -388,13 +388,14 @@ def deploy_shape_cmd(
     branch's tree: the PR is read only through the API.
     """
     from toolkit.features import deploy_shape as ds
-    from toolkit.features.product_registry import RegistryError
     from toolkit.features.product_registry import load_registry as load_products
 
+    # Every failure to load is `unknown`, as in `evaluate`: an exception that
+    # escaped here would exit 1, which the workflow publishes as `neutral`.
     try:
         decl = ds.load_declaration(registry)
         admitted = load_products(products).products
-    except (ds.DeclarationError, RegistryError, OSError) as exc:
+    except Exception as exc:  # noqa: BLE001 — a file that cannot be read is no verdict
         shape = ds.Shape(ds.UNKNOWN, f"cannot load the declaration: {exc}")
     else:
         shape = ds.evaluate(pr, repo, ds.GhApi(), decl, admitted)

@@ -80,7 +80,7 @@ def test_the_reviewer_skips_generated_deploy_and_promote_branches() -> None:
     waste a review, it displaces a human PR's (#1203).
 
     Both prefixes are asserted, not just one. They are opened by two different
-    workflows (`web-image-receiver.yml`, `promote-prod.yml`), so one can be
+    workflows (`product-image-receiver.yml`, `promote-prod.yml`), so one can be
     dropped from the condition while the other keeps this test green — which is
     the failure this repository keeps finding, an assertion that covers less
     than its name claims.

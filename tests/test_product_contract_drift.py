@@ -27,6 +27,7 @@ from toolkit.features.product_render import (
     drift,
     snapshot_exempt,
     snapshot_gaps,
+    snapshot_path,
     write,
 )
 from toolkit.main import app
@@ -41,7 +42,8 @@ OWNED_KEYS = {"default_port", "health_path", "domain", "enable_auth", "auth_leve
 
 @pytest.mark.parametrize("env", ENVS)
 def test_the_web_snapshot_matches_the_values(env: str, capsys: pytest.CaptureFixture[str]) -> None:
-    differences, compared = drift(validate_contract(WEB), "web", env)
+    """Each env against its own snapshot: prod renders the contract of the release it runs."""
+    differences, compared = drift(validate_contract(snapshot_path("web", env)), "web", env)
     print(f"compared {compared} contract-owned keys for web/{env}")
 
     assert not differences, f"web/{env}: {differences}"
@@ -120,13 +122,14 @@ def test_write_inserts_a_missing_key_before_version_and_changes_nothing_else(val
     assert updated[position + 1].strip().startswith("version:")
 
 
-def _render(*args: str) -> Result:
-    return CliRunner().invoke(app, ["product", "render", "--contract", str(WEB), *args])
+def _render(*args: str, contract: Path = WEB) -> Result:
+    return CliRunner().invoke(app, ["product", "render", "--contract", str(contract), *args])
 
 
 @pytest.mark.parametrize("env", ENVS)
 def test_render_check_passes_on_the_committed_tree(env: str) -> None:
-    result = _render("--env", env, "--check")
+    """The prod snapshot lives one directory down; --app is still inferred from it."""
+    result = _render("--env", env, "--check", contract=snapshot_path("web", env))
 
     assert result.exit_code == 0, result.output
     assert f"compared {len(CONTRACT_KEYS)} contract-owned keys for web/{env}" in result.output
@@ -166,8 +169,79 @@ def test_every_contract_managed_entry_has_a_snapshot_and_every_snapshot_an_entry
 
 def test_every_committed_snapshot_passes_the_registry_guards() -> None:
     """A registry edit (image override, an entry turned in-tree) that no snapshot follows is drift too."""
-    for snapshot in sorted(SNAPSHOT_DIR.glob("*.yaml")):
+    snapshots = sorted(SNAPSHOT_DIR.glob("*.yaml")) + sorted(snapshot_path("web", "prod").parent.glob("*.yaml"))
+    assert snapshot_path("web", "prod") in snapshots
+    for snapshot in snapshots:
         validate_registered(snapshot, snapshot.stem)
+
+
+def test_every_prod_pin_of_a_contract_managed_entry_has_a_prod_snapshot() -> None:
+    assert snapshot_gaps(env="prod") == ([], [])
+
+
+@pytest.fixture
+def snapshots_copy(tmp_path: Path) -> Path:
+    shutil.copytree(SNAPSHOT_DIR, tmp_path / "contracts")
+    return tmp_path / "contracts"
+
+
+def _drift_per_env(snapshot_dir: Path, values_dir: Path) -> dict[str, dict[str, tuple[object, object]]]:
+    return {
+        env: drift(validate_contract(snapshot_path("web", env, snapshot_dir)), "web", env, values_dir=values_dir)[0]
+        for env in ENVS
+    }
+
+
+def test_a_contract_change_to_a_prod_owned_key_leaves_the_tree_green(values_copy: Path, snapshots_copy: Path) -> None:
+    """The closeout review's Major: the receiver renders staging only, and prod must not go red for it.
+
+    A staging receive rewrites the staging snapshot and renders staging; prod keeps
+    the snapshot of the release it runs until a prod promotion copies the release's
+    contract and renders prod. Both envs are clean after each half.
+    """
+    staging = snapshot_path("web", "staging", snapshots_copy)
+    edited = staging.read_text().replace("port: 8080", "port: 9090").replace("prod: mlorente.dev", "prod: new.dev")
+    assert edited != staging.read_text()
+    staging.write_text(edited)
+
+    assert write(validate_contract(staging), "web", "staging", values_dir=values_copy) == ["default_port"]
+    assert _drift_per_env(snapshots_copy, values_copy) == {"staging": {}, "prod": {}}
+
+    shutil.copy(staging, snapshot_path("web", "prod", snapshots_copy))
+    prod = validate_contract(snapshot_path("web", "prod", snapshots_copy))
+    assert sorted(write(prod, "web", "prod", values_dir=values_copy)) == ["default_port", "domain"]
+    assert _drift_per_env(snapshots_copy, values_copy) == {"staging": {}, "prod": {}}
+
+
+def test_a_prod_snapshot_edited_without_a_render_is_drift(values_copy: Path, snapshots_copy: Path) -> None:
+    prod = snapshot_path("web", "prod", snapshots_copy)
+    prod.write_text(prod.read_text().replace("port: 8080", "port: 9090"))
+
+    assert _drift_per_env(snapshots_copy, values_copy)["prod"] == {"default_port": (9090, 8080)}
+
+
+def test_the_prod_snapshot_is_a_separate_file_from_the_staging_one() -> None:
+    assert snapshot_path("web", "staging") == WEB
+    assert snapshot_path("web", "prod") == SNAPSHOT_DIR / "prod" / "web.yaml"
+    with pytest.raises(ValueError, match="dev"):
+        snapshot_path("web", "dev")
+
+
+def test_a_prod_pin_without_a_prod_snapshot_is_drift(values_copy: Path, tmp_path: Path) -> None:
+    """Fixture registry: web and third are contract-managed; only web is pinned in prod."""
+    (tmp_path / "snaps" / "prod").mkdir(parents=True)
+
+    assert snapshot_gaps(FIXTURE_REGISTRY, tmp_path / "snaps", env="prod", values_dir=values_copy) == (["web"], [])
+
+
+def test_a_prod_snapshot_for_an_app_prod_does_not_pin_is_drift(values_copy: Path, tmp_path: Path) -> None:
+    """A product onboarded to staging only has no prod snapshot until its first prod promotion."""
+    prod_dir = tmp_path / "snaps" / "prod"
+    prod_dir.mkdir(parents=True)
+    for name in ("web", "third"):
+        shutil.copy(WEB, prod_dir / f"{name}.yaml")
+
+    assert snapshot_gaps(FIXTURE_REGISTRY, tmp_path / "snaps", env="prod", values_dir=values_copy) == ([], ["third"])
 
 
 def test_a_contract_managed_entry_without_a_snapshot_is_drift(tmp_path: Path) -> None:

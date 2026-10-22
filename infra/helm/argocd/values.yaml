@@ -68,6 +68,20 @@ notifications:
       headers:
         - name: Content-Type
           value: application/json
+    # GITOPS-003 AC1: one commit status per sync, so a merge can be checked by
+    # its consequence (`toolkit infra argo wait-status`). The token is a
+    # fine-grained PAT, `statuses:write` on kubelab only (SOPS
+    # `argocd.github_status_token`). A status posted with a PAT starts workflows,
+    # one posted with GITHUB_TOKEN would not.
+    service.webhook.github: |
+      url: https://api.github.com
+      headers:
+        - name: Authorization
+          value: token $github-status-token
+        - name: Accept
+          value: application/vnd.github+json
+        - name: Content-Type
+          value: application/json
   # Two properties every trigger here needs, both learned the hard way and both
   # taken from upstream's own catalog (argoproj/argo-cd
   # notifications_catalog/triggers/*.yaml) rather than reinvented:
@@ -109,6 +123,27 @@ notifications:
       - when: app.status.operationState != nil and app.status.operationState.phase in ['Succeeded']
         send: [app-sync-succeeded]
         oncePer: app.status.operationState?.syncResult?.revision
+    # Success keys on the revision Argo reports Synced, not on an operation: a
+    # commit whose render does not change moves `sync.revision` without starting
+    # one, and green means "the cluster is at this sha" (GITOPS-003 AC2). It is
+    # withheld while the last operation is running or did not succeed: a failed
+    # PostSync hook leaves the app Synced, and a success posted after the
+    # failure would bury it. Failure
+    # keys on `operation.sync.revision`, not `syncResult`: a failed operation
+    # often has no syncResult at all (the 2026-08-27 panic), and an automated
+    # sync carries the resolved sha there. Separate triggers from the Slack
+    # ones, so each recipient gets only templates written for it.
+    trigger.on-synced-github: |
+      - when: >-
+          app.status.sync.status == 'Synced' and
+          (app.status.operationState == nil or
+          app.status.operationState.phase == 'Succeeded')
+        send: [github-status-success]
+        oncePer: app.status.sync.revision
+    trigger.on-sync-failed-github: |
+      - when: app.status.operationState != nil and app.status.operationState.phase in ['Error', 'Failed']
+        send: [github-status-failure]
+        oncePer: app.status.operationState?.operation?.sync?.revision
   templates:
     template.app-sync-failed: |
       webhook:
@@ -155,6 +190,26 @@ notifications:
                 {"type": "mrkdwn", "text": "<https://argo.kubelab.live/applications/argocd/{{.app.metadata.name}}|Open>"}
               ]}
             ]}]}
+    # GitHub refuses a description over 140 characters (422), and `toJson`
+    # quotes and escapes whatever the operation message carries.
+    template.github-status-success: |
+      webhook:
+        github:
+          method: POST
+          path: /repos/mlorentedev/kubelab/statuses/{{.app.status.sync.revision}}
+          body: |
+            {"state": "success", "context": "argocd/{{.app.metadata.name}}",
+             "description": {{printf "Synced at %s" (.app.status.sync.revision | trunc 7) | trunc 140 | toJson}},
+             "target_url": "https://argo.kubelab.live/applications/argocd/{{.app.metadata.name}}"}
+    template.github-status-failure: |
+      webhook:
+        github:
+          method: POST
+          path: /repos/mlorentedev/kubelab/statuses/{{.app.status.operationState.operation.sync.revision}}
+          body: |
+            {"state": "failure", "context": "argocd/{{.app.metadata.name}}",
+             "description": {{.app.status.operationState.message | default "sync failed" | trunc 140 | toJson}},
+             "target_url": "https://argo.kubelab.live/applications/argocd/{{.app.metadata.name}}"}
   subscriptions:
     - recipients:
         - slack
@@ -162,6 +217,11 @@ notifications:
         - on-sync-failed
         - on-health-degraded
         - on-sync-succeeded
+    - recipients:
+        - github
+      triggers:
+        - on-synced-github
+        - on-sync-failed-github
 
 applicationSet:
   replicas: 1
