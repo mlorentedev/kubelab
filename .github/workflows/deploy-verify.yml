@@ -1,0 +1,156 @@
+---
+name: Deploy Verify
+
+# GITOPS-003 AC2 (#1478). A merge is not a deploy (lesson-407): Argo CD makes
+# one automated attempt per revision, and a failed one is not retried. Argo now
+# posts a commit status `argocd/kubelab-<env>` for every revision it reports
+# synced and for every failed sync (`infra/helm/argocd/values.yaml`). This
+# workflow turns that status into a red run on master.
+#
+# Why NOT `on: push`: staging deploy PRs are merged by a workflow (#1619), and a
+# merge made with `GITHUB_TOKEN` starts no `push` workflow, so a push trigger
+# would never run after an unattended merge, the one case this check exists
+# for. Instead:
+#
+# - `status`: Argo posts with a PAT, and a status posted with a PAT starts
+#   workflows. A `failure` or `error` is red at once with Argo's message.
+# - `schedule`: a status that never arrives starts nothing, so a sweep asks for
+#   master HEAD's status once HEAD is older than the merge-to-sync budget
+#   (N = 10 min, measured lag 0-6 min, `specs/GITOPS-003/proposal.md`).
+#   Prod only. Staging runs on ace1, an on-demand node: while it is off, or
+#   while staging is repointed at a branch (`make argo-set-revision`), no
+#   commit gets a staging status, and a runner cannot tell that from a sync
+#   that never happened. A sweep red most of the day would be ignored, and
+#   the monitoring of record is prod, never staging (ADR-028). Staging keeps
+#   the `status` path (a failed sync is red at once) and the operator's
+#   `make verify-product APP=<app> ENV=staging`.
+# - `workflow_dispatch`: replay one commit, e.g. a known failure.
+#
+# `on: status` cannot be filtered by context, so every status in the repository
+# (review-attestation, PR-Agent, CodeRabbit) starts a run whose job is skipped.
+# GitHub makes a status event's run against the default branch tip, so those
+# skipped runs show on master, not on the PR that caused them. They are noise,
+# not failures.
+#
+# Red here means "go read the runbook", which says what to do:
+# docs/runbooks/gitops-delivery-promotion.md#deploy-verify-is-red
+
+on:
+  status:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Full commit sha to check
+        required: true
+      env:
+        description: Environment whose Argo CD status to read
+        type: choice
+        options: [staging, prod]
+        default: staging
+      timeout:
+        description: Seconds to wait for a settled status
+        default: '60'
+
+permissions:
+  contents: read
+  statuses: read
+
+env:
+  RUNBOOK: https://github.com/${{ github.repository }}/blob/master/docs/runbooks/gitops-delivery-promotion.md#deploy-verify-is-red
+
+jobs:
+  # For a `status` event `github.sha` is the default branch tip; the commit the
+  # status is about is `github.event.sha`. Every `${{ }}` reaches the shell
+  # through `env:`: the description is Argo's message, written by whatever made
+  # the sync fail.
+  on-status:
+    name: Argo CD status
+    if: github.event_name == 'status' && startsWith(github.event.context, 'argocd/kubelab-')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read the status Argo CD posted
+        env:
+          STATE: ${{ github.event.state }}
+          CONTEXT: ${{ github.event.context }}
+          SHA: ${{ github.event.sha }}
+          DESCRIPTION: ${{ github.event.description }}
+        run: |
+          echo "$CONTEXT on $SHA: $STATE: $DESCRIPTION"
+          case "$STATE" in
+            failure|error)
+              echo "::error title=$CONTEXT failed on ${SHA:0:7}::$DESCRIPTION. Runbook: $RUNBOOK"
+              exit 1 ;;
+          esac
+
+  sweep:
+    name: Status arrived (${{ matrix.env }})
+    # Prod only: see the header.
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [prod]
+    concurrency:
+      group: deploy-verify-sweep-${{ matrix.env }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
+        with:
+          python-version: '3.12'
+
+      - name: Install the toolkit
+        run: |
+          pipx install poetry
+          poetry install --only main --no-interaction
+
+      - name: Wait for master HEAD's status
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_REPO: ${{ github.repository }}
+          CONTEXT: argocd/kubelab-${{ matrix.env }}
+          MIN_AGE_SECONDS: '600'
+        run: |
+          read -r SHA COMMITTED < <(gh api "repos/$TARGET_REPO/commits/master" --jq '[.sha, .commit.committer.date] | join(" ")')
+          AGE=$(( $(date -u +%s) - $(date -u -d "$COMMITTED" +%s) ))
+          if [ "$AGE" -lt "$MIN_AGE_SECONDS" ]; then
+            echo "master ${SHA:0:7} is ${AGE}s old, inside the ${MIN_AGE_SECONDS}s sync budget: not judged yet"
+            exit 0
+          fi
+          poetry run toolkit infra argo wait-status --repo "$TARGET_REPO" --sha "$SHA" --context "$CONTEXT" --timeout 30 \
+            || { echo "::error title=$CONTEXT has no success on ${SHA:0:7}::Runbook: $RUNBOOK"; exit 1; }
+
+  replay:
+    name: Replay one commit
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
+        with:
+          python-version: '3.12'
+
+      - name: Install the toolkit
+        run: |
+          pipx install poetry
+          poetry install --only main --no-interaction
+
+      - name: Wait for the commit's status
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_REPO: ${{ github.repository }}
+          SHA: ${{ inputs.sha }}
+          CONTEXT: argocd/kubelab-${{ inputs.env }}
+          TIMEOUT: ${{ inputs.timeout }}
+        run: |
+          poetry run toolkit infra argo wait-status --repo "$TARGET_REPO" --sha "$SHA" --context "$CONTEXT" --timeout "$TIMEOUT" \
+            || { echo "::error title=$CONTEXT has no success on ${SHA:0:7}::Runbook: $RUNBOOK"; exit 1; }
