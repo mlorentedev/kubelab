@@ -80,7 +80,10 @@ def test_a_trigger_reading_operation_state_guards_against_nil(name: str):
     for when in _when_clauses(_triggers()[name]):
         if not _DEREFERENCE.search(when):
             continue
-        assert "operationState != nil" in when or "operationState == nil or" in when, (
+        guards = [i for i in (when.find("operationState != nil"), when.find("operationState == nil or")) if i >= 0]
+        # The guard must come BEFORE the first dereference: expr-lang
+        # short-circuits left to right, so a guard after it guards nothing.
+        assert guards and min(guards) < _DEREFERENCE.search(when).start(), (
             f"trigger {name!r} dereferences operationState without guarding it:\n"
             f"  {when}\n"
             "expr-lang raises on nil, and a raised expression is a SKIPPED trigger — "
