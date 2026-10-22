@@ -53,7 +53,7 @@
     "behavior": "A second push to the same branch cancels the first run, including one already running on the runner (AC8)",
     "verification": "none: not measured",
     "state": "blocked",
-    "evidence": "2026-10-22: carried to #2619 (OPS-045), open; an earlier draft named #2063, which does not hold the measurement. #2375 comment 6238815197 measured only pickup and parsing of a concurrency block (run 1521, success). Not measured: a queued run cancelled by a newer push, and a running job cancelled (needs Gitea Runner >= 2.0.0; the runner is now gitea/runner 4.1.0 after PR #2425, so the precondition is met but the two-push measurement was never taken). Operator decision 2026-10-22: archive OPS-038 and move this half to #2063. No forge workflow declares concurrency yet"
+    "evidence": "2026-10-22: carried to #2619 (OPS-045), open; an earlier draft named #2063, which does not hold the measurement. #2375 comment 6238815197 measured only pickup and parsing of a concurrency block (run 1521, success). Not measured: a queued run cancelled by a newer push, and a running job cancelled (needs Gitea Runner >= 2.0.0; the runner is now gitea/runner 4.1.0 after PR #2425, so the precondition is met but the two-push measurement was never taken). Operator decision 2026-10-22: archive OPS-038 and move this half to #2619 (OPS-045). No forge workflow declares concurrency yet"
   },
   {
     "id": "OPS-038-gitea-forge-upgrade-f9",

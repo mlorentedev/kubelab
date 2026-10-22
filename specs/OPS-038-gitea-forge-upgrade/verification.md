@@ -61,3 +61,8 @@ Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`.
 - Minor (theoretical), no version-floor test, and a literal pin in `tests/test_gitea_anonymous_surface.py`: ticketed as #2620 (TOOL-124).
 - Minor (speculative), runbook ordering of `sync-platform-json` and provision: declined. The reviewer marked it surface-only and did not reproduce it.
 - Minor, review base bundles unrelated PRs: a launcher artifact, outside this repository.
+
+## Archive review dispositions (round 2, `nan/glm5.3-flash`, PASS-WITH-GAPS)
+
+- Minor, f8's evidence still ended with "move this half to #2063": corrected to #2619.
+- Minor, f4/f6/f7 asserted from live records, the unenforced guards, and the PR-Agent half: unchanged from round 1 (declined, #2620 and #1823 respectively).
