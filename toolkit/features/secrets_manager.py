@@ -210,9 +210,14 @@ SECRET_CATALOG: list[SecretSpec] = [
     SecretSpec(
         key_path="apps.services.observability.uptime_kuma.admin_password",
         description="Uptime Kuma admin password",
-        kind=SecretKind.PASSWORD,
+        # HUB_MANAGED for its contract, not its host: the name predates this entry, and the
+        # contract is "one instance, so one value, in common.enc.yaml, written as a set by
+        # `credentials generate`". Kuma is one instance on rpi3. As a per-env PASSWORD every
+        # rotation left it on a value `monitoring-apply` (common only) did not have, and
+        # `secrets rotate` wrote SOPS without changing Kuma at all (#2599).
+        kind=SecretKind.HUB_MANAGED,
         services=("uptime_kuma",),
-        rotate_note="Reconciled by `credentials generate` via _reconcile_external_credentials.",
+        rotate_note="Regenerate via `toolkit credentials generate` (→ common.enc.yaml), which then changes Kuma's.",
     ),
     SecretSpec(
         key_path="apps.services.observability.uptime_kuma.api_key",
@@ -2478,8 +2483,8 @@ class SecretsManager:
 
         The module docstring has promised `rotate (regenerate + propagate)` since
         it was written and nothing implemented it, so the only way to change one
-        credential was `credentials generate`, which rewrites 17 prod secrets and
-        4 hub secrets at once (counted 2026-10-21, #1454). That is why `rotate_note` entries describe
+        credential was `credentials generate`, which rewrites 16 prod secrets and
+        5 common secrets at once (counted 2026-10-22, #1454, #2599). That is why `rotate_note` entries describe
         procedures in prose: with no verb to carry them, a note is all there is,
         and `aws.headscale_preauth_key` sat unrotated from March to August.
 

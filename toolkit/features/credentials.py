@@ -537,13 +537,13 @@ class CredentialsManager:
             "apps.services.observability.grafana.admin_password": common_password,
             # CrowdSec secrets
             "apps.services.security.crowdsec.bouncer_api_key": crowdsec_bouncer_api_key,
-            # Uptime Kuma secrets (SSOT: same common credentials). Its account is the
-            # superadmin, derived in the merged config (#1356).
-            "apps.services.observability.uptime_kuma.admin_password": common_password,
             **oidc_env_secrets,
         }
 
         # Argo CD credentials — always written to common SOPS (hub is singleton, not per-env).
+        # Uptime Kuma's password joins them for the same reason: Kuma is one instance on rpi3,
+        # and `monitoring-apply` reads common only (#2599). Its account is the superadmin,
+        # derived in the merged config (#1356).
         # The OIDC pair belongs here too. It sat in `generated_secrets` until SSOT-028
         # (#1789), so every prod run wrote a copy into prod.enc.yaml. That copy overrode
         # common in the merged config, so Authelia registered a digest the hub never sends.
@@ -551,6 +551,7 @@ class CredentialsManager:
             "argocd.admin_password": common_password,
             "argocd.admin_password_hash": argocd_admin_password_hash,
             **oidc_hub_secrets,
+            "apps.services.observability.uptime_kuma.admin_password": common_password,
         }
 
         # Preserve immutable secrets (storage_encryption_key, session_secret, etc.)
@@ -573,12 +574,6 @@ class CredentialsManager:
                 logger.info(f"Skipping Docker reconciliation for {env} (use K8s deploy instead)")
                 logger.info("Next: toolkit infra k8s apply-secrets --env " + env)
 
-            # Uptime Kuma keeps its own user database, and its new password is in
-            # {env}.enc.yaml from this point on. Reconcile it before the hub write,
-            # so a failure there cannot leave the file and the service disagreeing.
-            old_uk_password = existing_secrets.get("apps.services.observability.uptime_kuma.admin_password", "")
-            self._reconcile_external_credentials(common_password, old_uk_password)
-
             # Hub credentials → always common SOPS (Argo CD hub is singleton)
             common_sops = self.project_root / PATH_STRUCTURES.CONFIG_SECRETS_DIR / "common.enc.yaml"
             if not self.config_manager.batch_update_secrets(hub_secrets, secret_file_path=common_sops):
@@ -586,7 +581,15 @@ class CredentialsManager:
                     f"{env}.enc.yaml was rotated but common.enc.yaml was not: {', '.join(sorted(hub_secrets))} "
                     "still hold their old values. Rerun before deploying, or the hub and the env disagree."
                 )
-            logger.success("Hub credentials (Argo CD) updated in common SOPS.")
+            logger.success("Hub credentials (Argo CD, Uptime Kuma) updated in common SOPS.")
+
+            # Uptime Kuma keeps its own user database. Change it only once common holds
+            # the new value: a failed common write above raises first and leaves Kuma on
+            # the value common still holds. The login uses common's previous value, never
+            # an env file's copy (#2599).
+            held_by_common = self._read_existing_secrets("common")
+            old_uk_password = held_by_common.get("apps.services.observability.uptime_kuma.admin_password", "")
+            self._reconcile_external_credentials(common_password, old_uk_password)
             self._report_undelivered_oidc(env, rotated_clients)
         else:
             self._report_secret_names(env, generated_secrets, hub_secrets)
