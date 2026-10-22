@@ -1,0 +1,25 @@
+version: 1
+run_id: "20261022-kubelab-auth"
+armed_by: manu
+armed_at: 2026-10-22T07:40:00Z
+expires_at: 2026-10-22T15:40:00Z
+objective: "Land the remaining unattended-safe children of auth epic #2390 (dev Grafana session bound #2415, the Grafana OAuth URL guard, AUTH-012 #1876) without a prod-runtime change."
+scope:
+  write_paths: ["infra/stacks/**", "tests/**", "toolkit/**", "docs/**", "CLAUDE.md", "Makefile", ".agent/runs/**"]
+  frozen_paths: [".github/**", "harness/**", "**/AGENTS.md", ".agent/unattended.yml", "infra/config/secrets/**", "toolkit/features/secrets_manager.py", "infra/k8s/**", "infra/ansible/**"]
+  max_files: 10
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make, poetry, docker]
+queue:
+  source: bitacora
+  filter: "children of #2390 that change no prod runtime: #2415, Grafana OAuth URL guard (detected gap), #1876"
+  max_items: 4
+budget:
+  max_iterations: 8
+  max_minutes_per_iteration: 40
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant
+  push: true
+  open_pr: true
+  advisor_tier: top
