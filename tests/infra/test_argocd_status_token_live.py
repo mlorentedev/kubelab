@@ -5,11 +5,20 @@ fine-grained PAT (`argocd.github_status_token`, common SOPS). When that PAT
 expires, Argo's webhook calls fail inside the notifications controller and no
 status is posted. Every `deploy-verify` run then reads "no status arrived",
 which says nothing about why. This file asks GitHub directly, with the same
-token, for the one thing Argo needs it for: the commit statuses of kubelab.
+token, whether it still authenticates and when it stops doing so.
+
+What it does NOT prove: the write grant. kubelab is public, so reading its
+commit statuses answers 200 for any valid token, whatever it may write. A token
+re-minted with `Commit statuses: Read` passes here while Argo's POST is refused.
+Probing the write grant means a POST to the statuses endpoint, which is a
+decision of its own (#2644); until then a lost grant shows only as
+`deploy-verify` reading "no status arrived".
 
 A 401 is a failure here, never a skip: it is the expired or revoked token this
-check exists to catch. Only an unreachable GitHub skips, because a check that
-could not run must not read as a pass.
+check exists to catch. A token with no expiry fails too: the credential decision
+(`specs/GITOPS-003/proposal.md`) requires one. Only an unreachable GitHub or a
+workstation that cannot decrypt SOPS skips, because a check that could not run
+must not read as a pass.
 
 The token is read in process and sent as a header. It never reaches argv, a
 log line or an assertion message.
@@ -27,6 +36,10 @@ import pytest
 pytestmark = pytest.mark.infra
 
 KEY = "argocd.github_status_token"
+#: A HUB_MANAGED key that always lives in common SOPS beside KEY. If it resolves,
+#: decryption worked, and a missing KEY is a missing credential, not a missing
+#: age key.
+WITNESS = "argocd.admin_password"
 REPO = "mlorentedev/kubelab"
 
 
@@ -34,10 +47,13 @@ REPO = "mlorentedev/kubelab"
 def token() -> str:
     from toolkit.features.configuration import ConfigurationManager
 
-    value = ConfigurationManager(env="prod").get_secret_by_path(KEY)
-    if not value:
-        pytest.skip(f"{KEY} is not in SOPS here (no age key?) — cannot ask GitHub")
-    return str(value)
+    config = ConfigurationManager(env="prod")
+    value = config.get_secret_by_path(KEY)
+    if value:
+        return str(value)
+    if not config.get_secret_by_path(WITNESS):
+        pytest.skip(f"SOPS is not decryptable here ({WITNESS} unresolved too): cannot ask GitHub")
+    pytest.fail(f"{KEY} is missing from SOPS, which decrypts: Argo CD has no token to post statuses with")
 
 
 def _get(path: str, token: str) -> tuple[int, dict, object]:
@@ -54,8 +70,8 @@ def _get(path: str, token: str) -> tuple[int, dict, object]:
         pytest.skip(f"GitHub unreachable ({exc}) — cannot check the token")
 
 
-def test_the_token_reads_kubelab_commit_statuses(token: str) -> None:
-    """The permission Argo uses, exercised read-only: a 401 means it can post nothing."""
+def test_the_token_still_authenticates(token: str) -> None:
+    """A 401 means Argo can post nothing. A 200 proves validity only (module docstring)."""
     status, _, body = _get(f"/repos/{REPO}/commits/master/statuses?per_page=1", token)
     assert status != 401, (
         f"GitHub rejected {KEY} (HTTP 401): expired or revoked. Argo CD posts no commit status "
@@ -76,5 +92,5 @@ def test_the_token_has_not_expired(token: str) -> None:
     except ExpiryUnavailableError as exc:
         pytest.skip(f"cannot ask GitHub for {KEY}'s expiry: {exc}")
     if expires is None:
-        pytest.skip(f"{KEY} carries no expiry: nothing to compare")
+        pytest.fail(f"{KEY} carries no expiry; the credential decision requires one. Re-mint it with an expiry")
     assert expires > datetime.now(timezone.utc), f"{KEY} expired at {expires.isoformat()}"
