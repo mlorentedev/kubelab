@@ -37,7 +37,16 @@ ENVS = ("staging", "prod")
 
 #: Pinned here, not read from CONTRACT_KEYS: a mapping that lost an entry would
 #: otherwise compare one key fewer and still report "all compared".
-OWNED_KEYS = {"default_port", "health_path", "domain", "enable_auth", "auth_level", "image_name"}
+OWNED_KEYS = {
+    "default_port",
+    "health_path",
+    "domain",
+    "site_domain",
+    "site_url",
+    "enable_auth",
+    "auth_level",
+    "image_name",
+}
 
 
 @pytest.mark.parametrize("env", ENVS)
@@ -98,6 +107,28 @@ def test_write_restores_the_contract_keys_and_never_touches_version(values_copy:
     assert after["default_port"] == 8080
     assert after["version"] == before
     assert drift(validate_contract(WEB), "web", "prod", values_dir=values_copy)[0] == {}
+
+
+@pytest.mark.parametrize("env", ENVS)
+def test_a_hostname_change_moves_the_site_keys_with_the_domain(env: str, values_copy: Path, tmp_path: Path) -> None:
+    """#2610: `site_domain` and `site_url` are the hostname too, so a contract that moves it moves all three.
+
+    Detecting the mismatch instead would turn the force-pushed staging deploy PR
+    red with nothing to correct it.
+    """
+    old = getattr(validate_contract(WEB).hostnames, env)
+    moved = tmp_path / "web.yaml"
+    moved.write_text(WEB.read_text().replace(f"{env}: {old}\n", f"{env}: new.{old}\n"))
+
+    changed = write(validate_contract(moved), "web", env, values_dir=values_copy)
+
+    assert sorted(changed) == ["domain", "site_domain", "site_url"]
+    after = yaml.safe_load((values_copy / f"{env}.yaml").read_text())["apps"]["platform"]["web"]
+    assert (after["domain"], after["site_domain"], after["site_url"]) == (
+        f"new.{old}",
+        f"new.{old}",
+        f"https://new.{old}",
+    )
 
 
 def test_write_on_a_clean_tree_changes_nothing(values_copy: Path) -> None:
@@ -209,7 +240,12 @@ def test_a_contract_change_to_a_prod_owned_key_leaves_the_tree_green(values_copy
 
     shutil.copy(staging, snapshot_path("web", "prod", snapshots_copy))
     prod = validate_contract(snapshot_path("web", "prod", snapshots_copy))
-    assert sorted(write(prod, "web", "prod", values_dir=values_copy)) == ["default_port", "domain"]
+    assert sorted(write(prod, "web", "prod", values_dir=values_copy)) == [
+        "default_port",
+        "domain",
+        "site_domain",
+        "site_url",
+    ]
     assert _drift_per_env(snapshots_copy, values_copy) == {"staging": {}, "prod": {}}
 
 
