@@ -150,6 +150,42 @@ jobs:
           echo "app=${app}" >> "$GITHUB_OUTPUT"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "Promoting ${app} to ${version} (trigger: ${EVENT})"
+      # Prod renders the contract of the release it ships, from its own snapshot
+      # (IDP-042). The receiver renders staging only, so without this step any
+      # contract change to a prod-owned key (port, health_path, auth, the prod
+      # hostname) left prod's drift check red with nothing to correct it. The
+      # release's commit is proven by digest inside the toolkit, never taken
+      # from the payload; an in-tree app has hand-authored values and no contract.
+      - name: Render prod from the release's contract
+        id: contract
+        if: steps.target.outputs.skip != 'true'
+        env:
+          APP: ${{ steps.target.outputs.app }}
+          VERSION: ${{ steps.target.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+          TOOLKIT: poetry run toolkit
+        run: |
+          set -euo pipefail
+          if ! entry="$($TOOLKIT product show "$APP" --json)"; then
+            echo "::error::toolkit product show failed: ${entry}"
+            exit 1
+          fi
+          if ! forge="$(jq -er .forge <<<"$entry" 2>/dev/null)"; then
+            echo "::error::toolkit product show answered no forge: ${entry}"
+            exit 1
+          fi
+          if [ "$forge" = in-tree ]; then
+            echo "${APP} is in-tree: its prod values are hand-authored, no contract to render"
+            exit 0
+          fi
+          snapshot="infra/config/products/contracts/prod/${APP}.yaml"
+          if ! answer="$($TOOLKIT product release-contract --app "$APP" --version "$VERSION" --out "$snapshot" --json)"; then
+            reason="$(jq -er '"\(.error). \(.why) FIX: \(.fix)"' <<<"$answer" 2>/dev/null)" \
+              || reason="toolkit product release-contract failed: ${answer}"
+            echo "::error::${reason}"
+            exit 1
+          fi
+          $TOOLKIT product render --contract "$snapshot" --app "$APP" --env prod --write
       - name: Promote app to prod
         id: promote
         if: steps.target.outputs.skip != 'true'
@@ -168,7 +204,7 @@ jobs:
         run: |
           git config user.name "kubelab-bot"
           git config user.email "bot@kubelab.live"
-          git add infra/config/values/prod.yaml infra/k8s/overlays/prod/
+          git add infra/config/values/prod.yaml infra/k8s/overlays/prod/ infra/config/products/contracts/prod/
           if git diff --staged --quiet; then
             echo "No prod overlay changes — ${APP} already at ${VERSION}"; exit 0
           fi

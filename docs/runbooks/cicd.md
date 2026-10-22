@@ -113,6 +113,8 @@ GitHub-hosted product takes three changes, in this order:
    - The registry entry in `infra/config/products.yaml`: `repository`, `forge: github`,
      `receiver: generic`, `events.staging` and `events.prod`.
    - The snapshot `infra/config/products/contracts/<app>.yaml`, which is the contract itself.
+     It is staging's: prod renders from its own `contracts/prod/<app>.yaml`, which the first
+     prod promotion writes (see below), so onboarding adds none.
    - An `apps.platform.<app>` block in `values/staging.yaml` and in `values/prod.yaml`, with
      its contract-owned keys written by
      `toolkit product render --contract infra/config/products/contracts/<app>.yaml --env <env> --write`.
@@ -138,6 +140,19 @@ registry, renders it into `values/staging.yaml`, snapshots it at
 PR. A manual `workflow_dispatch` defaults to `dry_run: true`. Before moving an existing product
 to `receiver: generic`, `toolkit product ready --app <app>` must exit 0. A Gitea-hosted product
 is not received yet (IDP-044, #1928); prod stays `promote-prod.yml`.
+
+Prod renders the contract of the release it ships, not the staging snapshot. The staging
+deploy PR is long-lived, so the staging snapshot can be ahead of or behind any release.
+`promote-prod.yml` runs
+`toolkit product release-contract --app <app> --version <v> --out infra/config/products/contracts/prod/<app>.yaml`.
+That resolves the release tag `v<version>` to a commit, refuses unless `<image>:<version>` and
+`<image>:sha-<commit7>` are one digest, and writes the validated `kubelab.yaml` of that commit.
+Then `product render --env prod --write` renders it, and the snapshot goes into the promotion
+PR with the values. A release older than its product's `kubelab.yaml` is refused, rollbacks
+included. An in-tree app (`api`) skips the step. The drift tests compare each environment
+with its own snapshot, so a contract change to a prod-owned key is red nowhere: staging takes
+it on the staging deploy PR, and prod on the next promotion of a release that carries it
+(lesson-616).
 
 ## Required GitHub secrets
 
