@@ -18,6 +18,7 @@ import re
 from typing import Any
 
 import pytest
+import yaml
 
 from toolkit.features.deploy_shape import (
     DeclarationError,
@@ -361,3 +362,29 @@ class TestEvaluate:
         """Human PRs are the common case: they cost one API call, not six."""
         routes = {f"repos/{REPO}/pulls/7/files?per_page=100": changes("README.md")}
         assert evaluate(7, REPO, FakeApi(routes), decl, products).verdict == "not-mechanical"
+
+
+class TestRequiredContext:
+    """AC3 (a): branch protection requires the published check by its exact name.
+
+    A required context is matched by name, so the declaration and the name the
+    workflow publishes must be the same string, or no PR on master ever merges.
+    """
+
+    WORKFLOW = REPO_ROOT / ".github/workflows/deploy-shape.yml"
+
+    def test_the_published_check_run_name_is_required_on_master(self) -> None:
+        config = yaml.safe_load((REPO_ROOT / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
+        required = config["ci"]["branch_protection"]["mlorentedev/kubelab"]["master"]["required_contexts"]
+        published = re.findall(r'-f name="([^"]+)"', self.WORKFLOW.read_text(encoding="utf-8"))
+        assert published == ["deploy-shape"], f"the workflow publishes {published}, expected one check-run"
+        assert published[0] in required, (
+            "deploy-shape is not a required context on master: without it a not-mechanical "
+            "verdict is advisory and an unknown one blocks nothing (DELIVERY-004 AC3)"
+        )
+
+    def test_the_job_name_is_not_what_is_required(self) -> None:
+        """The job fails only on `unknown`; the check-run carries all three verdicts."""
+        config = yaml.safe_load((REPO_ROOT / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
+        required = config["ci"]["branch_protection"]["mlorentedev/kubelab"]["master"]["required_contexts"]
+        assert "Judge the diff shape" not in required
