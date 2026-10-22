@@ -54,7 +54,7 @@ Pre-merge preview (optional): a feature-branch CI build also produces `sha-<pr-s
 First read which red it is, from the run's error annotation:
 
 - **A failure description** (the `Argo CD status` job, or `wait-status` printing `failure`/`error`): the sync at that commit failed, and the text is Argo's `operationState.message`.
-- **`no status arrived`** (the prod sweep, or a replay): master HEAD has been merged for over 10 minutes and Argo posted nothing for it.
+- **`no status arrived`** (the prod sweep, or a replay): master HEAD has been merged for over 10 minutes and Argo posted nothing for it. This is also what follows a failed sync: Argo withholds success while the last operation did not succeed, and a later commit that changes no manifest starts no new operation. So read the last operation first (step 1): a failure there, at an older commit, is the cause.
 
 Then:
 
