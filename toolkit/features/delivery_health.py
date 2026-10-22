@@ -59,6 +59,17 @@ checker that only reads other workflows is silent about its own
 `startup_failure`, which would reproduce the defect it closes one level up. This
 is the one hand-written entry and it is deliberate; `tests/` pins the reason so
 it is not "tidied away" as an inconsistency later.
+
+The verifier of delivery is named too
+-------------------------------------
+`deploy-verify.yml` (GITOPS-003) turns Argo CD's commit status into a red run on
+master. It runs only on `status`, `schedule` and `workflow_dispatch`, so nothing
+gated by a pull request ever runs it, and it publishes and promotes nothing, so
+the predicate cannot reach it either. It is the compensating control for
+unattended staging merges (#1619): if it stops starting, those merges go
+unverified and nothing says so (#2614). `VERIFIERS` names it. Widening the
+predicate to "verifies delivery" was rejected: no workflow declares that, so the
+derivation would be a name match in disguise.
 """
 
 from __future__ import annotations
@@ -88,6 +99,10 @@ PROMOTE = "deployment promote"
 #: cannot derive it, and leaving it out would make the watcher the one delivery
 #: workflow nothing watches.
 SELF = "delivery-health.yml"
+
+#: Workflows that verify delivery rather than perform it. See the module
+#: docstring: unattended, reaching neither the publisher nor `promote`.
+VERIFIERS = frozenset({"deploy-verify.yml"})
 
 #: A run still executing reports `conclusion: null`. Measured on `ci.yml`. It is
 #: not a verdict and must never be read as one.
@@ -219,9 +234,9 @@ def watched(
 ) -> list[str]:
     """The workflow filenames this check reads, derived from the tree.
 
-    Sorted, and always including `SELF` — see the module docstring.
+    Sorted, and always including `SELF` and `VERIFIERS` — see the module docstring.
     """
-    found = {SELF}
+    found = {SELF, *VERIFIERS}
     for path in paths:
         workflow = load(path)
         if not workflow:
