@@ -18,6 +18,7 @@ import re
 from typing import Any
 
 import pytest
+import yaml
 
 from toolkit.features.deploy_shape import (
     DeclarationError,
@@ -361,3 +362,48 @@ class TestEvaluate:
         """Human PRs are the common case: they cost one API call, not six."""
         routes = {f"repos/{REPO}/pulls/7/files?per_page=100": changes("README.md")}
         assert evaluate(7, REPO, FakeApi(routes), decl, products).verdict == "not-mechanical"
+
+
+class TestRequiredContext:
+    """AC3 (a): branch protection requires the published check by its exact name.
+
+    A required context is matched by name, so the declaration and the name the
+    workflow publishes must be the same string, or no PR on master ever merges.
+    """
+
+    WORKFLOW = REPO_ROOT / ".github/workflows/deploy-shape.yml"
+
+    def test_the_published_check_run_name_is_required_on_master(self) -> None:
+        config = yaml.safe_load((REPO_ROOT / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
+        required = config["ci"]["branch_protection"]["mlorentedev/kubelab"]["master"]["required_contexts"]
+        published = re.findall(r'-f name="([^"]+)"', self.WORKFLOW.read_text(encoding="utf-8"))
+        assert published == ["deploy-shape"], f"the workflow publishes {published}, expected one check-run"
+        assert published[0] in required, (
+            "deploy-shape is not a required context on master: without it a not-mechanical "
+            "verdict is advisory and an unknown one blocks nothing (DELIVERY-004 AC3)"
+        )
+
+    def test_the_check_runs_on_every_pull_request_to_master(self) -> None:
+        """A required context that is never created blocks every merge, forever.
+
+        So the workflow must trigger on every PR to master: no paths filter, and
+        every event that gives a PR a new head.
+        """
+        workflow = yaml.safe_load(self.WORKFLOW.read_text(encoding="utf-8"))
+        # PyYAML reads the bare key `on` as the boolean True.
+        trigger = (workflow.get("on") or workflow.get(True))["pull_request"]
+        assert trigger.get("branches") == ["master"], f"pull_request branches: {trigger.get('branches')}"
+        assert not {"paths", "paths-ignore", "branches-ignore"} & set(trigger), (
+            f"deploy-shape is a required context; a filter in {sorted(trigger)} leaves some PRs "
+            "with no check-run and so unmergeable"
+        )
+        assert {"opened", "synchronize", "reopened"} <= set(trigger.get("types") or [])
+
+    def test_the_job_name_is_not_what_is_required(self) -> None:
+        """The job fails only on `unknown`; the check-run carries all three verdicts."""
+        config = yaml.safe_load((REPO_ROOT / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
+        required = config["ci"]["branch_protection"]["mlorentedev/kubelab"]["master"]["required_contexts"]
+        jobs = yaml.safe_load(self.WORKFLOW.read_text(encoding="utf-8"))["jobs"]
+        job_names = {job.get("name") or job_id for job_id, job in jobs.items()}
+        assert job_names, "deploy-shape.yml declares no job; this test lost its subject"
+        assert not job_names & set(required), f"a job name is required: {sorted(job_names & set(required))}"

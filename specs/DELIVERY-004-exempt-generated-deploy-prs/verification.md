@@ -18,6 +18,9 @@ created: "2026-09-03"
   attestation head-sha equality -> `True`; provenance compare -> `False`. The first one survived until
   `test_a_change_after_the_version_ends_it_too` was added.
 
+- AC4/AC5 (PR 2): `tests/test_deploy_shape_widening.py`. `make mutate`, each RED: `tag_pattern` -> `{7,}` unbounded;
+  `env` -> `prod`; an extra key in `mechanical`; a `gh pr merge` line in a workflow not declared in `MERGERS`.
+
 ## Test status
 
 - `make test`: 6406 passed, 2 failed before fixes (pinned `gh pr view` field list, stale toolkit README); both fixed, targeted rerun green.
