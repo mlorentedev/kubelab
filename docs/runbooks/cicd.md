@@ -154,6 +154,15 @@ with its own snapshot, so a contract change to a prod-owned key is red nowhere: 
 it on the staging deploy PR, and prod on the next promotion of a release that carries it
 (lesson-616).
 
+The workflow has no bypass for a refused release. To roll prod back, `git revert` the most
+recent promotion PR and merge the revert as an ordinary PR: its values and prod snapshot go
+back together, and Argo CD syncs the earlier version. Rolling back further takes one revert per
+promotion, newest first. A release older than the product's first prod snapshot cannot be
+reached by revert alone: the drift test names the contract-owned keys that differ. `contracts/prod/<app>.yaml` is machine-owned: it
+is a byte copy of the product's `kubelab.yaml`, so its header names the staging path, but the
+next promotion overwrites any hand edit. Change the contract in the product repository.
+The release proof reads 7-hex `sha-` tags from anonymous Docker Hub only (#2627).
+
 ## Required GitHub secrets
 
 | Secret | Purpose | How to rotate |

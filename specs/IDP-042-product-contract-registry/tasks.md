@@ -16,7 +16,7 @@ created: "2026-10-17"
 ## Setup
 
 - [x] Operator answers Q1-Q8 in `proposal.md` (Q8: the WIP override for this spec, recorded as `wip_override`)
-- [ ] `/spec check IDP-042-product-contract-registry` returns PASS
+- [x] `/spec check IDP-042-product-contract-registry` returns PASS
 - [x] Branch for PR 1 created from master: `feat/idp-042-contract-schema` (worktree outside the repo, `make worktree-init` run once)
 - [x] `proposal.md` carries no `[AGENT-DRAFT]` / `[AGENT-SUGGESTION]` tag
 
@@ -113,7 +113,7 @@ Branch `feat/idp-042-web-cutover`. Commit prefix `feat(ci):`. Depends on PR 6 an
 - [x] ✓ 2026-10-20 (ported to `tests/test_receiver_pr_step.py`, parametrized over both receivers so the legacy step keeps its coverage until PR 8) [AC4] Before the flag flips: port the stable-branch PR-step tests of `tests/test_web_image_receiver_workflow.py` (two dispatches give one PR and one branch, the update renames the PR, an unchanged overlay pushes nothing, a closed offer is reopened, an unanswerable lookup leaves the remote untouched) to `tests/test_product_image_receiver_workflow.py`, run against the `open-pr` step. PR 6 copied that step but tests only its branch name; it cannot run until a product is `receiver: generic`, which this PR is the first to make so (PR-Agent on #2559)
 - [x] ✓ 2026-10-20 (plus `tests/test_product_registry.py::test_every_staging_event_has_exactly_one_receiver`, red under `make mutate` on either half) [AC4] `infra/config/products.yaml`: `web.receiver: generic`. `web-image-receiver.yml`: replace the `repository_dispatch` trigger with `workflow_dispatch` only. Expected: PASS
 - [x] ✓ 2026-10-20 [AC4] Rollback is `git revert` of this single PR: it restores the legacy trigger and the flag in one step. Write that into the PR body
-- [ ] After merge, prove it on the deployed machine (not provable from the diff): push a trivial commit to `mlorentedev/web`, then `gh run list --repo mlorentedev/kubelab --workflow product-image-receiver.yml --limit 3` shows a `success` run for the dispatch, `gh api repos/mlorentedev/kubelab/pulls?state=open --jq '.[] | select(.head.ref=="deploy/staging-web") | .title'` shows the new sha, and `gh run list --workflow web-image-receiver.yml --limit 3` shows no run for that dispatch. Paste the three outputs into `verification.md`
+- [x] After merge, prove it on the deployed machine (not provable from the diff): push a trivial commit to `mlorentedev/web`, then `gh run list --repo mlorentedev/kubelab --workflow product-image-receiver.yml --limit 3` shows a `success` run for the dispatch, `gh api repos/mlorentedev/kubelab/pulls?state=open --jq '.[] | select(.head.ref=="deploy/staging-web") | .title'` shows the new sha, and `gh run list --workflow web-image-receiver.yml --limit 3` shows no run for that dispatch. Paste the three outputs into `verification.md`
 
 ### PR 8 — Delete the old receiver (about 200 lines of deletion)
 
@@ -131,18 +131,18 @@ Branch `chore/idp-042-delete-web-receiver`. Commit prefix `chore(ci):`. Only aft
 - [x] ✓ 2026-10-21 [AC7] `toolkit product release-contract` (`toolkit/features/product_release.py`, tests `tests/test_product_release.py`): the tag `v<version>` resolves to a commit, `<image>:<version>` and `<image>:sha-<commit7>` must share a digest (`registry.tag_digest`), the contract at that commit is validated against the registry, then written; every refusal writes nothing
 - [x] ✓ 2026-10-21 [AC3] `.github/workflows/promote-prod.yml`: step `contract` before `promote` (in-tree apps skip it), and the open-pr step stages `infra/config/products/contracts/prod/`. Tests in `tests/test_promote_prod_dispatch.py` run the step with a stubbed toolkit
 - [x] ✓ 2026-10-21 Bootstrap `infra/config/products/contracts/prod/web.yaml` with the command itself against the live release `1.16.1` (`661a205a`, digest equal on both tags); byte-equal to the staging snapshot
-- [ ] After merge, re-run `dotf spec review IDP-042-product-contract-registry` (a reviewer that is not the implementer)
+- [x] After merge, re-run `dotf spec review IDP-042-product-contract-registry` (a reviewer that is not the implementer)
 
 ## Closing
 
-- [ ] Every acceptance criterion from `proposal.md` is covered by at least one test (AC4 additionally by the live check in PR 7)
-- [ ] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command
-- [ ] Type checks pass
-- [ ] Lint passes
-- [ ] No unrelated changes in the diff (no scope creep); `toolkit/features/oidc_clients.py` and `toolkit/features/credentials.py` untouched
-- [ ] `verification.md` filled in, including the spike result and the three post-cutover outputs
-- [ ] Independent adversarial review (`dotf spec review`) by a session that is not the implementer, before archive
-- [ ] PR opened referencing this spec folder; `## Knowledge` section filled in each PR
+- [x] Every acceptance criterion from `proposal.md` is covered by at least one test (AC4 additionally by the live check in PR 7)
+- [x] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command
+- [x] Type checks pass
+- [x] Lint passes
+- [x] No unrelated changes in the diff (no scope creep); `toolkit/features/oidc_clients.py` and `toolkit/features/credentials.py` untouched
+- [x] `verification.md` filled in, including the spike result and the three post-cutover outputs
+- [x] Independent adversarial review (`dotf spec review`) by a session that is not the implementer, before archive
+- [x] PR opened referencing this spec folder; `## Knowledge` section filled in each PR
 
 ## Machine-readable features
 

@@ -1,0 +1,12 @@
+# An invalid contract, on purpose: web's fixture with port 70000, outside the
+# schema's 1-65535. AC2's by-hand command validates it and expects ERROR / WHY /
+# FIX naming the field. Not a template: copy tests/fixtures/product/web.kubelab.yaml.
+schema_version: 1
+image: docker.io/mlorentedev/kubelab-web
+port: 70000
+health_path: /
+hostnames:
+  staging: staging.mlorente.dev
+  prod: mlorente.dev
+auth: public
+secrets: []
