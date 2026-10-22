@@ -27,7 +27,7 @@ created: "2026-08-27"
 - [x] ✓ 2026-10-21 [AC1] Write failing test: `template.github-status-*` renders a `POST /repos/mlorentedev/kubelab/statuses/<revision>` body with `state`, `context: argocd/<app>`, `description` (≤140 chars, from `operationState.message`), `target_url`
 - [x] ✓ 2026-10-21 [AC1] Add `service.webhook.github` + the two templates + subscriptions to `infra/helm/argocd/values.yaml`. The token (`argocd.github_status_token`, common SOPS) reaches the notifications secret the way the Slack webhook does, `make deploy-argocd`'s Helm `--set`, not `toolkit secrets apply` as first planned: that is the measured path for this secret
 - [ ] [AC1] Hub rebuild path: add `argocd.github_status_token` to Secret Manager (`sync_to_secret_manager`, `infra/terraform/gcp` secret ids, cloud-init `--set-file`, `tests/test_secret_manager_sync.py`). Until then a hub recreated from cloud-init posts no statuses, and `wait-status` reports "no status arrived"
-- [ ] [AC1] Apply on the hub (`make deploy-argocd` path), sync, and verify by consequence: `gh api repos/mlorentedev/kubelab/commits/<head>/status` shows `argocd/kubelab-staging`
+- [x] ✓ 2026-10-22 [AC1] Apply on the hub (`make deploy-argocd` path), sync, and verify by consequence: `4c9cda6`, a no-op revision, got `argocd/kubelab-prod` and `argocd/kubelab-staging` success `Synced at 4c9cda6` (`verification.md`)
 
 ### PR2 — `deploy-verify.yml` waits for the status (AC2)
 
