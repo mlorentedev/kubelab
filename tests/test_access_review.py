@@ -28,6 +28,7 @@ import yaml
 from toolkit.features.access_review import (
     ADMIN,
     ADMIN_GROUP,
+    ARGOCD_RBAC_CASES,
     ARGOCD_TOKEN_LIFESPAN,
     OPERATOR,
     OPERATOR_GROUP,
@@ -37,6 +38,9 @@ from toolkit.features.access_review import (
     GrafanaTiers,
     OpenWebUITiers,
     ReviewError,
+    argocd_image,
+    argocd_rbac_disagreements,
+    argocd_tier_findings,
     declared_tiers,
     idp_groups_drift,
     reconcile,
@@ -582,6 +586,8 @@ def _wire_review_env(monkeypatch: pytest.MonkeyPatch, read_live: Any) -> list[tu
     monkeypatch.setattr(access_review, "reconcile", fake_reconcile)
     monkeypatch.setattr(access_review, "TIERS", {"grafana": GrafanaTiers})
     monkeypatch.setattr(access_review, "_live_argocd_oidc_config", lambda: "enableUserInfoGroups: true")
+    monkeypatch.setattr(access_review, "_live_argocd_rbac", lambda: ("p, x", "role:readonly"))
+    monkeypatch.setattr(access_review, "argocd_rbac_disagreements", lambda *a: [])
     return calls
 
 
@@ -795,70 +801,193 @@ def test_grafana_reports_how_each_account_signs_in() -> None:
 # --------------------------------------------------------------------------- Argo CD RBAC, by Argo CD itself
 
 
-#: (subject, action, resource, object, allowed). Asked of Argo CD's own evaluator, so
-#: the policy is judged the way the hub judges it, not by reading the CSV.
-ARGO_CD_CASES = [
-    (ADMIN_GROUP, "delete", "applications", "*/*", True),
-    (ADMIN_GROUP, "update", "repositories", "*", True),
-    (OPERATOR_GROUP, "get", "applications", "*/*", True),
-    (OPERATOR_GROUP, "sync", "applications", "*/*", True),
-    (OPERATOR_GROUP, "action/apps/Deployment/restart", "applications", "kubelab/prod", True),
-    (OPERATOR_GROUP, "get", "logs", "*/*", True),
-    (OPERATOR_GROUP, "create", "applications", "*/*", False),
-    (OPERATOR_GROUP, "update", "applications", "*/*", False),
-    (OPERATOR_GROUP, "delete", "applications", "*/*", False),
-    (OPERATOR_GROUP, "exec", "exec", "*/*", False),
-    (OPERATOR_GROUP, "update", "repositories", "*", False),
-    (OPERATOR_GROUP, "update", "clusters", "*", False),
-    (OPERATOR_GROUP, "update", "projects", "*", False),
-    (OPERATOR_GROUP, "update", "accounts", "*", False),
-    ("e2e", "get", "applications", "*/*", True),
-    ("e2e", "sync", "applications", "*/*", False),
-]
-
-#: `argocd admin settings rbac can` builds a Kubernetes client before it reads
-#: `--policy-file`, and prompts for a username when the user entry is empty. It never
-#: connects, so a config that points nowhere is enough.
-_OFFLINE_KUBECONFIG = """apiVersion: v1
-kind: Config
-clusters: [{name: none, cluster: {server: "https://127.0.0.1:1"}}]
-users: [{name: none, user: {token: none}}]
-contexts: [{name: none, context: {cluster: none, user: none, namespace: argocd}}]
-current-context: none
-"""
+def _shipped_rbac() -> dict[str, str]:
+    return yaml.safe_load((REPO / "infra/helm/argocd/values.yaml").read_text())["configs"]["rbac"]
 
 
-def _argocd_image() -> str:
-    """The image the hub runs: the chart's `appVersion`, declared next to its pin."""
-    return f"quay.io/argoproj/argocd:{COMMON['argocd']['app_version']}"
-
-
-@pytest.mark.integration
-def test_argo_cd_rbac_lets_users_operate_and_never_administer(docker_mount_dir: Path) -> None:
-    """AUTH-011 AC1, asked of Argo CD's own evaluator with the pinned image."""
+def _docker_or_skip() -> None:
     if shutil.which("docker") is None:
         if os.environ.get("CI"):
             pytest.fail("docker not on PATH in CI: the Argo CD RBAC went untested")
         pytest.skip("docker not on PATH: cannot run Argo CD (a skip is CANNOT CHECK, not OK)")
-    rbac = yaml.safe_load((REPO / "infra/helm/argocd/values.yaml").read_text())["configs"]["rbac"]
-    (docker_mount_dir / "policy.csv").write_text(rbac["policy.csv"])
-    (docker_mount_dir / "kubeconfig").write_text(_OFFLINE_KUBECONFIG)
-    # One container for every case: `can` exits 0 for Yes and 1 for No.
-    script = "".join(
-        f"argocd admin settings rbac can '{s}' '{a}' '{r}' '{o}' --policy-file /w/policy.csv"
-        f" --default-role '{rbac['policy.default']}' >/dev/null 2>&1; echo $?\n"
-        for s, a, r, o, _ in ARGO_CD_CASES
+
+
+@pytest.mark.integration
+def test_argo_cd_rbac_lets_users_operate_and_never_administer(docker_mount_dir: Path) -> None:
+    """AUTH-011 AC1, asked of Argo CD's own evaluator with the pinned image.
+
+    The cases are `ARGOCD_RBAC_CASES`, the matrix `make auth-review` judges the live
+    hub with (#1876), so the shipped file and the served one answer the same questions."""
+    _docker_or_skip()
+    rbac = _shipped_rbac()
+    wrong = argocd_rbac_disagreements(
+        rbac["policy.csv"], rbac["policy.default"], argocd_image(COMMON), docker_mount_dir
     )
-    out = subprocess.run(
-        # The image runs as uid 999, which cannot enter a 0700 temporary directory.
-        ["docker", "run", "--rm", "--user", f"{os.getuid()}:{os.getgid()}"]
-        + ["-e", "KUBECONFIG=/w/kubeconfig", "-v", f"{docker_mount_dir}:/w:ro"]
-        + [_argocd_image(), "sh", "-c", script],
-        capture_output=True,
-        text=True,
-        timeout=180,
-    )
-    codes = out.stdout.split()
-    assert len(codes) == len(ARGO_CD_CASES), out.stdout + out.stderr
-    wrong = [case for case, code in zip(ARGO_CD_CASES, codes, strict=True) if (code == "0") != case[-1]]
     assert not wrong, f"Argo CD disagrees with the declared tiers on: {wrong}"
+
+
+@pytest.mark.integration
+def test_a_policy_granting_users_delete_reads_drift(docker_mount_dir: Path) -> None:
+    """#1876 AC3: the evaluator, not a CSV read, sees the widened operator tier."""
+    _docker_or_skip()
+    rbac = _shipped_rbac()
+    widened = rbac["policy.csv"] + "p, role:operator, applications, delete, */*, allow\n"
+    wrong = argocd_rbac_disagreements(widened, rbac["policy.default"], argocd_image(COMMON), docker_mount_dir)
+    findings = {f.user: f for f in argocd_tier_findings(wrong)}
+    assert findings[OPERATOR].status == "drift", findings
+    assert "delete applications */*" in findings[OPERATOR].detail
+    assert findings[ADMIN].status == findings[VIEWER].status == "ok"
+
+
+def test_every_tier_is_judged_and_ok_without_a_disagreement() -> None:
+    findings = argocd_tier_findings([])
+    assert [(f.service, f.user, f.status) for f in findings] == [
+        ("argocd", ADMIN, "ok"),
+        ("argocd", OPERATOR, "ok"),
+        ("argocd", VIEWER, "ok"),
+    ]
+
+
+def test_a_disagreement_is_drift_on_its_own_tier_and_names_the_first_tuple() -> None:
+    granted = [c for c in ARGOCD_RBAC_CASES if c[0] == OPERATOR_GROUP and not c[-1]][:2]
+    findings = {f.user: f for f in argocd_tier_findings(granted)}
+    _subject, action, resource, obj, _allowed = granted[0]
+    assert findings[OPERATOR].status == "drift"
+    assert findings[OPERATOR].detail.startswith(f"allowed {action} {resource} {obj}"), findings[OPERATOR].detail
+    assert findings[ADMIN].status == findings[VIEWER].status == "ok"
+
+
+def test_the_matrix_covers_every_tier() -> None:
+    """A tier with no case would read `ok` on any policy, and a bounded tier asked
+    only what it may do would read `ok` on a policy that lets it do everything.
+    Admin is bounded by nothing, so it has no case it must be refused."""
+    from toolkit.features.access_review import ARGOCD_TIER_SUBJECTS
+
+    assert set(ARGOCD_TIER_SUBJECTS) == {ADMIN, OPERATOR, VIEWER}
+    for tier, subject in ARGOCD_TIER_SUBJECTS.items():
+        polarities = {c[-1] for c in ARGOCD_RBAC_CASES if c[0] == subject}
+        assert polarities == ({True} if tier == ADMIN else {True, False}), subject
+
+
+def test_this_module_keeps_no_matrix_of_its_own() -> None:
+    """#1876 AC2 by construction: one matrix, imported, so the CI test and the live
+    reader cannot diverge. A local copy here would be the divergence."""
+    import ast
+
+    tree = ast.parse(Path(__file__).read_text(encoding="utf-8"))
+    tuples = [
+        n
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Tuple)
+        and len(n.elts) == 5
+        and isinstance(n.elts[-1], ast.Constant)
+        and isinstance(n.elts[-1].value, bool)
+    ]
+    assert not tuples, "an RBAC case is written here; add it to ARGOCD_RBAC_CASES instead"
+
+
+def _wire_argocd(monkeypatch: pytest.MonkeyPatch, live: tuple[str, str], judged: list[Any]) -> None:
+    from toolkit.features import access_review
+
+    monkeypatch.setattr(access_review, "_live_argocd_oidc_config", lambda: "enableUserInfoGroups: true")
+    monkeypatch.setattr(access_review, "_live_argocd_rbac", lambda: live)
+    monkeypatch.setattr(access_review.shutil, "which", lambda name: "/usr/bin/docker")
+
+    def judge(policy: str, default: str, image: str, work_dir: Path) -> list[Any]:
+        judged.append((policy, default, image, work_dir))
+        return []
+
+    monkeypatch.setattr(access_review, "argocd_rbac_disagreements", judge)
+
+
+def test_the_review_judges_the_live_policy_and_its_live_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The viewer tier is the default role, so a default taken from the Helm values
+    would judge the shipped hub, not the served one."""
+    from toolkit.features import access_review
+
+    judged: list[Any] = []
+    _wire_argocd(monkeypatch, ("p, live-policy", "role:live-default"), judged)
+    findings = access_review._argocd_findings("prod", COMMON)
+
+    [(policy, default, image, work_dir)] = judged
+    assert (policy, default) == ("p, live-policy", "role:live-default")
+    assert image == argocd_image(COMMON)
+    # Colima and Docker Desktop share $HOME only: a mount from /var/folders arrives
+    # empty, every case reads No, and every tier would read a false `drift`.
+    assert work_dir.resolve().is_relative_to(Path.home().resolve())
+    assert [f.user for f in findings] == ["*", ADMIN, OPERATOR, VIEWER]
+
+
+def test_no_docker_is_cannot_check_never_ok(monkeypatch: pytest.MonkeyPatch) -> None:
+    from toolkit.features import access_review
+
+    _wire_argocd(monkeypatch, ("p, x", "role:readonly"), [])
+    monkeypatch.setattr(access_review.shutil, "which", lambda name: None)
+    findings = access_review._argocd_findings("prod", COMMON)
+    assert [(f.user, f.status) for f in findings[1:]] == [("*", "failed")]
+    assert "cannot check" in findings[1].detail
+
+
+def test_an_unreadable_rbac_configmap_is_failed(monkeypatch: pytest.MonkeyPatch) -> None:
+    from toolkit.features import access_review
+
+    _wire_argocd(monkeypatch, ("", ""), [])
+
+    def unreadable() -> tuple[str, str]:
+        raise ReviewError("the hub's argocd-rbac-cm is unreadable: connection refused")
+
+    monkeypatch.setattr(access_review, "_live_argocd_rbac", unreadable)
+    findings = access_review._argocd_findings("prod", COMMON)
+    assert [(f.user, f.status) for f in findings[1:]] == [("*", "failed")]
+
+
+def test_an_evaluator_that_does_not_answer_is_a_review_error(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A slow pull or a hung daemon is a `failed` row, never a traceback."""
+    from toolkit.features import access_review
+
+    def hung(*_a: object, **_k: object) -> None:
+        raise subprocess.TimeoutExpired("docker", 180)
+
+    monkeypatch.setattr(subprocess, "run", hung)
+    with pytest.raises(ReviewError, match="no answer in 180s"):
+        access_review.argocd_rbac_disagreements("", "role:readonly", "img", tmp_path)
+
+
+def test_a_container_that_never_starts_names_docker_s_error(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from toolkit.features import access_review
+
+    def refused(*_a: object, **_k: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess([], 125, "", "pull access denied\n")
+
+    monkeypatch.setattr(subprocess, "run", refused)
+    with pytest.raises(ReviewError, match="pull access denied"):
+        access_review.argocd_rbac_disagreements("", "role:readonly", "img", tmp_path)
+
+
+def test_kubectl_output_that_is_not_json_is_a_review_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    from toolkit.features import access_review
+
+    def garbled(*_a: object, **_k: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess([], 0, "map[policy.csv:p]", "")
+
+    monkeypatch.setattr(subprocess, "run", garbled)
+    with pytest.raises(ReviewError, match="argocd-rbac-cm"):
+        access_review._live_argocd_rbac()
+
+
+def test_the_rbac_reader_takes_both_keys_from_the_configmap_object(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`-o json` is a documented format; a jsonpath over a whole map is the printer's choice."""
+    import json
+
+    from toolkit.features import access_review
+
+    seen: list[list[str]] = []
+
+    def kubectl(argv: list[str], **_k: object) -> subprocess.CompletedProcess[str]:
+        seen.append(argv)
+        body = {"kind": "ConfigMap", "data": {"policy.csv": "p, a", "policy.default": "role:readonly"}}
+        return subprocess.CompletedProcess(argv, 0, json.dumps(body), "")
+
+    monkeypatch.setattr(subprocess, "run", kubectl)
+    assert access_review._live_argocd_rbac() == ("p, a", "role:readonly")
+    assert seen[0][-2:] == ["-o", "json"]

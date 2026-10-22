@@ -59,7 +59,6 @@ def test_the_guard_finds_the_mounting_tests() -> None:
     """A floor: a rule that matched nothing would pass every file below."""
     names = {name for name, _ in _mounting_functions()}
     assert "test_oauth_tokens_not_logged.py::test_vector_redacts_every_token_kind_and_nothing_else" in names
-    assert "test_access_review.py::test_argo_cd_rbac_lets_users_operate_and_never_administer" in names
 
 
 def test_no_test_mounts_pytests_tmp_path_into_a_container() -> None:
