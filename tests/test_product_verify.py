@@ -474,6 +474,15 @@ class TestTargetsAt:
         assert "infra/config/products/contracts/web.yaml" in {path for _, path in seen}
         assert not any(path.startswith("infra/config/values/") for _, path in seen)
 
+    def test_prod_reads_the_prod_snapshot_not_the_staging_one(self) -> None:
+        """Prod runs the release's contract; the flat snapshot is what staging was last given."""
+        seen: list[tuple[str, str]] = []
+        _, url = targets_at(HEAD, "web", "prod", self._show_worktree(seen))
+        # Mirrors `hostnames.prod` in infra/config/products/contracts/prod/web.yaml.
+        assert url == "https://mlorente.dev/version.json"
+        contracts = {path for _, path in seen if "/contracts/" in path}
+        assert contracts == {"infra/config/products/contracts/prod/web.yaml"}
+
     def test_every_file_is_read_at_the_given_revision(self) -> None:
         seen: list[tuple[str, str]] = []
         targets_at(HEAD, "web", "prod", self._show_worktree(seen))

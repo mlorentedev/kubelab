@@ -1,0 +1,15 @@
+# web's platform contract (kubelab ADR-067): what web needs from kubelab to run.
+# The source is mlorentedev/web:kubelab.yaml. kubelab reads it at the commit of
+# each published image, validates it against its product registry, and keeps a
+# byte-for-byte copy at infra/config/products/contracts/web.yaml. A new hostname,
+# auth level or secret: allow it in kubelab first, then edit it here.
+# kubelab decides where it comes from and where it goes; this file names neither.
+schema_version: 1
+image: docker.io/mlorentedev/kubelab-web
+port: 8080
+health_path: /
+hostnames:
+  staging: staging.mlorente.dev
+  prod: mlorente.dev
+auth: public
+secrets: []

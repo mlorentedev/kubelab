@@ -59,6 +59,39 @@ class TestSelectStaleTags:
         assert "sha-new1111" in stale
 
 
+class TestTagDigest:
+    """A digest proves two tags are one image, so every unreadable answer is None, never a skip."""
+
+    DIGEST = "sha256:" + "a" * 64
+
+    def test_reads_the_tag_digest_anonymously(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        get = MagicMock(return_value=MagicMock(status_code=200, **{"json.return_value": {"digest": self.DIGEST}}))
+        monkeypatch.setattr(registry.httpx, "get", get)
+
+        assert registry.tag_digest("docker.io/ns", "kubelab-web", "1.16.1") == self.DIGEST
+        assert get.call_args.args[0] == "https://hub.docker.com/v2/repositories/ns/kubelab-web/tags/1.16.1"
+
+    @pytest.mark.parametrize(
+        "response",
+        [
+            MagicMock(status_code=404),
+            MagicMock(status_code=200, **{"json.return_value": {}}),
+            MagicMock(status_code=200, **{"json.return_value": {"digest": "md5:nope"}}),
+        ],
+        ids=["absent tag", "no digest", "not a sha256 digest"],
+    )
+    def test_an_unusable_answer_is_none(self, monkeypatch: pytest.MonkeyPatch, response: MagicMock) -> None:
+        monkeypatch.setattr(registry.httpx, "get", MagicMock(return_value=response))
+        assert registry.tag_digest("docker.io/ns", "kubelab-web", "1.16.1") is None
+
+    def test_an_unreachable_registry_is_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(registry.httpx, "get", MagicMock(side_effect=registry.httpx.ConnectError("down")))
+        assert registry.tag_digest("docker.io/ns", "kubelab-web", "1.16.1") is None
+
+    def test_a_registry_other_than_docker_hub_is_none(self) -> None:
+        assert registry.tag_digest("ghcr.io/ns", "kubelab-web", "1.16.1") is None
+
+
 class TestDockerHubClient:
     def test_list_tags_paginates(self, monkeypatch: pytest.MonkeyPatch) -> None:
         pages = [

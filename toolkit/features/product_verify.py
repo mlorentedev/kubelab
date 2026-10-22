@@ -188,7 +188,10 @@ def targets_at(rev: str, app: str, env: str, show: Callable[[str, str], str] = g
     entry = registry.products.get(app)
     if entry is None or not entry.contract_managed:
         raise NoContractError(f"'{app}' has no product contract at {rev[:7]}: nothing declares its hostname")
-    contract = yaml.safe_load(show(rev, f"infra/config/products/contracts/{app}.yaml"))
+    from toolkit.config.settings import PROJECT_ROOT
+    from toolkit.features.product_render import snapshot_path
+
+    contract = yaml.safe_load(show(rev, str(snapshot_path(app, env).relative_to(PROJECT_ROOT))))
     host = contract["hostnames"][env]
     image_name = contract["image"].rsplit("/", 1)[1]
     tag = pinned_tag(show(rev, f"infra/k8s/overlays/{env}/generated/deployments.yaml"), image_name)
