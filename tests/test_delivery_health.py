@@ -42,9 +42,11 @@ def _resolve(uses: str) -> dict[str, Any] | None:
 #: the set is as red as one arriving — a count would be satisfied by any five.
 #: `delivery-health.yml` is this checker's own workflow: the predicate cannot
 #: reach it, and a watcher blind to its own startup_failure is the defect one
-#: level up. See `delivery_health.SELF`.
+#: level up. See `delivery_health.SELF`. `deploy-verify.yml` is the verifier of
+#: delivery, named for the same reason (#2614): see `delivery_health.VERIFIERS`.
 EXPECTED = {
     "delivery-health.yml",
+    "deploy-verify.yml",
     "product-image-receiver.yml",
     "promote-prod.yml",
     "release.yml",
@@ -148,6 +150,27 @@ def test_the_checker_watches_itself():
     startup_failure is #1666 one level up.
     """
     assert dh.SELF in dh.watched(_load, [], lambda _: None)
+
+
+def test_the_delivery_verifier_is_watched_though_it_reaches_no_delivery():
+    """`deploy-verify.yml` publishes nothing and promotes nothing (#2614).
+
+    It runs only on `status`, `schedule` and `workflow_dispatch`, so nothing gated
+    by a pull request ever runs it, and its startup_failure would be silent. It is
+    the compensating control for unattended staging merges (#1619), so its going
+    quiet must be as loud as a delivery lane's.
+    """
+    assert "deploy-verify.yml" in dh.watched(_load, [], lambda _: None)
+
+
+def test_every_named_entry_is_a_workflow_in_the_tree():
+    """A renamed verifier would leave a name that matches no file.
+
+    `fetch_runs` reads a 404 as "never ran" and refuses, so it would be loud, but
+    for the wrong reason. Fail here instead, where the cause is obvious.
+    """
+    for name in {dh.SELF, *dh.VERIFIERS}:
+        assert (WORKFLOWS / name).is_file(), f"{name} is named in delivery_health but is not under {WORKFLOWS}"
 
 
 # --- the verdicts ------------------------------------------------------------
