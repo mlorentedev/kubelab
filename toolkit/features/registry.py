@@ -172,13 +172,18 @@ def image_repositories(
             name = ((common.get("edge") or {}).get("errors") or {}).get("image_name")
             key = "edge.errors.image_name"
         elif product_registry.product(app, registry).contract_managed:
-            name = product_registry.derived_image(app, registry).rsplit("/", 1)[1]
+            image = product_registry.derived_image(app, registry)
+            name = image.removeprefix(f"{product_registry.platform_registry()}/")
             key = "the product registry"
         else:
             name = (((common.get("apps") or {}).get("platform") or {}).get(app) or {}).get("image_name")
             key = f"apps.platform.{app}.image_name"
         if not name:
             raise ValueError(f"No image repository for '{app}': {key} is not set")
+        if "/" in name:
+            # The hub client lists and deletes under its own namespace, so a name
+            # that carries another one would prune the wrong repository.
+            raise ValueError(f"Image repository for '{app}' from {key} is '{name}', not a bare name")
         repos[app] = name
     return repos
 

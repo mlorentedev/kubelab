@@ -168,6 +168,24 @@ class TestImageRepositories:
         with pytest.raises(ValueError, match="apps.platform.api.image_name"):
             image_repositories(["api"], common={"apps": {"platform": {}}})
 
+    def test_a_name_carrying_a_namespace_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="not a bare name"):
+            image_repositories(["api"], common={"apps": {"platform": {"api": {"image_name": "other/kubelab-api"}}}})
+
+    @pytest.mark.parametrize(
+        ("workflow", "app"), [("ci-publish.yml", "api"), ("ci-publish.yml", "errors"), ("release.yml", "api")]
+    )
+    def test_the_publish_default_pushes_where_the_prune_looks(self, workflow: str, app: str) -> None:
+        """Publish still names its repository `<REGISTRY_PREFIX>-<app>` (#563); its default must match."""
+        import re
+
+        from toolkit.config.settings import PROJECT_ROOT
+
+        text = (PROJECT_ROOT / ".github" / "workflows" / workflow).read_text()
+        match = re.search(r"REGISTRY_PREFIX: \$\{\{ vars\.REGISTRY_PREFIX \|\| '([^']+)' \}\}", text)
+        assert match, f"{workflow} no longer declares REGISTRY_PREFIX's default"
+        assert f"{match.group(1)}-{app}" == image_repositories([app])[app]
+
     def test_errors_without_an_image_name_is_refused(self) -> None:
         with pytest.raises(ValueError, match="edge.errors.image_name"):
             image_repositories(["errors"], common={"edge": {}})
