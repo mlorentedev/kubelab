@@ -75,7 +75,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit credentials delete-gh-secret` | Delete a single GitHub secret. |
 | `toolkit credentials extract-common` | Extract shared infrastructure secrets into common.enc.yaml. |
 | `toolkit credentials generate` | Generate all primary authentication credentials (Authelia and Basic Auth). |
-| `toolkit credentials hash-password` | Interactively prompts for a password, generates its Argon2 hash, and updates the specified key in the SOPS-encrypted secrets file. |
+| `toolkit credentials hash-password` | Interactively prompts for a password, generates its Argon2 hash, and updates the specified key (or, with `--identity <key>`, that Authelia login's hash key) in the SOPS-encrypted secrets file. `make credentials-reset-password ENV=<env> IDENTITY=<key>` wraps it. |
 | `toolkit credentials init-env` | Initialize a new environment's SOPS file and generate service secrets. |
 | `toolkit credentials list-gh-secrets` | List all configured secrets in the GitHub repository. |
 | `toolkit credentials reconcile-grafana-admin` | Detect (and optionally fix) Grafana's admin row drifting from its break-glass declaration. |

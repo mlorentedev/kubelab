@@ -116,7 +116,7 @@ There is no `*.oidc-jwks.pem`. The OIDC signing key is `apps.services.security.a
 
 **How to change**:
 ```bash
-toolkit credentials hash-password apps.services.security.authelia.users_operator_password_hash --env <env>
+make credentials-reset-password ENV=<env> IDENTITY=operator    # an identity key of apps.auth.identities (#909)
 git add infra/config/secrets/<env>.enc.yaml && git commit    # SOPS is modified, not committed
 make apply-secrets ENV=<env>
 ```

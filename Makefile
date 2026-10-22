@@ -279,6 +279,13 @@ credentials-generate:
 	@$(TOOLKIT) credentials generate --env $(ENV) --auto-update
 	@if [ "$(ENV)" != "dev" ]; then $(TOOLKIT) sync all --env $(ENV); fi
 
+# Reset one Authelia login's password (#909): IDENTITY is a key of
+# apps.auth.identities (superadmin, operator), never the shell's $(USER).
+# Prompts for the password, writes its hash to SOPS; then commit and apply-secrets.
+.PHONY: credentials-reset-password
+credentials-reset-password:
+	@$(TOOLKIT) credentials hash-password --identity "$(IDENTITY)" --env $(ENV)
+
 .PHONY: config-generate
 config-generate:
 	@$(TOOLKIT) config generate --env $(ENV)

@@ -17,7 +17,7 @@ from toolkit.config.constants import AUTHELIA_CONFIG, PATH_STRUCTURES
 from toolkit.config.settings import PROJECT_ROOT, settings
 from toolkit.core.logging import logger
 from toolkit.core.sops import age_key_env
-from toolkit.features.configuration import ConfigurationManager
+from toolkit.features.configuration import ConfigurationManager, resolve_user_identity
 from toolkit.features.docker_service import DockerService
 
 # Mapping from secret key prefix to service component names that need restarting
@@ -55,6 +55,23 @@ class CredentialsWriteFailed(Exception):
     Raised instead of printing the values as a fallback: a failed write that
     dumps every secret to stdout is the exposure #1733 removes.
     """
+
+
+def authelia_password_hash_key(identity: str, config: dict[str, Any]) -> str:
+    """The SOPS key of one Authelia login's password hash, named by its identity key (#909).
+
+    `identity` is a KEY of `apps.auth.identities` that an Authelia user entry names
+    in `identity:`, never a username: the username resolves through
+    `resolve_user_identity`, as in both generators. There is no default, since more
+    than one user names an identity and which account a recovery resets is a
+    decision. Anything else raises, naming the keys that would work.
+    """
+    users = config.get("apps", {}).get("services", {}).get("security", {}).get("authelia", {}).get("users") or []
+    valid = sorted({str(u["identity"]) for u in users if isinstance(u, dict) and u.get("identity")})
+    username = resolve_user_identity({"identity": identity}, config) if identity in valid else ""
+    if not username:
+        raise ValueError(f"'{identity}' names no Authelia login. Use one of: {', '.join(valid) or 'none declared'}")
+    return f"apps.services.security.authelia.users_{username}_password_hash"
 
 
 def _refuse_identities(generated: dict[str, str], config: dict[str, Any]) -> None:
