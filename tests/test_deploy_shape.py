@@ -403,4 +403,7 @@ class TestRequiredContext:
         """The job fails only on `unknown`; the check-run carries all three verdicts."""
         config = yaml.safe_load((REPO_ROOT / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
         required = config["ci"]["branch_protection"]["mlorentedev/kubelab"]["master"]["required_contexts"]
-        assert "Judge the diff shape" not in required
+        jobs = yaml.safe_load(self.WORKFLOW.read_text(encoding="utf-8"))["jobs"]
+        job_names = {job.get("name") or job_id for job_id, job in jobs.items()}
+        assert job_names, "deploy-shape.yml declares no job; this test lost its subject"
+        assert not job_names & set(required), f"a job name is required: {sorted(job_names & set(required))}"
