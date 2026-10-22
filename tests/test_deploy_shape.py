@@ -383,6 +383,22 @@ class TestRequiredContext:
             "verdict is advisory and an unknown one blocks nothing (DELIVERY-004 AC3)"
         )
 
+    def test_the_check_runs_on_every_pull_request_to_master(self) -> None:
+        """A required context that is never created blocks every merge, forever.
+
+        So the workflow must trigger on every PR to master: no paths filter, and
+        every event that gives a PR a new head.
+        """
+        workflow = yaml.safe_load(self.WORKFLOW.read_text(encoding="utf-8"))
+        # PyYAML reads the bare key `on` as the boolean True.
+        trigger = (workflow.get("on") or workflow.get(True))["pull_request"]
+        assert trigger.get("branches") == ["master"], f"pull_request branches: {trigger.get('branches')}"
+        assert not {"paths", "paths-ignore", "branches-ignore"} & set(trigger), (
+            f"deploy-shape is a required context; a filter in {sorted(trigger)} leaves some PRs "
+            "with no check-run and so unmergeable"
+        )
+        assert {"opened", "synchronize", "reopened"} <= set(trigger.get("types") or [])
+
     def test_the_job_name_is_not_what_is_required(self) -> None:
         """The job fails only on `unknown`; the check-run carries all three verdicts."""
         config = yaml.safe_load((REPO_ROOT / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
