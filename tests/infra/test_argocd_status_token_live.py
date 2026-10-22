@@ -66,11 +66,15 @@ def test_the_token_reads_kubelab_commit_statuses(token: str) -> None:
 
 
 def test_the_token_has_not_expired(token: str) -> None:
-    """GitHub states a fine-grained PAT's expiry on every response; it must still be ahead."""
-    status, headers, _ = _get("/rate_limit", token)
-    assert status == 200, f"GET /rate_limit with {KEY} answered HTTP {status}"
-    raw = {k.lower(): v for k, v in headers.items()}.get("github-authentication-token-expiration")
-    if raw is None:
-        pytest.skip(f"{KEY} carries no expiry header: a token without an expiry, nothing to compare")
-    expires = datetime.strptime(raw.replace(" UTC", ""), "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+    """The expiry GitHub states for the token, read by the same function `secrets check-expiry` uses."""
+    from toolkit.features.secret_expiry import CredentialRejectedError, ExpiryUnavailableError, github_pat_expiry
+
+    try:
+        expires = github_pat_expiry(token)
+    except CredentialRejectedError as exc:
+        pytest.fail(f"{KEY}: {exc}")
+    except ExpiryUnavailableError as exc:
+        pytest.skip(f"cannot ask GitHub for {KEY}'s expiry: {exc}")
+    if expires is None:
+        pytest.skip(f"{KEY} carries no expiry: nothing to compare")
     assert expires > datetime.now(timezone.utc), f"{KEY} expired at {expires.isoformat()}"
