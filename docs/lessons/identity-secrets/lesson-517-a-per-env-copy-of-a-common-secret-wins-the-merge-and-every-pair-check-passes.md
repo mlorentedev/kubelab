@@ -5,7 +5,7 @@ status: active
 created: "2026-09-23"
 owner: manu
 category: identity-secrets
-tags: [kubelab, identity-secrets, sops, argocd, oidc, ssot]
+tags: [kubelab, identity-secrets, sops, argocd, oidc, ssot, uptime-kuma]
 ---
 
 # A per-env copy of a common secret wins the merge, and every check that compares a pair with itself passes
@@ -35,7 +35,17 @@ plaintext, so the test needs no decryption. The key set is derived from the cata
 a check that fails if it is ever empty. It was red on the first commit, for exactly
 `prod.enc.yaml`.
 
-**Rule**: in a layered config, a key's location is part of its value. A secret that must
+**Second instance** (#2599, 2026-10-22): Uptime Kuma's `admin_password` was a per-env
+`PASSWORD`. So `credentials generate --env <env>` wrote it to `{env}.enc.yaml` and changed
+the one Kuma on rpi3 to it, while `monitoring-apply` reads common only. `secrets rotate`
+was a second path to the same split: it wrote SOPS and never touched Kuma. Nothing had
+failed only because prod's copy still equalled common's (compared without printing). The
+key is now `HUB_MANAGED`: the guard above covers it, `rotate` refuses it, and Kuma changes
+only after the common write succeeds, starting from common's previous value.
+
+**Rule**: in a layered config, a key's location is part of its value. It follows from how
+many instances read it, not from where they run: one instance means one value in common,
+whether or not that instance is "the hub". A secret that must
 have one owner needs a guard on where it may appear, not only on whether it is
 consistent. Two self-consistent copies are the failure that consistency checks cannot
 see. Fix the writer that created the copy in the same change, or it comes back on the
