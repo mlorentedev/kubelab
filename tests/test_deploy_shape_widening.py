@@ -37,6 +37,9 @@ APPROVED = {
     "overlay_files": ["infra/k8s/overlays/staging/generated/deployments.yaml"],
     "version_path": ["apps", "platform", "{app}", "version"],
     "tag_pattern": "^sha-[0-9a-f]{7,40}$",
+    # The merge step's switch, OFF as PR 3 shipped it. Flipping it here and in
+    # the registry is PR 4, one reviewed diff, never a test fix.
+    "merge": False,
 }
 
 # Every way a workflow can merge a pull request. Auto-merge has its own guard
@@ -47,9 +50,11 @@ MERGE_CALLS = {
     "GraphQL mergePullRequest": re.compile(r"\bmergePullRequest\b"),
 }
 
-# Workflow files allowed to merge, with the exact merge line each may run.
-# Empty until the merge step lands, switched off (spec PR 3).
-MERGERS: dict[str, str] = {}
+# Workflow files allowed to merge, with the exact merge line each may run. The
+# sha pin is the condition: without it, a head pushed after the judging merges.
+MERGERS: dict[str, str] = {
+    "deploy-merge.yml": 'if gh pr merge "$n" --squash --match-head-commit "$sha"; then',
+}
 
 
 @pytest.fixture(scope="module")
@@ -116,3 +121,17 @@ class TestMergingActorDoesNotWiden:
         text = (WORKFLOWS / workflow).read_text(encoding="utf-8")
         lines = [line.strip() for line in text.splitlines() if MERGE_CALLS["gh pr merge"].search(line)]
         assert lines == [MERGERS[workflow]], f"{workflow} merges with {lines}: {DECIDED}"
+
+    def test_writes_happen_only_behind_the_switch_and_only_the_merge_holds_the_pat(self) -> None:
+        """deploy-merge.yml: a step that merges or closes runs only when the judge read the
+        switch as on, and the PAT (whose merges start push workflows) reaches the merge alone."""
+        import yaml
+
+        steps = yaml.safe_load((WORKFLOWS / "deploy-merge.yml").read_text(encoding="utf-8"))["jobs"]["merge"]["steps"]
+        writers = [s for s in steps if re.search(r"gh pr merge|-X (PATCH|POST)", s.get("run", ""))]
+        assert len(writers) == 2, [s.get("name") for s in writers]
+        for step in writers:
+            assert step.get("if") == "steps.judge.outputs.enabled == 'true'", f"{step['name']}: {DECIDED}"
+        holders = [s["name"] for s in steps if "RELEASE_PLEASE_TOKEN" in str(s)]
+        merger = [s["name"] for s in writers if "gh pr merge" in s["run"]]
+        assert holders == merger, f"RELEASE_PLEASE_TOKEN reaches {holders}, not only the merge: {DECIDED}"
