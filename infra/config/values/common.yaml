@@ -1997,9 +1997,9 @@ apps:
             cluster: hub
           open-webui:
             # A local account of nobody, the Grafana shape (#951). The login form
-            # stays on for it: `ENABLE_LOGIN_FORM=false` only hides the form, and
-            # `/api/v1/auths/signin` keeps taking passwords either way (v0.12.0,
-            # lesson-520). `WEBUI_ADMIN_EMAIL` seeds it on an empty database, before
+            # is hidden so the page redirects to Authelia (#2482); `path` shows it
+            # and stops the redirect. `/api/v1/auths/signin` takes passwords either
+            # way (v0.12.0, lesson-520). `WEBUI_ADMIN_EMAIL` seeds it on an empty database, before
             # the first request, so no visitor can sign up as the first admin. Open
             # WebUI signs in by email, which is why rotation uses it. The public
             # route refuses that endpoint (#2135), so the password works only on
@@ -2007,6 +2007,7 @@ apps:
             login: breakglass
             email: breakglass@kubelab.live
             secret: apps.services.ai.open_webui.admin_password
+            path: /auth?form=signin
           loki: {}
           uptime-kuma:
             # The private path only (#2483): the EndpointSlice address over the tailnet
