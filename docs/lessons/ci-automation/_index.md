@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 619 | [A reconciler run from a worktree reconciles that worktree's declaration, not master's](lesson-619-a-reconciler-run-from-a-worktree-reconciles-that-worktrees-declaration.md) | 2026-10-22 |
 | 613 | [An exemption keyed on which files changed exempts whatever those files say](lesson-613-an-exemption-keyed-on-which-files-changed-exempts-whatever-those-files-say.md) | 2026-10-21 |
 | 612 | [A skip that matches a word in the path also skips every checkout named after it](lesson-612-a-skip-that-matches-a-word-in-the-path-also-skips-every-checkout-named-after-it.md) | 2026-10-21 |
 | 608 | [A workflow that stages a tool's output by name misses the file the tool learns to write](lesson-608-a-workflow-that-stages-a-tools-output-by-name-misses-the-file-the-tool-learns-to-write.md) | 2026-10-20 |
