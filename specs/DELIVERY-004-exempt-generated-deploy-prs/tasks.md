@@ -22,7 +22,7 @@ created: "2026-09-04"
 - [x] [AC1] `toolkit tools deploy-shape` CLI: JSON verdict, exit 0 mechanical / 1 not mechanical / 2 unknown.
 - [x] [AC1] `.github/workflows/deploy-shape.yml`: master's code, check-run `success`/`neutral`/`failure`.
 - [x] [AC2] `review-attestation`: drop the file-only staging signature; exempt on a recomputed `mechanical` at the attested head sha.
-- [ ] [AC3] Measure a neutral run against protection on a real PR, then add `deploy-shape` to `required_contexts` (operator reconciles live).
+- [x] [AC3] `deploy-shape` added to `required_contexts` (#2643) and applied live from `origin/master` `91ff4b97`. A neutral run passes protection: #2653 at `5c5d7afd` had `deploy-shape: neutral`, every other required context green, and `mergeable_state: clean`. ✓ 2026-10-22
 - [x] Lesson in `docs/lessons/` (lesson-613) ✓ 2026-10-21
 
 ## PR 2 — widening tests (AC4, AC5)
