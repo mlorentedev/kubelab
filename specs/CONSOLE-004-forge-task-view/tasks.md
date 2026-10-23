@@ -33,13 +33,14 @@ created: "2026-10-21"
 
 - [ ] [P] [AC1] Contract tests for one read-adapter interface against recorded GitHub and Gitea responses
   - [x] ✓ 2026-10-22 Reader interface, unreachable-source error and the contract runner, with the recorded GitHub fixture (#2635)
-  - [ ] Record a Gitea fixture from the live forge (needs a token behind Authelia) and run the same contract against it
-  - [ ] Pin the request in the contract: path, `state=all` and `per_page=100` are asserted, so dropping one goes red (PR-Agent finding on #2635)
-  - [ ] Make the shared contract forge-neutral: the expected item numbers and counts come in as parameters instead of the GitHub fixture's, together with the Gitea fixture (PR-Agent finding on #2635)
+  - [x] ✓ 2026-10-22 Gitea fixture (shape recorded from the live forge, values neutralised by hand) run through the same contract
+  - [x] ✓ 2026-10-22 Pin the request in the contract: path and query are asserted per forge, mutation-proven (PR-Agent finding on #2635)
+  - [x] ✓ 2026-10-22 Forge-neutral contract: expected items and counts are parameters (PR-Agent finding on #2635)
 - [ ] [AC1] Atlas migration in the `infra.postgres` tenant: items, event table, per-source `as_of` and reachability
 - [ ] [AC1] Implement the Gitea and GitHub adapters to make the contract tests pass
   - [x] ✓ 2026-10-22 GitHub adapter: pagination, `since`, token only when set and never sent to another host (#2635)
-  - [ ] Gitea adapter
+  - [x] ✓ 2026-10-22 Gitea adapter: issues and pull requests are two listings, either failing fails the read
+  - [ ] [AC4] A `read:issue` credential for the Gitea reader of its own: SOPS key, `SECRET_CATALOG` entry and a recorded expiry, minted by `beelink_services` provisioning with a scope variable like `admin_token`, never by hand in the UI. `admin_token` and `bot_token` lack `read:issue`, and the reviewer's token is not the reader's
 - [ ] [AC1] Regression test: a source that is down renders unreachable with its last read time, never empty
 - [ ] [P] [AC4] Webhook receiver: reject an invalid HMAC, store the event before projecting it
   - [x] ✓ 2026-10-22 Signature verification for both forges, GitHub `sha256=` prefix and Gitea bare hex (#2636)

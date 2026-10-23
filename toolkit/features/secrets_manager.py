@@ -681,7 +681,9 @@ SECRET_CATALOG: list[SecretSpec] = [
         key_path="apps.services.core.gitea.admin_token",
         description=(
             "Gitea API token for the superadmin (apps.auth.identities.superadmin); "
-            "creates organizations and reads whole-forge state for the reconciler"
+            "creates organizations and reads whole-forge state for the reconciler. "
+            "Scopes: read:admin, write:organization, read:repository, read:user. "
+            "It cannot read issues (no read:issue): the forge task view needs its own token"
         ),
         # EXTERNAL for the same reason as `bot_token`: Gitea mints it, only Gitea
         # honours it, and a generated string would pass every audit while
