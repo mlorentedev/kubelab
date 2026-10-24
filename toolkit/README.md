@@ -222,6 +222,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit tools certs status` | Show certificate status for an environment. |
 | `toolkit tools cli-reference` | Keep the README's command table equal to the command tree it describes. |
 | `toolkit tools delivery-health` | Refuse a delivery workflow whose newest run never started. |
+| `toolkit tools deploy-merge` | Judge every open PR to the default branch: merge, close or skip (DELIVERY-004 AC6). |
 | `toolkit tools deploy-shape` | Judge whether a PR is a mechanical staging deploy (DELIVERY-004, #1619). |
 | `toolkit tools lessons-index` | Order each category's lesson rows newest first (by date, then by number within a date, #1912), after refusing a corpus a rewrite would hide. |
 | `toolkit tools mutate` | Run the test unmutated, apply one replacement, run it again, restore the file. |
