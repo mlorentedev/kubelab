@@ -37,12 +37,12 @@ ALWAYS-ON (24/7):
   VPS Hetzner (162.55.57.175) — Prod K3s: apps + observability + PostgreSQL
   GCP e2-small (2GB), gcp1    — Argo CD hub (management plane, ADR-063)
   RPi 3 (1GB)                 — Uptime Kuma (external prod monitoring)
+  RPi 4 (8GB)                 — Lab network edge: uplink, NAT, DHCP, lab Wi-Fi AP; staging DNS (ADR-075; bring-up in NET-005)
 
 ON-DEMAND (homelab, powered when working):
   Acemagic-1 (12GB)           — K3s staging all-in-one (ace1)
   Beelink (8GB)               — Platform node: Gitea forge + CI runners + Glances
   Acemagic-2 (12GB)           — Self-hosted developer node / CDE (ace2)
-  RPi 4 (8GB)                 — Staging DNS gateway (CoreDNS, Pi-hole)
   Jetson Nano                 — Pollex (llama.cpp, independent project)
 ```
 
@@ -178,7 +178,7 @@ ON-DEMAND (homelab, powered when working):
 - **Source of truth**: `infra/config/values/*.yaml` (never .env files)
 - **VPS is ARM**: Multi-arch Docker builds (amd64+arm64) required.
 - **Never clone repos on deployment targets** — VPS/servers are not dev machines.
-- **Service placement principle (ADR-028)**: "Would I need this at 3 AM?" → always-on (VPS/AWS/RPi3). Otherwise → on-demand (homelab). Observability: the **monitoring of record** is prod plus Uptime Kuma on the RPi3 — never staging. The **manifests** (Grafana, Loki, Vector) stay in the shared base and run in both environments, so an observability change is validated in staging before prod (ADR-028 amendment 2026-08-09). Embedding pipeline on VPS (autonomous). CI on Beelink with GitHub-hosted fallback.
+- **Service placement principle (ADR-028)**: "Would I need this at 3 AM?" → always-on (VPS, hub, RPi3, and the RPi4 as the lab's edge). Otherwise → on-demand (homelab). Observability: the **monitoring of record** is prod plus Uptime Kuma on the RPi3 — never staging. The **manifests** (Grafana, Loki, Vector) stay in the shared base and run in both environments, so an observability change is validated in staging before prod (ADR-028 amendment 2026-08-09). Embedding pipeline on VPS (autonomous). CI on Beelink with GitHub-hosted fallback.
 - **Beelink is on-demand Platform Node (ADR-028)**: Gitea forge + GH Actions runners + Glances (`provision-bee.yml`). NOT Grafana (monitoring of record is VPS prod, 24/7). Services here tolerate being offline when homelab is off; backups go to R2 via `node_backup`, not to an object store on this node (OPS-023).
 - **CI runs on GitHub-hosted runners by default (ADR-030, amended 2026-06-26)**: the repo is public, so hosted minutes are free and parallel — `RUNNER_DOCKER` is `["ubuntu-latest"]`. Self-hosted is **opt-in**, kept for any future job that genuinely needs homelab access: `gh variable set RUNNER_DOCKER --body '["self-hosted","linux","docker"]'` (unset falls back to hosted). All workflows route via `fromJSON(vars.RUNNER_DOCKER)`. Fork PRs are forced to `ubuntu-latest` regardless (Docker socket = host access). The Beelink runner (`kubelab-bee`, 4CPU/6GB, tool cache in the `runner_toolcache` volume) still exists but is idle by default.
 - **Docker buildx state corruption**: If `docker buildx inspect/create/rm` all fail for the same builder, clean filesystem state: `rm -rf /root/.docker/buildx/instances/<name>`. Caused by mixing `become: true/false` in Ansible Docker tasks.
