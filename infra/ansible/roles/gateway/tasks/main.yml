@@ -407,6 +407,20 @@
       operator stores them with `toolkit secrets set`.
     quiet: true
 
+- name: Check the lab Wi-Fi addresses
+  assert:
+    that:
+      - gateway_ap_channel | string | length > 0
+      - gateway_ap_cidr | length > 0
+      - gateway_ap_address | length > 0
+      - gateway_ap_dhcp_range_start | length > 0
+      - gateway_ap_dhcp_range_end | length > 0
+    fail_msg: >-
+      The lab Wi-Fi needs its channel and addresses from the play: networking.edge.uplink.channel
+      and networking.edge.lab_wifi.{cidr,gateway,dhcp_range} in common.yaml, passed by
+      provision-rpi4.yml. The role keeps no copy of them.
+    quiet: true
+
 # The archive answers over the uplink, and at a portal site only after the login: a run
 # before it stops here, before anything of the AP is written.
 - name: Install the AP's packages
