@@ -295,14 +295,15 @@ def test_a_lease_the_check_cannot_read_fails_closed(tmp_path: Path, awk_bin: Pat
     assert "cannot read" in _output(result)
 
 
-def test_a_hostile_value_is_never_repeated(tmp_path: Path, awk_bin: Path) -> None:
+@pytest.mark.parametrize("key", ["ADDRESS", "ROUTER", "CLASSLESS_ROUTES", "STATIC_ROUTES"])
+def test_a_hostile_value_is_never_repeated(tmp_path: Path, awk_bin: Path, key: str) -> None:
     """The site writes the lease and the journal excerpt becomes the page body."""
     hostile = "$(touch /tmp/pwned)\x1b[31m<script>evil"
-    result = _run(tmp_path, awk_bin, _site_lease(ROUTER=hostile))
+    result = _run(tmp_path, awk_bin, _site_lease(**{key: hostile}))
     assert result.returncode == 2, _output(result)
     for fragment in ("pwned", "\x1b", "<script>", "evil"):
         assert fragment not in _output(result)
-    assert "ROUTER" in _output(result)
+    assert key in _output(result)
 
 
 @pytest.mark.parametrize("spec", ["lan", "lan=", "lan=172.16.1.0", "lan=172.16.1.0/40", "lan=1.2.3/8"])
