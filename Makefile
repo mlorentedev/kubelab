@@ -1943,6 +1943,14 @@ alerts:
 	$(eval _ENV := $(if $(filter staging prod hub,$(ENV)),$(ENV),prod))
 	@$(TOOLKIT) obs alerts --env $(_ENV)
 
+# Say whether the lab edge's uplink is up, behind a portal, or dead (NET-005 AC5).
+# Reaches the edge over its LAN address, so it answers from the lab switch or the
+# lab Wi-Fi while the tailnet is down with the uplink. make exits 2 for any failure;
+# `toolkit infra edge status` keeps the edge's code (0 up, 2 portal, 3 dead).
+.PHONY: edge-status
+edge-status: ## Report the lab edge's uplink: up, portal or dead
+	@$(TOOLKIT) infra edge status
+
 # Run a CronJob once now, print its log and delete the Job (TOOL-084). For the
 # watchers (`r2-backup-watcher`, ...) the log IS the verdict, so this is how to
 # re-check without waiting for the schedule. No default ENV: an allow-list, not

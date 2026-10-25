@@ -90,6 +90,12 @@ node_app = typer.Typer(
     no_args_is_help=True,
 )
 
+edge_app = typer.Typer(
+    name="edge",
+    help="The lab edge (rpi4): uplink status (NET-005)",
+    no_args_is_help=True,
+)
+
 app.add_typer(ansible_app, name="ansible")
 app.add_typer(terraform_app, name="terraform")
 app.add_typer(k8s_app, name="k8s")
@@ -98,6 +104,7 @@ app.add_typer(argo_app, name="argo")
 app.add_typer(headscale_app, name="headscale")
 app.add_typer(n8n_app, name="n8n")
 app.add_typer(node_app, name="node")
+app.add_typer(edge_app, name="edge")
 app.add_typer(vps_app, name="vps")
 
 
@@ -184,6 +191,26 @@ def vps_snapshot(
 def _snapshot_line(image: dict[str, Any]) -> str:
     size = f"{image['image_size']} GB" if image.get("image_size") else "size pending"
     return f"{image.get('description')} is {image.get('status')} (image {image.get('id')}, {size})"
+
+
+@edge_app.command("status")
+def edge_status() -> None:
+    """Say whether the edge's uplink is up, behind a portal, or dead.
+
+    Runs the gateway role's check on the edge over its LAN address and exits with
+    its code: 0 up, 2 portal, 3 dead (255 when SSH itself fails).
+    """
+    from toolkit.features.configuration import ConfigurationManager
+    from toolkit.features.edge_status import EdgeNotDeclaredError, run_status
+
+    # Plaintext values only: the check needs addresses, not secrets.
+    net = ConfigurationManager("prod", settings.project_root).get_plaintext_values()["networking"]
+    try:
+        code = run_status(net)
+    except EdgeNotDeclaredError as e:
+        logger.error(str(e))
+        raise typer.Exit(1) from e
+    raise typer.Exit(code)
 
 
 @node_app.command("reclaim")

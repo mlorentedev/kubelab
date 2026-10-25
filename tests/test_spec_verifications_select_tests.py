@@ -62,7 +62,6 @@ UNWRITTEN = frozenset(
         "GITOPS-003-f3",
         "GITOPS-003-f6",
         "NET-005-lab-edge-site-modes-f3",
-        "NET-005-lab-edge-site-modes-f6",
         "NET-005-lab-edge-site-modes-f8",
         "NET-005-lab-edge-site-modes-f9",
         "NET-005-lab-edge-site-modes-f11",
