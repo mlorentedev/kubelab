@@ -148,7 +148,9 @@ def test_the_lan_goes_out_the_wire_before_the_tailnet_can_take_it(route: bool) -
     assert match.group(2) == LAN_CIDR
 
 
-def test_the_cidr_is_the_ssot_one() -> None:
+def test_the_rule_follows_the_cidr_it_is_given() -> None:
+    """A CIDR that is not the homelab's, so a hardcoded one fails here. That the CLI
+    passes `networking.lan_cidr` is test_the_command_passes_the_ssot_cidr_and_the_mode."""
     from toolkit.features.edge_lan_link import profile_settings
 
     other = "198.51.100.0/24"
@@ -156,7 +158,6 @@ def test_the_cidr_is_the_ssot_one() -> None:
     assert f"to {other} table" in dict(zip(pairs[::2], pairs[1::2], strict=True))["ipv4.routing-rules"]
     with pytest.raises(ValueError):
         profile_settings("not-a-cidr", route=False)
-    assert ipaddress.ip_network(LAN_CIDR)
 
 
 def test_the_profile_is_brought_up_and_never_autoconnects() -> None:
