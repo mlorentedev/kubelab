@@ -13,18 +13,18 @@
 | #2665 | PR 2, tasks 1–4 | `networking.edge` in the SSOT; edge `SecretSpec`s (values not stored: B1) |
 | #2666 | PR 3, tasks 5–11 | `inet kubelab` as the forward control, sysctls, resolver, udp 67 on `eth0`. **Proven live** over the LAN (task 11, `verification.md`) |
 | #2667 | PR 4, tasks 12–15 | uplink netplan rendered from the site profile; `/etc/netplan` owned by the role |
+| #2677 | task 37 (lesson) | lesson-621, the CLAUDE.md gotcha, lesson-110 superseded, and ADR-075 D3 corrected: ufw governs only the part of the forward path that Docker's and Tailscale's chains did not accept, and its forward policy stays ACCEPT on the edge. Merged 16:16Z as `ae3828ba`, after four triage rounds and the second independent review |
 
 ## Open, and why
 
 | PR | Tasks | Why it is open |
 |---|---|---|
 | #2670 | PR 5, tasks 16–17 | Lab AP. Blocked by the GitGuardian finding on #2103 (`0efef18b`), a false positive only the operator can dismiss. **Lands after #2668**: its regdomain check stops every rpi4 provision while the cmdline carries the token, and skips every role after `gateway` |
-| #2671 | PR 6, tasks 18–21 | Collision page and CAKE shaping. Stacked on #2670; same blocks |
-| #2673 | PR 8, tasks 28–29 | Watchdog and radio liveness. Stacked on #2671; same blocks |
+| #2671 | PR 6, tasks 18–21 | Collision alert and CAKE shaping. Stacked on #2670; same blocks. Out of draft at 15:50Z; PR-Agent's first review triaged |
+| #2673 | PR 8, tasks 28–29 | Watchdog and radio liveness. Stacked on #2671; same blocks. Out of draft at 15:50Z; head `9c43e9b5` awaits PR-Agent's re-review (see the handoff) |
 | #2672 | PR 7, tasks 22–25 | Prod edge probe. Touches `infra/k8s/**`, which Argo CD deploys to prod; never merged unattended. **Owner decision needed (task 26):** prod already repeats a firing page every 4h until silenced. Accept 4h, add a shorter child route, or repeat from n8n |
 | #2674 | PR 9, task 30 | `make edge-status`: up / portal / dead / unknown. Green and triaged, but GitHub reads `BLOCKED` with no reason given (below) |
 | #2676 | PR 10, tasks 32–33 | `make headscale-rejoin` and `make edge-lan-link [ROUTE=1] [STATIC=1] [REMOVE=1]`. Stacked on #2674 |
-| #2677 | task 37 (lesson) | lesson-621: ufw does not govern forwarded traffic. Second triage round posted; awaiting CI on `93925960` |
 | #2681 | PR 12, task 35 | Runbook `lab-edge.md`, rewritten bootstrap and hardware docs. Describes #2670/#2671/#2673/#2676, so it lands after them |
 
 ## Not done
@@ -45,10 +45,14 @@
 - #2678 NET-008: Headscale approval of the edge's subnet route is a hand step.
 - #2679 NET-009: nothing allowlists a captive portal's hosts in Pi-hole.
 - #2680 NET-010: the `gateway` role installs packages before it renders the uplink. A fresh card at a new or captive site may not get its uplink up. Not measured on a fresh image.
+- #2682 NET-011: a radio that flaps clears the reboot latch each time it serves, so only the cap bounds it, at two reboots an hour for as long as it flaps.
+- #2683 NET-012: no supported way to pause the liveness ladder for maintenance. Its target name is the operator's call.
+- #2684 NET-013: **the edge's failures post at `log` severity, not `page`** (below).
 
 ## Findings worth the operator's attention
 
-- **rpi3 and rpi4 were offline** for most of the run; PR 3's live proof was the only host change.
+- **The edge does not page today (#2684).** ADR-075 and the first runbook draft said the edge's units post `tag: page`. They fail into `kubelab-notify@`, which posts `node_notify_severity`, one value per host, and that is `log` (ratified 2026-08-15 for maintenance and backups). n8n routes `log` to the log channel. So a radio that did not come back after its reboot, which needs its power cable pulled, reaches the log channel. The three ways out are in the ticket; the runbook now says `log`, and B8's "must page" steps will fail until one is chosen.
+- **rpi3 and rpi4 were offline** for most of the run; PR 3's live proof was the only host change. At 16:20Z the RPi4 still did not answer SSH over the tailnet, so the shaper's kernel modules (`sch_cake`, `ifb`, `act_mirred`, `cls_matchall`) are left to B9.
 - **`NODE=rpi3` is refused by `headscale-rejoin`**: rpi3's play has no `tailscale` role.
 - **bee, ace1 and ace2 mint reusable pre-auth keys** of their own. Making the edge's play always mint is the operator's call; the rejoin mints single-use, one-hour keys only when the node is off the mesh.
 - **`edge-lan-link` is NetworkManager only**, so it runs on the Linux laptop. The Mac, the operator's machine from now on, has no implementation yet.
@@ -82,3 +86,28 @@ What moved:
 **Pattern worth keeping: verification chosen by file name misses cross-cutting guards.** B1 went unseen because both PR bodies ran a selection of tests named after the change (`test_gateway_*`, `test_edge_*`), and the guard that failed lives in `test_node_notify_role.py`. Earlier in the run the same thing happened with the `ENV_TARGETS` guard. CI caught both; the PR bodies claimed green. The stack's verification is now the full suite.
 
 **A reviewer's factual claim adopted without checking.** PR-Agent said ufw re-inserts its `FORWARD` jumps on every reload; #2677's `7acd8876` adopted it. ufw's init script (`/usr/lib/ufw/ufw-init-functions`, 0.36.2) appends them only when its chains are missing, and a reload leaves them in place. Corrected in `93925960`.
+
+A second independent reviewer (read-only, not the implementer) re-checked the fixes at about 15:50Z: `670d95dd`, `b4d74282`, `222ca4bd`, `93925960` and `30dd4684`. Its verdicts, verbatim:
+
+| PR | Verdict |
+|---|---|
+| #2670 | PASS |
+| #2671 | PASS |
+| #2673 | PASS-WITH-GAPS |
+| #2677 | PASS-WITH-GAPS |
+| #2681 | PASS-WITH-GAPS |
+
+What moved:
+
+| Finding | Disposition |
+|---|---|
+| #2677, Major (wording): "ufw governs only what the host itself accepts" overstated. The edge's own NAT falls through Docker's and Tailscale's chains to ufw's forward policy, which is why the role keeps it ACCEPT. The same overstatement was in the lesson's title, Problem and Rule and in ADR-075 D3 | Fixed in `62eecf9b` (lesson, CLAUDE.md, ADR-075 D3 with a dated note), then landed. The advisor had judged nothing overstated; the reviewer read the role's ACCEPT task as the counter-evidence, and the advisor agreed on reconcile |
+| #2681, Major: the exit-code table sat under `make edge-status`, and make turns any failure into exit 2, so a dead uplink reads as a portal | Fixed in `dc59c5c1`: read the `uplink:` line; the codes are `toolkit infra edge status`'s |
+| #2673, Minor: a reboot `systemctl` refused left the latch set, and the marker write was fail-safe only because dash exits on a special builtin's failed redirection | Fixed in `9c43e9b5`, test-first: the marker is written first and checked, a refused reboot clears it. 3 mutations, each red. Full suite 7086 passed |
+| #2673, Minor: stale "capped per hour" prose in the unit, the test module and `verification.md`; the promised "stop the timer" operator note existed nowhere | Fixed in `9c43e9b5`; the runbook now says not to stop hostapd by hand, and the pause target is #2683 |
+| #2673, Minor: a flapping radio still reboots twice an hour | Ticketed, #2682 |
+| #2670, Minor: "still converges" holds only under `TAGS=gateway` | Fixed in `2299b392` (comment and body) |
+| #2671, Minor: a first `TAGS=gateway` run that stops at the AP packages has no notifier yet | Declined: that run is an attended bring-up step, and `agent_stack` on ace2 has the same order |
+| #2681, Minors: fresh-card-only wording, `tag: page`, exit 4 needing #2674 | Fixed in `dc59c5c1`. Checking `tag: page` found #2684 |
+
+PR-Agent's later reviews also raised a reservations default on #2670 (fixed, `8678c60a`: the role's default is now `null` and the address check refuses it) and four findings on #2671's first review (one disproved by `test_a_success_with_nothing_failing_sends_nothing`, two deferred to B8 and B9, one declined). Each is in that PR's triage.
