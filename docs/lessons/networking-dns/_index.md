@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 621 | [ufw does not govern traffic a host forwards when Docker or Tailscale runs on it](lesson-621-ufw-does-not-govern-forwarded-traffic.md) | 2026-10-25 |
 | 560 | [A green DNS deploy is not what clients resolve until the cache in front expires](lesson-560-a-green-dns-deploy-is-not-what-clients-resolve-until-the-cache-in-front-expires.md) | 2026-10-11 |
 | 559 | [A resolver entry must name who serves the name, not where the workload runs](lesson-559-a-resolver-entry-must-name-who-serves-the-name-not-where-the-workload-runs.md) | 2026-10-11 |
 | 548 | [An egress rule on the destination drops the replies of a listener owned by the same uid](lesson-548-an-egress-rule-on-the-destination-drops-the-replies-of-a-listener-owned-by-the-same-uid.md) | 2026-10-10 |
