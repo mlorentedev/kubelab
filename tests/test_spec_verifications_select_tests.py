@@ -61,11 +61,8 @@ UNWRITTEN = frozenset(
         "BACKUP-057-f7",
         "GITOPS-003-f3",
         "GITOPS-003-f6",
-        "NET-005-lab-edge-site-modes-f8",
-        "NET-005-lab-edge-site-modes-f9",
         "NET-005-lab-edge-site-modes-f11",
         "NET-005-lab-edge-site-modes-f13",
-        "NET-005-lab-edge-site-modes-f14",
         "TOOL-080-forge-pr-reviewer-f8",
     }
 )

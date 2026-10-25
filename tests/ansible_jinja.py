@@ -63,6 +63,11 @@ def _regex_replace(value: str, pattern: str, replacement: str = "") -> str:
     return re.sub(pattern, replacement, value)
 
 
+def _changed(result: Any) -> bool:
+    """Ansible's `changed` test, over a registered result."""
+    return bool((result or {}).get("changed"))
+
+
 def _version(value: Any, version: str, operator: str = "eq") -> bool:
     """Ansible's `version` test, for the dotted numeric versions the roles compare."""
     ops = {"<": "lt", "<=": "le", "==": "eq", "!=": "ne", ">=": "ge", ">": "gt"}
@@ -79,5 +84,6 @@ def ansible_env(templates_dir: str, **kwargs: Any) -> Environment:
     env.filters["regex_replace"] = _regex_replace
     env.tests["match"] = _match
     env.tests["regex"] = _regex
+    env.tests["changed"] = _changed
     env.tests["version"] = _version
     return env
