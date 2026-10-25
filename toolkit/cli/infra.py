@@ -327,6 +327,44 @@ def headscale_probe() -> None:
         raise typer.Exit(rc)
 
 
+@headscale_app.command("rejoin")
+def headscale_rejoin(
+    node: Annotated[str, typer.Option("--node", help="Node whose provision-<node> play to run, e.g. rpi4")],
+    env: Annotated[str, typer.Option("--env", "-e", help="Target environment")] = "prod",
+) -> None:
+    """Put a node back on the mesh with a single-use, one-hour key (NET-005 task 32).
+
+    Runs the node's play, tailscale role only, over its LAN address: a node off the
+    mesh answers on nothing else. The role mints the key on Headscale only when the
+    node is off the mesh, so a node that is on it is a no-op. The mesh inventory is
+    put back whatever the run did.
+    """
+    from toolkit.features.generator_ansible import ansible_generator
+    from toolkit.features.headscale_nodes import REJOIN_EXTRA_VARS, REJOIN_TAGS, RejoinRefused, rejoin_playbook
+
+    try:
+        playbook = rejoin_playbook(settings.ansible_dir / "playbooks", node)
+    except RejoinRefused as exc:
+        logger.error(str(exc))
+        raise typer.Exit(1) from exc
+
+    try:
+        ansible_run(
+            playbook=playbook,
+            env=env,
+            tags=REJOIN_TAGS,
+            extra_vars=REJOIN_EXTRA_VARS,
+            bootstrap=True,
+            require_fresh=True,
+        )
+    finally:
+        logger.info("Restoring: inventory with mesh Tailscale IPs")
+        restored = ansible_generator.generate(env)
+        if not restored.get("success"):
+            logger.error(f"The LAN inventory is still on disk: {restored.get('error')}")
+            raise typer.Exit(1)
+
+
 @headscale_app.command("recycle-stale")
 def headscale_recycle_stale(
     name: Annotated[str, typer.Option("--name", help="Canonical node name to reclaim, e.g. gcp1")],

@@ -4,3 +4,8 @@ tailscale_accept_dns: true
 tailscale_accept_routes: false
 tailscale_advertise_routes: ""
 tailscale_auth_key: ""
+# Mint a single-use, one-hour key on Headscale when the node is off the mesh and
+# no key was passed in. `make headscale-rejoin` sets it per run.
+tailscale_mint_key: false
+tailscale_headscale_host: kubelab-vps
+tailscale_headscale_user_id: ""

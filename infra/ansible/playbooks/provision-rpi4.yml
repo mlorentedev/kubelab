@@ -143,6 +143,8 @@
         tailscale_accept_dns: false
         tailscale_accept_routes: false
         tailscale_advertise_routes: "{{ config.networking.lan_cidr }}"
+        # The user `make headscale-rejoin` mints the edge's key under.
+        tailscale_headscale_user_id: "{{ config.apps.services.core.headscale.infra_user_id }}"
 
     - role: ../roles/coredns
       tags: [coredns]

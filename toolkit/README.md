@@ -107,6 +107,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit infra headscale policy-check` | Render policy.hujson from the SSOT and validate it with `headscale policy check` (Docker). |
 | `toolkit infra headscale probe` | Probe the preserved mesh flows after a policy reload (auto-revert gate, ADR-041). |
 | `toolkit infra headscale recycle-stale` | Reclaim a canonical node name from a dead record after a preemption (#1369). |
+| `toolkit infra headscale rejoin` | Put a node back on the mesh with a single-use, one-hour key (NET-005 task 32). |
 | `toolkit infra k8s` | Kubernetes management commands |
 | `toolkit infra k8s access` | Cluster-access transport (ADR-052): bring up/tear down/inspect the local->apiserver tunnel |
 | `toolkit infra k8s access connect` | Bring up the cluster-access transport (idempotent). |

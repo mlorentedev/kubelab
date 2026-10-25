@@ -1149,6 +1149,15 @@ headscale-recycle-stale:
 	$(eval _APPLY := $(if $(APPLY),--apply,))
 	@$(TOOLKIT) infra headscale recycle-stale --name $(NODE) $(_APPLY)
 
+# Put a node back on the mesh (NET-005 task 32). The toolkit runs the node's own
+# play, tailscale role only, over the LAN, and the role mints a single-use key on
+# Headscale only when the node is off the mesh. ENV defaults to prod, where the
+# edge is provisioned.
+.PHONY: headscale-rejoin
+headscale-rejoin: ## Rejoin a node to the mesh with a single-use key (NODE=rpi4)
+	@test -n "$(NODE)" || (echo "Usage: make headscale-rejoin NODE=<node> [ENV=prod|staging]" && exit 1)
+	@$(TOOLKIT) infra headscale rejoin --node $(NODE) --env $(or $(filter staging prod,$(ENV)),prod)
+
 # Disk ceiling on a live node (GCP-001 AC8). Random 4K, `--direct=1`, bounded
 # file, unconditional cleanup — the reasoning is in the playbook's header, where
 # it stays next to the flags it justifies.
