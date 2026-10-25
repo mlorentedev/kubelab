@@ -53,6 +53,16 @@ def _keys(tree: Any) -> set[str]:
     return found
 
 
+def _values_of(tree: Any, key: str) -> list[Any]:
+    """Every value `key` takes anywhere in a parsed YAML tree, lists included."""
+    if isinstance(tree, list):
+        return [value for item in tree for value in _values_of(item, key)]
+    if not isinstance(tree, dict):
+        return []
+    found = [tree[key]] if key in tree else []
+    return found + [value for child in tree.values() for value in _values_of(child, key)]
+
+
 def test_the_uplink_declares_a_known_kind_and_its_site_settings(edge: dict[str, Any]) -> None:
     uplink = edge["uplink"]
     assert uplink["kind"] in UPLINK_KINDS
@@ -101,21 +111,25 @@ def test_the_rpi4s_wifi_address_is_the_lab_gateway(networking: dict[str, Any], e
 
 
 def test_no_trust_list_names_the_lab_cidr(networking: dict[str, Any], edge: dict[str, Any]) -> None:
-    """Personal devices must not inherit the tailnet's bulk trust (ADR-041, AC3).
+    """No trust list names the lab network on purpose (ADR-041, AC3).
 
-    The RFC 1918 supernets in `trusted_cidrs` predate this edge and contain the
-    lab CIDR; what keeps a lab client from the LAN is the edge's forward drops.
+    This does not show that lab clients are untrusted. The RFC 1918 supernets in
+    `trusted_cidrs` predate this edge and contain the lab CIDR, so what keeps a lab
+    client from the LAN is the edge's forward drops, tested with the firewall.
     What this forbids is an entry that names the lab network itself, or a range
-    inside it: that would be trust granted to the personal devices on purpose.
+    inside it, and an advertised route to it: trust granted to the personal
+    devices deliberately.
     """
     lab = ipaddress.ip_network(edge["lab_wifi"]["cidr"])
     for entry in networking["trusted_cidrs"]:
         assert not ipaddress.ip_network(entry).subnet_of(lab), entry
-    playbook = PLAYBOOK.read_text()
-    advertised = re.search(r"tailscale_advertise_routes:\s*(.+)", playbook)
-    assert advertised is not None
-    assert "lab_wifi" not in advertised.group(1)
-    assert edge["lab_wifi"]["cidr"] not in advertised.group(1)
+    # Parsed, not matched by line: a block list would put its second route on a
+    # line a regex never reads.
+    routes = _values_of(yaml.safe_load(PLAYBOOK.read_text()), "tailscale_advertise_routes")
+    assert routes
+    advertised = " ".join(str(route) for route in routes)
+    assert "lab_wifi" not in advertised
+    assert edge["lab_wifi"]["cidr"] not in advertised
 
 
 @pytest.mark.parametrize("values", sorted(VALUES.glob("*.yaml")), ids=lambda p: p.name)
