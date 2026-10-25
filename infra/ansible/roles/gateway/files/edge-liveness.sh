@@ -16,14 +16,17 @@
 #
 #   1. fewer than EDGE_LIVENESS_GRACE misses in a row: log only, since a provision
 #      restarts hostapd;
-#   2. the grace-th miss: unload the driver with whatever holds it, load it again,
-#      and restart hostapd;
+#   2. the grace-th miss: stop hostapd, unload the driver with whatever holds it,
+#      load it again, and start hostapd;
 #   3. the next miss: reboot, unless the edge already rebooted
 #      EDGE_LIVENESS_MAX_REBOOTS times in the last hour, in which case it holds and
 #      keeps paging. A radio that never comes back cannot loop the edge.
 #
 # The misses and the reload marker live in RUNTIME_DIRECTORY, so a reboot starts the
-# ladder again. The reboots are counted in STATE_DIRECTORY, which a reboot keeps.
+# ladder again. The reboots are counted in STATE_DIRECTORY, which a reboot keeps, and
+# so is a marker that says the last reboot was for the lab Wi-Fi: until it serves
+# again, a miss inside the grace still fails, because node_notify keeps its incident
+# across the reboot and a clean exit would close it.
 # The RPi4 has no RTC and boots with a stale clock until NTP answers, so a reboot
 # recorded later than now counts as recent: a clock that went back must not lift
 # the cap.
@@ -81,8 +84,8 @@ reload_module() {
     [ -e "$holder" ] && holders="$holders ${holder##*/}"
   done
   # shellcheck disable=SC2086 # module names, split on purpose
-  modprobe -r $holders "$1" || echo "could not unload $1; loading it anyway" >&2
-  modprobe "$1"
+  timeout 30 modprobe -r $holders "$1" || echo "could not unload $1; loading it anyway" >&2
+  timeout 30 modprobe "$1"
 }
 
 ap_serving() {
@@ -111,24 +114,33 @@ reboot_allowed() {
 recover_ap() {
   misses=$(miss ap)
   if [ "$misses" -lt "$grace" ]; then
+    if [ -e "$state_dir/ap.rebooted" ]; then
+      echo "lab Wi-Fi: $ap is still not serving after the reboot ($misses of $grace misses before a driver reload)" >&2
+      return 1
+    fi
     echo "lab Wi-Fi: $ap is not serving ($misses of $grace misses before a driver reload)" >&2
     return 0
   fi
   if [ ! -e "$run_dir/ap.reloaded" ]; then
     echo "lab Wi-Fi: $ap has not served for $misses checks; reloading $ap_driver and restarting hostapd" >&2
+    # Marked first: if a wedged driver hangs the unload and the unit's timeout kills
+    # the run, the next miss reboots.
     : >"$run_dir/ap.reloaded"
+    systemctl stop hostapd
     reload_module "$ap_driver"
     waited=0
     while [ ! -e "$sys_net/$ap" ] && [ "$waited" -lt "$settle" ]; do
       sleep 1
       waited=$((waited + 1))
     done
-    systemctl restart hostapd
+    # Not waited for: the next run checks whether it serves.
+    systemctl start --no-block hostapd
     return 1
   fi
   if reboot_allowed; then
     echo "lab Wi-Fi: $ap is still not serving after the driver reload; rebooting the edge" >&2
     echo "$now" >>"$state_dir/reboots"
+    : >"$state_dir/ap.rebooted"
     systemctl reboot
     return 1
   fi
@@ -168,6 +180,7 @@ status=0
 check_uplink || status=1
 if ap_serving; then
   forget ap
+  rm -f "$state_dir/ap.rebooted"
 else
   recover_ap || status=1
 fi

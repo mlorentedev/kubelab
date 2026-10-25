@@ -22,8 +22,10 @@ The escalation runs the real script under dash, with fake `hostapd_cli`,
 
 from __future__ import annotations
 
+import os
 import shlex
 import shutil
+import signal
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -163,6 +165,13 @@ def test_a_failure_pages_and_a_clean_run_closes_it() -> None:
     assert keys["OnSuccess"] == ["kubelab-notify-recovered@%n.service"]
 
 
+def test_a_run_that_hangs_is_killed() -> None:
+    """A oneshot has no start timeout by default, and the halt this exists for is a wedged
+    driver that can hang `modprobe -r` in the kernel: the unit would never go inactive,
+    the timer would never fire again, and the edge would never reboot."""
+    assert _directives(_render(SERVICE))["TimeoutStartSec"] == ["5min"]
+
+
 def test_the_timer_waits_after_a_boot_and_never_overlaps_a_run() -> None:
     """A boot or a re-provision restarts hostapd and networkd; the first check comes
     after both have had time to settle."""
@@ -213,7 +222,7 @@ def test_the_units_pass_systemd_analyze_verify(tmp_path: Path) -> None:
 
 FAKES = {
     "hostapd_cli": 'echo "hostapd_cli $*" >>"$FAKE/calls"\ncat "$FAKE/hostapd_status" 2>/dev/null\n',
-    "modprobe": 'echo "modprobe $*" >>"$FAKE/calls"\n',
+    "modprobe": 'echo "modprobe $*" >>"$FAKE/calls"\n[ -e "$FAKE/modprobe_hangs" ] && sleep 5\nexit 0\n',
     "systemctl": 'echo "systemctl $*" >>"$FAKE/calls"\n',
 }
 
@@ -260,7 +269,7 @@ class Edge:
     def reboots(self, *times: int) -> None:
         (self.root / "state" / "reboots").write_text("".join(f"{t}\n" for t in times))
 
-    def run(self, now: int = NOW) -> subprocess.CompletedProcess[str]:
+    def run(self, now: int = NOW, kill_after: float | None = None) -> subprocess.CompletedProcess[str]:
         calls = self.root / "fake" / "calls"
         calls.unlink(missing_ok=True)
         env = {
@@ -275,9 +284,21 @@ class Edge:
             "EDGE_NOW": str(now),
             "EDGE_SETTLE": "0",
         }
-        result = subprocess.run(
-            [SHELL, str(SCRIPT), AP, AP_DRIVER, UPLINK], capture_output=True, text=True, env=env, check=False
-        )
+        # A new session, so a kill takes the whole run, as systemd's timeout kills the cgroup.
+        with subprocess.Popen(
+            [SHELL, str(SCRIPT), AP, AP_DRIVER, UPLINK],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=env,
+            start_new_session=True,
+        ) as proc:
+            try:
+                stdout, stderr = proc.communicate(timeout=kill_after)
+            except subprocess.TimeoutExpired:
+                os.killpg(proc.pid, signal.SIGKILL)
+                stdout, stderr = proc.communicate()
+        result = subprocess.CompletedProcess(proc.args, proc.returncode, stdout, stderr)
         self.calls = [c for c in (calls.read_text().splitlines() if calls.exists() else []) if "status" not in c]
         return result
 
@@ -290,7 +311,12 @@ class Edge:
 SHELL = shutil.which("dash") or "/bin/sh"
 GRACE = int(_environment()["EDGE_LIVENESS_GRACE"])
 MAX_REBOOTS = int(_environment()["EDGE_LIVENESS_MAX_REBOOTS"])
-RELOAD_AP = [f"modprobe -r {HOLDER} {AP_DRIVER}", f"modprobe {AP_DRIVER}", "systemctl restart hostapd"]
+RELOAD_AP = [
+    "systemctl stop hostapd",
+    f"modprobe -r {HOLDER} {AP_DRIVER}",
+    f"modprobe {AP_DRIVER}",
+    "systemctl start --no-block hostapd",
+]
 REBOOT = ["systemctl reboot"]
 
 
@@ -336,6 +362,34 @@ def test_the_next_miss_after_the_reload_reboots(edge: Edge) -> None:
     assert result.returncode == 1
     assert edge.calls == REBOOT
     assert edge.recorded_reboots() == [str(NOW)]
+
+
+def test_a_reload_killed_by_the_timeout_reboots_at_the_next_miss(edge: Edge) -> None:
+    edge.ap(serving=False)
+    _miss(edge, GRACE - 1)
+    (edge.root / "fake" / "modprobe_hangs").touch()
+    edge.run(kill_after=1)
+    assert edge.calls[:2] == RELOAD_AP[:2], "the run was killed inside the unload"
+    (edge.root / "fake" / "modprobe_hangs").unlink()
+    edge.run()
+    assert edge.calls == REBOOT
+
+
+def test_a_miss_after_the_reboot_keeps_the_incident_open(edge: Edge) -> None:
+    """node_notify keeps its incidents in /var/lib, so a run that exits 0 after the
+    reboot would close the page while the lab Wi-Fi is still down."""
+    edge.ap(serving=False)
+    _miss(edge, GRACE + 1)
+    assert edge.calls == REBOOT
+    shutil.rmtree(edge.root / "run")
+    (edge.root / "run").mkdir()  # the reboot empties /run
+    result = edge.run()
+    assert result.returncode == 1
+    assert edge.calls == []
+    edge.ap(serving=True)
+    assert edge.run().returncode == 0
+    edge.ap(serving=False)
+    assert edge.run().returncode == 0, "served since the reboot: a miss is back inside the grace"
 
 
 def test_an_ap_that_disappeared_is_a_miss(edge: Edge) -> None:

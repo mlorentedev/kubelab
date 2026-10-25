@@ -11,6 +11,11 @@ OnSuccess=kubelab-notify-recovered@%n.service
 Type=oneshot
 Environment=EDGE_LIVENESS_GRACE={{ gateway_liveness_grace }}
 Environment=EDGE_LIVENESS_MAX_REBOOTS={{ gateway_liveness_max_reboots }}
+# A oneshot has no start timeout by default, and a wedged driver can hang the
+# unload in the kernel: without one the unit never ends and the timer never fires
+# again. The script's own bounds (two 30 s modprobes, 30 s for the interface,
+# hostapd's stop) fit inside it.
+TimeoutStartSec=5min
 ExecStart={{ gateway_liveness_path }} {{ gateway_ap_interface }} {{ gateway_ap_driver }} {{ gateway_uplink_interface }}
 # The misses and the reload marker live in /run, so a reboot starts the ladder
 # again. The reboots are counted in /var/lib, so a reboot cannot reset the cap.
