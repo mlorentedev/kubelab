@@ -221,7 +221,7 @@ def test_every_router_the_lease_lists_is_checked(tmp_path: Path, awk_bin: Path) 
     [
         "172.16.1.128/25",  # inside the LAN
         "172.16.0.0/12",  # contains the LAN
-        "0.0.0.0/1",  # contains the LAN and the lab
+        "0.0.0.0/1",  # contains the lab and the tailnet
         "100.64.0.0/16",  # inside the tailnet
     ],
 )
@@ -336,6 +336,7 @@ TASKS: list[dict[str, Any]] = yaml.safe_load((ROLE / "tasks" / "main.yml").read_
 DEFAULTS: dict[str, Any] = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text())
 SERVICE = "kubelab-edge-lease-check.service"
 PATH_UNIT = "kubelab-edge-lease-check.path"
+TIMER = "kubelab-edge-lease-check.timer"
 
 
 def _render(unit: str, **overrides: Any) -> str:
@@ -394,10 +395,11 @@ def test_the_units_pass_systemd_analyze_verify(tmp_path: Path) -> None:
         pytest.skip("systemd-analyze is not installed")
     (tmp_path / SERVICE).write_text(_render(SERVICE, gateway_lease_check_path="/bin/true"))
     (tmp_path / PATH_UNIT).write_text(_render(PATH_UNIT))
+    (tmp_path / TIMER).write_text(_render(TIMER))
     for stub in ("kubelab-notify@.service", "kubelab-notify-recovered@.service"):
         (tmp_path / stub).write_text("[Service]\nType=oneshot\nExecStart=/bin/true\n")
     proc = subprocess.run(
-        ["systemd-analyze", "verify", "--man=no", str(tmp_path / SERVICE), str(tmp_path / PATH_UNIT)],
+        ["systemd-analyze", "verify", "--man=no", *(str(tmp_path / unit) for unit in (SERVICE, PATH_UNIT, TIMER))],
         capture_output=True,
         text=True,
         env={"SYSTEMD_UNIT_PATH": f"{tmp_path}:", "PATH": "/usr/bin:/bin"},
@@ -426,7 +428,7 @@ def test_the_watch_starts_before_the_uplink_takes_its_first_lease() -> None:
     watch = _first(lambda task: _systemd(task).get("name") == PATH_UNIT)
     args = _systemd(TASKS[watch])
     assert args["enabled"] is True
-    assert "started" in args["state"]
+    assert args["state"] == "{{ 'restarted' if gateway_lease_check_units is changed else 'started' }}"
     apply_uplink = _first(lambda task: task.get("name") == "Apply the uplink before anything depends on it")
     assert watch < apply_uplink
 
@@ -439,6 +441,67 @@ def test_a_changed_unit_restarts_the_watch() -> None:
     assert f"{register} is changed" in state
     assert "restarted" in state
     assert _systemd(TASKS[watch]).get("daemon_reload")
+
+
+def test_a_timer_rechecks_what_no_lease_event_will() -> None:
+    """The path unit fires only on a write. A lease already on disk when it starts (every
+    re-provision restarts it) and a page a portal kept from leaving both wait for the
+    next renewal without the timer; node_notify keeps its clean runs silent."""
+    keys = _directives(_render(TIMER))
+    assert keys["OnActiveSec"] == ["1min"]
+    assert keys["OnUnitInactiveSec"] == ["10min"]
+    assert keys["Unit"] == [SERVICE]
+    assert keys["WantedBy"] == ["timers.target"]
+
+
+def test_the_timer_is_installed_with_the_watch_and_started() -> None:
+    units = _first(lambda task: PATH_UNIT in str(task.get("loop")))
+    assert TIMER in TASKS[units]["loop"]
+    timer = _first(lambda task: _systemd(task).get("name") == TIMER)
+    args = _systemd(TASKS[timer])
+    assert args["enabled"] is True
+    assert args["state"] == "{{ 'restarted' if gateway_lease_check_units is changed else 'started' }}"
+    assert units < timer
+
+
+def _holds(condition: Any, **variables: Any) -> bool:
+    env = ansible_env(str(ROLE / "templates"))
+    conditions = condition if isinstance(condition, list) else [condition]
+    return all(env.compile_expression(str(c))(**variables) for c in conditions)
+
+
+@pytest.mark.parametrize("unit", [PATH_UNIT, TIMER])
+def test_check_mode_skips_starting_a_unit_it_has_not_written(unit: str) -> None:
+    """`--check` writes no unit file, and the systemd module fails on a unit that is not
+    on disk, which would end the preview before the netplan and AP diffs."""
+    when = TASKS[_first(lambda task: _systemd(task).get("name") == unit)]["when"]
+    new, same = {"changed": True}, {"changed": False}
+    assert not _holds(when, ansible_check_mode=True, gateway_lease_check_units=new)
+    assert _holds(when, ansible_check_mode=True, gateway_lease_check_units=same)
+    assert _holds(when, ansible_check_mode=False, gateway_lease_check_units=new)
+
+
+def test_the_networks_are_checked_before_the_watch_is_armed() -> None:
+    """With no network the unit exits 64 on every lease event."""
+    check = _first(lambda task: "gateway_lease_check_networks" in str(task.get("assert")))
+    units = _first(lambda task: PATH_UNIT in str(task.get("loop")))
+    assert check < units
+
+
+@pytest.mark.parametrize("ifindex", ["abc\n", None], ids=["not-a-number", "unreadable"])
+def test_an_ifindex_the_check_cannot_read_is_blind_not_a_collision(
+    tmp_path: Path, awk_bin: Path, ifindex: str | None
+) -> None:
+    """Exit 1 means a collision. An interface that vanished between the test and the
+    read is unreadable, and pages as blind (2), never as a collision."""
+    sys_net = tmp_path / "sys-class-net" / UPLINK
+    sys_net.mkdir(parents=True)
+    if ifindex is None:
+        (sys_net / "ifindex").mkdir()
+    else:
+        (sys_net / "ifindex").write_text(ifindex)
+    result = _run(tmp_path, awk_bin, _site_lease(), with_interface=False)
+    assert result.returncode == 2, _output(result)
 
 
 def test_the_playbook_maps_the_internal_networks_from_the_ssot() -> None:

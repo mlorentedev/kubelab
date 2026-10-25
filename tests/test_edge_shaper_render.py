@@ -208,7 +208,10 @@ def test_the_shaper_is_enabled_and_started_only_on_a_present_uplink() -> None:
     enabled = _first(lambda task: _systemd(task).get("name") == UNIT and _systemd(task).get("enabled"))
     started = _first(lambda task: _systemd(task).get("name") == UNIT and "state" in _systemd(task))
     assert "state" not in _systemd(TASKS[enabled])
-    assert TASKS[started]["when"] == "gateway_uplink_sysfs.stat.exists"
+    present, absent = {"stat": {"exists": True}}, {"stat": {"exists": False}}
+    same = {"changed": False}
+    assert _holds(TASKS[started]["when"], ansible_check_mode=False, gateway_uplink_sysfs=present, gateway_shaper_unit=same)
+    assert not _holds(TASKS[started]["when"], ansible_check_mode=False, gateway_uplink_sysfs=absent, gateway_shaper_unit=same)
     rename_check = _first(lambda task: "gateway_uplink_sysfs" in str(task.get("assert")))
     assert rename_check < started
 
@@ -218,9 +221,26 @@ def test_a_changed_unit_restarts_the_shaper() -> None:
     started = _first(lambda task: _systemd(task).get("name") == UNIT and "state" in _systemd(task))
     register = TASKS[unit]["register"]
     state = _systemd(TASKS[started])["state"]
-    assert f"{register} is changed" in state
-    assert "restarted" in state and "started" in state
+    assert state == f"{{{{ 'restarted' if {register} is changed else 'started' }}}}"
     assert _systemd(TASKS[started]).get("daemon_reload")
+
+
+def _holds(condition: Any, **variables: Any) -> bool:
+    env = ansible_env(str(ROLE / "templates"))
+    conditions = condition if isinstance(condition, list) else [condition]
+    return all(env.compile_expression(str(c))(**variables) for c in conditions)
+
+
+@pytest.mark.parametrize("step", ["enabled", "state"])
+def test_check_mode_skips_the_shaper_until_its_unit_is_written(step: str) -> None:
+    """`--check` writes no unit file, and the systemd module fails on a unit not on disk."""
+    task = _first(lambda task: _systemd(task).get("name") == UNIT and step in _systemd(task))
+    when = TASKS[task]["when"]
+    present = {"stat": {"exists": True}}
+    new, same = {"changed": True}, {"changed": False}
+    assert not _holds(when, ansible_check_mode=True, gateway_uplink_sysfs=present, gateway_shaper_unit=new)
+    assert _holds(when, ansible_check_mode=True, gateway_uplink_sysfs=present, gateway_shaper_unit=same)
+    assert _holds(when, ansible_check_mode=False, gateway_uplink_sysfs=present, gateway_shaper_unit=new)
 
 
 def test_the_playbook_maps_the_profiles_rates() -> None:

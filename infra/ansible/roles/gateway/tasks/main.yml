@@ -215,8 +215,24 @@
       FIX: unplug the adapter and plug it back in, which brings it back down and named, then re-run.
     quiet: true
 
+# AC7, AC8. The check exits 64 on every lease event without a network to check,
+# and CAKE reads a zero bandwidth as unlimited.
+- name: Check the lease check's networks and the shaping rates
+  assert:
+    that:
+      - gateway_lease_check_networks | length > 0
+      - gateway_uplink_down_kbit | int > 0
+      - gateway_uplink_up_kbit | int > 0
+    fail_msg: >-
+      ERROR: the uplink's lease check or shaper has no input.
+      WHY: the playbook maps them from networking.lan_cidr, networking.edge.lab_wifi.cidr,
+      networking.tailscale_cidr and networking.edge.uplink.bandwidth in common.yaml.
+      FIX: set those keys in common.yaml, then re-run.
+    quiet: true
+
 # AC7. The watch has to be running before the uplink takes a lease: a path unit
-# does not fire for a lease written before it started.
+# does not fire for a lease written before it started. The timer re-checks what
+# no lease event will.
 - name: Install the uplink lease check
   copy:
     src: edge-lease-check.sh
@@ -231,29 +247,26 @@
   loop:
     - kubelab-edge-lease-check.service
     - kubelab-edge-lease-check.path
+    - kubelab-edge-lease-check.timer
   register: gateway_lease_check_units
 
+# `--check` writes no unit, and the systemd module fails on one that is not on disk,
+# which would end the preview before the netplan and AP diffs. So in check mode a
+# unit is started only once it exists unchanged.
 - name: Watch the uplink lease
   systemd:
     name: kubelab-edge-lease-check.path
     enabled: true
     state: "{{ 'restarted' if gateway_lease_check_units is changed else 'started' }}"
     daemon_reload: true
+  when: not ansible_check_mode or gateway_lease_check_units is not changed
 
-# AC8. CAKE reads a zero bandwidth as unlimited, and the check refuses to run
-# without a network to check.
-- name: Check the lease check's networks and the shaping rates
-  assert:
-    that:
-      - gateway_lease_check_networks | length > 0
-      - gateway_uplink_down_kbit | int > 0
-      - gateway_uplink_up_kbit | int > 0
-    fail_msg: >-
-      ERROR: the uplink's lease check or shaper has no input.
-      WHY: the playbook maps them from networking.lan_cidr, networking.edge.lab_wifi.cidr,
-      networking.tailscale_cidr and networking.edge.uplink.bandwidth in common.yaml.
-      FIX: set those keys in common.yaml, then re-run.
-    quiet: true
+- name: Re-check the uplink lease on a schedule
+  systemd:
+    name: kubelab-edge-lease-check.timer
+    enabled: true
+    state: "{{ 'restarted' if gateway_lease_check_units is changed else 'started' }}"
+  when: not ansible_check_mode or gateway_lease_check_units is not changed
 
 - name: Deploy the uplink shaper
   template:
@@ -262,19 +275,23 @@
     mode: "0644"
   register: gateway_shaper_unit
 
-# Enabled, it starts whenever the uplink device appears.
+# Enabled, it starts whenever the uplink device appears. Skipped in check mode
+# until its unit is on disk, as the lease watch is.
 - name: Shape the uplink whenever it is plugged in
   systemd:
     name: kubelab-edge-shaper.service
     enabled: true
     daemon_reload: true
+  when: not ansible_check_mode or gateway_shaper_unit is not changed
 
 - name: Shape the uplink now
   systemd:
     name: kubelab-edge-shaper.service
     state: "{{ 'restarted' if gateway_shaper_unit is changed else 'started' }}"
     daemon_reload: true
-  when: gateway_uplink_sysfs.stat.exists
+  when:
+    - gateway_uplink_sysfs.stat.exists
+    - not ansible_check_mode or gateway_shaper_unit is not changed
 
 - name: Keep cloud-init from writing netplan
   copy:

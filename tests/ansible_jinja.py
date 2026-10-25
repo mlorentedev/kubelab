@@ -62,6 +62,11 @@ def _regex_replace(value: str, pattern: str, replacement: str = "") -> str:
     return re.sub(pattern, replacement, value)
 
 
+def _changed(result: Any) -> bool:
+    """Ansible's `changed` test, over a registered result."""
+    return bool((result or {}).get("changed"))
+
+
 def ansible_env(templates_dir: str, **kwargs: Any) -> Environment:
     """A `FileSystemLoader` environment with the Ansible filters and tests these templates use."""
     env = Environment(loader=FileSystemLoader(templates_dir), **kwargs)
@@ -72,4 +77,5 @@ def ansible_env(templates_dir: str, **kwargs: Any) -> Environment:
     env.filters["regex_replace"] = _regex_replace
     env.tests["match"] = _match
     env.tests["regex"] = _regex
+    env.tests["changed"] = _changed
     return env

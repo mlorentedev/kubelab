@@ -22,7 +22,14 @@
 # use-routes: false), and `netplan ip leases` reads the same file. The format is
 # systemd 255's dhcp_lease_save(): ADDRESS=, ROUTER= (space-separated), and
 # CLASSLESS_ROUTES= or STATIC_ROUTES= as space-separated `dst/len,gw`. A lease with
-# no readable address exits 2, so a format change pages instead of passing.
+# no readable address exits 2, so a format change pages instead of passing. No lease
+# at all passes: the check cannot tell a lease networkd stopped writing from one it
+# never took, and the bring-up run (B8) is what proves the read on the edge.
+#
+# A route's next hop is not checked. The uplink installs no offered route, so a
+# next hop is never used; the destination is what shows the site's intent. And
+# with use-routes off, networkd does not request options 33 and 121, so a route
+# appears here only when the server sends it unasked.
 #
 # Every value in the lease comes from the site's DHCP server, and this output
 # becomes the page body (kubelab-notify quotes the unit's journal). The check only
@@ -53,7 +60,9 @@ state=present
 if [ ! -r "$sys_net/$iface/ifindex" ]; then
   state="absent: $iface is not present"
 else
-  ifindex=$(cat "$sys_net/$iface/ifindex")
+  # An interface that vanishes between the test and the read leaves this empty:
+  # blind (2), never the collision code that `set -e` would turn it into.
+  ifindex=$(cat "$sys_net/$iface/ifindex" 2>/dev/null) || ifindex=
   case $ifindex in
     '' | *[!0-9]*)
       echo "$iface: cannot read its ifindex, so this check is blind" >&2
