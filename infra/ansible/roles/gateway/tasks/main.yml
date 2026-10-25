@@ -424,8 +424,9 @@
 
 # The archive answers over the uplink, and at a portal site only after the login: a run
 # before it stops here, before anything of the AP is written. Installed packages need no
-# archive, so the index is refreshed only when the install fails: a re-run after the
-# portal's login expired still converges.
+# archive, so the index is refreshed only when the install fails: a TAGS=gateway re-run
+# after the portal's login expired still converges. A full provision does not get this
+# far: base_system refreshes the index first and stops there.
 - name: Install the AP's packages
   block:
     - name: Install hostapd and iw
