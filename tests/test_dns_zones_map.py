@@ -4,7 +4,7 @@ What this can and cannot see: it runs offline, so it cannot ask Cloudflare
 which zones the account holds. A zone nothing in the repository names (the way
 imagesensortool.com sat outside IaC) is invisible to it. It asserts the half
 that is checkable: every apex the config does name, through a service's
-`zone`, a staging split-DNS zone or a `*domain` value, is declared in
+`zone`, a staging split-DNS zone or a `domain`/`*_domain` value, is declared in
 `zones.json`, so a new domain cannot ship pointing at a zone Terraform does not
 manage. The apex is the last two labels; no domain in use sits under a
 multi-label public suffix.
@@ -51,7 +51,9 @@ def _domain_values(node: Any, found: list[str] | None = None) -> list[str]:
     found = [] if found is None else found
     if isinstance(node, dict):
         for key, value in node.items():
-            if key.endswith("domain") and isinstance(value, str) and value:
+            # `domain` and `*_domain`, not any suffix: `regdomain` is a radio's
+            # regulatory domain (networking.edge.uplink), not a DNS name.
+            if (key == "domain" or key.endswith("_domain")) and isinstance(value, str) and value:
                 found.append(value)
             else:
                 _domain_values(value, found)
