@@ -186,8 +186,9 @@ def test_the_edge_rejoins_with_every_flag_its_play_declares() -> None:
     assert f"--authkey={KEY}" in command
 
 
-def test_the_edge_play_lets_the_role_mint() -> None:
-    variables = _play_vars("rpi4")
+@pytest.mark.parametrize("node", ["rpi4", "rpi3"])
+def test_the_play_lets_the_role_mint(node: str) -> None:
+    variables = _play_vars(node)
     assert variables["tailscale_headscale_user_id"] == str(
         CONFIG["apps"]["services"]["core"]["headscale"]["infra_user_id"]
     )
@@ -198,23 +199,62 @@ def test_no_authkey_flag_without_a_key() -> None:
     assert "--authkey" not in _up_command("rpi4", "")
 
 
+def test_rpi3_rejoins_on_magicdns_and_takes_no_subnet_route() -> None:
+    """rpi3's host resolves `*.staging` through MagicDNS (the note on `rpi3_services`'
+    `docker_dns_servers`), and it sits on the lab Wi-Fi, not on `lan_cidr`: it routes
+    nothing for the mesh and needs no route from it (#2685)."""
+    command = _up_command("rpi3", KEY).split()
+    assert command[:3] == ["tailscale", "up", "--reset"]
+    assert f"--login-server=https://{CONFIG['apps']['services']['core']['headscale']['domain']}" in command
+    assert "--accept-dns=true" in command
+    assert "--accept-routes=false" in command
+    assert not [flag for flag in command if flag.startswith("--advertise-routes")]
+
+
+def _roles(playbook: Path) -> list[dict[str, Any]]:
+    return [r for p in yaml.safe_load(playbook.read_text()) or [] for r in p.get("roles") or [] if isinstance(r, dict)]
+
+
+def _named(role: dict[str, Any]) -> str:
+    return str(role.get("role", "")).rstrip("/").split("/")[-1]
+
+
+@pytest.mark.parametrize(
+    "playbook",
+    [p for p in sorted(PLAYBOOKS.glob("provision-*.yml")) if any(_named(r) == "tailscale" for r in _roles(p))],
+    ids=lambda p: p.stem,
+)
+def test_a_rejoin_pins_headscale_before_it_runs_up(playbook: Path) -> None:
+    """A node off the mesh may still point its resolver at MagicDNS, which answers
+    nothing then: `--tags tailscale` has to reach dns_resilience's /etc/hosts line for
+    the login server first (#1259)."""
+    names = [_named(r) for r in _roles(playbook)]
+    assert "dns_resilience" in names, f"{playbook.name} runs tailscale without pinning Headscale"
+    pin = _roles(playbook)[names.index("dns_resilience")]
+    assert names.index("dns_resilience") < names.index("tailscale")
+    assert "tailscale" in pin.get("tags", []), "a rejoin runs --tags tailscale and would skip the pin"
+
+
 # --------------------------------------------------------------- the operator's side
 
 
-def test_the_rejoin_runs_the_nodes_own_play() -> None:
+@pytest.mark.parametrize("node", ["rpi4", "rpi3"])
+def test_the_rejoin_runs_the_nodes_own_play(node: str) -> None:
     from toolkit.features.headscale_nodes import rejoin_playbook
 
-    assert rejoin_playbook(PLAYBOOKS, "rpi4") == "provision-rpi4"
+    assert rejoin_playbook(PLAYBOOKS, node) == f"provision-{node}"
 
 
-@pytest.mark.parametrize("node", ["rpi3", "no-such-node"])
-def test_a_node_whose_play_cannot_rejoin_it_is_refused(node: str) -> None:
-    """rpi3's play installs no tailscale role, so a rejoin there would do nothing and
-    report success."""
+@pytest.mark.parametrize("play", ["without-the-role", None], ids=["no-tailscale-role", "no-play"])
+def test_a_node_whose_play_cannot_rejoin_it_is_refused(tmp_path: Path, play: str | None) -> None:
+    """A play without the tailscale role would run nothing under `--tags tailscale`
+    and report success."""
     from toolkit.features.headscale_nodes import RejoinRefused, rejoin_playbook
 
+    if play:
+        (tmp_path / "provision-node.yml").write_text("- hosts: node\n  roles:\n    - role: ../roles/base_system\n")
     with pytest.raises(RejoinRefused, match=r"ERROR: .* WHY: .* FIX: "):
-        rejoin_playbook(PLAYBOOKS, node)
+        rejoin_playbook(tmp_path, "node")
 
 
 def _invoke(node: str, run_exit: int = 0, restored: bool = True) -> tuple[Any, mock.MagicMock, mock.MagicMock]:
@@ -263,7 +303,7 @@ def test_a_failed_restore_fails_the_command_without_hiding_why_the_run_failed(ru
 
 
 def test_a_refused_node_runs_nothing() -> None:
-    result, ansible_run, _ = _invoke("rpi3")
+    result, ansible_run, _ = _invoke("no-such-node")
     assert result.exit_code == 1
     assert not ansible_run.called
 
