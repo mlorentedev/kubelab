@@ -37,7 +37,7 @@ ALWAYS-ON (24/7):
   VPS Hetzner (162.55.57.175) — Prod K3s: apps + observability + PostgreSQL
   GCP e2-small (2GB), gcp1    — Argo CD hub (management plane, ADR-063)
   RPi 3 (1GB)                 — Uptime Kuma (external prod monitoring)
-  RPi 4 (8GB)                 — Lab network edge: uplink, NAT, DHCP, lab Wi-Fi AP; staging DNS (ADR-075)
+  RPi 4 (8GB)                 — Lab network edge: uplink, NAT, DHCP, lab Wi-Fi AP; staging DNS (ADR-075; bring-up in NET-005)
 
 ON-DEMAND (homelab, powered when working):
   Acemagic-1 (12GB)           — K3s staging all-in-one (ace1)
