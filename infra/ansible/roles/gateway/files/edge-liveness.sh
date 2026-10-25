@@ -20,9 +20,11 @@
 #      load it again, and start hostapd;
 #   3. the next miss: reboot, once per outage. A reboot that did not bring the
 #      radio back is not repeated: until the lab Wi-Fi serves again, the edge holds
-#      and keeps paging. A radio that flaps, serving for a while after each reboot,
-#      is held once the edge rebooted EDGE_LIVENESS_MAX_REBOOTS times in the last
-#      hour. Either way a radio that never comes back cannot loop the edge.
+#      and keeps paging, so a radio that never comes back cannot loop the edge. A
+#      radio that flaps, serving for a check after each reboot, clears that latch,
+#      and only EDGE_LIVENESS_MAX_REBOOTS bounds it: that many reboots an hour, for
+#      as long as it flaps (#2682). A reboot systemctl refuses clears the marker, so
+#      the next miss tries again; a marker that cannot be written holds the reboot.
 #
 # The misses and the reload marker live in RUNTIME_DIRECTORY, so a reboot starts the
 # ladder again. The reboots are counted in STATE_DIRECTORY, which a reboot keeps, and
@@ -145,10 +147,17 @@ recover_ap() {
     return 1
   fi
   if reboot_allowed; then
+    # The marker first: a boot that cannot tell it was for the radio would reboot again.
+    if ! touch "$state_dir/ap.rebooted" 2>/dev/null; then
+      echo "lab Wi-Fi: $ap is still not serving after the driver reload, and $state_dir cannot record a reboot; holding the reboot until a human looks" >&2
+      return 1
+    fi
     echo "lab Wi-Fi: $ap is still not serving after the driver reload; rebooting the edge" >&2
     echo "$now" >>"$state_dir/reboots"
-    : >"$state_dir/ap.rebooted"
-    systemctl reboot
+    if ! systemctl reboot; then
+      rm -f "$state_dir/ap.rebooted"
+      echo "lab Wi-Fi: systemctl refused the reboot; the next check tries again" >&2
+    fi
     return 1
   fi
   echo "lab Wi-Fi: $ap is still not serving, and the edge already rebooted $max_reboots times in the last hour; holding the reboot until a human looks" >&2

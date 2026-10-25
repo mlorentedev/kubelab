@@ -1,7 +1,8 @@
 # {{ ansible_managed }}
 # Checks the lab Wi-Fi and the uplink, and brings a halted radio back (NET-005
-# AC13): a driver reload first, a reboot second, capped per hour. A failing
-# component pages once per incident, and the next clean run closes it (node_notify).
+# AC13): a driver reload first, then one reboot per outage, and a cap on reboots per
+# hour for a radio that flaps. A failing component pages once per incident, and the
+# next clean run closes it (node_notify).
 [Unit]
 Description=Check the lab Wi-Fi and the uplink, and recover a halted radio
 OnFailure=kubelab-notify@%n.service

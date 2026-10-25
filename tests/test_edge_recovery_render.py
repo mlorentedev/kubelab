@@ -7,8 +7,9 @@ only a reboot brings it back (raspberrypi/firmware#1403). Two mechanisms:
   15 seconds is the hardware's ceiling.
 - A liveness timer checks the lab Wi-Fi and escalates in order: after a few misses
   in a row it reloads the radio's driver and restarts hostapd, and if the AP is
-  still down at the next check it reboots. A state file caps the reboots per hour,
-  so a radio that never comes back cannot loop the edge.
+  still down at the next check it reboots, once per outage: a radio that never comes
+  back holds the edge and pages. A state file caps the reboots per hour, which bounds
+  a radio that flaps (#2682).
 
 The uplink is checked too, but never rebooted for. A present adapter with no lease
 is the site (down, out of range, a changed passphrase), which a reboot cannot fix,
@@ -223,7 +224,9 @@ def test_the_units_pass_systemd_analyze_verify(tmp_path: Path) -> None:
 FAKES = {
     "hostapd_cli": 'echo "hostapd_cli $*" >>"$FAKE/calls"\ncat "$FAKE/hostapd_status" 2>/dev/null\n',
     "modprobe": 'echo "modprobe $*" >>"$FAKE/calls"\n[ -e "$FAKE/modprobe_hangs" ] && sleep 5\nexit 0\n',
-    "systemctl": 'echo "systemctl $*" >>"$FAKE/calls"\n',
+    "systemctl": (
+        'echo "systemctl $*" >>"$FAKE/calls"\n[ "$1" = reboot ] && [ -e "$FAKE/reboot_fails" ] && exit 1\nexit 0\n'
+    ),
 }
 
 
@@ -424,6 +427,39 @@ def test_a_radio_that_served_after_its_reboot_may_be_rebooted_again(edge: Edge) 
     edge.ap(serving=False)
     _miss(edge, GRACE + 1)
     assert edge.calls == REBOOT
+
+
+def test_a_refused_reboot_is_tried_again(edge: Edge) -> None:
+    """A reboot systemctl refused did not happen: the latch must not claim it did, or the
+    edge would hold and page "since the edge rebooted" with the radio still halted."""
+    edge.ap(serving=False)
+    (edge.root / "fake" / "reboot_fails").touch()
+    result = _miss(edge, GRACE + 1)
+    assert edge.calls == REBOOT
+    assert result.returncode == 1
+    assert "refused" in result.stderr
+    assert not (edge.root / "state" / "ap.rebooted").exists()
+    (edge.root / "fake" / "reboot_fails").unlink()
+    edge.run()
+    assert edge.calls == REBOOT, "the next miss tries again, inside the cap"
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root writes through a read-only mode")
+def test_a_reboot_that_cannot_be_marked_is_held(edge: Edge) -> None:
+    """Without the marker the boot that follows would not know it was for the radio, and
+    the ladder would reboot again at its next miss: no marker, no reboot."""
+    edge.ap(serving=False)
+    _miss(edge, GRACE)
+    edge.reboots()
+    state = edge.root / "state"
+    state.chmod(0o555)
+    try:
+        result = edge.run()
+    finally:
+        state.chmod(0o755)
+    assert edge.calls == []
+    assert result.returncode == 1
+    assert "cannot record a reboot" in result.stderr
 
 
 def test_an_ap_that_disappeared_is_a_miss(edge: Edge) -> None:
