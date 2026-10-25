@@ -178,6 +178,15 @@ def test_no_lease_is_dead_without_asking(edge: Edge) -> None:
     assert not [call for call in edge.calls if call.startswith("curl")]
 
 
+def test_no_adapter_is_dead_without_asking(edge: Edge) -> None:
+    shutil.rmtree(edge.root / "net" / UPLINK)
+    result = edge.run()
+    assert result.returncode == DEAD
+    assert "adapter" in _report(result)["uplink"]
+    assert _report(result)["uplink MAC"] == "unreadable"
+    assert not edge.calls
+
+
 def test_no_resolver_answering_is_dead(edge: Edge) -> None:
     for answer in (edge.root / "fake").glob("dns_*"):
         answer.unlink()
