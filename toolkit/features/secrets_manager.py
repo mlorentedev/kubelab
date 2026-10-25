@@ -1809,6 +1809,59 @@ SECRET_CATALOG: list[SecretSpec] = [
     # AI services (ADR-035 Stage 1 — X-API-Key via Traefik plugin)
     # =========================================================================
     # (empty since AI-007 — Ollama was Stage 1's only registered API key)
+    # =========================================================================
+    # Lab edge (NET-005, ADR-075 D1): what would locate a site or let a stranger
+    # on it claim the lab's access. The plaintext rest is networking.edge in
+    # common.yaml. All EXTERNAL: a PSK the toolkit minted unasked would reach the
+    # AP at the next provision and lock out rpi3, whose only network it is. Only
+    # the keys the current uplink kind needs are here (tests/test_secrets_catalog_edge.py).
+    # =========================================================================
+    SecretSpec(
+        key_path="networking.edge.lab_wifi.ssid",
+        expiry=Expiry.NEVER,
+        description="The lab Wi-Fi's SSID, served by the RPi4's AP",
+        kind=SecretKind.EXTERNAL,
+        services=("gateway",),
+        format_hint="1 to 32 characters",
+        value_pattern=r".{1,32}",
+        rotate_note="Saved client devices must re-join by hand; rpi3 is re-keyed by the gateway rotation.",
+        envs=("prod",),
+    ),
+    SecretSpec(
+        key_path="networking.edge.lab_wifi.psk",
+        expiry=Expiry.NEVER,
+        description="The lab Wi-Fi's WPA2 passphrase, rendered for the AP and rpi3",
+        kind=SecretKind.EXTERNAL,
+        services=("gateway", "rpi3"),
+        format_hint="WPA2 passphrase, 8 to 63 printable ASCII characters",
+        value_pattern=r"[ -~]{8,63}",
+        rotate_note=(
+            "Only through the edge PSK rotation (NET-005 AC10): it re-keys rpi3 before the AP drops the old one."
+        ),
+        envs=("prod",),
+    ),
+    SecretSpec(
+        key_path="networking.edge.uplink.mac",
+        expiry=Expiry.NEVER,
+        description="Permanent MAC of the uplink adapter; the captive portal authorizes it",
+        kind=SecretKind.EXTERNAL,
+        services=("gateway",),
+        format_hint="lower-case aa:bb:cc:dd:ee:ff",
+        value_pattern=r"[0-9a-f]{2}(:[0-9a-f]{2}){5}",
+        rotate_note="Changes only with the adapter. A new MAC needs a new portal login and payment at the site.",
+        envs=("prod",),
+    ),
+    SecretSpec(
+        key_path="networking.edge.uplink.ssid",
+        expiry=Expiry.NEVER,
+        description="SSID of the current site's uplink Wi-Fi (kind wifi_open or wifi_psk)",
+        kind=SecretKind.EXTERNAL,
+        services=("gateway",),
+        format_hint="1 to 32 characters",
+        value_pattern=r".{1,32}",
+        rotate_note="Changes with the site: set it, then provision the RPi4.",
+        envs=("prod",),
+    ),
 ]
 
 # Build lookup by key_path for quick access
