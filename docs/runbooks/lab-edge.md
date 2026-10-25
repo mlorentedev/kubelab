@@ -38,6 +38,8 @@ make edge-status
 
 The edge runs the check itself, against a connectivity-check URL bound to the uplink, and the target reaches it over SSH at its LAN address. It answers from the switch and from the lab Wi-Fi, not over the tailnet.
 
+Read the state from the `uplink:` line it prints. make turns every failing recipe into exit 2, so through `make edge-status` a portal, a dead uplink and an unknown one all exit 2. The codes below are `toolkit infra edge status`'s, the command the target runs, for a script that needs them; `unknown` arrives with #2674.
+
 | Exit | State | Meaning |
 |------|-------|---------|
 | 0 | `up` | The connectivity check answered `204`. |
@@ -63,11 +65,11 @@ It also reports whether a public resolver and the lease's resolver answer, and w
    make provision NODE=rpi4 ENV=prod BOOTSTRAP=1 TAGS=gateway
    ```
 
-   The role loads the uplink's drops before it brings the uplink up, so the uplink is never on a shared network unfiltered. At a captive-portal site the run then stops at the AP's packages, with a message saying the archive answers only after the login. That stop is expected.
+   The role loads the uplink's drops before it brings the uplink up, so the uplink is never on a shared network unfiltered. On a fresh card at a captive-portal site the run then stops at the AP's packages, with a message saying the archive answers only after the login. That stop is expected. An edge that already has them installed does not stop there.
 
 3. **Check the uplink** with `make edge-status`. `portal` means the login below. At a site whose portal you have not met before, read the two resolver lines first: if only the lease's resolver answers before the login, the login needs the login mode (below).
 
-4. **Finish the provision** once the uplink is `up`. This installs the AP and everything else the play holds:
+4. **Finish the provision** once the uplink is `up`. This runs everything else the play holds, and on a fresh card installs the AP:
 
    ```bash
    make provision NODE=rpi4 ENV=prod BOOTSTRAP=1
@@ -116,7 +118,7 @@ A portal page that loads only in part is most likely a Pi-hole blocklist hit on 
 
 ## Answering an uplink collision page
 
-The edge pages when its uplink lease falls inside `networking.lan_cidr`, the lab Wi-Fi's CIDR or the tailnet's (`kubelab-edge-lease-check`, posting through `node_notify` with `tag: page`). Routing survives such a lease, because the longer internal prefix wins. The address can still clash with a host on the homelab LAN:
+The edge alerts when its uplink lease falls inside `networking.lan_cidr`, the lab Wi-Fi's CIDR or the tailnet's (`kubelab-edge-lease-check`, posting through `node_notify`). It posts at `node_notify`'s severity for the host, which is `log` today, so the alert reaches the log channel rather than the page channel until #2684 decides otherwise. Routing survives such a lease, because the longer internal prefix wins. The address can still clash with a host on the homelab LAN:
 
 1. Compare the uplink's address with the edge's DHCP pool (`gateway_dhcp_range_start` to `gateway_dhcp_range_end` in the `gateway` role's defaults) and with every `networking.nodes.*.lan_ip`.
 2. Outside both: nothing collides today, and the page is a warning about the site.
@@ -136,7 +138,9 @@ Not built yet (NET-005 task 34). The lab Wi-Fi still uses the home network's PSK
 
 ## Self-recovery
 
-The radio's firmware can halt, after a weak client or an eighth station, and only a reboot recovers it. The role arms systemd's hardware watchdog, and a liveness timer (`kubelab-edge-liveness.timer`) watches the AP and the uplink: it reloads the driver first, then reboots, once per outage. If the lab Wi-Fi still does not serve after that reboot, the edge holds and keeps paging instead of rebooting again, since the RPi4 is also the homelab's DNS and DHCP. A warm reboot may not bring back a halted radio, and there is no remote power cycle (ADR-075 D5 records it as debt), so an edge that pages after its own reboot needs its power cable pulled.
+The radio's firmware can halt, after a weak client or an eighth station, and only a reboot recovers it. The role arms systemd's hardware watchdog, and a liveness timer (`kubelab-edge-liveness.timer`) watches the AP and the uplink: it reloads the driver first, then reboots, once per outage. If the lab Wi-Fi still does not serve after that reboot, the edge holds and keeps alerting instead of rebooting again (at `log` severity until #2684), since the RPi4 is also the homelab's DNS and DHCP. A warm reboot may not bring back a halted radio, and there is no remote power cycle (ADR-075 D5 records it as debt), so an edge that still alerts after its own reboot needs its power cable pulled. A radio that flaps, serving for a check after each boot, clears that hold each time, and only the cap of two reboots an hour bounds it (#2682).
+
+Do not stop hostapd by hand while the liveness timer runs: the ladder reads a stopped hostapd as a halted radio, reloads the driver under you, and at the next miss reboots the edge. There is no target to pause it yet (#2683).
 
 ## Reaching the edge from the switch
 
