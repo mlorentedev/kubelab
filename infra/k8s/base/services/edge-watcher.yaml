@@ -37,7 +37,9 @@ metadata:
     app.kubernetes.io/component: observability
     app.kubernetes.io/part-of: kubelab
 spec:
-  # The rule's window holds three runs, so one lost Job never decides it.
+  # grafana-alerting/edge-rules.yaml reads this cadence: the target rule's
+  # window holds two runs and the silent rule's three, so one lost Job never
+  # decides either. tests/test_edge_alerting_rules.py derives both from here.
   schedule: "*/5 * * * *"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
