@@ -52,6 +52,17 @@ Read on the RPi4 the same day:
 
 Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
 
+### Task 11: PR 3 live over the LAN (AC4), 2026-10-25
+
+`make provision NODE=rpi4 ENV=prod BOOTSTRAP=1 TAGS=gateway`, run from the PR 3 branch with no PR 4 content on it, twice in a row:
+
+- run 1: `ok=29 changed=6 failed=0`; run 2: `ok=26 changed=0 failed=0`.
+- `nft list tables` shows `inet kubelab` beside iptables-nft's own tables, which the scoped stop leaves alone. `nftables.service` stops with `nft delete table inet kubelab`, and the input chain opens with `iifname "uplink0" ct state established,related accept`.
+- `rp_filter` reads `all=0`, and `default`, `eth0`, `wlan0` and `tailscale0` read `2`. The uplink's `1` lands when `uplink0` exists (PR 4).
+- A host on the switch takes a lease from the RPi4. bee ran `busybox udhcpc -i enp1s0 -n -q -f -R -s /bin/true`, which completes the exchange without configuring the interface and releases on exit. dnsmasq logged `DHCPDISCOVER(eth0)`, `DHCPOFFER(eth0) 172.16.1.3`, `DHCPREQUEST(eth0)` and `DHCPACK(eth0) 172.16.1.3 kubelab-bee`, the reservation from `networking.nodes.beelink`.
+
+The RPi4's journal reads 2026-10-23 for these lines: with no uplink it has no NTP, and its clock drifts until PR 4 gives it one.
+
 - [ ] Criterion 1 -> commit `<hash>` / test `<name>`
 - [ ] Criterion 2 -> commit `<hash>` / test `<name>`
 - [ ] Criterion 3 -> commit `<hash>` / test `<name>`
