@@ -136,7 +136,7 @@ Not built yet (NET-005 task 34). The lab Wi-Fi still uses the home network's PSK
 
 ## Self-recovery
 
-The radio's firmware can halt, after a weak client or an eighth station, and only a reboot recovers it. The role arms systemd's hardware watchdog, and a liveness timer (`kubelab-edge-liveness.timer`) watches the AP and the uplink: it reloads the driver first, then reboots. A warm reboot may not bring back a halted radio, and there is no remote power cycle (ADR-075 D5 records it as debt), so an edge that stays down after its own reboot needs its power cable pulled.
+The radio's firmware can halt, after a weak client or an eighth station, and only a reboot recovers it. The role arms systemd's hardware watchdog, and a liveness timer (`kubelab-edge-liveness.timer`) watches the AP and the uplink: it reloads the driver first, then reboots, once per outage. If the lab Wi-Fi still does not serve after that reboot, the edge holds and keeps paging instead of rebooting again, since the RPi4 is also the homelab's DNS and DHCP. A warm reboot may not bring back a halted radio, and there is no remote power cycle (ADR-075 D5 records it as debt), so an edge that pages after its own reboot needs its power cable pulled.
 
 ## Reaching the edge from the switch
 
