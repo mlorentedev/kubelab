@@ -116,7 +116,7 @@ This PR loads the drops before any uplink exists. `iifname` matches a name, so r
 
 ### PR 5 — The access point
 
-16. [ ] [P] [AC2] Test first, `tests/test_gateway_ap_render.py`:
+16. [x] (✓ 2026-10-25, #2670) [P] [AC2] Test first, `tests/test_gateway_ap_render.py`:
     - `hostapd.conf` sets `interface=wlan0`, `hw_mode=g`, the profile's `channel`, `country_code` with `ieee80211d=1`, `wpa=2`, `wpa_key_mgmt=WPA-PSK`, `rsn_pairwise=CCMP` and `ieee80211w=0`. It has no `wps_state`, an absolute `wpa_psk_file` path, and an `ssid` from a variable;
     - the PSK file has one `keyid=<id> 00:00:00:00:00:00 <psk>` line per entry, with mode `0600`;
     - a networkd unit for `wlan0` sets the gateway address and `ConfigureWithoutCarrier=yes`;
@@ -125,7 +125,7 @@ This PR loads the drops before any uplink exists. `iifname` matches a name, so r
     - the role stops, disables and masks `netplan-wpa-wlan0.service` and `wpa_supplicant.service` before it starts hostapd. Removing the home SSID from netplan does not stop a running supplicant, and hostapd cannot take an interface a supplicant holds.
 
     Watch it fail.
-17. [ ] [AC2] Implement:
+17. [x] (✓ 2026-10-25, #2670) [AC2] Implement:
     - unmask and enable `hostapd`;
     - the templates, rendered with `no_log`;
     - handlers: `hostapd_cli reload_wpa_psk` for the PSK file, and a restart for the config;
@@ -136,20 +136,20 @@ This PR loads the drops before any uplink exists. `iifname` matches a name, so r
 
 ### PR 6 — Collision detection and shaping
 
-18. [ ] [P] [AC7] Test first, `tests/test_edge_lease_check.py`. Feed `roles/gateway/files/edge-lease-check.sh` lease fixtures (address, gateway, routes) and the CIDRs from the SSOT:
+18. [x] (✓ 2026-10-25, #2671) [P] [AC7] Test first, `tests/test_edge_lease_check.py`. Feed `roles/gateway/files/edge-lease-check.sh` lease fixtures (address, gateway, routes) and the CIDRs from the SSOT:
     - each collision kind exits non-zero with a message naming the kind;
     - a clean lease exits 0.
 
     Watch it fail.
-19. [ ] [AC7] Implement the script. A systemd path unit watches networkd's lease directory and runs it, with `OnFailure=kubelab-notify@%n.service` (the `node_notify` role). Green.
-20. [ ] [P] [AC8] Test first, `tests/test_edge_shaper_render.py`:
+19. [x] (✓ 2026-10-25, #2671) [AC7] Implement the script. A systemd path unit watches networkd's lease directory and runs it, with `OnFailure=kubelab-notify@%n.service` (the `node_notify` role). Green.
+20. [x] (✓ 2026-10-25, #2671) [P] [AC8] Test first, `tests/test_edge_shaper_render.py`:
     - egress is `cake bandwidth <up> nat dual-srchost`;
     - ingress goes through an IFB device with `cake bandwidth <down> nat dual-dsthost ingress`;
     - both rates come from `bandwidth`, scaled below the measured rate;
     - the unit is bound to the uplink device.
 
     Watch it fail.
-21. [ ] [AC8] Implement the shaper unit. Green.
+21. [x] (✓ 2026-10-25, #2671) [AC8] Implement the shaper unit. Green.
 
 ### PR 7 — The prod probe
 
@@ -171,14 +171,16 @@ This PR loads the drops before any uplink exists. `iifname` matches a name, so r
 
 ### PR 8 — Self-recovery
 
-28. [ ] [P] [AC13] Test first, `tests/test_edge_recovery_render.py`:
+28. [x] (✓ 2026-10-25, #2673) [P] [AC13] Test first, `tests/test_edge_recovery_render.py`:
     - `/etc/systemd/system.conf.d/watchdog.conf` sets `RuntimeWatchdogSec=15s`;
     - the liveness service checks that hostapd reports `ENABLED` with `wlan0` up, and that the uplink holds a lease;
     - on failure it reloads `brcmfmac` first and reboots second;
     - a state file caps reboots per hour, so a radio that never recovers cannot cause a boot loop.
 
     Watch it fail.
-29. [ ] [AC13] Implement the units and their timer. Green.
+29. [x] (✓ 2026-10-25, #2673) [AC13] Implement the units and their timer. Green.
+
+    The uplink is reported and never rebooted for, and a vanished adapter gets one driver reload per incident. See `verification.md`.
 
 ### PR 9 — Edge status and login mode
 
@@ -220,6 +222,8 @@ This PR loads the drops before any uplink exists. `iifname` matches a name, so r
 
     If B7 found the radio offloads the handshake, the rotate target takes the fallback in ADR-075 D8 instead. Implement in `toolkit/features/edge_psk.py`. Green.
 
+    The rotate target reloads hostapd's PSK file itself once the play ends, not only through the role's handler. A play that fails between the file's deploy and the handler flush loses the notification, and the next run finds the file unchanged (lesson-620's class). The retire check above detects that loss; the explicit reload repairs it.
+
 ### PR 12 — Reclassification, runbook, lesson
 
 35. [ ] [AC11] [AC5] Runbook `docs/runbooks/lab-edge.md`:
@@ -247,7 +251,7 @@ Run at the temporary site in this order, after the PR each step needs. Every res
 - [ ] B7. [AC10] **On-device multi-PSK check.** Write two wildcard entries and connect a client with the first entry's PSK. Record which entry works and the `keyid` hostapd logs. If only the last works, try `brcmfmac.feature_disable` through `modprobe.d` and record the result. It decides task 34's path.
 - [ ] B8. [AC3] [AC7] [AC9] [AC12] The uplink stand-in (the MSI's hotspot):
   - exposure scans over IPv4 and IPv6;
-  - hostile DHCP with option 121 and its own DNS;
+  - hostile DHCP with option 121 and its own DNS. The uplink does not request option 121 (`use-routes: false`), so the stand-in's server must send it unasked (dnsmasq `dhcp-option-force=121,...`), or the lease carries no route to check;
   - a colliding address and a colliding gateway;
   - a DNS-only block like a portal's, which must page with the phone on cellular;
   - the dongle unplugged, which must page;
