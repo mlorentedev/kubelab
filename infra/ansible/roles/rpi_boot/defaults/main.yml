@@ -29,6 +29,18 @@ rpi_boot_required_params:
   - cgroup_enable=memory
   - cgroup_memory=1
 
+# Kernel parameters this role guarantees are absent, by name: every token whose
+# name (the part before `=`) is listed is removed, whatever its value.
+#
+# EMPTY ON PURPOSE. A play that owns what a parameter would override declares it.
+# The edge (provision-rpi4.yml) removes `cfg80211.ieee80211_regdom`: the regulatory
+# domain is set per site through modprobe.d (the gateway role, #2670), and kmod
+# applies the command line after it, so the command line would always win (#2668).
+# The same token is how Raspberry Pi OS stores the Wi-Fi country (raspi-config's
+# `do_wifi_country` writes it into cmdline.txt), and rpi3 runs this role with Wi-Fi
+# as its only network: a default here could take a headless node off the air.
+rpi_boot_absent_params: []
+
 # A cmdline change only takes effect at boot, so this role is inert without a
 # reboot. Rebooting is NEVER ambient: it is opt-in per run.
 #
