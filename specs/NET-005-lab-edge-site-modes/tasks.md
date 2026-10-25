@@ -92,7 +92,7 @@ This PR loads the drops before any uplink exists. `iifname` matches a name, so r
 
 ### PR 4 — The uplink
 
-12. [ ] [P] [AC6] [AC9] Test first, `tests/test_gateway_uplink_render.py`. For each `kind`, the netplan render binds the profile's interface with DHCPv4 and these settings:
+12. [x] (✓ 2026-10-25, #2667) [P] [AC6] [AC9] Test first, `tests/test_gateway_uplink_render.py`. For each `kind`, the netplan render binds the profile's interface with DHCPv4 and these settings:
     - `use-routes`, `use-dns`, `use-ntp`, `use-domains` and `use-hostname` all `false`;
     - `dhcp-identifier: mac`;
     - no IPv6.
@@ -103,7 +103,7 @@ This PR loads the drops before any uplink exists. `iifname` matches a name, so r
     - for every `kind`, `eth0` renders static at `networking.nodes.rpi4.lan_ip`. The RPi4 has no screen, so the LAN is the recovery path and no profile may drop it.
 
     Watch it fail.
-13. [ ] [AC6] [AC5] Implement:
+13. [x] (✓ 2026-10-25, #2667) [AC6] [AC5] Implement:
     - `templates/netplan-edge.yaml.j2` and `templates/dhcp-gateway.conf.j2`;
     - the `.link` file `templates/uplink.link.j2`, which matches `PermanentMACAddress` from SOPS and sets `Name=uplink0` and `MACAddressPolicy=none`. It is rendered with `no_log`. `networking.edge.uplink.mac` names the adapter the current `kind` uses: the USB Wi-Fi adapter for `wifi_open` and `wifi_psk`, the USB Ethernet adapter for `ethernet`. Changing `kind` changes that key in the same edit, and the render test fails if a `kind` reaches the template without it;
     - the netplan task runs with `no_log: true` and mode `0600`, since the file holds the uplink SSID and, for `wifi_psk`, its PSK, and `--diff` would print it;
@@ -111,8 +111,8 @@ This PR loads the drops before any uplink exists. `iifname` matches a name, so r
     - netplan is validated with `netplan generate` before the handler applies it, and the play waits with `wait_for_connection` after the apply, so a profile that cuts the LAN fails visibly. Recovery from that is editing the SD card from another machine; the runbook (task 35) says how.
 
     Green.
-14. [ ] [AC1] [AC3] Test first, in `tests/test_gateway_role_tasks.py`: in `roles/gateway/tasks/main.yml`, the nftables task comes before the netplan task, so an uplink never comes up without its drops. It is green by construction after task 6; the test keeps it so.
-15. [ ] [P] [AC1] Test first, in `tests/test_gateway_firewall_render.py`: the masquerade list is derived from `networking.edge.uplink.interface`, not from the old `enx*`/`wlan0` literals in `defaults/main.yml`. Implement. Green.
+14. [x] (✓ 2026-10-25, #2667) [AC1] [AC3] Test first, in `tests/test_gateway_role_tasks.py`: in `roles/gateway/tasks/main.yml`, the nftables task comes before the netplan task, so an uplink never comes up without its drops. It is green by construction after task 6; the test keeps it so.
+15. [x] (✓ 2026-10-25, #2667) [P] [AC1] Test first, in `tests/test_gateway_firewall_render.py`: the masquerade list is derived from `networking.edge.uplink.interface`, not from the old `enx*`/`wlan0` literals in `defaults/main.yml`. Implement. Green.
 
 ### PR 5 — The access point
 
