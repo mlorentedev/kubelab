@@ -351,6 +351,15 @@ def test_hostapd_enabled_on_a_down_interface_is_a_miss(edge: Edge) -> None:
     assert edge.calls == RELOAD_AP
 
 
+@pytest.mark.parametrize("status", ["state=DISABLED\n", "state=COUNTRY_UPDATE\n", ""])
+def test_an_up_interface_whose_hostapd_is_not_enabled_is_a_miss(edge: Edge, status: str) -> None:
+    """A halted firmware can leave the interface up; hostapd is what knows. No reply is
+    a hostapd that is gone or hung."""
+    (edge.root / "fake" / "hostapd_status").write_text(status)
+    _miss(edge, GRACE)
+    assert edge.calls == RELOAD_AP
+
+
 def test_a_reload_that_worked_resets_the_ladder(edge: Edge) -> None:
     edge.ap(serving=False)
     _miss(edge, GRACE)
