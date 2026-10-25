@@ -92,7 +92,7 @@ This replaces the rigid "control plane vs data plane" taxonomy with an availabil
 
 | Tier | Nodes | Power | Purpose |
 |------|-------|-------|---------|
-| **Always-on** | VPS (8GB ARM), AWS t4g.micro, RPi3 (1GB), RPi4 (8GB, since the 2026-10-25 amendment) | 24/7 cloud + low-power | Production workloads, observability, GitOps, external monitoring, the lab's network edge |
+| **Always-on** | VPS (8GB ARM), gcp1 (GCP e2-small, the Argo CD hub since ADR-063), RPi3 (1GB), RPi4 (8GB, since the 2026-10-25 amendment) | 24/7 cloud + low-power | Production workloads, observability, GitOps, external monitoring, the lab's network edge |
 | **On-demand** | ace1 (12GB), Beelink (8GB), ace2 (12GB), Jetson (4GB) | Homelab, powered when working | Staging validation, CI, AI/LLM, local development |
 
 ### 2. Service placement

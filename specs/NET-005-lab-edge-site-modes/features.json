@@ -43,7 +43,7 @@
   },
   {
     "id": "NET-005-lab-edge-site-modes-f7",
-    "behavior": "AC6: network config, resolver and reservations are rendered from the SSOT; no site-identifying key is committed; secrets catalogued",
+    "behavior": "AC6: network config, resolver and reservations are rendered from the SSOT; no site-identifying key is committed; secrets catalogued. A missing secret stops the provision at the role's profile check; the audit's exit status on a missing key is #2499",
     "verification": "poetry run pytest -q --no-cov tests/test_edge_ssot.py tests/test_gateway_uplink_render.py tests/test_secrets_catalog_edge.py && make secrets-audit",
     "state": "pending",
     "evidence": ""
