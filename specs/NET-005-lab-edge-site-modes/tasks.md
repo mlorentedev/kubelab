@@ -184,13 +184,17 @@ This PR loads the drops before any uplink exists. `iifname` matches a name, so r
 
 ### PR 9 — Edge status and login mode
 
-30. [ ] [P] [AC5] Test first, `tests/test_edge_status.py`. The status script, fed recorded responses, classifies the uplink:
+30. [x] (✓ 2026-10-25) [P] [AC5] Test first, `tests/test_edge_status.py`. The status script, fed recorded responses, classifies the uplink:
     - `204` from a connectivity check bound to the uplink is `up`;
     - a redirect or `200` is `portal`;
     - no answer is `dead`.
 
     It exits 0 only for `up`, and with a distinct non-zero code for `portal` and for `dead`, so a script can tell them apart. It also reports whether a public resolver and the lease's resolver answer, and whether the uplink MAC matches SOPS, without printing it. `make edge-status` runs it over SSH. Implement. Green.
+
+    Built as `kubelab-edge-status`, run over SSH to the edge's LAN address (the tailnet rides on the uplink it reports on). The script reads the lease file unprivileged, which B3 confirms on the edge.
 31. [ ] [AC5] **Built only if B3 finds that only the site's resolver answers before login.** Test first: `make edge-login-mode MODE=on` renders one Pi-hole `server=/<domain>/<lease DNS>` line per portal domain in SOPS. `MODE=off` removes them and runs `docker restart pihole`, as the `coredns` role does: Pi-hole v6's `pihole reloaddns` does not reload dnsmasq configs, and the cache would otherwise keep the portal's answers. This task also registers `portal_domains` in `SECRET_CATALOG`. Implement through the toolkit and the `coredns` role. Green. If B3 shows public resolvers answer, record that and skip this task.
+
+    Not built with task 30: it waits for B3's answer.
 
 ### PR 10 — Operator steps as targets
 
@@ -226,7 +230,7 @@ This PR loads the drops before any uplink exists. `iifname` matches a name, so r
 
     Test first, `tests/test_edge_runbook_commands.py`: every fenced shell command in the runbook starts with `make `. Replace the netplan heredoc in `docs/runbooks/rpi4-bootstrap.md`, fix its `ES` regulatory domain, and update `docs/runbooks/hardware-setup.md`'s topology. Replace the MAC-derived adapter names in `docs/troubleshooting/networking-dns.md` with `enx<MAC>` (ADR-075 C7).
 36. [ ] [AC2] Set `networking.nodes.rpi4.location: always-on` and run `make sync-r2-watcher-targets`. Add the RPi4's push monitor if `tests/test_backup_heartbeat_monitors.py` requires one for always-on nodes. `make test` is green.
-37. [ ] Housekeeping: write the lesson `docs/lessons/<category>/lesson-NNN-ufw-does-not-govern-forwarded-traffic.md`, which records the false intersection claim and the evidence that refuted it, and add it to the index. Add a Critical-gotchas line to `CLAUDE.md` saying that on the RPi4 edge, `inet kubelab` alone restricts forwarded traffic. Mark `docs/lessons/networking-dns/lesson-110-nftables-masquerade-must-include-wlan0-not-ju.md` superseded by the new lesson, since ADR-075 moves the masquerade off `wlan0`, and correct `docs/runbooks/rpi4-sd-card-provisioning.md`, which still calls `enx*` and `wlan0` uplinks.
+37. [ ] (the lesson, as lesson-621, the `CLAUDE.md` line and lesson-110's mark ✓ 2026-10-25; `docs/runbooks/rpi4-sd-card-provisioning.md` is still open, outside the unattended run's write paths) Housekeeping: write the lesson `docs/lessons/<category>/lesson-NNN-ufw-does-not-govern-forwarded-traffic.md`, which records the false intersection claim and the evidence that refuted it, and add it to the index. Add a Critical-gotchas line to `CLAUDE.md` saying that on the RPi4 edge, `inet kubelab` alone restricts forwarded traffic. Mark `docs/lessons/networking-dns/lesson-110-nftables-masquerade-must-include-wlan0-not-ju.md` superseded by the new lesson, since ADR-075 moves the masquerade off `wlan0`, and correct `docs/runbooks/rpi4-sd-card-provisioning.md`, which still calls `enx*` and `wlan0` uplinks.
 38. [ ] Housekeeping, in another repository: point the dotfiles `rpi4-lan` alias at the new `wifi_lan_ip`, as a dotfiles PR.
 
 ## Bring-up and live proof
