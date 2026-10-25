@@ -210,8 +210,12 @@ def test_the_shaper_is_enabled_and_started_only_on_a_present_uplink() -> None:
     assert "state" not in _systemd(TASKS[enabled])
     present, absent = {"stat": {"exists": True}}, {"stat": {"exists": False}}
     same = {"changed": False}
-    assert _holds(TASKS[started]["when"], ansible_check_mode=False, gateway_uplink_sysfs=present, gateway_shaper_unit=same)
-    assert not _holds(TASKS[started]["when"], ansible_check_mode=False, gateway_uplink_sysfs=absent, gateway_shaper_unit=same)
+    assert _holds(
+        TASKS[started]["when"], ansible_check_mode=False, gateway_uplink_sysfs=present, gateway_shaper_unit=same
+    )
+    assert not _holds(
+        TASKS[started]["when"], ansible_check_mode=False, gateway_uplink_sysfs=absent, gateway_shaper_unit=same
+    )
     rename_check = _first(lambda task: "gateway_uplink_sysfs" in str(task.get("assert")))
     assert rename_check < started
 
