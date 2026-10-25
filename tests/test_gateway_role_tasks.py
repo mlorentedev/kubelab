@@ -81,17 +81,42 @@ def test_the_sysctls_reload_through_systemd_sysctl() -> None:
     assert handler["systemd"] == {"name": "systemd-sysctl", "state": "restarted"}
 
 
+def _tailscale_check() -> tuple[int, int, str]:
+    facts = next(
+        i for i, task in enumerate(TASKS) if "package_facts" in task or "ansible.builtin.package_facts" in task
+    )
+    check = next(i for i, task in enumerate(TASKS) if "gateway_tailscale_min_version" in str(task.get("assert")))
+    return facts, check, TASKS[check]["assert"]["that"]
+
+
 def test_the_tailscale_floor_is_asserted_before_the_sysctls_load() -> None:
+    """The version comes from dpkg, not from running the binary: a binary that fails
+    to run would read as absent, and absent is the one case let through."""
     assert DEFAULTS["gateway_tailscale_min_version"] == "1.96.2"
     sysctl_index, _ = _template_task("/etc/sysctl.d/99-kubelab-edge.conf")
-    probe = next(i for i, task in enumerate(TASKS) if task.get("register") == "gateway_tailscale_version")
-    check = next(i for i, task in enumerate(TASKS) if "gateway_tailscale_min_version" in str(task.get("assert")))
-    assert probe < check < sysctl_index
-    # A read-only probe: it must run under --check and must not fail on a node
-    # where the tailscale role (later in the play) has not installed it yet.
-    assert TASKS[probe]["check_mode"] is False
-    assert TASKS[probe]["failed_when"] is False
-    assert TASKS[probe]["changed_when"] is False
+    facts, check, _ = _tailscale_check()
+    assert facts < check < sysctl_index
+    assert not any(task.get("register") == "gateway_tailscale_version" for task in TASKS)
+
+
+@pytest.mark.parametrize(
+    ("packages", "passes"),
+    [
+        ({}, True),
+        ({"tailscale": [{"version": "1.96.1"}]}, False),
+        ({"tailscale": [{"version": "1.96.2"}]}, True),
+        ({"tailscale": [{"version": "1.102.4"}]}, True),
+    ],
+    ids=["absent", "below-the-floor", "at-the-floor", "installed-on-the-edge"],
+)
+def test_the_tailscale_floor_lets_only_an_absent_or_current_package_through(packages, passes) -> None:
+    """Absent passes: the tailscale role installs a current one later in the play."""
+    _, _, condition = _tailscale_check()
+    env = ansible_env(str(ROLE / "templates"))
+    result = env.compile_expression(condition)(
+        ansible_facts={"packages": packages}, gateway_tailscale_min_version=DEFAULTS["gateway_tailscale_min_version"]
+    )
+    assert bool(result) is passes
 
 
 def test_the_ruleset_handler_reloads_and_never_restarts() -> None:
