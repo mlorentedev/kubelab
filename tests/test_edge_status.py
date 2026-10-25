@@ -15,6 +15,7 @@ SSH to the edge's LAN address: the tailnet rides on the uplink being reported on
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -45,7 +46,7 @@ LEASE_DNS = "198.51.100.1"
 CHECK_IP = "192.0.2.204"
 PORTAL_IP = "192.0.2.80"
 IFINDEX = "7"
-UP, PORTAL, DEAD = 0, 2, 3
+UP, PORTAL, DEAD, UNKNOWN = 0, 2, 3, 4
 
 
 def _render(name: str, **variables: Any) -> str:
@@ -196,9 +197,23 @@ def test_no_resolver_answering_is_dead(edge: Edge) -> None:
     assert "resolver" in _report(result)["uplink"]
 
 
-def test_the_three_states_have_distinct_codes() -> None:
-    assert len({UP, PORTAL, DEAD}) == 3
-    assert 0 not in (PORTAL, DEAD)
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads a file whatever its mode")
+@pytest.mark.parametrize("unreadable", ["file", "directory"])
+def test_a_lease_it_cannot_read_is_unknown_not_dead(edge: Edge, unreadable: str) -> None:
+    """networkd writes its leases world-readable. A lease this user cannot read says
+    nothing about the uplink, and calling it "no lease" would send the operator to
+    debug a healthy edge."""
+    target = edge.root / "leases" / IFINDEX if unreadable == "file" else edge.root / "leases"
+    mode = target.stat().st_mode
+    target.chmod(0o600 if unreadable == "directory" else 0)
+    try:
+        result = edge.run()
+    finally:
+        target.chmod(mode)
+    assert result.returncode == UNKNOWN
+    assert _report(result)["uplink"].startswith("unknown")
+    assert _report(result)["lease"] == "unreadable"
+    assert not edge.calls
 
 
 def test_usage(edge: Edge) -> None:
@@ -349,7 +364,7 @@ def test_the_target_refuses_anything_but_one_edge(edges: int) -> None:
         status_command(networking)
 
 
-@pytest.mark.parametrize("code", [UP, PORTAL, DEAD, 255])
+@pytest.mark.parametrize("code", [UP, PORTAL, DEAD, UNKNOWN, 255])
 def test_the_command_exits_with_the_edges_code(code: int) -> None:
     from typer.testing import CliRunner
 
