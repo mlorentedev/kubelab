@@ -42,13 +42,17 @@ def _shell_lines(text: str) -> list[str]:
     return [line for line in lines if line and not line.startswith("#")]
 
 
+def _outside_make(text: str) -> list[str]:
+    return [line for line in _shell_lines(text) if not line.startswith("make ")]
+
+
 def test_the_runbook_has_commands_to_check() -> None:
     """Guard the guard: a fence pattern that matched nothing would pass any runbook."""
     assert len(_shell_lines(RUNBOOK.read_text(encoding="utf-8"))) >= 5
 
 
 def test_every_command_in_the_runbook_is_a_make_target() -> None:
-    outside = [line for line in _shell_lines(RUNBOOK.read_text(encoding="utf-8")) if not line.startswith("make ")]
+    outside = _outside_make(RUNBOOK.read_text(encoding="utf-8"))
     assert not outside, f"lab-edge.md tells the reader to run commands that are not Make targets: {outside}"
 
 
@@ -59,6 +63,7 @@ def test_a_shell_line_that_is_not_make_is_caught() -> None:
         "1. In a list item:\n\n   ```bash\n   sudo reboot\n   ```\n"
     )
     assert _shell_lines(sample) == ["make edge-status", "ssh rpi4 sudo reboot", "sudo reboot"]
+    assert _outside_make(sample) == ["ssh rpi4 sudo reboot", "sudo reboot"]
 
 
 def _documents() -> list[Path]:
