@@ -118,7 +118,7 @@ A portal page that loads only in part is most likely a Pi-hole blocklist hit on 
 
 ## Answering an uplink collision page
 
-The edge alerts when its uplink lease falls inside `networking.lan_cidr`, the lab Wi-Fi's CIDR or the tailnet's (`kubelab-edge-lease-check`, posting through `node_notify`). It posts at `node_notify`'s severity for the host, which is `log` today, so the alert reaches the log channel rather than the page channel until #2684 decides otherwise. Routing survives such a lease, because the longer internal prefix wins. The address can still clash with a host on the homelab LAN:
+The edge alerts when its uplink lease falls inside `networking.lan_cidr`, the lab Wi-Fi's CIDR or the tailnet's (`kubelab-edge-lease-check`, posting through `node_notify`). It pages: the unit declares `page` for itself, while the rest of the node keeps `log` (#2684). Routing survives such a lease, because the longer internal prefix wins. The address can still clash with a host on the homelab LAN:
 
 1. Compare the uplink's address with the edge's DHCP pool (`gateway_dhcp_range_start` to `gateway_dhcp_range_end` in the `gateway` role's defaults) and with every `networking.nodes.*.lan_ip`.
 2. Outside both: nothing collides today, and the page is a warning about the site.
@@ -138,7 +138,7 @@ Not built yet (NET-005 task 34). The lab Wi-Fi still uses the home network's PSK
 
 ## Self-recovery
 
-The radio's firmware can halt, after a weak client or an eighth station, and only a reboot recovers it. The role arms systemd's hardware watchdog, and a liveness timer (`kubelab-edge-liveness.timer`) watches the AP and the uplink: it reloads the driver first, then reboots, once per outage. If the lab Wi-Fi still does not serve after that reboot, the edge holds and keeps alerting instead of rebooting again (at `log` severity until #2684), since the RPi4 is also the homelab's DNS and DHCP. A warm reboot may not bring back a halted radio, and there is no remote power cycle (ADR-075 D5 records it as debt), so an edge that still alerts after its own reboot needs its power cable pulled. A radio that flaps, serving for a check after each boot, clears that hold each time, and only the cap of two reboots an hour bounds it (#2682).
+The radio's firmware can halt, after a weak client or an eighth station, and only a reboot recovers it. The role arms systemd's hardware watchdog, and a liveness timer (`kubelab-edge-liveness.timer`) watches the AP and the uplink: it reloads the driver first, then reboots, once per outage. If the lab Wi-Fi still does not serve after that reboot, the edge holds and keeps paging instead of rebooting again, since the RPi4 is also the homelab's DNS and DHCP. A warm reboot may not bring back a halted radio, and there is no remote power cycle (ADR-075 D5 records it as debt), so an edge that still alerts after its own reboot needs its power cable pulled. A radio that flaps, serving for a check after each boot, clears that hold each time, and only the cap of two reboots an hour bounds it (#2682).
 
 Do not stop hostapd by hand while the liveness timer runs: the ladder reads a stopped hostapd as a halted radio, reloads the driver under you, and at the next miss reboots the edge. There is no target to pause it yet (#2683).
 

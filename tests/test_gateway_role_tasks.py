@@ -690,8 +690,10 @@ NOTIFY = "kubelab-notify@%n.service"
 PAGE = "KUBELAB_NOTIFY_SEVERITY=page"
 
 
-def test_every_edge_unit_that_notifies_pages() -> None:
-    """When one of the edge's units fails, the lab is off the network: a `log` line read later is too late (#2684).
+def test_only_the_lease_check_and_the_liveness_units_page() -> None:
+    """A lease inside a lab network (ADR-075 D6) and a radio the edge's own reboot did not
+    bring back need a person now. The shaper logs: without it the uplink is unshaped, not
+    down (#2684).
 
     systemd reads `Environment=` only in [Service] and ignores it elsewhere, so the
     declaration is looked for there and nowhere else.
@@ -699,5 +701,6 @@ def test_every_edge_unit_that_notifies_pages() -> None:
     units = _units()
     notifying = {name for name, unit in units.items() if f"OnFailure={NOTIFY}" in _section(unit, "Unit")}
     paging = {name for name, unit in units.items() if f"Environment={PAGE}" in _section(unit, "Service")}
-    assert notifying, "no edge unit notifies: the derivation is wrong, not the edge silent"
-    assert paging == notifying
+    assert "kubelab-edge-shaper.service" in notifying, "the shaper no longer notifies: the derivation is wrong"
+    assert paging == {"kubelab-edge-lease-check.service", "kubelab-edge-liveness.service"}
+    assert paging <= notifying, "a unit declares page but nothing notifies on its failure"
