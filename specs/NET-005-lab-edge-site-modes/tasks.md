@@ -182,13 +182,17 @@ This PR loads the drops before any uplink exists. `iifname` matches a name, so r
 
 ### PR 9 — Edge status and login mode
 
-30. [ ] [P] [AC5] Test first, `tests/test_edge_status.py`. The status script, fed recorded responses, classifies the uplink:
+30. [x] (✓ 2026-10-25) [P] [AC5] Test first, `tests/test_edge_status.py`. The status script, fed recorded responses, classifies the uplink:
     - `204` from a connectivity check bound to the uplink is `up`;
     - a redirect or `200` is `portal`;
     - no answer is `dead`.
 
     It exits 0 only for `up`, and with a distinct non-zero code for `portal` and for `dead`, so a script can tell them apart. It also reports whether a public resolver and the lease's resolver answer, and whether the uplink MAC matches SOPS, without printing it. `make edge-status` runs it over SSH. Implement. Green.
+
+    Built as `kubelab-edge-status`, run over SSH to the edge's LAN address (the tailnet rides on the uplink it reports on). The script reads the lease file unprivileged, which B3 confirms on the edge.
 31. [ ] [AC5] **Built only if B3 finds that only the site's resolver answers before login.** Test first: `make edge-login-mode MODE=on` renders one Pi-hole `server=/<domain>/<lease DNS>` line per portal domain in SOPS. `MODE=off` removes them and runs `docker restart pihole`, as the `coredns` role does: Pi-hole v6's `pihole reloaddns` does not reload dnsmasq configs, and the cache would otherwise keep the portal's answers. This task also registers `portal_domains` in `SECRET_CATALOG`. Implement through the toolkit and the `coredns` role. Green. If B3 shows public resolvers answer, record that and skip this task.
+
+    Not built with task 30: it waits for B3's answer.
 
 ### PR 10 — Operator steps as targets
 
