@@ -58,10 +58,10 @@ def test_no_shell_task_hides_its_changes() -> None:
 
 
 def test_ufw_lets_dhcp_in_on_the_homelab_lan() -> None:
+    """`interface_in` implies inbound; the module refuses it next to `direction`."""
     rules = [_module(task, "community.general.ufw") or {} for task in TASKS]
     assert {
         "rule": "allow",
-        "direction": "in",
         "interface_in": "{{ gateway_interface }}",
         "proto": "udp",
         "port": "67",

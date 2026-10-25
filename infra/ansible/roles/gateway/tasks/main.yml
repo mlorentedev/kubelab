@@ -47,7 +47,6 @@
 - name: Allow DHCP in on the homelab LAN
   community.general.ufw:
     rule: allow
-    direction: in
     interface_in: "{{ gateway_interface }}"
     proto: udp
     port: "67"
