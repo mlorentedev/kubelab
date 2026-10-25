@@ -10,6 +10,10 @@
 # what controllers it actually exposes and does nothing when the answer already
 # includes what is required. A node that ships the controller (rpi4, on Ubuntu)
 # is a clean no-op, and so is a re-run on a node already fixed.
+#
+# It also removes the parameters a play declares absent (`rpi_boot_absent_params`,
+# empty by default), converging on what the running kernel booted with
+# (/proc/cmdline), the same way (#2668).
 # =============================================================================
 
 - name: Read the cgroup controllers the kernel currently exposes
@@ -32,10 +36,12 @@
       -- memory controller {{ 'present, nothing to do' if 'memory' in _rpi_boot_present_controllers
                               else 'ABSENT, cmdline will be updated' }}
 
-# Everything below is skipped once the capability exists. This single condition
-# is what makes the role safe to include unconditionally in a playbook.
-- name: Enable the memory cgroup controller
-  when: "'memory' not in _rpi_boot_present_controllers"
+# Two reasons to edit the command line, each with its own gate: the memory
+# controller is missing (ANSIBLE-040), or the play declares parameters absent
+# (#2668). A node with the controller and nothing declared (rpi3) skips everything
+# below, which is what makes the role safe to include unconditionally in a playbook.
+- name: Converge the kernel command line
+  when: "'memory' not in _rpi_boot_present_controllers or rpi_boot_absent_params | length > 0"
   block:
 
     - name: Locate the kernel command line file
@@ -55,9 +61,9 @@
     - name: Fail clearly when no cmdline file exists
       ansible.builtin.fail:
         msg: >-
-          The memory cgroup controller is absent but neither {{ rpi_boot_cmdline_path }}
+          The kernel command line needs an edit but neither {{ rpi_boot_cmdline_path }}
           nor {{ rpi_boot_cmdline_path_legacy }} exists. This host is not a Raspberry Pi
-          booted from a firmware partition, so enabling the controller is not this
+          booted from a firmware partition, so editing its command line is not this
           role's business -- investigate rather than guessing at a boot file.
       when: _rpi_boot_cmdline is not defined or _rpi_boot_cmdline | length == 0
 
@@ -65,6 +71,13 @@
       ansible.builtin.slurp:
         src: "{{ _rpi_boot_cmdline }}"
       register: _rpi_boot_cmdline_raw
+
+    # What the running kernel booted with, to tell a removal already active from one
+    # still waiting for a reboot (see the reboot decision below).
+    - name: Read the running kernel's command line
+      ansible.builtin.slurp:
+        src: /proc/cmdline
+      register: _rpi_boot_proc_cmdline
 
     # The kernel command line MUST remain exactly one line -- the bootloader
     # reads the first line only, and a stray second line silently drops every
@@ -85,36 +98,58 @@
         _rpi_boot_cmdline_current: >-
           {{ (_rpi_boot_cmdline_raw.content | b64decode).splitlines() | first | trim }}
 
+    # Only while the controller is missing: a node that ships it (rpi4, on Ubuntu)
+    # reaches this block for a removal and must not gain the cgroup parameters.
     - name: Determine which parameters are missing
       ansible.builtin.set_fact:
         _rpi_boot_missing_params: >-
           {{ rpi_boot_required_params
              | reject('in', _rpi_boot_cmdline_current.split())
-             | list }}
+             | list
+             if 'memory' not in _rpi_boot_present_controllers else [] }}
+
+    # By name, whatever the value; `(=|$)` keeps a parameter that only shares the prefix.
+    - name: Match the parameters declared absent
+      ansible.builtin.set_fact:
+        _rpi_boot_absent_pattern: "^({{ rpi_boot_absent_params | map('regex_escape') | join('|') }})(=|$)"
+
+    - name: Determine which parameters to remove
+      ansible.builtin.set_fact:
+        _rpi_boot_removed_params: >-
+          {{ _rpi_boot_cmdline_current.split() | select('match', _rpi_boot_absent_pattern) | list
+             if rpi_boot_absent_params | length > 0 else [] }}
+
+    - name: Collect the edit
+      ansible.builtin.set_fact:
+        _rpi_boot_changes: "{{ _rpi_boot_missing_params + _rpi_boot_removed_params }}"
 
     - name: Build the new command line
       ansible.builtin.set_fact:
         _rpi_boot_cmdline_new: >-
-          {{ ([_rpi_boot_cmdline_current] + _rpi_boot_missing_params) | join(' ') | trim }}
-      when: _rpi_boot_missing_params | length > 0
+          {{ ((_rpi_boot_cmdline_current.split() | reject('in', _rpi_boot_removed_params) | list)
+              + _rpi_boot_missing_params) | join(' ') | trim }}
+      when: _rpi_boot_changes | length > 0
 
     # There is no `validate:` program for a kernel command line, so the safety
     # net has to be an explicit precondition. `root=` is the one parameter whose
     # loss guarantees an unbootable node, and a result that is not exactly one
     # line means the computation above went wrong -- refuse in both cases rather
-    # than write a file that bricks the host.
+    # than write a file that bricks the host. A declared-absent parameter still in
+    # the result is the same kind of error, caught before the write.
     - name: Refuse to write a command line that would not boot
       ansible.builtin.assert:
         that:
           - "'root=' in _rpi_boot_cmdline_new"
           - _rpi_boot_cmdline_new.splitlines() | length == 1
-          - _rpi_boot_cmdline_new | length > _rpi_boot_cmdline_current | length
+          - _rpi_boot_missing_params | reject('in', _rpi_boot_cmdline_new.split()) | list | length == 0
+          - _rpi_boot_cmdline_new.split() | select('match', _rpi_boot_absent_pattern) | list | length == 0
         fail_msg: >-
           Refusing to write {{ _rpi_boot_cmdline }}: the computed command line is
-          malformed (missing root=, multi-line, or not longer than the original).
+          malformed (missing root=, multi-line, missing a required parameter, or still
+          carrying one declared absent).
           Computed value was: {{ _rpi_boot_cmdline_new | default('<undefined>') }}
         success_msg: "Computed command line passes the boot-safety preconditions"
-      when: _rpi_boot_missing_params | length > 0
+      when: _rpi_boot_changes | length > 0
 
     # Backup goes to the ROOT filesystem, not next to the original, and is taken
     # as an explicit step rather than with copy's `backup: true`.
@@ -135,7 +170,7 @@
         owner: root
         group: root
         mode: "0755"
-      when: _rpi_boot_missing_params | length > 0
+      when: _rpi_boot_changes | length > 0
 
     - name: Back up the current kernel command line to the root filesystem
       ansible.builtin.copy:
@@ -143,7 +178,7 @@
         dest: "/var/backups/cmdline.txt.{{ ansible_facts['date_time']['iso8601_basic_short'] }}"
         remote_src: true
         mode: "0600"
-      when: _rpi_boot_missing_params | length > 0
+      when: _rpi_boot_changes | length > 0
 
     # No owner/group/mode: /boot/firmware is vfat, which has no POSIX ownership
     # or permission bits. The root:root 0755 that `ls -l` reports is synthesised
@@ -153,7 +188,7 @@
       ansible.builtin.copy:
         content: "{{ _rpi_boot_cmdline_new }}\n"
         dest: "{{ _rpi_boot_cmdline }}"
-      when: _rpi_boot_missing_params | length > 0
+      when: _rpi_boot_changes | length > 0
       register: _rpi_boot_cmdline_written
 
     # Convergence is on the CAPABILITY, not on this run having written the file.
@@ -164,17 +199,23 @@
     # cmdline requesting a controller the kernel still does not expose, in
     # silence. The honest condition is "the controller is absent and the cmdline
     # already asks for it" -- true whether this run wrote it or an earlier one did.
-    - name: Determine whether a reboot would activate the requested parameters
+    # A removal is the same: pending while the running kernel still carries the
+    # parameter, which the file no longer does once this point is reached.
+    - name: Determine whether a reboot would activate the command line
       ansible.builtin.set_fact:
         _rpi_boot_reboot_pending: >-
-          {{ rpi_boot_required_params
-             | reject('in', (_rpi_boot_cmdline_new | default(_rpi_boot_cmdline_current)).split())
-             | list | length == 0 }}
+          {{ ('memory' not in _rpi_boot_present_controllers
+              and rpi_boot_required_params
+                  | reject('in', (_rpi_boot_cmdline_new | default(_rpi_boot_cmdline_current)).split())
+                  | list | length == 0)
+             or (rpi_boot_absent_params | length > 0
+              and (_rpi_boot_proc_cmdline.content | b64decode).split()
+                  | select('match', _rpi_boot_absent_pattern) | list | length > 0) }}
 
     - name: Reboot to activate the new kernel command line
       ansible.builtin.reboot:
         reboot_timeout: "{{ rpi_boot_reboot_timeout }}"
-        msg: "Rebooting to enable the memory cgroup controller (ANSIBLE-040)"
+        msg: "Rebooting to activate the kernel command line rpi_boot wrote (ANSIBLE-040, #2668)"
       when:
         - _rpi_boot_reboot_pending | bool
         - rpi_boot_allow_reboot | bool
@@ -183,6 +224,14 @@
       ansible.builtin.slurp:
         src: /sys/fs/cgroup/cgroup.controllers
       register: _rpi_boot_controllers_after
+      when:
+        - _rpi_boot_reboot_pending | bool
+        - rpi_boot_allow_reboot | bool
+
+    - name: Re-read the running command line after reboot
+      ansible.builtin.slurp:
+        src: /proc/cmdline
+      register: _rpi_boot_proc_cmdline_after
       when:
         - _rpi_boot_reboot_pending | bool
         - rpi_boot_allow_reboot | bool
@@ -199,6 +248,22 @@
           memory cgroup controller is present:
           {{ (_rpi_boot_controllers_after.content | b64decode).split() | join(' ') }}
       when:
+        - "'memory' not in _rpi_boot_present_controllers"
+        - _rpi_boot_reboot_pending | bool
+        - rpi_boot_allow_reboot | bool
+
+    - name: Verify the running kernel dropped the parameters declared absent
+      ansible.builtin.assert:
+        that:
+          - >-
+            (_rpi_boot_proc_cmdline_after.content | b64decode).split()
+            | select('match', _rpi_boot_absent_pattern) | list | length == 0
+        fail_msg: >-
+          {{ _rpi_boot_cmdline }} no longer carries {{ rpi_boot_absent_params | join(' ') }}
+          and the host rebooted, but /proc/cmdline still does. Something other than this
+          file supplies it (the firmware, a bootloader config) -- do not retry blindly.
+      when:
+        - rpi_boot_absent_params | length > 0
         - _rpi_boot_reboot_pending | bool
         - rpi_boot_allow_reboot | bool
 
@@ -208,10 +273,10 @@
     - name: Report that a reboot is still required
       ansible.builtin.debug:
         msg: >-
-          CHANGED, NOT YET ACTIVE -- {{ _rpi_boot_cmdline }} now requests
-          {{ rpi_boot_required_params | join(' ') }}, but the memory controller stays
-          absent until this host reboots. Re-run with -e rpi_boot_allow_reboot=true,
-          or reboot out of band.
+          CHANGED, NOT YET ACTIVE -- {{ _rpi_boot_cmdline }} now has the command line
+          this role owns, but the running kernel booted without it (a required
+          parameter missing, or a parameter declared absent still present) until this
+          host reboots. Re-run with -e rpi_boot_allow_reboot=true, or reboot out of band.
       when:
         - _rpi_boot_reboot_pending | bool
         - not (rpi_boot_allow_reboot | bool)
