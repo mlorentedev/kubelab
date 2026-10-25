@@ -337,6 +337,39 @@ def test_the_rename_runs_whenever_the_name_is_missing_and_is_checked() -> None:
     assert not any("udevadm" in str(handler) for handler in HANDLERS)
 
 
+NAMED = (
+    "5: uplink0: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN mode DEFAULT group default qlen 1000"
+    "\\    link/ether 02:00:5e:10:00:01 brd ff:ff:ff:ff:ff:ff\n"
+)
+
+
+@pytest.mark.parametrize(
+    ("exists", "named", "ok"),
+    [
+        (True, NAMED, True),
+        (True, NAMED.replace("02:00:5e:10:00:01", "02:00:5e:10:00:02"), False),
+        (False, "", True),
+    ],
+    ids=["the-uplink", "another-adapter", "no-name-yet-in-check-mode"],
+)
+def test_the_uplink_name_must_be_on_the_uplink_adapter(exists: bool, named: str, ok: bool) -> None:
+    """An adapter an earlier profile named keeps the name while it stays plugged in, and
+    the rename is skipped because the name is taken: netplan would configure it."""
+    verify = _first(lambda task: "gateway_uplink_sysfs" in str(task.get("assert")))
+    read = _first(lambda task: str(task.get("command")).startswith("ip -o link show"))
+    owner = _first(lambda task: "gateway_uplink_named" in str(task.get("assert")))
+    netplan, _ = _template_task(NETPLAN)
+    assert verify < read < owner < netplan
+    task = TASKS[read]
+    assert task["command"] == "ip -o link show {{ gateway_uplink_interface }}"
+    assert (task["changed_when"], task["check_mode"], task["no_log"]) == (False, False, True)
+    assert task["when"] == "gateway_uplink_sysfs.stat.exists"
+    variables = {"gateway_uplink_mac": UPLINK_MAC.upper(), "gateway_uplink_sysfs": {"stat": {"exists": exists}}}
+    named_result = {"stdout": named} if exists else {"skipped": True}
+    assert _holds(owner, gateway_uplink_named=named_result, **variables) is ok
+    assert TASKS[owner]["assert"]["fail_msg"].startswith("ERROR:")
+
+
 def test_old_and_new_netplan_are_never_applied_together() -> None:
     netplan, _ = _template_task(NETPLAN)
     remove = _first(lambda task: (task.get("file") or {}).get("state") == "absent" and "loop" in task)

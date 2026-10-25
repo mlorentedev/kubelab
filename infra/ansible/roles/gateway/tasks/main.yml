@@ -217,6 +217,27 @@
       FIX: unplug the adapter and plug it back in, which brings it back down and named, then re-run.
     quiet: true
 
+# An adapter an earlier profile named keeps the name while it stays plugged in, and
+# the rename above is skipped because the name is taken. `ip -o link` shows the
+# permanent MAC as `permaddr` when the current one differs.
+- name: Read the uplink adapter's MAC
+  command: ip -o link show {{ gateway_uplink_interface }}
+  register: gateway_uplink_named
+  changed_when: false
+  check_mode: false
+  no_log: true
+  when: gateway_uplink_sysfs.stat.exists
+
+- name: Check that the uplink name is on the uplink adapter
+  assert:
+    that: not gateway_uplink_sysfs.stat.exists or (gateway_uplink_mac | lower) in (gateway_uplink_named.stdout | lower)
+    fail_msg: >-
+      ERROR: {{ gateway_uplink_interface }} is not the adapter with the uplink MAC in prod SOPS.
+      WHY: an adapter that an earlier profile named is still plugged in and keeps the name, so the
+      new adapter could not take it.
+      FIX: unplug the old adapter, then re-run, which names the new one.
+    quiet: true
+
 - name: Keep cloud-init from writing netplan
   copy:
     dest: /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg
