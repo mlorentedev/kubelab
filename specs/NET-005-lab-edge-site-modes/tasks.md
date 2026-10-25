@@ -222,14 +222,18 @@ This PR loads the drops before any uplink exists. `iifname` matches a name, so r
 
 ### PR 12 — Reclassification, runbook, lesson
 
-35. [ ] [AC11] [AC5] Runbook `docs/runbooks/lab-edge.md`:
+35. [ ] (runbook, bootstrap and hardware docs ✓ 2026-10-25; `networking-dns.md` open) [AC11] [AC5] Runbook `docs/runbooks/lab-edge.md`:
     - a site change, the three human steps, and the portal login through a client routed by the RPi4;
     - the 5-day renewal and the paid plan's expiry, and what Uptime Kuma shows while the portal holds the uplink;
     - the collision response, the login mode, rotation, recovery from the switch, and the uplink stand-in;
     - recovery when a profile cuts the LAN: the SD card's netplan edited from another machine.
 
     Test first, `tests/test_edge_runbook_commands.py`: every fenced shell command in the runbook starts with `make `. Replace the netplan heredoc in `docs/runbooks/rpi4-bootstrap.md`, fix its `ES` regulatory domain, and update `docs/runbooks/hardware-setup.md`'s topology. Replace the MAC-derived adapter names in `docs/troubleshooting/networking-dns.md` with `enx<MAC>` (ADR-075 C7).
+
+    Done 2026-10-25 except `networking-dns.md`, which was outside the unattended run's write paths. `tests/test_edge_runbook_commands.py` also fails on any `enx<MAC>` name in `docs/runbooks/` and `docs/troubleshooting/`, with `networking-dns.md` and `headscale-setup.md` in a ledger that may only shrink. The heredoc became a LAN-only `eth0` file, which also recovers an edge whose profile cut the LAN, so the regulatory domain left it with the uplink. Gaps found and ticketed: the subnet route's approval (#2678), the portal's Pi-hole allowlist (#2679), and the gateway role installing packages before it renders the uplink, which a fresh card may not survive (#2680). The edge's own DHCP is missing on a fresh card too, so `make edge-lan-link` gained `STATIC=1` (task 33). The runbook describes PRs 5 to 8, so it lands after them; PR 7 adds its alerts section.
 36. [ ] [AC2] Set `networking.nodes.rpi4.location: always-on` and run `make sync-r2-watcher-targets`. Add the RPi4's push monitor if `tests/test_backup_heartbeat_monitors.py` requires one for always-on nodes. `make test` is green.
+
+    Deferred to after B12: an always-on RPi4 enters the R2 watcher's targets, which page while the edge is offline, as it is until the bring-up.
 37. [ ] Housekeeping: write the lesson `docs/lessons/<category>/lesson-NNN-ufw-does-not-govern-forwarded-traffic.md`, which records the false intersection claim and the evidence that refuted it, and add it to the index. Add a Critical-gotchas line to `CLAUDE.md` saying that on the RPi4 edge, `inet kubelab` alone restricts forwarded traffic. Mark `docs/lessons/networking-dns/lesson-110-nftables-masquerade-must-include-wlan0-not-ju.md` superseded by the new lesson, since ADR-075 moves the masquerade off `wlan0`, and correct `docs/runbooks/rpi4-sd-card-provisioning.md`, which still calls `enx*` and `wlan0` uplinks.
 38. [ ] Housekeeping, in another repository: point the dotfiles `rpi4-lan` alias at the new `wifi_lan_ip`, as a dotfiles PR.
 
