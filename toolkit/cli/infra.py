@@ -407,6 +407,7 @@ def headscale_rejoin(
         logger.error(str(exc))
         raise typer.Exit(1) from exc
 
+    ran = False
     try:
         ansible_run(
             playbook=playbook,
@@ -416,12 +417,15 @@ def headscale_rejoin(
             bootstrap=True,
             require_fresh=True,
         )
+        ran = True
     finally:
         logger.info("Restoring: inventory with mesh Tailscale IPs")
         restored = ansible_generator.generate(env)
         if not restored.get("success"):
             logger.error(f"The LAN inventory is still on disk: {restored.get('error')}")
-            raise typer.Exit(1)
+            # Raised in `finally`, an exit would replace a failed run's own: only a clean run takes it.
+            if ran:
+                raise typer.Exit(1)
 
 
 @headscale_app.command("recycle-stale")

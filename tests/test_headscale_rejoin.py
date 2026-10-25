@@ -217,7 +217,7 @@ def test_a_node_whose_play_cannot_rejoin_it_is_refused(node: str) -> None:
         rejoin_playbook(PLAYBOOKS, node)
 
 
-def _invoke(node: str, run_exit: int = 0) -> tuple[Any, mock.MagicMock, mock.MagicMock]:
+def _invoke(node: str, run_exit: int = 0, restored: bool = True) -> tuple[Any, mock.MagicMock, mock.MagicMock]:
     from typer.testing import CliRunner
 
     from toolkit.cli.infra import app
@@ -231,7 +231,7 @@ def _invoke(node: str, run_exit: int = 0) -> tuple[Any, mock.MagicMock, mock.Mag
         mock.patch("toolkit.features.generator_ansible.ansible_generator.generate") as generate,
         mock.patch("subprocess.run", side_effect=AssertionError("the toolkit must not reach Headscale")),
     ):
-        generate.return_value = {"success": True}
+        generate.return_value = {"success": restored, "error": "the generator failed"}
         result = CliRunner().invoke(app, ["headscale", "rejoin", "--node", node, "--env", "prod"])
     return result, ansible_run, generate
 
@@ -253,6 +253,13 @@ def test_the_mesh_inventory_is_restored_whatever_the_run_did(run_exit: int) -> N
     result, _, generate = _invoke("rpi4", run_exit)
     assert result.exit_code == run_exit
     assert generate.call_args_list[-1] == mock.call("prod")
+
+
+@pytest.mark.parametrize(("run_exit", "expected"), [(0, 1), (2, 2)], ids=["clean-run", "failed-run"])
+def test_a_failed_restore_fails_the_command_without_hiding_why_the_run_failed(run_exit: int, expected: int) -> None:
+    """The restore runs in `finally`: an exit raised there would replace the run's own."""
+    result, _, _ = _invoke("rpi4", run_exit, restored=False)
+    assert result.exit_code == expected
 
 
 def test_a_refused_node_runs_nothing() -> None:
