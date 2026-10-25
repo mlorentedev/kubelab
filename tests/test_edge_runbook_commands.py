@@ -28,12 +28,8 @@ INSTRUCTIONAL = [REPO / "docs" / "runbooks", REPO / "docs" / "troubleshooting"]
 SHELL_FENCE = re.compile(r"^[ \t]*```(?:bash|sh|shell|console|zsh)\s*\n(.*?)^[ \t]*```", re.M | re.S)
 MAC_NAMED = re.compile(r"\benx[0-9a-f]{12}\b")
 
-# A DEBT LEDGER, and it may only shrink. Outside the unattended run's write paths
-# (task 35 names networking-dns.md; headscale-setup.md was found by this test).
-KNOWN_MAC_NAMES: dict[str, str] = {
-    "docs/runbooks/headscale-setup.md": "a dated incident note; task 35 follow-up",
-    "docs/troubleshooting/networking-dns.md": "task 35 names it; outside the run's write paths",
-}
+# A DEBT LEDGER, and it may only shrink. Empty since task 35's follow-up.
+KNOWN_MAC_NAMES: dict[str, str] = {}
 
 
 def _shell_lines(text: str) -> list[str]:
