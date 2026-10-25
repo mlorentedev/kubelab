@@ -127,12 +127,14 @@ def test_a_passed_in_key_wins_over_minting() -> None:
 
 
 @pytest.mark.parametrize(
-    ("status", "registers"),
-    [(STOPPED, True), (NO_DAEMON, True), (RUNNING, False)],
-    ids=["off-mesh", "no-daemon", "on-mesh"],
+    ("status", "passed", "registers"),
+    [(STOPPED, "", True), (NO_DAEMON, "", True), (RUNNING, "", False), (RUNNING, "hskey-auth-passed", False)],
+    ids=["off-mesh", "no-daemon", "on-mesh", "on-mesh-key-passed-in"],
 )
-def test_tailscale_up_runs_only_when_the_node_is_off_the_mesh(status: dict[str, Any], registers: bool) -> None:
-    facts = _facts(status, KEY, tailscale_mint_key=True)
+def test_tailscale_up_runs_only_when_the_node_is_off_the_mesh(
+    status: dict[str, Any], passed: str, registers: bool
+) -> None:
+    facts = _facts(status, KEY, tailscale_mint_key=True, tailscale_auth_key=passed)
     assert _true(_task("Register with Headscale")["when"], **facts) is registers
 
 
@@ -142,26 +144,22 @@ def test_without_a_key_it_falls_back_to_the_manual_instructions() -> None:
     assert _true(_task("Show manual auth instructions")["when"], **facts)
 
 
+@pytest.mark.parametrize("name", ["Mint a single-use pre-auth key", "Hold the key this run registers with"])
+def test_the_tasks_that_only_ever_hold_a_key_never_log(name: str) -> None:
+    assert _task(name).get("no_log") is True
+
+
 @pytest.mark.parametrize(
-    "name",
-    [
-        "Mint a single-use pre-auth key",
-        "Hold the key this run registers with",
-        "Build Tailscale up command",
-        "Register with Headscale",
-        "Wait for Tailscale registration",
-    ],
+    "name", ["Build Tailscale up command", "Register with Headscale", "Wait for Tailscale registration"]
 )
-def test_no_task_that_holds_the_key_can_log_it(name: str) -> None:
+def test_the_tasks_that_may_hold_a_key_hide_it_and_only_it(name: str) -> None:
     """`-v` prints set_fact results, a failed command prints its `cmd`, and
-    async_status returns the job's result, `cmd` included."""
+    async_status returns the job's result, `cmd` included. Without a key there is
+    nothing to hide, and the manual path keeps its logs."""
     no_log = _task(name).get("no_log")
-    assert no_log is not None, f"{name!r} has no no_log"
-    if isinstance(no_log, str):
-        assert _templated_true(no_log, _tailscale_key=KEY)
-        assert not _templated_true(no_log, _tailscale_key=""), "the keyless path keeps its logs"
-    else:
-        assert no_log is True
+    assert isinstance(no_log, str), f"{name!r} must decide no_log from the key"
+    assert _templated_true(no_log, _tailscale_key=KEY)
+    assert not _templated_true(no_log, _tailscale_key="")
 
 
 # ----------------------------------------------- the flags (tailscale/tailscale#5597)
