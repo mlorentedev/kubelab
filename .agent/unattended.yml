@@ -1,0 +1,67 @@
+# Arming envelope for the 2026-10-25 NET-005 run (operator asleep). Committed on the run branch;
+# the run reads only the committed copy. A PR whose diff touches this file is never merged.
+version: 1
+run_id: "2026-10-25-net005"
+armed_by: manu
+armed_at: 2026-10-25T08:25:00Z
+expires_at: 2026-10-25T19:25:00Z
+objective: >-
+  Implement NET-005 (kubelab#2661) PR by PR in tasks.md order, test-first, and prove PR 3 live on the
+  RPi4 over the LAN; leave every live step that can cut eth0, and every prod-deploying change, for the operator.
+scope:
+  write_paths:
+    - "specs/NET-005-lab-edge-site-modes/**"
+    - "docs/adr/adr-075-lab-edge-per-site-uplink.md"
+    - "docs/adr/adr-028-operational-topology.md"
+    - "docs/runbooks/lab-edge.md"
+    - "docs/runbooks/rpi4-bootstrap.md"
+    - "docs/runbooks/hardware-setup.md"
+    - "docs/lessons/**"
+    - "infra/ansible/roles/gateway/**"
+    - "infra/ansible/roles/tailscale/**"
+    - "infra/ansible/roles/rpi3_services/**"
+    - "infra/ansible/playbooks/provision-rpi4.yml"
+    - "infra/config/values/common.yaml"
+    - "infra/k8s/base/**"
+    - "toolkit/**"
+    - "Makefile"
+    - "tests/**"
+    - "CLAUDE.md"
+    - ".agent/runs/**"
+  frozen_paths:
+    - ".github/**"
+    - "harness/**"
+    - ".pr_agent.toml"
+    - "infra/config/secrets/**"
+    - "infra/config/values/*.enc.yaml"
+    - "infra/terraform/**"
+    - "**/AGENTS.md"
+  # Written and opened, never merged in this run: Argo CD deploys them to prod, and the edge is down.
+  merge_excluded_paths:
+    - "infra/k8s/**"
+  max_files: 25
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make, poetry, toolkit, ssh]
+live:
+  # The only host change this run makes. ssh is otherwise read-only.
+  allowed: ["make provision NODE=rpi4 ENV=prod BOOTSTRAP=1 TAGS=gateway (PR 3 content only)"]
+  forbidden:
+    - >-
+      netplan, the uplink, hostapd, the watchdog or the liveness timer on the RPi4 (PR 4, 5, 8):
+      a fault cuts eth0 and only the SD card recovers it
+    - "storing secret values in SOPS: the uplink SSID is the operator's to type"
+queue:
+  source: spec
+  filter: "specs/NET-005-lab-edge-site-modes/tasks.md, PR 1 to PR 11, in order"
+  max_items: 11
+budget:
+  max_iterations: 14
+  max_minutes_per_iteration: 60
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant
+  push: true
+  open_pr: true
+  advisor_tier: top
+host:
+  wake_lock: "systemd-inhibit --what=idle:sleep:handle-lid-switch, 12h, armed 2026-10-25T08:24Z"
