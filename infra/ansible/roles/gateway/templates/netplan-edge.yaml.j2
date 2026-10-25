@@ -1,0 +1,45 @@
+# Managed by Ansible (gateway role). The edge's whole netplan (ADR-075 D2, D3):
+# eth0, the recovery path, and the uplink of the current site's kind. The AP
+# interface is absent on purpose: a networkd unit owns it, and a netplan file for
+# it would sort first and override that unit.
+#
+# The lease supplies an address only. use-routes: false also turns off networkd's
+# UseGateway=, so a drop-in beside 10-netplan-{{ gateway_uplink_interface }}.network turns it back on.
+{% macro uplink_settings() %}
+      optional: true
+      dhcp4: true
+      dhcp4-overrides:
+        use-routes: false
+        use-dns: false
+        use-ntp: false
+        use-domains: false
+        use-hostname: false
+        send-hostname: false
+      dhcp-identifier: mac
+      dhcp6: false
+      accept-ra: false
+      link-local: []
+{%- endmacro %}
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    {{ gateway_interface }}:
+      addresses:
+        - "{{ gateway_lan_cidr }}"
+{% if gateway_uplink_kind == 'ethernet' %}
+    {{ gateway_uplink_interface }}:
+{{ uplink_settings() }}
+{% else %}
+  wifis:
+    {{ gateway_uplink_interface }}:
+{{ uplink_settings() }}
+      regulatory-domain: "{{ gateway_uplink_regdomain }}"
+      access-points:
+{% if gateway_uplink_kind == 'wifi_psk' %}
+        {{ gateway_uplink_ssid | to_json }}:
+          password: {{ gateway_uplink_psk | to_json }}
+{% else %}
+        {{ gateway_uplink_ssid | to_json }}: {}
+{% endif %}
+{% endif %}

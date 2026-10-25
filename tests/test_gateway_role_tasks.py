@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +26,9 @@ ROLE = REPO / "infra" / "ansible" / "roles" / "gateway"
 TASKS: list[dict[str, Any]] = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text())
 HANDLERS: list[dict[str, Any]] = yaml.safe_load((ROLE / "handlers" / "main.yml").read_text())
 DEFAULTS: dict[str, Any] = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text())
+NODES = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text())["networking"]["nodes"]
+EDGE = {name for name, node in NODES.items() if "gateway" in ((node or {}).get("ansible_groups") or [])}
+ANSIBLE = REPO / "infra" / "ansible"
 
 TEMPLATE_MODULES = ("template", "ansible.builtin.template")
 
@@ -150,3 +154,234 @@ def test_an_immutable_resolver_is_unlocked_before_the_template() -> None:
     assert probe < unlock < resolver
     assert "immutable" in TASKS[unlock]["when"]
     assert TASKS[unlock]["changed_when"] is True
+
+
+NETPLAN = "/etc/netplan/10-kubelab-edge.yaml"
+LINK = "/etc/systemd/network/10-kubelab-uplink.link"
+
+
+def _first(predicate: Any) -> int:
+    return next(i for i, task in enumerate(TASKS) if predicate(task))
+
+
+def test_the_drops_load_before_the_uplink_comes_up() -> None:
+    """ADR-075 D7. A changed ruleset loads at handler time, so handlers flush between."""
+    nftables, _ = _template_task("/etc/nftables.conf")
+    netplan, _ = _template_task(NETPLAN)
+    flushes = [i for i, task in enumerate(TASKS) if task.get("meta") == "flush_handlers"]
+    assert any(nftables < i < netplan for i in flushes)
+
+
+def test_the_profile_is_checked_before_anything_of_the_uplink_is_written() -> None:
+    check = _first(lambda task: "gateway_uplink_kind" in str(task.get("assert")))
+    link, _ = _template_task(LINK)
+    netplan, _ = _template_task(NETPLAN)
+    assert check < link < netplan
+
+
+def test_the_netplan_file_is_private_and_checked_before_it_lands() -> None:
+    """It holds the site SSID and PSK, and `--diff` would print it."""
+    _, task = _template_task(NETPLAN)
+    assert task["no_log"] is True
+    assert task["template"]["mode"] == "0600"
+    assert "netplan generate --root-dir" in task["template"]["validate"]
+
+
+def test_the_link_file_is_private() -> None:
+    """It holds the uplink adapter's MAC (ADR-075 C7)."""
+    _, task = _template_task(LINK)
+    assert task["no_log"] is True
+
+
+def test_a_netplan_change_is_applied_and_the_session_awaited() -> None:
+    """A profile that cuts the LAN fails the run visibly instead of passing."""
+    _, task = _template_task(NETPLAN)
+    notified = task["notify"] if isinstance(task["notify"], list) else [task["notify"]]
+    apply = next(i for i, h in enumerate(HANDLERS) if h.get("command") == "netplan apply")
+    wait = next(i for i, h in enumerate(HANDLERS) if "wait_for_connection" in h)
+    assert apply < wait
+    assert {HANDLERS[apply]["name"], HANDLERS[wait]["name"]} <= set(notified)
+
+
+def test_hand_written_netplan_is_backed_up_then_removed() -> None:
+    """The role owns /etc/netplan. The old file can hold a PSK, so its copy stays root-only."""
+    find = _first(lambda task: (task.get("find") or {}).get("paths") == "/etc/netplan")
+    assert NETPLAN.rsplit("/", 1)[1] in TASKS[find]["find"]["excludes"]
+    backup = _first(lambda task: (task.get("copy") or {}).get("remote_src") is True)
+    assert TASKS[backup]["copy"]["mode"] == "0600"
+    assert TASKS[backup]["no_log"] is True
+    remove = _first(lambda task: (task.get("file") or {}).get("state") == "absent" and "loop" in task)
+    # Removed only once the role's own file has passed netplan's check and landed.
+    netplan, _ = _template_task(NETPLAN)
+    assert netplan < find < backup < remove
+
+
+def test_cloud_init_never_writes_netplan() -> None:
+    task = TASKS[_first(lambda task: (task.get("copy") or {}).get("dest", "").startswith("/etc/cloud/"))]
+    assert yaml.safe_load(task["copy"]["content"]) == {"network": {"config": "disabled"}}
+
+
+def _netplan_keys(node: Any) -> set[str]:
+    """Every `netplan_*` key at any depth: keys, so a comment that names one is not a hit."""
+    if isinstance(node, dict):
+        own = {str(key) for key in node if str(key).startswith("netplan_")}
+        return own.union(*(_netplan_keys(value) for value in node.values()))
+    if isinstance(node, list):
+        return set().union(*(_netplan_keys(item) for item in node))
+    return set()
+
+
+def test_no_other_role_writes_the_edges_netplan() -> None:
+    """base_system writes /etc/netplan/50-cloud-init.yaml when netplan_address is set.
+    On the edge, this role would then back it up and remove it on every run, and the
+    two would apply netplan against each other. So only a play aimed at named nodes
+    other than the edge may set a `netplan_` variable, and no source that every host
+    reads may: a role's defaults or vars, an inventory, group_vars, host_vars."""
+    base_system = yaml.safe_load((ANSIBLE / "roles" / "base_system" / "tasks" / "main.yml").read_text())
+    (gate,) = [task["when"] for task in base_system if "/etc/netplan/" in str(task)]
+    assert gate == "netplan_address is defined"
+    others = set(NODES) - EDGE
+    for playbook in sorted((ANSIBLE / "playbooks").glob("*.yml")):
+        for play in yaml.safe_load(playbook.read_text()) or []:
+            if isinstance(play, dict) and (keys := _netplan_keys(play)):
+                hosts = set(re.split(r"[,:]", str(play.get("hosts", ""))))
+                assert hosts <= others, f"{playbook.name}: the play on {play.get('hosts')!r} sets {sorted(keys)}"
+    shared = [
+        path
+        for pattern in (
+            "roles/*/defaults/*",
+            "roles/*/vars/*",
+            "inventories/**/*",
+            "**/group_vars/**/*",
+            "**/host_vars/**/*",
+        )
+        for path in ANSIBLE.glob(pattern)
+        if path.suffix in (".yml", ".yaml")
+    ]
+    assert shared, "no shared variable source found: the glob is wrong, not the edge clean"
+    for source in shared:
+        for document in yaml.safe_load_all(source.read_text()):
+            assert not _netplan_keys(document), f"{source.relative_to(REPO)} sets {sorted(_netplan_keys(document))}"
+
+
+def _that(index: int) -> list[str]:
+    that = TASKS[index]["assert"]["that"]
+    return that if isinstance(that, list) else [that]
+
+
+def _holds(index: int, **variables: Any) -> bool:
+    env = ansible_env(str(ROLE / "templates"))
+    return all(env.compile_expression(check)(**variables) for check in _that(index))
+
+
+def test_the_profile_check_names_every_key_it_checks() -> None:
+    """A bad kind or regdomain is a common.yaml edit, not a missing secret."""
+    check = _first(lambda task: "gateway_uplink_kind" in str(task.get("assert")))
+    message = TASKS[check]["assert"]["fail_msg"]
+    assert all(key in message for key in ("kind", "regdomain", ".mac", ".ssid", ".psk", "common.yaml"))
+
+
+def test_edge_changes_run_over_the_homelab_lan() -> None:
+    """ADR-075 D7. Over the tailnet, applying the uplink can cut the session that applies it."""
+    check = _first(lambda task: "ansible_host" in str(task.get("assert")))
+    link, _ = _template_task(LINK)
+    assert check < link
+    lan = {"gateway_lan_cidr": f"{NODES['rpi4']['lan_ip']}/24"}
+    assert _holds(check, ansible_host=NODES["rpi4"]["lan_ip"], **lan)
+    assert not _holds(check, ansible_host=NODES["rpi4"]["tailscale_ip"], **lan)
+
+
+UPLINK_MAC = "02:00:5e:10:00:01"
+LINKS = "lo UNKNOWN 00:00:00:00:00:00\neth0 UP 02:00:5e:10:00:09\nwlx02005e100001 DOWN 02:00:5e:10:00:01\n"
+
+
+@pytest.mark.parametrize(
+    ("mac", "links", "eth0", "ok"),
+    [
+        (UPLINK_MAC, LINKS, "02:00:5e:10:00:09", True),
+        (UPLINK_MAC.upper(), LINKS, "02:00:5e:10:00:09", True),
+        (UPLINK_MAC, LINKS.replace("02:00:5e:10:00:01", "02:00:5e:10:00:02"), "02:00:5e:10:00:09", False),
+        ("02:00:5e:10:00:09", LINKS, "02:00:5e:10:00:09", False),
+    ],
+    ids=["present", "upper-case-in-sops", "unplugged", "is-the-lan-port"],
+)
+def test_the_uplink_adapter_must_be_present_and_not_the_lan_port(mac: str, links: str, eth0: str, ok: bool) -> None:
+    """Without it, netplan waits on a device that never appears and fails without a cause.
+    On the LAN port, the next boot would rename the recovery path."""
+    read = _first(lambda task: task.get("command") == "ip -br link")
+    check = _first(lambda task: "gateway_uplink_links" in str(task.get("assert")))
+    link, _ = _template_task(LINK)
+    assert read < check < link
+    assert (TASKS[read]["changed_when"], TASKS[read]["check_mode"], TASKS[read]["no_log"]) == (False, False, True)
+    facts = {"eth0": {"macaddress": eth0}}
+    variables = {"gateway_uplink_mac": mac, "gateway_interface": "eth0", "ansible_facts": facts}
+    assert _holds(check, gateway_uplink_links={"stdout": links}, **variables) is ok
+
+
+def test_the_rename_runs_whenever_the_name_is_missing_and_is_checked() -> None:
+    """A handler would fire only when the .link file changes, so a run that failed after
+    writing it would never rename. udevadm exits 0 when nothing matched, and the kernel
+    refuses to rename an interface that is up, so the name itself is checked."""
+    link, _ = _template_task(LINK)
+    reload = _first(lambda task: task.get("command") == "udevadm control --reload")
+    rename = _first(lambda task: "udevadm trigger" in str(task.get("command")))
+    verify = _first(lambda task: "gateway_uplink_sysfs" in str(task.get("assert")))
+    netplan, _ = _template_task(NETPLAN)
+    assert link < reload < rename < verify < netplan
+    missing = "gateway_uplink_interface not in ansible_facts.interfaces"
+    assert missing in str(TASKS[reload]["when"])
+    assert TASKS[rename]["when"] == missing
+    assert "--settle" in TASKS[rename]["command"]
+    assert "address={{ gateway_uplink_mac | lower }}" in TASKS[rename]["command"]
+    assert TASKS[rename]["no_log"] is True
+    assert not any("udevadm" in str(handler) for handler in HANDLERS)
+
+
+NAMED = (
+    "5: uplink0: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN mode DEFAULT group default qlen 1000"
+    "\\    link/ether 02:00:5e:10:00:01 brd ff:ff:ff:ff:ff:ff\n"
+)
+
+
+@pytest.mark.parametrize(
+    ("exists", "named", "ok"),
+    [
+        (True, NAMED, True),
+        (True, NAMED.replace("02:00:5e:10:00:01", "02:00:5e:10:00:02"), False),
+        (False, "", True),
+    ],
+    ids=["the-uplink", "another-adapter", "no-name-yet-in-check-mode"],
+)
+def test_the_uplink_name_must_be_on_the_uplink_adapter(exists: bool, named: str, ok: bool) -> None:
+    """An adapter an earlier profile named keeps the name while it stays plugged in, and
+    the rename is skipped because the name is taken: netplan would configure it."""
+    verify = _first(lambda task: "gateway_uplink_sysfs" in str(task.get("assert")))
+    read = _first(lambda task: str(task.get("command")).startswith("ip -o link show"))
+    owner = _first(lambda task: "gateway_uplink_named" in str(task.get("assert")))
+    netplan, _ = _template_task(NETPLAN)
+    assert verify < read < owner < netplan
+    task = TASKS[read]
+    assert task["command"] == "ip -o link show {{ gateway_uplink_interface }}"
+    assert (task["changed_when"], task["check_mode"], task["no_log"]) == (False, False, True)
+    assert task["when"] == "gateway_uplink_sysfs.stat.exists"
+    variables = {"gateway_uplink_mac": UPLINK_MAC.upper(), "gateway_uplink_sysfs": {"stat": {"exists": exists}}}
+    named_result = {"stdout": named} if exists else {"skipped": True}
+    assert _holds(owner, gateway_uplink_named=named_result, **variables) is ok
+    assert TASKS[owner]["assert"]["fail_msg"].startswith("ERROR:")
+
+
+def test_old_and_new_netplan_are_never_applied_together() -> None:
+    netplan, _ = _template_task(NETPLAN)
+    remove = _first(lambda task: (task.get("file") or {}).get("state") == "absent" and "loop" in task)
+    flushes = [i for i, task in enumerate(TASKS) if task.get("meta") == "flush_handlers"]
+    assert not any(netplan < i < remove for i in flushes)
+    assert any(i > remove for i in flushes)
+    notified = TASKS[remove]["notify"]
+    assert {"apply netplan", "wait for the session"} <= set(notified)
+
+
+def test_the_netplan_backups_stay_private_and_are_never_overwritten() -> None:
+    directory = _first(lambda task: (task.get("file") or {}).get("path") == "/var/backups/kubelab-netplan")
+    assert TASKS[directory]["file"]["mode"] == "0700"
+    backup = _first(lambda task: (task.get("copy") or {}).get("remote_src") is True)
+    assert "date_time" in TASKS[backup]["copy"]["dest"]

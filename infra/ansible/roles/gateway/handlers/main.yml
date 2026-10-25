@@ -24,3 +24,11 @@
   systemd:
     name: systemd-sysctl
     state: restarted
+
+- name: apply netplan
+  command: netplan apply
+  changed_when: true
+
+- name: wait for the session
+  wait_for_connection:
+    timeout: 120

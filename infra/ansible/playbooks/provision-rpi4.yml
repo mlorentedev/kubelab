@@ -7,8 +7,8 @@
 # Docker, Tailscale VPN, Pi-hole, and CoreDNS.
 #
 # Prerequisites:
-#   - Ubuntu Server flashed on SD card with netplan configured
-#   - See vault runbook: 40-runbooks/rpi4-bootstrap.md
+#   - Ubuntu Server flashed on the SD card; the gateway role renders netplan
+#   - See docs/runbooks/rpi4-bootstrap.md
 #
 # Usage:
 #   make provision NODE=rpi4 ENV=prod
@@ -107,6 +107,11 @@
         gateway_interface: "eth0"
         gateway_lan_cidr: "{{ config.networking.nodes.rpi4.lan_ip }}/24"
         gateway_uplink_interface: "{{ config.networking.edge.uplink.interface }}"
+        gateway_uplink_kind: "{{ config.networking.edge.uplink.kind }}"
+        gateway_uplink_regdomain: "{{ config.networking.edge.uplink.regdomain }}"
+        gateway_uplink_mac: "{{ secrets.networking.edge.uplink.mac | default('') }}"
+        gateway_uplink_ssid: "{{ secrets.networking.edge.uplink.ssid | default('') }}"
+        gateway_uplink_psk: "{{ secrets.networking.edge.uplink.psk | default('') }}"
         gateway_ap_interface: "{{ config.networking.edge.lab_wifi.interface }}"
         gateway_dhcp_reservations:
           - mac: "{{ config.networking.nodes.ace1.mac }}"

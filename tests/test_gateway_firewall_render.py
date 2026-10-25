@@ -185,3 +185,16 @@ def test_the_inside_networks_still_reach_the_internet(chains, iif) -> None:
 @pytest.mark.parametrize("oif", [LAN, AP, "tailscale0"])
 def test_only_the_uplink_is_masqueraded(chains, oif) -> None:
     assert _verdict(chains["postrouting"], oif=oif) == "accept"
+
+
+def test_the_masquerade_follows_the_profile_not_a_literal() -> None:
+    """The old defaults named `enx*` and `wlan0`, interfaces the uplink drops never covered."""
+    role = REPO / "infra" / "ansible" / "roles" / "gateway"
+    defaults = yaml.safe_load((role / "defaults" / "main.yml").read_text())
+    assert defaults["gateway_uplink_interface"] == UPLINK
+    assert "enx" not in (role / "defaults" / "main.yml").read_text()
+    plays = yaml.safe_load((REPO / "infra" / "ansible" / "playbooks" / "provision-rpi4.yml").read_text())
+    gateway = next(
+        role["vars"] for play in plays for role in play.get("roles", []) if str(role.get("role")).endswith("/gateway")
+    )
+    assert gateway["gateway_uplink_interface"] == "{{ config.networking.edge.uplink.interface }}"
