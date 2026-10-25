@@ -48,6 +48,23 @@
     dest: /etc/resolv.conf
     mode: "0644"
 
+# Strict rp_filter under a subnet router needs this floor (tailscale/tailscale#18860).
+# The version is dpkg's, not `tailscale version`'s: a binary that fails to run would
+# read as absent, and absent is the one case let through. Checked before the first
+# notify, which a failed check would drop (lesson-620).
+- name: Read the installed packages
+  package_facts:
+
+- name: Assert Tailscale supports strict rp_filter
+  assert:
+    that: >-
+      'tailscale' not in ansible_facts.packages
+      or ansible_facts.packages['tailscale'][0].version is version(gateway_tailscale_min_version, '>=')
+    fail_msg: >-
+      Tailscale {{ ansible_facts.packages.get('tailscale', [{}])[0].version | default('?') }} is older than
+      {{ gateway_tailscale_min_version }}. Upgrade it before the strict rp_filter loads.
+      An absent package passes: the tailscale role installs a current one later in the play.
+
 - name: Set UFW default forward policy to ACCEPT
   lineinfile:
     path: /etc/default/ufw
@@ -107,22 +124,6 @@
     name: nftables
     state: started
     enabled: true
-
-# Strict rp_filter under a subnet router needs this floor (tailscale/tailscale#18860).
-# The version is dpkg's, not `tailscale version`'s: a binary that fails to run would
-# read as absent, and absent is the one case let through.
-- name: Read the installed packages
-  package_facts:
-
-- name: Assert Tailscale supports strict rp_filter
-  assert:
-    that: >-
-      'tailscale' not in ansible_facts.packages
-      or ansible_facts.packages['tailscale'][0].version is version(gateway_tailscale_min_version, '>=')
-    fail_msg: >-
-      Tailscale {{ ansible_facts.packages.get('tailscale', [{}])[0].version | default('?') }} is older than
-      {{ gateway_tailscale_min_version }}. Upgrade it before the strict rp_filter loads.
-      An absent package passes: the tailscale role installs a current one later in the play.
 
 - name: Deploy the edge sysctls
   template:
@@ -260,6 +261,21 @@
       WHY: the playbook maps them from networking.lan_cidr, networking.edge.lab_wifi.cidr,
       networking.tailscale_cidr and networking.edge.uplink.bandwidth in common.yaml.
       FIX: set those keys in common.yaml, then re-run.
+    quiet: true
+
+# AC13. systemd pets the hardware watchdog, so a hung PID 1 or kernel reboots the
+# edge. The BCM2835 counts at most 15 s, and a kernel that does not extend that in
+# software refuses a longer timeout. Checked with the other inputs: a check that
+# fails after a notify drops that handler, and the re-run notifies nothing (lesson-620).
+- name: Check the watchdog timeout
+  assert:
+    that:
+      - gateway_watchdog_sec | int > 0
+      - gateway_watchdog_sec | int <= 15
+    fail_msg: >-
+      ERROR: gateway_watchdog_sec is {{ gateway_watchdog_sec }}, outside 1 to 15.
+      WHY: 0 turns the hardware watchdog off, and the BCM2835 counts at most 15 s.
+      FIX: set gateway_watchdog_sec between 1 and 15, then re-run.
     quiet: true
 
 # AC7. The watch has to be running before the uplink takes a lease: a path unit
@@ -601,8 +617,47 @@
     state: started
     enabled: true
 
-# hostapd's and dnsmasq's handlers run here, inside the role, for the same reason the
-# address is a task. A play-level force_handlers would also run the uplink's netplan
-# handlers after a failure, which the uplink's ordering rules out.
+- name: Create the systemd manager drop-in directory
+  file:
+    path: /etc/systemd/system.conf.d
+    state: directory
+    mode: "0755"
+
+- name: Arm the hardware watchdog
+  template:
+    src: watchdog.conf.j2
+    dest: /etc/systemd/system.conf.d/watchdog.conf
+    mode: "0644"
+  notify: re-execute systemd
+
+# hostapd's, dnsmasq's and the watchdog's handlers run here, inside the role, for
+# the same reason the address is a task. A play-level force_handlers would also run
+# the uplink's netplan handlers after a failure, which the uplink's ordering rules out.
 - name: Apply the AP's changes
   meta: flush_handlers
+
+# AC13. After the AP's handlers, so the first check sees the AP this run configured.
+- name: Install the edge liveness check
+  copy:
+    src: edge-liveness.sh
+    dest: "{{ gateway_liveness_path }}"
+    mode: "0755"
+
+- name: Deploy the edge liveness units
+  template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    mode: "0644"
+  loop:
+    - kubelab-edge-liveness.service
+    - kubelab-edge-liveness.timer
+  register: gateway_liveness_units
+
+# Skipped in check mode until its units are on disk, as the lease watch is.
+- name: Check the edge's liveness every minute
+  systemd:
+    name: kubelab-edge-liveness.timer
+    enabled: true
+    state: "{{ 'restarted' if gateway_liveness_units is changed else 'started' }}"
+    daemon_reload: true
+  when: not ansible_check_mode or gateway_liveness_units is not changed

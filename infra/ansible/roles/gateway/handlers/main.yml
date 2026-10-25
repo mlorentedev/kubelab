@@ -47,3 +47,8 @@
   changed_when: true
   failed_when: gateway_psk_reload.rc != 0 or 'OK' not in (gateway_psk_reload.stdout_lines | map('trim') | list)
   when: gateway_ap_conf is not changed
+
+# PID 1 reads system.conf.d only when it re-executes.
+- name: re-execute systemd
+  systemd:
+    daemon_reexec: true
