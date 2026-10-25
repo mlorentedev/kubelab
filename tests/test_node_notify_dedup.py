@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import stat
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -31,7 +33,9 @@ class Node:
         self.sent = root / "sent.jsonl"
         self.result = root / "result"
         self.curl_exit = root / "curl-exit"
+        self.environment = root / "environment"
         (root / "bin").mkdir()
+        self.environment.mkdir()
         (root / "secret").write_text("tok")
         script = _render(
             "kubelab-notify.sh.j2",
@@ -41,7 +45,14 @@ class Node:
         self.script = root / "notify.sh"
         self.script.write_text(script)
         self.script.chmod(0o700)
-        self._shim("systemctl", 'printf "Result=%s\\n" "$(cat "$NODE_RESULT")"')
+        # `systemctl show -p <property> <unit>`: the unit's last result, or the
+        # Environment= its unit file declares.
+        self._shim(
+            "systemctl",
+            'case "$*" in'
+            ' *Environment*) printf "Environment=%s\\n" "$(cat "$NODE_ENVIRONMENT/${@: -1}" 2>/dev/null)" ;;'
+            ' *) printf "Result=%s\\n" "$(cat "$NODE_RESULT")" ;; esac',
+        )
         self._shim("journalctl", 'echo "unit output"')
         self._shim(
             "curl",
@@ -55,6 +66,10 @@ class Node:
         path.write_text(f"#!/bin/bash\n{body}\n")
         path.chmod(path.stat().st_mode | stat.S_IXUSR)
 
+    def declare(self, environment: str, unit: str = UNIT) -> None:
+        """What `Environment=` lines the unit's file carries, as systemd prints them."""
+        (self.environment / unit).write_text(environment)
+
     def set_result(self, value: str) -> None:
         self.result.write_text(value)
 
@@ -65,15 +80,19 @@ class Node:
             "NODE_RESULT": str(self.result),
             "NODE_SENT": str(self.sent),
             "NODE_CURL_EXIT": str(self.curl_exit),
+            "NODE_ENVIRONMENT": str(self.environment),
         }
         return subprocess.run(
             ["bash", str(self.script), *args, unit], capture_output=True, text=True, env=env, timeout=60
         )
 
-    def titles(self) -> list[str]:
+    def envelopes(self) -> list[dict[str, Any]]:
         if not self.sent.exists():
             return []
-        return [json.loads(line)["title"] for line in self.sent.read_text().splitlines()]
+        return [json.loads(line) for line in self.sent.read_text().splitlines()]
+
+    def titles(self) -> list[str]:
+        return [envelope["title"] for envelope in self.envelopes()]
 
     def age_state(self, seconds: int, unit: str = UNIT) -> None:
         """Pretend the last page went out `seconds` ago."""
@@ -214,3 +233,67 @@ def test_the_recovery_unit_is_installed_and_runs_the_recovery_mode() -> None:
     tasks = yaml.safe_load((NOTIFY_ROLE / "tasks/main.yml").read_text())
     [task] = [t for t in tasks if t.get("template", {}).get("src") == "kubelab-notify-recovered@.service.j2"]
     assert "node_notify_recovered_unit_name" in task["template"]["dest"]
+
+
+PAGE = "KUBELAB_NOTIFY_SEVERITY=page"
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(PAGE, id="alone"),
+        pytest.param(f"LANG=C.UTF-8 {PAGE} STATE=/var/lib/x", id="among-others"),
+    ]
+)
+def paged(node: Node, request: pytest.FixtureRequest) -> Node:
+    """A unit that declares `page`, as systemd prints it: `Environment=` then the variables, space-separated."""
+    node.declare(request.param)
+    return node
+
+
+def test_a_unit_that_declares_page_pages_and_every_other_unit_keeps_the_default(paged: Node) -> None:
+    """#2684: the edge's own units need a person now, the rest of the fleet does not."""
+    paged.run()
+    paged.run(unit="node-backup-ship.service")
+    assert [e["severity"] for e in paged.envelopes()] == ["page", "log"]
+
+
+def test_a_paged_unit_keeps_its_severity_on_the_reminder(paged: Node) -> None:
+    paged.run()
+    paged.age_state(REMINDER + 5)
+    paged.run()
+    assert [e["severity"] for e in paged.envelopes()] == ["page", "page"]
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed: the router was NOT run")
+def test_the_recovery_of_a_paged_unit_closes_the_alarm_instead_of_raising_another(paged: Node) -> None:
+    """The router sends a `page` envelope as a failure unless it is marked resolved."""
+    from tests.test_n8n_notify_router import _route
+
+    paged.run()
+    paged.set_result("success")
+    paged.run("--recovered")
+    page, recovery = (_route(envelope) for envelope in paged.envelopes())
+    assert (page["tag"], page["type"]) == ("page", "failure")
+    assert (recovery["tag"], recovery["type"]) == ("page", "info"), recovery["title"]
+
+
+def test_exercising_the_path_for_a_healthy_paged_unit_is_not_an_alarm(paged: Node) -> None:
+    """`make maintain-notify-test` starts the notifier by hand for a unit that did not fail."""
+    paged.set_result("success")
+    paged.run()
+    assert [e["severity"] for e in paged.envelopes()] == ["log"]
+
+
+@pytest.mark.parametrize(
+    "declared",
+    [
+        pytest.param("KUBELAB_NOTIFY_SEVERITY=critical", id="a-level-the-router-does-not-route"),
+        pytest.param("KUBELAB_NOTIFY_SEVERITY=", id="empty"),
+        pytest.param("XKUBELAB_NOTIFY_SEVERITY=page", id="another-variable"),
+        pytest.param("", id="nothing"),
+    ],
+)
+def test_anything_but_a_declared_page_keeps_the_default(node: Node, declared: str) -> None:
+    node.declare(declared)
+    node.run()
+    assert [e["severity"] for e in node.envelopes()] == ["log"]

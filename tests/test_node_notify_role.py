@@ -225,7 +225,7 @@ def _encode_via_rendered_script(journal_bytes: bytes, result: str = "exit-code")
         [sys.executable, "-c", body.group(1)],
         input=journal_bytes,
         capture_output=True,
-        env={**os.environ, "FAILED_UNIT": "node-backup-ship.service", "UNIT_RESULT": result},
+        env={**os.environ, "FAILED_UNIT": "node-backup-ship.service", "UNIT_RESULT": result, "NOTIFY_SEVERITY": "log"},
     )
     assert proc.returncode == 0, f"encoder crashed: {proc.stderr.decode(errors='replace')}"
     return json.loads(proc.stdout)
@@ -381,7 +381,6 @@ def test_the_envelope_names_the_unit_that_actually_failed() -> None:
     assert "node-backup-ship.service" in envelope["title"], (
         f"the failing unit is missing from the envelope title: {envelope['title']!r}"
     )
-    assert envelope["severity"] == "log"
 
 
 def test_the_journal_excerpt_is_scoped_to_the_current_boot() -> None:
@@ -660,3 +659,21 @@ def test_an_unknown_unit_is_not_announced_as_a_failure() -> None:
     """
     envelope = _encode_via_rendered_script(b"", result="")
     assert "failed" not in envelope["title"], f"an unknown unit is announced as {envelope['title']!r}"
+
+
+def test_the_fleet_default_stays_log() -> None:
+    """Ratified 2026-08-15: maintenance and backup failures are actionable, not page-worthy.
+
+    #2684 rejected raising it for a whole node: a unit that needs a person declares so itself.
+    """
+    assert _defaults()["node_notify_severity"] == "log"
+
+
+@pytest.mark.parametrize(("severity", "ok"), [("log", True), ("page", True), ("critical", False), ("", False)])
+def test_the_role_refuses_a_default_the_router_does_not_route(severity: str, ok: bool) -> None:
+    from tests.ansible_jinja import ansible_env
+
+    tasks = yaml.safe_load((NOTIFY_ROLE / "tasks/main.yml").read_text())
+    [check] = [t["assert"]["that"] for t in tasks if "node_notify_severity" in str(t.get("assert"))]
+    env = ansible_env(str(NOTIFY_ROLE / "templates"))
+    assert all(env.compile_expression(c)(node_notify_severity=severity) for c in check) is ok

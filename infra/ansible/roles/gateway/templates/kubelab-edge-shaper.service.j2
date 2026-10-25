@@ -17,6 +17,8 @@ OnFailure=kubelab-notify@%n.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+# No KUBELAB_NOTIFY_SEVERITY: a failure leaves the uplink unshaped, not down,
+# so it posts at the host's `log` (#2684).
 # Clear what the last start left: a restart would otherwise stack a second
 # redirect filter, and `ip link add` would fail on the IFB that already exists.
 ExecStartPre=-/usr/sbin/tc qdisc del dev {{ gateway_uplink_interface }} ingress

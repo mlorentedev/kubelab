@@ -12,6 +12,10 @@ OnSuccess=kubelab-notify-recovered@%n.service
 
 [Service]
 Type=oneshot
+# A lease inside a lab network can clash with a host on the LAN, and only a
+# person can answer it, so it pages rather than logs (ADR-075 D6, #2684).
+# node_notify reads this from systemd when the unit fails.
+Environment=KUBELAB_NOTIFY_SEVERITY=page
 ExecStart={{ gateway_lease_check_path }} {{ gateway_uplink_interface }} {{ gateway_lease_check_networks.items() | map('join', '=') | join(' ') }}
 NoNewPrivileges=yes
 ProtectSystem=strict

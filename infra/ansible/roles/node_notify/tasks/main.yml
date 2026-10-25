@@ -2,6 +2,18 @@
 # node_notify — installs the fleet's one failure-notification path and retires
 # the single-purpose one it replaces.
 
+# The level is rendered unquoted into the script, and the fleet's router tells
+# only these two apart.
+- name: Check the fleet's default severity
+  assert:
+    that:
+      - node_notify_severity in ['log', 'page']
+    fail_msg: >-
+      ERROR: node_notify_severity is {{ node_notify_severity }}.
+      WHY: the script posts it as the envelope's severity, and n8n's router routes
+      log and page. FIX: set log or page where the play overrides it.
+    quiet: true
+
 - name: Write fleet notify secret
   copy:
     content: "{{ secrets.apps.services.automation.notify.fleet_webhook_secret }}"
