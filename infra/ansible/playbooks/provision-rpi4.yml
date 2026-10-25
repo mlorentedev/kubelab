@@ -92,6 +92,18 @@
       tags: [always]
 
   roles:
+    # FIRST, as on rpi3, and before the gateway role in any case. The regulatory
+    # domain is the site's (`networking.edge.uplink.regdomain`), which the gateway
+    # role sets through modprobe.d (#2670). A value on the command line would always
+    # win, because kmod applies it after modprobe.d and the kernel keeps the last
+    # value, so it is removed here (#2668). The removal takes effect at the next
+    # boot. No reboot without -e rpi_boot_allow_reboot=true.
+    - role: ../roles/rpi_boot
+      tags: [boot]
+      vars:
+        rpi_boot_absent_params:
+          - cfg80211.ieee80211_regdom
+
     - role: ../roles/base_system
       tags: [base]
       vars:
@@ -159,6 +171,8 @@
         tailscale_accept_dns: false
         tailscale_accept_routes: false
         tailscale_advertise_routes: "{{ config.networking.lan_cidr }}"
+        # The user `make headscale-rejoin` mints the edge's key under.
+        tailscale_headscale_user_id: "{{ config.apps.services.core.headscale.infra_user_id }}"
 
     - role: ../roles/coredns
       tags: [coredns]
