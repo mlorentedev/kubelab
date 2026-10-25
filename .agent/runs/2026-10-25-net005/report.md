@@ -111,3 +111,24 @@ What moved:
 | #2681, Minors: fresh-card-only wording, `tag: page`, exit 4 needing #2674 | Fixed in `dc59c5c1`. Checking `tag: page` found #2684 |
 
 PR-Agent's later reviews also raised a reservations default on #2670 (fixed, `8678c60a`: the role's default is now `null` and the address check refuses it) and four findings on #2671's first review (one disproved by `test_a_success_with_nothing_failing_sends_nothing`, two deferred to B8 and B9, one declined). Each is in that PR's triage.
+
+## After the run (interactive, 2026-10-25 evening)
+
+The operator came back before the bring-up and kept the session going interactively, with the same merge rules. Landed under the standing grant, in this order:
+
+| PR | Master commit | What |
+|---|---|---|
+| #2676 | `3636f124` | `make headscale-rejoin`, `make edge-lan-link` |
+| #2686 | `75cb7961` | `rpi_boot` removes the kernel parameters a play declares absent (#2668's fix), so #2670 no longer stops every rpi4 provision |
+| #2670 | `688a752e` | Lab AP. The GitGuardian block cleared |
+| #2671 | `f41bec87` | Collision alert and CAKE shaping. Round 3's SSOT finding applied: the lease check's fixtures derive every lab address from `networking.*` |
+| #2673 | `c884f126` | Watchdog and radio liveness |
+| #2687 | `a0d04701` | rpi3's Tailscale owned by the `tailscale` role, so `make headscale-rejoin NODE=rpi3` works (#2685 closes at B6). PR-Agent's missing-role-tag finding applied, with a mutation proof |
+
+Still open:
+
+- **#2688** (#2684 option B, draft): a unit declares `Environment=KUBELAB_NOTIFY_SEVERITY=page` in `[Service]`, and `kubelab-notify.sh` reads it from systemd at run time. The edge's three notifying units declare it; the fleet default stays `log`. The first design, a map passed by the rpi4 play, was undone by every other play that applies `node_notify` to rpi4 (`maintain.yml`, `backup.yml`): lesson-623. Waits on the operator's confirmation of the new names.
+- **#2681** (runbook): out of draft after #2687 landed. Its "log until #2684" wording is flipped by whichever of #2681 and #2688 lands second.
+- **#2672** (prod probe): lands during the bring-up, after B3 and a staging validation (task 27), by the operator's decision.
+
+**`BLOCKED` with every required check green, again.** #2687's `a6087d45` sat `BLOCKED`, mergeable, triaged, with all five required contexts green. Branch protection is `strict: false`, there are no rulesets and no unresolved threads, so "behind master" is not the explanation. A merge of master cleared it, as with #2674. The cause is still unexplained; the remedy is the same.
