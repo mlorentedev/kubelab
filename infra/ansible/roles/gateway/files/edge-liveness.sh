@@ -18,15 +18,17 @@
 #      restarts hostapd;
 #   2. the grace-th miss: stop hostapd, unload the driver with whatever holds it,
 #      load it again, and start hostapd;
-#   3. the next miss: reboot, unless the edge already rebooted
-#      EDGE_LIVENESS_MAX_REBOOTS times in the last hour, in which case it holds and
-#      keeps paging. A radio that never comes back cannot loop the edge.
+#   3. the next miss: reboot, once per outage. A reboot that did not bring the
+#      radio back is not repeated: until the lab Wi-Fi serves again, the edge holds
+#      and keeps paging. A radio that flaps, serving for a while after each reboot,
+#      is held once the edge rebooted EDGE_LIVENESS_MAX_REBOOTS times in the last
+#      hour. Either way a radio that never comes back cannot loop the edge.
 #
 # The misses and the reload marker live in RUNTIME_DIRECTORY, so a reboot starts the
 # ladder again. The reboots are counted in STATE_DIRECTORY, which a reboot keeps, and
-# so is a marker that says the last reboot was for the lab Wi-Fi: until it serves
+# so is a marker that says the last reboot was for the lab Wi-Fi. Until it serves
 # again, a miss inside the grace still fails, because node_notify keeps its incident
-# across the reboot and a clean exit would close it.
+# across the reboot and a clean exit would close it, and no second reboot follows.
 # The RPi4 has no RTC and boots with a stale clock until NTP answers, so a reboot
 # recorded later than now counts as recent: a clock that went back must not lift
 # the cap.
@@ -135,6 +137,11 @@ recover_ap() {
     done
     # Not waited for: the next run checks whether it serves.
     systemctl start --no-block hostapd
+    return 1
+  fi
+  # The latch: the hourly cap alone would only pace a radio that never comes back.
+  if [ -e "$state_dir/ap.rebooted" ]; then
+    echo "lab Wi-Fi: $ap has not served since the edge rebooted for it, and the driver reload did not bring it back; holding the reboot until a human looks" >&2
     return 1
   fi
   if reboot_allowed; then

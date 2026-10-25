@@ -332,6 +332,11 @@ def _miss(edge: Edge, times: int) -> subprocess.CompletedProcess[str]:
     return result
 
 
+def _reboot(edge: Edge) -> None:
+    shutil.rmtree(edge.root / "run")
+    (edge.root / "run").mkdir()  # the reboot empties /run
+
+
 def test_a_healthy_edge_does_nothing(edge: Edge) -> None:
     result = edge.run()
     assert result.returncode == 0, result.stderr
@@ -381,8 +386,7 @@ def test_a_miss_after_the_reboot_keeps_the_incident_open(edge: Edge) -> None:
     edge.ap(serving=False)
     _miss(edge, GRACE + 1)
     assert edge.calls == REBOOT
-    shutil.rmtree(edge.root / "run")
-    (edge.root / "run").mkdir()  # the reboot empties /run
+    _reboot(edge)
     result = edge.run()
     assert result.returncode == 1
     assert edge.calls == []
@@ -390,6 +394,36 @@ def test_a_miss_after_the_reboot_keeps_the_incident_open(edge: Edge) -> None:
     assert edge.run().returncode == 0
     edge.ap(serving=False)
     assert edge.run().returncode == 0, "served since the reboot: a miss is back inside the grace"
+
+
+def test_a_reboot_that_did_not_bring_the_radio_back_is_not_repeated(edge: Edge) -> None:
+    """The hourly cap only paces a radio that never comes back: two reboots an hour,
+    forever. One reboot per outage, then the edge holds and keeps paging."""
+    edge.ap(serving=False)
+    _miss(edge, GRACE + 1)
+    assert edge.calls == REBOOT
+    _reboot(edge)
+    later = NOW + 2 * HOUR  # the first reboot has left the cap's window
+    seen: list[str] = []
+    for _ in range(GRACE + 1):
+        result = edge.run(now=later)
+        seen += edge.calls
+    assert seen == RELOAD_AP, "the reload stays: a driver that wedged after the boot may come back"
+    assert result.returncode == 1
+    assert "holding" in result.stderr
+    assert edge.recorded_reboots() == [str(NOW)]
+
+
+def test_a_radio_that_served_after_its_reboot_may_be_rebooted_again(edge: Edge) -> None:
+    """A flapping radio clears the latch each time it serves; the cap bounds that case."""
+    edge.ap(serving=False)
+    _miss(edge, GRACE + 1)
+    _reboot(edge)
+    edge.ap(serving=True)
+    edge.run()
+    edge.ap(serving=False)
+    _miss(edge, GRACE + 1)
+    assert edge.calls == REBOOT
 
 
 def test_an_ap_that_disappeared_is_a_miss(edge: Edge) -> None:
