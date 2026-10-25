@@ -176,6 +176,24 @@ def test_the_lab_wifi_and_the_homelab_lan_do_not_route_to_each_other(chains, iif
     assert _verdict(chains["forward"], iif=iif, oif=oif, state=state, proto="tcp", dport=22) == "drop"
 
 
+@pytest.mark.parametrize("state", ["new", "established"])
+@pytest.mark.parametrize(
+    ("iif", "oif"), [(AP, "tailscale0"), ("tailscale0", AP)], ids=["ap-to-tailnet", "tailnet-to-ap"]
+)
+def test_the_lab_wifi_never_rides_the_edges_tailnet_session(chains, iif, oif, state) -> None:
+    """A lab client reaches the tailnet with its own session, as UDP out of the uplink.
+    Routed through the edge's session it would carry a lab address onto the tailnet,
+    which trusts its range in bulk (ADR-041). The far peer's AllowedIPs would drop
+    it today; this drop does not depend on that."""
+    assert _verdict(chains["forward"], iif=iif, oif=oif, state=state, proto="tcp", dport=443) == "drop"
+
+
+def test_the_tailnet_still_reaches_the_homelab_lan(chains) -> None:
+    """The RPi4 is the subnet router for the homelab LAN."""
+    assert _verdict(chains["forward"], iif="tailscale0", oif=LAN, proto="tcp", dport=22) == "accept"
+    assert _verdict(chains["forward"], iif=LAN, oif="tailscale0", state="established", proto="tcp") == "accept"
+
+
 @pytest.mark.parametrize("iif", [LAN, AP])
 def test_the_inside_networks_still_reach_the_internet(chains, iif) -> None:
     assert _verdict(chains["forward"], iif=iif, oif=UPLINK, proto="tcp", dport=443) == "accept"
