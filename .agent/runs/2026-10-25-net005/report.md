@@ -29,7 +29,7 @@
 
 ## Not done
 
-- **PR 11 (task 34, PSK rotation)**: not started; it did not fit in the window.
+- **PR 11 (task 34, PSK rotation)**: not started, and it should wait for the bring-up, not only for time. The task chooses its design from B7: if the radio offloads the WPA handshake, the rotation takes ADR-075 D8's fallback. It also renders into the hostapd configuration of #2670, which is still blocked. Building it before B7 risks building the wrong variant.
 - **Task 31 (login mode)**: built only if B3 finds that only the site's resolver answers before the login.
 - **Task 36 (`always-on`)**: deferred to after B12. An always-on node enters the R2 watcher's targets, which would page while the edge is offline.
 - **Task 35, `docs/troubleshooting/networking-dns.md` and `docs/runbooks/headscale-setup.md`**: they still name an adapter by its MAC, and are outside this run's write paths. They sit in a ledger in `tests/test_edge_runbook_commands.py` that may only shrink.
