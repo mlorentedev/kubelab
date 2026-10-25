@@ -1788,6 +1788,12 @@ sync-terraform-backend: ## Render infra/terraform/backend.s3.tfbackend from terr
 sync-r2-watcher-targets:
 	@$(TOOLKIT) sync r2-watcher-targets
 
+# Regenerate the edge watcher's targets from networking (NET-005 AC12). Run after a
+# node joins or leaves the edge's networks or changes class; the test suite fails until you do.
+.PHONY: sync-edge-watcher-targets
+sync-edge-watcher-targets:
+	@$(TOOLKIT) sync edge-watcher-targets
+
 # BACKUP-044 AC1: does every declared node actually HAVE a backup, and how old
 # is it — asked from this workstation rather than from the nodes themselves.
 # Every other backup control runs on the node it checks, so it shares that

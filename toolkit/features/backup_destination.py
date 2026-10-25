@@ -28,6 +28,7 @@ should be the least valuable thing available, not the most.
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import os
 import secrets as _secrets
 import subprocess
@@ -397,7 +398,7 @@ def _reachability(config: dict[str, Any], node: str) -> list[str]:
     entry = _node_entry(config, node)
     missing = [field for field in ("tailscale_ip", "location") if not entry.get(field)]
     if missing:
-        raise ValueError(f"backup node {node} has no networking {', '.join(missing)}: the watcher cannot judge it")
+        raise ValueError(f"node {node} has no networking {', '.join(missing)}: the watcher cannot judge it")
     watcher = (config.get("backup", {}) or {}).get("watcher", {}) or {}
     port = (watcher.get("reachability_ports") or {}).get(node) or watcher.get("reachability_port", 22)
     return [str(entry["tailscale_ip"]), str(port), str(entry["location"])]
@@ -486,6 +487,61 @@ def write_watcher_targets(project_root: Path, config: dict[str, Any]) -> bool:
     """Write the targets file. True if it changed."""
     target = project_root / WATCHER_TARGETS_PATH
     rendered = render_watcher_targets(config)
+    if target.exists() and target.read_text() == rendered:
+        return False
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(rendered)
+    return True
+
+
+# Where the edge watcher's targets live (NET-005 AC12). Same contract as the R2
+# watcher's file: rendered from the SSOT, served through `configMapGenerator`,
+# and `tests/test_edge_watcher_targets.py` fails on a stale copy.
+EDGE_WATCHER_TARGETS_PATH = "infra/k8s/base/services/edge-watcher/targets.txt"
+
+_EDGE_WATCHER_TARGETS_HEADER = (
+    "# Generated from networking in common.yaml by `make sync-edge-watcher-targets`. Do not edit.\n"
+    "# One line per target: <node> <tailscale ip> <probe port>\n"
+)
+
+
+def render_edge_watcher_targets(config: dict[str, Any]) -> str:
+    """The edge and the always-on nodes behind it, where prod knocks to see them alive.
+
+    The edge is the one node in the `gateway` Ansible group, a target whatever
+    its class: it is the thing being watched. A node is behind it when its LAN
+    address is in the homelab LAN or the lab Wi-Fi, and only an always-on one is
+    a target, because an on-demand node is off whenever nobody is working.
+    """
+    networking = config.get("networking", {}) or {}
+    nodes = networking.get("nodes", {}) or {}
+    edges = sorted(name for name, entry in nodes.items() if "gateway" in ((entry or {}).get("ansible_groups") or []))
+    if len(edges) != 1:
+        raise ValueError(f"the edge watcher needs exactly one node in the gateway group, found {edges or 'none'}")
+    networks = [
+        ipaddress.ip_network(networking["lan_cidr"]),
+        ipaddress.ip_network(networking["edge"]["lab_wifi"]["cidr"]),
+    ]
+
+    def behind_the_edge(entry: dict[str, Any]) -> bool:
+        lan_ip = entry.get("lan_ip")
+        return bool(lan_ip) and any(ipaddress.ip_address(str(lan_ip)) in network for network in networks)
+
+    targets = set(edges) | {
+        name
+        for name, entry in nodes.items()
+        if entry and entry.get("location") == "always-on" and behind_the_edge(entry)
+    }
+    # `_reachability` refuses a node with no Tailscale IP: prod reaches the edge
+    # only over the tailnet, so such a row could only ever read "down".
+    lines = [" ".join([node, *_reachability(config, node)[:2]]) for node in sorted(targets)]
+    return _EDGE_WATCHER_TARGETS_HEADER + "\n".join(lines) + "\n"
+
+
+def write_edge_watcher_targets(project_root: Path, config: dict[str, Any]) -> bool:
+    """Write the edge watcher's targets file. True if it changed."""
+    target = project_root / EDGE_WATCHER_TARGETS_PATH
+    rendered = render_edge_watcher_targets(config)
     if target.exists() and target.read_text() == rendered:
         return False
     target.parent.mkdir(parents=True, exist_ok=True)
