@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,8 @@ TASKS: list[dict[str, Any]] = yaml.safe_load((ROLE / "tasks" / "main.yml").read_
 HANDLERS: list[dict[str, Any]] = yaml.safe_load((ROLE / "handlers" / "main.yml").read_text())
 DEFAULTS: dict[str, Any] = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text())
 NODES = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text())["networking"]["nodes"]
+EDGE = {name for name, node in NODES.items() if "gateway" in ((node or {}).get("ansible_groups") or [])}
+ANSIBLE = REPO / "infra" / "ansible"
 
 TEMPLATE_MODULES = ("template", "ansible.builtin.template")
 
@@ -81,17 +84,42 @@ def test_the_sysctls_reload_through_systemd_sysctl() -> None:
     assert handler["systemd"] == {"name": "systemd-sysctl", "state": "restarted"}
 
 
+def _tailscale_check() -> tuple[int, int, str]:
+    facts = next(
+        i for i, task in enumerate(TASKS) if "package_facts" in task or "ansible.builtin.package_facts" in task
+    )
+    check = next(i for i, task in enumerate(TASKS) if "gateway_tailscale_min_version" in str(task.get("assert")))
+    return facts, check, TASKS[check]["assert"]["that"]
+
+
 def test_the_tailscale_floor_is_asserted_before_the_sysctls_load() -> None:
+    """The version comes from dpkg, not from running the binary: a binary that fails
+    to run would read as absent, and absent is the one case let through."""
     assert DEFAULTS["gateway_tailscale_min_version"] == "1.96.2"
     sysctl_index, _ = _template_task("/etc/sysctl.d/99-kubelab-edge.conf")
-    probe = next(i for i, task in enumerate(TASKS) if task.get("register") == "gateway_tailscale_version")
-    check = next(i for i, task in enumerate(TASKS) if "gateway_tailscale_min_version" in str(task.get("assert")))
-    assert probe < check < sysctl_index
-    # A read-only probe: it must run under --check and must not fail on a node
-    # where the tailscale role (later in the play) has not installed it yet.
-    assert TASKS[probe]["check_mode"] is False
-    assert TASKS[probe]["failed_when"] is False
-    assert TASKS[probe]["changed_when"] is False
+    facts, check, _ = _tailscale_check()
+    assert facts < check < sysctl_index
+    assert not any(task.get("register") == "gateway_tailscale_version" for task in TASKS)
+
+
+@pytest.mark.parametrize(
+    ("packages", "passes"),
+    [
+        ({}, True),
+        ({"tailscale": [{"version": "1.96.1"}]}, False),
+        ({"tailscale": [{"version": "1.96.2"}]}, True),
+        ({"tailscale": [{"version": "1.102.4"}]}, True),
+    ],
+    ids=["absent", "below-the-floor", "at-the-floor", "installed-on-the-edge"],
+)
+def test_the_tailscale_floor_lets_only_an_absent_or_current_package_through(packages, passes) -> None:
+    """Absent passes: the tailscale role installs a current one later in the play."""
+    _, _, condition = _tailscale_check()
+    env = ansible_env(str(ROLE / "templates"))
+    result = env.compile_expression(condition)(
+        ansible_facts={"packages": packages}, gateway_tailscale_min_version=DEFAULTS["gateway_tailscale_min_version"]
+    )
+    assert bool(result) is passes
 
 
 def test_the_ruleset_handler_reloads_and_never_restarts() -> None:
@@ -193,12 +221,47 @@ def test_cloud_init_never_writes_netplan() -> None:
     assert yaml.safe_load(task["copy"]["content"]) == {"network": {"config": "disabled"}}
 
 
+def _netplan_keys(node: Any) -> set[str]:
+    """Every `netplan_*` key at any depth: keys, so a comment that names one is not a hit."""
+    if isinstance(node, dict):
+        own = {str(key) for key in node if str(key).startswith("netplan_")}
+        return own.union(*(_netplan_keys(value) for value in node.values()))
+    if isinstance(node, list):
+        return set().union(*(_netplan_keys(item) for item in node))
+    return set()
+
+
 def test_no_other_role_writes_the_edges_netplan() -> None:
     """base_system writes /etc/netplan/50-cloud-init.yaml when netplan_address is set.
     On the edge, this role would then back it up and remove it on every run, and the
-    two would apply netplan against each other."""
-    playbook = REPO / "infra" / "ansible" / "playbooks" / "provision-rpi4.yml"
-    assert "netplan_" not in playbook.read_text()
+    two would apply netplan against each other. So only a play aimed at named nodes
+    other than the edge may set a `netplan_` variable, and no source that every host
+    reads may: a role's defaults or vars, an inventory, group_vars, host_vars."""
+    base_system = yaml.safe_load((ANSIBLE / "roles" / "base_system" / "tasks" / "main.yml").read_text())
+    (gate,) = [task["when"] for task in base_system if "/etc/netplan/" in str(task)]
+    assert gate == "netplan_address is defined"
+    others = set(NODES) - EDGE
+    for playbook in sorted((ANSIBLE / "playbooks").glob("*.yml")):
+        for play in yaml.safe_load(playbook.read_text()) or []:
+            if isinstance(play, dict) and (keys := _netplan_keys(play)):
+                hosts = set(re.split(r"[,:]", str(play.get("hosts", ""))))
+                assert hosts <= others, f"{playbook.name}: the play on {play.get('hosts')!r} sets {sorted(keys)}"
+    shared = [
+        path
+        for pattern in (
+            "roles/*/defaults/*",
+            "roles/*/vars/*",
+            "inventories/**/*",
+            "**/group_vars/**/*",
+            "**/host_vars/**/*",
+        )
+        for path in ANSIBLE.glob(pattern)
+        if path.suffix in (".yml", ".yaml")
+    ]
+    assert shared, "no shared variable source found: the glob is wrong, not the edge clean"
+    for source in shared:
+        for document in yaml.safe_load_all(source.read_text()):
+            assert not _netplan_keys(document), f"{source.relative_to(REPO)} sets {sorted(_netplan_keys(document))}"
 
 
 def _that(index: int) -> list[str]:
@@ -272,6 +335,39 @@ def test_the_rename_runs_whenever_the_name_is_missing_and_is_checked() -> None:
     assert "address={{ gateway_uplink_mac | lower }}" in TASKS[rename]["command"]
     assert TASKS[rename]["no_log"] is True
     assert not any("udevadm" in str(handler) for handler in HANDLERS)
+
+
+NAMED = (
+    "5: uplink0: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN mode DEFAULT group default qlen 1000"
+    "\\    link/ether 02:00:5e:10:00:01 brd ff:ff:ff:ff:ff:ff\n"
+)
+
+
+@pytest.mark.parametrize(
+    ("exists", "named", "ok"),
+    [
+        (True, NAMED, True),
+        (True, NAMED.replace("02:00:5e:10:00:01", "02:00:5e:10:00:02"), False),
+        (False, "", True),
+    ],
+    ids=["the-uplink", "another-adapter", "no-name-yet-in-check-mode"],
+)
+def test_the_uplink_name_must_be_on_the_uplink_adapter(exists: bool, named: str, ok: bool) -> None:
+    """An adapter an earlier profile named keeps the name while it stays plugged in, and
+    the rename is skipped because the name is taken: netplan would configure it."""
+    verify = _first(lambda task: "gateway_uplink_sysfs" in str(task.get("assert")))
+    read = _first(lambda task: str(task.get("command")).startswith("ip -o link show"))
+    owner = _first(lambda task: "gateway_uplink_named" in str(task.get("assert")))
+    netplan, _ = _template_task(NETPLAN)
+    assert verify < read < owner < netplan
+    task = TASKS[read]
+    assert task["command"] == "ip -o link show {{ gateway_uplink_interface }}"
+    assert (task["changed_when"], task["check_mode"], task["no_log"]) == (False, False, True)
+    assert task["when"] == "gateway_uplink_sysfs.stat.exists"
+    variables = {"gateway_uplink_mac": UPLINK_MAC.upper(), "gateway_uplink_sysfs": {"stat": {"exists": exists}}}
+    named_result = {"stdout": named} if exists else {"skipped": True}
+    assert _holds(owner, gateway_uplink_named=named_result, **variables) is ok
+    assert TASKS[owner]["assert"]["fail_msg"].startswith("ERROR:")
 
 
 def test_old_and_new_netplan_are_never_applied_together() -> None:

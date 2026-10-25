@@ -84,7 +84,7 @@ This PR loads the drops before any uplink exists. `iifname` matches a name, so r
 9. [x] (✓ 2026-10-25, #2666) [AC4] Test first, in `tests/test_gateway_role_tasks.py`: the role allows udp 67 through ufw on `gateway_interface` with `interface_in`. Implement. Green.
 10. [x] (✓ 2026-10-25, #2666) [AC1] Test first, in `tests/test_gateway_role_tasks.py`: the gateway role asserts the installed Tailscale is at least 1.96.2 before it loads the sysctls. Implement. Green.
 11. [x] (✓ 2026-10-25, #2666, evidence in `verification.md`) [AC4] Live, over the LAN: `make provision NODE=rpi4 ENV=prod BOOTSTRAP=1 TAGS=gateway`.
-    - A laptop on the switch gets a lease.
+    - A host on the switch completes a DHCP exchange with the edge. The baseline's fault was the server side (ufw dropped udp 67), so any client shows it; the operator's laptop is re-checked when its AC11 hand changes are undone.
     - `inet kubelab` shows the chains.
     - A second run reports `changed=0`.
 

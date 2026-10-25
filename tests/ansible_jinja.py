@@ -23,6 +23,7 @@ import re
 from typing import Any
 
 from jinja2 import Environment, FileSystemLoader
+from packaging.version import Version
 
 
 def _to_bool(value: Any) -> bool:
@@ -62,6 +63,12 @@ def _regex_replace(value: str, pattern: str, replacement: str = "") -> str:
     return re.sub(pattern, replacement, value)
 
 
+def _version(value: Any, version: str, operator: str = "eq") -> bool:
+    """Ansible's `version` test, for the dotted numeric versions the roles compare."""
+    ops = {"<": "lt", "<=": "le", "==": "eq", "!=": "ne", ">=": "ge", ">": "gt"}
+    return getattr(Version(str(value)), f"__{ops.get(operator, operator)}__")(Version(version))
+
+
 def ansible_env(templates_dir: str, **kwargs: Any) -> Environment:
     """A `FileSystemLoader` environment with the Ansible filters and tests these templates use."""
     env = Environment(loader=FileSystemLoader(templates_dir), **kwargs)
@@ -72,4 +79,5 @@ def ansible_env(templates_dir: str, **kwargs: Any) -> Environment:
     env.filters["regex_replace"] = _regex_replace
     env.tests["match"] = _match
     env.tests["regex"] = _regex
+    env.tests["version"] = _version
     return env
