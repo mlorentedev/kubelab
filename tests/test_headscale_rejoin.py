@@ -266,4 +266,4 @@ def test_the_makefile_target_calls_the_command() -> None:
     target = re.search(r"^headscale-rejoin:.*\n((?:\t.*\n)+)", makefile, re.M)
     assert target, "no headscale-rejoin target"
     assert "infra headscale rejoin --node $(NODE)" in target.group(1)
-    assert "prod" in target.group(1), "the edge is provisioned against prod"
+    assert "--env $(or $(filter staging prod,$(ENV)),prod)" in target.group(1), "the edge is provisioned against prod"
