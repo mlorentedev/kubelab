@@ -136,20 +136,20 @@ This PR loads the drops before any uplink exists. `iifname` matches a name, so r
 
 ### PR 6 — Collision detection and shaping
 
-18. [ ] [P] [AC7] Test first, `tests/test_edge_lease_check.py`. Feed `roles/gateway/files/edge-lease-check.sh` lease fixtures (address, gateway, routes) and the CIDRs from the SSOT:
+18. [x] (✓ 2026-10-25, #2671) [P] [AC7] Test first, `tests/test_edge_lease_check.py`. Feed `roles/gateway/files/edge-lease-check.sh` lease fixtures (address, gateway, routes) and the CIDRs from the SSOT:
     - each collision kind exits non-zero with a message naming the kind;
     - a clean lease exits 0.
 
     Watch it fail.
-19. [ ] [AC7] Implement the script. A systemd path unit watches networkd's lease directory and runs it, with `OnFailure=kubelab-notify@%n.service` (the `node_notify` role). Green.
-20. [ ] [P] [AC8] Test first, `tests/test_edge_shaper_render.py`:
+19. [x] (✓ 2026-10-25, #2671) [AC7] Implement the script. A systemd path unit watches networkd's lease directory and runs it, with `OnFailure=kubelab-notify@%n.service` (the `node_notify` role). Green.
+20. [x] (✓ 2026-10-25, #2671) [P] [AC8] Test first, `tests/test_edge_shaper_render.py`:
     - egress is `cake bandwidth <up> nat dual-srchost`;
     - ingress goes through an IFB device with `cake bandwidth <down> nat dual-dsthost ingress`;
     - both rates come from `bandwidth`, scaled below the measured rate;
     - the unit is bound to the uplink device.
 
     Watch it fail.
-21. [ ] [AC8] Implement the shaper unit. Green.
+21. [x] (✓ 2026-10-25, #2671) [AC8] Implement the shaper unit. Green.
 
 ### PR 7 — The prod probe
 
