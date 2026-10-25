@@ -1,0 +1,14 @@
+# Managed by Ansible (gateway role). The lab Wi-Fi's gateway address (ADR-075 D2).
+# hostapd owns the radio. The address holds without a carrier, so dnsmasq has a
+# subnet to serve as soon as a station associates.
+[Match]
+Name={{ gateway_ap_interface }}
+
+[Link]
+RequiredForOnline=no
+
+[Network]
+Address={{ gateway_ap_address }}/{{ gateway_ap_cidr.split('/')[1] }}
+ConfigureWithoutCarrier=yes
+LinkLocalAddressing=no
+IPv6AcceptRA=no

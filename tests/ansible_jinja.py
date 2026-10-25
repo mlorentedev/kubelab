@@ -17,6 +17,7 @@ filter because they must render what Ansible renders.
 
 from __future__ import annotations
 
+import base64
 import json
 import re
 from typing import Any
@@ -40,6 +41,24 @@ def _to_bool(value: Any) -> bool:
     return bool(value)
 
 
+def _b64decode(value: str) -> str:
+    return base64.b64decode(value).decode()
+
+
+def _match(value: str, pattern: str) -> bool:
+    """Ansible's `match` test: `re.match`, so anchored at the start only."""
+    return re.match(pattern, value) is not None
+
+
+def _regex(
+    value: str, pattern: str, ignorecase: bool = False, multiline: bool = False, match_type: str = "search"
+) -> bool:
+    """Ansible's `regex` test, whose `match_type` names the `re` method: `fullmatch` is the
+    one that refuses a trailing newline, which `match` with a `$` lets through."""
+    flags = (re.I if ignorecase else 0) | (re.M if multiline else 0)
+    return bool(getattr(re.compile(pattern, flags), match_type)(value))
+
+
 def _regex_replace(value: str, pattern: str, replacement: str = "") -> str:
     return re.sub(pattern, replacement, value)
 
@@ -51,11 +70,14 @@ def _version(value: Any, version: str, operator: str = "eq") -> bool:
 
 
 def ansible_env(templates_dir: str, **kwargs: Any) -> Environment:
-    """A `FileSystemLoader` environment with the Ansible filters these templates use."""
+    """A `FileSystemLoader` environment with the Ansible filters and tests these templates use."""
     env = Environment(loader=FileSystemLoader(templates_dir), **kwargs)
     env.filters["bool"] = _to_bool
     # Jinja's own `tojson` HTML-escapes; Ansible's `to_json` is plain json.dumps.
     env.filters["to_json"] = json.dumps
+    env.filters["b64decode"] = _b64decode
     env.filters["regex_replace"] = _regex_replace
+    env.tests["match"] = _match
+    env.tests["regex"] = _regex
     env.tests["version"] = _version
     return env

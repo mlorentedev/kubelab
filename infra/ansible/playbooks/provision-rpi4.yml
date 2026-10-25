@@ -125,6 +125,16 @@
         gateway_uplink_ssid: "{{ secrets.networking.edge.uplink.ssid | default('') }}"
         gateway_uplink_psk: "{{ secrets.networking.edge.uplink.psk | default('') }}"
         gateway_ap_interface: "{{ config.networking.edge.lab_wifi.interface }}"
+        gateway_ap_channel: "{{ config.networking.edge.uplink.channel }}"
+        gateway_ap_cidr: "{{ config.networking.edge.lab_wifi.cidr }}"
+        gateway_ap_address: "{{ config.networking.edge.lab_wifi.gateway }}"
+        gateway_ap_dhcp_range_start: "{{ config.networking.edge.lab_wifi.dhcp_range.start }}"
+        gateway_ap_dhcp_range_end: "{{ config.networking.edge.lab_wifi.dhcp_range.end }}"
+        gateway_ap_reservations: "{{ config.networking.edge.lab_wifi.reservations | map('extract', config.networking.nodes) | list }}"
+        gateway_ap_ssid: "{{ secrets.networking.edge.lab_wifi.ssid | default('') }}"
+        gateway_ap_psks:
+          - keyid: current
+            psk: "{{ secrets.networking.edge.lab_wifi.psk | default('') }}"
         gateway_dhcp_reservations:
           - mac: "{{ config.networking.nodes.ace1.mac }}"
             hostname: "kubelab-ace1"

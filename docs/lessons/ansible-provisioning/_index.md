@@ -5,6 +5,7 @@ Newest first. Back to [all categories](../_index.md).
 | # | Lesson | Date |
 |---|---|---|
 | 622 | [A kernel parameter one node must lose can be another node's Wi-Fi country](lesson-622-a-kernel-parameter-one-node-must-lose-can-be-another-nodes-wi-fi-country.md) | 2026-10-25 |
+| 620 | [A deferred handler is lost when a later role fails, and the re-run reports changed=0](lesson-620-a-deferred-handler-is-lost-when-a-later-role-fails.md) | 2026-10-25 |
 | 604 | [A provision applies the checkout, so a branch behind master rolls the node back without failing](lesson-604-a-provision-applies-the-checkout-so-a-branch-behind-master-rolls-the-node-back-without-failing.md) | 2026-10-17 |
 | 589 | [A file written by a subuid with mkstemp is unreadable to its host owner, and no ACL fixes it](lesson-589-a-file-written-by-a-subuid-with-mkstemp-is-unreadable-to-its-host-owner-and-no-acl-fixes-it.md) | 2026-10-17 |
 | 588 | [A guard keyed on an error string breaks when the role itself changes what produced the string](lesson-588-a-guard-keyed-on-an-error-string-breaks-when-the-role-changes-what-produced-it.md) | 2026-10-17 |
