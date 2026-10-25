@@ -198,14 +198,15 @@ def test_remove_with_no_profile_is_a_no_op() -> None:
     assert nmcli.writes == []
 
 
-def test_a_failed_nmcli_write_fails_the_target() -> None:
+def test_a_failed_add_fails_the_target_and_brings_nothing_up() -> None:
     nmcli = Nmcli()
 
     def failing(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
         result = nmcli(argv, **kwargs)
-        return result if argv[1] == "-t" else subprocess.CompletedProcess(argv, 4, "", "boom")
+        return subprocess.CompletedProcess(argv, 4, "", "boom") if argv[2] == "add" else result
 
     assert _link(failing) == 4  # type: ignore[arg-type]
+    assert [w[2] for w in nmcli.writes] == ["add"]
 
 
 # ------------------------------------------------------------- the operator's side
