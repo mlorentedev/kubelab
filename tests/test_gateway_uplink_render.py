@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import configparser
+import os
 import shlex
 import shutil
 import subprocess
@@ -26,6 +27,16 @@ import pytest
 import yaml
 
 from tests.ansible_jinja import ansible_env
+
+
+def _netplan_or_skip() -> None:
+    """The two tests that ask netplan itself. In CI a missing netplan is a failure,
+    or a runner-image change would turn both into a quiet skip; elsewhere it is a
+    skip, which means CANNOT CHECK, never OK."""
+    if shutil.which("netplan") is None:
+        if os.environ.get("CI"):
+            pytest.fail("netplan not on PATH in CI: the drop-in's directory and the validate command went unchecked")
+        pytest.skip("CANNOT CHECK: netplan is not installed")
 
 REPO = Path(__file__).resolve().parents[1]
 ROLE = REPO / "infra" / "ansible" / "roles" / "gateway"
@@ -158,10 +169,10 @@ def test_the_drop_in_sits_beside_the_network_file_netplan_generates() -> None:
     assert _task_writing(dest)["src"] == "dhcp-gateway.conf.j2"
 
 
-@pytest.mark.skipif(shutil.which("netplan") is None, reason="netplan is not installed")
 @pytest.mark.parametrize("kind", KINDS)
 def test_netplan_generates_the_file_the_drop_in_names(kind: str, tmp_path: Path) -> None:
     """Asked of netplan itself: the drop-in's directory is only right if this file exists."""
+    _netplan_or_skip()
     (tmp_path / "etc" / "netplan").mkdir(parents=True)
     rendered = tmp_path / "etc" / "netplan" / "10-kubelab-edge.yaml"
     rendered.write_text(_render("netplan-edge.yaml.j2", kind))
@@ -245,9 +256,9 @@ def test_the_playbook_maps_the_profile_and_its_secrets() -> None:
         assert variables[f"gateway_uplink_{key}"] == f"{{{{ secrets.networking.edge.uplink.{key} | default('') }}}}"
 
 
-@pytest.mark.skipif(shutil.which("netplan") is None, reason="netplan is not installed")
 def test_the_validate_command_accepts_the_rendered_file_and_refuses_a_broken_one(tmp_path: Path) -> None:
     """Run the way Ansible runs `validate`: `%s` substituted, split, no shell."""
+    _netplan_or_skip()
     validate = _task_writing("/etc/netplan/10-kubelab-edge.yaml")["validate"]
     good = tmp_path / "good.yaml"
     good.write_text(_render("netplan-edge.yaml.j2"))

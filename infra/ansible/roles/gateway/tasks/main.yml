@@ -170,8 +170,12 @@
       - (gateway_uplink_mac | lower) != (ansible_facts[gateway_interface].macaddress | default('') | lower)
     fail_msg: >-
       ERROR: no adapter other than {{ gateway_interface }} has the uplink MAC in prod SOPS.
-      WHY: the uplink adapter is unplugged, or networking.edge.uplink.mac names another adapter.
-      FIX: plug in the uplink adapter, or correct the MAC with `toolkit secrets set`, then re-run.
+      WHY: the uplink adapter is unplugged, or networking.edge.uplink.mac names another adapter, or
+      something set the adapter's MAC away from its permanent one (`ip link` then shows `permaddr`).
+      The .link file matches the permanent MAC and sets none (MACAddressPolicy=none), so nothing in
+      this role does that.
+      FIX: plug in the uplink adapter, correct the MAC with `toolkit secrets set`, or undo what
+      changed the MAC, then re-run.
     quiet: true
 
 - name: Pin and name the uplink adapter
