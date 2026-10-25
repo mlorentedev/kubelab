@@ -25,6 +25,34 @@
   failed_when: false
   check_mode: false
 
+- name: Hold whether the node is on the mesh
+  set_fact:
+    _tailscale_running: >-
+      {{ tailscale_status.rc == 0
+         and (tailscale_status.stdout | from_json).BackendState | default('') == 'Running' }}
+
+# Single use and one hour, so a key that outlives the registration opens nothing
+# (the hermes sidecar's rule). Off by default: `make headscale-rejoin` turns it on,
+# because a provision before the uplink is up could not register with it.
+- name: Mint a single-use pre-auth key on Headscale
+  command: >-
+    docker exec headscale headscale preauthkeys create
+    --user {{ tailscale_headscale_user_id }} --expiration 1h
+  delegate_to: "{{ tailscale_headscale_host }}"
+  become: false
+  when: tailscale_mint_key | bool and tailscale_auth_key == '' and not (_tailscale_running | bool)
+  register: _tailscale_mint
+  no_log: true
+
+# A fact of its own: bee and ace pass tailscale_auth_key as a role var, which
+# outranks set_fact, so a minted key cannot be written over it.
+- name: Hold the key this run registers with
+  set_fact:
+    _tailscale_key: "{{ tailscale_auth_key or (_tailscale_mint.stdout | default('') | trim) }}"
+  no_log: true
+
+# --reset drops every flag it is not given (tailscale/tailscale#5597), so each
+# non-default flag the play declares has to be here.
 - name: Build Tailscale up command
   set_fact:
     tailscale_up_cmd: >-
@@ -33,17 +61,16 @@
       --accept-dns={{ tailscale_accept_dns | lower }}
       --accept-routes={{ tailscale_accept_routes | lower }}
       {% if tailscale_advertise_routes %}--advertise-routes={{ tailscale_advertise_routes }}{% endif %}
-      {% if tailscale_auth_key %}--authkey={{ tailscale_auth_key }}{% endif %}
+      {% if _tailscale_key %}--authkey={{ _tailscale_key }}{% endif %}
+  no_log: "{{ _tailscale_key != '' }}"
 
 - name: Register with Headscale (async — tailscale may disrupt SSH briefly)
   command: "{{ tailscale_up_cmd }} --timeout=30s"
-  when: >
-    tailscale_auth_key != '' and
-    (tailscale_status.rc != 0 or
-     (tailscale_status.stdout | from_json).BackendState | default('') != 'Running')
+  when: _tailscale_key != '' and not (_tailscale_running | bool)
   async: 60
   poll: 0
   register: tailscale_register
+  no_log: "{{ _tailscale_key != '' }}"
 
 - name: Wait for Tailscale registration to complete
   async_status:
@@ -53,6 +80,7 @@
   retries: 12
   delay: 5
   when: tailscale_register is changed
+  no_log: "{{ _tailscale_key != '' }}"
 
 - name: Show manual auth instructions
   debug:
@@ -60,10 +88,7 @@
       Tailscale is installed but not registered. Run manually on this host:
       {{ tailscale_up_cmd }}
       Then approve the node in Headscale.
-  when: >
-    tailscale_auth_key == '' and
-    (tailscale_status.rc != 0 or
-     (tailscale_status.stdout | from_json).BackendState | default('') != 'Running')
+  when: _tailscale_key == '' and not (_tailscale_running | bool)
 
 - name: Verify Tailscale connectivity
   command: tailscale status

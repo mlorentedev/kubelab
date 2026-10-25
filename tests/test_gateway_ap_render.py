@@ -38,6 +38,7 @@ LAB = EDGE["lab_wifi"]
 
 LAN = "eth0"
 LAN_GATEWAY = NETWORKING["nodes"]["rpi4"]["lan_ip"]
+ACE1 = NETWORKING["nodes"]["ace1"]
 AP = LAB["interface"]
 HOSTAPD_CONF = "/etc/hostapd/hostapd.conf"
 PSK_FILE = "/etc/hostapd/hostapd.wpa_psk"
@@ -57,7 +58,7 @@ def _vars(**overrides: Any) -> dict[str, Any]:
         "gateway_dhcp_range_end": DEFAULTS["gateway_dhcp_range_end"],
         "gateway_dhcp_lease": DEFAULTS["gateway_dhcp_lease"],
         "gateway_dns_servers": DEFAULTS["gateway_dns_servers"],
-        "gateway_dhcp_reservations": [{"mac": "02:00:5e:10:00:02", "hostname": "kubelab-ace1", "ip": "172.16.1.2"}],
+        "gateway_dhcp_reservations": [{"mac": ACE1["mac"], "hostname": "kubelab-ace1", "ip": ACE1["lan_ip"]}],
         "gateway_uplink_regdomain": EDGE["uplink"]["regdomain"],
         "gateway_ap_interface": AP,
         "gateway_ap_channel": EDGE["uplink"]["channel"],
