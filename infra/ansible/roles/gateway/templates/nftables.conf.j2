@@ -15,8 +15,10 @@ table inet kubelab {
     chain input {
         type filter hook input priority filter; policy accept;
         iifname "{{ gateway_uplink_interface }}" ct state established,related accept
-        # DHCP offers reach the client from an address it never sent to, so
-        # conntrack sees them as new; renewal replies are already established.
+        # A DHCP reply can come from an address the client never sent to (a
+        # relay, or an answer to a broadcast), which conntrack sees as new.
+        # networkd reads its first offer on a raw socket below this hook, so
+        # this keeps renewals and rebinds working whichever way they arrive.
         iifname "{{ gateway_uplink_interface }}" ct state new udp sport 67 udp dport 68 accept
         iifname "{{ gateway_uplink_interface }}" drop
     }

@@ -90,3 +90,35 @@ def test_the_tailscale_floor_is_asserted_before_the_sysctls_load() -> None:
     assert TASKS[probe]["check_mode"] is False
     assert TASKS[probe]["failed_when"] is False
     assert TASKS[probe]["changed_when"] is False
+
+
+def test_the_ruleset_handler_reloads_and_never_restarts() -> None:
+    """`nftables.service` stops with `flush ruleset`, which takes Docker's, ufw's and
+    Tailscale's rules with it."""
+    _, task = _template_task("/etc/nftables.conf")
+    handler = next(h for h in HANDLERS if h["name"] == task["notify"])
+    assert handler["systemd"] == {"name": "nftables", "state": "reloaded"}
+
+
+def test_a_package_restart_only_replaces_the_edge_table() -> None:
+    """The nftables postinst runs `try-restart` on upgrade (measured on the RPi4)."""
+    _, task = _template_task("/etc/systemd/system/nftables.service.d/kubelab-stop.conf")
+    env = ansible_env(str(ROLE / "templates"), trim_blocks=True)
+    lines = [line for line in env.get_template(task["template"]["src"]).render().splitlines() if not line.startswith("#")]
+    assert lines[lines.index("[Service]") + 1 :] == ["ExecStop=", "ExecStop=-/usr/sbin/nft delete table inet kubelab"]
+    handler = next(h for h in HANDLERS if h["name"] == task["notify"])
+    assert handler["systemd"] == {"daemon_reload": True}
+    ruleset, _ = _template_task("/etc/nftables.conf")
+    enable = next(i for i, t in enumerate(TASKS) if (t.get("systemd") or {}).get("name") == "nftables")
+    drop_in, _ = _template_task("/etc/systemd/system/nftables.service.d/kubelab-stop.conf")
+    assert drop_in < enable
+
+
+def test_an_immutable_resolver_is_unlocked_before_the_template() -> None:
+    """Older runbooks told the operator to `chattr +i` it, and `template` writes by rename."""
+    resolver, _ = _template_task("/etc/resolv.conf")
+    probe = next(i for i, t in enumerate(TASKS) if (t.get("stat") or {}).get("path") == "/etc/resolv.conf")
+    unlock = next(i for i, t in enumerate(TASKS) if t.get("command") == "chattr -i /etc/resolv.conf")
+    assert probe < unlock < resolver
+    assert "immutable" in TASKS[unlock]["when"]
+    assert TASKS[unlock]["changed_when"] is True

@@ -1,9 +1,10 @@
 # Managed by Ansible (gateway role). The edge's kernel settings (ADR-075 D3).
 #
 # rp_filter enforces max(conf/all, the interface's own value), and Ubuntu ships
-# all=2, so all=0 is what lets the uplink be strict. An interface copies
-# conf/default when it is created: eth0 and the AP exist before this file loads
-# and are named; tailscale0 and the Docker bridges come later and take the default.
+# all=2, so all=0 is what lets the uplink be strict. An interface takes
+# conf/default when it is created, and follows later writes to it only until its
+# own key is set. eth0 and the AP are named so their value does not depend on
+# that order; tailscale0 and the Docker bridges come later and take the default.
 #
 # The uplink may not exist yet. Its keys carry "-" so a failed write is ignored,
 # and systemd's udev rule re-applies them when the device appears.

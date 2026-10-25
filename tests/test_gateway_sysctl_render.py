@@ -6,10 +6,10 @@ rules rather than by key presence:
 - `rp_filter` takes the larger of `conf/all` and the interface's value, so strict on
   the uplink needs `all=0`. Ubuntu ships `all=2` in `10-network-security.conf`,
   which would make the uplink loose whatever its own key says.
-- An interface copies `conf/default` when it is created and never follows it after.
-  `eth0` and the AP exist before `systemd-sysctl` runs at boot, so they are named
-  explicitly; `tailscale0`, `docker0` and the Docker bridges come later and take the
-  default.
+- An interface takes `conf/default` when it is created, and follows later writes
+  to it only until its own key is set. `eth0` and the AP are named explicitly so
+  their value does not depend on that order; `tailscale0`, `docker0` and the Docker
+  bridges come later and take the default.
 - The uplink may not exist when the file loads, so its keys carry systemd's `-`
   prefix (a failed write is ignored). systemd's udev rule re-applies per-interface
   keys when the device appears.

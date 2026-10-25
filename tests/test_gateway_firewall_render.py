@@ -98,6 +98,31 @@ def test_interfaces_are_matched_by_name_so_the_uplink_rules_load_before_it_exist
     assert not re.search(r"\b(iif|oif)\s", _render())
 
 
+def test_the_table_covers_ipv4_and_ipv6_and_replaces_itself_on_reload() -> None:
+    """`inet`, or IPv6 is unfiltered. Without the delete, a reload appends to the live
+    chains, so a rule removed from the file would stay loaded."""
+    lines = [line.strip() for line in _render().splitlines()]
+    definition = lines.index("table inet kubelab {")
+    assert lines.index("delete table inet kubelab") < definition
+    assert lines.index("table inet kubelab") < lines.index("delete table inet kubelab")
+
+
+@pytest.mark.parametrize(
+    ("name", "header"),
+    [
+        ("input", "type filter hook input priority filter;"),
+        ("forward", "type filter hook forward priority filter;"),
+        ("postrouting", "type nat hook postrouting priority srcnat;"),
+    ],
+)
+def test_each_chain_is_attached_where_its_rules_mean_something(name: str, header: str) -> None:
+    """A chain on the wrong hook loads cleanly and filters nothing."""
+    body = re.search(rf"chain {name} \{{(.*?)\n\s*\}}", _render(), re.S)
+    assert body, name
+    first = next(line.strip() for line in body.group(1).splitlines() if line.strip())
+    assert first.startswith(header), first
+
+
 @pytest.mark.parametrize("name", ["input", "forward"])
 def test_the_filter_chains_accept_by_default_so_a_mistake_cannot_lock_out_the_lan(chains, name) -> None:
     assert chains[name][0] == "accept"
@@ -131,6 +156,11 @@ def test_the_host_still_gets_replies_on_the_uplink(chains, state) -> None:
 
 def test_the_uplink_lease_can_renew(chains) -> None:
     assert _verdict(chains["input"], iif=UPLINK, proto="udp", sport=67, dport=68) == "accept"
+
+
+@pytest.mark.parametrize(("sport", "dport"), [(53, 68), (67, 69)], ids=["not-from-a-server", "not-to-a-client"])
+def test_the_dhcp_exception_admits_server_to_client_only(chains, sport, dport) -> None:
+    assert _verdict(chains["input"], iif=UPLINK, proto="udp", sport=sport, dport=dport) == "drop"
 
 
 @pytest.mark.parametrize("oif", [LAN, AP, *OTHER_OUTPUTS])
