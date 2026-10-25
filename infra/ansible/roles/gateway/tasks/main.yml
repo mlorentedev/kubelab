@@ -542,8 +542,61 @@
     state: started
     enabled: true
 
-# hostapd's and dnsmasq's handlers run here, inside the role, for the same reason the
-# address is a task. A play-level force_handlers would also run the uplink's netplan
-# handlers after a failure, which the uplink's ordering rules out.
+# AC13. systemd pets the hardware watchdog, so a hung PID 1 or kernel reboots the
+# edge. The BCM2835 counts at most 15 s, and a kernel that does not extend that in
+# software refuses a longer timeout.
+- name: Check the watchdog timeout
+  assert:
+    that:
+      - gateway_watchdog_sec | int > 0
+      - gateway_watchdog_sec | int <= 15
+    fail_msg: >-
+      ERROR: gateway_watchdog_sec is {{ gateway_watchdog_sec }}, outside 1 to 15.
+      WHY: 0 turns the hardware watchdog off, and the BCM2835 counts at most 15 s.
+      FIX: set gateway_watchdog_sec between 1 and 15, then re-run.
+    quiet: true
+
+- name: Create the systemd manager drop-in directory
+  file:
+    path: /etc/systemd/system.conf.d
+    state: directory
+    mode: "0755"
+
+- name: Arm the hardware watchdog
+  template:
+    src: watchdog.conf.j2
+    dest: /etc/systemd/system.conf.d/watchdog.conf
+    mode: "0644"
+  notify: re-execute systemd
+
+# hostapd's, dnsmasq's and the watchdog's handlers run here, inside the role, for
+# the same reason the address is a task. A play-level force_handlers would also run
+# the uplink's netplan handlers after a failure, which the uplink's ordering rules out.
 - name: Apply the AP's changes
   meta: flush_handlers
+
+# AC13. After the AP's handlers, so the first check sees the AP this run configured.
+- name: Install the edge liveness check
+  copy:
+    src: edge-liveness.sh
+    dest: "{{ gateway_liveness_path }}"
+    mode: "0755"
+
+- name: Deploy the edge liveness units
+  template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    mode: "0644"
+  loop:
+    - kubelab-edge-liveness.service
+    - kubelab-edge-liveness.timer
+  register: gateway_liveness_units
+
+# Skipped in check mode until its units are on disk, as the lease watch is.
+- name: Check the edge's liveness every minute
+  systemd:
+    name: kubelab-edge-liveness.timer
+    enabled: true
+    state: "{{ 'restarted' if gateway_liveness_units is changed else 'started' }}"
+    daemon_reload: true
+  when: not ansible_check_mode or gateway_liveness_units is not changed

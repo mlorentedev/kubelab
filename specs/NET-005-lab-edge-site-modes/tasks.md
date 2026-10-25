@@ -171,14 +171,16 @@ This PR loads the drops before any uplink exists. `iifname` matches a name, so r
 
 ### PR 8 — Self-recovery
 
-28. [ ] [P] [AC13] Test first, `tests/test_edge_recovery_render.py`:
+28. [x] [P] [AC13] Test first, `tests/test_edge_recovery_render.py`:
     - `/etc/systemd/system.conf.d/watchdog.conf` sets `RuntimeWatchdogSec=15s`;
     - the liveness service checks that hostapd reports `ENABLED` with `wlan0` up, and that the uplink holds a lease;
     - on failure it reloads `brcmfmac` first and reboots second;
     - a state file caps reboots per hour, so a radio that never recovers cannot cause a boot loop.
 
     Watch it fail.
-29. [ ] [AC13] Implement the units and their timer. Green.
+29. [x] [AC13] Implement the units and their timer. Green.
+
+    The uplink is reported and never rebooted for, and a vanished adapter gets one driver reload per incident. See `verification.md`.
 
 ### PR 9 — Edge status and login mode
 
