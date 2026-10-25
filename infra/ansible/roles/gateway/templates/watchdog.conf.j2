@@ -1,0 +1,6 @@
+# {{ ansible_managed }}
+# Arms the RPi4's hardware watchdog (NET-005 AC13, ADR-075 D5): systemd pets it,
+# so a hung PID 1 or kernel reboots the edge after this long. The BCM2835's
+# ceiling is 15 s. PID 1 reads this on a re-exec, not on a daemon-reload.
+[Manager]
+RuntimeWatchdogSec={{ gateway_watchdog_sec }}s

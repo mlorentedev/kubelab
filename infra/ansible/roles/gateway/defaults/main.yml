@@ -42,3 +42,10 @@ gateway_lease_check_networks: {}
 gateway_uplink_down_kbit: 0
 gateway_uplink_up_kbit: 0
 gateway_uplink_ifb: "ifb4{{ gateway_uplink_interface }}"
+# Self-recovery (NET-005 AC13). The BCM2835 watchdog cannot hold more than 15 s.
+gateway_watchdog_sec: 15
+gateway_ap_driver: "brcmfmac"
+gateway_liveness_path: "/usr/local/sbin/kubelab-edge-liveness"
+# Misses in a row before the driver reload, and reboots allowed per hour.
+gateway_liveness_grace: 3
+gateway_liveness_max_reboots: 2
