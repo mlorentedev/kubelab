@@ -690,7 +690,7 @@ DNS fix applied on RPi4 (`--accept-dns=false` + `chattr +i`).
 2026-02-21 (post-reboot incident): RPi4 VPN down after reboot — boot ordering issue.
 Tailscale started before Pi-hole (Docker). Fix: dual nameserver in resolv.conf
 (`127.0.0.1` + `8.8.8.8`) + systemd drop-in to order tailscaled after docker.service.
-2026-02-22: RPi4 nftables NAT rule had hardcoded USB interface name (`enx00e04c690e15`)
+2026-02-22: RPi4 nftables NAT rule had hardcoded USB interface name (`enx<MAC>`)
 that no longer existed (MAC changed). K3s nodes lost internet → image pulls failed.
 Fix: wildcard `oifname "enx*"` in `/etc/nftables.conf`. See [networking-dns](../troubleshooting/networking-dns.md#rpi4-nat-broken).
 2026-02-22 (jet1 incident): After kubelab mesh integration + reboot, jet1 tailscale showed

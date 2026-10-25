@@ -158,26 +158,20 @@ ollama pull qwen2.5:7b  # ~4.7GB, best quality that fits in 8GB RAM
       endpoint no longer exists and a copy-pasteable probe for a dead service is
       worse than none.
 
-### 1.4 RPi 4 — Gateway + Agent Node (`kubelab-rpi4`) ✓ Already provisioned
+### 1.4 RPi 4 — Lab Edge (`kubelab-rpi4`)
 
 ```
 Hostname: kubelab-rpi4
-Username: manu (or ubuntu — rename if needed)
+Username: manu
 OS: Ubuntu Server 24.04 LTS (arm64)
 RAM: 8GB | Storage: SD 128GB
-Status: ONLINE — NAT gateway + dnsmasq DHCP operational
+Role: the lab's edge (ADR-075): NAT, DHCP, DNS (CoreDNS + Pi-hole) and the lab Wi-Fi
 ```
 
-- [x] Ubuntu Server installed
-- [x] USB 3.0 Ethernet adapter as WAN uplink (`enx00249b1b0d6b`, ASIX AX88179 Gigabit)
-  - **Previous adapter** (`enx00e04c690e15`) replaced. Netplan interface name updated 2026-02-21.
-- [x] Built-in Ethernet as LAN downlink (`eth0`, `172.16.1.1`)
-- [x] IP forwarding enabled (`/etc/sysctl.d/99-gateway.conf`)
-- [x] nftables NAT masquerade configured
-- [x] dnsmasq DHCP running (`/etc/dnsmasq.d/kubelab-dhcp.conf`)
-- [x] **Rename hostname** from `kubelab-rpi4-edge` → `kubelab-rpi4` ✓ 2026-02-19
-  - Applied `hostnamectl set-hostname` + `preserve_hostname: true` in `/etc/cloud/cloud.cfg` (cloud-init was resetting it on boot)
-- [ ] **Add dnsmasq reservations** for VMs (k3s-server, k3s-agent-1, k3s-agent-2)
+- **Uplink**: a USB Wi-Fi adapter (RTL8822BU) on a USB 2.0 port with an extension cable, named `uplink0` by the `gateway` role. It joins whatever network the site offers; the site's profile is `networking.edge.uplink`. An Ethernet site uses the same name.
+- **Lab Wi-Fi**: the built-in radio is a 2.4 GHz access point (`networking.edge.lab_wifi`), the same at every site.
+- **Homelab LAN**: built-in Ethernet (`eth0`, `networking.nodes.rpi4.lan_ip`) to the switch.
+- Everything on it is rendered by `make provision NODE=rpi4 ENV=prod`; a rebuild from a blank card is [rpi4-bootstrap](rpi4-bootstrap.md), and site moves are [lab-edge](lab-edge.md).
 
 ### 1.5 RPi 3 — External Monitor (`kubelab-rpi3`) ✓ Provisioned 2026-02-18
 
@@ -191,7 +185,7 @@ Status: ONLINE — WiFi configured, SSH accessible
 ```
 
 - [x] Raspberry Pi OS Lite installed (64-bit Bookworm)
-- [x] WiFi connected to home router via built-in `wlan0` (NOT dongle — simpler setup)
+- [x] WiFi on built-in `wlan0` (NOT dongle — simpler setup). Since NET-005 it joins the edge's lab Wi-Fi, which kept the home network's name and PSK so rpi3 rejoins unchanged.
 - [x] Hostname set to `kubelab-rpi3`
 - [x] User `manu` created
 - [x] SSH enabled and accessible at `10.0.0.157`
@@ -246,26 +240,26 @@ Status: ONLINE — hostname renamed ✓ 2026-02-19
 
 ## Phase 2: Network Cabling
 
-**Target topology:**
+**Target topology** (ADR-075):
 
 ```
-[Home Router]
-  ├── WiFi ──→ [RPi 3] (kubelab-rpi3) ← WiFi dongle, independent path, diff location
+[Site network: hotel Wi-Fi, ISP router, ...]
   │
-  └── ETH ──→ [RPi 4 USB ETH adapter] (kubelab-rpi4) ← uplink
-                │
-                └── [RPi 4 built-in ETH] ← downlink
-                       │
-                       └──→ [TP-Link Switch]
-                              ├── [Acemagic-1] (kubelab-ace1) → Proxmox
-                              ├── [Acemagic-2] (kubelab-ace2) → Proxmox
-                              ├── [Beelink]    (kubelab-bee)  → Ubuntu 24.04 + Ollama
-                              └── [Jetson]     (kubelab-jet1) → JetPack
+  └── uplink0 ──→ [RPi 4] (kubelab-rpi4) ← the lab's edge
+                    ├── wlan0 (AP) ──→ lab Wi-Fi ← RPi 3 (kubelab-rpi3), personal devices
+                    │
+                    └── eth0 ──→ [TP-Link Switch]
+                                   ├── [Acemagic-1] (kubelab-ace1) → Proxmox
+                                   ├── [Acemagic-2] (kubelab-ace2) → Proxmox
+                                   ├── [Beelink]    (kubelab-bee)  → Ubuntu 24.04
+                                   └── [Jetson]     (kubelab-jet1) → JetPack
 ```
 
-- [x] USB 3.0 Ethernet adapter on RPi 4 → home router (uplink)
+The lab Wi-Fi and the homelab LAN do not route to each other (ADR-075 D4).
+
+- [ ] USB Wi-Fi adapter on RPi 4 → the site's network (uplink, NET-005)
 - [x] RPi 4 built-in Ethernet → TP-Link switch (downlink)
-- [x] RPi 3 → home router via WiFi (independent, separate location)
+- [ ] RPi 3 → the lab Wi-Fi (NET-005)
 - [x] Jetson → TP-Link switch ✓
 - [x] Beelink → TP-Link switch ✓ (Ubuntu Server 24.04 installed)
 - [x] Acemagic-1 → TP-Link switch ✓
@@ -275,45 +269,20 @@ Status: ONLINE — hostname renamed ✓ 2026-02-19
 
 ## Phase 3: DHCP Reservations on RPi 4
 
-Update `/etc/dnsmasq.d/kubelab-dhcp.conf` with new devices:
-
-```ini
-# KubeLab DHCP server — RPi 4 gateway
-port=0
-interface=eth0
-bind-interfaces
-
-dhcp-range=172.16.1.50,172.16.1.150,255.255.255.0,12h
-
-# Gateway and DNS for clients
-dhcp-option=option:router,172.16.1.1
-dhcp-option=option:dns-server,8.8.8.8,1.1.1.1
-
-# Static reservations
-dhcp-host=68:1D:EF:38:C5:6F,kubelab-ace1,172.16.1.2
-dhcp-host=68:1D:EF:38:C5:8B,kubelab-ace2,172.16.1.5
-dhcp-host=78:55:36:06:18:14,kubelab-bee,172.16.1.3
-dhcp-host=00:04:4b:e5:5f:28,kubelab-jet1,172.16.1.4
-# K3s VMs get IPs assigned in Proxmox netplan (static)
-```
+The `gateway` role renders dnsmasq from the SSOT: each node's `networking.nodes.<node>.mac` and `lan_ip` in `infra/config/values/common.yaml` for the homelab LAN, and `networking.edge.lab_wifi.reservations` for the lab Wi-Fi. Never edit `/etc/dnsmasq.d/` by hand; change the SSOT and run `make provision NODE=rpi4 ENV=prod`.
 
 > Note: Proxmox VMs get static IPs via their own netplan config (not DHCP reservation) because
 > Proxmox bridges to the LAN and VMs are seen as distinct MAC addresses. Assign 172.16.1.10-12 statically inside each VM.
-
-Reload dnsmasq:
-```bash
-sudo systemctl restart dnsmasq
-```
 
 **IP reference table:**
 
 | Device | Hostname | IP | MAC |
 |--------|----------|----|-----|
 | RPi 4 (LAN) | kubelab-rpi4 | `172.16.1.1` | `e4:5f:01:fd:b0:81` |
-| RPi 4 (WAN USB) | — | `10.0.0.88` (DHCP not working as of 2026-03-14, Xfinity router issue) | `00:24:9b:1b:0d:6b` |
-| RPi 4 (WiFi) | — | `10.0.0.131` | `e4:5f:01:fd:b0:82` |
+| RPi 4 (uplink) | — | DHCP from the site | in SOPS (ADR-075 C7) |
+| RPi 4 (lab Wi-Fi AP) | — | `10.0.0.1` (`networking.nodes.rpi4.wifi_lan_ip`) | — |
 | RPi 4 (Tailscale) | — | `100.64.0.10` (was .5, changed 2026-03-14 after SD reflash) | — |
-| RPi 3 | kubelab-rpi3 | `10.0.0.157` (WiFi, router DHCP) | `b8:27:eb:xx:xx:xx` |
+| RPi 3 | kubelab-rpi3 | `10.0.0.157` (lab Wi-Fi, reserved by the edge) | `networking.nodes.rpi3.mac` |
 | Acemagic-1 | kubelab-ace1 | `172.16.1.2` | `68:1D:EF:38:C5:6F` |
 | k3s-server VM | k3s-server | `172.16.1.10` | static in VM |
 | k3s-agent-1 VM | k3s-agent-1 | `172.16.1.11` | static in VM |
@@ -324,31 +293,17 @@ sudo systemctl restart dnsmasq
 
 ---
 
-## Phase 4: RPi 4 Bridge/NAT (Already Configured ✓)
+## Phase 4: RPi 4 Edge Networking
 
-The RPi 4 NAT gateway was configured on 2026-02-17. Verified operational.
+Rendered by the `gateway` role from the SSOT (ADR-075); nothing on the RPi 4's network is configured by hand.
 
-Reference (already applied):
+| Interface | Name | Role |
+|-----------|------|------|
+| USB Wi-Fi (or Ethernet) | `uplink0` | Uplink to the site, per-site profile in `networking.edge.uplink` |
+| Built-in Ethernet | `eth0` | Homelab LAN (`networking.lan_cidr`) |
+| Built-in Wi-Fi | `wlan0` | Lab Wi-Fi access point (`networking.edge.lab_wifi`) |
 
-| Interface | Name | Role | Metric |
-|-----------|------|------|--------|
-| USB 3.0 Ethernet | `enx00249b1b0d6b` | WAN uplink (router) | 100 (primary) |
-| Built-in Ethernet | `eth0` | LAN downlink (switch) | — |
-| WiFi | `wlan0` | WAN backup (router) | 600 (failover) |
-
-**Failover**: automatic via route metrics. If USB Ethernet cable disconnects, Linux routes
-traffic through WiFi (metric 600). No manual intervention needed.
-
-**Netplan gotcha**: interface names use MAC-based naming (`enx<MAC>`). If you swap the USB
-adapter, update `/etc/netplan/50-cloud-init.yaml` with the new interface name (`ip link show`
-to find it), then `sudo netplan apply`.
-
-**Cloud-init protection**: disable cloud-init network config to prevent it from overwriting
-netplan on boot:
-```bash
-echo "network: {config: disabled}" | sudo tee /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg
-```
-Applied ✓ (2026-02-21).
+The role owns `/etc/netplan` and the nftables table `inet kubelab`, which drops everything from the uplink except replies and DHCP, and everything between the lab Wi-Fi and the homelab LAN. There is no failover uplink. Procedures: [lab-edge](lab-edge.md).
 
 ---
 
@@ -401,9 +356,9 @@ ssh manu@172.16.1.3 'ping -c 3 8.8.8.8'   # Beelink
 
 | Device | Hostname | IP | Subnet | User | SSH |
 |--------|----------|----|--------|------|-----|
-| RPi 4 (WAN) | kubelab-rpi4 | `10.0.0.131` | Router DHCP | manu | ✓ |
-| RPi 4 (LAN) | kubelab-rpi4 | `172.16.1.1` | Static | — | — |
-| RPi 3 | kubelab-rpi3 | `10.0.0.157` | Router DHCP (WiFi) | manu | ✓ |
+| RPi 4 (lab Wi-Fi) | kubelab-rpi4 | `10.0.0.1` | Static (AP) | manu | ✓ |
+| RPi 4 (LAN) | kubelab-rpi4 | `172.16.1.1` | Static | manu | ✓ |
+| RPi 3 | kubelab-rpi3 | `10.0.0.157` | Edge DHCP reservation (lab Wi-Fi) | manu | ✓ |
 | Acemagic-1 | kubelab-ace1 | `172.16.1.2` | dnsmasq | manu | ✓ |
 | k3s-server VM | k3s-server | `172.16.1.10` | static in VM | manu | ✓ Debian 13, SSH key |
 | k3s-agent-1 VM | k3s-agent-1 | `172.16.1.11` | static in VM | manu | ✓ Debian 13, SSH key |
@@ -418,7 +373,7 @@ All devices accessible from workstation via short aliases. **Primary path: Tails
 
 ```
 # Primary (Tailscale VPN)          # Fallback (LAN / public)
-rpi4        → 100.64.0.10          rpi4-lan        → 10.0.0.131
+rpi4        → 100.64.0.10          rpi4-lan        → 10.0.0.1    (wifi_lan_ip; alias update is NET-005 task 38)
 rpi3        → 100.64.0.6           rpi3-lan        → 10.0.0.157
 bee         → 100.64.0.3           bee-lan         → 172.16.1.3  (ProxyJump rpi4-lan)
 jet1        → 100.64.0.8           jet1-lan        → 172.16.1.4  (ProxyJump rpi4-lan)
