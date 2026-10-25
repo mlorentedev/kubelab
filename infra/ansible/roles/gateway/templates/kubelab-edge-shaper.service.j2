@@ -1,0 +1,37 @@
+# {{ ansible_managed }}
+# Shapes the uplink with CAKE in both directions (NET-005 AC8), so a bulk transfer
+# from one host does not starve a call on another. Egress is shaped on the uplink
+# with fairness between source hosts. Ingress is redirected to an IFB device and
+# shaped as it leaves it, with fairness between destination hosts. `nat` makes CAKE
+# read conntrack, so it sees the lab's hosts rather than the one masqueraded
+# address. The rates come from the site profile, already set below the measured
+# ones, so the queue forms here and not in the site's equipment.
+[Unit]
+Description=Shape the edge uplink with CAKE
+# The qdiscs die with the device: the unit stops with it and starts again when a
+# replugged adapter comes back.
+BindsTo=sys-subsystem-net-devices-{{ gateway_uplink_interface }}.device
+After=sys-subsystem-net-devices-{{ gateway_uplink_interface }}.device
+OnFailure=kubelab-notify@%n.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Clear what the last start left: a restart would otherwise stack a second
+# redirect filter, and `ip link add` would fail on the IFB that already exists.
+ExecStartPre=-/usr/sbin/tc qdisc del dev {{ gateway_uplink_interface }} ingress
+ExecStartPre=-/usr/sbin/ip link del {{ gateway_uplink_ifb }}
+# The IFB is shaped and up before anything is redirected to it.
+ExecStart=/usr/sbin/ip link add {{ gateway_uplink_ifb }} type ifb
+ExecStart=/usr/sbin/tc qdisc replace dev {{ gateway_uplink_ifb }} root cake bandwidth {{ gateway_uplink_down_kbit }}kbit nat dual-dsthost ingress
+ExecStart=/usr/sbin/ip link set {{ gateway_uplink_ifb }} up
+ExecStart=/usr/sbin/tc qdisc replace dev {{ gateway_uplink_interface }} root cake bandwidth {{ gateway_uplink_up_kbit }}kbit nat dual-srchost
+ExecStart=/usr/sbin/tc qdisc add dev {{ gateway_uplink_interface }} handle ffff: ingress
+ExecStart=/usr/sbin/tc filter add dev {{ gateway_uplink_interface }} parent ffff: matchall action mirred egress redirect dev {{ gateway_uplink_ifb }}
+# The device may already be gone.
+ExecStop=-/usr/sbin/tc qdisc del dev {{ gateway_uplink_interface }} root
+ExecStop=-/usr/sbin/tc qdisc del dev {{ gateway_uplink_interface }} ingress
+ExecStop=-/usr/sbin/ip link del {{ gateway_uplink_ifb }}
+
+[Install]
+WantedBy=sys-subsystem-net-devices-{{ gateway_uplink_interface }}.device

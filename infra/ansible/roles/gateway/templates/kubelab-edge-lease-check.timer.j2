@@ -1,0 +1,16 @@
+# {{ ansible_managed }}
+# Re-runs the uplink lease check on a schedule (NET-005 AC7). The path unit fires
+# only when networkd writes a lease, so on its own it never checks a lease that was
+# already on disk when it started (every re-provision restarts it), and a page that
+# a captive portal kept from leaving waits for the next renewal. node_notify keeps
+# a clean run silent unless it closes an incident, so the schedule costs nothing.
+[Unit]
+Description=Re-check the uplink's DHCP lease on a schedule
+
+[Timer]
+OnActiveSec=1min
+OnUnitInactiveSec=10min
+Unit=kubelab-edge-lease-check.service
+
+[Install]
+WantedBy=timers.target
