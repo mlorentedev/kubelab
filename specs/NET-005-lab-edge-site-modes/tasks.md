@@ -196,17 +196,21 @@ This PR loads the drops before any uplink exists. `iifname` matches a name, so r
 
 ### PR 10 — Operator steps as targets
 
-32. [ ] [P] [AC11] Test first, `tests/test_headscale_rejoin.py`, with subprocess mocked: `make headscale-rejoin NODE=<n>`:
+32. [x] (✓ 2026-10-25) [P] [AC11] Test first, `tests/test_headscale_rejoin.py`, with subprocess mocked: `make headscale-rejoin NODE=<n>`:
     - mints a single-use Headscale pre-auth key that expires within an hour;
     - runs the tailscale role's `tailscale up` only when `tailscale status` is not `Running`;
     - passes every non-default flag from the SSOT (tailscale/tailscale#5597).
 
     Implement in `toolkit/features/headscale_nodes.py` and `infra/ansible/roles/tailscale/tasks/main.yml`. Green.
-33. [ ] [P] [AC11] [AC5] Test first, `tests/test_edge_lan_link.py`: `make edge-lan-link` renders a NetworkManager profile on the operator's laptop, from `networking.lan_cidr`, with DHCP from the RPi4. It has two modes:
+
+    Built with the role minting the key, as the hermes sidecar does: on Headscale, only when the node is off the mesh and no key was passed in, and only when the rejoin asks (`tailscale_mint_key`), so the key never reaches the toolkit. The toolkit runs the node's play, tailscale role only, over the LAN, and refuses a play without the role: rpi3's has none, so `NODE=rpi3` is refused until it does. The hand-made `tailscale-watchdog` on the RPi4 keeps its own flags (NET-007, #2675).
+33. [x] (✓ 2026-10-25, code) [P] [AC11] [AC5] Test first, `tests/test_edge_lan_link.py`: `make edge-lan-link` renders a NetworkManager profile on the operator's laptop, from `networking.lan_cidr`, with DHCP from the RPi4. It has two modes:
     - management: `never-default`, `ignore-auto-dns`, no IPv6;
     - `ROUTE=1`: the RPi4 becomes the default route, for the portal login with the laptop's own Wi-Fi off.
 
     `REMOVE=1` deletes the profile. Implement. Green. Then undo the hand changes listed in `verification.md`: remove the `lab-bootstrap` profile and revert "Wired connection 1".
+
+    Built as the profile `kubelab-edge-lan`, which also routes `networking.lan_cidr` out the wire ahead of tailscale's `lookup 52`: the edge advertises that CIDR, and a laptop that accepts routes would otherwise reach the LAN through the tailnet. NetworkManager only. The undo is not done yet: `lab-bootstrap` is the operator's path to the edge today, so it moves to B4, after the target has carried a session.
 
 ### PR 11 — PSK rotation
 
@@ -237,6 +241,7 @@ Run at the temporary site in this order, after the PR each step needs. Every res
 - [ ] B2. [AC1] [AC3] Provision over the LAN with `BOOTSTRAP=1`, through PR 4. The journal shows `inet kubelab` loaded before `uplink0` came up. Then, with the drops still loaded, `networkctl renew uplink0` renews the lease: the journal shows the renewed DHCPv4 lease on `uplink0`, and the B2 evidence records it (AC1).
 - [ ] B3. [AC5] **DNS gate.** Before any login, `make edge-status` reports whether a public resolver and the lease's resolver answer. It decides task 31.
 - [ ] B4. [AC5] Human step 2: the portal login, from the laptop on the switch with `make edge-lan-link ROUTE=1` and its own Wi-Fi off. Then the uplink's MAC is reported identical after a reboot and a re-provision, by `make edge-status`, before anything is paid.
+  Once `make edge-lan-link` has carried the session, undo the hand changes listed in `verification.md`: delete the `lab-bootstrap` profile and revert "Wired connection 1" (task 33).
 - [ ] B5. [AC2] Provision the AP (PR 5). Saved devices rejoin. rpi3 takes its reservation, and Kuma's route answers.
 - [ ] B6. [AC1] `make headscale-rejoin NODE=rpi4` and `NODE=rpi3` are each a no-op, or they rejoin. The RPi4 advertises `networking.lan_cidr`.
 - [ ] B7. [AC10] **On-device multi-PSK check.** Write two wildcard entries and connect a client with the first entry's PSK. Record which entry works and the `keyid` hostapd logs. If only the last works, try `brcmfmac.feature_disable` through `modprobe.d` and record the result. It decides task 34's path.

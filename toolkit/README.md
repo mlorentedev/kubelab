@@ -104,6 +104,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit infra argo verify-product` | Verify a product is deployed at origin/master HEAD by consequence (GITOPS-003, #1478). |
 | `toolkit infra argo wait-status` | Wait for the commit status Argo CD posts per sync (GITOPS-003 AC2, #1478). |
 | `toolkit infra edge` | The lab edge (rpi4): uplink status (NET-005) |
+| `toolkit infra edge lan-link` | Join this laptop to the lab LAN with a NetworkManager profile (NET-005 AC11). |
 | `toolkit infra edge status` | Say whether the edge's uplink is up, behind a portal, or dead. |
 | `toolkit infra headscale` | Headscale VPN ACL policy + mesh probe (ADR-041) |
 | `toolkit infra headscale policy-check` | Render policy.hujson from the SSOT and validate it with `headscale policy check` (Docker). |
