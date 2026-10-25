@@ -344,7 +344,9 @@
     quiet: true
 
 # The archive answers over the uplink, and at a portal site only after the login: a run
-# before it stops here, before anything of the AP is written.
+# before it stops here, before anything of the AP is written. Installed packages need no
+# archive, so the index is refreshed only when the install fails: a re-run after the
+# portal's login expired still converges.
 - name: Install the AP's packages
   block:
     - name: Install hostapd and iw
@@ -353,16 +355,24 @@
           - hostapd
           - iw
         state: present
-        update_cache: true
-        cache_valid_time: 3600
   rescue:
-    - name: Say why the AP's packages are missing
-      fail:
-        msg: >-
-          ERROR: hostapd and iw are not installed ({{ ansible_failed_result.msg | default('apt failed') }}).
-          WHY: the package archive does not answer over the uplink. At a captive-portal site it
-          answers only after the portal login.
-          FIX: log in to the portal (bring-up B4), then re-run the provision.
+    - name: Refresh the package index and retry
+      block:
+        - name: Install hostapd and iw from a fresh index
+          apt:
+            name:
+              - hostapd
+              - iw
+            state: present
+            update_cache: true
+      rescue:
+        - name: Say why the AP's packages are missing
+          fail:
+            msg: >-
+              ERROR: hostapd and iw are not installed ({{ ansible_failed_result.msg | default('apt failed') }}).
+              WHY: the package archive does not answer over the uplink. At a captive-portal site it
+              answers only after the portal login.
+              FIX: log in to the portal (bring-up B4), then re-run the provision.
 
 - name: Read the kernel command line
   slurp:

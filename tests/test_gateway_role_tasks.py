@@ -416,7 +416,7 @@ def test_the_ap_packages_install_once_the_uplink_is_applied() -> None:
 
 
 def test_a_failed_install_says_what_to_do_and_quotes_apt() -> None:
-    rescue = TASKS[_ap_install()]["rescue"]
+    rescue = TASKS[_ap_install()]["rescue"][0]["rescue"]
     message = " ".join(task["fail"]["msg"] for task in rescue if "fail" in task)
     assert all(word in message for word in ("ERROR:", "WHY:", "FIX:", "B4"))
     assert "ansible_failed_result.msg" in message
@@ -596,11 +596,18 @@ def test_a_psk_reload_that_hostapd_refuses_fails_the_run(rc: int, lines: list[st
     assert bool(env.compile_expression(handler["failed_when"])(**{handler["register"]: result})) is fails
 
 
-def test_the_ap_packages_come_from_a_fresh_index() -> None:
-    """The image's index is as old as the image; a stale one asks for files the mirror dropped."""
+def test_installed_packages_need_no_package_archive() -> None:
+    """A re-run after the portal's login expired must not stop on an index refresh it does not need."""
     apt = TASKS[_ap_install()]["block"][0]["apt"]
-    assert apt["update_cache"] is True
-    assert apt["cache_valid_time"] > 0
+    assert not apt.get("update_cache")
+
+
+def test_a_stale_index_is_refreshed_before_the_run_gives_up() -> None:
+    """The image's index is as old as the image; a stale one asks for files the mirror dropped."""
+    install = TASKS[_ap_install()]
+    retry = install["rescue"][0]["block"][0]["apt"]
+    assert retry["update_cache"] is True
+    assert retry["name"] == install["block"][0]["apt"]["name"]
 
 
 def test_ufw_lets_dhcp_in_on_the_lab_wifi() -> None:
