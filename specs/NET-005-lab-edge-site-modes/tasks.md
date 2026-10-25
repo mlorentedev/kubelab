@@ -17,8 +17,8 @@ created: "2026-10-25"
 - [x] (✓ 2026-10-25) Read-only baseline of the RPi4 in `verification.md`.
 - [x] (✓ 2026-10-25) Prior art reviewed and applied (`verification.md`); NET-006 #2662 filed, NOTIFY-009 #1021 updated.
 - [x] (✓ 2026-10-25) The operator approved `proposal.md`, ADR-075 and the names below.
-- [ ] **PR 1 (docs):** this spec folder, ADR-075 flipped to `accepted`, and the ADR-028 amendment. `## Knowledge` names ADR-075 and the ADR-028 amendment. The description lists the plaintext SSOT keys task 2 adds (`networking.edge.uplink.{kind,interface,regdomain,channel,bandwidth}`, `networking.edge.lab_wifi.{cidr,gateway,reservations}`, `networking.nodes.<node>.mac`). The pytest-verified `features.json` ids go into `UNWRITTEN` in `tests/test_spec_verifications_select_tests.py`, and each PR removes the ids whose tests it adds.
-- [ ] The two `[OPEN]` risks are gates inside the plan (B3 and B7 below), not blockers for freezing it.
+- [x] (✓ 2026-10-25, #2663) **PR 1 (docs):** this spec folder, ADR-075 flipped to `accepted`, and the ADR-028 amendment. `## Knowledge` names ADR-075 and the ADR-028 amendment. The description lists the plaintext SSOT keys task 2 adds (`networking.edge.uplink.{kind,interface,regdomain,channel,bandwidth}`, `networking.edge.lab_wifi.{cidr,gateway,reservations}`, `networking.nodes.<node>.mac`). The pytest-verified `features.json` ids go into `UNWRITTEN` in `tests/test_spec_verifications_select_tests.py`, and each PR removes the ids whose tests it adds.
+- [x] (✓ 2026-10-25, #2663) The two `[OPEN]` risks are gates inside the plan (B3 and B7 below), not blockers for freezing it.
 
 ### Names to confirm
 
@@ -64,7 +64,7 @@ PRs stay under ~300 changed lines, excluding tests and generated files. Tests ru
 
 This PR loads the drops before any uplink exists. `iifname` matches a name, so rules for `uplink0` are valid before that interface does.
 
-5. [ ] [P] [AC3] Test first, `tests/test_gateway_firewall_render.py`. It renders `infra/ansible/roles/gateway/templates/nftables.conf.j2` through `tests/ansible_jinja.py` and checks:
+5. [x] (✓ 2026-10-25, #2666) [P] [AC3] Test first, `tests/test_gateway_firewall_render.py`. It renders `infra/ansible/roles/gateway/templates/nftables.conf.j2` through `tests/ansible_jinja.py` and checks:
    - input on the uplink: `ct state established,related` and udp 67→68 pass, and everything else drops;
    - forward: everything from the uplink that is not `established,related` drops, and so does traffic in both directions between the AP interface and `gateway_interface`;
    - masquerade covers the profile's uplink interface;
@@ -72,19 +72,19 @@ This PR loads the drops before any uplink exists. `iifname` matches a name, so r
    - the forward drops alone stop uplink-to-LAN, uplink-to-AP and uplink-to-Docker-bridge traffic, with nothing taken from ufw.
 
    Watch it fail.
-6. [ ] [AC3] Implement the template. The deploy task validates with `nft -c -f %s` before the handler reloads. Green.
-7. [ ] [P] [AC3] Test first, `tests/test_gateway_sysctl_render.py`, covering `templates/99-kubelab-edge.conf.j2`:
+6. [x] (✓ 2026-10-25, #2666) [AC3] Implement the template. The deploy task validates with `nft -c -f %s` before the handler reloads. Green.
+7. [x] (✓ 2026-10-25, #2666) [P] [AC3] Test first, `tests/test_gateway_sysctl_render.py`, covering `templates/99-kubelab-edge.conf.j2`:
    - `rp_filter` is `all=0`, uplink `1`, every other interface `2`;
    - `accept_redirects=0`, `send_redirects=0` and `accept_source_route=0`;
    - `arp_ignore=1` and `arp_announce=2`;
    - `disable_ipv6=1` on the uplink only.
 
    Implement. Green.
-8. [ ] [P] [AC6] [AC1] Test first, `tests/test_gateway_role_tasks.py`: in `roles/gateway/tasks/main.yml`, the resolver is a `template` task. No `shell` task carries `changed_when: false`. Implement `templates/resolv.conf.j2`, replacing the "Set static resolv.conf" shell task. Green.
-9. [ ] [AC4] Test first, in `tests/test_gateway_role_tasks.py`: the role allows udp 67 through ufw on `gateway_interface` with `interface_in`. Implement. Green.
-10. [ ] [AC1] Test first, in `tests/test_gateway_role_tasks.py`: the gateway role asserts the installed Tailscale is at least 1.96.2 before it loads the sysctls. Implement. Green.
-11. [ ] [AC4] Live, over the LAN: `make provision NODE=rpi4 ENV=prod BOOTSTRAP=1 TAGS=gateway`.
-    - A laptop on the switch gets a lease.
+8. [x] (✓ 2026-10-25, #2666) [P] [AC6] [AC1] Test first, `tests/test_gateway_role_tasks.py`: in `roles/gateway/tasks/main.yml`, the resolver is a `template` task. No `shell` task carries `changed_when: false`. Implement `templates/resolv.conf.j2`, replacing the "Set static resolv.conf" shell task. Green.
+9. [x] (✓ 2026-10-25, #2666) [AC4] Test first, in `tests/test_gateway_role_tasks.py`: the role allows udp 67 through ufw on `gateway_interface` with `interface_in`. Implement. Green.
+10. [x] (✓ 2026-10-25, #2666) [AC1] Test first, in `tests/test_gateway_role_tasks.py`: the gateway role asserts the installed Tailscale is at least 1.96.2 before it loads the sysctls. Implement. Green.
+11. [x] (✓ 2026-10-25, #2666, evidence in `verification.md`) [AC4] Live, over the LAN: `make provision NODE=rpi4 ENV=prod BOOTSTRAP=1 TAGS=gateway`.
+    - A host on the switch completes a DHCP exchange with the edge. The baseline's fault was the server side (ufw dropped udp 67), so any client shows it; the operator's laptop is re-checked when its AC11 hand changes are undone.
     - `inet kubelab` shows the chains.
     - A second run reports `changed=0`.
 

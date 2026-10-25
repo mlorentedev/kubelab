@@ -1,17 +1,40 @@
 #!/usr/sbin/nft -f
-# Managed by Ansible — gateway NAT masquerade for LAN routing
-# Uses named table to avoid conflicts with Docker/UFW/Tailscale
-# NEVER use 'flush ruleset' — it destroys all iptables rules from other services
-
-# Atomic idempotent pattern: create (noop if exists) → delete → recreate
+# Managed by Ansible (gateway role). NEVER use 'flush ruleset': it destroys
+# Docker's, ufw's and Tailscale's rules. Only this table is replaced.
+#
+# This table is the only forward control on the edge (ADR-075 D3). Tailscale's
+# ts-forward and Docker's chains accept forwarded traffic before ufw's rules, so
+# these drops are complete on their own; a drop in any base chain is final.
+# Interfaces are matched by name, so the uplink's rules load before it exists.
+#
+# ufw's fleet-wide allow for 41641 is dead on the uplink: Tailscale needs only
+# outbound traffic there and falls back to DERP.
 table inet kubelab
 delete table inet kubelab
-
 table inet kubelab {
+    chain input {
+        type filter hook input priority filter; policy accept;
+        iifname "{{ gateway_uplink_interface }}" ct state established,related accept
+        # A DHCP reply can come from an address the client never sent to (a
+        # relay, or an answer to a broadcast), which conntrack sees as new.
+        # networkd reads its first offer on a raw socket below this hook, so
+        # this keeps renewals and rebinds working whichever way they arrive.
+        iifname "{{ gateway_uplink_interface }}" ct state new udp sport 67 udp dport 68 accept
+        iifname "{{ gateway_uplink_interface }}" drop
+    }
+
+    chain forward {
+        type filter hook forward priority filter; policy accept;
+        # Docker-published ports are DNAT'd before routing, so this drop covers them.
+        iifname "{{ gateway_uplink_interface }}" ct state established,related accept
+        iifname "{{ gateway_uplink_interface }}" drop
+        # The lab Wi-Fi and the homelab LAN do not route to each other (D4).
+        iifname "{{ gateway_ap_interface }}" oifname "{{ gateway_interface }}" drop
+        iifname "{{ gateway_interface }}" oifname "{{ gateway_ap_interface }}" drop
+    }
+
     chain postrouting {
         type nat hook postrouting priority srcnat; policy accept;
-{% for iface in gateway_uplink_interfaces %}
-        oifname "{{ iface }}" masquerade
-{% endfor %}
+        oifname "{{ gateway_uplink_interface }}" masquerade
     }
 }
