@@ -69,7 +69,16 @@
     name:
       - nftables
       - dnsmasq
+      # The uplink status check's HTTP and DNS probes.
+      - curl
+      - bind9-dnsutils
     state: present
+
+- name: Install the uplink status check
+  copy:
+    src: edge-status.sh
+    dest: "{{ gateway_status_path }}"
+    mode: "0755"
 
 # It loads over the LAN session that provisions the edge, so it is checked first.
 - name: Deploy the edge ruleset

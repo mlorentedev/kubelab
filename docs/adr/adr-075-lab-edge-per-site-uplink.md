@@ -99,7 +99,7 @@ The rejected rows above are the fallbacks, triggered by a refused station or a f
 
 ### D3. Nothing on the uplink is trusted
 
-**Who owns the firewall.** ufw stays, because `base_system` installs it on every node. ufw governs what the host itself accepts. It does not govern routed or DNAT'd traffic: Tailscale's `ts-forward` and Docker's `DOCKER-USER` and `DOCKER-FORWARD` chains run before ufw's rules in the forward path and accept their own traffic. So for everything forwarded, the `gateway` role's nftables table `inet kubelab` is the control, and its drops must be complete on their own. A drop in any nftables base chain is final whatever its priority. The drops therefore hold over ufw's `DEFAULT_FORWARD_POLICY="ACCEPT"`, over Docker's chains and over Tailscale's.
+**Who owns the firewall.** ufw stays, because `base_system` installs it on every node. ufw governs what the host itself accepts, and only part of what it forwards: Tailscale's `ts-forward` and Docker's `DOCKER-USER` and `DOCKER-FORWARD` chains usually run before ufw's rules in the forward path and accept their own traffic, which never reaches ufw. What they leave, the edge's own NAT among it, does reach ufw's forward policy, so that policy stays ACCEPT. *(Corrected 2026-10-25, lesson-621: this said ufw does not govern routed or DNAT'd traffic at all.)* So for everything forwarded, the `gateway` role's nftables table `inet kubelab` is the control, and its drops must be complete on their own. A drop in any nftables base chain is final whatever its priority. The drops therefore hold over ufw's `DEFAULT_FORWARD_POLICY="ACCEPT"`, over Docker's chains and over Tailscale's.
 
 `inet kubelab` drops:
 
