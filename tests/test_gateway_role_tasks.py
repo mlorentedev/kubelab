@@ -476,7 +476,8 @@ def test_the_regulatory_domain_is_set_whenever_it_is_not_in_force(stdout: str, s
     task = TASKS[_regdomain_set()]
     read = TASKS[_first(lambda t: str(t.get("command")) == "iw reg get")]["register"]
     env = ansible_env(str(ROLE / "templates"))
-    variables = {read: {"stdout": stdout}, "gateway_uplink_regdomain": "US"}
+    variables = {read: {"stdout": stdout, "stdout_lines": stdout.splitlines()}, "gateway_uplink_regdomain": "US"}
+    assert "\\n" not in task["when"]
     assert bool(env.compile_expression(task["when"])(**variables)) is sets
 
 

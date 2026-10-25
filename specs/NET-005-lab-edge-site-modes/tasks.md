@@ -116,7 +116,7 @@ This PR loads the drops before any uplink exists. `iifname` matches a name, so r
 
 ### PR 5 — The access point
 
-16. [ ] [P] [AC2] Test first, `tests/test_gateway_ap_render.py`:
+16. [x] (✓ 2026-10-25, #2670) [P] [AC2] Test first, `tests/test_gateway_ap_render.py`:
     - `hostapd.conf` sets `interface=wlan0`, `hw_mode=g`, the profile's `channel`, `country_code` with `ieee80211d=1`, `wpa=2`, `wpa_key_mgmt=WPA-PSK`, `rsn_pairwise=CCMP` and `ieee80211w=0`. It has no `wps_state`, an absolute `wpa_psk_file` path, and an `ssid` from a variable;
     - the PSK file has one `keyid=<id> 00:00:00:00:00:00 <psk>` line per entry, with mode `0600`;
     - a networkd unit for `wlan0` sets the gateway address and `ConfigureWithoutCarrier=yes`;
@@ -125,7 +125,7 @@ This PR loads the drops before any uplink exists. `iifname` matches a name, so r
     - the role stops, disables and masks `netplan-wpa-wlan0.service` and `wpa_supplicant.service` before it starts hostapd. Removing the home SSID from netplan does not stop a running supplicant, and hostapd cannot take an interface a supplicant holds.
 
     Watch it fail.
-17. [ ] [AC2] Implement:
+17. [x] (✓ 2026-10-25, #2670) [AC2] Implement:
     - unmask and enable `hostapd`;
     - the templates, rendered with `no_log`;
     - handlers: `hostapd_cli reload_wpa_psk` for the PSK file, and a restart for the config;

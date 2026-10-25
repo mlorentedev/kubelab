@@ -359,10 +359,13 @@
   changed_when: false
   check_mode: false
 
+# By lines, not by a '\n' in the expression: whether Jinja sees one as a newline
+# depends on the YAML quoting and the Ansible version (lesson-497).
 - name: Set the regulatory domain
   command: iw reg set {{ gateway_uplink_regdomain }}
   changed_when: true
-  when: not gateway_regdomain.stdout.startswith('global\ncountry ' ~ gateway_uplink_regdomain ~ ':')
+  when: >-
+    not (gateway_regdomain.stdout_lines[:2] | join(' ')).startswith('global country ' ~ gateway_uplink_regdomain ~ ':')
 
 - name: Read the services
   service_facts:
