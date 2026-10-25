@@ -63,12 +63,16 @@ SEGMENT = re.compile(
 GUARDED = re.compile(r"\s*(\|\s*(default|d)\b|is\s+(not\s+)?defined\b)")
 
 # Guarded reads of keys no env declares, on purpose. Each is an override knob
-# whose default is the real value.
+# whose default is the real value, or a key only some site profiles need.
 ABSENT_BY_DESIGN = {
     # The toolkit's loader derives it from `apps.contact.email`
     # (`configuration.py`); a playbook reads the raw values, so it falls back
     # to the same key.
     "config.edge.traefik.acme_email",
+    # Only a `wifi_psk` uplink has one, and `SecretSpec` has no optional flag, so
+    # its catalog entry lands with the first such site (NET-005 task 4). The
+    # gateway role refuses a `wifi_psk` profile without it.
+    "secrets.networking.edge.uplink.psk",
 }
 
 
