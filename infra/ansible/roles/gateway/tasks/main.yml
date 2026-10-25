@@ -100,22 +100,20 @@
     enabled: true
 
 # Strict rp_filter under a subnet router needs this floor (tailscale/tailscale#18860).
-- name: Read the installed Tailscale version
-  command: tailscale version
-  register: gateway_tailscale_version
-  changed_when: false
-  failed_when: false
-  check_mode: false
+# The version is dpkg's, not `tailscale version`'s: a binary that fails to run would
+# read as absent, and absent is the one case let through.
+- name: Read the installed packages
+  package_facts:
 
 - name: Assert Tailscale supports strict rp_filter
   assert:
     that: >-
-      gateway_tailscale_version.rc != 0 or
-      gateway_tailscale_version.stdout_lines[0] is version(gateway_tailscale_min_version, '>=')
+      'tailscale' not in ansible_facts.packages
+      or ansible_facts.packages['tailscale'][0].version is version(gateway_tailscale_min_version, '>=')
     fail_msg: >-
-      Tailscale {{ gateway_tailscale_version.stdout_lines[0] | default('?') }} is older than
+      Tailscale {{ ansible_facts.packages.get('tailscale', [{}])[0].version | default('?') }} is older than
       {{ gateway_tailscale_min_version }}. Upgrade it before the strict rp_filter loads.
-      An absent binary passes: the tailscale role installs a current one later in the play.
+      An absent package passes: the tailscale role installs a current one later in the play.
 
 - name: Deploy the edge sysctls
   template:
@@ -172,8 +170,12 @@
       - (gateway_uplink_mac | lower) != (ansible_facts[gateway_interface].macaddress | default('') | lower)
     fail_msg: >-
       ERROR: no adapter other than {{ gateway_interface }} has the uplink MAC in prod SOPS.
-      WHY: the uplink adapter is unplugged, or networking.edge.uplink.mac names another adapter.
-      FIX: plug in the uplink adapter, or correct the MAC with `toolkit secrets set`, then re-run.
+      WHY: the uplink adapter is unplugged, or networking.edge.uplink.mac names another adapter, or
+      something set the adapter's MAC away from its permanent one (`ip link` then shows `permaddr`).
+      The .link file matches the permanent MAC and sets none (MACAddressPolicy=none), so nothing in
+      this role does that.
+      FIX: plug in the uplink adapter, correct the MAC with `toolkit secrets set`, or undo what
+      changed the MAC, then re-run.
     quiet: true
 
 - name: Pin and name the uplink adapter
@@ -213,6 +215,27 @@
       ERROR: the uplink adapter is not named {{ gateway_uplink_interface }}.
       WHY: the kernel refuses to rename an interface that is up, and udevadm reports success either way.
       FIX: unplug the adapter and plug it back in, which brings it back down and named, then re-run.
+    quiet: true
+
+# An adapter an earlier profile named keeps the name while it stays plugged in, and
+# the rename above is skipped because the name is taken. `ip -o link` shows the
+# permanent MAC as `permaddr` when the current one differs.
+- name: Read the uplink adapter's MAC
+  command: ip -o link show {{ gateway_uplink_interface }}
+  register: gateway_uplink_named
+  changed_when: false
+  check_mode: false
+  no_log: true
+  when: gateway_uplink_sysfs.stat.exists
+
+- name: Check that the uplink name is on the uplink adapter
+  assert:
+    that: not gateway_uplink_sysfs.stat.exists or (gateway_uplink_mac | lower) in (gateway_uplink_named.stdout | lower)
+    fail_msg: >-
+      ERROR: {{ gateway_uplink_interface }} is not the adapter with the uplink MAC in prod SOPS.
+      WHY: an adapter that an earlier profile named is still plugged in and keeps the name, so the
+      new adapter could not take it.
+      FIX: unplug the old adapter, then re-run, which names the new one.
     quiet: true
 
 # AC7, AC8. The check exits 64 on every lease event without a network to check,
