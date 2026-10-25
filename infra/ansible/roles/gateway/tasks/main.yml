@@ -415,10 +415,11 @@
       - gateway_ap_address | length > 0
       - gateway_ap_dhcp_range_start | length > 0
       - gateway_ap_dhcp_range_end | length > 0
+      - gateway_ap_reservations is not none
     fail_msg: >-
-      The lab Wi-Fi needs its channel and addresses from the play: networking.edge.uplink.channel
-      and networking.edge.lab_wifi.{cidr,gateway,dhcp_range} in common.yaml, passed by
-      provision-rpi4.yml. The role keeps no copy of them.
+      The lab Wi-Fi needs its channel, addresses and reserved nodes from the play:
+      networking.edge.uplink.channel and networking.edge.lab_wifi.{cidr,gateway,dhcp_range,reservations}
+      in common.yaml, passed by provision-rpi4.yml. The role keeps no copy of them.
     quiet: true
 
 # The archive answers over the uplink, and at a portal site only after the login: a run
