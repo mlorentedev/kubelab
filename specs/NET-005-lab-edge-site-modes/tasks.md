@@ -153,20 +153,24 @@ This PR loads the drops before any uplink exists. `iifname` matches a name, so r
 
 ### PR 7 — The prod probe
 
-22. [ ] [P] [AC12] Test first, `tests/test_edge_watcher_targets.py`: the committed `infra/k8s/base/services/edge-watcher/targets.txt` equals the render from the SSOT. It has one `<node> <tailscale_ip> <port>` line for each always-on node behind the edge (rpi4, rpi3). Implement the renderer next to `watcher_targets()` in `toolkit/features/backup_destination.py`, or in its own module, plus `make sync-edge-watcher-targets`. Green.
-23. [ ] [AC12] Test first, `tests/test_edge_watcher_probe.py`. Run `probe.sh` under `sh` with a fake `nc`. Every target yields exactly one `{"metric":"edge_probe","node":...,"up":0|1}` line, also on a timeout, a refused connection or a missing `nc`. The probe is never silent about a target. Watch it fail.
-24. [ ] [AC12] Implement:
+22. [x] [P] [AC12] Test first, `tests/test_edge_watcher_targets.py`: the committed `infra/k8s/base/services/edge-watcher/targets.txt` equals the render from the SSOT. It has one `<node> <tailscale_ip> <port>` line for each always-on node behind the edge (rpi4, rpi3). Implement the renderer next to `watcher_targets()` in `toolkit/features/backup_destination.py`, or in its own module, plus `make sync-edge-watcher-targets`. Green.
+23. [x] [AC12] Test first, `tests/test_edge_watcher_probe.py`. Run `probe.sh` under `sh` with a fake `nc`. Every target yields exactly one `{"metric":"edge_probe","node":...,"up":0|1}` line, also on a timeout, a refused connection or a missing `nc`. The probe is never silent about a target. Watch it fail.
+24. [x] [AC12] Implement:
     - `probe.sh`;
     - the CronJob `infra/k8s/base/services/edge-watcher.yaml`, every 5 minutes, with its image pinned through `IMAGE_SOURCES` in `toolkit/scripts/sync_k8s_images.py`, as the R2 watcher's is;
     - the ingress NetworkPolicy in `infra/k8s/base/governance/networkpolicies.yaml`.
 
     `tests/test_networkpolicy_coverage.py` and `tests/test_spoke_rbac_covers_manifests.py` stay green.
-25. [ ] [AC12] Test first, `tests/test_edge_alerting_rules.py`, for `grafana-alerting/edge-rules.yaml`:
+25. [x] [AC12] Test first, `tests/test_edge_alerting_rules.py`, for `grafana-alerting/edge-rules.yaml`:
     - a per-target rule alerts on `up` grouped by node, with `noDataState: Alerting`, `execErrState: Alerting` and the `page` routing label;
     - a second rule alerts when no `edge_probe` line arrives at all.
 
     `tests/test_alerting_no_data_is_not_health.py` stays green. Implement. Green.
+
+    Done without a `page` label: no rule carries one, and the tier comes from each environment's root policy (prod pages, staging archives). See `verification.md`.
 26. [ ] [AC12] Read the ADR-044 `page` route and check that it repeats until acknowledged. If it does not, extend it through git and `toolkit infra n8n import`, with a test beside the fabric's existing ones. Record which case held.
+
+    Read on 2026-10-25 and recorded in `verification.md`. The repeat interval is the operator's call, so this stays open.
 27. [ ] [AC12] Staging, following the validation flow in `CLAUDE.md`: repoint `targetRevision` after coordinating with the other lanes, run one Job, and read two lines with `up=1`. Revert. After the merge to prod, run one Job and confirm both rules are Normal.
 
 ### PR 8 — Self-recovery
@@ -214,7 +218,7 @@ This PR loads the drops before any uplink exists. `iifname` matches a name, so r
 
 ### PR 12 — Reclassification, runbook, lesson
 
-35. [ ] [AC11] [AC5] Runbook `docs/runbooks/lab-edge.md`:
+35. [ ] [AC11] [AC5] Extend the runbook `docs/runbooks/lab-edge.md`, which PR 7 started with the alert sections:
     - a site change, the three human steps, and the portal login through a client routed by the RPi4;
     - the 5-day renewal and the paid plan's expiry, and what Uptime Kuma shows while the portal holds the uplink;
     - the collision response, the login mode, rotation, recovery from the switch, and the uplink stand-in;

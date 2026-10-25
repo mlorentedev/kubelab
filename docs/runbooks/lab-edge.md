@@ -19,11 +19,14 @@ target:
 ```
 
 The edge cannot page about its own uplink while that uplink is down, so this
-probe runs where the edge's failure does not reach. Read the lines first:
+probe runs where the edge's failure does not reach. The first step for either
+alert is the same: run the probe once now and read its lines.
 
 ```bash
-toolkit obs logs --env prod -q '{container="edge-watcher"} |= "edge_probe"' --since 1h
+make watcher-run NAME=edge-watcher ENV=prod
 ```
+
+It prints one line per target and exits non-zero when the Job fails.
 
 ### Edge target down
 
@@ -45,11 +48,13 @@ minutes. One answer clears it.
 `net005-edge-watcher-silent` fires when no `edge_probe` line arrived for 15
 minutes, three runs. The probe prints a line for every target on every run,
 so silence is the watcher, never the edge, and the edge's state is unknown.
+`make watcher-run` above tells the causes apart:
 
-```bash
-kubectl get cronjob,jobs -n kubelab | grep edge-watcher
-```
-
-A Job that never started (image pull, a suspended CronJob, a CronJob never
-deployed), or a Job that failed: the probe exits 1 without a line when its
-targets file is missing or empty, and says why on stderr.
+- it cannot find the CronJob: it was never deployed;
+- the Job never starts: an image pull, or the namespace's quota;
+- the Job fails with no line: the probe found its targets file missing or
+  empty, and says so on stderr;
+- the Job prints its lines: the watcher works now, so the schedule is what
+  stopped, most likely a suspended CronJob (a Job cannot outlive its 2-minute
+  deadline, so none blocks the next). `make pods ENV=prod` shows when the last
+  `edge-watcher` pod ran.
