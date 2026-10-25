@@ -238,7 +238,7 @@ Run at the temporary site in this order, after the PR each step needs. Every res
 - [ ] B7. [AC10] **On-device multi-PSK check.** Write two wildcard entries and connect a client with the first entry's PSK. Record which entry works and the `keyid` hostapd logs. If only the last works, try `brcmfmac.feature_disable` through `modprobe.d` and record the result. It decides task 34's path.
 - [ ] B8. [AC3] [AC7] [AC9] [AC12] The uplink stand-in (the MSI's hotspot):
   - exposure scans over IPv4 and IPv6;
-  - hostile DHCP with option 121 and its own DNS;
+  - hostile DHCP with option 121 and its own DNS. The uplink does not request option 121 (`use-routes: false`), so the stand-in's server must send it unasked (dnsmasq `dhcp-option-force=121,...`), or the lease carries no route to check;
   - a colliding address and a colliding gateway;
   - a DNS-only block like a portal's, which must page with the phone on cellular;
   - the dongle unplugged, which must page;
