@@ -49,7 +49,8 @@ class Node:
         # Environment= its unit file declares.
         self._shim(
             "systemctl",
-            'case "$*" in *Environment*) printf "Environment=%s\\n" "$(cat "$NODE_ENVIRONMENT/${@: -1}" 2>/dev/null)" ;;'
+            'case "$*" in'
+            ' *Environment*) printf "Environment=%s\\n" "$(cat "$NODE_ENVIRONMENT/${@: -1}" 2>/dev/null)" ;;'
             ' *) printf "Result=%s\\n" "$(cat "$NODE_RESULT")" ;; esac',
         )
         self._shim("journalctl", 'echo "unit output"')
@@ -234,14 +235,18 @@ def test_the_recovery_unit_is_installed_and_runs_the_recovery_mode() -> None:
     assert "node_notify_recovered_unit_name" in task["template"]["dest"]
 
 
-
 PAGE = "KUBELAB_NOTIFY_SEVERITY=page"
 
 
-@pytest.fixture
-def paged(node: Node) -> Node:
-    """A unit that declares `page`, among other variables, as systemd prints them."""
-    node.declare(f"LANG=C.UTF-8 {PAGE} STATE=/var/lib/x")
+@pytest.fixture(
+    params=[
+        pytest.param(PAGE, id="alone"),
+        pytest.param(f"LANG=C.UTF-8 {PAGE} STATE=/var/lib/x", id="among-others"),
+    ]
+)
+def paged(node: Node, request: pytest.FixtureRequest) -> Node:
+    """A unit that declares `page`, as systemd prints it: `Environment=` then the variables, space-separated."""
+    node.declare(request.param)
     return node
 
 

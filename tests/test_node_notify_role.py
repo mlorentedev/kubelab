@@ -661,7 +661,6 @@ def test_an_unknown_unit_is_not_announced_as_a_failure() -> None:
     assert "failed" not in envelope["title"], f"an unknown unit is announced as {envelope['title']!r}"
 
 
-
 def test_the_fleet_default_stays_log() -> None:
     """Ratified 2026-08-15: maintenance and backup failures are actionable, not page-worthy.
 
