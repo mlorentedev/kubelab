@@ -130,7 +130,7 @@ The edge itself:
 
 ### D4. The lab Wi-Fi and the homelab LAN do not route to each other
 
-Nothing is forwarded between the lab Wi-Fi and `networking.lan_cidr`; devices reach the homelab over the tailnet, as before. The lab Wi-Fi CIDR is not advertised as a subnet route and enters no trusted-CIDR list (C5, ADR-041). The RPi4 keeps advertising `networking.lan_cidr` with the three required Tailscale flags. The homelab LAN's DHCP is allowed in the firewall, on both inside interfaces.
+Nothing is forwarded between the lab Wi-Fi and `networking.lan_cidr`; devices reach the homelab over the tailnet, as before. The lab Wi-Fi CIDR is not advertised as a subnet route and is named by no trusted-CIDR entry (C5, ADR-041). The RFC 1918 supernets already in those lists contain it; separating them is SEC-036 (#2669). The RPi4 keeps advertising `networking.lan_cidr` with the three required Tailscale flags. The homelab LAN's DHCP is allowed in the firewall, on both inside interfaces.
 
 ### D5. The RPi4 is always-on, and its SPOF is restated at its new size
 

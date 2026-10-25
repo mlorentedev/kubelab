@@ -38,22 +38,22 @@ PRs stay under ~300 changed lines, excluding tests and generated files. Tests ru
 
 ### PR 2 — SSOT and secrets
 
-1. [ ] [P] [AC6] [AC3] Test first, `tests/test_edge_ssot.py`, reading `infra/config/values/common.yaml` with `yaml.safe_load`:
+1. [x] (✓ 2026-10-25, #2665) [P] [AC6] [AC3] Test first, `tests/test_edge_ssot.py`, reading `infra/config/values/common.yaml` with `yaml.safe_load`:
    - `networking.edge.uplink` has `kind` in `{wifi_open, wifi_psk, ethernet}`, `interface`, `regdomain`, `channel` and `bandwidth.{down,up}_kbit`. The channel is valid for the regdomain's 2.4 GHz set (1-11 for `US`, 1-13 for `ES`), since hostapd refuses to start on a channel its country forbids;
    - `networking.edge.lab_wifi` has `cidr`, a `gateway` inside it, and reservations whose IP is inside `cidr`;
    - the lab CIDR overlaps neither `networking.lan_cidr` nor the tailnet CIDR;
-   - [AC3] the lab CIDR appears in no Tailscale `advertise_routes` and in no trusted-CIDR list (ADR-041);
+   - [AC3] the lab CIDR appears in no Tailscale `advertise_routes`, and no trusted-CIDR entry lies inside it (ADR-041). The RFC 1918 supernets already in the list contain it; SEC-036 (#2669) separates them and tests overlap;
    - no key named `ssid`, `psk`, `mac`, `bssid` or `portal_domains` appears under `networking.edge` in any committed values file.
 
    Watch it fail.
-2. [ ] [AC6] Add `networking.edge` to `common.yaml`:
+2. [x] (✓ 2026-10-25, #2665) [AC6] Add `networking.edge` to `common.yaml`:
    - the lab Wi-Fi is `10.0.0.0/24`, with rpi3 reserved at `networking.nodes.rpi3.lan_ip`. The gateway is `10.0.0.1`, the old home router's address (confirmed by the operator on 2026-10-25);
    - the uplink is `kind: wifi_open` on the temporary site, with `regdomain: US`;
    - `networking.nodes.rpi4.wifi_lan_ip` becomes the gateway address, and its comment says why.
 
    Green.
-3. [ ] [AC6] Test first, in `tests/test_edge_ssot.py`: `infra/ansible/playbooks/provision-rpi4.yml` carries no literal MAC or IP. The DHCP reservations read `networking.nodes.<node>.mac`, and the gateway vars read `config.networking.edge`. Move the four homelab MACs, and rpi3's, from the playbook and the `common.yaml` comment into `networking.nodes.<node>.mac`. Green.
-4. [ ] [P] [AC6] Test first, `tests/test_secrets_catalog_edge.py`: `SECRET_CATALOG` in `toolkit/features/secrets_manager.py` registers, with `envs=("prod",)`, the lab Wi-Fi SSID and PSK, the uplink MAC, and the keys the current `kind` needs: the SSID for `wifi_open`, the SSID and PSK for `wifi_psk`, none for `ethernet`. `SecretSpec` has no optional flag, so a key no current site uses is not registered: the uplink PSK lands with the first `wifi_psk` site, and `portal_domains` with task 31. The test fails when the SSOT's `kind` needs a key the catalog lacks. Add the `SecretSpec`s. Green. Then store the values in `prod.enc.yaml` through `toolkit secrets set ... --env prod --stdin`, without printing anything:
+3. [x] (✓ 2026-10-25, #2665) [AC6] Test first, in `tests/test_edge_ssot.py`: `infra/ansible/playbooks/provision-rpi4.yml` carries no literal MAC or IP. The DHCP reservations read `networking.nodes.<node>.mac`, and the gateway vars read `config.networking.edge`. Move the four homelab MACs, and rpi3's, from the playbook and the `common.yaml` comment into `networking.nodes.<node>.mac`. Green.
+4. [ ] (the `SecretSpec`s ✓ 2026-10-25, #2665; the values are stored at B1) [P] [AC6] Test first, `tests/test_secrets_catalog_edge.py`: `SECRET_CATALOG` in `toolkit/features/secrets_manager.py` registers, with `envs=("prod",)`, the lab Wi-Fi SSID and PSK, the uplink MAC, and the keys the current `kind` needs: the SSID for `wifi_open`, the SSID and PSK for `wifi_psk`, none for `ethernet`. `SecretSpec` has no optional flag, so a key no current site uses is not registered: the uplink PSK lands with the first `wifi_psk` site, and `portal_domains` with task 31. The test fails when the SSOT's `kind` needs a key the catalog lacks. Add the `SecretSpec`s. Green. Then store the values in `prod.enc.yaml` through `toolkit secrets set ... --env prod --stdin`, without printing anything:
    - the lab SSID and PSK are piped from the RPi4's current netplan over the LAN;
    - the dongle's MAC is read from `ethtool -P` on the host it is plugged into;
    - the uplink SSID is typed by the operator.
@@ -230,7 +230,7 @@ This PR loads the drops before any uplink exists. `iifname` matches a name, so r
 Run at the temporary site in this order, after the PR each step needs. Every result goes into `verification.md`. Each step's result goes under a `### B<n>-EVIDENCE` heading there, because that heading is what the live part of a `features.json` verification looks for.
 
 - [ ] B1. [AC1] Human step 1: the dongle moves to the RPi4, on a USB 2.0 port with an extension cable.
-- [ ] B2. [AC1] [AC3] Provision over the LAN with `BOOTSTRAP=1`, through PR 4. The journal shows `inet kubelab` loaded before `uplink0` came up.
+- [ ] B2. [AC1] [AC3] Provision over the LAN with `BOOTSTRAP=1`, through PR 4. The journal shows `inet kubelab` loaded before `uplink0` came up. Then, with the drops still loaded, `networkctl renew uplink0` renews the lease: the journal shows the renewed DHCPv4 lease on `uplink0`, and the B2 evidence records it (AC1).
 - [ ] B3. [AC5] **DNS gate.** Before any login, `make edge-status` reports whether a public resolver and the lease's resolver answer. It decides task 31.
 - [ ] B4. [AC5] Human step 2: the portal login, from the laptop on the switch with `make edge-lan-link ROUTE=1` and its own Wi-Fi off. Then the uplink's MAC is reported identical after a reboot and a re-provision, by `make edge-status`, before anything is paid.
 - [ ] B5. [AC2] Provision the AP (PR 5). Saved devices rejoin. rpi3 takes its reservation, and Kuma's route answers.

@@ -108,7 +108,7 @@ This replaces the rigid "control plane vs data plane" taxonomy with an availabil
 - Embedding pipeline: Ollama lightweight (nomic-embed-text ~300MB, CPU-only) or OpenRouter embeddings API
 - Future: cert-manager
 
-**AWS t4g.micro (Spot, ~$3.60/mo):**
+**GCP e2-small (`gcp1`) since ADR-063; AWS t4g.micro (Spot, ~$3.60/mo) when this ADR was written:**
 - ArgoCD hub (source: Gitea on VPS via Tailscale)
 
 **RPi3 (1GB, ~5W):**
