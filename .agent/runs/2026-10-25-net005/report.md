@@ -14,6 +14,7 @@
 | #2666 | PR 3, tasks 5–11 | `inet kubelab` as the forward control, sysctls, resolver, udp 67 on `eth0`. **Proven live** over the LAN (task 11, `verification.md`) |
 | #2667 | PR 4, tasks 12–15 | uplink netplan rendered from the site profile; `/etc/netplan` owned by the role |
 | #2677 | task 37 (lesson) | lesson-621, the CLAUDE.md gotcha, lesson-110 superseded, and ADR-075 D3 corrected: ufw governs only the part of the forward path that Docker's and Tailscale's chains did not accept, and its forward policy stays ACCEPT on the edge. Merged 16:16Z as `ae3828ba`, after four triage rounds and the second independent review |
+| #2674 | PR 9, task 30 | `make edge-status`: up / portal / dead / unknown. Merged 16:57Z as `95216a4d`, after a merge of master cleared GitHub's unexplained `BLOCKED` and PR-Agent's three repeat findings were triaged |
 
 ## Open, and why
 
@@ -23,8 +24,7 @@
 | #2671 | PR 6, tasks 18–21 | Collision alert and CAKE shaping. Stacked on #2670; same blocks. Out of draft at 15:50Z; PR-Agent's first review triaged |
 | #2673 | PR 8, tasks 28–29 | Watchdog and radio liveness. Stacked on #2671; same blocks. Out of draft at 15:50Z. PR-Agent's and CodeRabbit's reviews of `9c43e9b5` triaged at 16:45Z; CodeRabbit's Minor applied in `fd97aee9`: the watchdog check ran after the AP's notifies, so a failure dropped them (lesson-620). The same placement was on master since #2666 (the Tailscale floor after the ruleset's notifies) and is fixed in the same commit, with `test_no_check_runs_between_a_notify_and_its_flush` guarding the role. **Until #2673 lands, master keeps that floor-check placement**; nothing provisions the edge before then |
 | #2672 | PR 7, tasks 22–25 | Prod edge probe. Touches `infra/k8s/**`, which Argo CD deploys to prod; never merged unattended. **Owner decision needed (task 26):** prod already repeats a firing page every 4h until silenced. Accept 4h, add a shorter child route, or repeat from n8n |
-| #2674 | PR 9, task 30 | `make edge-status`: up / portal / dead / unknown. Green and triaged, but GitHub reads `BLOCKED` with no reason given (below). Master merged in at 16:48Z (`bd80094b`) to force a recompute |
-| #2676 | PR 10, tasks 32–33 | `make headscale-rejoin` and `make edge-lan-link [ROUTE=1] [STATIC=1] [REMOVE=1]`. Stacked on #2674 |
+| #2676 | PR 10, tasks 32–33 | `make headscale-rejoin` and `make edge-lan-link [ROUTE=1] [STATIC=1] [REMOVE=1]`. Was stacked on #2674; master merged in after #2674 landed (`ff14fba5`, three add/add conflicts taken from this branch). Awaiting CI and a re-review |
 | #2681 | PR 12, task 35 | Runbook `lab-edge.md`, rewritten bootstrap and hardware docs. Describes #2670/#2671/#2673/#2676, so it lands after them. Draft; master merged in at 16:21Z (`7727982b`) |
 
 ## Not done
@@ -59,7 +59,7 @@
 - **A fresh SD card serves no DHCP on `eth0`.** Fixed with `STATIC=1` (the last host of `networking.lan_cidr`) rather than ticketed.
 - **pre-commit's ruff skips `tests/**`.** Run `ruff format`/`check` on test files by hand.
 - **#2672 and #2681 both create `docs/runbooks/lab-edge.md`.** #2681 holds the stub `## Edge alerts`; the PR that lands second merges them. Both PRs carry a note.
-- **#2674 is parked at `BLOCKED` with nothing to fix on our side.** Every required check is green: `Validate`, `Tests`, `Detect Changes`, `deploy-shape` (neutral) and the `review-attestation` status. It is mergeable, not behind master, and its reviews are triaged (`dotf pr triage-queue --pr 2674` exits 0). Its required contexts are identical to those of #2672, which reads `CLEAN`. GitHub's merge box names no reason. Re-running the two cancelled runs on its head (`Spec Gate`, `review-attestation`) changed nothing. `dotf pr land` refuses on `BLOCKED`, and a by-hand merge would route around that refusal, so it is left for the operator. One click in the UI shows GitHub's reason. At 15:28Z the REST endpoint, read twice 10 s apart (a read starts GitHub's recompute), still answered `{"mergeable":true,"mergeable_state":"blocked"}`, and every required context on its head read green with `isRequired`. Branch protection asks for five contexts, no approvals, no conversation resolution, and the branch has no rulesets. **#2676 reads `CLEAN` with a diff that contains #2674's, and is deliberately not landed:** it would carry #2674's content past a block nobody can name.
+- **#2674's `BLOCKED` cleared with a merge of master, and it landed.** Every required check had been green, it was mergeable, its reviews were triaged, and neither branch protection nor any ruleset explained the block; re-running cancelled checks had not cleared it. At 16:48Z its branch was behind master by #2677, and merging master in turned it `CLEAN` within minutes. The cause stays unexplained; the remedy that worked is a merge of the base. Landed at 16:57Z. A stale peer PR, #2656 (last updated 2026-10-23), also edits `toolkit/README.md`; the overlap was checked only after the land, and that PR may need a trivial rebase of the table.
 
 ## Reviews
 
