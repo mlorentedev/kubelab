@@ -105,7 +105,7 @@ This PR loads the drops before any uplink exists. `iifname` matches a name, so r
     Watch it fail.
 13. [ ] [AC6] [AC5] Implement:
     - `templates/netplan-edge.yaml.j2` and `templates/dhcp-gateway.conf.j2`;
-    - the `.link` file `templates/uplink.link.j2`, which matches `PermanentMACAddress` from SOPS and sets `Name=uplink0` and `MACAddressPolicy=none`. It is rendered with `no_log`;
+    - the `.link` file `templates/uplink.link.j2`, which matches `PermanentMACAddress` from SOPS and sets `Name=uplink0` and `MACAddressPolicy=none`. It is rendered with `no_log`. `networking.edge.uplink.mac` names the adapter the current `kind` uses: the USB Wi-Fi adapter for `wifi_open` and `wifi_psk`, the USB Ethernet adapter for `ethernet`. Changing `kind` changes that key in the same edit, and the render test fails if a `kind` reaches the template without it;
     - the netplan task runs with `no_log: true` and mode `0600`, since the file holds the uplink SSID and, for `wifi_psk`, its PSK, and `--diff` would print it;
     - the role owns `/etc/netplan/`. It backs up the hand-written file on the host, then removes it;
     - netplan is validated with `netplan generate` before the handler applies it, and the play waits with `wait_for_connection` after the apply, so a profile that cuts the LAN fails visibly. Recovery from that is editing the SD card from another machine; the runbook (task 35) says how.
@@ -227,7 +227,7 @@ This PR loads the drops before any uplink exists. `iifname` matches a name, so r
 
 ## Bring-up and live proof
 
-Run at the temporary site in this order, after the PR each step needs. Every result goes into `verification.md`.
+Run at the temporary site in this order, after the PR each step needs. Every result goes into `verification.md`. Each step's result goes under a `### B<n>-EVIDENCE` heading there, because that heading is what the live part of a `features.json` verification looks for.
 
 - [ ] B1. [AC1] Human step 1: the dongle moves to the RPi4, on a USB 2.0 port with an extension cable.
 - [ ] B2. [AC1] [AC3] Provision over the LAN with `BOOTSTRAP=1`, through PR 4. The journal shows `inet kubelab` loaded before `uplink0` came up.

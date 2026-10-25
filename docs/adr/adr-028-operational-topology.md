@@ -92,8 +92,8 @@ This replaces the rigid "control plane vs data plane" taxonomy with an availabil
 
 | Tier | Nodes | Power | Purpose |
 |------|-------|-------|---------|
-| **Always-on** | VPS (8GB ARM), AWS t4g.micro, RPi3 (1GB) | 24/7 cloud + low-power | Production workloads, observability, GitOps, external monitoring |
-| **On-demand** | ace1 (12GB), Beelink (8GB), ace2 (12GB), RPi4 (8GB), Jetson (4GB) | Homelab, powered when working | Staging validation, CI, AI/LLM, local development |
+| **Always-on** | VPS (8GB ARM), AWS t4g.micro, RPi3 (1GB), RPi4 (8GB, since the 2026-10-25 amendment) | 24/7 cloud + low-power | Production workloads, observability, GitOps, external monitoring, the lab's network edge |
+| **On-demand** | ace1 (12GB), Beelink (8GB), ace2 (12GB), Jetson (4GB) | Homelab, powered when working | Staging validation, CI, AI/LLM, local development |
 
 ### 2. Service placement
 
@@ -131,11 +131,11 @@ This replaces the rigid "control plane vs data plane" taxonomy with an availabil
 - Ollama (Mistral Nemo 12B Q4, ~7GB)
 - Glances (node metrics)
 
-**RPi4 (8GB ARM) — Staging network gateway:**
+**RPi4 (8GB ARM) — the lab's network edge (always-on since the 2026-10-25 amendment, ADR-075):**
 - CoreDNS (staging DNS resolution)
 - Pi-hole (DNS filtering)
 - Tailscale subnet routing (172.16.1.0/24 for remote LAN access)
-- Only needed when staging or on-demand nodes are active
+- NAT, DHCP for the homelab LAN and the lab Wi-Fi, and the lab Wi-Fi access point
 
 **Jetson Nano (4GB ARM):**
 - Pollex (independent project, own repo)

@@ -123,6 +123,6 @@ After this change:
 ## References
 
 - Bitácora: mlorentedev/kubelab#2661 (this spec); NET-004 #2363 (guest network); NET-006 #2662 (renumbering); NOTIFY-009 #1021 (off-network dead-man's switch); ANSIBLE-009 #363 (rpi4 `/etc/hosts`).
-- ADR: `docs/adr/adr-075-lab-edge-per-site-uplink.md` (Proposed). Amends `adr-028` (always-on vs on-demand placement); must stay consistent with `adr-015` (Headscale outside K3s, `vpn.kubelab.live` on the public IP) and `adr-052` (cluster access transport, the `rpi4-lan` jump).
+- ADR: `docs/adr/adr-075-lab-edge-per-site-uplink.md` (Accepted). Amends `adr-028` (always-on vs on-demand placement); must stay consistent with `adr-015` (Headscale outside K3s, `vpn.kubelab.live` on the public IP) and `adr-052` (cluster access transport, the `rpi4-lan` jump).
 - Repo paths: `infra/ansible/roles/gateway/`, `infra/ansible/roles/coredns/templates/docker-compose.yml.j2`, `infra/config/values/common.yaml` (`networking.*`), `toolkit/features/secrets_manager.py` (`SECRET_CATALOG`), `docs/runbooks/rpi4-bootstrap.md`, `docs/runbooks/hardware-setup.md`.
 - Evidence log: `specs/NET-005-lab-edge-site-modes/verification.md` (portal measurements of 2026-10-25 and the RPi4 baseline go here first).
