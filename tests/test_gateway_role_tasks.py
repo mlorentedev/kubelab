@@ -248,7 +248,13 @@ def test_no_other_role_writes_the_edges_netplan() -> None:
                 assert hosts <= others, f"{playbook.name}: the play on {play.get('hosts')!r} sets {sorted(keys)}"
     shared = [
         path
-        for pattern in ("roles/*/defaults/*", "roles/*/vars/*", "inventories/**/*", "**/group_vars/**/*", "**/host_vars/**/*")
+        for pattern in (
+            "roles/*/defaults/*",
+            "roles/*/vars/*",
+            "inventories/**/*",
+            "**/group_vars/**/*",
+            "**/host_vars/**/*",
+        )
         for path in ANSIBLE.glob(pattern)
         if path.suffix in (".yml", ".yaml")
     ]
