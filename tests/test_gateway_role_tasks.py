@@ -537,6 +537,30 @@ def test_the_ap_handlers_run_inside_the_role() -> None:
     assert not any("force_handlers" in play for play in plays)
 
 
+def _in_order(tasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    flat: list[dict[str, Any]] = []
+    for task in tasks:
+        flat.append(task)
+        for section in ("block", "rescue", "always"):
+            flat.extend(_in_order(task.get(section) or []))
+    return flat
+
+
+def test_no_check_runs_between_a_notify_and_its_flush() -> None:
+    """A failed check ends the play and drops the handlers already notified, and on the
+    re-run the unchanged files notify nothing, so the change is never applied
+    (lesson-620). Any task can fail; a check that reads only inputs and facts is the
+    one that can always run before the first file it guards is written."""
+    pending: list[str] = []
+    for task in _in_order(TASKS):
+        if task.get("meta") == "flush_handlers":
+            pending = []
+        elif "assert" in task or "fail" in task:
+            assert not pending, f"{task['name']!r} can fail after {pending} notified a handler"
+        elif "notify" in task:
+            pending.append(task["name"])
+
+
 def test_the_ap_starts_in_check_mode_only_where_the_package_is_installed() -> None:
     assert TASKS[_hostapd_start()]["when"] == "not ansible_check_mode or 'hostapd.service' in ansible_facts.services"
 
