@@ -112,6 +112,12 @@
         gateway_uplink_mac: "{{ secrets.networking.edge.uplink.mac | default('') }}"
         gateway_uplink_ssid: "{{ secrets.networking.edge.uplink.ssid | default('') }}"
         gateway_uplink_psk: "{{ secrets.networking.edge.uplink.psk | default('') }}"
+        gateway_uplink_down_kbit: "{{ config.networking.edge.uplink.bandwidth.down_kbit }}"
+        gateway_uplink_up_kbit: "{{ config.networking.edge.uplink.bandwidth.up_kbit }}"
+        gateway_lease_check_networks:
+          lan: "{{ config.networking.lan_cidr }}"
+          lab: "{{ config.networking.edge.lab_wifi.cidr }}"
+          tailnet: "{{ config.networking.tailscale_cidr }}"
         gateway_ap_interface: "{{ config.networking.edge.lab_wifi.interface }}"
         gateway_ap_channel: "{{ config.networking.edge.uplink.channel }}"
         gateway_ap_cidr: "{{ config.networking.edge.lab_wifi.cidr }}"

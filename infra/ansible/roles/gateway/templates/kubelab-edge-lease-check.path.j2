@@ -1,0 +1,14 @@
+# {{ ansible_managed }}
+# Runs the uplink lease check whenever networkd writes or removes a lease (NET-005
+# AC7). networkd writes a lease to a temporary file and renames it into place, and
+# this directory watch sees both. A path unit does not fire for a lease written
+# before it started, so the role starts it before the uplink comes up.
+[Unit]
+Description=Watch the uplink's DHCP lease for a collision with an internal network
+
+[Path]
+PathChanged=/run/systemd/netif/leases
+Unit=kubelab-edge-lease-check.service
+
+[Install]
+WantedBy=paths.target

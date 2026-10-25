@@ -27,12 +27,16 @@ because the RPi4 runs dash and gawk and a laptop may run neither.
 from __future__ import annotations
 
 import ipaddress
+import shlex
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
+
+from tests.ansible_jinja import ansible_env
 
 REPO = Path(__file__).resolve().parents[1]
 SCRIPT = REPO / "infra" / "ansible" / "roles" / "gateway" / "files" / "edge-lease-check.sh"
@@ -322,3 +326,129 @@ def test_an_implausible_interface_name_is_refused(tmp_path: Path, awk_bin: Path)
     """The name becomes a path under sysfs: no traversal through it."""
     result = _run(tmp_path, awk_bin, _site_lease(), interface="../../etc")
     assert result.returncode == 64, _output(result)
+
+
+# ------------------------------------------------------------------- the units
+
+ROLE = REPO / "infra" / "ansible" / "roles" / "gateway"
+TASKS: list[dict[str, Any]] = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text())
+DEFAULTS: dict[str, Any] = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text())
+SERVICE = "kubelab-edge-lease-check.service"
+PATH_UNIT = "kubelab-edge-lease-check.path"
+
+
+def _render(unit: str, **overrides: Any) -> str:
+    variables: dict[str, Any] = {
+        "ansible_managed": "managed",
+        "gateway_uplink_interface": UPLINK,
+        "gateway_lease_check_networks": INTERNAL,
+        "gateway_lease_check_path": DEFAULTS["gateway_lease_check_path"],
+    }
+    variables.update(overrides)
+    env = ansible_env(str(ROLE / "templates"), trim_blocks=True, lstrip_blocks=True)
+    return env.get_template(f"{unit}.j2").render(**variables)
+
+
+def _directives(text: str) -> dict[str, list[str]]:
+    keys: dict[str, list[str]] = {}
+    for line in text.splitlines():
+        if "=" in line and not line.startswith("#"):
+            key, value = line.split("=", 1)
+            keys.setdefault(key, []).append(value)
+    return keys
+
+
+def test_the_service_checks_the_uplink_against_every_internal_network() -> None:
+    (command,) = _directives(_render(SERVICE))["ExecStart"]
+    argv = shlex.split(command)
+    assert argv[0] == DEFAULTS["gateway_lease_check_path"]
+    assert argv[1] == UPLINK
+    assert argv[2:] == [f"{name}={cidr}" for name, cidr in INTERNAL.items()]
+
+
+def test_a_collision_pages_once_and_a_clean_run_closes_it() -> None:
+    keys = _directives(_render(SERVICE))
+    assert keys["OnFailure"] == ["kubelab-notify@%n.service"]
+    assert keys["OnSuccess"] == ["kubelab-notify-recovered@%n.service"]
+    assert keys["Type"] == ["oneshot"]
+
+
+def test_a_burst_of_lease_events_never_reaches_the_start_limit() -> None:
+    """One lease write is several inotify events and the check takes milliseconds: under the
+    default limit (5 starts in 10 s) the unit lands in `failed` and pages for nothing."""
+    assert _directives(_render(SERVICE))["StartLimitIntervalSec"] == ["0"]
+
+
+def test_the_path_unit_watches_networkds_lease_directory() -> None:
+    """networkd writes a temporary file and renames it into place; a directory watch sees
+    both the write and the removal, and the removal's run closes an open incident."""
+    keys = _directives(_render(PATH_UNIT))
+    assert keys["PathChanged"] == ["/run/systemd/netif/leases"]
+    assert keys["Unit"] == [SERVICE]
+    assert keys["WantedBy"] == ["paths.target"]
+
+
+def test_the_units_pass_systemd_analyze_verify(tmp_path: Path) -> None:
+    if shutil.which("systemd-analyze") is None:
+        pytest.skip("systemd-analyze is not installed")
+    (tmp_path / SERVICE).write_text(_render(SERVICE, gateway_lease_check_path="/bin/true"))
+    (tmp_path / PATH_UNIT).write_text(_render(PATH_UNIT))
+    for stub in ("kubelab-notify@.service", "kubelab-notify-recovered@.service"):
+        (tmp_path / stub).write_text("[Service]\nType=oneshot\nExecStart=/bin/true\n")
+    proc = subprocess.run(
+        ["systemd-analyze", "verify", "--man=no", str(tmp_path / SERVICE), str(tmp_path / PATH_UNIT)],
+        capture_output=True,
+        text=True,
+        env={"SYSTEMD_UNIT_PATH": f"{tmp_path}:", "PATH": "/usr/bin:/bin"},
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+
+
+def _first(predicate: Any) -> int:
+    return next(i for i, task in enumerate(TASKS) if predicate(task))
+
+
+def _systemd(task: dict[str, Any]) -> dict[str, Any]:
+    return task.get("systemd") or task.get("ansible.builtin.systemd") or {}
+
+
+def test_the_role_installs_the_script_where_the_unit_runs_it() -> None:
+    install = _first(lambda task: (task.get("copy") or {}).get("src") == "edge-lease-check.sh")
+    args = TASKS[install]["copy"]
+    assert args["dest"] == "{{ gateway_lease_check_path }}"
+    assert args["mode"] == "0755"
+
+
+def test_the_watch_starts_before_the_uplink_takes_its_first_lease() -> None:
+    """A path unit does not fire for a lease written before it started watching."""
+    watch = _first(lambda task: _systemd(task).get("name") == PATH_UNIT)
+    args = _systemd(TASKS[watch])
+    assert args["enabled"] is True
+    assert "started" in args["state"]
+    apply_uplink = _first(lambda task: task.get("name") == "Apply the uplink before anything depends on it")
+    assert watch < apply_uplink
+
+
+def test_a_changed_unit_restarts_the_watch() -> None:
+    units = _first(lambda task: PATH_UNIT in str(task.get("loop")))
+    watch = _first(lambda task: _systemd(task).get("name") == PATH_UNIT)
+    register = TASKS[units]["register"]
+    state = _systemd(TASKS[watch])["state"]
+    assert f"{register} is changed" in state
+    assert "restarted" in state
+    assert _systemd(TASKS[watch]).get("daemon_reload")
+
+
+def test_the_playbook_maps_the_internal_networks_from_the_ssot() -> None:
+    plays = yaml.safe_load((REPO / "infra" / "ansible" / "playbooks" / "provision-rpi4.yml").read_text())
+    for play in plays:
+        for role in play.get("roles", []):
+            if isinstance(role, dict) and role.get("role", "").endswith("/gateway"):
+                assert role["vars"]["gateway_lease_check_networks"] == {
+                    "lan": "{{ config.networking.lan_cidr }}",
+                    "lab": "{{ config.networking.edge.lab_wifi.cidr }}",
+                    "tailnet": "{{ config.networking.tailscale_cidr }}",
+                }
+                return
+    raise AssertionError("provision-rpi4.yml runs no gateway role")

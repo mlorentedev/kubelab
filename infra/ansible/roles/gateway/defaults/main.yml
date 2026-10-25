@@ -27,3 +27,11 @@ gateway_dhcp_lease: "12h"
 gateway_dns_servers: "8.8.8.8,1.1.1.1"
 gateway_dhcp_reservations: []
 gateway_tailscale_min_version: "1.96.2"
+# The uplink lease check (NET-005 AC7). The playbook passes the networks from the SSOT.
+gateway_lease_check_path: "/usr/local/sbin/kubelab-edge-lease-check"
+gateway_lease_check_networks: {}
+# The uplink shaper (NET-005 AC8). The playbook passes the rates from
+# networking.edge.uplink.bandwidth; the role refuses zero, which CAKE reads as unlimited.
+gateway_uplink_down_kbit: 0
+gateway_uplink_up_kbit: 0
+gateway_uplink_ifb: "ifb4{{ gateway_uplink_interface }}"
