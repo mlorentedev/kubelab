@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,8 @@ TASKS: list[dict[str, Any]] = yaml.safe_load((ROLE / "tasks" / "main.yml").read_
 HANDLERS: list[dict[str, Any]] = yaml.safe_load((ROLE / "handlers" / "main.yml").read_text())
 DEFAULTS: dict[str, Any] = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text())
 NODES = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text())["networking"]["nodes"]
+EDGE = {name for name, node in NODES.items() if "gateway" in ((node or {}).get("ansible_groups") or [])}
+ANSIBLE = REPO / "infra" / "ansible"
 
 TEMPLATE_MODULES = ("template", "ansible.builtin.template")
 
@@ -218,12 +221,41 @@ def test_cloud_init_never_writes_netplan() -> None:
     assert yaml.safe_load(task["copy"]["content"]) == {"network": {"config": "disabled"}}
 
 
+def _netplan_keys(node: Any) -> set[str]:
+    """Every `netplan_*` key at any depth: keys, so a comment that names one is not a hit."""
+    if isinstance(node, dict):
+        own = {str(key) for key in node if str(key).startswith("netplan_")}
+        return own.union(*(_netplan_keys(value) for value in node.values()))
+    if isinstance(node, list):
+        return set().union(*(_netplan_keys(item) for item in node))
+    return set()
+
+
 def test_no_other_role_writes_the_edges_netplan() -> None:
     """base_system writes /etc/netplan/50-cloud-init.yaml when netplan_address is set.
     On the edge, this role would then back it up and remove it on every run, and the
-    two would apply netplan against each other."""
-    playbook = REPO / "infra" / "ansible" / "playbooks" / "provision-rpi4.yml"
-    assert "netplan_" not in playbook.read_text()
+    two would apply netplan against each other. So only a play aimed at named nodes
+    other than the edge may set a `netplan_` variable, and no source that every host
+    reads may: a role's defaults or vars, an inventory, group_vars, host_vars."""
+    base_system = yaml.safe_load((ANSIBLE / "roles" / "base_system" / "tasks" / "main.yml").read_text())
+    (gate,) = [task["when"] for task in base_system if "/etc/netplan/" in str(task)]
+    assert gate == "netplan_address is defined"
+    others = set(NODES) - EDGE
+    for playbook in sorted((ANSIBLE / "playbooks").glob("*.yml")):
+        for play in yaml.safe_load(playbook.read_text()) or []:
+            if isinstance(play, dict) and (keys := _netplan_keys(play)):
+                hosts = set(re.split(r"[,:]", str(play.get("hosts", ""))))
+                assert hosts <= others, f"{playbook.name}: the play on {play.get('hosts')!r} sets {sorted(keys)}"
+    shared = [
+        path
+        for pattern in ("roles/*/defaults/*", "roles/*/vars/*", "inventories/**/*", "**/group_vars/**/*", "**/host_vars/**/*")
+        for path in ANSIBLE.glob(pattern)
+        if path.suffix in (".yml", ".yaml")
+    ]
+    assert shared, "no shared variable source found: the glob is wrong, not the edge clean"
+    for source in shared:
+        for document in yaml.safe_load_all(source.read_text()):
+            assert not _netplan_keys(document), f"{source.relative_to(REPO)} sets {sorted(_netplan_keys(document))}"
 
 
 def _that(index: int) -> list[str]:
