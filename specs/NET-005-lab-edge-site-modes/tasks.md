@@ -212,6 +212,8 @@ This PR loads the drops before any uplink exists. `iifname` matches a name, so r
 
     If B7 found the radio offloads the handshake, the rotate target takes the fallback in ADR-075 D8 instead. Implement in `toolkit/features/edge_psk.py`. Green.
 
+    The rotate target reloads hostapd's PSK file itself once the play ends, not only through the role's handler. A play that fails between the file's deploy and the handler flush loses the notification, and the next run finds the file unchanged (lesson-620's class). The retire check above detects that loss; the explicit reload repairs it.
+
 ### PR 12 — Reclassification, runbook, lesson
 
 35. [ ] [AC11] [AC5] Runbook `docs/runbooks/lab-edge.md`:
