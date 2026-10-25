@@ -18,6 +18,7 @@ filter because they must render what Ansible renders.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from jinja2 import Environment, FileSystemLoader
@@ -38,10 +39,15 @@ def _to_bool(value: Any) -> bool:
     return bool(value)
 
 
+def _regex_replace(value: str, pattern: str, replacement: str = "") -> str:
+    return re.sub(pattern, replacement, value)
+
+
 def ansible_env(templates_dir: str, **kwargs: Any) -> Environment:
-    """A `FileSystemLoader` environment with Ansible's `bool` and `to_json` filters registered."""
+    """A `FileSystemLoader` environment with the Ansible filters these templates use."""
     env = Environment(loader=FileSystemLoader(templates_dir), **kwargs)
     env.filters["bool"] = _to_bool
     # Jinja's own `tojson` HTML-escapes; Ansible's `to_json` is plain json.dumps.
     env.filters["to_json"] = json.dumps
+    env.filters["regex_replace"] = _regex_replace
     return env

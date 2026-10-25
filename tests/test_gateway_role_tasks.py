@@ -15,6 +15,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
 
 from tests.ansible_jinja import ansible_env
@@ -24,6 +25,7 @@ ROLE = REPO / "infra" / "ansible" / "roles" / "gateway"
 TASKS: list[dict[str, Any]] = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text())
 HANDLERS: list[dict[str, Any]] = yaml.safe_load((ROLE / "handlers" / "main.yml").read_text())
 DEFAULTS: dict[str, Any] = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text())
+NODES = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text())["networking"]["nodes"]
 
 TEMPLATE_MODULES = ("template", "ansible.builtin.template")
 
@@ -189,3 +191,93 @@ def test_hand_written_netplan_is_backed_up_then_removed() -> None:
 def test_cloud_init_never_writes_netplan() -> None:
     task = TASKS[_first(lambda task: (task.get("copy") or {}).get("dest", "").startswith("/etc/cloud/"))]
     assert yaml.safe_load(task["copy"]["content"]) == {"network": {"config": "disabled"}}
+
+
+def _that(index: int) -> list[str]:
+    that = TASKS[index]["assert"]["that"]
+    return that if isinstance(that, list) else [that]
+
+
+def _holds(index: int, **variables: Any) -> bool:
+    env = ansible_env(str(ROLE / "templates"))
+    return all(env.compile_expression(check)(**variables) for check in _that(index))
+
+
+def test_the_profile_check_names_every_key_it_checks() -> None:
+    """A bad kind or regdomain is a common.yaml edit, not a missing secret."""
+    check = _first(lambda task: "gateway_uplink_kind" in str(task.get("assert")))
+    message = TASKS[check]["assert"]["fail_msg"]
+    assert all(key in message for key in ("kind", "regdomain", ".mac", ".ssid", ".psk", "common.yaml"))
+
+
+def test_edge_changes_run_over_the_homelab_lan() -> None:
+    """ADR-075 D7. Over the tailnet, applying the uplink can cut the session that applies it."""
+    check = _first(lambda task: "ansible_host" in str(task.get("assert")))
+    link, _ = _template_task(LINK)
+    assert check < link
+    lan = {"gateway_lan_cidr": f"{NODES['rpi4']['lan_ip']}/24"}
+    assert _holds(check, ansible_host=NODES["rpi4"]["lan_ip"], **lan)
+    assert not _holds(check, ansible_host=NODES["rpi4"]["tailscale_ip"], **lan)
+
+
+UPLINK_MAC = "02:00:5e:10:00:01"
+LINKS = "lo UNKNOWN 00:00:00:00:00:00\neth0 UP 02:00:5e:10:00:09\nwlx02005e100001 DOWN 02:00:5e:10:00:01\n"
+
+
+@pytest.mark.parametrize(
+    ("mac", "links", "eth0", "ok"),
+    [
+        (UPLINK_MAC, LINKS, "02:00:5e:10:00:09", True),
+        (UPLINK_MAC.upper(), LINKS, "02:00:5e:10:00:09", True),
+        (UPLINK_MAC, LINKS.replace("02:00:5e:10:00:01", "02:00:5e:10:00:02"), "02:00:5e:10:00:09", False),
+        ("02:00:5e:10:00:09", LINKS, "02:00:5e:10:00:09", False),
+    ],
+    ids=["present", "upper-case-in-sops", "unplugged", "is-the-lan-port"],
+)
+def test_the_uplink_adapter_must_be_present_and_not_the_lan_port(mac: str, links: str, eth0: str, ok: bool) -> None:
+    """Without it, netplan waits on a device that never appears and fails without a cause.
+    On the LAN port, the next boot would rename the recovery path."""
+    read = _first(lambda task: task.get("command") == "ip -br link")
+    check = _first(lambda task: "gateway_uplink_links" in str(task.get("assert")))
+    link, _ = _template_task(LINK)
+    assert read < check < link
+    assert (TASKS[read]["changed_when"], TASKS[read]["check_mode"], TASKS[read]["no_log"]) == (False, False, True)
+    facts = {"eth0": {"macaddress": eth0}}
+    variables = {"gateway_uplink_mac": mac, "gateway_interface": "eth0", "ansible_facts": facts}
+    assert _holds(check, gateway_uplink_links={"stdout": links}, **variables) is ok
+
+
+def test_the_rename_runs_whenever_the_name_is_missing_and_is_checked() -> None:
+    """A handler would fire only when the .link file changes, so a run that failed after
+    writing it would never rename. udevadm exits 0 when nothing matched, and the kernel
+    refuses to rename an interface that is up, so the name itself is checked."""
+    link, _ = _template_task(LINK)
+    reload = _first(lambda task: task.get("command") == "udevadm control --reload")
+    rename = _first(lambda task: "udevadm trigger" in str(task.get("command")))
+    verify = _first(lambda task: "gateway_uplink_sysfs" in str(task.get("assert")))
+    netplan, _ = _template_task(NETPLAN)
+    assert link < reload < rename < verify < netplan
+    missing = "gateway_uplink_interface not in ansible_facts.interfaces"
+    assert missing in str(TASKS[reload]["when"])
+    assert TASKS[rename]["when"] == missing
+    assert "--settle" in TASKS[rename]["command"]
+    assert "address={{ gateway_uplink_mac | lower }}" in TASKS[rename]["command"]
+    assert TASKS[rename]["no_log"] is True
+    assert not any("udevadm" in str(handler) for handler in HANDLERS)
+
+
+def test_old_and_new_netplan_are_never_applied_together() -> None:
+    netplan, _ = _template_task(NETPLAN)
+    remove = _first(lambda task: (task.get("file") or {}).get("state") == "absent" and "loop" in task)
+    flushes = [i for i, task in enumerate(TASKS) if task.get("meta") == "flush_handlers"]
+    assert not any(netplan < i < remove for i in flushes)
+    assert any(i > remove for i in flushes)
+    notified = TASKS[remove]["notify"]
+    assert {"apply netplan", "wait for the session"} <= set(notified)
+
+
+def test_the_netplan_backups_stay_private_and_are_never_overwritten() -> None:
+    directory = _first(lambda task: (task.get("file") or {}).get("path") == "/var/backups/kubelab-netplan")
+    assert TASKS[directory]["file"]["mode"] == "0700"
+    backup = _first(lambda task: (task.get("copy") or {}).get("remote_src") is True)
+    assert "date_time" in TASKS[backup]["copy"]["dest"]

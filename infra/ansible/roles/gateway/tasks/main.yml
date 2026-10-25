@@ -138,9 +138,42 @@
       - gateway_uplink_kind == 'ethernet' or gateway_uplink_ssid | length > 0
       - gateway_uplink_kind != 'wifi_psk' or gateway_uplink_psk | length > 0
     fail_msg: >-
-      The {{ gateway_uplink_kind }} uplink needs networking.edge.uplink.mac in prod SOPS,
-      plus .ssid for a Wi-Fi kind and .psk for wifi_psk. The operator stores them with
-      `toolkit secrets set`; the role never invents them.
+      The site profile in common.yaml needs networking.edge.uplink.kind (wifi_open, wifi_psk
+      or ethernet) and a two-letter regdomain. The {{ gateway_uplink_kind }} uplink needs
+      networking.edge.uplink.mac in prod SOPS, plus .ssid for a Wi-Fi kind and .psk for
+      wifi_psk. The operator stores them with `toolkit secrets set`; the role never invents them.
+    quiet: true
+
+# ADR-075 D7: applying the uplink can cut a session that rides the tailnet it carries.
+- name: Check that the run comes over the homelab LAN
+  assert:
+    that: ansible_host == gateway_lan_cidr | regex_replace('/.*', '')
+    fail_msg: >-
+      ERROR: this run reaches the edge at {{ ansible_host }}, not at its LAN address.
+      WHY: edge changes run over the homelab LAN, because applying the uplink can cut a
+      session that rides the tailnet (ADR-075 D7).
+      FIX: from the laptop on the switch, run `make provision NODE=rpi4 ENV=prod BOOTSTRAP=1`.
+    quiet: true
+
+# It holds every adapter's MAC, the uplink's included (ADR-075 C7).
+- name: Read the adapters
+  command: ip -br link
+  register: gateway_uplink_links
+  changed_when: false
+  check_mode: false
+  no_log: true
+
+# Without the adapter, netplan waits on a device that never appears and fails without a
+# cause. On the LAN port, the next boot would rename the recovery path.
+- name: Check that the uplink adapter is plugged in
+  assert:
+    that:
+      - (gateway_uplink_mac | lower) in (gateway_uplink_links.stdout | lower)
+      - (gateway_uplink_mac | lower) != (ansible_facts[gateway_interface].macaddress | default('') | lower)
+    fail_msg: >-
+      ERROR: no adapter other than {{ gateway_interface }} has the uplink MAC in prod SOPS.
+      WHY: the uplink adapter is unplugged, or networking.edge.uplink.mac names another adapter.
+      FIX: plug in the uplink adapter, or correct the MAC with `toolkit secrets set`, then re-run.
     quiet: true
 
 - name: Pin and name the uplink adapter
@@ -149,7 +182,38 @@
     dest: /etc/systemd/network/10-kubelab-uplink.link
     mode: "0644"
   no_log: true
-  notify: reload udev
+  register: gateway_uplink_link
+
+# Tasks, not handlers: a handler fires only when the .link file changes, so a run that
+# failed after writing it would never rename the adapter.
+- name: Reload the udev rules
+  command: udevadm control --reload
+  when: gateway_uplink_link is changed or gateway_uplink_interface not in ansible_facts.interfaces
+  changed_when: true
+
+- name: Rename the uplink adapter
+  command: >-
+    udevadm trigger --settle --action=add --subsystem-match=net
+    --attr-match=address={{ gateway_uplink_mac | lower }}
+  when: gateway_uplink_interface not in ansible_facts.interfaces
+  changed_when: true
+  no_log: true
+
+- name: Read the uplink adapter's name
+  stat:
+    path: "/sys/class/net/{{ gateway_uplink_interface }}"
+  register: gateway_uplink_sysfs
+
+# udevadm exits 0 when nothing matched, and the kernel refuses to rename an interface
+# that is up, so the name itself is checked before netplan depends on it.
+- name: Check that the uplink adapter took its name
+  assert:
+    that: gateway_uplink_sysfs.stat.exists or ansible_check_mode
+    fail_msg: >-
+      ERROR: the uplink adapter is not named {{ gateway_uplink_interface }}.
+      WHY: the kernel refuses to rename an interface that is up, and udevadm reports success either way.
+      FIX: unplug the adapter and plug it back in, which brings it back down and named, then re-run.
+    quiet: true
 
 - name: Keep cloud-init from writing netplan
   copy:
@@ -203,7 +267,7 @@
 - name: Back up hand-written netplan files
   copy:
     src: "{{ item.path }}"
-    dest: "/var/backups/kubelab-netplan/{{ item.path | basename }}"
+    dest: "/var/backups/kubelab-netplan/{{ item.path | basename }}.{{ ansible_facts.date_time.iso8601_basic_short }}"
     remote_src: true
     mode: "0600"
   loop: "{{ gateway_netplan_found.files }}"

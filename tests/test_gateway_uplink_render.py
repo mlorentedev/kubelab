@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import configparser
+import shlex
 import shutil
 import subprocess
 from pathlib import Path
@@ -169,7 +170,8 @@ def test_netplan_generates_the_file_the_drop_in_names(kind: str, tmp_path: Path)
     generated = tmp_path / "run" / "systemd" / "network"
     network = _ini((generated / f"10-netplan-{UPLINK}.network").read_text())
     # netplan 1.x writes the legacy `[DHCP]` section, which networkd reads as DHCPv4.
-    dhcp = {key: value for name in ("DHCP", "DHCPv4") if network.has_section(name) for key, value in network[name].items()}
+    sections = [network[name] for name in ("DHCP", "DHCPv4") if network.has_section(name)]
+    dhcp = {key: value for section in sections for key, value in section.items()}
     assert dhcp["UseRoutes"] == "false"
     # The drop-in is the only thing that sets it, so the gateway does not depend on
     # what netplan's defaults happen to be.
@@ -241,3 +243,16 @@ def test_the_playbook_maps_the_profile_and_its_secrets() -> None:
         assert variables[f"gateway_uplink_{key}"] == f"{{{{ config.networking.edge.uplink.{key} }}}}"
     for key in ("mac", "ssid", "psk"):
         assert variables[f"gateway_uplink_{key}"] == f"{{{{ secrets.networking.edge.uplink.{key} | default('') }}}}"
+
+
+@pytest.mark.skipif(shutil.which("netplan") is None, reason="netplan is not installed")
+def test_the_validate_command_accepts_the_rendered_file_and_refuses_a_broken_one(tmp_path: Path) -> None:
+    """Run the way Ansible runs `validate`: `%s` substituted, split, no shell."""
+    validate = _task_writing("/etc/netplan/10-kubelab-edge.yaml")["validate"]
+    good = tmp_path / "good.yaml"
+    good.write_text(_render("netplan-edge.yaml.j2"))
+    bad = tmp_path / "bad.yaml"
+    bad.write_text("network:\n  version: 2\n  ethernets:\n    eth0:\n      dhcp4: maybe\n")
+    for path, accepted in ((good, True), (bad, False)):
+        result = subprocess.run(shlex.split(validate % path), capture_output=True, check=False)
+        assert (result.returncode == 0) is accepted, result.stderr
