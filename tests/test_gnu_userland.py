@@ -19,9 +19,17 @@ def test_base64_takes_the_gnu_wrap_flag() -> None:
     assert result.stdout == b"a3ViZWxhYg=="
 
 
-def test_chown_takes_long_options() -> None:
-    result = subprocess.run(["chown", "--version"], capture_output=True, text=True, check=False)
-    assert result.returncode == 0 and "GNU coreutils" in result.stdout, result.stderr
+def test_chown_takes_long_options(tmp_path) -> None:
+    """The scripts call `chown --reference`; BSD chown has no long options.
+
+    Checked by behavior, not by the `--version` banner: Ubuntu 25.10 ships uutils
+    coreutils, which takes the same options and does not print "GNU coreutils".
+    """
+    ref, target = tmp_path / "ref", tmp_path / "target"
+    ref.touch()
+    target.touch()
+    result = subprocess.run(["chown", f"--reference={ref}", str(target)], capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stderr
 
 
 def test_a_gnu_timeout_already_on_path_is_accepted(tmp_path, monkeypatch) -> None:
