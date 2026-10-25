@@ -49,6 +49,15 @@ def _match(value: str, pattern: str) -> bool:
     return re.match(pattern, value) is not None
 
 
+def _regex(
+    value: str, pattern: str, ignorecase: bool = False, multiline: bool = False, match_type: str = "search"
+) -> bool:
+    """Ansible's `regex` test, whose `match_type` names the `re` method: `fullmatch` is the
+    one that refuses a trailing newline, which `match` with a `$` lets through."""
+    flags = (re.I if ignorecase else 0) | (re.M if multiline else 0)
+    return bool(getattr(re.compile(pattern, flags), match_type)(value))
+
+
 def _regex_replace(value: str, pattern: str, replacement: str = "") -> str:
     return re.sub(pattern, replacement, value)
 
@@ -62,4 +71,5 @@ def ansible_env(templates_dir: str, **kwargs: Any) -> Environment:
     env.filters["b64decode"] = _b64decode
     env.filters["regex_replace"] = _regex_replace
     env.tests["match"] = _match
+    env.tests["regex"] = _regex
     return env

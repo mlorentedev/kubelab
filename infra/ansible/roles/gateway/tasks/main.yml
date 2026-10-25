@@ -293,14 +293,17 @@
 - name: Check the lab Wi-Fi secrets
   assert:
     that:
-      - gateway_ap_ssid | length > 0
+      - gateway_ap_ssid is regex('[^\x00-\x1f\x7f]+', match_type='fullmatch')
+      - gateway_ap_ssid.encode('utf-8') | length <= 32
       - gateway_ap_psks | length > 0
-      - gateway_ap_psks | rejectattr('psk', 'match', '^[!-~][ -~]{7,62}$') | list | length == 0
-      - gateway_ap_psks | rejectattr('keyid', 'match', '^[A-Za-z0-9_-]+$') | list | length == 0
+      - gateway_ap_psks | rejectattr('psk', 'regex', '[!-~][ -~]{6,61}[!-~]', match_type='fullmatch') | list | length == 0
+      - gateway_ap_psks | rejectattr('keyid', 'regex', '[A-Za-z0-9_-]{1,31}', match_type='fullmatch') | list | length == 0
     fail_msg: >-
-      The lab Wi-Fi needs networking.edge.lab_wifi.ssid and .psk in prod SOPS. A PSK is
-      8 to 63 printable characters and cannot start with a blank, which hostapd's PSK file
-      drops; a keyid is one word. The operator stores them with `toolkit secrets set`.
+      The lab Wi-Fi needs networking.edge.lab_wifi.ssid and .psk in prod SOPS. The SSID is
+      1 to 32 bytes with no control characters. A PSK is 8 to 63 printable ASCII characters
+      with no blank at either end: hostapd keeps one as part of the passphrase, where no
+      client's password prompt shows it. A keyid is one word of at most 31 characters. The
+      operator stores them with `toolkit secrets set`.
     quiet: true
 
 # The archive answers over the uplink, and at a portal site only after the login: a run
@@ -313,6 +316,8 @@
           - hostapd
           - iw
         state: present
+        update_cache: true
+        cache_valid_time: 3600
   rescue:
     - name: Say why the AP's packages are missing
       fail:
@@ -340,11 +345,24 @@
       FIX: remove the parameter through the rpi_boot role (#2668), then re-run.
     quiet: true
 
+# modprobe.d reaches cfg80211 when the module loads, which is at boot: it is in no
+# initramfs and is loaded already. `iw reg set` makes the running kernel agree now.
 - name: Persist the regulatory domain
   copy:
     dest: /etc/modprobe.d/kubelab-regdom.conf
     content: "options cfg80211 ieee80211_regdom={{ gateway_uplink_regdomain }}\n"
     mode: "0644"
+
+- name: Read the regulatory domain in force
+  command: iw reg get
+  register: gateway_regdomain
+  changed_when: false
+  check_mode: false
+
+- name: Set the regulatory domain
+  command: iw reg set {{ gateway_uplink_regdomain }}
+  changed_when: true
+  when: not gateway_regdomain.stdout.startswith('global\ncountry ' ~ gateway_uplink_regdomain ~ ':')
 
 - name: Read the services
   service_facts:
@@ -391,7 +409,27 @@
     src: 10-kubelab-ap.network.j2
     dest: /etc/systemd/network/10-kubelab-ap.network
     mode: "0644"
-  notify: reload networkd
+  register: gateway_ap_network
+
+- name: Read the AP interface's addresses
+  command: ip -4 -br addr show dev {{ gateway_ap_interface }}
+  register: gateway_ap_addresses
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+# A task and not a handler: a handler deferred to the end of the play is lost when a
+# later role fails, and the re-run reports changed=0 with no address on the AP. So it
+# runs whenever the address is not in place, whatever the last run did.
+- name: Apply the AP interface's address
+  command: "{{ item }}"
+  loop:
+    - networkctl reload
+    - networkctl reconfigure {{ gateway_ap_interface }}
+  changed_when: true
+  when: >-
+    gateway_ap_network is changed
+    or (' ' ~ gateway_ap_address ~ '/' ~ gateway_ap_cidr.split('/')[1]) not in (' ' ~ gateway_ap_addresses.stdout)
 
 - name: Allow DHCP in on the lab Wi-Fi
   community.general.ufw:
@@ -422,3 +460,9 @@
     name: dnsmasq
     state: started
     enabled: true
+
+# hostapd's and dnsmasq's handlers run here, inside the role, for the same reason the
+# address is a task. A play-level force_handlers would also run the uplink's netplan
+# handlers after a failure, which the uplink's ordering rules out.
+- name: Apply the AP's changes
+  meta: flush_handlers

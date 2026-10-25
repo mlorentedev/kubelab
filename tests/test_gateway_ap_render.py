@@ -153,6 +153,11 @@ def test_the_control_socket_is_where_the_reload_handler_looks() -> None:
     assert "-i {{ gateway_ap_interface }}" in reload["command"]
 
 
+def test_only_root_reaches_the_control_socket() -> None:
+    """The socket reloads PSKs and lists stations: group 0 keeps it to root."""
+    assert _hostapd()["ctrl_interface_group"] == "0"
+
+
 # --- the PSK file -----------------------------------------------------------------
 
 
@@ -206,6 +211,12 @@ def test_dnsmasq_starts_without_the_ap_interface() -> None:
     the homelab LAN's DHCP down with a failed radio. `bind-dynamic` only warns."""
     assert "bind-dynamic" in _dnsmasq()
     assert "bind-interfaces" not in _dnsmasq()
+
+
+def test_dnsmasq_answers_for_its_networks_without_waiting() -> None:
+    """It is the only DHCP server on both. Authoritative, a client whose lease it lost
+    (a reboot, a re-imaged card) gets a NAK and a new lease at once, not after a timeout."""
+    assert "dhcp-authoritative" in _dnsmasq()
 
 
 def test_every_option_names_the_network_it_is_for() -> None:
@@ -270,17 +281,58 @@ def test_complete_lab_secrets_pass_the_check() -> None:
 @pytest.mark.parametrize(
     "overrides",
     [
+        {"gateway_ap_ssid": "Lab Wi-Fi ñ 2"},
+        {"gateway_ap_ssid": "x" * 32},
+        {"gateway_ap_psks": [{"keyid": "current", "psk": "x" * 8}]},
+        {"gateway_ap_psks": [{"keyid": "current", "psk": "x" * 63}]},
+        {"gateway_ap_psks": [{"keyid": "k" * 31, "psk": "lab pass phrase"}]},
+    ],
+    ids=["utf8-ssid", "ssid-32-bytes", "psk-8", "psk-63", "keyid-31"],
+)
+def test_lab_secrets_at_the_limits_pass_the_check(overrides: dict[str, Any]) -> None:
+    assert _passes("gateway_ap_psks", **{**SECRETS, **overrides})
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
         {"gateway_ap_ssid": ""},
         {"gateway_ap_psks": []},
         {"gateway_ap_psks": [{"keyid": "current", "psk": ""}]},
         {"gateway_ap_psks": [{"keyid": "current", "psk": "x" * 7}]},
         {"gateway_ap_psks": [{"keyid": "current", "psk": "x" * 64}]},
         {"gateway_ap_psks": [{"keyid": "current", "psk": " leading blank"}]},
+        {"gateway_ap_psks": [{"keyid": "current", "psk": "trailing blank "}]},
+        {"gateway_ap_psks": [{"keyid": "current", "psk": "trailing newline\n"}]},
         {"gateway_ap_psks": [{"keyid": "current", "psk": "tab\tinside"}]},
         {"gateway_ap_psks": [{"keyid": "two words", "psk": "lab pass phrase"}]},
         {"gateway_ap_psks": [{"keyid": "", "psk": "lab pass phrase"}]},
+        {"gateway_ap_psks": [{"keyid": "current\n", "psk": "lab pass phrase"}]},
+        {"gateway_ap_psks": [{"keyid": "k" * 32, "psk": "lab pass phrase"}]},
+        {"gateway_ap_ssid": "x" * 33},
+        {"gateway_ap_ssid": "ñ" * 17},
+        {"gateway_ap_ssid": "two\nlines"},
+        {"gateway_ap_ssid": "tab\there"},
     ],
-    ids=["no-ssid", "no-psk", "empty-psk", "short", "long", "leading-blank", "tab", "keyid-blank", "keyid-empty"],
+    ids=[
+        "no-ssid",
+        "no-psk",
+        "empty-psk",
+        "short",
+        "long",
+        "leading-blank",
+        "trailing-blank",
+        "trailing-newline",
+        "tab",
+        "keyid-blank",
+        "keyid-empty",
+        "keyid-newline",
+        "keyid-32",
+        "ssid-33-bytes",
+        "ssid-34-utf8-bytes",
+        "ssid-newline",
+        "ssid-tab",
+    ],  # fmt: skip
 )
 def test_lab_secrets_hostapd_would_misread_fail_the_check(overrides: dict[str, Any]) -> None:
     assert not _passes("gateway_ap_psks", **{**SECRETS, **overrides})
@@ -307,8 +359,16 @@ def test_a_cmdline_regdomain_stops_the_run_whatever_its_value(regdomain: str) ->
     assert not _passes("ieee80211_regdom", **_cmdline(text))
 
 
+def test_the_cmdline_is_read_from_the_boot_partition_and_may_be_missing() -> None:
+    task = _task(lambda task: "slurp" in task and "gateway_cmdline" == task.get("register"))
+    assert task["slurp"]["src"] == "/boot/firmware/cmdline.txt"
+    assert task["failed_when"] is False
+
+
 def test_the_regulatory_domain_persists_for_cfg80211() -> None:
     task = _task(lambda task: (task.get("copy") or {}).get("dest", "").startswith("/etc/modprobe.d/"))
+    # modprobe reads only `*.conf` there.
+    assert task["copy"]["dest"].endswith(".conf")
     env = ansible_env(str(TEMPLATES), keep_trailing_newline=True)
     rendered = env.from_string(task["copy"]["content"]).render(**_vars())
     assert rendered == f"options cfg80211 ieee80211_regdom={EDGE['uplink']['regdomain']}\n"

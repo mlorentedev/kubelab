@@ -385,10 +385,125 @@ def test_a_psk_change_reloads_and_a_config_change_restarts() -> None:
     assert HANDLERS.index(restart) < HANDLERS.index(reload)
 
 
-def test_the_ap_unit_reloads_networkd() -> None:
-    _, unit = _template_task(AP_UNIT)
-    handler = next(h for h in HANDLERS if h["name"] == unit["notify"])
-    assert handler["command"] == "networkctl reload"
+def _address_apply() -> int:
+    return _first(lambda task: "networkctl reconfigure" in str(task.get("loop") or task.get("command")))
+
+
+def test_the_ap_address_is_applied_before_hostapd_starts() -> None:
+    """Applied by a task, not a handler: a handler deferred to the end of the play is lost
+    when a later role fails, and the re-run then reports `changed=0` with no address."""
+    unit, task = _template_task(AP_UNIT)
+    assert "notify" not in task
+    read = _first(lambda t: "ip -4 -br addr show dev {{ gateway_ap_interface }}" in str(t.get("command")))
+    assert unit < _address_apply() < _hostapd_start()
+    assert read < _address_apply()
+    assert TASKS[read]["changed_when"] is False
+    assert TASKS[read]["failed_when"] is False
+    assert TASKS[read]["check_mode"] is False
+    assert TASKS[_address_apply()]["loop"] == ["networkctl reload", "networkctl reconfigure {{ gateway_ap_interface }}"]
+    assert not any(h["name"] == "reload networkd" for h in HANDLERS)
+
+
+@pytest.mark.parametrize(
+    ("changed", "stdout", "applies"),
+    [
+        (True, "wlan0 UP 10.0.0.1/24", True),
+        (False, "", True),
+        (False, "wlan0 DOWN ", True),
+        (False, "wlan0 UP 10.0.0.10/24", True),
+        (False, "wlan0 UP 10.0.0.1/24", False),
+    ],
+    ids=["unit-changed", "no-interface", "no-address", "another-address", "in-place"],
+)
+def test_the_ap_address_is_applied_whenever_it_is_not_in_place(changed: bool, stdout: str, applies: bool) -> None:
+    task = TASKS[_address_apply()]
+    unit_register = _template_task(AP_UNIT)[1]["register"]
+    read_register = TASKS[_first(lambda t: "ip -4 -br addr" in str(t.get("command")))]["register"]
+    env = ansible_env(str(ROLE / "templates"))
+    variables = {
+        unit_register: {"changed": changed},
+        read_register: {"stdout": stdout},
+        "gateway_ap_address": "10.0.0.1",
+        "gateway_ap_cidr": "10.0.0.0/24",
+    }
+    # Ansible's `is changed` reads the result's `changed` key.
+    env.tests["changed"] = lambda result: bool(result.get("changed"))
+    assert bool(env.compile_expression(task["when"])(**variables)) is applies
+
+
+def test_the_ap_handlers_run_inside_the_role() -> None:
+    """A play-level `force_handlers` would reorder the uplink's netplan handlers, so the
+    role flushes its own after the last task that notifies one."""
+    flush = [i for i, task in enumerate(TASKS) if task.get("meta") == "flush_handlers"]
+    last_notify = max(i for i, task in enumerate(TASKS) if "notify" in task)
+    assert any(i > last_notify for i in flush)
+    plays = yaml.safe_load((REPO / "infra" / "ansible" / "playbooks" / "provision-rpi4.yml").read_text())
+    assert not any("force_handlers" in play for play in plays)
+
+
+def test_the_ap_starts_in_check_mode_only_where_the_package_is_installed() -> None:
+    assert TASKS[_hostapd_start()]["when"] == "not ansible_check_mode or 'hostapd.service' in ansible_facts.services"
+
+
+def _regdomain_set() -> int:
+    return _first(lambda task: "iw reg set" in str(task.get("command")))
+
+
+def test_the_regulatory_domain_is_persisted_and_set_before_hostapd_starts() -> None:
+    """modprobe.d reaches cfg80211 only when the module loads, which is boot here: the
+    module is built into no initramfs and is loaded already."""
+    persist = _first(lambda task: (task.get("copy") or {}).get("dest", "").startswith("/etc/modprobe.d/"))
+    read = _first(lambda task: str(task.get("command")) == "iw reg get")
+    assert persist < _hostapd_start()
+    assert read < _regdomain_set() < _hostapd_start()
+    assert TASKS[read]["changed_when"] is False
+    assert TASKS[read]["check_mode"] is False
+    assert TASKS[_regdomain_set()]["command"] == "iw reg set {{ gateway_uplink_regdomain }}"
+
+
+@pytest.mark.parametrize(
+    ("stdout", "sets"),
+    [
+        ("global\ncountry US: DFS-FCC\n\t(2402 - 2472 @ 40), (N/A, 30), (N/A)", False),
+        ("global\ncountry ES: DFS-ETSI\n\t(2400 - 2483 @ 40), (N/A, 20), (N/A)", True),
+        ("global\ncountry 00: DFS-UNSET\n", True),
+        ("phy#0\ncountry US: DFS-FCC\n", True),
+        ("", True),
+    ],
+    ids=["in-force", "another-country", "world", "only-a-phy", "unreadable"],
+)
+def test_the_regulatory_domain_is_set_whenever_it_is_not_in_force(stdout: str, sets: bool) -> None:
+    task = TASKS[_regdomain_set()]
+    read = TASKS[_first(lambda t: str(t.get("command")) == "iw reg get")]["register"]
+    env = ansible_env(str(ROLE / "templates"))
+    variables = {read: {"stdout": stdout}, "gateway_uplink_regdomain": "US"}
+    assert bool(env.compile_expression(task["when"])(**variables)) is sets
+
+
+@pytest.mark.parametrize(
+    ("rc", "lines", "fails"),
+    [
+        (0, ["OK"], False),
+        (0, ["Selected interface 'wlan0'", "OK"], False),
+        (0, ["FAIL"], True),
+        (0, [], True),
+        (255, ["Failed to connect to hostapd - wpa_ctrl_open: No such file or directory"], True),
+    ],
+    ids=["ok", "ok-after-banner", "fail-reply", "no-reply", "no-socket"],
+)
+def test_a_psk_reload_that_hostapd_refuses_fails_the_run(rc: int, lines: list[str], fails: bool) -> None:
+    """hostapd_cli exits 0 on a FAIL reply, so the rc alone would pass a refused reload."""
+    handler = next(h for h in HANDLERS if "reload_wpa_psk" in str(h.get("command")))
+    env = ansible_env(str(ROLE / "templates"))
+    result = {"rc": rc, "stdout_lines": lines}
+    assert bool(env.compile_expression(handler["failed_when"])(**{handler["register"]: result})) is fails
+
+
+def test_the_ap_packages_come_from_a_fresh_index() -> None:
+    """The image's index is as old as the image; a stale one asks for files the mirror dropped."""
+    apt = TASKS[_ap_install()]["block"][0]["apt"]
+    assert apt["update_cache"] is True
+    assert apt["cache_valid_time"] > 0
 
 
 def test_ufw_lets_dhcp_in_on_the_lab_wifi() -> None:

@@ -6,6 +6,9 @@ port=0
 interface={{ gateway_interface }}
 interface={{ gateway_ap_interface }}
 bind-dynamic
+# The only DHCP server on both networks: a client whose lease it lost (a reboot, a
+# re-imaged card) gets a NAK and a new lease at once, not after a timeout.
+dhcp-authoritative
 
 # An untagged option applies to every range, so each network's options carry its tag.
 
