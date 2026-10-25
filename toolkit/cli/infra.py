@@ -198,7 +198,7 @@ def edge_status() -> None:
     """Say whether the edge's uplink is up, behind a portal, or dead.
 
     Runs the gateway role's check on the edge over its LAN address and exits with
-    its code: 0 up, 2 portal, 3 dead (255 when SSH itself fails).
+    its code: 0 up, 2 portal, 3 dead, 4 unknown (255 when SSH itself fails).
     """
     from toolkit.features.configuration import ConfigurationManager
     from toolkit.features.edge_status import EdgeNotDeclaredError, run_status

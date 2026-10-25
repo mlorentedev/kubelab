@@ -8,6 +8,7 @@
 #   0   up: the connectivity check answered 204 over the uplink
 #   2   portal: it answered something else, which is a portal's redirect or page
 #   3   dead: no adapter, no lease, no resolver, or no HTTP answer
+#   4   unknown: the lease exists but this user cannot read it
 #   64  usage
 #
 # The check goes out the uplink by name, so the tailnet or the LAN cannot answer for
@@ -71,7 +72,15 @@ public_report="not asked"
 lease_report="not asked"
 ifindex=$(cat "$sys_net/$uplink/ifindex" 2>/dev/null)
 [ -n "$ifindex" ] || report "dead (no adapter named $uplink)" 3
-address=$(field ADDRESS "$leases_dir/$ifindex")
+lease_file=$leases_dir/$ifindex
+# networkd writes its leases world-readable. One this user cannot read says nothing
+# about the uplink, so it is not reported as a missing lease.
+if { [ -d "$leases_dir" ] && ! [ -x "$leases_dir" ]; } ||
+  { [ -e "$lease_file" ] && ! [ -r "$lease_file" ]; }; then
+  lease=unreadable
+  report "unknown (cannot read the lease as $(id -un))" 4
+fi
+address=$(field ADDRESS "$lease_file")
 [ -n "$address" ] || report "dead (no DHCP lease)" 3
 lease=yes
 
@@ -85,7 +94,7 @@ public_report=${public_ip:+answers}
 public_report=${public_report:-no answer}
 
 lease_ip=
-lease_dns=$(field DNS "$leases_dir/$ifindex" | cut -d ' ' -f 1)
+lease_dns=$(field DNS "$lease_file" | cut -d ' ' -f 1)
 if [ -z "$lease_dns" ]; then
   lease_report="none offered"
 else
