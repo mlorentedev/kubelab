@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import re
 from pathlib import Path
 from typing import Any
@@ -26,7 +27,8 @@ ROLE = REPO / "infra" / "ansible" / "roles" / "gateway"
 TASKS: list[dict[str, Any]] = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text())
 HANDLERS: list[dict[str, Any]] = yaml.safe_load((ROLE / "handlers" / "main.yml").read_text())
 DEFAULTS: dict[str, Any] = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text())
-NODES = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text())["networking"]["nodes"]
+NETWORKING = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text())["networking"]
+NODES = NETWORKING["nodes"]
 EDGE = {name for name, node in NODES.items() if "gateway" in ((node or {}).get("ansible_groups") or [])}
 ANSIBLE = REPO / "infra" / "ansible"
 
@@ -510,14 +512,19 @@ def test_the_ap_address_is_applied_before_hostapd_starts() -> None:
     assert not any(h["name"] == "reload networkd" for h in HANDLERS)
 
 
+LAB_NET = ipaddress.ip_network(NETWORKING["edge"]["lab_wifi"]["cidr"])
+LAB_GATEWAY = NETWORKING["edge"]["lab_wifi"]["gateway"]
+LAB_OTHER = str(ipaddress.ip_address(LAB_GATEWAY) + 9)
+
+
 @pytest.mark.parametrize(
     ("changed", "stdout", "applies"),
     [
-        (True, "wlan0 UP 10.0.0.1/24", True),
+        (True, f"wlan0 UP {LAB_GATEWAY}/{LAB_NET.prefixlen}", True),
         (False, "", True),
         (False, "wlan0 DOWN ", True),
-        (False, "wlan0 UP 10.0.0.10/24", True),
-        (False, "wlan0 UP 10.0.0.1/24", False),
+        (False, f"wlan0 UP {LAB_OTHER}/{LAB_NET.prefixlen}", True),
+        (False, f"wlan0 UP {LAB_GATEWAY}/{LAB_NET.prefixlen}", False),
     ],
     ids=["unit-changed", "no-interface", "no-address", "another-address", "in-place"],
 )
@@ -529,8 +536,8 @@ def test_the_ap_address_is_applied_whenever_it_is_not_in_place(changed: bool, st
     variables = {
         unit_register: {"changed": changed},
         read_register: {"stdout": stdout},
-        "gateway_ap_address": "10.0.0.1",
-        "gateway_ap_cidr": "10.0.0.0/24",
+        "gateway_ap_address": LAB_GATEWAY,
+        "gateway_ap_cidr": str(LAB_NET),
     }
     # Ansible's `is changed` reads the result's `changed` key.
     env.tests["changed"] = lambda result: bool(result.get("changed"))
