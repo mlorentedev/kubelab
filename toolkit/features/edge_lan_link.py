@@ -3,7 +3,9 @@
 The edge serves DHCP on the lab LAN, so the profile asks for a lease and renders
 only what a lease cannot say: whether the edge may be the default route and the
 DNS (only for the portal login, with the laptop's own Wi-Fi off), and a rule that
-sends `networking.lan_cidr` out the wire.
+sends `networking.lan_cidr` out the wire. When the edge serves no DHCP (a freshly
+flashed SD card, or a provision that cut the LAN), the static mode holds a fixed
+address instead.
 
 The rule is the reason this is not a plain DHCP profile. The edge advertises the
 lab LAN to the tailnet, and on a laptop that accepts routes tailscale's
@@ -34,12 +36,22 @@ class LanLinkRefused(RuntimeError):
     """The laptop cannot take the profile as asked."""
 
 
-def profile_settings(lan_cidr: str, route: bool) -> list[str]:
+def static_address(lan_cidr: str) -> str:
+    """The laptop's address when there is no lease: the CIDR's last host, above the
+    edge's DHCP pool and every node's address."""
+    cidr = ipaddress.ip_network(lan_cidr)
+    return f"{cidr.broadcast_address - 1}/{cidr.prefixlen}"
+
+
+def profile_settings(lan_cidr: str, route: bool, static: bool = False) -> list[str]:
     """The profile's settings, as nmcli `setting value` pairs."""
     cidr = ipaddress.ip_network(lan_cidr)
     return [
         "ipv4.method",
-        "auto",
+        "manual" if static else "auto",
+        # Empty clears an address a static run left: `modify` keeps what it is not told.
+        "ipv4.addresses",
+        static_address(lan_cidr) if static else "",
         "ipv4.never-default",
         "no" if route else "yes",
         "ipv4.ignore-auto-dns",
@@ -85,6 +97,7 @@ def apply(
     *,
     route: bool = False,
     remove: bool = False,
+    static: bool = False,
     interface: str | None = None,
     run: Runner = subprocess.run,
 ) -> int:
@@ -99,7 +112,7 @@ def apply(
     if remove:
         return _write(run, ["nmcli", "connection", "delete", PROFILE]) if exists else 0
 
-    settings = profile_settings(lan_cidr, route)
+    settings = profile_settings(lan_cidr, route, static)
     adapter = _adapter(run, interface)
     if exists:
         first = ["nmcli", "connection", "modify", PROFILE, "connection.interface-name", adapter, *settings]

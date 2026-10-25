@@ -219,24 +219,26 @@ def edge_lan_link(
         bool, typer.Option("--route", help="Make the edge the default route, for the portal login")
     ] = False,
     remove: Annotated[bool, typer.Option("--remove", help="Delete the profile")] = False,
+    static: Annotated[bool, typer.Option("--static", help="A fixed address, for when the edge serves no DHCP")] = False,
     interface: Annotated[
         str | None, typer.Option("--interface", help="The adapter on the lab switch, if not the only one")
     ] = None,
 ) -> None:
     """Join this laptop to the lab LAN with a NetworkManager profile (NET-005 AC11).
 
-    DHCP from the edge, the lab LAN routed out the wire ahead of the tailnet, and by
-    default neither the edge's default route nor its DNS.
+    DHCP from the edge, or a fixed address when it serves none, the lab LAN routed
+    out the wire ahead of the tailnet, and by default neither the edge's default
+    route nor its DNS.
     """
     from toolkit.features.configuration import ConfigurationManager
     from toolkit.features.edge_lan_link import LanLinkRefused, apply
 
-    if route and remove:
-        logger.error("--route and --remove contradict each other: pick one")
+    if route + remove + static > 1:
+        logger.error("--route, --static and --remove contradict each other: pick one")
         raise typer.Exit(1)
     net = ConfigurationManager("prod", settings.project_root).get_plaintext_values()["networking"]
     try:
-        code = apply(net["lan_cidr"], route=route, remove=remove, interface=interface)
+        code = apply(net["lan_cidr"], route=route, remove=remove, static=static, interface=interface)
     except LanLinkRefused as e:
         logger.error(str(e))
         raise typer.Exit(1) from e

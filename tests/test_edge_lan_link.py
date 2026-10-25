@@ -8,6 +8,8 @@ cannot say:
   The laptop keeps its own internet and reaches the LAN beside it;
 - `ROUTE=1`: the edge becomes the default route, for the portal login with the
   laptop's own Wi-Fi off;
+- `STATIC=1`: a fixed address instead of a lease, for when the edge serves no
+  DHCP: a freshly flashed SD card, or a provision that cut the LAN;
 - `REMOVE=1`: the profile goes, and nothing else does.
 
 Either way, `networking.lan_cidr` is routed out the wire by a rule that comes
@@ -35,6 +37,9 @@ REPO = Path(__file__).resolve().parents[1]
 NETWORKING = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text())["networking"]
 LAN_CIDR = NETWORKING["lan_cidr"]
 TAILSCALE_TABLE_RULE = 5270  # `from all lookup 52`, measured on the operator's laptop
+GATEWAY_DEFAULTS = yaml.safe_load(
+    (REPO / "infra" / "ansible" / "roles" / "gateway" / "defaults" / "main.yml").read_text()
+)
 ADAPTER = "enx020000000001"
 DEVICES = f"{ADAPTER}:ethernet:connected\nveth01916b3:ethernet:unmanaged\nwlp1s0:wifi:connected\n"
 
@@ -91,6 +96,45 @@ def test_route_mode_makes_the_edge_the_default_route() -> None:
     assert settings["ipv4.never-default"] == "no"
     assert settings["ipv4.ignore-auto-dns"] == "no", "the portal's names resolve through the edge"
     assert settings["ipv6.method"] == "disabled"
+
+
+def test_static_mode_holds_an_address_without_a_lease() -> None:
+    """The hand profile it replaces was static because the edge served no DHCP."""
+    from toolkit.features.edge_lan_link import static_address
+
+    nmcli = Nmcli()
+    assert _link(nmcli, static=True) == 0
+    settings = _settings(nmcli.writes[0])
+    assert settings["ipv4.method"] == "manual"
+    assert settings["ipv4.addresses"] == static_address(LAN_CIDR)
+    assert settings["ipv4.never-default"] == "yes"
+    assert settings["ipv6.method"] == "disabled"
+
+
+def test_the_static_address_is_free_on_the_lan() -> None:
+    """Outside the edge's DHCP pool and every node's address, so it collides with neither."""
+    from toolkit.features.edge_lan_link import static_address
+
+    interface = ipaddress.ip_interface(static_address(LAN_CIDR))
+    assert interface.network == ipaddress.ip_network(LAN_CIDR)
+    address = interface.ip
+    assert address in set(interface.network.hosts())
+    pool = (
+        ipaddress.ip_address(GATEWAY_DEFAULTS["gateway_dhcp_range_start"]),
+        ipaddress.ip_address(GATEWAY_DEFAULTS["gateway_dhcp_range_end"]),
+    )
+    assert not pool[0] <= address <= pool[1]
+    taken = {node["lan_ip"] for node in NETWORKING["nodes"].values() if "lan_ip" in node}
+    assert str(address) not in taken
+
+
+def test_a_lease_mode_clears_an_address_a_static_run_left() -> None:
+    """`modify` keeps what it is not told: a static address would ride along with the lease."""
+    from toolkit.features.edge_lan_link import PROFILE
+
+    nmcli = Nmcli(profiles=f"{PROFILE}\n")
+    _link(nmcli)
+    assert _settings(nmcli.writes[0])["ipv4.addresses"] == ""
 
 
 @pytest.mark.parametrize("route", [False, True])
@@ -215,10 +259,11 @@ def test_a_failed_add_fails_the_target_and_brings_nothing_up() -> None:
 @pytest.mark.parametrize(
     ("args", "expected"),
     [
-        ([], {"route": False, "remove": False, "interface": None}),
-        (["--route"], {"route": True, "remove": False, "interface": None}),
-        (["--remove"], {"route": False, "remove": True, "interface": None}),
-        (["--interface", ADAPTER], {"route": False, "remove": False, "interface": ADAPTER}),
+        ([], {"route": False, "remove": False, "static": False, "interface": None}),
+        (["--route"], {"route": True, "remove": False, "static": False, "interface": None}),
+        (["--remove"], {"route": False, "remove": True, "static": False, "interface": None}),
+        (["--static"], {"route": False, "remove": False, "static": True, "interface": None}),
+        (["--interface", ADAPTER], {"route": False, "remove": False, "static": False, "interface": ADAPTER}),
     ],
 )
 def test_the_command_passes_the_ssot_cidr_and_the_mode(args: list[str], expected: dict[str, Any]) -> None:
@@ -233,13 +278,19 @@ def test_the_command_passes_the_ssot_cidr_and_the_mode(args: list[str], expected
     assert apply.call_args.kwargs == expected
 
 
-def test_route_and_remove_together_are_refused() -> None:
+@pytest.mark.parametrize(
+    "flags",
+    [["--route", "--remove"], ["--route", "--static"], ["--static", "--remove"]],
+    ids=lambda flags: "+".join(flag.strip("-") for flag in flags),
+)
+def test_contradictory_modes_are_refused(flags: list[str]) -> None:
+    """A static address has no edge to route through, and removal takes no mode."""
     from typer.testing import CliRunner
 
     from toolkit.cli.infra import app
 
     with mock.patch("toolkit.features.edge_lan_link.apply") as apply:
-        result = CliRunner().invoke(app, ["edge", "lan-link", "--route", "--remove"])
+        result = CliRunner().invoke(app, ["edge", "lan-link", *flags])
     assert result.exit_code == 1
     assert not apply.called
 
@@ -250,5 +301,10 @@ def test_the_makefile_target_calls_the_command() -> None:
     assert target, "no edge-lan-link target"
     recipe = target.group(1)
     assert "infra edge lan-link" in recipe
-    for make_var, flag in [("ROUTE", "--route"), ("REMOVE", "--remove"), ("IFACE", "--interface $(IFACE)")]:
+    for make_var, flag in [
+        ("ROUTE", "--route"),
+        ("REMOVE", "--remove"),
+        ("STATIC", "--static"),
+        ("IFACE", "--interface $(IFACE)"),
+    ]:
         assert f"$(if $({make_var}),{flag}" in recipe, make_var

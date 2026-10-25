@@ -1953,11 +1953,12 @@ edge-status: ## Report the lab edge's uplink: up, portal or dead
 
 # Join this laptop to the lab LAN, the edge's management path (NET-005 AC11).
 # ROUTE=1 makes the edge the default route, for the portal login with the
-# laptop's own Wi-Fi off; REMOVE=1 deletes the profile; IFACE names the adapter
-# when there is more than one.
+# laptop's own Wi-Fi off; STATIC=1 holds a fixed address when the edge serves
+# no DHCP (a fresh SD card, a provision that cut the LAN); REMOVE=1 deletes the
+# profile; IFACE names the adapter when there is more than one.
 .PHONY: edge-lan-link
-edge-lan-link: ## Join this laptop to the lab LAN [ROUTE=1] [REMOVE=1] [IFACE=<device>]
-	@$(TOOLKIT) infra edge lan-link $(if $(ROUTE),--route) $(if $(REMOVE),--remove) $(if $(IFACE),--interface $(IFACE))
+edge-lan-link: ## Join this laptop to the lab LAN [ROUTE=1] [STATIC=1] [REMOVE=1] [IFACE=<device>]
+	@$(TOOLKIT) infra edge lan-link $(if $(ROUTE),--route) $(if $(STATIC),--static) $(if $(REMOVE),--remove) $(if $(IFACE),--interface $(IFACE))
 
 # Run a CronJob once now, print its log and delete the Job (TOOL-084). For the
 # watchers (`r2-backup-watcher`, ...) the log IS the verdict, so this is how to
