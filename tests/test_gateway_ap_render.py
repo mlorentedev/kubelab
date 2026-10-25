@@ -118,6 +118,32 @@ def test_the_ap_runs_wpa2_ccmp_on_the_profile_channel() -> None:
     }.items() <= conf.items()
 
 
+AP_SSOT_VARS = {
+    "gateway_ap_channel": EDGE["uplink"]["channel"],
+    "gateway_ap_cidr": LAB["cidr"],
+    "gateway_ap_address": LAB["gateway"],
+    "gateway_ap_dhcp_range_start": LAB["dhcp_range"]["start"],
+    "gateway_ap_dhcp_range_end": LAB["dhcp_range"]["end"],
+}
+
+
+@pytest.mark.parametrize("name", AP_SSOT_VARS)
+def test_the_role_keeps_no_copy_of_the_ap_addresses(name: str) -> None:
+    """A run without the play's vars stops instead of rendering a stale subnet."""
+    (check,) = [t for t in TASKS if t.get("name") == "Check the lab Wi-Fi addresses"]
+    env = ansible_env(str(ROLE))
+
+    def holds(variables: dict[str, Any]) -> bool:
+        return all(
+            env.from_string("{{ (" + condition + ") | bool }}").render(**variables) == "True"
+            for condition in check["assert"]["that"]
+        )
+
+    assert DEFAULTS[name] == ""
+    assert holds(AP_SSOT_VARS)
+    assert not holds({**AP_SSOT_VARS, name: DEFAULTS[name]})
+
+
 def test_the_ap_serves_802_11n() -> None:
     """Without both, 2.4 GHz falls back to 802.11g's 54 Mbit/s."""
     conf = _hostapd()
