@@ -38,9 +38,9 @@ make edge-status
 
 The edge runs the check itself, against a connectivity-check URL bound to the uplink, and the target reaches it over SSH at its LAN address. It answers from the switch and from the lab Wi-Fi, not over the tailnet.
 
-Read the state from the `uplink:` line it prints. make turns every failing recipe into exit 2, so through `make edge-status` a portal, a dead uplink and an unknown one all exit 2. The codes below are `toolkit infra edge status`'s, the command the target runs, for a script that needs them; `unknown` arrives with #2674.
+Read the state from the `uplink:` line it prints. make turns every failing recipe into exit 2, so through `make edge-status` a portal, a dead uplink and an unknown one all exit 2. The codes below are `toolkit infra edge status`'s, the command the target runs, for a script that needs them.
 
-| Exit | State | Meaning |
+| `toolkit infra edge status` exit | State | Meaning |
 |------|-------|---------|
 | 0 | `up` | The connectivity check answered `204`. |
 | 2 | `portal` | A redirect or a `200`: a captive portal holds the uplink. Log in (below). |

@@ -43,8 +43,12 @@ def _outside_make(text: str) -> list[str]:
 
 
 def test_the_runbook_has_commands_to_check() -> None:
-    """Guard the guard: a fence pattern that matched nothing would pass any runbook."""
-    assert len(_shell_lines(RUNBOOK.read_text(encoding="utf-8"))) >= 5
+    """Guard the guard: a fence pattern that matched nothing would pass any runbook,
+    and an untagged fence is one the pattern never reads."""
+    text = RUNBOOK.read_text(encoding="utf-8")
+    assert len(_shell_lines(text)) >= 5
+    openers = re.findall(r"^[ \t]*```(.*)$", text, re.M)[::2]
+    assert all(tag.strip() for tag in openers), "an untagged fence: tag it `bash` if it holds commands"
 
 
 def test_every_command_in_the_runbook_is_a_make_target() -> None:
@@ -77,8 +81,10 @@ def test_no_instruction_names_an_adapter_by_its_mac(doc: Path) -> None:
 
 
 def test_the_ledger_names_only_scanned_documents() -> None:
-    """An entry outside the scan would excuse nothing, and hide that the scan narrowed."""
+    """An entry outside the scan would excuse nothing, and hide that the scan narrowed.
+    The scan must see the runbook too: a moved directory would collect no case at all."""
     scanned = {str(path.relative_to(REPO)) for path in _documents()}
+    assert str(RUNBOOK.relative_to(REPO)) in scanned, f"the MAC scan does not read {RUNBOOK.name}"
     assert set(KNOWN_MAC_NAMES) <= scanned, f"not scanned: {sorted(set(KNOWN_MAC_NAMES) - scanned)}"
 
 
