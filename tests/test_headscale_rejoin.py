@@ -227,12 +227,15 @@ def _named(role: dict[str, Any]) -> str:
 def test_a_rejoin_pins_headscale_before_it_runs_up(playbook: Path) -> None:
     """A node off the mesh may still point its resolver at MagicDNS, which answers
     nothing then: `--tags tailscale` has to reach dns_resilience's /etc/hosts line for
-    the login server first (#1259)."""
+    the login server first (#1259). The role itself needs the tag as much: its tasks
+    carry none, so without it the rejoin runs the pin alone and reports success."""
     names = [_named(r) for r in _roles(playbook)]
     assert "dns_resilience" in names, f"{playbook.name} runs tailscale without pinning Headscale"
     pin = _roles(playbook)[names.index("dns_resilience")]
     assert names.index("dns_resilience") < names.index("tailscale")
     assert "tailscale" in pin.get("tags", []), "a rejoin runs --tags tailscale and would skip the pin"
+    role = _roles(playbook)[names.index("tailscale")]
+    assert "tailscale" in role.get("tags", []), "a rejoin runs --tags tailscale and would skip the role"
 
 
 # --------------------------------------------------------------- the operator's side
