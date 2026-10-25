@@ -106,9 +106,8 @@
       vars:
         gateway_interface: "eth0"
         gateway_lan_cidr: "{{ config.networking.nodes.rpi4.lan_ip }}/24"
-        gateway_uplink_interfaces:
-          - "enx*"
-          - "wlan0"
+        gateway_uplink_interface: "{{ config.networking.edge.uplink.interface }}"
+        gateway_ap_interface: "{{ config.networking.edge.lab_wifi.interface }}"
         gateway_dhcp_reservations:
           - mac: "{{ config.networking.nodes.ace1.mac }}"
             hostname: "kubelab-ace1"

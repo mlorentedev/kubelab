@@ -28,13 +28,12 @@
     - avahi-daemon.socket
   failed_when: false
 
-- name: Set static resolv.conf
-  shell: |
-    chattr -i /etc/resolv.conf 2>/dev/null || true
-    rm -f /etc/resolv.conf
-    printf 'nameserver 8.8.8.8\nnameserver 1.1.1.1\n' > /etc/resolv.conf
-    chmod 644 /etc/resolv.conf
-  changed_when: false
+# A file, not the resolved stub symlink: the template replaces the link itself.
+- name: Deploy the static resolver
+  template:
+    src: resolv.conf.j2
+    dest: /etc/resolv.conf
+    mode: "0644"
 
 - name: Set UFW default forward policy to ACCEPT
   lineinfile:
@@ -43,6 +42,16 @@
     line: 'DEFAULT_FORWARD_POLICY="ACCEPT"'
   notify: reload ufw
 
+# Delivered traffic must pass both ufw and inet kubelab, and ufw drops DHCP on
+# eth0 by default: that is why the homelab LAN had no DHCP (ADR-075 D3).
+- name: Allow DHCP in on the homelab LAN
+  community.general.ufw:
+    rule: allow
+    direction: in
+    interface_in: "{{ gateway_interface }}"
+    proto: udp
+    port: "67"
+
 - name: Install gateway packages
   apt:
     name:
@@ -50,11 +59,13 @@
       - dnsmasq
     state: present
 
-- name: Deploy nftables NAT config
+# It loads over the LAN session that provisions the edge, so it is checked first.
+- name: Deploy the edge ruleset
   template:
     src: nftables.conf.j2
     dest: /etc/nftables.conf
     mode: "0644"
+    validate: nft -c -f %s
   notify: restart nftables
 
 - name: Enable nftables
@@ -62,6 +73,31 @@
     name: nftables
     state: started
     enabled: true
+
+# Strict rp_filter under a subnet router needs this floor (tailscale/tailscale#18860).
+- name: Read the installed Tailscale version
+  command: tailscale version
+  register: gateway_tailscale_version
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Assert Tailscale supports strict rp_filter
+  assert:
+    that: >-
+      gateway_tailscale_version.rc != 0 or
+      gateway_tailscale_version.stdout_lines[0] is version(gateway_tailscale_min_version, '>=')
+    fail_msg: >-
+      Tailscale {{ gateway_tailscale_version.stdout_lines[0] | default('?') }} is older than
+      {{ gateway_tailscale_min_version }}. Upgrade it before the strict rp_filter loads.
+      An absent binary passes: the tailscale role installs a current one later in the play.
+
+- name: Deploy the edge sysctls
+  template:
+    src: 99-kubelab-edge.conf.j2
+    dest: /etc/sysctl.d/99-kubelab-edge.conf
+    mode: "0644"
+  notify: restart systemd-sysctl
 
 - name: Deploy dnsmasq DHCP config
   template:
