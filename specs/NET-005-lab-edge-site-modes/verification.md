@@ -83,7 +83,7 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 
   Both are replaced by the AC11 target and removed once it exists.
 - **The uplink is checked, never rebooted for (AC13), 2026-10-25.** Task 28 has the liveness check the uplink's lease, and AC13 recovers the edge "where a reboot can". A present adapter with no lease is the site (down, out of range, a changed passphrase), which a reboot cannot fix, and the reboot would cost rpi3 its Wi-Fi and the homelab its route. So the check reports it after the grace and does nothing else. An adapter that disappeared gets its driver reloaded once per incident; an unplugged one looks the same, so the edge does no more.
-- **The AP's `operstate` under hostapd (AC13), pending B10.** The check reads `up`, as task 28 words it; brcmfmac turns the carrier on when it starts the BSS. B10 reads it on the edge with the AP serving. A driver that reported anything else would escalate on a healthy AP, two reboots an hour at most.
+- **The AP's `operstate` under hostapd (AC13), pending B10.** The check reads `up`, as task 28 words it; brcmfmac turns the carrier on when it starts the BSS. B10 reads it on the edge with the AP serving. A driver that reported anything else would escalate on a healthy AP, two reboots an hour at most. B10 also shows whether the unload succeeds on the serving edge: `brcmfmac_wcc` holding `brcmfmac` was read with `wlan0` down and no hostapd, and the ladder stops hostapd before the unload.
 -
 
 ## Promotion candidates
