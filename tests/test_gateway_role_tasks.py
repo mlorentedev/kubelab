@@ -659,3 +659,45 @@ def test_ufw_lets_dhcp_in_on_the_lab_wifi() -> None:
         "proto": "udp",
         "port": "67",
     } in rules
+
+
+def _units() -> dict[str, str]:
+    """Every unit the role writes under /etc/systemd/system, by name, with its template's text."""
+    units: dict[str, str] = {}
+    for task in _in_order(TASKS):
+        args = _module(task, *TEMPLATE_MODULES)
+        if not args or not str(args.get("dest", "")).startswith("/etc/systemd/system/"):
+            continue
+        for item in task.get("loop") or [""]:
+            name = str(args["dest"]).replace("{{ item }}", item).rsplit("/", 1)[1]
+            units[name] = (ROLE / "templates" / str(args["src"]).replace("{{ item }}", item)).read_text()
+    return units
+
+
+def _section(unit: str, name: str) -> list[str]:
+    """The lines of one section of a unit file."""
+    lines: list[str] = []
+    current = None
+    for line in unit.splitlines():
+        if line.startswith("["):
+            current = line.strip()
+        elif current == f"[{name}]":
+            lines.append(line.strip())
+    return lines
+
+
+NOTIFY = "kubelab-notify@%n.service"
+PAGE = "KUBELAB_NOTIFY_SEVERITY=page"
+
+
+def test_every_edge_unit_that_notifies_pages() -> None:
+    """When one of the edge's units fails, the lab is off the network: a `log` line read later is too late (#2684).
+
+    systemd reads `Environment=` only in [Service] and ignores it elsewhere, so the
+    declaration is looked for there and nowhere else.
+    """
+    units = _units()
+    notifying = {name for name, unit in units.items() if f"OnFailure={NOTIFY}" in _section(unit, "Unit")}
+    paging = {name for name, unit in units.items() if f"Environment={PAGE}" in _section(unit, "Service")}
+    assert notifying, "no edge unit notifies: the derivation is wrong, not the edge silent"
+    assert paging == notifying

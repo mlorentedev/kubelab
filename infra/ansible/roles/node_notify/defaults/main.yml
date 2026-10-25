@@ -42,10 +42,13 @@ node_notify_body_bytes: 2000
 # n8n routes by severity. `log` is the ratified level for fleet maintenance and
 # backup failures (2026-08-15) — they are actionable, not page-worthy.
 #
-# A unit whose failure needs a person now says so itself, beside the line that
-# wires it here (#2684):
+# A unit whose failure needs a person now says so itself, in the unit that wires
+# it here (#2684). `Environment=` belongs in [Service]: systemd ignores it in
+# [Unit], and the unit would post at this default.
 #
+#     [Unit]
 #     OnFailure=kubelab-notify@%n.service
+#     [Service]
 #     Environment=KUBELAB_NOTIFY_SEVERITY=page
 #
 # The script reads it from systemd at run time. A value rendered into the script

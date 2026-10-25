@@ -10,6 +10,9 @@ OnSuccess=kubelab-notify-recovered@%n.service
 
 [Service]
 Type=oneshot
+# A failure here takes the lab off the network, so it pages rather than logs
+# (#2684). node_notify reads this from systemd when the unit fails.
+Environment=KUBELAB_NOTIFY_SEVERITY=page
 Environment=EDGE_LIVENESS_GRACE={{ gateway_liveness_grace }}
 Environment=EDGE_LIVENESS_MAX_REBOOTS={{ gateway_liveness_max_reboots }}
 # A oneshot has no start timeout by default, and a wedged driver can hang the

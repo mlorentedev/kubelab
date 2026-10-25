@@ -17,6 +17,9 @@ OnFailure=kubelab-notify@%n.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+# A failure here takes the lab off the network, so it pages rather than logs
+# (#2684). node_notify reads this from systemd when the unit fails.
+Environment=KUBELAB_NOTIFY_SEVERITY=page
 # Clear what the last start left: a restart would otherwise stack a second
 # redirect filter, and `ip link add` would fail on the IFB that already exists.
 ExecStartPre=-/usr/sbin/tc qdisc del dev {{ gateway_uplink_interface }} ingress

@@ -12,6 +12,9 @@ OnSuccess=kubelab-notify-recovered@%n.service
 
 [Service]
 Type=oneshot
+# A failure here takes the lab off the network, so it pages rather than logs
+# (#2684). node_notify reads this from systemd when the unit fails.
+Environment=KUBELAB_NOTIFY_SEVERITY=page
 ExecStart={{ gateway_lease_check_path }} {{ gateway_uplink_interface }} {{ gateway_lease_check_networks.items() | map('join', '=') | join(' ') }}
 NoNewPrivileges=yes
 ProtectSystem=strict
