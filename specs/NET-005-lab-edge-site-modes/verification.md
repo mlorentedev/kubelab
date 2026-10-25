@@ -10,7 +10,7 @@ created: "2026-10-25"
 Read-only capture over the homelab LAN (`ssh` to `lan_ip`, host key checked against the pinned tailnet entry with `HostKeyAlias`). The PSK was never read into the transcript: only its length and character classes were computed on the host. Site SSIDs are omitted here on purpose (see the proposal's risk on site-identifying data).
 
 - **System:** Ubuntu 24.04.4, kernel `6.8.0-1065-raspi`. `iw` is not installed.
-- **Network config:** one hand-written netplan file from 2026-03-15, renderer networkd. `eth0` is static on `lan_ip`; `enx00249b1b0d6b` (the USB Ethernet adapter) is DHCP with metric 100; `wlan0` is a DHCP client of the home SSID with metric 600 and `regulatory-domain: US` (the bootstrap runbook says `ES`). cloud-init's network config is disabled.
+- **Network config:** one hand-written netplan file from 2026-03-15, renderer networkd. `eth0` is static on `lan_ip`; `enx<MAC>` (the USB Ethernet adapter, whose name embeds its MAC) is DHCP with metric 100; `wlan0` is a DHCP client of the home SSID with metric 600 and `regulatory-domain: US` (the bootstrap runbook says `ES`). cloud-init's network config is disabled.
 - **The home PSK:** checked on the host for length and character classes. The result is not recorded in this public file, since it would narrow an offline search; the operator has it.
 - **Resolver:** a static `/etc/resolv.conf` (8.8.8.8, 1.1.1.1), with systemd-resolved masked.
 - **Sysctls:** `ip_forward=1`, `rp_filter=2` (loose), `arp_ignore=0`, `arp_announce=0`, and IPv6 enabled.

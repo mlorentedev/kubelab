@@ -29,8 +29,8 @@
   },
   {
     "id": "NET-005-lab-edge-site-modes-f5",
-    "behavior": "AC4: homelab DHCP works (udp 67 allowed on eth0) and make test-e2e ENV=staging passes through the new uplink",
-    "verification": "poetry run pytest -q --no-cov tests/test_gateway_role_tasks.py && make test-e2e ENV=staging",
+    "behavior": "AC4: a homelab host gets a DHCP lease from the RPi4 (udp 67 allowed on eth0), the homelab reaches the internet through the uplink, and make test-e2e ENV=staging passes",
+    "verification": "poetry run pytest -q --no-cov tests/test_gateway_role_tasks.py && grep -qF '### B11-EVIDENCE' specs/NET-005-lab-edge-site-modes/verification.md && make test-e2e ENV=staging",
     "state": "pending",
     "evidence": ""
   },

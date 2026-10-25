@@ -220,7 +220,7 @@ This PR loads the drops before any uplink exists. `iifname` matches a name, so r
     - the collision response, the login mode, rotation, recovery from the switch, and the uplink stand-in;
     - recovery when a profile cuts the LAN: the SD card's netplan edited from another machine.
 
-    Test first, `tests/test_edge_runbook_commands.py`: every fenced shell command in the runbook starts with `make `. Replace the netplan heredoc in `docs/runbooks/rpi4-bootstrap.md`, fix its `ES` regulatory domain, and update `docs/runbooks/hardware-setup.md`'s topology.
+    Test first, `tests/test_edge_runbook_commands.py`: every fenced shell command in the runbook starts with `make `. Replace the netplan heredoc in `docs/runbooks/rpi4-bootstrap.md`, fix its `ES` regulatory domain, and update `docs/runbooks/hardware-setup.md`'s topology. Replace the MAC-derived adapter names in `docs/troubleshooting/networking-dns.md` with `enx<MAC>` (ADR-075 C7).
 36. [ ] [AC2] Set `networking.nodes.rpi4.location: always-on` and run `make sync-r2-watcher-targets`. Add the RPi4's push monitor if `tests/test_backup_heartbeat_monitors.py` requires one for always-on nodes. `make test` is green.
 37. [ ] Housekeeping: write the lesson `docs/lessons/<category>/lesson-NNN-ufw-does-not-govern-forwarded-traffic.md`, which records the false intersection claim and the evidence that refuted it, and add it to the index. Add a Critical-gotchas line to `CLAUDE.md` saying that on the RPi4 edge, `inet kubelab` alone restricts forwarded traffic.
 38. [ ] Housekeeping, in another repository: point the dotfiles `rpi4-lan` alias at the new `wifi_lan_ip`, as a dotfiles PR.
@@ -245,7 +245,7 @@ Run at the temporary site in this order, after the PR each step needs. Every res
   - rpi3 stopped while the RPi4 is up, which must page.
 - [ ] B9. [AC8] Connect-time bounds under a bulk upload and a bulk download, each with and without the shaper.
 - [ ] B10. [AC13] `modprobe -r brcmfmac` simulates a halt. The lab Wi-Fi returns with no human step.
-- [ ] B11. [AC4] `make test-e2e ENV=staging` passes with the homelab powered.
+- [ ] B11. [AC4] A host on the homelab switch gets a DHCP lease from the RPi4 (`DHCPACK(eth0)` in dnsmasq's journal), the homelab nodes reach the internet through the uplink, and `make test-e2e ENV=staging` passes with the homelab powered.
 - [ ] B12. [AC1] A second provisioning run reports `changed=0`. Over a 48-hour soak, the kernel log shows no rtw88 reset.
 - [ ] B13. [AC1] At the next site: the Ethernet kind, live. The spec stays in `verifying` until then.
 
