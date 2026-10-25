@@ -225,7 +225,7 @@ def _encode_via_rendered_script(journal_bytes: bytes, result: str = "exit-code")
         [sys.executable, "-c", body.group(1)],
         input=journal_bytes,
         capture_output=True,
-        env={**os.environ, "FAILED_UNIT": "node-backup-ship.service", "UNIT_RESULT": result},
+        env={**os.environ, "FAILED_UNIT": "node-backup-ship.service", "UNIT_RESULT": result, "NOTIFY_SEVERITY": "log"},
     )
     assert proc.returncode == 0, f"encoder crashed: {proc.stderr.decode(errors='replace')}"
     return json.loads(proc.stdout)
@@ -381,7 +381,6 @@ def test_the_envelope_names_the_unit_that_actually_failed() -> None:
     assert "node-backup-ship.service" in envelope["title"], (
         f"the failing unit is missing from the envelope title: {envelope['title']!r}"
     )
-    assert envelope["severity"] == "log"
 
 
 def test_the_journal_excerpt_is_scoped_to_the_current_boot() -> None:
@@ -660,3 +659,30 @@ def test_an_unknown_unit_is_not_announced_as_a_failure() -> None:
     """
     envelope = _encode_via_rendered_script(b"", result="")
     assert "failed" not in envelope["title"], f"an unknown unit is announced as {envelope['title']!r}"
+
+
+def _severity_check() -> list[str]:
+    tasks = yaml.safe_load((NOTIFY_ROLE / "tasks/main.yml").read_text())
+    [check] = [t["assert"]["that"] for t in tasks if "node_notify_unit_severity" in str(t.get("assert"))]
+    return check
+
+
+@pytest.mark.parametrize(
+    ("severities", "ok"),
+    [
+        pytest.param({}, True, id="nothing-declared"),
+        pytest.param({"kubelab-edge-liveness.service": "page"}, True, id="page"),
+        pytest.param({"kubelab-edge-liveness.service": "log"}, True, id="log"),
+        pytest.param({"kubelab-edge-liveness.service": "critical"}, False, id="a-level-outside-log-and-page"),
+        pytest.param({"kubelab-edge-liveness": "page"}, False, id="no-suffix-never-matches-what-%n-passes"),
+        pytest.param({"x.service' ; reboot ; '": "page"}, False, id="a-quote-would-escape-the-case-pattern"),
+        pytest.param(["kubelab-edge-liveness.service"], False, id="a-list-not-a-map"),
+    ],
+)
+def test_the_role_refuses_a_severity_map_the_script_cannot_honour(severities: object, ok: bool) -> None:
+    """The keys are spliced into the script's `case` patterns, the values into the envelope (#2684)."""
+    from tests.ansible_jinja import ansible_env
+
+    env = ansible_env(str(NOTIFY_ROLE / "templates"))
+    holds = all(env.compile_expression(c)(node_notify_unit_severity=severities) for c in _severity_check())
+    assert holds is ok

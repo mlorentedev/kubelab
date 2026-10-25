@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import stat
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -25,7 +27,7 @@ TTL = int(_defaults()["node_notify_state_ttl_seconds"])  # type: ignore[call-ove
 class Node:
     """A scratch directory standing in for one node: the rendered script, its state and its shims."""
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, **render: object) -> None:
         self.root = root
         self.state = root / "state"
         self.sent = root / "sent.jsonl"
@@ -37,6 +39,7 @@ class Node:
             "kubelab-notify.sh.j2",
             node_notify_secret_file=str(root / "secret"),
             node_notify_state_dir=str(self.state),
+            **render,
         )
         self.script = root / "notify.sh"
         self.script.write_text(script)
@@ -70,10 +73,13 @@ class Node:
             ["bash", str(self.script), *args, unit], capture_output=True, text=True, env=env, timeout=60
         )
 
-    def titles(self) -> list[str]:
+    def envelopes(self) -> list[dict[str, Any]]:
         if not self.sent.exists():
             return []
-        return [json.loads(line)["title"] for line in self.sent.read_text().splitlines()]
+        return [json.loads(line) for line in self.sent.read_text().splitlines()]
+
+    def titles(self) -> list[str]:
+        return [envelope["title"] for envelope in self.envelopes()]
 
     def age_state(self, seconds: int, unit: str = UNIT) -> None:
         """Pretend the last page went out `seconds` ago."""
@@ -214,3 +220,36 @@ def test_the_recovery_unit_is_installed_and_runs_the_recovery_mode() -> None:
     tasks = yaml.safe_load((NOTIFY_ROLE / "tasks/main.yml").read_text())
     [task] = [t for t in tasks if t.get("template", {}).get("src") == "kubelab-notify-recovered@.service.j2"]
     assert "node_notify_recovered_unit_name" in task["template"]["dest"]
+
+
+PAGED = {UNIT: "page"}
+
+
+def test_a_unit_declared_at_page_pages_and_every_other_unit_keeps_the_default(tmp_path: Path) -> None:
+    """#2684: the edge's own units need a person now, the rest of the fleet does not."""
+    node = Node(tmp_path, node_notify_unit_severity=PAGED)
+    node.run()
+    node.run(unit="node-backup-ship.service")
+    assert [e["severity"] for e in node.envelopes()] == ["page", _defaults()["node_notify_severity"]]
+
+
+def test_a_paged_unit_keeps_its_severity_on_the_reminder(tmp_path: Path) -> None:
+    node = Node(tmp_path, node_notify_unit_severity=PAGED)
+    node.run()
+    node.age_state(REMINDER + 5)
+    node.run()
+    assert [e["severity"] for e in node.envelopes()] == ["page", "page"]
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed: the router was NOT run")
+def test_the_recovery_of_a_paged_unit_closes_the_alarm_instead_of_raising_another(tmp_path: Path) -> None:
+    """The router sends a `page` envelope as a failure unless it is marked resolved."""
+    from tests.test_n8n_notify_router import _route
+
+    node = Node(tmp_path, node_notify_unit_severity=PAGED)
+    node.run()
+    node.set_result("success")
+    node.run("--recovered")
+    page, recovery = (_route(envelope) for envelope in node.envelopes())
+    assert (page["tag"], page["type"]) == ("page", "failure")
+    assert (recovery["tag"], recovery["type"]) == ("page", "info"), recovery["title"]

@@ -43,6 +43,13 @@ node_notify_body_bytes: 2000
 # backup failures (2026-08-15) — they are actionable, not page-worthy.
 node_notify_severity: log
 
+# Units whose failure needs a person now, by full unit name (the `%n` the
+# consumer passes, suffix included) -> `page` or `log`. A play declares them for
+# its own units; every other unit posts at `node_notify_severity`. The lab edge
+# declares its uplink and liveness units (#2684): when they fail, the lab is off
+# the network, which a `log` line read the next morning does not cover.
+node_notify_unit_severity: {}
+
 # One page per incident (#2423). The state is `<count> <first> <last>` per unit.
 # A failing unit is reminded at most once per `reminder`, and a state older than
 # `ttl` is a finished incident nobody closed, so it starts over. The ttl must

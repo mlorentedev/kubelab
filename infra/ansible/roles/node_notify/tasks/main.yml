@@ -2,6 +2,23 @@
 # node_notify — installs the fleet's one failure-notification path and retires
 # the single-purpose one it replaces.
 
+# The keys become `case` patterns in the script, inside single quotes, and the
+# values the envelope's severity. The character set is what keeps the quotes
+# closed, and a name without its suffix would never match what `%n` passes.
+- name: Check the per-unit severities
+  assert:
+    that:
+      - node_notify_unit_severity is mapping
+      - node_notify_unit_severity.values() | reject('in', ['log', 'page']) | list | length == 0
+      - node_notify_unit_severity.keys() | reject('match', '^[A-Za-z0-9@:_.-]+[.][a-z]+$') | list | length == 0
+    fail_msg: >-
+      ERROR: node_notify_unit_severity is {{ node_notify_unit_severity }}.
+      WHY: it maps full unit names, suffix included, to log or page; a key outside
+      letters, digits and @:_.- or without its suffix never matches, and a level the
+      fleet's router does not tell apart pages or stays silent by accident.
+      FIX: correct the play that declares it.
+    quiet: true
+
 - name: Write fleet notify secret
   copy:
     content: "{{ secrets.apps.services.automation.notify.fleet_webhook_secret }}"
