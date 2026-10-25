@@ -210,7 +210,7 @@ This PR loads the drops before any uplink exists. `iifname` matches a name, so r
 
     `REMOVE=1` deletes the profile. Implement. Green. Then undo the hand changes listed in `verification.md`: remove the `lab-bootstrap` profile and revert "Wired connection 1".
 
-    Built as the profile `kubelab-edge-lan`, which also routes `networking.lan_cidr` out the wire ahead of tailscale's `lookup 52`: the edge advertises that CIDR, and a laptop that accepts routes would otherwise reach the LAN through the tailnet. NetworkManager only. The undo is not done yet: `lab-bootstrap` is the operator's path to the edge today, so it moves to B4, after the target has carried a session.
+    Built as the profile `kubelab-edge-lan`, with a third mode, `STATIC=1`, that holds a fixed address when the edge serves no DHCP (a fresh SD card, or a provision that cut the LAN), as the hand profile did. The profile also routes `networking.lan_cidr` out the wire ahead of tailscale's `lookup 52`: the edge advertises that CIDR, and a laptop that accepts routes would otherwise reach the LAN through the tailnet. NetworkManager only. The undo is not done yet: `lab-bootstrap` is the operator's path to the edge today, so it moves to B4, after the target has carried a session.
 
 ### PR 11 — PSK rotation
 
