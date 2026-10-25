@@ -661,28 +661,20 @@ def test_an_unknown_unit_is_not_announced_as_a_failure() -> None:
     assert "failed" not in envelope["title"], f"an unknown unit is announced as {envelope['title']!r}"
 
 
-def _severity_check() -> list[str]:
-    tasks = yaml.safe_load((NOTIFY_ROLE / "tasks/main.yml").read_text())
-    [check] = [t["assert"]["that"] for t in tasks if "node_notify_unit_severity" in str(t.get("assert"))]
-    return check
+
+def test_the_fleet_default_stays_log() -> None:
+    """Ratified 2026-08-15: maintenance and backup failures are actionable, not page-worthy.
+
+    #2684 rejected raising it for a whole node: a unit that needs a person declares so itself.
+    """
+    assert _defaults()["node_notify_severity"] == "log"
 
 
-@pytest.mark.parametrize(
-    ("severities", "ok"),
-    [
-        pytest.param({}, True, id="nothing-declared"),
-        pytest.param({"kubelab-edge-liveness.service": "page"}, True, id="page"),
-        pytest.param({"kubelab-edge-liveness.service": "log"}, True, id="log"),
-        pytest.param({"kubelab-edge-liveness.service": "critical"}, False, id="a-level-outside-log-and-page"),
-        pytest.param({"kubelab-edge-liveness": "page"}, False, id="no-suffix-never-matches-what-%n-passes"),
-        pytest.param({"x.service' ; reboot ; '": "page"}, False, id="a-quote-would-escape-the-case-pattern"),
-        pytest.param(["kubelab-edge-liveness.service"], False, id="a-list-not-a-map"),
-    ],
-)
-def test_the_role_refuses_a_severity_map_the_script_cannot_honour(severities: object, ok: bool) -> None:
-    """The keys are spliced into the script's `case` patterns, the values into the envelope (#2684)."""
+@pytest.mark.parametrize(("severity", "ok"), [("log", True), ("page", True), ("critical", False), ("", False)])
+def test_the_role_refuses_a_default_the_router_does_not_route(severity: str, ok: bool) -> None:
     from tests.ansible_jinja import ansible_env
 
+    tasks = yaml.safe_load((NOTIFY_ROLE / "tasks/main.yml").read_text())
+    [check] = [t["assert"]["that"] for t in tasks if "node_notify_severity" in str(t.get("assert"))]
     env = ansible_env(str(NOTIFY_ROLE / "templates"))
-    holds = all(env.compile_expression(c)(node_notify_unit_severity=severities) for c in _severity_check())
-    assert holds is ok
+    assert all(env.compile_expression(c)(node_notify_severity=severity) for c in check) is ok

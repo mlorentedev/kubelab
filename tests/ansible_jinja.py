@@ -50,11 +50,6 @@ def _version(value: Any, version: str, operator: str = "eq") -> bool:
     return getattr(Version(str(value)), f"__{ops.get(operator, operator)}__")(Version(version))
 
 
-def _match(value: Any, pattern: str) -> bool:
-    """Ansible's `match` test: the pattern anchored at the start, as `re.match` does."""
-    return re.match(pattern, str(value)) is not None
-
-
 def ansible_env(templates_dir: str, **kwargs: Any) -> Environment:
     """A `FileSystemLoader` environment with the Ansible filters these templates use."""
     env = Environment(loader=FileSystemLoader(templates_dir), **kwargs)
@@ -63,5 +58,4 @@ def ansible_env(templates_dir: str, **kwargs: Any) -> Environment:
     env.filters["to_json"] = json.dumps
     env.filters["regex_replace"] = _regex_replace
     env.tests["version"] = _version
-    env.tests["match"] = _match
     return env

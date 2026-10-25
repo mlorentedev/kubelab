@@ -27,24 +27,31 @@ TTL = int(_defaults()["node_notify_state_ttl_seconds"])  # type: ignore[call-ove
 class Node:
     """A scratch directory standing in for one node: the rendered script, its state and its shims."""
 
-    def __init__(self, root: Path, **render: object) -> None:
+    def __init__(self, root: Path) -> None:
         self.root = root
         self.state = root / "state"
         self.sent = root / "sent.jsonl"
         self.result = root / "result"
         self.curl_exit = root / "curl-exit"
+        self.environment = root / "environment"
         (root / "bin").mkdir()
+        self.environment.mkdir()
         (root / "secret").write_text("tok")
         script = _render(
             "kubelab-notify.sh.j2",
             node_notify_secret_file=str(root / "secret"),
             node_notify_state_dir=str(self.state),
-            **render,
         )
         self.script = root / "notify.sh"
         self.script.write_text(script)
         self.script.chmod(0o700)
-        self._shim("systemctl", 'printf "Result=%s\\n" "$(cat "$NODE_RESULT")"')
+        # `systemctl show -p <property> <unit>`: the unit's last result, or the
+        # Environment= its unit file declares.
+        self._shim(
+            "systemctl",
+            'case "$*" in *Environment*) printf "Environment=%s\\n" "$(cat "$NODE_ENVIRONMENT/${@: -1}" 2>/dev/null)" ;;'
+            ' *) printf "Result=%s\\n" "$(cat "$NODE_RESULT")" ;; esac',
+        )
         self._shim("journalctl", 'echo "unit output"')
         self._shim(
             "curl",
@@ -58,6 +65,10 @@ class Node:
         path.write_text(f"#!/bin/bash\n{body}\n")
         path.chmod(path.stat().st_mode | stat.S_IXUSR)
 
+    def declare(self, environment: str, unit: str = UNIT) -> None:
+        """What `Environment=` lines the unit's file carries, as systemd prints them."""
+        (self.environment / unit).write_text(environment)
+
     def set_result(self, value: str) -> None:
         self.result.write_text(value)
 
@@ -68,6 +79,7 @@ class Node:
             "NODE_RESULT": str(self.result),
             "NODE_SENT": str(self.sent),
             "NODE_CURL_EXIT": str(self.curl_exit),
+            "NODE_ENVIRONMENT": str(self.environment),
         }
         return subprocess.run(
             ["bash", str(self.script), *args, unit], capture_output=True, text=True, env=env, timeout=60
@@ -222,34 +234,61 @@ def test_the_recovery_unit_is_installed_and_runs_the_recovery_mode() -> None:
     assert "node_notify_recovered_unit_name" in task["template"]["dest"]
 
 
-PAGED = {UNIT: "page"}
+
+PAGE = "KUBELAB_NOTIFY_SEVERITY=page"
 
 
-def test_a_unit_declared_at_page_pages_and_every_other_unit_keeps_the_default(tmp_path: Path) -> None:
+@pytest.fixture
+def paged(node: Node) -> Node:
+    """A unit that declares `page`, among other variables, as systemd prints them."""
+    node.declare(f"LANG=C.UTF-8 {PAGE} STATE=/var/lib/x")
+    return node
+
+
+def test_a_unit_that_declares_page_pages_and_every_other_unit_keeps_the_default(paged: Node) -> None:
     """#2684: the edge's own units need a person now, the rest of the fleet does not."""
-    node = Node(tmp_path, node_notify_unit_severity=PAGED)
-    node.run()
-    node.run(unit="node-backup-ship.service")
-    assert [e["severity"] for e in node.envelopes()] == ["page", _defaults()["node_notify_severity"]]
+    paged.run()
+    paged.run(unit="node-backup-ship.service")
+    assert [e["severity"] for e in paged.envelopes()] == ["page", "log"]
 
 
-def test_a_paged_unit_keeps_its_severity_on_the_reminder(tmp_path: Path) -> None:
-    node = Node(tmp_path, node_notify_unit_severity=PAGED)
-    node.run()
-    node.age_state(REMINDER + 5)
-    node.run()
-    assert [e["severity"] for e in node.envelopes()] == ["page", "page"]
+def test_a_paged_unit_keeps_its_severity_on_the_reminder(paged: Node) -> None:
+    paged.run()
+    paged.age_state(REMINDER + 5)
+    paged.run()
+    assert [e["severity"] for e in paged.envelopes()] == ["page", "page"]
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed: the router was NOT run")
-def test_the_recovery_of_a_paged_unit_closes_the_alarm_instead_of_raising_another(tmp_path: Path) -> None:
+def test_the_recovery_of_a_paged_unit_closes_the_alarm_instead_of_raising_another(paged: Node) -> None:
     """The router sends a `page` envelope as a failure unless it is marked resolved."""
     from tests.test_n8n_notify_router import _route
 
-    node = Node(tmp_path, node_notify_unit_severity=PAGED)
-    node.run()
-    node.set_result("success")
-    node.run("--recovered")
-    page, recovery = (_route(envelope) for envelope in node.envelopes())
+    paged.run()
+    paged.set_result("success")
+    paged.run("--recovered")
+    page, recovery = (_route(envelope) for envelope in paged.envelopes())
     assert (page["tag"], page["type"]) == ("page", "failure")
     assert (recovery["tag"], recovery["type"]) == ("page", "info"), recovery["title"]
+
+
+def test_exercising_the_path_for_a_healthy_paged_unit_is_not_an_alarm(paged: Node) -> None:
+    """`make maintain-notify-test` starts the notifier by hand for a unit that did not fail."""
+    paged.set_result("success")
+    paged.run()
+    assert [e["severity"] for e in paged.envelopes()] == ["log"]
+
+
+@pytest.mark.parametrize(
+    "declared",
+    [
+        pytest.param("KUBELAB_NOTIFY_SEVERITY=critical", id="a-level-the-router-does-not-route"),
+        pytest.param("KUBELAB_NOTIFY_SEVERITY=", id="empty"),
+        pytest.param("XKUBELAB_NOTIFY_SEVERITY=page", id="another-variable"),
+        pytest.param("", id="nothing"),
+    ],
+)
+def test_anything_but_a_declared_page_keeps_the_default(node: Node, declared: str) -> None:
+    node.declare(declared)
+    node.run()
+    assert [e["severity"] for e in node.envelopes()] == ["log"]

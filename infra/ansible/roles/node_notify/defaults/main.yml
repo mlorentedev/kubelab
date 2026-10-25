@@ -41,14 +41,17 @@ node_notify_body_bytes: 2000
 
 # n8n routes by severity. `log` is the ratified level for fleet maintenance and
 # backup failures (2026-08-15) — they are actionable, not page-worthy.
+#
+# A unit whose failure needs a person now says so itself, beside the line that
+# wires it here (#2684):
+#
+#     OnFailure=kubelab-notify@%n.service
+#     Environment=KUBELAB_NOTIFY_SEVERITY=page
+#
+# The script reads it from systemd at run time. A value rendered into the script
+# would differ by play: maintain.yml and backup.yml apply this role too, with no
+# vars, and the last play to run would set the level for every unit on the node.
 node_notify_severity: log
-
-# Units whose failure needs a person now, by full unit name (the `%n` the
-# consumer passes, suffix included) -> `page` or `log`. A play declares them for
-# its own units; every other unit posts at `node_notify_severity`. The lab edge
-# declares its uplink and liveness units (#2684): when they fail, the lab is off
-# the network, which a `log` line read the next morning does not cover.
-node_notify_unit_severity: {}
 
 # One page per incident (#2423). The state is `<count> <first> <last>` per unit.
 # A failing unit is reminded at most once per `reminder`, and a state older than
