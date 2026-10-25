@@ -127,21 +127,33 @@ AP_SSOT_VARS = {
 }
 
 
+RESERVED = [NETWORKING["nodes"][node] for node in LAB["reservations"]]
+
+
+def _addresses_check_holds(variables: dict[str, Any]) -> bool:
+    (check,) = [t for t in TASKS if t.get("name") == "Check the lab Wi-Fi addresses"]
+    env = ansible_env(str(ROLE))
+    return all(
+        env.from_string("{{ (" + condition + ") | bool }}").render(**variables) == "True"
+        for condition in check["assert"]["that"]
+    )
+
+
 @pytest.mark.parametrize("name", AP_SSOT_VARS)
 def test_the_role_keeps_no_copy_of_the_ap_addresses(name: str) -> None:
     """A run without the play's vars stops instead of rendering a stale subnet."""
-    (check,) = [t for t in TASKS if t.get("name") == "Check the lab Wi-Fi addresses"]
-    env = ansible_env(str(ROLE))
-
-    def holds(variables: dict[str, Any]) -> bool:
-        return all(
-            env.from_string("{{ (" + condition + ") | bool }}").render(**variables) == "True"
-            for condition in check["assert"]["that"]
-        )
-
+    passed = {**AP_SSOT_VARS, "gateway_ap_reservations": RESERVED}
     assert DEFAULTS[name] == ""
-    assert holds(AP_SSOT_VARS)
-    assert not holds({**AP_SSOT_VARS, name: DEFAULTS[name]})
+    assert _addresses_check_holds(passed)
+    assert not _addresses_check_holds({**passed, name: DEFAULTS[name]})
+
+
+@pytest.mark.parametrize(("reservations", "holds"), [(RESERVED, True), ([], True), (None, False)])
+def test_a_play_that_passes_no_reservations_stops(reservations: Any, holds: bool) -> None:
+    """None is the role's own default, so the play said nothing and rpi3 would silently get a
+    dynamic lease. An empty list is a play that declares no reserved node."""
+    assert DEFAULTS["gateway_ap_reservations"] is None
+    assert _addresses_check_holds({**AP_SSOT_VARS, "gateway_ap_reservations": reservations}) is holds
 
 
 def test_the_ap_serves_802_11n() -> None:
