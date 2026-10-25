@@ -1946,7 +1946,7 @@ alerts:
 # Say whether the lab edge's uplink is up, behind a portal, or dead (NET-005 AC5).
 # Reaches the edge over its LAN address, so it answers from the lab switch or the
 # lab Wi-Fi while the tailnet is down with the uplink. make exits 2 for any failure;
-# `toolkit infra edge status` keeps the edge's code (0 up, 2 portal, 3 dead).
+# `toolkit infra edge status` keeps the edge's code (0 up, 2 portal, 3 dead, 4 unknown).
 .PHONY: edge-status
 edge-status: ## Report the lab edge's uplink: up, portal or dead
 	@$(TOOLKIT) infra edge status

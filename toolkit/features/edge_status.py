@@ -54,7 +54,8 @@ def status_command(networking: dict[str, Any]) -> list[str]:
 
 
 def run_status(networking: dict[str, Any]) -> int:
-    """Run the check on the edge and return its exit code: 0 up, 2 portal, 3 dead.
+    """Run the check on the edge and return its exit code: 0 up, 2 portal, 3 dead,
+    4 unknown.
 
     ssh's own failures (unreachable, refused key) come back as 255.
     """
