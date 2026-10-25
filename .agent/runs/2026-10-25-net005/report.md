@@ -21,11 +21,11 @@
 |---|---|---|
 | #2670 | PR 5, tasks 16–17 | Lab AP. Blocked by the GitGuardian finding on #2103 (`0efef18b`), a false positive only the operator can dismiss. **Lands after #2668**: its regdomain check stops every rpi4 provision while the cmdline carries the token, and skips every role after `gateway` |
 | #2671 | PR 6, tasks 18–21 | Collision alert and CAKE shaping. Stacked on #2670; same blocks. Out of draft at 15:50Z; PR-Agent's first review triaged |
-| #2673 | PR 8, tasks 28–29 | Watchdog and radio liveness. Stacked on #2671; same blocks. Out of draft at 15:50Z; head `9c43e9b5` awaits PR-Agent's re-review (see the handoff) |
+| #2673 | PR 8, tasks 28–29 | Watchdog and radio liveness. Stacked on #2671; same blocks. Out of draft at 15:50Z. PR-Agent's and CodeRabbit's reviews of `9c43e9b5` triaged at 16:45Z; CodeRabbit's Minor applied in `fd97aee9`: the watchdog check ran after the AP's notifies, so a failure dropped them (lesson-620). The same placement was on master since #2666 (the Tailscale floor after the ruleset's notifies) and is fixed in the same commit, with `test_no_check_runs_between_a_notify_and_its_flush` guarding the role. **Until #2673 lands, master keeps that floor-check placement**; nothing provisions the edge before then |
 | #2672 | PR 7, tasks 22–25 | Prod edge probe. Touches `infra/k8s/**`, which Argo CD deploys to prod; never merged unattended. **Owner decision needed (task 26):** prod already repeats a firing page every 4h until silenced. Accept 4h, add a shorter child route, or repeat from n8n |
-| #2674 | PR 9, task 30 | `make edge-status`: up / portal / dead / unknown. Green and triaged, but GitHub reads `BLOCKED` with no reason given (below) |
+| #2674 | PR 9, task 30 | `make edge-status`: up / portal / dead / unknown. Green and triaged, but GitHub reads `BLOCKED` with no reason given (below). Master merged in at 16:48Z (`bd80094b`) to force a recompute |
 | #2676 | PR 10, tasks 32–33 | `make headscale-rejoin` and `make edge-lan-link [ROUTE=1] [STATIC=1] [REMOVE=1]`. Stacked on #2674 |
-| #2681 | PR 12, task 35 | Runbook `lab-edge.md`, rewritten bootstrap and hardware docs. Describes #2670/#2671/#2673/#2676, so it lands after them |
+| #2681 | PR 12, task 35 | Runbook `lab-edge.md`, rewritten bootstrap and hardware docs. Describes #2670/#2671/#2673/#2676, so it lands after them. Draft; master merged in at 16:21Z (`7727982b`) |
 
 ## Not done
 
