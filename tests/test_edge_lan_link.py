@@ -148,7 +148,9 @@ def test_the_lan_goes_out_the_wire_before_the_tailnet_can_take_it(route: bool) -
     assert match.group(2) == LAN_CIDR
 
 
-def test_the_cidr_is_the_ssot_one() -> None:
+def test_the_rule_follows_the_cidr_it_is_given() -> None:
+    """A CIDR that is not the homelab's, so a hardcoded one fails here. That the CLI
+    passes `networking.lan_cidr` is test_the_command_passes_the_ssot_cidr_and_the_mode."""
     from toolkit.features.edge_lan_link import profile_settings
 
     other = "198.51.100.0/24"
@@ -156,7 +158,6 @@ def test_the_cidr_is_the_ssot_one() -> None:
     assert f"to {other} table" in dict(zip(pairs[::2], pairs[1::2], strict=True))["ipv4.routing-rules"]
     with pytest.raises(ValueError):
         profile_settings("not-a-cidr", route=False)
-    assert ipaddress.ip_network(LAN_CIDR)
 
 
 def test_the_profile_is_brought_up_and_never_autoconnects() -> None:
@@ -295,16 +296,25 @@ def test_contradictory_modes_are_refused(flags: list[str]) -> None:
     assert not apply.called
 
 
-def test_the_makefile_target_calls_the_command() -> None:
-    makefile = (REPO / "Makefile").read_text()
-    target = re.search(r"^edge-lan-link:.*\n((?:\t.*\n)+)", makefile, re.M)
-    assert target, "no edge-lan-link target"
-    recipe = target.group(1)
-    assert "infra edge lan-link" in recipe
-    for make_var, flag in [
-        ("ROUTE", "--route"),
-        ("REMOVE", "--remove"),
-        ("STATIC", "--static"),
-        ("IFACE", "--interface $(IFACE)"),
-    ]:
-        assert f"$(if $({make_var}),{flag}" in recipe, make_var
+def _make_lan_link(*args: str) -> str:
+    out = subprocess.run(
+        ["make", "-n", "-C", str(REPO), "edge-lan-link", *args],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    return next(ln for ln in out.splitlines() if "infra edge lan-link" in ln)
+
+
+@pytest.mark.parametrize(("make_var", "flag"), [("ROUTE", "--route"), ("STATIC", "--static"), ("REMOVE", "--remove")])
+@pytest.mark.parametrize(("value", "expected"), [("", False), ("0", False), ("1", True)])
+def test_only_1_turns_a_mode_on(make_var: str, flag: str, value: str, expected: bool) -> None:
+    """`$(if $(REMOVE),...)` tests emptiness, so REMOVE=0 would delete the profile
+    it was asked to keep (CodeRabbit on #2676, the class pr-agent found on #1893)."""
+    line = _make_lan_link(f"{make_var}={value}")
+    assert (flag in line.split()) is expected, line
+
+
+def test_the_makefile_target_passes_the_interface() -> None:
+    assert "--interface eth9" in _make_lan_link("IFACE=eth9")
+    assert "--interface" not in _make_lan_link()
