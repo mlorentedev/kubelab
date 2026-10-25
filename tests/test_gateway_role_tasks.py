@@ -193,6 +193,14 @@ def test_cloud_init_never_writes_netplan() -> None:
     assert yaml.safe_load(task["copy"]["content"]) == {"network": {"config": "disabled"}}
 
 
+def test_no_other_role_writes_the_edges_netplan() -> None:
+    """base_system writes /etc/netplan/50-cloud-init.yaml when netplan_address is set.
+    On the edge, this role would then back it up and remove it on every run, and the
+    two would apply netplan against each other."""
+    playbook = REPO / "infra" / "ansible" / "playbooks" / "provision-rpi4.yml"
+    assert "netplan_" not in playbook.read_text()
+
+
 def _that(index: int) -> list[str]:
     that = TASKS[index]["assert"]["that"]
     return that if isinstance(that, list) else [that]
