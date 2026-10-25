@@ -1,10 +1,15 @@
 ---
 - name: restart nftables
-  # Use reload, NOT restart — restart triggers ExecStop which does 'flush ruleset'
-  # and destroys Docker/UFW/Tailscale iptables rules
+  # Reload, never restart. A restart runs ExecStop, which the kubelab-stop.conf
+  # drop-in limits to the edge table, so the uplink has no drops until the start
+  # reloads the file. A reload swaps the table in one transaction.
   systemd:
     name: nftables
     state: reloaded
+
+- name: reload systemd
+  systemd:
+    daemon_reload: true
 
 - name: reload ufw
   command: ufw reload
@@ -13,4 +18,9 @@
 - name: restart dnsmasq
   systemd:
     name: dnsmasq
+    state: restarted
+
+- name: restart systemd-sysctl
+  systemd:
+    name: systemd-sysctl
     state: restarted

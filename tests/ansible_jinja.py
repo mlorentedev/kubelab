@@ -20,6 +20,7 @@ from __future__ import annotations
 from typing import Any
 
 from jinja2 import Environment, FileSystemLoader
+from packaging.version import Version
 
 
 def _to_bool(value: Any) -> bool:
@@ -37,8 +38,15 @@ def _to_bool(value: Any) -> bool:
     return bool(value)
 
 
+def _version(value: Any, version: str, operator: str = "eq") -> bool:
+    """Ansible's `version` test, for the dotted numeric versions the roles compare."""
+    ops = {"<": "lt", "<=": "le", "==": "eq", "!=": "ne", ">=": "ge", ">": "gt"}
+    return getattr(Version(str(value)), f"__{ops.get(operator, operator)}__")(Version(version))
+
+
 def ansible_env(templates_dir: str, **kwargs: Any) -> Environment:
     """A `FileSystemLoader` environment with Ansible's `bool` filter registered."""
     env = Environment(loader=FileSystemLoader(templates_dir), **kwargs)
     env.filters["bool"] = _to_bool
+    env.tests["version"] = _version
     return env
