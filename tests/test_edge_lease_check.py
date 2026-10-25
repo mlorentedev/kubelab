@@ -7,9 +7,9 @@ collision, because the longer internal prefix wins, but the address can clash
 with a homelab host dnsmasq leased it to, so the operator is paged.
 
 - An offered route counts when it overlaps an internal network in either
-  direction. A route that contains one (a `/1`, or `172.16.0.0/12`) is the
-  TunnelVision shape. The default route is not a collision: option 121 carries
-  it routinely, and every renewal would page.
+  direction. A route that contains one (a `/1`, or the RFC 1918 block that
+  holds the LAN) is the TunnelVision shape. The default route is not a
+  collision: option 121 carries it routinely, and every renewal would page.
 - The site's prefix is not checked. The temporary site's `/23` contains the
   homelab LAN, which NET-006 (#2662) renumbers; an alert on every renewal until
   then would bury the cases that matter.
@@ -47,6 +47,13 @@ INTERNAL = {
     "lab": NETWORKING["edge"]["lab_wifi"]["cidr"],
     "tailnet": NETWORKING["tailscale_cidr"],
 }
+LAN = ipaddress.ip_network(INTERNAL["lan"])
+LAB = ipaddress.ip_network(INTERNAL["lab"])
+TAILNET = ipaddress.ip_network(INTERNAL["tailnet"])
+# The temporary site's shape (NET-006): a prefix one bit wider than the LAN, so it
+# contains the LAN, with its gateway in the other half.
+SITE = LAN.supernet()
+SITE_HALF = next(half for half in SITE.subnets() if half != LAN)
 IFINDEX = "7"
 # Addresses outside every internal network, for the parts of a lease a case does not
 # exercise. Documentation ranges (RFC 5737), so no real site is described.
@@ -163,17 +170,18 @@ def test_a_clean_lease_passes(tmp_path: Path, awk_bin: Path) -> None:
 
 
 def test_the_temporary_sites_prefix_alone_is_not_a_collision(tmp_path: Path, awk_bin: Path) -> None:
-    """The site's /23 contains the homelab LAN (NET-006); its address and gateway do not."""
-    lease = _site_lease(ADDRESS="172.16.0.123", NETMASK="255.255.254.0", ROUTER="172.16.0.1")
+    """The site's prefix contains the homelab LAN (NET-006); its address and gateway do not."""
+    lease = _site_lease(ADDRESS=_host(str(SITE_HALF), 123), NETMASK=str(SITE.netmask), ROUTER=_host(str(SITE_HALF), 1))
     result = _run(tmp_path, awk_bin, lease)
     assert result.returncode == 0, _output(result)
 
 
 def test_the_same_prefix_with_an_address_in_the_lan_is_a_collision(tmp_path: Path, awk_bin: Path) -> None:
-    lease = _site_lease(ADDRESS="172.16.1.123", NETMASK="255.255.254.0", ROUTER="172.16.0.1")
+    address = _host(INTERNAL["lan"], 123)
+    lease = _site_lease(ADDRESS=address, NETMASK=str(SITE.netmask), ROUTER=_host(str(SITE_HALF), 1))
     result = _run(tmp_path, awk_bin, lease)
     assert result.returncode == 1, _output(result)
-    assert "address 172.16.1.123" in _output(result)
+    assert f"address {address}" in _output(result)
     assert f"lan {INTERNAL['lan']}" in _output(result)
 
 
@@ -219,10 +227,10 @@ def test_every_router_the_lease_lists_is_checked(tmp_path: Path, awk_bin: Path) 
 @pytest.mark.parametrize(
     "route",
     [
-        "172.16.1.128/25",  # inside the LAN
-        "172.16.0.0/12",  # contains the LAN
-        "0.0.0.0/1",  # contains the lab and the tailnet
-        "100.64.0.0/16",  # inside the tailnet
+        str(list(LAN.subnets())[1]),  # inside the LAN
+        str(LAN.supernet(new_prefix=max(LAN.prefixlen - 12, 1))),  # contains the LAN
+        str(TAILNET.supernet(new_prefix=1)),  # a /1, which contains the tailnet
+        str(next(TAILNET.subnets(prefixlen_diff=6))),  # inside the tailnet
     ],
 )
 def test_an_offered_route_that_overlaps_an_internal_network_is_reported(
@@ -242,19 +250,21 @@ def test_the_default_route_is_not_a_collision(tmp_path: Path, awk_bin: Path, key
 
 
 def test_every_offered_route_is_checked(tmp_path: Path, awk_bin: Path) -> None:
-    routes = f"0.0.0.0/0,{OUTSIDE_ROUTER} 198.51.100.0/24,{OUTSIDE_ROUTER} 10.0.0.0/8,{OUTSIDE_ROUTER}"
+    last = LAB.supernet(new_prefix=8)
+    routes = f"0.0.0.0/0,{OUTSIDE_ROUTER} 198.51.100.0/24,{OUTSIDE_ROUTER} {last},{OUTSIDE_ROUTER}"
     result = _run(tmp_path, awk_bin, _site_lease(CLASSLESS_ROUTES=routes))
     assert result.returncode == 1, _output(result)
-    assert "route 10.0.0.0/8" in _output(result)
+    assert f"route {last}" in _output(result)
 
 
 def test_every_collision_is_reported_not_only_the_first(tmp_path: Path, awk_bin: Path) -> None:
     address = _host(INTERNAL["lan"], 50)
     router = _host(INTERNAL["lan"], 1)
-    lease = _site_lease(ADDRESS=address, ROUTER=router, CLASSLESS_ROUTES=f"0.0.0.0/1,{router}")
+    route = TAILNET.supernet(new_prefix=1)
+    lease = _site_lease(ADDRESS=address, ROUTER=router, CLASSLESS_ROUTES=f"{route},{router}")
     result = _run(tmp_path, awk_bin, lease)
     assert result.returncode == 1, _output(result)
-    for kind in (f"address {address}", f"gateway {router}", "route 0.0.0.0/1"):
+    for kind in (f"address {address}", f"gateway {router}", f"route {route}"):
         assert kind in _output(result)
 
 
@@ -278,12 +288,12 @@ def test_no_uplink_passes(tmp_path: Path, awk_bin: Path) -> None:
     "lease",
     [
         _lease(ROUTER=OUTSIDE_ROUTER),  # no address at all
-        _site_lease(ADDRESS="172.16.1.256"),
-        _site_lease(ADDRESS="172.16.1"),
+        _site_lease(ADDRESS="192.0.2.256"),
+        _site_lease(ADDRESS="192.0.2"),
         _site_lease(ADDRESS=""),
         _site_lease(ROUTER="not-an-address"),
-        _site_lease(CLASSLESS_ROUTES=f"172.16.1.0/33,{OUTSIDE_ROUTER}"),
-        _site_lease(CLASSLESS_ROUTES="172.16.1.0/24"),
+        _site_lease(CLASSLESS_ROUTES=f"192.0.2.0/33,{OUTSIDE_ROUTER}"),
+        _site_lease(CLASSLESS_ROUTES="192.0.2.0/24"),
         _site_lease(STATIC_ROUTES=f"garbage,{OUTSIDE_ROUTER}"),
     ],
     ids=["no-address", "octet", "short", "empty", "router", "prefix", "no-gateway", "static"],
@@ -306,7 +316,7 @@ def test_a_hostile_value_is_never_repeated(tmp_path: Path, awk_bin: Path, key: s
     assert key in _output(result)
 
 
-@pytest.mark.parametrize("spec", ["lan", "lan=", "lan=172.16.1.0", "lan=172.16.1.0/40", "lan=1.2.3/8"])
+@pytest.mark.parametrize("spec", ["lan", "lan=", "lan=192.0.2.0", "lan=192.0.2.0/40", "lan=1.2.3/8"])
 def test_a_malformed_network_is_a_usage_error(tmp_path: Path, awk_bin: Path, spec: str) -> None:
     result = subprocess.run(
         [_sh(awk_bin), str(SCRIPT), UPLINK, spec],
