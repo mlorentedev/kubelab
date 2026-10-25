@@ -15,6 +15,9 @@ net.ipv4.conf.{{ gateway_ap_interface }}.rp_filter = 2
 -net.ipv4.conf.{{ gateway_uplink_interface }}.rp_filter = 1
 -net.ipv6.conf.{{ gateway_uplink_interface }}.disable_ipv6 = 1
 
+# The kernel takes max(all, the interface's own) for both ARP keys, so `all`
+# reaches the uplink whenever it appears. No inside interface answers ARP for
+# an address on another one, so the stricter setting costs nothing there.
 net.ipv4.conf.all.arp_ignore = 1
 net.ipv4.conf.all.arp_announce = 2
 

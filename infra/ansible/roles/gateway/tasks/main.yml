@@ -100,22 +100,20 @@
     enabled: true
 
 # Strict rp_filter under a subnet router needs this floor (tailscale/tailscale#18860).
-- name: Read the installed Tailscale version
-  command: tailscale version
-  register: gateway_tailscale_version
-  changed_when: false
-  failed_when: false
-  check_mode: false
+# The version is dpkg's, not `tailscale version`'s: a binary that fails to run would
+# read as absent, and absent is the one case let through.
+- name: Read the installed packages
+  package_facts:
 
 - name: Assert Tailscale supports strict rp_filter
   assert:
     that: >-
-      gateway_tailscale_version.rc != 0 or
-      gateway_tailscale_version.stdout_lines[0] is version(gateway_tailscale_min_version, '>=')
+      'tailscale' not in ansible_facts.packages
+      or ansible_facts.packages['tailscale'][0].version is version(gateway_tailscale_min_version, '>=')
     fail_msg: >-
-      Tailscale {{ gateway_tailscale_version.stdout_lines[0] | default('?') }} is older than
+      Tailscale {{ ansible_facts.packages.get('tailscale', [{}])[0].version | default('?') }} is older than
       {{ gateway_tailscale_min_version }}. Upgrade it before the strict rp_filter loads.
-      An absent binary passes: the tailscale role installs a current one later in the play.
+      An absent package passes: the tailscale role installs a current one later in the play.
 
 - name: Deploy the edge sysctls
   template:

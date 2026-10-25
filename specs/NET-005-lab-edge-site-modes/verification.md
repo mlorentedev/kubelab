@@ -59,7 +59,7 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - run 1: `ok=29 changed=6 failed=0`; run 2: `ok=26 changed=0 failed=0`.
 - `nft list tables` shows `inet kubelab` beside iptables-nft's own tables, which the scoped stop leaves alone. `nftables.service` stops with `nft delete table inet kubelab`, and the input chain opens with `iifname "uplink0" ct state established,related accept`.
 - `rp_filter` reads `all=0`, and `default`, `eth0`, `wlan0` and `tailscale0` read `2`. The uplink's `1` lands when `uplink0` exists (PR 4).
-- A host on the switch takes a lease from the RPi4. bee ran `busybox udhcpc -i enp1s0 -n -q -f -R -s /bin/true`, which completes the exchange without configuring the interface and releases on exit. dnsmasq logged `DHCPDISCOVER(eth0)`, `DHCPOFFER(eth0) 172.16.1.3`, `DHCPREQUEST(eth0)` and `DHCPACK(eth0) 172.16.1.3 kubelab-bee`, the reservation from `networking.nodes.beelink`.
+- A host on the switch takes a lease from the RPi4. bee ran `busybox udhcpc -i enp1s0 -n -q -f -R -s /bin/true`, which completes the exchange without configuring the interface and releases on exit. dnsmasq logged `DHCPDISCOVER(eth0)`, `DHCPOFFER(eth0) 172.16.1.3`, `DHCPREQUEST(eth0)` and `DHCPACK(eth0) 172.16.1.3 kubelab-bee`, the reservation from `networking.nodes.beelink`. The exchange is complete but nothing was configured with it: it shows the server answering, which the baseline lacked. The laptop was not on the switch for this run.
 
 The RPi4's journal reads 2026-10-23 for these lines: with no uplink it has no NTP, and its clock drifts until PR 4 gives it one.
 
