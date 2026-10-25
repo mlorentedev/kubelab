@@ -11,6 +11,16 @@ gateway_uplink_regdomain: ""
 gateway_uplink_mac: ""
 gateway_uplink_ssid: ""
 gateway_uplink_psk: ""
+# The lab Wi-Fi, from networking.edge.lab_wifi. The SSID and PSKs come from prod SOPS;
+# each PSK entry is {keyid, psk}.
+gateway_ap_ssid: ""
+gateway_ap_psks: []
+gateway_ap_channel: 6
+gateway_ap_cidr: "10.0.0.0/24"
+gateway_ap_address: "10.0.0.1"
+gateway_ap_dhcp_range_start: "10.0.0.50"
+gateway_ap_dhcp_range_end: "10.0.0.199"
+gateway_ap_reservations: []
 gateway_dhcp_range_start: "172.16.1.50"
 gateway_dhcp_range_end: "172.16.1.150"
 gateway_dhcp_lease: "12h"

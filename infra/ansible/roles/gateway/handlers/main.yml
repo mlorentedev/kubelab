@@ -32,3 +32,19 @@
 - name: wait for the session
   wait_for_connection:
     timeout: 120
+
+- name: reload networkd
+  command: networkctl reload
+  changed_when: true
+
+- name: restart hostapd
+  systemd:
+    name: hostapd
+    state: restarted
+
+# A reload keeps every station associated (ADR-075 D8). After a restart it is skipped:
+# the restart already read the file, and the control socket may not be up yet.
+- name: reload the lab Wi-Fi PSKs
+  command: hostapd_cli -p /run/hostapd -i {{ gateway_ap_interface }} reload_wpa_psk
+  changed_when: true
+  when: gateway_ap_conf is not changed

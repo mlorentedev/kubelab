@@ -198,3 +198,9 @@ def test_the_masquerade_follows_the_profile_not_a_literal() -> None:
         role["vars"] for play in plays for role in play.get("roles", []) if str(role.get("role")).endswith("/gateway")
     )
     assert gateway["gateway_uplink_interface"] == "{{ config.networking.edge.uplink.interface }}"
+
+
+def test_the_lab_wifi_reaches_pihole_through_dockers_dnat(chains) -> None:
+    """Pi-hole is published on every address, so lab DNS to the AP address is DNAT'd to
+    a Docker bridge and forwarded, not delivered to the host (NET-005 AC2)."""
+    assert _verdict(chains["forward"], iif=AP, oif="docker0", proto="udp", dport=53) == "accept"

@@ -1,13 +1,26 @@
 # Managed by Ansible — do not edit manually
+# DHCP only: Pi-hole answers DNS. bind-dynamic, because bind-interfaces exits on a
+# named interface that does not exist, and a failed radio would take the LAN's DHCP
+# down with it.
 port=0
 interface={{ gateway_interface }}
-bind-interfaces
+interface={{ gateway_ap_interface }}
+bind-dynamic
 
-dhcp-range={{ gateway_dhcp_range_start }},{{ gateway_dhcp_range_end }},255.255.255.0,{{ gateway_dhcp_lease }}
+# An untagged option applies to every range, so each network's options carry its tag.
 
-dhcp-option=option:router,{{ gateway_lan_cidr | regex_replace('/.*', '') }}
-dhcp-option=option:dns-server,{{ gateway_dns_servers }}
-
+# Homelab LAN
+dhcp-range=set:lan,{{ gateway_dhcp_range_start }},{{ gateway_dhcp_range_end }},255.255.255.0,{{ gateway_dhcp_lease }}
+dhcp-option=tag:lan,option:router,{{ gateway_lan_cidr | regex_replace('/.*', '') }}
+dhcp-option=tag:lan,option:dns-server,{{ gateway_dns_servers }}
 {% for res in gateway_dhcp_reservations %}
 dhcp-host={{ res.mac }},{{ res.hostname }},{{ res.ip }}
+{% endfor %}
+
+# Lab Wi-Fi. dnsmasq takes the netmask from the AP's own address.
+dhcp-range=set:lab,{{ gateway_ap_dhcp_range_start }},{{ gateway_ap_dhcp_range_end }},{{ gateway_dhcp_lease }}
+dhcp-option=tag:lab,option:router,{{ gateway_ap_address }}
+dhcp-option=tag:lab,option:dns-server,{{ gateway_ap_address }}
+{% for node in gateway_ap_reservations %}
+dhcp-host={{ node.mac }},{{ node.hostname }},{{ node.lan_ip }}
 {% endfor %}

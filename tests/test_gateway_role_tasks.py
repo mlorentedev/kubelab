@@ -289,3 +289,113 @@ def test_the_netplan_backups_stay_private_and_are_never_overwritten() -> None:
     assert TASKS[directory]["file"]["mode"] == "0700"
     backup = _first(lambda task: (task.get("copy") or {}).get("remote_src") is True)
     assert "date_time" in TASKS[backup]["copy"]["dest"]
+
+
+# --- the lab Wi-Fi AP (NET-005 AC2, ADR-075 D2) ------------------------------------
+
+HOSTAPD_CONF = "/etc/hostapd/hostapd.conf"
+PSK_FILE = "/etc/hostapd/hostapd.wpa_psk"
+AP_UNIT = "/etc/systemd/network/10-kubelab-ap.network"
+AP_SUPPLICANTS = ["netplan-wpa-{{ gateway_ap_interface }}.service", "wpa_supplicant.service"]
+
+
+def _ap_install() -> int:
+    return _first(lambda task: "hostapd" in str((task.get("block") or [{}])[0].get("apt")))
+
+
+def _hostapd_start() -> int:
+    return _first(lambda task: (task.get("systemd") or {}).get("name") == "hostapd")
+
+
+def test_the_ap_packages_install_once_the_uplink_is_applied() -> None:
+    """At a portal site the archive answers only after the login, so this is where a run
+    before the login stops, and nothing of the AP lands half-done."""
+    remove = _first(lambda task: (task.get("file") or {}).get("state") == "absent" and "loop" in task)
+    applied = next(i for i, task in enumerate(TASKS) if i > remove and task.get("meta") == "flush_handlers")
+    install = _ap_install()
+    assert applied < install
+    assert TASKS[install]["block"][0]["apt"]["name"] == ["hostapd", "iw"]
+    dnsmasq, _ = _template_task("/etc/dnsmasq.d/kubelab-dhcp.conf")
+    assert install < dnsmasq
+
+
+def test_a_failed_install_says_what_to_do_and_quotes_apt() -> None:
+    rescue = TASKS[_ap_install()]["rescue"]
+    message = " ".join(task["fail"]["msg"] for task in rescue if "fail" in task)
+    assert all(word in message for word in ("ERROR:", "WHY:", "FIX:", "B4"))
+    assert "ansible_failed_result.msg" in message
+
+
+def test_the_lab_secrets_are_checked_before_anything_of_the_ap_is_installed() -> None:
+    check = _first(lambda task: "gateway_ap_psks" in str(task.get("assert")))
+    assert check < _ap_install()
+
+
+def test_the_regdomain_is_checked_after_the_install_and_before_hostapd_starts() -> None:
+    """After the install, so a run before the portal login stops at the install (B2)."""
+    check = _first(lambda task: "ieee80211_regdom" in str(task.get("assert")))
+    assert _ap_install() < check < _hostapd_start()
+
+
+def test_the_supplicants_are_masked_and_stopped_by_exact_name_before_hostapd_starts() -> None:
+    """A glob would also match the uplink's supplicant, `netplan-wpa-uplink0`."""
+    mask = _first(lambda task: task.get("loop") == AP_SUPPLICANTS and task["systemd"].get("masked") is True)
+    stop = _first(lambda task: task.get("loop") == AP_SUPPLICANTS and task["systemd"].get("state") == "stopped")
+    assert TASKS[stop]["systemd"]["enabled"] is False
+    assert not any("*" in name for name in AP_SUPPLICANTS)
+    assert mask < stop < _hostapd_start()
+
+
+def test_stopping_a_supplicant_is_gated_on_it_existing() -> None:
+    """The systemd module fails on a stop of a unit that does not exist; it can mask one."""
+    facts = _first(lambda task: "service_facts" in task)
+    stop = _first(lambda task: task.get("loop") == AP_SUPPLICANTS and task["systemd"].get("state") == "stopped")
+    assert facts < stop
+    assert TASKS[stop]["when"] == "item in ansible_facts.services"
+
+
+def test_hostapd_is_unmasked_enabled_and_started() -> None:
+    """The package masks it when it installs without a config."""
+    task = TASKS[_hostapd_start()]["systemd"]
+    assert (task["masked"], task["enabled"], task["state"]) == (False, True, "started")
+    for dest in (HOSTAPD_CONF, PSK_FILE, AP_UNIT):
+        index, _ = _template_task(dest)
+        assert index < _hostapd_start()
+
+
+@pytest.mark.parametrize("dest", [HOSTAPD_CONF, PSK_FILE])
+def test_the_ap_files_are_private(dest: str) -> None:
+    """The config holds the lab SSID and the PSK file the passphrases; `--diff` would print both."""
+    _, task = _template_task(dest)
+    assert task["no_log"] is True
+    assert task["template"]["mode"] == "0600"
+
+
+def test_a_psk_change_reloads_and_a_config_change_restarts() -> None:
+    """A reload keeps every station associated (D8). After a restart, the reload is skipped:
+    the restart already read the file, and its control socket may not be up yet."""
+    _, psks = _template_task(PSK_FILE)
+    _, conf = _template_task(HOSTAPD_CONF)
+    reload = next(h for h in HANDLERS if "reload_wpa_psk" in str(h.get("command")))
+    restart = next(h for h in HANDLERS if (h.get("systemd") or {}).get("name") == "hostapd")
+    assert psks["notify"] == reload["name"]
+    assert conf["notify"] == restart["name"]
+    assert restart["systemd"]["state"] == "restarted"
+    assert reload["when"] == f"{conf['register']} is not changed"
+    assert HANDLERS.index(restart) < HANDLERS.index(reload)
+
+
+def test_the_ap_unit_reloads_networkd() -> None:
+    _, unit = _template_task(AP_UNIT)
+    handler = next(h for h in HANDLERS if h["name"] == unit["notify"])
+    assert handler["command"] == "networkctl reload"
+
+
+def test_ufw_lets_dhcp_in_on_the_lab_wifi() -> None:
+    rules = [_module(task, "community.general.ufw") or {} for task in TASKS]
+    assert {
+        "rule": "allow",
+        "interface_in": "{{ gateway_ap_interface }}",
+        "proto": "udp",
+        "port": "67",
+    } in rules
