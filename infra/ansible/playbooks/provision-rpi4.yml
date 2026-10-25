@@ -110,10 +110,18 @@
           - "enx*"
           - "wlan0"
         gateway_dhcp_reservations:
-          - { mac: "68:1D:EF:38:C5:6F", hostname: "kubelab-ace1", ip: "{{ config.networking.nodes.ace1.lan_ip }}" }
-          - { mac: "68:1D:EF:38:C5:8B", hostname: "kubelab-ace2", ip: "{{ config.networking.nodes.ace2.lan_ip }}" }
-          - { mac: "78:55:36:06:18:14", hostname: "kubelab-bee", ip: "{{ config.networking.nodes.beelink.lan_ip }}" }
-          - { mac: "00:04:4b:e5:5f:28", hostname: "kubelab-jet1", ip: "{{ config.networking.nodes.jetson.lan_ip }}" }
+          - mac: "{{ config.networking.nodes.ace1.mac }}"
+            hostname: "kubelab-ace1"
+            ip: "{{ config.networking.nodes.ace1.lan_ip }}"
+          - mac: "{{ config.networking.nodes.ace2.mac }}"
+            hostname: "kubelab-ace2"
+            ip: "{{ config.networking.nodes.ace2.lan_ip }}"
+          - mac: "{{ config.networking.nodes.beelink.mac }}"
+            hostname: "kubelab-bee"
+            ip: "{{ config.networking.nodes.beelink.lan_ip }}"
+          - mac: "{{ config.networking.nodes.jetson.mac }}"
+            hostname: "kubelab-jet1"
+            ip: "{{ config.networking.nodes.jetson.lan_ip }}"
 
     - role: ../roles/docker
       tags: [docker]
