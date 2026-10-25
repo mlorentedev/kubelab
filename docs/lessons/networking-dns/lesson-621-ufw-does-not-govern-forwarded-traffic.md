@@ -25,8 +25,11 @@ chain is shared:
 - Docker puts `DOCKER-USER` and `DOCKER-FORWARD` ahead of ufw's jumps (Docker's
   "Packet filtering and firewalls" page says published ports bypass ufw).
 
-Each accepts its own traffic. An accept ends that chain, so ufw's rules never
-see tailnet-forwarded traffic or traffic to a published port. On the RPi4 the
+Each accepts its own traffic, and an accept ends that chain. The order of
+the jumps is insertion order, set by whichever of the three started or reloaded
+last, not a property of the chain. So ufw's rules may or may not see
+tailnet-forwarded traffic or traffic to a published port, and nothing in the
+ruleset says which. On the RPi4 the
 point was moot anyway: the baseline of 2026-10-25 read
 `DEFAULT_FORWARD_POLICY="ACCEPT"`, and Pi-hole and CoreDNS publish on
 `0.0.0.0`, the case #959 measured on other nodes. Under the draft's model, a
