@@ -81,7 +81,7 @@ It also reports whether a public resolver and the lease's resolver answer, and w
    make headscale-rejoin NODE=rpi4
    ```
 
-   It mints a single-use, one-hour pre-auth key on Headscale only when the node is off the mesh, and is a no-op otherwise. `NODE=rpi3` is refused, because rpi3's play has no tailscale role.
+   It mints a single-use, one-hour pre-auth key on Headscale only when the node is off the mesh, and is a no-op otherwise. `NODE=rpi3` runs the same way (#2687), over rpi3's lab Wi-Fi address, so the controller has to reach the lab Wi-Fi.
 
 ## Captive portal
 
