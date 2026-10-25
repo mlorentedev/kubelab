@@ -32,3 +32,18 @@
 - name: wait for the session
   wait_for_connection:
     timeout: 120
+
+- name: restart hostapd
+  systemd:
+    name: hostapd
+    state: restarted
+
+# A reload keeps every station associated (ADR-075 D8). After a restart it is skipped:
+# the restart already read the file, and the control socket may not be up yet.
+# hostapd_cli exits 0 on a FAIL reply, so the reply is what says it worked.
+- name: reload the lab Wi-Fi PSKs
+  command: hostapd_cli -p /run/hostapd -i {{ gateway_ap_interface }} reload_wpa_psk
+  register: gateway_psk_reload
+  changed_when: true
+  failed_when: gateway_psk_reload.rc != 0 or 'OK' not in (gateway_psk_reload.stdout_lines | map('trim') | list)
+  when: gateway_ap_conf is not changed

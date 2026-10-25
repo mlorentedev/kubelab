@@ -320,6 +320,196 @@
 - name: Apply the uplink before anything depends on it
   meta: flush_handlers
 
+# --- The lab Wi-Fi AP (ADR-075 D2) ---
+
+- name: Check the lab Wi-Fi secrets
+  assert:
+    that:
+      - gateway_ap_ssid is regex('[^\x00-\x1f\x7f]+', match_type='fullmatch')
+      - gateway_ap_ssid.encode('utf-8') | length <= 32
+      - gateway_ap_psks | length > 0
+      - gateway_ap_psks | rejectattr('psk', 'regex', '[!-~][ -~]{6,61}[!-~]', match_type='fullmatch') | list | length == 0
+      - gateway_ap_psks | rejectattr('keyid', 'regex', '[A-Za-z0-9_-]{1,31}', match_type='fullmatch') | list | length == 0
+    fail_msg: >-
+      The lab Wi-Fi needs networking.edge.lab_wifi.ssid and .psk in prod SOPS. The SSID is
+      1 to 32 bytes with no control characters. A PSK is 8 to 63 printable ASCII characters
+      with no blank at either end: hostapd keeps one as part of the passphrase, where no
+      client's password prompt shows it. A keyid is one word of at most 31 characters. The
+      operator stores them with `toolkit secrets set`.
+    quiet: true
+
+- name: Check the lab Wi-Fi addresses
+  assert:
+    that:
+      - gateway_ap_channel | string | length > 0
+      - gateway_ap_cidr | length > 0
+      - gateway_ap_address | length > 0
+      - gateway_ap_dhcp_range_start | length > 0
+      - gateway_ap_dhcp_range_end | length > 0
+      - gateway_ap_reservations is not none
+    fail_msg: >-
+      The lab Wi-Fi needs its channel, addresses and reserved nodes from the play:
+      networking.edge.uplink.channel and networking.edge.lab_wifi.{cidr,gateway,dhcp_range,reservations}
+      in common.yaml, passed by provision-rpi4.yml. The role keeps no copy of them.
+    quiet: true
+
+# The archive answers over the uplink, and at a portal site only after the login: a run
+# before it stops here, before anything of the AP is written. Installed packages need no
+# archive, so the index is refreshed only when the install fails: a TAGS=gateway re-run
+# after the portal's login expired still converges. A full provision does not get this
+# far: base_system refreshes the index first and stops there.
+- name: Install the AP's packages
+  block:
+    - name: Install hostapd and iw
+      apt:
+        name:
+          - hostapd
+          - iw
+        state: present
+  rescue:
+    - name: Refresh the package index and retry
+      block:
+        - name: Install hostapd and iw from a fresh index
+          apt:
+            name:
+              - hostapd
+              - iw
+            state: present
+            update_cache: true
+      rescue:
+        - name: Say why the AP's packages are missing
+          fail:
+            msg: >-
+              ERROR: hostapd and iw are not installed ({{ ansible_failed_result.msg | default('apt failed') }}).
+              WHY: the package archive does not answer over the uplink. At a captive-portal site it
+              answers only after the portal login.
+              FIX: log in to the portal (bring-up B4), then re-run the provision.
+
+- name: Read the kernel command line
+  slurp:
+    src: /boot/firmware/cmdline.txt
+  register: gateway_cmdline
+  failed_when: false
+
+- name: Check that no boot parameter overrides the regulatory domain
+  assert:
+    that: >-
+      (gateway_cmdline.content | default('') | b64decode).split()
+      | select('match', 'cfg80211[.]ieee80211_regdom=') | list | length == 0
+    fail_msg: >-
+      ERROR: /boot/firmware/cmdline.txt sets cfg80211.ieee80211_regdom.
+      WHY: kmod appends the kernel command line's module options after /etc/modprobe.d, and
+      the kernel keeps the last value, so the site's regulatory domain would never load.
+      FIX: this run skipped the play's rpi_boot role, which removes it (#2668). Run it with
+      TAGS=boot, then re-run.
+    quiet: true
+
+# modprobe.d reaches cfg80211 when the module loads, which is at boot: it is in no
+# initramfs and is loaded already. `iw reg set` makes the running kernel agree now.
+- name: Persist the regulatory domain
+  copy:
+    dest: /etc/modprobe.d/kubelab-regdom.conf
+    content: "options cfg80211 ieee80211_regdom={{ gateway_uplink_regdomain }}\n"
+    mode: "0644"
+
+- name: Read the regulatory domain in force
+  command: iw reg get
+  register: gateway_regdomain
+  changed_when: false
+  check_mode: false
+
+# By lines, not by a '\n' in the expression: whether Jinja sees one as a newline
+# depends on the YAML quoting and the Ansible version (lesson-497).
+- name: Set the regulatory domain
+  command: iw reg set {{ gateway_uplink_regdomain }}
+  changed_when: true
+  when: >-
+    not (gateway_regdomain.stdout_lines[:2] | join(' ')).startswith('global country ' ~ gateway_uplink_regdomain ~ ':')
+
+- name: Read the services
+  service_facts:
+
+# hostapd cannot take an interface a supplicant holds, and removing the home SSID from
+# netplan does not stop a running one. Exact names: a glob would match the uplink's too.
+- name: Mask the supplicants that would hold the AP interface
+  systemd:
+    name: "{{ item }}"
+    masked: true
+  loop:
+    - "netplan-wpa-{{ gateway_ap_interface }}.service"
+    - wpa_supplicant.service
+
+- name: Stop the supplicants that would hold the AP interface
+  systemd:
+    name: "{{ item }}"
+    state: stopped
+    enabled: false
+  loop:
+    - "netplan-wpa-{{ gateway_ap_interface }}.service"
+    - wpa_supplicant.service
+  when: item in ansible_facts.services
+
+- name: Deploy the lab Wi-Fi PSKs
+  template:
+    src: hostapd.wpa_psk.j2
+    dest: /etc/hostapd/hostapd.wpa_psk
+    mode: "0600"
+  no_log: true
+  notify: reload the lab Wi-Fi PSKs
+
+- name: Deploy the lab Wi-Fi AP
+  template:
+    src: hostapd.conf.j2
+    dest: /etc/hostapd/hostapd.conf
+    mode: "0600"
+  no_log: true
+  register: gateway_ap_conf
+  notify: restart hostapd
+
+- name: Give the AP interface the gateway address
+  template:
+    src: 10-kubelab-ap.network.j2
+    dest: /etc/systemd/network/10-kubelab-ap.network
+    mode: "0644"
+  register: gateway_ap_network
+
+- name: Read the AP interface's addresses
+  command: ip -4 -br addr show dev {{ gateway_ap_interface }}
+  register: gateway_ap_addresses
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+# A task and not a handler: a handler deferred to the end of the play is lost when a
+# later role fails, and the re-run reports changed=0 with no address on the AP. So it
+# runs whenever the address is not in place, whatever the last run did.
+- name: Apply the AP interface's address
+  command: "{{ item }}"
+  loop:
+    - networkctl reload
+    - networkctl reconfigure {{ gateway_ap_interface }}
+  changed_when: true
+  when: >-
+    gateway_ap_network is changed
+    or (' ' ~ gateway_ap_address ~ '/' ~ gateway_ap_cidr.split('/')[1]) not in (' ' ~ gateway_ap_addresses.stdout)
+
+- name: Allow DHCP in on the lab Wi-Fi
+  community.general.ufw:
+    rule: allow
+    interface_in: "{{ gateway_ap_interface }}"
+    proto: udp
+    port: "67"
+
+# The package masks hostapd when it installs without a config. In check mode the
+# package is not installed yet, so there is no unit to start.
+- name: Start the lab Wi-Fi AP
+  systemd:
+    name: hostapd
+    masked: false
+    enabled: true
+    state: started
+  when: not ansible_check_mode or 'hostapd.service' in ansible_facts.services
+
 - name: Deploy dnsmasq DHCP config
   template:
     src: kubelab-dhcp.conf.j2
@@ -332,3 +522,9 @@
     name: dnsmasq
     state: started
     enabled: true
+
+# hostapd's and dnsmasq's handlers run here, inside the role, for the same reason the
+# address is a task. A play-level force_handlers would also run the uplink's netplan
+# handlers after a failure, which the uplink's ordering rules out.
+- name: Apply the AP's changes
+  meta: flush_handlers
