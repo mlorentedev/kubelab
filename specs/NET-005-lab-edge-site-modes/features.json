@@ -1,0 +1,100 @@
+[
+  {
+    "id": "NET-005-lab-edge-site-modes-f1",
+    "behavior": "AC1: one uplink block per site; provisioning converges with changed=0 on the second run; drops load before the uplink; masquerade follows the profile; Tailscale floor asserted",
+    "verification": "poetry run pytest -q --no-cov tests/test_gateway_firewall_render.py tests/test_gateway_uplink_render.py tests/test_edge_ssot.py tests/test_gateway_role_tasks.py && make provision NODE=rpi4 ENV=prod 2>&1 | grep -E 'rpi4 +: ok=[0-9]+ +changed=0 +unreachable=0 +failed=0 '",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "NET-005-lab-edge-site-modes-f2",
+    "behavior": "AC1 live: the Wi-Fi kind holds a 48-hour soak with no rtw88 reset, a lease renews with the drops loaded, and the Ethernet kind is proven at the next site",
+    "verification": "Manual, tasks.md B2, B6, B12 and B13; journal excerpts and lease renewal recorded in verification.md",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "NET-005-lab-edge-site-modes-f3",
+    "behavior": "AC2: lab Wi-Fi clients get a lease in the lab CIDR with Pi-hole DNS, saved devices rejoin, rpi3 takes its reservation and Kuma's route answers",
+    "verification": "poetry run pytest -q --no-cov tests/test_gateway_ap_render.py && echo 'live part: tasks.md B5, recorded in verification.md'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "NET-005-lab-edge-site-modes-f4",
+    "behavior": "AC3: uplink input and forward drop everything but established/related and DHCP replies; the forward drops are complete without ufw; no lab CIDR on the tailnet",
+    "verification": "poetry run pytest -q --no-cov tests/test_gateway_firewall_render.py tests/test_gateway_sysctl_render.py && echo 'live part: tasks.md B8 scans over IPv4 and IPv6, recorded in verification.md'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "NET-005-lab-edge-site-modes-f5",
+    "behavior": "AC4: homelab DHCP works (udp 67 allowed on eth0) and make test-e2e ENV=staging passes through the new uplink",
+    "verification": "poetry run pytest -q --no-cov tests/test_gateway_role_tasks.py && make test-e2e ENV=staging",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "NET-005-lab-edge-site-modes-f6",
+    "behavior": "AC5: the status target tells up, portal and dead apart; login mode renders and removes the portal forwards; the uplink MAC is stable across reboot and re-provision",
+    "verification": "poetry run pytest -q --no-cov tests/test_edge_status.py && make edge-status && echo 'make edge-status exits 0 only when the uplink is up; live part: tasks.md B3 and B4, recorded in verification.md'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "NET-005-lab-edge-site-modes-f7",
+    "behavior": "AC6: network config, resolver and reservations are rendered from the SSOT; no site-identifying key is committed; secrets catalogued",
+    "verification": "poetry run pytest -q --no-cov tests/test_edge_ssot.py tests/test_gateway_uplink_render.py tests/test_secrets_catalog_edge.py && make secrets-audit",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "NET-005-lab-edge-site-modes-f8",
+    "behavior": "AC7: a lease colliding with the LAN, lab Wi-Fi or tailnet CIDR raises an operator alert from the edge",
+    "verification": "poetry run pytest -q --no-cov tests/test_edge_lease_check.py && echo 'live part: tasks.md B8 forced leases, recorded in verification.md'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "NET-005-lab-edge-site-modes-f9",
+    "behavior": "AC8: CAKE shapes both directions from the profile; connect time under bulk load stays within the recorded bound",
+    "verification": "poetry run pytest -q --no-cov tests/test_edge_shaper_render.py && echo 'live part: tasks.md B9, recorded in verification.md'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "NET-005-lab-edge-site-modes-f10",
+    "behavior": "AC9: uplink DHCP routes and DNS change neither the routing table nor the resolver",
+    "verification": "poetry run pytest -q --no-cov tests/test_gateway_uplink_render.py && echo 'live part: tasks.md B8 option 121 case, recorded in verification.md'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "NET-005-lab-edge-site-modes-f11",
+    "behavior": "AC10: the lab PSK rotates from SOPS with one command, rpi3 first, and retirement refuses until rpi3 answers on the new keyid",
+    "verification": "poetry run pytest -q --no-cov tests/test_edge_psk.py && echo 'live part: tasks.md B7 offload check and the first rotation, recorded in verification.md'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "NET-005-lab-edge-site-modes-f12",
+    "behavior": "AC11: every non-human step is a Make target; mesh rejoin mints a short-lived single-use key; the operator LAN link is rendered from lan_cidr",
+    "verification": "poetry run pytest -q --no-cov tests/test_edge_runbook_commands.py tests/test_headscale_rejoin.py tests/test_edge_lan_link.py",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "NET-005-lab-edge-site-modes-f13",
+    "behavior": "AC12: prod pages through the ADR-044 fabric on a dead or captive uplink and on a stopped rpi3; the probe logs every SSOT target every run; both rules exist",
+    "verification": "poetry run pytest -q --no-cov tests/test_edge_watcher_targets.py tests/test_edge_watcher_probe.py tests/test_edge_alerting_rules.py tests/test_alerting_no_data_is_not_health.py && echo 'live part: tasks.md B8 with the phone on cellular, recorded in verification.md'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "NET-005-lab-edge-site-modes-f14",
+    "behavior": "AC13: the hardware watchdog is armed and the liveness ladder restores the lab Wi-Fi after a simulated firmware halt",
+    "verification": "poetry run pytest -q --no-cov tests/test_edge_recovery_render.py && echo 'live part: tasks.md B10, recorded in verification.md'",
+    "state": "pending",
+    "evidence": ""
+  }
+]

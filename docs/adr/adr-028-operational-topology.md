@@ -13,6 +13,19 @@ created: "2026-03-28"
 Accepted (2026-03-28). Refines ADR-023 (Hub-and-Spoke), ADR-027 (Intelligence Layer).
 
 > **MinIO retired** (OPS-023, #972, 2026-09): the Beelink's object store, listed below among the on-demand services, no longer runs anywhere. See [ADR-061](adr-061-stateful-service-placement.md) D4.
+>
+> **Amended 2026-10-25 by [ADR-075](adr-075-lab-edge-per-site-uplink.md).** §6 no longer holds: the RPi4 is always-on again (amendment below).
+
+## Amendment — 2026-10-25 (the RPi4 is the lab's edge, so it is always-on)
+
+§6 classed the RPi4 on-demand because it "only serves staging DNS (CoreDNS + Pi-hole) and LAN subnet routing". That stopped being true when the operator moved away from the home router. [ADR-075](adr-075-lab-edge-per-site-uplink.md) (NET-005, #2661) makes the RPi4 the lab's network edge: its built-in radio is the lab Wi-Fi access point, and a per-site uplink replaces the home router. rpi3, which is always-on, and every personal device now reach the internet through it.
+
+By this ADR's own 3 AM test, the RPi4 now answers yes, and C6 of ADR-075 forbids an always-on node depending on an on-demand one. So:
+
+- **The RPi4 moves to the always-on tier**, with its duties: NAT, DHCP for the homelab LAN and the lab Wi-Fi, the access point, staging DNS, and the Tailscale subnet route. `networking.nodes.rpi4.location` in `common.yaml` follows.
+- **The external monitor shares a failure domain it did not share before.** The 2026-08-09 amendment below names Uptime Kuma on the RPi3 as the monitor outside both clusters. That still holds for prod, which shares nothing with the edge. But when the edge dies, Kuma goes silent with it. ADR-075 D6 adds a prod-side probe of the edge and rpi3 for that case. NOTIFY-009 (#1021) tracks a watcher outside the fleet for prod itself.
+
+**Amended, not superseded**: the always-on / on-demand split and the 3 AM test are unchanged. One node changes tier, because its role changed.
 
 ## Amendment — 2026-08-12 (state placement is a second axis this ADR does not carry)
 
@@ -163,6 +176,8 @@ Moving Gitea to VPS prod enables:
 - Bootstrap independence: ArgoCD can sync even if GitHub has an outage
 
 ### 6. RPi4 reclassified as on-demand
+
+> **Superseded 2026-10-25** by the amendment at the top of this ADR ([ADR-075](adr-075-lab-edge-per-site-uplink.md)): the RPi4 is the lab's edge and always-on.
 
 RPi4 only serves staging DNS (CoreDNS + Pi-hole) and LAN subnet routing. Prod DNS is Cloudflare (public). When staging is off, RPi4 can be off.
 
