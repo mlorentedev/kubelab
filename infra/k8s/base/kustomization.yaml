@@ -25,6 +25,7 @@ resources:
   - services/apprise.yaml
   - services/quota-watcher.yaml
   - services/r2-backup-watcher.yaml
+  - services/edge-watcher.yaml
   - services/disk-watcher.yaml
 
 configMapGenerator:
@@ -78,6 +79,14 @@ configMapGenerator:
       - services/r2-backup-watcher/probe.sh
       - services/r2-backup-watcher/size.sh
       - services/r2-backup-watcher/targets.txt
+
+  # The edge watcher's probe and targets (NET-005 AC12). Hash kept, as above.
+  # targets.txt is generated: `make sync-edge-watcher-targets`.
+  - name: edge-watcher-probe
+    namespace: kubelab
+    files:
+      - services/edge-watcher/probe.sh
+      - services/edge-watcher/targets.txt
 
   - name: authelia-assets
     namespace: kubelab
