@@ -213,6 +213,38 @@ def edge_status() -> None:
     raise typer.Exit(code)
 
 
+@edge_app.command("lan-link")
+def edge_lan_link(
+    route: Annotated[
+        bool, typer.Option("--route", help="Make the edge the default route, for the portal login")
+    ] = False,
+    remove: Annotated[bool, typer.Option("--remove", help="Delete the profile")] = False,
+    static: Annotated[bool, typer.Option("--static", help="A fixed address, for when the edge serves no DHCP")] = False,
+    interface: Annotated[
+        str | None, typer.Option("--interface", help="The adapter on the lab switch, if not the only one")
+    ] = None,
+) -> None:
+    """Join this laptop to the lab LAN with a NetworkManager profile (NET-005 AC11).
+
+    DHCP from the edge, or a fixed address when it serves none, the lab LAN routed
+    out the wire ahead of the tailnet, and by default neither the edge's default
+    route nor its DNS.
+    """
+    from toolkit.features.configuration import ConfigurationManager
+    from toolkit.features.edge_lan_link import LanLinkRefused, apply
+
+    if route + remove + static > 1:
+        logger.error("--route, --static and --remove contradict each other: pick one")
+        raise typer.Exit(1)
+    net = ConfigurationManager("prod", settings.project_root).get_plaintext_values()["networking"]
+    try:
+        code = apply(net["lan_cidr"], route=route, remove=remove, static=static, interface=interface)
+    except LanLinkRefused as e:
+        logger.error(str(e))
+        raise typer.Exit(1) from e
+    raise typer.Exit(code)
+
+
 @node_app.command("reclaim")
 def node_reclaim(
     node: Annotated[str, typer.Option("--node", help="Node key under networking.nodes (e.g. beelink)")],
@@ -352,6 +384,48 @@ def headscale_probe() -> None:
     rc = run_probe()
     if rc != 0:
         raise typer.Exit(rc)
+
+
+@headscale_app.command("rejoin")
+def headscale_rejoin(
+    node: Annotated[str, typer.Option("--node", help="Node whose provision-<node> play to run, e.g. rpi4")],
+    env: Annotated[str, typer.Option("--env", "-e", help="Target environment")] = "prod",
+) -> None:
+    """Put a node back on the mesh with a single-use, one-hour key (NET-005 task 32).
+
+    Runs the node's play, tailscale role only, over its LAN address: a node off the
+    mesh answers on nothing else. The role mints the key on Headscale only when the
+    node is off the mesh, so a node that is on it is a no-op. The mesh inventory is
+    put back whatever the run did.
+    """
+    from toolkit.features.generator_ansible import ansible_generator
+    from toolkit.features.headscale_nodes import REJOIN_EXTRA_VARS, REJOIN_TAGS, RejoinRefused, rejoin_playbook
+
+    try:
+        playbook = rejoin_playbook(settings.ansible_dir / "playbooks", node)
+    except RejoinRefused as exc:
+        logger.error(str(exc))
+        raise typer.Exit(1) from exc
+
+    ran = False
+    try:
+        ansible_run(
+            playbook=playbook,
+            env=env,
+            tags=REJOIN_TAGS,
+            extra_vars=REJOIN_EXTRA_VARS,
+            bootstrap=True,
+            require_fresh=True,
+        )
+        ran = True
+    finally:
+        logger.info("Restoring: inventory with mesh Tailscale IPs")
+        restored = ansible_generator.generate(env)
+        if not restored.get("success"):
+            logger.error(f"The LAN inventory is still on disk: {restored.get('error')}")
+            # Raised in `finally`, an exit would replace a failed run's own: only a clean run takes it.
+            if ran:
+                raise typer.Exit(1)
 
 
 @headscale_app.command("recycle-stale")

@@ -400,7 +400,8 @@
       ERROR: /boot/firmware/cmdline.txt sets cfg80211.ieee80211_regdom.
       WHY: kmod appends the kernel command line's module options after /etc/modprobe.d, and
       the kernel keeps the last value, so the site's regulatory domain would never load.
-      FIX: remove the parameter through the rpi_boot role (#2668), then re-run.
+      FIX: this run skipped the play's rpi_boot role, which removes it (#2668). Run it with
+      TAGS=boot, then re-run.
     quiet: true
 
 # modprobe.d reaches cfg80211 when the module loads, which is at boot: it is in no

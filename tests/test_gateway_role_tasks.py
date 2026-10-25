@@ -433,6 +433,16 @@ def test_the_regdomain_is_checked_after_the_install_and_before_hostapd_starts() 
     assert _ap_install() < check < _hostapd_start()
 
 
+def test_the_parameter_the_gateway_refuses_is_the_one_the_edge_play_removes() -> None:
+    """rpi_boot runs first in the same play and removes it (#2668). Two spellings would
+    leave the gateway refusing a command line that nothing ever cleans."""
+    check = TASKS[_first(lambda task: "ieee80211_regdom" in str(task.get("assert")))]
+    (pattern,) = re.findall(r"select\('match', '([^']+)'\)", check["assert"]["that"])
+    plays = yaml.safe_load((ANSIBLE / "playbooks" / "provision-rpi4.yml").read_text())
+    (boot,) = [r for p in plays for r in p.get("roles") or [] if str(r.get("role", "")).endswith("/rpi_boot")]
+    assert [name for name in boot["vars"]["rpi_boot_absent_params"] if re.match(pattern, f"{name}=US")]
+
+
 def test_the_supplicants_are_masked_and_stopped_by_exact_name_before_hostapd_starts() -> None:
     """A glob would also match the uplink's supplicant, `netplan-wpa-uplink0`."""
     mask = _first(lambda task: task.get("loop") == AP_SUPPLICANTS and task["systemd"].get("masked") is True)
