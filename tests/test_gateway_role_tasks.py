@@ -104,7 +104,9 @@ def test_a_package_restart_only_replaces_the_edge_table() -> None:
     """The nftables postinst runs `try-restart` on upgrade (measured on the RPi4)."""
     _, task = _template_task("/etc/systemd/system/nftables.service.d/kubelab-stop.conf")
     env = ansible_env(str(ROLE / "templates"), trim_blocks=True)
-    lines = [line for line in env.get_template(task["template"]["src"]).render().splitlines() if not line.startswith("#")]
+    lines = [
+        line for line in env.get_template(task["template"]["src"]).render().splitlines() if not line.startswith("#")
+    ]
     assert lines[lines.index("[Service]") + 1 :] == ["ExecStop=", "ExecStop=-/usr/sbin/nft delete table inet kubelab"]
     handler = next(h for h in HANDLERS if h["name"] == task["notify"])
     assert handler["systemd"] == {"daemon_reload": True}
@@ -122,3 +124,68 @@ def test_an_immutable_resolver_is_unlocked_before_the_template() -> None:
     assert probe < unlock < resolver
     assert "immutable" in TASKS[unlock]["when"]
     assert TASKS[unlock]["changed_when"] is True
+
+
+NETPLAN = "/etc/netplan/10-kubelab-edge.yaml"
+LINK = "/etc/systemd/network/10-kubelab-uplink.link"
+
+
+def _first(predicate: Any) -> int:
+    return next(i for i, task in enumerate(TASKS) if predicate(task))
+
+
+def test_the_drops_load_before_the_uplink_comes_up() -> None:
+    """ADR-075 D7. A changed ruleset loads at handler time, so handlers flush between."""
+    nftables, _ = _template_task("/etc/nftables.conf")
+    netplan, _ = _template_task(NETPLAN)
+    flushes = [i for i, task in enumerate(TASKS) if task.get("meta") == "flush_handlers"]
+    assert any(nftables < i < netplan for i in flushes)
+
+
+def test_the_profile_is_checked_before_anything_of_the_uplink_is_written() -> None:
+    check = _first(lambda task: "gateway_uplink_kind" in str(task.get("assert")))
+    link, _ = _template_task(LINK)
+    netplan, _ = _template_task(NETPLAN)
+    assert check < link < netplan
+
+
+def test_the_netplan_file_is_private_and_checked_before_it_lands() -> None:
+    """It holds the site SSID and PSK, and `--diff` would print it."""
+    _, task = _template_task(NETPLAN)
+    assert task["no_log"] is True
+    assert task["template"]["mode"] == "0600"
+    assert "netplan generate --root-dir" in task["template"]["validate"]
+
+
+def test_the_link_file_is_private() -> None:
+    """It holds the uplink adapter's MAC (ADR-075 C7)."""
+    _, task = _template_task(LINK)
+    assert task["no_log"] is True
+
+
+def test_a_netplan_change_is_applied_and_the_session_awaited() -> None:
+    """A profile that cuts the LAN fails the run visibly instead of passing."""
+    _, task = _template_task(NETPLAN)
+    notified = task["notify"] if isinstance(task["notify"], list) else [task["notify"]]
+    apply = next(i for i, h in enumerate(HANDLERS) if h.get("command") == "netplan apply")
+    wait = next(i for i, h in enumerate(HANDLERS) if "wait_for_connection" in h)
+    assert apply < wait
+    assert {HANDLERS[apply]["name"], HANDLERS[wait]["name"]} <= set(notified)
+
+
+def test_hand_written_netplan_is_backed_up_then_removed() -> None:
+    """The role owns /etc/netplan. The old file can hold a PSK, so its copy stays root-only."""
+    find = _first(lambda task: (task.get("find") or {}).get("paths") == "/etc/netplan")
+    assert NETPLAN.rsplit("/", 1)[1] in TASKS[find]["find"]["excludes"]
+    backup = _first(lambda task: (task.get("copy") or {}).get("remote_src") is True)
+    assert TASKS[backup]["copy"]["mode"] == "0600"
+    assert TASKS[backup]["no_log"] is True
+    remove = _first(lambda task: (task.get("file") or {}).get("state") == "absent" and "loop" in task)
+    # Removed only once the role's own file has passed netplan's check and landed.
+    netplan, _ = _template_task(NETPLAN)
+    assert netplan < find < backup < remove
+
+
+def test_cloud_init_never_writes_netplan() -> None:
+    task = TASKS[_first(lambda task: (task.get("copy") or {}).get("dest", "").startswith("/etc/cloud/"))]
+    assert yaml.safe_load(task["copy"]["content"]) == {"network": {"config": "disabled"}}

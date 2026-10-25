@@ -1,6 +1,6 @@
 ---
-# Gateway role: IP forwarding, nftables NAT, dnsmasq DHCP, DNS resilience
-# Assumes netplan was configured pre-boot (see vault runbook: 40-runbooks/rpi4-bootstrap.md)
+# Gateway role: IP forwarding, nftables NAT, dnsmasq DHCP, DNS resilience, and the
+# edge's network config: the role owns /etc/netplan (ADR-075 D2).
 
 - name: Enable IP forwarding
   sysctl:
@@ -123,6 +123,106 @@
     dest: /etc/sysctl.d/99-kubelab-edge.conf
     mode: "0644"
   notify: restart systemd-sysctl
+
+# A changed ruleset only loads when its handler runs, and the uplink must never come
+# up without its drops (ADR-075 D7).
+- name: Load the edge ruleset and sysctls before the uplink
+  meta: flush_handlers
+
+- name: Check the site profile and its secrets
+  assert:
+    that:
+      - gateway_uplink_kind in ['wifi_open', 'wifi_psk', 'ethernet']
+      - gateway_uplink_regdomain | length == 2
+      - gateway_uplink_mac | length > 0
+      - gateway_uplink_kind == 'ethernet' or gateway_uplink_ssid | length > 0
+      - gateway_uplink_kind != 'wifi_psk' or gateway_uplink_psk | length > 0
+    fail_msg: >-
+      The {{ gateway_uplink_kind }} uplink needs networking.edge.uplink.mac in prod SOPS,
+      plus .ssid for a Wi-Fi kind and .psk for wifi_psk. The operator stores them with
+      `toolkit secrets set`; the role never invents them.
+    quiet: true
+
+- name: Pin and name the uplink adapter
+  template:
+    src: uplink.link.j2
+    dest: /etc/systemd/network/10-kubelab-uplink.link
+    mode: "0644"
+  no_log: true
+  notify: reload udev
+
+- name: Keep cloud-init from writing netplan
+  copy:
+    dest: /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg
+    content: "network: {config: disabled}\n"
+    mode: "0644"
+
+# Checked alone in a scratch root, so a file netplan rejects never replaces a working one.
+- name: Deploy the edge netplan
+  template:
+    src: netplan-edge.yaml.j2
+    dest: /etc/netplan/10-kubelab-edge.yaml
+    mode: "0600"
+    validate: >-
+      sh -c 'root=$(mktemp -d) && mkdir -p "$root/etc/netplan" &&
+      install -m 0600 "$1" "$root/etc/netplan/10-kubelab-edge.yaml" &&
+      netplan generate --root-dir "$root"; status=$?; rm -rf "$root"; exit $status' _ %s
+  no_log: true
+  notify:
+    - apply netplan
+    - wait for the session
+
+- name: Create the uplink's networkd drop-in directory
+  file:
+    path: "/etc/systemd/network/10-netplan-{{ gateway_uplink_interface }}.network.d"
+    state: directory
+    mode: "0755"
+
+# Named after the .network file netplan generates for the uplink, or it applies to nothing.
+- name: Let the uplink lease set the default gateway
+  template:
+    src: dhcp-gateway.conf.j2
+    dest: "/etc/systemd/network/10-netplan-{{ gateway_uplink_interface }}.network.d/kubelab-gateway.conf"
+    mode: "0644"
+  notify: apply netplan
+
+- name: Find hand-written netplan files
+  find:
+    paths: /etc/netplan
+    patterns: "*.yaml,*.yml"
+    excludes: "10-kubelab-edge.yaml"
+  register: gateway_netplan_found
+
+- name: Create the netplan backup directory
+  file:
+    path: /var/backups/kubelab-netplan
+    state: directory
+    mode: "0700"
+
+# They can hold a Wi-Fi PSK, so the copies stay root-only and out of the log.
+- name: Back up hand-written netplan files
+  copy:
+    src: "{{ item.path }}"
+    dest: "/var/backups/kubelab-netplan/{{ item.path | basename }}"
+    remote_src: true
+    mode: "0600"
+  loop: "{{ gateway_netplan_found.files }}"
+  no_log: true
+
+- name: Remove hand-written netplan files
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ gateway_netplan_found.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  notify:
+    - apply netplan
+    - wait for the session
+
+# Apply now, so a profile that cuts the LAN stops the run here and not later.
+- name: Apply the uplink before anything depends on it
+  meta: flush_handlers
 
 - name: Deploy dnsmasq DHCP config
   template:

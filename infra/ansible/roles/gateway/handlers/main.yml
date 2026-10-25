@@ -24,3 +24,26 @@
   systemd:
     name: systemd-sysctl
     state: restarted
+
+# Handlers run in the order written here: the adapter is named before netplan
+# applies, and the session is awaited last.
+- name: Reload the udev rules
+  command: udevadm control --reload
+  changed_when: true
+  listen: reload udev
+
+# Only the uplink adapter: re-adding every interface would re-run the rest too.
+# The kernel refuses to rename an interface that is up, so this lands while it is down.
+- name: Rename the uplink adapter
+  command: udevadm trigger --action=add --subsystem-match=net --attr-match=address={{ gateway_uplink_mac }}
+  changed_when: true
+  no_log: true
+  listen: reload udev
+
+- name: apply netplan
+  command: netplan apply
+  changed_when: true
+
+- name: wait for the session
+  wait_for_connection:
+    timeout: 120
