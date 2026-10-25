@@ -243,7 +243,7 @@ Run at the temporary site in this order, after the PR each step needs. Every res
 - [ ] B4. [AC5] Human step 2: the portal login, from the laptop on the switch with `make edge-lan-link ROUTE=1` and its own Wi-Fi off. Then the uplink's MAC is reported identical after a reboot and a re-provision, by `make edge-status`, before anything is paid.
   Once `make edge-lan-link` has carried the session, undo the hand changes listed in `verification.md`: delete the `lab-bootstrap` profile and revert "Wired connection 1" (task 33).
 - [ ] B5. [AC2] Provision the AP (PR 5). Saved devices rejoin. rpi3 takes its reservation, and Kuma's route answers.
-- [ ] B6. [AC1] `make headscale-rejoin NODE=rpi4` and `NODE=rpi3` are each a no-op, or they rejoin. The RPi4 advertises `networking.lan_cidr`.
+- [ ] B6. [AC1] `make headscale-rejoin NODE=rpi4` is a no-op, or it rejoins. The RPi4 advertises `networking.lan_cidr`. rpi3's play has no tailscale role, so the rejoin refuses it (task 32, #2685): after B5, rpi3 answering on the tailnet with its non-expiring key is the check.
 - [ ] B7. [AC10] **On-device multi-PSK check.** Write two wildcard entries and connect a client with the first entry's PSK. Record which entry works and the `keyid` hostapd logs. If only the last works, try `brcmfmac.feature_disable` through `modprobe.d` and record the result. It decides task 34's path.
 - [ ] B8. [AC3] [AC7] [AC9] [AC12] The uplink stand-in (the MSI's hotspot):
   - exposure scans over IPv4 and IPv6;
