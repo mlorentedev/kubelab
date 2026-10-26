@@ -131,9 +131,10 @@ Then, in this order:
 |---|---|---|
 | #2681 | `a8bdbc99` | Runbook `lab-edge.md`; the hand-written netplan doc retired (DOCS-6 in #825 ticked). Guard-the-guard tests: the runbook has commands to check and no untagged fence |
 
+Then #2688 `14369af4` (#2684 option B; only the lease check and the liveness unit page, the shaper logs by the operator's decision; lesson-623). The operator merged it after the round-3 triage of `a53abf7e`, and #2684 closed. Filed #2690 for the unexplained `BLOCKED`.
+
 Still open at handoff:
 
-- **#2688** (#2684 option B): a unit declares `Environment=KUBELAB_NOTIFY_SEVERITY=page` in `[Service]`, and `kubelab-notify.sh` reads it from systemd at run time; the fleet default stays `log`. The first design, a map passed by the rpi4 play, was undone by every other play that applies `node_notify` to rpi4 (`maintain.yml`, `backup.yml`): lesson-623. **The operator decided the shaper logs** (a failure leaves the uplink unshaped, not down), so only the lease check and the liveness unit page, each with its own reason beside the line; `a53abf7e`. #2681 landed first, so this PR flips its "`log` until #2684" wording in ADR-075 D6 and the runbook. B8 needs it on master.
 - **#2672** (prod probe): lands during the bring-up, after B3 and a staging validation (task 27), by the operator's decision.
 
 **`BLOCKED` with every required check green, again.** #2687's `a6087d45` sat `BLOCKED`, mergeable, triaged, with all five required contexts green. Branch protection is `strict: false`, there are no rulesets and no unresolved threads, so "behind master" is not the explanation. A merge of master cleared it, as with #2674. The cause is still unexplained; the remedy is the same.
