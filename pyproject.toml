@@ -29,7 +29,7 @@ httpx = "^0.28.1" # HTTP client for registry tag verification (deployment promot
 certifi = ">=2026.10.19" # Transitive (httpx); floor past the compromised emSign roots, GHSA-6q48-6c7w-9gw2
 
 [tool.poetry.group.dev.dependencies]
-ruff = "^0.17.1"
+ruff = "^0.17.2"
 mypy = "^2.4.0"
 pre-commit = "^4.7.0"
 pytest = "^9.0.3"
