@@ -44,7 +44,7 @@ Run them from the deploy checkout once it is synced: `git -C ~/Projects/worktree
 4. `make provision NODE=rpi3 ENV=prod`: #2697 and #2729.
 5. `make provision NODE=ace2 ENV=prod TAGS=agent_stack,maintenance,glances`: #2703, #2710 and #2697.
 6. `make provision NODE=ace1 ENV=prod TAGS=maintenance,glances`: #2710 and #2697.
-7. `make provision NODE=rpi4 ENV=prod TAGS=gateway,maintenance`: #2730 and #2710. Then `make edge-boot-check` must be all `OK`. Then the hard-reset cases T1 to T4 together (`docs/runbooks/lab-edge.md`, "Hard-reset test"), with the evidence under `### B14-EVIDENCE`. T4 measures #2732.
+7. `make provision NODE=rpi4 ENV=prod`, full: the B2 re-run (its first run stopped at the hostapd install, with no clean re-run on record), plus #2730, #2710 and #2729. Then `make edge-boot-check` must be all `OK`. Then the hard-reset cases T1 to T4 together (`docs/runbooks/lab-edge.md`, "Hard-reset test"), with the evidence under `### B14-EVIDENCE`. T4 measures #2732.
 8. `TAGS=maintenance` on vps and gcp1: #2710.
 9. After the provisions, no node's boot journal should carry `Failed to enqueue On(Success|Failure)=` (#2729).
 10. After 2026-10-28 00:04Z: read that night's prune run (#2708).
