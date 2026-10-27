@@ -237,7 +237,10 @@ def on_demand_skip_reason(svc_name: str, exp: ServiceExpectation) -> str | None:
     host, port = on_demand_target(svc_name, exp.on_demand_backend)
     if backend_reachable(host, port):
         return None
+    # Says what the probe measured. A refused connection lands here too, with the node
+    # up and nothing bound to the port (ace2 and Open WebUI, 2026-10-27), so "powered
+    # off" is one of two causes this cannot tell apart, never the claim.
     return (
-        f"{svc_name}: on-demand backend {exp.on_demand_backend} ({host}:{port}) is "
-        "powered off — the route itself is asserted by TestOnDemandBackend"
+        f"{svc_name}: on-demand backend {exp.on_demand_backend} not reachable: powered off, "
+        f"or nothing listening on {host}:{port} — the route itself is asserted by TestOnDemandBackend"
     )
