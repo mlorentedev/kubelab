@@ -3,7 +3,7 @@
 Final, 10:25Z. Envelope: `.agent/unattended.yml` (expires 2026-10-27T15:00:00Z).
 
 ## Host
-- Sleep inhibitor held for the window (`systemd-inhibit --what=idle:sleep`, until ~15:00Z).
+- Sleep inhibitor (`systemd-inhibit --what=idle:sleep`) held from arming until the run ended `queue-empty`, then released at ~10:35Z.
 
 ## Landed under the grant
 - #2718, #2719, #2709, #2715, #2723, #2725, #2727, #2721 (closed #2720), #2731.
@@ -13,6 +13,12 @@ Final, 10:25Z. Envelope: `.agent/unattended.yml` (expires 2026-10-27T15:00:00Z).
 
 ## Open, mine
 - None. #2706 (`.github/**`, the operator's) and #2672 (after B3) were never under the grant.
+
+## Tickets filed this run
+- #2722 OPS-050, #2726 DNS-008, #2732 NET-017, #2733 OBS-039 (Backlog, P2, on the board).
+
+## Adversarial review
+- An independent review of #2730 returned FAIL: the no-uplink case could not pass on real systemd (the page it sends fails too), and "active" is not "serving" for the AP and DHCP. Fixed in `8228fed0` (the page is expected, `hostapd_cli` state and a listening DHCP port, LAN DNS answering). Its two edge behaviours that need a decision are #2732 and #2733.
 
 ## Not picked up
 - #2726 DNS-008: parked (scope-violation): its fix pins `infra/stacks/services/core/pihole/compose.yml`, outside `write_paths`.
