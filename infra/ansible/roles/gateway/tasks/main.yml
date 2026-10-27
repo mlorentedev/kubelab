@@ -89,12 +89,20 @@
       # The uplink status check's HTTP and DNS probes.
       - curl
       - bind9-dnsutils
+      # The boot check reads the radio's mode with it.
+      - iw
     state: present
 
 - name: Install the uplink status check
   copy:
     src: edge-status.sh
     dest: "{{ gateway_status_path }}"
+    mode: "0755"
+
+- name: Install the boot check
+  copy:
+    src: edge-boot-check.sh
+    dest: "{{ gateway_boot_check_path }}"
     mode: "0755"
 
 # It loads over the LAN session that provisions the edge, so it is checked first.
