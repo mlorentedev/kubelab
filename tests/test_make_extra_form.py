@@ -24,10 +24,17 @@ def _tracked_text_files() -> list[Path]:
     return [REPO / name for name in names.splitlines() if (REPO / name).is_file()]
 
 
-def test_the_makefile_passes_extra_as_the_extra_vars_value() -> None:
-    """The premise: if EXTRA ever became raw ansible arguments, `-e` would be right."""
+# A use of EXTRA's value, not the `$(if $(EXTRA),...)` that tests it is set.
+EXTRA_VALUE = re.compile(r"(?<!\$\(if )\$\(EXTRA\)")
+
+
+def test_the_makefile_passes_extra_only_as_the_extra_vars_value() -> None:
+    """The premise: if a target ever passed EXTRA as raw ansible arguments, `-e` would be right there."""
     makefile = (REPO / "Makefile").read_text(encoding="utf-8")
-    assert '--extra-vars "$(EXTRA)"' in makefile
+    uses = [match.start() for match in EXTRA_VALUE.finditer(makefile)]
+    assert uses, "no target passes EXTRA: the check below would be vacuous"
+    raw = [makefile.count("\n", 0, at) + 1 for at in uses if not makefile[:at].endswith('--extra-vars "')]
+    assert not raw, f"Makefile lines {raw} pass EXTRA other than as --extra-vars' value"
 
 
 def test_no_documented_extra_value_starts_with_a_flag() -> None:
