@@ -2,7 +2,7 @@
 # Says, after a boot, whether the edge brought back everything it serves (NET-005
 # AC13; the hard-reset test in docs/runbooks/lab-edge.md). `make edge-boot-check`
 # runs it over SSH. It reads and changes nothing. It uses `sudo -n` only where a
-# read needs root: the ruleset, the containers and the tailnet.
+# read needs root: the ruleset, the containers, hostapd's socket and the tailnet.
 #
 # Usage: kubelab-edge-boot-check <lan if> <lan address> <uplink if> <ap if> <lan cidr>
 #
@@ -34,6 +34,7 @@ lan_cidr=$5
 expect=${EDGE_EXPECT:-}
 case $expect in '' | no-uplink | no-lan) ;; *) usage ;; esac
 sys_net=${EDGE_SYS_NET:-/sys/class/net}
+hostapd_dir=${EDGE_HOSTAPD_DIR:-/run/hostapd}
 failed=0
 
 pass() { echo "OK   $1"; }
@@ -65,8 +66,8 @@ missing() {
 # on it when the device appears. The order comes from systemd's own record of
 # the boot, in microseconds since boot, because the journal can lose a boot's
 # first seconds to its size cap. The role only ever reloads the ruleset, which
-# keeps the timestamp; a restart by hand moves it, and the check then fails until
-# the next boot.
+# keeps the timestamp. A restart of either unit moves it, by hand or by an
+# unattended upgrade, so the check is for a boot nothing has restarted since.
 since_boot() { systemctl show -p "$1" --value "$2"; }
 loaded=$(since_boot ActiveEnterTimestampMonotonic nftables.service)
 networkd=$(since_boot InactiveExitTimestampMonotonic systemd-networkd.service)
@@ -74,10 +75,17 @@ drops_first() { [ "${loaded:-0}" -gt 0 ] && [ "$loaded" -lt "${networkd:-0}" ]; 
 seconds() { awk -v usec="${1:-0}" 'BEGIN { printf "%.1fs", usec / 1000000 }'; }
 
 has_carrier() { [ "$(cat "$sys_net/$1/carrier" 2>/dev/null)" = 1 ]; }
+# Unplugged, not gone: the device is there and reports no carrier.
+unplugged() { [ -e "$sys_net/$1" ] && [ "$(cat "$sys_net/$1/carrier" 2>/dev/null)" = 0 ]; }
 lan_address_set() { ip -4 -o addr show dev "$lan" | grep -q " $lan_address/"; }
 uplink_lease() { ip -4 -o addr show dev "$uplink" scope global | grep -q ' inet '; }
 default_route() { ip -4 route show default dev "$uplink" | grep -q '^default'; }
-serves_ap() { iw dev "$ap" info | grep -q 'type AP'; }
+# hostapd reports ENABLED once the AP beacons, not when the radio is merely in AP mode.
+serves_ap() { sudo -n hostapd_cli -p "$hostapd_dir" -i "$ap" status | grep -qx 'state=ENABLED'; }
+dhcp_listening() { ss -H -lun 'sport = :67' | grep -q .; }
+# Pi-hole answers `localhost` from its own tables: this proves its port on the LAN
+# address answers. Its healthcheck proves the hop to CoreDNS behind it.
+lan_dns() { dig @"$lan_address" localhost +short +time=2 +tries=1 | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; }
 
 # Running, and healthy when the image declares a health check.
 container_up() {
@@ -118,31 +126,37 @@ for unit in hostapd.service dnsmasq.service docker.service tailscaled.service \
   kubelab-edge-liveness.timer kubelab-edge-lease-check.timer kubelab-edge-lease-check.path; do
   check "$unit active" systemctl is-active --quiet "$unit"
 done
+check "DHCP server listening" dhcp_listening
 check "$ap serves the lab Wi-Fi" serves_ap
 check "container coredns up" container_up coredns
 check "container pihole up" container_up pihole
 
 if [ "$expect" = no-lan ]; then
-  missing "carrier on $lan" has_carrier "$lan"
+  check "$lan present without a carrier, as this case expects" unplugged "$lan"
 else
   check "LAN address on $lan" lan_address_set
+  check "DNS answers on the LAN address" lan_dns
 fi
 
-# The liveness check pages a missing uplink: in that case its failure is the page.
+# The liveness check fails on a missing uplink, and the page its failure sends
+# fails too: the edge has no route out. In that case both are expected.
 reporter=kubelab-edge-liveness.service
+expected=
 if [ "$expect" = no-uplink ]; then
   missing "uplink adapter $uplink" test -e "$sys_net/$uplink"
-  check "$reporter pages the missing uplink" pages "$reporter"
+  check "$reporter failed on the missing uplink" pages "$reporter"
+  expected="$reporter kubelab-notify@$reporter.service"
 else
   check "lease on $uplink" uplink_lease
   check "default route out $uplink" default_route
   check "kubelab-edge-shaper.service active" systemctl is-active --quiet kubelab-edge-shaper.service
   check "tailnet session running" tailnet_up
   check "subnet route $lan_cidr primary on the tailnet" advertises_lan
-  reporter=
 fi
 
-failed_units=$(systemctl --failed --no-legend --plain | awk -v skip="$reporter" '$1 != skip { printf "%s%s", sep, $1; sep = " " }')
+failed_units=$(systemctl --failed --no-legend --plain | awk -v expected="$expected" '
+  BEGIN { n = split(expected, e, " "); for (i = 1; i <= n; i++) skip[e[i]] = 1 }
+  !($1 in skip) { printf "%s%s", sep, $1; sep = " " }')
 if [ -z "$failed_units" ]; then pass "no failed unit"; else fail "failed units: $failed_units"; fi
 
 exit "$failed"

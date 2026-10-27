@@ -8,8 +8,8 @@ without the uplink adapter, then without the switch cable. After each boot,
 line per check. For a case that took something away, the check for that thing
 passes when it is missing.
 
-The script runs under dash, with fake `systemctl`, `ip`, `iw`, `docker`, `nft`
-and `tailscale` that read recorded state from files.
+The script runs under dash, with fake `systemctl`, `ip`, `ss`, `dig`,
+`hostapd_cli`, `docker`, `nft` and `tailscale` that read recorded state from files.
 """
 
 from __future__ import annotations
@@ -46,6 +46,8 @@ UNITS = (
     "kubelab-edge-shaper.service",
 )
 LIVENESS = "kubelab-edge-liveness.service"
+# The page the liveness check's failure sends, which cannot leave without the uplink.
+PAGE = f"kubelab-notify@{LIVENESS}.service"
 
 FAKES = {
     "sudo": '[ "$1" = -n ] && shift\nexec "$@"\n',
@@ -68,7 +70,9 @@ esac
   "route show") cat "$FAKE/route_$6" 2>/dev/null ;;
 esac
 """,
-    "iw": 'cat "$FAKE/iw_$2"\n',
+    "hostapd_cli": 'cat "$FAKE/hostapd_$4"\n',
+    "ss": 'cat "$FAKE/ss_udp_67" 2>/dev/null\n',
+    "dig": 'cat "$FAKE/dig_${1#@}" 2>/dev/null\n',
     "docker": 'cat "$FAKE/docker_$4"\n',
     "tailscale": 'cat "$FAKE/tailscale.json"\n',
     "sleep": ":\n",
@@ -90,7 +94,9 @@ class Edge:
         self.write("show_RuntimeWatchdogUSec_manager", "15s")
         for unit in UNITS:
             self.write(f"active/{unit}", "")
-        self.write(f"iw_{AP}", f"Interface {AP}\n\ttype AP\n")
+        self.write(f"hostapd_{AP}", "state=ENABLED\nphy=phy0\n")
+        self.write("ss_udp_67", "UNCONN 0 0 0.0.0.0%wlan0:67 0.0.0.0:*\n")
+        self.write(f"dig_{LAN_ADDRESS}", "127.0.0.1\n")
         self.write("docker_coredns", "running \n")
         self.write("docker_pihole", "running healthy\n")
         self.write(f"addr_{LAN}", f"2: {LAN}    inet {LAN_ADDRESS}/24 brd 192.0.2.255 scope global {LAN}\n")
@@ -133,13 +139,20 @@ class Edge:
             self.remove(name)
         self.tailnet(state="NoState", routes=[])
         self.write(f"failed/{LIVENESS}", "")
+        self.write(f"failed/{PAGE}", "")
 
     def unplug_lan(self) -> None:
         self.write_sys(LAN, "0")
         self.remove(f"addr_{LAN}")
+        self.remove(f"dig_{LAN_ADDRESS}")
 
     def run(self, *args: str, expect: str | None = None) -> subprocess.CompletedProcess[str]:
-        env = {"PATH": f"{self.bin}:/usr/bin:/bin", "FAKE": str(self.fake), "EDGE_SYS_NET": str(self.net)}
+        env = {
+            "PATH": f"{self.bin}:/usr/bin:/bin",
+            "FAKE": str(self.fake),
+            "EDGE_SYS_NET": str(self.net),
+            "EDGE_HOSTAPD_DIR": str(self.fake),
+        }
         if expect:
             env["EDGE_EXPECT"] = expect
         argv = args or (LAN, LAN_ADDRESS, UPLINK, AP, LAN_CIDR)
@@ -174,7 +187,15 @@ BROKEN = {
     "ruleset not loaded": (lambda e: e.remove("ruleset"), "ruleset inet kubelab"),
     "watchdog off": (lambda e: e.write("show_RuntimeWatchdogUSec_manager", "0"), "hardware watchdog"),
     **{f"{unit} down": (_stop(unit), unit) for unit in UNITS},
-    "radio not in AP mode": (lambda e: e.write(f"iw_{AP}", "\ttype managed\n"), f"{AP} serves"),
+    # In AP mode but not beaconing: hostapd has not enabled it.
+    "AP not enabled": (lambda e: e.write(f"hostapd_{AP}", "state=DISABLED\n"), f"{AP} serves"),
+    "nothing on the DHCP port": (lambda e: e.remove("ss_udp_67"), "DHCP server listening"),
+    "LAN DNS silent": (lambda e: e.remove(f"dig_{LAN_ADDRESS}"), "DNS answers on the LAN"),
+    # dig prints its diagnostics on stdout, so any output is not an answer.
+    "LAN DNS refused": (
+        lambda e: e.write(f"dig_{LAN_ADDRESS}", ";; communications error to 192.0.2.1#53: connection refused\n"),
+        "DNS answers on the LAN",
+    ),
     "pihole unhealthy": (lambda e: e.write("docker_pihole", "running unhealthy\n"), "container pihole"),
     "pihole still starting": (lambda e: e.write("docker_pihole", "running starting\n"), "container pihole"),
     "coredns exited": (lambda e: e.write("docker_coredns", "exited \n"), "container coredns"),
@@ -202,6 +223,7 @@ BROKEN = {
         lambda e: e.write(f"failed/{LIVENESS}", ""),
         f"failed units: {LIVENESS}",
     ),
+    "a page failed with the uplink up": (lambda e: e.write(f"failed/{PAGE}", ""), f"failed units: {PAGE}"),
 }
 
 
@@ -218,13 +240,13 @@ def test_each_thing_a_boot_can_lose_fails_its_own_check(edge: Edge, breakage: An
 
 
 def test_without_the_uplink_adapter_the_rest_still_passes(edge: Edge) -> None:
-    """The liveness check pages a missing uplink, so its failure is what the case
-    expects, and no other unit may fail."""
+    """The liveness check fails on a missing uplink and its page cannot leave, so
+    both failures are what the case expects, and no other unit may fail."""
     edge.unplug_uplink()
     result = edge.run(expect="no-uplink")
     assert result.returncode == 0, result.stdout
     assert f"OK   uplink adapter {UPLINK}: missing, as this case expects" in result.stdout
-    assert f"OK   {LIVENESS} pages the missing uplink" in result.stdout
+    assert f"OK   {LIVENESS} failed on the missing uplink" in result.stdout
 
 
 def test_an_uplink_that_is_there_fails_the_no_uplink_case(edge: Edge) -> None:
@@ -237,7 +259,7 @@ def test_a_missing_uplink_nobody_pages_fails(edge: Edge) -> None:
     edge.unplug_uplink()
     edge.remove(f"failed/{LIVENESS}")
     (failure,) = _failures(edge.run(expect="no-uplink"))
-    assert "pages the missing uplink" in failure
+    assert "failed on the missing uplink" in failure
 
 
 def test_a_liveness_run_under_way_is_waited_out(edge: Edge) -> None:
@@ -253,7 +275,7 @@ def test_a_liveness_run_that_never_ends_fails_in_bounded_time(edge: Edge) -> Non
     edge.unplug_uplink()
     edge.write(f"activating/{LIVENESS}", "100")
     (failure,) = _failures(edge.run(expect="no-uplink"))
-    assert "pages the missing uplink" in failure
+    assert "failed on the missing uplink" in failure
     assert edge.read(f"activating/{LIVENESS}") == "39"
 
 
@@ -268,11 +290,18 @@ def test_without_the_switch_cable_the_rest_still_passes(edge: Edge) -> None:
     edge.unplug_lan()
     result = edge.run(expect="no-lan")
     assert result.returncode == 0, result.stdout
-    assert f"OK   carrier on {LAN}: missing, as this case expects" in result.stdout
+    assert f"OK   {LAN} present without a carrier, as this case expects" in result.stdout
 
 
 def test_a_cable_that_is_there_fails_the_no_lan_case(edge: Edge) -> None:
-    assert _failures(edge.run(expect="no-lan")) == [f"FAIL carrier on {LAN}: present, but this case took it away"]
+    assert _failures(edge.run(expect="no-lan")) == [f"FAIL {LAN} present without a carrier, as this case expects"]
+
+
+def test_a_lan_device_that_is_gone_fails_the_no_lan_case(edge: Edge) -> None:
+    """A missing cable leaves the device; a missing device is another failure."""
+    edge.unplug_lan()
+    shutil.rmtree(edge.net / LAN)
+    assert _failures(edge.run(expect="no-lan")) == [f"FAIL {LAN} present without a carrier, as this case expects"]
 
 
 @pytest.mark.parametrize("args", [(LAN,), (LAN, LAN_ADDRESS, UPLINK, AP), (LAN, LAN_ADDRESS, UPLINK, AP, LAN_CIDR, "")])
@@ -285,11 +314,11 @@ def test_an_unknown_case_is_usage(edge: Edge) -> None:
 
 
 def test_it_prints_no_address(edge: Edge) -> None:
-    edge.remove(f"addr_{LAN}")
-    edge.remove(f"addr_{UPLINK}")
+    """On a healthy edge, where every probe has an address to print."""
     out = edge.run().stdout
     assert LAN_ADDRESS not in out
     assert LEASE_ADDRESS not in out
+    assert "127.0.0.1" not in out
 
 
 # ------------------------------------------------------------------ the role
@@ -299,15 +328,23 @@ def test_the_role_installs_the_script_and_what_it_runs() -> None:
     install = [t for t in TASKS if (t.get("copy") or {}).get("src") == SCRIPT.name]
     assert [t["copy"]["dest"] for t in install] == ["{{ gateway_boot_check_path }}"]
     assert install[0]["copy"]["mode"] == "0755"
-    (packages,) = [t for t in TASKS if t.get("name") == "Install gateway packages"]
-    assert "iw" in packages["apt"]["name"]
+
+
+# The units the boot check reads that another role on the edge starts.
+UNIT_OF_ROLE = {"docker": "docker", "tailscale": "tailscaled"}
 
 
 def test_it_checks_the_units_and_containers_the_roles_start() -> None:
     """A renamed unit or container would leave its check looking at nothing."""
-    started = {t["systemd"]["name"] for t in TASKS if "systemd" in t and "name" in t["systemd"]}
+    roles = {role: yaml.safe_load((ROLE.parent / role / "tasks" / "main.yml").read_text()) for role in UNIT_OF_ROLE}
+    started = {
+        t["systemd"]["name"]
+        for tasks in (TASKS, *roles.values())
+        for t in tasks
+        if "systemd" in t and "name" in t["systemd"]
+    }
     text = SCRIPT.read_text()
-    for unit in ("hostapd", "dnsmasq", *(u for u in UNITS if u.startswith("kubelab-edge"))):
+    for unit in ("hostapd", "dnsmasq", *UNIT_OF_ROLE.values(), *(u for u in UNITS if u.startswith("kubelab-edge"))):
         assert unit in started or f"{unit}.service" in started or unit.removesuffix(".service") in started
         assert unit in text
     compose = (REPO / "infra/ansible/roles/coredns/templates/docker-compose.yml.j2").read_text()

@@ -86,11 +86,9 @@
     name:
       - nftables
       - dnsmasq
-      # The uplink status check's HTTP and DNS probes.
+      # The uplink status check's HTTP and DNS probes, and the boot check's DNS one.
       - curl
       - bind9-dnsutils
-      # The boot check reads the radio's mode with it.
-      - iw
     state: present
 
 - name: Install the uplink status check
