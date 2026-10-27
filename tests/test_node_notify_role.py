@@ -648,6 +648,21 @@ def test_the_order_spans_plays_and_included_roles(tmp_path: Path) -> None:
     assert _applied_roles(playbook) == ["gateway", "rpi3_services", "node_notify", "node_backup"]
 
 
+@pytest.mark.parametrize("playbook", PLAYBOOKS, ids=lambda p: p.stem)
+def test_the_notifier_and_its_consumers_are_applied_as_roles(playbook: Path):
+    """The tag pairing above reads `roles:` only, and tags on an `include_role`
+    task do not reach the role's own tasks. A notifier or consumer included from
+    a task list would escape that guard, so neither may be."""
+    plays = [play for play in yaml.safe_load(playbook.read_text()) or [] if isinstance(play, dict)]
+    included = {
+        role
+        for play in plays
+        for key in ("pre_tasks", "tasks", "post_tasks", "handlers")
+        for role in _task_roles(play.get(key))
+    }
+    assert not included & _notifier_consumers(), f"{playbook.stem} includes {sorted(included & _notifier_consumers())}"
+
+
 def _ahead_of_the_notifier(order: list[str]) -> list[str]:
     """The consumers applied before node_notify; every one of them when it is absent."""
     first = order.index("node_notify") if "node_notify" in order else len(order)
