@@ -86,7 +86,7 @@
     name:
       - nftables
       - dnsmasq
-      # The uplink status check's HTTP and DNS probes.
+      # The uplink status check's HTTP and DNS probes, and the boot check's DNS one.
       - curl
       - bind9-dnsutils
     state: present
@@ -95,6 +95,12 @@
   copy:
     src: edge-status.sh
     dest: "{{ gateway_status_path }}"
+    mode: "0755"
+
+- name: Install the boot check
+  copy:
+    src: edge-boot-check.sh
+    dest: "{{ gateway_boot_check_path }}"
     mode: "0755"
 
 # It loads over the LAN session that provisions the edge, so it is checked first.
