@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 638 | [A guard scoped to one stack leaves its defect open in every other role](lesson-638-a-guard-scoped-to-one-stack-leaves-its-defect-open-in-every-other-role.md) | 2026-10-27 |
 | 630 | [Purging a package removes its unit files but not their failed state, so `systemctl --failed` keeps listing them](lesson-630-purging-a-package-removes-its-unit-files-but-not-their-failed-state.md) | 2026-10-26 |
 | 629 | [A flag only `tailscale up` applies drifts unseen while the node stays on the mesh](lesson-629-a-flag-only-tailscale-up-applies-drifts-unseen-while-the-node-stays-on-the-mesh.md) | 2026-10-26 |
 | 623 | [A var one play gives a shared role lasts only until the next play that applies the role to the same host](lesson-623-a-var-one-play-gives-a-shared-role-lasts-until-the-next-play-that-applies-it.md) | 2026-10-25 |
