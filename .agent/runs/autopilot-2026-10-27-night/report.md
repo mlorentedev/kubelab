@@ -14,6 +14,10 @@ Draft, updated through the run. Envelope: `.agent/unattended.yml` (expires 2026-
 - #2730 edge boot check: redesigned after a live read-only run on rpi4 (journal lost the boot's first 28 s; now reads unit timestamps); live run all `OK`. Lesson 641.
   An independent adversarial review then returned FAIL: the no-uplink case could not pass (the liveness unit's page also fails with no route out). Fixed, plus AP/DHCP/LAN-DNS probes; 22 checks `OK` live. Tickets filed: #2732 NET-017 (T4 hypothesis: LAN address needs a carrier, may take DNS down), #2733 OBS-039 (an undelivered page stays a failed unit).
 
+## Not picked up
+- #2726 DNS-008: parked (scope-violation): its fix pins `infra/stacks/services/core/pihole/compose.yml`, outside `write_paths`.
+- #2722 OPS-050, #2732 NET-017, #2733 OBS-039: each needs a decision (options in the issue).
+
 ## Notes against the envelope
 - #2730 executable LOC: script ~110, toolkit ~70, Makefile/tasks ~10 (tests ~400). Over `max_loc` 300 in sum; stated, not hidden: the script, its CLI and its runbook are one deliverable the operator asked for.
 - Pushed branches got `git merge origin/master` commits instead of rebases: force-push is denied.
