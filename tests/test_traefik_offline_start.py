@@ -21,6 +21,7 @@ only the rendered output says what Traefik receives.
 
 from __future__ import annotations
 
+import ast
 import pathlib
 import re
 from typing import Any
@@ -141,6 +142,37 @@ def test_the_source_is_on_the_node_before_traefik_is_configured() -> None:
 def test_versions_no_longer_declared_are_pruned() -> None:
     _, prune = _task("Remove Traefik plugin versions no longer declared")
     assert prune["file"]["state"] == "absent"
+
+
+def test_the_prune_removes_what_the_finds_report_and_nothing_else() -> None:
+    """The loop joins two registered `find` results; no live run has had anything to prune.
+
+    A per-plugin result carries no `files` when its iteration was skipped, which is the
+    shape that would break a naive `map(attribute='files')`.
+    """
+    _, prune = _task("Remove Traefik plugin versions no longer declared")
+    stale_versions = {
+        "results": [
+            {"files": [{"path": "/p/bouncer/v1.5.0"}, {"path": "/p/bouncer/v1.5.0.tar.gz"}]},
+            {"files": []},
+            {"skipped": True},
+        ]
+    }
+    stale_plugins = {"files": [{"path": "/p/retired"}]}
+
+    rendered = (
+        ansible_env(str(ROLE / "templates"))
+        .from_string(prune["loop"].strip())
+        .render(_k3s_stale_plugin_versions=stale_versions, _k3s_stale_plugins=stale_plugins)
+    )
+
+    assert ast.literal_eval(rendered) == ["/p/bouncer/v1.5.0", "/p/bouncer/v1.5.0.tar.gz", "/p/retired"]
+
+
+def test_the_prune_finds_spare_the_declared_version_and_its_archive() -> None:
+    _, find = _task("Find Traefik plugin versions no longer declared")
+    assert find["find"]["excludes"] == ["{{ item.version }}", "{{ item.version }}.tar.gz"]
+    assert not find["find"].get("recurse")
 
 
 # --- ACME --------------------------------------------------------------------------

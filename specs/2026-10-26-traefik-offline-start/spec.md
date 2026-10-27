@@ -26,24 +26,29 @@ Out of scope: the Loki alert on `Plugins are disabled` / `invalid middleware ...
 
 ## Checklist
 
-- [ ] Role defaults declare both plugins with module, version and sha256, the plugin directory, and the ACME toggle.
-- [ ] Tasks fetch, verify, unpack and prune, idempotently, before the HelmChartConfig is templated.
-- [ ] The HelmChartConfig renders `localPlugins` (hostPath) and `abortOnPluginFailure`, and no `experimental.plugins`.
-- [ ] Tests: rendered config, every plugin a Middleware uses is declared locally, pins are well-formed, tasks order, ACME flags.
-- [ ] Lessons 625 (plugins) and 626 (DNS interception).
-- [ ] Staging: `make provision NODE=ace1 ENV=staging TAGS=k3s`, re-run `changed=0`, Traefik logs no plugin download and no plugin error, CrowdSec-protected routes answer, renewals succeed.
+- [x] Role defaults declare both plugins with module, version and sha256, the plugin directory, and the ACME toggle.
+- [x] Tasks fetch, verify, unpack and prune, idempotently, before the HelmChartConfig is templated.
+- [x] The HelmChartConfig renders `localPlugins` (hostPath) and `abortOnPluginFailure`, and no `experimental.plugins`.
+- [x] Tests: rendered config, every plugin a Middleware uses is declared locally, pins are well-formed, tasks order, ACME flags.
+- [x] Lessons 625 (plugins) and 626 (DNS interception).
+- [x] Staging: `make provision NODE=ace1 ENV=staging TAGS=k3s`, re-run `changed=0`, Traefik logs no plugin download and no plugin error, CrowdSec-protected routes answer, renewals succeed.
 - [ ] Prod: `make provision NODE=vps ENV=prod TAGS=k3s` after merge, same checks, `make test-e2e ENV=prod`.
 
 ## Evidence
 
-Filled in as the checklist closes.
+Staging, 2026-10-27 UTC (ace1, from this branch):
+
+- `make provision NODE=ace1 ENV=staging TAGS=k3s`: `ok=37 changed=4 failed=0` (directories, download, unpack, HelmChartConfig). Re-run: `ok=36 changed=0 failed=0` (the unpack skips on its `creates`).
+- Traefik's new pod logged `Loading plugins...` and `Plugins loaded. plugins=["api-key","bouncer"]` in the same second (03:02:27Z). The remote download took 17 s at the 00:51 boot. No `Plugins are disabled` and no `middleware ... does not exist` since.
+- CrowdSec-protected routes answer: n8n 200, status 302, traefik 302, pihole `/admin/` 302, grafana 302, auth 200. No 404.
+- ACME: the renewals that had failed since the site move with `propagation: time limit exceeded: last error: authoritative nameserver ... NXDOMAIN` succeed one after another at about 70 s each (60 s delay plus validation). Served certificates moved from `notAfter=Nov 25 2026` to `notAfter=Jan 25 2027` for staging.mlorente.dev, n8n and console.minio within minutes of the restart.
 
 ## Next
 
-Implement the role change and its tests.
+Merge, then `make provision NODE=vps ENV=prod TAGS=k3s`, the same checks on prod, and `make test-e2e ENV=prod`.
 
 ## Promotion candidates
 
-- [ ] Lesson? `yes`: 625 and 626.
-- [ ] ADR? `no`: the decision is recorded on #2565 and ADR-035 is unchanged.
+- [x] Lesson? `yes`: 625 and 626.
+- [x] ADR? `amendment`: ADR-035 gains a one-line note that its `api-key` plugin is now loaded from the node; the decision itself is recorded on #2565.
 - [ ] Pattern? `no`
