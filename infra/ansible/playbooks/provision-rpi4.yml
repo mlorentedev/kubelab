@@ -113,6 +113,28 @@
     - role: ../roles/ssh_hardening
       tags: [ssh]
 
+    # The fleet's failure-notification path, and the fleet webhook secret it
+    # reads. Applied BEFORE every role whose units name its templates
+    # (`OnFailure=kubelab-notify@`, `OnSuccess=kubelab-notify-recovered@`): a
+    # unit started first runs with no template behind the name, and systemd
+    # drops each page as "not found" until this role runs (#2728).
+    - role: ../roles/node_notify
+      # `maintenance` and NOT a `notify` tag of its own, deliberately.
+      # node_maintenance re-points its unit at this role's template and then
+      # removes the single-purpose notifier it replaces, so a selector that
+      # reaches one of the two without the other leaves the node
+      # notification-dark: systemd logs "unit not found" on the next failure
+      # and nobody is told.
+      #
+      # Found by a `--check` run scoped to a `notify` tag that used to exist
+      # here. Sharing node_maintenance's tag makes the unsafe scoping
+      # unreachable rather than merely documented, which is the difference
+      # between a rule and a comment. Asserted in tests/test_node_notify_role.py.
+      # `gateway` too: the edge's lease check, shaper and liveness page through
+      # this notifier, so `TAGS=gateway` must install it (and node_maintenance
+      # with it), as `agent_stack` does on ace2.
+      tags: [maintenance, gateway]
+
     - role: ../roles/gateway
       tags: [gateway]
       vars:
@@ -186,26 +208,6 @@
         glances_port: "{{ config.apps.services.observability.glances.default_port }}"
         glances_cpu_limit: "{{ config.apps.services.observability.glances.resources.cpu_limit }}"
         glances_memory_limit: "{{ config.apps.services.observability.glances.resources.memory_limit }}"
-
-    # The fleet's failure-notification path, and the fleet webhook secret it
-    # reads. Ordered BEFORE node_maintenance deliberately: that role's unit
-    # declares `OnFailure=kubelab-notify@%n.service`, and this one installs the
-    # template it names while removing the single-purpose unit it replaces.
-    - role: ../roles/node_notify
-      # `maintenance` and NOT a `notify` tag of its own, deliberately. This role
-      # REMOVES the unit `kubelab-maintenance.service` still names until
-      # node_maintenance re-templates it, so a selector that reaches this role
-      # without reaching that one leaves the node notification-dark: systemd
-      # logs "unit not found" on the next failure and nobody is told.
-      #
-      # Found by a `--check` run scoped to a `notify` tag that used to exist
-      # here. Sharing node_maintenance's tag makes the unsafe scoping
-      # unreachable rather than merely documented, which is the difference
-      # between a rule and a comment. Asserted in tests/test_node_notify_role.py.
-      # `gateway` too: the edge's lease check, shaper and liveness page through
-      # this notifier, so `TAGS=gateway` must install it (and node_maintenance
-      # with it), as `agent_stack` does on ace2.
-      tags: [maintenance, gateway]
 
     # ANSIBLE-035: install-only (maintenance_run_cleanup: false) — cleanup
     # runs on the timer's own weekly schedule, not synchronously on every
