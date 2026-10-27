@@ -8,10 +8,10 @@ Draft, updated through the run. Envelope: `.agent/unattended.yml` (expires 2026-
 ## Landed under the grant
 - #2718, #2719, #2709, #2715, #2723, #2725, #2727, #2721 (closed #2720), #2731.
 - #2724 Pi-hole pin (09:4xZ), two stale PR-Agent findings declined with reasons.
+- #2730 edge boot check (~10:05Z): expected page read from the unit's `OnFailure=` (checked live), four repeat findings declined; CodeRabbit clean. Its only overlap, `toolkit/README.md` with #2656 (draft, idle since 2026-10-23), is a hunk 118 lines away.
 
 ## Open, mine (state at writing)
 - #2729 notifier ordering: two PR-Agent findings applied in `9fff8024` (recovery-only consumers counted, templated role names refused; both mutation-killed), master merged (`d3ff6de3`), awaiting CI.
-- #2730 edge boot check: redesigned after a live read-only run on rpi4 (journal lost the boot's first 28 s; now reads unit timestamps); live run all `OK`. Lesson 641. Expected page now read from the unit's `OnFailure=` (`f867536d`, checked live), awaiting CI.
 
 ## Not picked up
 - #2726 DNS-008: parked (scope-violation): its fix pins `infra/stacks/services/core/pihole/compose.yml`, outside `write_paths`.
