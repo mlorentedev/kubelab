@@ -73,7 +73,7 @@ networks:
     external: true
 ```
 
-### 1.3 TLS certificate (certbot superseded, retired 2026-10-26)
+### 1.3 TLS certificate (certbot superseded)
 
 > **Superseded.** This section used to obtain a certificate with certbot (Cloudflare
 > DNS-01) because Headscale terminated TLS itself behind a Traefik TCP passthrough
@@ -81,8 +81,9 @@ networks:
 > Since the K3s cutover ([lesson-173](../lessons/kubernetes/lesson-173-k3s-ingressroute-needed-for-vpn-kubelab-live-.md))
 > **K3s Traefik terminates TLS** for `vpn.kubelab.live` and Headscale listens on plain
 > HTTP (`listen_addr: 0.0.0.0:8080`; `config.yaml.j2` has no `tls_*` keys). Nothing mounts
-> `/etc/letsencrypt`. The `headscale` role removes certbot, nginx and `/etc/letsencrypt`
-> from the VPS (OPS-047, #2701): do not reinstall them, and do not follow the old steps.
+> `/etc/letsencrypt`. The `headscale` role purges certbot, nginx and `/etc/letsencrypt`
+> from the VPS (OPS-047, #2701; `make deploy TARGET=vps ENV=prod` applies it): do not
+> reinstall them, and do not follow the old steps.
 
 There is nothing to obtain by hand. The certificate comes from K3s Traefik's
 `letsencrypt` resolver (ACME DNS-01, stored on Traefik's persistent volume), named by
@@ -647,7 +648,7 @@ sudo chattr +i /etc/resolv.conf
 | Docker network | `proxy` | `kubelab` |
 | ACME storage | `/letsencrypt/acme.json` | `/etc/traefik/acme/acme.json` |
 | Wildcard cert | `*.mlorente.dev` | `*.kubelab.live` |
-| Headscale TLS | K3s Traefik terminates TLS (certbot retired 2026-10-26, OPS-047; it was the pre-K3s setup) | Traefik terminates TLS |
+| Headscale TLS | K3s Traefik terminates TLS (certbot was the pre-K3s setup; the `headscale` role purges it, OPS-047) | Traefik terminates TLS |
 | Headscale routing | K3s Traefik IngressRoute → plain HTTP `:8080`, HTTP/1.1 ALPN (the TCP passthrough is superseded) | HTTP reverse proxy |
 | Traefik version | v3.0 | v3.6 |
 | traefik.yml path | `/opt/traefik/traefik.yml` | `edge/traefik/generated/prod/` |
@@ -680,7 +681,7 @@ See [dns-homelab](dns-homelab.md#DNS Resilience — /etc/hosts Fallback via Ansi
 2026-02-26: Traefik routing changed from HTTP reverse proxy to TCP passthrough with SNI.
 Root cause: Traefik strips `Upgrade: tailscale-control-protocol` header (only supports WebSocket).
 Headscale then terminated TLS itself (certbot DNS-01 via Cloudflare). **Superseded** by the K3s cutover,
-where K3s Traefik terminates TLS (see 1.3); certbot was retired from the VPS on 2026-10-26.
+where K3s Traefik terminates TLS (see 1.3); certbot is purged from the VPS by OPS-047 (2026-10-26).
 See [error-headscale-noise-http2](../troubleshooting/error-headscale-noise-http2.md).
 2026-02-27: tsnet upgraded v1.60.0 → v1.80.0. Headscale v0.28.0 requires minimum_version=v1.74;
 older tsnet failed silently with EOF during Noise handshake. Native clients worked because they
@@ -691,9 +692,12 @@ Previous broad scope caused total DNS failure for prod domains (status.kubelab.l
 when RPi4 was off — Tailscale MagicDNS sent all `*.kubelab.live` queries to RPi4 instead of
 public Cloudflare DNS. Now only staging domains require RPi4; prod resolves via 1.1.1.1.
 Config also updated in repo IaC (`infra/stacks/services/core/headscale/config/config.yaml`).
-2026-10-26: certbot and nginx removed from the VPS by the `headscale` role (OPS-047, #2701): three expired
-certificates, a `certbot.service` failing every 12 hours and a refused Cloudflare token on disk. The live
-certificate for `vpn.kubelab.live` is K3s Traefik's (Let's Encrypt, valid to 2026-12-19 when measured).
+2026-10-26: OPS-047 (#2701) makes the `headscale` role purge certbot and nginx and remove `/etc/letsencrypt` from
+the VPS. What it retires: three expired certificates, a `certbot.service` failing every 12 hours and a refused
+Cloudflare token on disk. The live certificate for `vpn.kubelab.live` is K3s Traefik's (Let's Encrypt, valid to
+2026-12-19 when measured). Measured in a booted Ubuntu 24.04 container: first run `changed=2`, second `changed=0`.
+To apply on prod: `make deploy TARGET=vps ENV=prod`, then `systemctl list-units --failed` on the VPS must no
+longer list `certbot.service` or `certbot.timer`.
 
 ---
 
