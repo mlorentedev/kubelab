@@ -82,6 +82,8 @@ def ansible_env(templates_dir: str, **kwargs: Any) -> Environment:
     env.filters["to_json"] = json.dumps
     env.filters["b64decode"] = _b64decode
     env.filters["regex_replace"] = _regex_replace
+    # Ansible's `comment` filter, in its default (shell-style) form.
+    env.filters["comment"] = lambda text: "\n".join(f"# {line}" for line in str(text).splitlines())
     env.tests["match"] = _match
     env.tests["regex"] = _regex
     env.tests["changed"] = _changed
