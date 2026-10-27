@@ -238,6 +238,9 @@ class AnsibleGenerator(BaseGenerator):
 
         jump_targets = self._lan_jump_targets(networking)
         for node_key, node in networking.get("nodes", {}).items():
+            self._warn_if_retired(f"nodes.{node_key}", node)
+            if node.get("retired"):
+                continue
             entry = self._homelab_node(node_key, node, networking, bootstrap)
             if node_key in jump_targets:
                 entry["ssh_lan_jump_targets"] = jump_targets[node_key]
