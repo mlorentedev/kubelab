@@ -139,13 +139,14 @@ else
 fi
 
 # The liveness check fails on a missing uplink, and the page its failure sends
-# fails too: the edge has no route out. In that case both are expected.
+# fails too: the edge has no route out. In that case both are expected, the page
+# by the name systemd resolved from the unit's own OnFailure= line.
 reporter=kubelab-edge-liveness.service
 expected=
 if [ "$expect" = no-uplink ]; then
   missing "uplink adapter $uplink" test -e "$sys_net/$uplink"
   check "$reporter failed on the missing uplink" pages "$reporter"
-  expected="$reporter kubelab-notify@$reporter.service"
+  expected="$reporter $(systemctl show -p OnFailure --value "$reporter")"
 else
   check "lease on $uplink" uplink_lease
   check "default route out $uplink" default_route

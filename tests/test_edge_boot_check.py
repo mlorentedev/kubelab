@@ -46,8 +46,13 @@ UNITS = (
     "kubelab-edge-shaper.service",
 )
 LIVENESS = "kubelab-edge-liveness.service"
-# The page the liveness check's failure sends, which cannot leave without the uplink.
-PAGE = f"kubelab-notify@{LIVENESS}.service"
+# The page the liveness check's failure sends, which cannot leave without the uplink:
+# the unit's own OnFailure= line, with `%n` resolved the way systemd resolves it.
+PAGE = (
+    re.search(r"^OnFailure=(\S+)$", (ROLE / "templates" / f"{LIVENESS}.j2").read_text(), re.M)
+    .group(1)
+    .replace("%n", LIVENESS)
+)
 
 FAKES = {
     "sudo": '[ "$1" = -n ] && shift\nexec "$@"\n',
@@ -92,6 +97,7 @@ class Edge:
             (self.bin / name).chmod(0o755)
         self.write("ruleset", "")
         self.write("show_RuntimeWatchdogUSec_manager", "15s")
+        self.write(f"show_OnFailure_{LIVENESS}", PAGE)
         for unit in UNITS:
             self.write(f"active/{unit}", "")
         self.write(f"hostapd_{AP}", "state=ENABLED\nphy=phy0\n")
@@ -253,6 +259,17 @@ def test_an_uplink_that_is_there_fails_the_no_uplink_case(edge: Edge) -> None:
     edge.write(f"failed/{LIVENESS}", "")
     (failure,) = _failures(edge.run(expect="no-uplink"))
     assert "present, but this case took it away" in failure
+
+
+def test_the_expected_page_is_the_one_systemd_names(edge: Edge) -> None:
+    """The exemption reads the unit's OnFailure= from systemd, so a renamed notifier
+    moves it too instead of failing the case on the page it expected."""
+    edge.unplug_uplink()
+    edge.remove(f"failed/{PAGE}")
+    edge.write(f"show_OnFailure_{LIVENESS}", "kubelab-page@x.service")
+    edge.write("failed/kubelab-page@x.service", "")
+    result = edge.run(expect="no-uplink")
+    assert result.returncode == 0, result.stdout
 
 
 def test_a_missing_uplink_nobody_pages_fails(edge: Edge) -> None:
