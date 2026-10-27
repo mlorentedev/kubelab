@@ -11,8 +11,9 @@ tags: [kubelab, containers-docker, docker, node-maintenance]
 # An image prune keeps what a container holds, so the container prune decides which stacks lose their image
 
 **Context**: `node_maintenance` cleans Docker the same way on every Docker host, on a
-timer: first `docker container prune -f`, then `docker image prune -af`. The timer
-runs weekly, and daily on CI nodes. Each stack's systemd unit stops it with
+timer. Until this change it ran an unfiltered `docker container prune -f`, then
+`docker image prune -af`; the filtered command is under Solution. The timer runs
+weekly, and daily on CI nodes. Each stack's systemd unit stops it with
 `docker compose stop`, so a stopped stack keeps its containers.
 
 **Problem**: On 2026-10-26 ace2 lost the Open WebUI image and its container (#2703).
