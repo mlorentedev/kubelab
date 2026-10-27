@@ -25,10 +25,18 @@ from rich.console import Console
 from toolkit.core import logging as toolkit_logging
 from toolkit.core.logging import logger
 
-#: Short on purpose: rich wraps at 80 columns when stderr is not a terminal, and these are
-#: compared whole. The last three are the ways escaping itself can go wrong: a trailing
-#: backslash that escaping doubles, a backslash that escapes a tag, and text that is not
-#: markup at all but that rich would turn into emoji (`:cd:` is a disc, `:tada:` a party).
+#: The width the logger's console is pinned to, wider than any line below so that none wraps.
+#: The module's own console asks the terminal for its size, and `COLUMNS=40` wrapped five of
+#: these lines mid-assertion.
+WIDTH = 120
+
+#: The ways a message can go wrong between the caller and the screen: a closing tag that
+#: matches nothing, an opening or unknown one that would be swallowed, backslashes (a
+#: trailing one that escaping doubles, one that escapes a tag, an odd run that would escape
+#: the tag written after it, and one in front of a bracket that is no tag, which rich's
+#: renderer drops), and text that is not markup at all but that rich would turn into emoji
+#: (`:cd:` is a disc, `:tada:` a party). The last two are 60 characters or more, so
+#: `section` pads nothing around them and the backslash is the last thing in its line.
 HOSTILE_MESSAGES = [
     "[/blue] x",
     "[bold]x",
@@ -40,9 +48,23 @@ HOSTILE_MESSAGES = [
     "\\[bold]x",
     "[#ff0000]x",
     "mac a0:cd:11 and 12:30:45 :tada:",
+    r"Regex: 'foo\[1\]'",
+    r"bad escape \[",
+    "three at the end\\\\\\",
+    "z" * 59 + "\\",
+    "z" * 57 + "\\\\\\",
 ]
 
 LEVELS = ["info", "success", "warning", "error"]
+
+
+@pytest.fixture(autouse=True)
+def _pinned_stderr(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Give every test a logger console of a known width.
+
+    It still writes to whatever `sys.stderr` is, so `capsys` sees it as before.
+    """
+    monkeypatch.setattr(toolkit_logging, "err_console", Console(stderr=True, width=WIDTH))
 
 
 def _call(method: str, message: str) -> None:
@@ -71,17 +93,19 @@ def test_the_level_label_is_still_printed(method: str, capsys: pytest.CaptureFix
     assert capsys.readouterr().err.startswith(f"[{method.upper()}] ")
 
 
-@pytest.mark.parametrize("method", ["section", "subsection"])
-def test_a_title_with_brackets_is_printed_as_written(method: str, capsys: pytest.CaptureFixture[str]) -> None:
-    # 63 characters, so `section` has no padding to put between the title and its end.
-    title = "deploy [/blue] [bold]x" + "." * 40 + "\\"
+@pytest.mark.parametrize("title", HOSTILE_MESSAGES)
+def test_a_section_title_is_printed_as_written(title: str, capsys: pytest.CaptureFixture[str]) -> None:
+    logger.section(title)
 
-    getattr(logger, method)(title)
+    rule = "=" * 60
+    assert capsys.readouterr().err == f"\n{rule}\n{title.center(60)}\n{rule}\n\n"
 
-    # One trailing backslash, not the two that escaping a text which ends in one would print.
-    err = capsys.readouterr().err
-    assert title in err
-    assert title + "\\" not in err
+
+@pytest.mark.parametrize("title", HOSTILE_MESSAGES)
+def test_a_subsection_title_is_printed_as_written(title: str, capsys: pytest.CaptureFixture[str]) -> None:
+    logger.subsection(title)
+
+    assert capsys.readouterr().err == f"\n--- {title} ---\n\n"
 
 
 def test_a_message_that_is_not_a_string_is_printed(capsys: pytest.CaptureFixture[str]) -> None:
@@ -101,7 +125,16 @@ def _styled_stderr(monkeypatch: pytest.MonkeyPatch) -> io.StringIO:
     monkeypatch.setattr(
         toolkit_logging,
         "err_console",
-        Console(file=buffer, force_terminal=True, color_system="standard", width=80, highlight=False),
+        # `no_color=False`: rich reads NO_COLOR from the environment, which would strip the very
+        # colours these tests look for.
+        Console(
+            file=buffer,
+            force_terminal=True,
+            color_system="standard",
+            width=WIDTH,
+            highlight=False,
+            no_color=False,
+        ),
     )
     return buffer
 
@@ -121,6 +154,25 @@ def test_the_label_keeps_its_colour_and_the_message_takes_none_from_its_brackets
     assert f"{ansi}[{method.upper()}]" in out
     assert "[bold]x" in out
     assert "\x1b[1m" not in out, "the message's [bold] was applied as a style"
+
+
+@pytest.mark.parametrize(
+    ("method", "styled_line"),
+    [
+        ("section", "\x1b[1;36m" + "[red]x[/red]".center(60)),
+        ("subsection", "\x1b[1;34m--- [red]x[/red] ---"),
+    ],
+)
+def test_a_title_keeps_its_colour_and_takes_none_from_its_brackets(
+    method: str, styled_line: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    buffer = _styled_stderr(monkeypatch)
+
+    getattr(logger, method)("[red]x[/red]")
+
+    out = buffer.getvalue()
+    assert styled_line in out
+    assert "\x1b[31m" not in out, "the title's [red] was applied as a style"
 
 
 def test_markup_is_honoured_only_when_the_caller_asks_for_it(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -150,9 +202,7 @@ def test_the_default_is_to_print_the_text_as_written(method: str, monkeypatch: p
     assert "\x1b[36m" not in out
 
 
-def test_the_services_listing_still_colours_its_headings(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_the_services_listing_still_colours_its_headings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """`toolkit services list` is the one caller that writes markup into the logger on purpose.
 
     Escaping by default would have turned its `[cyan]APPS[/cyan]` into literal text, so it

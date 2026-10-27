@@ -6,9 +6,9 @@ from typing import Any
 
 from rich.console import Console
 from rich.logging import RichHandler
-from rich.markup import escape
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.prompt import Confirm, Prompt
+from rich.text import Text
 
 # Removed static import of settings to avoid circular dependency
 
@@ -88,19 +88,6 @@ console = Console()
 err_console = Console(stderr=True)
 
 
-def _literal(text: str) -> str:
-    """Markup that renders as `text` itself, for a spot where no tag follows it.
-
-    `escape` doubles a trailing backslash so that it cannot escape a tag written right
-    after the text. Nothing follows here, so the second backslash would print.
-    """
-    text = str(text)
-    escaped = escape(text)
-    if text.endswith("\\") and not text.endswith("\\\\"):
-        return escaped[:-1]
-    return escaped
-
-
 class PlatformLogger:
     """Enhanced logger with Rich formatting and user interaction."""
 
@@ -143,17 +130,20 @@ class PlatformLogger:
     def _emit(self, style: str, label: str, message: str, markup: bool, **kwargs: Any) -> None:
         """Print `[LABEL] message` on stderr with the label in `style`.
 
-        The label is markup this module wrote. The message is whatever the caller is
-        reporting (a subprocess's output, an exception, a file name), so it is escaped:
-        left as markup, a stray `[/blue]` raised `MarkupError` and an unknown tag such as
-        pytest's `test_x[param-1]` was swallowed with its text. `markup=True` is the
-        caller's explicit statement that the message is markup it wrote itself.
+        The label is a `Text` this module built, so rich never parses it. The message is
+        whatever the caller is reporting (a subprocess's output, an exception, a file
+        name), so it is handed to rich as plain text: left to be read as markup, a stray
+        `[/blue]` raised `MarkupError` and an unknown tag such as pytest's
+        `test_x[param-1]` was swallowed with its text. Escaping it would not be enough:
+        rich's renderer also drops a backslash in front of a bracket that is no tag, and
+        `escape` leaves an odd run of backslashes in front of the tag that follows it.
+        `markup=True` is the caller's explicit statement that the message is markup it
+        wrote itself.
         """
-        body = message if markup else _literal(message)
         # Emoji codes are the same hazard in a smaller size: `:cd:` in a MAC address
         # prints as a disc.
         kwargs.setdefault("emoji", False)
-        err_console.print(f"[{style}][{label}][/{style}] {body}", **kwargs)
+        err_console.print(Text(f"[{label}]", style=style), message, markup=markup, **kwargs)
 
     def info(self, message: str, markup: bool = False, **kwargs: Any) -> None:
         """Log info message with blue prefix.
@@ -184,12 +174,16 @@ class PlatformLogger:
     def section(self, title: str) -> None:
         """Print a section header."""
         err_console.print(f"\n[bold cyan]{'=' * 60}[/bold cyan]")
-        err_console.print(f"[bold cyan]{escape(title.center(60))}[/bold cyan]", emoji=False)
+        # A `Text`, not a markup string: the title is the caller's, and rich reads
+        # neither markup nor emoji codes in a `Text`.
+        err_console.print(Text(title.center(60), style="bold cyan"))
         err_console.print(f"[bold cyan]{'=' * 60}[/bold cyan]\n")
 
     def subsection(self, title: str) -> None:
         """Print a subsection header."""
-        err_console.print(f"\n[bold blue]--- {_literal(title)} ---[/bold blue]\n", emoji=False)
+        err_console.print()
+        err_console.print(Text(f"--- {title} ---", style="bold blue"))
+        err_console.print()
 
     def confirm(
         self,

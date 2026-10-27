@@ -26,25 +26,43 @@ which hides it: only `[` followed by `a-z`, `#`, `/` or `@` opens a tag. `[DRY-R
 `[INFO]` and `[100%]` print as written, and the eight `[DRY-RUN]` call sites in `toolkit/`
 were never affected.
 
-**Solution**: The logger escapes the message (`rich.markup.escape`) and keeps its label
-as markup, so the level colour is unchanged. Three details of doing it right:
+**Solution**: The logger no longer puts the message into a markup string at all. The label
+is a `Text` the module builds (`Text("[INFO]", style="blue")`, which rich never parses), and
+the message is passed to `Console.print` as its own argument with `markup=False`, so the
+level colour is unchanged and the message is plain text. `section` and `subsection` print a
+`Text` for the same reason. The first design escaped the message with `rich.markup.escape`
+and was rejected in review, because escaping only protects what it recognises:
 
-- `escape()` doubles a trailing backslash, so that it cannot escape a tag written right
-  after the text. Where nothing follows (the end of the line), that second backslash
-  prints: `x\` came out as `x\\`. A substring assertion passed on it. `_literal()` drops
-  the extra one, and the test compares the whole line.
-- Emoji codes are a smaller case of the same hazard: `a0:cd:11` printed a disc, because
-  `:cd:` is a rich emoji name. The logger passes `emoji=False`.
+- `escape()` protects tag-shaped brackets only, and rich's renderer drops a backslash in
+  front of ANY `[`. So `foo\[1\]` printed as `foo[1\]` and `bad escape \[` as `bad escape [`.
+- `escape()` doubles a trailing backslash so that it cannot escape a tag written right after
+  the text. Where nothing follows (the end of the line) that second backslash prints, so the
+  first design needed a helper to trim it; where a tag does follow (`section`), an odd run of
+  three or more is not doubled and eats the closing tag: a 60-character title ending in
+  `\\\` printed `...\[/bold cyan]`. Every fix for one position broke another, which is the
+  sign that the position is the wrong place to fix it.
+- Emoji codes are the same hazard in a smaller size: `a0:cd:11` printed a disc, because
+  `:cd:` is a rich emoji name. The logger passes `emoji=False`, and a `Text` has no emoji
+  step at all.
 - One caller wrote markup on purpose (`toolkit services list`, a cyan heading). A scan of
   every logger call in `toolkit/` found it alone, so the methods take an explicit
   `markup=True`. That shadows rich's own `markup=` print argument, which the methods used
   to forward and nothing used.
 
-`tests/test_logger_escapes_markup.py` holds the hostile shapes (stray close, unknown tag,
-`[#ff0000]`, backslashes, emoji codes) for every level and for `section` and `subsection`.
+Passing the message as a separate `print` argument keeps rich's automatic highlighter on it
+(numbers, paths and URLs are still coloured). The one visible difference in a terminal is
+the label: its brackets were bolded by that highlighter, as a side effect of being part of
+the same string, and are now the plain level colour.
 
-**Rule**: A formatter that puts a caller's value into a markup string escapes the value in
-the formatter, not in each caller, and the fix is not finished until the test compares the
+`tests/test_logger_escapes_markup.py` holds the hostile shapes (stray close, unknown tag,
+`[#ff0000]`, every backslash position including the unpadded and odd-run ones, emoji
+codes) for every level, `section` and `subsection`, compares each whole line, and pins the
+console width, so `COLUMNS=40` no longer wraps the lines it compares.
+
+**Rule**: A formatter that puts a caller's value into a markup string cannot make it safe
+by escaping it: the escape is correct only for the position it was written for. Give the
+renderer the value as data (a `Text`, or its own `print` argument with `markup=False`)
+instead, and keep markup for the strings the formatter itself wrote. Test by comparing the
 whole output: a substring check passes on the doubled backslash and on the dropped tag
 alike. Look for the intentional markup users before changing the default, by scanning the
 call sites rather than grepping the colour names.
