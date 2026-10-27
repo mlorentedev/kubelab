@@ -388,8 +388,12 @@
     path: /var/backups/kubelab-netplan
     state: directory
     mode: "0700"
+  register: gateway_netplan_backup_dir
 
 # They can hold a Wi-Fi PSK, so the copies stay root-only and out of the log.
+# A dry run does not create the directory, so on the first run it cannot copy
+# into it and would fail the whole check (#2696). Once the directory exists, a
+# dry run still reports the backup it would take.
 - name: Back up hand-written netplan files
   copy:
     src: "{{ item.path }}"
@@ -397,6 +401,7 @@
     remote_src: true
     mode: "0600"
   loop: "{{ gateway_netplan_found.files }}"
+  when: not (ansible_check_mode and gateway_netplan_backup_dir is changed)
   no_log: true
 
 - name: Remove hand-written netplan files

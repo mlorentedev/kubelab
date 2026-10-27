@@ -704,3 +704,40 @@ def test_only_the_lease_check_and_the_liveness_units_page() -> None:
     assert "kubelab-edge-shaper.service" in notifying, "the shaper no longer notifies: the derivation is wrong"
     assert paging == {"kubelab-edge-lease-check.service", "kubelab-edge-liveness.service"}
     assert paging <= notifying, "a unit declares page but nothing notifies on its failure"
+
+
+def _task(name: str) -> dict[str, Any]:
+    return next(task for task in TASKS if task.get("name") == name)
+
+
+def _runs(task: dict[str, Any], variables: dict[str, Any]) -> bool:
+    """Whether Ansible would run the task: every `when` clause, evaluated."""
+    clauses = task.get("when", [])
+    env = ansible_env(str(ROLE / "templates"))
+    return all(
+        env.from_string("{{ (" + str(clause) + ") | bool }}").render(**variables) == "True"
+        for clause in (clauses if isinstance(clauses, list) else [clauses])
+    )
+
+
+@pytest.mark.parametrize(
+    ("check_mode", "directory_created", "copies"),
+    [
+        (False, True, True),
+        (False, False, True),
+        # A dry run never creates the directory, so a copy into it fails (#2696).
+        (True, True, False),
+        # Once the directory exists, a dry run still reports the backup it would take.
+        (True, False, True),
+    ],
+)
+def test_a_dry_run_reaches_past_the_netplan_backup(check_mode: bool, directory_created: bool, copies: bool) -> None:
+    directory = _task("Create the netplan backup directory")
+    backup = _task("Back up hand-written netplan files")
+    assert "check_mode" not in directory, "a dry run must not create the directory on the host"
+    register = directory.get("register")
+    assert register, "the backup cannot tell whether its directory exists yet"
+
+    variables = {"ansible_check_mode": check_mode, register: {"changed": directory_created}}
+
+    assert _runs(backup, variables) is copies

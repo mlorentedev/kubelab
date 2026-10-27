@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 637 | [A dry run creates no directory, so the next task writing into it fails the check](lesson-637-a-dry-run-creates-no-directory-so-the-next-task-writing-into-it-fails-the-check.md) | 2026-10-27 |
 | 630 | [Purging a package removes its unit files but not their failed state, so `systemctl --failed` keeps listing them](lesson-630-purging-a-package-removes-its-unit-files-but-not-their-failed-state.md) | 2026-10-26 |
 | 623 | [A var one play gives a shared role lasts only until the next play that applies the role to the same host](lesson-623-a-var-one-play-gives-a-shared-role-lasts-until-the-next-play-that-applies-it.md) | 2026-10-25 |
 | 622 | [A kernel parameter one node must lose can be another node's Wi-Fi country](lesson-622-a-kernel-parameter-one-node-must-lose-can-be-another-nodes-wi-fi-country.md) | 2026-10-25 |
