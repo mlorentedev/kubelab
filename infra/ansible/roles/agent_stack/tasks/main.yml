@@ -366,10 +366,14 @@
         group: root
         mode: "0644"
 
-    - name: Enable the Open WebUI unit at boot
+    # Started, not only enabled: a unit whose wait for the address failed at boot
+    # stays failed until something starts it (#2500). On a unit already active
+    # this is a no-op; on one that is not, its ExecStart recreates the container.
+    - name: Enable and start the Open WebUI unit
       ansible.builtin.systemd:
         name: agent-stack-webui.service
         enabled: true
+        state: started
         daemon_reload: true
       when: not ansible_check_mode
 

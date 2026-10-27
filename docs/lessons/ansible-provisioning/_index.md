@@ -5,6 +5,7 @@ Newest first. Back to [all categories](../_index.md).
 | # | Lesson | Date |
 |---|---|---|
 | 636 | [A flag that removes a node must reach every list of nodes, the hand-kept one included](lesson-636-a-flag-that-removes-a-node-must-reach-every-list-of-nodes-including-the-hand-kept-one.md) | 2026-10-27 |
+| 630 | [Purging a package removes its unit files but not their failed state, so `systemctl --failed` keeps listing them](lesson-630-purging-a-package-removes-its-unit-files-but-not-their-failed-state.md) | 2026-10-26 |
 | 623 | [A var one play gives a shared role lasts only until the next play that applies the role to the same host](lesson-623-a-var-one-play-gives-a-shared-role-lasts-until-the-next-play-that-applies-it.md) | 2026-10-25 |
 | 622 | [A kernel parameter one node must lose can be another node's Wi-Fi country](lesson-622-a-kernel-parameter-one-node-must-lose-can-be-another-nodes-wi-fi-country.md) | 2026-10-25 |
 | 620 | [A deferred handler is lost when a later role fails, and the re-run reports changed=0](lesson-620-a-deferred-handler-is-lost-when-a-later-role-fails.md) | 2026-10-25 |
