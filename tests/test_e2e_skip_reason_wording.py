@@ -56,11 +56,15 @@ def _skip_reason() -> str | None:
 
 
 @pytest.fixture
-def closed_port() -> int:
-    """A loopback port nothing listens on: the kernel refuses a connection to it."""
+def closed_port() -> Iterator[int]:
+    """A loopback port nothing listens on: the kernel refuses a connection to it.
+
+    The socket stays bound, never listening, for the whole test. Closing it
+    would free the port, and a listener another worker opens there would turn
+    the refusal into a connection."""
     with socket.socket() as probe:
         probe.bind((LOOPBACK, 0))
-        return int(probe.getsockname()[1])
+        yield int(probe.getsockname()[1])
 
 
 @pytest.fixture

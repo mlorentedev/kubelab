@@ -126,7 +126,9 @@ class ServiceExpectation:
             its error-pages middleware must still be intact and answer 502/503/504.
             Both branches assert something real; neither can pass vacuously.
             A node that answers and *refuses* is neither: it is up with the
-            service down, and every check fails with `BackendRefused`.
+            service down. The check fails with `BackendRefused` when the route
+            is intact; when the route is broken too, the outage is appended to
+            the route's own failure.
     """
 
     health_status: tuple[int, ...] = (200,)
