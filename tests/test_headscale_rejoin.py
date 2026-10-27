@@ -280,6 +280,19 @@ def test_only_a_node_on_the_mesh_is_read_and_converged(status: dict[str, Any], r
     assert _true(_task("Converge the flags of a node on the mesh")["when"][0], **facts) is reads
 
 
+@pytest.mark.parametrize("status", [STOPPED, NO_DAEMON], ids=["off", "no-daemon"])
+def test_off_the_mesh_the_converge_stops_before_it_reads_the_prefs(status: dict[str, Any]) -> None:
+    """Ansible stops at the first false condition, and the task's `vars:` render only
+    when a condition reaches them. The skipped read left no stdout, so a drift check
+    placed ahead of the mesh check would fail every provision of a node off the mesh."""
+    facts = {**_facts(status), "_tailscale_prefs": {"skipped": True, "changed": False}}
+    for condition in _task("Converge the flags of a node on the mesh")["when"]:
+        if not _true(condition, **facts):
+            break
+    else:
+        pytest.fail("off the mesh, the converge would run")
+
+
 @pytest.mark.parametrize(("node", "drifted"), [("rpi3", True), ("rpi4", False), ("ace1", False), ("gcp1", False)])
 def test_a_node_is_converged_only_where_it_differs_from_its_play(node: str, drifted: bool) -> None:
     assert _drifted(node, LIVE_PREFS[node]) is drifted
