@@ -223,8 +223,26 @@
   register: _pull
   changed_when: "'Pull complete' in _pull.stderr or 'Downloaded' in _pull.stderr"
 
+# Enabling does not start a unit, so a unit that failed at boot stayed failed and
+# its stack unbound until the next boot (#2500). Starting a failed unit recreates
+# the stack once its address exists; on a healthy node the unit is already active
+# and this is a no-op.
+- name: Start the Compose stack unit
+  systemd:
+    name: kubelab-compose.service
+    state: started
+  when: not ansible_check_mode
+  tags: [boot]
+
+- name: Check for a port binding that was never established
+  import_tasks: "{{ playbook_dir }}/_includes/compose-port-drift.yml"
+  vars:
+    compose_port_drift_file: "{{ beelink_deploy_dir }}/compose.yml"
+
 - name: Start services
-  command: docker compose -f {{ beelink_deploy_dir }}/compose.yml up -d
+  command: >-
+    docker compose -f {{ beelink_deploy_dir }}/compose.yml up -d
+    {{ '--force-recreate' if compose_port_drift | bool else '' }}
   register: _compose_up
   changed_when: "'Started' in _compose_up.stderr or 'Created' in _compose_up.stderr"
 

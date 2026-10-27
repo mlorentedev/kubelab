@@ -143,8 +143,27 @@
   command: docker compose -f {{ rpi3_deploy_dir }}/compose.yml pull
   changed_when: false
 
+# Enabling does not start a unit, so a unit that failed at boot stayed failed and
+# its stack unbound until the next boot (#2500). Starting a failed unit recreates
+# the stack once its address exists; on a healthy node the unit is already active
+# and this is a no-op.
+- name: Start the Compose stack unit
+  systemd:
+    name: kubelab-rpi3.service
+    state: started
+  # Same --check guard as the enable task above (#1983).
+  when: not (ansible_check_mode and not _rpi3_unit_file.stat.exists)
+  tags: [boot]
+
+- name: Check for a port binding that was never established
+  import_tasks: "{{ playbook_dir }}/_includes/compose-port-drift.yml"
+  vars:
+    compose_port_drift_file: "{{ rpi3_deploy_dir }}/compose.yml"
+
 - name: Start services
-  command: docker compose -f {{ rpi3_deploy_dir }}/compose.yml up -d
+  command: >-
+    docker compose -f {{ rpi3_deploy_dir }}/compose.yml up -d
+    {{ '--force-recreate' if compose_port_drift | bool else '' }}
   register: _compose_up
   # compose v2 writes progress to stderr. `Running` is no change; Started and
   # Created (which Recreated contains) are.

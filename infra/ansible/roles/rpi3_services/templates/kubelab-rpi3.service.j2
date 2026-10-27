@@ -32,8 +32,28 @@ RemainAfterExit=yes
 # Comfortably above the wait script's own bound, so its explicit failure is what
 # surfaces rather than an opaque systemd timeout.
 TimeoutStartSec=180
+# The wait above is bounded, and nothing runs a oneshot again once it failed at
+# boot. An address that arrives later, because the tailnet is unreachable until
+# the lab edge's uplink is up, left every stack bound to it unbound for a day on
+# 2026-10-26 (#2500). So retry: 30 s keeps a wait that fails fast clear of
+# systemd's default start limit (5 starts in 10 s), which would end the retries.
+# Only the wait is retried: compose exits 1 on an error of its own (a port held,
+# a broken mount), and retrying that would recreate the whole stack every 30 s
+# and never reach `failed`, where node_notify's OnFailure sees it. The exit
+# status read here is ExecStart's alone; an ExecStartPre failure still retries.
+Restart=on-failure
+RestartSec=30
+RestartPreventExitStatus=1
 ExecStartPre={{ rpi3_deploy_dir }}/wait-for-tailscale-addr.sh {{ tailscale_ip }}
-ExecStart=/usr/bin/docker compose -f {{ rpi3_deploy_dir }}/compose.yml up -d
+# --force-recreate: dockerd resurrects Uptime Kuma at boot through
+# `restart: unless-stopped`, before this unit and before the address exists, and
+# plain `up -d` adopts that container as it is, bound to nothing (#2500). The
+# beelink unit records how that was measured (ANSIBLE-053).
+# --pull never: the provision pulls before it starts this unit. A pull here
+# is cut at TimeoutStartSec on a slow link, a timeout restarts the unit, and
+# each retry pulls again, so the stack never starts and never reaches
+# `failed`. A missing image instead exits 1, which fails the unit.
+ExecStart=/usr/bin/docker compose -f {{ rpi3_deploy_dir }}/compose.yml up -d --force-recreate --pull never
 ExecStop=/usr/bin/docker compose -f {{ rpi3_deploy_dir }}/compose.yml stop
 
 [Install]
