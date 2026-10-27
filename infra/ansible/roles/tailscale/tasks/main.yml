@@ -38,7 +38,10 @@
 - name: Read the routing and DNS prefs of a node on the mesh
   shell: >-
     set -o pipefail;
-    tailscale debug prefs | python3 -I -c 'import json, sys; p = json.load(sys.stdin); print(json.dumps({"RouteAll": p.get("RouteAll"), "CorpDNS": p.get("CorpDNS"), "AdvertiseRoutes": sorted(p.get("AdvertiseRoutes") or [])}))'
+    tailscale debug prefs | python3 -I -c 'import json, sys;
+    p = json.load(sys.stdin);
+    print(json.dumps({"RouteAll": p.get("RouteAll"), "CorpDNS": p.get("CorpDNS"),
+    "AdvertiseRoutes": sorted(p.get("AdvertiseRoutes") or [])}))'
   args:
     executable: /bin/bash
   register: _tailscale_prefs
