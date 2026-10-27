@@ -8,8 +8,8 @@ without the uplink adapter, then without the switch cable. After each boot,
 line per check. For a case that took something away, the check for that thing
 passes when it is missing.
 
-The script runs under dash, with fake `systemctl`, `journalctl`, `ip`, `iw`,
-`docker`, `nft` and `tailscale` that read recorded state from files.
+The script runs under dash, with fake `systemctl`, `ip`, `iw`, `docker`, `nft`
+and `tailscale` that read recorded state from files.
 """
 
 from __future__ import annotations
@@ -50,20 +50,13 @@ LIVENESS = "kubelab-edge-liveness.service"
 FAKES = {
     "sudo": '[ "$1" = -n ] && shift\nexec "$@"\n',
     "nft": '[ -f "$FAKE/ruleset" ]\n',
-    "journalctl": """pattern=; unit=
-while [ $# -gt 0 ]; do
-  case $1 in --grep) pattern=$2; shift ;; -u) unit=$2; shift ;; esac
-  shift
-done
-[ -f "$FAKE/journal_$unit" ] || exit 1
-while IFS= read -r line; do
-  printf '%s\\n' "$line" | sed 's/^\\[[^]]*\\] [^ ]* [^:]*: //' | grep -qE "$pattern" && printf '%s\\n' "$line"
-done <"$FAKE/journal_$unit"
-""",
     "systemctl": """case "$1 $2" in
-  "show -p") cat "$FAKE/watchdog" 2>/dev/null || echo 0 ;;
+  "show -p") cat "$FAKE/show_$3_${5:-manager}" 2>/dev/null || echo 0 ;;
   "is-active --quiet") [ -f "$FAKE/active/$3" ] ;;
-  "is-failed --quiet") [ -f "$FAKE/failed/$3" ] ;;
+  "is-failed --quiet") [ "$(cat "$FAKE/activating/$3" 2>/dev/null || echo 0)" -eq 0 ] && [ -f "$FAKE/failed/$3" ] ;;
+  "is-active "*)
+    runs=$(cat "$FAKE/activating/$2" 2>/dev/null || echo 0)
+    if [ "$runs" -gt 0 ]; then echo $((runs - 1)) >"$FAKE/activating/$2"; echo activating; else echo inactive; fi ;;
   "--failed --no-legend")
     for f in "$FAKE"/failed/*; do [ -f "$f" ] && echo "${f##*/} loaded failed failed x"; done
     true ;;
@@ -78,6 +71,7 @@ esac
     "iw": 'cat "$FAKE/iw_$2"\n',
     "docker": 'cat "$FAKE/docker_$4"\n',
     "tailscale": 'cat "$FAKE/tailscale.json"\n',
+    "sleep": ":\n",
     "systemd-analyze": 'echo "Startup finished in 5.1s (kernel) + 20.3s (userspace) = 25.4s"\n',
 }
 
@@ -87,13 +81,13 @@ class Edge:
 
     def __init__(self, root: Path) -> None:
         self.fake, self.bin, self.net = root / "fake", root / "bin", root / "net"
-        for directory in (self.fake / "active", self.fake / "failed", self.bin):
+        for directory in (self.fake / "active", self.fake / "failed", self.fake / "activating", self.bin):
             directory.mkdir(parents=True)
         for name, body in FAKES.items():
             (self.bin / name).write_text(f"#!/bin/sh\n{body}")
             (self.bin / name).chmod(0o755)
         self.write("ruleset", "")
-        self.write("watchdog", "15s")
+        self.write("show_RuntimeWatchdogUSec_manager", "15s")
         for unit in UNITS:
             self.write(f"active/{unit}", "")
         self.write(f"iw_{AP}", f"Interface {AP}\n\ttype AP\n")
@@ -102,7 +96,7 @@ class Edge:
         self.write(f"addr_{LAN}", f"2: {LAN}    inet {LAN_ADDRESS}/24 brd 192.0.2.255 scope global {LAN}\n")
         self.write(f"addr_{UPLINK}", f"3: {UPLINK}    inet {LEASE_ADDRESS}/24 scope global dynamic {UPLINK}\n")
         self.write(f"route_{UPLINK}", "default via 198.51.100.1 proto dhcp\n")
-        self.journal(drops=3.1, carrier=9.2)
+        self.order(ruleset=9.6, networkd=15.5)
         self.tailnet(state="Running", routes=[LAN_CIDR])
         for interface in (LAN, UPLINK, AP):
             (self.net / interface).mkdir(parents=True)
@@ -111,21 +105,19 @@ class Edge:
     def write(self, name: str, text: str) -> None:
         (self.fake / name).write_text(text)
 
+    def read(self, name: str) -> str:
+        return (self.fake / name).read_text().strip()
+
     def remove(self, name: str) -> None:
         (self.fake / name).unlink()
 
     def write_sys(self, interface: str, carrier: str) -> None:
         (self.net / interface / "carrier").write_text(f"{carrier}\n")
 
-    def journal(self, drops: float | None, carrier: float | None) -> None:
-        for unit, at, message in (
-            ("nftables.service", drops, "systemd[1]: Finished nftables.service - nftables."),
-            ("systemd-networkd.service", carrier, f"systemd-networkd[612]: {UPLINK}: Gained carrier"),
-        ):
-            lines = [f"[{1.0:12.6f}] edge {message.split(': ')[0]}: Starting"]
-            if at is not None:
-                lines.append(f"[{at:12.6f}] edge {message}")
-            self.write(f"journal_{unit}", "\n".join(lines) + "\n")
+    def order(self, ruleset: float, networkd: float) -> None:
+        """When each unit reached the state the check reads, in seconds since boot; 0 never."""
+        self.write("show_ActiveEnterTimestampMonotonic_nftables.service", f"{round(ruleset * 1e6)}\n")
+        self.write("show_InactiveExitTimestampMonotonic_systemd-networkd.service", f"{round(networkd * 1e6)}\n")
 
     def tailnet(self, state: str, routes: list[str], allowed: tuple[str, ...] = ("100.64.0.99/32",)) -> None:
         # Indented, as `tailscale status --json` prints it.
@@ -139,7 +131,6 @@ class Edge:
         shutil.rmtree(self.net / UPLINK)
         for name in (f"addr_{UPLINK}", f"route_{UPLINK}", "active/kubelab-edge-shaper.service"):
             self.remove(name)
-        self.journal(drops=3.1, carrier=None)
         self.tailnet(state="NoState", routes=[])
         self.write(f"failed/{LIVENESS}", "")
 
@@ -172,6 +163,7 @@ def test_a_healthy_boot_passes_every_check(edge: Edge) -> None:
     assert result.returncode == 0, result.stdout
     assert not _failures(result)
     assert result.stdout.startswith("INFO Startup finished")
+    assert "INFO ruleset loaded at 9.6s, systemd-networkd started at 15.5s" in result.stdout
 
 
 def _stop(unit: str) -> Any:
@@ -180,7 +172,7 @@ def _stop(unit: str) -> Any:
 
 BROKEN = {
     "ruleset not loaded": (lambda e: e.remove("ruleset"), "ruleset inet kubelab"),
-    "watchdog off": (lambda e: e.write("watchdog", "0"), "hardware watchdog"),
+    "watchdog off": (lambda e: e.write("show_RuntimeWatchdogUSec_manager", "0"), "hardware watchdog"),
     **{f"{unit} down": (_stop(unit), unit) for unit in UNITS},
     "radio not in AP mode": (lambda e: e.write(f"iw_{AP}", "\ttype managed\n"), f"{AP} serves"),
     "pihole unhealthy": (lambda e: e.write("docker_pihole", "running unhealthy\n"), "container pihole"),
@@ -192,8 +184,9 @@ BROKEN = {
         lambda e: e.write(f"addr_{LAN}", f"2: {LAN}    inet {LAN_ADDRESS}7/24 scope global {LAN}\n"),
         "LAN address",
     ),
-    "drops after the carrier": (lambda e: e.journal(drops=12.0, carrier=9.2), "drops loaded before"),
-    "drops never loaded": (lambda e: e.journal(drops=None, carrier=9.2), "drops loaded before"),
+    "ruleset after networkd": (lambda e: e.order(ruleset=16.0, networkd=15.5), "loaded before systemd-networkd"),
+    "ruleset never active": (lambda e: e.order(ruleset=0, networkd=15.5), "loaded before systemd-networkd"),
+    "networkd never started": (lambda e: e.order(ruleset=9.6, networkd=0), "loaded before systemd-networkd"),
     "no lease": (lambda e: e.remove(f"addr_{UPLINK}"), "lease on"),
     "no default route": (lambda e: e.remove(f"route_{UPLINK}"), "default route"),
     "tailnet stopped": (lambda e: e.tailnet(state="Stopped", routes=[LAN_CIDR]), "tailnet session"),
@@ -245,6 +238,23 @@ def test_a_missing_uplink_nobody_pages_fails(edge: Edge) -> None:
     edge.remove(f"failed/{LIVENESS}")
     (failure,) = _failures(edge.run(expect="no-uplink"))
     assert "pages the missing uplink" in failure
+
+
+def test_a_liveness_run_under_way_is_waited_out(edge: Edge) -> None:
+    """Its timer runs it every minute, and a running unit is not failed."""
+    edge.unplug_uplink()
+    edge.write(f"activating/{LIVENESS}", "3")
+    result = edge.run(expect="no-uplink")
+    assert result.returncode == 0, result.stdout
+    assert edge.read(f"activating/{LIVENESS}") == "0"
+
+
+def test_a_liveness_run_that_never_ends_fails_in_bounded_time(edge: Edge) -> None:
+    edge.unplug_uplink()
+    edge.write(f"activating/{LIVENESS}", "100")
+    (failure,) = _failures(edge.run(expect="no-uplink"))
+    assert "pages the missing uplink" in failure
+    assert edge.read(f"activating/{LIVENESS}") == "39"
 
 
 def test_without_the_uplink_another_failed_unit_still_fails(edge: Edge) -> None:

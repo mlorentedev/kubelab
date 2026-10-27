@@ -2,7 +2,7 @@
 # Says, after a boot, whether the edge brought back everything it serves (NET-005
 # AC13; the hard-reset test in docs/runbooks/lab-edge.md). `make edge-boot-check`
 # runs it over SSH. It reads and changes nothing. It uses `sudo -n` only where a
-# read needs root: the ruleset, the system journal, the containers and the tailnet.
+# read needs root: the ruleset, the containers and the tailnet.
 #
 # Usage: kubelab-edge-boot-check <lan if> <lan address> <uplink if> <ap if> <lan cidr>
 #
@@ -60,18 +60,17 @@ missing() {
   fi
 }
 
-# Microseconds since boot of a unit's first journal line this boot that matches.
-first_usec() {
-  sudo -n journalctl -b -o short-monotonic --no-pager -u "$1" --grep "$2" 2>/dev/null |
-    sed -n 's/^\[ *\([0-9]*\)\.\([0-9]\{6\}\)\].*/\1\2/p' | head -n 1
-}
-
-# The uplink's drops must be loaded before it has a carrier (AC3), at boot too.
-drops_first() {
-  loaded=$(first_usec nftables.service '^Finished')
-  carrier=$(first_usec systemd-networkd.service "^$uplink: Gained carrier")
-  [ -n "$loaded" ] && [ -n "$carrier" ] && [ "$loaded" -lt "$carrier" ]
-}
+# The uplink's drops must be loaded before it can have an address (AC3), at boot
+# too. It has none until systemd-networkd configures it: the role disables IPv6
+# on it when the device appears. The order comes from systemd's own record of
+# the boot, in microseconds since boot, because the journal can lose a boot's
+# first seconds to its size cap. A provision that reloads the ruleset moves its
+# timestamp, so the check is for a boot nothing has touched since.
+since_boot() { systemctl show -p "$1" --value "$2"; }
+loaded=$(since_boot ActiveEnterTimestampMonotonic nftables.service)
+networkd=$(since_boot InactiveExitTimestampMonotonic systemd-networkd.service)
+drops_first() { [ "${loaded:-0}" -gt 0 ] && [ "$loaded" -lt "${networkd:-0}" ]; }
+seconds() { awk -v usec="${1:-0}" 'BEGIN { printf "%.1fs", usec / 1000000 }'; }
 
 has_carrier() { [ "$(cat "$sys_net/$1/carrier" 2>/dev/null)" = 1 ]; }
 lan_address_set() { ip -4 -o addr show dev "$lan" | grep -q " $lan_address/"; }
@@ -92,14 +91,27 @@ tailnet() { sudo -n tailscale status --json --peers=false | tr -d ' \t\n'; }
 tailnet_up() { tailnet | grep -q '"BackendState":"Running"'; }
 advertises_lan() { tailnet | grep -q "\"PrimaryRoutes\":\[[^]]*\"$lan_cidr\""; }
 
+# Its timer runs it again every minute, and while a run is under way the unit is
+# activating, not failed: wait that run out, for at most two minutes.
+pages() {
+  tries=0
+  while [ "$(systemctl is-active "$1")" = activating ] && [ "$tries" -lt 60 ]; do
+    sleep 2
+    tries=$((tries + 1))
+  done
+  systemctl is-failed --quiet "$1"
+}
+
 watchdog_armed() {
   usec=$(systemctl show -p RuntimeWatchdogUSec --value)
   [ -n "$usec" ] && [ "$usec" != 0 ]
 }
 
 echo "INFO $(systemd-analyze time 2>/dev/null | head -n 1)"
+echo "INFO ruleset loaded at $(seconds "$loaded"), systemd-networkd started at $(seconds "$networkd")"
 
 check "ruleset inet kubelab loaded" sudo -n nft list table inet kubelab
+check "ruleset loaded before systemd-networkd started" drops_first
 check "hardware watchdog armed" watchdog_armed
 for unit in hostapd.service dnsmasq.service docker.service tailscaled.service \
   kubelab-edge-liveness.timer kubelab-edge-lease-check.timer kubelab-edge-lease-check.path; do
@@ -119,9 +131,8 @@ fi
 reporter=kubelab-edge-liveness.service
 if [ "$expect" = no-uplink ]; then
   missing "uplink adapter $uplink" test -e "$sys_net/$uplink"
-  check "$reporter pages the missing uplink" systemctl is-failed --quiet "$reporter"
+  check "$reporter pages the missing uplink" pages "$reporter"
 else
-  check "drops loaded before $uplink had a carrier" drops_first
   check "lease on $uplink" uplink_lease
   check "default route out $uplink" default_route
   check "kubelab-edge-shaper.service active" systemctl is-active --quiet kubelab-edge-shaper.service

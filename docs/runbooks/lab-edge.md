@@ -170,7 +170,7 @@ The checks that need a hostile uplink (ADR-075 AC3, AC7, AC9 and AC12: exposure 
 
 A power cut is the failure the edge meets most, and nothing else exercises its whole boot: the ruleset before the uplink, the AP, DHCP, the DNS containers, the tailnet and its subnet route. The test runs four boots, and after each one `make edge-boot-check` asks the edge whether it brought everything back. The check reads and changes nothing, and prints one line per check (`OK` or `FAIL`) with no host address. `toolkit infra edge boot-check` exits 0 when every check passes, 1 when one fails and 64 on a usage error; through make, a failure exits 2.
 
-Before each case, `make edge-status` reports the uplink up and `make edge-boot-check` passes. Wait **10 minutes** after power returns before checking, for every case: the liveness timer first runs 5 minutes after boot and fails on its third miss, so a missing uplink pages about 7 minutes in. Check the boot under test before anything else touches the edge: a provision or a hand fix in between hides what the boot left broken.
+Before each case, `make edge-status` reports the uplink up and `make edge-boot-check` passes. Wait **10 minutes** after power returns before checking, for every case: the liveness timer first runs 5 minutes after boot and fails on its third miss, so a missing uplink pages about 7 minutes in. Check the boot under test before anything else touches the edge: a provision or a hand fix in between hides what the boot left broken. A provision that reloads the ruleset also moves the time the order check reads, so that check fails until the next boot.
 
 | Case | Physical step | Then run | Passes when |
 |---|---|---|---|
