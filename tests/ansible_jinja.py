@@ -98,3 +98,13 @@ def ansible_env(templates_dir: str, **kwargs: Any) -> Environment:
     env.tests["changed"] = _changed
     env.tests["version"] = _version
     return env
+
+
+def task_runs(task: dict[str, Any], variables: dict[str, Any]) -> bool:
+    """Whether Ansible would run the task: every `when` clause, evaluated."""
+    clauses = task.get("when", [])
+    env = ansible_env(".")
+    return all(
+        env.from_string("{{ (" + str(clause) + ") | bool }}").render(**variables) == "True"
+        for clause in (clauses if isinstance(clauses, list) else [clauses])
+    )
