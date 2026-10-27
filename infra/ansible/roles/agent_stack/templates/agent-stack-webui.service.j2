@@ -18,8 +18,13 @@ TimeoutStartSec=180
 # the lab edge's uplink is up, left every stack bound to it unbound for a day on
 # 2026-10-26 (#2500). So retry: 30 s keeps a wait that fails fast clear of
 # systemd's default start limit (5 starts in 10 s), which would end the retries.
+# Only the wait is retried: compose exits 1 on an error of its own (a port held,
+# a broken mount), and retrying that would recreate the whole stack every 30 s
+# and never reach `failed`, where node_notify's OnFailure sees it. The exit
+# status read here is ExecStart's alone; an ExecStartPre failure still retries.
 Restart=on-failure
 RestartSec=30
+RestartPreventExitStatus=1
 ExecStartPre={{ agent_stack_dir }}/wait-for-tailscale-addr.sh {{ tailscale_ip }}
 # --force-recreate: a container left unbound by a lost boot race has an
 # unchanged spec hash, so a plain `up -d` would leave it alone (glances unit).
