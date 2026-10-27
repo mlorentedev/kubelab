@@ -37,7 +37,8 @@ started" is the order AC3 needs, read from a source no cap can rotate away.
 
 **Rule**: For an order between units in the current boot, read the units'
 monotonic timestamps, not the journal. The journal is history with a size limit,
-and early boot is the first thing it drops. A reload moves the timestamp too, so
-the check is for a boot nothing has touched since.
+and early boot is the first thing it drops. A reload keeps a unit's
+`ActiveEnterTimestamp` and a restart moves it, so know which one your
+provisioning sends before trusting the order after it.
 
 **Tags**: `#systemd` `#journald` `#boot-order` `#net-005`

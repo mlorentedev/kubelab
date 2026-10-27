@@ -64,8 +64,9 @@ missing() {
 # too. It has none until systemd-networkd configures it: the role disables IPv6
 # on it when the device appears. The order comes from systemd's own record of
 # the boot, in microseconds since boot, because the journal can lose a boot's
-# first seconds to its size cap. A provision that reloads the ruleset moves its
-# timestamp, so the check is for a boot nothing has touched since.
+# first seconds to its size cap. The role only ever reloads the ruleset, which
+# keeps the timestamp; a restart by hand moves it, and the check then fails until
+# the next boot.
 since_boot() { systemctl show -p "$1" --value "$2"; }
 loaded=$(since_boot ActiveEnterTimestampMonotonic nftables.service)
 networkd=$(since_boot InactiveExitTimestampMonotonic systemd-networkd.service)
