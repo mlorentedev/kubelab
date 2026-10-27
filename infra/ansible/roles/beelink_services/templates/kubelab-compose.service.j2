@@ -23,6 +23,13 @@ RemainAfterExit=yes
 # Comfortably above the wait script's own bound, so its explicit failure is what
 # surfaces rather than an opaque systemd timeout.
 TimeoutStartSec=180
+# The wait above is bounded, and nothing runs a oneshot again once it failed at
+# boot. An address that arrives later, because the tailnet is unreachable until
+# the lab edge's uplink is up, left every stack bound to it unbound for a day on
+# 2026-10-26 (#2500). So retry: 30 s keeps a wait that fails fast clear of
+# systemd's default start limit (5 starts in 10 s), which would end the retries.
+Restart=on-failure
+RestartSec=30
 ExecStartPre={{ beelink_deploy_dir }}/wait-for-tailscale-addr.sh {{ tailscale_ip }}
 # `--force-recreate` is the whole fix for ANSIBLE-053, and it is not defensive.
 #

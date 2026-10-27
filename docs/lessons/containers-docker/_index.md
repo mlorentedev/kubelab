@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 624 | [A bounded wait at boot fails for good when the address arrives after the bound](lesson-624-a-bounded-wait-at-boot-fails-for-good-when-the-address-arrives-after-the-bound.md) | 2026-10-26 |
 | 618 | [A bind mount on Colima ignores ownership, so a container-uid guard goes red only on Linux](lesson-618-a-bind-mount-on-colima-ignores-ownership-so-a-container-uid-guard-goes-red-only-on-linux.md) | 2026-10-22 |
 | 610 | [A DOCKER-USER rule matched by original destination also catches the replies](lesson-610-a-docker-user-rule-matched-by-original-destination-also-catches-the-replies.md) | 2026-10-21 |
 | 603 | [A throwaway gateway that mounts the live config fails for reasons the check never meant to test](lesson-603-a-probe-that-borrows-the-live-config-needs-the-live-mounts-or-its-own-minimal-one.md) | 2026-10-18 |

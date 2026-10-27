@@ -13,6 +13,13 @@ Wants=network-online.target tailscaled.service
 Type=oneshot
 RemainAfterExit=yes
 TimeoutStartSec=180
+# The wait above is bounded, and nothing runs a oneshot again once it failed at
+# boot. An address that arrives later, because the tailnet is unreachable until
+# the lab edge's uplink is up, left every stack bound to it unbound for a day on
+# 2026-10-26 (#2500). So retry: 30 s keeps a wait that fails fast clear of
+# systemd's default start limit (5 starts in 10 s), which would end the retries.
+Restart=on-failure
+RestartSec=30
 ExecStartPre={{ agent_stack_dir }}/wait-for-tailscale-addr.sh {{ tailscale_ip }}
 # --force-recreate: a container left unbound by a lost boot race has an
 # unchanged spec hash, so a plain `up -d` would leave it alone (glances unit).

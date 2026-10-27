@@ -100,38 +100,11 @@
 # it is the check that would have caught the bug in the first place.
 # A port binding is fixed at container CREATE time, and the boot race with
 # tailscaled can leave a container running with the binding requested but never
-# established: HostConfig.PortBindings asks for the Tailscale address while
-# NetworkSettings.Ports is empty. `docker ps` shows it Up, nothing listens, and
-# `up -d` will not fix it because the compose spec hash is unchanged.
-#
-# Comparing the request against what is in force is the only thing that notices.
-# Same shape as the memory-limit check below, and the same lesson: a declared
-# control has to be compared with the enforced one or it can be absent in silence.
-- name: Read the port bindings requested vs the ones in effect
-  command: >-
-    docker inspect glances
-    --format '{% raw %}{{len .HostConfig.PortBindings}}:{{len .NetworkSettings.Ports}}{% endraw %}'
-  register: _glances_ports
-  changed_when: false
-  check_mode: false
-  failed_when: false
-
-- name: Detect a requested port binding that was never established
-  set_fact:
-    _glances_port_drift: >-
-      {{ _glances_ports.rc == 0
-         and (_glances_ports.stdout | trim).split(':')[0] | int > 0
-         and (_glances_ports.stdout | trim).split(':')[1] | int == 0 }}
-
-- name: Report an unpublished port
-  debug:
-    msg: >-
-      Glances is running with its port binding requested but NOT in effect
-      ({{ _glances_ports.stdout | trim }} = requested:effective) — recreating.
-      This is the tailscaled boot race: the container started before
-      {{ tailscale_ip }} existed on the interface, so docker-proxy could not bind
-      and the port was dropped without an error anywhere.
-  when: _glances_port_drift | bool
+# established. The comparison lives in one shared task file (#2500).
+- name: Check for a port binding that was never established
+  import_tasks: "{{ playbook_dir }}/_includes/compose-port-drift.yml"
+  vars:
+    compose_port_drift_file: "{{ glances_deploy_dir }}/compose.yml"
 
 - name: Read the memory limit currently applied to the container
   command: docker inspect glances --format '{% raw %}{{.HostConfig.Memory}}{% endraw %}'
@@ -165,7 +138,7 @@
 - name: Start Glances container
   command: >-
     docker compose -f {{ glances_deploy_dir }}/compose.yml up -d
-    {{ '--force-recreate' if (_glances_conf.changed or _glances_memory_drift | bool or _glances_port_drift | bool) else '' }}
+    {{ '--force-recreate' if (_glances_conf.changed or _glances_memory_drift | bool or compose_port_drift | bool) else '' }}
   register: _compose_up
   changed_when: "'Started' in _compose_up.stderr or 'Created' in _compose_up.stderr"
 
@@ -205,10 +178,14 @@
     mode: "0644"
   tags: [boot]
 
-- name: Enable the Glances unit at boot
+# Started, not only enabled: enabling does not start a unit, so one that failed at
+# boot stayed failed until the next boot (#2500). Running it on a failed unit
+# recreates the container, a no-op on a healthy one.
+- name: Enable and start the Glances unit
   systemd:
     name: kubelab-glances.service
     enabled: true
+    state: started
     daemon_reload: true
   # In check mode the template above was never written, so systemd cannot see a
   # unit to enable and the task fails on an artefact of the dry run rather than
