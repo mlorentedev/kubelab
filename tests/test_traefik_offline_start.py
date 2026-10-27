@@ -60,9 +60,14 @@ def _tasks() -> list[dict[str, Any]]:
 
 
 def _plugins_used_by_middlewares() -> set[str]:
-    """Every plugin name a Middleware in the manifests asks Traefik for."""
+    """Every plugin name a Middleware in the manifests asks Traefik for.
+
+    `.yaml.tpl` too: ADR-035's API-key Middlewares are rendered from those by the
+    toolkit, outside Kustomize. None exists today, so `api-key` has no consumer in
+    the repo, and the first one is held to this the day it is added.
+    """
     used: set[str] = set()
-    for path in K8S.rglob("*.yaml"):
+    for path in [*K8S.rglob("*.yaml"), *K8S.rglob("*.yaml.tpl")]:
         for doc in yaml.safe_load_all(path.read_text(encoding="utf-8")):
             if isinstance(doc, dict) and doc.get("kind") == "Middleware":
                 used |= set((doc.get("spec") or {}).get("plugin") or {})
