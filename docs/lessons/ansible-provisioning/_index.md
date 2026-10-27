@@ -5,6 +5,7 @@ Newest first. Back to [all categories](../_index.md).
 | # | Lesson | Date |
 |---|---|---|
 | 640 | [A guard that pairs two roles by tag says nothing about which runs first](lesson-640-a-guard-that-pairs-two-roles-by-tag-says-nothing-about-which-runs-first.md) | 2026-10-27 |
+| 638 | [A guard scoped to one stack leaves its defect open in every other role](lesson-638-a-guard-scoped-to-one-stack-leaves-its-defect-open-in-every-other-role.md) | 2026-10-27 |
 | 637 | [A dry run creates no directory, so the next task writing into it fails the check](lesson-637-a-dry-run-creates-no-directory-so-the-next-task-writing-into-it-fails-the-check.md) | 2026-10-27 |
 | 636 | [A flag that removes a node must reach every list of nodes, the hand-kept one included](lesson-636-a-flag-that-removes-a-node-must-reach-every-list-of-nodes-including-the-hand-kept-one.md) | 2026-10-27 |
 | 630 | [Purging a package removes its unit files but not their failed state, so `systemctl --failed` keeps listing them](lesson-630-purging-a-package-removes-its-unit-files-but-not-their-failed-state.md) | 2026-10-26 |
