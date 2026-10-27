@@ -25,5 +25,20 @@ Draft, updated through the run. Envelope: `.agent/unattended.yml` (expires 2026-
 ## Incidents
 - One raw networkd journal line printed the uplink's DHCP lease address and gateway (private RFC1918) into the session transcript. Transcript only: not in the repo, a PR or an issue. Later remote output was filtered.
 
+## Stop
+`queue-empty` at 10:20Z. Every queue item has landed, is closed, or waits on the operator: #2685's code landed in #2687 and the issue closes at B6, #2678 is parked, #2706 is the operator's. All PRs I opened this run are merged. The repo-wide `dotf pr triage-queue` exits 0.
+
 ## For the operator (prod actions, in order)
-See the session journal; summary filled at close.
+Run them from the deploy checkout once it is synced: `git -C ~/Projects/worktrees/kubelab/master-deploy fetch origin && git -C ~/Projects/worktrees/kubelab/master-deploy checkout --detach origin/master`.
+
+1. `make deploy TARGET=dns ENV=prod`: #2724's pin and #2725's cache flush. Pi-hole is recreated once, because its image string changes.
+2. `make deploy TARGET=vps ENV=prod`, twice: #2707. The second run must report `changed=0`.
+3. `make provision NODE=bee ENV=prod TAGS=maintenance,glances`, **before 2026-10-28 00:27**: #2719, #2710 and #2697.
+4. `make provision NODE=rpi3 ENV=prod`: #2697 and #2729.
+5. `make provision NODE=ace2 ENV=prod TAGS=agent_stack,maintenance,glances`: #2703, #2710 and #2697.
+6. `make provision NODE=ace1 ENV=prod TAGS=maintenance,glances`: #2710 and #2697.
+7. `make provision NODE=rpi4 ENV=prod TAGS=gateway,maintenance`: #2730 and #2710. Then `make edge-boot-check` must be all `OK`. Then the hard-reset cases T1 to T4 together (`docs/runbooks/lab-edge.md`, "Hard-reset test"), with the evidence under `### B14-EVIDENCE`. T4 measures #2732.
+8. `TAGS=maintenance` on vps and gcp1: #2710.
+9. After the provisions, no node's boot journal should carry `Failed to enqueue On(Success|Failure)=` (#2729).
+10. After 2026-10-28 00:04Z: read that night's prune run (#2708).
+11. #2706 is yours to review and merge. #2672 merges after B3 and the staging validation.
