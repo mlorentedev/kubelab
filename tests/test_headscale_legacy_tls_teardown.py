@@ -22,7 +22,11 @@ import re
 from pathlib import Path
 from typing import Any
 
+import jinja2
+import pytest
 import yaml
+
+from tests.ansible_jinja import ansible_env
 
 REPO = Path(__file__).resolve().parent.parent
 ANSIBLE = REPO / "infra/ansible"
@@ -41,6 +45,12 @@ REQUIRED_PACKAGES = {
     "nginx-common",
 }
 LETSENCRYPT_DIR = "/etc/letsencrypt"
+
+# What `systemctl list-units --failed --plain --no-legend --no-pager 'certbot*'` prints on
+# a host that purged certbot and has not reset its units (measured on a booted 24.04 container).
+FAILED_CERTBOT_UNITS = (
+    "certbot.service not-found failed failed certbot.service\ncertbot.timer   not-found failed failed certbot.timer"
+)
 
 APT_MODULES = ("apt", "ansible.builtin.apt")
 FILE_MODULES = ("file", "ansible.builtin.file")
@@ -118,6 +128,28 @@ def _letsencrypt_removal() -> dict:
     raise AssertionError(f"the headscale role does not remove {LETSENCRYPT_DIR}")
 
 
+def _failed_unit_read() -> dict:
+    """The task that lists the failed certbot units the reset is gated on."""
+    found = [
+        t
+        for t in _tasks()
+        if "systemctl list-units" in str(_module(t, COMMAND_MODULES)) and "certbot" in str(_module(t, COMMAND_MODULES))
+    ]
+    assert found, "no task reads which certbot units are failed"
+    return found[0]
+
+
+def _failed_unit_reset() -> dict:
+    found = [
+        t
+        for t in _tasks()
+        if "systemctl reset-failed" in str(_module(t, COMMAND_MODULES))
+        and "certbot" in str(_module(t, COMMAND_MODULES))
+    ]
+    assert found, "no task clears the failed state of the removed certbot units"
+    return found[0]
+
+
 def _index(task: dict) -> int:
     """Position of a task in the role, by name (each call re-reads the file)."""
     return [candidate.get("name") for candidate in _tasks()].index(task["name"])
@@ -185,29 +217,116 @@ class TestFailedUnitIsCleared:
     certbot.service as failed" by itself.
     """
 
-    def _reset(self) -> dict:
-        found = [
-            t
-            for t in _tasks()
-            if "systemctl reset-failed" in str(_module(t, COMMAND_MODULES))
-            and "certbot" in str(_module(t, COMMAND_MODULES))
-        ]
-        assert found, "no task clears the failed state of the removed certbot units"
-        return found[0]
-
     def test_reset_runs_after_the_packages_are_removed(self) -> None:
-        assert _index(_removal_packages()[0]) < _index(self._reset())
+        assert _index(_removal_packages()[0]) < _index(_failed_unit_reset())
 
     def test_reset_runs_as_root(self) -> None:
-        assert _privileged(self._reset())
+        assert _privileged(_failed_unit_reset())
 
-    def test_reset_only_acts_when_a_failed_unit_exists(self) -> None:
-        # `reset-failed` exits 0 whether or not anything matches, so left
-        # unconditional it would report `changed` on every run and the second
-        # run could never be changed=0.
-        task = self._reset()
-        assert "when" in task, "an unconditional reset reports changed on every run"
-        assert "certbot" in str(task["when"])
+    def test_the_read_precedes_the_reset(self) -> None:
+        assert _index(_failed_unit_read()) < _index(_failed_unit_reset())
+
+    def test_the_read_never_reports_a_change(self) -> None:
+        # A read changes nothing. Left reporting `changed`, every run would end at
+        # changed=1 and the second run could never be changed=0.
+        assert _failed_unit_read().get("changed_when") is False
+
+    def test_the_read_runs_under_check_mode(self) -> None:
+        # Ansible skips a command in check mode, and a skipped task registers no
+        # `stdout`: the reset's condition would then raise on `make deploy CHECK=1`.
+        assert _failed_unit_read().get("check_mode") is False
+
+    def test_the_read_asks_for_failed_units_only(self) -> None:
+        # Without `--failed` it lists every loaded certbot unit, so the reset would
+        # fire on a host where certbot is still installed and healthy.
+        assert "--failed" in str(_module(_failed_unit_read(), COMMAND_MODULES))
+
+    @pytest.mark.parametrize(
+        ("stdout", "resets"),
+        [("", False), (FAILED_CERTBOT_UNITS, True)],
+        ids=["nothing-failed", "units-failed"],
+    )
+    def test_the_reset_runs_exactly_when_the_read_found_a_failed_unit(self, stdout: str, resets: bool) -> None:
+        """The second run reads nothing and so resets nothing: that is what makes it changed=0.
+
+        `reset-failed` exits 0 whether or not anything matches, so left unconditional it
+        would report `changed` on every run. The condition is evaluated, not read: a
+        `when` that merely mentions certbot, or that ignores the read's output, passes
+        a reading of its text and fails here. `rc` is 0 in both cases because
+        `systemctl list-units` exits 0 with or without a match.
+        """
+        read, reset = _failed_unit_read(), _failed_unit_reset()
+        conditions = reset.get("when")
+        assert conditions is not None, "an unconditional reset reports changed on every run"
+        result = {"rc": 0, "stdout": stdout, "stdout_lines": stdout.splitlines(), "stderr": "", "changed": False}
+        env = ansible_env(str(ROLE / "templates"))
+        try:
+            applies = all(
+                env.compile_expression(str(c))(**{read["register"]: result})
+                for c in (conditions if isinstance(conditions, list) else [conditions])
+            )
+        except jinja2.UndefinedError:
+            pytest.fail("the reset's condition does not read the registered result of the read task")
+        assert bool(applies) is resets
+
+
+class TestTheTeardownDoesNotGateTheRest:
+    """`make deploy TARGET=vps ENV=prod` is also how an ACL change reaches the VPS.
+
+    The target passes no `--tags`, so there is no ACL-only run to exempt: every
+    deploy executes the whole role. A locked or broken dpkg fails the apt purge, and
+    a purge that runs first would then stop the play before the policy is rendered,
+    reloaded and probed. Running it last means the ACL work is done, or reverted by
+    its own probe, before apt is touched, and the failure still fails the play.
+    """
+
+    @staticmethod
+    def _tags(task: dict) -> list[str]:
+        tags = task.get("tags") or []
+        return [tags] if isinstance(tags, str) else list(tags)
+
+    def _cleanup_positions(self) -> list[int]:
+        return [i for i, task in enumerate(_tasks()) if "cleanup" in self._tags(task)]
+
+    def test_every_teardown_task_is_tagged_cleanup(self) -> None:
+        tasks = _tasks()
+        names = [
+            _removal_packages()[0]["name"],
+            _letsencrypt_removal()["name"],
+            _failed_unit_read()["name"],
+            _failed_unit_reset()["name"],
+        ]
+        untagged = [t["name"] for t in tasks if t["name"] in names and "cleanup" not in self._tags(t)]
+        assert not untagged, f"outside the ordering guard below, because untagged: {untagged}"
+
+    def test_the_teardown_is_the_last_thing_the_role_does(self) -> None:
+        positions = self._cleanup_positions()
+        total = len(_tasks())
+        assert len(positions) >= 4, "the teardown tasks are no longer tagged `cleanup`"
+        assert positions == list(range(total - len(positions), total)), (
+            "a task tagged `cleanup` sits before Headscale's own tasks: a failed purge would stop the play "
+            "before the ACL policy is applied. Put new Headscale tasks above the teardown."
+        )
+
+    def test_the_acl_policy_and_its_probe_come_first(self) -> None:
+        """Without this the test above passes on a role that has lost its ACL tasks."""
+        tasks = _tasks()
+        first_cleanup = self._cleanup_positions()[0]
+        policy = [
+            i
+            for i, t in enumerate(tasks)
+            if "policy.hujson.j2" in str(_module(t, ("template", "ansible.builtin.template")))
+        ]
+        probe = [i for i, t in enumerate(tasks) if "block" in t and "rescue" in t]
+        assert policy and probe, "the role no longer renders the ACL policy or probes it"
+        assert max(policy + probe) < first_cleanup
+
+    def test_a_teardown_command_cannot_report_changed_on_every_run(self) -> None:
+        for task in (_tasks()[i] for i in self._cleanup_positions()):
+            if _module(task, COMMAND_MODULES) is not None:
+                assert task.get("changed_when") is False or "when" in task, (
+                    f"{task['name']!r} runs a command that would report changed on every run"
+                )
 
 
 class TestNothingReinstallsWhatTheTeardownRemoves:
