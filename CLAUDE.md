@@ -68,7 +68,7 @@ ON-DEMAND (homelab, powered when working):
 - **VPS Traefik managed by Ansible**: `traefik_vps` role templates all config from common.yaml. Deploy via `make deploy TARGET=vps ENV=prod`. Do NOT edit VPS files manually.
 - **Traefik certResolver name is `letsencrypt`** (NOT `cloudflare` — cloudflare is the DNS challenge provider, not the resolver name)
 - **Headscale v0.28 has no HTTP /health endpoint**: Use `docker inspect --format '{{.State.Health.Status}}'` for health checks, not `curl /health`
-- **Pi-hole v6**: `pihole reloaddns` does NOT reload dnsmasq configs — use `docker restart pihole`
+- **Pi-hole v6**: `pihole reloaddns` does NOT reload dnsmasq configs, so a `pihole-forwarding.conf` change needs `docker restart pihole`. It DOES empty the DNS cache: it sends FTL a `HUP`, and the process keeps running. Measured 2026-10-27 on FTL v6.8: a record CoreDNS moved resolved to its new address on the next query, and 0 of 215 queries were lost, against 10 lost to a restart. Since ADR-075 that Pi-hole is the LAN's resolver, so the `coredns` role flushes on a Corefile-only change instead of restarting (#2716, lesson-639).
 - **Headscale v0.28**: CLI uses numeric IDs (`--user 2`), routes via `nodes approve-routes`
 - **Authelia on K8s**: MUST set `enableServiceLinks: false` — K8s injects `AUTHELIA_*` env vars that conflict with Authelia config. Also set `automountServiceAccountToken: false` (read-only `/run`).
 - **Binary assets in K8s**: Use kustomize `configMapGenerator` with `files:` (NOT inline binaryData, NOT imperative kubectl). See `authelia-assets` and `grafana-dashboards` patterns.
