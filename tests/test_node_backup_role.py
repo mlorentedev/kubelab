@@ -105,6 +105,10 @@ def _render(template: str, **overrides: object) -> str:
         # hide a playbook that forgot to pass it, which is what StrictUndefined
         # is here to catch.
         node_backup_location="on-demand",
+        # R, supplied by the playbook from `backup.r2.lock_retention_days` and never
+        # role-defaulted, like the values above: the prune waits R days for copied
+        # history (#1920), and a guessed R would wait the wrong number of days.
+        node_backup_r2_lock_retention_days=_common()["backup"]["r2"]["lock_retention_days"],
     )
     ctx.update(overrides)
     # What the role's `docker volume inspect` task registers on a node with

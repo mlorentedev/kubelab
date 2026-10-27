@@ -218,6 +218,16 @@ After #2122 merged (eb3d0ccb), the first `make watcher-run NAME=r2-backup-watche
 
 Still open in the AC1/AC3 task: the seven-day prune window, which starts 2026-10-08.
 
+## The window failed: copied history under the lock (#1920)
+
+2026-10-26. The seven-day window did not hold. `node-backup-prune` failed every day on the four migrated nodes. On the VPS, `forget` selected `e390107e` (2026-09-13) and `37757357` (2026-09-20) and R2 refused both deletes with `The object is locked by the bucket policy`, which gives exit 3 and a page. ace2, born in its own bucket, was not affected.
+
+Cause: `restic copy` keeps a snapshot's `time` but writes its objects at the copy (01:55Z to 02:25Z on 2026-10-08). `forget` ages a snapshot by `time` and the lock ages it by the object, so for R days after the sitting `--keep-within 31d` no longer kept `forget` inside what the lock allows. The invariant holds for native history only. Lesson-628.
+
+Fix: the prune lists the repository first. While any snapshot carries `original` (a copy) and the oldest snapshot without it is younger than R, it logs the expected clearance date and exits 0 without calling `forget`. The migration copied before each node's first ship, so that bound covers every copied object. On the migrated nodes the wait ends about 2026-11-07 02:30Z.
+
+What this means for AC3: a run that waits exits 0, but it measures nothing about the prune under the lock. The window AC3 asks for is therefore read from the first real prune after the clearance: seven days from 2026-11-07 with no `node-backup-prune.service` failure on any node (`make backup-schedule NODE=all ENV=prod`), and at least one run on each migrated node that logs a `forget` rather than a wait.
+
 ## The escrow check (AC5, ahead of PR 5)
 
 2026-10-07, run `make backup-escrow-check ENV=prod` with Bitwarden unlocked. Five of five matched: `KUBELAB_RESTIC_PASSWORD` and the four `KUBELAB_RESTIC_PASSWORD_<NODE>` entries against their SOPS values, by sha256[:12], printing no value. This repeats the hand comparison of 2026-10-03, now as a command. I ran five mutations of `backup_escrow.py`, and each turned a test red. One did so only after the test for a password missing from SOPS was made to assert that the escrow is never queried for it.
