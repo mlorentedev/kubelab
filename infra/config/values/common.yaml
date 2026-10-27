@@ -541,16 +541,19 @@ ci:
         strict: false
         # Exact check-run / commit-status names, verified against a real head sha
         # rather than transcribed from the workflow: a required context that never
-        # reports blocks every merge forever. `review-attestation` is a commit
-        # STATUS, the rest are check-runs; both kinds are matched by name here.
+        # reports blocks every merge forever. `review-attestation` and
+        # `deploy-shape` are commit STATUSES, the rest are check-runs; both kinds
+        # are matched by name here.
         # `Tests` runs unconditionally on every pull request (ci.yml has no `if:`
         # and no paths filter on it), so requiring it costs no extra CI minutes —
         # only the latency of waiting for a job that was already running.
-        # `deploy-shape` is the check-run that deploy-shape.yml publishes, NOT its
+        # `deploy-shape` is the status that deploy-shape.yml publishes, NOT its
         # job ("Judge the diff shape"), which fails only when nothing could be judged.
-        # The check-run carries all three verdicts: success (a mechanical staging
-        # deploy), neutral (any other PR; GitHub counts neutral as passing) and
-        # failure (unknown, fail closed). DELIVERY-004 AC3, #1619.
+        # The status is success for a mechanical staging deploy and for any other
+        # PR (the verdict is in its description), and failure when unknown (fail
+        # closed). DELIVERY-004 AC3, #1619. It was a check-run until DELIVERY-011
+        # (#2714): GitHub filed it under another workflow's suite, and once that
+        # workflow ran again on the sha the context read "Expected" for good.
         required_contexts:
           - Validate
           - Detect Changes
