@@ -34,11 +34,18 @@ DRIFT = REPO / "infra/ansible/playbooks/_includes/compose-port-drift.yml"
 WAIT = "wait-for-tailscale-addr.sh"
 
 #: The roles that bring up a compose stack bound to the Tailscale address, with
-#: their stack unit and the task that starts the stack at provision.
+#: their stack unit and the task that starts the stack at provision, for the
+#: roles that use the shared drift check.
 STACKS = {
     "rpi3_services": ("kubelab-rpi3.service", "Start services"),
     "beelink_services": ("kubelab-compose.service", "Start services"),
     "glances": ("kubelab-glances.service", "Start Glances container"),
+}
+
+#: Every role's stack unit. agent_stack keeps its own drift check, which also
+#: compares memory limits and networks, so it is not in STACKS.
+UNITS_BY_ROLE = {role: unit for role, (unit, _) in STACKS.items()} | {
+    "agent_stack": "agent-stack-webui.service",
 }
 
 
@@ -76,7 +83,15 @@ UNITS = _waiting_units()
 def test_every_known_stack_unit_is_found() -> None:
     """The checks below are only as wide as the discovery; an empty one passes them all."""
     found = {name.split("/")[0] for name in UNITS}
-    assert set(STACKS) | {"agent_stack"} <= found, found
+    assert set(UNITS_BY_ROLE) <= found, found
+
+
+@pytest.mark.parametrize("name", sorted(UNITS))
+def test_the_unit_stays_active_after_it_ran(name: str) -> None:
+    """Without it the unit goes inactive once ExecStart exits, and the provision's
+    `state: started` would recreate a healthy stack on every run."""
+    assert UNITS[name].get("Type") == ["oneshot"], name
+    assert UNITS[name].get("RemainAfterExit") == ["yes"], name
 
 
 @pytest.mark.parametrize("name", sorted(UNITS))
@@ -160,13 +175,23 @@ def test_the_provision_recreates_on_drift(role: str) -> None:
     )
 
 
-@pytest.mark.parametrize("role", sorted(STACKS))
+def _all_tasks(tasks: list[dict]) -> list[dict]:
+    """Tasks at any depth: agent_stack nests its Open WebUI tasks in a block."""
+    out = []
+    for task in tasks:
+        out.append(task)
+        for key in ("block", "rescue", "always"):
+            out.extend(_all_tasks(task.get(key) or []))
+    return out
+
+
+@pytest.mark.parametrize("role", sorted(UNITS_BY_ROLE))
 def test_the_provision_starts_the_stack_unit(role: str) -> None:
     """Enabling a unit does not start it, so a unit that failed at boot stays failed."""
-    unit, _ = STACKS[role]
+    unit = UNITS_BY_ROLE[role]
     started = [
         t
-        for t in _tasks(role)
+        for t in _all_tasks(_tasks(role))
         if (t.get("systemd") or t.get("ansible.builtin.systemd") or {}).get("name") == unit
         and (t.get("systemd") or t.get("ansible.builtin.systemd") or {}).get("state") == "started"
     ]
