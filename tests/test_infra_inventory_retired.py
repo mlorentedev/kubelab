@@ -8,11 +8,14 @@ for `networking.nodes.jetson`); the address is what links them.
 
 from __future__ import annotations
 
+import copy
 from pathlib import Path
 
+import pytest
 import yaml
 
 from tests.infra import fixtures
+from toolkit.features.generator_ansible import AnsibleGenerator
 
 LIVE = "100.64.0.201"
 GONE = "100.64.0.202"
@@ -55,3 +58,43 @@ def test_the_committed_inventory_yields_no_retired_node() -> None:
     assert retired, "fixture assumption: some node is retired"
 
     assert not [n.name for n in nodes if n.host in retired]
+
+
+ADDRESS_KEYS = ("tailscale_ip", "tailscale_dns", "lan_ip", "public_ip")
+NETWORKING = fixtures._COMMON["networking"]
+# Every declaration that carries an address, so every block a `retired` flag could land on.
+DECLARATIONS = [
+    *(("nodes", key) for key in NETWORKING.get("nodes", {})),
+    *((key,) for key, block in NETWORKING.items() if isinstance(block, dict) and any(a in block for a in ADDRESS_KEYS)),
+]
+
+
+def _block(networking: dict, path: tuple[str, ...]) -> dict:
+    for key in path:
+        networking = networking[key]
+    return networking
+
+
+def _generated_hosts(networking: dict) -> set[str]:
+    inventory = AnsibleGenerator()._build_inventory(networking)
+    return {host for group in inventory["all"]["children"].values() for host in group.get("hosts") or {}}
+
+
+@pytest.mark.parametrize("path", DECLARATIONS, ids=".".join)
+def test_the_suite_and_the_generator_agree_on_what_retired_removes(path: tuple[str, ...]) -> None:
+    """The fixture is the second reader of the flag. Where it honours `retired` and
+    the generator does not, a node drops out of the live suite while it is still
+    provisioned, silently; the reverse leaves the suite dialling a node nothing
+    provisions. Either way the two lists disagree about which machines exist."""
+    present = copy.deepcopy(NETWORKING)
+    _block(present, path).pop("retired", None)
+    flagged = copy.deepcopy(present)
+    _block(flagged, path)["retired"] = True
+
+    generator_drops = bool(_generated_hosts(present) - _generated_hosts(flagged))
+    suite_drops = bool(fixtures.retired_addresses(flagged) - fixtures.retired_addresses(present))
+
+    assert suite_drops == generator_drops, (
+        f"networking.{'.'.join(path)}: `retired` removes it from the "
+        f"{'suite' if suite_drops else 'generated inventory'} only"
+    )

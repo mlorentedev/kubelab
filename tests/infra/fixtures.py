@@ -77,18 +77,25 @@ def ssh_user(node: NodeInfo) -> str:
     return node.vars.get("ansible_user", _DEFAULT_SSH_USER)
 
 
+#: The cloud blocks the inventory generator lets `retired` remove, besides `nodes.*`.
+#: A flag anywhere else removes nothing from the generated inventory, so it must
+#: not remove anything from the suite either (test_infra_inventory_retired.py).
+RETIRABLE_CLOUD_BLOCKS = ("aws", "gcp")
+
+
 def retired_addresses(networking: dict) -> frozenset[str]:
     """Every address of a node declared `retired`: a rebuild recipe, not a machine.
 
     The inventory names hosts its own way (`kubelab-jet1` for
     `networking.nodes.jetson`), so the address is what links it to the declaration.
+    `tailscale_dns` counts as one: it is the `ansible_host` the generator gives a hub.
     """
-    blocks = [*networking.get("nodes", {}).values(), *(v for v in networking.values() if isinstance(v, dict))]
+    blocks = [*networking.get("nodes", {}).values(), *(networking.get(key) for key in RETIRABLE_CLOUD_BLOCKS)]
     return frozenset(
         block[attr]
         for block in blocks
         if block and block.get("retired")
-        for attr in ("tailscale_ip", "lan_ip", "public_ip")
+        for attr in ("tailscale_ip", "tailscale_dns", "lan_ip", "public_ip")
         if block.get(attr)
     )
 
