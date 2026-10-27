@@ -1,0 +1,42 @@
+version: 1
+run_id: "autopilot-2026-10-27-night"
+armed_by: manu
+armed_at: 2026-10-27T06:40:00Z
+expires_at: 2026-10-27T15:00:00Z
+objective: >-
+  Land the open PRs of this session under the grant and fix, in their own PRs,
+  the defects the homelab's read-only tests find, then work NET-005 follow-ups
+  that need no physical presence.
+scope:
+  write_paths:
+    - "infra/ansible/**"
+    - "infra/config/values/common.yaml"
+    - "infra/config/platform.json"
+    - "toolkit/**"
+    - "tests/**"
+    - "docs/**"
+    - "specs/**"
+    - "CLAUDE.md"
+    - "Makefile"
+  frozen_paths: [".github/**", "infra/k8s/**", "harness/**", "**/AGENTS.md", ".agent/unattended.yml", "infra/config/secrets/**"]
+  max_files: 12
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make, poetry, pytest, ssh, dig, docker, curl]
+queue:
+  source: bitacora
+  filter: >-
+    open PRs #2715 #2697 #2718 #2719 #2707 #2709; jet1 retired (operator-approved);
+    test-infra reds; then #2716 #2696 #2685 #2678
+  max_items: 8
+budget:
+  max_iterations: 12
+  max_minutes_per_iteration: 45
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant
+  push: true
+  open_pr: true
+  advisor_tier: top
+# Never: prod deploys or provisions (the operator runs them), live netplan,
+# uplink, hostapd, watchdog or Tailscale changes, merging .github/**, release
+# PRs, infra/k8s/** or #2706, or touching other sessions' PRs (#2655 #2656 #2658 #2659).
