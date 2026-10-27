@@ -11,6 +11,11 @@
 `tests/infra/test_network.py` draws the same line, but only for Gitea on the Beelink;
 nothing else catches a refusal, so the e2e probe has to.
 
+`TestOnDemandBackend` is the one caller that keeps testing while the backend refuses: the
+public route must still answer the offline status, since an outage is the window in which a
+broken route or middleware chain would go unseen. It then fails with the outage. The last
+tests drive that test method with a fake HTTP client.
+
 This lives outside `tests/e2e/` on purpose: that directory is skipped wholesale when
 the target environment is unreachable, and this test needs no environment at all. It
 runs the real probe against loopback sockets, or against a `create_connection` that
@@ -22,11 +27,21 @@ from __future__ import annotations
 import errno
 import socket
 from collections.abc import Iterator
+from types import SimpleNamespace
+from typing import Any, cast
 
+import httpx
 import pytest
 
 from tests.e2e import expectations
-from tests.e2e.expectations import BackendRefused, ServiceExpectation, backend_reachable, on_demand_skip_reason
+from tests.e2e import test_health as e2e_health
+from tests.e2e.expectations import (
+    OFFLINE_STATUS,
+    BackendRefused,
+    ServiceExpectation,
+    backend_reachable,
+    on_demand_skip_reason,
+)
 
 LOOPBACK = "127.0.0.1"
 
@@ -120,3 +135,70 @@ def test_a_reachable_backend_gives_no_skip_reason(monkeypatch: pytest.MonkeyPatc
 
 def test_a_service_with_no_on_demand_backend_is_never_probed() -> None:
     assert on_demand_skip_reason("some_service", ServiceExpectation()) is None
+
+
+class _FakeEdge:
+    """Stands in for the HTTP client: records the requests and answers with one status."""
+
+    def __init__(self, status: int | None = None, error: Exception | None = None) -> None:
+        self.status = status
+        self.error = error
+        self.requests: list[str] = []
+
+    def get(self, url: str) -> Any:
+        self.requests.append(url)
+        if self.error:
+            raise self.error
+        return SimpleNamespace(status_code=self.status)
+
+
+def _check_route(monkeypatch: pytest.MonkeyPatch, port: int, edge: _FakeEdge) -> None:
+    """Run `TestOnDemandBackend` for a declared backend at a loopback port, with a fake edge."""
+    monkeypatch.setitem(e2e_health.EXPECTATIONS, "some_service", ServiceExpectation(on_demand_backend="some_node"))
+    monkeypatch.setattr(e2e_health, "on_demand_target", lambda svc_name, node_key: (LOOPBACK, port))
+    services = {"some_service": SimpleNamespace(domain="some.example.invalid", health_path="/health")}
+    e2e_health.TestOnDemandBackend().test_route_is_intact_whether_or_not_the_backend_is_up(
+        "some_service", cast(Any, services), cast(httpx.Client, edge), "prod"
+    )
+
+
+def test_a_refusal_still_asserts_the_route_and_then_fails_with_the_outage(
+    monkeypatch: pytest.MonkeyPatch, closed_port: int
+) -> None:
+    """The route is checked in the outage window, and the outage is what fails the test."""
+    edge = _FakeEdge(status=OFFLINE_STATUS[0])
+
+    with pytest.raises(BackendRefused) as failure:
+        _check_route(monkeypatch, closed_port, edge)
+
+    assert edge.requests == ["https://some.example.invalid/health"], "the route was not asserted before failing"
+    assert f"nothing is listening on {LOOPBACK}:{closed_port}" in str(failure.value)
+
+
+def test_a_refusal_with_a_broken_route_reports_both(monkeypatch: pytest.MonkeyPatch, closed_port: int) -> None:
+    """A route that serves 200 from a dead backend is its own failure, and the outage is not lost."""
+    with pytest.raises(AssertionError) as failure:
+        _check_route(monkeypatch, closed_port, _FakeEdge(status=200))
+
+    message = str(failure.value)
+    assert not isinstance(failure.value, BackendRefused), "the route assertion was skipped"
+    assert str(OFFLINE_STATUS) in message
+    assert f"nothing is listening on {LOOPBACK}:{closed_port}" in message
+
+
+def test_a_refusal_with_an_edge_timeout_reports_both(monkeypatch: pytest.MonkeyPatch, closed_port: int) -> None:
+    with pytest.raises(pytest.fail.Exception) as failure:
+        _check_route(monkeypatch, closed_port, _FakeEdge(error=httpx.ReadTimeout("slow")))
+
+    assert "refuses connections" in str(failure.value)
+    assert f"nothing is listening on {LOOPBACK}:{closed_port}" in str(failure.value)
+
+
+def test_a_silent_backend_passes_when_the_route_answers_the_offline_status(
+    monkeypatch: pytest.MonkeyPatch, silent_host: None
+) -> None:
+    _check_route(monkeypatch, 4242, _FakeEdge(status=OFFLINE_STATUS[-1]))
+
+
+def test_a_live_backend_passes_when_the_route_serves_it(monkeypatch: pytest.MonkeyPatch, listening_port: int) -> None:
+    _check_route(monkeypatch, listening_port, _FakeEdge(status=200))
