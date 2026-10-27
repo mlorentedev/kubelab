@@ -365,7 +365,7 @@ class TestEvaluate:
 
 
 class TestRequiredContext:
-    """AC3 (a): branch protection requires the published check by its exact name.
+    """AC3 (a): branch protection requires the published status by its exact name.
 
     A required context is matched by name, so the declaration and the name the
     workflow publishes must be the same string, or no PR on master ever merges.
@@ -373,11 +373,11 @@ class TestRequiredContext:
 
     WORKFLOW = REPO_ROOT / ".github/workflows/deploy-shape.yml"
 
-    def test_the_published_check_run_name_is_required_on_master(self) -> None:
+    def test_the_published_status_name_is_required_on_master(self) -> None:
         config = yaml.safe_load((REPO_ROOT / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
         required = config["ci"]["branch_protection"]["mlorentedev/kubelab"]["master"]["required_contexts"]
-        published = re.findall(r'-f name="([^"]+)"', self.WORKFLOW.read_text(encoding="utf-8"))
-        assert published == ["deploy-shape"], f"the workflow publishes {published}, expected one check-run"
+        published = re.findall(r'-f context="([^"]+)"', self.WORKFLOW.read_text(encoding="utf-8"))
+        assert published == ["deploy-shape"], f"the workflow publishes {published}, expected one status"
         assert published[0] in required, (
             "deploy-shape is not a required context on master: without it a not-mechanical "
             "verdict is advisory and an unknown one blocks nothing (DELIVERY-004 AC3)"
@@ -399,8 +399,22 @@ class TestRequiredContext:
         )
         assert {"opened", "synchronize", "reopened"} <= set(trigger.get("types") or [])
 
+    def test_the_verdict_is_a_commit_status_never_a_check_run(self) -> None:
+        """DELIVERY-011 (#2714): a check-run posted with GITHUB_TOKEN joins the first
+        github-actions suite on the sha, not this workflow's. When that workflow runs
+        again on the sha, branch protection stops seeing the older suite's check-runs
+        and the required context reads "Expected" with every check green. A status
+        belongs to no suite."""
+        text = self.WORKFLOW.read_text(encoding="utf-8")
+        posts = re.findall(r'gh api -X POST "repos/\$\{GITHUB_REPOSITORY\}/([a-z-]+)/', text)
+        assert posts == ["statuses"], f"the workflow posts to {posts}, expected one commit status"
+        assert "check-runs" not in text.split("\njobs:", 1)[1], "a step still creates a check-run"
+        permissions = yaml.safe_load(text)["permissions"]
+        assert permissions.get("statuses") == "write", f"permissions: {permissions}"
+        assert "checks" not in permissions, f"permissions still grant checks: {permissions}"
+
     def test_the_job_name_is_not_what_is_required(self) -> None:
-        """The job fails only on `unknown`; the check-run carries all three verdicts."""
+        """The job fails only on `unknown`; the status carries the verdict."""
         config = yaml.safe_load((REPO_ROOT / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
         required = config["ci"]["branch_protection"]["mlorentedev/kubelab"]["master"]["required_contexts"]
         jobs = yaml.safe_load(self.WORKFLOW.read_text(encoding="utf-8"))["jobs"]
