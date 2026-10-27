@@ -4,7 +4,8 @@ The `coredns` role ran Pi-hole as `pihole/pihole:latest` and pulls on every
 deploy, so any `make deploy TARGET=dns` could move the LAN's resolver to an
 image nobody chose, and the pull reports `changed=false`. The Beelink's stack
 has its own check (`test_beelink_images_versioned.py`). This one covers what
-every role declares in its defaults.
+every role declares in its defaults, and refuses an image written anywhere
+else in a role.
 
 An empty default is one the playbook fills from the config SSOT, which the
 per-stack checks cover. A `:local` image is built on the node and never pulled.
@@ -45,12 +46,17 @@ def test_every_role_default_image_carries_a_version(var: str, image: str) -> Non
     )
 
 
-def test_no_role_template_names_an_image_outside_a_var() -> None:
-    """A literal `image:` in a template would run without passing the check above."""
+# Where a role can write `image:` besides its defaults: a template it renders, or a
+# module argument in a task or handler.
+IMAGE_SITES = ("*/templates/*", "*/tasks/*.yml", "*/handlers/*.yml")
+
+
+def test_no_role_names_an_image_outside_a_var() -> None:
+    """A literal `image:` anywhere else would run without passing the check above."""
     literal = [
         f"{path.relative_to(ROLES)}:{number}"
-        for path in sorted(ROLES.glob("*/templates/*"))
+        for path in sorted(p for site in IMAGE_SITES for p in ROLES.glob(site))
         for number, line in enumerate(path.read_text(encoding="utf-8", errors="ignore").splitlines(), 1)
         if (m := re.match(r"\s*image:\s*(\S+)", line)) and "{{" not in m.group(1)
     ]
-    assert not literal, f"images written into templates: {literal}"
+    assert not literal, f"images written outside a default: {literal}"
