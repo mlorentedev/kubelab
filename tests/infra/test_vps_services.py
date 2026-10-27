@@ -7,6 +7,7 @@ Requires Tailscale VPN connection.
 
 from __future__ import annotations
 
+import json
 import subprocess
 
 import pytest
@@ -79,9 +80,12 @@ class TestAPI:
     """KubeLab API."""
 
     def test_health(self, require_vpn: None) -> None:
+        """/health is liveness only and answers `alive` (#2387). Readiness is /ready."""
         code, body = _curl_body("https://api.kubelab.live/health")
         assert code == 200
-        assert '"healthy"' in body
+        reply = json.loads(body)
+        assert reply["service"] == "kubelab-api", reply
+        assert reply["status"] == "alive", reply
 
 
 class TestWeb:
