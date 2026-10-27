@@ -179,8 +179,9 @@
   tags: [boot]
 
 # Started, not only enabled: enabling does not start a unit, so one that failed at
-# boot stayed failed until the next boot (#2500). Running it on a failed unit
-# recreates the container, a no-op on a healthy one.
+# boot stayed failed until the next boot (#2500). On a unit that is not active (a
+# fresh node, or one that failed) its ExecStart recreates the container started
+# above, once; on an active unit this is a no-op.
 - name: Enable and start the Glances unit
   systemd:
     name: kubelab-glances.service
