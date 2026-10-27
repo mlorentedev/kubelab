@@ -603,6 +603,32 @@ def test_the_notifier_and_its_consumers_are_selected_together(playbook: Path):
     )
 
 
+def _plays_roles(playbook: Path) -> list[list[str]]:
+    """Each play's roles, by role name, in the order the play applies them."""
+    return [
+        [str(e.get("role", "") if isinstance(e, dict) else e).split("/")[-1] for e in play.get("roles") or []]
+        for play in yaml.safe_load(playbook.read_text()) or []
+        if isinstance(play, dict)
+    ]
+
+
+@pytest.mark.parametrize("playbook", PLAYBOOKS, ids=lambda p: p.stem)
+def test_the_notifier_is_installed_before_the_units_that_name_it(playbook: Path):
+    """Selecting both together is not enough: a consumer applied first starts units
+    whose template does not exist yet. On a first provision, or a run that stops
+    between the two, systemd logs `Failed to enqueue OnFailure= job ... not found`
+    at every run and the failure goes unannounced (#2728). The lab edge did that
+    across two boots while `gateway` ran before `node_notify`."""
+    consumers = _notifier_consumers() - {"node_notify"}
+    late = [
+        role
+        for roles in _plays_roles(playbook)
+        for role in roles
+        if role in consumers and "node_notify" in roles and roles.index(role) < roles.index("node_notify")
+    ]
+    assert not late, f"{playbook.stem} applies {late} before node_notify, so their units name a missing template"
+
+
 def test_the_delivery_test_can_name_the_unit_it_simulates() -> None:
     """A documented override that no caller can pass is not an override.
 
