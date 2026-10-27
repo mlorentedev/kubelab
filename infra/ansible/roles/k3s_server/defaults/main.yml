@@ -35,6 +35,33 @@ k3s_traefik_acme_dns_provider: "cloudflare"
 k3s_traefik_acme_dns_resolvers: "1.1.1.1:53,8.8.8.8:53"
 k3s_traefik_acme_secret_name: "cloudflare-api-token"
 k3s_traefik_acme_cloudflare_token: ""  # From SOPS (secrets.cloudflare.acme_dns_token)
+# Before asking Let's Encrypt to validate, lego checks the DNS-01 record against the
+# zone's authoritative nameservers over UDP 53. A site that answers every outbound UDP
+# 53 query itself (the lab's, measured 2026-10-27) only ever shows it a cached NXDOMAIN,
+# so every renewal times out. Let's Encrypt validates from its own network either way:
+# false replaces the local check with a fixed delay, in both environments (#2699).
+k3s_traefik_acme_propagation_checks: false
+
+# Traefik plugins, loaded from the node (#2565). A remote plugin is downloaded from
+# plugins.traefik.io at every start, and when that fails Traefik starts with every
+# plugin disabled and drops each router that uses one, while the pod stays Ready. The
+# role fetches each source here instead, at provision time, verified by sha256, into
+# one directory per version. The name is the one Middlewares use under `spec.plugin`.
+# The source is the module's GitHub tag archive, so `module` must be a GitHub path.
+k3s_traefik_local_plugins_dir: /var/lib/kubelab/traefik-plugins
+k3s_traefik_local_plugins:
+  - name: bouncer
+    module: github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin
+    version: v1.5.1
+    sha256: a0fe391765d347726e260cd32d767c56e417910ff6e2c61bd2563c50c7b20ed3
+  # api-key (ADR-035 Stage 1): used by Middlewares api-key-* rendered from
+  # infra/k8s/overlays/<env>/middlewares/*.yaml.tpl via `make apply-middleware-secrets
+  # ENV=<env>`. It answers 403 for any rejected request, and accepts both X-API-Key and
+  # Authorization: Bearer (Bearer for Stage 2 OIDC forward-compat).
+  - name: api-key
+    module: github.com/dtomlinson91/traefik-api-key-middleware
+    version: v0.1.2
+    sha256: bf36f5c93ae3948ba669d40d8d95084cf4b4f028fe0f7a2c41ca430a28227eda
 
 # Kubeconfig fetch to controller
 k3s_fetch_kubeconfig: false
