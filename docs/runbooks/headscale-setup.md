@@ -37,27 +37,34 @@ Copy config from repo:
 scp infra/stacks/services/core/headscale/config/config.yaml deployer@kubelab-vps:/opt/headscale/config/
 ```
 
-### 1.2 Create docker-compose.yml on VPS
+### 1.2 docker-compose.yml on the VPS (rendered)
 
-> **IMPORTANT**: VPS uses Docker network `proxy` (not `kubelab`). The repo compose uses
-> `${NETWORK_NAME}` which resolves to `kubelab` — this won't work on VPS.
-
-`/opt/headscale/docker-compose.yml`:
+The `headscale` role renders `/opt/headscale/docker-compose.yml` from
+`infra/ansible/roles/headscale/templates/docker-compose.yml.j2` on every
+`make deploy TARGET=vps ENV=prod`. That template is the source of truth: do not write the
+file by hand, an edit on the VPS is overwritten by the next deploy. The values come from
+`common.yaml`, and the VPS network is `kubelab` (ADR-020 Phase 2b; the old `proxy` network
+is gone). `tests/test_headscale_runbook_compose.py` fails when this snippet stops matching
+what the template renders.
 
 ```yaml
 services:
   headscale:
     container_name: headscale
-    image: headscale/headscale:v0.28.0
+    image: <apps.services.core.headscale.image>
     restart: unless-stopped
     command: serve
     ports:
+      - "<networking.vps.public_ip>:8080:8080"
       - "3478:3478/udp"
     volumes:
       - ./config:/etc/headscale:ro
       - headscale_data:/var/lib/headscale
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     networks:
-      - proxy
+      - kubelab
     healthcheck:
       test: ["CMD", "headscale", "version"]
       interval: 10s
@@ -69,9 +76,13 @@ volumes:
   headscale_data:
 
 networks:
-  proxy:
+  kubelab:
     external: true
 ```
+
+Port 8080 is published on the VPS public IP only: that is the address the K3s Traefik
+EndpointSlice points at (1.4), so Headscale's control port is not reachable on any other
+interface. STUN (`3478/udp`) is published on all addresses.
 
 ### 1.3 TLS certificate (certbot superseded)
 
@@ -645,7 +656,7 @@ sudo chattr +i /etc/resolv.conf
 
 | Setting | VPS (prod) | Repo (toolkit-generated) |
 |---------|-----------|-------------------------|
-| Docker network | `proxy` | `kubelab` |
+| Docker network | `kubelab` (renamed from `proxy`, ADR-020 Phase 2b) | `kubelab` |
 | ACME storage | `/letsencrypt/acme.json` | `/etc/traefik/acme/acme.json` |
 | Wildcard cert | `*.mlorente.dev` | `*.kubelab.live` |
 | Headscale TLS | K3s Traefik terminates TLS (certbot was the pre-K3s setup; the `headscale` role purges it, OPS-047) | Traefik terminates TLS |
@@ -681,7 +692,7 @@ See [dns-homelab](dns-homelab.md#DNS Resilience — /etc/hosts Fallback via Ansi
 2026-02-26: Traefik routing changed from HTTP reverse proxy to TCP passthrough with SNI.
 Root cause: Traefik strips `Upgrade: tailscale-control-protocol` header (only supports WebSocket).
 Headscale then terminated TLS itself (certbot DNS-01 via Cloudflare). **Superseded** by the K3s cutover,
-where K3s Traefik terminates TLS (see 1.3); certbot is purged from the VPS by OPS-047 (2026-10-26).
+where K3s Traefik terminates TLS (see 1.3); the `headscale` role removes certbot (OPS-047).
 See [error-headscale-noise-http2](../troubleshooting/error-headscale-noise-http2.md).
 2026-02-27: tsnet upgraded v1.60.0 → v1.80.0. Headscale v0.28.0 requires minimum_version=v1.74;
 older tsnet failed silently with EOF during Noise handshake. Native clients worked because they
