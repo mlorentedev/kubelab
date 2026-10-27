@@ -112,6 +112,9 @@
       vars:
         node_backup_sources: "{{ config.backup.sources[node_short_name] | default({}) }}"
         node_backup_restic_version: "{{ config.backup.r2.restic_version }}"
+        # R: the prune waits this long for history copied into the repository
+        # (#1920). No role default, so a play that forgets it fails the apply.
+        node_backup_r2_lock_retention_days: "{{ config.backup.r2.lock_retention_days }}"
         # Own bucket: its root, named as `node_bucket()` names it
         # (`kubelab-backup-<node>`, r2_tfvars.NODE_BUCKET_PREFIX; the isolation
         # test renders this and compares). Shared bucket: the prefix as before.

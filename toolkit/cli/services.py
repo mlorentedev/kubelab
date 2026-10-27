@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Annotated, Any
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 from toolkit.config.constants import MESSAGES, PATH_STRUCTURES
@@ -201,7 +202,7 @@ def list_components() -> None:
 
     logger.section("Available Components")
     for category in sorted(components.keys()):
-        logger.info(f"[cyan]{category.upper()}[/cyan]")
+        logger.info(f"[cyan]{escape(category.upper())}[/cyan]", markup=True)
         for item in sorted(components[category]):
             logger.info(f"  • {item}")
         logger.info("")
