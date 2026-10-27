@@ -1,5 +1,5 @@
 ---
-id: lesson-628-purging-a-package-removes-its-unit-files-but-not-their-failed-state
+id: lesson-630-purging-a-package-removes-its-unit-files-but-not-their-failed-state
 type: lesson
 status: active
 created: "2026-10-26"
