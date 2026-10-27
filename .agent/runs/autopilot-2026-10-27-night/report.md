@@ -7,12 +7,11 @@ Draft, updated through the run. Envelope: `.agent/unattended.yml` (expires 2026-
 
 ## Landed under the grant
 - #2718, #2719, #2709, #2715, #2723, #2725, #2727, #2721 (closed #2720), #2731.
+- #2724 Pi-hole pin (09:4xZ), two stale PR-Agent findings declined with reasons.
 
 ## Open, mine (state at writing)
-- #2724 Pi-hole pin: scan widened in `605b1847` (third PR-Agent pass), awaiting CI.
-- #2729 notifier ordering: awaiting the PR-Agent re-run and CI.
-- #2730 edge boot check: redesigned after a live read-only run on rpi4 (journal lost the boot's first 28 s; now reads unit timestamps); live run all `OK`. Lesson 641.
-  An independent adversarial review then returned FAIL: the no-uplink case could not pass (the liveness unit's page also fails with no route out). Fixed, plus AP/DHCP/LAN-DNS probes; 22 checks `OK` live. Tickets filed: #2732 NET-017 (T4 hypothesis: LAN address needs a carrier, may take DNS down), #2733 OBS-039 (an undelivered page stays a failed unit).
+- #2729 notifier ordering: two PR-Agent findings applied in `9fff8024` (recovery-only consumers counted, templated role names refused; both mutation-killed), master merged (`d3ff6de3`), awaiting CI.
+- #2730 edge boot check: redesigned after a live read-only run on rpi4 (journal lost the boot's first 28 s; now reads unit timestamps); live run all `OK`. Lesson 641. Expected page now read from the unit's `OnFailure=` (`f867536d`, checked live), awaiting CI.
 
 ## Not picked up
 - #2726 DNS-008: parked (scope-violation): its fix pins `infra/stacks/services/core/pihole/compose.yml`, outside `write_paths`.
