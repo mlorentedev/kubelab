@@ -21,3 +21,12 @@
   changed_when: false
   register: _vps_check
   failed_when: _vps_check.rc != 0
+  # The first connection over a cold tailnet path can outlast ConnectTimeout while the
+  # next one answers in milliseconds (a provision of bee was refused that way on
+  # 2026-10-26; the retry seconds later took 431 ms). `retries` counts attempts AFTER the
+  # first, so this is 4 attempts: a VPS that really is down still fails the run in
+  # 4 * 5 + 3 * 3 = 29 s, and the last ssh error is what the failure reports.
+  # tests/test_vps_preflight_retries.py holds both the count and the bound.
+  until: _vps_check.rc == 0
+  retries: 3
+  delay: 3
