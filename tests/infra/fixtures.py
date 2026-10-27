@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -123,6 +124,8 @@ def load_inventory(
             if host_vars is None:
                 host_vars = {}
             if host_vars.get("ansible_host", hostname) in retired:
+                # Said, as the generator says it: a reduced run must name what it stopped covering.
+                warnings.warn(f"{hostname} is retired in common.yaml: the infra suite does not check it", stacklevel=2)
                 continue
             nodes.append(
                 NodeInfo(

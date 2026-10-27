@@ -37,7 +37,8 @@ def _write_inventory(path: Path) -> Path:
 def test_a_host_at_a_retired_address_is_skipped(tmp_path: Path) -> None:
     networking = {"nodes": {"live": {"tailscale_ip": LIVE}, "gone": {"tailscale_ip": GONE, "retired": True}}}
 
-    nodes = fixtures.load_inventory(_write_inventory(tmp_path / "hosts.yml"), networking=networking)
+    with pytest.warns(UserWarning, match="kubelab-gone is retired"):
+        nodes = fixtures.load_inventory(_write_inventory(tmp_path / "hosts.yml"), networking=networking)
 
     assert [n.name for n in nodes] == ["kubelab-live"]
 
@@ -48,18 +49,6 @@ def test_without_the_flag_every_host_is_kept(tmp_path: Path) -> None:
     nodes = fixtures.load_inventory(_write_inventory(tmp_path / "hosts.yml"), networking=networking)
 
     assert sorted(n.name for n in nodes) == ["kubelab-gone", "kubelab-live"]
-
-
-def test_the_committed_inventory_yields_no_retired_node() -> None:
-    """Against the real files: what makes `make test-infra` stop dialling the node."""
-    nodes = fixtures.load_inventory()
-    assert nodes, "the committed inventory produced no node: the check below would be vacuous"
-    retired = fixtures.retired_addresses(fixtures._COMMON["networking"])
-    if not retired:
-        # A node's return is one flag, so an empty set is a valid state, not a broken fixture.
-        pytest.skip("no node is retired today; the cases above cover the mechanism")
-
-    assert not [n.name for n in nodes if n.host in retired]
 
 
 ADDRESS_KEYS = ("tailscale_ip", "tailscale_dns", "lan_ip", "public_ip")
@@ -100,3 +89,18 @@ def test_the_suite_and_the_generator_agree_on_what_retired_removes(path: tuple[s
         f"networking.{'.'.join(path)}: `retired` removes it from the "
         f"{'suite' if suite_drops else 'generated inventory'} only"
     )
+
+
+def test_every_inventory_host_sits_at_a_declared_address() -> None:
+    """The link `retired` rests on: the suite finds a node by its address, so a host
+    whose `ansible_host` drifted from `common.yaml` would escape the flag silently."""
+    declared = {
+        block[attr]
+        for path in DECLARATIONS
+        for block in [_block(NETWORKING, path)]
+        for attr in ADDRESS_KEYS
+        if block.get(attr)
+    }
+    hosts = fixtures.load_inventory(networking={})
+    assert hosts, "the committed inventory produced no node: the check below would be vacuous"
+    assert not [f"{n.name} ({n.host})" for n in hosts if n.host not in declared]
