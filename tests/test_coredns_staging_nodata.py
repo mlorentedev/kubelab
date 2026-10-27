@@ -144,8 +144,14 @@ def test_a_staging_name_answers_every_type_and_a_with_ace1(coredns: int) -> None
 
 @pytest.mark.integration
 def test_the_apex_still_reaches_hosts(coredns: int) -> None:
-    """The NODATA block falls through for the apex, which no pattern matches."""
+    """The NODATA block falls through for the apex, which no pattern matches.
+
+    AAAA is asked too: musl sends it with A, so the apex needs `hosts`' NODATA
+    for it as much as the A answer."""
     reply = _query(coredns, APEX, "A")
+    aaaa = _query(coredns, APEX, "AAAA")
 
     assert reply.rcode == NOERROR
     assert reply.answers == [(TYPES["A"], socket.inet_aton(_role_vars()["node_ips"]["ace1"]))]
+    assert aaaa.rcode == NOERROR
+    assert aaaa.answers == []
