@@ -55,17 +55,17 @@ else
     exit "$LISTING_RC"
 fi
 
-# The fractional seconds are dropped and a `Z` spelled out before parsing:
-# restic writes nine digits, which `fromisoformat` refuses before Python 3.11.
+# restic writes nanoseconds and a local offset; `fromisoformat` takes both from
+# Python 3.11, and every node runs 3.12 or later (measured 2026-10-26).
 VERDICT="$(python3 - "$LISTING" {{ node_backup_r2_lock_retention_days }} <<'PY'
-import json, re, sys
+import json, sys
 from datetime import datetime, timedelta, timezone
 
 snapshots = json.load(open(sys.argv[1]))
 lock = timedelta(days=int(sys.argv[2]))
 copied = [s for s in snapshots if s.get("original")]
 own = [
-    datetime.fromisoformat(re.sub(r"Z$", "+00:00", re.sub(r"\.\d+", "", s["time"])))
+    datetime.fromisoformat(s["time"])
     for s in snapshots
     if not s.get("original")
 ]

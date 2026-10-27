@@ -117,11 +117,7 @@ def _forget_call() -> str:
 
 
 def _snapshot(days_old: float, *, copied: bool = False) -> dict:
-    """A snapshot as `restic snapshots --json` prints it: local offset, nanoseconds.
-
-    The offset and the nine fractional digits are what restic 0.19.1 writes, and
-    what an older python's `fromisoformat` refuses, so every test parses them.
-    """
+    """A snapshot as `restic snapshots --json` prints it: local offset, nanoseconds."""
     when = (datetime.now(timezone.utc) - timedelta(days=days_old)).astimezone(timezone(timedelta(hours=-6)))
     snap = {"id": os.urandom(32).hex(), "time": when.strftime("%Y-%m-%dT%H:%M:%S.123456789-06:00")}
     if copied:
