@@ -255,6 +255,18 @@ def test_a_job_volume_of_either_runner_is_a_candidate(name: str) -> None:
     assert is_candidate(Volume(name))
 
 
+def test_a_finished_job_of_the_new_runner_is_reclaimed(containers: list[Container], volumes: list[Volume]) -> None:
+    """Through the whole plan, not only the predicate: an empty plan is what the
+    naming change produced, and the reaper reported it as success."""
+    job = "GITEA-ACTIONS-TASK-6071-WORKFLOW-CI-JOB-build-pdf-build-pdf-" + "8d77" * 16
+    finished = MEASURED_AT - timedelta(hours=DEFAULT_MIN_AGE_HOURS + 1)
+    new = [Volume(job, created=finished), Volume(f"{job}-env", created=finished)]
+
+    plan = plan_reclaim(containers, [*volumes, *new], MEASURED_AT, DEFAULT_MIN_AGE_HOURS, protected=PROTECTED)
+
+    assert {job, f"{job}-env"} <= set(plan.volumes)
+
+
 # --- what must never be removed ----------------------------------------------
 
 
