@@ -1,6 +1,7 @@
 ---
 coredns_image: "coredns/coredns:1.12.1"
-pihole_image: "pihole/pihole:latest"
+# The LAN resolver: a deploy pulls this, so a rolling tag would upgrade it unasked.
+pihole_image: "pihole/pihole:2026.10.0"
 # Absolute, like every other service under /opt. A remote `~` is the home of
 # whoever the task runs as, so `~/coredns` was /home/<user>/coredns from
 # deploy-dns.yml and /root/coredns from provision-rpi4.yml: one stack, two
