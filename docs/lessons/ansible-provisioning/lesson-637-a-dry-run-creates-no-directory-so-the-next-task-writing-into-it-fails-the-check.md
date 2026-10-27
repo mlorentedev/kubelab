@@ -14,14 +14,14 @@ tags: [kubelab, ansible-provisioning, check-mode, gateway, rpi4]
 
 **Problem**: The run failed at `Back up hand-written netplan files` with `Destination directory /var/backups/kubelab-netplan does not exist`. The task before it, `Create the netplan backup directory`, reported `changed` under `--check`, which only says it would have created the directory. The `copy` then ran for real against a path that was never made. A live run passes. Only the dry run fails, and it fails on every edge that still holds a hand-written netplan, which is every edge the role has not converted yet.
 
-**Solution**: Register the directory task, and skip the copy only when the dry run is the one that would have created the directory:
+**Solution**: Read the directory first with a `stat`, which is read-only and so runs in a dry run too, and skip the copy only in a dry run where the directory is not there:
 
 ```yaml
-  when: not (ansible_check_mode and gateway_netplan_backup_dir is changed)
+  when: not (ansible_check_mode and not gateway_netplan_backup_dir.stat.exists)
 ```
 
-On a re-run the directory exists, so the dry run still reports the backup it would take. `when: not ansible_check_mode` would hide that on every dry run. `ignore_errors` would put an `ignored=1` in every recap, and a reader learns to treat that column as noise. `check_mode: false` on the directory makes the dry run write to the host. `tests/test_gateway_role_tasks.py` evaluates the real `when` for each pair of check mode and directory state.
+Where the directory exists, the dry run still reports the backup it would take. `when: not ansible_check_mode` would hide that on every dry run. `ignore_errors` would put an `ignored=1` in every recap, and a reader learns to treat that column as noise. `check_mode: false` on the directory makes the dry run write to the host. Keying on the directory task's `is changed` was the first version, and review found it too wide: the task also pins `mode: "0700"`, so a directory that exists with another mode reports `changed` too, and the dry run would skip a backup it could take. `tests/test_gateway_role_tasks.py` evaluates the real `when` for each pair of check mode and directory state.
 
-**Rule**: Under `--check`, `changed` on a task that creates something means the thing does not exist. A later task that needs it must ask whether its producer `is changed` in check mode, not skip every dry run.
+**Rule**: Under `--check`, a later task that needs something an earlier task creates must ask whether it exists (`stat`), not whether its producer `is changed`, which also means "would modify", and not skip every dry run.
 
 **Tags**: `#check-mode` `#gateway` `#pr-2696`
