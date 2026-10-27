@@ -20,7 +20,7 @@ from typing import Any
 import pytest
 import yaml
 
-from tests.ansible_jinja import ansible_env
+from tests.ansible_jinja import ansible_env, task_runs
 
 REPO = Path(__file__).resolve().parents[1]
 ROLE = REPO / "infra" / "ansible" / "roles" / "gateway"
@@ -710,16 +710,6 @@ def _task(name: str) -> dict[str, Any]:
     return next(task for task in TASKS if task.get("name") == name)
 
 
-def _runs(task: dict[str, Any], variables: dict[str, Any]) -> bool:
-    """Whether Ansible would run the task: every `when` clause, evaluated."""
-    clauses = task.get("when", [])
-    env = ansible_env(str(ROLE / "templates"))
-    return all(
-        env.from_string("{{ (" + str(clause) + ") | bool }}").render(**variables) == "True"
-        for clause in (clauses if isinstance(clauses, list) else [clauses])
-    )
-
-
 @pytest.mark.parametrize(
     ("check_mode", "exists", "copies"),
     [
@@ -741,4 +731,4 @@ def test_a_dry_run_reaches_past_the_netplan_backup(check_mode: bool, exists: boo
 
     variables = {"ansible_check_mode": check_mode, probe["register"]: {"stat": {"exists": exists}}}
 
-    assert _runs(backup, variables) is copies
+    assert task_runs(backup, variables) is copies
