@@ -75,8 +75,8 @@ drops_first() { [ "${loaded:-0}" -gt 0 ] && [ "$loaded" -lt "${networkd:-0}" ]; 
 seconds() { awk -v usec="${1:-0}" 'BEGIN { printf "%.1fs", usec / 1000000 }'; }
 
 has_carrier() { [ "$(cat "$sys_net/$1/carrier" 2>/dev/null)" = 1 ]; }
-# Unplugged, not gone: the device is there and reports no carrier.
-unplugged() { [ -e "$sys_net/$1" ] && [ "$(cat "$sys_net/$1/carrier" 2>/dev/null)" = 0 ]; }
+# Unplugged, not gone: only a device that is there reports a carrier of 0.
+unplugged() { [ "$(cat "$sys_net/$1/carrier" 2>/dev/null)" = 0 ]; }
 lan_address_set() { ip -4 -o addr show dev "$lan" | grep -q " $lan_address/"; }
 uplink_lease() { ip -4 -o addr show dev "$uplink" scope global | grep -q ' inet '; }
 default_route() { ip -4 route show default dev "$uplink" | grep -q '^default'; }
