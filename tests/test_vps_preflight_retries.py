@@ -29,6 +29,7 @@ import yaml
 
 REPO = Path(__file__).resolve().parents[1]
 INCLUDE = REPO / "infra/ansible/playbooks/_includes/check-vps-reachable.yml"
+CI = REPO / ".github/workflows/ci.yml"
 
 #: "Well under a minute": the unreachable case must give up inside this many seconds.
 WORST_CASE_SECONDS = 45
@@ -71,6 +72,27 @@ class TestTheDeclaredRetry:
         command = str(_check_task()["ansible.builtin.command"])
         assert "BatchMode=yes" in command
         assert _connect_timeout(_check_task()) <= 10
+
+
+class TestCiRunsTheEffectTests:
+    """The effect tests skip where `ansible-playbook` is absent, and CI's `Tests` step has none.
+
+    That step runs before Ansible is installed, so `make test` reports them as skipped and
+    CI never reports that the retry was not exercised. A later step in the job that does
+    install Ansible runs them, as it does for the zero-host test (#1228).
+    """
+
+    def _steps(self) -> list[dict[str, Any]]:
+        return yaml.safe_load(CI.read_text(encoding="utf-8"))["jobs"]["tests"]["steps"]
+
+    def test_a_step_runs_this_file_after_ansible_is_installed(self) -> None:
+        steps = self._steps()
+        install = next(
+            i for i, s in enumerate(steps) if "pip install" in str(s.get("run", "")) and "ansible-core" in str(s["run"])
+        )
+        runs = [i for i, s in enumerate(steps) if Path(__file__).name in str(s.get("run", ""))]
+        assert runs, "no CI step runs this file where Ansible is installed: its effect tests skip silently"
+        assert all(i > install for i in runs), "the step runs before ansible-core is installed, so the tests skip"
 
 
 # --- the effect: run the real include against a stand-in ssh ---------------------------
@@ -139,7 +161,9 @@ def _run_preflight(tmp_path: Path, fail_first: int) -> tuple[subprocess.Complete
     return result, calls, elapsed
 
 
-@pytest.mark.allow_host_clients(reason="runs ansible-playbook on localhost with a stand-in ssh that never leaves the machine")
+@pytest.mark.allow_host_clients(
+    reason="runs ansible-playbook on localhost with a stand-in ssh that never leaves the machine"
+)
 def test_a_cold_path_that_times_out_once_does_not_fail_the_provision(tmp_path: Path) -> None:
     if shutil.which("ansible-playbook") is None:
         pytest.skip("ansible-playbook not on PATH: the retry was NOT executed")
@@ -151,7 +175,9 @@ def test_a_cold_path_that_times_out_once_does_not_fail_the_provision(tmp_path: P
     assert "stubuser@stub-vps.example.invalid" in (tmp_path / "argv").read_text()
 
 
-@pytest.mark.allow_host_clients(reason="runs ansible-playbook on localhost with a stand-in ssh that never leaves the machine")
+@pytest.mark.allow_host_clients(
+    reason="runs ansible-playbook on localhost with a stand-in ssh that never leaves the machine"
+)
 def test_a_vps_that_never_answers_fails_after_the_declared_attempts_and_says_why(tmp_path: Path) -> None:
     if shutil.which("ansible-playbook") is None:
         pytest.skip("ansible-playbook not on PATH: the retry was NOT executed")
