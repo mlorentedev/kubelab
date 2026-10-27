@@ -48,14 +48,12 @@
       when: corefile.changed
       notify: verify coredns
 
-    # Pi-hole v6 quirk: reloaddns does NOT reload dnsmasq configs.
-    # A Corefile change restarts it too: Pi-hole caches what CoreDNS answered
-    # for the record's TTL (3600s from the hosts plugin), so a moved record kept
-    # its old address for up to an hour after a green deploy (#2213, lesson-560).
-    # The restart empties that cache; the waits below prove DNS came back.
+    # Pi-hole v6 quirk: reloaddns does NOT reload dnsmasq configs, so a change
+    # to the forwarding config needs the restart. A Corefile change does not:
+    # it only needs Pi-hole's cache emptied, which the flush below does.
     - name: Restart Pi-hole on config change
       command: docker restart pihole
-      when: pihole_conf.changed or corefile.changed
+      when: pihole_conf.changed
       notify: verify pihole
 
     - name: Wait for CoreDNS
@@ -76,6 +74,18 @@
       retries: 6
       delay: 5
       until: pihole_test.status in [200, 302]
+
+    # Pi-hole caches what CoreDNS answered for the record's TTL (3600s from the
+    # hosts plugin), so a moved record kept its old address for up to an hour
+    # after a green deploy (#2213, lesson-560). `pihole reloaddns` sends FTL a
+    # HUP, which empties that cache in the same process: the restart this
+    # replaces cost the LAN about ten seconds of resolution, the flush none
+    # (DNS-007, lesson-639). After both waits, so CoreDNS already answers from
+    # the new Corefile and FTL is up. A restart above already emptied the cache.
+    - name: Empty Pi-hole's cache on a Corefile change
+      command: docker exec pihole pihole reloaddns
+      when: corefile.changed and not pihole_conf.changed
+      notify: verify pihole
 
     # The HTTP wait above proves the admin UI, not DNS. This asks Pi-hole for a
     # staging name, which only resolves if Pi-hole loaded the forwarding config
