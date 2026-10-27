@@ -492,15 +492,16 @@ def test_token_value_is_not_shell_interpreted():
 PLAYBOOKS = sorted((REPO / "infra/ansible/playbooks").glob("*.yml"))
 
 
-def _notifier_consumers() -> set[str]:
-    """Every role with a unit template declaring `OnFailure=kubelab-notify@`.
+def _notifier_consumers(roles_dir: Path = REPO / "infra/ansible/roles") -> set[str]:
+    """Every role with a unit template naming one of the notifier's templates:
+    `OnFailure=kubelab-notify@` or `OnSuccess=kubelab-notify-recovered@`.
 
     Derived from the templates rather than listed here, because the case this
     guard exists for is a NEW consumer whose playbook wiring was forgotten — and
     a literal list is exactly the thing that would not contain it.
     """
     roles = set()
-    for template in (REPO / "infra/ansible/roles").glob("*/templates/*.j2"):
+    for template in roles_dir.glob("*/templates/*.j2"):
         # Anchored to the start of a line, so the DIRECTIVE matches and a
         # comment mentioning it does not. Without the anchor the scan counted
         # `node_notify` itself as a consumer of its own notifier — its unit
@@ -508,9 +509,24 @@ def _notifier_consumers() -> set[str]:
         # assertion below then compared that role's tags with themselves and
         # passed trivially. A guard agreeing with itself, found by mutating the
         # directive away and watching the vacuity check stay green (lesson-357).
-        if re.search(r"^OnFailure=kubelab-notify@", template.read_text(encoding="utf-8"), re.M):
+        directive = r"^On(?:Failure=kubelab-notify|Success=kubelab-notify-recovered)@"
+        if re.search(directive, template.read_text(encoding="utf-8"), re.M):
             roles.add(template.parents[1].name)
     return roles
+
+
+def test_a_unit_naming_only_the_recovery_notice_is_a_consumer(tmp_path: Path) -> None:
+    """`OnSuccess=kubelab-notify-recovered@` names a node_notify template as much as
+    `OnFailure=` does, so a role whose units declare only that one still has to be
+    paired with the notifier and applied after it. A comment naming either is not one."""
+    for role, line in {
+        "pages": "OnFailure=kubelab-notify@%n.service",
+        "recovers": "OnSuccess=kubelab-notify-recovered@%n.service",
+        "mentions": "# OnFailure=kubelab-notify@%n.service",
+    }.items():
+        (tmp_path / role / "templates").mkdir(parents=True)
+        (tmp_path / role / "templates" / "x.service.j2").write_text(f"[Unit]\n{line}\n")
+    assert _notifier_consumers(tmp_path) == {"pages", "recovers"}
 
 
 def _role_tags(playbook: Path, role_name: str) -> set[str] | None:
@@ -533,7 +549,7 @@ def test_the_derived_consumer_set_is_not_empty() -> None:
     coverage it does not have. So the scan asserts on itself first.
     """
     assert _notifier_consumers(), (
-        "no role template declares `OnFailure=kubelab-notify@`, so the pairing guard below checks nothing at all"
+        "no role template names the notifier, so the pairing guard below checks nothing at all"
     )
 
 
@@ -692,6 +708,15 @@ def test_the_notifier_is_installed_before_the_units_that_name_it(playbook: Path)
     across two boots while `gateway` ran before `node_notify`."""
     late = _ahead_of_the_notifier(_applied_roles(playbook))
     assert not late, f"{playbook.stem} applies {late} before node_notify, so their units name a missing template"
+
+
+@pytest.mark.parametrize("playbook", PLAYBOOKS, ids=lambda p: p.stem)
+def test_every_applied_role_is_named_literally(playbook: Path):
+    """The guards above match role names as written. A templated one
+    (`name: "{{ role }}"`) reaches them as its template text, matches no consumer,
+    and so passes the pairing and the ordering whatever it resolves to."""
+    templated = [role for role in _applied_roles(playbook) if "{{" in role]
+    assert not templated, f"{playbook.stem} applies {templated}, which no guard here can resolve"
 
 
 def test_the_delivery_test_can_name_the_unit_it_simulates() -> None:
