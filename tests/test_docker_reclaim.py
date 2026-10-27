@@ -36,6 +36,7 @@ from toolkit.features.docker_reclaim import (
     ReclaimRefused,
     Volume,
     _checked_name,
+    is_candidate,
     parse_containers,
     parse_volumes,
     plan_reclaim,
@@ -234,6 +235,24 @@ def test_the_containerless_state_volume_is_reclaimed(plan: ReclaimPlan) -> None:
 def test_gitea_actions_job_volumes_are_reclaimed(plan: ReclaimPlan) -> None:
     reclaimed = [v for v in plan.volumes if v.startswith("GITEA-ACTIONS-TASK-")]
     assert len(reclaimed) == 4
+
+
+# The 4.1.0 names were read on beelink on 2026-10-27, where test-infra found them
+# undeclared: the pattern had been measured against act_runner's names only.
+@pytest.mark.parametrize(
+    "name",
+    [
+        "GITEA-ACTIONS-TASK-54_WORKFLOW-CI_JOB-build-pdf",
+        "GITEA-ACTIONS-TASK-54_WORKFLOW-CI_JOB-build-pdf-env",
+        "GITEA-ACTIONS-TASK-6071-WORKFLOW-CI-JOB-build-pdf-build-pdf-"
+        "8d7720f3e9de33e2ecacb00ee5ae5f10289591d1ac48617a6f4746ed5386ef39",
+        "GITEA-ACTIONS-TASK-6071-WORKFLOW-CI-JOB-build-pdf-build-pdf-"
+        "8d7720f3e9de33e2ecacb00ee5ae5f10289591d1ac48617a6f4746ed5386ef39-env",
+    ],
+)
+def test_a_job_volume_of_either_runner_is_a_candidate(name: str) -> None:
+    """act_runner joins task and workflow with `_`; gitea/runner 4.1.0 (#2425) with `-`."""
+    assert is_candidate(Volume(name))
 
 
 # --- what must never be removed ----------------------------------------------
