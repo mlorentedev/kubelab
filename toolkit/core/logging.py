@@ -6,6 +6,7 @@ from typing import Any
 
 from rich.console import Console
 from rich.logging import RichHandler
+from rich.markup import escape
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.prompt import Confirm, Prompt
 
@@ -87,6 +88,19 @@ console = Console()
 err_console = Console(stderr=True)
 
 
+def _literal(text: str) -> str:
+    """Markup that renders as `text` itself, for a spot where no tag follows it.
+
+    `escape` doubles a trailing backslash so that it cannot escape a tag written right
+    after the text. Nothing follows here, so the second backslash would print.
+    """
+    text = str(text)
+    escaped = escape(text)
+    if text.endswith("\\") and not text.endswith("\\\\"):
+        return escaped[:-1]
+    return escaped
+
+
 class PlatformLogger:
     """Enhanced logger with Rich formatting and user interaction."""
 
@@ -126,36 +140,56 @@ class PlatformLogger:
         """Log debug message."""
         self.logger.debug(message, **kwargs)
 
-    def info(self, message: str, **kwargs: Any) -> None:
-        """Log info message with blue prefix."""
-        err_console.print(f"[blue][INFO][/blue] {message}", **kwargs)
+    def _emit(self, style: str, label: str, message: str, markup: bool, **kwargs: Any) -> None:
+        """Print `[LABEL] message` on stderr with the label in `style`.
 
-    def success(self, message: str, **kwargs: Any) -> None:
+        The label is markup this module wrote. The message is whatever the caller is
+        reporting (a subprocess's output, an exception, a file name), so it is escaped:
+        left as markup, a stray `[/blue]` raised `MarkupError` and an unknown tag such as
+        pytest's `test_x[param-1]` was swallowed with its text. `markup=True` is the
+        caller's explicit statement that the message is markup it wrote itself.
+        """
+        body = message if markup else _literal(message)
+        # Emoji codes are the same hazard in a smaller size: `:cd:` in a MAC address
+        # prints as a disc.
+        kwargs.setdefault("emoji", False)
+        err_console.print(f"[{style}][{label}][/{style}] {body}", **kwargs)
+
+    def info(self, message: str, markup: bool = False, **kwargs: Any) -> None:
+        """Log info message with blue prefix.
+
+        The message is printed as written. Pass `markup=True` only for a message that is
+        markup you wrote: it shadows rich's own `markup=` print argument, which this
+        method used to forward and nothing used.
+        """
+        self._emit("blue", "INFO", message, markup, **kwargs)
+
+    def success(self, message: str, markup: bool = False, **kwargs: Any) -> None:
         """Log success message with green prefix."""
-        err_console.print(f"[green][SUCCESS][/green] {message}", **kwargs)
+        self._emit("green", "SUCCESS", message, markup, **kwargs)
 
-    def warning(self, message: str, **kwargs: Any) -> None:
+    def warning(self, message: str, markup: bool = False, **kwargs: Any) -> None:
         """Log warning message with yellow prefix."""
-        err_console.print(f"[yellow][WARNING][/yellow] {message}", **kwargs)
+        self._emit("yellow", "WARNING", message, markup, **kwargs)
 
-    def error(self, message: str, **kwargs: Any) -> None:
+    def error(self, message: str, markup: bool = False, **kwargs: Any) -> None:
         """Log error message with red prefix."""
-        err_console.print(f"[red][ERROR][/red] {message}", **kwargs)
+        self._emit("red", "ERROR", message, markup, **kwargs)
 
-    def critical(self, message: str, **kwargs: Any) -> None:
+    def critical(self, message: str, markup: bool = False, **kwargs: Any) -> None:
         """Log critical message and exit."""
-        err_console.print(f"[bold red][CRITICAL][/bold red] {message}", **kwargs)
+        self._emit("bold red", "CRITICAL", message, markup, **kwargs)
         sys.exit(1)
 
     def section(self, title: str) -> None:
         """Print a section header."""
         err_console.print(f"\n[bold cyan]{'=' * 60}[/bold cyan]")
-        err_console.print(f"[bold cyan]{title.center(60)}[/bold cyan]")
+        err_console.print(f"[bold cyan]{escape(title.center(60))}[/bold cyan]", emoji=False)
         err_console.print(f"[bold cyan]{'=' * 60}[/bold cyan]\n")
 
     def subsection(self, title: str) -> None:
         """Print a subsection header."""
-        err_console.print(f"\n[bold blue]--- {title} ---[/bold blue]\n")
+        err_console.print(f"\n[bold blue]--- {_literal(title)} ---[/bold blue]\n", emoji=False)
 
     def confirm(
         self,
