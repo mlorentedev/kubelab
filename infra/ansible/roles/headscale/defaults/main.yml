@@ -38,3 +38,26 @@ headscale_policy_path: ""
 # "hosts" block. SSOT: built from networking.* in the deploy playbook. Empty by
 # default (policy task is dormant until headscale_policy_path is set).
 headscale_policy_hosts: {}
+
+# Retired TLS stack (OPS-047). The VPS still carried certbot and nginx from two
+# designs that Traefik replaced: the 2025 nginx + certbot setup for mlorente.dev,
+# and the 2026-02-26 setup in which Headscale terminated TLS itself from a certbot
+# certificate (lesson-075). K3s Traefik terminates TLS for both today, nothing
+# mounts /etc/letsencrypt, and every certificate certbot issued has expired, so its
+# timer only fails every 12 hours and leaves a Cloudflare credential on disk.
+# Ansible is additive: dropping the install never removes what was installed, so
+# tasks/main.yml purges these.
+#
+# nginx-common is listed because `apt remove nginx` does not take it along: on
+# Ubuntu 24.04 (noble-updates 1.24.0-2ubuntu7.19) it no longer depends on nginx,
+# so it would stay installed with /etc/nginx and /var/log/nginx. The orphaned
+# libraries certbot pulled in stay too (no autoremove: it would take whatever
+# else on the node happens to be orphaned).
+headscale_retired_tls_packages:
+  - certbot
+  - python3-certbot
+  - python3-certbot-dns-cloudflare
+  - python3-certbot-nginx
+  - nginx
+  - nginx-common
+headscale_retired_letsencrypt_dir: "/etc/letsencrypt"

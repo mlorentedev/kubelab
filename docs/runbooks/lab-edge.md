@@ -115,6 +115,7 @@ A portal page that loads only in part is most likely a Pi-hole blocklist hit on 
 - The edge says nothing: HTTPS and the tailnet are both blocked, so it cannot report its own state.
 - Prod pages (ADR-075 D6, AC12): its probe reaches the edge over the tailnet, finds it gone, and pages through the ADR-044 fabric. This is the signal that counts. `make alerts` lists what prod has firing.
 - Uptime Kuma on rpi3 reads wrong, not just absent. Its HTTP monitors can read UP from the portal's own page, its HTTPS monitors read DOWN, and none of it leaves the lab until the uplink is back, when a stale burst of notifications arrives at once. Ignore that burst; it reports the past.
+- A node that booted while the uplink was down has its stacks (Kuma on rpi3, Gitea on bee, Glances, Open WebUI) waiting for its tailnet address. Each stack unit retries every 30 s and recreates its containers once the address exists, so they come back on their own within a minute of the tailnet (#2500). If one has not, `make provision NODE=<node> ENV=prod` starts a unit left failed and recreates a container whose port was never bound.
 
 ## Answering an uplink collision page
 

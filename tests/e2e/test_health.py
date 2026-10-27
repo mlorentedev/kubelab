@@ -10,6 +10,7 @@ from toolkit.features.health_check import ServiceHealthConfig
 from .expectations import (
     EXPECTATIONS,
     OFFLINE_STATUS,
+    BackendRefused,
     ServiceExpectation,
     backend_reachable,
     on_demand_skip_reason,
@@ -98,11 +99,14 @@ class TestOnDemandBackend:
 
     So this runs unconditionally and branches:
 
-    * backend up   → the service must actually answer, end to end.
-    * backend down → the route, its certificate and its error-pages middleware
+    * backend up      → the service must actually answer, end to end.
+    * backend silent  → the route, its certificate and its error-pages middleware
       must still be intact and return 502/503/504.
+    * backend refuses → the node is up with the service down, an outage rather
+      than an absence. The route must still return 502/503/504, as for a silent
+      backend, and then this fails with the `BackendRefused` outage message.
 
-    The down branch is the valuable one: it is exactly the state in which a
+    The offline branches are the valuable ones: they are exactly the states in which a
     deleted IngressRoute, an expired certificate or a broken middleware chain
     would otherwise go unnoticed, because nobody is looking while the lab is off.
     A flat `200 or 502` acceptance would cover both and assert nothing — the TCP
@@ -124,16 +128,23 @@ class TestOnDemandBackend:
             pytest.skip(f"{svc_name} not in {env} config")
 
         host, port = on_demand_target(svc_name, exp.on_demand_backend)
-        up = backend_reachable(host, port)
+        # A refusal is an outage, but it is also the window in which a broken route would go
+        # unseen, so the route is asserted first and the refusal re-raised after it.
+        refused: BackendRefused | None = None
+        try:
+            up = backend_reachable(host, port)
+        except BackendRefused as exc:
+            up, refused = False, exc
+        backend = "is reachable" if up else "refuses connections" if refused is not None else "does not answer"
+        outage = f" {refused}" if refused is not None else ""
         url = f"https://{svc.domain}{svc.health_path}"
 
         try:
             r = http_client.get(url)
         except httpx.TimeoutException:
             pytest.fail(
-                f"{svc_name} ({url}): timeout. Backend {host}:{port} "
-                f"{'is reachable' if up else 'is down'} — a timeout at the edge means the "
-                "route, not the backend, since Traefik answers 502 for a dead service."
+                f"{svc_name} ({url}): timeout. Backend {host}:{port} {backend} — a timeout at the "
+                f"edge means the route, not the backend, since Traefik answers 502 for a dead service.{outage}"
             )
 
         if up:
@@ -143,8 +154,10 @@ class TestOnDemandBackend:
             )
         else:
             assert r.status_code in OFFLINE_STATUS, (
-                f"{svc_name}: backend {host}:{port} is down, so Traefik must answer "
+                f"{svc_name}: backend {host}:{port} {backend}, so Traefik must answer "
                 f"{OFFLINE_STATUS} through error-pages — got {r.status_code}. "
                 "Anything else means the route or its middleware chain is broken, "
-                "which is the failure this test exists to catch."
+                f"which is the failure this test exists to catch.{outage}"
             )
+        if refused is not None:
+            raise refused

@@ -1,0 +1,51 @@
+---
+# Is any container of a compose stack running with a port binding it asked for and
+# never got? Sets `compose_port_drift`, which the caller's `up -d` turns into
+# `--force-recreate`. Imported (not included) so the caller's tags apply.
+#
+#   - import_tasks: "{{ playbook_dir }}/_includes/compose-port-drift.yml"
+#     vars:
+#       compose_port_drift_file: /opt/stack/compose.yml
+#
+# A port binding is fixed when the container is CREATED. When dockerd resurrects a
+# container at boot before the node's Tailscale address exists, the bind is dropped
+# with no error anywhere: HostConfig.PortBindings asks for the address while
+# NetworkSettings.Ports is empty, `docker ps` shows it Up and healthy, nothing
+# listens, and `up -d` will not fix it because the compose spec hash is unchanged.
+# Measured on 2026-10-26 after a site move (#2500): Uptime Kuma on rpi3, Gitea on bee
+# and Glances on every homelab node were in this state a day after booting, attached
+# to no network at all.
+#
+# Comparing what was requested with what is in force is the only thing that notices.
+# A container that asks for no port (bee's runner) can never show it.
+# Only running containers are read: a stopped or restarting one has no ports in
+# effect for a reason of its own, and recreating the stack would not fix it.
+
+- name: Read the port bindings requested vs the ones in effect
+  shell: >-
+    docker inspect
+    --format '{% raw %}{{.Name}} {{len .HostConfig.PortBindings}}:{{len .NetworkSettings.Ports}}{% endraw %}'
+    $(docker compose -f {{ compose_port_drift_file }} ps -q --status running)
+  register: _compose_port_drift_read
+  changed_when: false
+  check_mode: false
+  # No container yet (a first provision) makes `docker inspect` fail with no
+  # argument: nothing exists to recreate, and the expression below reads rc.
+  failed_when: false
+
+- name: Detect a requested port binding that was never established
+  set_fact:
+    compose_port_drift: >-
+      {{ _compose_port_drift_read.rc == 0
+         and (_compose_port_drift_read.stdout_lines
+              | select('regex', ' [1-9][0-9]*:0$')
+              | list | length > 0) }}
+
+- name: Report an unpublished port
+  debug:
+    msg: >-
+      A container runs with its port binding requested but NOT in effect
+      ({{ _compose_port_drift_read.stdout_lines | select('regex', ' [1-9][0-9]*:0$') | join(', ') }},
+      requested:effective). The stack started before the address it binds existed,
+      so the bind was dropped: recreating.
+  when: compose_port_drift | bool

@@ -24,7 +24,7 @@ AI-001 forced an explicit decision: BasicAuth | Authelia ForwardAuth | X-API-Key
 
 **Stage 1 (NOW — `v1`)**: Per-service **X-API-Key custom header** via the Traefik plugin [`github.com/dtomlinson91/traefik-api-key-middleware`](https://github.com/dtomlinson91/traefik-api-key-middleware) v0.1.2+.
 
-- Plugin registered once in K3s Traefik `HelmChartConfig.experimental.plugins` (same pattern as the existing CrowdSec bouncer plugin).
+- Plugin registered once in K3s Traefik `HelmChartConfig.experimental.plugins` (same pattern as the existing CrowdSec bouncer plugin). *Amended 2026-10-26 (#2565): both plugins are now local plugins (`experimental.localPlugins`), fetched by the `k3s_server` role at provision time, so a Traefik start downloads nothing.*
 - One Middleware CRD per service (`api-key-ollama`, `api-key-widget-proxy`, …). Keys are inlined in the CRD — the toolkit renders the Middleware manifest from a template + SOPS at deploy time (analogous to how it already renders K8s Secrets from `REPLACE_WITH_SOPS_VALUE` placeholders).
 - Plugin supports BOTH `X-API-KEY: <key>` AND `Authorization: Bearer <key>` headers (configurable, both enabled). The Bearer surface is the forward-compatibility hinge for the Stage 2 migration.
 - API keys live in SOPS under `apps.services.<service>.api_key`, propagated via the toolkit secrets workflow.
