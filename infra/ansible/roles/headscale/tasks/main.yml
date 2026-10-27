@@ -1,4 +1,43 @@
 ---
+# --- Retired TLS stack: certbot and nginx (OPS-047) ---------------------------
+# Why these go, and why the list is in defaults: see headscale_retired_tls_packages.
+# deploy-vps.yml has no play-level become, so each task escalates for itself.
+- name: Remove the retired certbot and nginx packages
+  apt:
+    name: "{{ headscale_retired_tls_packages }}"
+    state: absent
+    purge: true
+  become: true
+  tags: [cleanup]
+
+# The directory holds cloudflare.ini, a Cloudflare token certbot's own error
+# already reports as refused; removing it rotates nothing. certbot's postrm
+# deletes the directory itself only when no certificate is still valid (it asks
+# otherwise), so this task is what makes the outcome independent of that.
+- name: Remove the retired Let's Encrypt directory
+  file:
+    path: "{{ headscale_retired_letsencrypt_dir }}"
+    state: absent
+  become: true
+  tags: [cleanup]
+
+# Purging the package deletes the unit files, not their failed state: certbot.service
+# and certbot.timer stay in `systemctl --failed` as `not-found failed` until reset
+# (measured on a booted Ubuntu 24.04 container). `reset-failed` exits 0 whether or
+# not anything matches, so the read below gates it, and a second run reports changed=0.
+- name: Look for a failed certbot unit
+  command: systemctl list-units --failed --plain --no-legend --no-pager 'certbot*'
+  register: _certbot_failed
+  changed_when: false
+  check_mode: false
+  tags: [cleanup]
+
+- name: Clear the failed state of the removed certbot units
+  command: systemctl reset-failed 'certbot*'
+  become: true
+  when: "'certbot' in _certbot_failed.stdout"
+  tags: [cleanup]
+
 - name: Create Headscale directories
   file:
     path: "{{ item }}"

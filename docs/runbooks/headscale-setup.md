@@ -56,7 +56,6 @@ services:
     volumes:
       - ./config:/etc/headscale:ro
       - headscale_data:/var/lib/headscale
-      - /etc/letsencrypt:/etc/letsencrypt:ro
     networks:
       - proxy
     healthcheck:
@@ -74,70 +73,45 @@ networks:
     external: true
 ```
 
-### 1.3 Obtain TLS certificate (certbot + Cloudflare DNS-01)
+### 1.3 TLS certificate (certbot superseded, retired 2026-10-26)
 
-Headscale handles TLS itself (not Traefik — see below). Get a cert via certbot:
+> **Superseded.** This section used to obtain a certificate with certbot (Cloudflare
+> DNS-01) because Headscale terminated TLS itself behind a Traefik TCP passthrough
+> (2026-02-26, [lesson-075](../lessons/networking-dns/lesson-075-2026-02-26-traefik-cannot-proxy-headscale-cus.md)).
+> Since the K3s cutover ([lesson-173](../lessons/kubernetes/lesson-173-k3s-ingressroute-needed-for-vpn-kubelab-live-.md))
+> **K3s Traefik terminates TLS** for `vpn.kubelab.live` and Headscale listens on plain
+> HTTP (`listen_addr: 0.0.0.0:8080`; `config.yaml.j2` has no `tls_*` keys). Nothing mounts
+> `/etc/letsencrypt`. The `headscale` role removes certbot, nginx and `/etc/letsencrypt`
+> from the VPS (OPS-047, #2701): do not reinstall them, and do not follow the old steps.
+
+There is nothing to obtain by hand. The certificate comes from K3s Traefik's
+`letsencrypt` resolver (ACME DNS-01, stored on Traefik's persistent volume), named by
+`tls.certResolver` on the `headscale` IngressRoute in
+`infra/k8s/overlays/prod/headscale.yaml`. To see which certificate clients get:
 
 ```bash
-sudo apt install certbot python3-certbot-dns-cloudflare
-
-# Create Cloudflare credentials (use same API token as Traefik)
-echo "dns_cloudflare_api_token = YOUR_CF_TOKEN" | sudo tee /etc/letsencrypt/cloudflare.ini
-sudo chmod 600 /etc/letsencrypt/cloudflare.ini
-
-sudo certbot certonly \
-  --dns-cloudflare \
-  --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini \
-  -d vpn.kubelab.live \
-  --non-interactive --agree-tos -m mlorentedev@gmail.com
+openssl s_client -connect vpn.kubelab.live:443 -servername vpn.kubelab.live </dev/null 2>/dev/null \
+  | openssl x509 -noout -subject -issuer -enddate
+# → subject=CN=vpn.kubelab.live, issuer=Let's Encrypt (Traefik's certificate, auto-renewed)
 ```
 
-Certbot auto-renews via systemd timer. After renewal, restart Headscale to pick up new cert:
-```bash
-# /etc/letsencrypt/renewal-hooks/deploy/restart-headscale.sh
-#!/bin/sh
-docker restart headscale
-```
+### 1.4 Traefik route (TCP passthrough superseded)
 
-### 1.4 Add Traefik route (TCP passthrough)
+> **Superseded.** The first working route (2026-02-26) was a Traefik TCP passthrough
+> (`HostSNI(...)` + `tls.passthrough: true`) with Headscale terminating TLS, because,
+> per lesson-075, Traefik v3.0 did not carry `Upgrade: tailscale-control-protocol`
+> ([traefik#12609](https://github.com/traefik/traefik/issues/12609), still open). The
+> file it created, `/opt/traefik/dynamic/app-headscale.yml`, and the reasoning are in
+> lesson-075. It no longer applies.
 
-> **CRITICAL: Traefik does NOT support the Tailscale Noise protocol.**
-> Traefik only handles `Upgrade: websocket` — the `Upgrade: tailscale-control-protocol`
-> header is stripped as a hop-by-hop header. This is a known open issue
-> ([traefik#12609](https://github.com/traefik/traefik/issues/12609)).
-> Headscale's own docs don't list Traefik as a supported reverse proxy.
->
-> **Solution:** TCP passthrough with SNI routing. Traefik forwards raw TCP based on the
-> TLS SNI. Headscale handles TLS termination and the Noise protocol directly.
-
-Create `/opt/traefik/dynamic/app-headscale.yml`:
-
-```yaml
-tcp:
-  routers:
-    headscale:
-      rule: "HostSNI(`vpn.kubelab.live`)"
-      entryPoints:
-        - websecure
-      service: headscale-tcp
-      tls:
-        passthrough: true
-  services:
-    headscale-tcp:
-      loadBalancer:
-        servers:
-          - address: "headscale:443"
-```
-
-Key differences from standard HTTP routing:
-- `tcp:` not `http:` — raw TCP, not HTTP reverse proxy
-- `HostSNI()` not `Host()` — matches on TLS SNI before decryption
-- `tls.passthrough: true` — Traefik does NOT terminate TLS
-- `address:` not `url:` — TCP service format, no scheme prefix
-- No `healthCheck:` — TCP services don't support HTTP health checks
-- No `middlewares:` — TCP passthrough bypasses all HTTP middlewares
-
-Traefik auto-detects new files in `dynamic/` (file provider with `watch: true`). No restart needed.
+Current route (prod): `infra/k8s/overlays/prod/headscale.yaml` defines an IngressRoute
+`headscale` (rule ``Host(`vpn.kubelab.live`)``, entry point `websecure`,
+`tls.certResolver: letsencrypt`) that forwards plain HTTP to Service `headscale:8080`,
+whose EndpointSlice points at the VPS public IP (`networking.vps.public_ip`). Headscale
+publishes 8080 on that address only (`docker-compose.yml.j2`). The route references the TLSOption
+`headscale-http11` (`alpnProtocols: [http/1.1]`, TLS 1.2 minimum), so clients negotiate
+HTTP/1.1, which is where the Noise `Upgrade` request exists. Details and the history:
+[error-headscale-noise-http2](../troubleshooting/error-headscale-noise-http2.md).
 
 ### 1.5 Deploy
 
@@ -158,17 +132,19 @@ curl -s https://vpn.kubelab.live/health
 
 From workstation:
 ```bash
-# Verify TLS passthrough (cert issued by Headscale/certbot, not Traefik):
-curl -sv https://vpn.kubelab.live/health 2>&1 | grep -E "subject|issuer|HTTP"
-# → subject: CN=vpn.kubelab.live
-# → issuer: C=US; O=Let's Encrypt; CN=R12
-# → HTTP/1.1 200   (NOT HTTP/2 — Headscale serves HTTP/1.1)
+# Verify the certificate is Traefik's (Let's Encrypt, auto-renewed) and that
+# HTTP/1.1 is negotiated even when the client offers HTTP/2 (TLSOption headscale-http11):
+openssl s_client -connect vpn.kubelab.live:443 -servername vpn.kubelab.live \
+  -alpn h2,http/1.1 </dev/null 2>&1 | grep -E "subject=|issuer=|ALPN protocol"
+# → subject=CN=vpn.kubelab.live
+# → issuer=C=US, O=Let's Encrypt, CN=<intermediate>
+# → ALPN protocol: http/1.1
 
 # Verify Noise protocol endpoint is reachable:
 curl --http1.1 -s -X POST https://vpn.kubelab.live/ts2021 \
   -H "Upgrade: tailscale-control-protocol" -H "Connection: Upgrade"
 # → Should NOT return "missing Tailscale handshake header"
-# → (with TCP passthrough, Headscale receives the Upgrade header)
+# → (the Upgrade header reaches Headscale through K3s Traefik)
 ```
 
 ### 1.6 Create user and pre-auth key
@@ -671,8 +647,8 @@ sudo chattr +i /etc/resolv.conf
 | Docker network | `proxy` | `kubelab` |
 | ACME storage | `/letsencrypt/acme.json` | `/etc/traefik/acme/acme.json` |
 | Wildcard cert | `*.mlorente.dev` | `*.kubelab.live` |
-| Headscale TLS | certbot DNS-01 (own cert) | Traefik terminates TLS |
-| Headscale routing | TCP passthrough (SNI) | HTTP reverse proxy |
+| Headscale TLS | K3s Traefik terminates TLS (certbot retired 2026-10-26, OPS-047; it was the pre-K3s setup) | Traefik terminates TLS |
+| Headscale routing | K3s Traefik IngressRoute → plain HTTP `:8080`, HTTP/1.1 ALPN (the TCP passthrough is superseded) | HTTP reverse proxy |
 | Traefik version | v3.0 | v3.6 |
 | traefik.yml path | `/opt/traefik/traefik.yml` | `edge/traefik/generated/prod/` |
 | Dynamic configs | `/opt/traefik/dynamic/app-*.yml` | Single `apps.yml` |
@@ -703,7 +679,9 @@ in `/etc/hosts` via Ansible. Tailscale reconnection no longer depends on Pi-hole
 See [dns-homelab](dns-homelab.md#DNS Resilience — /etc/hosts Fallback via Ansible).
 2026-02-26: Traefik routing changed from HTTP reverse proxy to TCP passthrough with SNI.
 Root cause: Traefik strips `Upgrade: tailscale-control-protocol` header (only supports WebSocket).
-Headscale now terminates TLS itself (certbot DNS-01 via Cloudflare). See [error-headscale-noise-http2](../troubleshooting/error-headscale-noise-http2.md).
+Headscale then terminated TLS itself (certbot DNS-01 via Cloudflare). **Superseded** by the K3s cutover,
+where K3s Traefik terminates TLS (see 1.3); certbot was retired from the VPS on 2026-10-26.
+See [error-headscale-noise-http2](../troubleshooting/error-headscale-noise-http2.md).
 2026-02-27: tsnet upgraded v1.60.0 → v1.80.0. Headscale v0.28.0 requires minimum_version=v1.74;
 older tsnet failed silently with EOF during Noise handshake. Native clients worked because they
 were already >= v1.74. Re-test SUCCESSFUL: ts-bridge registered as 100.64.0.11 (user=work),
@@ -713,6 +691,9 @@ Previous broad scope caused total DNS failure for prod domains (status.kubelab.l
 when RPi4 was off — Tailscale MagicDNS sent all `*.kubelab.live` queries to RPi4 instead of
 public Cloudflare DNS. Now only staging domains require RPi4; prod resolves via 1.1.1.1.
 Config also updated in repo IaC (`infra/stacks/services/core/headscale/config/config.yaml`).
+2026-10-26: certbot and nginx removed from the VPS by the `headscale` role (OPS-047, #2701): three expired
+certificates, a `certbot.service` failing every 12 hours and a refused Cloudflare token on disk. The live
+certificate for `vpn.kubelab.live` is K3s Traefik's (Let's Encrypt, valid to 2026-12-19 when measured).
 
 ---
 
