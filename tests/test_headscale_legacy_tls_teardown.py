@@ -213,8 +213,8 @@ class TestFailedUnitIsCleared:
 class TestNothingReinstallsWhatTheTeardownRemoves:
     """A package one role installs and another purges flaps on every provision."""
 
-    def _installers(self) -> list[tuple[str, Any]]:
-        found: list[tuple[str, Any]] = []
+    def _installers(self) -> list[tuple[str, set[str]]]:
+        found: list[tuple[str, set[str]]] = []
         for path in sorted(ANSIBLE.rglob("*.yml")):
             if "generated" in path.parts or "inventories" in path.parts:
                 continue
@@ -222,34 +222,61 @@ class TestNothingReinstallsWhatTheTeardownRemoves:
                 doc = yaml.safe_load(path.read_text())
             except yaml.YAMLError:
                 continue
-            found.extend(_apt_installs(doc, str(path.relative_to(REPO))))
+            found.extend(_apt_installs(doc, str(path.relative_to(REPO)), _role_defaults(path)))
         return found
 
     def test_the_scan_sees_installs(self) -> None:
         """A scan that matches nothing passes on any tree."""
         assert len(self._installers()) >= 5, "the matcher finds no apt installs; it is broken"
 
+    def test_the_scan_reads_through_a_role_default_list(self) -> None:
+        """`base_system` installs from `{{ base_packages }}`; a scan of literals alone misses a list there."""
+        names = {name for where, names in self._installers() for name in names if "roles/base_system/" in where}
+        assert "curl" in names, "the scan does not resolve a package list declared in role defaults"
+
     def test_no_role_or_playbook_installs_a_retired_package(self) -> None:
-        clashes = []
-        for where, names in self._installers():
-            named = {names} if isinstance(names, str) else set(names or [])
-            clash = named & REQUIRED_PACKAGES
-            if clash:
-                clashes.append(f"{where}: {sorted(clash)}")
+        clashes = [
+            f"{where}: {sorted(names & REQUIRED_PACKAGES)}"
+            for where, names in self._installers()
+            if names & REQUIRED_PACKAGES
+        ]
         assert not clashes, "installed by one task and purged by the headscale teardown:\n  " + "\n  ".join(clashes)
 
 
-def _apt_installs(node: Any, where: str) -> list[tuple[str, Any]]:
+def _role_defaults(path: Path) -> dict[str, Any]:
+    """The defaults of the role a task file belongs to; empty for a playbook."""
+    parts = path.relative_to(ANSIBLE).parts
+    if parts[0] != "roles":
+        return {}
+    defaults = ANSIBLE / "roles" / parts[1] / "defaults/main.yml"
+    return (yaml.safe_load(defaults.read_text()) or {}) if defaults.exists() else {}
+
+
+def _package_names(name: Any, defaults: dict[str, Any]) -> set[str]:
+    """Package names an apt `name:` can carry: literals, plus any role-default list its expression mentions."""
+    if isinstance(name, list):
+        return {n for item in name for n in _package_names(item, defaults)}
+    if not isinstance(name, str):
+        return set()
+    names = {name}
+    for ident in re.findall(r"[A-Za-z_]\w*", name):
+        value = defaults.get(ident)
+        if isinstance(value, list):
+            names |= {item for item in value if isinstance(item, str)}
+    return names
+
+
+def _apt_installs(node: Any, where: str, defaults: dict[str, Any]) -> list[tuple[str, set[str]]]:
     """Every apt task that installs (any state but `absent`), at any depth."""
-    found: list[tuple[str, Any]] = []
+    found: list[tuple[str, set[str]]] = []
     if isinstance(node, list):
         for item in node:
-            found.extend(_apt_installs(item, where))
+            found.extend(_apt_installs(item, where, defaults))
     elif isinstance(node, dict):
         apt = _module(node, APT_MODULES)
-        if apt is not None and isinstance(apt, dict) and apt.get("state") != "absent" and "name" in apt:
-            found.append((where, apt["name"]))
+        if isinstance(apt, dict) and apt.get("state") != "absent" and "name" in apt:
+            found.append((where, _package_names(apt["name"], defaults)))
         for value in node.values():
             if isinstance(value, (list, dict)):
-                found.extend(_apt_installs(value, where))
+                found.extend(_apt_installs(value, where, defaults))
     return found
