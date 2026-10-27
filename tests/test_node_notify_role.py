@@ -660,7 +660,8 @@ def test_the_notifier_and_its_consumers_are_applied_as_roles(playbook: Path):
         for key in ("pre_tasks", "tasks", "post_tasks", "handlers")
         for role in _task_roles(play.get(key))
     }
-    assert not included & _notifier_consumers(), f"{playbook.stem} includes {sorted(included & _notifier_consumers())}"
+    paired = included & (_notifier_consumers() | {"node_notify"})
+    assert not paired, f"{playbook.stem} includes {sorted(paired)} from a task list, where no tag guard reads them"
 
 
 def _ahead_of_the_notifier(order: list[str]) -> list[str]:
