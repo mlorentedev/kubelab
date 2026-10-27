@@ -128,12 +128,13 @@
         headscale_ip: "{{ config.networking.vps.public_ip }}"
         headscale_domain: "{{ config.apps.services.core.headscale.domain }}"
 
-    # A no-op while the node is Running: it installs nothing over the existing
-    # client and runs `tailscale up` only off the mesh, with a key minted by
-    # `make headscale-rejoin NODE=rpi3` (#2685). `--reset` drops every flag not
-    # given here, so these are the node's whole set. MagicDNS stays on (the
-    # role's default): the host resolves `*.staging` through it. No subnet
-    # route either way: rpi3 sits on the lab Wi-Fi, not on `lan_cidr`.
+    # On the mesh it installs nothing over the existing client and only
+    # converges the flags below with `tailscale set`. Off the mesh it runs
+    # `tailscale up` with a key minted by `make headscale-rejoin NODE=rpi3`
+    # (#2685), whose `--reset` drops every flag not given here, so these are
+    # the node's whole set. MagicDNS stays on (the role's default): the host
+    # resolves `*.staging` through it. No subnet route either way: rpi3 sits
+    # on the lab Wi-Fi, not on `lan_cidr`.
     - role: ../roles/tailscale
       tags: [tailscale]
       vars:
