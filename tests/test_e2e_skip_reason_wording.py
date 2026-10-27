@@ -109,6 +109,8 @@ def test_a_timeout_skips_and_names_its_real_causes(silent_host: None) -> None:
     assert reason is not None, "a silent backend must produce a skip reason"
     assert "timeout" in reason
     assert "node off, or this runner is not on the tailnet" in reason
+    # Silence has two causes the probe cannot tell apart, so the reason asserts neither.
+    assert "powered off" not in reason
     assert "127.0.0.1:4242" in reason
 
 
