@@ -603,13 +603,68 @@ def test_the_notifier_and_its_consumers_are_selected_together(playbook: Path):
     )
 
 
-def _plays_roles(playbook: Path) -> list[list[str]]:
-    """Each play's roles, by role name, in the order the play applies them."""
-    return [
-        [str(e.get("role", "") if isinstance(e, dict) else e).split("/")[-1] for e in play.get("roles") or []]
-        for play in yaml.safe_load(playbook.read_text()) or []
-        if isinstance(play, dict)
-    ]
+INCLUDES = ("include_role", "import_role", "ansible.builtin.include_role", "ansible.builtin.import_role")
+
+
+def _task_roles(tasks: list | None) -> list[str]:
+    """Roles a task list includes or imports, in order, inside blocks too."""
+    names: list[str] = []
+    for task in tasks or []:
+        for key in ("block", "rescue", "always"):
+            names += _task_roles(task.get(key))
+        names += [str((task[key] or {}).get("name", "")).split("/")[-1] for key in INCLUDES if key in task]
+    return names
+
+
+def _applied_roles(playbook: Path) -> list[str]:
+    """Every role a playbook applies, in the order Ansible runs them: each play's
+    pre_tasks, roles, tasks and post_tasks, play after play."""
+    order: list[str] = []
+    for play in yaml.safe_load(playbook.read_text()) or []:
+        if not isinstance(play, dict):
+            continue
+        order += _task_roles(play.get("pre_tasks"))
+        order += [str(e.get("role", "") if isinstance(e, dict) else e).split("/")[-1] for e in play.get("roles") or []]
+        order += _task_roles(play.get("tasks")) + _task_roles(play.get("post_tasks"))
+    return order
+
+
+def test_the_order_spans_plays_and_included_roles(tmp_path: Path) -> None:
+    """A consumer one play or one include_role ahead of the notifier is still ahead of it."""
+    playbook = tmp_path / "provision-x.yml"
+    playbook.write_text(
+        yaml.safe_dump(
+            [
+                {"hosts": "x", "roles": ["gateway"]},
+                {
+                    "hosts": "x",
+                    "pre_tasks": [{"block": [{"include_role": {"name": "../roles/rpi3_services"}}]}],
+                    "roles": [{"role": "../roles/node_notify"}],
+                    "tasks": [{"ansible.builtin.import_role": {"name": "node_backup"}}],
+                },
+            ]
+        )
+    )
+    assert _applied_roles(playbook) == ["gateway", "rpi3_services", "node_notify", "node_backup"]
+
+
+def _ahead_of_the_notifier(order: list[str]) -> list[str]:
+    """The consumers applied before node_notify; every one of them when it is absent."""
+    first = order.index("node_notify") if "node_notify" in order else len(order)
+    return [role for role in order[:first] if role in _notifier_consumers() - {"node_notify"}]
+
+
+@pytest.mark.parametrize(
+    ("order", "late"),
+    [
+        (["node_notify", "gateway"], []),
+        (["gateway", "node_notify"], ["gateway"]),
+        (["gateway"], ["gateway"]),
+        (["dns_resilience", "node_notify"], []),
+    ],
+)
+def test_a_consumer_ahead_of_the_notifier_is_late(order: list[str], late: list[str]) -> None:
+    assert _ahead_of_the_notifier(order) == late
 
 
 @pytest.mark.parametrize("playbook", PLAYBOOKS, ids=lambda p: p.stem)
@@ -619,13 +674,7 @@ def test_the_notifier_is_installed_before_the_units_that_name_it(playbook: Path)
     between the two, systemd logs `Failed to enqueue OnFailure= job ... not found`
     at every run and the failure goes unannounced (#2728). The lab edge did that
     across two boots while `gateway` ran before `node_notify`."""
-    consumers = _notifier_consumers() - {"node_notify"}
-    late = [
-        role
-        for roles in _plays_roles(playbook)
-        for role in roles
-        if role in consumers and "node_notify" in roles and roles.index(role) < roles.index("node_notify")
-    ]
+    late = _ahead_of_the_notifier(_applied_roles(playbook))
     assert not late, f"{playbook.stem} applies {late} before node_notify, so their units name a missing template"
 
 
