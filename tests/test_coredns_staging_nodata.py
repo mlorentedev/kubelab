@@ -147,11 +147,13 @@ def test_the_apex_still_reaches_hosts(coredns: int) -> None:
     """The NODATA block falls through for the apex, which no pattern matches.
 
     AAAA is asked too: musl sends it with A, so the apex needs `hosts`' NODATA
-    for it as much as the A answer."""
+    for it as much as the A answer. HTTPS stands for every type `hosts` keeps no
+    record of, which browsers ask before A."""
     reply = _query(coredns, APEX, "A")
-    aaaa = _query(coredns, APEX, "AAAA")
 
     assert reply.rcode == NOERROR
     assert reply.answers == [(TYPES["A"], socket.inet_aton(_role_vars()["node_ips"]["ace1"]))]
-    assert aaaa.rcode == NOERROR
-    assert aaaa.answers == []
+    for qtype in ("AAAA", "HTTPS"):
+        other = _query(coredns, APEX, qtype)
+        assert other.rcode == NOERROR, f"the apex fails {qtype}"
+        assert other.answers == [], f"the apex answered {qtype} with a record nothing declares"
