@@ -48,7 +48,7 @@ rpi_boot_absent_params: []
 # that quietly reboots it would blind prod monitoring as a side effect of an
 # unrelated `make provision`. Callers opt in explicitly:
 #
-#   make provision NODE=rpi3 ENV=prod TAGS=boot EXTRA="-e rpi_boot_allow_reboot=true"
+#   make provision NODE=rpi3 ENV=prod TAGS=boot EXTRA='rpi_boot_allow_reboot=true'
 #
 # When the edit lands but a reboot is not allowed, the role ends by reporting
 # loudly that the change is pending rather than reporting success.
