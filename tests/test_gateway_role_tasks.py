@@ -704,3 +704,41 @@ def test_only_the_lease_check_and_the_liveness_units_page() -> None:
     assert "kubelab-edge-shaper.service" in notifying, "the shaper no longer notifies: the derivation is wrong"
     assert paging == {"kubelab-edge-lease-check.service", "kubelab-edge-liveness.service"}
     assert paging <= notifying, "a unit declares page but nothing notifies on its failure"
+
+
+def _task(name: str) -> dict[str, Any]:
+    return next(task for task in TASKS if task.get("name") == name)
+
+
+def _runs(task: dict[str, Any], variables: dict[str, Any]) -> bool:
+    """Whether Ansible would run the task: every `when` clause, evaluated."""
+    clauses = task.get("when", [])
+    env = ansible_env(str(ROLE / "templates"))
+    return all(
+        env.from_string("{{ (" + str(clause) + ") | bool }}").render(**variables) == "True"
+        for clause in (clauses if isinstance(clauses, list) else [clauses])
+    )
+
+
+@pytest.mark.parametrize(
+    ("check_mode", "exists", "copies"),
+    [
+        (False, True, True),
+        (False, False, True),
+        # A dry run never creates the directory, so a copy into it fails (#2696).
+        (True, False, False),
+        # Once it exists, whatever its mode, a dry run still reports the backup it would take.
+        (True, True, True),
+    ],
+)
+def test_a_dry_run_reaches_past_the_netplan_backup(check_mode: bool, exists: bool, copies: bool) -> None:
+    directory = _task("Create the netplan backup directory")
+    probe = _task("Check whether the netplan backup directory exists")
+    backup = _task("Back up hand-written netplan files")
+    assert "check_mode" not in directory, "a dry run must not create the directory on the host"
+    assert probe["stat"]["path"] == directory["file"]["path"], "the probe reads another path than the one created"
+    assert TASKS.index(probe) < TASKS.index(directory), "the probe must read the host before the directory task"
+
+    variables = {"ansible_check_mode": check_mode, probe["register"]: {"stat": {"exists": exists}}}
+
+    assert _runs(backup, variables) is copies
