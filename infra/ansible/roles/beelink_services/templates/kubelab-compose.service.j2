@@ -65,7 +65,11 @@ ExecStartPre={{ beelink_deploy_dir }}/wait-for-tailscale-addr.sh {{ tailscale_ip
 # Cost: a few seconds per boot, and pre-boot `docker logs` are lost — persistent
 # journald (ANSIBLE-023) already covers that. Service data is in bind mounts and
 # is untouched by a recreate.
-ExecStart=/usr/bin/docker compose -f {{ beelink_deploy_dir }}/compose.yml up -d --force-recreate
+# --pull never: the provision pulls before it starts this unit. A pull here
+# is cut at TimeoutStartSec on a slow link, a timeout restarts the unit, and
+# each retry pulls again, so the stack never starts and never reaches
+# `failed`. A missing image instead exits 1, which fails the unit.
+ExecStart=/usr/bin/docker compose -f {{ beelink_deploy_dir }}/compose.yml up -d --force-recreate --pull never
 ExecStop=/usr/bin/docker compose -f {{ beelink_deploy_dir }}/compose.yml stop
 
 [Install]

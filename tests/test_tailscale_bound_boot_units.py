@@ -110,6 +110,21 @@ def test_the_unit_recreates_the_stack(name: str) -> None:
 
 
 @pytest.mark.parametrize("name", sorted(UNITS))
+def test_the_unit_never_pulls(name: str) -> None:
+    """The provision pulls; the unit only starts what is already on the node.
+
+    A pull cut at TimeoutStartSec ends in a timeout, which `Restart=on-failure`
+    retries, so a slow link would pull forever and the unit never reach `failed`.
+    With `--pull never` a missing image exits 1 (compose 2.39, measured
+    2026-10-27), which RestartPreventExitStatus turns into `failed`.
+    """
+    starts = [v for v in UNITS[name].get("ExecStart", []) if "compose" in v and " up" in v]
+    assert starts, f"{name} no longer brings a stack up; drop it from this check"
+    for value in starts:
+        assert "--pull never" in value, f"{name}: the boot unit may pull: {value}"
+
+
+@pytest.mark.parametrize("name", sorted(UNITS))
 def test_the_unit_retries_when_the_address_comes_late(name: str) -> None:
     directives = UNITS[name]
     assert directives.get("Restart") == ["on-failure"], (
