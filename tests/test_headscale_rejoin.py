@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 from unittest import mock
@@ -209,6 +211,116 @@ def test_rpi3_rejoins_on_magicdns_and_takes_no_subnet_route() -> None:
     assert "--accept-dns=true" in command
     assert "--accept-routes=false" in command
     assert not [flag for flag in command if flag.startswith("--advertise-routes")]
+
+
+# ------------------------------------------------- the flags of a node on the mesh
+
+# What each node's prefs read on 2026-10-26, through the role's own filter. rpi3 had
+# drifted: its play declares --accept-routes=false and the node held true, because a
+# Running node never reaches `tailscale up`.
+LIVE_PREFS = {
+    "rpi3": {"RouteAll": True, "CorpDNS": True, "AdvertiseRoutes": []},
+    "rpi4": {"RouteAll": False, "CorpDNS": False, "AdvertiseRoutes": ["172.16.1.0/24"]},
+    "ace1": {"RouteAll": False, "CorpDNS": True, "AdvertiseRoutes": []},
+    "gcp1": {"RouteAll": True, "CorpDNS": True, "AdvertiseRoutes": []},
+}
+
+
+def _prefs_filter() -> str:
+    """The Python the read task runs on the node, as written in the task."""
+    command = " ".join(_task("Read the routing and DNS prefs")["shell"].split())
+    (code,) = re.findall(r"python3 -I -c '(.+)'$", command)
+    return code
+
+
+def _converge_facts(node: str, live: dict[str, Any] | None = None, **overrides: Any) -> dict[str, Any]:
+    """The play's vars, then the task's own `vars:` evaluated as Ansible does, to a
+    list or a dict rather than to the text a plain render gives."""
+    facts = {**_play_vars(node), **overrides, "_tailscale_running": True}
+    facts["_tailscale_prefs"] = {"stdout": json.dumps(live or {})}
+    for name, template in _task("Converge the flags of a node on the mesh")["vars"].items():
+        (inner,) = re.findall(r"^\{\{(.+)\}\}$", template.strip(), re.DOTALL)
+        facts[name] = json.loads(_render("{{ (" + inner + ") | tojson }}", **facts))
+    return facts
+
+
+def _drifted(node: str, live: dict[str, Any], **overrides: Any) -> bool:
+    facts = _converge_facts(node, live, **overrides)
+    return all(_true(condition, **facts) for condition in _task("Converge the flags of a node on the mesh")["when"])
+
+
+def test_the_prefs_leave_the_node_as_three_fields_and_no_key() -> None:
+    """`tailscale debug prefs` carries the node and machine keys under Persist."""
+    prefs = {
+        "RouteAll": True,
+        "CorpDNS": True,
+        "AdvertiseRoutes": ["172.16.1.0/24", "10.9.0.0/24"],
+        "Persist": {"PrivateNodeKey": "privkey:secret-node-key", "OldPrivateNodeKey": "privkey:old"},
+        "ControlURL": "https://vpn.example",
+    }
+    result = subprocess.run(
+        [sys.executable, "-I", "-c", _prefs_filter()], input=json.dumps(prefs), capture_output=True, text=True
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {
+        "RouteAll": True,
+        "CorpDNS": True,
+        "AdvertiseRoutes": ["10.9.0.0/24", "172.16.1.0/24"],
+    }
+    assert "privkey" not in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("status", "reads"), [(RUNNING, True), (STOPPED, False), (NO_DAEMON, False)], ids=["on", "off", "no-daemon"]
+)
+def test_only_a_node_on_the_mesh_is_read_and_converged(status: dict[str, Any], reads: bool) -> None:
+    """Off the mesh, `tailscale up` applies the whole set, so there is nothing to converge."""
+    facts = _facts(status)
+    assert _true(_task("Read the routing and DNS prefs")["when"], **facts) is reads
+    assert _true(_task("Converge the flags of a node on the mesh")["when"][0], **facts) is reads
+
+
+@pytest.mark.parametrize(("node", "drifted"), [("rpi3", True), ("rpi4", False), ("ace1", False), ("gcp1", False)])
+def test_a_node_is_converged_only_where_it_differs_from_its_play(node: str, drifted: bool) -> None:
+    assert _drifted(node, LIVE_PREFS[node]) is drifted
+
+
+@pytest.mark.parametrize(
+    "live",
+    [
+        {"RouteAll": False, "CorpDNS": True, "AdvertiseRoutes": ["172.16.1.0/24"]},
+        {"RouteAll": False, "CorpDNS": False, "AdvertiseRoutes": []},
+        {"RouteAll": False, "CorpDNS": False, "AdvertiseRoutes": ["172.16.1.0/24", "10.9.0.0/24"]},
+    ],
+    ids=["dns", "route-dropped", "route-added"],
+)
+def test_each_flag_is_drift_on_its_own(live: dict[str, Any]) -> None:
+    assert _drifted("rpi4", live)
+
+
+def test_the_order_of_advertised_routes_is_not_drift() -> None:
+    live = {"RouteAll": False, "CorpDNS": False, "AdvertiseRoutes": ["10.9.0.0/24", "172.16.1.0/24"]}
+    assert not _drifted("rpi4", live, tailscale_advertise_routes="172.16.1.0/24, 10.9.0.0/24")
+
+
+def _set_command(node: str) -> list[str]:
+    return _render(_task("Converge the flags of a node on the mesh")["command"], **_converge_facts(node)).split()
+
+
+def test_the_converge_sets_the_whole_set_without_logging_in_again() -> None:
+    """`tailscale set` changes prefs in place. `up --reset` would re-authenticate,
+    and a Running node holds no key to do it with."""
+    command = _set_command("rpi4")
+    assert command[:2] == ["tailscale", "set"]
+    assert "--accept-dns=false" in command
+    assert "--accept-routes=false" in command
+    assert f"--advertise-routes={CONFIG['networking']['lan_cidr']}" in command
+    assert not [flag for flag in command if flag.startswith(("--reset", "--authkey", "--login-server"))]
+
+
+def test_a_node_that_declares_no_route_clears_any_it_advertises() -> None:
+    """An empty value is what withdraws a route; leaving the flag out would keep it."""
+    assert "--advertise-routes=" in _set_command("rpi3")
 
 
 def _roles(playbook: Path) -> list[dict[str, Any]]:

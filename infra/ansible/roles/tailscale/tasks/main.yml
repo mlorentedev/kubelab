@@ -31,6 +31,39 @@
       {{ tailscale_status.rc == 0
          and (tailscale_status.stdout | from_json).BackendState | default('') == 'Running' }}
 
+# A node on the mesh never reaches `tailscale up` below, so its flags drift from
+# the play unseen until a rejoin applies them all at once (rpi3 held
+# --accept-routes=true against a declared false, #2685). The prefs carry the
+# node's keys under Persist, so only these three fields leave the node.
+- name: Read the routing and DNS prefs of a node on the mesh
+  shell: >-
+    set -o pipefail;
+    tailscale debug prefs | python3 -I -c 'import json, sys; p = json.load(sys.stdin); print(json.dumps({"RouteAll": p.get("RouteAll"), "CorpDNS": p.get("CorpDNS"), "AdvertiseRoutes": sorted(p.get("AdvertiseRoutes") or [])}))'
+  args:
+    executable: /bin/bash
+  register: _tailscale_prefs
+  changed_when: false
+  check_mode: false
+  when: _tailscale_running | bool
+
+# `tailscale set` changes prefs in place: no re-authentication, no --reset. An
+# empty --advertise-routes withdraws a route the play no longer declares.
+- name: Converge the flags of a node on the mesh on its play's
+  command: >-
+    tailscale set
+    --accept-dns={{ tailscale_accept_dns | lower }}
+    --accept-routes={{ tailscale_accept_routes | lower }}
+    --advertise-routes={{ _declared_routes | join(',') }}
+  vars:
+    _live: "{{ _tailscale_prefs.stdout | from_json }}"
+    _declared_routes: "{{ tailscale_advertise_routes.split(',') | map('trim') | select | sort }}"
+  when:
+    - _tailscale_running | bool
+    - >-
+      _live.RouteAll != (tailscale_accept_routes | bool)
+      or _live.CorpDNS != (tailscale_accept_dns | bool)
+      or _live.AdvertiseRoutes != _declared_routes
+
 # Single use and one hour, so a key that outlives the registration opens nothing
 # (the hermes sidecar's rule). Off by default: `make headscale-rejoin` turns it on,
 # because a provision before the uplink is up could not register with it.
