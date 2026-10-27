@@ -5,6 +5,7 @@ Newest first. Back to [all categories](../_index.md).
 | # | Lesson | Date |
 |---|---|---|
 | 639 | [Emptying a resolver's cache is not restarting it](lesson-639-emptying-a-resolvers-cache-is-not-restarting-it.md) | 2026-10-27 |
+| 633 | [A CoreDNS template for one type answers SERVFAIL for every other type, and musl fails the lookup](lesson-633-a-coredns-template-for-one-type-answers-servfail-for-every-other.md) | 2026-10-26 |
 | 621 | [ufw sees only the forwarded traffic that Docker and Tailscale leave to it](lesson-621-ufw-does-not-govern-forwarded-traffic.md) | 2026-10-25 |
 | 560 | [A green DNS deploy is not what clients resolve until the cache in front expires](lesson-560-a-green-dns-deploy-is-not-what-clients-resolve-until-the-cache-in-front-expires.md) | 2026-10-11 |
 | 559 | [A resolver entry must name who serves the name, not where the workload runs](lesson-559-a-resolver-entry-must-name-who-serves-the-name-not-where-the-workload-runs.md) | 2026-10-11 |
