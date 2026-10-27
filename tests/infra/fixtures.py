@@ -77,10 +77,27 @@ def ssh_user(node: NodeInfo) -> str:
     return node.vars.get("ansible_user", _DEFAULT_SSH_USER)
 
 
+def retired_addresses(networking: dict) -> frozenset[str]:
+    """Every address of a node declared `retired`: a rebuild recipe, not a machine.
+
+    The inventory names hosts its own way (`kubelab-jet1` for
+    `networking.nodes.jetson`), so the address is what links it to the declaration.
+    """
+    blocks = [*networking.get("nodes", {}).values(), *(v for v in networking.values() if isinstance(v, dict))]
+    return frozenset(
+        block[attr]
+        for block in blocks
+        if block and block.get("retired")
+        for attr in ("tailscale_ip", "lan_ip", "public_ip")
+        if block.get(attr)
+    )
+
+
 def load_inventory(
     inventory_path: Path | None = None,
+    networking: dict | None = None,
 ) -> list[NodeInfo]:
-    """Parse the Ansible inventory YAML and return a list of NodeInfo."""
+    """Parse the Ansible inventory YAML and return its nodes, less the retired ones."""
     if inventory_path is None:
         inventory_path = _REPO_ROOT / "infra" / "ansible" / "inventories" / "homelab.yml"
 
@@ -90,6 +107,7 @@ def load_inventory(
     with open(inventory_path) as f:
         data = yaml.safe_load(f)
 
+    retired = retired_addresses(_COMMON["networking"] if networking is None else networking)
     nodes: list[NodeInfo] = []
     children = data.get("all", {}).get("children", {})
     for group_name, group_data in children.items():
@@ -97,6 +115,8 @@ def load_inventory(
         for hostname, host_vars in hosts.items():
             if host_vars is None:
                 host_vars = {}
+            if host_vars.get("ansible_host", hostname) in retired:
+                continue
             nodes.append(
                 NodeInfo(
                     name=hostname,

@@ -424,6 +424,13 @@ networking:
       dashboard:
         display_name: "Beelink"
     jetson:
+      # Out of the lab for some weeks (October 2026) and coming back. `retired`
+      # means what it means on `networking.aws`: this block is how the node is
+      # rebuilt, not a machine that answers today. The generated inventory and
+      # the infra suite skip it. Its DHCP reservation, its DNS entry and rpi4's
+      # `PermitOpen` stay, so its return is this one flag: remove it, regenerate
+      # the inventory, run `make test-infra ENV=prod`.
+      retired: true
       # ADR-028 tier. Machine-readable projection of the topology the ADR
       # narrates; consumed by the backup trigger model (BACKUP-044).
       location: "on-demand"
