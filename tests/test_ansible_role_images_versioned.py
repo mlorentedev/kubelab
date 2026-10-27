@@ -46,17 +46,28 @@ def test_every_role_default_image_carries_a_version(var: str, image: str) -> Non
     )
 
 
-# Where a role can write `image:` besides its defaults: a template it renders, or a
-# module argument in a task or handler.
-IMAGE_SITES = ("*/templates/*", "*/tasks/*.yml", "*/handlers/*.yml")
+# Every file of a role but its defaults, at any depth: templates, tasks, handlers,
+# vars, files. An image key is `image:` or one ending in `_image:`, such as the
+# `docker_image` module's.
+IMAGE_KEY = re.compile(r"\s*(?:\w+_)?image:\s*(\S+)")
+
+
+def _outside_defaults() -> list[Path]:
+    return sorted(p for p in ROLES.rglob("*") if p.is_file() and p.relative_to(ROLES).parts[1] != "defaults")
+
+
+def test_the_scan_reaches_nested_files_and_skips_the_defaults() -> None:
+    scanned = [path.relative_to(ROLES).parts for path in _outside_defaults()]
+    assert any(len(parts) > 3 for parts in scanned), "no nested file scanned"
+    assert not any(parts[1] == "defaults" for parts in scanned)
 
 
 def test_no_role_names_an_image_outside_a_var() -> None:
-    """A literal `image:` anywhere else would run without passing the check above."""
+    """A literal image anywhere else would run without passing the check above."""
     literal = [
         f"{path.relative_to(ROLES)}:{number}"
-        for path in sorted(p for site in IMAGE_SITES for p in ROLES.glob(site))
+        for path in _outside_defaults()
         for number, line in enumerate(path.read_text(encoding="utf-8", errors="ignore").splitlines(), 1)
-        if (m := re.match(r"\s*image:\s*(\S+)", line)) and "{{" not in m.group(1)
+        if (m := IMAGE_KEY.match(line)) and "{{" not in m.group(1)
     ]
     assert not literal, f"images written outside a default: {literal}"
