@@ -279,21 +279,27 @@ class TestRetiredHomelabNodes:
     consumer that enumerates nodes reached for a machine that is not there:
     `make test-infra` reported it as six SSH and ping failures. The flag keeps
     the declaration whole, so its return is one edit.
+
+    Each case flags a node itself, so the suite holds whether or not one is
+    retired today: the return must not also be four test edits.
     """
 
-    def test_a_retired_homelab_node_produces_no_host(self) -> None:
+    @staticmethod
+    def _one_retired() -> tuple[dict[str, Any], str, dict[str, Any]]:
         net = _networking()
-        retired = [key for key, node in net["nodes"].items() if node.get("retired")]
-        assert retired, "fixture assumption: some networking.nodes entry is retired"
+        key, node = next(iter(net["nodes"].items()))
+        node["retired"] = True
+        return net, key, node
+
+    def test_a_retired_homelab_node_produces_no_host(self) -> None:
+        net, key, node = self._one_retired()
 
         hosts = _hosts(AnsibleGenerator()._build_inventory(net))
 
-        for key in retired:
-            assert net["nodes"][key].get("hostname", key) not in hosts, f"retired node {key} reached the inventory"
+        assert node.get("hostname", key) not in hosts, f"retired node {key} reached the inventory"
 
     def test_clearing_the_flag_brings_the_host_back(self) -> None:
-        net = _networking()
-        key, node = next((k, n) for k, n in net["nodes"].items() if n.get("retired"))
+        net, key, node = self._one_retired()
         net["nodes"][key] = {**node, "retired": False}
 
         hosts = _hosts(AnsibleGenerator()._build_inventory(net))
@@ -301,8 +307,7 @@ class TestRetiredHomelabNodes:
         assert node.get("hostname", key) in hosts, "un-retiring must restore the host, or the flag is a one-way door"
 
     def test_skipping_a_retired_homelab_node_is_announced(self, capsys) -> None:
-        net = _networking()
-        key = next(k for k, n in net["nodes"].items() if n.get("retired"))
+        net, key, _ = self._one_retired()
 
         AnsibleGenerator()._build_inventory(net)
 
