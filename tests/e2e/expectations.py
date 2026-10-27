@@ -52,6 +52,23 @@ def on_demand_target(svc_name: str, node_key: str) -> tuple[str, int]:
     raise KeyError(f"{svc_name}: no apps.services.*.{svc_name}.default_port in common.yaml")
 
 
+class BackendRefused(AssertionError):
+    """An on-demand backend's node answered and refused the connection.
+
+    Raised, never returned, so a caller that forgets this case fails instead of
+    reading "refused" as "down" and skipping, or as "up" and testing a dead service.
+    """
+
+    def __init__(self, host: str, port: int) -> None:
+        self.host = host
+        self.port = port
+        super().__init__(
+            f"the node is up and nothing is listening on {host}:{port} (connection refused). "
+            "This is a service outage, not a powered-off node or a runner off the tailnet: "
+            "check that the service is running and bound to that address on the node."
+        )
+
+
 def backend_reachable(host: str, port: int, timeout: float = 3.0) -> bool:
     """TCP-probe the backend directly, bypassing the public route.
 
@@ -59,17 +76,25 @@ def backend_reachable(host: str, port: int, timeout: float = 3.0) -> bool:
     whole point of the on-demand branch. A probe through the public domain
     could not tell those apart, since both surface as a 502.
 
-    Accepted trade-off: a *refused* connection (node up, nothing listening) is
-    reported here as "not reachable", identical to a timeout, so this suite skips
-    in both cases. That conflation is deliberate rather than overlooked —
-    `tests/infra/test_network.py` owns the distinction and fails loudly on a
-    refusal, which is the failure mode observed on 2026-08-14. Duplicating the
-    judgement in an e2e suite that may run from outside the tailnet would produce
-    false reds without adding coverage.
+    Three outcomes, because a failed connection means two different things:
+
+    * connected          → True.
+    * nothing answered   → False. A timeout or no route: the node is off, or this
+      runner is not on the tailnet. Neither is a service outage, so callers skip.
+    * connection refused → raises `BackendRefused`. A refusal is an answer: the node
+      is up and nothing is bound to the port (the Beelink after its 2026-08-14 reboot,
+      Open WebUI on ace2, #2703). Skipping it reports a live outage as an absence.
+      A runner off the tailnet never reaches the host, so it times out or finds no
+      route rather than being refused.
+
+    `tests/infra/test_network.py` makes the same cut, but for Gitea on the Beelink
+    alone; this is the only check for every other on-demand backend.
     """
     try:
         with socket.create_connection((host, port), timeout=timeout):
             return True
+    except ConnectionRefusedError as exc:
+        raise BackendRefused(host, port) from exc
     except OSError:
         return False
 
@@ -94,12 +119,14 @@ class ServiceExpectation:
             (ADR-028 / ADR-061). Empty for everything else.
 
             This is NOT a way to make a service optional. The rest of the suite
-            skips such a service when its node is unreachable — otherwise a
-            powered-down homelab would report a prod outage — and
-            `TestOnDemandBackend` then asserts the case that skipping would
-            otherwise hide: with the backend down, the route, its TLS and its
-            error-pages middleware must still be intact and answer 502/503/504.
+            skips such a service when its node does not answer at all (timeout or
+            no route) — otherwise a powered-down homelab would report a prod
+            outage — and `TestOnDemandBackend` then asserts the case that skipping
+            would otherwise hide: with the backend silent, the route, its TLS and
+            its error-pages middleware must still be intact and answer 502/503/504.
             Both branches assert something real; neither can pass vacuously.
+            A node that answers and *refuses* is neither: it is up with the
+            service down, and every check fails with `BackendRefused`.
     """
 
     health_status: tuple[int, ...] = (200,)
@@ -229,18 +256,19 @@ def on_demand_skip_reason(svc_name: str, exp: ServiceExpectation) -> str | None:
     """Why the ordinary suite should skip this service right now, or None.
 
     Returns a reason only when the service declares an on-demand backend AND
-    that backend is unreachable. Everything else — including a reachable
-    on-demand backend — is tested normally.
+    that backend does not answer at all. Everything else — including a reachable
+    on-demand backend — is tested normally. A backend that answers and refuses
+    is not skipped: `backend_reachable` raises `BackendRefused`, which propagates,
+    so a live outage cannot pass as an absence.
     """
     if not exp.on_demand_backend:
         return None
     host, port = on_demand_target(svc_name, exp.on_demand_backend)
     if backend_reachable(host, port):
         return None
-    # Says what the probe measured. A refused connection lands here too, with the node
-    # up and nothing bound to the port (ace2 and Open WebUI, 2026-10-27), so "powered
-    # off" is one of two causes this cannot tell apart, never the claim.
+    # Says what the probe measured: silence, with two causes it cannot tell apart.
     return (
-        f"{svc_name}: on-demand backend {exp.on_demand_backend} not reachable: powered off, "
-        f"or nothing listening on {host}:{port} — the route itself is asserted by TestOnDemandBackend"
+        f"{svc_name}: on-demand backend {exp.on_demand_backend} did not answer on {host}:{port} "
+        "(timeout: node off, or this runner is not on the tailnet) — "
+        "the route itself is asserted by TestOnDemandBackend"
     )

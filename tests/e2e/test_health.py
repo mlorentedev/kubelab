@@ -98,11 +98,13 @@ class TestOnDemandBackend:
 
     So this runs unconditionally and branches:
 
-    * backend up   → the service must actually answer, end to end.
-    * backend down → the route, its certificate and its error-pages middleware
+    * backend up      → the service must actually answer, end to end.
+    * backend silent  → the route, its certificate and its error-pages middleware
       must still be intact and return 502/503/504.
+    * backend refuses → the node is up with the service down, an outage rather
+      than an absence: `backend_reachable` raises `BackendRefused` and this fails.
 
-    The down branch is the valuable one: it is exactly the state in which a
+    The silent branch is the valuable one: it is exactly the state in which a
     deleted IngressRoute, an expired certificate or a broken middleware chain
     would otherwise go unnoticed, because nobody is looking while the lab is off.
     A flat `200 or 502` acceptance would cover both and assert nothing — the TCP
@@ -132,7 +134,7 @@ class TestOnDemandBackend:
         except httpx.TimeoutException:
             pytest.fail(
                 f"{svc_name} ({url}): timeout. Backend {host}:{port} "
-                f"{'is reachable' if up else 'is down'} — a timeout at the edge means the "
+                f"{'is reachable' if up else 'does not answer'} — a timeout at the edge means the "
                 "route, not the backend, since Traefik answers 502 for a dead service."
             )
 
@@ -143,7 +145,7 @@ class TestOnDemandBackend:
             )
         else:
             assert r.status_code in OFFLINE_STATUS, (
-                f"{svc_name}: backend {host}:{port} is down, so Traefik must answer "
+                f"{svc_name}: backend {host}:{port} does not answer, so Traefik must answer "
                 f"{OFFLINE_STATUS} through error-pages — got {r.status_code}. "
                 "Anything else means the route or its middleware chain is broken, "
                 "which is the failure this test exists to catch."
