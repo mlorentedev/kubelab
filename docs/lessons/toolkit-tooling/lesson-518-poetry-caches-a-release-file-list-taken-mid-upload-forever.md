@@ -10,8 +10,10 @@ tags: [kubelab, toolkit-tooling, poetry, pypi, cache, worktree-init]
 
 # Poetry caches a release's file list forever, so a lock taken during the upload misses wheels for good
 
-**Context**: `make worktree-init` in a new sibling worktree, 2026-10-03. `poetry.lock` is
-gitignored here, so every worktree resolves its own lock.
+**Context**: `make worktree-init` in a new sibling worktree, 2026-10-03. `poetry.lock` was
+gitignored then, so every worktree resolved its own lock. TOOL-125 committed it on
+2026-10-28, so a checkout now installs the committed lock and only a relock reads this
+cache.
 
 **Problem**: the install failed with `Unable to find installation candidates for
 setproctitle (1.3.8)`: 16 wheels identified, all skipped for their ABI tags. The
