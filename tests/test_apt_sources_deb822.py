@@ -20,6 +20,13 @@ import yaml
 REPO = Path(__file__).resolve().parents[1]
 ANSIBLE = REPO / "infra/ansible"
 SOURCES_DIR = "/etc/apt/sources.list.d/"
+# The file each role's old apt_repository task wrote, read on bee, ace1, ace2 and
+# rpi4 on 2026-10-28. apt_repository derived the docker name from the URL and took
+# `filename: github-cli` for the other, so a removal of any other path leaves it.
+LEGACY_LISTS = {
+    "docker": SOURCES_DIR + "download_docker_com_linux_ubuntu.list",
+    "dev_node": SOURCES_DIR + "github-cli.list",
+}
 # Every spelling of the deprecated module as a task key.
 APT_REPOSITORY = re.compile(r"^\s*(?:-\s+)?(?:ansible\.(?:builtin|legacy)\.)?apt_repository\s*:", re.MULTILINE)
 
@@ -59,24 +66,24 @@ def test_the_scan_reaches_both_roles_that_add_a_source() -> None:
 def test_the_list_the_old_task_wrote_is_removed_after_the_source_is_in_place(path: Path) -> None:
     tasks = _tasks(path)
     [added] = [i for i, t in enumerate(tasks) if _args(t, "deb822_repository")]
+    legacy = LEGACY_LISTS[path.parts[-3]]
     removed = [
         i
         for i, t in enumerate(tasks)
-        if (args := _args(t, "file"))
-        and args.get("state") == "absent"
-        and str(args.get("path", "")).startswith(SOURCES_DIR)
-        and str(args.get("path", "")).endswith(".list")
+        if (args := _args(t, "file")) and args.get("state") == "absent" and args.get("path") == legacy
     ]
-    assert removed, f"{path.parent.parent.name} writes a deb822 source and leaves the old .list beside it"
+    assert removed, f"{path.parts[-3]} writes a deb822 source and leaves {legacy} beside it"
     assert all(i > added for i in removed), "the .list goes before the .sources exists, leaving no source"
 
 
 @pytest.mark.parametrize("path", _deb822_task_files(), ids=lambda p: p.parts[-3])
 def test_the_source_names_the_key_the_role_downloads(path: Path) -> None:
     tasks = _tasks(path)
-    keys = {str(args["dest"]) for t in tasks if (args := _args(t, "get_url")) and "keyrings" in str(args.get("dest"))}
-    [source] = [args for t in tasks if (args := _args(t, "deb822_repository"))]
-    assert source.get("signed_by") in keys, f"signed_by {source.get('signed_by')!r} is not a key this role fetches"
+    [added] = [i for i, t in enumerate(tasks) if _args(t, "deb822_repository")]
+    signed_by = _args(tasks[added], "deb822_repository").get("signed_by")
+    # A key fetched after the source leaves apt reading a source whose key is not there yet.
+    keys = {str(args["dest"]) for i, t in enumerate(tasks) if i < added and (args := _args(t, "get_url"))}
+    assert signed_by in keys, f"signed_by {signed_by!r} is not a key this role fetches before the source"
 
 
 @pytest.mark.parametrize("path", _deb822_task_files(), ids=lambda p: p.parts[-3])
