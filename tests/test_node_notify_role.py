@@ -430,7 +430,8 @@ def _flag(script: str, name: str) -> int:
     return int(match.group(1))
 
 
-def test_notify_unit_timeout_exceeds_the_script_retry_budget():
+@pytest.mark.parametrize("unit_template", ["kubelab-notify@.service.j2", "kubelab-notify-recovered@.service.j2"])
+def test_notify_unit_timeout_exceeds_the_script_retry_budget(unit_template: str):
     """A retry longer than TimeoutStartSec is worse than no retry at all.
 
     systemd would kill the unit mid-attempt, so a delivery still in progress is
@@ -439,17 +440,23 @@ def test_notify_unit_timeout_exceeds_the_script_retry_budget():
     retry without moving the timeout would have manufactured this failure.
 
     Worst case is ``--retry-max-time`` (after which curl starts no NEW attempt)
-    plus one final attempt bounded by ``--max-time``.
+    plus one final attempt bounded by ``--max-time``. Before it, the script may
+    wait for the unit's lock while another notice of it is delivered (#2733):
+    the wait must outlast that delivery, and the timeout must hold both.
     """
     script = _render("kubelab-notify.sh.j2")
     worst_case = _flag(script, "--retry-max-time") + _flag(script, "--max-time")
+    lock_wait = _flag(script, "flock -w")
+    assert lock_wait > worst_case, (
+        f"a {lock_wait}s lock wait gives up while a {worst_case}s delivery of the same unit can still be in flight"
+    )
 
-    unit = _render("kubelab-notify@.service.j2")
+    unit = _render(unit_template)
     timeout = re.search(r"^TimeoutStartSec=(\d+)$", unit, re.MULTILINE)
-    assert timeout, "notify unit has no TimeoutStartSec"
+    assert timeout, f"{unit_template} has no TimeoutStartSec"
 
-    assert int(timeout.group(1)) > worst_case, (
-        f"TimeoutStartSec={timeout.group(1)}s cannot contain a {worst_case}s retry budget"
+    assert int(timeout.group(1)) > lock_wait + worst_case, (
+        f"TimeoutStartSec={timeout.group(1)}s cannot contain a {lock_wait}s lock wait and a {worst_case}s retry budget"
     )
 
 

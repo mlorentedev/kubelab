@@ -20,9 +20,10 @@ Type=oneshot
 ExecStart={{ node_notify_script_path }} %i
 # Must exceed the script's own retry budget or systemd truncates a delivery
 # that was still in progress. Worst case measured against a blackholed host:
-# --retry-max-time 20 + one final --max-time 10 attempt = 30s. 45 leaves
-# margin for DNS and process start. Raising the retry budget means raising
-# this too -- tests/test_node_notify_role.py asserts the relationship.
-TimeoutStartSec=45
+# --retry-max-time 20 + one final --max-time 10 attempt = 30s. The script may
+# first wait for the unit's lock while another notice of it is delivered
+# (#2733), so the timeout holds that wait too. Raising either means raising
+# this -- tests/test_node_notify_role.py asserts the relationship.
+TimeoutStartSec={{ node_notify_timeout_seconds }}
 StandardOutput=journal
 StandardError=journal
