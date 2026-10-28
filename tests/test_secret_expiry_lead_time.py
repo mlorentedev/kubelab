@@ -77,8 +77,9 @@ def test_a_lead_time_is_a_positive_number_of_days() -> None:
 
 # A life stated in days: "60d expiry", "a 60-day life", "**Expiry:** 60 or 90 days",
 # "valid for 60 days". Days, because that is the unit GitHub and Cloudflare issue them in.
+# A count followed by "before" is a lead time ("renew 14 days before it expires"), not a life.
 _UNIT = r"(?:d\b|-day\b| days?\b)"
-_DAYS = re.compile(rf"\b(\d{{1,3}})(?:{_UNIT}| or (?=\d{{1,3}}{_UNIT}))")
+_DAYS = re.compile(rf"\b(\d{{1,3}})(?:{_UNIT}(?! before)| or (?=\d{{1,3}}{_UNIT}))")
 _LIFE_WORDS = re.compile(r"expir|life|ttl|valid", re.IGNORECASE)
 
 
@@ -94,6 +95,16 @@ def _stated_lives(spec: SecretSpec) -> list[int]:
 def test_each_way_of_stating_a_life_is_read(hint: str) -> None:
     spec = SecretSpec(key_path="x.token", description="d", kind=SecretKind.EXTERNAL, format_hint=hint)
     assert min(_stated_lives(spec)) == 60
+
+
+def test_a_lead_time_on_an_expiry_line_is_not_read_as_a_life() -> None:
+    spec = SecretSpec(
+        key_path="x.token",
+        description="d",
+        kind=SecretKind.EXTERNAL,
+        format_hint="Renew the token at least 14 days before it expires; it is valid for 60 days.",
+    )
+    assert _stated_lives(spec) == [60]
 
 
 _REPORTED = [s for s in SECRET_CATALOG if resolve_expiry(s) in (Expiry.PROVIDER, Expiry.DECLARED)]
