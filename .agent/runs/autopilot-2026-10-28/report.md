@@ -5,7 +5,9 @@ Verdict: in progress (armed 2026-10-28T03:25Z, expires 12:25Z).
 ## Waiting on you (irreversible first)
 
 - T1-T4 of the hard-reset test (B14), each followed by `make edge-boot-check`. The rpi4 second pass ran (ok=182 changed=1, the one change being apt's time-based cache refresh), and the plugged-in boot check passed 22/22 at 06:35.
-- The Beelink provision with `EXTRA='base_system_release_holds=true'`: #2756 is on master. Run it after #2763 lands, so the same run smoke-builds on the new engine. It is the deliberate Docker move #2722 asks for.
+- After #2763 lands, first `make provision NODE=bee ENV=prod TAGS=docker EXTRA='docker_smoke_build=true'`: it runs the smoke build against the installed 29.9.2 without moving any package. Red there proves both the check and the #2722 hypothesis; green leaves the check unproven on a bad engine (the 10-27 drop came two hours after dockerd restarted).
+- Then the Beelink provision with `EXTRA='base_system_release_holds=true'` (#2756 is on master), which upgrades, re-holds and smoke-builds the new engine. It is the deliberate Docker move #2722 asks for.
+- #2722: hold `docker-buildx-plugin` too, A or B (issuecomment-6462941361). It did not move on 10-27, so not urgent.
 - #2759 (deb822 sources) lands after that Beelink provision, not before.
 - New names for you to confirm or rename (cheap follow-ups): the probe overrides `F2_WORK` and `F2_RESULT` and the verdict `F2_FIXTURE_UNREACHABLE` (#2760); the `docker` role's `docker_smoke_build`, `docker_smoke_build_image` and `docker_smoke_build_timeout_seconds` (#2763).
 - #2758: `make provision NODE=ace2 ENV=staging TAGS=dev_node` (no `CHECK`). It applies the role, so it is yours, and it tells check mode apart from time-dependent state.
@@ -65,10 +67,14 @@ Landed this run: #2743, #2746, #2706, #2741, #2736, #2747 (05:34), #2748 (06:02)
 | 06:45 | #2758 discriminator | `TAGS=dev_node CHECK=1` hangs at the same point: the tag is ruled out; correction posted | issuecomment-6462606265 |
 | 06:55–07:05 | #2722 smoke build | `docker` role builds `RUN sleep 20` under `timeout 180`, `cacheonly`, on in the Beelink play only with the release flag (5 mutants red) | #2763 |
 | 07:00–07:02 | #2756 | triage posted (two applied, two stale re-raises declined with evidence, hold ordering declined by design), landed | issuecomment-6462692294 |
+| 07:10–07:35 | adversarial review of #2762, #2763 (independent reviewer) | #2762: TTL comment in role defaults fixed, ruling recorded on #2757, PR scoped to the five wired units. #2763: the assert was untested (5 mutants stayed green): now 7 more mutants red; `--kill-after=30` and rc 137; runbook names the validation run. buildx hold raised on #2722, not folded in | f65fe977, 999b61d4 |
+| 07:15 | #2761 pr-agent | "same boot as B2" replaced by the boot's own start (2026-10-27T00:52Z, `/proc/stat`) | fc1b8219 |
+| 07:20 | #2760 | triage posted | issuecomment-6462782066 |
+| 07:20 | worktree hygiene | 17 merged worktrees removed with `dotf worktree done` | |
 
 ## Budget
 
-Iterations: 12 / 14: (1) open-PR dispositions, #1021, node_maintenance comment, #2740 diagnosis; (2) #2744; (3) #2742 park and the land sweep; (4) ace2 PAT and #2692; (5) #2726; (6) #2722; (7) #2733 and the review follow-ups; (8) #2737; (9) #2750; (10) NET-005 reconcile; (11) #2757; (12) #2722 smoke build. Items: 16 / 17. No dollar figure exists for this run.
+Iterations: 13 / 14: (1) open-PR dispositions, #1021, node_maintenance comment, #2740 diagnosis; (2) #2744; (3) #2742 park and the land sweep; (4) ace2 PAT and #2692; (5) #2726; (6) #2722; (7) #2733 and the review follow-ups; (8) #2737; (9) #2750; (10) NET-005 reconcile; (11) #2757; (12) #2722 smoke build; (13) review follow-ups on #2760-#2763. Items: 16 / 17. No dollar figure exists for this run.
 
 ## Host suspend
 
