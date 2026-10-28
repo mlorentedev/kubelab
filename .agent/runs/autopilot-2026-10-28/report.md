@@ -9,7 +9,7 @@ Verdict: in progress (armed 2026-10-28T03:25Z, expires 12:25Z).
 - Then the Beelink provision with `EXTRA='base_system_release_holds=true'` (#2756 is on master), which upgrades, re-holds and smoke-builds the new engine. It is the deliberate Docker move #2722 asks for.
 - #2722: hold `docker-buildx-plugin` too, A or B (issuecomment-6462941361). It did not move on 10-27, so not urgent.
 - #2759 (deb822 sources) lands after that Beelink provision, not before.
-- New names for you to confirm or rename (cheap follow-ups): the probe overrides `F2_WORK` and `F2_RESULT` and the verdict `F2_FIXTURE_UNREACHABLE` (#2760); the `docker` role's `docker_smoke_build`, `docker_smoke_build_image` and `docker_smoke_build_timeout_seconds` (#2763).
+- New names for you to confirm or rename (cheap follow-ups): the probe overrides `F2_WORK` and `F2_RESULT` and the verdict `F2_FIXTURE_UNREACHABLE` (#2760); the `docker` role's `docker_smoke_build`, `docker_smoke_build_image` and `docker_smoke_build_timeout_seconds` (#2763); the `dev_node` register `dev_node_gh_index` (#2759).
 - #2758: `make provision NODE=ace2 ENV=staging TAGS=dev_node` (no `CHECK`). It applies the role, so it is yours, and it tells check mode apart from time-dependent state.
 
 ## Parked
@@ -20,8 +20,8 @@ Verdict: in progress (armed 2026-10-28T03:25Z, expires 12:25Z).
 
 ## Done but unmerged
 
-- #2763 #2722 smoke build in the release run: Tests went red on the check-mode guard (the build is a write that reports no change, now declared beside `Test Docker functionality`, 8cf9af59); CI re-running.
-- #2759 #2737 deb822 sources: both pr-agent findings applied (a1c23a1b), triaged; held for the Beelink provision.
+- #2763 #2722 smoke build in the release run: review applied and triaged (fde4737b); CI re-running.
+- #2759 #2737 deb822 sources: two pr-agent passes applied (a1c23a1b, bb01ee60), triaged; held for the Beelink provision.
 
 Landed this run: #2743, #2746, #2706, #2741, #2736, #2747 (05:34), #2748 (06:02), #2740 (06:03), #2752 (06:25), #2749 (06:52), #2756 (07:02), #2760, #2761, #2762 (07:40).
 
@@ -72,6 +72,8 @@ Landed this run: #2743, #2746, #2706, #2741, #2736, #2747 (05:34), #2748 (06:02)
 | 07:35–07:40 | #2760, #2761, #2762 | triage posted on #2761 and #2762 (pr-agent's #2661 scope items declined as out of scope, live-TTL check open by design), all three landed; #2750 and #2757 closed | issuecomment-6463377220, issuecomment-6463377492 |
 | 07:40 | worktree hygiene | 3 more merged worktrees removed | |
 | 07:45–07:55 | #2759 pr-agent | the test pins the `.list` each role removes and requires the key fetched before the source (2 mutants red); triage posted, landing still held | a1c23a1b, issuecomment-6463426435 |
+| 08:00–08:25 | #2759 second pr-agent pass | `gh` refreshes the index while apt has never read its source (`dev_node_gh_index`, name read on ace2; mutant red); scans take `.yaml` and nested files; second triage posted | bb01ee60, issuecomment-6463880541 |
+| 08:00–08:25 | #2763 pr-agent | rc 137 reports its elapsed time and names the OOM killer beside #2722 (mutant red); the role order the promise rests on is pinned by a test (mutant red); SIGPIPE flake declined (0/300); triage posted | 6f7fcbb8, fde4737b, issuecomment-6463880219 |
 
 ## Budget
 
