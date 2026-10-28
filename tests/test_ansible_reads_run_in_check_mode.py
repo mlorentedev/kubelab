@@ -37,6 +37,9 @@ WRITES_THAT_REPORT_NO_CHANGE = {
     ("docker", "Test Docker functionality"): (
         "a smoke test: it pulls hello-world and runs a container, which a dry run must not"
     ),
+    ("docker", "Smoke-build an image on this engine"): (
+        "a smoke build: it pulls its base image and runs a build step, which a dry run must not"
+    ),
 }
 
 
