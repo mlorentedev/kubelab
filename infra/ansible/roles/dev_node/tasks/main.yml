@@ -79,21 +79,44 @@
     mode: "0644"
   tags: [dev_node, tooling, gh]
 
-- name: Add GitHub CLI apt repository
-  ansible.builtin.apt_repository:
-    repo: >-
-      deb [arch={{ 'arm64' if ansible_facts.architecture == 'aarch64' else 'amd64' }}
-      signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg]
-      https://cli.github.com/packages stable main
-    filename: github-cli
+# Here and not only in the docker role: `TAGS=dev_node` skips that role.
+- name: Install the library deb822_repository needs
+  ansible.builtin.apt:
+    name: python3-debian
     state: present
-    update_cache: true
   tags: [dev_node, tooling, gh]
 
+# deb822, because apt_repository goes away in ansible-core 2.25 (#2737).
+- name: Add GitHub CLI apt repository
+  ansible.builtin.deb822_repository:
+    name: github-cli
+    types: [deb]
+    uris: https://cli.github.com/packages
+    suites: [stable]
+    components: [main]
+    architectures: ["{{ 'arm64' if ansible_facts.architecture == 'aarch64' else 'amd64' }}"]
+    signed_by: /etc/apt/keyrings/githubcli-archive-keyring.gpg
+    state: present
+  register: dev_node_gh_source
+  tags: [dev_node, tooling, gh]
+
+# The one-line source the old task wrote. Removed only now that
+# github-cli.sources is in place; left beside it, apt warns the target is
+# configured twice.
+- name: Remove the GitHub CLI source the old task wrote
+  ansible.builtin.file:
+    path: /etc/apt/sources.list.d/github-cli.list
+    state: absent
+  register: dev_node_gh_legacy_source
+  tags: [dev_node, tooling, gh]
+
+# The package index above may be under an hour old and predate the source, so
+# it is refreshed here exactly when the source changed.
 - name: Install GitHub CLI (gh)
   ansible.builtin.apt:
     name: gh
     state: present
+    update_cache: "{{ dev_node_gh_source is changed or dev_node_gh_legacy_source is changed }}"
   tags: [dev_node, tooling, gh]
 
 # --- User-level provisioning (runs as the interactive dev user) ------------
