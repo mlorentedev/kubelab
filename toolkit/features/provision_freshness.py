@@ -102,15 +102,17 @@ def collections_off_declaration(declared: dict[str, str]) -> list[str]:
     )
     if done.returncode != 0:
         raise FreshnessError(f"ansible-galaxy collection list: {done.stderr.strip() or done.stdout.strip()}")
-    held: dict[str, set[str]] = {}
-    for collections in json.loads(done.stdout or "{}").values():
+    held: dict[str, dict[str, list[str]]] = {}  # name -> version -> the paths holding it
+    for path, collections in json.loads(done.stdout or "{}").items():
         for name, meta in collections.items():
-            held.setdefault(name, set()).add(str(meta.get("version")))
+            held.setdefault(name, {}).setdefault(str(meta.get("version")), []).append(path)
     off = []
     for name, version in sorted(declared.items()):
-        found = held.get(name, set())
-        if found != {version}:
-            off.append(f"{name} {', '.join(sorted(found)) or 'missing'} (declared {version})")
+        found = held.get(name, {})
+        if set(found) != {version}:
+            # Where a stale copy is, because `make setup-ansible` replaces only the user path's.
+            copies = [v if v == version else f"{v} at {', '.join(sorted(found[v]))}" for v in sorted(found)]
+            off.append(f"{name} {', '.join(copies) or 'missing'} (declared {version})")
     return off
 
 
@@ -121,5 +123,7 @@ def collections_refusal_message(off: list[str]) -> str:
         f"{shown}\n"
         "WHY: the roles run whatever version the controller has, and a stale one keeps the bugs and "
         "security fixes the pin moved past (ANSIBLE-070, authorized_key on ansible.posix 2.1.0).\n"
-        "FIX: make setup-ansible and run again; FORCE=1 only if you mean to run with these versions."
+        "FIX: make setup-ansible and run again. It installs into the user path, so a stale copy elsewhere "
+        "stays: the full `ansible` package bundles its own, so uninstall it and keep ansible-core. "
+        "FORCE=1 only if you mean to run with these versions."
     )

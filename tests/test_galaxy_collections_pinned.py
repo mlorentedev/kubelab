@@ -69,7 +69,7 @@ def test_a_controller_holding_the_declared_versions_is_current(monkeypatch: pyte
 
 def test_an_older_installed_version_is_named(monkeypatch: pytest.MonkeyPatch) -> None:
     _galaxy_list(monkeypatch, {"/c": {"ansible.posix": "2.1.0", "community.docker": "5.0.6"}})
-    assert provision_freshness.collections_off_declaration(DECLARED) == ["ansible.posix 2.1.0 (declared 2.2.2)"]
+    assert provision_freshness.collections_off_declaration(DECLARED) == ["ansible.posix 2.1.0 at /c (declared 2.2.2)"]
 
 
 def test_a_missing_collection_is_named(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -80,9 +80,14 @@ def test_a_missing_collection_is_named(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_a_stale_second_copy_is_named_because_the_listing_does_not_say_which_one_loads(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """`ansible-galaxy collection list` walks its search paths as a set, so its order is not load precedence."""
+    """`ansible-galaxy collection list` walks its search paths as a set, so its order is not load precedence.
+
+    The stale copy's path is named: `make setup-ansible` installs into the user path
+    and does not touch a copy elsewhere, such as one the full `ansible` package bundles.
+    """
     _galaxy_list(monkeypatch, {"/a": dict(DECLARED), "/b": {"ansible.posix": "2.1.0"}})
-    assert provision_freshness.collections_off_declaration(DECLARED) == ["ansible.posix 2.1.0, 2.2.2 (declared 2.2.2)"]
+    expected = ["ansible.posix 2.1.0 at /b, 2.2.2 (declared 2.2.2)"]
+    assert provision_freshness.collections_off_declaration(DECLARED) == expected
 
 
 def test_a_listing_that_fails_is_an_error_not_a_pass(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -97,8 +102,9 @@ def test_the_declaration_read_is_the_repository_file() -> None:
 
 
 def test_the_refusal_names_the_collections_the_cause_and_the_way_out() -> None:
-    message = provision_freshness.collections_refusal_message(["ansible.posix 2.1.0 (declared 2.2.2)"])
-    assert "ansible.posix 2.1.0 (declared 2.2.2)" in message
+    message = provision_freshness.collections_refusal_message(["ansible.posix 2.1.0 at /c (declared 2.2.2)"])
+    assert "ansible.posix 2.1.0 at /c (declared 2.2.2)" in message
+    assert "full `ansible` package" in message, "a copy setup-ansible does not replace needs its own way out"
     assert "WHY:" in message
     assert "make setup-ansible" in message
     assert "FORCE=1" in message
