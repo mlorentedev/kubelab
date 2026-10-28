@@ -235,8 +235,9 @@ def _networking_reads(source: str) -> tuple[set[str], list[int]]:
 
     Parsed rather than matched, so the form of a read cannot hide it: every load
     of the name is a constant-key read (`networking["k"]`, `networking.get("k")`),
-    a hand-off to a function of this module whose parameter keeps the name (its
-    reads are then reads of the same name), or a line in the second list.
+    a hand-off to a function of this module whose parameter keeps the name, by
+    position or by keyword (its reads are then reads of the same name), or a
+    line in the second list.
     """
     tree = ast.parse(source)
     functions = {f.name: f for f in ast.walk(tree) if isinstance(f, ast.FunctionDef)}
@@ -260,19 +261,30 @@ def _networking_reads(source: str) -> tuple[set[str], list[int]]:
             keys.add(call.args[0].value)
         elif isinstance(parent, ast.Call) and node in parent.args and _keeps_the_name(parent, node, functions):
             continue
+        elif isinstance(parent, ast.keyword) and parent.arg == "networking" and _takes_networking(call, functions):
+            continue
         else:
             other.append(node.lineno)
     return keys, other
 
 
+def _callee(call: ast.Call, functions: dict[str, ast.FunctionDef]) -> ast.FunctionDef | None:
+    name = call.func.attr if isinstance(call.func, ast.Attribute) else getattr(call.func, "id", "")
+    return functions.get(name)
+
+
 def _keeps_the_name(call: ast.Call, arg: ast.Name, functions: dict[str, ast.FunctionDef]) -> bool:
-    callee = call.func.attr if isinstance(call.func, ast.Attribute) else getattr(call.func, "id", "")
-    target = functions.get(callee)
+    target = _callee(call, functions)
     if target is None:
         return False
     params = [a.arg for a in target.args.args if a.arg not in ("self", "cls")]
     index = call.args.index(arg)
     return index < len(params) and params[index] == "networking"
+
+
+def _takes_networking(call: ast.AST | None, functions: dict[str, ast.FunctionDef]) -> bool:
+    target = _callee(call, functions) if isinstance(call, ast.Call) else None
+    return target is not None and "networking" in [a.arg for a in (*target.args.args, *target.args.kwonlyargs)]
 
 
 _NETWORKING_KEYS, _NETWORKING_OTHER_USES = _networking_reads(_GENERATOR_SOURCE)
@@ -307,6 +319,8 @@ def test_the_generator_reads_networking_key_by_key() -> None:
         pytest.param("merged = {**networking}", id="unpacked"),
         pytest.param("def helper(cfg):\n    return cfg['vps']\nhelper(networking)", id="handed-on-renamed"),
         pytest.param("external(networking)", id="handed-outside-the-module"),
+        pytest.param("def helper(cfg):\n    return cfg['vps']\nhelper(cfg=networking)", id="keyword-renamed"),
+        pytest.param("external(networking=networking)", id="keyword-outside-the-module"),
         pytest.param("networking.get(name)", id="a-key-that-is-not-a-constant"),
     ],
 )
@@ -318,7 +332,7 @@ def test_a_key_read_in_any_form_is_found_and_a_hand_off_that_keeps_the_name_is_f
     source = (
         "def helper(node, networking):\n    return networking['ssh_users']\n"
         "a = networking['nodes']\nb = networking.get('vps', {})\nc = networking.get(\"lan_cidr\")\n"
-        "helper(a, networking)\n"
+        "helper(a, networking)\nhelper(node=a, networking=networking)\n"
     )
     assert _networking_reads(source) == ({"nodes", "vps", "lan_cidr", "ssh_users"}, [])
 
