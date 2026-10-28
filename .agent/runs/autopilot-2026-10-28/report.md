@@ -1,11 +1,11 @@
 # Run autopilot-2026-10-28
 
-Verdict: in progress (armed 2026-10-28T03:25Z, expires 12:25Z).
+Verdict: ended at 08:45Z on its iteration budget (14 / 14), window open until 12:25Z. 15 PRs landed, 1 held by design (#2759), 3 items parked on your answers. Nothing half-done.
 
 ## Waiting on you (irreversible first)
 
 - T1-T4 of the hard-reset test (B14), each followed by `make edge-boot-check`. The rpi4 second pass ran (ok=182 changed=1, the one change being apt's time-based cache refresh), and the plugged-in boot check passed 22/22 at 06:35.
-- After #2763 lands, first `make provision NODE=bee ENV=prod TAGS=docker EXTRA='docker_smoke_build=true'`: it runs the smoke build against the installed 29.9.2 without moving any package. Red there proves both the check and the #2722 hypothesis; green leaves the check unproven on a bad engine (the 10-27 drop came two hours after dockerd restarted).
+- #2763 is on master. First `make provision NODE=bee ENV=prod TAGS=docker EXTRA='docker_smoke_build=true'`: it runs the smoke build against the installed 29.9.2 without moving any package. Red there proves both the check and the #2722 hypothesis; green leaves the check unproven on a bad engine (the 10-27 drop came two hours after dockerd restarted).
 - Then the Beelink provision with `EXTRA='base_system_release_holds=true'` (#2756 is on master), which upgrades, re-holds and smoke-builds the new engine. It is the deliberate Docker move #2722 asks for.
 - #2722: hold `docker-buildx-plugin` too, A or B (issuecomment-6462941361). It did not move on 10-27, so not urgent.
 - #2759 (deb822 sources) lands after that Beelink provision, not before.
@@ -20,10 +20,9 @@ Verdict: in progress (armed 2026-10-28T03:25Z, expires 12:25Z).
 
 ## Done but unmerged
 
-- #2763 #2722 smoke build in the release run: review applied and triaged (fde4737b); CI re-running.
-- #2759 #2737 deb822 sources: two pr-agent passes applied (a1c23a1b, bb01ee60), triaged; held for the Beelink provision.
+- #2759 #2737 deb822 sources: three review passes applied (a1c23a1b, bb01ee60, 002bcee5) and triaged. Held for the Beelink provision; rebase it onto master before landing (11 commits behind, no conflict).
 
-Landed this run: #2743, #2746, #2706, #2741, #2736, #2747 (05:34), #2748 (06:02), #2740 (06:03), #2752 (06:25), #2749 (06:52), #2756 (07:02), #2760, #2761, #2762 (07:40).
+Landed this run: #2743, #2746, #2706, #2741, #2736, #2747 (05:34), #2748 (06:02), #2740 (06:03), #2752 (06:25), #2749 (06:52), #2756 (07:02), #2760, #2761, #2762 (07:40), #2763 (08:38).
 
 ## Ledger
 
@@ -74,15 +73,17 @@ Landed this run: #2743, #2746, #2706, #2741, #2736, #2747 (05:34), #2748 (06:02)
 | 07:45–07:55 | #2759 pr-agent | the test pins the `.list` each role removes and requires the key fetched before the source (2 mutants red); triage posted, landing still held | a1c23a1b, issuecomment-6463426435 |
 | 08:00–08:25 | #2759 second pr-agent pass | `gh` refreshes the index while apt has never read its source (`dev_node_gh_index`, name read on ace2; mutant red); scans take `.yaml` and nested files; second triage posted | bb01ee60, issuecomment-6463880541 |
 | 08:00–08:25 | #2763 pr-agent | rc 137 reports its elapsed time and names the OOM killer beside #2722 (mutant red); the role order the promise rests on is pinned by a test (mutant red); SIGPIPE flake declined (0/300); triage posted | 6f7fcbb8, fde4737b, issuecomment-6463880219 |
+| 08:30–08:40 | #2759 third pass | `python3-debian` refreshes the index first in both roles (pr-agent and CodeRabbit; 2 mutants red); CodeRabbit accepted and resolved both threads | 002bcee5, issuecomment-6464392929 |
+| 08:38 | #2763 | stale re-raises declined, landed; worktree removed | issuecomment-6464393318 |
 
 ## Budget
 
-Iterations: 13 / 14: (1) open-PR dispositions, #1021, node_maintenance comment, #2740 diagnosis; (2) #2744; (3) #2742 park and the land sweep; (4) ace2 PAT and #2692; (5) #2726; (6) #2722; (7) #2733 and the review follow-ups; (8) #2737; (9) #2750; (10) NET-005 reconcile; (11) #2757; (12) #2722 smoke build; (13) review follow-ups on #2760-#2763. Items: 16 / 17. No dollar figure exists for this run.
+Iterations: 14 / 14: (1) open-PR dispositions, #1021, node_maintenance comment, #2740 diagnosis; (2) #2744; (3) #2742 park and the land sweep; (4) ace2 PAT and #2692; (5) #2726; (6) #2722; (7) #2733 and the review follow-ups; (8) #2737; (9) #2750; (10) NET-005 reconcile; (11) #2757; (12) #2722 smoke build; (13) review follow-ups on #2760-#2763; (14) landing sweep: #2760-#2763 landed, #2759 reviewed three times. Items: 16 / 17. No dollar figure exists for this run.
 
 ## Host suspend
 
-Not yet checked (journalctl -u systemd-suspend.service at exit).
+`journalctl --since 2026-10-28T03:25:00Z -u systemd-suspend.service`: no entries. The host did not suspend during the run; a `systemd-inhibit` lock held sleep and lid.
 
 ## Next action
 
-To be written at exit.
+Run "Waiting on you" top to bottom: T1-T4 with the boot check, then the Beelink validation run (`TAGS=docker EXTRA='docker_smoke_build=true'`), then the release provision, then rebase and land #2759.
