@@ -448,5 +448,12 @@ class _LazySettings:
     def __delattr__(self, name: str) -> None:
         delattr(self._target(), name)
 
+    @property
+    def __dict__(self) -> dict[str, Any]:  # type: ignore[override]
+        # The real object's too. pytest 9.2's monkeypatch takes the value to
+        # restore from the target's `__dict__` and undoes with `delattr` when it
+        # finds none, which the proxy forwards: the real field was deleted.
+        return self._target().__dict__
+
 
 settings = cast(PlatformSettings, _LazySettings(_IMPORT_ENV))

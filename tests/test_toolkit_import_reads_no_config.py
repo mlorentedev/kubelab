@@ -65,6 +65,21 @@ def test_settings_still_resolve_on_first_use(monkeypatch: pytest.MonkeyPatch) ->
     assert settings.environment == get_settings().environment
 
 
+def test_undoing_a_patch_restores_the_field_rather_than_deleting_it(tmp_path: Path) -> None:
+    """pytest 9.2 takes the old value from the target's `__dict__` and, finding none, undoes with `delattr`.
+
+    The proxy forwards `delattr` to the real object, so with the proxy's own
+    `__dict__` the undo deleted `project_root` from every later test's settings
+    (97 failures on 2026-10-28, all ordering).
+    """
+    from toolkit.config.settings import PROJECT_ROOT, settings
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(settings, "project_root", tmp_path)
+        assert settings.project_root == tmp_path
+    assert settings.project_root == PROJECT_ROOT
+
+
 @pytest.fixture
 def logger_state():
     """The process-wide logger, restored after the test reconfigures it."""
