@@ -18,6 +18,9 @@ import jinja2
 import pytest
 import yaml
 
+from tests.ansible_jinja import _to_bool
+from tests.test_node_maintenance_patching import _run_hold_block
+
 REPO = Path(__file__).resolve().parents[1]
 ROLE = REPO / "infra/ansible/roles/base_system"
 BEE = REPO / "infra/ansible/playbooks/provision-bee.yml"
@@ -42,10 +45,28 @@ def _sets_holds(task: dict) -> bool:
     return "dpkg_selections" in task and "base_system_held_packages" in str(task.get("loop", ""))
 
 
-def _selection(task: dict, release: bool) -> str:
+def _env() -> jinja2.Environment:
     env = jinja2.Environment(undefined=jinja2.StrictUndefined)
-    env.filters["bool"] = lambda v: str(v).lower() in ("true", "yes", "1")
-    return env.from_string(task["dpkg_selections"]["selection"]).render(base_system_release_holds=release)
+    env.filters["bool"] = _to_bool
+    return env
+
+
+def _selection(task: dict, release: bool) -> str:
+    return _env().from_string(task["dpkg_selections"]["selection"]).render(base_system_release_holds=release)
+
+
+def _runs(task: dict, release: bool) -> bool:
+    conditions = task.get("when", [])
+    conditions = conditions if isinstance(conditions, list) else [conditions]
+    return all(
+        _to_bool(_env().from_string("{{ " + c + " }}").render(base_system_release_holds=release, legacy_python=False))
+        for c in conditions
+    )
+
+
+def _applied(release: bool) -> list[str]:
+    """The selections a run applies, in order: the task's `when` decides as much as its value."""
+    return [_selection(t, release) for t in _tasks() if _sets_holds(t) and _runs(t, release)]
 
 
 def test_no_node_holds_anything_unless_its_play_says_so() -> None:
@@ -68,12 +89,10 @@ def test_a_run_releases_them_only_when_asked() -> None:
     assert [_selection(t, release=True) for t in before] == ["install"]
 
 
-@pytest.mark.parametrize("release", [False, True])
-def test_every_run_ends_with_the_packages_held(release: bool) -> None:
-    """The re-hold is unconditional on the flag's value: it must never read `install`."""
-    [upgrade] = _index(lambda t: t.get("name") == UPGRADE)
-    after = [_tasks()[i] for i in _index(_sets_holds) if i > upgrade]
-    assert after and all(_selection(t, release=release) == "hold" for t in after)
+@pytest.mark.parametrize(("release", "applied"), [(False, ["hold"]), (True, ["install", "hold"])])
+def test_every_run_ends_with_the_packages_held(release: bool, applied: list[str]) -> None:
+    """A released run must not end unheld: the routine provision after it would upgrade them."""
+    assert _applied(release) == applied
 
 
 def test_only_an_installed_package_is_held() -> None:
@@ -94,7 +113,12 @@ def test_the_beelink_holds_its_ci_engine() -> None:
     assert _bee_base_system_vars().get("base_system_held_packages") == CI_ENGINE
 
 
-def test_the_maintenance_timer_finds_them_held_and_leaves_them_held() -> None:
-    """It releases only the holds it created, and it creates none on a package already held."""
+def test_the_maintenance_timer_finds_them_held_and_leaves_them_held(tmp_path: Path) -> None:
+    """It releases only the holds it created (pinned in test_node_maintenance_patching), and it creates none here."""
     blacklist = _load(MAINTENANCE_DEFAULTS)["maintenance_patch_blacklist"]
-    assert set(CI_ENGINE) <= set(blacklist)
+    assert set(CI_ENGINE) <= set(blacklist), "the timer no longer holds the CI engine for its own run"
+    unprotected, held_by_timer = _run_hold_block(
+        tmp_path, fail_hold=[], states=dict.fromkeys(CI_ENGINE, "installed"), held_before=tuple(CI_ENGINE)
+    )
+    assert not unprotected
+    assert not held_by_timer & set(CI_ENGINE), f"the timer would release the provision's holds: {held_by_timer}"
