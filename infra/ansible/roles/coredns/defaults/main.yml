@@ -1,6 +1,7 @@
 ---
 coredns_image: "coredns/coredns:1.12.1"
 # The LAN resolver: a deploy pulls this, so a rolling tag would upgrade it unasked.
+# The dev stack (infra/stacks/services/core/pihole) runs the same tag; bump both.
 pihole_image: "pihole/pihole:2026.10.0"
 # Absolute, like every other service under /opt. A remote `~` is the home of
 # whoever the task runs as, so `~/coredns` was /home/<user>/coredns from
