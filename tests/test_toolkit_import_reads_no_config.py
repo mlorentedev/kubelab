@@ -87,10 +87,15 @@ def test_a_copy_of_the_proxy_resolves_the_same_settings() -> None:
     import copy
     import pickle
 
-    from toolkit.config.settings import settings
+    from toolkit.config.settings import _LazySettings, settings
 
     for clone in (copy.copy(settings), copy.deepcopy(settings), pickle.loads(pickle.dumps(settings))):
         assert clone.project_root == settings.project_root
+    # `project_root` is the same in every environment, so read the environment the copy carries,
+    # on a proxy never resolved: building settings for it would decrypt SOPS.
+    proxy = _LazySettings("drill")
+    for clone in (copy.copy(proxy), pickle.loads(pickle.dumps(proxy))):
+        assert object.__getattribute__(clone, "_env") == "drill"
 
 
 @pytest.fixture
