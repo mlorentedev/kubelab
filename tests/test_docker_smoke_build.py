@@ -124,7 +124,9 @@ def test_only_a_build_that_finished_passes(rc: int, passes: bool) -> None:
     ("result", "says"),
     [
         ({"rc": 124, "stderr_lines": []}, "no progress"),
-        ({"rc": 137, "stderr_lines": []}, "no progress"),
+        # A kill is the timeout's only past the timeout: the OOM killer also answers 137.
+        ({"rc": 137, "stderr_lines": [], "delta": "0:03:30.020000"}, "killed after 0:03:30"),
+        ({"rc": 137, "stderr_lines": [], "delta": "0:00:41.500000"}, "OOM killer"),
         ({"rc": 1, "stderr_lines": ["#1 load", "ERROR: failed to solve: busybox: not found"]}, "failed to solve"),
     ],
 )

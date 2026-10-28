@@ -207,7 +207,12 @@
     fail_msg: >-
       {{ ('The smoke build made no progress in ' ~ docker_smoke_build_timeout_seconds
           ~ ' s: a dropped BuildKit session (#2722). Read journalctl -u docker.')
-         if _docker_smoke_build.rc in [124, 137] else
+         if _docker_smoke_build.rc == 124 else
+         ('The smoke build was killed after ' ~ (_docker_smoke_build.delta | default('?'))
+          ~ '. Past the ' ~ docker_smoke_build_timeout_seconds ~ ' s timeout, its client ignored the'
+          ~ ' TERM on a dropped BuildKit session (#2722); sooner, something else killed it, most'
+          ~ ' often the OOM killer (journalctl -k).')
+         if _docker_smoke_build.rc == 137 else
          ('The smoke build failed with rc ' ~ _docker_smoke_build.rc ~ ': '
           ~ (_docker_smoke_build.stderr_lines | default([]))[-5:] | join(' | ')) }}
   when:

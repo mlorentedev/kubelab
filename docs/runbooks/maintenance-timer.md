@@ -83,8 +83,10 @@ The same run then smoke-builds an image on the new engine (`docker_smoke_build`,
 `docker_smoke_build_timeout_seconds`. Its step sleeps 20 s, past the 10 s in which the session
 dropped on 2026-10-27, when a provision moved Docker from 29.8.1 to 29.9.2 as a side effect
 and BuildKit sessions began dropping that morning. Read the failure before blaming the engine:
-rc 124 or 137 is a build that made no progress, the #2722 failure; any other rc quotes the
-build's own error. A failed smoke build leaves the new engine installed and held, so the runner
+rc 124 is a build that made no progress, the #2722 failure. rc 137 is a kill, and the message
+gives the time it took: past the timeout it is the same failure with a client that ignored the
+TERM, sooner it is something else, most often the OOM killer (`journalctl -k`). Any other rc
+quotes the build's own error. A failed smoke build leaves the new engine installed and held, so the runner
 builds on it until someone acts: record it on #2722.
 
 To run the check against the engine already installed, without moving any package:
