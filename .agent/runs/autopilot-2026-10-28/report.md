@@ -5,24 +5,26 @@ Verdict: in progress (armed 2026-10-28T03:25Z, expires 12:25Z).
 ## Waiting on you (irreversible first)
 
 - T1-T4 of the hard-reset test (B14), each followed by `make edge-boot-check`. The rpi4 second pass ran (ok=182 changed=1, the one change being apt's time-based cache refresh), and the plugged-in boot check passed 22/22 at 06:35.
-- The Beelink provision with `-e base_system_release_holds=true`, after #2756 lands. It is the deliberate Docker move #2722 asks for.
+- The Beelink provision with `EXTRA='base_system_release_holds=true'`: #2756 is on master. Run it after #2763 lands, so the same run smoke-builds on the new engine. It is the deliberate Docker move #2722 asks for.
 - #2759 (deb822 sources) lands after that Beelink provision, not before.
-- New names for you to confirm or rename (cheap follow-ups): the probe overrides `F2_WORK` and `F2_RESULT` and the verdict `F2_FIXTURE_UNREACHABLE` (#2760).
+- New names for you to confirm or rename (cheap follow-ups): the probe overrides `F2_WORK` and `F2_RESULT` and the verdict `F2_FIXTURE_UNREACHABLE` (#2760); the `docker` role's `docker_smoke_build`, `docker_smoke_build_image` and `docker_smoke_build_timeout_seconds` (#2763).
+- #2758: `make provision NODE=ace2 ENV=staging TAGS=dev_node` (no `CHECK`). It applies the role, so it is yours, and it tells check mode apart from time-dependent state.
 
 ## Parked
 
 - #2742 ANSIBLE-072: two forks on the issue (scope and rollout order); it changes the rpi4 and Beelink plays on your return list.
 - #2722, the runner job timeout: the value lives in `infra/config/values/**`, outside this run's write paths, and needs your number. The smoke build (option A, ruled 06:16) follows #2756.
-- #2758 ANSIBLE-074: the ace2 dry run with `TAGS=gh CHECK=1` hangs on the controller before connecting (no `ESTABLISH` after Gathering Facts at `-vvvv`). Being isolated: check mode or the tag.
+- #2758 ANSIBLE-074: the ace2 dry run hangs on the controller before connecting. The tag is ruled out: `TAGS=dev_node CHECK=1`, the tag of a run that completed, hangs at the same Gathering Facts (rc 124 at 600 s). Left: check mode, or state that changed since; the next discriminator applies the role (Waiting on you).
 
 ## Done but unmerged
 
-- #2749 #2733 recovery clears the failed notifier: CodeRabbit's lock race applied (e6a3bd33), CI running, then triage and land. #2757 follows it.
-- #2756 #2722 CI engine held across provisions: pr-agent's two test findings applied (42aebed3), CI running.
+- #2762 #2757 a recovery closes its incident whatever its age: CI and review running.
+- #2763 #2722 smoke build in the release run: CI and review running.
 - #2760 #2750 missing-fixture verdict: CI and review running.
+- #2761 NET-005 bring-up progress (B1 ticked, the rest recorded as partial): CI and review running.
 - #2759 #2737 deb822 sources: held for the Beelink provision.
 
-Landed this run: #2743, #2746, #2706, #2741, #2736, #2747 (05:34), #2748 (06:02), #2740 (06:03), #2752 (06:25).
+Landed this run: #2743, #2746, #2706, #2741, #2736, #2747 (05:34), #2748 (06:02), #2740 (06:03), #2752 (06:25), #2749 (06:52), #2756 (07:02).
 
 ## Ledger
 
@@ -57,10 +59,16 @@ Landed this run: #2743, #2746, #2706, #2741, #2736, #2747 (05:34), #2748 (06:02)
 | 06:25–06:35 | #2758 | `-vvvv`: the second play never connects; ace2 has no hung mount and passwordless sudo works | issuecomment-6462346657 |
 | 06:25–06:35 | #2750 | fixture recreated private; probe verdict `F2_FIXTURE_UNREACHABLE` for a 404 (mutant red); F2 on ace2: `F2_OK`, probe PR closed, branch gone | #2760 |
 | 06:35 | `make edge-boot-check VIA=tailnet` | 22/22 OK, rc 0, ruleset at 9.6s before networkd at 15.5s | read-only |
+| 06:35–06:40 | NET-005 B1-B14 reconcile | only B1 meets its criterion (ticked, `B1-EVIDENCE`); the rest recorded under "Bring-up progress" so `features.json` reads no step as proven | #2761 |
+| 06:40–06:50 | #2757 | the TTL binds failures only; a recovery closes its incident whatever its age (2 mutants red) | #2762 |
+| 06:50–06:52 | #2749 | triage posted (CodeRabbit both applied, pr-agent's two TTL findings to #2757), landed | issuecomment-6462577465 |
+| 06:45 | #2758 discriminator | `TAGS=dev_node CHECK=1` hangs at the same point: the tag is ruled out; correction posted | issuecomment-6462606265 |
+| 06:55–07:05 | #2722 smoke build | `docker` role builds `RUN sleep 20` under `timeout 180`, `cacheonly`, on in the Beelink play only with the release flag (5 mutants red) | #2763 |
+| 07:00–07:02 | #2756 | triage posted (two applied, two stale re-raises declined with evidence, hold ordering declined by design), landed | issuecomment-6462692294 |
 
 ## Budget
 
-Iterations: 9 / 14: (1) open-PR dispositions, #1021, node_maintenance comment, #2740 diagnosis; (2) #2744; (3) #2742 park and the land sweep; (4) ace2 PAT and #2692; (5) #2726; (6) #2722; (7) #2733 and the review follow-ups; (8) #2737; (9) #2750. Items: 14 / 17. No dollar figure exists for this run.
+Iterations: 12 / 14: (1) open-PR dispositions, #1021, node_maintenance comment, #2740 diagnosis; (2) #2744; (3) #2742 park and the land sweep; (4) ace2 PAT and #2692; (5) #2726; (6) #2722; (7) #2733 and the review follow-ups; (8) #2737; (9) #2750; (10) NET-005 reconcile; (11) #2757; (12) #2722 smoke build. Items: 16 / 17. No dollar figure exists for this run.
 
 ## Host suspend
 
