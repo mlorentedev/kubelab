@@ -1,0 +1,49 @@
+# Arming envelope for the 2026-10-28 run (operator training, ~9h). Committed on the run branch,
+# which is never pushed; the run reads only the committed copy. A PR touching this file is never merged.
+version: 1
+run_id: "autopilot-2026-10-28"
+armed_by: manu
+armed_at: 2026-10-28T03:25:00Z
+expires_at: 2026-10-28T12:25:00Z
+objective: >-
+  Land this session's open PRs under the grant, close the PAT rotation on ace2, and fix
+  #2744 and #2742 in their own fast-track specs and PRs, leaving prod and the edge untouched.
+scope:
+  write_paths:
+    - "toolkit/**"
+    - "tests/**"
+    - "infra/ansible/**"
+    - "docs/**"
+    - "specs/**"
+    - "Makefile"
+    - "CLAUDE.md"
+    - ".agent/runs/**"
+  frozen_paths: [".github/**", "infra/k8s/**", "harness/**", "infra/config/secrets/**", "**/AGENTS.md", ".agent/unattended.yml"]
+  max_files: 12
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make, poetry, pytest, toolkit, ssh]
+queue:
+  source: bitacora
+  filter: >-
+    open PRs #2741 #2743 #2740 #2736; ace2 PAT check (gh auth status, F2 probe) and the main
+    checkout's SOPS restore after the ace2 play exits; #1021 cross-link to #1102; the
+    node_maintenance defaults comment; then #2744 and #2742 (spec fast each); #2737 if time remains
+  max_items: 8
+budget:
+  max_iterations: 10
+  max_minutes_per_iteration: 45
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant
+  push: true
+  open_pr: true
+  advisor_tier: top
+# Operator rulings at arming (in chat, 2026-10-28):
+# - #2741 may be landed although it touches .github/dependabot.yml: the operator authorized it explicitly.
+# - #2740 and #2743 may be landed although they touch infra/config/secrets/*.enc.yaml: authorized at arming.
+#   This run writes no secrets file itself; both PRs already carry the operator-typed values.
+# - #2744 and #2742: /spec fast --issue N each, landed under the grant; a WIP refusal parks the item.
+# Never: prod deploys or provisions (rpi4's changed=0 pass and T1-T4 wait for the operator), live
+# netplan, uplink, hostapd, watchdog or Tailscale changes, `make setup-ansible`, merging .github/workflows,
+# release PRs, infra/k8s/**, #2706 or #2692, or touching other sessions' PRs (#2655 #2656 #2658).
+# The main checkout's SOPS files are restored only after the ace2 play exits AND each blob equals origin/master's.
