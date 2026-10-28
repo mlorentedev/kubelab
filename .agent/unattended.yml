@@ -29,10 +29,12 @@ queue:
     open PRs #2741 #2743 #2740 #2736, then #2692 (after #2741) and #2706; ace2 PAT check (gh auth status, F2 probe) and the main
     checkout's SOPS restore after the ace2 play exits; #1021 cross-link to #1102; the
     node_maintenance defaults comment; then #2744 and #2742 (spec fast each);
-    #2733 (A), #2726, #2722 (A plus a lower job timeout); #2737 if time remains
-  max_items: 13
+    #2733 (A), #2726, #2722 (A plus a lower job timeout); #2737 if time remains;
+    widened by the operator at 06:40Z: #2750 (A, recreate the fixture repository),
+    #2757 (A), #2722 smoke build (A, under the release flag)
+  max_items: 17
 budget:
-  max_iterations: 10
+  max_iterations: 14
   max_minutes_per_iteration: 45
   max_consecutive_failures: 2
 authority:
