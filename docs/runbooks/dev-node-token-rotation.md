@@ -10,7 +10,8 @@ owner: manu
 # Dev node token rotation (ace2)
 
 > Rotate the fine-grained GitHub PAT that gives the ace2 dev node its machine
-> identity. **Next due: 2026-12-27** (regenerated 2026-10-27 with a 60-day expiry).
+> identity. **Next due: 2026-12-27**, the expiry GitHub reports for the token
+> regenerated on 2026-10-28 (UTC) with a 60-day life.
 
 The token is the node's only credential: it serves both `gh` and git-over-HTTPS,
 so one rotation covers both. See ADR-058 (D1/D3) and the archived
@@ -36,11 +37,13 @@ not use this credential.
 
 ## Who is notified
 
-Nobody is paged. `make secrets-audit` asks GitHub for the expiry (the catalog
-marks the key `PROVIDER`) and prints it, so the date is read from the token
-rather than remembered. The **Next due** line above is the calendar copy. The
-short life is deliberate — see the spec's Risks section — and short enough that
-this runbook gets exercised several times a year.
+Nobody, automatically. This is a **calendar-driven** task: when you rotate, put
+the new **Next due** date in your calendar a week early, and update the line
+above. `make secrets-audit` reads the real expiry from GitHub (the catalog marks
+the key `PROVIDER`), so it confirms the date, but nothing runs it on a schedule,
+and until #2744 it prints this token red from the day it is issued. A red line
+there is not a reminder. The short life is deliberate — see the spec's Risks
+section — and short enough that this runbook gets exercised several times a year.
 
 ## Rotation
 
@@ -62,6 +65,10 @@ has run, so do not regenerate while an agent on ace2 is mid-push.
   month in the name only told two live tokens apart, and regenerating never
   leaves two.
 - **Expiry:** 60 or 90 days.
+
+Only if you mint a new token instead (a suspected exposure, or a token that no
+longer exists), also set the following, then do step 5:
+
 - **Repository access:** see *Reconsider the scope* below before choosing.
 - **Permissions:** Contents `RW`, Pull requests `RW`, Metadata `R` (forced),
   Checks `R`, Commit statuses `R`. **No** Workflows, **no** Issues, **no**
