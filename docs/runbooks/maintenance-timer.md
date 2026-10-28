@@ -171,7 +171,9 @@ with a 5s delay, so the unit failing means roughly 4 attempts over ~30s all
 failed, not one unlucky packet. Two consequences when reading its journal:
 
 - The unit legitimately takes tens of seconds against an unreachable n8n. It
-  is not hung; `TimeoutStartSec=45` is the real ceiling.
+  is not hung; `TimeoutStartSec=90` is the real ceiling. It may also first wait
+  up to 40s for the unit's lock while another notice of the same unit is
+  delivered, so a recovery never overtakes its own failure page (#2733).
 - The retry lives in `curl`, **not** as `Restart=` on the unit. If you add
   `Restart=` you get both, and systemd will re-run the whole script — journal
   read and payload encode included — to retry one HTTP request. The rationale

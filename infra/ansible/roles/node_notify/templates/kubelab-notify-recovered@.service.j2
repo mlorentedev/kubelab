@@ -8,6 +8,7 @@ Description=KubeLab recovery notification for %i (#2423)
 [Service]
 Type=oneshot
 ExecStart={{ node_notify_script_path }} --recovered %i
-TimeoutStartSec=45
+# The same budget as the failure notifier, whose page it may wait for.
+TimeoutStartSec={{ node_notify_timeout_seconds }}
 StandardOutput=journal
 StandardError=journal

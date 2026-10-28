@@ -109,6 +109,16 @@ UNIT_RESULT="$(systemctl show -p Result "$UNIT" 2>/dev/null | cut -d= -f2 || tru
 # measured from a `last` of 0, an incident whose first page n8n refused read as
 # stale at once, so its recovery was never sent.
 STATE_FILE="{{ node_notify_state_dir }}/${UNIT}"
+# One lock per unit, held from this read to the write at the end (#2733). A
+# recovery that overtook a page still in flight would close the incident before
+# the page landed, and the page would then reopen it. A waiter sits behind at
+# most one delivery, which the units' timeout allows for. Past the wait it goes
+# on without the lock: a late page beats a lost one, and failing here would
+# leave a failed notifier of its own.
+install -d -m 0700 "{{ node_notify_state_dir }}"
+exec 9>"$STATE_FILE.lock"
+flock -w {{ node_notify_lock_wait_seconds }} 9 \
+  || echo "went on without the lock on $STATE_FILE after {{ node_notify_lock_wait_seconds }}s" >&2
 NOW="$(date +%s)"
 COUNT=0
 FIRST="$NOW"
@@ -138,7 +148,6 @@ elif [ -n "$UNIT_RESULT" ] && [ "$UNIT_RESULT" != success ]; then
   # The count is recorded before the send, the delivery time only after it: a
   # page that never arrived must not silence the next one, and while none of
   # this incident has arrived, the next one is still its first page.
-  install -d -m 0700 "{{ node_notify_state_dir }}"
   printf '%s %s %s\n' "$COUNT" "$FIRST" "$LAST" > "$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
   if [ "$LAST" -eq 0 ]; then
     KIND=first
@@ -252,8 +261,8 @@ TOKEN_ESC=${TOKEN_ESC//\"/\\\"}
 # entire job is to report promptly". A single attempt is not the reliability
 # budget here -- there are four of them (--retry 3), so a genuinely slow n8n is
 # covered by retrying rather than by waiting longer on the first try, and the
-# operator learns sooner when it is unreachable. Both pairs fit under
-# TimeoutStartSec=45 (30s worst case here, 35s at 10/15), so this is a choice
+# operator learns sooner when it is unreachable. Both pairs fit under the
+# unit's timeout (30s worst case here, 35s at 10/15), so this is a choice
 # within the budget, not a constraint imposed by it. Settled when #1088 closed;
 # recorded here because a reviewer re-raised it, correctly, from a comment that
 # explained the retry arithmetic and not this.
@@ -272,7 +281,7 @@ TOKEN_ESC=${TOKEN_ESC//\"/\\\"}
 # mid-flight -- i.e. adding a retry naively would have turned a clean failure
 # into a truncated one. --retry-max-time 20 stops curl starting a NEW attempt
 # after 20s, so worst case is 20s + one final --max-time 10 attempt = 30s,
-# under the unit's TimeoutStartSec=45.
+# under the unit's TimeoutStartSec less the lock wait above.
 printf 'header = "Authorization: Bearer %s"\n' "$TOKEN_ESC" | curl -sS -f --config - \
   --connect-timeout 5 --max-time 10 \
   --retry 3 --retry-delay 5 --retry-connrefused --retry-max-time 20 \

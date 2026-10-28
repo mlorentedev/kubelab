@@ -64,6 +64,13 @@ node_notify_severity: log
 node_notify_state_dir: /var/lib/kubelab-notify
 node_notify_reminder_seconds: 3600
 node_notify_state_ttl_seconds: 21600
+# A unit's failure and recovery notices take one lock (#2733), so a recovery
+# waits for a page still in flight instead of overtaking it. The wait outlasts
+# one whole delivery (curl's worst case is 30s), and both notifier units' timeout
+# holds that wait plus their own delivery. tests/test_node_notify_role.py
+# asserts both.
+node_notify_lock_wait_seconds: 40
+node_notify_timeout_seconds: 90
 node_notify_recovered_unit_name: "kubelab-notify-recovered@.service"
 
 # What this role supersedes is removed by `node_maintenance`, right after the

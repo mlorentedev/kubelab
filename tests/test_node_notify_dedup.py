@@ -7,11 +7,16 @@ test counts the requests the script makes, never the text that describes them.
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
+import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -27,7 +32,7 @@ TTL = int(_defaults()["node_notify_state_ttl_seconds"])  # type: ignore[call-ove
 class Node:
     """A scratch directory standing in for one node: the rendered script, its state and its shims."""
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, **render: object) -> None:
         self.root = root
         self.state = root / "state"
         self.sent = root / "sent.jsonl"
@@ -43,6 +48,7 @@ class Node:
             "kubelab-notify.sh.j2",
             node_notify_secret_file=str(root / "secret"),
             node_notify_state_dir=str(self.state),
+            **render,
         )
         self.script = root / "notify.sh"
         self.script.write_text(script)
@@ -77,8 +83,8 @@ class Node:
     def set_result(self, value: str) -> None:
         self.result.write_text(value)
 
-    def run(self, *args: str, unit: str = UNIT) -> subprocess.CompletedProcess[str]:
-        env = {
+    def _env(self) -> dict[str, str]:
+        return {
             **os.environ,
             "PATH": f"{self.root / 'bin'}:{os.environ['PATH']}",
             "NODE_RESULT": str(self.result),
@@ -88,9 +94,29 @@ class Node:
             "NODE_RESET_EXIT": str(self.reset_exit),
             "NODE_ENVIRONMENT": str(self.environment),
         }
+
+    def run(self, *args: str, unit: str = UNIT) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            ["bash", str(self.script), *args, unit], capture_output=True, text=True, env=env, timeout=60
+            ["bash", str(self.script), *args, unit], capture_output=True, text=True, env=self._env(), timeout=60
         )
+
+    def start(self, *args: str, unit: str = UNIT) -> subprocess.Popen[str]:
+        """The script in the background, as systemd starts a second notice while the first is still out."""
+        return subprocess.Popen(
+            ["bash", str(self.script), *args, unit],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=self._env(),
+        )
+
+    @contextmanager
+    def locked(self, unit: str = UNIT) -> Iterator[None]:
+        """Hold the unit's lock, as a notice of it does while its page is out."""
+        self.state.mkdir(exist_ok=True)
+        with open(self.state / f"{unit}.lock", "w") as handle:
+            fcntl.flock(handle, fcntl.LOCK_EX)
+            yield
 
     def envelopes(self) -> list[dict[str, Any]]:
         if not self.sent.exists():
@@ -107,10 +133,22 @@ class Node:
         return [line.split()[-1] for line in self.systemctl.read_text().splitlines() if line.startswith("reset-failed")]
 
     def age_state(self, seconds: int, unit: str = UNIT) -> None:
-        """Pretend the last page went out `seconds` ago, and the incident began at least that long ago."""
-        path = self.state / unit
-        count, first, last = path.read_text().split()
-        path.write_text(f"{count} {int(first) - seconds} {int(last) - seconds}\n")
+        """Pretend the incident began `seconds` ago, and so did its last page, if one was delivered.
+
+        A `last` of 0 means none was, and stays 0: aged, it would turn negative,
+        which the script reads as a corrupt state and drops.
+        """
+        self.write_state(*self.read_state(unit), unit=unit, first_ago=seconds, last_ago=seconds)
+
+    def read_state(self, unit: str = UNIT) -> tuple[int, int, int]:
+        count, first, last = (self.state / unit).read_text().split()
+        return int(count), int(first), int(last)
+
+    def write_state(
+        self, count: int, first: int, last: int, *, first_ago: int = 0, last_ago: int = 0, unit: str = UNIT
+    ) -> None:
+        self.state.mkdir(exist_ok=True)
+        (self.state / unit).write_text(f"{count} {first - first_ago} {last - last_ago if last else 0}\n")
 
 
 @pytest.fixture
@@ -166,8 +204,11 @@ def test_a_success_after_failures_sends_one_recovery_and_clears_the_state(node: 
     assert "failed" in node.titles()[-1] and len(node.titles()) == 3, "a new incident pages again"
 
 
-# The failure notifier for UNIT, as `OnFailure=kubelab-notify@%n.service` names it.
-NOTIFIER = f"kubelab-notify@{UNIT}.service"
+# The failure notifier for UNIT, read from the consumers' own `OnFailure=` line rather
+# than rebuilt by the formula the script uses, so the two cannot agree by construction.
+_ON_FAILURE = re.search(r"^OnFailure=(\S+)$", _render("kubelab-maintenance.service.j2"), re.MULTILINE)
+assert _ON_FAILURE, "the maintenance unit no longer declares OnFailure="
+NOTIFIER = _ON_FAILURE.group(1).replace("%n", UNIT)
 
 
 def test_a_delivered_recovery_clears_the_failed_page_of_its_incident(node: Node) -> None:
@@ -217,7 +258,70 @@ def test_a_reset_systemd_refuses_does_not_fail_a_delivered_recovery(node: Node) 
     node.set_result("success")
     node.reset_exit.write_text("1")
     assert node.run("--recovered").returncode == 0
+    assert node.resets() == [NOTIFIER], "the reset was never attempted"
     assert not (node.state / UNIT).exists()
+
+
+def test_an_undelivered_incident_ages_from_its_first_failure(node: Node) -> None:
+    """#2733: measured from a `last` of 0, an incident whose only page was refused read as stale at once."""
+    node.curl_exit.write_text("22")
+    node.run()
+    node.curl_exit.write_text("0")
+    node.age_state(REMINDER + 5)
+    node.set_result("success")
+    assert node.run("--recovered").returncode == 0
+    assert "recovered" in node.titles()[-1], "an incident within its TTL lost its recovery"
+    assert node.resets() == [NOTIFIER]
+
+
+def test_an_undelivered_incident_past_its_ttl_is_dropped(node: Node) -> None:
+    node.curl_exit.write_text("22")
+    node.run()
+    node.curl_exit.write_text("0")
+    node.age_state(TTL + 5)
+    node.set_result("success")
+    assert node.run("--recovered").returncode == 0
+    assert len(node.titles()) == 1, "a recovery went out for an incident past its TTL"
+    assert node.resets() == []
+
+
+def test_a_long_incident_reminded_recently_is_not_stale(node: Node) -> None:
+    """Its age runs from the last delivered page, not from the first failure."""
+    node.run()
+    node.write_state(*node.read_state(), first_ago=TTL + 5, last_ago=REMINDER + 5)
+    node.run()
+    assert "still failing" in node.titles()[-1], node.titles()
+
+
+def test_a_recovery_waits_for_a_page_still_in_flight(node: Node) -> None:
+    """#2733: a recovery that overtook the page would close the incident before the page landed.
+
+    The failure notice records the count, then sends, then records the delivery,
+    all under the unit's lock. The test holds that lock in its place.
+    """
+    node.write_state(1, int(time.time()), 0)
+    node.set_result("success")
+    with node.locked():
+        recovery = node.start("--recovered")
+        time.sleep(0.5)
+        assert node.titles() == [], "the recovery did not wait for the page in flight"
+        # The page lands, a second failure with it, and the notice records the delivery.
+        node.write_state(2, node.read_state()[1], int(time.time()))
+    assert recovery.wait(timeout=30) == 0, recovery.stderr.read() if recovery.stderr else ""
+    [title] = node.titles()
+    assert "recovered" in title and "2" in title, f"the recovery read the state before the lock: {title}"
+    assert not (node.state / UNIT).exists()
+    assert node.resets() == [NOTIFIER]
+
+
+def test_a_notice_whose_lock_is_held_past_the_wait_still_goes_out(tmp_path: Path) -> None:
+    """A late page beats a lost one, and failing here would leave a failed notifier of its own."""
+    node = Node(tmp_path, node_notify_lock_wait_seconds=1)
+    with node.locked():
+        result = node.run()
+    assert result.returncode == 0, result.stderr
+    assert "failed" in node.titles()[0]
+    assert "without the lock" in result.stderr
 
 
 def test_a_hand_run_of_the_recovery_mode_while_the_unit_fails_closes_nothing(node: Node) -> None:
