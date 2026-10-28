@@ -14,8 +14,8 @@ tags: [kubelab, toolkit-tooling, pytest, monkeypatch, settings, ci]
 failures. Each failure raised `'PlatformSettings' object has no attribute
 'project_root'`. Master had been green the day before.
 
-**Problem**: `poetry.lock` is gitignored, so CI resolved pytest 9.2.0, released that
-day. In 9.2, `monkeypatch.setattr` on an instance takes the value to restore from
+**Problem**: `poetry.lock` is gitignored, so CI resolved pytest 9.2.0, uploaded to
+PyPI at 21:30 UTC the evening before. In 9.2, `monkeypatch.setattr` on an instance takes the value to restore from
 the target's `__dict__`. If the name is not there, the undo uses `delattr` instead of
 `setattr` (pytest #10644). The toolkit's `settings` is a `_LazySettings` proxy. Reads,
 writes and deletes go to the real `PlatformSettings`, but its own `__dict__` holds
