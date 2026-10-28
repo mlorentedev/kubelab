@@ -118,8 +118,15 @@ class SecretSpec:
     # Defaults to UNKNOWN so a new entry surfaces as unclassified rather than
     # being quietly assumed immortal.
     expiry: Expiry = Expiry.UNKNOWN
+    # How many days before expiry the reports turn this credential red (TOOL-126,
+    # #2744). None takes the report's window, 90 days by default. A credential
+    # whose whole life is 90 days or less needs its own, or it is red from the day
+    # it is issued and the column stops being read.
+    warn_days: int | None = None
 
     def __post_init__(self) -> None:
+        if self.warn_days is not None and self.warn_days <= 0:
+            raise ValueError(f"{self.key_path}: warn_days must be a positive number of days, got {self.warn_days}")
         # A username is not a secret, and an entry the toolkit mints is one
         # `credentials generate` and `rotate` may rewrite: on 2026-08-23 rotating
         # `basic_auth.user` renamed Gitea's only admin. Identities live in
@@ -1399,7 +1406,9 @@ SECRET_CATALOG: list[SecretSpec] = [
         description="Cloudflare account API token, Account API Tokens: Edit (mints the backup R2 tokens)",
         kind=SecretKind.EXTERNAL,
         services=("toolkit",),
+        format_hint="Cloudflare account API token with a TTL, 90d expiry",
         envs=("prod",),
+        warn_days=14,
         rotate_note=(
             "Create a new account token (Account API Tokens: Edit, with a TTL) in the Cloudflare "
             "dashboard, `toolkit secrets set` it in common, revoke the old one. Nothing deployed reads it."
@@ -1603,13 +1612,16 @@ SECRET_CATALOG: list[SecretSpec] = [
         description="Fine-grained GitHub PAT giving the ace2 dev node its own machine identity (gh + git over HTTPS)",
         kind=SecretKind.EXTERNAL,
         services=("dev-node",),
-        format_hint="fine-grained PAT (github_pat_…), contents+pull-requests write, checks+statuses read, 90d expiry",
+        format_hint=(
+            "fine-grained PAT (github_pat_…), contents+pull-requests write, checks+statuses read, 60d or 90d expiry"
+        ),
         rotate_note=(
             "EXPIRES — see docs/runbooks/dev-node-token-rotation.md. Mint a replacement, "
             "`toolkit secrets set` it in common.enc.yaml, `make provision NODE=ace2 ENV=staging "
             "TAGS=dev_node`, then revoke the old one."
         ),
         envs=("staging",),
+        warn_days=14,
     ),
     # Apprise notification gateway (NOTIFY-001, ADR-044). Promoted to staging+prod.
     # bot-token is shared (common SOPS); chat IDs are per-env (dedicated Telegram
