@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 645 | [A hold scoped to the maintenance timer leaves every provision free to upgrade](lesson-645-a-hold-scoped-to-the-maintenance-timer-leaves-every-provision-free-to-upgrade.md) | 2026-10-28 |
 | 642 | [A version floor in `requirements.yml` never upgrades a controller](lesson-642-a-version-floor-never-upgrades-a-controller.md) | 2026-10-28 |
 | 640 | [A guard that pairs two roles by tag says nothing about which runs first](lesson-640-a-guard-that-pairs-two-roles-by-tag-says-nothing-about-which-runs-first.md) | 2026-10-27 |
 | 638 | [A guard scoped to one stack leaves its defect open in every other role](lesson-638-a-guard-scoped-to-one-stack-leaves-its-defect-open-in-every-other-role.md) | 2026-10-27 |
