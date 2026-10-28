@@ -16,8 +16,8 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-import yaml
 import typer
+import yaml
 
 from toolkit.cli import infra
 from toolkit.features import generator_ansible
