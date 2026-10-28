@@ -7,8 +7,10 @@
 # Runs ON ace2, detached inside tmux. Writes its verdict to $RESULT so the
 # caller never has to parse output:
 #   F2_OK   — the full flow succeeded
-#   F2_FAIL — anything failed (the trap writes this, so a failure is immediate
-#             rather than costing the caller its whole poll window)
+#   F2_FIXTURE_UNREACHABLE — the fixture answers 404 (see 1a)
+#   F2_FIXTURE_ARCHIVED    — the fixture is read-only (see 1b)
+#   F2_FAIL — anything else failed (the trap writes this, so a failure is
+#             immediate rather than costing the caller its whole poll window)
 #
 # Lives in the spec folder, not scripts/: it is the acceptance criterion, not
 # product code. Inline in features.json it would need three quoting layers
@@ -23,8 +25,9 @@ set -euo pipefail
 # permanent fixture, it also makes this probe the re-verification step after
 # each token rotation (docs/runbooks/dev-node-token-rotation.md).
 REPO="mlorentedev/kubelab-devnode-fixture"
-WORK="/tmp/ansible-033-f2"
-RESULT="/tmp/ansible-033-f2.result"
+# Overridable so the verdicts can be tested off the node.
+WORK="${F2_WORK:-/tmp/ansible-033-f2}"
+RESULT="${F2_RESULT:-/tmp/ansible-033-f2.result}"
 BRANCH="acceptance/ansible-033-$(date +%s)"
 PR_URL=""
 
@@ -48,6 +51,21 @@ trap cleanup EXIT
 
 rm -rf "$WORK"
 rm -f "$RESULT"
+
+# 1a. The fixture must be there. A 404 has two causes this token cannot tell
+#     apart: the repository is gone (measured 2026-10-28, #2750), or the token's
+#     repository access excludes it. Either way the generic F2_FAIL would send you
+#     rotating a token that may be fine; read the repository with the owner's
+#     own token to tell which. Any other failure stays F2_FAIL.
+if ! lookup="$(gh api "repos/${REPO}" --silent 2>&1)"; then
+    case "$lookup" in
+        *"HTTP 404"*)
+            echo "F2_FIXTURE_UNREACHABLE" >"$RESULT"
+            echo "fixture ${REPO} answers 404: it is gone, or this token's repository access excludes it" >&2
+            ;;
+    esac
+    exit 1
+fi
 
 # 1. The fixture must actually be private, and the token must be able to see it.
 #    Guards against the criterion silently weakening if the repo is ever made
