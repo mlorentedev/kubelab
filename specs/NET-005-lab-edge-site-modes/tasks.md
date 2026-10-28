@@ -245,7 +245,9 @@ This PR loads the drops before any uplink exists. `iifname` matches a name, so r
 
 Run at the temporary site in this order, after the PR each step needs. Every result goes into `verification.md`. Each step's result goes under a `### B<n>-EVIDENCE` heading there, because that heading is what the live part of a `features.json` verification looks for.
 
-- [ ] B1. [AC1] Human step 1: the dongle moves to the RPi4, on a USB 2.0 port with an extension cable.
+A step gets that heading only once every part of its criterion is observed. Partial results go under "Bring-up progress" in `verification.md`, which names what each open step still lacks.
+
+- [x] (✓ 2026-10-26) B1. [AC1] Human step 1: the dongle moves to the RPi4, on a USB 2.0 port with an extension cable.
 - [ ] B2. [AC1] [AC3] Provision over the LAN with `BOOTSTRAP=1`, through PR 4. The journal shows `inet kubelab` loaded before `uplink0` came up. Then, with the drops still loaded, `networkctl renew uplink0` renews the lease: the journal shows the renewed DHCPv4 lease on `uplink0`, and the B2 evidence records it (AC1).
 - [ ] B3. [AC5] **DNS gate.** Before any login, `make edge-status` reports whether a public resolver and the lease's resolver answer. It decides task 31.
 - [ ] B4. [AC5] Human step 2: the portal login, from the laptop on the switch with `make edge-lan-link ROUTE=1` and its own Wi-Fi off. Then the uplink's MAC is reported identical after a reboot and a re-provision, by `make edge-status`, before anything is paid.
