@@ -33,6 +33,8 @@ class Node:
         self.sent = root / "sent.jsonl"
         self.result = root / "result"
         self.curl_exit = root / "curl-exit"
+        self.systemctl = root / "systemctl.log"
+        self.reset_exit = root / "reset-exit"
         self.environment = root / "environment"
         (root / "bin").mkdir()
         self.environment.mkdir()
@@ -46,10 +48,12 @@ class Node:
         self.script.write_text(script)
         self.script.chmod(0o700)
         # `systemctl show -p <property> <unit>`: the unit's last result, or the
-        # Environment= its unit file declares.
+        # Environment= its unit file declares. Every call is logged, so a test
+        # can see what the script asked systemd to do.
         self._shim(
             "systemctl",
-            'case "$*" in'
+            'printf "%s\\n" "$*" >> "$NODE_SYSTEMCTL"; case "$*" in'
+            ' reset-failed*) exit "$(cat "$NODE_RESET_EXIT" 2>/dev/null || echo 0)" ;;'
             ' *Environment*) printf "Environment=%s\\n" "$(cat "$NODE_ENVIRONMENT/${@: -1}" 2>/dev/null)" ;;'
             ' *) printf "Result=%s\\n" "$(cat "$NODE_RESULT")" ;; esac',
         )
@@ -80,6 +84,8 @@ class Node:
             "NODE_RESULT": str(self.result),
             "NODE_SENT": str(self.sent),
             "NODE_CURL_EXIT": str(self.curl_exit),
+            "NODE_SYSTEMCTL": str(self.systemctl),
+            "NODE_RESET_EXIT": str(self.reset_exit),
             "NODE_ENVIRONMENT": str(self.environment),
         }
         return subprocess.run(
@@ -94,11 +100,17 @@ class Node:
     def titles(self) -> list[str]:
         return [envelope["title"] for envelope in self.envelopes()]
 
+    def resets(self) -> list[str]:
+        """The units the script asked systemd to clear the failed state of."""
+        if not self.systemctl.exists():
+            return []
+        return [line.split()[-1] for line in self.systemctl.read_text().splitlines() if line.startswith("reset-failed")]
+
     def age_state(self, seconds: int, unit: str = UNIT) -> None:
-        """Pretend the last page went out `seconds` ago."""
+        """Pretend the last page went out `seconds` ago, and the incident began at least that long ago."""
         path = self.state / unit
         count, first, last = path.read_text().split()
-        path.write_text(f"{count} {first} {int(last) - seconds}\n")
+        path.write_text(f"{count} {int(first) - seconds} {int(last) - seconds}\n")
 
 
 @pytest.fixture
@@ -152,6 +164,60 @@ def test_a_success_after_failures_sends_one_recovery_and_clears_the_state(node: 
     node.set_result("exit-code")
     node.run()
     assert "failed" in node.titles()[-1] and len(node.titles()) == 3, "a new incident pages again"
+
+
+# The failure notifier for UNIT, as `OnFailure=kubelab-notify@%n.service` names it.
+NOTIFIER = f"kubelab-notify@{UNIT}.service"
+
+
+def test_a_delivered_recovery_clears_the_failed_page_of_its_incident(node: Node) -> None:
+    """#2733: a page n8n refused leaves its notifier failed, and nothing else ever runs it again.
+
+    The next failure of the unit would restart the same instance and replace its
+    result, but a recovered unit does not fail again, so the failed notifier
+    outlived the incident it reported, on `systemctl --failed` and in Glances.
+    """
+    node.curl_exit.write_text("22")
+    node.run()
+    node.curl_exit.write_text("0")
+    node.set_result("success")
+    assert node.run("--recovered").returncode == 0
+    assert "recovered" in node.titles()[-1], "the recovery of an incident whose page was refused was not sent"
+    assert node.resets() == [NOTIFIER]
+
+
+def test_the_next_failure_after_a_refused_first_page_is_still_the_first_page(node: Node) -> None:
+    """`still failing (2 failures since the first page)` would name a page nobody received."""
+    node.curl_exit.write_text("22")
+    node.run()
+    node.curl_exit.write_text("0")
+    node.run()
+    [title] = node.titles()[1:]
+    assert "failed" in title and "still failing" not in title, title
+
+
+def test_an_undelivered_recovery_leaves_the_failed_page_in_place(node: Node) -> None:
+    """The operator has heard of neither the failure nor the recovery: the failed state is the only trace."""
+    node.run()
+    node.set_result("success")
+    node.curl_exit.write_text("22")
+    assert node.run("--recovered").returncode != 0
+    assert node.resets() == []
+
+
+def test_a_healthy_run_with_no_incident_resets_nothing(node: Node) -> None:
+    node.set_result("success")
+    node.run("--recovered")
+    assert node.resets() == []
+
+
+def test_a_reset_systemd_refuses_does_not_fail_a_delivered_recovery(node: Node) -> None:
+    """The recovery reached the phone; failing here would leave a new failed unit for a closed incident."""
+    node.run()
+    node.set_result("success")
+    node.reset_exit.write_text("1")
+    assert node.run("--recovered").returncode == 0
+    assert not (node.state / UNIT).exists()
 
 
 def test_a_hand_run_of_the_recovery_mode_while_the_unit_fails_closes_nothing(node: Node) -> None:
