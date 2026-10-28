@@ -80,25 +80,6 @@ TOKEN="$(cat {{ node_notify_secret_file }})"
 BODY_TAIL="$(journalctl -b -u "$UNIT" -n {{ node_notify_journal_lines }} --no-pager 2>/dev/null \
   | tail -c {{ node_notify_body_bytes }})"
 
-# The unit's ACTUAL last result, so the title can state what is true rather than
-# assume that this script running means something failed.
-#
-# It does not. `OnFailure=` is one caller; `systemctl start kubelab-notify@X` by
-# hand is another, and that is exactly what the delivery test does. Before this,
-# the test posted "X failed on <node>" with a body showing X's last run --
-# which, the test being run on a healthy fleet, was a SUCCESS. Measured
-# 2026-08-21: an envelope titled "node-backup-ship.service failed on rpi3"
-# carrying `ship complete` and `Deactivated successfully` reached the operator's
-# phone at 08:00. A channel that cries failure over a healthy backup teaches
-# people to skim it, which is the exact indifference this whole path exists to
-# prevent.
-#
-# `| cut` rather than `--value`, which is systemd >= 230: this fleet is well
-# past that, but the parse costs nothing and the script also runs on the Jetson
-# class of node. `|| true` because `set -e` is active and an unknown unit is a
-# legitimate state here -- it yields an empty result and the neutral wording.
-UNIT_RESULT="$(systemctl show -p Result "$UNIT" 2>/dev/null | cut -d= -f2 || true)"
-
 # Incident state: `<count> <first> <last>` (failures since the first page, epoch of the
 # first, epoch of the last page that was delivered). The unit name is already
 # restricted to the characters a unit name can hold, so it is a safe file name.
@@ -119,6 +100,29 @@ install -d -m 0700 "{{ node_notify_state_dir }}"
 exec 9>"$STATE_FILE.lock"
 flock -w {{ node_notify_lock_wait_seconds }} 9 \
   || echo "went on without the lock on $STATE_FILE after {{ node_notify_lock_wait_seconds }}s" >&2
+
+# The unit's ACTUAL last result, so the title can state what is true rather than
+# assume that this script running means something failed.
+#
+# It does not. `OnFailure=` is one caller; `systemctl start kubelab-notify@X` by
+# hand is another, and that is exactly what the delivery test does. Before this,
+# the test posted "X failed on <node>" with a body showing X's last run --
+# which, the test being run on a healthy fleet, was a SUCCESS. Measured
+# 2026-08-21: an envelope titled "node-backup-ship.service failed on rpi3"
+# carrying `ship complete` and `Deactivated successfully` reached the operator's
+# phone at 08:00. A channel that cries failure over a healthy backup teaches
+# people to skim it, which is the exact indifference this whole path exists to
+# prevent.
+#
+# `| cut` rather than `--value`, which is systemd >= 230: this fleet is well
+# past that, but the parse costs nothing and the script also runs on the Jetson
+# class of node. `|| true` because `set -e` is active and an unknown unit is a
+# legitimate state here -- it yields an empty result and the neutral wording.
+#
+# Read under the lock: a recovery that waited behind a page reads the result the
+# unit has now, not the success it had before failing again while it waited.
+UNIT_RESULT="$(systemctl show -p Result "$UNIT" 2>/dev/null | cut -d= -f2 || true)"
+
 NOW="$(date +%s)"
 COUNT=0
 FIRST="$NOW"

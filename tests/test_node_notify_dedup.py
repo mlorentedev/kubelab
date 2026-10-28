@@ -332,6 +332,21 @@ def test_a_recovery_waits_for_a_page_still_in_flight(node: Node) -> None:
     assert node.resets() == [NOTIFIER]
 
 
+def test_a_recovery_that_waited_reads_the_result_the_unit_has_now(node: Node) -> None:
+    """The unit failed again while the recovery waited: it must not close the new incident."""
+    node.write_state(1, int(time.time()), 0)
+    node.set_result("success")
+    with node.locked():
+        recovery = node.start("--recovered")
+        time.sleep(0.5)
+        node.set_result("exit-code")
+        node.write_state(2, node.read_state()[1], int(time.time()))
+    assert recovery.wait(timeout=30) == 0, recovery.stderr.read() if recovery.stderr else ""
+    assert not any("recovered" in t for t in node.titles()), node.titles()
+    assert (node.state / UNIT).exists(), "a recovery read before the lock closed an open incident"
+    assert node.resets() == []
+
+
 def test_a_notice_whose_lock_is_held_past_the_wait_still_goes_out(tmp_path: Path) -> None:
     """A late page beats a lost one, and failing here would leave a failed notifier of its own."""
     node = Node(tmp_path, node_notify_lock_wait_seconds=1)
