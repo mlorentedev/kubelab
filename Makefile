@@ -55,7 +55,7 @@ help:
 	@echo ""
 	@echo "Infrastructure (Ansible):"
 	@echo "  make provision NODE=x ENV=y  Provision a node (NODE=ace1|ace2|aws1|bee|rpi3|rpi4|jetson|vps, ENV=staging|prod|hub) [TAGS=tag1,tag2] [EXTRA='k=v']"
-	@echo "  make maintain NODE=x         Disk cleanup (NODE=aws1|ace1|ace2|beelink|vps|all) [TIMER=1] [TAGS=tag1,tag2]"
+	@echo "  make maintain NODE=x         Disk cleanup (NODE=gcp1|ace1|ace2|beelink|vps|rpi3|rpi4|all) [TIMER=1] [TAGS=tag1,tag2]"
 	@echo "  make reboot NODE=x ENV=y     Reboot a node only if it has a pending reboot, one host at a time [EXTRA='reboot_force=true reboot_allow_vps=true'] [CHECK=1]"
 	@echo "  make node-reclaim NODE=x     Remove orphaned buildx builders + CI job volumes over SSH [APPLY=1] (works at 0 bytes free, where Ansible cannot)"
 	@echo "  make deploy TARGET=x ENV=y  Deploy services (TARGET=vps|dns|k3s|harden-nodes)"
@@ -1065,7 +1065,7 @@ provision:
 
 .PHONY: maintain
 maintain:
-	@test -n "$(NODE)" || (echo "Usage: make maintain NODE=aws1|ace1|ace2|beelink|vps|rpi3|rpi4|all [TIMER=1] [TAGS=tag1,tag2] [CHECK=1]" && exit 1)
+	@test -n "$(NODE)" || (echo "Usage: make maintain NODE=gcp1|ace1|ace2|beelink|vps|rpi3|rpi4|all [TIMER=1] [TAGS=tag1,tag2] [CHECK=1]" && exit 1)
 	$(eval _ENV := $(or $(filter staging prod,$(ENV)),staging))
 	$(eval _TIMER := $(if $(TIMER),--extra-vars "install_timer=true",))
 	$(eval _TAGS := $(if $(TAGS),--tags $(TAGS),))
@@ -1126,7 +1126,7 @@ node-reclaim: ## Remove orphaned buildx builders and CI job volumes over SSH (AP
 # documented and unreachable.
 .PHONY: maintain-notify-test
 maintain-notify-test:
-	@test -n "$(NODE)" || (echo "Usage: make maintain-notify-test NODE=aws1|ace1|ace2|beelink|vps|rpi3|rpi4|all [ENV=staging|prod|hub] [EXTRA='notify_test_unit=<unit>']" && exit 1)
+	@test -n "$(NODE)" || (echo "Usage: make maintain-notify-test NODE=gcp1|ace1|ace2|beelink|vps|rpi3|rpi4|all [ENV=staging|prod|hub] [EXTRA='notify_test_unit=<unit>']" && exit 1)
 	$(eval _ENV := $(or $(filter staging prod hub,$(ENV)),staging))
 	$(eval _EXTRA := $(if $(EXTRA),--extra-vars "$(EXTRA)",))
 	@if [ "$(NODE)" = "all" ]; then \
