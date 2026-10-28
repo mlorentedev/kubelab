@@ -107,3 +107,9 @@ def test_both_measured_credentials_state_their_life() -> None:
     for key in (_OWN_LEAD, "cloudflare.r2_token_minter"):
         spec = next(s for s in SECRET_CATALOG if s.key_path == key)
         assert any(n <= 90 for n in _stated_lives(spec)), key
+
+
+def test_the_argo_cd_status_token_states_its_life() -> None:
+    """Red at 83 days left on 2026-10-28, a week after #2594 minted it with GitHub's 90-day expiry."""
+    spec = next(s for s in SECRET_CATALOG if s.key_path == "argocd.github_status_token")
+    assert any(n <= 90 for n in _stated_lives(spec))

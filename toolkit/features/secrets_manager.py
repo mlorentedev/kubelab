@@ -1233,7 +1233,7 @@ SECRET_CATALOG: list[SecretSpec] = [
         description="Fine-grained GitHub PAT, Commit statuses write on kubelab only (Argo CD notifications)",
         kind=SecretKind.EXTERNAL,
         services=("argocd",),
-        format_hint="fine-grained PAT (github_pat_…), statuses:write on kubelab, expiry set",
+        format_hint="fine-grained PAT (github_pat_…), statuses:write on kubelab, 90d expiry",
         rotate_note=(
             "Mint a new fine-grained token (Settings > Developer settings > Fine-grained tokens), "
             "repository access `mlorentedev/kubelab` only, Commit statuses: Read and write. "
@@ -1241,6 +1241,7 @@ SECRET_CATALOG: list[SecretSpec] = [
             "then `make deploy-argocd`, then revoke the old one."
         ),
         envs=("prod",),
+        warn_days=14,
     ),
     SecretSpec(
         key_path="argocd.github_webhook_secret",
