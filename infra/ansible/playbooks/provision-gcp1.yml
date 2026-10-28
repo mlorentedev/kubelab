@@ -202,7 +202,8 @@
       vars:
         # gcp1 is already registered (cloud-init, with a just-in-time minted
         # key — F2). Role is idempotent: install task skips (binary present),
-        # `tailscale up` skips (BackendState=Running).
+        # `tailscale up` skips (BackendState=Running), and `tailscale set`
+        # converges the flags below if the node has drifted from them.
         tailscale_headscale_url: "https://{{ config.apps.services.core.headscale.domain }}"
         tailscale_accept_routes: true   # Hub is remote — accepts subnet routes
         tailscale_auth_key: ""           # No re-registration

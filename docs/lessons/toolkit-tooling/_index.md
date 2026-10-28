@@ -4,6 +4,8 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 631 | [An e2e probe that folds a refusal into a timeout skips the outage it exists to find](lesson-631-an-e2e-probe-that-folds-a-refusal-into-a-timeout-skips-the-outage-it-exists-to-find.md) | 2026-10-26 |
+| 627 | [Rich reads the brackets in a log message as markup: a stray close raises, an unknown tag vanishes](lesson-627-rich-reads-the-brackets-in-a-log-message-as-markup-a-stray-close-raises-an-unknown-tag-vanishes.md) | 2026-10-26 |
 | 614 | [A Make variable named like an environment variable is never unset](lesson-614-a-make-variable-named-like-an-environment-variable-is-never-unset.md) | 2026-10-21 |
 | 605 | [A logger that writes to stdout makes every `--json` command one warning from corrupt](lesson-605-a-logger-that-writes-to-stdout-makes-every-json-command-one-warning-from-corrupt.md) | 2026-10-18 |
 | 590 | [A ruamel round-trip is lossless only for files written in one sequence style](lesson-590-a-ruamel-round-trip-is-lossless-only-for-files-written-in-one-sequence-style.md) | 2026-10-17 |

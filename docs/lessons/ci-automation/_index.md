@@ -4,6 +4,8 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 635 | [A reaper that selects by name stops reaping when the runner renames what it creates](lesson-635-a-reaper-that-selects-by-name-stops-reaping-when-the-runner-renames.md) | 2026-10-27 |
+| 634 | [A check-run posted with `GITHUB_TOKEN` joins another workflow's suite, and protection loses it when that workflow re-runs](lesson-634-a-check-run-posted-with-github-token-joins-another-workflows-suite.md) | 2026-10-27 |
 | 613 | [An exemption keyed on which files changed exempts whatever those files say](lesson-613-an-exemption-keyed-on-which-files-changed-exempts-whatever-those-files-say.md) | 2026-10-21 |
 | 612 | [A skip that matches a word in the path also skips every checkout named after it](lesson-612-a-skip-that-matches-a-word-in-the-path-also-skips-every-checkout-named-after-it.md) | 2026-10-21 |
 | 608 | [A workflow that stages a tool's output by name misses the file the tool learns to write](lesson-608-a-workflow-that-stages-a-tools-output-by-name-misses-the-file-the-tool-learns-to-write.md) | 2026-10-20 |

@@ -160,7 +160,9 @@ def test_the_timer_actually_calls_the_reclaim_in_order(tmp_path: Path) -> None:
     calls, out = _run_docker_section(tmp_path, CI_HOST, reclaim_rc=0)
     reclaim = [i for i, c in enumerate(calls) if c.startswith("python3 /opt/kubelab-docker-reclaim.py --apply")]
     assert len(reclaim) == 1, calls
-    assert calls.index("docker container prune -f") < reclaim[0] < calls.index("docker image prune -af")
+    # The stub logs the arguments the shell passed, so the filter's quotes are gone.
+    prune = "docker container prune -f --filter label!=com.docker.compose.project"
+    assert calls.index(prune) < reclaim[0] < calls.index("docker image prune -af")
     assert "FAILURES=\n" in out or out.rstrip().endswith("FAILURES=")
 
 

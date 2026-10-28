@@ -74,6 +74,14 @@ def _version(value: Any, version: str, operator: str = "eq") -> bool:
     return getattr(Version(str(value)), f"__{ops.get(operator, operator)}__")(Version(version))
 
 
+def _flatten(value: Any) -> list[Any]:
+    """Ansible's `flatten` filter with no `levels`: every nested list, all the way down."""
+    flat: list[Any] = []
+    for item in value:
+        flat.extend(_flatten(item) if isinstance(item, list) else [item])
+    return flat
+
+
 def ansible_env(templates_dir: str, **kwargs: Any) -> Environment:
     """A `FileSystemLoader` environment with the Ansible filters and tests these templates use."""
     env = Environment(loader=FileSystemLoader(templates_dir), **kwargs)
@@ -82,8 +90,21 @@ def ansible_env(templates_dir: str, **kwargs: Any) -> Environment:
     env.filters["to_json"] = json.dumps
     env.filters["b64decode"] = _b64decode
     env.filters["regex_replace"] = _regex_replace
+    env.filters["flatten"] = _flatten
+    # Ansible's `comment` filter, in its default (shell-style) form.
+    env.filters["comment"] = lambda text: "\n".join(f"# {line}" for line in str(text).splitlines())
     env.tests["match"] = _match
     env.tests["regex"] = _regex
     env.tests["changed"] = _changed
     env.tests["version"] = _version
     return env
+
+
+def task_runs(task: dict[str, Any], variables: dict[str, Any]) -> bool:
+    """Whether Ansible would run the task: every `when` clause, evaluated."""
+    clauses = task.get("when", [])
+    env = ansible_env(".")
+    return all(
+        env.from_string("{{ (" + str(clause) + ") | bool }}").render(**variables) == "True"
+        for clause in (clauses if isinstance(clauses, list) else [clauses])
+    )
