@@ -229,10 +229,10 @@ setup-local-dns:
 # Idempotent: re-running in an already-bootstrapped worktree is ~1s no-op. A venv
 # whose scripts name another directory (a renamed worktree with an in-project
 # `.venv`) is not ready: it is rebuilt, and restored if the rebuild fails.
-# `poetry.lock` is gitignored, so a long-lived checkout keeps the lock of the
-# day it was first installed. Once pyproject.toml moves on (a new dependency),
-# `poetry install` refuses the stale lock and the checkout cannot import what
-# master now needs. Relock only when stale; CI resolves fresh the same way.
+# `poetry.lock` is committed (TOOL-125), so a checkout installs what CI installs.
+# A lock can still trail pyproject.toml in a branch that edits a dependency, and
+# `poetry install` refuses it: relock only when stale, and the lock's diff is
+# then the change to commit beside pyproject.toml.
 # Discovered as TOOL-010 after Wave 1 DT-010 PR hit `make sync-homepage`
 # failures in a fresh worktree (no .venv -> toolkit package not importable).
 .PHONY: worktree-init
