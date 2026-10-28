@@ -136,6 +136,14 @@ ssh -o ForwardAgent=no ace2 'cat /tmp/ansible-033-f2.result'   # want: F2_OK
 
 It clones, commits, pushes and opens a draft PR against the fixture, then removes
 both. `F2_FIXTURE_ARCHIVED` means the fixture, not the token, is the problem.
+`F2_FIXTURE_UNREACHABLE` means the fixture answers 404: either it is gone, or the
+token's repository access leaves it out. Read it with your own token
+(`gh api repos/mlorentedev/kubelab-devnode-fixture --jq .private`) to tell which;
+if that 404s too, recreate it with
+`gh repo create mlorentedev/kubelab-devnode-fixture --private --add-readme` (#2750).
+`F2_FAIL` is any other failure, the token's own permissions among them. The
+tmux session closes with the probe, so to see the step that stopped, run it in
+the foreground: `ssh -o ForwardAgent=no ace2 'bash /tmp/ansible-033-f2.sh'`.
 
 The `specs/archive/` path is correct as written: the spec was archived on
 2026-08-08, and the runbook outlives it by design.
