@@ -1,6 +1,6 @@
 # Run autopilot-2026-10-28
 
-Verdict: ended at 08:55Z on its iteration budget (14 / 14), window open until 12:25Z. 15 PRs landed, 1 held by design (#2759), 3 items parked on your answers. Nothing half-done.
+Verdict: ended at 08:50Z on its iteration budget (14 / 14), window open until 12:25Z. 15 PRs landed, 1 held by design (#2759), 3 items parked on your answers. Nothing half-done.
 
 ## Waiting on you (irreversible first)
 
@@ -75,15 +75,19 @@ Landed this run: #2743, #2746, #2706, #2741, #2736, #2747 (05:34), #2748 (06:02)
 | 08:00–08:25 | #2763 pr-agent | rc 137 reports its elapsed time and names the OOM killer beside #2722 (mutant red); the role order the promise rests on is pinned by a test (mutant red); SIGPIPE flake declined (0/300); triage posted | 6f7fcbb8, fde4737b, issuecomment-6463880219 |
 | 08:30–08:40 | #2759 third pass | `python3-debian` refreshes the index first in both roles (pr-agent and CodeRabbit; 2 mutants red); CodeRabbit accepted and resolved both threads | 002bcee5, issuecomment-6464392929 |
 | 08:38 | #2763 | stale re-raises declined, landed; worktree removed | issuecomment-6464393318 |
-| 08:45–08:55 | #2759 fourth pass | the `.list` removal must carry the source's tags (mutant red); the refresh comment no longer over-claims; dropping `cache_valid_time` declined with reasons | 8fc5e040, issuecomment-6464662330 |
+| 08:45–08:50 | #2759 fourth pass | the `.list` removal must carry the source's tags (mutant red); the refresh comment no longer over-claims; dropping `cache_valid_time` declined with reasons | 8fc5e040, issuecomment-6464662330 |
 
 ## Budget
 
-Iterations: 14 / 14: (1) open-PR dispositions, #1021, node_maintenance comment, #2740 diagnosis; (2) #2744; (3) #2742 park and the land sweep; (4) ace2 PAT and #2692; (5) #2726; (6) #2722; (7) #2733 and the review follow-ups; (8) #2737; (9) #2750; (10) NET-005 reconcile; (11) #2757; (12) #2722 smoke build; (13) review follow-ups on #2760-#2763; (14) landing sweep: #2760-#2763 landed, #2759 reviewed three times. Iteration 14 ran 80 minutes against a 45-minute budget: each push to #2759 drew a new review round, and every round was dispositioned rather than left open. Items: 16 / 17. No dollar figure exists for this run.
+Iterations: 14 / 14: (1) open-PR dispositions, #1021, node_maintenance comment, #2740 diagnosis; (2) #2744; (3) #2742 park and the land sweep; (4) ace2 PAT and #2692; (5) #2726; (6) #2722; (7) #2733 and the review follow-ups; (8) #2737; (9) #2750; (10) NET-005 reconcile; (11) #2757; (12) #2722 smoke build; (13) review follow-ups on #2760-#2763; (14) landing sweep: #2760-#2763 landed, #2759 reviewed three times. Iteration 14 ran 75 minutes against a 45-minute budget: each push to #2759 drew a new review round, and every round was dispositioned rather than left open. Items: 16 / 17. No dollar figure exists for this run.
 
 ## Host suspend
 
-`journalctl --since 2026-10-28T03:25:00Z -u systemd-suspend.service`: no entries. The host did not suspend during the run; a `systemd-inhibit` lock held sleep and lid.
+`journalctl --since 2026-10-28T03:25:00Z -u systemd-suspend.service`: no entries. The host did not suspend during the run; a `systemd-inhibit` lock held sleep and lid, released at exit (08:50Z), not at window end.
+
+## Exit checks
+
+`dotf pr triage-queue --repo mlorentedev/kubelab` at 08:50Z: rc 0, "no reviewer output is awaiting a disposition". pr-agent's review of #2759 at 8fc5e040 may land after this; it is triaged at the rebase.
 
 ## Next action
 
