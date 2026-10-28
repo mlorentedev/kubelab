@@ -20,13 +20,10 @@ Verdict: in progress (armed 2026-10-28T03:25Z, expires 12:25Z).
 
 ## Done but unmerged
 
-- #2762 #2757 a recovery closes its incident whatever its age: CI and review running.
-- #2763 #2722 smoke build in the release run: CI and review running.
-- #2760 #2750 missing-fixture verdict: CI and review running.
-- #2761 NET-005 bring-up progress (B1 ticked, the rest recorded as partial): CI and review running.
+- #2763 #2722 smoke build in the release run: Tests went red on the check-mode guard (the build is a write that reports no change, now declared beside `Test Docker functionality`, 8cf9af59); CI re-running.
 - #2759 #2737 deb822 sources: held for the Beelink provision.
 
-Landed this run: #2743, #2746, #2706, #2741, #2736, #2747 (05:34), #2748 (06:02), #2740 (06:03), #2752 (06:25), #2749 (06:52), #2756 (07:02).
+Landed this run: #2743, #2746, #2706, #2741, #2736, #2747 (05:34), #2748 (06:02), #2740 (06:03), #2752 (06:25), #2749 (06:52), #2756 (07:02), #2760, #2761, #2762 (07:40).
 
 ## Ledger
 
@@ -71,6 +68,9 @@ Landed this run: #2743, #2746, #2706, #2741, #2736, #2747 (05:34), #2748 (06:02)
 | 07:15 | #2761 pr-agent | "same boot as B2" replaced by the boot's own start (2026-10-27T00:52Z, `/proc/stat`) | fc1b8219 |
 | 07:20 | #2760 | triage posted | issuecomment-6462782066 |
 | 07:20 | worktree hygiene | 17 merged worktrees removed with `dotf worktree done` | |
+| 07:35 | #2763 Tests red | `test_every_read_runs_in_a_dry_run`: the smoke build is declared a write that reports no change, not given `check_mode: false` | 8cf9af59 |
+| 07:35–07:40 | #2760, #2761, #2762 | triage posted on #2761 and #2762 (pr-agent's #2661 scope items declined as out of scope, live-TTL check open by design), all three landed; #2750 and #2757 closed | issuecomment-6463377220, issuecomment-6463377492 |
+| 07:40 | worktree hygiene | 3 more merged worktrees removed | |
 
 ## Budget
 
