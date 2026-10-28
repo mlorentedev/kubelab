@@ -4,21 +4,25 @@ Verdict: in progress (armed 2026-10-28T03:25Z, expires 12:25Z).
 
 ## Waiting on you (irreversible first)
 
-- `make provision NODE=rpi4 ENV=prod BOOTSTRAP=1` (changed=0 pass), then `make edge-boot-check`, then T1-T4. Not run: prod edge provision with nobody home.
+- T1-T4 of the hard-reset test (B14), each followed by `make edge-boot-check`. The rpi4 second pass ran (ok=182 changed=1, the one change being apt's time-based cache refresh), and the plugged-in boot check passed 22/22 at 06:35.
+- The Beelink provision with `-e base_system_release_holds=true`, after #2756 lands. It is the deliberate Docker move #2722 asks for.
+- #2759 (deb822 sources) lands after that Beelink provision, not before.
+- New names for you to confirm or rename (cheap follow-ups): the probe overrides `F2_WORK` and `F2_RESULT` and the verdict `F2_FIXTURE_UNREACHABLE` (#2760).
 
 ## Parked
 
 - #2742 ANSIBLE-072: two forks on the issue (scope and rollout order); it changes the rpi4 and Beelink plays on your return list.
-- #2722, two halves: the runner job timeout (the value lives in `infra/config/values/**`, outside this run's write paths, and needs your number) and the smoke build (options A and B on the issue). The hold itself is #2756.
-- #2750 ANSIBLE-073: the dev node token's acceptance fixture repository is gone, so the probe's F2 cannot pass. Options A (recreate it, your step) and B on the issue.
+- #2722, the runner job timeout: the value lives in `infra/config/values/**`, outside this run's write paths, and needs your number. The smoke build (option A, ruled 06:16) follows #2756.
+- #2758 ANSIBLE-074: the ace2 dry run with `TAGS=gh CHECK=1` hangs on the controller before connecting (no `ESTABLISH` after Gathering Facts at `-vvvv`). Being isolated: check mode or the tag.
 
 ## Done but unmerged
 
-- #2747 inventory SOPS guard (triaged on 45a335a4; lands when Tests is green, then #2740 is updated and landed).
-- #2748 TOOL-126 expiry lead time (waits for pr-agent on a97bc1e3).
-- #2749 #2733 recovery clears the failed notifier (review follow-up pushed 05286907; waits for the re-review).
-- #2752 #2726 dev Pi-hole pinned to the edge's tag (draft, CI running).
-- #2756 #2722 CI engine held across provisions (draft, CI running).
+- #2749 #2733 recovery clears the failed notifier: CodeRabbit's lock race applied (e6a3bd33), CI running, then triage and land. #2757 follows it.
+- #2756 #2722 CI engine held across provisions: pr-agent's two test findings applied (42aebed3), CI running.
+- #2760 #2750 missing-fixture verdict: CI and review running.
+- #2759 #2737 deb822 sources: held for the Beelink provision.
+
+Landed this run: #2743, #2746, #2706, #2741, #2736, #2747 (05:34), #2748 (06:02), #2740 (06:03), #2752 (06:25).
 
 ## Ledger
 
@@ -42,10 +46,21 @@ Verdict: in progress (armed 2026-10-28T03:25Z, expires 12:25Z).
 | 04:05–04:45 | #2722 | apt history shows the Docker move came from `base_system`'s dist-upgrade during a provision, not the timer. #2756: `base_system` holds a node's declared packages before its upgrade, release flag for one run, `package_facts` guard for a first provision (4 mutants red), lesson-645. Correction posted on the issue | #2756, issuecomment-6460839746 |
 | 04:40–04:50 | #2747, #2748 review fixes | #2747 follows a keyword hand-off (2 mutants red); #2748's new phrasing test found "60 or 90 days" read as 90 only, regex fixed (2 mutants red) | 45a335a4, a97bc1e3 |
 | 04:52–05:05 | #2749 review follow-up | CodeRabbit: a recovery could overtake a page in flight, newly reachable for first pages. Per-unit `flock` from state read to state write, notifier timeout 45→90s to hold the wait, test helper sentinel bug fixed, reset target read from `OnFailure=` (8 mutants red). #2747 triage posted | 05286907, issuecomment-6460989928 |
+| 05:05–05:50 | #2740 Tests, #1196 | #2747 landed, #2740 updated and landed; a known Socket.IO flake on #2749 noted on #1196 | issue comment on #1196 |
+| 05:05–05:50 | #2733 follow-ups | ticketed #2757 NOTIFY-011 (a unit slower than the TTL loses its recovery) and #2758 ANSIBLE-074 (ace2 dry run hangs) | #2757, #2758 |
+| 05:05–05:50 | #2737 | #2759: Docker and GitHub CLI sources as deb822, old `.list` removed after the new source (10 mutants red); dry run blocked by #2758 | #2759 |
+| 05:50 | rpi4 second pass (operator) | ok=182 changed=1 failed=0; the change is apt's `cache_valid_time` refresh, time-based, so converged | operator terminal |
+| 06:16 | envelope widened by the operator | 17 items / 14 iterations; #2750 A, #2757 A, #2722 smoke build A | 70eb182a |
+| 06:20–06:30 | #2749 CodeRabbit lock race | unit result read under the lock; new test red on the old template | e6a3bd33 |
+| 06:20–06:30 | #2756 pr-agent findings | re-hold test now simulates each run's applied selections (gate mutant red); timer test runs the hold block with the engine already held (mutant red) | 42aebed3 |
+| 06:25 | #2752 | triaged, landed | issuecomment-6462294391 |
+| 06:25–06:35 | #2758 | `-vvvv`: the second play never connects; ace2 has no hung mount and passwordless sudo works | issuecomment-6462346657 |
+| 06:25–06:35 | #2750 | fixture recreated private; probe verdict `F2_FIXTURE_UNREACHABLE` for a 404 (mutant red); F2 on ace2: `F2_OK`, probe PR closed, branch gone | #2760 |
+| 06:35 | `make edge-boot-check VIA=tailnet` | 22/22 OK, rc 0, ruleset at 9.6s before networkd at 15.5s | read-only |
 
 ## Budget
 
-Iterations: 7 / 10: (1) open-PR dispositions, #1021, node_maintenance comment, #2740 diagnosis; (2) #2744; (3) #2742 park and the land sweep; (4) ace2 PAT and #2692; (5) #2726; (6) #2722; (7) #2733 and the review follow-ups. Items: 12 / 13. No dollar figure exists for this run.
+Iterations: 9 / 14: (1) open-PR dispositions, #1021, node_maintenance comment, #2740 diagnosis; (2) #2744; (3) #2742 park and the land sweep; (4) ace2 PAT and #2692; (5) #2726; (6) #2722; (7) #2733 and the review follow-ups; (8) #2737; (9) #2750. Items: 14 / 17. No dollar figure exists for this run.
 
 ## Host suspend
 
