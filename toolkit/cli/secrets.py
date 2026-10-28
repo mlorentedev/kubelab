@@ -383,6 +383,14 @@ def dig_across(configs: list[dict[str, object]], path: str) -> str:
     return ""
 
 
+def _lead_days(key_path: str, default: int) -> int:
+    """The catalog entry's own lead time (TOOL-126), else the report's window."""
+    from toolkit.features.secrets_manager import SECRET_CATALOG
+
+    own = next((s.warn_days for s in SECRET_CATALOG if s.key_path == key_path), None)
+    return default if own is None else own
+
+
 def _declared_expiry_lines(warn_days: int) -> tuple[list[str], list[str]]:
     """Report every DECLARED credential: its recorded expiry, or the absence of one.
 
@@ -411,7 +419,7 @@ def _declared_expiry_lines(warn_days: int) -> tuple[list[str], list[str]]:
             missing.append(label)
             continue
         line = f"  {label} — expires {item.expires_on:%Y-%m-%d} ({item.days_left}d, recorded, not asked)"
-        if (item.days_left or 0) < warn_days:
+        if (item.days_left or 0) < _lead_days(item.key_path, warn_days):
             logger.error(line)
             expiring.append(label)
         else:
@@ -453,7 +461,7 @@ def _report_expiry(warn_days: int) -> None:
             continue
         days = (expires - datetime.now(timezone.utc)).days
         line = f"  {spec.key_path} — expires {expires:%Y-%m-%d} ({days}d)"
-        logger.error(line) if days < warn_days else logger.info(line)
+        logger.error(line) if days < _lead_days(spec.key_path, warn_days) else logger.info(line)
 
     _declared_expiry_lines(warn_days)
 
@@ -790,7 +798,9 @@ def catalog(
 
 @app.command("check-expiry")
 def check_expiry(
-    warn_days: Annotated[int, typer.Option("--warn-days", help="Fail below this many days remaining")] = 90,
+    warn_days: Annotated[
+        int, typer.Option("--warn-days", help="Fail below this many days left, where the catalog sets no warn_days")
+    ] = 90,
     ssh_target: Annotated[
         str | None,
         typer.Option("--ssh", help="Where headscale runs; defaults to the VPS from the SSOT"),
@@ -865,7 +875,7 @@ def check_expiry(
             continue
         days = (expires - datetime.now(timezone.utc)).days
         line = f"{spec.key_path}  expires {expires:%Y-%m-%d}  ({days}d)"
-        if days < warn_days:
+        if days < _lead_days(spec.key_path, warn_days):
             logger.error(line)
             expiring.append(spec.key_path)
         else:
@@ -897,7 +907,7 @@ def check_expiry(
 
     if expiring:
         logger.error(
-            f"{len(expiring)} credential(s) expire within {warn_days} days: {expiring}. "
+            f"{len(expiring)} credential(s) inside their lead time (default {warn_days} days): {expiring}. "
             "Each fails SILENTLY at the moment it is needed rather than when it expires: "
             "a Headscale key leaves the next hub recreate unable to clear its stale node, "
             "so it registers as <host>-<random> and breaks the inventory and kubeconfig; "
@@ -905,7 +915,7 @@ def check_expiry(
             "clone. Nothing raises an alarm on the expiry date itself."
         )
         raise typer.Exit(1)
-    logger.success(f"{len(keys)} provider-issued credentials, none expiring within {warn_days} days")
+    logger.success(f"{len(keys)} provider-issued credentials, none inside its lead time (default {warn_days} days)")
 
 
 @app.command("acme-token-scope")

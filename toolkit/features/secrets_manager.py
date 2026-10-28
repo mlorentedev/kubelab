@@ -118,8 +118,15 @@ class SecretSpec:
     # Defaults to UNKNOWN so a new entry surfaces as unclassified rather than
     # being quietly assumed immortal.
     expiry: Expiry = Expiry.UNKNOWN
+    # How many days before expiry the reports turn this credential red (TOOL-126,
+    # #2744). None takes the report's window, 90 days by default. A credential
+    # whose whole life is 90 days or less needs its own, or it is red from the day
+    # it is issued and the column stops being read.
+    warn_days: int | None = None
 
     def __post_init__(self) -> None:
+        if self.warn_days is not None and self.warn_days <= 0:
+            raise ValueError(f"{self.key_path}: warn_days must be a positive number of days, got {self.warn_days}")
         # A username is not a secret, and an entry the toolkit mints is one
         # `credentials generate` and `rotate` may rewrite: on 2026-08-23 rotating
         # `basic_auth.user` renamed Gitea's only admin. Identities live in
@@ -1226,7 +1233,7 @@ SECRET_CATALOG: list[SecretSpec] = [
         description="Fine-grained GitHub PAT, Commit statuses write on kubelab only (Argo CD notifications)",
         kind=SecretKind.EXTERNAL,
         services=("argocd",),
-        format_hint="fine-grained PAT (github_pat_…), statuses:write on kubelab, expiry set",
+        format_hint="fine-grained PAT (github_pat_…), statuses:write on kubelab, 90d expiry",
         rotate_note=(
             "Mint a new fine-grained token (Settings > Developer settings > Fine-grained tokens), "
             "repository access `mlorentedev/kubelab` only, Commit statuses: Read and write. "
@@ -1234,6 +1241,7 @@ SECRET_CATALOG: list[SecretSpec] = [
             "then `make deploy-argocd`, then revoke the old one."
         ),
         envs=("prod",),
+        warn_days=14,
     ),
     SecretSpec(
         key_path="argocd.github_webhook_secret",
@@ -1399,7 +1407,9 @@ SECRET_CATALOG: list[SecretSpec] = [
         description="Cloudflare account API token, Account API Tokens: Edit (mints the backup R2 tokens)",
         kind=SecretKind.EXTERNAL,
         services=("toolkit",),
+        format_hint="Cloudflare account API token with a TTL, 90d expiry",
         envs=("prod",),
+        warn_days=14,
         rotate_note=(
             "To extend it, edit the token in the Cloudflare dashboard and move its TTL (Edit, not "
             "Roll): the value is kept, so SOPS does not change. To replace it (suspected exposure), "
@@ -1613,6 +1623,7 @@ SECRET_CATALOG: list[SecretSpec] = [
             "leaves the old one live: revoke it."
         ),
         envs=("staging",),
+        warn_days=14,
     ),
     # Apprise notification gateway (NOTIFY-001, ADR-044). Promoted to staging+prod.
     # bot-token is shared (common SOPS); chat IDs are per-env (dedicated Telegram
