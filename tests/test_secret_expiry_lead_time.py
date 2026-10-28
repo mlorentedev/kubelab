@@ -75,9 +75,11 @@ def test_a_lead_time_is_a_positive_number_of_days() -> None:
         SecretSpec(key_path="x.token", description="d", kind=SecretKind.EXTERNAL, warn_days=0)
 
 
-# A life stated in days: "60d expiry", "a 60-day life", "**Expiry:** 60 or 90 days".
-_DAYS = re.compile(r"\b(\d{1,3})(?:d\b|-day\b| days?\b)")
-_LIFE_WORDS = re.compile(r"expir|life|ttl", re.IGNORECASE)
+# A life stated in days: "60d expiry", "a 60-day life", "**Expiry:** 60 or 90 days",
+# "valid for 60 days". Days, because that is the unit GitHub and Cloudflare issue them in.
+_UNIT = r"(?:d\b|-day\b| days?\b)"
+_DAYS = re.compile(rf"\b(\d{{1,3}})(?:{_UNIT}| or (?=\d{{1,3}}{_UNIT}))")
+_LIFE_WORDS = re.compile(r"expir|life|ttl|valid", re.IGNORECASE)
 
 
 def _stated_lives(spec: SecretSpec) -> list[int]:
@@ -86,6 +88,12 @@ def _stated_lives(spec: SecretSpec) -> list[int]:
     for runbook in re.findall(r"docs/runbooks/[\w.-]+\.md", spec.rotate_note):
         lines += (_ROOT / runbook).read_text().splitlines()
     return [int(n) for line in lines if _LIFE_WORDS.search(line) for n in _DAYS.findall(line)]
+
+
+@pytest.mark.parametrize("hint", ["60d expiry", "a 60-day life", "**Expiry:** 60 or 90 days", "valid for 60 days"])
+def test_each_way_of_stating_a_life_is_read(hint: str) -> None:
+    spec = SecretSpec(key_path="x.token", description="d", kind=SecretKind.EXTERNAL, format_hint=hint)
+    assert min(_stated_lives(spec)) == 60
 
 
 _REPORTED = [s for s in SECRET_CATALOG if resolve_expiry(s) in (Expiry.PROVIDER, Expiry.DECLARED)]
