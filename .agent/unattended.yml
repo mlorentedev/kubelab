@@ -15,6 +15,7 @@ scope:
     - "infra/ansible/**"
     - "docs/**"
     - "specs/**"
+    - "infra/stacks/**"
     - "Makefile"
     - "CLAUDE.md"
     - ".agent/runs/**"
@@ -27,8 +28,9 @@ queue:
   filter: >-
     open PRs #2741 #2743 #2740 #2736, then #2692 (after #2741) and #2706; ace2 PAT check (gh auth status, F2 probe) and the main
     checkout's SOPS restore after the ace2 play exits; #1021 cross-link to #1102; the
-    node_maintenance defaults comment; then #2744 and #2742 (spec fast each); #2737 if time remains
-  max_items: 10
+    node_maintenance defaults comment; then #2744 and #2742 (spec fast each);
+    #2733 (A), #2726, #2722 (A plus a lower job timeout); #2737 if time remains
+  max_items: 13
 budget:
   max_iterations: 10
   max_minutes_per_iteration: 45
@@ -45,6 +47,8 @@ authority:
 # - #2692 (Dependabot, not opened by this run) may be landed once #2741 is in and its rebase is green:
 #   authorized at arming. If `dotf pr land` refuses it for authorship, it stays for the operator.
 # - #2706 may be landed although it touches .github/workflows/ci.yml: authorized at arming.
+# - #2733: option A (reset-failed on a delivered recovery). #2722: option A (hold the Docker packages on
+#   the Beelink) plus a lower runner job timeout; the Beelink provision stays the operator's. #2726: as proposed.
 # - #2744 and #2742: /spec fast --issue N each, landed under the grant; a WIP refusal parks the item.
 # Never: prod deploys or provisions (rpi4's changed=0 pass and T1-T4 wait for the operator), live
 # netplan, uplink, hostapd, watchdog or Tailscale changes, `make setup-ansible`, merging any other
