@@ -46,6 +46,9 @@
   apt:
     name: python3-debian
     state: present
+    # The first apt step a tagged run reaches, so it must not trust an empty index.
+    update_cache: true
+    cache_valid_time: 3600
 
 # deb822, as Docker's install page writes it (docker.sources), because
 # apt_repository goes away in ansible-core 2.25 (#2737).

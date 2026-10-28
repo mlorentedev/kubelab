@@ -102,6 +102,8 @@ def test_the_module_library_is_installed_first(path: Path) -> None:
         if (args := _args(t, "apt")) and "python3-debian" in str(args.get("name", "")) and i < added
     ]
     assert installs, "python3-debian is not installed before the deb822 source"
+    # A tagged run reaches it before any other refresh, on a node whose index may be empty.
+    assert _args(tasks[installs[0]], "apt").get("update_cache") is True, "python3-debian installs from a stale index"
     assert set(tasks[added].get("tags", [])) <= set(tasks[installs[0]].get("tags", [])), (
         "a tag that runs the source task skips the library it needs"
     )
