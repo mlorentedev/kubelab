@@ -79,6 +79,11 @@ def test_the_list_the_old_task_wrote_is_removed_after_the_source_is_in_place(pat
     ]
     assert removed, f"{path.parts[-3]} writes a deb822 source and leaves {legacy} beside it"
     assert all(i > added for i in removed), "the .list goes before the .sources exists, leaving no source"
+    # A tagged run that writes the source must also remove the old file.
+    source_tags = set(tasks[added].get("tags", []))
+    assert all(source_tags <= set(tasks[i].get("tags", [])) for i in removed), (
+        "a tag writes the source and keeps the .list"
+    )
 
 
 @pytest.mark.parametrize("path", _deb822_task_files(), ids=lambda p: p.parts[-3])
