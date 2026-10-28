@@ -97,14 +97,34 @@ def test_the_build_outlives_the_window_the_session_dropped_in(tmp_path: Path) ->
     assert dockerfile.startswith(f"FROM {DEFAULTS['docker_smoke_build_image']}\n"), dockerfile
     sleep = re.search(r"^RUN sleep (\d+)$", dockerfile, re.M)
     assert sleep and SESSION_DROP_SECONDS < int(sleep[1]) < DEFAULTS["docker_smoke_build_timeout_seconds"], dockerfile
+    args = (tmp_path / "args").read_text(encoding="utf-8").split()
     # A cached step would finish at once and never hold a session open.
-    assert "--no-cache" in (tmp_path / "args").read_text(encoding="utf-8").split()
+    assert "--no-cache" in args
+    # The Dockerfile comes on stdin, and the result is discarded rather than loaded.
+    assert args[-1] == "-" and "type=cacheonly" in args, args
+
+
+def test_a_client_that_ignores_the_term_is_killed() -> None:
+    """A buildx client blocked on the dead session may ignore SIGTERM, and the play would hang."""
+    assert re.search(r"\btimeout --kill-after=\d+ ", _task(SMOKE)["shell"]), _task(SMOKE)["shell"]
+
+
+@pytest.mark.parametrize(("rc", "passes"), [(0, True), (1, False), (124, False), (137, False)])
+def test_only_a_build_that_finished_passes(rc: int, passes: bool) -> None:
+    smoke, verify = _task(SMOKE), _task(VERIFY)
+    # The shell must not fail first: the assert is what says why.
+    assert smoke["failed_when"] is False
+    that = verify["assert"]["that"]
+    assert smoke["register"] in that and smoke["register"] in verify["assert"]["fail_msg"]
+    rendered = ansible_env(".").from_string("{{ (" + that + ") }}").render({smoke["register"]: {"rc": rc}})
+    assert rendered == str(passes), rendered
 
 
 @pytest.mark.parametrize(
     ("result", "says"),
     [
         ({"rc": 124, "stderr_lines": []}, "no progress"),
+        ({"rc": 137, "stderr_lines": []}, "no progress"),
         ({"rc": 1, "stderr_lines": ["#1 load", "ERROR: failed to solve: busybox: not found"]}, "failed to solve"),
     ],
 )
@@ -115,4 +135,4 @@ def test_the_failure_names_a_hang_apart_from_an_error(result: dict, says: str) -
         .render(_docker_smoke_build=result, docker_smoke_build_timeout_seconds=180)
     )
     assert says in message, message
-    assert ("#2722" in message) is (result["rc"] == 124), message
+    assert ("#2722" in message) is (result["rc"] in (124, 137)), message

@@ -184,12 +184,13 @@
 # 2026-10-27 the BuildKit session failed 5 s into a build and fatally 5 s later,
 # and the build then waited for it, with no error, until the runner's 3 h job
 # timeout. The build sleeps past that window, and `timeout` turns a hang into a
-# failed play. `cacheonly` keeps no image behind.
+# failed play: 124 on its TERM, or 137 on the KILL that follows when a client
+# blocked on the dead session ignores the TERM. `cacheonly` keeps no image behind.
 - name: Smoke-build an image on this engine
   shell: |
     set -o pipefail
     printf 'FROM %s\nRUN sleep 20\n' '{{ docker_smoke_build_image }}' \
-      | timeout {{ docker_smoke_build_timeout_seconds }} \
+      | timeout --kill-after=30 {{ docker_smoke_build_timeout_seconds }} \
         docker buildx build --no-cache --progress=plain --output type=cacheonly -
   args:
     executable: /bin/bash
@@ -206,7 +207,7 @@
     fail_msg: >-
       {{ ('The smoke build made no progress in ' ~ docker_smoke_build_timeout_seconds
           ~ ' s: a dropped BuildKit session (#2722). Read journalctl -u docker.')
-         if _docker_smoke_build.rc == 124 else
+         if _docker_smoke_build.rc in [124, 137] else
          ('The smoke build failed with rc ' ~ _docker_smoke_build.rc ~ ': '
           ~ (_docker_smoke_build.stderr_lines | default([]))[-5:] | join(' | ')) }}
   when:
