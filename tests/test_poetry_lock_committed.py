@@ -21,11 +21,30 @@ def _git(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(["git", *args], cwd=REPO, capture_output=True, text=True, check=False)
 
 
+def _ignoring_pattern(cwd: pathlib.Path) -> str | None:
+    """The pattern that ignores poetry.lock in `cwd`, or None when nothing does.
+
+    --no-index: a tracked file is otherwise never reported, so a pattern re-added later would pass.
+    The verdict comes from the plain form, because with -v a negation (`!poetry.lock`) exits 0 as well.
+    """
+    check = ["git", "check-ignore", "--no-index"]
+    if subprocess.run([*check, "poetry.lock"], cwd=cwd, capture_output=True, check=False).returncode != 0:
+        return None
+    verbose = subprocess.run([*check, "-v", "poetry.lock"], cwd=cwd, capture_output=True, text=True, check=False)
+    return verbose.stdout.strip()
+
+
 def test_the_lock_is_tracked_and_not_ignored() -> None:
     assert _git("ls-files", "--error-unmatch", "poetry.lock").returncode == 0, "poetry.lock is not tracked"
-    # --no-index: a tracked file is otherwise never reported, so a pattern re-added later would pass.
-    ignored = _git("check-ignore", "--no-index", "-v", "poetry.lock")
-    assert ignored.returncode == 1, f"poetry.lock is ignored again: {ignored.stdout.strip()}"
+    assert _ignoring_pattern(REPO) is None, f"poetry.lock is ignored again: {_ignoring_pattern(REPO)}"
+
+
+def test_a_negated_pattern_is_not_read_as_ignoring_the_lock(tmp_path: pathlib.Path) -> None:
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    (tmp_path / ".gitignore").write_text("*.lock\n!poetry.lock\n")
+    assert _ignoring_pattern(tmp_path) is None
+    (tmp_path / ".gitignore").write_text("*.lock\n")
+    assert _ignoring_pattern(tmp_path) == ".gitignore:1:*.lock\tpoetry.lock"
 
 
 def test_the_lock_matches_pyproject() -> None:

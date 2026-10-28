@@ -27,7 +27,13 @@ the lock with `--no-cache`. It does not say that the cache is the cause.
 
 **Solution**: `poetry cache clear PyPI:setproctitle:1.3.8 -n`, which removes only that
 entry, then `make worktree-init` again. The new entry is 17 KB, the lock lists all 100
-files, and `toolkit` imports.
+files, and `toolkit` imports. That was while the lock was gitignored and each worktree
+generated its own. Since #2739 the lock is committed, and a short file list in it
+survives a cleared cache: `poetry check --lock` still passes, so `make worktree-init`
+does not relock. Clear the entry, run `poetry lock`, check that the diff adds the
+release's missing files and changes no version (if it is empty, `poetry lock
+--regenerate`, whose diff needs the same check), commit the lock, then
+`make worktree-init`.
 
 **Rule**: when a lock resolves a version but finds no installable artifact for an
 interpreter the release supports, compare the cached file list with the index before
