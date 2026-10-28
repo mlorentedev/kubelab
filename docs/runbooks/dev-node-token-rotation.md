@@ -3,14 +3,14 @@ id: dev-node-token-rotation
 type: runbook
 status: active
 created: "2026-08-08"
-updated: "2026-08-08"
+updated: "2026-10-27"
 owner: manu
 ---
 
 # Dev node token rotation (ace2)
 
 > Rotate the fine-grained GitHub PAT that gives the ace2 dev node its machine
-> identity. **Next due: 2026-11-05** (90 days from 2026-08-07).
+> identity. **Next due: 2026-12-27** (regenerated 2026-10-27 with a 60-day expiry).
 
 The token is the node's only credential: it serves both `gh` and git-over-HTTPS,
 so one rotation covers both. See ADR-058 (D1/D3) and the archived
@@ -36,24 +36,32 @@ not use this credential.
 
 ## Who is notified
 
-Nobody, automatically. This is a **calendar-driven** task, which is precisely why
-the expiry date is recorded here, in the token's name (`ace2-dev-node-2026-08`),
-and in `SECRET_CATALOG`. The 90-day life is deliberate — see the spec's Risks
-section — and short enough that this runbook gets exercised four times a year.
+Nobody is paged. `make secrets-audit` asks GitHub for the expiry (the catalog
+marks the key `PROVIDER`) and prints it, so the date is read from the token
+rather than remembered. The **Next due** line above is the calendar copy. The
+short life is deliberate — see the spec's Risks section — and short enough that
+this runbook gets exercised several times a year.
 
 ## Rotation
 
-Steps 1-4 replace the credential; **step 5 is the one people skip.**
+Steps 1-4 replace the credential. Step 5 matters only when you minted a new
+token instead of regenerating the existing one.
 
-### 1. Mint the replacement
+### 1. Regenerate the token
 
-GitHub → Settings → Developer settings → Personal access tokens → Fine-grained.
+GitHub → Settings → Developer settings → Personal access tokens → Fine-grained →
+`ace2-dev-node` → **Regenerate token**.
 
-- **Name:** `ace2-dev-node-<YYYY-MM>` (e.g. `ace2-dev-node-2026-11`). The host
-  leads so that during an incident you can answer "which machine loses access if
-  I revoke this?". The month distinguishes the new token from the old during the
-  overlap, when both are live.
-- **Expiry:** 90 days.
+Regenerating keeps the name, the repository access and the permissions, and
+issues a new value. The old value stops working at once, so there is no overlap
+and nothing to revoke afterwards. It also means ace2 cannot push until step 4
+has run, so do not regenerate while an agent on ace2 is mid-push.
+
+- **Name:** `ace2-dev-node`, with no date. The host leads so that during an
+  incident you can answer "which machine loses access if I revoke this?". A
+  month in the name only told two live tokens apart, and regenerating never
+  leaves two.
+- **Expiry:** 60 or 90 days.
 - **Repository access:** see *Reconsider the scope* below before choosing.
 - **Permissions:** Contents `RW`, Pull requests `RW`, Metadata `R` (forced),
   Checks `R`, Commit statuses `R`. **No** Workflows, **no** Issues, **no**
@@ -125,12 +133,14 @@ both. `F2_FIXTURE_ARCHIVED` means the fixture, not the token, is the problem.
 The `specs/archive/` path is correct as written: the spec was archived on
 2026-08-08, and the runbook outlives it by design.
 
-### 5. Revoke the old token
+### 5. Revoke any other token (only if you minted a new one)
 
-**This is the step that gets skipped**, because everything already works after
-step 4 — which is exactly why the old credential quietly stays valid.
+Regenerating leaves nothing to revoke. If the token was lost or deleted and you
+minted a new one instead, **this is the step that gets skipped**, because
+everything already works after step 4 — which is exactly why an old credential
+quietly stays valid.
 
-GitHub → the previous token (`ace2-dev-node-<previous-month>`) → **Delete**.
+GitHub → any other `ace2-dev-node*` token → **Delete**.
 
 Until you do this, there are two live credentials for one machine, and the
 compensating control that the whole interim rests on — a short, enforced
@@ -138,7 +148,7 @@ lifetime — is not actually in force.
 
 ### 6. Update the record
 
-- Bump **Next due** at the top of this file (+90 days).
+- Set **Next due** at the top of this file to the expiry you chose.
 - Note the new token name in the archived spec's `verification.md` if the
   repository scope changed.
 

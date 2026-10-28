@@ -1401,8 +1401,10 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("toolkit",),
         envs=("prod",),
         rotate_note=(
-            "Create a new account token (Account API Tokens: Edit, with a TTL) in the Cloudflare "
-            "dashboard, `toolkit secrets set` it in common, revoke the old one. Nothing deployed reads it."
+            "To extend it, edit the token in the Cloudflare dashboard and move its TTL (Edit, not "
+            "Roll): the value is kept, so SOPS does not change. To replace it (suspected exposure), "
+            "create a new account token (Account API Tokens: Edit, with a TTL), `toolkit secrets set` "
+            "it in common, revoke the old one. Nothing deployed reads it."
         ),
     ),
     # Offsite backup destination (BACKUP-044 / #1056, ADR-049 D3). Stored in
@@ -1603,11 +1605,12 @@ SECRET_CATALOG: list[SecretSpec] = [
         description="Fine-grained GitHub PAT giving the ace2 dev node its own machine identity (gh + git over HTTPS)",
         kind=SecretKind.EXTERNAL,
         services=("dev-node",),
-        format_hint="fine-grained PAT (github_pat_…), contents+pull-requests write, checks+statuses read, 90d expiry",
+        format_hint="fine-grained PAT (github_pat_…), contents+pull-requests write, checks+statuses read, ≤90d expiry",
         rotate_note=(
-            "EXPIRES — see docs/runbooks/dev-node-token-rotation.md. Mint a replacement, "
-            "`toolkit secrets set` it in common.enc.yaml, `make provision NODE=ace2 ENV=staging "
-            "TAGS=dev_node`, then revoke the old one."
+            "EXPIRES — see docs/runbooks/dev-node-token-rotation.md. Regenerate it on GitHub "
+            "(same name, new value), `toolkit secrets set` it in common.enc.yaml, then "
+            "`make provision NODE=ace2 ENV=staging TAGS=dev_node`. A token minted new instead "
+            "leaves the old one live: revoke it."
         ),
         envs=("staging",),
     ),
