@@ -78,8 +78,12 @@ To upgrade them, run one provision that releases them, upgrades and holds them a
 make provision NODE=bee ENV=prod EXTRA='base_system_release_holds=true'
 ```
 
-Then run a build on the runner before trusting it. On 2026-10-27 a provision moved Docker
-from 29.8.1 to 29.9.2 as a side effect, and BuildKit sessions began dropping that morning.
+The same run then smoke-builds an image on the new engine (`docker_smoke_build`, in the
+`docker` role) and fails the play if the build errors or makes no progress within
+`docker_smoke_build_timeout_seconds`. Its step sleeps 20 s, past the 10 s in which the session
+dropped on 2026-10-27, when a provision moved Docker from 29.8.1 to 29.9.2 as a side effect
+and BuildKit sessions began dropping that morning. A failed smoke build leaves the new engine
+installed and held, so the runner builds on it until someone acts: record it on #2722.
 
 ## Checking status
 

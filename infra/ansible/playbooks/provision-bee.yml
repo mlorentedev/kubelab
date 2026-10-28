@@ -195,6 +195,9 @@
 
     - role: ../roles/docker
       tags: [docker]
+      vars:
+        # The run that releases the CI engine proves it can still build (#2722).
+        docker_smoke_build: "{{ base_system_release_holds | default(false) | bool }}"
 
     - role: ../roles/dns_resilience
       tags: [dns, tailscale]
