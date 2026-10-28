@@ -10,6 +10,7 @@ a failed generation stops it before ansible-playbook is invoked.
 
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
 from types import SimpleNamespace
@@ -225,12 +226,57 @@ def test_the_recipe_parser_sees_every_run() -> None:
 # exit 0 (lesson-356). `networking` is guarded key by key, derived from the
 # generator's own reads, because SOPS does hold a part of it the generator never
 # reads: the lab edge's site secrets at `networking.edge`, which the rpi4 play
-# takes from SOPS itself (#2665). A read the generator gains is guarded at once.
+# takes from SOPS itself (#2665).
 _GENERATOR_SOURCE = (_ROOT / "toolkit" / "features" / "generator_ansible.py").read_text()
-_GENERATOR_READS = (
-    *sorted({f"networking.{key}" for key in re.findall(r"\bnetworking(?:\.get\(|\[)\"([a-z_]+)\"", _GENERATOR_SOURCE)}),
-    "backup.sources",
-)
+
+
+def _networking_reads(source: str) -> tuple[set[str], list[int]]:
+    """The keys `source` reads from `networking`, and the lines that use it any other way.
+
+    Parsed rather than matched, so the form of a read cannot hide it: every load
+    of the name is a constant-key read (`networking["k"]`, `networking.get("k")`),
+    a hand-off to a function of this module whose parameter keeps the name (its
+    reads are then reads of the same name), or a line in the second list.
+    """
+    tree = ast.parse(source)
+    functions = {f.name: f for f in ast.walk(tree) if isinstance(f, ast.FunctionDef)}
+    parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+    keys: set[str] = set()
+    other: list[int] = []
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Name) and node.id == "networking" and isinstance(node.ctx, ast.Load)):
+            continue
+        parent = parents[node]
+        call = parents.get(parent)
+        if isinstance(parent, ast.Subscript) and isinstance(parent.slice, ast.Constant):
+            keys.add(parent.slice.value)
+        elif (
+            isinstance(parent, ast.Attribute)
+            and parent.attr == "get"
+            and isinstance(call, ast.Call)
+            and call.args
+            and isinstance(call.args[0], ast.Constant)
+        ):
+            keys.add(call.args[0].value)
+        elif isinstance(parent, ast.Call) and node in parent.args and _keeps_the_name(parent, node, functions):
+            continue
+        else:
+            other.append(node.lineno)
+    return keys, other
+
+
+def _keeps_the_name(call: ast.Call, arg: ast.Name, functions: dict[str, ast.FunctionDef]) -> bool:
+    callee = call.func.attr if isinstance(call.func, ast.Attribute) else getattr(call.func, "id", "")
+    target = functions.get(callee)
+    if target is None:
+        return False
+    params = [a.arg for a in target.args.args if a.arg not in ("self", "cls")]
+    index = call.args.index(arg)
+    return index < len(params) and params[index] == "networking"
+
+
+_NETWORKING_KEYS, _NETWORKING_OTHER_USES = _networking_reads(_GENERATOR_SOURCE)
+_GENERATOR_READS = (*sorted(f"networking.{key}" for key in _NETWORKING_KEYS), "backup.sources")
 
 
 def test_the_generator_reads_only_the_subtrees_listed_here() -> None:
@@ -242,11 +288,39 @@ def test_the_generator_reads_only_the_subtrees_listed_here() -> None:
 
 
 def test_the_generator_reads_networking_key_by_key() -> None:
-    """A wholesale read (iterating the dict, or handing it on under another name) hides keys from the list above."""
-    assert "networking.nodes" in _GENERATOR_READS, "the read pattern no longer matches the generator's source"
-    wholesale = re.findall(r"networking\.(?:items|values|keys)\(\)|\bin networking\b(?![.\[])", _GENERATOR_SOURCE)
-    renamed = re.findall(r"\w+\s*=\s*networking\s*$", _GENERATOR_SOURCE, re.MULTILINE)
-    assert not wholesale and not renamed, (wholesale, renamed)
+    """Any other use (iterating it, handing it on under another name) hides keys from the list above."""
+    assert "nodes" in _NETWORKING_KEYS, "the generator no longer reads networking.nodes: the parse is stale"
+    assert not _NETWORKING_OTHER_USES, (
+        f"generator_ansible.py uses `networking` other than by key on lines {_NETWORKING_OTHER_USES}: "
+        "read each key by name, or hand it to a function whose parameter is also named `networking`"
+    )
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        pytest.param("nw = networking", id="renamed"),
+        pytest.param("nw = networking  # site secrets", id="renamed-with-a-comment"),
+        pytest.param("def f():\n    return networking", id="returned"),
+        pytest.param("for key in networking:\n    pass", id="iterated"),
+        pytest.param("networking.items()", id="items"),
+        pytest.param("merged = {**networking}", id="unpacked"),
+        pytest.param("def helper(cfg):\n    return cfg['vps']\nhelper(networking)", id="handed-on-renamed"),
+        pytest.param("external(networking)", id="handed-outside-the-module"),
+        pytest.param("networking.get(name)", id="a-key-that-is-not-a-constant"),
+    ],
+)
+def test_a_use_that_is_not_a_key_read_is_reported(source: str) -> None:
+    assert _networking_reads(source)[1], source
+
+
+def test_a_key_read_in_any_form_is_found_and_a_hand_off_that_keeps_the_name_is_followed() -> None:
+    source = (
+        "def helper(node, networking):\n    return networking['ssh_users']\n"
+        "a = networking['nodes']\nb = networking.get('vps', {})\nc = networking.get(\"lan_cidr\")\n"
+        "helper(a, networking)\n"
+    )
+    assert _networking_reads(source) == ({"nodes", "vps", "lan_cidr", "ssh_users"}, [])
 
 
 def _declared(doc: dict[str, Any]) -> list[str]:
