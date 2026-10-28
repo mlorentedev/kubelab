@@ -50,6 +50,13 @@ def test_the_beelink_smoke_builds_only_in_the_run_that_releases_its_engine(extra
     assert _bee_smoke_flag(**extra) is expected
 
 
+def test_the_smoke_build_runs_after_the_role_that_upgrades_the_engine() -> None:
+    """Before the upgrade, it would build on the engine the run is about to replace."""
+    plays = yaml.safe_load(BEE_PLAY.read_text(encoding="utf-8"))
+    roles = [r["role"].rsplit("/", 1)[-1] for r in next(p["roles"] for p in plays if "roles" in p)]
+    assert roles.index("base_system") < roles.index("docker"), roles
+
+
 @pytest.mark.parametrize("name", [SMOKE, VERIFY])
 def test_the_smoke_build_is_off_by_default_and_in_check_mode(name: str) -> None:
     task = _task(name)
