@@ -455,5 +455,10 @@ class _LazySettings:
         # finds none, which the proxy forwards: the real field was deleted.
         return self._target().__dict__
 
+    def __reduce__(self) -> tuple[type[_LazySettings], tuple[str]]:
+        # `copy` and `pickle` would otherwise build an empty proxy and fill it
+        # through `__dict__`, which then has no environment to resolve.
+        return _LazySettings, (object.__getattribute__(self, "_env"),)
+
 
 settings = cast(PlatformSettings, _LazySettings(_IMPORT_ENV))

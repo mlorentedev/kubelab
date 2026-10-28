@@ -74,10 +74,23 @@ def test_undoing_a_patch_restores_the_field_rather_than_deleting_it(tmp_path: Pa
     """
     from toolkit.config.settings import PROJECT_ROOT, settings
 
+    # The contract itself, which holds whatever the installed pytest does on undo.
+    assert vars(settings)["project_root"] == PROJECT_ROOT
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(settings, "project_root", tmp_path)
         assert settings.project_root == tmp_path
     assert settings.project_root == PROJECT_ROOT
+
+
+def test_a_copy_of_the_proxy_resolves_the_same_settings() -> None:
+    """With `__dict__` forwarded, a copy built empty and filled through it had no environment."""
+    import copy
+    import pickle
+
+    from toolkit.config.settings import settings
+
+    for clone in (copy.copy(settings), copy.deepcopy(settings), pickle.loads(pickle.dumps(settings))):
+        assert clone.project_root == settings.project_root
 
 
 @pytest.fixture
