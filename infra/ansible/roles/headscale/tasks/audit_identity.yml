@@ -1,0 +1,67 @@
+---
+# SEC-037 (#2734): restricted read-only SSH identities for unattended audits of
+# this host. The deploy user is root-equivalent here (passwordless sudo and the
+# docker group), so each declared key is authorized only with `restrict` and the
+# forced command below, which runs a fixed allowlist of reads and refuses the rest.
+
+# Root-owned, so the restricted account cannot edit its own allowlist.
+- name: Install the audit forced command
+  copy:
+    src: headscale-audit.sh
+    dest: "{{ headscale_audit_command }}"
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+# `exclusive` is never set: making authorized_keys exclusive is SEC-033's switch
+# (#2246), which must read `audit_identities` as part of the deploy user's
+# declaration or its first exclusive run deletes these keys.
+# `from=` is added only for an identity whose source address SOPS declares.
+# no_log: the module's result and diff carry key_options, and so the source address.
+- name: Authorize the declared audit identities
+  ansible.posix.authorized_key:
+    user: "{{ headscale_audit_user }}"
+    key: "{{ item.key }}"
+    comment: "{{ item.name }}"
+    key_options: >-
+      {{ (['restrict', 'command="' ~ headscale_audit_command ~ '"']
+      + (['from="' ~ headscale_audit_sources[item.name] ~ '"'] if headscale_audit_sources.get(item.name) else []))
+      | join(',') }}
+    state: present
+  loop: "{{ headscale_audit_identities }}"
+  loop_control:
+    label: "{{ item.name }}"
+  no_log: true
+  become: true
+
+# Revoking is removing the declaration. A line that carries this role's forced
+# command is an audit key by construction, never a personal one, so every such
+# key that is no longer declared is removed and nothing else is touched.
+- name: Look up the audit user's home
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ headscale_audit_user }}"
+
+- name: Read the audit user's authorized_keys
+  ansible.builtin.slurp:
+    path: "{{ ansible_facts.getent_passwd[headscale_audit_user][4] }}/.ssh/authorized_keys"
+  register: _headscale_audit_authorized
+  failed_when: false
+  become: true
+
+- name: Revoke audit keys that are no longer declared
+  ansible.posix.authorized_key:
+    user: "{{ headscale_audit_user }}"
+    key: "{{ item }}"
+    state: absent
+  loop: "{{ _headscale_audit_stale }}"
+  become: true
+  vars:
+    _headscale_audit_stale: >-
+      {{ ((_headscale_audit_authorized.content | default('')) | b64decode).splitlines()
+      | select('search', 'command="' ~ headscale_audit_command ~ '"')
+      | map('regex_search', '(ssh|ecdsa|sk)-[^ ]+ [A-Za-z0-9+/]+=*')
+      | reject('none')
+      | reject('in', headscale_audit_identities | map(attribute='key') | list)
+      | list }}

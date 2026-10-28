@@ -39,6 +39,18 @@ headscale_policy_path: ""
 # default (policy task is dormant until headscale_policy_path is set).
 headscale_policy_hosts: {}
 
+# Audit identities (SEC-037). Each entry is {name, key}: `name` becomes the key's
+# comment and `key` is the bare public key. A key that carries the forced command
+# but is no longer declared is removed on the next run.
+# The play passes them from
+# `apps.services.core.headscale.audit_identities` in common.yaml. Optional source
+# addresses (name -> address, rendered as `from=`) come from SOPS, because they
+# are network inventory and the repository is public. Empty: nothing authorized.
+headscale_audit_identities: []
+headscale_audit_sources: {}
+headscale_audit_user: "{{ ansible_user }}"
+headscale_audit_command: "/usr/local/bin/headscale-audit"
+
 # Retired TLS stack (OPS-047). The VPS still carried certbot and nginx from two
 # designs that Traefik replaced: the 2025 nginx + certbot setup for mlorente.dev,
 # and the 2026-02-26 setup in which Headscale terminated TLS itself from a certbot

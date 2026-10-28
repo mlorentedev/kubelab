@@ -172,3 +172,10 @@
         # permissive-first (existing identities keep allow-all → cannot sever a flow);
         # on reload the role probes the preserved flows and AUTO-REVERTS on failure.
         headscale_policy_path: "/etc/headscale/policy.hujson"
+        # SEC-037: restricted audit identities. Keys are public (common.yaml); the
+        # optional source addresses are network inventory, so they come from SOPS.
+        headscale_audit_identities: "{{ config.apps.services.core.headscale.audit_identities | default([]) }}"
+        headscale_audit_sources: >-
+          {{ secrets.get('apps', {}).get('services', {}).get('core', {})
+          .get('headscale', {}).get('audit_sources', {}) }}
+        headscale_audit_user: "{{ config.networking.ssh_users.cloud }}"

@@ -146,6 +146,10 @@
              else 'an explicit allow-all (first activation, no prior policy)' }}.
           Inspect `toolkit infra headscale probe`.
 
+# SEC-037: restricted read-only SSH identities for unattended audits.
+- name: Declare the audit identities
+  import_tasks: audit_identity.yml
+
 # --- Retired TLS stack: certbot and nginx (OPS-047) ---------------------------
 # Last in the role on purpose. `make deploy TARGET=vps ENV=prod` passes no tags and is
 # also how an ACL change reaches the VPS, so these tasks run on every ACL deploy. A
