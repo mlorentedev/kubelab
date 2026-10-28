@@ -39,4 +39,8 @@ def test_dependabot_waits_before_proposing_a_python_release() -> None:
     config = yaml.safe_load((REPO / ".github" / "dependabot.yml").read_text(encoding="utf-8"))
     pip = [u for u in config["updates"] if u["package-ecosystem"] == "pip"]
     assert len(pip) == 1, pip
-    assert pip[0].get("cooldown", {}).get("default-days", 0) >= 1, pip[0]
+    cooldown = pip[0].get("cooldown", {})
+    # Three days: long enough for a broken upload to be yanked or fixed, as pytest 9.2.0 was within a day.
+    assert cooldown.get("default-days", 0) >= 3, pip[0]
+    # A per-semver key overrides the default for its class, so one set lower would reopen the window.
+    assert all(v >= 3 for k, v in cooldown.items() if k.startswith("semver-")), cooldown
