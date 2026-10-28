@@ -39,8 +39,9 @@ headscale_policy_path: ""
 # default (policy task is dormant until headscale_policy_path is set).
 headscale_policy_hosts: {}
 
-# Audit identities (SEC-037). Each entry is {name, key[, revoked]}: `name` becomes
-# the key's comment, `key` is the bare public key, and `revoked: true` removes it.
+# Audit identities (SEC-037). Each entry is {name, key}: `name` becomes the key's
+# comment and `key` is the bare public key. A key that carries the forced command
+# but is no longer declared is removed on the next run.
 # The play passes them from
 # `apps.services.core.headscale.audit_identities` in common.yaml. Optional source
 # addresses (name -> address, rendered as `from=`) come from SOPS, because they

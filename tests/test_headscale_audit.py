@@ -15,7 +15,8 @@ does, with a stand-in `logger` that records what it was asked to log.
 
 from __future__ import annotations
 
-import ipaddress
+import base64
+import json
 import os
 import re
 import shutil
@@ -42,6 +43,11 @@ DENIED_RC = 126
 SH = shutil.which("sh")
 needs_sh = pytest.mark.skipif(SH is None, reason="no POSIX sh on this runner")
 
+FORCED = f'restrict,command="{INSTALLED_AT}"'
+DECLARED = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDeclaredDeclaredDeclaredDeclaredDecla"
+UNDECLARED = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGoneGoneGoneGoneGoneGoneGoneGoneGoneGo"
+PERSONAL = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPersonalPersonalPersonalPersonalPers operator"
+
 REFUSED = [
     "rm -rf /tmp/canary",
     "bash",
@@ -63,6 +69,13 @@ REFUSED = [
     "docker run --rm -v /:/host alpine cat /host/etc/shadow",
     "docker ps",
     "sudo -n true",
+    "docker exec headscale headscale policy get; id",
+    "docker exec headscale headscale nodes delete -i 1",
+    "docker exec headscale headscale nodes approve-routes -i 1 -r 0.0.0.0/0",
+    "docker exec headscale headscale nodes expire -i 1",
+    "docker exec headscale headscale users delete --name x",
+    "docker exec headscale headscale preauthkeys create --user 1",
+    "docker exec headscale headscale apikeys create",
 ]
 
 
@@ -136,7 +149,12 @@ class TestForcedCommand:
         assert len(lines) == 1 and "refused" in lines[0] and "unknown" in lines[0]
 
     def test_the_allowlist_holds_only_reads(self) -> None:
-        patterns = set(re.findall(r"^\s*'([^']*)'\)", SCRIPT.read_text(), re.M))
+        body = SCRIPT.read_text().split('case "$request" in', 1)[1].split("\nesac", 1)[0]
+        arms = re.findall(r"^    (\S.*)\)$", body, re.M)
+        assert arms[-1] == "*", "the catch-all refusal must be the last arm"
+        unquoted = [a for a in arms[:-1] if not re.fullmatch(r"'[^']*'", a)]
+        assert not unquoted, f"every allowed request is one single-quoted literal: {unquoted}"
+        patterns = {a[1:-1] for a in arms[:-1]}
         headscale = {p for p in patterns if p.startswith("docker exec headscale headscale ")}
         assert headscale == {
             "docker exec headscale headscale nodes list -o json",
@@ -151,12 +169,20 @@ def _audit_tasks() -> list[dict[str, Any]]:
     return yaml.safe_load(AUDIT_TASKS.read_text())
 
 
-def _task_using(module: str) -> dict[str, Any]:
+def _task_using(module: str, name: str | None = None) -> dict[str, Any]:
     names = (module, f"ansible.builtin.{module}", f"ansible.posix.{module}")
-    found = [t for t in _audit_tasks() if any(n in t for n in names)]
+    found = [t for t in _audit_tasks() if any(n in t for n in names) and (name is None or t["name"] == name)]
     assert len(found) == 1, f"expected one {module} task, found {len(found)}"
     task = found[0]
     return task | {"_args": next(task[n] for n in names if n in task)}
+
+
+def _authorize() -> dict[str, Any]:
+    return _task_using("authorized_key", "Authorize the declared audit identities")
+
+
+def _revoke() -> dict[str, Any]:
+    return _task_using("authorized_key", "Revoke audit keys that are no longer declared")
 
 
 def _audit_identities() -> list[dict[str, Any]]:
@@ -179,20 +205,44 @@ class TestRole:
         assert copy.get("become") is True
 
     def test_keys_are_added_never_made_exclusive(self) -> None:
-        args = _task_using("authorized_key")["_args"]
-        assert "exclusive" not in args, "exclusive authorized_keys is SEC-033's switch (#2246), not this role's"
+        for task in (_authorize(), _revoke()):
+            assert "exclusive" not in task["_args"], "exclusive authorized_keys is SEC-033's switch (#2246)"
+        assert _authorize()["_args"]["state"] == "present"
+
+    def test_the_source_address_never_reaches_the_task_output(self) -> None:
+        assert _authorize().get("no_log") is True, "key_options, and so the SOPS source, is in the result and diff"
 
     @pytest.mark.parametrize(
-        ("item", "expected"),
+        ("lines", "declared", "stale"),
         [
-            ({"name": "probe", "key": "k"}, "present"),
-            ({"name": "probe", "key": "k", "revoked": False}, "present"),
-            ({"name": "probe", "key": "k", "revoked": True}, "absent"),
+            pytest.param(None, [DECLARED], [], id="no-authorized-keys-file"),
+            pytest.param([PERSONAL, f"{FORCED} {DECLARED} audit_automation"], [DECLARED], [], id="all-declared"),
+            pytest.param(
+                [PERSONAL, f'{FORCED},from="198.51.100.7" {UNDECLARED} gone'], [DECLARED], [UNDECLARED], id="removed"
+            ),
+            pytest.param([f"{FORCED} {DECLARED} a", PERSONAL], [], [DECLARED], id="emptied-declaration"),
+            pytest.param([f'command="/bin/other" {UNDECLARED} other'], [], [], id="another-forced-command"),
         ],
     )
-    def test_revoking_is_declared_not_done_by_hand(self, item: dict[str, Any], expected: str) -> None:
-        template = _task_using("authorized_key")["_args"]["state"]
-        assert ansible_env(str(ROLE)).from_string(template).render(item=item) == expected
+    def test_revoking_is_removing_the_declaration(
+        self, lines: list[str] | None, declared: list[str], stale: list[str]
+    ) -> None:
+        registered = {} if lines is None else {"content": base64.b64encode("\n".join(lines).encode()).decode()}
+        expression = _revoke()["vars"]["_headscale_audit_stale"]
+        rendered = (
+            ansible_env(str(ROLE))
+            .from_string("{{ (" + expression.strip()[2:-2] + ") | to_json }}")
+            .render(
+                _headscale_audit_authorized=registered,
+                headscale_audit_command=INSTALLED_AT,
+                headscale_audit_identities=[{"name": f"n{i}", "key": k} for i, k in enumerate(declared)],
+            )
+        )
+        assert json.loads(rendered) == stale
+
+    def test_revoking_never_reads_a_home_through_tilde(self) -> None:
+        slurp = _task_using("slurp")["_args"]["path"]
+        assert "~" not in slurp and "getent_passwd" in slurp
 
     @pytest.mark.parametrize(
         ("sources", "expected"),
@@ -205,7 +255,7 @@ class TestRole:
     def test_key_options_restrict_force_and_pin_the_source_when_declared(
         self, sources: dict[str, str], expected: str
     ) -> None:
-        template = _task_using("authorized_key")["_args"]["key_options"]
+        template = _authorize()["_args"]["key_options"]
         defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text())
         rendered = (
             ansible_env(str(ROLE))
@@ -237,7 +287,7 @@ class TestDeclaration:
         identities = _audit_identities()
         assert identities, "no audit identity is declared"
         for identity in identities:
-            assert set(identity) <= {"name", "key", "revoked"} and {"name", "key"} <= set(identity)
+            assert set(identity) == {"name", "key"}
             assert re.fullmatch(r"ssh-ed25519 [A-Za-z0-9+/]+={0,2}", identity["key"]), (
                 "the comment comes from `name`, so a key's own comment cannot leak a host name"
             )
@@ -246,7 +296,12 @@ class TestDeclaration:
         names = [i["name"] for i in _audit_identities()]
         assert len(names) == len(set(names))
 
-    def test_no_source_address_in_the_public_tree(self) -> None:
-        for token in re.findall(r"[0-9A-Fa-f:.]{7,}", yaml.safe_dump(_audit_identities())):
-            with pytest.raises(ValueError):
-                ipaddress.ip_network(token.strip(":."), strict=False)
+    def test_no_field_can_carry_a_source_address(self) -> None:
+        """The source is SOPS's: the shape leaves no field an address could sit in.
+
+        `key` is held to the key regex above, and `name` to an identifier, which
+        has no `.` or `:` and cannot start with a digit, so neither an IPv4 nor an
+        IPv6 address or CIDR fits.
+        """
+        for identity in _audit_identities():
+            assert re.fullmatch(r"[a-z][a-z0-9_]*", identity["name"]), identity["name"]

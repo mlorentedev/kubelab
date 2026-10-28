@@ -95,6 +95,8 @@ def ansible_env(templates_dir: str, **kwargs: Any) -> Environment:
     env.filters["comment"] = lambda text: "\n".join(f"# {line}" for line in str(text).splitlines())
     env.tests["match"] = _match
     env.tests["regex"] = _regex
+    env.tests["search"] = lambda value, pattern: re.search(pattern, value) is not None
+    env.filters["regex_search"] = lambda value, pattern: m.group(0) if (m := re.search(pattern, value)) else None
     env.tests["changed"] = _changed
     env.tests["version"] = _version
     return env

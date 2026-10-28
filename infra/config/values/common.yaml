@@ -1566,8 +1566,8 @@ apps:
         # /usr/local/bin/headscale-audit (role `headscale`), never exclusively.
         # `name` becomes the key's comment; `key` is the bare public key. An optional
         # source address lives in SOPS at `audit_sources.<name>` (network inventory,
-        # public repo). Revoke with `revoked: true` and a deploy, which removes the
-        # key from the host; delete the entry only after that run.
+        # public repo). Revoke by deleting the entry and deploying: the role removes
+        # every key carrying its forced command that is no longer declared here.
         audit_identities:
           - name: audit_automation
             key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILevHjcCW1uOUGcyMnWTFqixFPv4RcEue2nx29crqND0"
