@@ -25,10 +25,10 @@ allowed_commands: [dotf, gh, git, make, poetry, pytest, toolkit, ssh]
 queue:
   source: bitacora
   filter: >-
-    open PRs #2741 #2743 #2740 #2736; ace2 PAT check (gh auth status, F2 probe) and the main
+    open PRs #2741 #2743 #2740 #2736, then #2692 (after #2741) and #2706; ace2 PAT check (gh auth status, F2 probe) and the main
     checkout's SOPS restore after the ace2 play exits; #1021 cross-link to #1102; the
     node_maintenance defaults comment; then #2744 and #2742 (spec fast each); #2737 if time remains
-  max_items: 8
+  max_items: 10
 budget:
   max_iterations: 10
   max_minutes_per_iteration: 45
@@ -42,8 +42,11 @@ authority:
 # - #2741 may be landed although it touches .github/dependabot.yml: the operator authorized it explicitly.
 # - #2740 and #2743 may be landed although they touch infra/config/secrets/*.enc.yaml: authorized at arming.
 #   This run writes no secrets file itself; both PRs already carry the operator-typed values.
+# - #2692 (Dependabot, not opened by this run) may be landed once #2741 is in and its rebase is green:
+#   authorized at arming. If `dotf pr land` refuses it for authorship, it stays for the operator.
+# - #2706 may be landed although it touches .github/workflows/ci.yml: authorized at arming.
 # - #2744 and #2742: /spec fast --issue N each, landed under the grant; a WIP refusal parks the item.
 # Never: prod deploys or provisions (rpi4's changed=0 pass and T1-T4 wait for the operator), live
-# netplan, uplink, hostapd, watchdog or Tailscale changes, `make setup-ansible`, merging .github/workflows,
-# release PRs, infra/k8s/**, #2706 or #2692, or touching other sessions' PRs (#2655 #2656 #2658).
+# netplan, uplink, hostapd, watchdog or Tailscale changes, `make setup-ansible`, merging any other
+# .github/** change, release PRs, infra/k8s/**, or touching other sessions' PRs (#2655 #2656 #2658).
 # The main checkout's SOPS files are restored only after the ace2 play exits AND each blob equals origin/master's.
