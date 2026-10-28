@@ -181,6 +181,11 @@ jobs:
       - name: Ansible fails a run that matches no host
         run: poetry run pytest -q --no-cov -p no:cacheprovider tests/test_ansible_zero_host_run_fails.py
 
+      # Same reason: the retry on the VPS pre-flight is only exercised by running the
+      # real include through ansible-playbook, which the Tests job does not have.
+      - name: The VPS pre-flight retries a slow first connection
+        run: poetry run pytest -q --no-cov -p no:cacheprovider tests/test_vps_preflight_retries.py
+
   detect-changes:
     name: Detect Changes
     needs: validate

@@ -10,14 +10,15 @@ a failed generation stops it before ansible-playbook is invoked.
 
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
-import yaml
 import typer
+import yaml
 
 from toolkit.cli import infra
 from toolkit.features import generator_ansible
@@ -222,17 +223,136 @@ def test_the_recipe_parser_sees_every_run() -> None:
 # only while no SOPS file declares a key under these (review of #1951): a node
 # override or a backup source added to an `*.enc.yaml` would be invisible to the
 # generator, and `make backup-node NODE=all` would target a thinner group and
-# exit 0 (lesson-356).
-_GENERATOR_READS = ("networking", "backup.sources")
+# exit 0 (lesson-356). `networking` is guarded key by key, derived from the
+# generator's own reads, because SOPS does hold a part of it the generator never
+# reads: the lab edge's site secrets at `networking.edge`, which the rpi4 play
+# takes from SOPS itself (#2665).
+_GENERATOR_SOURCE = (_ROOT / "toolkit" / "features" / "generator_ansible.py").read_text()
+
+
+def _networking_reads(source: str) -> tuple[set[str], list[int]]:
+    """The keys `source` reads from `networking`, and the lines that use it any other way.
+
+    Parsed rather than matched, so the form of a read cannot hide it: every load
+    of the name is a constant-key read (`networking["k"]`, `networking.get("k")`),
+    a hand-off to a function of this module whose parameter keeps the name, by
+    position or by keyword (its reads are then reads of the same name), or a
+    line in the second list.
+    """
+    tree = ast.parse(source)
+    functions = {f.name: f for f in ast.walk(tree) if isinstance(f, ast.FunctionDef)}
+    parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+    keys: set[str] = set()
+    other: list[int] = []
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Name) and node.id == "networking" and isinstance(node.ctx, ast.Load)):
+            continue
+        parent = parents[node]
+        call = parents.get(parent)
+        if isinstance(parent, ast.Subscript) and isinstance(parent.slice, ast.Constant):
+            keys.add(parent.slice.value)
+        elif (
+            isinstance(parent, ast.Attribute)
+            and parent.attr == "get"
+            and isinstance(call, ast.Call)
+            and call.args
+            and isinstance(call.args[0], ast.Constant)
+        ):
+            keys.add(call.args[0].value)
+        elif isinstance(parent, ast.Call) and node in parent.args and _keeps_the_name(parent, node, functions):
+            continue
+        elif isinstance(parent, ast.keyword) and parent.arg == "networking" and _takes_networking(call, functions):
+            continue
+        else:
+            other.append(node.lineno)
+    return keys, other
+
+
+def _callee(call: ast.Call, functions: dict[str, ast.FunctionDef]) -> ast.FunctionDef | None:
+    name = call.func.attr if isinstance(call.func, ast.Attribute) else getattr(call.func, "id", "")
+    return functions.get(name)
+
+
+def _keeps_the_name(call: ast.Call, arg: ast.Name, functions: dict[str, ast.FunctionDef]) -> bool:
+    target = _callee(call, functions)
+    if target is None:
+        return False
+    params = [a.arg for a in target.args.args if a.arg not in ("self", "cls")]
+    index = call.args.index(arg)
+    return index < len(params) and params[index] == "networking"
+
+
+def _takes_networking(call: ast.AST | None, functions: dict[str, ast.FunctionDef]) -> bool:
+    target = _callee(call, functions) if isinstance(call, ast.Call) else None
+    return target is not None and "networking" in [a.arg for a in (*target.args.args, *target.args.kwonlyargs)]
+
+
+_NETWORKING_KEYS, _NETWORKING_OTHER_USES = _networking_reads(_GENERATOR_SOURCE)
+_GENERATOR_READS = (*sorted(f"networking.{key}" for key in _NETWORKING_KEYS), "backup.sources")
 
 
 def test_the_generator_reads_only_the_subtrees_listed_here() -> None:
-    source = (_ROOT / "toolkit" / "features" / "generator_ansible.py").read_text()
-    top_level = set(re.findall(r"\bconfig\.get\(\"([a-z_]+)\"", source))
+    top_level = set(re.findall(r"\bconfig\.get\(\"([a-z_]+)\"", _GENERATOR_SOURCE))
     assert top_level == {path.split(".")[0] for path in _GENERATOR_READS}, (
         f"the generator reads {sorted(top_level)} from the config; list each subtree in "
         "_GENERATOR_READS so the SOPS check below covers it"
     )
+
+
+def test_the_generator_reads_networking_key_by_key() -> None:
+    """Any other use (iterating it, handing it on under another name) hides keys from the list above."""
+    assert "nodes" in _NETWORKING_KEYS, "the generator no longer reads networking.nodes: the parse is stale"
+    assert not _NETWORKING_OTHER_USES, (
+        f"generator_ansible.py uses `networking` other than by key on lines {_NETWORKING_OTHER_USES}: "
+        "read each key by name, or hand it to a function whose parameter is also named `networking`"
+    )
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        pytest.param("nw = networking", id="renamed"),
+        pytest.param("nw = networking  # site secrets", id="renamed-with-a-comment"),
+        pytest.param("def f():\n    return networking", id="returned"),
+        pytest.param("for key in networking:\n    pass", id="iterated"),
+        pytest.param("networking.items()", id="items"),
+        pytest.param("merged = {**networking}", id="unpacked"),
+        pytest.param("def helper(cfg):\n    return cfg['vps']\nhelper(networking)", id="handed-on-renamed"),
+        pytest.param("external(networking)", id="handed-outside-the-module"),
+        pytest.param("def helper(cfg):\n    return cfg['vps']\nhelper(cfg=networking)", id="keyword-renamed"),
+        pytest.param("external(networking=networking)", id="keyword-outside-the-module"),
+        pytest.param("networking.get(name)", id="a-key-that-is-not-a-constant"),
+    ],
+)
+def test_a_use_that_is_not_a_key_read_is_reported(source: str) -> None:
+    assert _networking_reads(source)[1], source
+
+
+def test_a_key_read_in_any_form_is_found_and_a_hand_off_that_keeps_the_name_is_followed() -> None:
+    source = (
+        "def helper(node, networking):\n    return networking['ssh_users']\n"
+        "a = networking['nodes']\nb = networking.get('vps', {})\nc = networking.get(\"lan_cidr\")\n"
+        "helper(a, networking)\nhelper(node=a, networking=networking)\n"
+    )
+    assert _networking_reads(source) == ({"nodes", "vps", "lan_cidr", "ssh_users"}, [])
+
+
+def _declared(doc: dict[str, Any]) -> list[str]:
+    """The guarded paths a SOPS document declares."""
+    declared = []
+    for dotted in _GENERATOR_READS:
+        node: Any = doc
+        for part in dotted.split("."):
+            node = node.get(part) if isinstance(node, dict) else None
+        if node is not None:
+            declared.append(dotted)
+    return declared
+
+
+def test_a_secret_under_networking_the_generator_never_reads_is_allowed() -> None:
+    """The lab edge's site secrets live at `networking.edge` (#2665); a node override there would not."""
+    assert _declared({"networking": {"edge": {"uplink": {"mac": "ENC[...]"}}}}) == []
+    assert _declared({"networking": {"nodes": {"rpi4": {"lan_ip": "ENC[...]"}}}}) == ["networking.nodes"]
 
 
 @pytest.mark.parametrize(
@@ -240,14 +360,7 @@ def test_the_generator_reads_only_the_subtrees_listed_here() -> None:
 )
 def test_no_sops_file_declares_what_the_inventory_is_built_from(path: Path) -> None:
     """Key names are plaintext in a SOPS file, so this needs no decryption key."""
-    doc = yaml.safe_load(path.read_text()) or {}
-    declared = []
-    for dotted in _GENERATOR_READS:
-        node = doc
-        for part in dotted.split("."):
-            node = node.get(part) if isinstance(node, dict) else None
-        if node is not None:
-            declared.append(dotted)
+    declared = _declared(yaml.safe_load(path.read_text()) or {})
     assert not declared, (
         f"{path.name} declares {declared}. The inventory is generated from plaintext values "
         "only, so these keys would never reach it. Keep them in common.yaml / <env>.yaml."

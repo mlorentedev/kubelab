@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 642 | [A version floor in `requirements.yml` never upgrades a controller](lesson-642-a-version-floor-never-upgrades-a-controller.md) | 2026-10-28 |
 | 640 | [A guard that pairs two roles by tag says nothing about which runs first](lesson-640-a-guard-that-pairs-two-roles-by-tag-says-nothing-about-which-runs-first.md) | 2026-10-27 |
 | 638 | [A guard scoped to one stack leaves its defect open in every other role](lesson-638-a-guard-scoped-to-one-stack-leaves-its-defect-open-in-every-other-role.md) | 2026-10-27 |
 | 637 | [A dry run creates no directory, so the next task writing into it fails the check](lesson-637-a-dry-run-creates-no-directory-so-the-next-task-writing-into-it-fails-the-check.md) | 2026-10-27 |

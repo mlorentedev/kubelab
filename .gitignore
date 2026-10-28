@@ -60,9 +60,6 @@ coverage.xml
 .ruff_cache/
 .tox/
 
-# Poetry
-poetry.lock
-
 # Ruby / Jekyll
 Gemfile.lock
 beautiful-jekyll-theme-*.gem
