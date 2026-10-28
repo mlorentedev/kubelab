@@ -183,10 +183,10 @@ setup-certs:
 setup-ansible:
 	@if command -v ansible-galaxy >/dev/null 2>&1; then \
 		echo "Installing Ansible Galaxy collections..."; \
-		ansible-galaxy collection install -r infra/ansible/requirements.yml >/dev/null 2>&1; \
+		ansible-galaxy collection install -r infra/ansible/requirements.yml && \
 		echo "✓ Ansible collections installed"; \
 	else \
-		echo "⚠ ansible-galaxy not found — skipping Ansible setup (install with: pip install ansible)"; \
+		echo "⚠ ansible-galaxy not found — skipping Ansible setup (install with: pip install ansible-core)"; \
 	fi
 
 .PHONY: regen-certs

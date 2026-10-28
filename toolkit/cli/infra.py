@@ -1738,6 +1738,29 @@ def _refuse_if_behind_master(ansible_dir: Path, *, force: bool) -> None:
     raise typer.Exit(1) from None
 
 
+def _refuse_if_collections_off_declaration(ansible_dir: Path, *, force: bool) -> None:
+    """ANSIBLE-070: the roles run the controller's Galaxy collections, so a pin it never installed changes nothing."""
+    from toolkit.features import provision_freshness
+
+    try:
+        declared = provision_freshness.declared_collections(provision_freshness.repo_root(ansible_dir))
+        off = provision_freshness.collections_off_declaration(declared)
+    except provision_freshness.FreshnessError as exc:
+        if force:
+            logger.warning(f"Could not compare the Galaxy collections (FORCE=1, continuing): {exc}")
+            return
+        logger.error(f"Could not compare the Galaxy collections with {provision_freshness.REQUIREMENTS}: {exc}")
+        logger.info("Fix ansible-galaxy, or FORCE=1 to run without the check")
+        raise typer.Exit(1) from None
+    if not off:
+        return
+    if force:
+        logger.warning(f"FORCE=1: running with {len(off)} Galaxy collections off their pins")
+        return
+    logger.error(provision_freshness.collections_refusal_message(off))
+    raise typer.Exit(1) from None
+
+
 @ansible_app.command("run")
 def ansible_run(
     playbook: Annotated[str, typer.Option("--playbook", "-p", help="Playbook name (without .yml)")],
@@ -1793,6 +1816,7 @@ def ansible_run(
 
     if require_fresh and not check:
         _refuse_if_behind_master(ansible_dir, force=force)
+        _refuse_if_collections_off_declaration(ansible_dir, force=force)
 
     if not skip_generate:
         from toolkit.features.generator_ansible import ansible_generator
