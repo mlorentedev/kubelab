@@ -1,0 +1,34 @@
+---
+# SEC-037 (#2734): restricted read-only SSH identities for unattended audits of
+# this host. The deploy user is root-equivalent here (passwordless sudo and the
+# docker group), so each declared key is authorized only with `restrict` and the
+# forced command below, which runs a fixed allowlist of reads and refuses the rest.
+
+# Root-owned, so the restricted account cannot edit its own allowlist.
+- name: Install the audit forced command
+  copy:
+    src: headscale-audit.sh
+    dest: "{{ headscale_audit_command }}"
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+# `exclusive` is never set: making authorized_keys exclusive is SEC-033's switch
+# (#2246), which keeps these keys because they are declared.
+# `from=` is added only for an identity whose source address SOPS declares.
+- name: Authorize the declared audit identities
+  ansible.posix.authorized_key:
+    user: "{{ headscale_audit_user }}"
+    key: "{{ item.key }}"
+    comment: "{{ item.name }}"
+    key_options: >-
+      {{ (['restrict', 'command="' ~ headscale_audit_command ~ '"']
+      + (['from="' ~ headscale_audit_sources[item.name] ~ '"'] if headscale_audit_sources.get(item.name) else []))
+      | join(',') }}
+    # Revoking is declarative: `revoked: true` removes the key on the next run.
+    state: "{{ 'absent' if item.revoked | default(false) | bool else 'present' }}"
+  loop: "{{ headscale_audit_identities }}"
+  loop_control:
+    label: "{{ item.name }}"
+  become: true

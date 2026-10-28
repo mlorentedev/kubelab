@@ -44,7 +44,8 @@ state is declared here, where the host is owned.
   install the script `root:root 0755` at `/usr/local/bin/headscale-audit`;
   for each declared identity, `ansible.posix.authorized_key` on `deployer` with
   `key_options: restrict,command="/usr/local/bin/headscale-audit"` plus
-  `from="<source>"` when a source is declared, `state: present`, never
+  `from="<source>"` when a source is declared, `state: present` (`absent` when
+  the entry says `revoked: true`), never
   `exclusive` (that is SEC-033's switch).
 - Declaration: public key and owner in `common.yaml` under
   `apps.services.core.headscale.audit_identities` (shape compatible with
@@ -59,7 +60,7 @@ on the public address (#2224); any write command in the allowlist, ever.
 
 ## Checklist
 
-- [ ] [AC1] Write `tests/test_headscale_audit.py` first and watch it fail:
+- [x] [AC1] Write `tests/test_headscale_audit.py` first and watch it fail: ✓ 2026-10-28
   - LF-only bytes check of the script;
   - liveness (`''`, `true`) exits 0, also with `SSH_CLIENT` unset;
   - `hostname` exits 0 with output;
@@ -73,12 +74,12 @@ on the public address (#2224); any write command in the allowlist, ever.
     `docker run --rm -v /:/host alpine cat /host/etc/shadow`, `docker ps`,
     `sudo -n true`;
   - refusal with `SSH_CLIENT` unset exits 126 without `unbound variable`.
-- [ ] [AC1] Add `files/headscale-audit.sh` and make the tests pass.
-- [ ] [AC2] Static tests: the task installs `root:root 0755`; `key_options`
+- [x] [AC1] Add `files/headscale-audit.sh` and make the tests pass. ✓ 2026-10-28
+- [x] [AC2] Static tests: the task installs `root:root 0755`; `key_options`
       contains `restrict` and `command=`; `exclusive` is never set; no IPv4
-      literal in `common.yaml` under `audit_identities`.
-- [ ] [AC2] Add `tasks/audit_identity.yml`, defaults (`headscale_audit_identities: []`),
-      the include, the `deploy-vps.yml` wiring and the `common.yaml` declaration.
+      literal in `common.yaml` under `audit_identities`. ✓ 2026-10-28
+- [x] [AC2] Add `tasks/audit_identity.yml`, defaults (`headscale_audit_identities: []`),
+      the include, the `deploy-vps.yml` wiring and the `common.yaml` declaration. ✓ 2026-10-28
 - [ ] [AC2] `make lint-ansible` and the targeted `pytest` run green; PR with
       `Closes #2734`.
 - [ ] [AC3] Operator adds the source address to SOPS and runs
@@ -92,11 +93,23 @@ live apply converges and the restricted key works and is refused as designed.
 
 ## Evidence
 
-None yet. Design decided 2026-10-27; implementation not started.
+- 2026-10-28: `tests/test_headscale_audit.py` red first (42 failed, nothing
+  implemented), then 45 passed locally under busybox `sh`. The run also caught a
+  portability bug: busybox `tr -c '[:print:]'` treats the class as literal
+  characters, so the log sanitizer uses the octal range `\001-\037\177`.
+- Design additions while implementing: the key comment comes from `name`, never
+  from the key file (the generated comment carried a host name); `revoked: true`
+  renders `state: absent`, so revoking is a declaration plus a deploy rather than
+  a hand edit; the source address is catalogued in `SECRET_CATALOG`
+  (`apps.services.core.headscale.audit_sources.audit_automation`, EXTERNAL, prod)
+  so the orphan audit does not flag it once the operator adds it.
+- yamllint and `shellcheck -s sh` clean on the changed files. `make lint-ansible`
+  runs in CI (Ansible does not run on the Windows controller).
 
 ## Next
 
-Write `tests/test_headscale_audit.py` (first checklist item) and watch it fail.
+PR with `Closes #2734`. After merge: operator adds the source address to SOPS
+and applies `deploy-vps --tags headscale` twice (AC3).
 
 ## Promotion candidates
 

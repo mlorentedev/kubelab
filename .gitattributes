@@ -12,3 +12,6 @@
 *.js   text eol=lf
 *.svg  text eol=lf
 *.css  text eol=lf
+# Shell scripts run on Linux hosts; a CR breaks the shebang and every `case` pattern
+# (SEC-037's forced command is matched byte for byte).
+*.sh   text eol=lf

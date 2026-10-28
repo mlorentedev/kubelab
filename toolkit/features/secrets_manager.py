@@ -1255,6 +1255,29 @@ SECRET_CATALOG: list[SecretSpec] = [
         sync_to_secret_manager=True,
     ),
     # =========================================================================
+    # Headscale host (VPS) — SEC-037
+    # =========================================================================
+    SecretSpec(
+        key_path="apps.services.core.headscale.audit_sources.audit_automation",
+        expiry=Expiry.NEVER,
+        description=(
+            "Source address the `audit_automation` audit key may connect from, rendered as "
+            "`from=` on its authorized_keys entry. Not a credential: network inventory, kept "
+            "out of the public tree. The key itself is declared in common.yaml (audit_identities)."
+        ),
+        kind=SecretKind.EXTERNAL,
+        services=("headscale",),
+        format_hint="an IPv4/IPv6 address or CIDR, or a comma-separated list of them",
+        value_pattern=r"[0-9A-Fa-f:./]+(,[0-9A-Fa-f:./]+)*",
+        rotate_note=(
+            "Update common.enc.yaml, then `make deploy TARGET=vps ENV=prod` "
+            "(or deploy-vps with `--tags headscale`). Removing it drops the `from=` pin."
+        ),
+        # The VPS is prod-only. The value lives in common.enc.yaml, which deploy-vps
+        # merges under the env file (`envs` is the audit dimension, ANSIBLE-033).
+        envs=("prod",),
+    ),
+    # =========================================================================
     # GCP hub (ADR-063) — read by cloud-init from Secret Manager, not by a human
     # =========================================================================
     SecretSpec(
