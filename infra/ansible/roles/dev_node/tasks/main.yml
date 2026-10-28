@@ -110,13 +110,24 @@
   register: dev_node_gh_legacy_source
   tags: [dev_node, tooling, gh]
 
+# Whether apt has ever read the source. A run that wrote it and stopped before
+# the install leaves the next run with both registers above unchanged, and
+# `TAGS=gh` skips the hourly refresh above.
+- name: Check that apt has read the GitHub CLI source
+  ansible.builtin.stat:
+    path: /var/lib/apt/lists/cli.github.com_packages_dists_stable_InRelease
+  register: dev_node_gh_index
+  tags: [dev_node, tooling, gh]
+
 # The package index above may be under an hour old and predate the source, so
-# it is refreshed here exactly when the source changed.
+# it is refreshed here when the source changed or apt has never read it.
 - name: Install GitHub CLI (gh)
   ansible.builtin.apt:
     name: gh
     state: present
-    update_cache: "{{ dev_node_gh_source is changed or dev_node_gh_legacy_source is changed }}"
+    update_cache: >-
+      {{ dev_node_gh_source is changed or dev_node_gh_legacy_source is changed
+         or not dev_node_gh_index.stat.exists }}
   tags: [dev_node, tooling, gh]
 
 # --- User-level provisioning (runs as the interactive dev user) ------------
