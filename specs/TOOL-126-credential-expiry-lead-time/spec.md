@@ -18,7 +18,7 @@ In:
 
 - `SecretSpec.warn_days`: an optional lead time per catalog entry. Unset, the global window applies (`--warn-days`, 90 by default).
 - All three places that judge a remaining life read it: the provider loop of the audit's expiry report, the provider loop of `check-expiry`, and the declared-date lines both share.
-- `warn_days=14` on the dev node PAT and the R2 minter, whose stated lives are 60–90 and 90 days.
+- `warn_days=14` on the dev node PAT and the R2 minter, whose stated lives are 60–90 and 90 days, and on the Argo CD commit status token, minted by #2594 on 2026-10-21 with GitHub's 90-day expiry (2027-01-20) and red at 83 days left on 2026-10-28.
 - A catalog test: an entry whose expiry is reported and whose format hint, rotate note or referenced runbook states a life of 90 days or less declares a lead time shorter than that life.
 
 Out:
@@ -31,9 +31,9 @@ Out:
 
 - [x] Failing tests first: a credential with its own lead time is INFO outside it and ERROR inside it, in the audit report, in `check-expiry` and on a declared date; one without keeps the 90-day default.
 - [x] `SecretSpec.warn_days`, validated positive; the three call sites read it.
-- [x] `warn_days=14` on `apps.services.automation.dev_node.github_token` and `cloudflare.r2_token_minter`; their format hints state the life.
+- [x] `warn_days=14` on `apps.services.automation.dev_node.github_token`, `cloudflare.r2_token_minter` and `argocd.github_status_token`; their format hints state the life.
 - [x] Catalog test for stated lives of 90 days or less; mutants on both entries go red.
-- [ ] `make secrets-audit` on the live state prints both credentials as INFO.
+- [x] `make secrets-audit` on the live state prints both credentials as INFO (2026-10-28: dev node PAT 59d, R2 minter 90d).
 
 ## Evidence
 
@@ -41,7 +41,7 @@ See the PR body.
 
 ## Next
 
-Open the PR, triage, land.
+Triage, land.
 
 ## Promotion candidates
 
