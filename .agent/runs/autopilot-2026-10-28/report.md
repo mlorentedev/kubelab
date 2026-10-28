@@ -25,6 +25,10 @@ None yet.
 | 03:25–03:44 | node_maintenance comment | #2746 opened. The `make maintain` premise for the hub was wrong (gcp1 is in staging/prod inventories); dropped before commit | fa089970 |
 | 03:25–03:44 | #2740 Tests red | real: inventory guard refused any `networking` key in SOPS; #2665 put edge secrets at `networking.edge`. Fix #2747 (guard derived from generator reads, 3 mutants red); then update-branch #2740 | #2747 |
 | 03:25–03:44 | debt seen | `tests/` unlinted, 68 ruff findings: counted on existing #1292 | issuecomment-6460113045 |
+| 03:44–04:05 | #2744 TOOL-126 | #2748 draft (6 mutants red); live audit waits for #2743's token on master, then rebase + ready | #2748 |
+| 03:44–04:05 | #2741 second CodeRabbit review | applied both (check-ignore -v negation, lesson-518 relock), mutant red, re-pushed | issuecomment-6460217856 |
+| 03:44–04:05 | #2736 pr-agent finding | applied (name each stale copy's path; FIX names the full `ansible` package), mutant red, re-pushed | issuecomment-6460241002 |
+| 04:05 | #2742 ANSIBLE-072 | parked before claim (needs-decision). Deviates from the "spec fast + PR" ruling: 12 pulls in 11 roles, and it would change the rpi4/Beelink plays on your return list. Two forks posted | #2742 comment |
 
 ## Budget
 
