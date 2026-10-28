@@ -275,6 +275,7 @@ def test_an_undelivered_incident_ages_from_its_first_failure(node: Node) -> None
 
 
 def test_an_undelivered_incident_past_its_ttl_is_dropped(node: Node) -> None:
+    """A unit whose runs are further apart than the TTL loses its recovery and the reset (#2757)."""
     node.curl_exit.write_text("22")
     node.run()
     node.curl_exit.write_text("0")
@@ -283,6 +284,23 @@ def test_an_undelivered_incident_past_its_ttl_is_dropped(node: Node) -> None:
     assert node.run("--recovered").returncode == 0
     assert len(node.titles()) == 1, "a recovery went out for an incident past its TTL"
     assert node.resets() == []
+
+
+def test_a_unit_that_keeps_failing_past_the_ttl_still_closes_its_incident(node: Node) -> None:
+    """The edge liveness check runs every minute, so with the uplink out its pages fail for hours.
+
+    Each failure renews the state, and past the TTL one starts the incident over
+    instead of dropping it, so the recovery that follows still finds it.
+    """
+    node.curl_exit.write_text("22")
+    node.run()
+    node.age_state(TTL + 5)
+    node.run()
+    node.curl_exit.write_text("0")
+    node.set_result("success")
+    assert node.run("--recovered").returncode == 0
+    assert "recovered" in node.titles()[-1], node.titles()
+    assert node.resets() == [NOTIFIER]
 
 
 def test_a_long_incident_reminded_recently_is_not_stale(node: Node) -> None:
