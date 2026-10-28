@@ -64,6 +64,23 @@ builder prune -af` while CI jobs were running. Provision such a change when CI i
 Emergency path (disk already full, Ansible cannot run):
 `make node-reclaim NODE=beelink APPLY=1 [IMAGES_ALL=1]`.
 
+## The CI node: Docker moves only on purpose (#2722)
+
+Neither this timer nor a provision upgrades the Beelink's `docker-ce`, `docker-ce-cli` and
+`containerd.io`. The timer holds them for its own run, as it does on every node. A provision
+would otherwise move them through `base_system`'s full dist-upgrade, so `provision-bee.yml`
+lists them in `base_system_held_packages` and the role holds them before that upgrade.
+The timer finds them already held and leaves them held.
+
+To upgrade them, run one provision that releases them, upgrades and holds them again:
+
+```bash
+make provision NODE=bee ENV=prod EXTRA='base_system_release_holds=true'
+```
+
+Then run a build on the runner before trusting it. On 2026-10-27 a provision moved Docker
+from 29.8.1 to 29.9.2 as a side effect, and BuildKit sessions began dropping that morning.
+
 ## Checking status
 
 ```bash

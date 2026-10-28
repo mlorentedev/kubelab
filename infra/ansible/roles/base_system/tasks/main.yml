@@ -101,10 +101,39 @@
     cache_valid_time: 3600
   when: not (legacy_python | default(false))
 
+# dpkg_selections fails on a package dpkg has never seen, which is every one of
+# them on a node's first provision, before the role that installs it has run.
+# Only an installed package has anything to protect.
+- name: Read the installed packages, to hold only those
+  package_facts:
+    manager: apt
+  when:
+    - base_system_held_packages | length > 0
+    - not (legacy_python | default(false))
+
+# Before the upgrade, so a provision never moves them as a side effect (#2722).
+# `install` releases them for a run that asks to; the task after the upgrade
+# holds them again.
+- name: Hold the packages this node upgrades only on purpose
+  dpkg_selections:
+    name: "{{ item }}"
+    selection: "{{ 'install' if base_system_release_holds | bool else 'hold' }}"
+  loop: "{{ base_system_held_packages | intersect(ansible_facts.packages | default({}) | list) }}"
+  when: not (legacy_python | default(false))
+
 - name: Upgrade all packages
   apt:
     upgrade: dist
   when: not (legacy_python | default(false))
+
+- name: Hold them again after a run that released them
+  dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop: "{{ base_system_held_packages | intersect(ansible_facts.packages | default({}) | list) }}"
+  when:
+    - base_system_release_holds | bool
+    - not (legacy_python | default(false))
 
 - name: Install base packages
   apt:

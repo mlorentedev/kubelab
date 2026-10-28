@@ -179,6 +179,12 @@
         netplan_interface: "{{ config.networking.nodes.beelink.lan_interface }}"
         netplan_address: "{{ config.networking.nodes.beelink.lan_ip }}/24"
         netplan_gateway: "{{ config.networking.nodes.rpi4.lan_ip }}"
+        # The CI engine: Gitea's jobs build on it, so it moves only in a run
+        # that releases it (#2722, `base_system_release_holds` in the role defaults).
+        base_system_held_packages:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
         firewall_tailnet_ports:
           - "{{ config.apps.services.observability.glances.default_port }}"
           - "{{ config.apps.services.core.gitea.default_port }}"

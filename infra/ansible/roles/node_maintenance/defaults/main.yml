@@ -49,8 +49,11 @@ maintenance_security_updates: true
 #     upgrade removes the way in to fix it.
 # These are patched deliberately, by an operator who can watch: `make provision`,
 # whose `base_system` role runs a full `apt upgrade: dist`. Not `make maintain`,
-# which runs this role and so holds them too. A hold already in place before a
-# run (an operator's pin) is left alone; the run releases only its own.
+# which runs this role and so holds them too. A node whose play lists them in
+# `base_system_held_packages` (the Beelink's CI engine, #2722) moves them only in
+# a provision run with `base_system_release_holds=true`. A hold already in place
+# before a run (that one, or an operator's pin) is left alone; the run releases
+# only its own.
 maintenance_patch_blacklist:
   - docker-ce
   - docker-ce-cli
