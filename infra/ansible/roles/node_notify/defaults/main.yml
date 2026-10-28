@@ -57,8 +57,9 @@ node_notify_body_bytes: 2000
 node_notify_severity: log
 
 # One page per incident (#2423). The state is `<count> <first> <last>` per unit.
-# A failing unit is reminded at most once per `reminder`, and a state older than
-# `ttl` is a finished incident nobody closed, so it starts over. The ttl must
+# A failing unit is reminded at most once per `reminder`, and to a failure a state
+# older than `ttl` is a finished incident nobody closed, so it starts over. A
+# recovery closes the incident whatever its age (#2757). The ttl must
 # outlast the reminder (a failing unit refreshes the state each reminder), and
 # tests/test_node_notify_dedup.py asserts it.
 node_notify_state_dir: /var/lib/kubelab-notify
