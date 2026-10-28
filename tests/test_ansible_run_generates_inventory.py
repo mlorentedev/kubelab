@@ -222,17 +222,49 @@ def test_the_recipe_parser_sees_every_run() -> None:
 # only while no SOPS file declares a key under these (review of #1951): a node
 # override or a backup source added to an `*.enc.yaml` would be invisible to the
 # generator, and `make backup-node NODE=all` would target a thinner group and
-# exit 0 (lesson-356).
-_GENERATOR_READS = ("networking", "backup.sources")
+# exit 0 (lesson-356). `networking` is guarded key by key, derived from the
+# generator's own reads, because SOPS does hold a part of it the generator never
+# reads: the lab edge's site secrets at `networking.edge`, which the rpi4 play
+# takes from SOPS itself (#2665). A read the generator gains is guarded at once.
+_GENERATOR_SOURCE = (_ROOT / "toolkit" / "features" / "generator_ansible.py").read_text()
+_GENERATOR_READS = (
+    *sorted({f"networking.{key}" for key in re.findall(r"\bnetworking(?:\.get\(|\[)\"([a-z_]+)\"", _GENERATOR_SOURCE)}),
+    "backup.sources",
+)
 
 
 def test_the_generator_reads_only_the_subtrees_listed_here() -> None:
-    source = (_ROOT / "toolkit" / "features" / "generator_ansible.py").read_text()
-    top_level = set(re.findall(r"\bconfig\.get\(\"([a-z_]+)\"", source))
+    top_level = set(re.findall(r"\bconfig\.get\(\"([a-z_]+)\"", _GENERATOR_SOURCE))
     assert top_level == {path.split(".")[0] for path in _GENERATOR_READS}, (
         f"the generator reads {sorted(top_level)} from the config; list each subtree in "
         "_GENERATOR_READS so the SOPS check below covers it"
     )
+
+
+def test_the_generator_reads_networking_key_by_key() -> None:
+    """A wholesale read (iterating the dict, or handing it on under another name) hides keys from the list above."""
+    assert "networking.nodes" in _GENERATOR_READS, "the read pattern no longer matches the generator's source"
+    wholesale = re.findall(r"networking\.(?:items|values|keys)\(\)|\bin networking\b(?![.\[])", _GENERATOR_SOURCE)
+    renamed = re.findall(r"\w+\s*=\s*networking\s*$", _GENERATOR_SOURCE, re.MULTILINE)
+    assert not wholesale and not renamed, (wholesale, renamed)
+
+
+def _declared(doc: dict[str, Any]) -> list[str]:
+    """The guarded paths a SOPS document declares."""
+    declared = []
+    for dotted in _GENERATOR_READS:
+        node: Any = doc
+        for part in dotted.split("."):
+            node = node.get(part) if isinstance(node, dict) else None
+        if node is not None:
+            declared.append(dotted)
+    return declared
+
+
+def test_a_secret_under_networking_the_generator_never_reads_is_allowed() -> None:
+    """The lab edge's site secrets live at `networking.edge` (#2665); a node override there would not."""
+    assert _declared({"networking": {"edge": {"uplink": {"mac": "ENC[...]"}}}}) == []
+    assert _declared({"networking": {"nodes": {"rpi4": {"lan_ip": "ENC[...]"}}}}) == ["networking.nodes"]
 
 
 @pytest.mark.parametrize(
@@ -240,14 +272,7 @@ def test_the_generator_reads_only_the_subtrees_listed_here() -> None:
 )
 def test_no_sops_file_declares_what_the_inventory_is_built_from(path: Path) -> None:
     """Key names are plaintext in a SOPS file, so this needs no decryption key."""
-    doc = yaml.safe_load(path.read_text()) or {}
-    declared = []
-    for dotted in _GENERATOR_READS:
-        node = doc
-        for part in dotted.split("."):
-            node = node.get(part) if isinstance(node, dict) else None
-        if node is not None:
-            declared.append(dotted)
+    declared = _declared(yaml.safe_load(path.read_text()) or {})
     assert not declared, (
         f"{path.name} declares {declared}. The inventory is generated from plaintext values "
         "only, so these keys would never reach it. Keep them in common.yaml / <env>.yaml."
