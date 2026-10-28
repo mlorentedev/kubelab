@@ -44,8 +44,7 @@ state is declared here, where the host is owned.
   install the script `root:root 0755` at `/usr/local/bin/headscale-audit`;
   for each declared identity, `ansible.posix.authorized_key` on `deployer` with
   `key_options: restrict,command="/usr/local/bin/headscale-audit"` plus
-  `from="<source>"` when a source is declared, `state: present` (`absent` when
-  the entry says `revoked: true`), never
+  `from="<source>"` when a source is declared, `state: present`, never
   `exclusive` (that is SEC-033's switch).
 - Declaration: public key and owner in `common.yaml` under
   `apps.services.core.headscale.audit_identities` (shape compatible with
@@ -98,13 +97,17 @@ live apply converges and the restricted key works and is refused as designed.
   portability bug: busybox `tr -c '[:print:]'` treats the class as literal
   characters, so the log sanitizer uses the octal range `\001-\037\177`.
 - Design additions while implementing: the key comment comes from `name`, never
-  from the key file (the generated comment carried a host name); `revoked: true`
-  renders `state: absent`, so revoking is a declaration plus a deploy rather than
-  a hand edit; the source address is catalogued in `SECRET_CATALOG`
+  from the key file (the generated comment carried a host name); the source address is catalogued in `SECRET_CATALOG`
   (`apps.services.core.headscale.audit_sources.audit_automation`, EXTERNAL, prod)
   so the orphan audit does not flag it once the operator adds it.
 - yamllint and `shellcheck -s sh` clean on the changed files. `make lint-ansible`
   runs in CI (Ansible does not run on the Windows controller).
+
+- Review (#2764): removing a declaration now revokes the key (every line that
+  carries the forced command and is no longer declared is removed; personal keys
+  are untouched), the authorize task is `no_log` because its diff carries the
+  source, and the allowlist guard reads every `case` arm. Mutations: dropping
+  the declared-key filter and adding an unquoted `approve-routes*` arm both go red.
 
 ## Next
 
