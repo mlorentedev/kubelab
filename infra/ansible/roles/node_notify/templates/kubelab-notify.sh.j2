@@ -83,12 +83,14 @@ BODY_TAIL="$(journalctl -b -u "$UNIT" -n {{ node_notify_journal_lines }} --no-pa
 # Incident state: `<count> <first> <last>` (failures since the first page, epoch of the
 # first, epoch of the last page that was delivered). The unit name is already
 # restricted to the characters a unit name can hold, so it is a safe file name.
-# A state older than the TTL is a finished incident that nobody closed (a unit
-# with no recovery hook, or a timer slower than the TTL): it starts over rather
-# than reporting an old count as "still failing". Its age runs from the last
-# delivered page, or from the first failure while none was delivered (#2733):
-# measured from a `last` of 0, an incident whose first page n8n refused read as
-# stale at once, so its recovery was never sent.
+# For a failure, a state older than the TTL is a finished incident that nobody
+# closed (a unit with no recovery hook): it starts over rather than reporting an
+# old count as "still failing". Its age runs from the last delivered page, or
+# from the first failure while none was delivered (#2733): measured from a
+# `last` of 0, an incident whose first page n8n refused read as stale at once.
+# A recovery ignores the age (#2757). Only a wired unit sends one, and its
+# success ends the incident however far apart its runs are: dropping the state
+# there lost the recovery and left the notifier's own failed run standing.
 STATE_FILE="{{ node_notify_state_dir }}/${UNIT}"
 # One lock per unit, held from this read to the write at the end (#2733). A
 # recovery that overtook a page still in flight would close the incident before
@@ -130,7 +132,8 @@ LAST=0
 if [ -r "$STATE_FILE" ]; then
   read -r s_count s_first s_last < "$STATE_FILE" || true
   if [[ "${s_count:-}" =~ ^[0-9]+$ && "${s_first:-}" =~ ^[0-9]+$ && "${s_last:-}" =~ ^[0-9]+$ ]] \
-    && [ $((NOW - (s_last > s_first ? s_last : s_first))) -le {{ node_notify_state_ttl_seconds }} ]; then
+    && { [ "$MODE" = recovered ] \
+      || [ $((NOW - (s_last > s_first ? s_last : s_first))) -le {{ node_notify_state_ttl_seconds }} ]; }; then
     COUNT="$s_count"
     FIRST="$s_first"
     LAST="$s_last"

@@ -274,16 +274,28 @@ def test_an_undelivered_incident_ages_from_its_first_failure(node: Node) -> None
     assert node.resets() == [NOTIFIER]
 
 
-def test_an_undelivered_incident_past_its_ttl_is_dropped(node: Node) -> None:
-    """A unit whose runs are further apart than the TTL loses its recovery and the reset (#2757)."""
+def test_an_undelivered_incident_past_its_ttl_still_recovers(node: Node) -> None:
+    """#2757: a unit whose runs are further apart than the TTL lost its recovery and the reset."""
     node.curl_exit.write_text("22")
     node.run()
     node.curl_exit.write_text("0")
     node.age_state(TTL + 5)
     node.set_result("success")
     assert node.run("--recovered").returncode == 0
-    assert len(node.titles()) == 1, "a recovery went out for an incident past its TTL"
-    assert node.resets() == []
+    assert "recovered" in node.titles()[-1], node.titles()
+    assert node.resets() == [NOTIFIER]
+    assert not (node.state / UNIT).exists()
+
+
+def test_a_slow_unit_closes_the_incident_its_delivered_page_opened(node: Node) -> None:
+    """A unit on a timer slower than the TTL: its next success is still the recovery (#2757)."""
+    node.run()
+    node.age_state(TTL + 5)
+    node.set_result("success")
+    assert node.run("--recovered").returncode == 0
+    titles = node.titles()
+    assert len(titles) == 2 and "recovered" in titles[1], titles
+    assert not (node.state / UNIT).exists()
 
 
 def test_a_unit_that_keeps_failing_past_the_ttl_still_closes_its_incident(node: Node) -> None:
