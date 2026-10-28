@@ -5,13 +5,13 @@
 # Runs on any node. Targets selected via --limit.
 #
 # Usage:
-#   make maintain NODE=aws1                 Cleanup aws1
 #   make maintain NODE=ace1                 Cleanup ace1
+#   make maintain NODE=gcp1                 Cleanup the hub (in every env's inventory)
 #   make maintain NODE=all                  Cleanup all nodes
-#   make maintain NODE=aws1 TIMER=1         Cleanup + install weekly timer
+#   make maintain NODE=ace1 TIMER=1         Cleanup + install the timer
 #
 # Direct:
-#   toolkit infra ansible run -p maintain -e staging -l kubelab-aws1
+#   toolkit infra ansible run -p maintain -e staging -l gcp1
 # =============================================================================
 
 - name: Node maintenance
