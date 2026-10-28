@@ -47,10 +47,20 @@ def _connect_timeout(task: dict[str, Any]) -> int:
     return int(match.group(1))
 
 
+def _stall_bound(task: dict[str, Any]) -> int:
+    """Seconds an established session may go unanswered: ssh sends CountMax probes, one per Interval."""
+    command = str(task["ansible.builtin.command"])
+    interval = re.search(r"ServerAliveInterval=(\d+)", command)
+    count = re.search(r"ServerAliveCountMax=(\d+)", command)
+    assert interval and count, "ConnectTimeout does not bound a session that stalls after connecting"
+    return int(interval.group(1)) * int(count.group(1))
+
+
 def _worst_case_seconds(task: dict[str, Any]) -> int:
-    """Every attempt times out, with the delay slept between attempts and not after the last."""
+    """Every attempt connects late and then stalls, with the delay slept between attempts and not after the last."""
     attempts = int(task["retries"]) + 1
-    return attempts * _connect_timeout(task) + int(task["retries"]) * int(task["delay"])
+    per_attempt = _connect_timeout(task) + _stall_bound(task)
+    return attempts * per_attempt + int(task["retries"]) * int(task["delay"])
 
 
 class TestTheDeclaredRetry:
@@ -72,6 +82,7 @@ class TestTheDeclaredRetry:
         command = str(_check_task()["ansible.builtin.command"])
         assert "BatchMode=yes" in command
         assert _connect_timeout(_check_task()) <= 10
+        assert 0 < _stall_bound(_check_task()) <= 10
 
 
 class TestCiRunsTheEffectTests:
