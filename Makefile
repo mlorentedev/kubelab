@@ -1951,6 +1951,13 @@ alerts:
 edge-status: ## Report the lab edge's uplink: up, portal or dead
 	@$(TOOLKIT) infra edge status
 
+# Say whether a boot brought back everything the edge serves: the hard-reset test
+# in docs/runbooks/lab-edge.md. CASE names what the case took away (no-uplink,
+# no-lan); VIA=tailnet reaches the edge when the LAN is what was taken away.
+.PHONY: edge-boot-check
+edge-boot-check: ## Check what the edge brought back after a boot [CASE=no-uplink|no-lan] [VIA=tailnet]
+	@$(TOOLKIT) infra edge boot-check $(if $(CASE),--case $(CASE)) $(if $(VIA),--via $(VIA))
+
 # Join this laptop to the lab LAN, the edge's management path (NET-005 AC11).
 # ROUTE=1 makes the edge the default route, for the portal login with the
 # laptop's own Wi-Fi off; STATIC=1 holds a fixed address when the edge serves

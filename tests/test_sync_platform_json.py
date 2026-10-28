@@ -36,12 +36,13 @@ class TestPlatformManifestGeneration:
         # 2. Cluster metadata
         cluster = manifest["cluster"]
         assert cluster["name"] == "KubeLab Hybrid Cloud & Edge Platform"
-        assert cluster["activeNodes"] == 8
+        # Derived, not counted: a node retired or brought back changes it.
+        assert cluster["activeNodes"] == len([n for n in manifest["nodes"] if n["status"] != "standby"])
         assert cluster["kubernetesClusters"] == 3
         assert cluster["kubernetesNodes"] == 3
         assert cluster["totalServices"] >= 14
 
-        # 3. Nodes fleet (9 nodes total: 8 active + 1 standby)
+        # 3. Nodes fleet: every declared node, a retired one shown as standby
         nodes: list[dict[str, Any]] = manifest["nodes"]
         assert len(nodes) == 9
         node_ids = {n["id"] for n in nodes}
@@ -61,6 +62,11 @@ class TestPlatformManifestGeneration:
         aws1 = next(n for n in nodes if n["id"] == "aws1")
         assert aws1["status"] == "standby"
         assert aws1["runtime"] == "standby"
+
+        common = yaml.safe_load((Path(__file__).parents[1] / "infra/config/values/common.yaml").read_text())
+        retired = {key for key, node in common["networking"]["nodes"].items() if node.get("retired")}
+        # The set, not a count: a stale or over-broad regeneration fails it.
+        assert {n["id"] for n in nodes if n["status"] == "standby"} == {"aws1", *retired}
 
         vps = next(n for n in nodes if n["id"] == "vps")
         assert vps["status"] == "healthy"

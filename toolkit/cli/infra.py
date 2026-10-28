@@ -213,6 +213,33 @@ def edge_status() -> None:
     raise typer.Exit(code)
 
 
+@edge_app.command("boot-check")
+def edge_boot_check(
+    case: Annotated[
+        str | None, typer.Option("--case", help="What the hard-reset case took away: no-uplink or no-lan")
+    ] = None,
+    via: Annotated[str, typer.Option("--via", help="Reach the edge over its lan or tailnet address")] = "lan",
+) -> None:
+    """Say whether a boot brought back everything the edge serves (the hard-reset test).
+
+    Runs the gateway role's boot check on the edge, one line per check, and exits 0
+    when every check passed, 1 when one failed (255 when SSH itself fails).
+    """
+    from toolkit.features.configuration import ConfigurationManager
+    from toolkit.features.edge_status import BOOT_CASES, EdgeNotDeclaredError, run_boot_check
+
+    if case not in (None, *BOOT_CASES) or via not in ("lan", "tailnet"):
+        logger.error(f"--case takes {' or '.join(BOOT_CASES)}, and --via lan or tailnet")
+        raise typer.Exit(64)
+    net = ConfigurationManager("prod", settings.project_root).get_plaintext_values()["networking"]
+    try:
+        code = run_boot_check(net, case, via)
+    except EdgeNotDeclaredError as e:
+        logger.error(str(e))
+        raise typer.Exit(1) from e
+    raise typer.Exit(code)
+
+
 @edge_app.command("lan-link")
 def edge_lan_link(
     route: Annotated[

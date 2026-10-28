@@ -492,15 +492,16 @@ def test_token_value_is_not_shell_interpreted():
 PLAYBOOKS = sorted((REPO / "infra/ansible/playbooks").glob("*.yml"))
 
 
-def _notifier_consumers() -> set[str]:
-    """Every role with a unit template declaring `OnFailure=kubelab-notify@`.
+def _notifier_consumers(roles_dir: Path = REPO / "infra/ansible/roles") -> set[str]:
+    """Every role with a unit template naming one of the notifier's templates:
+    `OnFailure=kubelab-notify@` or `OnSuccess=kubelab-notify-recovered@`.
 
     Derived from the templates rather than listed here, because the case this
     guard exists for is a NEW consumer whose playbook wiring was forgotten — and
     a literal list is exactly the thing that would not contain it.
     """
     roles = set()
-    for template in (REPO / "infra/ansible/roles").glob("*/templates/*.j2"):
+    for template in roles_dir.glob("*/templates/*.j2"):
         # Anchored to the start of a line, so the DIRECTIVE matches and a
         # comment mentioning it does not. Without the anchor the scan counted
         # `node_notify` itself as a consumer of its own notifier — its unit
@@ -508,9 +509,24 @@ def _notifier_consumers() -> set[str]:
         # assertion below then compared that role's tags with themselves and
         # passed trivially. A guard agreeing with itself, found by mutating the
         # directive away and watching the vacuity check stay green (lesson-357).
-        if re.search(r"^OnFailure=kubelab-notify@", template.read_text(encoding="utf-8"), re.M):
+        directive = r"^On(?:Failure=kubelab-notify|Success=kubelab-notify-recovered)@"
+        if re.search(directive, template.read_text(encoding="utf-8"), re.M):
             roles.add(template.parents[1].name)
     return roles
+
+
+def test_a_unit_naming_only_the_recovery_notice_is_a_consumer(tmp_path: Path) -> None:
+    """`OnSuccess=kubelab-notify-recovered@` names a node_notify template as much as
+    `OnFailure=` does, so a role whose units declare only that one still has to be
+    paired with the notifier and applied after it. A comment naming either is not one."""
+    for role, line in {
+        "pages": "OnFailure=kubelab-notify@%n.service",
+        "recovers": "OnSuccess=kubelab-notify-recovered@%n.service",
+        "mentions": "# OnFailure=kubelab-notify@%n.service",
+    }.items():
+        (tmp_path / role / "templates").mkdir(parents=True)
+        (tmp_path / role / "templates" / "x.service.j2").write_text(f"[Unit]\n{line}\n")
+    assert _notifier_consumers(tmp_path) == {"pages", "recovers"}
 
 
 def _role_tags(playbook: Path, role_name: str) -> set[str] | None:
@@ -533,7 +549,7 @@ def test_the_derived_consumer_set_is_not_empty() -> None:
     coverage it does not have. So the scan asserts on itself first.
     """
     assert _notifier_consumers(), (
-        "no role template declares `OnFailure=kubelab-notify@`, so the pairing guard below checks nothing at all"
+        "no role template names the notifier, so the pairing guard below checks nothing at all"
     )
 
 
@@ -601,6 +617,106 @@ def test_the_notifier_and_its_consumers_are_selected_together(playbook: Path):
         f"{playbook.stem}: node_notify's {sorted(unnamed)!r} selects no consumer, "
         f"so it installs a notifier nothing names."
     )
+
+
+INCLUDES = ("include_role", "import_role", "ansible.builtin.include_role", "ansible.builtin.import_role")
+
+
+def _task_roles(tasks: list | None) -> list[str]:
+    """Roles a task list includes or imports, in order, inside blocks too."""
+    names: list[str] = []
+    for task in tasks or []:
+        for key in ("block", "rescue", "always"):
+            names += _task_roles(task.get(key))
+        names += [str((task[key] or {}).get("name", "")).split("/")[-1] for key in INCLUDES if key in task]
+    return names
+
+
+def _applied_roles(playbook: Path) -> list[str]:
+    """Every role a playbook applies, in the order Ansible runs them: each play's
+    pre_tasks, roles, tasks and post_tasks, play after play."""
+    order: list[str] = []
+    for play in yaml.safe_load(playbook.read_text()) or []:
+        if not isinstance(play, dict):
+            continue
+        order += _task_roles(play.get("pre_tasks"))
+        order += [str(e.get("role", "") if isinstance(e, dict) else e).split("/")[-1] for e in play.get("roles") or []]
+        order += _task_roles(play.get("tasks")) + _task_roles(play.get("post_tasks"))
+    return order
+
+
+def test_the_order_spans_plays_and_included_roles(tmp_path: Path) -> None:
+    """A consumer one play or one include_role ahead of the notifier is still ahead of it."""
+    playbook = tmp_path / "provision-x.yml"
+    playbook.write_text(
+        yaml.safe_dump(
+            [
+                {"hosts": "x", "roles": ["gateway"]},
+                {
+                    "hosts": "x",
+                    "pre_tasks": [{"block": [{"include_role": {"name": "../roles/rpi3_services"}}]}],
+                    "roles": [{"role": "../roles/node_notify"}],
+                    "tasks": [{"ansible.builtin.import_role": {"name": "node_backup"}}],
+                },
+            ]
+        )
+    )
+    assert _applied_roles(playbook) == ["gateway", "rpi3_services", "node_notify", "node_backup"]
+
+
+@pytest.mark.parametrize("playbook", PLAYBOOKS, ids=lambda p: p.stem)
+def test_the_notifier_and_its_consumers_are_applied_as_roles(playbook: Path):
+    """The tag pairing above reads `roles:` only, and tags on an `include_role`
+    task do not reach the role's own tasks. A notifier or consumer included from
+    a task list would escape that guard, so neither may be."""
+    plays = [play for play in yaml.safe_load(playbook.read_text()) or [] if isinstance(play, dict)]
+    included = {
+        role
+        for play in plays
+        for key in ("pre_tasks", "tasks", "post_tasks", "handlers")
+        for role in _task_roles(play.get(key))
+    }
+    paired = included & (_notifier_consumers() | {"node_notify"})
+    assert not paired, f"{playbook.stem} includes {sorted(paired)} from a task list, where no tag guard reads them"
+
+
+def _ahead_of_the_notifier(order: list[str]) -> list[str]:
+    """The consumers applied before node_notify; every one of them when it is absent."""
+    first = order.index("node_notify") if "node_notify" in order else len(order)
+    return [role for role in order[:first] if role in _notifier_consumers() - {"node_notify"}]
+
+
+@pytest.mark.parametrize(
+    ("order", "late"),
+    [
+        (["node_notify", "gateway"], []),
+        (["gateway", "node_notify"], ["gateway"]),
+        (["gateway"], ["gateway"]),
+        (["dns_resilience", "node_notify"], []),
+    ],
+)
+def test_a_consumer_ahead_of_the_notifier_is_late(order: list[str], late: list[str]) -> None:
+    assert _ahead_of_the_notifier(order) == late
+
+
+@pytest.mark.parametrize("playbook", PLAYBOOKS, ids=lambda p: p.stem)
+def test_the_notifier_is_installed_before_the_units_that_name_it(playbook: Path):
+    """Selecting both together is not enough: a consumer applied first starts units
+    whose template does not exist yet. On a first provision, or a run that stops
+    between the two, systemd logs `Failed to enqueue OnFailure= job ... not found`
+    at every run and the failure goes unannounced (#2728). The lab edge did that
+    across two boots while `gateway` ran before `node_notify`."""
+    late = _ahead_of_the_notifier(_applied_roles(playbook))
+    assert not late, f"{playbook.stem} applies {late} before node_notify, so their units name a missing template"
+
+
+@pytest.mark.parametrize("playbook", PLAYBOOKS, ids=lambda p: p.stem)
+def test_every_applied_role_is_named_literally(playbook: Path):
+    """The guards above match role names as written. A templated one
+    (`name: "{{ role }}"`) reaches them as its template text, matches no consumer,
+    and so passes the pairing and the ordering whatever it resolves to."""
+    templated = [role for role in _applied_roles(playbook) if "{{" in role]
+    assert not templated, f"{playbook.stem} applies {templated}, which no guard here can resolve"
 
 
 def test_the_delivery_test_can_name_the_unit_it_simulates() -> None:

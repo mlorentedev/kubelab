@@ -86,7 +86,7 @@
     name:
       - nftables
       - dnsmasq
-      # The uplink status check's HTTP and DNS probes.
+      # The uplink status check's HTTP and DNS probes, and the boot check's DNS one.
       - curl
       - bind9-dnsutils
     state: present
@@ -95,6 +95,12 @@
   copy:
     src: edge-status.sh
     dest: "{{ gateway_status_path }}"
+    mode: "0755"
+
+- name: Install the boot check
+  copy:
+    src: edge-boot-check.sh
+    dest: "{{ gateway_boot_check_path }}"
     mode: "0755"
 
 # It loads over the LAN session that provisions the edge, so it is checked first.
@@ -383,6 +389,13 @@
     excludes: "10-kubelab-edge.yaml"
   register: gateway_netplan_found
 
+# Read-only, so a dry run sees whether the directory is there. Whether the next
+# task would change it says more than that: a mode drift counts too.
+- name: Check whether the netplan backup directory exists
+  stat:
+    path: /var/backups/kubelab-netplan
+  register: gateway_netplan_backup_dir
+
 - name: Create the netplan backup directory
   file:
     path: /var/backups/kubelab-netplan
@@ -390,6 +403,9 @@
     mode: "0700"
 
 # They can hold a Wi-Fi PSK, so the copies stay root-only and out of the log.
+# A dry run does not create the directory, so where it does not exist yet a copy
+# into it would fail the whole check (#2696). Where it exists, whatever its mode,
+# a dry run still reports the backup it would take.
 - name: Back up hand-written netplan files
   copy:
     src: "{{ item.path }}"
@@ -397,6 +413,7 @@
     remote_src: true
     mode: "0600"
   loop: "{{ gateway_netplan_found.files }}"
+  when: not (ansible_check_mode and not gateway_netplan_backup_dir.stat.exists)
   no_log: true
 
 - name: Remove hand-written netplan files

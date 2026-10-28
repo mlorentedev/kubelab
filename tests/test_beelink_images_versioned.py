@@ -19,6 +19,8 @@ from typing import Any
 import pytest
 import yaml
 
+from tests.image_versions import versioned as _versioned
+
 REPO = Path(__file__).resolve().parents[1]
 PLAYBOOK = REPO / "infra/ansible/playbooks/provision-bee.yml"
 ROLE_TEMPLATES = REPO / "infra/ansible/roles/beelink_services/templates"
@@ -62,15 +64,6 @@ def _resolve(config: dict[str, Any], path: str) -> str:
     for key in path.split("."):
         node = node[key]
     return node
-
-
-def _versioned(image: str) -> bool:
-    """A digest, or a tag that carries a version number and is not `latest`."""
-    if "@sha256:" in image:
-        return True
-    name = image.split("/")[-1]
-    tag = name.split(":", 1)[1] if ":" in name else ""
-    return tag not in ("", "latest") and any(ch.isdigit() for ch in tag)
 
 
 ENVS = sorted(p.stem for p in VALUES.glob("*.yaml") if p.stem != "common")
