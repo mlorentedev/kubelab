@@ -24,4 +24,4 @@ So the check measured a different BuildKit, and charged the uplink's time to it.
 
 **Rule**: A check for a component names that component. A `docker buildx build` without `--builder` tests whatever `docker buildx use` last chose for that user, and a role elsewhere may have chosen it. Fetch what the check depends on before its timeout starts, so the timeout measures the thing under test. A failure message says what was observed and how to confirm the cause, not the cause it was written to catch.
 
-**Tags**: `#ops-050` `#buildkit` `#docker` `#pr-2771`
+**Tags**: `#ops-050` `#buildkit` `#docker` `#pr-2772`
