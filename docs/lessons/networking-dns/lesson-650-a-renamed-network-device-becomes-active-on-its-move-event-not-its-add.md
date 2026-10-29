@@ -19,7 +19,7 @@ tags: [kubelab, networking-dns, systemd, udev, rpi4, hotplug]
 
 `udevadm test --action=add` on the already-renamed device was a false pass: it ran the rules once, on an interface already called `uplink0`, so no rename and no move followed. On systemd 255 it also writes its result into the udev database, so `udevadm info` afterwards shows a property the real event never left there.
 
-**Solution**: Match every event but remove, `ACTION!="remove"`, as systemd's own `99-systemd.rules` does for the properties PID 1 reads. `tests/test_edge_uplink_replug.py` fails on any other `ACTION` condition. A change event that lists the same units starts nothing new: systemd starts only units added to the list.
+**Solution**: Match every event but remove, `ACTION!="remove"`, as systemd's own `99-systemd.rules` does for the properties PID 1 reads. `tests/test_edge_uplink_replug.py` fails on any other `ACTION` condition. A later change event lists the same units and starts none of them again.
 
 **Rule**: A udev property that PID 1 reads (`SYSTEMD_WANTS`, `SYSTEMD_ALIAS`, `TAG+="systemd"`) goes on every event but remove. Each event replaces the device's database entry, and the event that makes a device active is not always the first. Prove a hotplug rule with a physical replug and `udevadm monitor`, never with `udevadm test` on a device that is already present.
 
