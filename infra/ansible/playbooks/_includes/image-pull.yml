@@ -1,0 +1,74 @@
+---
+# Pull a stack's images, sized first against the lab edge's downlink (#2742).
+# Imported (not included) so the caller's tags apply.
+#
+#   - import_tasks: "{{ playbook_dir }}/_includes/image-pull.yml"
+#     vars:
+#       image_pull_name: Open WebUI
+#       image_pull_images: ["{{ agent_stack_webui.image }}"]
+#       image_pull_command: docker compose -p agent-stack-webui -f /opt/agent-stack/compose-webui.yml pull
+#
+# A node behind the edge shares the uplink the edge shapes to
+# networking.edge.uplink.bandwidth.down_kbit (ADR-075), so a multi-GB pull there
+# takes most of an hour, and on 2026-10-27 one ended in an EOF after 52 minutes.
+# The play of such a node sets image_pull_down_kbit from that key. The include
+# then estimates the bytes to fetch before pulling, refuses past
+# image_pull_budget_seconds unless image_pull_allow_slow, and bounds each attempt
+# by the estimate. Retries keep the layers already fetched. Without the var the
+# pull is bounded by image_pull_timeout_seconds and nothing is estimated.
+
+- name: Estimate the download of {{ image_pull_name }}
+  ansible.builtin.script:
+    cmd: >-
+      {{ playbook_dir }}/files/image-pull-estimate.py {{ ansible_architecture }}
+      {{ image_pull_images | join(' ') }}
+    executable: python3
+  register: _image_pull_estimate
+  changed_when: false
+  # Reads the registry and the local images, so a dry run reports the estimate.
+  check_mode: false
+  when: image_pull_down_kbit | default(0) | int > 0
+
+- name: Size the pull of {{ image_pull_name }} against the edge's downlink
+  ansible.builtin.set_fact:
+    _image_pull_bytes: "{{ (_image_pull_estimate.stdout | from_json).bytes | int }}"
+    _image_pull_seconds: >-
+      {{ (((_image_pull_estimate.stdout | from_json).bytes | int) * 8
+          / ((image_pull_down_kbit | int) * 1000)) | round(0, 'ceil') | int }}
+  when: image_pull_down_kbit | default(0) | int > 0
+
+- name: Refuse a pull of {{ image_pull_name }} that outlasts its budget
+  ansible.builtin.assert:
+    that: >-
+      image_pull_down_kbit | default(0) | int == 0
+      or _image_pull_seconds | int <= image_pull_budget_seconds | default(1800) | int
+      or image_pull_allow_slow | default(false) | bool
+    fail_msg: >-
+      ERROR: pulling {{ image_pull_name }} fetches up to
+      {{ ((_image_pull_bytes | default(0) | int) / 1e9) | round(2) }} GB, about
+      {{ ((_image_pull_seconds | default(0) | int) / 60) | round | int }} min at the edge's
+      {{ image_pull_down_kbit | default(0) }} kbit/s, past the
+      {{ ((image_pull_budget_seconds | default(1800) | int) / 60) | round | int }} min budget.
+      WHY: the node is behind the lab edge, whose uplink is shaped to
+      networking.edge.uplink.bandwidth.down_kbit (ADR-075). A pull that long holds the
+      play, and one that breaks midway is retried (#2742).
+      FIX: rerun with EXTRA='image_pull_allow_slow=true' to pull anyway, each attempt bounded
+      by twice the estimate, or raise image_pull_budget_seconds.
+    quiet: true
+
+- name: Pull {{ image_pull_name }}
+  ansible.builtin.command: "{{ image_pull_command }}"
+  register: _image_pull
+  changed_when: >-
+    'Pull complete' in (_image_pull.stderr | default(''))
+    or 'Downloaded' in (_image_pull.stderr | default('') ~ _image_pull.stdout | default(''))
+  # Polled rather than held: each poll is its own SSH round trip, so the pull
+  # does not depend on one session staying up for an hour.
+  async: >-
+    {{ ((_image_pull_seconds | int) * 2 + 300)
+       if image_pull_down_kbit | default(0) | int > 0
+       else image_pull_timeout_seconds | default(3600) | int }}
+  poll: 15
+  retries: "{{ image_pull_retries | default(2) }}"
+  delay: 30
+  until: _image_pull is succeeded
