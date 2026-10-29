@@ -35,6 +35,7 @@ from tests.ansible_jinja import ansible_env
 REPO = Path(__file__).resolve().parent.parent
 ROLES = REPO / "infra/ansible/roles"
 DRIFT = REPO / "infra/ansible/playbooks/_includes/compose-port-drift.yml"
+SETTLED = REPO / "infra/ansible/playbooks/_includes/stack-unit-settled.yml"
 WAIT = "wait-for-tailscale-addr.sh"
 
 #: The roles that bring up a compose stack bound to the Tailscale address, with
@@ -322,14 +323,13 @@ def _all_tasks(tasks: list[dict]) -> list[dict]:
     return out
 
 
+def _starts_unit(task: dict, unit: str) -> bool:
+    module = task.get("systemd") or task.get("ansible.builtin.systemd") or {}
+    return module.get("name") == unit and module.get("state") == "started"
+
+
 def _unit_starts(role: str) -> list[dict]:
-    unit = UNITS_BY_ROLE[role]
-    return [
-        t
-        for t in _all_tasks(_tasks(role))
-        if (t.get("systemd") or t.get("ansible.builtin.systemd") or {}).get("name") == unit
-        and (t.get("systemd") or t.get("ansible.builtin.systemd") or {}).get("state") == "started"
-    ]
+    return [t for t in _all_tasks(_tasks(role)) if _starts_unit(t, UNITS_BY_ROLE[role])]
 
 
 @pytest.mark.parametrize("role", sorted(UNITS_BY_ROLE))
@@ -348,3 +348,76 @@ def test_the_unit_start_runs_outside_a_dry_run(role: str) -> None:
         for condition in conditions if isinstance(conditions, list) else [conditions]:
             rendered = env.from_string(f"{{{{ ({condition}) | bool }}}}").render(**facts)
             assert rendered.strip() == "True", f"{role}: `when: {condition}` skips the start"
+
+
+def _imports(task: dict, include: str) -> bool:
+    path = task.get("import_tasks") or task.get("ansible.builtin.import_tasks") or ""
+    return str(path).endswith(f"_includes/{include}")
+
+
+@pytest.mark.parametrize("role", sorted(UNITS_BY_ROLE))
+def test_the_provision_waits_for_the_unit_it_started(role: str) -> None:
+    """A `Type=exec` unit's start returns before its stack is up (#2776).
+
+    Without the wait, the compose run a role makes next races the unit's own
+    recreate on the same project, and a stack that never came up passes the play.
+    """
+    unit = UNITS_BY_ROLE[role]
+    tasks = _all_tasks(_tasks(role))
+    starts = [i for i, t in enumerate(tasks) if _starts_unit(t, unit)]
+    settles = [i for i, t in enumerate(tasks) if _imports(t, "stack-unit-settled.yml")]
+    assert starts and len(settles) == 1, f"{role} must wait once for the unit it starts"
+    (settle,) = settles
+    assert tasks[settle].get("vars", {}).get("stack_unit_settled_name") == unit, tasks[settle]
+    assert "when" not in tasks[settle], f"{role}: a condition on the import switches the wait off"
+    assert max(starts) < settle, f"{role}: the wait must follow the start"
+    if role in STACKS:
+        names = [t.get("name") for t in tasks]
+        compose_run = names.index(STACKS[role][1])
+        if compose_run > max(starts):
+            assert settle < compose_run, f"{role}: '{STACKS[role][1]}' runs before the unit settled"
+
+
+def _settle_tasks() -> tuple[dict, dict]:
+    tasks = yaml.safe_load(SETTLED.read_text())
+    (wait,) = [t for t in tasks if t.get("register") == "_stack_unit_settled"]
+    (check,) = [t for t in tasks if "assert" in t]
+    return wait, check
+
+
+def test_the_wait_outlasts_the_units_own_bound() -> None:
+    """Past the unit's bound it has restarted or failed, which the check then reads.
+
+    A shorter wait reads a unit still bringing its stack up and fails a healthy play.
+    """
+    wait, _ = _settle_tasks()
+    budget = int(wait["retries"]) * int(wait["delay"])
+    for role, unit in UNITS_BY_ROLE.items():
+        (name,) = [n for n in UNITS if n.startswith(f"{role}/") and n.endswith(f"/{unit}.j2")]
+        bounds = UNITS[name].get("TimeoutStartSec", []) + UNITS[name].get("RuntimeMaxSec", [])
+        assert bounds, f"{unit} sets no bound for the wait to outlast"
+        for bound in bounds:
+            seconds = re.fullmatch(r"(\d+)s?", bound)
+            assert seconds, f"{unit}: {bound} is not in seconds"
+            assert budget > int(seconds.group(1)), f"{unit}: waits {budget} s for a {bound} s bound"
+
+
+@pytest.mark.parametrize(
+    ("state", "waits", "passes"),
+    [
+        pytest.param("start", True, False, id="oneshot-starting"),
+        pytest.param("running", True, False, id="exec-bringing-it-up"),
+        pytest.param("exited", False, True, id="up"),
+        pytest.param("auto-restart", False, False, id="retrying"),
+        pytest.param("failed", False, False, id="compose-error"),
+        pytest.param("", False, False, id="unreadable"),
+    ],
+)
+def test_the_wait_ends_on_a_settled_state_and_only_exited_passes(state: str, waits: bool, passes: bool) -> None:
+    wait, check = _settle_tasks()
+    env = ansible_env(str(SETTLED.parent))
+    read = {"_stack_unit_settled": {"stdout": state}}
+    settled = env.from_string(f"{{{{ ({wait['until']}) | bool }}}}").render(**read)
+    assert (settled.strip() == "False") is waits, settled
+    up = env.from_string(f"{{{{ ({check['assert']['that']}) | bool }}}}").render(**read)
+    assert (up.strip() == "True") is passes, up

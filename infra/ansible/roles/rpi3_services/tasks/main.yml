@@ -155,6 +155,13 @@
   when: not (ansible_check_mode and not _rpi3_unit_file.stat.exists)
   tags: [boot]
 
+# Before the compose run below: it would race the unit's own recreate.
+- name: Wait for the Compose stack unit to bring the stack up
+  import_tasks: "{{ playbook_dir }}/_includes/stack-unit-settled.yml"
+  vars:
+    stack_unit_settled_name: kubelab-rpi3.service
+  tags: [boot]
+
 - name: Check for a port binding that was never established
   import_tasks: "{{ playbook_dir }}/_includes/compose-port-drift.yml"
   vars:
