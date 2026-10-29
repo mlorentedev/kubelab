@@ -78,7 +78,7 @@ Partial results, kept apart from the `### B<n>-EVIDENCE` headings on purpose: `f
 - **B6.** Both nodes' Tailscale prefs were compared read-only with their plays (lesson-629). rpi4 matched. rpi3 accepted routes its play declares off, which the role's `tailscale set` convergence then corrected (#2685). The 2026-10-28 boot check reads the subnet route primary on the tailnet. Left: `make headscale-rejoin` for both nodes, rpi3's `TAGS=tailscale` second run at `changed=0`, and the Headscale expiry read.
 - **B11.** ace1, bee and ace2 each had a default route through the RPi4 and a 204 from the connectivity probe (2026-10-27). Left: a `DHCPACK(eth0)` at this step (the one on record is task 11's, from before the uplink existed) and `make test-e2e ENV=staging`.
 - **B12.** The second provision (2026-10-28) reported `ok=182 changed=1 failed=0`. The one change is apt's cache refresh (`cache_valid_time: 3600`), which fires on time elapsed, not on drift. On 2026-10-29 the edge's provision at 973113b9 read `changed=0`, the configuration B14 ran on. Left: the 48-hour soak's rtw88 check.
-- **B14.** Open. Every case passed after B12's `changed=0` provision, and again on #2797's configuration once T3 had found #2794. The check after T4's cable went back in cannot tell a cable from none: it has no line for `eth0`'s carrier (#2800). B14 closes when that check, with the carrier line, passes over the LAN. See `### B14-EVIDENCE` below.
+- **B14.** Done. Every case passed after B12's `changed=0` provision, and again on #2797's configuration once T3 had found #2794. The first check after T4's cable went back in could not tell a cable from none (#2800). Redone over the LAN with #2800's carrier line, it reads `eth0 has a carrier`, 28 of 28 `OK`. See `### B14-EVIDENCE` below.
 - **B7, B8, B9, B10, B13.** Not started.
 
 ### Hard-reset runs, 2026-10-29
@@ -288,9 +288,46 @@ OK   no failed unit
 
 Exit 0. On this cold boot the adapter's device job was queued at 8.72 s (`Expecting device sys-subsystem-net-devices-uplink0.device`) and the kernel renamed the adapter at 12.60 s, 3.9 s later; the warm reboot (T1) took 4.1 s. Both leave about 6 s of the 10 s bound. The persistent journal of this boot again begins at 47.7 s, so the early lines were read from dmesg (#2702).
 
-#### Cable plugged back after T4, 2026-10-29: not proven
+#### Cable plugged back after T4, 2026-10-29
 
-`make edge-boot-check` read 27 of 27 `OK`, exit 0, with the switch powered off. It ran over the tailnet, and it has no line for `eth0`'s carrier, while the LAN address, route and DNS hold without one since #2769. It cannot tell a cable from none (#2800). The 07:12 run above has the same limit. To redo once #2800 adds the carrier line, over the LAN.
+The first check did not prove it. `make edge-boot-check` read 27 of 27 `OK`, exit 0, with the switch powered off. It ran over the tailnet, and it has no line for `eth0`'s carrier, while the LAN address, route and DNS hold without one since #2769. It cannot tell a cable from none (#2800). The 07:12 run above has the same limit.
+
+Redone over the LAN (`ip route get 172.16.1.1` via `enx00249b1b0d6b`, after `make edge-lan-link`), on the same boot as T4: no reboot came between, and `Startup finished` reads the same. Before it, `make provision NODE=rpi4 ENV=prod BOOTSTRAP=1 TAGS=gateway` from #2804's branch read `changed=1` (the boot check), then `changed=0`.
+
+```text
+INFO Startup finished in 7.300s (kernel) + 30.097s (userspace) = 37.397s
+OK   boot finished
+INFO ruleset loaded at 9.6s, systemd-networkd started at 12.6s, network.target reached at 12.9s
+OK   ruleset inet kubelab loaded
+OK   ruleset loaded before systemd-networkd started
+OK   wait for uplink0 at boot bounded (10s; systemd's default 1min 30s)
+OK   hardware watchdog armed
+OK   hostapd.service active
+OK   dnsmasq.service active
+OK   docker.service active
+OK   tailscaled.service active
+OK   kubelab-edge-liveness.timer active
+OK   kubelab-edge-lease-check.timer active
+OK   kubelab-edge-lease-check.path active
+OK   DHCP server listening
+OK   wlan0 serves the lab Wi-Fi
+OK   container coredns up
+OK   container coredns publishes its ports
+OK   container pihole up
+OK   container pihole publishes its ports
+OK   eth0 has a carrier
+OK   LAN address on eth0
+OK   route to 172.16.1.0/24 on eth0
+OK   DNS answers on the LAN address
+OK   lease on uplink0
+OK   default route out uplink0
+OK   kubelab-edge-shaper.service active
+OK   tailnet session running
+OK   subnet route 172.16.1.0/24 primary on the tailnet
+OK   no failed unit
+```
+
+Exit 0. `eth0 has a carrier` is the line the first check lacked. #2800 changes what the check reads, not what the edge does at boot, so T1 to T4 stand.
 
 - [ ] Criterion 1 -> commit `<hash>` / test `<name>`
 - [ ] Criterion 2 -> commit `<hash>` / test `<name>`
