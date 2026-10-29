@@ -12,6 +12,9 @@ Description=BACKUP-044 node-backup capture ({{ inventory_hostname }})
 # and `OnFailure=` cannot do it by construction. A run that never STARTED is a
 # different failure and a different control (AC9).
 OnFailure=kubelab-notify@%n.service
+# Closes the incident the line above opened, and clears an undelivered page's
+# failed notifier (#2423, #2749). Quiet when nothing was failing.
+OnSuccess=kubelab-notify-recovered@%n.service
 {% if node_backup_location == 'on-demand' %}
 # R-C (verification.md): on this node's actual failure mode -- an unclean
 # shutdown -- `restart: unless-stopped` resurrects the writer at the

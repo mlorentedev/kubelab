@@ -11,6 +11,7 @@ import fcntl
 import json
 import os
 import re
+import shlex
 import shutil
 import stat
 import subprocess
@@ -512,3 +513,32 @@ def test_anything_but_a_declared_page_keeps_the_default(node: Node, declared: st
     node.declare(declared)
     node.run()
     assert [e["severity"] for e in node.envelopes()] == ["log"]
+
+
+def test_the_shaper_pages_again_after_a_fix_and_a_new_failure(node: Node) -> None:
+    """#2689. The shaper is RemainAfterExit, so `OnSuccess=` would fire only when it
+    stops: a fix closed nothing, and a failure within the reminder window after it
+    was counted into the old incident instead of paging.
+
+    The recovery is the shaper's own `ExecStartPost=`, read from its rendered unit,
+    and the notifier it starts runs the command that template declares.
+    """
+    from tests.test_edge_shaper_render import UNIT as SHAPER
+    from tests.test_edge_shaper_render import _directives
+    from tests.test_edge_shaper_render import _render as _render_shaper
+
+    hook = shlex.split(_directives(_render_shaper())["ExecStartPost"][0].lstrip("-"))
+    assert hook[1:4] == ["start", "--no-block", "kubelab-notify-recovered@%n.service"], hook
+    recovered = re.search(r"^ExecStart=\S+ (.+)$", _render("kubelab-notify-recovered@.service.j2"), re.MULTILINE)
+    assert recovered, "the recovery notifier no longer declares ExecStart="
+    recover = [arg.replace("%i", SHAPER) for arg in shlex.split(recovered.group(1))]
+    assert recover[-1] == SHAPER
+
+    node.run(unit=SHAPER)
+    node.set_result("success")
+    node.run(*recover[:-1], unit=recover[-1])
+    node.set_result("exit-code")
+    node.run(unit=SHAPER)
+    titles = node.titles()
+    kinds = ["recovered" if " recovered on " in t else "failed" if " failed on " in t else t for t in titles]
+    assert kinds == ["failed", "recovered", "failed"], titles

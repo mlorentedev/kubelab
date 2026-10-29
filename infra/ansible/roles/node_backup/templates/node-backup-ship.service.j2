@@ -12,6 +12,9 @@ Description=BACKUP-044 node-backup ship to R2{{ ' with integrity check' if node_
 # rather than a page. Suppressing the second would mean the only in-band
 # evidence that the sentinel worked is its absence, which is not evidence.
 OnFailure=kubelab-notify@%n.service
+# Closes the incident the line above opened, and clears an undelivered page's
+# failed notifier (#2423, #2749). Quiet when nothing was failing.
+OnSuccess=kubelab-notify-recovered@%n.service
 # Ship reads what capture staged; running it first would ship stale or
 # missing data. This ordering constraint is declared here so it holds
 # regardless of how a trigger invokes either unit.

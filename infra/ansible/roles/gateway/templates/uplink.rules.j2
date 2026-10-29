@@ -1,0 +1,12 @@
+# {{ ansible_managed }}
+# Starts what the uplink needs each time its adapter appears, so a replug or a USB
+# reset brings the uplink back without a reboot (#2766). netplan starts the
+# supplicant only with systemd-networkd at boot. systemd acts on SYSTEMD_WANTS only
+# when the device first becomes active, so a missing adapter pulls in nothing.
+# Sorts after 80-net-setup-link.rules, which gives the adapter its name from
+# 10-kubelab-uplink.link: NAME== matches nothing before it.
+{% if gateway_uplink_kind == 'ethernet' %}
+ACTION=="add", SUBSYSTEM=="net", NAME=="{{ gateway_uplink_interface }}", ENV{SYSTEMD_WANTS}+="kubelab-edge-shaper.service"
+{% else %}
+ACTION=="add", SUBSYSTEM=="net", NAME=="{{ gateway_uplink_interface }}", ENV{SYSTEMD_WANTS}+="netplan-wpa-{{ gateway_uplink_interface }}.service kubelab-edge-shaper.service"
+{% endif %}
