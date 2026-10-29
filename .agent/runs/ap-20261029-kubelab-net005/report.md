@@ -1,6 +1,6 @@
 # Run ap-20261029-kubelab-net005
 
-Verdict: in progress (updated 10:40Z, window open until 17:43Z). 12 PRs landed, 2 open and left to you (#2789, #2791). Every other item of the queue is landed or waits on a step of yours. Nothing half-done on a branch without a PR.
+Verdict: ended 11:05Z, reason `queue-empty`: every remaining item waits on a step of yours (#2742 PR 2 on your ruling at #2789's merge and the spec question, #2776 on #2791 and the T3 re-run, #2675 on the frozen `CLAUDE.md` line, #2758 on your check-mode run). 12 PRs landed. 2 are open and left to you, both green and CLEAN with every reviewer finding disposed: #2789 and #2791. Repo-wide `dotf pr triage-queue` exits 0. Nothing is half-done on a branch without a PR.
 
 ## Waiting on you (irreversible and urgent first)
 
@@ -56,3 +56,5 @@ Filed this run: #2786 (PR #2791), #2787 (parked), #2792 (TEST-009, Backlog: the 
 | 10:30 | #2789 | triage addendum; unmeasured retry claim dropped; CI flake filed | `e261243c`, #2792 |
 | 10:35 | #2786 | fleet test reads timeouts as systemd does; runbook | `240caa6e`, `206391d3` |
 | 10:38 | #2758 | Blocked on the board, waiting on the operator's check-mode run | board |
+| 11:00 | #2789, #2791 | CI green on `e261243c` and `206391d3`; PR-Agent re-reviews disposed (no new finding on #2789; two stale and one declined on #2791) | triage addenda |
+| 11:05 | run | ended, queue empty | this report |
