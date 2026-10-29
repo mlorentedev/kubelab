@@ -8,7 +8,8 @@
 #
 # EDGE_EXPECT names what the case under test took away: `no-uplink` (the adapter
 # unplugged) or `no-lan` (the switch cable out). The check for that thing then
-# passes when it is missing, and the checks that need it are not run.
+# passes when it is missing, and the checks that need it are not run. The LAN
+# address needs only the device, not the cable (#2732), so `no-lan` keeps them.
 #
 # Exit codes:
 #   0   every check passed
@@ -78,6 +79,8 @@ has_carrier() { [ "$(cat "$sys_net/$1/carrier" 2>/dev/null)" = 1 ]; }
 # Unplugged, not gone: only a device that is there reports a carrier of 0.
 unplugged() { [ "$(cat "$sys_net/$1/carrier" 2>/dev/null)" = 0 ]; }
 lan_address_set() { ip -4 -o addr show dev "$lan" | grep -q " $lan_address/"; }
+# Without it, traffic for the LAN takes the default route out of the uplink.
+lan_route() { ip -4 route show exact "$lan_cidr" dev "$lan" | awk -v cidr="$lan_cidr" '$1 == cidr { found = 1 } END { exit !found }'; }
 uplink_lease() { ip -4 -o addr show dev "$uplink" scope global | grep -q ' inet '; }
 default_route() { ip -4 route show default dev "$uplink" | grep -q '^default'; }
 # hostapd reports ENABLED once the AP beacons, not when the radio is merely in AP mode.
@@ -93,6 +96,17 @@ container_up() {
     'running ' | 'running healthy') return 0 ;;
   esac
   return 1
+}
+
+# A start that failed on a bind leaves the container on no network: ports
+# requested, none in effect, and dockerd restores it so at every boot (#2732).
+# Both containers checked here publish ports, so none requested is a mapping
+# dropped from the compose, not a container with nothing to publish.
+ports_in_effect() {
+  case $(sudo -n docker inspect -f '{{len .HostConfig.PortBindings}}:{{len .NetworkSettings.Ports}}' "$1") in
+    '' | 0:* | [1-9]*:0) return 1 ;;
+  esac
+  return 0
 }
 
 # This node only: with peers, another node's routes would answer for it.
@@ -140,15 +154,17 @@ for unit in hostapd.service dnsmasq.service docker.service tailscaled.service \
 done
 check "DHCP server listening" dhcp_listening
 check "$ap serves the lab Wi-Fi" serves_ap
-check "container coredns up" container_up coredns
-check "container pihole up" container_up pihole
+for container in coredns pihole; do
+  check "container $container up" container_up "$container"
+  check "container $container publishes its ports" ports_in_effect "$container"
+done
 
 if [ "$expect" = no-lan ]; then
   check "$lan present without a carrier, as this case expects" unplugged "$lan"
-else
-  check "LAN address on $lan" lan_address_set
-  check "DNS answers on the LAN address" lan_dns
 fi
+check "LAN address on $lan" lan_address_set
+check "route to $lan_cidr on $lan" lan_route
+check "DNS answers on the LAN address" lan_dns
 
 # The liveness check fails on a missing uplink, and the page its failure sends
 # fails too: the edge has no route out. In that case both are expected, the page
