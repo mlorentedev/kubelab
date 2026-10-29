@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 657 | [A missing Wi-Fi adapter holds network.target for systemd's 90-second device timeout](lesson-657-a-missing-wifi-adapter-holds-network-target-for-the-device-timeout.md) | 2026-10-29 |
 | 650 | [A renamed network device becomes active on its move event, not its add](lesson-650-a-renamed-network-device-becomes-active-on-its-move-event-not-its-add.md) | 2026-10-29 |
 | 648 | [A static address on a link without a carrier is not configured](lesson-648-a-static-address-on-a-link-without-a-carrier-is-not-configured.md) | 2026-10-29 |
 | 646 | [A unit started with networkd never starts for an adapter that appears later](lesson-646-a-unit-started-with-networkd-never-starts-for-an-adapter-that-appears-later.md) | 2026-10-28 |
