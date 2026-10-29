@@ -39,6 +39,10 @@ Description=BACKUP-044 node-backup shutdown snapshot ({{ inventory_hostname }})
 # happened. Whether the notifier fires across a REAL power cycle is part of
 # AC5's demonstration -- it is not asserted here, because nothing on this
 # branch can establish it.
+#
+# Unlike the other three it declares no recovery: its run ends when it stops,
+# inside the shutdown transaction, where systemd starts no unit, so a recovery
+# hook would only log a refused job at every poweroff.
 OnFailure=kubelab-notify@%n.service
 After={{ node_backup_shutdown_after }} network-online.target
 Wants=network-online.target

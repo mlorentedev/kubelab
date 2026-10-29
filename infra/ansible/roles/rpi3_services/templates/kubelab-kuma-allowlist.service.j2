@@ -15,6 +15,9 @@ Type=oneshot
 RemainAfterExit=yes
 ExecStartPre=/bin/sh -c 'while iptables -w -D DOCKER-USER -p tcp -m conntrack --ctorigdst {{ tailscale_ip }} --ctorigdstport {{ uptime_kuma_port }} -j KUMA-ALLOW 2>/dev/null; do :; done'
 ExecStart=/usr/sbin/iptables-restore -w 5 --noflush {{ rpi3_deploy_dir }}/kuma-allowlist.rules
+# Closes the incident a failed start opened (#2423, #2749). Not OnSuccess=: on a
+# RemainAfterExit unit that fires when the unit stops.
+ExecStartPost=-/usr/bin/systemctl start --no-block kubelab-notify-recovered@%n.service
 ExecStop=/bin/sh -c 'while iptables -w -D DOCKER-USER -p tcp -m conntrack --ctorigdst {{ tailscale_ip }} --ctorigdstport {{ uptime_kuma_port }} -j KUMA-ALLOW 2>/dev/null; do :; done'
 
 [Install]

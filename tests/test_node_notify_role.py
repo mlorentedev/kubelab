@@ -800,3 +800,54 @@ def test_the_role_refuses_a_default_the_router_does_not_route(severity: str, ok:
     [check] = [t["assert"]["that"] for t in tasks if "node_notify_severity" in str(t.get("assert"))]
     env = ansible_env(str(NOTIFY_ROLE / "templates"))
     assert all(env.compile_expression(c)(node_notify_severity=severity) for c in check) is ok
+
+
+# --- every unit that pages closes its page (#2689) ---------------------------
+#
+# A unit that pages and never reports a recovery keeps its incident open: a fixed
+# unit that fails again inside the reminder window is counted into the old
+# incident instead of paging, and an undelivered page stays a failed notifier
+# until a delivered recovery clears it (#2749). The edge's hard-reset test found
+# both on a backup unit, so the rule is held over every unit, not opted into.
+
+ROLES = REPO / "infra/ansible/roles"
+PAGES = re.compile(r"^OnFailure=kubelab-notify@%n\.service$", re.M)
+ON_SUCCESS = "OnSuccess=kubelab-notify-recovered@%n.service"
+START_POST = "ExecStartPost=-/usr/bin/systemctl start --no-block kubelab-notify-recovered@%n.service"
+
+#: Units that page and declare no recovery, each with the reason.
+NO_RECOVERY = {
+    "node_backup/node-backup-shutdown.service.j2": (
+        "its run ends when it stops, inside the shutdown transaction, where systemd "
+        "starts no unit; a recovery hook would log a refused job at every poweroff"
+    ),
+}
+
+
+def _paging_units() -> list[Path]:
+    return sorted(t for t in ROLES.glob("*/templates/*.service.j2") if PAGES.search(t.read_text(encoding="utf-8")))
+
+
+def _key(template: Path) -> str:
+    return f"{template.parents[1].name}/{template.name}"
+
+
+@pytest.mark.parametrize("template", _paging_units(), ids=_key)
+def test_every_unit_that_pages_closes_its_page(template: Path) -> None:
+    """`OnSuccess=` on a RemainAfterExit unit fires when it stops, not when its start
+    succeeds, so such a unit starts the recovery from its last ExecStartPost."""
+    lines = template.read_text(encoding="utf-8").splitlines()
+    if _key(template) in NO_RECOVERY:
+        assert ON_SUCCESS not in lines and START_POST not in lines
+    elif "RemainAfterExit=yes" in lines:
+        assert START_POST in lines and ON_SUCCESS not in lines
+        assert [line for line in lines if line.startswith("ExecStart")][-1] == START_POST
+    else:
+        assert ON_SUCCESS in lines
+
+
+def test_the_recovery_scan_sees_the_units_that_page() -> None:
+    """Vacuity guard (lesson-357), and no exemption outlives its unit."""
+    keys = {_key(t) for t in _paging_units()}
+    assert len(keys) >= 10, keys
+    assert set(NO_RECOVERY) <= keys
