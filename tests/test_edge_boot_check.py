@@ -71,7 +71,9 @@ FAKES = {
   "list-jobs --no-legend") cat "$FAKE/jobs" 2>/dev/null; true ;;
   # Starting while jobs are queued, degraded once finished with a failed unit.
   "is-system-running ")
-    if [ -f "$FAKE/system" ]; then cat "$FAKE/system"
+    if [ -f "$FAKE/system" ]; then
+      head -n 1 "$FAKE/system"
+      if [ "$(wc -l < "$FAKE/system")" -gt 1 ]; then sed -i 1d "$FAKE/system"; fi
     elif [ -f "$FAKE/jobs" ]; then echo starting
     elif ls "$FAKE"/failed/* >/dev/null 2>&1; then echo degraded
     else echo running; fi ;;
@@ -411,13 +413,17 @@ def test_only_a_running_service_start_job_is_judged(edge: Edge, job: str) -> Non
         edge.write(f"show_TimeoutStartUSec_{unit}", "infinity\n")
     result = edge.run()
     assert not _failures(result), result.stdout
-    assert "WAIT boot finished: not yet, running no start job: run the check again after the longest" in result.stdout
+    assert (
+        "WAIT boot finished: not yet, running no service start job: run the check again after the longest"
+        in result.stdout
+    )
     assert result.returncode == 2
 
 
 def test_a_finished_boot_with_a_failed_unit_is_finished(edge: Edge) -> None:
     """`degraded` is reported only once the boot has finished; the failed unit is
     judged by its own check."""
+    edge.write("system", "degraded\n")
     edge.write("failed/stray.service", "")
     result = edge.run()
     assert "OK   boot finished" in result.stdout.splitlines()
@@ -428,6 +434,15 @@ def test_a_finished_boot_with_a_failed_unit_is_finished(edge: Edge) -> None:
 def test_a_system_neither_booting_nor_up_fails(edge: Edge, system: str) -> None:
     edge.write("system", f"{system}\n")
     assert _failures(edge.run()) == [f"FAIL boot finished: the system is {system or 'unknown'}"]
+
+
+def test_a_boot_that_finishes_between_the_reads_is_finished(edge: Edge) -> None:
+    """The jobs drain after `starting` is read: the empty table asks again."""
+    edge.write("system", "starting\nrunning\n")
+    edge.write("jobs", "")
+    result = edge.run()
+    assert "OK   boot finished" in result.stdout.splitlines()
+    assert result.returncode == 0, result.stdout
 
 
 def test_an_unfinished_boot_with_an_empty_table_says_none(edge: Edge) -> None:

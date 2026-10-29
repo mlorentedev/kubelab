@@ -190,6 +190,10 @@ fi
 # when its own TimeoutStartSec does, and `infinity`, a oneshot's default, means
 # it never has to. Only running start jobs are judged; a waiting one has not
 # started. `degraded` is a finished boot with failed units, judged below.
+system_up() {
+  case $(systemctl is-system-running 2>/dev/null) in running | degraded) return 0 ;; esac
+  return 1
+}
 boot_finished() {
   system=$(systemctl is-system-running 2>/dev/null)
   case $system in
@@ -213,10 +217,13 @@ boot_finished() {
       bounded="${bounded:+$bounded, }$unit ($timeout)"
     fi
   done
+  # The table can empty between the two reads, so an empty one asks again.
   if [ -n "$unbounded" ]; then
     fail "boot finished: held by $unbounded, with no start timeout"
+  elif [ -z "$bounded" ] && system_up; then
+    pass "boot finished"
   else
-    wait_for "boot finished: not yet, running ${bounded:-no start job}: run the check again after the longest"
+    wait_for "boot finished: not yet, running ${bounded:-no service start job}: run the check again after the longest"
   fi
 }
 boot_finished
