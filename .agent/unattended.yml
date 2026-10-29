@@ -1,0 +1,52 @@
+# Arming envelope for one unattended run. The run reads the committed copy only.
+version: 1
+run_id: "ap-20261029-kubelab-net005"
+armed_by: manu
+armed_at: 2026-10-29T05:43:00Z
+expires_at: 2026-10-29T17:43:00Z
+objective: >-
+  Close NET-005's B14 follow-ups under the standing grant: land #2773 and #2759,
+  then #2675, #2758, #2742 and the #2722 text corrections, filing the B14 debt
+  found on 2026-10-29 as tickets and fixing those that pass the 3 a.m. test.
+scope:
+  write_paths:
+    - "infra/ansible/roles/**"
+    - "infra/ansible/playbooks/**"
+    - "infra/ansible/*.yml"
+    - "infra/config/values/common.yaml"
+    - "tests/**"
+    - "toolkit/**"
+    - "Makefile"
+    - "scripts/**"
+    - "docs/lessons/**"
+    - "docs/runbooks/**"
+    - "specs/NET-005-lab-edge-site-modes/**"
+    - ".agent/runs/**"
+  frozen_paths:
+    - ".github/**"
+    - "harness/**"
+    - "**/AGENTS.md"
+    - "**/CLAUDE.md"
+    - "infra/config/secrets/**"
+    - "toolkit/features/credentials.py"
+    - "toolkit/features/oidc_clients.py"
+    - "infra/k8s/**"
+  max_files: 12
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make, poetry, ssh]
+queue:
+  source: bitacora
+  filter: "#2773, #2759, #2675, #2758, #2742, #2722 corrections, B14 debt tickets"
+  max_items: 8
+budget:
+  max_iterations: 10
+  max_minutes_per_iteration: 60
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant
+  push: true
+  open_pr: true
+  advisor_tier: top
+# Host constraints: ssh is read-only diagnostics on fleet nodes. No provision,
+# deploy, reboot or remote write on prod: those are the operator's, listed in
+# the run report. ace1, ace2 and bee stay powered for the window.
