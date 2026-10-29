@@ -80,14 +80,22 @@ make provision NODE=bee ENV=prod EXTRA='base_system_release_holds=true'
 
 The same run then smoke-builds an image on the new engine (`docker_smoke_build`, in the
 `docker` role) and fails the play if the build errors or makes no progress within
-`docker_smoke_build_timeout_seconds`. Its step sleeps 20 s, past the 10 s in which the session
+`docker_smoke_build_timeout_seconds`. It first pulls the pinned base image under the same
+timeout, so a slow uplink or an unreachable registry fails as a pull, with a message that says
+so, and the build never starts. The build then runs on `default`, the engine's own BuildKit,
+which is where the Gitea jobs build. It does not use the builder root has selected: on the
+Beelink that is `multiarch`, a docker-container builder that would first pull its own BuildKit
+image (lesson-649). Its step sleeps 20 s, past the 10 s in which the session
 dropped on 2026-10-27, when a provision moved Docker from 29.8.1 to 29.9.2 as a side effect
 and BuildKit sessions began dropping that morning. Read the failure before blaming the engine:
-rc 124 is a build that made no progress, the #2722 failure. rc 137 is a kill, and the message
+rc 124 is a build that made no progress, and the message quotes its last lines of output. It
+is the #2722 failure only if `journalctl -u docker` shows `session healthcheck failed` at that
+time. rc 137 is a kill, and the message
 gives the time it took: past the timeout it is the same failure with a client that ignored the
 TERM, sooner it is something else, most often the OOM killer (`journalctl -k`). Any other rc
 quotes the build's own error. A failed smoke build leaves the new engine installed and held, so the runner
-builds on it until someone acts: record it on #2722.
+builds on it until someone acts: record it on #2722. The pulled base image stays in the
+engine's store; the build itself leaves nothing behind.
 
 To run the check against the engine already installed, without moving any package:
 
