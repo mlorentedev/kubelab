@@ -18,4 +18,4 @@ tags: [kubelab, observability, systemd, notify]
 
 **Rule**: A failure hook and its recovery hook are one contract. Hold every unit that has the first to the second with a test, rather than having each unit opt in. Pick the form from when the unit's work ends: `OnSuccess=` fires on the transition to inactive, so on a unit that stays active it means "stopped", not "succeeded".
 
-**Tags**: `#systemd` `#notify` `#net-015` `#pr-TBD`
+**Tags**: `#systemd` `#notify` `#net-015` `#pr-2768`

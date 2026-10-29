@@ -27,4 +27,4 @@ tags: [kubelab, networking-dns, netplan, systemd, udev, rpi4, hotplug]
 
 **Rule**: For a unit that must run whenever a hot-pluggable device is present, want it from udev with `SYSTEMD_WANTS`, never with `WantedBy=` the device, and bind it to the device with `BindsTo=`. A unit pulled in by a service at boot is a boot-time unit, whatever its `Requires=` says.
 
-**Tags**: `#net-018` `#net-005` `#systemd` `#udev` `#pr-TBD`
+**Tags**: `#net-018` `#net-005` `#systemd` `#udev` `#pr-2768`
