@@ -72,7 +72,7 @@ make deploy TARGET=dns ENV=prod CHECK=1   # dry run: read the diff first
 make deploy TARGET=dns ENV=prod           # render, restart what changed, verify
 ```
 
-`make provision NODE=rpi4 ENV=prod` runs the same role as part of the full node provision. The two must agree. Never copy files to the node by hand, and never keep the stack under `~`: a remote `~` is a different directory with and without `become` (lesson-519).
+`make provision NODE=rpi4 ENV=prod BOOTSTRAP=1` runs the same role as part of the full node provision, from the switch, since the full provision also applies the `gateway` role. The two must agree. Never copy files to the node by hand, and never keep the stack under `~`: a remote `~` is a different directory with and without `become` (lesson-519).
 
 **Port mapping**:
 - Pi-hole: port 53 (DNS) + port 80 (admin UI)
