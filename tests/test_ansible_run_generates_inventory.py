@@ -5,13 +5,15 @@ or generated from an older common.yaml. Generating before the run was a
 per-target Makefile convention, and seven targets had not followed it. A stale
 inventory does not fail: a play whose pattern no longer matches is a warning and
 exit 0 (lesson-356). So `run` now generates first, in the mode it is given, and
-a failed generation stops it before ansible-playbook is invoked.
+a failed generation stops it before ansible-playbook is invoked. After a
+bootstrap or bastion run it puts the mesh inventory back, failed run or not.
 """
 
 from __future__ import annotations
 
 import ast
 import re
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -113,6 +115,83 @@ def test_an_unknown_playbook_generates_nothing(ansible_dir: Path, calls: list) -
     assert calls == []
 
 
+# --------------------------------------------- the mesh inventory comes back
+#
+# A bootstrap (LAN IPs) or bastion run leaves its inventory on disk, and whatever
+# reads the file without running would address every node that way. Restoring it
+# was a branch of `make provision`: TOOL-036 found that branch exiting 0 after a
+# failed run, and `make reboot` had no branch at all, so it could not reach a node
+# off the tailnet (the edge with its uplink down, NET-005's hard-reset test).
+# `run` now restores after any such run, failed or not.
+
+MESH = ("generate", ("prod", False, "mesh"))
+
+
+@pytest.mark.parametrize(
+    ("mode", "first"),
+    [({"bootstrap": True}, ("prod", True, "mesh")), ({"transport": "bastion"}, ("prod", False, "bastion"))],
+)
+def test_a_bootstrap_or_bastion_run_restores_the_mesh_inventory(
+    ansible_dir: Path, calls: list, mode: dict, first: tuple
+) -> None:
+    _run(**mode)
+    assert [name for name, _ in calls] == ["generate", "ansible-playbook", "generate"]
+    assert calls[0][1] == first
+    assert calls[2] == MESH
+
+
+def test_a_mesh_run_restores_nothing(ansible_dir: Path, calls: list) -> None:
+    _run()
+    assert calls.count(MESH) == 1 and calls[-1][0] == "ansible-playbook"
+
+
+def test_skip_generate_restores_nothing(ansible_dir: Path, calls: list) -> None:
+    """Nothing was generated for the run, so the inventory on disk is the operator's."""
+    _run(bootstrap=True, skip_generate=True)
+    assert [name for name, _ in calls] == ["ansible-playbook"]
+
+
+def test_a_failed_run_restores_and_exits_non_zero(
+    ansible_dir: Path, calls: list, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def failed(cmd: str, **_kwargs: Any) -> SimpleNamespace:
+        calls.append(("ansible-playbook", cmd))
+        return SimpleNamespace(returncode=2)
+
+    monkeypatch.setattr(infra.command, "run", failed)
+    with pytest.raises(typer.Exit) as exited:
+        _run(bootstrap=True)
+    assert exited.value.exit_code == 1
+    assert calls[-1] == MESH
+
+
+def test_an_interrupted_run_still_restores(ansible_dir: Path, calls: list, monkeypatch: pytest.MonkeyPatch) -> None:
+    def interrupted(cmd: str, **_kwargs: Any) -> SimpleNamespace:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(infra.command, "run", interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        _run(bootstrap=True)
+    assert calls[-1] == MESH
+
+
+def test_a_failed_restore_after_a_good_run_exits_non_zero(
+    ansible_dir: Path, calls: list, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A success would hide that the inventory on disk is still the LAN one."""
+    results = iter([{"success": True}, {"success": False, "error": "boom"}])
+
+    def generate(env: str, bootstrap: bool = False, transport: str = "mesh") -> dict[str, Any]:
+        calls.append(("generate", (env, bootstrap, transport)))
+        return next(results)
+
+    monkeypatch.setattr(generator_ansible.ansible_generator, "generate", generate)
+    with pytest.raises(typer.Exit) as exited:
+        _run(bootstrap=True)
+    assert exited.value.exit_code == 1
+    assert [name for name, _ in calls] == ["generate", "ansible-playbook", "generate"]
+
+
 def test_generation_needs_no_decryption_key(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Every run generates now, so generation must not require the age key.
 
@@ -151,59 +230,50 @@ def _recipes() -> dict[str, str]:
     return recipes
 
 
-_BRANCH = re.compile(r"(?:else|then|elif|fi)\b")
+def _generates_and_runs(recipe: str) -> bool:
+    """True when a recipe both generates the inventory and runs a playbook.
 
-
-def _generates_for_a_run(recipe: str) -> bool:
-    """True when a generate is the inventory step of a following run: the old form.
-
-    Per command, not per recipe: a recipe is split into shell commands, and a
-    generate followed by a run with no branch keyword between them is the old
-    convention. `provision`'s restore generate is followed by `else`, so the
-    run after it belongs to the other branch.
+    Before the run is the convention TOOL-090 replaced; after it is the mesh
+    restore `run` now does itself. Either way the generate is `run`'s job.
     """
-    joined = recipe.replace("\\\n", " ")
-    pending = False
-    for command in re.split(r";|&&|\|\||\n", joined):
-        command = command.strip().lstrip("@").strip()
-        if _BRANCH.match(command):
-            pending = False
-            command = _BRANCH.sub("", command, count=1).strip()
-        if "infra ansible generate" in command:
-            pending = True
-        elif "infra ansible run" in command:
-            if pending:
-                return True
-            pending = False
-    return False
+    return "infra ansible generate" in recipe and "infra ansible run" in recipe
 
 
-def test_no_make_recipe_generates_the_inventory_for_a_run() -> None:
-    """The convention this replaces must not come back one target at a time.
-
-    A generate BEFORE a run is the old form. One after it is allowed:
-    `provision` restores the mesh inventory on disk after a bootstrap run.
-    """
-    offenders = [target for target, recipe in _recipes().items() if _generates_for_a_run(recipe)]
-    assert not offenders, f"recipes still generate the inventory for their run: {offenders}"
+def test_no_make_recipe_generates_the_inventory_around_a_run() -> None:
+    """The conventions `run` absorbed must not come back one target at a time."""
+    offenders = [target for target, recipe in _recipes().items() if _generates_and_runs(recipe)]
+    assert not offenders, f"recipes still generate the inventory around their run: {offenders}"
 
 
-def test_the_guard_sees_the_old_form_inside_a_recipe_that_restores() -> None:
-    """Review of #1951: a per-recipe first-occurrence check exempted `provision` whole.
+@pytest.mark.parametrize("where", ["before", "after"])
+def test_the_guard_sees_a_generate_on_either_side_of_a_run(where: str) -> None:
+    """Checked against a real recipe with the edit made, so the guard cannot pass vacuously."""
+    reboot = _recipes()["reboot"]
+    run = next(line for line in reboot.splitlines() if "infra ansible run" in line)
+    generate = "\t@$(TOOLKIT) infra ansible generate --env $(_ENV)"
+    edited = reboot.replace(run, f"{generate}\n{run}" if where == "before" else f"{run}\n{generate}", 1)
+    assert not _generates_and_runs(reboot)
+    assert _generates_and_runs(edited)
 
-    Its bootstrap run comes before its restore generate, so re-adding the old
-    `generate && run` to its else branch passed. Checked against the real
-    recipe with exactly that edit.
-    """
-    provision = _recipes()["provision"]
-    assert not _generates_for_a_run(provision)
-    regressed = provision.replace(
-        "\telse \\\n",
-        "\telse \\\n\t\t$(TOOLKIT) infra ansible generate --env $(_ENV) >/dev/null && \\\n",
-        1,
-    )
-    assert regressed != provision, "the provision recipe changed shape; update this mutation"
-    assert _generates_for_a_run(regressed)
+
+def _offers(flag: str) -> list[str]:
+    return [target for target, recipe in _recipes().items() if f"[{flag}=" in recipe and "infra ansible run" in recipe]
+
+
+def test_bootstrap_and_transport_reach_run_from_every_target_that_offers_them() -> None:
+    """Expanded with `make -n`, so a flag the usage line offers but the run line drops fails here."""
+    targets = _offers("BOOTSTRAP")
+    assert {"provision", "reboot"} <= set(targets)
+    for target in targets:
+        dry = subprocess.run(
+            ["make", "-n", target, "NODE=rpi4", "ENV=prod", "BOOTSTRAP=1", "TRANSPORT=bastion"],
+            cwd=_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+        run = next(line for line in dry.splitlines() if "infra ansible run" in line)
+        assert "--bootstrap" in run and "--transport bastion" in run, (target, run)
 
 
 def test_the_recipe_parser_sees_every_run() -> None:

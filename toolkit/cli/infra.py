@@ -1853,13 +1853,38 @@ def ansible_run(
         cmd += f" --extra-vars '{extra_vars}'"
 
     logger.info(f"Running: {cmd}")
-    result = command.run(cmd, cwd=ansible_dir, check=False, capture_output=False)
+    restore = not skip_generate and (bootstrap or transport != "mesh")
+    try:
+        result = command.run(cmd, cwd=ansible_dir, check=False, capture_output=False)
+    finally:
+        restored = _restore_mesh_inventory(env) if restore else True
 
-    if result.returncode == 0:
-        logger.success(f"Playbook '{playbook}' completed successfully")
-    else:
+    # The run's failure is the one reported; a failed restore after a good run
+    # still fails, because the inventory on disk is then the bootstrap one.
+    if result.returncode != 0:
         logger.error(f"Playbook '{playbook}' failed")
         raise typer.Exit(1) from None
+    if not restored:
+        raise typer.Exit(1) from None
+    logger.success(f"Playbook '{playbook}' completed successfully")
+
+
+def _restore_mesh_inventory(env: str) -> bool:
+    """Put the mesh inventory back on disk after a bootstrap or bastion run.
+
+    Whatever reads the file without running (a raw ansible-playbook, `run
+    --skip-generate`) would otherwise address every node by its LAN IP or through
+    the bastion. This was a branch of `make provision` (TOOL-036); here every
+    target that passes `--bootstrap` or `--transport` gets it, failed run or not.
+    """
+    from toolkit.features.generator_ansible import ansible_generator
+
+    logger.info("Restoring the inventory with mesh Tailscale IPs")
+    restored = ansible_generator.generate(env)
+    if not restored.get("success"):
+        logger.error(f"Mesh inventory not restored, the one on disk is this run's: {restored.get('error')}")
+        return False
+    return True
 
 
 @ansible_app.command("syntax-check")

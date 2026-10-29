@@ -116,7 +116,19 @@ watchdog_armed() {
   [ -n "$usec" ] && [ "$usec" != 0 ]
 }
 
-echo "INFO $(systemd-analyze time 2>/dev/null | head -n 1)"
+# `systemd-analyze time` fails until the boot finishes, so an unfinished boot names
+# the jobs it still waits for instead (#2675). Any other failure says what it was.
+if analyzed=$(systemd-analyze time 2>&1); then
+  echo "INFO $(printf '%s\n' "$analyzed" | head -n 1)"
+else
+  case $analyzed in
+    *"not yet finished"*)
+      queued=$(systemctl list-jobs --no-legend --plain 2>/dev/null | awk '{ printf "%s%s", sep, $2; sep = " " }')
+      echo "INFO boot not finished, jobs still queued: ${queued:-none}"
+      ;;
+    *) echo "INFO startup time unavailable: $(printf '%s\n' "$analyzed" | head -n 1)" ;;
+  esac
+fi
 echo "INFO ruleset loaded at $(seconds "$loaded"), systemd-networkd started at $(seconds "$networkd")"
 
 check "ruleset inet kubelab loaded" sudo -n nft list table inet kubelab
@@ -154,6 +166,30 @@ else
   check "tailnet session running" tailnet_up
   check "subnet route $lan_cidr primary on the tailnet" advertises_lan
 fi
+
+# A run a timer started is a scheduled job, not something the boot brings back, and
+# its own page reports its failure. An outage the case caused fails it too, along
+# with that page: node-backup-ship cannot reach R2 without the uplink. A run whose
+# page failed or does not exist reached nobody, so it is named apart. The edge's
+# own timers run what it serves, so they are judged like everything else.
+failed_now=" $(systemctl --failed --no-legend --plain | awk '{ printf "%s ", $1 }')"
+paged=
+unpaged=
+for unit in $failed_now; do
+  case $unit in kubelab-edge-*) continue ;; esac
+  case " $(systemctl show -p TriggeredBy --value "$unit") " in
+    *".timer "*)
+      page=$(systemctl show -p OnFailure --value "$unit")
+      expected="$expected $unit $page"
+      case "$page:$failed_now" in
+        :* | *" $page "*) unpaged="${unpaged:+$unpaged }$unit" ;;
+        *) paged="${paged:+$paged }$unit" ;;
+      esac
+      ;;
+  esac
+done
+[ -z "$paged" ] || echo "INFO failed scheduled runs, each paged: $paged"
+[ -z "$unpaged" ] || echo "INFO failed scheduled runs nobody was paged for: $unpaged"
 
 failed_units=$(systemctl --failed --no-legend --plain | awk -v expected="$expected" '
   BEGIN { n = split(expected, e, " "); for (i = 1; i <= n; i++) skip[e[i]] = 1 }

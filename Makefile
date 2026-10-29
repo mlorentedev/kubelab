@@ -1042,26 +1042,9 @@ provision:
 	# invocation, which is exactly what these targets exist to prevent.
 	$(eval _EXTRA := $(if $(EXTRA),--extra-vars "$(EXTRA)",))
 	# `ansible run` generates the inventory it runs against (TOOL-090), in the
-	# mode it is given: BOOTSTRAP (LAN IPs) and TRANSPORT reach the generator
-	# through run's own flags, and a failed generation stops the playbook. The
-	# restore line after a bootstrap/bastion run is a generate on its own: it
-	# puts the mesh inventory back on disk for anything that reads the file
-	# without running (a raw ansible-playbook, or `run --skip-generate`). It runs
-	# either way, so it is `;`. The exit is the run's status when the run failed,
-	# else the restore's: a failed restore leaves the bootstrap inventory on disk,
-	# and a success would hide that.
-	@if [ -n "$(BOOTSTRAP)" ] || [ -n "$(TRANSPORT)" ]; then \
-		echo "=== Inventory for this run: $(if $(BOOTSTRAP),LAN IPs,mesh)$(if $(TRANSPORT), via $(TRANSPORT),) ==="; \
-		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_BOOT) $(_TRANSPORT) $(_K) $(_TAGS) $(_CHECK) $(_EXTRA) $(_FRESH); \
-		_exit=$$?; \
-		echo "=== Restoring: inventory with mesh Tailscale IPs ==="; \
-		$(TOOLKIT) infra ansible generate --env $(_ENV); \
-		_restore=$$?; \
-		[ $$_exit -ne 0 ] && exit $$_exit; \
-		exit $$_restore; \
-	else \
-		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_K) $(_TAGS) $(_CHECK) $(_EXTRA) $(_FRESH); \
-	fi
+	# mode it is given, and after a BOOTSTRAP or TRANSPORT run puts the mesh one
+	# back on disk itself, failed run or not (see `ansible_run`).
+	@$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_BOOT) $(_TRANSPORT) $(_K) $(_TAGS) $(_CHECK) $(_EXTRA) $(_FRESH)
 
 .PHONY: maintain
 maintain:
@@ -1079,13 +1062,17 @@ maintain:
 # Reboot the nodes `make maintain` reported as needing it. The playbook skips
 # hosts with no pending reboot, takes one host at a time, and refuses the VPS
 # (Headscale) unless EXTRA='reboot_allow_vps=true'. No inline logic here.
+# BOOTSTRAP=1 reaches a node by its LAN IP, for one that is off the tailnet:
+# the edge with its uplink down is the case it was added for.
 .PHONY: reboot
 reboot:
-	@test -n "$(NODE)" || (echo "Usage: make reboot NODE=ace1|ace2|beelink|gcp1|vps|rpi3|rpi4 [ENV=staging|prod|hub] [EXTRA='reboot_force=true reboot_allow_vps=true'] [CHECK=1]" && exit 1)
+	@test -n "$(NODE)" || (echo "Usage: make reboot NODE=ace1|ace2|beelink|gcp1|vps|rpi3|rpi4 [ENV=staging|prod|hub] [BOOTSTRAP=1] [TRANSPORT=bastion] [EXTRA='reboot_force=true reboot_allow_vps=true'] [CHECK=1]" && exit 1)
 	$(eval _ENV := $(or $(filter staging prod hub,$(ENV)),staging))
+	$(eval _BOOT := $(if $(BOOTSTRAP),--bootstrap,))
+	$(eval _TRANSPORT := $(if $(TRANSPORT),--transport $(TRANSPORT),))
 	$(eval _EXTRA := $(if $(EXTRA),--extra-vars "$(EXTRA)",))
 	$(eval _CHECK := $(if $(CHECK),--check,))
-	@$(TOOLKIT) infra ansible run -p reboot -e $(_ENV) -l $(NODE) $(_EXTRA) $(_CHECK)
+	@$(TOOLKIT) infra ansible run -p reboot -e $(_ENV) -l $(NODE) $(_BOOT) $(_TRANSPORT) $(_EXTRA) $(_CHECK)
 
 # Emergency reclaim for the residue `make maintain` structurally cannot reach
 # (OPS-024/#1657). Two reasons it is a separate path and not a tag on that one:
