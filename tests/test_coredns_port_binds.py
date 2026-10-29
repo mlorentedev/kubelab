@@ -53,3 +53,40 @@ def test_a_bound_port_is_bound_to_loopback() -> None:
             assert _is_loopback(parts[0]), (
                 f"{service} binds {port}: a node address may not exist when Docker starts (#2732)"
             )
+
+
+def _tasks() -> list[dict]:
+    """The role's tasks at any depth: they sit in one block that runs as root."""
+
+    def walk(tasks: list[dict]) -> list[dict]:
+        out = []
+        for task in tasks:
+            out.append(task)
+            for key in ("block", "rescue", "always"):
+                out.extend(walk(task.get(key) or []))
+        return out
+
+    return walk(yaml.safe_load((ROLE / "tasks/main.yml").read_text()))
+
+
+def test_a_container_left_on_no_network_is_recreated() -> None:
+    """A start that failed on a bind leaves the container attached to no network.
+
+    dockerd restores it that way at every boot, and `up -d` sees an unchanged
+    spec, so only the shared drift check notices (#2732, #2500).
+    """
+    tasks = _tasks()
+    names = [task.get("name") for task in tasks]
+    [check] = [
+        i for i, task in enumerate(tasks) if str(task.get("import_tasks", "")).endswith("compose-port-drift.yml")
+    ]
+    start = names.index("Start DNS stack")
+    assert check < start, "the drift check must run before the stack starts"
+    # A condition on an import lands on every task it imports.
+    assert "when" not in tasks[check]
+    [compose] = [
+        task["template"]["dest"] for task in tasks if (task.get("template") or {}).get("src") == "docker-compose.yml.j2"
+    ]
+    assert tasks[check]["vars"]["compose_port_drift_file"] == compose
+    command = str(tasks[start]["command"])
+    assert "--force-recreate" in command and "compose_port_drift | bool" in command, command
