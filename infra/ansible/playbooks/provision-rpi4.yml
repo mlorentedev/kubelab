@@ -65,6 +65,24 @@
         config: "{{ common | combine(env_overrides, recursive=True) }}"
       tags: [always]
 
+    # ADR-075 D7: applying the uplink can cut a session that rides the tailnet it
+    # carries. Checked here, before any role, because the gateway role runs after
+    # others that change the edge: from inside it, a refused run had already made
+    # them (#2775). Every run that applies the gateway role is checked.
+    - name: Check that the run comes over the homelab LAN
+      assert:
+        that: ansible_host == config.networking.nodes.rpi4.lan_ip
+        fail_msg: >-
+          ERROR: this run reaches the edge at {{ ansible_host }}, not at its LAN address.
+          WHY: edge changes run over the homelab LAN, because applying the uplink can cut a
+          session that rides the tailnet (ADR-075 D7).
+          FIX: from the laptop on the switch, run `make provision NODE=rpi4 ENV=prod BOOTSTRAP=1`.
+        quiet: true
+      when:
+        - "'all' in ansible_run_tags or 'tagged' in ansible_run_tags or 'gateway' in ansible_run_tags"
+        - "'gateway' not in ansible_skip_tags"
+      tags: [always]
+
     - name: Decrypt common secrets (controller-side)
       command: sops -d {{ playbook_dir }}/../../config/secrets/common.enc.yaml
       register: sops_common

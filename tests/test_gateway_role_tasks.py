@@ -283,14 +283,66 @@ def test_the_profile_check_names_every_key_it_checks() -> None:
     assert all(key in message for key in ("kind", "regdomain", ".mac", ".ssid", ".psk", "common.yaml"))
 
 
+EDGE_PLAY_FILE = ANSIBLE / "playbooks" / "provision-rpi4.yml"
+CONTROLLER_SIDE = ("include_vars", "set_fact")
+
+
+def _edge_play() -> dict[str, Any]:
+    plays = yaml.safe_load(EDGE_PLAY_FILE.read_text())
+    return next(p for p in plays if any(str(r.get("role", "")).endswith("/gateway") for r in p.get("roles", [])))
+
+
+def _lan_guard() -> tuple[int, dict[str, Any]]:
+    tasks = _edge_play().get("pre_tasks", [])
+    return next((i, t) for i, t in enumerate(tasks) if "ansible_host" in str(t.get("assert")))
+
+
+def _guard_holds(ansible_host: str) -> bool:
+    _, guard = _lan_guard()
+    that = guard["assert"]["that"]
+    env = ansible_env(".")
+    config = {"networking": {"nodes": {"rpi4": NODES["rpi4"]}}}
+    return all(
+        env.compile_expression(check)(ansible_host=ansible_host, config=config)
+        for check in (that if isinstance(that, list) else [that])
+    )
+
+
 def test_edge_changes_run_over_the_homelab_lan() -> None:
     """ADR-075 D7. Over the tailnet, applying the uplink can cut the session that applies it."""
-    check = _first(lambda task: "ansible_host" in str(task.get("assert")))
-    link, _ = _template_task(LINK)
-    assert check < link
-    lan = {"gateway_lan_cidr": f"{NODES['rpi4']['lan_ip']}/24"}
-    assert _holds(check, ansible_host=NODES["rpi4"]["lan_ip"], **lan)
-    assert not _holds(check, ansible_host=NODES["rpi4"]["tailscale_ip"], **lan)
+    assert _guard_holds(NODES["rpi4"]["lan_ip"])
+    assert not _guard_holds(NODES["rpi4"]["tailscale_ip"])
+
+
+def test_a_run_over_the_tailnet_is_refused_before_anything_changes() -> None:
+    """#2775. In the role, the guard refused only after earlier roles had changed the edge.
+    A pre_task runs before every role, and each one before it runs on the controller."""
+    index, guard = _lan_guard()
+    assert "always" in guard.get("tags", []), guard
+    before = _edge_play()["pre_tasks"][:index]
+    assert all(
+        any(module in task for module in CONTROLLER_SIDE) or task.get("delegate_to") == "localhost" for task in before
+    ), [task.get("name") for task in before]
+
+
+@pytest.mark.parametrize(
+    ("run", "skip", "guarded"),
+    [
+        (["all"], [], True),
+        (["gateway"], [], True),
+        (["tagged"], [], True),
+        (["all"], ["gateway"], False),
+        (["ssh"], [], False),
+    ],
+)
+def test_the_guard_covers_every_run_that_applies_the_gateway(run: list[str], skip: list[str], guarded: bool) -> None:
+    """The scope the role's own assert had: a run that leaves the gateway role out changes no uplink."""
+    _, guard = _lan_guard()
+    assert task_runs(guard, {"ansible_run_tags": run, "ansible_skip_tags": skip}) is guarded
+
+
+def test_the_role_keeps_no_second_copy_of_the_guard() -> None:
+    assert not [task.get("name") for task in TASKS if "ansible_host" in str(task.get("assert"))]
 
 
 UPLINK_MAC = "02:00:5e:10:00:01"
