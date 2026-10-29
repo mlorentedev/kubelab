@@ -9,7 +9,8 @@
 # EDGE_EXPECT names what the case under test took away: `no-uplink` (the adapter
 # unplugged) or `no-lan` (the switch cable out). The check for that thing then
 # passes when it is missing, and the checks that need it are not run. The LAN
-# address needs only the device, not the cable (#2732), so `no-lan` keeps them.
+# address needs only the device, not the cable (#2732), so `no-lan` keeps them,
+# and every other case reads the carrier on its own line (#2800).
 #
 # Exit codes:
 #   0   every check passed
@@ -280,6 +281,8 @@ done
 
 if [ "$expect" = no-lan ]; then
   check "$lan present without a carrier, as this case expects" unplugged "$lan"
+else
+  check "$lan has a carrier" has_carrier "$lan"
 fi
 check "LAN address on $lan" lan_address_set
 check "route to $lan_cidr on $lan" lan_route
