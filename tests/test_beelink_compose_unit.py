@@ -92,10 +92,10 @@ def test_the_guard_is_kept_as_well_as_the_recreate() -> None:
     Recreating after the address exists is the repair; waiting for the address is
     the prevention. Dropping the guard would make every boot depend on the repair.
     """
-    pre = _directive("ExecStartPre")
-    assert any("wait-for-tailscale-addr.sh" in v for v in pre), (
-        "the Tailscale address guard must stay: --force-recreate repairs the outcome, the guard avoids provoking it"
-    )
+    (start,) = _directive("ExecStart")
+    assert "wait-for-tailscale-addr.sh" in start and start.index("wait-for-tailscale-addr.sh") < start.index(
+        "compose"
+    ), "the Tailscale address guard must stay: --force-recreate repairs the outcome, the guard avoids provoking it"
 
 
 def test_the_fix_does_not_live_in_execstop() -> None:
