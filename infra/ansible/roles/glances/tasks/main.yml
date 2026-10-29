@@ -82,10 +82,14 @@
     mode: "0644"
   notify: Restart glances
 
+# Sized against the edge's downlink on a node behind it, where the play sets
+# image_pull_down_kbit; bounded and retried on every node (#2742).
 - name: Pull Glances image
-  command: docker compose -f {{ glances_deploy_dir }}/compose.yml pull
-  register: _pull
-  changed_when: "'Pull complete' in _pull.stderr or 'Downloaded' in _pull.stderr"
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/_includes/image-pull.yml"
+  vars:
+    image_pull_name: Glances
+    image_pull_images: ["{{ glances_image }}"]
+    image_pull_command: docker compose -f {{ glances_deploy_dir }}/compose.yml pull
 
 # A container's resource limits are fixed at CREATE time, so a limit declared
 # while the kernel could not enforce it stays discarded through every restart —
