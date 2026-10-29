@@ -24,8 +24,8 @@ TWO REMEDIES ARE VALID, and a role must use one of them:
    static address only once the link has a carrier, and coredns's LAN bind failed
    the same way with the switch cable out (#2732, lesson-648).
 
-2. **Order the start after the address exists** -- a systemd oneshot with
-   `After=tailscaled.service` and `ExecStartPre=wait-for-tailscale-addr.sh`.
+2. **Order the start after the address exists** -- a systemd unit with
+   `After=tailscaled.service` that runs `wait-for-tailscale-addr.sh` before compose.
    This is what `beelink_services` and `glances` already do, and it is the only
    option for a node with no LAN address (rpi3 is not on 172.16.1.0/24).
 
@@ -135,6 +135,6 @@ def test_the_wait_script_the_units_reference_actually_exists():
     """A unit referencing a missing script fails at boot, which is the worst time."""
     script = REPO_ROOT / "infra/ansible/playbooks/files/wait-for-tailscale-addr.sh"
     assert script.is_file(), (
-        f"{script} is missing, but service templates reference it in ExecStartPre. "
+        f"{script} is missing, but service templates run it before compose. "
         "Every node using remedy 2 would fail to start its stack at boot."
     )
