@@ -46,6 +46,8 @@ UNITS = (
     "kubelab-edge-shaper.service",
 )
 LIVENESS = "kubelab-edge-liveness.service"
+# The uplink adapter's device unit, whose start job the boot waits on (#2794).
+DEVICE = f"sys-subsystem-net-devices-{UPLINK}.device"
 GRACE = DEFAULTS["gateway_liveness_grace"]
 # The page the liveness check's failure sends, which cannot leave without the uplink:
 # the unit's own OnFailure= line, with `%n` resolved the way systemd resolves it.
@@ -124,6 +126,8 @@ class Edge:
             (self.bin / name).chmod(0o755)
         self.write("ruleset", "")
         self.write("show_RuntimeWatchdogUSec_manager", "15s")
+        self.write("show_DefaultDeviceTimeoutUSec_manager", "1min 30s\n")
+        self.write(f"show_JobRunningTimeoutUSec_{DEVICE}", "10s\n")
         self.write(f"show_OnFailure_{LIVENESS}", PAGE)
         self.write(f"show_Environment_{LIVENESS}", f"KUBELAB_NOTIFY_SEVERITY=page EDGE_LIVENESS_GRACE={GRACE}\n")
         self.booted(minutes=15)
@@ -158,10 +162,11 @@ class Edge:
     def write_sys(self, interface: str, carrier: str) -> None:
         (self.net / interface / "carrier").write_text(f"{carrier}\n")
 
-    def order(self, ruleset: float, networkd: float) -> None:
+    def order(self, ruleset: float, networkd: float, network: float = 16.2) -> None:
         """When each unit reached the state the check reads, in seconds since boot; 0 never."""
         self.write("show_ActiveEnterTimestampMonotonic_nftables.service", f"{round(ruleset * 1e6)}\n")
         self.write("show_InactiveExitTimestampMonotonic_systemd-networkd.service", f"{round(networkd * 1e6)}\n")
+        self.write("show_ActiveEnterTimestampMonotonic_network.target", f"{round(network * 1e6)}\n")
 
     def tailnet(self, state: str, routes: list[str], allowed: tuple[str, ...] = ("100.64.0.99/32",)) -> None:
         # Indented, as `tailscale status --json` prints it.
@@ -226,7 +231,10 @@ def test_a_healthy_boot_passes_every_check(edge: Edge) -> None:
     assert not _failures(result)
     assert result.stdout.startswith("INFO Startup finished")
     assert "OK   boot finished" in result.stdout.splitlines()
-    assert "INFO ruleset loaded at 9.6s, systemd-networkd started at 15.5s" in result.stdout
+    assert "INFO ruleset loaded at 9.6s, systemd-networkd started at 15.5s, network.target reached at 16.2s" in (
+        result.stdout.splitlines()
+    )
+    assert f"OK   wait for {UPLINK} at boot bounded (10s; systemd's default 1min 30s)" in result.stdout.splitlines()
 
 
 def test_a_route_line_that_ends_at_its_prefix_still_counts(edge: Edge) -> None:
@@ -275,6 +283,16 @@ BROKEN = {
     "ruleset after networkd": (lambda e: e.order(ruleset=16.0, networkd=15.5), "loaded before systemd-networkd"),
     "ruleset never active": (lambda e: e.order(ruleset=0, networkd=15.5), "loaded before systemd-networkd"),
     "networkd never started": (lambda e: e.order(ruleset=9.6, networkd=0), "loaded before systemd-networkd"),
+    # The drop-in did not apply: a missing adapter holds network.target for 90 s (#2794).
+    "adapter wait at systemd's default": (
+        lambda e: e.write(f"show_JobRunningTimeoutUSec_{DEVICE}", "1min 30s\n"),
+        f"wait for {UPLINK} at boot bounded",
+    ),
+    "adapter wait unbounded": (
+        lambda e: e.write(f"show_JobRunningTimeoutUSec_{DEVICE}", "infinity\n"),
+        f"wait for {UPLINK} at boot bounded",
+    ),
+    "adapter wait unreadable": (lambda e: e.remove(f"show_JobRunningTimeoutUSec_{DEVICE}"), "at boot bounded"),
     "no lease": (lambda e: e.remove(f"addr_{UPLINK}"), "lease on"),
     "no default route": (lambda e: e.remove(f"route_{UPLINK}"), "default route"),
     "tailnet stopped": (lambda e: e.tailnet(state="Stopped", routes=[LAN_CIDR]), "tailnet session"),
@@ -473,6 +491,25 @@ def test_without_the_uplink_adapter_the_rest_still_passes(edge: Edge) -> None:
     assert result.returncode == 0, result.stdout
     assert f"OK   uplink adapter {UPLINK}: missing, as this case expects" in result.stdout
     assert f"OK   {LIVENESS} failed on the missing uplink" in result.stdout
+
+
+def test_without_the_uplink_adapter_an_unbounded_wait_for_it_fails(edge: Edge) -> None:
+    """The case #2794 found: every check passed while network.target waited 90 s."""
+    edge.unplug_uplink()
+    edge.write(f"show_JobRunningTimeoutUSec_{DEVICE}", "1min 30s\n")
+    result = edge.run(expect="no-uplink")
+    assert result.returncode == 1
+    (failure,) = _failures(result)
+    assert f"wait for {UPLINK} at boot bounded (1min 30s; systemd's default 1min 30s)" in failure
+
+
+def test_the_wait_it_reads_is_the_one_the_role_bounds() -> None:
+    """The device unit the check reads is the one the role's drop-in names."""
+    (task,) = [t for t in TASKS if t.get("name") == "Bound the boot's wait for the uplink adapter"]
+    assert task["template"]["dest"].startswith(
+        "/etc/systemd/system/sys-subsystem-net-devices-{{ gateway_uplink_interface }}.device.d/"
+    )
+    assert 'since_boot JobRunningTimeoutUSec "sys-subsystem-net-devices-$uplink.device"' in SCRIPT.read_text()
 
 
 def test_an_uplink_that_is_there_fails_the_no_uplink_case(edge: Edge) -> None:
