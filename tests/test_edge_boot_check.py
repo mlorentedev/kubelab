@@ -73,13 +73,13 @@ esac
 """,
     "ip": """case "$2 $3" in
   "-o addr") cat "$FAKE/addr_$6" 2>/dev/null ;;
-  "route show") cat "$FAKE/route_$6" 2>/dev/null ;;
+  "route show") if [ "$4" = exact ]; then cat "$FAKE/route_exact_$7"; else cat "$FAKE/route_$6"; fi 2>/dev/null ;;
 esac
 """,
     "hostapd_cli": 'cat "$FAKE/hostapd_$4"\n',
     "ss": 'cat "$FAKE/ss_udp_67" 2>/dev/null\n',
     "dig": 'cat "$FAKE/dig_${1#@}" 2>/dev/null\n',
-    "docker": 'cat "$FAKE/docker_$4"\n',
+    "docker": 'case "$3" in *PortBindings*) cat "$FAKE/ports_$4" ;; *) cat "$FAKE/docker_$4" ;; esac\n',
     "tailscale": 'cat "$FAKE/tailscale.json"\n',
     "sleep": ":\n",
     # Before the boot finishes, `systemd-analyze time` fails with systemd's own words on
@@ -114,9 +114,12 @@ class Edge:
         self.write(f"dig_{LAN_ADDRESS}", "127.0.0.1\n")
         self.write("docker_coredns", "running \n")
         self.write("docker_pihole", "running healthy\n")
+        for container in ("coredns", "pihole"):
+            self.write(f"ports_{container}", "3:3\n")
         self.write(f"addr_{LAN}", f"2: {LAN}    inet {LAN_ADDRESS}/24 brd 192.0.2.255 scope global {LAN}\n")
         self.write(f"addr_{UPLINK}", f"3: {UPLINK}    inet {LEASE_ADDRESS}/24 scope global dynamic {UPLINK}\n")
         self.write(f"route_{UPLINK}", "default via 198.51.100.1 proto dhcp\n")
+        self.write(f"route_exact_{LAN}", f"{LAN_CIDR} proto kernel scope link src {LAN_ADDRESS}\n")
         self.order(ruleset=9.6, networkd=15.5)
         self.tailnet(state="Running", routes=[LAN_CIDR])
         for interface in (LAN, UPLINK, AP):
@@ -157,9 +160,9 @@ class Edge:
         self.write(f"failed/{PAGE}", "")
 
     def unplug_lan(self) -> None:
+        """networkd keeps the address without a carrier (#2732); the kernel marks its route."""
         self.write_sys(LAN, "0")
-        self.remove(f"addr_{LAN}")
-        self.remove(f"dig_{LAN_ADDRESS}")
+        self.write(f"route_exact_{LAN}", f"{LAN_CIDR} proto kernel scope link src {LAN_ADDRESS} linkdown\n")
 
     def run(self, *args: str, expect: str | None = None) -> subprocess.CompletedProcess[str]:
         env = {
@@ -213,7 +216,16 @@ BROKEN = {
     ),
     "pihole unhealthy": (lambda e: e.write("docker_pihole", "running unhealthy\n"), "container pihole"),
     "pihole still starting": (lambda e: e.write("docker_pihole", "running starting\n"), "container pihole"),
-    "coredns exited": (lambda e: e.write("docker_coredns", "exited \n"), "container coredns"),
+    "coredns exited": (lambda e: e.write("docker_coredns", "exited \n"), "container coredns up"),
+    # Running and healthy, with no port in effect: the state #2732 left CoreDNS in.
+    "coredns on no network": (lambda e: e.write("ports_coredns", "3:0\n"), "container coredns publishes"),
+    "pihole on no network": (lambda e: e.write("ports_pihole", "3:0\n"), "container pihole publishes"),
+    "coredns gone": (lambda e: e.remove("ports_coredns"), "container coredns publishes"),
+    "no LAN route": (lambda e: e.remove(f"route_exact_{LAN}"), "route to"),
+    "a route for another prefix": (
+        lambda e: e.write(f"route_exact_{LAN}", f"172.16.10.0/24 proto kernel scope link src {LAN_ADDRESS}\n"),
+        "route to",
+    ),
     "no LAN address": (lambda e: e.remove(f"addr_{LAN}"), "LAN address"),
     # A prefix of the declared one, so a match that stops at the address's end is not enough.
     "another LAN address": (
@@ -403,6 +415,23 @@ def test_without_the_switch_cable_the_rest_still_passes(edge: Edge) -> None:
 
 def test_a_cable_that_is_there_fails_the_no_lan_case(edge: Edge) -> None:
     assert _failures(edge.run(expect="no-lan")) == [f"FAIL {LAN} present without a carrier, as this case expects"]
+
+
+@pytest.mark.parametrize(
+    ("take", "check"),
+    [
+        (lambda e: e.remove(f"addr_{LAN}"), f"FAIL LAN address on {LAN}"),
+        (lambda e: e.remove(f"route_exact_{LAN}"), f"FAIL route to {LAN_CIDR} on {LAN}"),
+        (lambda e: e.remove(f"dig_{LAN_ADDRESS}"), "FAIL DNS answers on the LAN address"),
+        (lambda e: e.write("ports_coredns", "3:0\n"), "FAIL container coredns publishes its ports"),
+    ],
+    ids=["address", "route", "dns", "coredns ports"],
+)
+def test_the_cable_takes_neither_the_lan_address_nor_what_rests_on_it(edge: Edge, take: Any, check: str) -> None:
+    """Without the cable, #2732 lost the address, its route and CoreDNS's ports with it."""
+    edge.unplug_lan()
+    take(edge)
+    assert _failures(edge.run(expect="no-lan")) == [check]
 
 
 def test_a_lan_device_that_is_gone_fails_the_no_lan_case(edge: Edge) -> None:
