@@ -377,6 +377,11 @@
         daemon_reload: true
       when: not ansible_check_mode
 
+    - name: Wait for the Open WebUI unit to bring Open WebUI up
+      ansible.builtin.import_tasks: "{{ playbook_dir }}/_includes/stack-unit-settled.yml"
+      vars:
+        stack_unit_settled_name: agent-stack-webui.service
+
 # Imported, not included: an include is dynamic and its tasks do not inherit
 # the role's `agent_stack` tag, so `--tags agent_stack` would skip all of them.
 - name: Provision the agent's user and its rootless daemon
