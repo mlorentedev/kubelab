@@ -10,6 +10,9 @@ Requisite=agent-stack-egress.service
 PartOf=agent-stack-egress.service
 After=network-online.target agent-stack-egress.service
 OnFailure=kubelab-notify@%n.service
+# Closes the incident the line above opened, and clears an undelivered page's
+# failed notifier (#2423, #2749). Quiet when nothing was failing.
+OnSuccess=kubelab-notify-recovered@%n.service
 
 [Service]
 Type=oneshot

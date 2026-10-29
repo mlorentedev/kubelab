@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 647 | [Every unit that pages must also close its page](lesson-647-every-unit-that-pages-must-also-close-its-page.md) | 2026-10-28 |
 | 644 | [A zero that means "never delivered" reads as the oldest time there is](lesson-644-a-zero-that-means-never-delivered-reads-as-the-oldest-time-there-is.md) | 2026-10-28 |
 | 641 | [A boot order read from the journal fails once its size cap drops the boot's first seconds](lesson-641-a-boot-order-read-from-the-journal-fails-once-its-size-cap-drops-the-boots-first-seconds.md) | 2026-10-27 |
 | 595 | [An hourly job that reports state repeats a standing problem, and fills the gaps it cannot see with guesses](lesson-595-an-hourly-job-that-reports-state-repeats-a-standing-problem-and-fills-the-gaps-it-cannot-see-with-guesses.md) | 2026-10-18 |

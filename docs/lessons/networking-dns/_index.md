@@ -5,6 +5,7 @@ Newest first. Back to [all categories](../_index.md).
 | # | Lesson | Date |
 |---|---|---|
 | 648 | [A static address on a link without a carrier is not configured](lesson-648-a-static-address-on-a-link-without-a-carrier-is-not-configured.md) | 2026-10-29 |
+| 646 | [A unit started with networkd never starts for an adapter that appears later](lesson-646-a-unit-started-with-networkd-never-starts-for-an-adapter-that-appears-later.md) | 2026-10-28 |
 | 639 | [Emptying a resolver's cache is not restarting it](lesson-639-emptying-a-resolvers-cache-is-not-restarting-it.md) | 2026-10-27 |
 | 633 | [A CoreDNS template for one type answers SERVFAIL for every other type, and musl fails the lookup](lesson-633-a-coredns-template-for-one-type-answers-servfail-for-every-other.md) | 2026-10-26 |
 | 621 | [ufw sees only the forwarded traffic that Docker and Tailscale leave to it](lesson-621-ufw-does-not-govern-forwarded-traffic.md) | 2026-10-25 |

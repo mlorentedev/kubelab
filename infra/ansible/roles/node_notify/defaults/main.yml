@@ -13,6 +13,11 @@
 #
 #     OnFailure=kubelab-notify@%n.service
 #
+# and closes the incident with `OnSuccess=kubelab-notify-recovered@%n.service`,
+# or on a RemainAfterExit unit with an ExecStartPost that starts it, since
+# OnSuccess= fires there on stop. tests/test_node_notify_role.py holds every
+# unit that pages to one of the two (#2689).
+#
 # `%n` is the full unit name, suffix included, and it becomes the instance —
 # verified against a live systemd, not assumed: `OnFailure=x@%n.service` on
 # `foo.service` resolves to `x@foo.service.service`, and `%i` inside it is
