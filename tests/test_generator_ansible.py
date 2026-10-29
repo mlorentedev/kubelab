@@ -314,3 +314,22 @@ class TestRetiredHomelabNodes:
         assert f"networking.nodes.{key} is retired" in "".join(capsys.readouterr()), (
             "a retired node left the inventory silently"
         )
+
+
+class TestSystemPythonInterpreter:
+    """A provision runs its modules as root with the node's own Python (#2802).
+
+    Discovery took the first interpreter the SSH user's PATH found, so on the
+    developer node a mise shim ran every module as root and hung in `poll()`.
+    """
+
+    @pytest.mark.parametrize("transport", sorted(VALID_TRANSPORTS))
+    def test_every_host_runs_the_system_python(self, transport: str) -> None:
+        inv = AnsibleGenerator()._build_inventory(_networking(), transport=transport)
+        assert inv["all"]["vars"]["ansible_python_interpreter"] == "/usr/bin/python3"
+        overrides = {
+            name: hv["ansible_python_interpreter"]
+            for name, hv in _hosts(inv).items()
+            if "ansible_python_interpreter" in hv
+        }
+        assert overrides == {}, f"hosts choosing another interpreter: {overrides}"

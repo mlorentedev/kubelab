@@ -203,7 +203,10 @@ class AnsibleGenerator(BaseGenerator):
                 "vars": {
                     "ansible_ssh_private_key_file": ssh_key,
                     "ansible_ssh_common_args": pinned_args,
-                    "ansible_python_interpreter": "auto_silent",
+                    # The node's own Python, not discovery: discovery takes the first
+                    # interpreter the SSH user's PATH finds, and on ace2 that was a
+                    # mise shim that hung every module run as root (#2802).
+                    "ansible_python_interpreter": "/usr/bin/python3",
                 },
                 "children": {},
             }
