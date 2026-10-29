@@ -36,7 +36,7 @@ scope:
 allowed_commands: [dotf, gh, git, make, poetry, ssh]
 queue:
   source: bitacora
-  filter: "#2773, #2759, #2675, #2758, #2742, #2722 corrections, B14 debt tickets"
+  filter: "#2773, #2759, #2675, #2758, #2742, #2722 corrections, B14 debt #2774 #2775 #2776 #2777"
   max_items: 8
 budget:
   max_iterations: 10
