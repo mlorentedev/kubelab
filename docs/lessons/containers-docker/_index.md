@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 649 | [A smoke build tests the builder the shell selected, not the engine](lesson-649-a-smoke-build-tests-the-builder-the-shell-selected-not-the-engine.md) | 2026-10-29 |
 | 632 | [An image prune keeps what a container holds, so the container prune decides which stacks lose their image](lesson-632-an-image-prune-keeps-what-a-container-holds-so-the-container-prune-decides-which-stacks-lose-their-image.md) | 2026-10-27 |
 | 624 | [A bounded wait at boot fails for good when the address arrives after the bound](lesson-624-a-bounded-wait-at-boot-fails-for-good-when-the-address-arrives-after-the-bound.md) | 2026-10-26 |
 | 618 | [A bind mount on Colima ignores ownership, so a container-uid guard goes red only on Linux](lesson-618-a-bind-mount-on-colima-ignores-ownership-so-a-container-uid-guard-goes-red-only-on-linux.md) | 2026-10-22 |
