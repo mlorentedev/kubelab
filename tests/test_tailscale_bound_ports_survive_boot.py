@@ -32,6 +32,11 @@ TWO REMEDIES ARE VALID, and a role must use one of them:
 What must never happen again is a THIRD case: a Tailscale-bound port with
 neither remedy. That is what this guard forbids, fleet-wide, so the next role
 to follow #959's advice cannot silently inherit the race.
+
+It recognizes a Tailscale bind by the name of the variable it binds. A LAN bind
+has no such name: coredns's went through `coredns_health_bind_ip`. So the LAN
+half of remedy 1 is not checked here. `tests/test_coredns_port_binds.py` checks
+it by rendering the compose of coredns, the one role that ever bound a LAN address.
 """
 
 from __future__ import annotations
