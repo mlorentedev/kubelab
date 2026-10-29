@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 655 | [A pull behind a shaped uplink is a duration, and the registry states its size before it starts](lesson-655-a-pull-behind-a-shaped-uplink-is-a-duration-and-the-registry-states-its-size-before-it-starts.md) | 2026-10-29 |
 | 653 | [A oneshot that waits holds a job, and the boot is finished only once no job is left](lesson-653-a-oneshot-that-waits-holds-a-job-and-the-boot-is-finished-only-once-no-job-is-left.md) | 2026-10-29 |
 | 649 | [A smoke build tests the builder the shell selected, not the engine](lesson-649-a-smoke-build-tests-the-builder-the-shell-selected-not-the-engine.md) | 2026-10-29 |
 | 632 | [An image prune keeps what a container holds, so the container prune decides which stacks lose their image](lesson-632-an-image-prune-keeps-what-a-container-holds-so-the-container-prune-decides-which-stacks-lose-their-image.md) | 2026-10-27 |

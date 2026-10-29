@@ -115,7 +115,18 @@ directory (mcpo's digest, or the filesystem server's lockfile) changes nothing
 on ace2 until the next provision, which rebuilds it; an unchanged context is a
 cached build and reports no change.
 
-`CHECK=1` runs it in check mode and changes nothing.
+ace2 is behind the lab edge, so the Open WebUI pull is sized first against
+`networking.edge.uplink.bandwidth.down_kbit` (#2742). A new tag of about 1.6 GB
+takes over an hour at the edge's downlink, past the 30 minute budget, and the
+play stops before pulling with the estimate. Rerun with
+`EXTRA='image_pull_allow_slow=true'` to pull anyway; each attempt is bounded by
+twice the estimate and retried twice. An image ace2 already holds costs nothing,
+so its pull gets 300 s: if that tag has moved and the pull times out, rerun with
+`EXTRA='image_pull_timeout_seconds=<seconds>'`, which bounds each attempt
+outright.
+
+`CHECK=1` runs it in check mode and changes nothing. It still prints the
+estimate.
 
 ## Stop
 
