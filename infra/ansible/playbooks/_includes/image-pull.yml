@@ -14,10 +14,12 @@
 # The play of such a node sets image_pull_down_kbit from that key. The include
 # then estimates the bytes to fetch before pulling, refuses past
 # image_pull_budget_seconds unless image_pull_allow_slow, and bounds each attempt
-# by the estimate. Retries keep the layers already fetched. Without the var the
-# pull is bounded by image_pull_timeout_seconds and nothing is estimated. Set
-# explicitly, image_pull_timeout_seconds bounds each attempt on any node: the
-# lever for an estimate that is wrong, such as a held tag that has since moved.
+# by the estimate. A retry runs the pull again; whether it reuses the layers an
+# interrupted attempt fetched depends on the node's image store, and was not
+# measured. Without the var the pull is bounded by image_pull_timeout_seconds and
+# nothing is estimated. Set explicitly, image_pull_timeout_seconds bounds each
+# attempt on any node: the lever for an estimate that is wrong, such as a held
+# tag that has since moved.
 
 - name: Estimate the download of {{ image_pull_name }}
   ansible.builtin.script:
