@@ -164,3 +164,33 @@
   when:
     - tailscale_watchdog | bool
     - not ansible_check_mode
+
+# Off removes what on installed. Ansible is additive, so turning the var off
+# would otherwise leave the timer running `tailscale up --reset` every 5 minutes.
+- name: Look for a Tailscale watchdog on a node that has it off
+  stat:
+    path: /etc/systemd/system/tailscale-watchdog.timer
+  register: _tailscale_watchdog_timer
+  when: not (tailscale_watchdog | bool)
+
+- name: Stop the Tailscale watchdog timer where it is off
+  systemd:
+    name: tailscale-watchdog.timer
+    enabled: false
+    state: stopped
+  when:
+    - not (tailscale_watchdog | bool)
+    - _tailscale_watchdog_timer.stat.exists | default(false)
+
+- name: Remove the Tailscale watchdog where it is off
+  file:
+    path: "/etc/systemd/system/{{ item }}"
+    state: absent
+  loop: [tailscale-watchdog.service, tailscale-watchdog.timer]
+  register: _tailscale_watchdog_removed
+  when: not (tailscale_watchdog | bool)
+
+- name: Reload systemd after removing the Tailscale watchdog
+  systemd:
+    daemon_reload: true
+  when: _tailscale_watchdog_removed is changed

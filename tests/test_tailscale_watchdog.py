@@ -103,7 +103,7 @@ def test_the_provision_starts_only_the_timer() -> None:
     install = _task("Install the Tailscale watchdog")
     assert install["loop"] == ["tailscale-watchdog.service", "tailscale-watchdog.timer"]
     assert install["template"]["dest"] == "/etc/systemd/system/{{ item }}"
-    started = [t["systemd"]["name"] for t in TASKS if "state" in (t.get("systemd") or {})]
+    started = [t["systemd"]["name"] for t in TASKS if (t.get("systemd") or {}).get("state") == "started"]
     assert started == ["tailscaled", "tailscale-watchdog.timer"]
     timer = _task("Enable and start the Tailscale watchdog timer")
     assert timer["systemd"]["daemon_reload"] is True
@@ -125,3 +125,23 @@ def test_only_the_edge_turns_the_watchdog_on() -> None:
                 if isinstance(role, dict) and (role.get("vars") or {}).get("tailscale_watchdog"):
                     on.append(playbook.name)
     assert on == ["provision-rpi4.yml"]
+
+
+def test_turning_the_watchdog_off_removes_it() -> None:
+    """Ansible is additive: without these, a node turned off keeps the timer firing."""
+    names = [t.get("name", "") for t in TASKS]
+    look = _task("Look for a Tailscale watchdog on a node that has it off")
+    stop = _task("Stop the Tailscale watchdog timer where it is off")
+    remove = _task("Remove the Tailscale watchdog where it is off")
+    reload = _task("Reload systemd after removing the Tailscale watchdog")
+    assert look["stat"]["path"] == "/etc/systemd/system/tailscale-watchdog.timer"
+    assert stop["systemd"] == {"name": "tailscale-watchdog.timer", "enabled": False, "state": "stopped"}
+    assert remove["file"] == {"path": "/etc/systemd/system/{{ item }}", "state": "absent"}
+    assert remove["loop"] == _task("Install the Tailscale watchdog")["loop"]
+    for task in (look, stop, remove):
+        gate = task["when"] if isinstance(task["when"], list) else [task["when"]]
+        assert "not (tailscale_watchdog | bool)" in gate
+    # A node that never had the unit: nothing to stop, so the stop is gated on the file.
+    assert "_tailscale_watchdog_timer.stat.exists | default(false)" in stop["when"]
+    assert reload["systemd"] == {"daemon_reload": True} and reload["when"] == "_tailscale_watchdog_removed is changed"
+    assert names.index(stop["name"]) < names.index(remove["name"]) < names.index(reload["name"])
