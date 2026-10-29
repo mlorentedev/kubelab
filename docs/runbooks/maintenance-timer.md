@@ -85,14 +85,15 @@ timeout, so a slow uplink or an unreachable registry fails as a pull, with a mes
 so, and the build never starts. The build then runs on `default`, the engine's own BuildKit,
 which is where the Gitea jobs build. It does not use the builder root has selected: on the
 Beelink that is `multiarch`, a docker-container builder that would first pull its own BuildKit
-image (lesson-649). Its step sleeps 20 s, past the 10 s in which the session
-dropped on 2026-10-27, when a provision moved Docker from 29.8.1 to 29.9.2 as a side effect
-and BuildKit sessions began dropping that morning. Read the failure before blaming the engine:
-rc 124 is a build that made no progress, and the message quotes its last lines of output. It
-is the #2722 failure only if `journalctl -u docker` shows `session healthcheck failed` at that
-time. rc 137 is a kill, and the message
-gives the time it took: past the timeout it is the same failure with a client that ignored the
-TERM, sooner it is something else, most often the OOM killer (`journalctl -k`). Any other rc
+image (lesson-649). Its step sleeps 20 s, past the 10 s in which dockerd logs
+`session healthcheck failed` and then `failed fatally`. Those lines appear on builds that pass
+too, so they are not evidence of a failure. Read the failure before blaming the engine:
+rc 124 is a build that made no progress, the message quotes its last lines of output, and
+`docker buildx history logs` on the node shows the step it stopped in. The one hang on record
+(2026-10-27) was a 2.31 GB base layer pulling at about 80 KB/s, not the engine. rc 137 is a
+kill, and the message gives the time it took: past the timeout it is the same failure with a
+client that ignored the TERM, sooner it is something else, most often the OOM killer
+(`journalctl -k`). Any other rc
 quotes the build's own error. A failed smoke build leaves the new engine installed and held, so the runner
 builds on it until someone acts: record it on #2722. The pulled base image stays in the
 engine's store; the build itself leaves nothing behind.
@@ -103,8 +104,9 @@ To run the check against the engine already installed, without moving any packag
 make provision NODE=bee ENV=prod TAGS=docker EXTRA='docker_smoke_build=true'
 ```
 
-A pass says the engine finished a 20 s build minutes after it started. It does not prove the
-engine sound: on 2026-10-27 the first dropped session came two hours after dockerd restarted.
+A pass says the engine finished a 20 s build minutes after it started. It does not prove
+a long build sound: a pull of a multi-GB base image over the edge's uplink can still outlast
+the runner's job timeout (#2742).
 
 ## Checking status
 

@@ -10,7 +10,7 @@ tags: [kubelab, ansible-provisioning, apt, docker, ci]
 
 # A hold scoped to the maintenance timer leaves every provision free to upgrade
 
-**Context**: BuildKit sessions on the Beelink began dropping on 2026-10-27, and a Gitea job hung for three hours. That morning `docker-ce` had moved from 29.8.1 to 29.9.2. The ticket (#2722) blamed `node_maintenance`, which "runs dist-upgrade on the platform node".
+**Context**: BuildKit sessions on the Beelink began dropping on 2026-10-27, and a Gitea job hung for three hours. That morning `docker-ce` had moved from 29.8.1 to 29.9.2. The ticket (#2722) blamed `node_maintenance`, which "runs dist-upgrade on the platform node". **Correction (2026-10-29):** the hung job was not the engine. It was pulling a 2.31 GB base layer at about 80 KB/s when the runner's timeout cancelled it, and the session lines appear on builds that pass too (#2722). The hold below stands as policy: the engine moves on purpose, not as a side effect.
 
 **Problem**: The timer could not have done it. It upgrades from the security pocket only, and it holds `docker-ce`, `docker-ce-cli` and `containerd.io` for its run. The upgrade came from `base_system`'s "Upgrade all packages" (`apt upgrade: dist`), which every `make provision` runs. The protection existed, but only on the path that did not need it. The role's own comment named provision as the place where Docker is "patched deliberately". Nothing made it deliberate: a provision run for any other reason moved Docker too.
 
