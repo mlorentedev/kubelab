@@ -10,7 +10,8 @@ Nothing is installed into the device's `.wants/`: systemd follows a static link
 there whenever a start job for the device is enqueued, present or not, so with the
 adapter missing the shaper failed with result `dependency` every 90 s and paged an
 outage the liveness check already owns. `SYSTEMD_WANTS=` is acted on only when the
-device first becomes active (systemd.device(5)).
+device first becomes active (systemd.device(5)), and a renamed adapter becomes active
+on the move event after its add, so the rule must not match on add alone.
 """
 
 from __future__ import annotations
@@ -104,10 +105,21 @@ def test_the_rule_sorts_after_the_rule_that_names_the_adapter() -> None:
 def test_the_rule_matches_the_named_adapter_when_it_appears(kind: str) -> None:
     """The name, not the MAC: the .link file pins the MAC, and no committed file carries it."""
     rule = next(line for line in _rule(kind).splitlines() if line and not line.startswith("#"))
-    assert 'ACTION=="add"' in rule
     assert 'SUBSYSTEM=="net"' in rule
     assert f'NAME=="{INTERFACE}"' in rule
     assert "address" not in rule.lower()
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_the_rule_wants_the_units_on_every_event_but_remove(kind: str) -> None:
+    """The .link file renames the adapter during its add event, which udev flags
+    `ID_RENAMING=1`, and systemd ignores a device being renamed. The device becomes
+    active on the move event that follows, so that is the event whose `SYSTEMD_WANTS`
+    counts. Observed on the edge (#2766): the add carried the property, the move did
+    not, and neither unit was ever started."""
+    rule = next(line for line in _rule(kind).splitlines() if line and not line.startswith("#"))
+    actions = re.findall(r'ACTION(==|!=)"([^"]*)"', rule)
+    assert actions == [("!=", "remove")], rule
 
 
 @pytest.mark.parametrize("kind", ["wifi_open", "wifi_psk"])
