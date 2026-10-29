@@ -1,9 +1,10 @@
 """A provision does not move the Beelink's CI engine as a side effect (#2722).
 
 `base_system` runs `apt upgrade: dist` on every `make provision`. On 2026-10-27
-one such run moved `docker-ce` from 29.8.1 to 29.9.2 on the Beelink, and BuildKit
-sessions began dropping that morning. The maintenance timer already holds Docker
-for its own run; nothing held it across a provision.
+one such run moved `docker-ce` from 29.8.1 to 29.9.2 on the Beelink as a side
+effect. The maintenance timer already holds Docker for its own run; nothing held
+it across a provision. The engine moves on purpose now, whether or not that
+upgrade broke anything: the hang suspected of it was a slow pull (#2722).
 
 So `base_system` holds a node's declared packages before its upgrade, and
 releases them only for a run that asks to (`base_system_release_holds=true`),

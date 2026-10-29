@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 651 | [A check that judges another check inside its grace must read that grace](lesson-651-a-check-that-judges-another-inside-its-grace-must-read-that-grace.md) | 2026-10-29 |
 | 647 | [Every unit that pages must also close its page](lesson-647-every-unit-that-pages-must-also-close-its-page.md) | 2026-10-28 |
 | 644 | [A zero that means "never delivered" reads as the oldest time there is](lesson-644-a-zero-that-means-never-delivered-reads-as-the-oldest-time-there-is.md) | 2026-10-28 |
 | 641 | [A boot order read from the journal fails once its size cap drops the boot's first seconds](lesson-641-a-boot-order-read-from-the-journal-fails-once-its-size-cap-drops-the-boots-first-seconds.md) | 2026-10-27 |

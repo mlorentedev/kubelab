@@ -158,16 +158,8 @@
       wifi_psk. The operator stores them with `toolkit secrets set`; the role never invents them.
     quiet: true
 
-# ADR-075 D7: applying the uplink can cut a session that rides the tailnet it carries.
-- name: Check that the run comes over the homelab LAN
-  assert:
-    that: ansible_host == gateway_lan_cidr | regex_replace('/.*', '')
-    fail_msg: >-
-      ERROR: this run reaches the edge at {{ ansible_host }}, not at its LAN address.
-      WHY: edge changes run over the homelab LAN, because applying the uplink can cut a
-      session that rides the tailnet (ADR-075 D7).
-      FIX: from the laptop on the switch, run `make provision NODE=rpi4 ENV=prod BOOTSTRAP=1`.
-    quiet: true
+# ADR-075 D7's transport check is the play's first pre_task, so a run over the
+# tailnet is refused before any role changes the edge (#2775).
 
 # It holds every adapter's MAC, the uplink's included (ADR-075 C7).
 - name: Read the adapters

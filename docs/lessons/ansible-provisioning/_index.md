@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 652 | [A guard inside a role refuses after the roles before it changed the host](lesson-652-a-guard-inside-a-role-refuses-after-the-roles-before-it-changed-the-host.md) | 2026-10-29 |
 | 645 | [A hold scoped to the maintenance timer leaves every provision free to upgrade](lesson-645-a-hold-scoped-to-the-maintenance-timer-leaves-every-provision-free-to-upgrade.md) | 2026-10-28 |
 | 642 | [A version floor in `requirements.yml` never upgrades a controller](lesson-642-a-version-floor-never-upgrades-a-controller.md) | 2026-10-28 |
 | 640 | [A guard that pairs two roles by tag says nothing about which runs first](lesson-640-a-guard-that-pairs-two-roles-by-tag-says-nothing-about-which-runs-first.md) | 2026-10-27 |

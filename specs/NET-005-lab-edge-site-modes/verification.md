@@ -78,14 +78,24 @@ Partial results, kept apart from the `### B<n>-EVIDENCE` headings on purpose: `f
 - **B6.** Both nodes' Tailscale prefs were compared read-only with their plays (lesson-629). rpi4 matched. rpi3 accepted routes its play declares off, which the role's `tailscale set` convergence then corrected (#2685). The 2026-10-28 boot check reads the subnet route primary on the tailnet. Left: `make headscale-rejoin` for both nodes, rpi3's `TAGS=tailscale` second run at `changed=0`, and the Headscale expiry read.
 - **B11.** ace1, bee and ace2 each had a default route through the RPi4 and a 204 from the connectivity probe (2026-10-27). Left: a `DHCPACK(eth0)` at this step (the one on record is task 11's, from before the uplink existed) and `make test-e2e ENV=staging`.
 - **B12.** The second provision (2026-10-28) reported `ok=182 changed=1 failed=0`. The one change is apt's cache refresh (`cache_valid_time: 3600`), which fires on time elapsed, not on drift. Left: a run that reports `changed=0` as written, and the 48-hour soak's rtw88 check.
-- **B14.** A baseline first: `make edge-boot-check VIA=tailnet` passed 22 of 22 checks on 2026-10-28 with everything plugged in, on the boot that began 2026-10-27T00:52Z. Then the cases, each checked 10 minutes after power returned (times UTC, 2026-10-29):
-  - **T1 warm reboot**, 01:17: 22 of 22, startup 57.4 s, ruleset at 9.5 s and networkd at 15.5 s. `make reboot` could not reach the edge from the LAN (its inventory is the tailnet one), which `BOOTSTRAP=1` now does.
-  - **T2 power cut**, 01:28: 22 of 22, startup 59.4 s.
-  - **T3 no uplink adapter**, 01:40: exit 2. The shaper had failed with result `dependency` and its page with it (#2766), and so had a timer's `node-backup-ship` run with its page, which a boot does not own. The startup line was empty, because the boot had not finished.
-  - **T3, adapter plugged back**, 01:47: the adapter came back as `uplink0` but nothing started its supplicant: no lease, no route, no tailnet session, no subnet route (#2766).
-  - **T2 again, restored**, 02:00: 22 of 22, startup 56.9 s, with the adapter in the other USB port.
-  Left: T4, then T3 again with #2766 deployed, its replug bringing the lease, the route and the tailnet back within 2 minutes.
+- **B14.** T3 and T4 pass on the configuration #2768 to #2773 produced; T1 and T2 ran before it (see `### Hard-reset runs, 2026-10-29` below). Left, after B12: T1 and T2 on the configuration B12's `changed=0` run confirms, with the ruleset and networkd times read for both, and T3 and T4 again if that run changes the `gateway` role.
 - **B7, B8, B9, B10, B13.** Not started.
+
+### Hard-reset runs, 2026-10-29
+
+Partial for B14, so kept apart from the `### B<n>-EVIDENCE` headings: T1 and T2 ran before the fixes below, and B14 runs after B12.
+
+Each case was checked with `make edge-boot-check` 10 minutes after power returned. Times are UTC on 2026-10-29, read on the operator's machine, because the edge's own clock has no RTC and is not synced while its uplink is down.
+
+- **T1 warm reboot**, 01:17: 22 of 22, startup 57.4 s, ruleset at 9.5 s and networkd at 15.5 s.
+- **T2 power cut**, 01:28: 22 of 22, startup 59.4 s. The ruleset and networkd times were not read.
+- **T3 and T4, first runs**, 01:40 to 02:00: they found #2766 (the replugged uplink never started its supplicant) and #2732 (the LAN address needed a carrier). Fixed by #2768, #2769, #2770 and #2771, and provisioned with `make provision NODE=rpi4 ENV=prod BOOTSTRAP=1`: `ok=192 changed=13 failed=0`. The baseline after it, at 05:17, passed 25 of 25.
+- **T3 no uplink adapter**, 05:28: every check `OK`, the adapter missing and `kubelab-edge-liveness.service` failed on it, as the case expects. Ruleset at 9.7 s, networkd at 15.5 s. Two earlier checks of the same boot ran inside the liveness grace and read FAIL (#2774). The boot had not finished, with tailnet-bound units still queued (#2776).
+- **T3, adapter plugged back**: the first replug started nothing. `udevadm monitor` showed why: the add event that renames the adapter carries `ID_RENAMING=1`, and the move event that activates it carried no `SYSTEMD_WANTS` (lesson-650). Fixed by #2773 and provisioned with `TAGS=gateway`: `ok=90 changed=3 failed=0`. On the replug at 06:28, the move event carried `SYSTEMD_WANTS`, the supplicant started in the same second as the rename, and the check 2 minutes later passed every check, lease, default route, shaper, tailnet session and subnet route included (#2766, closed).
+- **T4 no switch cable**, 07:11, through the tailnet: 26 of 26. `eth0` was present without a carrier, and its address, its route and DNS on the LAN address all held (#2732). Startup 52.1 s, ruleset at 10.7 s and networkd at 16.9 s. The shaper came up at boot through #2773's rule.
+- **Cable plugged back**, 07:12: 25 of 25.
+
+T1 and T2 ran on the configuration from before #2768 to #2773. T4 is a power cut on the current configuration with everything plugged in but the switch cable, so it also covers T2's path on that configuration. Every boot whose order was read (T1, T3, T4) loaded the ruleset before systemd-networkd started.
 
 - [ ] Criterion 1 -> commit `<hash>` / test `<name>`
 - [ ] Criterion 2 -> commit `<hash>` / test `<name>`
