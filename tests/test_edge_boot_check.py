@@ -82,10 +82,15 @@ esac
     "docker": 'cat "$FAKE/docker_$4"\n',
     "tailscale": 'cat "$FAKE/tailscale.json"\n',
     "sleep": ":\n",
-    # Before the boot finishes, `systemd-analyze time` prints nothing and fails.
-    "systemd-analyze": (
-        '[ -f "$FAKE/jobs" ] && exit 1\necho "Startup finished in 5.1s (kernel) + 20.3s (userspace) = 25.4s"\n'
-    ),
+    # Before the boot finishes, `systemd-analyze time` fails with systemd's own words on
+    # stderr; analyze_error stands for any other failure.
+    "systemd-analyze": """if [ -f "$FAKE/jobs" ]; then
+  echo "Bootup is not yet finished (org.freedesktop.systemd1.Manager.FinishTimestampMonotonic=0)." >&2
+  exit 1
+fi
+if [ -f "$FAKE/analyze_error" ]; then cat "$FAKE/analyze_error" >&2; exit 1; fi
+echo "Startup finished in 5.1s (kernel) + 20.3s (userspace) = 25.4s"
+""",
 }
 
 
@@ -254,20 +259,33 @@ SHIP = "node-backup-ship.service"
 SHIP_PAGE = f"kubelab-notify@{SHIP}.service"
 
 
-def _scheduled_run_failed(edge: Edge, unit: str = SHIP, page: str = SHIP_PAGE) -> None:
+def _scheduled_run_failed(edge: Edge, unit: str = SHIP, page: str = SHIP_PAGE, page_failed: bool = True) -> None:
     edge.write(f"show_TriggeredBy_{unit}", f"{unit.removesuffix('.service')}.timer")
     edge.write(f"show_OnFailure_{unit}", page)
     edge.write(f"failed/{unit}", "")
-    edge.write(f"failed/{page}", "")
+    if page and page_failed:
+        edge.write(f"failed/{page}", "")
 
 
-def test_a_failed_scheduled_run_and_its_page_are_reported_not_failed(edge: Edge) -> None:
+def test_a_failed_scheduled_run_its_page_reported_is_not_failed(edge: Edge) -> None:
     """A run a timer started is not something the boot brings back, and its own page
     reports it; the operator ruled it out of the boot's verdict (#2661, B14 T3)."""
-    _scheduled_run_failed(edge)
+    _scheduled_run_failed(edge, page_failed=False)
     result = edge.run()
     assert result.returncode == 0, result.stdout
-    assert f"INFO failed scheduled runs, each reported by its own page: {SHIP}" in result.stdout
+    assert f"INFO failed scheduled runs, each paged: {SHIP}" in result.stdout
+    assert "nobody was paged" not in result.stdout
+
+
+@pytest.mark.parametrize(("page", "page_failed"), [(SHIP_PAGE, True), ("", False)], ids=["page-failed", "no-page"])
+def test_a_failed_scheduled_run_nobody_was_paged_for_is_named_apart(edge: Edge, page: str, page_failed: bool) -> None:
+    """When the page failed too, or the unit declares none, the run reached nobody, and
+    saying it was reported would be false (#2767 review)."""
+    _scheduled_run_failed(edge, page=page, page_failed=page_failed)
+    result = edge.run()
+    assert result.returncode == 0, result.stdout
+    assert f"INFO failed scheduled runs nobody was paged for: {SHIP}" in result.stdout
+    assert "each paged" not in result.stdout
     assert SHIP_PAGE not in result.stdout
 
 
@@ -300,6 +318,17 @@ def test_an_unfinished_boot_names_what_it_still_waits_for(edge: Edge) -> None:
     result = edge.run()
     assert result.stdout.splitlines()[0] == (
         "INFO boot not finished, jobs still queued: tailscale-watchdog.service multi-user.target"
+    )
+    assert result.returncode == 0, result.stdout
+
+
+def test_a_startup_time_that_cannot_be_read_is_not_an_unfinished_boot(edge: Edge) -> None:
+    """Only systemd's own "not yet finished" means the boot is still running; any other
+    failure is reported as itself (#2767 review)."""
+    edge.write("analyze_error", "Failed to connect to bus: No such file or directory\n")
+    result = edge.run()
+    assert result.stdout.splitlines()[0] == (
+        "INFO startup time unavailable: Failed to connect to bus: No such file or directory"
     )
     assert result.returncode == 0, result.stdout
 
