@@ -201,17 +201,45 @@ def test_no_shipped_oneshot_is_restarted() -> None:
     assert not restarted, f"oneshot units that restart: {restarted}"
 
 
-#: systemd's time-span units, in seconds.
-SPAN_UNITS = {"": 1, "s": 1, "sec": 1, "ms": 0.001, "m": 60, "min": 60, "h": 3600, "hr": 3600}
+#: systemd's time-span units, in seconds (systemd.time(7)): `M` is a month, `m` a minute.
+SPAN_UNITS = {
+    **dict.fromkeys(("us", "usec", "μs"), 1e-6),
+    **dict.fromkeys(("ms", "msec"), 1e-3),
+    **dict.fromkeys(("", "s", "sec", "second", "seconds"), 1),
+    **dict.fromkeys(("m", "min", "minute", "minutes"), 60),
+    **dict.fromkeys(("h", "hr", "hour", "hours"), 3600),
+    **dict.fromkeys(("d", "day", "days"), 86400),
+    **dict.fromkeys(("w", "week", "weeks"), 604800),
+    **dict.fromkeys(("M", "month", "months"), 2630016),
+    **dict.fromkeys(("y", "year", "years"), 31557600),
+}
+SPAN_PART = r"\s*(\d+(?:\.\d+)?)\s*([^\d\s.]*)"
 
 
 def _span_seconds(value: str) -> float:
-    """A systemd time span (`600`, `5min`, `300s`) in seconds; `infinity` is infinite."""
+    """A systemd time span (`600`, `5min`, `1.5s`, `1min 30s`) in seconds; `infinity` is infinite."""
     if value.strip() == "infinity":
         return float("inf")
-    parts = re.findall(r"(\d+)\s*([a-z]*)", value)
-    assert parts and re.fullmatch(r"(\s*\d+\s*[a-z]*)+\s*", value), f"not a time span: {value!r}"
-    return sum(int(n) * SPAN_UNITS[unit] for n, unit in parts)
+    parts = re.findall(SPAN_PART, value)
+    assert parts and re.fullmatch(rf"(?:{SPAN_PART})+\s*", value), f"not a time span: {value!r}"
+    unknown = [unit for _, unit in parts if unit not in SPAN_UNITS]
+    assert not unknown, f"{value!r}: not a systemd time unit: {unknown}"
+    return sum(float(n) * SPAN_UNITS[unit] for n, unit in parts)
+
+
+def _start_timeout(path: Path) -> str:
+    """The span that ends the unit's start job, as systemd reads the file.
+
+    The last assignment wins, and `TimeoutSec=` sets the start timeout as well, so
+    the answer is the last of either. Unset, or reset by an empty assignment, a
+    oneshot's start has none.
+    """
+    value = "infinity"
+    for line in path.read_text().splitlines():
+        key, sep, rest = line.strip().partition("=")
+        if sep and key in ("TimeoutStartSec", "TimeoutSec"):
+            value = rest.strip() or "infinity"
+    return value
 
 
 def _role_default(name: str, var: str) -> str:
@@ -229,13 +257,11 @@ def test_every_shipped_oneshot_bounds_its_start() -> None:
     network keeps the boot from finishing (lesson-653). `0` disables the timeout
     too. Same reach as the check above: unit files in this repository.
     """
-    units = _shipped_units()
+    oneshots = [name for name, directives in _shipped_units().items() if directives.get("Type") == ["oneshot"]]
+    assert len(oneshots) > 10, f"only {len(oneshots)} oneshot units found; the glob or the parser is stale"
     unbounded = []
-    for name, directives in units.items():
-        if directives.get("Type") != ["oneshot"]:
-            continue
-        values = directives.get("TimeoutStartSec") or directives.get("TimeoutSec") or ["infinity"]
-        value = values[-1]
+    for name in oneshots:
+        value = _start_timeout(REPO / "infra/ansible" / name)
         templated = re.fullmatch(r"\{\{\s*(\w+)\s*\}\}", value.strip())
         if templated:
             value = _role_default(name, templated.group(1))
@@ -243,6 +269,47 @@ def test_every_shipped_oneshot_bounds_its_start() -> None:
         if not 0 < seconds < float("inf"):
             unbounded.append(f"{name} ({value})")
     assert not unbounded, f"oneshot units with no start timeout: {unbounded}"
+
+
+@pytest.mark.parametrize(
+    ("span", "seconds"),
+    [
+        ("600", 600),
+        ("5min", 300),
+        ("1.5s", 1.5),
+        ("1min 30s", 90),
+        ("500ms", 0.5),
+        ("1d", 86400),
+        ("2w", 1209600),
+        ("1M", 2630016),
+        ("infinity", float("inf")),
+    ],
+)
+def test_a_span_reads_as_systemd_reads_it(span: str, seconds: float) -> None:
+    """A unit bounded in days or fractions is bounded; reading it as unbounded is a false red."""
+    assert _span_seconds(span) == pytest.approx(seconds)
+
+
+def test_an_unknown_unit_is_named_not_a_key_error() -> None:
+    with pytest.raises(AssertionError, match="not a systemd time unit"):
+        _span_seconds("5parsecs")
+
+
+@pytest.mark.parametrize(
+    ("lines", "expected"),
+    [
+        pytest.param("TimeoutStartSec=30\nTimeoutSec=infinity", "infinity", id="timeoutsec-last"),
+        pytest.param("TimeoutSec=infinity\nTimeoutStartSec=30", "30", id="start-last"),
+        pytest.param("TimeoutStartSec=30\nTimeoutStartSec=", "infinity", id="reset"),
+        pytest.param("# TimeoutStartSec=30", "infinity", id="comment"),
+        pytest.param("ExecStart=/bin/true", "infinity", id="unset"),
+    ],
+)
+def test_the_last_assignment_bounds_the_start(lines: str, expected: str, tmp_path: Path) -> None:
+    """systemd keeps the last assignment, and `TimeoutSec=` sets the start timeout too."""
+    unit = tmp_path / "unit.service"
+    unit.write_text(f"[Service]\nType=oneshot\n{lines}\n")
+    assert _start_timeout(unit) == expected
 
 
 def test_every_stack_on_the_tailnet_address_waits_for_it() -> None:
