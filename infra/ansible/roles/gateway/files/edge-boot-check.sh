@@ -9,7 +9,8 @@
 # EDGE_EXPECT names what the case under test took away: `no-uplink` (the adapter
 # unplugged) or `no-lan` (the switch cable out). The check for that thing then
 # passes when it is missing, and the checks that need it are not run. The LAN
-# address needs only the device, not the cable (#2732), so `no-lan` keeps them.
+# address needs only the device, not the cable (#2732), so `no-lan` keeps them,
+# and every other case reads the carrier on its own line (#2800).
 #
 # Exit codes:
 #   0   every check passed
@@ -83,6 +84,40 @@ loaded=$(since_boot ActiveEnterTimestampMonotonic nftables.service)
 networkd=$(since_boot InactiveExitTimestampMonotonic systemd-networkd.service)
 drops_first() { [ "${loaded:-0}" -gt 0 ] && [ "$loaded" -lt "${networkd:-0}" ]; }
 seconds() { awk -v usec="${1:-0}" 'BEGIN { printf "%.1fs", usec / 1000000 }'; }
+network=$(since_boot ActiveEnterTimestampMonotonic network.target)
+
+# A missing uplink adapter holds network.target, and docker and tailscaled after
+# it, for as long as the boot waits for the device (#2794). The role bounds that
+# wait with a drop-in on the device unit; systemd's own default means it did not
+# apply. Every other check passed while the boot waited 90 s, so this one is read
+# from systemd, not from the boot's timing.
+adapter_wait=$(since_boot JobRunningTimeoutUSec "sys-subsystem-net-devices-$uplink.device")
+default_wait=$(systemctl show -p DefaultDeviceTimeoutUSec --value)
+# usec <span>: systemd's spelling of a duration ("1min 30s", "100ms") in
+# microseconds, and nothing for what is not one ("infinity", an empty read).
+usec() {
+  printf '%s\n' "$1" | awk '
+    BEGIN {
+      split("us 1 μs 1 ms 1e3 s 1e6 min 6e7 h 3.6e9 d 8.64e10 w 6.048e11 month 2.6298e12 y 3.15576e13", t, " ")
+      for (i = 1; i in t; i += 2) per[t[i]] = t[i + 1]
+    }
+    {
+      for (i = 1; i <= NF; i++) {
+        if (!match($i, /^[0-9.]+/) || !((unit = substr($i, RLENGTH + 1)) in per)) bad = 1
+        else total += substr($i, 1, RLENGTH) * per[unit]
+      }
+      seen += NF
+    }
+    END { if (seen && !bad) printf "%.0f\n", total }'
+}
+# Compared as durations: a wait at or past the default bounds nothing, however
+# it is spelled, and a default that cannot be read proves nothing.
+wait_bounded() {
+  case $adapter_wait in '' | 0 | infinity) return 1 ;; esac
+  wait_us=$(usec "$adapter_wait")
+  default_us=$(usec "$default_wait")
+  [ -n "$wait_us" ] && [ -n "$default_us" ] && [ "$wait_us" -lt "$default_us" ]
+}
 
 has_carrier() { [ "$(cat "$sys_net/$1/carrier" 2>/dev/null)" = 1 ]; }
 # Unplugged, not gone: only a device that is there reports a carrier of 0.
@@ -227,10 +262,11 @@ boot_finished() {
   fi
 }
 boot_finished
-echo "INFO ruleset loaded at $(seconds "$loaded"), systemd-networkd started at $(seconds "$networkd")"
+echo "INFO ruleset loaded at $(seconds "$loaded"), systemd-networkd started at $(seconds "$networkd"), network.target reached at $(seconds "$network")"
 
 check "ruleset inet kubelab loaded" sudo -n nft list table inet kubelab
 check "ruleset loaded before systemd-networkd started" drops_first
+check "wait for $uplink at boot bounded ($adapter_wait; systemd's default $default_wait)" wait_bounded
 check "hardware watchdog armed" watchdog_armed
 for unit in hostapd.service dnsmasq.service docker.service tailscaled.service \
   kubelab-edge-liveness.timer kubelab-edge-lease-check.timer kubelab-edge-lease-check.path; do
@@ -245,6 +281,8 @@ done
 
 if [ "$expect" = no-lan ]; then
   check "$lan present without a carrier, as this case expects" unplugged "$lan"
+else
+  check "$lan has a carrier" has_carrier "$lan"
 fi
 check "LAN address on $lan" lan_address_set
 check "route to $lan_cidr on $lan" lan_route
