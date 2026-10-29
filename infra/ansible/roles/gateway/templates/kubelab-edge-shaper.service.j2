@@ -20,6 +20,9 @@ OnFailure=kubelab-notify@%n.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+# `ip` and `tc` take milliseconds. A oneshot has no start timeout unless it sets
+# one, and its start job holds the boot (#2786).
+TimeoutStartSec=30
 # No KUBELAB_NOTIFY_SEVERITY: a failure leaves the uplink unshaped, not down,
 # so it posts at the host's `log` (#2684).
 # Clear what the last start left: a restart would otherwise stack a second
