@@ -208,10 +208,10 @@
     fail_msg: "Docker installation test failed"
     success_msg: "Docker installation verified successfully"
 
-# A play turns this on for the run that upgrades its engine (#2722). On
-# 2026-10-27 the BuildKit session failed 5 s into a build and fatally 5 s later,
-# and the build then waited for it, with no error, until the runner's 3 h job
-# timeout. The base image is pulled first under its own timeout, so the uplink
+# A play turns this on for the run that upgrades its engine (#2722), so a build
+# that makes no progress fails the play rather than holding the runner until its
+# 3 h job timeout. The hang on record was a 2.31 GB base layer pulling at about
+# 80 KB/s, so the base image is pulled first under its own timeout: the uplink
 # fails as a pull and the build's timeout measures the engine alone. The pinned
 # image stays in the store; `cacheonly` keeps no build result behind.
 - name: Pull the smoke build's base image
@@ -237,13 +237,13 @@
     - docker_smoke_build | bool
     - not ansible_check_mode
 
-# `default` is the engine's own BuildKit, the one the Gitea jobs build on: the
-# dropped sessions were logged by dockerd. Without it the build runs on whichever
-# builder root last selected, and on the Beelink that is `multiarch`, a
-# docker-container builder that pulls its own image first. The build sleeps past
-# the window the session dropped in, and `timeout` turns a hang into a failed
-# play: 124 on its TERM, or 137 on the KILL that follows when a client blocked on
-# the dead session ignores the TERM.
+# `default` is the engine's own BuildKit, the one the Gitea jobs build on.
+# Without it the build runs on whichever builder root last selected, and on the
+# Beelink that is `multiarch`, a docker-container builder that pulls its own image
+# first. The build sleeps past the 10 s in which dockerd logs its session
+# healthcheck lines, which also appear on builds that pass, and `timeout` turns a
+# hang into a failed play: 124 on its TERM, or 137 on the KILL that follows when a
+# client blocked on its build ignores the TERM.
 - name: Smoke-build an image on this engine
   shell: |
     set -o pipefail
@@ -264,14 +264,14 @@
     that: _docker_smoke_build.rc == 0
     fail_msg: >-
       {{ ('The smoke build made no progress in ' ~ docker_smoke_build_timeout_seconds
-          ~ ' s. That is how a dropped BuildKit session showed (#2722): confirm it with'
-          ~ ' "session healthcheck failed" in journalctl -u docker. Last output: '
+          ~ ' s. Read the step it stopped in with docker buildx history logs on this node,'
+          ~ ' and record it on #2722. Last output: '
           ~ (_docker_smoke_build.stderr_lines | default([]))[-5:] | join(' | '))
          if _docker_smoke_build.rc == 124 else
          ('The smoke build was killed after ' ~ (_docker_smoke_build.delta | default('?'))
-          ~ '. Past the ' ~ docker_smoke_build_timeout_seconds ~ ' s timeout, its client ignored the'
-          ~ ' TERM on a dropped BuildKit session (#2722); sooner, something else killed it, most'
-          ~ ' often the OOM killer (journalctl -k).')
+          ~ '. Past the ' ~ docker_smoke_build_timeout_seconds ~ ' s timeout, it made no progress and'
+          ~ ' its client ignored the TERM: record it on #2722. Sooner, something else killed it,'
+          ~ ' most often the OOM killer (journalctl -k).')
          if _docker_smoke_build.rc == 137 else
          ('The smoke build failed with rc ' ~ _docker_smoke_build.rc ~ ': '
           ~ (_docker_smoke_build.stderr_lines | default([]))[-5:] | join(' | ')) }}

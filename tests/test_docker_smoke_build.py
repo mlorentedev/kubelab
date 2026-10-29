@@ -1,10 +1,14 @@
 """The run that upgrades the CI engine proves it can still build (#2722).
 
-On 2026-10-27 a provision moved the Beelink's Docker, and BuildKit sessions began
-dropping 5 s into a build. A dropped session leaves the build waiting with no error,
-so the job held the runner until its 3 h timeout. The engine now moves only in a
+On 2026-10-27 a provision moved the Beelink's Docker as a side effect, and a Gitea
+job then held the runner until its 3 h timeout. The engine now moves only in a
 provision that releases it, and that run smoke-builds an image under a timeout, so
-a hang fails the play instead of the next job.
+a build that makes no progress fails the play instead of the next job.
+
+The hang on record was a slow pull, not the engine: the job was pulling a 2.31 GB
+base layer at about 80 KB/s when the timeout cancelled it. dockerd's
+`session healthcheck failed` lines appear on builds that pass too, so a failure
+message must not name them as the cause.
 
 The build runs on the engine's own BuildKit, and its base image is pulled first under
 its own timeout. The first live run did neither: it built on the Beelink's
@@ -32,8 +36,9 @@ PULL = "Pull the smoke build's base image"
 PULL_VERIFY = "Verify the smoke build's base image pulled"
 SMOKE = "Smoke-build an image on this engine"
 VERIFY = "Verify the smoke build finished"
-# The session failed 5 s into the build and fatally 5 s later.
-SESSION_DROP_SECONDS = 10
+# dockerd logs a failed session healthcheck about 5 s into a build and a fatal one
+# 5 s later, on builds that pass too: not shown to break a build, nor shown harmless.
+SESSION_HEALTHCHECK_SECONDS = 10
 
 
 def _tasks() -> list[dict[str, Any]]:
@@ -124,12 +129,12 @@ def test_a_build_that_errors_reports_its_own_exit_code(tmp_path: Path) -> None:
     assert _run_smoke(tmp_path, "error").returncode == 1
 
 
-def test_the_build_outlives_the_window_the_session_dropped_in(tmp_path: Path) -> None:
+def test_the_build_holds_its_session_past_the_healthcheck_lines(tmp_path: Path) -> None:
     assert _run_smoke(tmp_path, "ok").returncode == 0
     dockerfile = (tmp_path / "Dockerfile").read_text(encoding="utf-8")
     assert dockerfile.startswith(f"FROM {DEFAULTS['docker_smoke_build_image']}\n"), dockerfile
     sleep = re.search(r"^RUN sleep (\d+)$", dockerfile, re.M)
-    assert sleep and SESSION_DROP_SECONDS < int(sleep[1]) < DEFAULTS["docker_smoke_build_timeout_seconds"], dockerfile
+    assert sleep and SESSION_HEALTHCHECK_SECONDS < int(sleep[1]) < DEFAULTS["docker_smoke_build_timeout_seconds"], dockerfile
     args = (tmp_path / "args").read_text(encoding="utf-8").split()
     # A cached step would finish at once and never hold a session open.
     assert "--no-cache" in args
@@ -183,7 +188,7 @@ def test_a_failed_pull_blames_the_path_to_the_registry_not_the_engine(result: di
 
 
 def test_a_client_that_ignores_the_term_is_killed() -> None:
-    """A buildx client blocked on the dead session may ignore SIGTERM, and the play would hang."""
+    """A buildx client blocked on its build may ignore SIGTERM, and the play would hang."""
     assert re.search(r"\btimeout --kill-after=\d+ ", _task(SMOKE)["shell"]), _task(SMOKE)["shell"]
 
 
@@ -202,8 +207,8 @@ def test_only_a_build_that_finished_passes(rc: int, passes: bool) -> None:
     ("result", "says"),
     [
         ({"rc": 124, "stderr_lines": []}, "no progress"),
-        # A hang names its evidence instead of asserting the cause, and shows where it stopped.
-        ({"rc": 124, "stderr_lines": ["#5 [2/2] RUN sleep 20"]}, "session healthcheck failed"),
+        # A hang names where to read the step it stopped in, and shows its last output.
+        ({"rc": 124, "stderr_lines": ["#5 [2/2] RUN sleep 20"]}, "docker buildx history logs"),
         ({"rc": 124, "stderr_lines": ["#5 [2/2] RUN sleep 20"]}, "RUN sleep 20"),
         # A kill is the timeout's only past the timeout: the OOM killer also answers 137.
         ({"rc": 137, "stderr_lines": [], "delta": "0:03:30.020000"}, "killed after 0:03:30"),
@@ -219,3 +224,5 @@ def test_the_failure_names_a_hang_apart_from_an_error(result: dict, says: str) -
     )
     assert says in message, message
     assert ("#2722" in message) is (result["rc"] in (124, 137)), message
+    # The session lines also appear on builds that pass, so no message blames them.
+    assert "session" not in message.lower(), message

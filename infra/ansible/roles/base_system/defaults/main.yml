@@ -82,7 +82,7 @@ rsyslog_logrotate_size_cap: "50M"
 # --- packages a provision upgrades only on purpose (#2722) ---
 # "Upgrade all packages" is a full dist-upgrade on every `make provision`, so
 # without a hold a run for any other reason moves these too. On 2026-10-27 one
-# moved the Beelink's Docker, and its BuildKit sessions began dropping. A node
+# moved the Beelink's Docker as a side effect. A node
 # lists them in its play. node_maintenance finds them already held and leaves
 # them held. To upgrade them, run one provision that releases and re-holds:
 #   make provision NODE=<node> ENV=<env> EXTRA='base_system_release_holds=true'
