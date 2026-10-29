@@ -225,9 +225,9 @@ dig vpn.kubelab.live +short
 
 ## Troubleshooting
 
-### CoreDNS unhealthy
+### CoreDNS shows no health status
 
-The default CoreDNS Docker image does not include `dig`. The healthcheck uses `dig` which fails. This is cosmetic — CoreDNS still works. Fix by using a wget-based healthcheck or ignoring the status.
+The CoreDNS image is distroless, with no shell and no `dig`, so the compose file declares no healthcheck and `docker ps` shows the container as plain `Up`. Two signals stand in for it. Pi-hole's healthcheck resolves a staging name through CoreDNS, so an unhealthy Pi-hole with CoreDNS running points at the hop between them. CoreDNS's `health` plugin is published on the edge's loopback only (`127.0.0.1:8080`), because a bind to a node address that is missing at start takes the whole container's ports with it (#2732). `make edge-boot-check` reads both containers.
 
 ### Port 5353 already in use
 

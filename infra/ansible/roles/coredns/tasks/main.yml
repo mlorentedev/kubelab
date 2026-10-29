@@ -38,8 +38,19 @@
       command: docker compose -f {{ coredns_remote_dir }}/docker-compose.yml pull
       changed_when: false
 
+    # A container whose start failed on a bind is left attached to no network.
+    # dockerd brings it back that way at every boot, with its ports requested
+    # and none in effect, and `up -d` sees an unchanged spec (#2732). The shared
+    # check notices it and the start below recreates (#2500).
+    - name: Check for a port binding that was never established
+      import_tasks: "{{ playbook_dir }}/_includes/compose-port-drift.yml"
+      vars:
+        compose_port_drift_file: "{{ coredns_remote_dir }}/docker-compose.yml"
+
     - name: Start DNS stack
-      command: docker compose -f {{ coredns_remote_dir }}/docker-compose.yml up -d
+      command: >-
+        docker compose -f {{ coredns_remote_dir }}/docker-compose.yml up -d
+        {{ '--force-recreate' if compose_port_drift | bool else '' }}
       register: dns_start
       changed_when: "'Started' in dns_start.stderr or 'Created' in dns_start.stderr"
 
