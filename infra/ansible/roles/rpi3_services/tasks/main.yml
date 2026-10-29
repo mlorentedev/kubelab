@@ -139,9 +139,14 @@
   when: not ansible_check_mode
   tags: [allowlist]
 
-- name: Pull service images
-  command: docker compose -f {{ rpi3_deploy_dir }}/compose.yml pull
-  changed_when: false
+# rpi3 is on the lab Wi-Fi, which leaves by the edge's uplink: sized against its
+# downlink when the play sets image_pull_down_kbit, bounded and retried (#2742).
+- name: Pull the Uptime Kuma image
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/_includes/image-pull.yml"
+  vars:
+    image_pull_name: Uptime Kuma
+    image_pull_images: ["{{ uptime_kuma_image }}"]
+    image_pull_command: docker compose -f {{ rpi3_deploy_dir }}/compose.yml pull
 
 # Enabling does not start a unit, so a unit that failed at boot stayed failed and
 # its stack unbound until the next boot (#2500). Starting a failed unit recreates
