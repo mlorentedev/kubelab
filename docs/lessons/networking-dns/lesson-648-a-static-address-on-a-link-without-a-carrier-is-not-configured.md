@@ -19,7 +19,7 @@ tags: [kubelab, networking-dns, netplan, systemd, docker, rpi4]
 - netplan 1.1.2 renders `systemd-networkd-wait-online` with `-i <iface>:degraded` for each interface that is not `optional`. `eth0` was the only one, so wait-online failed after two minutes and the boot took 2 min 50 s.
 - With no address there was no connected route for the LAN. `ip route get` for a LAN host answered `dev uplink0`, so tailnet traffic for the advertised subnet left through the uplink.
 
-`ignore-carrier: true` alone does not fix the wait. netplan keeps `-i eth0:degraded` for an interface with a static address whatever `ignore_carrier` says, and `no-carrier` is below `degraded`.
+`ignore-carrier: true` alone does not fix the wait. netplan writes `-i eth0:degraded` for an interface that asks for link-local addresses, which IPv6 does by default, and `-o routable` for one with a static address (`networkd.c`, 1.1.2). `ignore_carrier` changes neither, and `no-carrier` is below `degraded`.
 
 **Solution**: Three changes, each closing one effect.
 

@@ -13,6 +13,7 @@ from __future__ import annotations
 import ipaddress
 from pathlib import Path
 
+import pytest
 import yaml
 from jinja2 import Environment, StrictUndefined
 
@@ -29,28 +30,56 @@ def _compose() -> dict:
     return yaml.safe_load(template.render(**context))
 
 
-def _published() -> list[tuple[str, str]]:
-    return [(name, str(port)) for name, service in _compose()["services"].items() for port in service.get("ports", [])]
+def _published() -> list[tuple[str, str | dict]]:
+    return [(name, port) for name, service in _compose()["services"].items() for port in service.get("ports", [])]
+
+
+def _host_ip(port: str | dict) -> str | None:
+    """The address a port is bound to, in the short form or the long one; None if bare."""
+    if isinstance(port, dict):
+        return port.get("host_ip")
+    if port.startswith("["):  # [::1]:8080:8080
+        return port[1 : port.index("]")]
+    parts = port.split(":")
+    return parts[0] if len(parts) == 3 else None
 
 
 def test_the_guard_reads_every_published_port() -> None:
     ports = _published()
     assert len(ports) >= 6, ports
-    assert any(port.count(":") == 2 for _, port in ports), "no bound port left to check"
+    assert any(_host_ip(port) for _, port in ports), "no bound port left to check"
 
 
-def _is_loopback(address: str) -> bool:
+def _binds_safely(address: str) -> bool:
+    """Loopback exists before Docker starts, and 0.0.0.0 or :: is a bare publish."""
     try:
-        return ipaddress.ip_address(address).is_loopback
+        ip = ipaddress.ip_address(address)
     except ValueError:  # derived from common.yaml: a node's address, not a literal
         return False
+    return ip.is_loopback or ip.is_unspecified
+
+
+@pytest.mark.parametrize(
+    ("port", "safe"),
+    [
+        ("127.0.0.1:8080:8080/tcp", True),
+        ("[::1]:8080:8080", True),
+        ("0.0.0.0:53:53/udp", True),
+        ({"target": 8080, "published": 8080, "host_ip": "127.0.0.1"}, True),
+        ("{{ lan_ip }}:8080:8080/tcp", False),
+        ("[2001:db8::1]:8080:8080", False),
+        ({"target": 8080, "published": 8080, "host_ip": "192.0.2.1"}, False),
+    ],
+)
+def test_the_guard_reads_each_form_of_a_bound_port(port: str | dict, safe: bool) -> None:
+    assert _binds_safely(_host_ip(port) or "0.0.0.0") is safe
 
 
 def test_a_bound_port_is_bound_to_loopback() -> None:
     for service, port in _published():
-        parts = port.split(":")
-        if len(parts) == 3:
-            assert _is_loopback(parts[0]), (
+        address = _host_ip(port)
+        if address is not None:
+            assert _binds_safely(address), (
                 f"{service} binds {port}: a node address may not exist when Docker starts (#2732)"
             )
 

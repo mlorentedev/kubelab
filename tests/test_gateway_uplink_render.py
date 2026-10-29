@@ -161,7 +161,10 @@ def test_boot_waits_for_no_interface(kind: str) -> None:
     and the LAN a cable's, so boot waits for neither.
     """
     rendered = _netplan(kind)
-    interfaces = {**rendered.get("ethernets", {}), **rendered.get("wifis", {})}
+    # Every device section, so a bridge or a VLAN added later is held to it too.
+    interfaces = {
+        name: iface for section in rendered.values() if isinstance(section, dict) for name, iface in section.items()
+    }
     assert interfaces, "the guard found no interface"
     assert {name for name, iface in interfaces.items() if iface.get("optional") is not True} == set()
 

@@ -18,8 +18,9 @@ coredns_legacy_dirs:
   - /root/coredns
   - "/home/{{ common.networking.ssh_users.homelab }}/coredns"
 coredns_port: 5353
-# CoreDNS `health` plugin, published for external probing because the image is
-# distroless and cannot be probed from inside. `ready` (:8181) stays unpublished.
+# CoreDNS `health` plugin, published because the image is distroless and cannot
+# be probed from inside; it answers on the host only, at coredns_health_bind_ip.
+# `ready` (:8181) stays unpublished.
 coredns_health_port: 8080
 pihole_port: 53
 pihole_web_port: 80

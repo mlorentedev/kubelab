@@ -84,7 +84,8 @@ services:
     # CoreDNS outage this was meant to catch would arrive at an indicator that
     # was already red. Docker healthchecks run *inside* the container, so no
     # in-container probe is possible here; the signal moves out instead, to the
-    # `health`/`ready` endpoints published above.
+    # `health` endpoint published above and to Pi-hole's check, which resolves
+    # through CoreDNS.
 
 volumes:
   pihole_data:

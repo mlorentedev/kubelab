@@ -18,9 +18,11 @@ dead for roughly ninety minutes and three separate green signals covered it.
 
 TWO REMEDIES ARE VALID, and a role must use one of them:
 
-1. **Bind to an address that exists before Docker starts** -- a LAN address on a
-   physical interface. No race to lose. This is what `coredns` does, because
-   rpi4 has a LAN address (`networking.nodes.rpi4.lan_ip`).
+1. **Bind to an address that exists before Docker starts** -- loopback, or none
+   at all (publish bare). No race to lose. This is what `coredns` does. A LAN
+   address on a physical interface is NOT such an address: networkd configures a
+   static address only once the link has a carrier, and coredns's LAN bind failed
+   the same way with the switch cable out (#2732, lesson-648).
 
 2. **Order the start after the address exists** -- a systemd oneshot with
    `After=tailscaled.service` and `ExecStartPre=wait-for-tailscale-addr.sh`.
@@ -119,7 +121,7 @@ def test_a_tailscale_bound_port_is_ordered_after_the_address_exists(role: str):
         "and runs `wait-for-tailscale-addr.sh`. At boot Docker will race "
         "tailscaled; when it wins, the bind fails and the container loses ALL its "
         "published ports while still reporting `running`.\n\n"
-        "Either bind to the node's LAN address (as `coredns` does), or copy the "
+        "Either bind loopback or publish bare (as `coredns` does), or copy the "
         "unit `beelink_services` and `glances` already use."
     )
 
