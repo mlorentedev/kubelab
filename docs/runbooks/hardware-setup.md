@@ -171,7 +171,7 @@ Role: the lab's edge (ADR-075): NAT, DHCP, DNS (CoreDNS + Pi-hole) and the lab W
 - **Uplink**: a USB Wi-Fi adapter (RTL8822BU) on a USB 2.0 port with an extension cable, named `uplink0` by the `gateway` role. It joins whatever network the site offers; the site's profile is `networking.edge.uplink`. An Ethernet site uses the same name.
 - **Lab Wi-Fi**: the built-in radio is a 2.4 GHz access point (`networking.edge.lab_wifi`), the same at every site.
 - **Homelab LAN**: built-in Ethernet (`eth0`, `networking.nodes.rpi4.lan_ip`) to the switch.
-- Everything on it is rendered by `make provision NODE=rpi4 ENV=prod`; a rebuild from a blank card is [rpi4-bootstrap](rpi4-bootstrap.md), and site moves are [lab-edge](lab-edge.md).
+- Everything on it is rendered by `make provision NODE=rpi4 ENV=prod BOOTSTRAP=1`, run from the switch (a run that applies the `gateway` role refuses to reach the edge over the tailnet, ADR-075 D7); a rebuild from a blank card is [rpi4-bootstrap](rpi4-bootstrap.md), and site moves are [lab-edge](lab-edge.md).
 
 ### 1.5 RPi 3 — External Monitor (`kubelab-rpi3`) ✓ Provisioned 2026-02-18
 
@@ -269,7 +269,7 @@ The lab Wi-Fi and the homelab LAN do not route to each other (ADR-075 D4).
 
 ## Phase 3: DHCP Reservations on RPi 4
 
-The `gateway` role renders dnsmasq from the SSOT: each node's `networking.nodes.<node>.mac` and `lan_ip` in `infra/config/values/common.yaml` for the homelab LAN, and `networking.edge.lab_wifi.reservations` for the lab Wi-Fi. Never edit `/etc/dnsmasq.d/` by hand; change the SSOT and run `make provision NODE=rpi4 ENV=prod`.
+The `gateway` role renders dnsmasq from the SSOT: each node's `networking.nodes.<node>.mac` and `lan_ip` in `infra/config/values/common.yaml` for the homelab LAN, and `networking.edge.lab_wifi.reservations` for the lab Wi-Fi. Never edit `/etc/dnsmasq.d/` by hand; change the SSOT and run `make provision NODE=rpi4 ENV=prod BOOTSTRAP=1 TAGS=gateway` from the switch.
 
 > Note: Proxmox VMs get static IPs via their own netplan config (not DHCP reservation) because
 > Proxmox bridges to the LAN and VMs are seen as distinct MAC addresses. Assign 172.16.1.10-12 statically inside each VM.
