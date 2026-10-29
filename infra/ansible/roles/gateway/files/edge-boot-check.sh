@@ -175,7 +175,10 @@ if analyzed=$(systemd-analyze time 2>&1); then
   echo "INFO $(printf '%s\n' "$analyzed" | head -n 1)"
 else
   case $analyzed in
-    *"not yet finished"*) echo "INFO boot not finished, jobs still queued: $(queued_jobs)" ;;
+    *"not yet finished"*)
+      queued=$(queued_jobs)
+      echo "INFO boot not finished, jobs still queued: ${queued:-none}"
+      ;;
     *) echo "INFO startup time unavailable: $(printf '%s\n' "$analyzed" | head -n 1)" ;;
   esac
 fi

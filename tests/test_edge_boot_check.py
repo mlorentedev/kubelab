@@ -430,6 +430,12 @@ def test_a_system_neither_booting_nor_up_fails(edge: Edge, system: str) -> None:
     assert _failures(edge.run()) == [f"FAIL boot finished: the system is {system or 'unknown'}"]
 
 
+def test_an_unfinished_boot_with_an_empty_table_says_none(edge: Edge) -> None:
+    """The table can empty between the two reads."""
+    edge.write("jobs", "")
+    assert edge.run().stdout.splitlines()[0] == "INFO boot not finished, jobs still queued: none"
+
+
 def test_a_startup_time_that_cannot_be_read_is_not_an_unfinished_boot(edge: Edge) -> None:
     """Only systemd's own "not yet finished" means the boot is still running; any other
     failure is reported as itself (#2767 review)."""
