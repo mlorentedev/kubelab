@@ -88,3 +88,10 @@ rsyslog_logrotate_size_cap: "50M"
 #   make provision NODE=<node> ENV=<env> EXTRA='base_system_release_holds=true'
 base_system_held_packages: []
 base_system_release_holds: false
+
+# --- cloud-init (#2777) ---
+# Stop cloud-init on a node whose image's user-data sets manage_etc_hosts: it
+# rewrites /etc/hosts at every boot, replacing this role's 127.0.1.1 line and
+# dropping dns_resilience's block. Nodes installed from the ISO already carry
+# the marker, which the installer writes. The edge's play turns it on.
+base_system_disable_cloud_init: false

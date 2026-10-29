@@ -166,6 +166,9 @@ watchdog_armed() {
   [ -n "$usec" ] && [ "$usec" != 0 ]
 }
 
+job_table() { systemctl list-jobs --no-legend --plain 2>/dev/null; }
+queued_jobs() { job_table | awk '{ printf "%s%s", sep, $2; sep = " " }'; }
+
 # `systemd-analyze time` fails until the boot finishes, so an unfinished boot names
 # the jobs it still waits for instead (#2675). Any other failure says what it was.
 if analyzed=$(systemd-analyze time 2>&1); then
@@ -173,12 +176,57 @@ if analyzed=$(systemd-analyze time 2>&1); then
 else
   case $analyzed in
     *"not yet finished"*)
-      queued=$(systemctl list-jobs --no-legend --plain 2>/dev/null | awk '{ printf "%s%s", sep, $2; sep = " " }')
+      queued=$(queued_jobs)
       echo "INFO boot not finished, jobs still queued: ${queued:-none}"
       ;;
     *) echo "INFO startup time unavailable: $(printf '%s\n' "$analyzed" | head -n 1)" ;;
   esac
 fi
+
+# The boot finishes once systemd's job table first empties (lesson-653), so an
+# unfinished one is judged by its jobs, not by the clock: timers that catch up a
+# missed run after a random delay can join a boot that is still running, so a
+# fixed time limit would be either too long or wrong. A service start job ends
+# when its own TimeoutStartSec does, and `infinity`, a oneshot's default, means
+# it never has to. Only running start jobs are judged; a waiting one has not
+# started. `degraded` is a finished boot with failed units, judged below.
+system_up() {
+  case $(systemctl is-system-running 2>/dev/null) in running | degraded) return 0 ;; esac
+  return 1
+}
+boot_finished() {
+  system=$(systemctl is-system-running 2>/dev/null)
+  case $system in
+    running | degraded)
+      pass "boot finished"
+      return
+      ;;
+    starting | initializing) ;;
+    *)
+      fail "boot finished: the system is ${system:-unknown}"
+      return
+      ;;
+  esac
+  unbounded=
+  bounded=
+  for unit in $(job_table | awk '$2 ~ /\.service$/ && $3 == "start" && $4 == "running" { print $2 }'); do
+    timeout=$(systemctl show -p TimeoutStartUSec --value "$unit")
+    if [ "$timeout" = infinity ]; then
+      unbounded="${unbounded:+$unbounded }$unit"
+    else
+      bounded="${bounded:+$bounded, }$unit ($timeout)"
+    fi
+  done
+  # The table can empty between the two reads, so an empty one asks again.
+  if [ -n "$unbounded" ]; then
+    fail "boot finished: held by $unbounded, with no start timeout"
+  elif [ -z "$bounded" ] && system_up; then
+    pass "boot finished"
+  else
+    wait_for "boot finished: not yet, running ${bounded:-no service start job}: run the check again after the longest"
+  fi
+}
+boot_finished
 echo "INFO ruleset loaded at $(seconds "$loaded"), systemd-networkd started at $(seconds "$networkd")"
 
 check "ruleset inet kubelab loaded" sudo -n nft list table inet kubelab
