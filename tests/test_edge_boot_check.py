@@ -67,6 +67,7 @@ FAKES = {
   "--failed --no-legend")
     for f in "$FAKE"/failed/*; do [ -f "$f" ] && echo "${f##*/} loaded failed failed x"; done
     true ;;
+  "list-jobs --no-legend") cat "$FAKE/jobs" 2>/dev/null; true ;;
   *) exit 2 ;;
 esac
 """,
@@ -81,7 +82,10 @@ esac
     "docker": 'cat "$FAKE/docker_$4"\n',
     "tailscale": 'cat "$FAKE/tailscale.json"\n',
     "sleep": ":\n",
-    "systemd-analyze": 'echo "Startup finished in 5.1s (kernel) + 20.3s (userspace) = 25.4s"\n',
+    # Before the boot finishes, `systemd-analyze time` prints nothing and fails.
+    "systemd-analyze": (
+        '[ -f "$FAKE/jobs" ] && exit 1\necho "Startup finished in 5.1s (kernel) + 20.3s (userspace) = 25.4s"\n'
+    ),
 }
 
 
@@ -240,6 +244,64 @@ def test_each_thing_a_boot_can_lose_fails_its_own_check(edge: Edge, breakage: An
     assert result.returncode == 1
     (failure,) = _failures(result)
     assert line in failure
+
+
+# ------------------------------------------------------- what a boot does not judge
+
+# A scheduled job that failed during the outage the case caused, and its page, which
+# could not leave either: node-backup-ship cannot reach R2 without the uplink.
+SHIP = "node-backup-ship.service"
+SHIP_PAGE = f"kubelab-notify@{SHIP}.service"
+
+
+def _scheduled_run_failed(edge: Edge, unit: str = SHIP, page: str = SHIP_PAGE) -> None:
+    edge.write(f"show_TriggeredBy_{unit}", f"{unit.removesuffix('.service')}.timer")
+    edge.write(f"show_OnFailure_{unit}", page)
+    edge.write(f"failed/{unit}", "")
+    edge.write(f"failed/{page}", "")
+
+
+def test_a_failed_scheduled_run_and_its_page_are_reported_not_failed(edge: Edge) -> None:
+    """A run a timer started is not something the boot brings back, and its own page
+    reports it; the operator ruled it out of the boot's verdict (#2661, B14 T3)."""
+    _scheduled_run_failed(edge)
+    result = edge.run()
+    assert result.returncode == 0, result.stdout
+    assert f"INFO failed scheduled runs, each reported by its own page: {SHIP}" in result.stdout
+    assert SHIP_PAGE not in result.stdout
+
+
+def test_without_the_uplink_a_failed_scheduled_run_is_reported_not_failed(edge: Edge) -> None:
+    edge.unplug_uplink()
+    _scheduled_run_failed(edge)
+    result = edge.run(expect="no-uplink")
+    assert result.returncode == 0, result.stdout
+
+
+def test_a_failed_run_of_the_edges_own_timer_still_fails(edge: Edge) -> None:
+    """The lease check and the liveness check are what the edge serves, timer or not."""
+    unit = "kubelab-edge-lease-check.service"
+    _scheduled_run_failed(edge, unit, f"kubelab-notify@{unit}.service")
+    (failure,) = _failures(edge.run())
+    assert failure == f"FAIL failed units: {unit} kubelab-notify@{unit}.service"
+
+
+def test_a_page_that_failed_for_a_unit_no_timer_started_still_fails(edge: Edge) -> None:
+    edge.write(f"show_OnFailure_{SHIP}", SHIP_PAGE)
+    edge.write(f"failed/{SHIP}", "")
+    (failure,) = _failures(edge.run())
+    assert failure == f"FAIL failed units: {SHIP}"
+
+
+def test_an_unfinished_boot_names_what_it_still_waits_for(edge: Edge) -> None:
+    """`systemd-analyze time` prints nothing until the boot finishes, which left the
+    first line empty after every boot without the uplink (#2675)."""
+    edge.write("jobs", "123 tailscale-watchdog.service start running\n130 multi-user.target start waiting\n")
+    result = edge.run()
+    assert result.stdout.splitlines()[0] == (
+        "INFO boot not finished, jobs still queued: tailscale-watchdog.service multi-user.target"
+    )
+    assert result.returncode == 0, result.stdout
 
 
 # ------------------------------------------------------------ a case took something

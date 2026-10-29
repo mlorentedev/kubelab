@@ -78,7 +78,13 @@ Partial results, kept apart from the `### B<n>-EVIDENCE` headings on purpose: `f
 - **B6.** Both nodes' Tailscale prefs were compared read-only with their plays (lesson-629). rpi4 matched. rpi3 accepted routes its play declares off, which the role's `tailscale set` convergence then corrected (#2685). The 2026-10-28 boot check reads the subnet route primary on the tailnet. Left: `make headscale-rejoin` for both nodes, rpi3's `TAGS=tailscale` second run at `changed=0`, and the Headscale expiry read.
 - **B11.** ace1, bee and ace2 each had a default route through the RPi4 and a 204 from the connectivity probe (2026-10-27). Left: a `DHCPACK(eth0)` at this step (the one on record is task 11's, from before the uplink existed) and `make test-e2e ENV=staging`.
 - **B12.** The second provision (2026-10-28) reported `ok=182 changed=1 failed=0`. The one change is apt's cache refresh (`cache_valid_time: 3600`), which fires on time elapsed, not on drift. Left: a run that reports `changed=0` as written, and the 48-hour soak's rtw88 check.
-- **B14.** A baseline only, not one of the four cases: `make edge-boot-check VIA=tailnet` passed 22 of 22 checks on 2026-10-28 with everything plugged in, on the boot that began 2026-10-27T00:52Z. Left: the warm reboot, the power cut, the cut without the uplink adapter and the cut without the switch cable.
+- **B14.** A baseline first: `make edge-boot-check VIA=tailnet` passed 22 of 22 checks on 2026-10-28 with everything plugged in, on the boot that began 2026-10-27T00:52Z. Then the cases, each checked 10 minutes after power returned (times UTC, 2026-10-29):
+  - **T1 warm reboot**, 01:17: 22 of 22, startup 57.4 s, ruleset at 9.5 s and networkd at 15.5 s. `make reboot` could not reach the edge from the LAN (its inventory is the tailnet one), which `BOOTSTRAP=1` now does.
+  - **T2 power cut**, 01:28: 22 of 22, startup 59.4 s.
+  - **T3 no uplink adapter**, 01:40: exit 2. The shaper had failed with result `dependency` and its page with it (#2766), and so had a timer's `node-backup-ship` run with its page, which a boot does not own. The startup line was empty, because the boot had not finished.
+  - **T3, adapter plugged back**, 01:47: the adapter came back as `uplink0` but nothing started its supplicant: no lease, no route, no tailnet session, no subnet route (#2766).
+  - **T2 again, restored**, 02:00: 22 of 22, startup 56.9 s, with the adapter in the other USB port.
+  Left: T4, then T3 again with #2766 deployed, its replug bringing the lease, the route and the tailnet back within 2 minutes.
 - **B7, B8, B9, B10, B13.** Not started.
 
 - [ ] Criterion 1 -> commit `<hash>` / test `<name>`
