@@ -127,6 +127,8 @@
       vars:
         base_system_hostname: "{{ config.networking.nodes.rpi4.hostname }}"
         base_system_timezone: "{{ config.global.timezone }}"
+        # Its image's user-data has cloud-init rewrite /etc/hosts at every boot (#2777).
+        base_system_disable_cloud_init: true
 
     - role: ../roles/ssh_hardening
       tags: [ssh]

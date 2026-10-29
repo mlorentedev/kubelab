@@ -6,6 +6,23 @@
     mode: "0440"
     validate: "visudo -cf %s"
 
+# Before the line below: on a Raspberry Pi image cloud-init's update_etc_hosts
+# rewrites /etc/hosts from its own template at every boot, so after each reboot
+# the edge had cloud-init's 127.0.1.1 line and no dns_resilience block (#2777).
+# The user-data that asks for it outranks /etc/cloud/cloud.cfg.d, so a drop-in
+# cannot turn it off. The marker stops cloud-init at its generator, as the
+# Ubuntu installer does on the nodes installed from the ISO. force: false
+# leaves an existing marker as it is.
+- name: Stop cloud-init where it rewrites /etc/hosts at boot
+  copy:
+    dest: /etc/cloud/cloud-init.disabled
+    content: "Disabled by the base_system role: it rewrote /etc/hosts at every boot (#2777).\n"
+    owner: root
+    group: root
+    mode: "0644"
+    force: false
+  when: base_system_disable_cloud_init | bool
+
 - name: Ensure hostname resolves locally
   lineinfile:
     path: /etc/hosts
