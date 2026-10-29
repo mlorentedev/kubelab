@@ -269,13 +269,13 @@ sudo tailscale down && sudo tailscale up --login-server=https://vpn.kubelab.live
 **Automatic fix** (already deployed):
 1. **Corefile**: `vpn.kubelab.live` resolves to public IP `162.55.57.175` (not Tailscale IP)
 2. **`/etc/hosts` on RPi4**: `162.55.57.175 vpn.kubelab.live` as permanent fallback
-3. **Systemd watchdog**: `tailscale-watchdog.timer` auto-reconnects every 5 min
+3. **Systemd watchdog**: `tailscale-watchdog.timer` runs `tailscale up` every 5 min when the node is stopped or logged out. The `tailscale` role renders it with its own flags (`tailscale_watchdog`, on in `provision-rpi4.yml`), bounded so a run with no route out gives up after 60 s instead of holding the boot (#2675).
 
-**Manual fix** (if all else fails):
+**Manual fix** (if all else fails): `make headscale-rejoin NODE=rpi4` registers the node with every flag its play declares and a single-use key. By hand:
 ```bash
 # SSH to RPi4 via LAN (172.16.1.1)
 echo "162.55.57.175 vpn.kubelab.live" | sudo tee -a /etc/hosts
-sudo tailscale up --login-server=https://vpn.kubelab.live --accept-dns=false --advertise-routes=172.16.1.0/24
+sudo tailscale up --reset --login-server=https://vpn.kubelab.live --accept-dns=false --accept-routes=false --advertise-routes=172.16.1.0/24
 # After connected, remove temporary entry (if not using permanent /etc/hosts)
 sudo sed -i '/162.55.57.175 vpn.kubelab.live/d' /etc/hosts
 ```
@@ -301,7 +301,7 @@ All changes below survive reboot:
 | RPi4 `--accept-dns=false` | Tailscale remembers flags | Persists across restarts |
 | RPi4 resolv.conf | `chattr +i` protected | Immutable |
 | RPi4 `/etc/hosts` vpn entry | `162.55.57.175 vpn.kubelab.live` | Bootstrap fallback |
-| RPi4 Tailscale watchdog | `tailscale-watchdog.timer` (systemd, enabled) | Auto-reconnects every 5 min |
+| RPi4 Tailscale watchdog | `tailscale-watchdog.timer`, rendered by the `tailscale` role | Re-runs `tailscale up` every 5 min when stopped or logged out |
 
 ## Files in repo
 
