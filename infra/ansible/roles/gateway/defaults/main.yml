@@ -29,6 +29,7 @@ gateway_ap_reservations: null
 gateway_dhcp_range_start: "172.16.1.50"
 gateway_dhcp_range_end: "172.16.1.150"
 gateway_dhcp_lease: "12h"
+# The edge's own resolvers (resolv.conf). Not its clients': they get Pi-hole.
 gateway_dns_servers: "8.8.8.8,1.1.1.1"
 # Reports the uplink as up, behind a portal or dead; `make edge-status` runs it.
 gateway_status_path: "/usr/local/sbin/kubelab-edge-status"
