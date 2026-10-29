@@ -120,7 +120,10 @@ ace2 is behind the lab edge, so the Open WebUI pull is sized first against
 takes over an hour at the edge's downlink, past the 30 minute budget, and the
 play stops before pulling with the estimate. Rerun with
 `EXTRA='image_pull_allow_slow=true'` to pull anyway; each attempt is bounded by
-twice the estimate and retried twice. An image ace2 already holds costs nothing.
+twice the estimate and retried twice. An image ace2 already holds costs nothing,
+so its pull gets 300 s: if that tag has moved and the pull times out, rerun with
+`EXTRA='image_pull_timeout_seconds=<seconds>'`, which bounds each attempt
+outright.
 
 `CHECK=1` runs it in check mode and changes nothing. It still prints the
 estimate.

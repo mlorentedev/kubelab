@@ -114,6 +114,12 @@ def test_a_pull_past_the_budget_is_refused_unless_the_run_allows_it():
     assert _decide(2970, 0) == (True, 300), "a held image still gets a bound"
 
 
+def test_an_explicit_timeout_bounds_the_pull_whatever_the_estimate():
+    """The lever when the estimate is wrong: a held tag counts 0, and gets 300 s."""
+    assert _decide(2970, 0, image_pull_timeout_seconds="5400") == (True, 5400)
+    assert _decide(0, OPEN_WEBUI_BYTES, image_pull_timeout_seconds=900) == (True, 900)
+
+
 def test_a_node_outside_the_edge_is_not_estimated_and_keeps_a_fixed_bound():
     assert _decide(0, OPEN_WEBUI_BYTES) == (True, 3600)
     assert "image_pull_down_kbit | default(0) | int > 0" in _tasks()["Estimate the download of"]["when"]
