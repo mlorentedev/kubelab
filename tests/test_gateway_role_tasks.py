@@ -394,6 +394,19 @@ def test_the_path_is_read_on_the_controller_before_any_role() -> None:
         assert task.get("when") == address_task.get("when"), task.get("name")
 
 
+def test_the_session_from_before_the_read_is_closed_before_the_verdict() -> None:
+    """A refused run's session outlives it under a socket name every run shares; once
+    `make edge-lan-link` moves the route, the rerun would hang on it (#2801)."""
+    read, _, check, _ = _route_guard()
+    tasks = _edge_play().get("pre_tasks", [])
+    resets = [i for i, t in enumerate(tasks) if t.get("meta") == "reset_connection"]
+    assert len(resets) == 1 and read < resets[0] < check, (read, resets, check)
+    reset = tasks[resets[0]]
+    # Ansible ignores `when` on this meta task, with a warning: a condition would read as one.
+    assert "when" not in reset
+    assert "always" in reset.get("tags", [])
+
+
 def test_the_refusal_names_the_way_out() -> None:
     _, _, _, guard = _route_guard()
     message = guard["assert"]["fail_msg"]

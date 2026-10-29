@@ -105,6 +105,15 @@
         - "'gateway' not in ansible_skip_tags"
       tags: [always]
 
+    # The session already open was opened on the path the facts came over, and
+    # Ansible keeps it for 60 s under one socket name that every run shares. Left
+    # open on the tailnet, it strands when `make edge-lan-link` moves the route,
+    # and the rerun the refusal asks for hangs on it (#2801). Closed here, the
+    # next task opens one on the path just read. A meta task takes no `when`.
+    - name: Close the session opened before the path was read
+      meta: reset_connection
+      tags: [always]
+
     - name: Check that the run's packets leave by the homelab LAN
       assert:
         that: not (_edge_route.stdout | from_json).tailnet
