@@ -729,3 +729,43 @@ def test_the_makefile_target_calls_the_command() -> None:
     target = re.search(r"^edge-boot-check:.*\n((?:\t.*\n)+)", makefile, re.M)
     assert target, "no edge-boot-check target"
     assert "infra edge boot-check $(if $(CASE),--case $(CASE)) $(if $(VIA),--via $(VIA))" in target.group(1)
+
+
+def _edge_at(address: str, tailnet: str) -> dict[str, Any]:
+    (name,) = [n for n, node in NETWORKING["nodes"].items() if "gateway" in (node.get("ansible_groups") or [])]
+    nodes = {**NETWORKING["nodes"], name: {**NETWORKING["nodes"][name], "lan_ip": address, "tailscale_ip": address}}
+    return {**NETWORKING, "nodes": nodes, "tailscale_cidr": tailnet}
+
+
+@pytest.mark.parametrize(("tailnet", "on_it"), [("127.0.0.0/8", True), ("100.64.0.0/10", False)])
+def test_the_check_reads_the_path_the_way_the_edge_play_does(tailnet: str, on_it: bool) -> None:
+    from toolkit.features.edge_status import path_to_edge
+
+    assert path_to_edge(_edge_at("127.0.0.1", tailnet)) == {"source": "127.0.0.1", "tailnet": on_it}
+
+
+@pytest.mark.parametrize(
+    ("via", "tailnet", "said"),
+    [
+        ("lan", True, "does not show that the LAN path works"),
+        ("lan", False, "over the LAN"),
+        ("tailnet", True, "over the tailnet"),
+    ],
+)
+def test_the_command_says_which_path_it_took(via: str, tailnet: bool, said: str) -> None:
+    """#2801: a pass over the tailnet was read as a pass over the LAN."""
+    from typer.testing import CliRunner
+
+    from toolkit.cli.infra import app
+
+    path = {"source": "192.0.2.10", "tailnet": tailnet}
+    with (
+        mock.patch("toolkit.features.edge_status.path_to_edge", return_value=path),
+        mock.patch("toolkit.features.edge_status.subprocess.run") as run,
+        mock.patch("toolkit.cli.infra.logger") as logger,
+    ):
+        run.return_value = subprocess.CompletedProcess([], 0)
+        result = CliRunner().invoke(app, ["edge", "boot-check", "--via", via])
+    assert result.exit_code == 0
+    logged = " ".join(str(c.args[0]) for c in [*logger.info.call_args_list, *logger.warning.call_args_list])
+    assert said in logged, logged

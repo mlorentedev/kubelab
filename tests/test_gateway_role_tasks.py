@@ -13,7 +13,10 @@
 from __future__ import annotations
 
 import ipaddress
+import json
 import re
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -339,6 +342,62 @@ def test_the_guard_covers_every_run_that_applies_the_gateway(run: list[str], ski
     """The scope the role's own assert had: a run that leaves the gateway role out changes no uplink."""
     _, guard = _lan_guard()
     assert task_runs(guard, {"ansible_run_tags": run, "ansible_skip_tags": skip}) is guarded
+
+
+ROUTE_SOURCE = ANSIBLE / "playbooks" / "files" / "route-source.py"
+
+
+def _route_source(destination: str, tailnet: str) -> dict[str, Any]:
+    out = subprocess.run([sys.executable, str(ROUTE_SOURCE), destination, tailnet], capture_output=True, check=True)
+    return json.loads(out.stdout)
+
+
+@pytest.mark.parametrize(("tailnet", "on_it"), [(NETWORKING["tailscale_cidr"], False), ("127.0.0.0/8", True)])
+def test_the_path_is_read_from_the_source_address_the_kernel_picks(tailnet: str, on_it: bool) -> None:
+    assert _route_source("127.0.0.1", tailnet) == {"source": "127.0.0.1", "tailnet": on_it}
+
+
+def _route_guard() -> tuple[int, dict[str, Any], int, dict[str, Any]]:
+    tasks = _edge_play().get("pre_tasks", [])
+    read = next(i for i, t in enumerate(tasks) if "route-source.py" in str(t))
+    check = next(i for i, t in enumerate(tasks) if "_edge_route" in str(t.get("assert")))
+    return read, tasks[read], check, tasks[check]
+
+
+def _route_holds(tailnet: bool) -> bool:
+    _, _, _, guard = _route_guard()
+    that = guard["assert"]["that"]
+    env = ansible_env(".")
+    route = {"stdout": json.dumps({"source": "192.0.2.10", "tailnet": tailnet})}
+    return all(
+        env.compile_expression(check)(_edge_route=route) for check in (that if isinstance(that, list) else [that])
+    )
+
+
+def test_a_run_whose_packets_ride_the_tailnet_is_refused() -> None:
+    """#2801. The address check passed while the session rode the tailnet: the
+    controller accepted the edge's subnet route, which Tailscale looks up first."""
+    assert _route_holds(tailnet=False)
+    assert not _route_holds(tailnet=True)
+
+
+def test_the_path_is_read_on_the_controller_before_any_role() -> None:
+    address, _ = _lan_guard()
+    read, read_task, check, check_task = _route_guard()
+    assert address < read < check, (address, read, check)
+    assert read_task.get("delegate_to") == "localhost"
+    assert read_task.get("become") is False
+    assert read_task.get("check_mode") is False, "a dry run must refuse the same path"
+    _, address_task = _lan_guard()
+    for task in (read_task, check_task):
+        assert "always" in task.get("tags", []), task.get("name")
+        assert task.get("when") == address_task.get("when"), task.get("name")
+
+
+def test_the_refusal_names_the_way_out() -> None:
+    _, _, _, guard = _route_guard()
+    message = guard["assert"]["fail_msg"]
+    assert all(part in message for part in ("ERROR:", "WHY:", "FIX:", "make edge-lan-link", "--accept-routes=false"))
 
 
 def test_the_role_keeps_no_second_copy_of_the_guard() -> None:
