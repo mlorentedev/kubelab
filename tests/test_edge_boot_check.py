@@ -293,6 +293,20 @@ BROKEN = {
         f"wait for {UPLINK} at boot bounded",
     ),
     "adapter wait unreadable": (lambda e: e.remove(f"show_JobRunningTimeoutUSec_{DEVICE}"), "at boot bounded"),
+    # Compared as durations: a wait longer than the default, or the default spelled
+    # another way, is not a bound.
+    "adapter wait past systemd's default": (
+        lambda e: e.write(f"show_JobRunningTimeoutUSec_{DEVICE}", "2min\n"),
+        f"wait for {UPLINK} at boot bounded",
+    ),
+    "adapter wait at the default, written another way": (
+        lambda e: e.write(f"show_JobRunningTimeoutUSec_{DEVICE}", "90s\n"),
+        f"wait for {UPLINK} at boot bounded",
+    ),
+    "systemd's default unreadable": (
+        lambda e: e.remove("show_DefaultDeviceTimeoutUSec_manager"),
+        f"wait for {UPLINK} at boot bounded",
+    ),
     "no lease": (lambda e: e.remove(f"addr_{UPLINK}"), "lease on"),
     "no default route": (lambda e: e.remove(f"route_{UPLINK}"), "default route"),
     "tailnet stopped": (lambda e: e.tailnet(state="Stopped", routes=[LAN_CIDR]), "tailnet session"),
@@ -501,6 +515,15 @@ def test_without_the_uplink_adapter_an_unbounded_wait_for_it_fails(edge: Edge) -
     assert result.returncode == 1
     (failure,) = _failures(result)
     assert f"wait for {UPLINK} at boot bounded (1min 30s; systemd's default 1min 30s)" in failure
+
+
+def test_a_wait_shorter_than_the_default_is_bounded_in_any_unit(edge: Edge) -> None:
+    edge.write(f"show_JobRunningTimeoutUSec_{DEVICE}", "1min 29.500000s\n")
+    result = edge.run()
+    assert result.returncode == 0, result.stdout
+    assert f"OK   wait for {UPLINK} at boot bounded (1min 29.500000s; systemd's default 1min 30s)" in (
+        result.stdout.splitlines()
+    )
 
 
 def test_the_wait_it_reads_is_the_one_the_role_bounds() -> None:

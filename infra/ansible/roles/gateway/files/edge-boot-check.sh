@@ -92,8 +92,30 @@ network=$(since_boot ActiveEnterTimestampMonotonic network.target)
 # from systemd, not from the boot's timing.
 adapter_wait=$(since_boot JobRunningTimeoutUSec "sys-subsystem-net-devices-$uplink.device")
 default_wait=$(systemctl show -p DefaultDeviceTimeoutUSec --value)
+# usec <span>: systemd's spelling of a duration ("1min 30s", "100ms") in
+# microseconds, and nothing for what is not one ("infinity", an empty read).
+usec() {
+  printf '%s\n' "$1" | awk '
+    BEGIN {
+      split("us 1 μs 1 ms 1e3 s 1e6 min 6e7 h 3.6e9 d 8.64e10 w 6.048e11 month 2.6298e12 y 3.15576e13", t, " ")
+      for (i = 1; i in t; i += 2) per[t[i]] = t[i + 1]
+    }
+    {
+      for (i = 1; i <= NF; i++) {
+        if (!match($i, /^[0-9.]+/) || !((unit = substr($i, RLENGTH + 1)) in per)) bad = 1
+        else total += substr($i, 1, RLENGTH) * per[unit]
+      }
+      seen += NF
+    }
+    END { if (seen && !bad) printf "%.0f\n", total }'
+}
+# Compared as durations: a wait at or past the default bounds nothing, however
+# it is spelled, and a default that cannot be read proves nothing.
 wait_bounded() {
-  case $adapter_wait in '' | 0 | infinity | "$default_wait") return 1 ;; esac
+  case $adapter_wait in '' | 0 | infinity) return 1 ;; esac
+  wait_us=$(usec "$adapter_wait")
+  default_us=$(usec "$default_wait")
+  [ -n "$wait_us" ] && [ -n "$default_us" ] && [ "$wait_us" -lt "$default_us" ]
 }
 
 has_carrier() { [ "$(cat "$sys_net/$1/carrier" 2>/dev/null)" = 1 ]; }
