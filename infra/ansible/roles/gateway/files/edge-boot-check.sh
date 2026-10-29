@@ -14,6 +14,8 @@
 # Exit codes:
 #   0   every check passed
 #   1   one or more failed
+#   2   none failed, but one cannot be judged yet: run it again after the
+#       minutes its WAIT line names
 #   64  usage
 #
 # One line per check, and no host address, MAC or key: the output lands in a spec's
@@ -36,12 +38,19 @@ expect=${EDGE_EXPECT:-}
 case $expect in '' | no-uplink | no-lan) ;; *) usage ;; esac
 sys_net=${EDGE_SYS_NET:-/sys/class/net}
 hostapd_dir=${EDGE_HOSTAPD_DIR:-/run/hostapd}
+liveness_dir=${EDGE_LIVENESS_DIR:-/run/kubelab-edge-liveness}
+uptime_file=${EDGE_UPTIME:-/proc/uptime}
 failed=0
+pending=0
 
 pass() { echo "OK   $1"; }
 fail() {
   echo "FAIL $1"
   failed=1
+}
+wait_for() {
+  echo "WAIT $1"
+  pending=1
 }
 
 # check <name> <command...>: the command's status decides.
@@ -125,6 +134,33 @@ pages() {
   systemctl is-failed --quiet "$1"
 }
 
+# The liveness check tolerates a missing uplink for EDGE_LIVENESS_GRACE misses in a
+# row, a minute apart, and its timer first runs minutes after boot. Until the last
+# of those runs, an edge without its uplink is behaving as designed (#2774). Prints
+# how long to wait, from the misses counted, the grace in the unit's own
+# environment and, before its first run, the timer's schedule in microseconds
+# since boot. A grace it cannot read, or a run that never ended ($1, the polls
+# `pages` made of the reporter), is not waited for.
+liveness_pending() {
+  [ "$1" -lt 60 ] || return 1
+  grace=$(systemctl show -p Environment --value "$reporter" | tr ' ' '\n' | sed -n 's/^EDGE_LIVENESS_GRACE=//p')
+  case $grace in '' | *[!0-9]* | 0) return 1 ;; esac
+  misses=$(cat "$liveness_dir/uplink.misses" 2>/dev/null)
+  case $misses in '' | *[!0-9]*) misses=0 ;; esac
+  [ "$misses" -lt "$grace" ] || return 1
+  # One run a minute until the grace-th miss; the first run counts the first.
+  left=$((grace - misses))
+  if [ "$misses" -eq 0 ]; then
+    next=$(busctl get-property org.freedesktop.systemd1 \
+      /org/freedesktop/systemd1/unit/kubelab_2dedge_2dliveness_2etimer \
+      org.freedesktop.systemd1.Timer NextElapseUSecMonotonic | awk '{ print $2 }')
+    left=$(awk -v next_usec="${next:-0}" -v up="$(cut -d ' ' -f 1 "$uptime_file")" -v runs="$left" 'BEGIN {
+      s = next_usec / 1000000 - up; first = s > 0 ? int((s + 59) / 60) : 0; print first + runs - 1 }')
+  fi
+  [ "$left" -ge 1 ] || left=1
+  echo "$misses of $grace misses counted, and it fails on miss $grace: run the check again in about $left min"
+}
+
 watchdog_armed() {
   usec=$(systemctl show -p RuntimeWatchdogUSec --value)
   [ -n "$usec" ] && [ "$usec" != 0 ]
@@ -173,7 +209,13 @@ reporter=kubelab-edge-liveness.service
 expected=
 if [ "$expect" = no-uplink ]; then
   missing "uplink adapter $uplink" test -e "$sys_net/$uplink"
-  check "$reporter failed on the missing uplink" pages "$reporter"
+  if pages "$reporter"; then
+    pass "$reporter failed on the missing uplink"
+  elif eta=$(liveness_pending "$tries"); then
+    wait_for "$reporter failed on the missing uplink: not yet, $eta"
+  else
+    fail "$reporter failed on the missing uplink"
+  fi
   expected="$reporter $(systemctl show -p OnFailure --value "$reporter")"
 else
   check "lease on $uplink" uplink_lease
@@ -212,4 +254,5 @@ failed_units=$(systemctl --failed --no-legend --plain | awk -v expected="$expect
   !($1 in skip) { printf "%s%s", sep, $1; sep = " " }')
 if [ -z "$failed_units" ]; then pass "no failed unit"; else fail "failed units: $failed_units"; fi
 
+[ "$failed" -eq 1 ] || [ "$pending" -eq 0 ] || exit 2
 exit "$failed"
