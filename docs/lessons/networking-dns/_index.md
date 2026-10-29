@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 650 | [A renamed network device becomes active on its move event, not its add](lesson-650-a-renamed-network-device-becomes-active-on-its-move-event-not-its-add.md) | 2026-10-29 |
 | 648 | [A static address on a link without a carrier is not configured](lesson-648-a-static-address-on-a-link-without-a-carrier-is-not-configured.md) | 2026-10-29 |
 | 646 | [A unit started with networkd never starts for an adapter that appears later](lesson-646-a-unit-started-with-networkd-never-starts-for-an-adapter-that-appears-later.md) | 2026-10-28 |
 | 639 | [Emptying a resolver's cache is not restarting it](lesson-639-emptying-a-resolvers-cache-is-not-restarting-it.md) | 2026-10-27 |
