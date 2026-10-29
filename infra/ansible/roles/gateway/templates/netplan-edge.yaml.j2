@@ -24,7 +24,13 @@ network:
   version: 2
   renderer: networkd
   ethernets:
+    # The switch cable may be out (NET-017, #2732). ignore-carrier keeps the address
+    # and its connected route, so traffic for the LAN dies here instead of following
+    # the default route out of the uplink. optional leaves netplan no interface to
+    # wait for, so boot does not spend two minutes on a cable.
     {{ gateway_interface }}:
+      optional: true
+      ignore-carrier: true
       addresses:
         - "{{ gateway_lan_cidr }}"
 {% if gateway_uplink_kind == 'ethernet' %}

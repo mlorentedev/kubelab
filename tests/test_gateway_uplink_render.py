@@ -38,6 +38,7 @@ def _netplan_or_skip() -> None:
             pytest.fail("netplan not on PATH in CI: the drop-in's directory and the validate command went unchecked")
         pytest.skip("CANNOT CHECK: netplan is not installed")
 
+
 REPO = Path(__file__).resolve().parents[1]
 ROLE = REPO / "infra" / "ansible" / "roles" / "gateway"
 TEMPLATES = ROLE / "templates"
@@ -78,6 +79,16 @@ def _render(template: str, kind: str = "wifi_open") -> str:
 
 def _netplan(kind: str) -> dict[str, Any]:
     return yaml.safe_load(_render("netplan-edge.yaml.j2", kind))["network"]
+
+
+def _generate(kind: str, root: Path) -> Path:
+    """Run `netplan generate` on the rendered file; returns where it writes networkd's units."""
+    (root / "etc" / "netplan").mkdir(parents=True)
+    rendered = root / "etc" / "netplan" / "10-kubelab-edge.yaml"
+    rendered.write_text(_render("netplan-edge.yaml.j2", kind))
+    rendered.chmod(0o600)
+    subprocess.run(["netplan", "generate", "--root-dir", str(root)], check=True, capture_output=True)
+    return root / "run" / "systemd" / "network"
 
 
 def _uplink(kind: str) -> dict[str, Any]:
@@ -124,16 +135,44 @@ def test_the_uplink_has_no_ipv6(kind: str) -> None:
 
 
 @pytest.mark.parametrize("kind", KINDS)
-def test_boot_does_not_wait_for_a_site(kind: str) -> None:
-    assert _uplink(kind)["optional"] is True
-
-
-@pytest.mark.parametrize("kind", KINDS)
 def test_the_lan_renders_static_for_every_kind(kind: str) -> None:
     """The RPi4 has no screen: no profile may take away the recovery path."""
     lan = _netplan(kind)["ethernets"][LAN]
     assert lan["addresses"] == [LAN_CIDR]
     assert not lan.get("dhcp4")
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_the_lan_keeps_its_address_and_route_without_a_cable(kind: str) -> None:
+    """networkd configures no address on a link without a carrier, by default.
+
+    T4 of the hard-reset test measured what that costs (#2732): no LAN address,
+    so no connected route, and LAN traffic from the tailnet left by the uplink.
+    """
+    assert _netplan(kind)["ethernets"][LAN]["ignore-carrier"] is True
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_boot_waits_for_no_interface(kind: str) -> None:
+    """netplan pulls wait-online in for each interface that is not optional.
+
+    On the edge it rendered `-i eth0:degraded` for the LAN alone, and with the
+    switch cable out that failed after two minutes (#2732). The uplink is a site's
+    and the LAN a cable's, so boot waits for neither.
+    """
+    rendered = _netplan(kind)
+    interfaces = {**rendered.get("ethernets", {}), **rendered.get("wifis", {})}
+    assert interfaces, "the guard found no interface"
+    assert {name for name, iface in interfaces.items() if iface.get("optional") is not True} == set()
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_netplan_configures_the_lan_without_a_carrier(kind: str, tmp_path: Path) -> None:
+    """Asked of netplan itself: the key above is the one networkd reads."""
+    _netplan_or_skip()
+    generated = _generate(kind, tmp_path)
+    network = _ini((generated / f"10-netplan-{LAN}.network").read_text())
+    assert network["Network"]["ConfigureWithoutCarrier"] == "yes"
 
 
 @pytest.mark.parametrize("kind", KINDS)
@@ -173,12 +212,7 @@ def test_the_drop_in_sits_beside_the_network_file_netplan_generates() -> None:
 def test_netplan_generates_the_file_the_drop_in_names(kind: str, tmp_path: Path) -> None:
     """Asked of netplan itself: the drop-in's directory is only right if this file exists."""
     _netplan_or_skip()
-    (tmp_path / "etc" / "netplan").mkdir(parents=True)
-    rendered = tmp_path / "etc" / "netplan" / "10-kubelab-edge.yaml"
-    rendered.write_text(_render("netplan-edge.yaml.j2", kind))
-    rendered.chmod(0o600)
-    subprocess.run(["netplan", "generate", "--root-dir", str(tmp_path)], check=True, capture_output=True)
-    generated = tmp_path / "run" / "systemd" / "network"
+    generated = _generate(kind, tmp_path)
     network = _ini((generated / f"10-netplan-{UPLINK}.network").read_text())
     # netplan 1.x writes the legacy `[DHCP]` section, which networkd reads as DHCPv4.
     sections = [network[name] for name in ("DHCP", "DHCPv4") if network.has_section(name)]
