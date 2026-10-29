@@ -16,6 +16,12 @@
 
 The provision also compares the bindings each container asked for with the ones in
 effect and recreates on a difference, through one shared task file.
+
+#2776. The retry must not run inside a start job. systemd records the boot as
+finished only once its job table is empty, and a oneshot waits inside its start
+job, so on a site with no uplink the wait, retried every 30 s, kept a job queued
+most of the time and the boot's end was a matter of chance. The units are `exec`
+units: the job ends once the command runs, and the wait runs in that command.
 """
 
 from __future__ import annotations
@@ -72,12 +78,20 @@ def _directives(path: Path) -> dict[str, list[str]]:
     return out
 
 
+def _waits_for_the_tailnet(value: str) -> bool:
+    return WAIT in value and "tailscale_ip }}" in value
+
+
 def _waiting_units() -> dict[str, dict[str, list[str]]]:
-    """Every unit template that waits for an address before it runs."""
+    """Every unit template that waits for the node's Tailscale address, wherever the wait sits.
+
+    agent-stack-hermes-bind waits for a Docker bridge instead, which the system
+    daemon creates at start with no uplink involved.
+    """
     units = {}
     for path in sorted(ROLES.glob("*/templates/*.service.j2")):
         directives = _directives(path)
-        if any(WAIT in v for v in directives.get("ExecStartPre", [])):
+        if any(_waits_for_the_tailnet(v) for v in directives.get("ExecStartPre", []) + directives.get("ExecStart", [])):
             units[str(path.relative_to(ROLES))] = directives
     return units
 
@@ -95,8 +109,18 @@ def test_every_known_stack_unit_is_found() -> None:
 def test_the_unit_stays_active_after_it_ran(name: str) -> None:
     """Without it the unit goes inactive once ExecStart exits, and the provision's
     `state: started` would recreate a healthy stack on every run."""
-    assert UNITS[name].get("Type") == ["oneshot"], name
     assert UNITS[name].get("RemainAfterExit") == ["yes"], name
+
+
+@pytest.mark.parametrize("name", sorted(UNITS))
+def test_the_wait_runs_outside_the_start_job(name: str) -> None:
+    """#2776. In ExecStartPre, or in a oneshot, the wait holds a job for as long as it runs."""
+    directives = UNITS[name]
+    assert directives.get("Type") == ["exec"], f"{name}: its start job lasts as long as the wait"
+    assert not any(WAIT in v for v in directives.get("ExecStartPre", [])), f"{name}: the wait is in ExecStartPre"
+    (start,) = directives.get("ExecStart", [])
+    assert _waits_for_the_tailnet(start), f"{name}: ExecStart no longer waits for the address"
+    assert start.index(WAIT) < start.index("exec /usr/bin/docker compose"), f"{name}: compose runs before the wait"
 
 
 @pytest.mark.parametrize("name", sorted(UNITS))
@@ -114,7 +138,7 @@ def test_the_unit_recreates_the_stack(name: str) -> None:
 def test_the_unit_never_pulls(name: str) -> None:
     """The provision pulls; the unit only starts what is already on the node.
 
-    A pull cut at TimeoutStartSec ends in a timeout, which `Restart=on-failure`
+    A pull cut at RuntimeMaxSec ends in a timeout, which `Restart=on-failure`
     retries, so a slow link would pull forever and the unit never reach `failed`.
     With `--pull never` a missing image exits 1 (compose 2.39, measured
     2026-10-27), which RestartPreventExitStatus turns into `failed`.
@@ -143,10 +167,33 @@ def test_the_unit_retries_when_the_address_comes_late(name: str) -> None:
 def test_only_the_wait_is_retried(name: str) -> None:
     """A compose error of its own must fail the unit, not recreate the stack every 30 s.
 
-    systemd reads this against ExecStart's exit status only, so an ExecStartPre
-    (the wait) that fails still retries. Measured on systemd 259, 2026-10-26.
+    The wait and compose share ExecStart's exit status, and both scripts fail with
+    1, so the wait's failure is mapped to a status the unit still retries.
     """
     assert UNITS[name].get("RestartPreventExitStatus") == ["1"], name
+    (start,) = UNITS[name].get("ExecStart", [])
+    mapped = re.search(rf"{re.escape(WAIT)} [^|;]*\|\| exit (\d+);", start)
+    assert mapped, f"{name}: a failed wait exits with the status compose fails with"
+    assert mapped.group(1) not in ("0", "1"), f"{name}: a failed wait exits {mapped.group(1)}"
+
+
+def _shipped_units() -> dict[str, dict[str, list[str]]]:
+    return {str(path.relative_to(ROLES)): _directives(path) for path in sorted(ROLES.glob("*/templates/*.service.j2"))}
+
+
+def test_no_shipped_oneshot_is_restarted() -> None:
+    """#2776. A oneshot that restarts waits inside a job on every attempt.
+
+    systemd records the boot as finished only once no job is left, so a oneshot
+    retried until a condition holds keeps a job queued for as long as the condition
+    fails. A retry belongs to an exec unit, whose job ends when its command runs.
+    """
+    units = _shipped_units()
+    assert len(units) > 10, f"only {len(units)} unit templates found; the glob is stale"
+    restarted = [
+        name for name, d in units.items() if d.get("Type") == ["oneshot"] and d.get("Restart", ["no"]) != ["no"]
+    ]
+    assert not restarted, f"oneshot units that restart: {restarted}"
 
 
 def test_every_stack_on_the_tailnet_address_waits_for_it() -> None:
