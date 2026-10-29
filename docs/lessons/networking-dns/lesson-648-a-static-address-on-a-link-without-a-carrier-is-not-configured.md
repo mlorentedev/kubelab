@@ -30,4 +30,4 @@ tags: [kubelab, networking-dns, netplan, systemd, docker, rpi4]
 
 **Rule**: A container port bound to a node address depends on that address existing when Docker starts. A static address meets that only with a carrier, and a Tailscale address only after tailscaled. Publish bare or on loopback. A boot wait follows from which interfaces are not optional, so an interface the host can run without is `optional`.
 
-**Tags**: `#net-017` `#net-005` `#netplan` `#docker` `#pr-TBD`
+**Tags**: `#net-017` `#net-005` `#netplan` `#docker` `#pr-2769`
