@@ -197,6 +197,12 @@ def test_a_healthy_boot_passes_every_check(edge: Edge) -> None:
     assert "INFO ruleset loaded at 9.6s, systemd-networkd started at 15.5s" in result.stdout
 
 
+def test_a_route_line_that_ends_at_its_prefix_still_counts(edge: Edge) -> None:
+    """The prefix is matched as a field, so it need not be followed by anything."""
+    edge.write(f"route_exact_{LAN}", f"{LAN_CIDR}\n")
+    assert not _failures(edge.run())
+
+
 def _stop(unit: str) -> Any:
     return lambda edge: edge.remove(f"active/{unit}")
 
@@ -221,6 +227,8 @@ BROKEN = {
     "coredns on no network": (lambda e: e.write("ports_coredns", "3:0\n"), "container coredns publishes"),
     "pihole on no network": (lambda e: e.write("ports_pihole", "3:0\n"), "container pihole publishes"),
     "coredns gone": (lambda e: e.remove("ports_coredns"), "container coredns publishes"),
+    # No mapping at all is a compose that lost its ports, not a container with none to publish.
+    "coredns publishes nothing": (lambda e: e.write("ports_coredns", "0:0\n"), "container coredns publishes"),
     "no LAN route": (lambda e: e.remove(f"route_exact_{LAN}"), "route to"),
     "a route for another prefix": (
         lambda e: e.write(f"route_exact_{LAN}", f"172.16.10.0/24 proto kernel scope link src {LAN_ADDRESS}\n"),

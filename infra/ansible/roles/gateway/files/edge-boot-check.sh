@@ -80,7 +80,7 @@ has_carrier() { [ "$(cat "$sys_net/$1/carrier" 2>/dev/null)" = 1 ]; }
 unplugged() { [ "$(cat "$sys_net/$1/carrier" 2>/dev/null)" = 0 ]; }
 lan_address_set() { ip -4 -o addr show dev "$lan" | grep -q " $lan_address/"; }
 # Without it, traffic for the LAN takes the default route out of the uplink.
-lan_route() { ip -4 route show exact "$lan_cidr" dev "$lan" | grep -qF "$lan_cidr "; }
+lan_route() { ip -4 route show exact "$lan_cidr" dev "$lan" | awk -v cidr="$lan_cidr" '$1 == cidr { found = 1 } END { exit !found }'; }
 uplink_lease() { ip -4 -o addr show dev "$uplink" scope global | grep -q ' inet '; }
 default_route() { ip -4 route show default dev "$uplink" | grep -q '^default'; }
 # hostapd reports ENABLED once the AP beacons, not when the radio is merely in AP mode.
@@ -100,9 +100,11 @@ container_up() {
 
 # A start that failed on a bind leaves the container on no network: ports
 # requested, none in effect, and dockerd restores it so at every boot (#2732).
+# Both containers checked here publish ports, so none requested is a mapping
+# dropped from the compose, not a container with nothing to publish.
 ports_in_effect() {
   case $(sudo -n docker inspect -f '{{len .HostConfig.PortBindings}}:{{len .NetworkSettings.Ports}}' "$1") in
-    '' | [1-9]*:0) return 1 ;;
+    '' | 0:* | [1-9]*:0) return 1 ;;
   esac
   return 0
 }
