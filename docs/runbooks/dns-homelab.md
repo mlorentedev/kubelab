@@ -268,7 +268,7 @@ sudo tailscale down && sudo tailscale up --login-server=https://vpn.kubelab.live
 
 **Automatic fix** (already deployed):
 1. **Corefile**: `vpn.kubelab.live` resolves to public IP `162.55.57.175` (not Tailscale IP)
-2. **`/etc/hosts` on RPi4**: `162.55.57.175 vpn.kubelab.live` as permanent fallback
+2. **`/etc/hosts` on RPi4**: `162.55.57.175 vpn.kubelab.live` as permanent fallback, in the `dns_resilience` block. cloud-init is off on the edge (`base_system_disable_cloud_init`, on in `provision-rpi4.yml`), so a reboot no longer rewrites the file and drops the block (#2777)
 3. **Systemd watchdog**: `tailscale-watchdog.timer` runs `tailscale up` every 5 min when the node is stopped or logged out. The `tailscale` role renders it with its own flags (`tailscale_watchdog`, on in `provision-rpi4.yml`), bounded so a run with no route out gives up after 60 s instead of holding the boot (#2675).
 
 **Manual fix** (if all else fails): `make headscale-rejoin NODE=rpi4` registers the node with every flag its play declares and a single-use key. By hand:
@@ -300,7 +300,7 @@ All changes below survive reboot:
 | Headscale split DNS | In `/opt/headscale/config/config.yaml` | File on disk |
 | RPi4 `--accept-dns=false` | Tailscale remembers flags | Persists across restarts |
 | RPi4 resolv.conf | `chattr +i` protected | Immutable |
-| RPi4 `/etc/hosts` vpn entry | `162.55.57.175 vpn.kubelab.live` | Bootstrap fallback |
+| RPi4 `/etc/hosts` vpn entry | `162.55.57.175 vpn.kubelab.live`, in the `dns_resilience` block | Survives a reboot because cloud-init is off on the edge (`/etc/cloud/cloud-init.disabled`, #2777) |
 | RPi4 Tailscale watchdog | `tailscale-watchdog.timer`, rendered by the `tailscale` role | Re-runs `tailscale up` every 5 min when stopped or logged out |
 
 ## Files in repo
