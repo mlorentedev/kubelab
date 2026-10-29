@@ -90,7 +90,7 @@ def test_no_published_port_binds_to_a_tailscale_address():
     )
 
 
-def test_the_lan_address_the_compose_relies_on_exists_in_the_ssot():
+def test_the_compose_hardcodes_no_lan_address():
     """Guard against fixing the race by inventing an address.
 
     The stack binds no LAN address since #2732. Hardcoding one here would
