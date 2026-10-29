@@ -797,11 +797,13 @@ def _edge_at(address: str, tailnet: str) -> dict[str, Any]:
     return {**NETWORKING, "nodes": nodes, "tailscale_cidr": tailnet}
 
 
-@pytest.mark.parametrize(("tailnet", "on_it"), [("127.0.0.0/8", True), ("100.64.0.0/10", False)])
+# Sent to 127.0.0.2 from 127.0.0.1: each range holds only one of the two, so reading
+# the destination instead of the source answers the opposite.
+@pytest.mark.parametrize(("tailnet", "on_it"), [("127.0.0.1/32", True), ("127.0.0.2/32", False)])
 def test_the_check_reads_the_path_the_way_the_edge_play_does(tailnet: str, on_it: bool) -> None:
     from toolkit.features.edge_status import path_to_edge
 
-    assert path_to_edge(_edge_at("127.0.0.1", tailnet)) == {"source": "127.0.0.1", "tailnet": on_it}
+    assert path_to_edge(_edge_at("127.0.0.2", tailnet)) == {"source": "127.0.0.1", "tailnet": on_it}
 
 
 @pytest.mark.parametrize(

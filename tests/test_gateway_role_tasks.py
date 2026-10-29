@@ -352,9 +352,11 @@ def _route_source(destination: str, tailnet: str) -> dict[str, Any]:
     return json.loads(out.stdout)
 
 
-@pytest.mark.parametrize(("tailnet", "on_it"), [(NETWORKING["tailscale_cidr"], False), ("127.0.0.0/8", True)])
+# The kernel sends to 127.0.0.2 from 127.0.0.1, so source and destination differ and
+# each range holds one of them: a check that read the destination answers the opposite.
+@pytest.mark.parametrize(("tailnet", "on_it"), [("127.0.0.1/32", True), ("127.0.0.2/32", False)])
 def test_the_path_is_read_from_the_source_address_the_kernel_picks(tailnet: str, on_it: bool) -> None:
-    assert _route_source("127.0.0.1", tailnet) == {"source": "127.0.0.1", "tailnet": on_it}
+    assert _route_source("127.0.0.2", tailnet) == {"source": "127.0.0.1", "tailnet": on_it}
 
 
 def _route_guard() -> tuple[int, dict[str, Any], int, dict[str, Any]]:
