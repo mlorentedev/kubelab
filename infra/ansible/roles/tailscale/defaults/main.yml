@@ -9,3 +9,8 @@ tailscale_auth_key: ""
 tailscale_mint_key: false
 tailscale_headscale_host: kubelab-vps
 tailscale_headscale_user_id: ""
+# Re-run `tailscale up` every 5 minutes when the node reports itself stopped or
+# logged out (#2675). Off by default: the edge's play turns it on, the node the
+# lab's DNS and its LAN route depend on. Off also removes a watchdog a node
+# already has.
+tailscale_watchdog: false

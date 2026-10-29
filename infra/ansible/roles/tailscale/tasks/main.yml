@@ -88,15 +88,21 @@
   no_log: true
 
 # --reset drops every flag it is not given (tailscale/tailscale#5597), so each
-# non-default flag the play declares has to be here.
-- name: Build Tailscale up command
+# non-default flag the play declares has to be here. No key: the watchdog's unit
+# is rendered from these as well.
+- name: Build the Tailscale up flags
   set_fact:
-    tailscale_up_cmd: >-
-      tailscale up --reset
+    tailscale_up_flags: >-
+      --reset
       --login-server={{ tailscale_headscale_url }}
       --accept-dns={{ tailscale_accept_dns | lower }}
       --accept-routes={{ tailscale_accept_routes | lower }}
       {% if tailscale_advertise_routes %}--advertise-routes={{ tailscale_advertise_routes }}{% endif %}
+
+- name: Build Tailscale up command
+  set_fact:
+    tailscale_up_cmd: >-
+      tailscale up {{ tailscale_up_flags }}
       {% if _tailscale_key %}--authkey={{ _tailscale_key }}{% endif %}
   no_log: "{{ _tailscale_key != '' }}"
 
@@ -132,3 +138,59 @@
   changed_when: false
   failed_when: false
   check_mode: false
+
+# The watchdog runs `tailscale up` with this role's flags, so a flag the play
+# changes reaches it on the next provision. It was made by hand on the edge
+# before any role owned it; these paths replace those files in place.
+- name: Install the Tailscale watchdog
+  template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: [tailscale-watchdog.service, tailscale-watchdog.timer]
+  when: tailscale_watchdog | bool
+
+# Only the timer is started. Starting the service would run `tailscale up` inside
+# the provision, which on a node off the mesh waits out its whole timeout.
+- name: Enable and start the Tailscale watchdog timer
+  systemd:
+    name: tailscale-watchdog.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  # A dry run on a node without the unit wrote no file for systemd to find.
+  when:
+    - tailscale_watchdog | bool
+    - not ansible_check_mode
+
+# Off removes what on installed. Ansible is additive, so turning the var off
+# would otherwise leave the timer running `tailscale up --reset` every 5 minutes.
+- name: Look for a Tailscale watchdog on a node that has it off
+  stat:
+    path: /etc/systemd/system/tailscale-watchdog.timer
+  register: _tailscale_watchdog_timer
+  when: not (tailscale_watchdog | bool)
+
+- name: Stop the Tailscale watchdog timer where it is off
+  systemd:
+    name: tailscale-watchdog.timer
+    enabled: false
+    state: stopped
+  when:
+    - not (tailscale_watchdog | bool)
+    - _tailscale_watchdog_timer.stat.exists | default(false)
+
+- name: Remove the Tailscale watchdog where it is off
+  file:
+    path: "/etc/systemd/system/{{ item }}"
+    state: absent
+  loop: [tailscale-watchdog.service, tailscale-watchdog.timer]
+  register: _tailscale_watchdog_removed
+  when: not (tailscale_watchdog | bool)
+
+- name: Reload systemd after removing the Tailscale watchdog
+  systemd:
+    daemon_reload: true
+  when: _tailscale_watchdog_removed is changed

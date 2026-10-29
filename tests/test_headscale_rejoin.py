@@ -174,8 +174,10 @@ def _play_vars(node: str) -> dict[str, Any]:
 
 
 def _up_command(node: str, key: str) -> str:
+    """The two set_facts in order: the flags, then the command around them."""
+    flags = _render(_task("Build the Tailscale up flags")["set_fact"]["tailscale_up_flags"], **_play_vars(node))
     template = _task("Build Tailscale up command")["set_fact"]["tailscale_up_cmd"]
-    return " ".join(_render(template, **_play_vars(node), _tailscale_key=key).split())
+    return " ".join(_render(template, tailscale_up_flags=flags, _tailscale_key=key).split())
 
 
 def test_the_edge_rejoins_with_every_flag_its_play_declares() -> None:
