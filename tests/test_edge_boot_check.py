@@ -69,6 +69,12 @@ FAKES = {
     for f in "$FAKE"/failed/*; do [ -f "$f" ] && echo "${f##*/} loaded failed failed x"; done
     true ;;
   "list-jobs --no-legend") cat "$FAKE/jobs" 2>/dev/null; true ;;
+  # Starting while jobs are queued, degraded once finished with a failed unit.
+  "is-system-running ")
+    if [ -f "$FAKE/system" ]; then cat "$FAKE/system"
+    elif [ -f "$FAKE/jobs" ]; then echo starting
+    elif ls "$FAKE"/failed/* >/dev/null 2>&1; then echo degraded
+    else echo running; fi ;;
   *) exit 2 ;;
 esac
 """,
@@ -103,7 +109,13 @@ class Edge:
     def __init__(self, root: Path) -> None:
         self.fake, self.bin, self.net = root / "fake", root / "bin", root / "net"
         self.liveness, self.uptime = root / "liveness", root / "uptime"
-        for directory in (self.fake / "active", self.fake / "failed", self.fake / "activating", self.bin, self.liveness):
+        for directory in (
+            self.fake / "active",
+            self.fake / "failed",
+            self.fake / "activating",
+            self.bin,
+            self.liveness,
+        ):
             directory.mkdir(parents=True)
         for name, body in FAKES.items():
             (self.bin / name).write_text(f"#!/bin/sh\n{body}")
@@ -211,6 +223,7 @@ def test_a_healthy_boot_passes_every_check(edge: Edge) -> None:
     assert result.returncode == 0, result.stdout
     assert not _failures(result)
     assert result.stdout.startswith("INFO Startup finished")
+    assert "OK   boot finished" in result.stdout.splitlines()
     assert "INFO ruleset loaded at 9.6s, systemd-networkd started at 15.5s" in result.stdout
 
 
@@ -350,13 +363,71 @@ def test_a_page_that_failed_for_a_unit_no_timer_started_still_fails(edge: Edge) 
 
 def test_an_unfinished_boot_names_what_it_still_waits_for(edge: Edge) -> None:
     """`systemd-analyze time` prints nothing until the boot finishes, which left the
-    first line empty after every boot without the uplink (#2675)."""
+    first line empty after every boot without the uplink (#2675). The hand-made
+    watchdog was a oneshot with no start timeout, so its job could hold the boot
+    for good (lesson-653), and the check now says so."""
     edge.write("jobs", "123 tailscale-watchdog.service start running\n130 multi-user.target start waiting\n")
+    edge.write("show_TimeoutStartUSec_tailscale-watchdog.service", "infinity\n")
     result = edge.run()
     assert result.stdout.splitlines()[0] == (
         "INFO boot not finished, jobs still queued: tailscale-watchdog.service multi-user.target"
     )
-    assert result.returncode == 0, result.stdout
+    assert _failures(result) == ["FAIL boot finished: held by tailscale-watchdog.service, with no start timeout"]
+    assert result.returncode == 1, result.stdout
+
+
+def test_a_boot_held_by_jobs_that_end_on_their_own_is_waited_for(edge: Edge) -> None:
+    """A timer can join a boot that is still running, so the check names each running
+    job with the timeout that ends it rather than judging the boot by the clock."""
+    edge.write(
+        "jobs",
+        "140 node-backup-ship.service start running\n"
+        "141 kubelab-edge-liveness.service start running\n"
+        "130 multi-user.target start waiting\n",
+    )
+    edge.write("show_TimeoutStartUSec_node-backup-ship.service", "10min\n")
+    edge.write("show_TimeoutStartUSec_kubelab-edge-liveness.service", "5min\n")
+    result = edge.run()
+    assert not _failures(result), result.stdout
+    assert (
+        "WAIT boot finished: not yet, running node-backup-ship.service (10min), "
+        "kubelab-edge-liveness.service (5min): run the check again after the longest"
+    ) in result.stdout.splitlines()
+    assert result.returncode == 2, result.stdout
+
+
+@pytest.mark.parametrize(
+    "job",
+    [
+        "150 kubelab-edge-lease-check.service start waiting",
+        "151 dev-sda1.device start running",
+        "152 kubelab-edge-lease-check.service stop running",
+    ],
+)
+def test_only_a_running_service_start_job_is_judged(edge: Edge, job: str) -> None:
+    """A waiting job has not started, and a device or a stop has no start timeout."""
+    edge.write("jobs", f"{job}\n")
+    for unit in ("kubelab-edge-lease-check.service", "dev-sda1.device"):
+        edge.write(f"show_TimeoutStartUSec_{unit}", "infinity\n")
+    result = edge.run()
+    assert not _failures(result), result.stdout
+    assert "WAIT boot finished: not yet, running no start job: run the check again after the longest" in result.stdout
+    assert result.returncode == 2
+
+
+def test_a_finished_boot_with_a_failed_unit_is_finished(edge: Edge) -> None:
+    """`degraded` is reported only once the boot has finished; the failed unit is
+    judged by its own check."""
+    edge.write("failed/stray.service", "")
+    result = edge.run()
+    assert "OK   boot finished" in result.stdout.splitlines()
+    assert _failures(result) == ["FAIL failed units: stray.service"]
+
+
+@pytest.mark.parametrize("system", ["maintenance", "stopping", ""])
+def test_a_system_neither_booting_nor_up_fails(edge: Edge, system: str) -> None:
+    edge.write("system", f"{system}\n")
+    assert _failures(edge.run()) == [f"FAIL boot finished: the system is {system or 'unknown'}"]
 
 
 def test_a_startup_time_that_cannot_be_read_is_not_an_unfinished_boot(edge: Edge) -> None:
@@ -461,8 +532,8 @@ def test_the_wait_reads_what_the_role_deploys() -> None:
     runtime = re.search(r"^RuntimeDirectory=(\S+)$", unit, re.M).group(1)
     assert f"EDGE_LIVENESS_DIR:-/run/{runtime}}}" in script
     liveness = (ROLE / "files" / "edge-liveness.sh").read_text()
-    assert 'miss uplink' in liveness
-    assert 'run_dir=${RUNTIME_DIRECTORY:' in liveness
+    assert "miss uplink" in liveness
+    assert "run_dir=${RUNTIME_DIRECTORY:" in liveness
     assert 'echo "$count" >"$run_dir/$1.misses"' in liveness
     timer = LIVENESS.replace(".service", ".timer")
     escaped = "".join(c if c.isalnum() else f"_{ord(c):02x}" for c in timer)
