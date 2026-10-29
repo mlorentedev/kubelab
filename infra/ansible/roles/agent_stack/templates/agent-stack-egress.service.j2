@@ -8,6 +8,9 @@ Before=user@{{ _agent_stack_agent_uid }}.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+# nft loads one file in milliseconds. A oneshot has no start timeout unless it
+# sets one, and its start job holds the boot for as long as it runs (#2786).
+TimeoutStartSec=30
 ExecStart=/usr/sbin/nft -f {{ agent_stack_egress_table }}
 # A change is applied by reload, never restart: restarting this unit restarts
 # the user manager that requires it, and the agent's gateway with it. The file

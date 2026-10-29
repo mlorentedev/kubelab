@@ -12,6 +12,9 @@ OnSuccess=kubelab-notify-recovered@%n.service
 
 [Service]
 Type=oneshot
+# The check reads two files and takes milliseconds. A oneshot has no start
+# timeout unless it sets one, and its start job holds the boot (#2786).
+TimeoutStartSec=30
 # A lease inside a lab network can clash with a host on the LAN, and only a
 # person can answer it, so it pages rather than logs (ADR-075 D6, #2684).
 # node_notify reads this from systemd when the unit fails.

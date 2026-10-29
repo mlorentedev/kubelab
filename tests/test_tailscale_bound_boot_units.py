@@ -201,6 +201,50 @@ def test_no_shipped_oneshot_is_restarted() -> None:
     assert not restarted, f"oneshot units that restart: {restarted}"
 
 
+#: systemd's time-span units, in seconds.
+SPAN_UNITS = {"": 1, "s": 1, "sec": 1, "ms": 0.001, "m": 60, "min": 60, "h": 3600, "hr": 3600}
+
+
+def _span_seconds(value: str) -> float:
+    """A systemd time span (`600`, `5min`, `300s`) in seconds; `infinity` is infinite."""
+    if value.strip() == "infinity":
+        return float("inf")
+    parts = re.findall(r"(\d+)\s*([a-z]*)", value)
+    assert parts and re.fullmatch(r"(\s*\d+\s*[a-z]*)+\s*", value), f"not a time span: {value!r}"
+    return sum(int(n) * SPAN_UNITS[unit] for n, unit in parts)
+
+
+def _role_default(name: str, var: str) -> str:
+    """The role default a templated directive names, so the bound is read, not assumed."""
+    defaults = yaml.safe_load((REPO / "infra/ansible" / name.split("/templates/")[0] / "defaults/main.yml").read_text())
+    assert var in defaults, f"{name}: {var} is not a default of its role"
+    return str(defaults[var])
+
+
+def test_every_shipped_oneshot_bounds_its_start() -> None:
+    """#2786. A oneshot has no start timeout unless it sets one.
+
+    systemd disables `TimeoutStartSec` for `Type=oneshot` by default, and a unit
+    holds a start job for as long as its command runs, so one that waits on the
+    network keeps the boot from finishing (lesson-653). `0` disables the timeout
+    too. Same reach as the check above: unit files in this repository.
+    """
+    units = _shipped_units()
+    unbounded = []
+    for name, directives in units.items():
+        if directives.get("Type") != ["oneshot"]:
+            continue
+        values = directives.get("TimeoutStartSec") or directives.get("TimeoutSec") or ["infinity"]
+        value = values[-1]
+        templated = re.fullmatch(r"\{\{\s*(\w+)\s*\}\}", value.strip())
+        if templated:
+            value = _role_default(name, templated.group(1))
+        seconds = _span_seconds(value)
+        if not 0 < seconds < float("inf"):
+            unbounded.append(f"{name} ({value})")
+    assert not unbounded, f"oneshot units with no start timeout: {unbounded}"
+
+
 def test_every_stack_on_the_tailnet_address_waits_for_it() -> None:
     """A new stack that publishes on the address but has no waiting unit would
     pass every check above, which only sees units that already wait."""

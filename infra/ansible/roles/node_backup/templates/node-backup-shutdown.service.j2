@@ -52,6 +52,9 @@ Type=oneshot
 RemainAfterExit=yes
 Environment=HOME=/root
 ExecStart=/bin/true
+# The start does nothing, and TimeoutStopSec below bounds the work. Bounded
+# anyway: a oneshot has no start timeout unless it sets one (#2786).
+TimeoutStartSec=30
 # No `-`: if capture fails, ship's own sentinel check (node-backup-ship.sh)
 # already refuses a partial backup, so there is nothing useful left for it to
 # attempt. The `-` on ship's line means an unreachable R2 at the moment of
