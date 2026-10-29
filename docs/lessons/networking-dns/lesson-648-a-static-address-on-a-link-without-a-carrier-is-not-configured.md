@@ -15,7 +15,7 @@ tags: [kubelab, networking-dns, netplan, systemd, docker, rpi4]
 **Problem**: The premise holds only with a cable. networkd's default is `ConfigureWithoutCarrier=no`, so with no carrier `eth0` stayed `no-carrier (configuring)` and had no address. Three things followed (#2732):
 
 - CoreDNS exited on `cannot assign requested address` for its health port. A failed bind takes the container's whole port publication with it, `5353:53` included, so Pi-hole lost its upstream and went unhealthy. The same mechanism took staging DNS down on 2026-08-22, with the Tailscale address.
-- Plugging the cable back did not bring CoreDNS back. The bind failed while the container was being started, and `restart: unless-stopped` does not retry a start that failed: the container read `exited`, `RestartCount=0`, with the LAN address back. Only a deploy or a reboot starts it again.
+- Plugging the cable back did not bring CoreDNS back. The bind failed while the container was being started, and `restart: unless-stopped` does not retry a start that failed: the container read `exited`, `RestartCount=0`, with the LAN address back. A reboot with the cable in did not either. dockerd restored the container attached to no network, with three ports requested and none in effect, the state #2500 measured on other nodes. `up -d` sees an unchanged spec and leaves it so.
 - netplan 1.1.2 renders `systemd-networkd-wait-online` with `-i <iface>:degraded` for each interface that is not `optional`. `eth0` was the only one, so wait-online failed after two minutes and the boot took 2 min 50 s.
 - With no address there was no connected route for the LAN. `ip route get` for a LAN host answered `dev uplink0`, so tailnet traffic for the advertised subnet left through the uplink.
 
@@ -26,9 +26,10 @@ tags: [kubelab, networking-dns, netplan, systemd, docker, rpi4]
 - `eth0` takes `ignore-carrier: true`. netplan writes `ConfigureWithoutCarrier=yes`, so the address and its connected route stay without a cable. LAN traffic then dies at `eth0` instead of leaving by the default route.
 - `eth0` takes `optional: true`. No interface is left for netplan to wait for, so it does not pull wait-online in: its drop-in carries `ConditionPathIsSymbolicLink=` on a link the generator only creates for a non-optional interface.
 - CoreDNS's health port binds `127.0.0.1`. Making `eth0` optional removed the ordering that had kept the LAN bind safe, and loopback exists before Docker starts.
+- The coredns role runs the shared drift check (`playbooks/_includes/compose-port-drift.yml`) before its `up -d`, and recreates the stack when a container runs with a port requested and none in effect.
 
-`tests/test_gateway_uplink_render.py` holds both netplan keys and asks netplan which networkd key it writes. `tests/test_coredns_port_binds.py` fails on any bound port of the DNS stack that is not loopback. The live proof is T4 passing after a provision.
+`tests/test_gateway_uplink_render.py` holds both netplan keys and asks netplan which networkd key it writes. `tests/test_coredns_port_binds.py` fails on any bound port of the DNS stack that is not loopback, and on a role that starts the stack without the drift check. The live proof is T4 passing after a provision.
 
-**Rule**: A container port bound to a node address depends on that address existing when Docker starts. A static address meets that only with a carrier, and a Tailscale address only after tailscaled. Publish bare or on loopback: a restart policy does not retry a bind that failed at start, so the outage outlasts its cause. A boot wait follows from which interfaces are not optional, so an interface the host can run without is `optional`.
+**Rule**: A container port bound to a node address depends on that address existing when Docker starts. A static address meets that only with a carrier, and a Tailscale address only after tailscaled. Publish bare or on loopback. A bind that fails at start outlasts its cause: no restart policy retries it, and a reboot brings the container back on no network. A role that starts a compose stack runs the drift check, whatever addresses it binds. A boot wait follows from which interfaces are not optional, so an interface the host can run without is `optional`.
 
 **Tags**: `#net-017` `#net-005` `#netplan` `#docker` `#pr-2769`
