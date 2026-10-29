@@ -16,6 +16,15 @@ created: "2026-10-25"
 
 Accepted, 2026-10-25, in the spec's first PR, which also adds the ADR-028 amendment block, so the two never disagree on `master`. Drafted with the operator during NET-005 (kubelab#2661). Spec: `specs/NET-005-lab-edge-site-modes/`.
 
+## Amendment — 2026-10-29 (the LAN transport rule covers the runs that apply the uplink)
+
+D7 said every edge change runs over the homelab LAN. The check that enforces it (#2775, `provision-rpi4.yml`) refuses only a run that applies the `gateway` role: a full provision, `TAGS=gateway`, or any tag selection that includes it. The operator chose to narrow the rule to that check rather than widen the check to every tag:
+
+- What can cut the session is the uplink and its ruleset, and both belong to the `gateway` role.
+- A wider rule would send every routine edge change, such as a DNS zone or an SSH setting, to the switch, and would take remote management away from an always-on node.
+
+D7's Transport paragraph is edited to match.
+
 ## Context
 
 The homelab and the operator's personal devices sat behind a home ISP router that did the NAT and the Wi-Fi. The RPi4 was a client of that Wi-Fi, a NAT gateway and DHCP server for the homelab LAN, and the staging DNS gateway (Pi-hole + CoreDNS). ADR-028 §6 classed it on-demand: "When staging is off, RPi4 can be off."
@@ -160,7 +169,7 @@ The page must reach the operator over a path that does not run through the edge.
 
 ### D7. Provisioning cannot cut its own session, and every site proves its tailnet
 
-**Transport.** Edge changes run over the homelab LAN, from the operator's laptop on the switch: `make provision NODE=rpi4 ENV=prod BOOTSTRAP=1`, never over the tailnet that the uplink carries. `eth0` input stays open to the homelab LAN as the recovery path, and every nftables ruleset is checked with `nft -c` before it loads.
+**Transport.** A run that applies the `gateway` role, which renders the uplink and its ruleset, runs over the homelab LAN, from the operator's laptop on the switch: `make provision NODE=rpi4 ENV=prod BOOTSTRAP=1`, never over the tailnet that the uplink carries. The play refuses such a run at any other address before any role runs (#2775). Runs that leave the `gateway` role out, such as `TAGS=dns` or `TAGS=ssh`, are not held to it (amended 2026-10-29, see Amendment). `eth0` input stays open to the homelab LAN as the recovery path, and every nftables ruleset is checked with `nft -c` before it loads.
 
 **Order.** Each step comes before the one that needs it:
 
