@@ -11,7 +11,8 @@ not starve a call on another:
 
 The rates come from the site profile, already set below the measured ones, so the
 queue forms here rather than in the site's equipment. The unit follows the uplink
-device: the qdiscs die with it, and a replugged adapter gets them back.
+device: the qdiscs die with it, and a replugged adapter gets them back through the
+udev rule (#2766, tests/test_edge_uplink_replug.py).
 """
 
 from __future__ import annotations
@@ -141,15 +142,30 @@ def test_stopping_tolerates_a_device_that_is_already_gone() -> None:
 
 
 def test_the_unit_follows_the_uplink_device() -> None:
-    keys = _directives(_render())
+    """Started by the udev rule, never by a link in the device's .wants/ (#2766):
+    systemd follows that link whenever a start job for the device is enqueued, and
+    with the adapter missing the unit failed with result `dependency` every 90 s."""
+    text = _render()
+    keys = _directives(text)
     assert keys["BindsTo"] == [DEVICE]
     assert keys["After"] == [DEVICE]
-    assert keys["WantedBy"] == [DEVICE]
+    assert "[Install]" not in text
+    assert "WantedBy" not in keys
     assert keys["RemainAfterExit"] == ["yes"]
 
 
 def test_a_failed_start_pages() -> None:
     assert _directives(_render())["OnFailure"] == ["kubelab-notify@%n.service"]
+
+
+def test_a_successful_start_closes_the_incident_a_failed_one_opened() -> None:
+    """#2689. `OnSuccess=` fires when a RemainAfterExit unit stops, which for a unit
+    bound to the uplink is every unplug, and never when its start succeeds."""
+    keys = _directives(_render())
+    assert "OnSuccess" not in keys
+    on_failure = keys["OnFailure"][0]
+    recovery = on_failure.replace("kubelab-notify@", "kubelab-notify-recovered@")
+    assert keys["ExecStartPost"] == [f"-/usr/bin/systemctl start --no-block {recovery}"]
 
 
 def test_the_ifb_name_fits_the_kernels_limit() -> None:
@@ -171,7 +187,8 @@ def test_the_unit_passes_systemd_analyze_verify(tmp_path: Path) -> None:
         if not Path(binary).exists():
             pytest.skip(f"{binary} is not installed")
     (tmp_path / UNIT).write_text(_render())
-    (tmp_path / "kubelab-notify@.service").write_text("[Service]\nType=oneshot\nExecStart=/bin/true\n")
+    for notifier in ("kubelab-notify@.service", "kubelab-notify-recovered@.service"):
+        (tmp_path / notifier).write_text("[Service]\nType=oneshot\nExecStart=/bin/true\n")
     proc = subprocess.run(
         ["systemd-analyze", "verify", "--man=no", str(tmp_path / UNIT)],
         capture_output=True,
@@ -203,11 +220,9 @@ def test_the_rates_are_checked_before_the_unit_is_written() -> None:
     assert check < unit
 
 
-def test_the_shaper_is_enabled_and_started_only_on_a_present_uplink() -> None:
-    """Enabling hooks it to the device; starting it on a missing device would fail the run."""
-    enabled = _first(lambda task: _systemd(task).get("name") == UNIT and _systemd(task).get("enabled"))
+def test_the_shaper_is_started_only_on_a_present_uplink() -> None:
+    """Starting it on a missing device would fail the run."""
     started = _first(lambda task: _systemd(task).get("name") == UNIT and "state" in _systemd(task))
-    assert "state" not in _systemd(TASKS[enabled])
     present, absent = {"stat": {"exists": True}}, {"stat": {"exists": False}}
     same = {"changed": False}
     assert _holds(
@@ -235,10 +250,9 @@ def _holds(condition: Any, **variables: Any) -> bool:
     return all(env.compile_expression(str(c))(**variables) for c in conditions)
 
 
-@pytest.mark.parametrize("step", ["enabled", "state"])
-def test_check_mode_skips_the_shaper_until_its_unit_is_written(step: str) -> None:
+def test_check_mode_skips_the_shaper_until_its_unit_is_written() -> None:
     """`--check` writes no unit file, and the systemd module fails on a unit not on disk."""
-    task = _first(lambda task: _systemd(task).get("name") == UNIT and step in _systemd(task))
+    task = _first(lambda task: _systemd(task).get("name") == UNIT and "state" in _systemd(task))
     when = TASKS[task]["when"]
     present = {"stat": {"exists": True}}
     new, same = {"changed": True}, {"changed": False}

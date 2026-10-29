@@ -202,11 +202,25 @@
   no_log: true
   register: gateway_uplink_link
 
+# #2766. netplan starts the uplink's supplicant only with systemd-networkd at boot,
+# so a replugged or reset adapter stayed off the internet until a reboot. The rule
+# needs the name the .link file gives, and is checked by udev before it replaces
+# the live one.
+- name: Start the uplink's units whenever its adapter appears
+  template:
+    src: uplink.rules.j2
+    dest: /etc/udev/rules.d/90-kubelab-uplink.rules
+    mode: "0644"
+    validate: udevadm verify --resolve-names=never %s
+  register: gateway_uplink_rules
+
 # Tasks, not handlers: a handler fires only when the .link file changes, so a run that
 # failed after writing it would never rename the adapter.
 - name: Reload the udev rules
   command: udevadm control --reload
-  when: gateway_uplink_link is changed or gateway_uplink_interface not in ansible_facts.interfaces
+  when: >-
+    gateway_uplink_link is changed or gateway_uplink_rules is changed
+    or gateway_uplink_interface not in ansible_facts.interfaces
   changed_when: true
 
 - name: Rename the uplink adapter
@@ -329,14 +343,14 @@
     mode: "0644"
   register: gateway_shaper_unit
 
-# Enabled, it starts whenever the uplink device appears. Skipped in check mode
-# until its unit is on disk, as the lease watch is.
-- name: Shape the uplink whenever it is plugged in
-  systemd:
-    name: kubelab-edge-shaper.service
-    enabled: true
-    daemon_reload: true
-  when: not ansible_check_mode or gateway_shaper_unit is not changed
+# The udev rule starts it whenever the uplink device appears (#2766). The role used
+# to enable it into the device's .wants/, and Ansible does not undo what a role
+# stops declaring, so the link is removed here.
+- name: Unhook the shaper from the uplink device
+  file:
+    path: "/etc/systemd/system/sys-subsystem-net-devices-{{ gateway_uplink_interface }}.device.wants/kubelab-edge-shaper.service"
+    state: absent
+  notify: reload systemd
 
 - name: Shape the uplink now
   systemd:
@@ -346,6 +360,31 @@
   when:
     - gateway_uplink_sysfs.stat.exists
     - not ansible_check_mode or gateway_shaper_unit is not changed
+
+- name: Create the uplink supplicant's drop-in directory
+  file:
+    path: "/etc/systemd/system/netplan-wpa-{{ gateway_uplink_interface }}.service.d"
+    state: directory
+    mode: "0755"
+  when: gateway_uplink_kind != 'ethernet'
+
+# netplan's Requires= leaves the supplicant alone when the adapter leaves; bound to
+# it, the supplicant stops, and the udev rule starts it when the adapter is back.
+- name: Bind the uplink's supplicant to its adapter
+  template:
+    src: netplan-wpa-replug.conf.j2
+    dest: "/etc/systemd/system/netplan-wpa-{{ gateway_uplink_interface }}.service.d/kubelab-replug.conf"
+    mode: "0644"
+  when: gateway_uplink_kind != 'ethernet'
+  notify: reload systemd
+
+# netplan writes no supplicant for a wired uplink.
+- name: Remove the supplicant drop-in from a wired uplink
+  file:
+    path: "/etc/systemd/system/netplan-wpa-{{ gateway_uplink_interface }}.service.d/kubelab-replug.conf"
+    state: absent
+  when: gateway_uplink_kind == 'ethernet'
+  notify: reload systemd
 
 - name: Keep cloud-init from writing netplan
   copy:
