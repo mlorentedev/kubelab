@@ -279,8 +279,11 @@ def test_lab_clients_route_and_resolve_through_the_ap() -> None:
     assert _options("lab") == {"router": LAB["gateway"], "dns-server": LAB["gateway"]}
 
 
-def test_lan_clients_keep_their_router_and_resolvers() -> None:
-    assert _options("lan") == {"router": LAN_GATEWAY, "dns-server": DEFAULTS["gateway_dns_servers"]}
+def test_lan_clients_route_and_resolve_through_the_edge() -> None:
+    """Pi-hole answers on the LAN address too, as it does on the AP's. A public
+    resolver here cannot see staging, and the edge's own resolvers are for the
+    edge alone: it must not resolve through a container it runs itself."""
+    assert _options("lan") == {"router": LAN_GATEWAY, "dns-server": LAN_GATEWAY}
 
 
 def test_the_lan_range_is_tagged_too() -> None:

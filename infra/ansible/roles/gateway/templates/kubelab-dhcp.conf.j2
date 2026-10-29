@@ -12,10 +12,12 @@ dhcp-authoritative
 
 # An untagged option applies to every range, so each network's options carry its tag.
 
-# Homelab LAN
+# Homelab LAN. Its clients resolve through Pi-hole on the LAN address, like the lab
+# Wi-Fi's on the AP's. gateway_dns_servers is the edge's own resolver, never theirs.
+{% set lan_gateway = gateway_lan_cidr | regex_replace('/.*', '') %}
 dhcp-range=set:lan,{{ gateway_dhcp_range_start }},{{ gateway_dhcp_range_end }},255.255.255.0,{{ gateway_dhcp_lease }}
-dhcp-option=tag:lan,option:router,{{ gateway_lan_cidr | regex_replace('/.*', '') }}
-dhcp-option=tag:lan,option:dns-server,{{ gateway_dns_servers }}
+dhcp-option=tag:lan,option:router,{{ lan_gateway }}
+dhcp-option=tag:lan,option:dns-server,{{ lan_gateway }}
 {% for res in gateway_dhcp_reservations %}
 dhcp-host={{ res.mac }},{{ res.hostname }},{{ res.ip }}
 {% endfor %}
