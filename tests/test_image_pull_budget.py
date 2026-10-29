@@ -117,6 +117,28 @@ def _decide(down_kbit: int, nbytes: int, **extra) -> tuple[bool, int]:
     return allowed.render(**names) == "True", int(bound)
 
 
+def test_the_estimate_is_stated_before_the_pull_whatever_it_decides():
+    """`make provision` runs without -v, so a registered estimate alone says nothing."""
+    names = list(_tasks())
+    assert names.index("State the estimate for") < names.index("Refuse a pull of") < names.index("Pull")
+    task = _tasks()["State the estimate for"]
+    assert task["when"] == "image_pull_down_kbit | default(0) | int > 0"
+    env = ansible_env(".")
+    env.filters["from_json"] = json.loads
+    images = [{"image": "a:1", "bytes": OPEN_WEBUI_BYTES}, {"image": "b:2", "bytes": 0}]
+    message = env.from_string(task["ansible.builtin.debug"]["msg"]).render(
+        image_pull_name="Open WebUI",
+        image_pull_down_kbit=2970,
+        _image_pull_bytes=OPEN_WEBUI_BYTES,
+        _image_pull_seconds=4359,
+        _image_pull_estimate={"stdout": json.dumps({"bytes": OPEN_WEBUI_BYTES, "images": images})},
+    )
+    assert message == (
+        "Open WebUI: 1.6 GB to fetch (a:1 1.6 GB, b:2 0 Bytes), about 72.7 min at the edge's"
+        " 2970 kbit/s, against a budget of 30 min."
+    )
+
+
 def test_a_pull_past_the_budget_is_refused_unless_the_run_allows_it():
     # 1.62 GB at 2970 kbit/s is 4359 s, past the 1800 s default.
     assert _decide(2970, OPEN_WEBUI_BYTES) == (False, 4359 * 2 + 300)
@@ -177,8 +199,18 @@ def _plays() -> list[tuple[str, dict]]:
     return found
 
 
+ROLE_MODULES = ("include_role", "import_role", "ansible.builtin.include_role", "ansible.builtin.import_role")
+
+
 def _roles(play: dict) -> set[str]:
-    return {Path(entry["role"] if isinstance(entry, dict) else entry).name for entry in play.get("roles") or []}
+    """The roles a play runs: its `roles:` list, and any `include_role`/`import_role` in its tasks."""
+    found = {Path(entry["role"] if isinstance(entry, dict) else entry).name for entry in play.get("roles") or []}
+    for key in ("pre_tasks", "tasks", "post_tasks", "handlers"):
+        for task in _task_list(play.get(key)):
+            for module in ROLE_MODULES:
+                if isinstance(task.get(module), dict):
+                    found.add(Path(task[module]["name"]).name)
+    return found
 
 
 def _plays_setting_the_downlink() -> dict[str, str]:
@@ -223,7 +255,8 @@ def _pulls_bare(task: dict) -> bool:
     )
     text += " " + " ".join(str(item) for item in task.get("loop") or [])
     module = task.get("community.docker.docker_container") or {}
-    return bool(re.search(r"\bpull\b", text)) or module.get("pull") is True
+    image_pull = re.search(r"\bpull\b", text) and re.search(r"\b(docker|compose)\b", text)
+    return bool(image_pull) or module.get("pull") is True
 
 
 def _roles_pulling_bare() -> set[str]:
@@ -291,3 +324,13 @@ def test_the_hermes_images_are_sized_on_the_agents_own_daemon():
     for task in (stack, sandbox):
         assert task["become_user"] == "{{ agent_stack_agent_user }}"
         assert task["environment"] == "{{ agent_stack_agent_daemon_env }}"
+
+
+def test_the_guard_reads_image_pulls_and_roles_however_they_are_written():
+    assert _pulls_bare({"ansible.builtin.command": "docker compose -f x.yml pull"})
+    assert _pulls_bare({"command": "docker {{ item }}", "loop": ["pull a:1"]})
+    assert _pulls_bare({"community.docker.docker_container": {"name": "x", "pull": True}})
+    assert not _pulls_bare({"ansible.builtin.command": "git -C /opt/x pull --ff-only"})
+    play = {"roles": ["../roles/a"], "tasks": [{"block": [{"include_role": {"name": "../roles/b"}}]}]}
+    play["pre_tasks"] = [{"ansible.builtin.import_role": {"name": "c"}}]
+    assert _roles(play) == {"a", "b", "c"}

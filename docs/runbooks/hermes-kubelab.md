@@ -128,8 +128,9 @@ so its pull gets 300 s: if that tag has moved and the pull times out, rerun with
 `EXTRA='image_pull_timeout_seconds=<seconds>'`, which bounds each attempt
 outright.
 
-`CHECK=1` runs it in check mode and changes nothing. It still prints the
-estimate.
+`CHECK=1` runs it in check mode and changes nothing. It still states each
+estimate, in the task `State the estimate for <name>`: size per image, minutes
+at the edge's downlink, and the budget.
 
 ## Stop
 

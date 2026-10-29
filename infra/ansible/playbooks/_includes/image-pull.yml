@@ -12,7 +12,7 @@
 # networking.edge.uplink.bandwidth.down_kbit (ADR-075), so a multi-GB pull there
 # takes most of an hour, and on 2026-10-27 one ended in an EOF after 52 minutes.
 # The play of such a node sets image_pull_down_kbit from that key. The include
-# then estimates the bytes to fetch before pulling, refuses past
+# then estimates the bytes to fetch before pulling, states the estimate, refuses past
 # image_pull_budget_seconds unless image_pull_allow_slow, and bounds each attempt
 # by the estimate. A retry runs the pull again; whether it reuses the layers an
 # interrupted attempt fetched depends on the node's image store, and was not
@@ -39,6 +39,19 @@
     _image_pull_seconds: >-
       {{ (((_image_pull_estimate.stdout | from_json).bytes | int) * 8
           / ((image_pull_down_kbit | int) * 1000)) | round(0, 'ceil') | int }}
+  when: image_pull_down_kbit | default(0) | int > 0
+
+# Stated whether or not the pull goes ahead: a run without -v shows nothing of a
+# registered result, and the duration is what the operator lacked (#2742).
+- name: State the estimate for {{ image_pull_name }}
+  ansible.builtin.debug:
+    msg: >-
+      {{ image_pull_name }}: {{ _image_pull_bytes | int | filesizeformat }} to fetch
+      ({% for item in (_image_pull_estimate.stdout | from_json).images %}{{ item.image }}
+      {{ item.bytes | filesizeformat }}{{ ', ' if not loop.last }}{% endfor %}), about
+      {{ ((_image_pull_seconds | int) / 60) | round(1) }} min at the edge's
+      {{ image_pull_down_kbit }} kbit/s, against a budget of
+      {{ ((image_pull_budget_seconds | default(1800) | int) / 60) | round | int }} min.
   when: image_pull_down_kbit | default(0) | int > 0
 
 - name: Refuse a pull of {{ image_pull_name }} that outlasts its budget
