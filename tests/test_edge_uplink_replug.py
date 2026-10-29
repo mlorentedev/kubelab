@@ -226,3 +226,48 @@ def test_no_task_enables_the_shaper() -> None:
         module = task.get("systemd") or task.get("ansible.builtin.systemd") or {}
         if module.get("name") == SHAPER:
             assert "enabled" not in module, task["name"]
+
+
+# --------------------------------------------------- the device's start job
+
+
+DEVICE_DROP_IN_DIR = f"/etc/systemd/system/{DEVICE}.d"
+DEFAULTS: dict[str, Any] = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text())
+# systemd's DefaultDeviceTimeoutSec, the bound a missing adapter held network.target for (#2794).
+SYSTEMD_DEVICE_TIMEOUT = 90
+
+
+def _device_drop_in_task() -> int:
+    return _index(lambda task: _dest(task).startswith(DEVICE_DROP_IN_DIR + "/"))
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_a_missing_adapter_holds_the_boot_for_the_roles_bound_not_systemds(kind: str) -> None:
+    """netplan's supplicant requires the adapter and is ordered before network.target, so
+    with the adapter missing the boot waited out the device's start job: 90 s, holding
+    docker, the LAN's DNS and tailscaled (#2794). The device's own drop-in bounds that
+    job, the way systemd-fstab-generator bounds a mount's device (`JobRunningTimeoutSec=`).
+    An adapter that appears later is still served: the udev rule starts the supplicant."""
+    task = TASKS[_device_drop_in_task()]
+    bound = DEFAULTS["gateway_uplink_device_timeout_seconds"]
+    env = ansible_env(str(ROLE / "templates"), trim_blocks=True, lstrip_blocks=True)
+    text = env.get_template(task["template"]["src"]).render(**_vars(kind), gateway_uplink_device_timeout_seconds=bound)
+    lines = [line for line in text.splitlines() if line and not line.startswith("#")]
+    assert lines == ["[Unit]", f"JobRunningTimeoutSec={bound}s"]
+    assert 5 <= bound < SYSTEMD_DEVICE_TIMEOUT
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_the_device_bound_is_written_for_every_uplink_kind(kind: str) -> None:
+    """It describes the adapter, not the supplicant: no condition, so a change of kind
+    leaves nothing to remove."""
+    assert task_runs(TASKS[_device_drop_in_task()], _vars(kind))
+
+
+def test_the_device_bound_lands_in_a_directory_the_role_creates_and_reloads_systemd() -> None:
+    task = TASKS[_device_drop_in_task()]
+    assert task["notify"] == "reload systemd"
+    assert task["template"]["mode"] == "0644"
+    directory = _index(lambda t: _path(t) == DEVICE_DROP_IN_DIR)
+    assert TASKS[directory]["file"]["state"] == "directory"
+    assert directory < _device_drop_in_task()

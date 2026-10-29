@@ -353,6 +353,20 @@
     - gateway_uplink_sysfs.stat.exists
     - not ansible_check_mode or gateway_shaper_unit is not changed
 
+- name: Create the uplink adapter's drop-in directory
+  file:
+    path: "/etc/systemd/system/sys-subsystem-net-devices-{{ gateway_uplink_interface }}.device.d"
+    state: directory
+    mode: "0755"
+
+# Every kind: it bounds the wait for the adapter, whatever needs it.
+- name: Bound the boot's wait for the uplink adapter
+  template:
+    src: uplink-device-timeout.conf.j2
+    dest: "/etc/systemd/system/sys-subsystem-net-devices-{{ gateway_uplink_interface }}.device.d/kubelab-timeout.conf"
+    mode: "0644"
+  notify: reload systemd
+
 - name: Create the uplink supplicant's drop-in directory
   file:
     path: "/etc/systemd/system/netplan-wpa-{{ gateway_uplink_interface }}.service.d"

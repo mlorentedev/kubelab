@@ -11,6 +11,11 @@ gateway_uplink_regdomain: ""
 gateway_uplink_mac: ""
 gateway_uplink_ssid: ""
 gateway_uplink_psk: ""
+# How long the boot waits for the uplink adapter before going on without it (#2794).
+# systemd's own bound is 90 s, and network.target waited all of it on a missing
+# adapter. An adapter that appears later is still served: the udev rule starts
+# what it needs.
+gateway_uplink_device_timeout_seconds: 10
 # The lab Wi-Fi, from networking.edge.lab_wifi. The SSID and PSKs come from prod SOPS;
 # each PSK entry is {keyid, psk}.
 gateway_ap_ssid: ""
