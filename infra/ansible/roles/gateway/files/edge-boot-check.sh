@@ -139,9 +139,10 @@ pages() {
 # of those runs, an edge without its uplink is behaving as designed (#2774). Prints
 # how long to wait, from the misses counted, the grace in the unit's own
 # environment and, before its first run, the timer's schedule in microseconds
-# since boot. A grace it cannot read, or a run that never ended, is not waited for.
+# since boot. A grace it cannot read, or a run that never ended ($1, the polls
+# `pages` made of the reporter), is not waited for.
 liveness_pending() {
-  [ "$tries" -lt 60 ] || return 1
+  [ "$1" -lt 60 ] || return 1
   grace=$(systemctl show -p Environment --value "$reporter" | tr ' ' '\n' | sed -n 's/^EDGE_LIVENESS_GRACE=//p')
   case $grace in '' | *[!0-9]* | 0) return 1 ;; esac
   misses=$(cat "$liveness_dir/uplink.misses" 2>/dev/null)
@@ -210,7 +211,7 @@ if [ "$expect" = no-uplink ]; then
   missing "uplink adapter $uplink" test -e "$sys_net/$uplink"
   if pages "$reporter"; then
     pass "$reporter failed on the missing uplink"
-  elif eta=$(liveness_pending); then
+  elif eta=$(liveness_pending "$tries"); then
     wait_for "$reporter failed on the missing uplink: not yet, $eta"
   else
     fail "$reporter failed on the missing uplink"

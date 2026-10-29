@@ -460,7 +460,10 @@ def test_the_wait_reads_what_the_role_deploys() -> None:
     assert "Environment=EDGE_LIVENESS_GRACE={{ gateway_liveness_grace }}" in unit
     runtime = re.search(r"^RuntimeDirectory=(\S+)$", unit, re.M).group(1)
     assert f"EDGE_LIVENESS_DIR:-/run/{runtime}}}" in script
-    assert 'miss uplink' in (ROLE / "files" / "edge-liveness.sh").read_text()
+    liveness = (ROLE / "files" / "edge-liveness.sh").read_text()
+    assert 'miss uplink' in liveness
+    assert 'run_dir=${RUNTIME_DIRECTORY:' in liveness
+    assert 'echo "$count" >"$run_dir/$1.misses"' in liveness
     timer = LIVENESS.replace(".service", ".timer")
     escaped = "".join(c if c.isalnum() else f"_{ord(c):02x}" for c in timer)
     assert f"/org/freedesktop/systemd1/unit/{escaped}" in script
