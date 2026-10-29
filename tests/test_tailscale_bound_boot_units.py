@@ -178,7 +178,10 @@ def test_only_the_wait_is_retried(name: str) -> None:
 
 
 def _shipped_units() -> dict[str, dict[str, list[str]]]:
-    return {str(path.relative_to(ROLES)): _directives(path) for path in sorted(ROLES.glob("*/templates/*.service.j2"))}
+    """Every unit file the repo ships to a node: role templates and plain copies alike."""
+    ansible = REPO / "infra/ansible"
+    paths = [*ansible.rglob("*.service"), *ansible.rglob("*.service.j2")]
+    return {str(path.relative_to(ansible)): _directives(path) for path in sorted(p for p in paths if p.is_file())}
 
 
 def test_no_shipped_oneshot_is_restarted() -> None:
@@ -187,6 +190,8 @@ def test_no_shipped_oneshot_is_restarted() -> None:
     systemd records the boot as finished only once no job is left, so a oneshot
     retried until a condition holds keeps a job queued for as long as the condition
     fails. A retry belongs to an exec unit, whose job ends when its command runs.
+    It reads the unit files in this repository; a drop-in (none ships today) or a
+    unit made by hand on a node, like the edge's watchdog before #2675, is outside it.
     """
     units = _shipped_units()
     assert len(units) > 10, f"only {len(units)} unit templates found; the glob is stale"
