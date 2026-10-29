@@ -49,10 +49,10 @@ ansible-galaxy collection install -r infra/ansible/requirements.yml
 poetry run toolkit infra ansible generate --env staging
 
 # Provision a node
-make provision NODE=rpi4 ENV=staging
+make provision NODE=bee ENV=prod
 
 # Deploy a target
-make deploy-vps ENV=prod
+make deploy TARGET=vps ENV=prod
 ```
 
 See the root `Makefile` (`make help`) for the full list of `provision`/
