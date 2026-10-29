@@ -16,7 +16,7 @@ node-specific files.
   `playbooks/provision-<node>.yml` against the generated inventory.
 - Deploys: per-target playbooks (`deploy-vps.yml`, `deploy-k3s.yml`,
   `deploy-dns.yml`, `deploy-harden-nodes.yml`) invoked the same way via
-  their own `make deploy-*` targets.
+  `make deploy TARGET=<vps|k3s|dns|harden-nodes> ENV=<env>`.
 - Roles: `roles/` holds one directory per capability (system hardening,
   Docker, Tailscale, and one role per service the fleet runs).
 
