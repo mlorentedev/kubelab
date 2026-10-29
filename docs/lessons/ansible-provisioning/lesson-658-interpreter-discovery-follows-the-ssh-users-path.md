@@ -18,4 +18,4 @@ tags: [kubelab, ansible-provisioning, ansible, python, mise]
 
 **Rule**: Pin the managed node's system interpreter in the inventory. With discovery, whatever a developer tool puts first on the SSH user's `PATH` runs every module as root. A run that passes `become: false` and hangs as soon as it becomes root points here.
 
-**Tags**: `#ansible` `#interpreter` `#pr-2802`
+**Tags**: `#ansible` `#interpreter` `#pr-2803`
