@@ -78,7 +78,7 @@ Partial results, kept apart from the `### B<n>-EVIDENCE` headings on purpose: `f
 - **B6.** Both nodes' Tailscale prefs were compared read-only with their plays (lesson-629). rpi4 matched. rpi3 accepted routes its play declares off, which the role's `tailscale set` convergence then corrected (#2685). The 2026-10-28 boot check reads the subnet route primary on the tailnet. Left: `make headscale-rejoin` for both nodes, rpi3's `TAGS=tailscale` second run at `changed=0`, and the Headscale expiry read.
 - **B11.** ace1, bee and ace2 each had a default route through the RPi4 and a 204 from the connectivity probe (2026-10-27). Left: a `DHCPACK(eth0)` at this step (the one on record is task 11's, from before the uplink existed) and `make test-e2e ENV=staging`.
 - **B12.** The second provision (2026-10-28) reported `ok=182 changed=1 failed=0`. The one change is apt's cache refresh (`cache_valid_time: 3600`), which fires on time elapsed, not on drift. On 2026-10-29 the edge's provision at 973113b9 read `changed=0`, the configuration B14 ran on. Left: the 48-hour soak's rtw88 check.
-- **B14.** Done 2026-10-29: every case passed after B12's `changed=0` provision, and again on #2797's configuration once T3 had found #2794. See `### B14-EVIDENCE` below.
+- **B14.** Open. Every case passed after B12's `changed=0` provision, and again on #2797's configuration once T3 had found #2794. The check after T4's cable went back in cannot tell a cable from none: it has no line for `eth0`'s carrier (#2800). B14 closes when that check, with the carrier line, passes over the LAN. See `### B14-EVIDENCE` below.
 - **B7, B8, B9, B10, B13.** Not started.
 
 ### Hard-reset runs, 2026-10-29
@@ -93,7 +93,7 @@ Each case was checked with `make edge-boot-check` 10 minutes after power returne
 - **T3 no uplink adapter**, 05:28: every check `OK`, the adapter missing and `kubelab-edge-liveness.service` failed on it, as the case expects. Ruleset at 9.7 s, networkd at 15.5 s. Two earlier checks of the same boot ran inside the liveness grace and read FAIL (#2774). The boot had not finished, with tailnet-bound units still queued (#2776).
 - **T3, adapter plugged back**: the first replug started nothing. `udevadm monitor` showed why: the add event that renames the adapter carries `ID_RENAMING=1`, and the move event that activates it carried no `SYSTEMD_WANTS` (lesson-650). Fixed by #2773 and provisioned with `TAGS=gateway`: `ok=90 changed=3 failed=0`. On the replug at 06:28, the move event carried `SYSTEMD_WANTS`, the supplicant started in the same second as the rename, and the check 2 minutes later passed every check, lease, default route, shaper, tailnet session and subnet route included (#2766, closed).
 - **T4 no switch cable**, 07:11, through the tailnet: 26 of 26. `eth0` was present without a carrier, and its address, its route and DNS on the LAN address all held (#2732). Startup 52.1 s, ruleset at 10.7 s and networkd at 16.9 s. The shaper came up at boot through #2773's rule.
-- **Cable plugged back**, 07:12: 25 of 25.
+- **Cable plugged back**, 07:12: 25 of 25. The check has no line for `eth0`'s carrier, and since #2769 the LAN address, route and DNS hold without one, so this does not show the cable was back (#2800).
 
 T1 and T2 ran on the configuration from before #2768 to #2773. T4 is a power cut on the current configuration with everything plugged in but the switch cable, so it also covers T2's path on that configuration. Every boot whose order was read (T1, T3, T4) loaded the ruleset before systemd-networkd started.
 
@@ -288,9 +288,9 @@ OK   no failed unit
 
 Exit 0. On this cold boot the adapter's device job was queued at 8.72 s (`Expecting device sys-subsystem-net-devices-uplink0.device`) and the kernel renamed the adapter at 12.60 s, 3.9 s later; the warm reboot (T1) took 4.1 s. Both leave about 6 s of the 10 s bound. The persistent journal of this boot again begins at 47.7 s, so the early lines were read from dmesg (#2702).
 
-#### Cable plugged back after T4, 2026-10-29, over the LAN
+#### Cable plugged back after T4, 2026-10-29: not proven
 
-`make edge-boot-check`: 27 of 27 `OK`, exit 0.
+`make edge-boot-check` read 27 of 27 `OK`, exit 0, with the switch powered off. It ran over the tailnet, and it has no line for `eth0`'s carrier, while the LAN address, route and DNS hold without one since #2769. It cannot tell a cable from none (#2800). The 07:12 run above has the same limit. To redo once #2800 adds the carrier line, over the LAN.
 
 - [ ] Criterion 1 -> commit `<hash>` / test `<name>`
 - [ ] Criterion 2 -> commit `<hash>` / test `<name>`
