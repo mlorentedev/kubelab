@@ -46,6 +46,7 @@ UNITS = (
     "kubelab-edge-shaper.service",
 )
 LIVENESS = "kubelab-edge-liveness.service"
+GRACE = DEFAULTS["gateway_liveness_grace"]
 # The page the liveness check's failure sends, which cannot leave without the uplink:
 # the unit's own OnFailure= line, with `%n` resolved the way systemd resolves it.
 PAGE = (
@@ -82,6 +83,8 @@ esac
     "docker": 'case "$3" in *PortBindings*) cat "$FAKE/ports_$4" ;; *) cat "$FAKE/docker_$4" ;; esac\n',
     "tailscale": 'cat "$FAKE/tailscale.json"\n',
     "sleep": ":\n",
+    # The liveness timer's next run, in microseconds since boot, as busctl prints it.
+    "busctl": 'cat "$FAKE/next_elapse" 2>/dev/null || echo "t 0"\n',
     # Before the boot finishes, `systemd-analyze time` fails with systemd's own words on
     # stderr; analyze_error stands for any other failure.
     "systemd-analyze": """if [ -f "$FAKE/jobs" ]; then
@@ -99,7 +102,8 @@ class Edge:
 
     def __init__(self, root: Path) -> None:
         self.fake, self.bin, self.net = root / "fake", root / "bin", root / "net"
-        for directory in (self.fake / "active", self.fake / "failed", self.fake / "activating", self.bin):
+        self.liveness, self.uptime = root / "liveness", root / "uptime"
+        for directory in (self.fake / "active", self.fake / "failed", self.fake / "activating", self.bin, self.liveness):
             directory.mkdir(parents=True)
         for name, body in FAKES.items():
             (self.bin / name).write_text(f"#!/bin/sh\n{body}")
@@ -107,6 +111,8 @@ class Edge:
         self.write("ruleset", "")
         self.write("show_RuntimeWatchdogUSec_manager", "15s")
         self.write(f"show_OnFailure_{LIVENESS}", PAGE)
+        self.write(f"show_Environment_{LIVENESS}", f"KUBELAB_NOTIFY_SEVERITY=page EDGE_LIVENESS_GRACE={GRACE}\n")
+        self.booted(minutes=15)
         for unit in UNITS:
             self.write(f"active/{unit}", "")
         self.write(f"hostapd_{AP}", "state=ENABLED\nphy=phy0\n")
@@ -159,6 +165,15 @@ class Edge:
         self.write(f"failed/{LIVENESS}", "")
         self.write(f"failed/{PAGE}", "")
 
+    def misses(self, count: int) -> None:
+        """The uplink misses the liveness check has counted in a row this boot."""
+        (self.liveness / "uplink.misses").write_text(f"{count}\n")
+
+    def booted(self, minutes: float, next_run: float = 0) -> None:
+        """Minutes since boot, and when the liveness timer runs next, in minutes since boot."""
+        self.uptime.write_text(f"{minutes * 60:.2f} 1000.00\n")
+        self.write("next_elapse", f"t {round(next_run * 60e6)}\n")
+
     def unplug_lan(self) -> None:
         """networkd keeps the address without a carrier (#2732); the kernel marks its route."""
         self.write_sys(LAN, "0")
@@ -170,6 +185,8 @@ class Edge:
             "FAKE": str(self.fake),
             "EDGE_SYS_NET": str(self.net),
             "EDGE_HOSTAPD_DIR": str(self.fake),
+            "EDGE_LIVENESS_DIR": str(self.liveness),
+            "EDGE_UPTIME": str(self.uptime),
         }
         if expect:
             env["EDGE_EXPECT"] = expect
@@ -386,8 +403,67 @@ def test_the_expected_page_is_the_one_systemd_names(edge: Edge) -> None:
 def test_a_missing_uplink_nobody_pages_fails(edge: Edge) -> None:
     edge.unplug_uplink()
     edge.remove(f"failed/{LIVENESS}")
+    edge.misses(GRACE)
     (failure,) = _failures(edge.run(expect="no-uplink"))
     assert "failed on the missing uplink" in failure
+
+
+def _inside_the_grace(edge: Edge) -> None:
+    """The uplink is gone, and the liveness check has not failed on it yet, nor paged."""
+    edge.unplug_uplink()
+    edge.remove(f"failed/{LIVENESS}")
+    edge.remove(f"failed/{PAGE}")
+
+
+def test_a_missing_uplink_inside_the_grace_is_pending_not_failed(edge: Edge) -> None:
+    """The liveness check tolerates GRACE misses a minute apart: judged earlier, the edge is
+    behaving as designed (#2774)."""
+    _inside_the_grace(edge)
+    edge.misses(1)
+    result = edge.run(expect="no-uplink")
+    assert result.returncode == 2, result.stdout
+    assert not _failures(result)
+    (line,) = [line for line in result.stdout.splitlines() if line.startswith("WAIT")]
+    assert f"1 of {GRACE} misses" in line and f"in about {GRACE - 1} min" in line, line
+
+
+def test_before_its_first_run_the_wait_counts_the_time_to_it(edge: Edge) -> None:
+    _inside_the_grace(edge)
+    edge.booted(minutes=2, next_run=5)
+    (line,) = [line for line in edge.run(expect="no-uplink").stdout.splitlines() if line.startswith("WAIT")]
+    # Three minutes to its first run, which counts the first miss, then one a minute.
+    assert f"0 of {GRACE} misses" in line and f"in about {3 + GRACE - 1} min" in line, line
+
+
+def test_a_grace_it_cannot_read_is_not_waited_for(edge: Edge) -> None:
+    _inside_the_grace(edge)
+    edge.misses(1)
+    edge.write(f"show_Environment_{LIVENESS}", "KUBELAB_NOTIFY_SEVERITY=page\n")
+    (failure,) = _failures(edge.run(expect="no-uplink"))
+    assert "failed on the missing uplink" in failure
+
+
+def test_a_wait_does_not_hide_a_failure(edge: Edge) -> None:
+    _inside_the_grace(edge)
+    edge.misses(1)
+    edge.write("failed/dnsmasq.service", "")
+    result = edge.run(expect="no-uplink")
+    assert result.returncode == 1, result.stdout
+    assert _failures(result) == ["FAIL failed units: dnsmasq.service"]
+
+
+def test_the_wait_reads_what_the_role_deploys() -> None:
+    """The grace from the unit's own Environment=, the misses from its RuntimeDirectory=,
+    and the next run from its timer, by the object path systemd escapes its name to."""
+    script = SCRIPT.read_text()
+    unit = (ROLE / "templates" / f"{LIVENESS}.j2").read_text()
+    assert "Environment=EDGE_LIVENESS_GRACE={{ gateway_liveness_grace }}" in unit
+    runtime = re.search(r"^RuntimeDirectory=(\S+)$", unit, re.M).group(1)
+    assert f"EDGE_LIVENESS_DIR:-/run/{runtime}}}" in script
+    assert 'miss uplink' in (ROLE / "files" / "edge-liveness.sh").read_text()
+    timer = LIVENESS.replace(".service", ".timer")
+    escaped = "".join(c if c.isalnum() else f"_{ord(c):02x}" for c in timer)
+    assert f"/org/freedesktop/systemd1/unit/{escaped}" in script
 
 
 def test_a_liveness_run_under_way_is_waited_out(edge: Edge) -> None:
@@ -533,7 +609,13 @@ def test_a_case_and_the_tailnet_path_reach_the_command() -> None:
 
 @pytest.mark.parametrize(
     ("argv", "code"),
-    [([], 0), (["--case", "no-uplink"], 1), (["--case", "no-power"], 64), (["--via", "wifi"], 64)],
+    [
+        ([], 0),
+        (["--case", "no-uplink"], 1),
+        (["--case", "no-uplink"], 2),
+        (["--case", "no-power"], 64),
+        (["--via", "wifi"], 64),
+    ],
 )
 def test_the_command_exits_with_the_checks_code(argv: list[str], code: int) -> None:
     from typer.testing import CliRunner

@@ -223,7 +223,8 @@ def edge_boot_check(
     """Say whether a boot brought back everything the edge serves (the hard-reset test).
 
     Runs the gateway role's boot check on the edge, one line per check, and exits 0
-    when every check passed, 1 when one failed (255 when SSH itself fails).
+    when every check passed, 1 when one failed, 2 when none failed but one cannot be
+    judged yet (its WAIT line says when to run it again), and 255 when SSH itself fails.
     """
     from toolkit.features.configuration import ConfigurationManager
     from toolkit.features.edge_status import BOOT_CASES, EdgeNotDeclaredError, run_boot_check

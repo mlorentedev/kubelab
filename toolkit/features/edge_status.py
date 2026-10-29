@@ -90,5 +90,6 @@ def run_status(networking: dict[str, Any]) -> int:
 
 
 def run_boot_check(networking: dict[str, Any], case: str | None = None, via: str = "lan") -> int:
-    """Run the boot check on the edge: 0 every check passed, 1 one failed, 255 SSH."""
+    """Run the boot check on the edge: 0 every check passed, 1 one failed, 2 one
+    cannot be judged yet, 255 SSH."""
     return subprocess.run(boot_check_command(networking, case, via), check=False).returncode
