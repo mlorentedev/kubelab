@@ -42,6 +42,19 @@ created: "2026-10-30"
   `ports`; the ports are the integers `[22, 45000]`. A dry run on `f29189df` with the
   real SOPS data rendered 1 segment, with no validation failure, none of the 14 live
   nodes cut off, and no wildcard.
+- **Step 3, 2026-10-30** (deploy with the segment, from the operator's controller).
+  The recap was `ok=35 changed=3 failed=0`: owner creation, the policy file and the
+  reload handler. The read-back through the audit identity (`policy get`,
+  `users list -o json`, `nodes list -o json`, all exit 0) shows the following.
+  - The effective policy equals `render_policy()` with the SOPS segment, ignoring
+    comments and whitespace.
+  - There are 3 rules. The new one is the segment's clients tag reaching its hosts
+    tag on ports 22 and 45000, and nothing else.
+  - The new owner user holds both segment tags, and the server now holds 5 users.
+  - There is no wildcard grant.
+  - The 14 nodes are unchanged, 9 online.
+- **Convergence, 2026-10-30.** The next deploy reported
+  `ok=32 changed=0 unreachable=0 failed=0`.
 
 ## Test status
 

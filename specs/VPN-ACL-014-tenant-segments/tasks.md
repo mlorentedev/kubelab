@@ -43,9 +43,9 @@ unchecked step.
 - [x] Write the segment to SOPS at `apps.services.core.headscale.segments`. ✓ 2026-10-30,
   under the neutral key `tenant-1`: SOPS key names are plaintext, so the tenant's name
   stays inside the encrypted value. A mapping, because `sops set` cannot write a list (#2852).
-- [ ] Deploy again. The role creates the owner user if missing, then renders and
-  reloads the segment. Repeat both checks.
-- [ ] A third deploy reports `changed=0`.
+- [x] Deploy again. The role creates the owner user if missing, then renders and
+  reloads the segment. Repeat both checks. ✓ 2026-10-30: `changed=3`, read back equal.
+- [x] A third deploy reports `changed=0`. ✓ 2026-10-30: `ok=32 changed=0 failed=0`.
 
 ## Closing
 
