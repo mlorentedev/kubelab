@@ -376,7 +376,11 @@ def test_the_play_calls_dict2items_with_its_default_names() -> None:
     The stub returns `key`/`value`, which matches the real filter only with its default
     names; `map(attribute='value')` relies on them. A `key_name=` or `value_name=`
     argument would pass the stub and break the deploy, so the call must take none."""
-    call = re.search(r"dict2items\s*(\([^)]*\))?", _play_segments_expr())
+    expr = _play_segments_expr()
+    calls = re.findall(r"dict2items\s*(\([^)]*\))?", expr)
 
-    assert call is not None, "the play no longer turns the SOPS mapping into a list"
-    assert call.group(1) in (None, "()"), f"dict2items takes arguments: {call.group(0)}"
+    assert calls, "the play no longer turns the SOPS mapping into a list"
+    assert all(args in ("", "()") for args in calls), f"dict2items takes arguments in: {expr}"
+    assert re.search(r"dict2items\s*(\(\s*\))?\s*\|\s*map\(attribute='value'\)", expr), (
+        "dict2items no longer feeds map(attribute='value')"
+    )
