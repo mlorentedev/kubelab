@@ -18,4 +18,4 @@ tags: [kubelab, ansible-provisioning, ansible, tags]
 
 **Rule**: when a shared file must run under any `--tags`, import it (`import_tasks`, `import_role`) with the tag, or put the tag on the tasks inside it. A tag on `include_tasks` or `include_role` selects the include line only, unless `apply: {tags: [...]}` is given.
 
-**Tags**: `#ansible` `#tags` `#pr-NNNN`
+**Tags**: `#ansible` `#tags` `#pr-2857`
