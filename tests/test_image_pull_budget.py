@@ -24,6 +24,7 @@ import pytest
 import yaml
 
 from tests.ansible_jinja import ansible_env
+from tests.repo_files import repo_files
 from toolkit.features.generator_ansible import AnsibleGenerator
 
 REPO = Path(__file__).resolve().parents[1]
@@ -471,7 +472,7 @@ def test_the_ledgered_probe_image_is_the_one_its_reason_sizes():
     # The image read above is the one the variable resolves to only while every setter reads that key.
     setters = {
         line.strip()
-        for path in (REPO / "infra/ansible").rglob("*.yml")
+        for path in repo_files(REPO / "infra/ansible", "*.yml", "*.yaml")
         for line in path.read_text(encoding="utf-8").splitlines()
         if line.strip().startswith("agent_stack_agent_probe_image:")
     }
