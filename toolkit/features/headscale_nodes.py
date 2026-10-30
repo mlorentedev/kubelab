@@ -254,7 +254,7 @@ def rejoin_playbook(playbooks_dir: Path, node: str) -> str:
         )
     roles = [
         str(role.get("role", "")) if isinstance(role, dict) else str(role)
-        for play in yaml.safe_load(path.read_text()) or []
+        for play in yaml.safe_load(path.read_text(encoding="utf-8")) or []
         for role in play.get("roles") or []
     ]
     if not any(Path(role).name == "tailscale" for role in roles):

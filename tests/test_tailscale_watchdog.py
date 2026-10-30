@@ -36,7 +36,7 @@ TIMER = ROLE / "templates" / "tailscale-watchdog.timer.j2"
 
 
 def _unit(path: Path, **facts: Any) -> dict[str, str]:
-    text = _render(path.read_text(), ansible_managed="managed", **facts)
+    text = _render(path.read_text(encoding="utf-8"), ansible_managed="managed", **facts)
     return dict(line.split("=", 1) for line in text.splitlines() if re.match(r"^[A-Z]\w*=", line))
 
 
@@ -61,7 +61,7 @@ def test_the_watchdog_runs_the_roles_own_flags() -> None:
     """The flags the play declares reach the watchdog on the next provision, and
     `--reset` (tailscale/tailscale#5597) keeps it from refusing on a changed flag."""
     assert _watchdog_up(_service()) == _up_command("rpi4", "").split()
-    assert "{{ tailscale_up_flags }}" in SERVICE.read_text()
+    assert "{{ tailscale_up_flags }}" in SERVICE.read_text(encoding="utf-8")
 
 
 def test_the_edge_watchdog_carries_every_flag_its_play_declares() -> None:
@@ -76,8 +76,8 @@ def test_the_edge_watchdog_carries_every_flag_its_play_declares() -> None:
 def test_the_watchdog_never_carries_a_key() -> None:
     """A rejoin run holds a minted key in its facts; none of it reaches the unit."""
     assert "authkey" not in " ".join(_service(key=KEY).values())
-    assert "_tailscale_key" not in SERVICE.read_text()
-    assert "tailscale_up_cmd" not in SERVICE.read_text()
+    assert "_tailscale_key" not in SERVICE.read_text(encoding="utf-8")
+    assert "tailscale_up_cmd" not in SERVICE.read_text(encoding="utf-8")
     assert "authkey" not in _task("Build the Tailscale up flags")["set_fact"]["tailscale_up_flags"]
 
 
@@ -120,7 +120,7 @@ def test_only_the_edge_turns_the_watchdog_on() -> None:
     assert DEFAULTS["tailscale_watchdog"] is False
     on = []
     for playbook in sorted(PLAYBOOKS.glob("*.yml")):
-        for play in yaml.safe_load(playbook.read_text()) or []:
+        for play in yaml.safe_load(playbook.read_text(encoding="utf-8")) or []:
             for role in play.get("roles") or []:
                 if isinstance(role, dict) and (role.get("vars") or {}).get("tailscale_watchdog"):
                     on.append(playbook.name)

@@ -189,7 +189,7 @@ class TestPinnedTag:
 
         import yaml
 
-        text = Path("infra/k8s/overlays/staging/generated/deployments.yaml").read_text()
+        text = Path("infra/k8s/overlays/staging/generated/deployments.yaml").read_text(encoding="utf-8")
         # The overlay pins api and web, both `sha-*`: read web's own Deployment
         # independently, or a function returning api's tag would pass (PR-Agent on #2579).
         web = next(d for d in yaml.safe_load_all(text) if d and d["metadata"]["name"] == "web")
@@ -460,7 +460,7 @@ class TestTargetsAt:
 
         def show(rev: str, path: str) -> str:
             seen.append((rev, path))
-            return Path(path).read_text()
+            return Path(path).read_text(encoding="utf-8")
 
         return show
 

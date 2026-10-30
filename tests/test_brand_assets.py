@@ -49,7 +49,9 @@ def test_svg_marks_use_the_brand_primary_and_no_background(name: str) -> None:
     """The colour is the SSOT token, not a sampled one (ADR-071 D1)."""
     import yaml
 
-    primary = yaml.safe_load((ROOT / "infra/config/values/common.yaml").read_text())["branding"]["palette"]["primary"]
+    primary = yaml.safe_load((ROOT / "infra/config/values/common.yaml").read_text(encoding="utf-8"))["branding"][
+        "palette"
+    ]["primary"]
     svg = (EDGE / name).read_text(encoding="utf-8")
     assert primary.lower() in svg.lower()
     assert "<text" not in svg  # no font dependency: the mark is geometry only

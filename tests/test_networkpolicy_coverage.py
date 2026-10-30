@@ -134,7 +134,7 @@ def _callers(overlay: str) -> set[tuple[str, str, int]]:
         texts.append((name, pod))
         texts += [(name, text) for cm, text in configmaps.items() if f'"{cm}"' in pod]
     texts += [("traefik", json.dumps(d["spec"])) for d in docs if d["kind"] == "Middleware"]
-    texts += [("n8n", f.read_text()) for f in _workflows()]
+    texts += [("n8n", f.read_text(encoding="utf-8")) for f in _workflows()]
     found = set()
     for caller, text in texts:
         for host, port in ADDRESS.findall(text):
@@ -180,7 +180,9 @@ def test_the_render_measured_what_it_judges(overlay: str) -> None:
     # Each source is measured on its own, so losing one cannot hide behind the others.
     assert len(_workflows()) >= 5, "the n8n workflows are no longer where this test reads them"
     assert any(caller == "n8n" for caller, _, _ in _callers(overlay))
-    assert _middleware_backends(overlay), "the error-pages Middleware no longer names a Service where this test reads it"
+    assert _middleware_backends(overlay), (
+        "the error-pages Middleware no longer names a Service where this test reads it"
+    )
 
 
 def test_an_empty_selector_selects_every_pod() -> None:

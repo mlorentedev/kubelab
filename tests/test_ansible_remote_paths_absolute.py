@@ -54,12 +54,12 @@ def _tilde_vars(root: pathlib.Path) -> set[str]:
             names.update(k for k, v in mapping.items() if any(TILDE.search(s) for s in _strings(v)))
 
     for path in [*root.glob("roles/*/defaults/**/*.y*ml"), *root.glob("roles/*/vars/**/*.y*ml")]:
-        collect(yaml.safe_load(path.read_text()))
+        collect(yaml.safe_load(path.read_text(encoding="utf-8")))
     for path in [*root.glob("roles/*/tasks/**/*.y*ml"), *root.glob("roles/*/handlers/**/*.y*ml")]:
-        for task, _ in _walk(yaml.safe_load(path.read_text()), False):
+        for task, _ in _walk(yaml.safe_load(path.read_text(encoding="utf-8")), False):
             collect(task.get("vars"))
     for path in root.glob("playbooks/**/*.y*ml"):
-        for play in yaml.safe_load(path.read_text()) or []:
+        for play in yaml.safe_load(path.read_text(encoding="utf-8")) or []:
             if not isinstance(play, dict):
                 continue
             collect(play.get("vars"))
@@ -98,10 +98,10 @@ def _tasks_in_play(play: dict[str, Any]) -> Iterator[tuple[dict[str, Any], bool]
 
 def _all_tasks(root: pathlib.Path) -> Iterator[tuple[pathlib.Path, dict[str, Any], bool]]:
     for path in [*root.glob("roles/*/tasks/**/*.y*ml"), *root.glob("roles/*/handlers/**/*.y*ml")]:
-        for task, here in _walk(yaml.safe_load(path.read_text()), False):
+        for task, here in _walk(yaml.safe_load(path.read_text(encoding="utf-8")), False):
             yield path, task, here
     for path in root.glob("playbooks/**/*.y*ml"):
-        for play in yaml.safe_load(path.read_text()) or []:
+        for play in yaml.safe_load(path.read_text(encoding="utf-8")) or []:
             if not isinstance(play, dict):
                 continue
             for task, here in _tasks_in_play(play):
@@ -164,7 +164,7 @@ def test_the_scan_reports_every_way_a_remote_tilde_hides(tmp_path: pathlib.Path)
     }
     for rel, content in files.items():
         (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
-        (tmp_path / rel).write_text(yaml.safe_dump(content))
+        (tmp_path / rel).write_text(yaml.safe_dump(content), encoding="utf-8")
 
     found = {line.split(": ", 1)[1] for line in _remote_tilde_paths(tmp_path)}
 

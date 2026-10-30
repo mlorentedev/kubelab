@@ -24,7 +24,7 @@ from toolkit.features.backup_destination import WATCHER_TARGETS_PATH, own_bucket
 from toolkit.features.r2_tfvars import node_bucket
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
-COMMON = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
+COMMON = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
 
 
 def _rows(text: str) -> dict[str, list[str]]:
@@ -37,7 +37,7 @@ def _rows(text: str) -> dict[str, list[str]]:
 
 
 def test_the_committed_targets_match_the_ssot() -> None:
-    committed = (REPO / WATCHER_TARGETS_PATH).read_text()
+    committed = (REPO / WATCHER_TARGETS_PATH).read_text(encoding="utf-8")
     assert committed == render_watcher_targets(COMMON), (
         f"{WATCHER_TARGETS_PATH} is stale. Regenerate it with `make sync-r2-watcher-targets`."
     )
@@ -92,7 +92,7 @@ def test_the_watcher_reads_with_the_restic_that_writes() -> None:
     assert name == "restic/restic"
     assert tag == COMMON["backup"]["r2"]["restic_version"]
     assert "backup.watcher.image" in IMAGE_SOURCES
-    kustomization = yaml.safe_load((REPO / "infra/k8s/base/kustomization.yaml").read_text())
+    kustomization = yaml.safe_load((REPO / "infra/k8s/base/kustomization.yaml").read_text(encoding="utf-8"))
     assert {"name": name, "newTag": tag} in kustomization["images"]
 
 

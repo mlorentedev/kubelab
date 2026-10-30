@@ -38,7 +38,7 @@ def _unresolvable(snapshot_dir: pathlib.Path, records: set[str]) -> list[str]:
     """One ERROR / WHY / FIX message per snapshot whose prod hostname has no record."""
     messages = []
     for snapshot in sorted(snapshot_dir.glob("*.yaml")):
-        host = (yaml.safe_load(snapshot.read_text()).get("hostnames") or {}).get("prod")
+        host = (yaml.safe_load(snapshot.read_text(encoding="utf-8")).get("hostnames") or {}).get("prod")
         if host and host not in records:
             messages.append(
                 f"ERROR: {snapshot.stem}'s contract names prod hostname {host}, which has no public DNS record\n"
@@ -52,13 +52,16 @@ def _unresolvable(snapshot_dir: pathlib.Path, records: set[str]) -> list[str]:
 
 def _committed() -> set[str]:
     return _public_records(
-        json.loads((DNS / "zones.json").read_text()),
-        json.loads((DNS / "services.json").read_text()),
+        json.loads((DNS / "zones.json").read_text(encoding="utf-8")),
+        json.loads((DNS / "services.json").read_text(encoding="utf-8")),
     )
 
 
 def test_every_committed_prod_hostname_has_a_public_record() -> None:
-    hosts = [(yaml.safe_load(p.read_text()).get("hostnames") or {}).get("prod") for p in SNAPSHOT_DIR.glob("*.yaml")]
+    hosts = [
+        (yaml.safe_load(p.read_text(encoding="utf-8")).get("hostnames") or {}).get("prod")
+        for p in SNAPSHOT_DIR.glob("*.yaml")
+    ]
     assert [host for host in hosts if host], (
         f"no snapshot under {SNAPSHOT_DIR} names a prod hostname: nothing was checked"
     )
@@ -66,9 +69,9 @@ def test_every_committed_prod_hostname_has_a_public_record() -> None:
 
 
 def test_a_prod_hostname_with_no_record_is_refused_naming_zones_json(tmp_path: pathlib.Path) -> None:
-    contract = yaml.safe_load((SNAPSHOT_DIR / "web.yaml").read_text())
+    contract = yaml.safe_load((SNAPSHOT_DIR / "web.yaml").read_text(encoding="utf-8"))
     contract["hostnames"]["prod"] = "shop.mlorente.dev"
-    (tmp_path / "shop.yaml").write_text(yaml.safe_dump(contract))
+    (tmp_path / "shop.yaml").write_text(yaml.safe_dump(contract), encoding="utf-8")
 
     [message] = _unresolvable(tmp_path, _committed())
 
@@ -77,16 +80,16 @@ def test_a_prod_hostname_with_no_record_is_refused_naming_zones_json(tmp_path: p
 
 
 def test_a_staging_hostname_needs_no_public_record(tmp_path: pathlib.Path) -> None:
-    contract = yaml.safe_load((SNAPSHOT_DIR / "web.yaml").read_text())
+    contract = yaml.safe_load((SNAPSHOT_DIR / "web.yaml").read_text(encoding="utf-8"))
     contract["hostnames"]["staging"] = "shop.staging.mlorente.dev"
-    (tmp_path / "web.yaml").write_text(yaml.safe_dump(contract))
+    (tmp_path / "web.yaml").write_text(yaml.safe_dump(contract), encoding="utf-8")
 
     assert _unresolvable(tmp_path, _committed()) == []
 
 
 def test_main_tf_still_keys_records_the_way_this_test_does() -> None:
     """`_public_records` re-implements two expressions of `main.tf`; if either changes, so must it."""
-    main_tf = (DNS / "main.tf").read_text()
+    main_tf = (DNS / "main.tf").read_text(encoding="utf-8")
 
     assert '(r.name == r.apex ? r.apex : "${r.name}.${r.apex}") => r' in main_tf
     assert 'if contains(svc.environments, "prod")' in main_tf

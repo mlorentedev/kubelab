@@ -53,12 +53,13 @@ def capture(tmp_path: Path):
             node_backup_location="always-on",
             node_backup_staging_dir=str(staging),
             node_backup_capture_sentinel=str(sentinel),
-        )
+        ),
+        encoding="utf-8",
     )
     bindir = tmp_path / "bin"
     bindir.mkdir()
     kubectl = bindir / "kubectl"
-    kubectl.write_text(FAKE_KUBECTL)
+    kubectl.write_text(FAKE_KUBECTL, encoding="utf-8")
     kubectl.chmod(kubectl.stat().st_mode | stat.S_IXUSR)
     log = tmp_path / "kubectl.log"
 
@@ -82,7 +83,7 @@ def test_a_complete_dump_is_staged_and_the_capture_completes(capture) -> None:
     proc = capture("ok")
     assert proc.returncode == 0, proc.stderr
     dump = capture.staging / "postgres" / "pg_dumpall.sql"
-    assert TRAILER in dump.read_text()
+    assert TRAILER in dump.read_text(encoding="utf-8")
     assert capture.sentinel.exists()
     # Nothing else from the claim: a file copy of a running Postgres is not a backup.
     assert sorted(p.name for p in (capture.staging / "postgres").iterdir()) == ["pg_dumpall.sql"]
@@ -90,7 +91,7 @@ def test_a_complete_dump_is_staged_and_the_capture_completes(capture) -> None:
 
 def test_the_dump_runs_inside_the_declared_workload_as_its_own_user(capture) -> None:
     capture("ok")
-    calls = capture.log.read_text().splitlines()
+    calls = capture.log.read_text(encoding="utf-8").splitlines()
     assert len(calls) == 1, calls
     call = calls[0]
     assert call.startswith("exec -n kubelab deploy/postgres -c postgres -- ")

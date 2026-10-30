@@ -97,14 +97,14 @@ def _render(text: str, variables: dict[str, str]) -> str:
 
 @pytest.fixture(scope="module")
 def rendered() -> str:
-    return _render(CLOUD_INIT.read_text(), TEMPLATE_VARS)
+    return _render(CLOUD_INIT.read_text(encoding="utf-8"), TEMPLATE_VARS)
 
 
 class TestItRendersToValidCloudConfig:
     def test_the_first_line_is_the_cloud_config_marker(self) -> None:
         # Without it cloud-init does not recognise the file at all and simply
         # does nothing -- no error, no bootstrap, an instance that looks fine.
-        assert CLOUD_INIT.read_text().splitlines()[0] == "#cloud-config"
+        assert CLOUD_INIT.read_text(encoding="utf-8").splitlines()[0] == "#cloud-config"
 
     def test_the_rendered_output_parses_as_yaml(self, rendered: str) -> None:
         try:
@@ -121,10 +121,10 @@ class TestItRendersToValidCloudConfig:
         The reverse direction (used but not passed) is caught by the renderer
         itself, which raises rather than leaving the literal in place.
         """
-        block = re.search(r"user-data\s*=\s*templatefile\((.*?)\n    \}\)", MAIN_TF.read_text(), re.S)
+        block = re.search(r"user-data\s*=\s*templatefile\((.*?)\n    \}\)", MAIN_TF.read_text(encoding="utf-8"), re.S)
         assert block, "could not find the templatefile call in main.tf"
         passed = set(re.findall(r"^\s*([a-z_]+)\s*=", block.group(1), re.M))
-        used = set(re.findall(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}", CLOUD_INIT.read_text()))
+        used = set(re.findall(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}", CLOUD_INIT.read_text(encoding="utf-8")))
         unused = passed - used - {"user-data"}
         assert not unused, f"main.tf passes template variables cloud-init never uses: {sorted(unused)}"
 

@@ -21,7 +21,7 @@ COMMON = REPO / "infra/config/values/common.yaml"
 
 
 def _role_vars() -> dict:
-    for play in yaml.safe_load(PLAYBOOK.read_text()):
+    for play in yaml.safe_load(PLAYBOOK.read_text(encoding="utf-8")):
         for role in play.get("roles") or []:
             if isinstance(role, dict) and role.get("role", "").endswith("rpi3_services"):
                 return role.get("vars") or {}
@@ -30,13 +30,13 @@ def _role_vars() -> dict:
 
 def test_the_volume_name_is_rendered_from_the_backup_ssot() -> None:
     assert _role_vars()["uptime_kuma_volume"] == "{{ config.backup.sources.rpi3.uptime_kuma.volume }}"
-    assert "name: {{ uptime_kuma_volume }}" in TEMPLATE.read_text()
+    assert "name: {{ uptime_kuma_volume }}" in TEMPLATE.read_text(encoding="utf-8")
 
 
 def test_no_volume_name_is_hardcoded_in_the_template() -> None:
-    assert "uptime-kuma_uptime_kuma_data" not in TEMPLATE.read_text()
+    assert "uptime-kuma_uptime_kuma_data" not in TEMPLATE.read_text(encoding="utf-8")
 
 
 def test_the_ssot_names_the_live_volume() -> None:
-    common = yaml.safe_load(COMMON.read_text())
+    common = yaml.safe_load(COMMON.read_text(encoding="utf-8"))
     assert common["backup"]["sources"]["rpi3"]["uptime_kuma"]["volume"] == "uptime_kuma_data"

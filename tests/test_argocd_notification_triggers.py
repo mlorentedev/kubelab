@@ -50,7 +50,7 @@ _DEREFERENCE = re.compile(r"app\.status\.operationState\s*(?:\.|\?\.)")
 
 def _triggers() -> dict[str, str]:
     """Every `trigger.*` block in the notifications values, name -> raw body."""
-    values = yaml.safe_load(VALUES.read_text())
+    values = yaml.safe_load(VALUES.read_text(encoding="utf-8"))
     triggers = values["notifications"]["triggers"]
     return {name: body for name, body in triggers.items()}
 
@@ -148,7 +148,7 @@ _ACTION = re.compile(r"\{\{.*?\}\}", re.DOTALL)
 
 
 def _notifications() -> dict:
-    return yaml.safe_load(VALUES.read_text())["notifications"]
+    return yaml.safe_load(VALUES.read_text(encoding="utf-8"))["notifications"]
 
 
 def _github_webhook(name: str) -> dict:
@@ -162,7 +162,9 @@ def test_a_recipient_is_sent_only_templates_written_for_it():
     behaviour nothing here can test, so the pairing is held instead.
     """
     notifications = _notifications()
-    templates = {name.removeprefix("template."): yaml.safe_load(body) for name, body in notifications["templates"].items()}
+    templates = {
+        name.removeprefix("template."): yaml.safe_load(body) for name, body in notifications["templates"].items()
+    }
     for subscription in notifications["subscriptions"]:
         for recipient in subscription["recipients"]:
             for trigger in subscription["triggers"]:

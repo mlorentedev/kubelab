@@ -31,7 +31,7 @@ _COMMON_YAML = pathlib.Path(__file__).resolve().parents[2] / "infra/config/value
 @functools.lru_cache(maxsize=1)
 def _common_config() -> dict[str, Any]:
     """Load the SSOT. Never hardcode addresses in tests — see CLAUDE.md."""
-    return yaml.safe_load(_COMMON_YAML.read_text())
+    return yaml.safe_load(_COMMON_YAML.read_text(encoding="utf-8"))
 
 
 def on_demand_target(svc_name: str, node_key: str) -> tuple[str, int]:

@@ -102,7 +102,7 @@ def test_the_scan_sees_a_second_writer(tmp_path: pathlib.Path) -> None:
     }
     for rel, content in files.items():
         (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
-        (tmp_path / rel).write_text(yaml.safe_dump(content))
+        (tmp_path / rel).write_text(yaml.safe_dump(content), encoding="utf-8")
 
     found = {line.split(":")[0] for line in _writers_of_the_headscale_line(tmp_path)}
 

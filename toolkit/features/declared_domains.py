@@ -26,7 +26,7 @@ def declared_domains(env: str, values_dir: Path = VALUES_DIR) -> dict[str, str]:
         path = values_dir / f"{source}.yaml"
         if not path.exists():
             continue
-        config = yaml.safe_load(path.read_text()) or {}
+        config = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         _walk(config.get("apps", {}), found)
     return found
 

@@ -72,14 +72,14 @@ class Preflight:
 
     def __init__(self, tmp_path: Path) -> None:
         self.out = tmp_path / "output"
-        self.out.write_text("")
+        self.out.write_text("", encoding="utf-8")
         self.argv_log = tmp_path / "argv.log"
         self.stdin_log = tmp_path / "stdin.log"
         self.summary = tmp_path / "summary.md"
         bindir = tmp_path / "bin"
         bindir.mkdir()
         curl = bindir / "curl"
-        curl.write_text(FAKE_CURL)
+        curl.write_text(FAKE_CURL, encoding="utf-8")
         curl.chmod(0o755)
         self.env = _base_env()
         self.env["PATH"] = f"{bindir}{os.pathsep}{os.environ['PATH']}"
@@ -107,7 +107,7 @@ class Preflight:
         )
 
     def lines(self) -> list[str]:
-        return self.out.read_text().splitlines()
+        return self.out.read_text(encoding="utf-8").splitlines()
 
 
 @pytest.fixture
@@ -185,7 +185,7 @@ def test_it_never_picks_a_model_outside_the_declared_chain(preflight: Preflight)
     """Every other id answers; only the two declared ones refuse."""
     proc = preflight.run("mimo-v2.6-flash=401 deepseek-v4-flash=401 glm5.3-flash=200 qwen3.6=200")
     assert proc.returncode == 1, _output(proc)
-    written = preflight.out.read_text()
+    written = preflight.out.read_text(encoding="utf-8")
     assert "glm5.3-flash" not in written
     assert "qwen3.6" not in written
 
@@ -193,7 +193,7 @@ def test_it_never_picks_a_model_outside_the_declared_chain(preflight: Preflight)
 def test_it_probes_the_bare_nan_id_and_hands_pr_agent_the_transport_prefixed_one(preflight: Preflight) -> None:
     proc = preflight.run("mimo-v2.6-flash=200 deepseek-v4-flash=200")
     assert proc.returncode == 0, _output(proc)
-    argv = preflight.argv_log.read_text()
+    argv = preflight.argv_log.read_text(encoding="utf-8")
     assert '"model":"mimo-v2.6-flash"' in argv
     assert '"model":"openai/' not in argv
 
@@ -201,8 +201,8 @@ def test_it_probes_the_bare_nan_id_and_hands_pr_agent_the_transport_prefixed_one
 def test_the_key_reaches_curl_on_stdin_never_on_its_argv(preflight: Preflight) -> None:
     proc = preflight.run("mimo-v2.6-flash=200 deepseek-v4-flash=200")
     assert proc.returncode == 0, _output(proc)
-    assert KEY not in preflight.argv_log.read_text()
-    assert f"Bearer {KEY}" in preflight.stdin_log.read_text()
+    assert KEY not in preflight.argv_log.read_text(encoding="utf-8")
+    assert f"Bearer {KEY}" in preflight.stdin_log.read_text(encoding="utf-8")
     assert KEY not in _output(proc)
 
 
@@ -211,7 +211,7 @@ def test_the_job_summary_names_the_model_that_reviews_and_every_one_that_did_not
 ) -> None:
     proc = preflight.run("mimo-v2.6-flash=401 deepseek-v4-flash=200", summary=True)
     assert proc.returncode == 0, _output(proc)
-    summary = preflight.summary.read_text()
+    summary = preflight.summary.read_text(encoding="utf-8")
     assert "openai/deepseek-v4-flash" in summary
     assert any("openai/mimo-v2.6-flash" in line and "401" in line for line in summary.splitlines())
 
@@ -301,7 +301,7 @@ def nan() -> Iterator[LocalNaN]:
 
 def _run_real(nan: LocalNaN, tmp_path: Path, model: str) -> tuple[subprocess.CompletedProcess[str], list[str]]:
     out = tmp_path / "output"
-    out.write_text("")
+    out.write_text("", encoding="utf-8")
     env = {**_base_env(), "NAN_API_BASE": nan.url, "PREFLIGHT_TIMEOUT": "2"}
     proc = subprocess.run(  # noqa: S603
         [str(PREFLIGHT), "--model", model, "--fallbacks", '["openai/alive"]', "--output", str(out)],
@@ -311,7 +311,7 @@ def _run_real(nan: LocalNaN, tmp_path: Path, model: str) -> tuple[subprocess.Com
         text=True,
         timeout=60,
     )
-    return proc, out.read_text().splitlines()
+    return proc, out.read_text(encoding="utf-8").splitlines()
 
 
 def test_real_curl_sends_the_key_read_from_stdin_and_the_status_comes_back(nan: LocalNaN, tmp_path: Path) -> None:

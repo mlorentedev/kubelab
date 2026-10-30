@@ -377,14 +377,14 @@ def test_every_source_snapshot_needs_exactly_one_copy(copied: list[dict[str, Any
 
 def test_the_values_file_keeps_its_comments(tmp_path: pathlib.Path) -> None:
     common = tmp_path / "common.yaml"
-    source = (REPO / "infra/config/values/common.yaml").read_text()
+    source = (REPO / "infra/config/values/common.yaml").read_text(encoding="utf-8")
     # A trailing comment on each line the edit replaces, which a whole-line
     # substitution would drop while the line count still matched.
     source = re.sub(r"^(    own_bucket_nodes: .*)$", r"\1  # moved nodes", source, count=1, flags=re.MULTILINE)
     source = re.sub(
         r"^(      rpi3: [0-9a-f]{64})$", r"\1  # pinned at the sitting", source, count=1, flags=re.MULTILINE
     )
-    common.write_text(source)
+    common.write_text(source, encoding="utf-8")
     before = yaml.safe_load(source)["backup"]["r2"].get("own_bucket_nodes") or []
     values = bm.ValuesFile(common)
 
@@ -393,7 +393,7 @@ def test_the_values_file_keeps_its_comments(tmp_path: pathlib.Path) -> None:
     values.declare("rpi3")
     values.pin("rpi3", NEW_ID)
 
-    text = common.read_text()
+    text = common.read_text(encoding="utf-8")
     loaded = yaml.safe_load(text)["backup"]["r2"]
     # Read from the tree, not hardcoded: the sitting moves the nodes one PR at a time.
     expected = sorted({*before, "rpi3"})
@@ -406,7 +406,7 @@ def test_the_values_file_keeps_its_comments(tmp_path: pathlib.Path) -> None:
 
 
 def test_the_make_target_is_one_node_prod_only_and_threads_the_dry_run() -> None:
-    recipe = (REPO / "Makefile").read_text().split("\nbackup-migrate:\n", 1)[1].split("\n\n", 1)[0]
+    recipe = (REPO / "Makefile").read_text(encoding="utf-8").split("\nbackup-migrate:\n", 1)[1].split("\n\n", 1)[0]
     assert '"$(ENV)" = prod' in recipe
     assert '"$(NODE)" != "all"' in recipe
     assert "$(if $(CHECK),--check)" in recipe
@@ -419,7 +419,7 @@ def test_the_make_target_is_one_node_prod_only_and_threads_the_dry_run() -> None
 def test_the_make_target_refuses_an_ambiguous_check(check: str, refused: bool) -> None:
     import subprocess
 
-    recipe = (REPO / "Makefile").read_text().split("\nbackup-migrate:\n", 1)[1].split("\n\n", 1)[0]
+    recipe = (REPO / "Makefile").read_text(encoding="utf-8").split("\nbackup-migrate:\n", 1)[1].split("\n\n", 1)[0]
     guard = next(line for line in recipe.splitlines() if "CHECK takes" in line).strip().lstrip("@")
     proc = subprocess.run(["sh", "-c", guard.replace("$(CHECK)", check)], capture_output=True, check=False)
     assert (proc.returncode != 0) is refused

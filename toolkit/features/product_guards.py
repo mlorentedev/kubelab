@@ -77,7 +77,7 @@ def _manifest_hosts(k8s_dir: Path) -> dict[str, str]:
     """``{host: manifest path}`` for every route match in the committed manifests."""
     hosts: dict[str, str] = {}
     for path in sorted(k8s_dir.rglob("*.yaml")):
-        for host in _ROUTE_HOST.findall(path.read_text()):
+        for host in _ROUTE_HOST.findall(path.read_text(encoding="utf-8")):
             hosts.setdefault(host, str(path.relative_to(k8s_dir.parent.parent)))
     return hosts
 

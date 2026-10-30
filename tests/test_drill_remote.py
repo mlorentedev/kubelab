@@ -27,7 +27,7 @@ from toolkit.features.headscale_drill import read_live
 REPO = Path(__file__).resolve().parents[1]
 SHA = "0123456789abcdef0123456789abcdef01234567"
 #: Addresses come from the SSOT, never a literal (CLAUDE.md, networking.*).
-NET = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())["networking"]
+NET = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text(encoding="utf-8"))["networking"]
 TARGET = f"{NET['ssh_users']['homelab']}@{NET['nodes']['ace2']['tailscale_ip']}"
 
 #: Distinctive values standing in for every secret the workstation injects.
@@ -134,7 +134,7 @@ def test_each_exit_class_is_reported_as_itself(capsys, rc, expected, named) -> N
 
 
 def test_the_checkout_path_is_the_one_dev_node_provisions() -> None:
-    defaults = yaml.safe_load((REPO / "infra/ansible/roles/dev_node/defaults/main.yml").read_text())
+    defaults = yaml.safe_load((REPO / "infra/ansible/roles/dev_node/defaults/main.yml").read_text(encoding="utf-8"))
     assert defaults["dev_node_drill_checkout"] == "{{ dev_node_home }}/" + drill_remote.CHECKOUT
 
 

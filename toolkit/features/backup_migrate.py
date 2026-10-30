@@ -127,25 +127,27 @@ class ValuesFile:
 
         import yaml
 
-        text = self.path.read_text()
+        text = self.path.read_text(encoding="utf-8")
         # A trailing comment on the edited line is kept: only the value is replaced.
         edited, count = re.subn(pattern + r"(\s+#.*)?$", line + r"\g<2>", text, count=1, flags=re.MULTILINE)
         if count != 1:
             raise ValueError(f"{self.path}: no line matches {pattern!r}")
         if not check(yaml.safe_load(edited)["backup"]["r2"]):
             raise ValueError(f"{self.path}: the edit did not produce the expected value")
-        self.path.write_text(edited)
+        self.path.write_text(edited, encoding="utf-8")
 
     def pinnable(self, node: str) -> bool:
         """Whether `pin` will find the node's line, so a run that cannot finish never starts."""
         import re
 
-        return re.search(PIN_LINE.format(node=node), self.path.read_text(), flags=re.MULTILINE) is not None
+        return (
+            re.search(PIN_LINE.format(node=node), self.path.read_text(encoding="utf-8"), flags=re.MULTILINE) is not None
+        )
 
     def declare(self, node: str) -> None:
         import yaml
 
-        current = (yaml.safe_load(self.path.read_text())["backup"]["r2"].get("own_bucket_nodes")) or []
+        current = (yaml.safe_load(self.path.read_text(encoding="utf-8"))["backup"]["r2"].get("own_bucket_nodes")) or []
         nodes = sorted({*current, node})
         self._replace(
             r"^(    own_bucket_nodes:) [^#\n]*?",

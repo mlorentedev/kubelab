@@ -26,14 +26,14 @@ VALUES = REPO_ROOT / "infra/config/values"
 #: ICANN's private-use `.internal`). dev.yaml lives entirely under `.test`.
 NON_PUBLIC_TLDS = frozenset({"test", "local", "internal"})
 
-ZONES: dict[str, Any] = json.loads((DNS / "zones.json").read_text())
+ZONES: dict[str, Any] = json.loads((DNS / "zones.json").read_text(encoding="utf-8"))
 
 
 ENVS = ("common", "staging", "prod")
 
 
 def _configs() -> list[dict[str, Any]]:
-    return [yaml.safe_load((VALUES / f"{env}.yaml").read_text()) or {} for env in ENVS]
+    return [yaml.safe_load((VALUES / f"{env}.yaml").read_text(encoding="utf-8")) or {} for env in ENVS]
 
 
 def _is_reference(value: str, configs: list[dict[str, Any]]) -> bool:
@@ -69,7 +69,7 @@ def _apex(host: str) -> str:
 
 def test_every_service_zone_is_in_the_map() -> None:
     keys = {zone["key"] for zone in ZONES.values()}
-    services = json.loads((DNS / "services.json").read_text())
+    services = json.loads((DNS / "services.json").read_text(encoding="utf-8"))
     unknown = sorted({s["zone"] for s in services} - keys)
     assert not unknown, f"services.json names zones absent from zones.json: {unknown}"
 
@@ -95,7 +95,7 @@ def test_the_guard_sees_the_zones_it_must() -> None:
 
 
 def _serves(apex: str, zone: dict[str, Any]) -> bool:
-    services = json.loads((DNS / "services.json").read_text())
+    services = json.loads((DNS / "services.json").read_text(encoding="utf-8"))
     return bool(zone["records"]) or any(s["zone"] == zone["key"] for s in services)
 
 

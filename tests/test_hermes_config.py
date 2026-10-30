@@ -22,7 +22,7 @@ REPO = Path(__file__).resolve().parent.parent
 ROLE = REPO / "infra/ansible/roles/agent_stack"
 DENYLIST = ROLE / "files/guardrails-denylist.yaml"
 COMMON = REPO / "infra/config/values/common.yaml"
-RULES = yaml.safe_load(DENYLIST.read_text())["rules"]
+RULES = yaml.safe_load(DENYLIST.read_text(encoding="utf-8"))["rules"]
 
 
 def _render(name: str, **overrides: object) -> str:
@@ -82,7 +82,7 @@ def test_the_rendered_deny_list_is_every_glob_of_the_file() -> None:
 
 def test_the_role_reads_the_deny_list_from_that_file() -> None:
     """The tests above inject RULES; this pins that the role reads the same file."""
-    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text())
+    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))
     assert "role_path ~ '/files/guardrails-denylist.yaml'" in defaults["agent_stack_deny_rules"]
     assert defaults["agent_stack_deny_rules"].rstrip("} ").endswith(".rules")
 
@@ -126,7 +126,9 @@ def test_no_secret_is_written_into_the_config() -> None:
 def test_scheduled_and_delegated_work_runs_on_the_unmetered_model() -> None:
     """ADR-068 D7: the key is PR-Agent's, so only an interactive turn draws a quota."""
     config = _config()
-    unmetered = yaml.safe_load(COMMON.read_text())["apps"]["services"]["ai"]["hermes_kubelab"]["models"]["unmetered"]
+    unmetered = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["apps"]["services"]["ai"]["hermes_kubelab"][
+        "models"
+    ]["unmetered"]
     assert config["cron"]["model"] == unmetered
     assert config["delegation"]["model"] == unmetered
     assert config["cron"]["catch_up_missed"] is True
@@ -219,7 +221,7 @@ def test_the_agent_cannot_rewrite_its_own_config() -> None:
 
 
 def test_hermes_is_not_deployed_without_the_inference_key_and_is_taken_down() -> None:
-    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text())
+    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))
     assert "agent_stack_nan_api_key | length > 0" in defaults["agent_stack_hermes_configured"]
     gate = "agent_stack_hermes_configured | bool"
     [deploy] = [t for t in _tasks() if t.get("name") == "Deploy hermes-kubelab"]
@@ -230,7 +232,7 @@ def test_hermes_is_not_deployed_without_the_inference_key_and_is_taken_down() ->
 
 def test_every_provision_reads_the_deny_list_back_through_the_running_gateway() -> None:
     """A config Hermes failed to load leaves the list empty and the gateway running."""
-    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text())
+    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))
     evaluate = defaults["_agent_stack_hermes_evaluate"]
     assert evaluate[:6] == ["docker", "exec", "-u", "hermes", "hermes-kubelab", "hermes"]
     # The env type follows the mount: test_hermes_vault_sync proves which one.
@@ -247,7 +249,7 @@ def test_every_provision_reads_the_deny_list_back_through_the_running_gateway() 
 
 # --------------------------------------------------------------------------- the ported harness
 
-HERMES = yaml.safe_load(COMMON.read_text())["apps"]["services"]["ai"]["hermes_kubelab"]
+HERMES = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["apps"]["services"]["ai"]["hermes_kubelab"]
 PORTED = HERMES["agent_config"]
 # What the role decides, so the SSOT's ported keys cannot reach it (spec AI-012).
 ROLE_OWNED = {
@@ -316,7 +318,7 @@ def test_no_tirith_key_is_declared_for_an_image_that_removed_the_scanner() -> No
     false`, asserted with the rest of the terminal block above)."""
     assert not [k for k in _config()["security"] if k.startswith("tirith_")]
     for path in ("defaults/main.yml", "tasks/hermes.yml"):
-        assert "tirith" not in (ROLE / path).read_text().lower(), (
+        assert "tirith" not in (ROLE / path).read_text(encoding="utf-8").lower(), (
             f"{path} still reaches the scanner the image no longer ships"
         )
 

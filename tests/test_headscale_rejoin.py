@@ -389,7 +389,9 @@ def test_a_node_whose_play_cannot_rejoin_it_is_refused(tmp_path: Path, play: str
     from toolkit.features.headscale_nodes import RejoinRefused, rejoin_playbook
 
     if play:
-        (tmp_path / "provision-node.yml").write_text("- hosts: node\n  roles:\n    - role: ../roles/base_system\n")
+        (tmp_path / "provision-node.yml").write_text(
+            "- hosts: node\n  roles:\n    - role: ../roles/base_system\n", encoding="utf-8"
+        )
     with pytest.raises(RejoinRefused, match=r"ERROR: .* WHY: .* FIX: "):
         rejoin_playbook(tmp_path, "node")
 

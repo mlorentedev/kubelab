@@ -24,28 +24,28 @@ from tests.test_coredns_prod_zone_targets import COMMON, ROLE, _role_vars
 from tests.test_runbook_hostnames_are_published import _routed_in_staging
 
 # The role's own `staging_domain`, rendered against common.yaml as Ansible does.
-APEX = jinja2.Template(yaml.safe_load((ROLE / "defaults/main.yml").read_text())["staging_domain"]).render(
-    common=yaml.safe_load(COMMON.read_text())
-)
+APEX = jinja2.Template(
+    yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))["staging_domain"]
+).render(common=yaml.safe_load(COMMON.read_text(encoding="utf-8")))
 
 
 def _render(section: str) -> str:
     env = jinja2.Environment(undefined=jinja2.StrictUndefined)
     variables = _role_vars()
     variables["staging_domain"] = APEX
-    variables["staging_zones"] = yaml.safe_load(COMMON.read_text())["networking"]["staging_zones"]
+    variables["staging_zones"] = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["networking"]["staging_zones"]
     return env.from_string(section).render(**variables)
 
 
 def _staging_zone() -> str:
     """The rendered first staging zone, the one whose apex is `staging_domain`."""
-    text = (ROLE / "templates/Corefile.j2").read_text()
+    text = (ROLE / "templates/Corefile.j2").read_text(encoding="utf-8")
     return _render(text.split("{{ staging_domain }} {", 1)[1].split("{% for zone in staging_zones %}", 1)[0])
 
 
 def _staging_section() -> str:
     """Every staging zone the template renders: the apex zone and the `staging_zones` loop."""
-    text = (ROLE / "templates/Corefile.j2").read_text()
+    text = (ROLE / "templates/Corefile.j2").read_text(encoding="utf-8")
     return _render(text.split("# --- Staging zones", 1)[1].split("# --- Prod zone", 1)[0])
 
 
@@ -75,7 +75,7 @@ def _unrouted(zone: str, hosts: list[str]) -> list[str]:
 
 def test_every_staging_zone_is_read() -> None:
     zones = _explicit_hosts(_staging_section())
-    assert set(zones) == set(yaml.safe_load(COMMON.read_text())["networking"]["staging_zones"]) | {APEX}
+    assert set(zones) == set(yaml.safe_load(COMMON.read_text(encoding="utf-8"))["networking"]["staging_zones"]) | {APEX}
 
 
 def test_every_explicit_staging_host_is_its_zone_apex_or_routed() -> None:

@@ -113,15 +113,15 @@ def _tf_text() -> str:
     an assertion about the configuration -- the failure mode where a test passes
     because someone wrote *about* the setting instead of setting it.
     """
-    return "\n".join(_strip_comments(path.read_text()) for path in sorted(GCP_DIR.glob("*.tf")))
+    return "\n".join(_strip_comments(path.read_text(encoding="utf-8")) for path in sorted(GCP_DIR.glob("*.tf")))
 
 
 def _networking() -> dict:
-    return yaml.safe_load(COMMON_YAML.read_text())["networking"]
+    return yaml.safe_load(COMMON_YAML.read_text(encoding="utf-8"))["networking"]
 
 
 def _common() -> dict:
-    return yaml.safe_load(COMMON_YAML.read_text())
+    return yaml.safe_load(COMMON_YAML.read_text(encoding="utf-8"))
 
 
 def _ssot(dotted: str) -> object:
@@ -586,7 +586,7 @@ class TestNoCredentialLiterals:
         # Deliberately NOT using the comment-stripped text: a key pasted into a
         # comment is committed exactly as hard as one in a value.
         for path in sorted(GCP_DIR.glob("*.tf")):
-            body = path.read_text()
+            body = path.read_text(encoding="utf-8")
             for pattern, what in self._SECRET_SHAPES:
                 assert not re.search(pattern, body), (
                     f"{path.name} contains what looks like {what}. Credentials "
@@ -697,7 +697,7 @@ class TestThePlanCanConverge:
         return match.group(1).strip()
 
     def test_distribution_policy_zones_is_not_an_empty_list(self) -> None:
-        value = self._declared_value((GCP_DIR / "main.tf").read_text())
+        value = self._declared_value((GCP_DIR / "main.tf").read_text(encoding="utf-8"))
         match = True
         assert value != "[]", (
             "distribution_policy_zones is `[]`. GCP expands that to every zone in "
@@ -708,7 +708,7 @@ class TestThePlanCanConverge:
 
     def test_it_derives_from_the_zones_data_source(self) -> None:
         """A hardcoded zone list is the same trap one region change later."""
-        value = self._declared_value((GCP_DIR / "main.tf").read_text())
+        value = self._declared_value((GCP_DIR / "main.tf").read_text(encoding="utf-8"))
         assert "data.google_compute_zones.available.names" in value, (
             "distribution_policy_zones should read the same data source that already "
             "drives max_unavailable_fixed, so a region change cannot desynchronise them"

@@ -31,10 +31,12 @@ from tests.ansible_jinja import ansible_env, task_runs
 
 REPO = Path(__file__).resolve().parents[1]
 ROLE = REPO / "infra" / "ansible" / "roles" / "gateway"
-TASKS: list[dict[str, Any]] = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text())
-HANDLERS: list[dict[str, Any]] = yaml.safe_load((ROLE / "handlers" / "main.yml").read_text())
-DEFAULTS: dict[str, Any] = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text())
-NETWORKING = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text())["networking"]
+TASKS: list[dict[str, Any]] = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text(encoding="utf-8"))
+HANDLERS: list[dict[str, Any]] = yaml.safe_load((ROLE / "handlers" / "main.yml").read_text(encoding="utf-8"))
+DEFAULTS: dict[str, Any] = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text(encoding="utf-8"))
+NETWORKING = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text(encoding="utf-8"))[
+    "networking"
+]
 NODES = NETWORKING["nodes"]
 EDGE = {name for name, node in NODES.items() if "gateway" in ((node or {}).get("ansible_groups") or [])}
 ANSIBLE = REPO / "infra" / "ansible"
@@ -246,12 +248,12 @@ def test_no_other_role_writes_the_edges_netplan() -> None:
     two would apply netplan against each other. So only a play aimed at named nodes
     other than the edge may set a `netplan_` variable, and no source that every host
     reads may: a role's defaults or vars, an inventory, group_vars, host_vars."""
-    base_system = yaml.safe_load((ANSIBLE / "roles" / "base_system" / "tasks" / "main.yml").read_text())
+    base_system = yaml.safe_load((ANSIBLE / "roles" / "base_system" / "tasks" / "main.yml").read_text(encoding="utf-8"))
     (gate,) = [task["when"] for task in base_system if "/etc/netplan/" in str(task)]
     assert gate == "netplan_address is defined"
     others = set(NODES) - EDGE
     for playbook in sorted((ANSIBLE / "playbooks").glob("*.yml")):
-        for play in yaml.safe_load(playbook.read_text()) or []:
+        for play in yaml.safe_load(playbook.read_text(encoding="utf-8")) or []:
             if isinstance(play, dict) and (keys := _netplan_keys(play)):
                 hosts = set(re.split(r"[,:]", str(play.get("hosts", ""))))
                 assert hosts <= others, f"{playbook.name}: the play on {play.get('hosts')!r} sets {sorted(keys)}"
@@ -269,7 +271,7 @@ def test_no_other_role_writes_the_edges_netplan() -> None:
     ]
     assert shared, "no shared variable source found: the glob is wrong, not the edge clean"
     for source in shared:
-        for document in yaml.safe_load_all(source.read_text()):
+        for document in yaml.safe_load_all(source.read_text(encoding="utf-8")):
             assert not _netplan_keys(document), f"{source.relative_to(REPO)} sets {sorted(_netplan_keys(document))}"
 
 
@@ -295,7 +297,7 @@ CONTROLLER_SIDE = ("include_vars", "set_fact")
 
 
 def _edge_play() -> dict[str, Any]:
-    plays = yaml.safe_load(EDGE_PLAY_FILE.read_text())
+    plays = yaml.safe_load(EDGE_PLAY_FILE.read_text(encoding="utf-8"))
     return next(p for p in plays if any(str(r.get("role", "")).endswith("/gateway") for r in p.get("roles", [])))
 
 
@@ -599,7 +601,7 @@ def test_the_parameter_the_gateway_refuses_is_the_one_the_edge_play_removes() ->
     leave the gateway refusing a command line that nothing ever cleans."""
     check = TASKS[_first(lambda task: "ieee80211_regdom" in str(task.get("assert")))]
     (pattern,) = re.findall(r"select\('match', '([^']+)'\)", check["assert"]["that"])
-    plays = yaml.safe_load((ANSIBLE / "playbooks" / "provision-rpi4.yml").read_text())
+    plays = yaml.safe_load((ANSIBLE / "playbooks" / "provision-rpi4.yml").read_text(encoding="utf-8"))
     (boot,) = [r for p in plays for r in p.get("roles") or [] if str(r.get("role", "")).endswith("/rpi_boot")]
     assert [name for name in boot["vars"]["rpi_boot_absent_params"] if re.match(pattern, f"{name}=US")]
 
@@ -709,7 +711,9 @@ def test_the_ap_handlers_run_inside_the_role() -> None:
     flush = [i for i, task in enumerate(TASKS) if task.get("meta") == "flush_handlers"]
     last_notify = max(i for i, task in enumerate(TASKS) if "notify" in task)
     assert any(i > last_notify for i in flush)
-    plays = yaml.safe_load((REPO / "infra" / "ansible" / "playbooks" / "provision-rpi4.yml").read_text())
+    plays = yaml.safe_load(
+        (REPO / "infra" / "ansible" / "playbooks" / "provision-rpi4.yml").read_text(encoding="utf-8")
+    )
     assert not any("force_handlers" in play for play in plays)
 
 
@@ -829,7 +833,9 @@ def _units() -> dict[str, str]:
             continue
         for item in task.get("loop") or [""]:
             name = str(args["dest"]).replace("{{ item }}", item).rsplit("/", 1)[1]
-            units[name] = (ROLE / "templates" / str(args["src"]).replace("{{ item }}", item)).read_text()
+            units[name] = (ROLE / "templates" / str(args["src"]).replace("{{ item }}", item)).read_text(
+                encoding="utf-8"
+            )
     return units
 
 

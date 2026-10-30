@@ -1272,7 +1272,7 @@ _BODY_HELP = "Markdown file with the body (omit for an empty body)"
 
 
 def _read_body(body_file: Path | None) -> str:
-    return body_file.read_text() if body_file else ""
+    return body_file.read_text(encoding="utf-8") if body_file else ""
 
 
 @gitea_pr_app.command("create")

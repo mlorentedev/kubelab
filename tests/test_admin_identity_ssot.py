@@ -199,7 +199,9 @@ class TestTheCatalogKeyFollowsTheIdentity:
         report on it, and find it missing — reading as "the secret was never
         set" rather than "the catalog is looking in the wrong place".
         """
-        common = yaml.safe_load((Path(__file__).parent.parent / "infra/config/values/common.yaml").read_text())
+        common = yaml.safe_load(
+            (Path(__file__).parent.parent / "infra/config/values/common.yaml").read_text(encoding="utf-8")
+        )
         operator = common["apps"]["auth"]["identities"]["operator"]
         expected = f"apps.services.security.authelia.users_{operator}_password_hash"
 
@@ -223,7 +225,9 @@ class TestTheOldSSOTIsGone:
         future consumer to pick whichever it finds first, which is how one
         identity acquires two resolution paths again.
         """
-        common = yaml.safe_load((Path(__file__).parent.parent / "infra/config/values/common.yaml").read_text())
+        common = yaml.safe_load(
+            (Path(__file__).parent.parent / "infra/config/values/common.yaml").read_text(encoding="utf-8")
+        )
         auth = common["apps"]["auth"]
         assert "admin_username" not in auth, (
             "apps.auth.admin_username is back. The identity is declared once, in "
@@ -240,7 +244,9 @@ class TestTheOldSSOTIsGone:
         resolve to no identity and be skipped with a warning — a user silently
         absent from Authelia, which fails as a login nobody can explain.
         """
-        common = yaml.safe_load((Path(__file__).parent.parent / "infra/config/values/common.yaml").read_text())
+        common = yaml.safe_load(
+            (Path(__file__).parent.parent / "infra/config/values/common.yaml").read_text(encoding="utf-8")
+        )
         users = common["apps"]["services"]["security"]["authelia"]["users"]
         offenders = [u for u in users if "is_admin" in u]
         assert not offenders, (
@@ -256,7 +262,9 @@ class TestTheOldSSOTIsGone:
         is skipped by both generators, so it disappears from the users database
         without failing anything.
         """
-        common = yaml.safe_load((Path(__file__).parent.parent / "infra/config/values/common.yaml").read_text())
+        common = yaml.safe_load(
+            (Path(__file__).parent.parent / "infra/config/values/common.yaml").read_text(encoding="utf-8")
+        )
         users = common["apps"]["services"]["security"]["authelia"]["users"]
         unresolved = [u for u in users if not resolve_user_identity(u, common)]
         assert not unresolved, (
@@ -330,7 +338,9 @@ class TestEveryIdentityHasItsOwnEmail:
     def _derived() -> dict[str, Any]:
         from toolkit.features.configuration import ConfigurationManager
 
-        config = yaml.safe_load((Path(__file__).parent.parent / "infra/config/values/common.yaml").read_text())
+        config = yaml.safe_load(
+            (Path(__file__).parent.parent / "infra/config/values/common.yaml").read_text(encoding="utf-8")
+        )
         ConfigurationManager._inject_contact_email_derivations(config)
         return config
 

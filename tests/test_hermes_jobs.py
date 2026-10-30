@@ -31,12 +31,12 @@ def _planner() -> types.ModuleType:
     files/, which other tests read as text."""
     path = ROLE / "files/hermes-jobs.py"
     module = types.ModuleType("hermes_jobs")
-    exec(compile(path.read_text(), str(path), "exec"), module.__dict__)  # noqa: S102
+    exec(compile(path.read_text(encoding="utf-8"), str(path), "exec"), module.__dict__)  # noqa: S102
     return module
 
 
 def _hermes() -> dict:
-    return yaml.safe_load(COMMON.read_text())["apps"]["services"]["ai"]["hermes_kubelab"]
+    return yaml.safe_load(COMMON.read_text(encoding="utf-8"))["apps"]["services"]["ai"]["hermes_kubelab"]
 
 
 def _declaration(**jobs: dict) -> dict:
@@ -274,7 +274,7 @@ def test_the_declared_jobs_are_valid_and_all_new_on_an_empty_gateway() -> None:
 def _job_tasks() -> list[dict]:
     path = ROLE / "tasks/hermes_jobs.yml"
     assert path.exists(), "the reconcile tasks live in tasks/hermes_jobs.yml"
-    return yaml.safe_load(path.read_text())
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
 def _flat(tasks: list[dict]) -> list[dict]:
@@ -287,7 +287,7 @@ def _flat(tasks: list[dict]) -> list[dict]:
 
 
 def test_the_reconcile_is_part_of_the_gateway_deploy() -> None:
-    text = (ROLE / "tasks/hermes.yml").read_text()
+    text = (ROLE / "tasks/hermes.yml").read_text(encoding="utf-8")
     assert "hermes_jobs.yml" in text
 
 
@@ -309,7 +309,7 @@ def test_the_diff_decides_changed_and_a_dry_run_changes_nothing() -> None:
 
 def test_jobs_are_written_as_the_gateways_user_through_the_cli_and_never_restart_it() -> None:
     """R6 (verification.md): the running gateway reads jobs.json on every tick."""
-    text = (ROLE / "tasks/hermes_jobs.yml").read_text()
+    text = (ROLE / "tasks/hermes_jobs.yml").read_text(encoding="utf-8")
     commands = [t for t in _flat(_job_tasks()) if "ansible.builtin.command" in t]
     assert len(commands) == 2
     for task in commands:

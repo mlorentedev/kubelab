@@ -31,7 +31,7 @@ def _statuses(repo: Path, *codes: int) -> tuple[Callable[[], int], list[str]]:
     seen: list[str] = []
 
     def run_test() -> int:
-        seen.append((repo / "guard.py").read_text())
+        seen.append((repo / "guard.py").read_text(encoding="utf-8"))
         return next(answers)
 
     return run_test, seen
@@ -42,26 +42,28 @@ def repo(tmp_path: Path) -> Path:
     _git(tmp_path, "init", "-q")
     _git(tmp_path, "config", "user.email", "t@example.invalid")
     _git(tmp_path, "config", "user.name", "t")
-    (tmp_path / "guard.py").write_text(ORIGINAL)
+    (tmp_path / "guard.py").write_text(ORIGINAL, encoding="utf-8")
     _git(tmp_path, "add", "-A")
     _git(tmp_path, "commit", "-qm", "base")
     return tmp_path
 
 
 def test_a_dirty_tree_refuses_before_touching_anything(repo: Path) -> None:
-    (repo / "guard.py").write_text(ORIGINAL + "# uncommitted work\n")
+    (repo / "guard.py").write_text(ORIGINAL + "# uncommitted work\n", encoding="utf-8")
     ran: list[str] = []
     with pytest.raises(mutate.Refused, match="not clean"):
         mutate.run(repo, Path("guard.py"), "x > 0", "x >= 0", lambda: ran.append("test") or 1)
     assert ran == []
-    assert (repo / "guard.py").read_text() == ORIGINAL + "# uncommitted work\n", "the uncommitted work survives"
+    assert (repo / "guard.py").read_text(encoding="utf-8") == ORIGINAL + "# uncommitted work\n", (
+        "the uncommitted work survives"
+    )
 
 
 @pytest.mark.parametrize(("find", "count"), [("x < 0", 0), ("x", 2)])
 def test_a_replacement_that_is_not_exactly_one_match_refuses(repo: Path, find: str, count: int) -> None:
     with pytest.raises(mutate.Refused, match=f"matches {count} times"):
         mutate.run(repo, Path("guard.py"), find, "y", lambda: 1)
-    assert (repo / "guard.py").read_text() == ORIGINAL
+    assert (repo / "guard.py").read_text(encoding="utf-8") == ORIGINAL
 
 
 @pytest.mark.parametrize("status", [0, 1, 2, 5])
@@ -155,7 +157,7 @@ def test_a_marker_in_the_target_selects_a_test_the_default_markers_deselect(tmp_
     the result depends on that configuration and on nothing else in `tests/infra`."""
     root = Path(__file__).resolve().parents[1]
     infra = tmp_path / "test_sample.py"
-    infra.write_text("import pytest\n\n\n@pytest.mark.infra\ndef test_live():\n    pass\n")
+    infra.write_text("import pytest\n\n\n@pytest.mark.infra\ndef test_live():\n    pass\n", encoding="utf-8")
     argv = [sys.executable, "-m", "pytest", "-c", str(root / "pyproject.toml"), "-q", "--no-cov"]
     argv += ["-p", "no:cacheprovider", "--collect-only", str(infra)]
     deselected = subprocess.run(argv, cwd=root, capture_output=True, text=True)
@@ -275,10 +277,10 @@ def test_the_mutant_never_reaches_the_repository_bytecode_cache(
     _git(tmp_path, "init", "-q")
     _git(tmp_path, "config", "user.email", "t@example.invalid")
     _git(tmp_path, "config", "user.name", "t")
-    (tmp_path / ".gitignore").write_text("__pycache__/\n")
-    (tmp_path / "limits.py").write_text("MODE = 0o600\n")
+    (tmp_path / ".gitignore").write_text("__pycache__/\n", encoding="utf-8")
+    (tmp_path / "limits.py").write_text("MODE = 0o600\n", encoding="utf-8")
     (tmp_path / "test_limits.py").write_text(
-        "from limits import MODE\n\n\ndef test_mode():\n    assert MODE == 0o600\n"
+        "from limits import MODE\n\n\ndef test_mode():\n    assert MODE == 0o600\n", encoding="utf-8"
     )
     _git(tmp_path, "add", "-A")
     _git(tmp_path, "commit", "-qm", "base")
@@ -306,10 +308,10 @@ def test_a_cached_original_cannot_stand_in_for_the_mutant(tmp_path: Path, monkey
     _git(tmp_path, "init", "-q")
     _git(tmp_path, "config", "user.email", "t@example.invalid")
     _git(tmp_path, "config", "user.name", "t")
-    (tmp_path / ".gitignore").write_text("__pycache__/\n")
-    (tmp_path / "limits.py").write_text("MODE = 0o600\n")
+    (tmp_path / ".gitignore").write_text("__pycache__/\n", encoding="utf-8")
+    (tmp_path / "limits.py").write_text("MODE = 0o600\n", encoding="utf-8")
     (tmp_path / "test_limits.py").write_text(
-        "from limits import MODE\n\n\ndef test_mode():\n    assert MODE == 0o600\n"
+        "from limits import MODE\n\n\ndef test_mode():\n    assert MODE == 0o600\n", encoding="utf-8"
     )
     _git(tmp_path, "add", "-A")
     _git(tmp_path, "commit", "-qm", "base")
@@ -329,11 +331,12 @@ def test_a_failing_test_target_refuses_through_the_command(tmp_path: Path, monke
     _git(tmp_path, "init", "-q")
     _git(tmp_path, "config", "user.email", "t@example.invalid")
     _git(tmp_path, "config", "user.name", "t")
-    (tmp_path / ".gitignore").write_text("__pycache__/\n")
-    (tmp_path / "limits.py").write_text("MODE = 0o600\n")
+    (tmp_path / ".gitignore").write_text("__pycache__/\n", encoding="utf-8")
+    (tmp_path / "limits.py").write_text("MODE = 0o600\n", encoding="utf-8")
     (tmp_path / "test_limits.py").write_text(
         "from limits import MODE\n\n\ndef test_mode():\n    assert MODE == 0o600\n\n\n"
-        "def test_unrelated():\n    assert False\n"
+        "def test_unrelated():\n    assert False\n",
+        encoding="utf-8",
     )
     _git(tmp_path, "add", "-A")
     _git(tmp_path, "commit", "-qm", "base")
@@ -341,7 +344,7 @@ def test_a_failing_test_target_refuses_through_the_command(tmp_path: Path, monke
 
     args = ["mutate", "--file", "limits.py", "--from", "0o600", "--to", "0o644", "--test", "test_limits.py"]
     assert CliRunner().invoke(tools.app, args).exit_code == 2
-    assert (tmp_path / "limits.py").read_text() == "MODE = 0o600\n"
+    assert (tmp_path / "limits.py").read_text(encoding="utf-8") == "MODE = 0o600\n"
 
     # Deselecting the unrelated failure gives a usable baseline, and the verdict is real.
     deselected = [*args[:-1], "test_limits.py -k test_mode"]
@@ -381,10 +384,10 @@ def test_an_empty_envvar_is_no_replacement_but_an_empty_argument_is(
     _git(tmp_path, "init", "-q")
     _git(tmp_path, "config", "user.email", "t@example.invalid")
     _git(tmp_path, "config", "user.name", "t")
-    (tmp_path / ".gitignore").write_text("__pycache__/\n")
-    (tmp_path / "limits.py").write_text("MODE = 0o600\n")
+    (tmp_path / ".gitignore").write_text("__pycache__/\n", encoding="utf-8")
+    (tmp_path / "limits.py").write_text("MODE = 0o600\n", encoding="utf-8")
     (tmp_path / "test_limits.py").write_text(
-        "from limits import MODE\n\n\ndef test_mode():\n    assert MODE == 0o600\n"
+        "from limits import MODE\n\n\ndef test_mode():\n    assert MODE == 0o600\n", encoding="utf-8"
     )
     _git(tmp_path, "add", "-A")
     _git(tmp_path, "commit", "-qm", "base")
@@ -396,4 +399,4 @@ def test_an_empty_envvar_is_no_replacement_but_an_empty_argument_is(
     assert refused.exit_code == 2
     assert "Missing option '--to'" in refused.output
     assert CliRunner().invoke(tools.app, [*args, "--to", ""]).exit_code == mutate.Verdict.RED.exit_code
-    assert (tmp_path / "limits.py").read_text() == "MODE = 0o600\n"
+    assert (tmp_path / "limits.py").read_text(encoding="utf-8") == "MODE = 0o600\n"

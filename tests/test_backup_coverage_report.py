@@ -21,7 +21,7 @@ import pytest
 import yaml
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
-COMMON = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
+COMMON = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
 
 
 def _repository_name(node: str) -> str:
