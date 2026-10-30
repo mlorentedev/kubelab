@@ -307,7 +307,7 @@ def test_only_plays_of_nodes_behind_the_edge_size_their_pulls():
 
 def test_every_play_names_hosts_the_inventory_emits():
     """A name that resolved to nothing used to count as outside the edge, unchecked."""
-    for name, play in _plays():
+    for _name, play in _plays():
         _nodes(play["hosts"])
     assert _nodes("node_backup:&on_demand") == {"ace2", "beelink", "rpi4"}
     assert _nodes("node_backup:!rpi3") == {"ace2", "beelink", "kubelab-vps", "rpi4"}
@@ -577,3 +577,24 @@ def test_a_sized_pull_runs_before_the_writes_whose_change_a_later_task_acts_on()
 
 def test_the_order_guard_reads_both_ways_a_task_gates_on_a_change():
     assert {m.group(1) for m in _GATES.finditer("a.changed or b is changed and c is not changed")} == {"a", "b", "c"}
+
+
+# dockerd's pause after its k-th failed attempt at a layer is 5k seconds, with no cap
+# (moby daemon/internal/distribution/xfer/download.go), so N attempts can sleep
+# 5 * N * (N - 1) / 2 seconds before a pull fails.
+_PAUSE_LIMIT_SECONDS = 2 * 3600
+
+
+def test_dockerd_keeps_a_layer_through_the_edges_eofs():
+    """A pull behind the edge ends in `unexpected EOF` every 7 to 8 minutes per layer
+    (ace2, 2026-10-30). dockerd resumes the layer from its partial file on each of its
+    own attempts, but after the last one it fails the pull and drops every layer the
+    pull registered, so the play's retry starts from nothing. Open WebUI's largest
+    layer is 1.1 GB, which at the 0.7 to 2 Mbit/s measured takes 1.3 to 3.8 hours: up to
+    30 EOFs. Docker's default of 5 attempts lost all of it, three times."""
+    tasks = yaml.safe_load((ROLES / "docker/tasks/main.yml").read_text(encoding="utf-8"))
+    [content] = [t["copy"]["content"] for t in tasks if (t.get("copy") or {}).get("dest") == "/etc/docker/daemon.json"]
+    attempts = re.search(r'"max-download-attempts":\s*(\d+)', content)
+    assert attempts, "daemon.json keeps Docker's 5 attempts per layer"
+    assert int(attempts[1]) >= 30
+    assert 5 * int(attempts[1]) * (int(attempts[1]) - 1) / 2 <= _PAUSE_LIMIT_SECONDS
