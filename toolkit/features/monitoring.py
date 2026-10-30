@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from uptime_kuma_api import UptimeKumaApi
+from uptime_kuma_api import UptimeKumaApi, UptimeKumaException
 
 from toolkit.core.logging import logger
 from toolkit.features.configuration import ConfigurationManager
@@ -269,6 +269,12 @@ def import_monitors(project_root: Path) -> None:
         api.disconnect()
 
 
+# Kuma has no not-found answer: `getMonitor` reads a null row and replies ok:false
+# with V8's TypeError message (server/server.js, 2.2.1). Any other failure, a
+# timeout or a lost login among them, says nothing about whether a delete landed.
+_MONITOR_GONE = "Cannot read properties of null"
+
+
 def _assert_deleted(api: UptimeKumaApi, deleted_ids: list[int], timeout: float = 30.0) -> None:
     """Block until every id is gone, or raise. Never proceed on an unmet precondition.
 
@@ -279,6 +285,7 @@ def _assert_deleted(api: UptimeKumaApi, deleted_ids: list[int], timeout: float =
     `get_monitors()` returns a client-side cache fed by socket events and can lag
     a write by many seconds, so polling it would replace a fixed guess with a
     longer one and still be racing. `get_monitor(id)` is an authoritative read.
+    Only its not-found answer counts as gone; any other error propagates (#2506).
     """
     if not deleted_ids:
         return
@@ -291,8 +298,9 @@ def _assert_deleted(api: UptimeKumaApi, deleted_ids: list[int], timeout: float =
             try:
                 api.get_monitor(monitor_id)
                 still_here.append(monitor_id)
-            except Exception:
-                pass  # Gone — which is the outcome we are waiting for.
+            except UptimeKumaException as error:
+                if _MONITOR_GONE not in str(error):
+                    raise
         pending = still_here
         if pending:
             time.sleep(0.5)
