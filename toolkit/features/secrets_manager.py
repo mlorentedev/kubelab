@@ -2490,13 +2490,22 @@ class SecretsManager:
 
         decrypted = yaml.safe_load(result.stdout) or {}
         value = self._resolve_key(decrypted, key_path)
-        return str(value) if value is not None else None
+        if value is None:
+            return None
+        if isinstance(value, (list, dict)):
+            # JSON, not str(): a repr is neither readable as JSON nor writable back
+            # with `secrets set --json`, so a structured value could not round-trip.
+            import json
 
-    def set_secret(self, env: str, key_path: str, value: str) -> bool:
+            return json.dumps(value)
+        return str(value)
+
+    def set_secret(self, env: str, key_path: str, value: object) -> bool:
         """Set a single secret value in the SOPS vault.
 
         Uses `sops set` to write the value directly into the encrypted file.
-        The key_path is dot-separated (e.g., 'aws.access_key_id').
+        The key_path is dot-separated (e.g., 'aws.access_key_id'). A string is
+        stored as a string; a list or a mapping is stored as that structure.
         """
         cm = self._cm(env)
         sops_file = cm.secrets_path / f"{env}.enc.yaml"
