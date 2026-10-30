@@ -188,7 +188,7 @@ def _upgrades(task: dict) -> bool:
                 return True
             if args.get("name") in ("*", ["*"]) and args.get("state") == "latest":
                 return True
-    keys = ("command", "shell", "ansible.builtin.command", "ansible.builtin.shell")
+    keys = ("command", "shell", "raw", "ansible.builtin.command", "ansible.builtin.shell", "ansible.builtin.raw")
     text = " ".join(str(task.get(key, "")) for key in keys)
     return bool(UPGRADE_COMMAND.search(text))
 
@@ -197,6 +197,7 @@ def test_the_upgrade_detector_sees_the_includes_own_upgrades():
     tasks = _tasks()
     assert _upgrades(tasks[UPGRADE]) and _upgrades(tasks[DOWNLOAD]) and _upgrades(tasks[ESTIMATE])
     assert _upgrades({"apt": {"name": "*", "state": "latest"}})
+    assert _upgrades({"raw": "apt-get -y dist-upgrade"}), "base_system's legacy path runs apt through raw"
     assert not _upgrades({"apt": {"name": "curl", "state": "present"}})
     assert not _upgrades({"apt": {"update_cache": True, "upgrade": False}})
 
