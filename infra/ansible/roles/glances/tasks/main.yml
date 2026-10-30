@@ -7,6 +7,15 @@
 # inline, ad-hoc on VPS+rpi4 (those are migrated in DASH-DT-014b / PR3b).
 # =============================================================================
 
+# Sized against the edge's downlink on a node behind it, where the play sets
+# image_pull_down_kbit; bounded and retried on every node (#2742). First, so a
+# refused pull leaves the node as it was (#2812).
+- name: Pull Glances image
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/_includes/image-pull.yml"
+  vars:
+    image_pull_name: Glances
+    image_pull_images: ["{{ glances_image }}"]
+
 # Self-migration: stop any previous ad-hoc deploy whose compose file
 # is named `docker-compose.yml` (legacy) before templating ours as
 # `compose.yml`. The legacy container_name 'glances' would collide otherwise.
@@ -59,7 +68,7 @@
 # exist yet — which Glances would then skip, leaving the API wide open with no
 # error anywhere.
 #
-# Registered rather than notifying `Restart glances`: a handler fires at the
+# Registered rather than notifying a restart handler: a handler fires at the
 # END of the play, i.e. AFTER "Verify Glances health" below. A config-only
 # change would then be validated against the container that is about to be
 # replaced, and the play would go green on a Glances that had not read the new
@@ -73,6 +82,8 @@
     mode: "0644"
   register: _glances_conf
 
+# Applied by "Start Glances container" below, whose `up -d` recreates a container
+# whose compose spec changed. No handler: the edge's play cannot force one (#2824).
 - name: Template Glances Docker Compose stack
   template:
     src: compose.yml.j2
@@ -80,16 +91,6 @@
     owner: root
     group: root
     mode: "0644"
-  notify: Restart glances
-
-# Sized against the edge's downlink on a node behind it, where the play sets
-# image_pull_down_kbit; bounded and retried on every node (#2742).
-- name: Pull Glances image
-  ansible.builtin.import_tasks: "{{ playbook_dir }}/_includes/image-pull.yml"
-  vars:
-    image_pull_name: Glances
-    image_pull_images: ["{{ glances_image }}"]
-    image_pull_command: docker compose -f {{ glances_deploy_dir }}/compose.yml pull
 
 # A container's resource limits are fixed at CREATE time, so a limit declared
 # while the kernel could not enforce it stays discarded through every restart —

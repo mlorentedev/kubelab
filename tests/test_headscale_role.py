@@ -184,12 +184,14 @@ class TestPolicyHujsonContent:
         assert "agents@" in owners, "agents@ must own tag:hermes so the agent can register with it"
         assert all(o.endswith("@") for o in owners), "user references need the user@ form on v0.28"
 
-    def test_permissive_first_rule_preserves_existing_identities(self) -> None:
-        acls = _load_hujson(_render_policy())["acls"]
-        permissive = [a for a in acls if a["dst"] == ["*:*"]]
-        assert permissive, "rule 1 must preserve all current flows (dst *:*)"
-        src = permissive[0]["src"]
-        assert {"kubelab@", "manu@", "work@"} <= set(src), "existing users must keep allow-all (user@ form)"
+    def test_rule_one_preserves_existing_identities_without_a_wildcard(self) -> None:
+        """Rule 1 used to be `dst *:*`. It names its destinations since VPN-ACL-014;
+        the equivalence with the old wildcard is held in test_headscale_segments.py."""
+        rule_one = _load_hujson(_render_policy())["acls"][0]
+        assert {"kubelab@", "manu@", "work@"} == set(rule_one["src"]), (
+            "existing users must keep their rule (user@ form)"
+        )
+        assert "lan-rpi4:*" in rule_one["dst"], "the rpi4 LAN route must stay reachable"
 
     @staticmethod
     def _hermes_dst() -> list[str]:
@@ -356,13 +358,15 @@ class TestAutoRevert:
         assert "kill --signal=HUP" in rescue_yaml, "rescue must SIGHUP-reload the reverted policy"
         assert any("fail" in task for task in blocks[0]["rescue"]), "rescue must fail the play after reverting"
 
-    def test_first_activation_reverts_to_allow_all(self) -> None:
-        # Codex P1: with no .prev (first activation), a failed probe must revert to an explicit
-        # allow-all, not strand the mesh on the just-loaded ACL.
+    def test_first_activation_reverts_to_a_policy_that_keeps_every_private_flow(self) -> None:
+        # Codex P1: with no restorable .prev, a failed probe must not strand the mesh on the
+        # just-loaded ACL. Since VPN-ACL-014 the fallback is the segment-free policy, not an
+        # allow-all: it keeps every private flow and grants a tenant segment nothing.
         rescue = [t for t in self._tasks() if "block" in t and "rescue" in t][0]["rescue"]
-        rescue_yaml = yaml.safe_dump(rescue)
-        assert '"*:*"' in rescue_yaml or "'*:*'" in rescue_yaml, "no-.prev path must write an allow-all policy"
-        assert "not hs_prev.stat.exists" in rescue_yaml, "allow-all fallback must guard on the no-previous-policy case"
+        fallback = [t for t in rescue if (t.get("template") or {}).get("src") == "policy.hujson.j2"]
+        assert fallback, "the no-.prev path must render the policy, not leave the mesh on the failed one"
+        assert fallback[0]["vars"]["headscale_policy_segments"] == []
+        assert "not (hs_prev_safe | bool)" in str(fallback[0]["when"]), "fallback must guard on no restorable policy"
 
     def test_probe_runs_via_cli_not_direct_script(self) -> None:
         blocks = [t for t in self._tasks() if "block" in t]

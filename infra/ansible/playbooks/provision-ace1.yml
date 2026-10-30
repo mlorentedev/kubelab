@@ -51,6 +51,8 @@
 # ---------------------------------------------------------------------------
 - name: Provision ace1 — K3s staging all-in-one
   hosts: ace1
+  # A later failure must not drop the handlers earlier tasks notified (#2824).
+  force_handlers: true
   become: true
   gather_facts: true
 

@@ -1,0 +1,94 @@
+---
+# Upgrade a node's packages, sized first against the lab edge's downlink (#2809).
+# Imported (not included) so the caller's tags and `when` apply.
+#
+#   - import_tasks: "{{ playbook_dir }}/_includes/apt-upgrade.yml"
+#
+# The image-pull include's sibling (#2742), reading the same vars: a package
+# download leaves by the uplink the edge shapes too. On 2026-10-29 ace1's upgrade
+# of 27 packages spent about 29 minutes fetching them and 48 seconds installing
+# them, and printed nothing until it was done. Where the play sets
+# image_pull_down_kbit, the include reads the bytes the upgrade would fetch,
+# states them, and fetches them first in a bounded, retried download. The
+# upgrade then installs from the cache, and nothing bounds dpkg. `apt-get
+# --print-uris` leaves out a package already in /var/cache/apt/archives
+# (measured 2026-10-29), so a retry or a rerun counts only what the cache lacks.
+#
+# Past image_pull_budget_seconds, and without image_pull_allow_slow, the include
+# skips the upgrade and says so, where a refused pull fails the play. The stack
+# after a pull needs its image; nothing after the upgrade needs it, and failing
+# here would drop the handlers the role notified before it (#2812). Without the
+# var the upgrade runs as it always has.
+
+- name: Estimate the package upgrade's download
+  ansible.builtin.shell: >-
+    set -o pipefail &&
+    apt-get -qq --print-uris dist-upgrade | awk '{ bytes += $3 } END { print bytes + 0 }'
+  args:
+    executable: /bin/bash
+  register: _apt_upgrade_estimate
+  changed_when: false
+  # Reads the package lists and the cache, so a dry run reports the estimate.
+  check_mode: false
+  when: image_pull_down_kbit | default(0) | int > 0
+
+- name: Size the package upgrade against the edge's downlink
+  ansible.builtin.set_fact:
+    _apt_upgrade_bytes: "{{ _bytes }}"
+    _apt_upgrade_seconds: "{{ _seconds }}"
+    _apt_upgrade_allowed: >-
+      {{ _seconds | int <= image_pull_budget_seconds | default(1800) | int
+         or image_pull_allow_slow | default(false) | bool }}
+  vars:
+    _bytes: "{{ _apt_upgrade_estimate.stdout | int }}"
+    _seconds: "{{ ((_bytes | int) * 8 / ((image_pull_down_kbit | int) * 1000)) | round(0, 'ceil') | int }}"
+  when: image_pull_down_kbit | default(0) | int > 0
+
+- name: State the estimate for the package upgrade
+  ansible.builtin.debug:
+    msg: >-
+      Package upgrade: {{ _apt_upgrade_bytes | int | filesizeformat }} to fetch, about
+      {{ ((_apt_upgrade_seconds | int) / 60) | round(1) }} min at the edge's
+      {{ image_pull_down_kbit }} kbit/s, against a budget of
+      {{ ((image_pull_budget_seconds | default(1800) | int) / 60) | round | int }} min.
+  when: image_pull_down_kbit | default(0) | int > 0
+
+- name: Skip a package upgrade that outlasts its budget
+  ansible.builtin.debug:
+    msg: >-
+      SKIPPED: the package upgrade fetches
+      {{ ((_apt_upgrade_bytes | int) / 1e9) | round(2) }} GB, about
+      {{ ((_apt_upgrade_seconds | int) / 60) | round | int }} min at the edge's
+      {{ image_pull_down_kbit }} kbit/s, past the
+      {{ ((image_pull_budget_seconds | default(1800) | int) / 60) | round | int }} min budget,
+      so this run did not upgrade the node.
+      WHY: the node is behind the lab edge, whose uplink is shaped to
+      networking.edge.uplink.bandwidth.down_kbit (ADR-075), and the rest of the play
+      does not need the upgrade (#2809).
+      FIX: rerun with EXTRA='image_pull_allow_slow=true' to upgrade anyway, the download
+      bounded by twice the estimate, or raise image_pull_budget_seconds.
+  when:
+    - image_pull_down_kbit | default(0) | int > 0
+    - not (_apt_upgrade_allowed | bool)
+
+- name: Download the package upgrade
+  ansible.builtin.command: apt-get -y -q --download-only dist-upgrade
+  register: _apt_upgrade_download
+  # Polled rather than held, as a pull is: each poll is its own SSH round trip.
+  async: >-
+    {{ image_pull_timeout_seconds | int
+       if image_pull_timeout_seconds | default(none) is not none
+       else (_apt_upgrade_seconds | int) * 2 + 300 }}
+  poll: 15
+  retries: "{{ image_pull_retries | default(2) }}"
+  delay: 30
+  until: _apt_upgrade_download is succeeded
+  when:
+    - image_pull_down_kbit | default(0) | int > 0
+    - _apt_upgrade_bytes | int > 0
+    - _apt_upgrade_allowed | bool
+
+- name: Upgrade all packages
+  ansible.builtin.apt:
+    upgrade: dist
+  when: image_pull_down_kbit | default(0) | int == 0 or _apt_upgrade_allowed | bool
