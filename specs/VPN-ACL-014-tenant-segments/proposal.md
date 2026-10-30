@@ -1,52 +1,83 @@
 ---
 id: "VPN-ACL-014-tenant-segments"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: implementing # draft | implementing | verifying | archived
 created: "2026-10-30"
-issue: "mlorentedev/kubelab#2830"   # repo#NNN — GitHub issue / Project item that tracks this spec
+issue: "mlorentedev/kubelab#2830"
 tags: [spec, proposal]
 template_version: "1.0"
 wip_override: "Operator approved on 2026-10-29: the tenant segment is the critical path for enrolling the office lab, chosen ahead of the Headscale upgrade (13 active, limit 10, 2026-10-30)"
 ---
 
-# VPN-ACL-014-tenant-segments
-
-> **Naming**: file lives at `<repo>/specs/VPN-ACL-014-tenant-segments/proposal.md`. `VPN-ACL-014-tenant-segments` is `AREA-NNN-slug` (e.g. `TOOL-001-secret-drift`).
+# VPN-ACL-014: isolate tenant segments on the shared Headscale
 
 ## Why
 
 <!-- from issue #2830: VPN-ACL-014: isolate tenant segments on the shared Headscale -->
 
-Single paragraph. The user or business problem this feature solves. Link to the vault roadmap or the bitácora board issue if applicable. If you cannot write this in 3 sentences, you do not understand the problem yet.
+Another organisation's lab is to enrol in this Headscale as its own segment, sharing
+the control plane but not the private inventory. Rule 1 granted the existing users a
+wildcard destination. A tenant node under any identity was then either inside rule 1
+or reachable by it, and Headscale makes both peers visible when a grant exists in
+either direction. So the tenant would see every private peer. Measured on
+2026-10-30 through the read-only audit identity (SEC-037). The live policy equals
+the rendered template.
 
 ## What
 
-Concrete behavior change. What does the system do after this PR that it did not do before? Observable, not implementation-focused.
+- Rule 1 names its destinations: the existing users, `agents@`, `tag:hermes` and
+  `lan-rpi4`, on every port. For every current node and route, that equals the old
+  wildcard: each node is owned by one of those users or carries `tag:hermes`, and the
+  only advertised subnet is `lan-rpi4`. Headscale v0.29's narrower wildcard needs the
+  same change (VPN-ACL-006 G4).
+- A tenant segment is data: `{owner, hosts_tag, clients_tag, ports}`, read from
+  SOPS (`apps.services.core.headscale.segments`) at deploy time. It grants exactly
+  `clients_tag -> hosts_tag:<port>`. Its hosts originate nothing, and nothing reaches
+  its clients. The role refuses a malformed segment before rendering.
+- Rollback keeps the isolation. The first-activation fallback is the segment-free
+  policy instead of an allow-all. While segments are declared, a `.prev` with a
+  wildcard grant is not restored.
+- `toolkit infra headscale policy-check` also validates a synthetic segment on the
+  pinned image.
 
 ## Out of scope
 
-Things this PR explicitly does NOT include. Forces a sharp boundary and prevents scope creep.
-
--
--
+- Deploying to production. The segment owner user must exist first, because a policy
+  naming an unknown user can be rejected on reload while the deploy reports green
+  (VPN-ACL-013, #2190). The morning checklist covers this.
+- Tightening rule 1 toward least privilege (VPN-ACL-004), or `tag:hermes`
+  (VPN-ACL-012).
+- Per-segment DNS. Headscale v0.28 delivers DNS configuration to every node.
+  Retiring the extra record is OPS-019 (#964).
 
 ## Risks / open questions
 
-Failure modes, dependencies, and unknowns to clarify before implementation. If any item here is unresolved, do not move to `tasks.md` yet.
-
--
--
+- [RESOLVED] Equivalence beyond the measured nodes. A future node under an unknown
+  user would no longer be reachable. That is intended: a new identity must be added
+  to the role defaults deliberately.
+- [OPEN, deploy-time] On v0.28, `policy check` is syntax-only. Whether the reload
+  accepts the segment owner is proven by the effective policy read through the audit
+  identity after the deploy, not by CI.
+- [OPEN, operator] The split-zone resolver address still reaches every node. It is
+  unreachable under the policy, but visible.
 
 ## Acceptance criteria
 
-Observable outcomes. Each must be testable.
-
-- [ ] Outcome 1
-- [ ] Outcome 2
-- [ ] Outcome 3
+- [ ] AC1: With no segments, rule 1 reaches every identity the policy knows (users,
+  `agents@`, `tag:hermes`) and `lan-rpi4` on every port, and no rule grants a wildcard.
+- [ ] AC2: With a segment, no private rule names a segment tag, the segment hosts are
+  in no `src`, nothing reaches the segment clients, and the clients reach only the
+  declared ports.
+- [ ] AC3: The role refuses a segment owned by a private identity, reusing a private
+  tag, with a malformed tag or port list, or sharing a tag with another segment, and
+  it prints no tenant data.
+- [ ] AC4: Neither rollback path can restore a wildcard grant while segments are
+  declared, and a failed probe still leaves every private flow working.
+- [ ] AC5: Segments reach the role only from SOPS, and the CI policy check validates
+  both the segment-free and a synthetic segment render on the pinned image.
 
 ## References
 
-- Bitácora board: the GitHub issue / Project item tracking this spec (see the `issue:` frontmatter field)
-- Related ADR: `<repo>/docs/adr/adr-XXX.md` (if any)
-- Related patterns: `00_meta/patterns/<pattern>.md` (if any)
+- Issue: mlorentedev/kubelab#2830
+- ADR-041 (agent fleet VPN segmentation); VPN-ACL-006 (#248) for the upgrade
+- VPN-ACL-012, VPN-ACL-013 (#2190), OPS-019 (#964)
