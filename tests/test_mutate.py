@@ -349,8 +349,13 @@ def test_a_failing_test_target_refuses_through_the_command(tmp_path: Path, monke
 
 
 def _recipe(*variables: str) -> str:
-    """What `make mutate` would run, with TO left out of the environment unless given."""
-    env = {k: v for k, v in os.environ.items() if k not in {"FROM", "TO"}}
+    """What `make mutate` would run, with TO left out unless given.
+
+    MAKEFLAGS goes too: under an outer make (`make mutate` proving this very test)
+    it carries the outer command line, TO= included, into this one.
+    """
+    outer = {"FROM", "TO", "MAKEFLAGS", "MFLAGS", "MAKELEVEL", "MAKEOVERRIDES"}
+    env = {k: v for k, v in os.environ.items() if k not in outer}
     repo = Path(__file__).resolve().parent.parent
     args = ["make", "-n", "-C", str(repo), "mutate", "FILE=f.py", "FROM=a", "TEST=t.py", *variables]
     return subprocess.run(args, capture_output=True, text=True, check=True, env=env).stdout
