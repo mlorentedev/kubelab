@@ -24,4 +24,4 @@ The file holds that one key on purpose. Any option that `dockerd-rootless.sh` al
 
 **Rule**: A host with a rootless daemon has two Docker configurations, and a fix to one does not reach the other. Prove a reload by what the process itself reports, here its `reload` event, never by the exit status of the signal that should have caused it.
 
-**Tags**: `#rootless` `#dockerd` `#pr-2834`
+**Tags**: `#rootless` `#dockerd` `#pr-2855`
