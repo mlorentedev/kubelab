@@ -184,7 +184,7 @@ class TestSecretsSetJson:
     always reached `sops set` as one JSON string (VPN-ACL-014's tenant segments).
     """
 
-    SEGMENTS = '[{"owner":"o","hosts_tag":"tag:h","clients_tag":"tag:c","ports":[22]}]'
+    SEGMENTS = '{"seg": {"owner":"o","hosts_tag":"tag:h","clients_tag":"tag:c","ports":[22]}}'
 
     def _invoke(self, args: list[str], **kwargs: str):
         mgr = MagicMock()
@@ -197,17 +197,25 @@ class TestSecretsSetJson:
         result, mgr = self._invoke([self.SEGMENTS, "--json"])
         assert result.exit_code == 0, result.output
         mgr.set_secret.assert_called_once_with(
-            "prod", "apps.x.k", [{"owner": "o", "hosts_tag": "tag:h", "clients_tag": "tag:c", "ports": [22]}]
+            "prod", "apps.x.k", {"seg": {"owner": "o", "hosts_tag": "tag:h", "clients_tag": "tag:c", "ports": [22]}}
         )
 
     def test_json_from_stdin(self) -> None:
         result, mgr = self._invoke(["--stdin", "--json"], input=self.SEGMENTS + "\n")
         assert result.exit_code == 0, result.output
-        assert mgr.set_secret.call_args.args[2][0]["ports"] == [22]
+        assert mgr.set_secret.call_args.args[2]["seg"]["ports"] == [22]
 
     def test_invalid_json_is_an_error_and_writes_nothing(self) -> None:
         result, mgr = self._invoke(["[{not json", "--json"])
         assert result.exit_code != 0
+        mgr.set_secret.assert_not_called()
+
+    def test_a_top_level_list_is_refused_before_sops_is_asked(self) -> None:
+        """sops 3.13.1 refuses a top-level JSON array in `sops set`, by argument and by stdin.
+        Refusing here names the fix (a mapping) instead of sops' 'Invalid --set value format'."""
+        result, mgr = self._invoke(['[{"a": 1}]', "--json"])
+        assert result.exit_code != 0
+        assert "mapping" in result.output
         mgr.set_secret.assert_not_called()
 
     def test_without_the_flag_a_json_looking_value_stays_a_string(self) -> None:
