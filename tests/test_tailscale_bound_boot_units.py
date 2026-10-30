@@ -37,6 +37,7 @@ import pytest
 import yaml
 
 from tests.ansible_jinja import ansible_env
+from tests.repo_files import repo_files
 
 REPO = Path(__file__).resolve().parent.parent
 ROLES = REPO / "infra/ansible/roles"
@@ -180,8 +181,9 @@ def test_only_the_wait_is_retried(name: str) -> None:
 def _shipped_units() -> dict[str, dict[str, list[str]]]:
     """Every unit file the repo ships to a node: role templates and plain copies alike."""
     ansible = REPO / "infra/ansible"
-    paths = [*ansible.rglob("*.service"), *ansible.rglob("*.service.j2")]
-    return {str(path.relative_to(ansible)): _directives(path) for path in sorted(p for p in paths if p.is_file())}
+    return {
+        str(path.relative_to(ansible)): _directives(path) for path in repo_files(ansible, "*.service", "*.service.j2")
+    }
 
 
 def test_no_shipped_oneshot_is_restarted() -> None:

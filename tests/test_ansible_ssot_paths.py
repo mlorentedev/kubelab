@@ -37,6 +37,8 @@ from typing import Any
 import pytest
 import yaml
 
+from tests.repo_files import repo_files
+
 REPO = Path(__file__).resolve().parent.parent
 ANSIBLE = REPO / "infra/ansible"
 VALUES = REPO / "infra/config/values"
@@ -126,17 +128,8 @@ def reads_in(expression: str, path: str = "") -> Iterator[Read]:
         yield Read(path, root.group(1), tuple(segments), optional, hyphen)
 
 
-# The toolkit's output, gitignored (`infra/ansible/.gitignore`): what it holds in a
-# checkout is whatever an old run left there, which no playbook reads.
-GENERATED = ANSIBLE / "generated"
-
-
 def _files() -> list[Path]:
-    return [
-        p
-        for p in sorted(ANSIBLE.rglob("*"))
-        if p.suffix in {".yml", ".yaml", ".j2"} and p.is_file() and GENERATED not in p.parents
-    ]
+    return repo_files(ANSIBLE, "*.yml", "*.yaml", "*.j2")
 
 
 def _reads() -> list[Read]:

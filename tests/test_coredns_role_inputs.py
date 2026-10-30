@@ -14,6 +14,8 @@ from pathlib import Path
 import yaml
 from jinja2 import Environment, meta
 
+from tests.repo_files import repo_files
+
 REPO = Path(__file__).resolve().parent.parent
 ROLE = REPO / "infra/ansible/roles/coredns"
 PLAYBOOKS = REPO / "infra/ansible/playbooks"
@@ -118,7 +120,7 @@ def test_the_defaults_resolve_against_the_ssot() -> None:
 def test_every_reference_to_the_role_is_a_caller_these_tests_read() -> None:
     """A third caller via include_role, a short name, a .yaml file or another directory is still seen."""
     seen = 0
-    for path in sorted(ANSIBLE.rglob("*.y*ml")):
+    for path in repo_files(ANSIBLE, "*.y*ml"):
         if ROLE in path.parents:
             continue
         for doc in yaml.safe_load_all(path.read_text()):
