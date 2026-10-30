@@ -423,9 +423,6 @@
         image_pull_images:
           - "{{ agent_stack_hermes.image }}"
           - "{{ agent_stack_hermes.sidecar.image }}"
-        image_pull_command: >-
-          docker compose -p {{ agent_stack_hermes_project }}
-          -f {{ agent_stack_hermes_compose }} pull
 
     # Pulled now rather than at the first command, which would otherwise wait
     # on a multi-hundred-megabyte download.
@@ -436,7 +433,6 @@
       vars:
         image_pull_name: the hermes-kubelab sandbox
         image_pull_images: ["{{ agent_stack_hermes.sandbox.image }}"]
-        image_pull_command: docker pull {{ agent_stack_hermes.sandbox.image }}
 
     # Same check as Open WebUI's: a binding is fixed at create time, so a gateway
     # created before the bridge had its address runs with no port, and an
