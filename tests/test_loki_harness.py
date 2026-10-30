@@ -8,7 +8,7 @@ print it, so 15 rule tests erred in CI with no cause anywhere in the log.
 
 from __future__ import annotations
 
-import os
+import shutil
 
 import pytest
 
@@ -19,6 +19,8 @@ def test_a_failed_docker_run_fails_the_test_with_dockers_stderr(tmp_path, monkey
     docker = tmp_path / "docker"
     docker.write_text("#!/bin/sh\necho 'toomanyrequests: You have reached your pull rate limit' >&2\nexit 125\n")
     docker.chmod(0o755)
-    monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ['PATH']}")
+    # The fake alone on PATH: a host Docker must not answer in its place.
+    monkeypatch.setenv("PATH", str(tmp_path))
+    assert shutil.which("docker") == str(docker)
     with pytest.raises(pytest.fail.Exception, match=r"exited 125: toomanyrequests: You have reached"):
         next(run_loki())
