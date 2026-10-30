@@ -2,7 +2,7 @@
 
 Verdict: ended. Reason: `queue-empty`. All four named Backlog items are closed (#2792, #2817, #2765, #2637), and the run already used its 8 items: the 4 named items plus #2824, #2703, #2812 and B11. No new ticket is picked after this point.
 
-Host: the laptop held `systemd-inhibit --what=idle:sleep` from arming to 17:40Z, so the window was covered.
+Host: the laptop held `systemd-inhibit --what=idle:sleep` from arming until 11:58Z, when the run's last work was done and it was released. The window was covered.
 
 ## Waiting on you (irreversible and urgent first)
 
@@ -19,13 +19,15 @@ Host: the laptop held `systemd-inhibit --what=idle:sleep` from arming to 17:40Z,
 
 These are past the envelope's 8 items, or are found defects whose fix is wider than the item. An earlier draft of this report said each one's reviewer output was triaged. At 10:30Z `dotf pr triage-queue` showed it was not: #2842, #2844 and #2845 had PR-Agent reviews nobody had answered, and #2838 had a new one. They were answered by 11:00Z, see the ledger.
 
-- #2838 (#2822): the guard sees images a task fetches by running them. beelink_services' qemu registration no longer pulls an unpinned image. PR-Agent's flag-set finding was applied in 127fb594, and a run the parser cannot read now fails the guard.
+- #2838 (#2822): the guard sees images a task fetches by running them. beelink_services' qemu registration no longer pulls an unpinned image. Since the first review: a run the parser cannot read fails the guard (127fb594); `--pull`'s value is read once (85219a7c); every setter of the probe variable is pinned to the key the test sizes (19d002ed); and the registration is held to the `F` flag on every run, an existing one included (64588c60, 0cff0d4e). bee was not re-provisioned with it; its measured `flags: POF` passes.
 - #2840 (#2839, TOOL-127): `make mutate` accepts an empty TO as a deletion.
 - #2841 (#2506): only Kuma's not-found answer counts as a confirmed monitor delete.
 - #2842 (#2617), #2844 (#2621 item 2): the errors tests read the access log and the rendered overlays.
 - #2843 (#2620): the drill's doctor exclusions and the forge's version floor are pinned. See item 4.
 - #2845 (#1700): a lessons index that still holds conflict markers is refused.
 - #2849 (#2848): the Pi-hole flush test read a helper `pihole-FTL` process as a restart. It failed master at 517896d8 with `'279 203' == '203'`, while the daemon, 203, was still running.
+
+CI at 11:58Z: Tests was still running on #2838 (now 25ec074b), #2840 (d6e2c550) and #2845 (ef400656). The Kuma flake (#1196) can fail #2840's Tests again; re-run the failed job if it does. #2841 to #2844 and #2849 were green.
 
 #2840 and #2845 each add a row at the top of `docs/lessons/toolkit-tooling/_index.md`. Both were merged with master at 11:40Z, after #2846's row. Whichever lands second needs one more merge: put its row above the other, newest first.
 
@@ -73,4 +75,6 @@ These are past the envelope's 8 items, or are found defects whose fix is wider t
 | 11:40 | #2849 | CI green; marked ready | 93151a53 |
 | 11:45 | #2840 | PR-Agent: a TO set in a makefile would reach `--to` empty. `--to` now passes only for a command-line or environment TO; assertion red first | d6e2c550 |
 | 11:50 | #2838 | CodeRabbit: the F check skipped a registration that already existed. It now runs on every run, check mode included where there is one to read | 0cff0d4e |
-| 11:55 | reviews | triage posted on #2838, #2840, #2849 | comments 6522061184, 6522061745, 6521922967 |
+| 11:55 | reviews | triage posted on #2838, #2840, #2845, #2849; `dotf pr triage-queue` exit 0 | comments 6522061184, 6522061745, 6522088436, 6521922967 |
+| 11:58 | #2838 | lesson-671 and the PR body updated for the every-run F check | 25ec074b |
+| 11:58 | host | sleep inhibitor released | |
