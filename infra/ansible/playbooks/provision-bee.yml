@@ -131,6 +131,9 @@
       no_log: true
       tags: [always]   # secrets must load for any tag selection (e.g. --tags runner)
 
+    - import_tasks: _includes/require-secrets.yml
+      tags: [always]
+
     # Separate vault AND values tree for the one service on this node whose
     # environment identity is not deploy_env. Built into their own facts rather
     # than merged over `config`/`secrets`, so they cannot silently change what
