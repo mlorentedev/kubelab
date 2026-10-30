@@ -195,9 +195,42 @@ def test_the_wildcard_pattern_tells_old_policies_from_new_ones() -> None:
     pattern = re.compile(DEFAULTS["headscale_policy_wildcard_pattern"])
     old_rule_one = '{ "action": "accept", "src": ["kubelab@"], "dst": ["*:*"] }'
     allow_all = '{ "acls": [ { "action": "accept", "src": ["*"], "dst": ["*:*"] } ] }'
+    wildcard_port = '{ "action": "accept", "src": ["kubelab@"], "dst": ["*:22,443"] }'
 
-    assert pattern.search(old_rule_one) and pattern.search(allow_all)
+    assert pattern.search(old_rule_one) and pattern.search(allow_all) and pattern.search(wildcard_port)
     assert not pattern.search(render_policy()) and not pattern.search(render_policy(segments=[SEGMENT]))
+
+
+def test_only_a_policy_this_template_rendered_carries_the_marker() -> None:
+    marker = DEFAULTS["headscale_policy_marker"]
+    old_rule_one = '{ "acls": [ { "action": "accept", "src": ["kubelab@"], "dst": ["100.64.0.0/10:*"] } ] }'
+
+    assert marker in render_policy() and marker in render_policy(segments=[SEGMENT])
+    assert marker not in old_rule_one
+
+
+def test_a_previous_policy_is_restored_only_when_safe() -> None:
+    """Evaluate the rescue's decision with Jinja, against the three cases that matter."""
+    decide = next(t for t in _rescue() if "hs_prev_safe" in (t.get("set_fact") or {}))
+    expr = decide["set_fact"]["hs_prev_safe"].strip().removeprefix("{{").removesuffix("}}")
+    env = Environment()
+    env.filters["b64decode"] = lambda s: s
+    env.tests["search"] = lambda value, pattern: re.search(pattern, value) is not None
+
+    def safe(prev: str, segments: list[dict[str, Any]]) -> bool:
+        variables = {
+            **DEFAULTS,
+            "hs_prev": {"stat": {"exists": True}},
+            "hs_prev_text": {"content": prev},
+            "headscale_policy_segments": segments,
+        }
+        return bool(env.compile_expression(expr)(**variables))
+
+    old = '{ "acls": [ { "action": "accept", "src": ["kubelab@"], "dst": ["100.64.0.0/10:*"] } ] }'
+    assert safe(old, []), "with no segment, any previous policy is a valid revert target"
+    assert not safe(old, [SEGMENT]), "a policy from before this template must not return while segments exist"
+    assert safe(render_policy(), [SEGMENT]), "a segment-free policy from this template is a valid revert target"
+    assert not safe(render_policy().replace('"lan-rpi4:*"', '"*:*"'), [SEGMENT])
 
 
 def test_a_previous_policy_with_a_wildcard_is_not_restored_while_segments_exist() -> None:
@@ -207,6 +240,58 @@ def test_a_previous_policy_with_a_wildcard_is_not_restored_while_segments_exist(
     decide = next(t for t in _rescue() if "hs_prev_safe" in (t.get("set_fact") or {}))
     expr = decide["set_fact"]["hs_prev_safe"]
     assert "headscale_policy_segments" in expr and "headscale_policy_wildcard_pattern" in expr
+    assert "headscale_policy_marker" in expr
+
+
+# --- the deploy refuses a policy that would cut off a live node --------------------
+
+
+def _live_node(node: dict[str, Any]) -> dict[str, Any]:
+    """The fixture's identity fields, in the shape `nodes list -o json` returns."""
+    return {"id": "1", "tags": node["tags"], "user": {"name": node["user"]}}
+
+
+def _cut_off(nodes: list[dict[str, Any]], segments: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+    task = _assert_task("Refuse a policy that cuts off a node Headscale holds")
+    env = Environment()
+    variables = {**DEFAULTS, "headscale_policy_segments": segments or []}
+    accounted = env.compile_expression(task["vars"]["hs_accounted"].strip().removeprefix("{{").removesuffix("}}"))(
+        **variables
+    )
+    checks = [env.compile_expression(expr) for expr in task["assert"]["that"]]
+    return [n for n in nodes if not all(c(**variables, item=n, hs_accounted=accounted) for c in checks)]
+
+
+def test_every_node_the_live_server_held_is_accounted_for() -> None:
+    live = json.loads((REPO / "tests/fixtures/headscale_nodes_2026-10-30.json").read_text(encoding="utf-8"))
+
+    assert _cut_off([_live_node(n) for n in live["nodes"]]) == []
+
+
+@pytest.mark.parametrize(
+    "node",
+    [
+        {"id": "9", "tags": [], "user": {"name": "stranger"}},  # a user rule 1 does not name
+        {"id": "9", "tags": ["tag:unknown"], "user": {"name": "tagged-devices"}},
+    ],
+)
+def test_a_node_rule_one_would_cut_off_stops_the_deploy(node: dict[str, Any]) -> None:
+    assert _cut_off([node]) == [node]
+
+
+def test_a_tenant_node_is_accounted_for_by_its_segment() -> None:
+    node = {"id": "9", "tags": [SEGMENT["hosts_tag"]], "user": {"name": "tagged-devices"}}
+
+    assert _cut_off([node], [SEGMENT]) == []
+    assert _cut_off([node]) == [node]
+
+
+def test_the_live_node_check_runs_before_the_policy_is_rendered() -> None:
+    names = [t.get("name") for t in TASKS]
+
+    assert names.index("Refuse a policy that cuts off a node Headscale holds") < names.index(
+        "Template Headscale ACL policy"
+    )
 
 
 def test_the_fallback_is_the_segment_free_policy_not_an_allow_all() -> None:

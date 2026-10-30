@@ -70,6 +70,37 @@
     fail_msg: "two tenant segments in SOPS share a tag"
   when: headscale_policy_path | length > 0
 
+# VPN-ACL-014: rule 1 names its destinations, so a node under a user or tag it does not
+# name would silently lose every flow on reload. Read the nodes Headscale holds and
+# refuse the render if any is left out. A host where the container does not exist yet
+# (first install) holds no node; any other failure to ask stops the play.
+- name: Read the nodes Headscale holds
+  command: docker exec headscale headscale nodes list -o json
+  register: hs_nodes_list
+  changed_when: false
+  check_mode: false
+  failed_when: hs_nodes_list.rc != 0 and 'No such container' not in hs_nodes_list.stderr
+  when: headscale_policy_path | length > 0
+
+- name: Refuse a policy that cuts off a node Headscale holds
+  assert:
+    that:
+      - >-
+        (item.tags | default([]) | length > 0 and item.tags | select('in', hs_accounted) | list | length > 0)
+        or (item.tags | default([]) | length == 0 and (item.user.name ~ '@') in hs_accounted)
+    fail_msg: >-
+      rule 1 would no longer reach this node: add its user or tag to
+      headscale_policy_private_users or headscale_policy_private_destinations
+  vars:
+    hs_accounted: >-
+      {{ headscale_policy_private_users + headscale_policy_private_destinations
+      + headscale_policy_segments | map(attribute='hosts_tag') | list
+      + headscale_policy_segments | map(attribute='clients_tag') | list }}
+  loop: "{{ (hs_nodes_list.stdout | from_json) if hs_nodes_list.rc | default(1) == 0 else [] }}"
+  loop_control:
+    label: "node {{ item.id }}"
+  when: headscale_policy_path | length > 0
+
 # ADR-041 / VPN-ACL-001: render the HuJSON ACL policy into the bind-mounted
 # config dir (appears at headscale_policy_path inside the container). Dormant
 # while headscale_policy_path is "" (default → allow-all). On change this fires
@@ -160,7 +191,8 @@
       set_fact:
         hs_prev_safe: >-
           {{ hs_prev.stat.exists and (headscale_policy_segments | length == 0
-          or not ((hs_prev_text.content | b64decode) is search(headscale_policy_wildcard_pattern))) }}
+          or (headscale_policy_marker in (hs_prev_text.content | b64decode)
+          and not ((hs_prev_text.content | b64decode) is search(headscale_policy_wildcard_pattern)))) }}
 
     - name: Restore the previous known-good policy
       copy:

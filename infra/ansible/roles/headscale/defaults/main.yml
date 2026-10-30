@@ -53,9 +53,13 @@ headscale_policy_private_destinations: ["agents@", "tag:hermes", "lan-rpi4"]
 # and grants exactly clients_tag -> hosts_tag on those ports. Empty: segment-free.
 headscale_policy_segments: []
 
-# A quoted `*` or `*:*`: how a wildcard grant appears in a policy file. The rescue
-# path refuses to restore a previous policy that has one while segments are declared.
-headscale_policy_wildcard_pattern: '"\*(:\*)?"'
+# A quoted `*`, `*:*` or `*:<ports>`: how a wildcard grant appears in a policy file.
+headscale_policy_wildcard_pattern: '"\*(:[^"]*)?"'
+# The first line of every policy this template renders. While segments are declared,
+# the rescue path restores a previous policy only if it carries this marker and no
+# wildcard: a policy from before VPN-ACL-014 could reach tenant hosts through a
+# CIDR as well as a wildcard, and only this template is known not to.
+headscale_policy_marker: "// headscale-policy: explicit-destinations (VPN-ACL-014)"
 
 # Audit identities (SEC-037). Each entry is {name, key}: `name` becomes the key's
 # comment and `key` is the bare public key. A key that carries the forced command

@@ -35,7 +35,11 @@ EXAMPLE_SEGMENT: dict[str, Any] = {
     "ports": [22, 3389],
 }
 # The role defaults the template reads, beside the hosts and segments passed in.
-_POLICY_DEFAULTS = ("headscale_policy_private_users", "headscale_policy_private_destinations")
+_POLICY_DEFAULTS = (
+    "headscale_policy_private_users",
+    "headscale_policy_private_destinations",
+    "headscale_policy_marker",
+)
 
 
 def _networking(common_yaml: Path = COMMON_YAML) -> dict[str, Any]:
