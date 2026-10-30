@@ -294,6 +294,38 @@ def test_the_live_node_check_runs_before_the_policy_is_rendered() -> None:
     )
 
 
+# --- the owner user exists before a policy names it ---------------------------------
+
+
+def _owners_to_create(segments: list[dict[str, Any]], existing: list[str]) -> list[Any]:
+    task = _assert_task("Create each segment owner Headscale does not hold yet")
+    env = Environment()
+    env.filters["from_json"] = json.loads
+    loop = task["loop"].strip().removeprefix("{{").removesuffix("}}")
+    users = json.dumps([{"id": str(i), "name": name} for i, name in enumerate(existing)])
+    result = env.compile_expression(loop)(headscale_policy_segments=segments, hs_users_list={"rc": 0, "stdout": users})
+    return list(result or [])
+
+
+def test_a_missing_owner_is_created_once_and_an_existing_one_never() -> None:
+    other = SEGMENT | {"hosts_tag": "tag:b-hosts", "clients_tag": "tag:b-clients"}
+    owner = str(SEGMENT["owner"])
+
+    assert _owners_to_create([SEGMENT, other], ["kubelab", "manu"]) == [owner]
+    assert _owners_to_create([SEGMENT], ["kubelab", owner]) == []
+
+
+def test_owner_creation_runs_before_the_render_quotes_its_argument_and_prints_no_name() -> None:
+    names = [t.get("name") for t in TASKS]
+    task = _assert_task("Create each segment owner Headscale does not hold yet")
+
+    assert names.index("Create each segment owner Headscale does not hold yet") < names.index(
+        "Template Headscale ACL policy"
+    )
+    assert "item | quote" in task["command"]
+    assert "item" not in task["loop_control"]["label"]
+
+
 def test_the_fallback_is_the_segment_free_policy_not_an_allow_all() -> None:
     fallback = next(t for t in _rescue() if (t.get("template") or {}).get("src") == "policy.hujson.j2")
 

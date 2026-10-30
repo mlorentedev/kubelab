@@ -101,6 +101,29 @@
     label: "node {{ item.id }}"
   when: headscale_policy_path | length > 0
 
+# VPN-ACL-014 / VPN-ACL-013: a policy naming a user Headscale does not hold can be
+# rejected on reload while the deploy reports green. Create each segment owner first,
+# idempotently: only the ones the user list lacks, so a second run changes nothing.
+- name: Read the users Headscale holds
+  command: docker exec headscale headscale users list -o json
+  register: hs_users_list
+  changed_when: false
+  check_mode: false
+  failed_when: hs_users_list.rc != 0 and 'No such container' not in hs_users_list.stderr
+  when: headscale_policy_path | length > 0 and headscale_policy_segments | length > 0
+
+- name: Create each segment owner Headscale does not hold yet
+  command: docker exec headscale headscale users create {{ item | quote }}
+  loop: >-
+    {{ headscale_policy_segments | map(attribute='owner') | unique
+    | reject('in', hs_users_list.stdout | from_json | map(attribute='name') | list) | list }}
+  loop_control:
+    index_var: owner_index
+    label: "segment owner {{ owner_index }}"
+  when: >-
+    headscale_policy_path | length > 0 and headscale_policy_segments | length > 0
+    and hs_users_list.rc | default(1) == 0
+
 # ADR-041 / VPN-ACL-001: render the HuJSON ACL policy into the bind-mounted
 # config dir (appears at headscale_policy_path inside the container). Dormant
 # while headscale_policy_path is "" (default → allow-all). On change this fires
