@@ -161,6 +161,16 @@
   when: agent_stack_webui_configured | bool
   tags: [agent_stack]
   block:
+    # Several GB through the edge's shaped uplink: sized before it starts (#2742).
+    # First, so a refused pull leaves every file below as it was and the rerun
+    # still sees the change that recreates the container (#2812). The MCP bridge
+    # is built further down, not pulled (`pull_policy: never`).
+    - name: Pull the Open WebUI image
+      ansible.builtin.import_tasks: "{{ playbook_dir }}/_includes/image-pull.yml"
+      vars:
+        image_pull_name: Open WebUI
+        image_pull_images: ["{{ agent_stack_webui.image }}"]
+
     # Registered, not notified: the recreate has to happen before the drift
     # checks below read the container, not at the end of the play.
     - name: Render the Open WebUI env file
@@ -223,14 +233,6 @@
         mode: "0600"
       when: agent_stack_mcp_bridge_configured | bool
       no_log: true
-
-    # Several GB through the edge's shaped uplink: sized before it starts (#2742).
-    # The MCP bridge is built here, not pulled (`pull_policy: never`).
-    - name: Pull the Open WebUI image
-      ansible.builtin.import_tasks: "{{ playbook_dir }}/_includes/image-pull.yml"
-      vars:
-        image_pull_name: Open WebUI
-        image_pull_images: ["{{ agent_stack_webui.image }}"]
 
     # Built from the context above. The image ID is the measurement: a cached
     # build of an unchanged context gives the same one, so a rerun is no change.
