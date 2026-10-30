@@ -43,6 +43,7 @@ from typing import Any, Callable, Optional
 
 import yaml
 
+from toolkit.core.io import docker_user_args
 from toolkit.core.logging import logger
 from toolkit.features.restore_drill import latest_snapshot, report, restore_source, scratch, wait_until
 
@@ -383,8 +384,7 @@ def _serve(
             name,
             "--network",
             "none",
-            "--user",
-            f"{os.getuid()}:{os.getgid()}",
+            *docker_user_args(),
             "-v",
             f"{data}:/var/lib/headscale",
             "-v",

@@ -98,7 +98,7 @@ def run(tmp_path: Path):
         if ssh_client is not None:
             env["SSH_CLIENT"] = ssh_client
         result = subprocess.run([SH, str(SCRIPT)], env=env, capture_output=True, text=True, timeout=30)
-        lines = log.read_text().splitlines() if log.exists() else []
+        lines = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
         return result, lines
 
     return _run
@@ -149,7 +149,7 @@ class TestForcedCommand:
         assert len(lines) == 1 and "refused" in lines[0] and "unknown" in lines[0]
 
     def test_the_allowlist_holds_only_reads(self) -> None:
-        body = SCRIPT.read_text().split('case "$request" in', 1)[1].split("\nesac", 1)[0]
+        body = SCRIPT.read_text(encoding="utf-8").split('case "$request" in', 1)[1].split("\nesac", 1)[0]
         arms = re.findall(r"^    (\S.*)\)$", body, re.M)
         assert arms[-1] == "*", "the catch-all refusal must be the last arm"
         unquoted = [a for a in arms[:-1] if not re.fullmatch(r"'[^']*'", a)]
@@ -166,7 +166,7 @@ class TestForcedCommand:
 
 
 def _audit_tasks() -> list[dict[str, Any]]:
-    return yaml.safe_load(AUDIT_TASKS.read_text())
+    return yaml.safe_load(AUDIT_TASKS.read_text(encoding="utf-8"))
 
 
 def _task_using(module: str, name: str | None = None) -> dict[str, Any]:
@@ -186,19 +186,21 @@ def _revoke() -> dict[str, Any]:
 
 
 def _audit_identities() -> list[dict[str, Any]]:
-    return yaml.safe_load(COMMON.read_text())["apps"]["services"]["core"]["headscale"]["audit_identities"]
+    return yaml.safe_load(COMMON.read_text(encoding="utf-8"))["apps"]["services"]["core"]["headscale"][
+        "audit_identities"
+    ]
 
 
 class TestRole:
     def test_the_role_includes_the_audit_tasks(self) -> None:
-        main = yaml.safe_load((ROLE / "tasks/main.yml").read_text())
+        main = yaml.safe_load((ROLE / "tasks/main.yml").read_text(encoding="utf-8"))
         assert any("audit_identity.yml" in str(t) for t in main)
 
     def test_the_script_is_installed_root_owned_and_not_writable_by_the_account(self) -> None:
         copy = _task_using("copy")
         args = copy["_args"]
         assert args["src"] == "headscale-audit.sh"
-        defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text())
+        defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))
         dest = ansible_env(str(ROLE)).from_string(args["dest"]).render(**defaults)
         assert dest == INSTALLED_AT
         assert (args["owner"], args["group"], str(args["mode"])) == ("root", "root", "0755")
@@ -256,7 +258,7 @@ class TestRole:
         self, sources: dict[str, str], expected: str
     ) -> None:
         template = _authorize()["_args"]["key_options"]
-        defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text())
+        defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))
         rendered = (
             ansible_env(str(ROLE))
             .from_string(template)
@@ -269,13 +271,13 @@ class TestRole:
         assert rendered.strip() == expected
 
     def test_defaults_declare_no_identity(self) -> None:
-        defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text())
+        defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))
         assert defaults["headscale_audit_identities"] == []
         assert defaults["headscale_audit_sources"] == {}
         assert defaults["headscale_audit_command"] == INSTALLED_AT
 
     def test_the_vps_play_takes_keys_from_config_and_sources_from_sops(self) -> None:
-        play = yaml.safe_load(VPS_PLAYBOOK.read_text())[0]
+        play = yaml.safe_load(VPS_PLAYBOOK.read_text(encoding="utf-8"))[0]
         role = next(r for r in play["roles"] if str(r.get("role", "")).endswith("/headscale"))
         assert "config.apps.services.core.headscale.audit_identities" in role["vars"]["headscale_audit_identities"]
         sources = role["vars"]["headscale_audit_sources"]

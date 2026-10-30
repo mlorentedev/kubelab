@@ -31,9 +31,11 @@ from tests.ansible_jinja import ansible_env
 REPO = Path(__file__).resolve().parents[1]
 ROLE = REPO / "infra" / "ansible" / "roles" / "tailscale"
 PLAYBOOKS = REPO / "infra" / "ansible" / "playbooks"
-TASKS: list[dict[str, Any]] = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text())
-DEFAULTS: dict[str, Any] = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text())
-CONFIG: dict[str, Any] = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text())
+TASKS: list[dict[str, Any]] = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text(encoding="utf-8"))
+DEFAULTS: dict[str, Any] = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text(encoding="utf-8"))
+CONFIG: dict[str, Any] = yaml.safe_load(
+    (REPO / "infra" / "config" / "values" / "common.yaml").read_text(encoding="utf-8")
+)
 KEY = "hskey-auth-test-0000"
 RUNNING = {"rc": 0, "stdout": json.dumps({"BackendState": "Running"})}
 STOPPED = {"rc": 0, "stdout": json.dumps({"BackendState": "NeedsLogin"})}
@@ -168,7 +170,7 @@ def test_the_tasks_that_may_hold_a_key_hide_it_and_only_it(name: str) -> None:
 
 
 def _play_vars(node: str) -> dict[str, Any]:
-    plays = yaml.safe_load((PLAYBOOKS / f"provision-{node}.yml").read_text())
+    plays = yaml.safe_load((PLAYBOOKS / f"provision-{node}.yml").read_text(encoding="utf-8"))
     (entry,) = [r for p in plays for r in p.get("roles") or [] if str(r.get("role", "")).endswith("/tailscale")]
     return {k: _render(v, config=CONFIG) if isinstance(v, str) else v for k, v in entry.get("vars", {}).items()}
 
@@ -339,7 +341,12 @@ def test_a_node_that_declares_no_route_clears_any_it_advertises() -> None:
 
 
 def _roles(playbook: Path) -> list[dict[str, Any]]:
-    return [r for p in yaml.safe_load(playbook.read_text()) or [] for r in p.get("roles") or [] if isinstance(r, dict)]
+    return [
+        r
+        for p in yaml.safe_load(playbook.read_text(encoding="utf-8")) or []
+        for r in p.get("roles") or []
+        if isinstance(r, dict)
+    ]
 
 
 def _named(role: dict[str, Any]) -> str:
@@ -439,7 +446,7 @@ def test_a_refused_node_runs_nothing() -> None:
 
 
 def test_the_makefile_target_calls_the_command() -> None:
-    makefile = (REPO / "Makefile").read_text()
+    makefile = (REPO / "Makefile").read_text(encoding="utf-8")
     target = re.search(r"^headscale-rejoin:.*\n((?:\t.*\n)+)", makefile, re.M)
     assert target, "no headscale-rejoin target"
     assert "infra headscale rejoin --node $(NODE)" in target.group(1)
