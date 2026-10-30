@@ -595,10 +595,11 @@ def set_secret(
       toolkit secrets set aws.access_key_id AKIA... --env common
       printf %s "$TOKEN" | toolkit secrets set apps.x.token --env staging --stdin
 
-    --json stores a structure instead of a string, for keys a role reads as a list
-    or a mapping. Invalid JSON writes nothing:
+    --json stores a structure instead of a string, for keys a role reads as a mapping.
+    sops cannot store a top-level list, so key list entries by name. Invalid JSON
+    writes nothing:
 
-      toolkit secrets set apps.services.core.headscale.segments --env prod --json '[{"owner": "x", ...}]'
+      toolkit secrets set apps.services.core.headscale.segments.<name> --env prod --json '{"owner": "x", ...}'
     """
     valid_envs = ("common", "dev", "staging", "prod")
     if env not in valid_envs:
@@ -634,6 +635,10 @@ def set_secret(
                 f"--json: the value is not valid JSON (line {exc.lineno}, column {exc.colno}); nothing written"
             )
             raise typer.Exit(1) from None
+        if isinstance(stored, list):
+            # sops 3.13.1 refuses a top-level array in `sops set`, by argument and by stdin.
+            logger.error("--json: sops cannot store a top-level list; key the entries by name in a mapping instead")
+            raise typer.Exit(1)
 
     mgr = _get_manager()
     if mgr.set_secret(env, key, stored):

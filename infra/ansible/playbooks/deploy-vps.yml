@@ -190,7 +190,9 @@
           .get('headscale', {}).get('audit_sources', {}) }}
         headscale_audit_user: "{{ config.networking.ssh_users.cloud }}"
         # VPN-ACL-014: tenant segments are inventory of another organisation, so they
-        # come from SOPS and never from common.yaml. Absent: the policy is segment-free.
+        # come from SOPS and never from common.yaml. SOPS keys each segment by name,
+        # because `sops set` cannot write a top-level list; the role takes a list.
+        # Absent: the policy is segment-free.
         headscale_policy_segments: >-
           {{ secrets.get('apps', {}).get('services', {}).get('core', {})
-          .get('headscale', {}).get('segments', []) }}
+          .get('headscale', {}).get('segments', {}) | dict2items | map(attribute='value') | list }}
