@@ -5,6 +5,10 @@
   force_handlers: true
   become: true
 
+  vars:
+    # `all` includes nodes behind the lab edge, whose pulls need these attempts (#2834).
+    docker_max_download_attempts: "{{ config.networking.edge.uplink.max_download_attempts }}"
+
   pre_tasks:
     - name: Load base config (SSOT)
       include_vars:

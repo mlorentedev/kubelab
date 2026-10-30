@@ -9,6 +9,9 @@
     deploy_env: prod  # RPi4 DNS gateway serves all envs — prod config is the baseline
     # The edge's own image pulls leave by the uplink it shapes (_includes/image-pull.yml, #2742).
     image_pull_down_kbit: "{{ config.networking.edge.uplink.bandwidth.down_kbit }}"
+    image_pull_goodput: "{{ config.networking.edge.uplink.bandwidth.pull_goodput }}"
+    # dockerd's attempts at a layer, for the node's daemons and the pull's bound (#2834).
+    docker_max_download_attempts: "{{ config.networking.edge.uplink.max_download_attempts }}"
 
   pre_tasks:
     - name: Load base config (SSOT)
