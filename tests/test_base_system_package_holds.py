@@ -27,7 +27,6 @@ ROLE = REPO / "infra/ansible/roles/base_system"
 BEE = REPO / "infra/ansible/playbooks/provision-bee.yml"
 MAINTENANCE_DEFAULTS = REPO / "infra/ansible/roles/node_maintenance/defaults/main.yml"
 CI_ENGINE = ["docker-ce", "docker-ce-cli", "containerd.io"]
-UPGRADE = "Upgrade all packages"
 
 
 def _load(path: Path):
@@ -40,6 +39,11 @@ def _tasks() -> list[dict]:
 
 def _index(predicate) -> list[int]:
     return [i for i, task in enumerate(_tasks()) if predicate(task)]
+
+
+def _upgrades(task: dict) -> bool:
+    """The upgrade runs through the include that sizes it against the edge (#2809)."""
+    return "_includes/apt-upgrade.yml" in str(task.get("ansible.builtin.import_tasks", ""))
 
 
 def _sets_holds(task: dict) -> bool:
@@ -77,14 +81,14 @@ def test_no_node_holds_anything_unless_its_play_says_so() -> None:
 
 
 def test_the_holds_are_set_before_the_upgrade_and_again_after() -> None:
-    [upgrade] = _index(lambda t: t.get("name") == UPGRADE)
+    [upgrade] = _index(_upgrades)
     holds = _index(_sets_holds)
     assert any(i < upgrade for i in holds), "nothing holds the packages before the upgrade runs"
     assert any(i > upgrade for i in holds), "nothing holds them again after a released run"
 
 
 def test_a_run_releases_them_only_when_asked() -> None:
-    [upgrade] = _index(lambda t: t.get("name") == UPGRADE)
+    [upgrade] = _index(_upgrades)
     before = [_tasks()[i] for i in _index(_sets_holds) if i < upgrade]
     assert [_selection(t, release=False) for t in before] == ["hold"]
     assert [_selection(t, release=True) for t in before] == ["install"]
