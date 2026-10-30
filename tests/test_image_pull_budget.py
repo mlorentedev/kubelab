@@ -457,6 +457,14 @@ def test_the_ledgered_probe_image_is_the_one_its_reason_sizes():
     """UNSIZED_RUNS keys the probe by its variable, so a bigger image in common.yaml would pass unsized."""
     probe = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["apps"]["services"]["ai"]["hermes_kubelab"]["probe"]
     assert probe["image"].split(":")[0] == "busybox", "size the new probe image, then update its UNSIZED_RUNS reason"
+    # The image read above is the one the variable resolves to only while every setter reads that key.
+    setters = {
+        line.strip()
+        for path in (REPO / "infra/ansible").rglob("*.yml")
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip().startswith("agent_stack_agent_probe_image:")
+    }
+    assert setters == {'agent_stack_agent_probe_image: "{{ config.apps.services.ai.hermes_kubelab.probe.image }}"'}
     # Any other key named by a variable would pass whatever image it resolves to.
     by_variable = {image for _, image in UNSIZED_RUNS if "{{" in image}
     assert by_variable == {"{{ agent_stack_agent_probe_image }}"}, "pin what the new variable resolves to, as above"
