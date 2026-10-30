@@ -69,6 +69,21 @@ networking:
       bandwidth:
         down_kbit: 2970
         up_kbit: 1350
+        # The share of down_kbit an image pull gets, against which a pull is sized
+        # (_includes/image-pull.yml). Open WebUI's 1.62 GB took 133.7 min on ace2,
+        # against 72.7 at down_kbit, with the shaper binding (#2703, 2026-10-30).
+        # Re-measured with the site, like down_kbit.
+        pull_goodput: 0.54
+      # dockerd's attempts at each layer of a pull, for every daemon behind the edge
+      # and for the bound on a pull's attempt (#2834). A pull's connections end in
+      # `unexpected EOF` about every 10 minutes here. dockerd resumes the layer on each
+      # of its own attempts, but after the last it fails the pull and drops every
+      # layer the pull fetched. Docker's default of 5 lost a 1.6 GB pull three times
+      # running (ace2, 2026-10-30). The pause after attempt k is 5k seconds, uncapped:
+      # 40 attempts sleep at most 65 minutes in all, which is also how long a blob
+      # that never downloads takes to fail. tests/test_image_pull_budget.py holds it
+      # between those two bounds.
+      max_download_attempts: 40
     # The lab's own Wi-Fi, the same at every site. It reuses the old home network
     # so rpi3 (no screen) and saved devices rejoin unchanged; the AP takes the
     # old home router's address. A future uplink may land in this common ISP

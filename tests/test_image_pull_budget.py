@@ -131,23 +131,28 @@ def test_the_estimate_is_stated_before_the_pull_whatever_it_decides():
     message = env.from_string(task["ansible.builtin.debug"]["msg"]).render(
         image_pull_name="Open WebUI",
         image_pull_down_kbit=2970,
+        image_pull_goodput="0.54",
+        docker_max_download_attempts="40",
         _image_pull_bytes=OPEN_WEBUI_BYTES,
-        _image_pull_seconds=4359,
+        _image_pull_seconds=8072,
+        _image_pull_pauses=3900,
         _image_pull_estimate={"stdout": json.dumps({"bytes": OPEN_WEBUI_BYTES, "images": images})},
     )
     assert message == (
-        "Open WebUI: 1.6 GB to fetch (a:1 1.6 GB, b:2 0 Bytes), about 72.7 min at the edge's"
-        " 2970 kbit/s, against a budget of 30 min."
+        "Open WebUI: 1.6 GB to fetch (a:1 1.6 GB, b:2 0 Bytes), about 134.5 min at the 54% of the"
+        " edge's 2970 kbit/s a pull gets, against a budget of 30 min. dockerd's pauses between its"
+        " 40 attempts at a layer can add 65.0 min."
     )
 
 
 def test_a_pull_past_the_budget_is_refused_unless_the_run_allows_it():
-    # 1.62 GB at 2970 kbit/s is 4359 s, past the 1800 s default.
-    assert _decide(2970, OPEN_WEBUI_BYTES) == (False, 4359 * 2 + 300)
+    # 1.62 GB at 2970 kbit/s is 4359 s, past the 1800 s default. Unset, the goodput is
+    # the whole rate and dockerd has its default 5 attempts, 50 s of pauses.
+    assert _decide(2970, OPEN_WEBUI_BYTES) == (False, 4359 * 2 + 300 + 50)
     assert _decide(2970, OPEN_WEBUI_BYTES, image_pull_allow_slow="true")[0]
     assert _decide(2970, OPEN_WEBUI_BYTES, image_pull_budget_seconds=5000)[0]
-    assert _decide(2970, 100_000_000) == (True, 270 * 2 + 300)
-    assert _decide(2970, 0) == (True, 300), "a held image still gets a bound"
+    assert _decide(2970, 100_000_000) == (True, 270 * 2 + 300 + 50)
+    assert _decide(2970, 0) == (True, 300 + 50), "a held image still gets a bound"
 
 
 def test_an_explicit_timeout_bounds_the_pull_whatever_the_estimate():
@@ -724,9 +729,71 @@ def test_dockerd_keeps_a_layer_through_the_edges_eofs():
     WebUI's largest layer is 1.1 GB, which at the 0.7 to 2 Mbit/s a shared layer got
     takes 1.3 to 3.8 hours: up to 37 EOFs. Docker's default of 5 lost all of it, three
     times."""
-    tasks = yaml.safe_load((ROLES / "docker/tasks/main.yml").read_text(encoding="utf-8"))
-    [content] = [t["copy"]["content"] for t in tasks if (t.get("copy") or {}).get("dest") == "/etc/docker/daemon.json"]
-    attempts = re.search(r'"max-download-attempts":\s*(\d+)', content)
-    assert attempts, "daemon.json keeps Docker's 5 attempts per layer"
-    assert int(attempts[1]) >= 37
-    assert 5 * int(attempts[1]) * (int(attempts[1]) - 1) / 2 <= _PAUSE_LIMIT_SECONDS
+    attempts = _networking()["edge"]["uplink"]["max_download_attempts"]
+    assert attempts >= 37
+    assert 5 * attempts * (attempts - 1) / 2 <= _PAUSE_LIMIT_SECONDS
+
+
+ATTEMPTS = "{{ config.networking.edge.uplink.max_download_attempts }}"
+GOODPUT = "{{ config.networking.edge.uplink.bandwidth.pull_goodput }}"
+RENDERED_ATTEMPTS = '"max-download-attempts": {{ docker_max_download_attempts | int }}'
+
+#: Plays of a node behind the edge whose daemon no role configures, each with its ticket.
+#: Such a daemon keeps Docker's 5 attempts, which is what the include assumes unset.
+UNCONFIGURED_DAEMONS = {
+    "provision-rpi3.yml": "#1032: rpi3's Docker install is unmanaged, with no daemon.json",
+}
+
+
+def _daemon_json(path: Path, dest: str) -> str:
+    [task] = [t for t in _task_list(yaml.safe_load(path.read_text(encoding="utf-8"))) if _copy_dest(t) == dest]
+    return (task.get("copy") or task["ansible.builtin.copy"])["content"]
+
+
+def _copy_dest(task: dict) -> str:
+    return ((task.get("copy") or task.get("ansible.builtin.copy")) or {}).get("dest", "")
+
+
+def test_both_daemons_render_the_one_attempts_value():
+    """The agent's rootless daemon reads its own daemon.json, not /etc/docker's, so it
+    kept Docker's 5 while the system daemon had 40 (#2834)."""
+    system = _daemon_json(ROLES / "docker/tasks/main.yml", "/etc/docker/daemon.json")
+    rootless = _daemon_json(
+        ROLES / "agent_stack/tasks/agent_user.yml", "{{ agent_stack_agent_home }}/.config/docker/daemon.json"
+    )
+    for content in (system, rootless):
+        assert RENDERED_ATTEMPTS in content
+        assert len(re.findall(r"max-download-attempts", content)) == 1
+
+
+def test_every_play_behind_the_edge_passes_the_edges_values():
+    """One value per site for both daemons and for the include's bound, read from the
+    SSOT by every play that runs a daemon's role or sizes a pull (#2834)."""
+    networking, setting, unconfigured = _networking(), set(), set()
+    for name, play in _plays():
+        play_vars = play.get("vars") or {}
+        sized = "image_pull_down_kbit" in play_vars
+        if _roles(play) & {"docker", "agent_stack"} or (sized and name not in UNCONFIGURED_DAEMONS):
+            assert play_vars.get("docker_max_download_attempts") == ATTEMPTS, f"{name}: read the SSOT"
+            setting.add(name)
+        elif sized:
+            assert "docker_max_download_attempts" not in play_vars, f"{name}: no longer an exception"
+            unconfigured.add(name)
+        if sized:
+            assert play_vars.get("image_pull_goodput") == GOODPUT, f"{name}: estimates at the shaped rate"
+    names = ("provision.yml", "provision-ace1.yml", "provision-ace2.yml", "provision-bee.yml", "provision-rpi4.yml")
+    assert setting >= {*names, "deploy-dns.yml"}
+    assert unconfigured == set(UNCONFIGURED_DAEMONS)
+    assert all(_behind_the_edge(node, networking) for node in _nodes("rpi3", networking))
+
+
+def test_the_bound_covers_dockerds_pauses_and_the_estimate_its_goodput():
+    """dockerd pauses 5k s after its k-th failed attempt at a layer, so one attempt of
+    the play can hold 5·n(n−1)/2 s of pauses. Past the bound, the pull is killed and
+    dockerd drops every layer, which is what the attempts exist to prevent (#2834).
+    The refill of Open WebUI took 133.7 min against an estimate of 72.7 at down_kbit,
+    a goodput of 54% (#2703)."""
+    edge = {"image_pull_goodput": "0.54", "docker_max_download_attempts": "40", "image_pull_allow_slow": "true"}
+    assert _decide(2970, OPEN_WEBUI_BYTES, **edge) == (True, 8072 * 2 + 300 + 3900)
+    assert _decide(2970, 0, **edge) == (True, 300 + 3900), "a held image's bound still covers the pauses"
+    assert _decide(2970, OPEN_WEBUI_BYTES, image_pull_goodput="0.54")[0] is False, "refused at 134.5 min"

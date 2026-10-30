@@ -64,6 +64,9 @@
     # Beelink is behind the lab edge, so its image pulls share the edge's shaped
     # downlink and are sized against it first (_includes/image-pull.yml, #2742).
     image_pull_down_kbit: "{{ config.networking.edge.uplink.bandwidth.down_kbit }}"
+    image_pull_goodput: "{{ config.networking.edge.uplink.bandwidth.pull_goodput }}"
+    # dockerd's attempts at a layer, for the node's daemons and the pull's bound (#2834).
+    docker_max_download_attempts: "{{ config.networking.edge.uplink.max_download_attempts }}"
 
     # Gitea is a singleton whose identity is PROD's, even though this node is
     # provisioned under staging (ADR-061: the axes are independent — "prod is an
