@@ -27,7 +27,10 @@
 # daemon's role too (#2834). dockerd pauses 5k seconds after its k-th failed attempt
 # at a layer, so the bound adds 5·n(n−1)/2 seconds: past it the pull is killed
 # and every layer dropped. Unset, the attempts are Docker's own 5, what a daemon
-# nothing configures keeps. Without image_pull_down_kbit the pull is bounded by
+# nothing configures keeps. A daemon on the containerd image store, as agent_stack's
+# rootless one is, reads no attempts: for its pulls the pause term only widens the
+# bound, and what that store does on an EOF is unmeasured (#2868). Without
+# image_pull_down_kbit the pull is bounded by
 # image_pull_timeout_seconds and nothing is estimated. Set explicitly, image_pull_timeout_seconds bounds each
 # attempt on any node: the lever for an estimate that is wrong, such as a held
 # tag that has since moved.
