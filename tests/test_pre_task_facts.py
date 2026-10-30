@@ -212,3 +212,13 @@ def test_the_resolution_follows_a_play_var_into_an_include_a_role_imports():
     assert any("builds config, read by role coredns" in line for line in _unbuilt(play))
     play["pre_tasks"][0]["tags"] = ["always"]
     assert _unbuilt(play) == []
+
+
+def test_a_play_var_that_names_another_reads_what_that_one_reads():
+    play = {
+        "hosts": "gateway",
+        "vars": {"down": "{{ uplink.down_kbit }}", "uplink": "{{ config.networking.edge.uplink.bandwidth }}"},
+        "pre_tasks": [{"name": "Merge configs", "set_fact": {"config": "{{ {} }}"}}],
+        "tasks": [{"name": "Use it", "debug": {"msg": "{{ down }}"}, "tags": ["dns"]}],
+    }
+    assert _unbuilt(play) == ["'Merge configs' builds config, read by tasks: Use it ['dns']"]
