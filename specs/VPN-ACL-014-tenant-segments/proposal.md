@@ -1,7 +1,7 @@
 ---
 id: "VPN-ACL-014-tenant-segments"
 type: spec
-status: implementing # draft | implementing | verifying | archived
+status: verifying # draft | implementing | verifying | archived
 created: "2026-10-30"
 issue: "mlorentedev/kubelab#2830"
 tags: [spec, proposal]

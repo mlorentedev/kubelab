@@ -31,6 +31,14 @@ created: "2026-10-30"
 
 ## Rollout evidence
 
+Comparison method for every "equals `render_policy()`" below: from a checkout at the
+deployed `origin/master`, the render came from
+`toolkit/scripts/render_headscale_policy.py:render_policy(segments=...)`, with the
+segments decrypted from `prod.enc.yaml`. The live policy came from `policy get`
+through the audit identity. Both were parsed as JSON after stripping HuJSON comments
+and trailing commas, and the two objects compared equal. Raw outputs stay out of the
+repository.
+
 - **Step 1, 2026-10-30** (deploy with no segment, from the operator's controller). The
   policy was read back through the audit identity: `policy get` and `nodes list -o json`
   both exited 0. The effective policy equals `render_policy()` (segment-free), ignoring
@@ -42,6 +50,21 @@ created: "2026-10-30"
   `ports`; the ports are the integers `[22, 45000]`. A dry run on `f29189df` with the
   real SOPS data rendered 1 segment, with no validation failure, none of the 14 live
   nodes cut off, and no wildcard.
+- **Step 3, 2026-10-30** (deploy with the segment, from the operator's controller).
+  The recap was `ok=35 changed=3 failed=0`: owner creation, the policy file and the
+  reload handler. The read-back through the audit identity (`policy get`,
+  `users list -o json`, `nodes list -o json`, all exit 0) shows the following.
+  - The effective policy equals `render_policy()` with the SOPS segment, ignoring
+    comments and whitespace.
+  - There are 3 rules. The new one is the segment's clients tag reaching its hosts
+    tag on ports 22 and 45000, and nothing else.
+  - The new owner user holds both segment tags, and the server now holds 5 users.
+  - There is no wildcard grant.
+  - The 14 nodes are unchanged, 9 online.
+- **Convergence, 2026-10-30.** The next deploy reported
+  `ok=32 changed=0 unreachable=0 failed=0`. This proves idempotency only: with nothing
+  changed the reload handler did not fire, so it says nothing about policy acceptance.
+  Acceptance rests on step 3's read-back.
 
 ## Test status
 
