@@ -90,9 +90,11 @@ same day, accepting the amendments in `proposal.md`.
   `[OK] 12 active spec(s), every one tracking an open issue` (no zombie spec to
   archive). Still over the limit of 10, so starting code needs either two specs
   to close or a renewed operator exception.
-- **G1 coverage (pre-freeze `/spec check`):** deterministic path; every
-  Implementation task carries an `[ACn]` tag, AC1-AC7 each have at least one
-  covering task, no orphan tasks. Verdict PASS. Re-run after any contract edit.
+- **G1 coverage (`/spec check`):** deterministic path; every Implementation
+  task carries an `[ACn]` tag. Pre-freeze run: PASS. Re-run on the frozen
+  contract on 2026-10-30 (amendments included): AC1-AC7 each covered by at
+  least one of 31 Implementation tasks, no orphan task. Verdict PASS. Re-run
+  after any further contract edit.
 - **G7:** both Windows failures are test portability defects, not product
   defects: `Path.read_text()` used cp1252 and the scan reported native
   separators. Fixed in #2820 (`read_text(encoding="utf-8")`,
@@ -106,7 +108,22 @@ same day, accepting the amendments in `proposal.md`.
   `sha256:d080ca49bf379cc8d6b8df07f0d11d7fb3d11812965a09c2c3a1acfb3c6e6130`.
   Current `v0.28.0` index is
   `sha256:51b1b9182bb6219e97374fa89af6b9320d6f87ecc739e328d5357ea4fa7a5ce3`.
-  Read anonymously from the registry API on 2026-10-29; re-resolve at freeze.
+  Read anonymously from the registry API on 2026-10-29, and re-resolved at
+  freeze on 2026-10-30T04:13:56Z with identical results for both tags:
+
+  ```text
+  GET https://registry-1.docker.io/v2/headscale/headscale/manifests/<tag>
+  Accept: application/vnd.oci.image.index.v1+json
+  v0.28.0 index=sha256:51b1b9182bb6219e97374fa89af6b9320d6f87ecc739e328d5357ea4fa7a5ce3
+    linux/amd64    sha256:f66e9e3dfb3e795f1bf6ea28b0b7eddc1f803e54342fc089af0880b374503cae
+    linux/arm64/v8 sha256:44aa28de565af389d15cd7d695005a570076c6ef373d6563545e0163f4666310
+  v0.29.6 index=sha256:cabe84f0699913dbca9320f0883dca7565dd08df3c5be29edfabbebeff763966
+    linux/amd64    sha256:d080ca49bf379cc8d6b8df07f0d11d7fb3d11812965a09c2c3a1acfb3c6e6130
+    linux/arm64/v8 sha256:8c89809526c15c1c0ff4a49cc205e0f7d9b9fe2533f476eabdb2a95363a2f08a
+  ```
+
+  The tag can still be re-pushed to another digest, so the pin is the digest,
+  and the AC1 preflight checks it against the registry again before rollout.
 - **G3 upstream v0.29.1-v0.29.6:**
   - v0.29.1 fixes nodes losing their user on upgrade, so v0.29.0 is not an
     acceptable target.

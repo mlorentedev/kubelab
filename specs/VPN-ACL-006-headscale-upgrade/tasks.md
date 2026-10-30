@@ -24,7 +24,9 @@ not inferred from this entire document being one delivery.
 - [ ] Resolve compatibility gate G2 and production gates G5/G6/G8 before
   rollout. Never infer these approvals from the planning exception.
 - [x] Run `/spec check VPN-ACL-006-headscale-upgrade` after contract approval.
-  ✓ 2026-10-29: PASS, deterministic `[ACn]` path, no orphan task.
+  ✓ 2026-10-30: re-run on the frozen contract (amendments included). PASS,
+  deterministic `[ACn]` path: 7 criteria, 31 Implementation tasks, none
+  uncovered, no orphan task.
 
 ## Implementation
 
