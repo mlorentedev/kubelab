@@ -105,7 +105,7 @@ def test_the_make_target_validates_the_env_value_not_its_presence() -> None:
     Asserted against the recipe text because the failure is not that the guard is
     absent — it is that a weaker guard looks entirely reasonable in review.
     """
-    text = MAKEFILE.read_text()
+    text = MAKEFILE.read_text(encoding="utf-8")
     recipe = text[text.index("vikunja-audit-users: ##") :]
     recipe = recipe[: recipe.index("\n.PHONY")]
 

@@ -101,6 +101,6 @@ def test_a_403_is_an_answer_not_an_error(monkeypatch: pytest.MonkeyPatch) -> Non
 
 def test_the_probed_zones_are_the_issuing_apexes() -> None:
     """The CLI probes `edge.traefik.acme_domains[].main`; it must keep naming zones."""
-    common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
+    common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
     mains = [d["main"] for d in common["edge"]["traefik"]["acme_domains"]]
     assert "kubelab.live" in mains

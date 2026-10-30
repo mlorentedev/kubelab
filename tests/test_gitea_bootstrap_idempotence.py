@@ -82,7 +82,7 @@ def harness(tmp_path: Path):
     bin_dir.mkdir()
     calls = tmp_path / "calls.log"
 
-    (bin_dir / "wget").write_text("#!/bin/sh\nexit 0\n")
+    (bin_dir / "wget").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
 
     # `su git -c "<command>"`. Dispatch on the command text, record every call,
     # and answer as a Gitea with the admin user and the Authelia source already
@@ -98,7 +98,8 @@ case "$cmd" in
   *"add-oauth"*)        exit 0 ;;
   *)                    exit 0 ;;
 esac
-"""
+""",
+        encoding="utf-8",
     )
     for stub in ("wget", "su"):
         (bin_dir / stub).chmod(0o755)
@@ -131,7 +132,7 @@ def test_the_stubs_actually_drive_the_script(harness):
     """Without this, a script that died on line 1 would make every check below pass."""
     result = harness.run()
     assert result.returncode == 0, f"script failed: {result.stderr}"
-    assert "admin auth list" in harness.calls.read_text(), (
+    assert "admin auth list" in harness.calls.read_text(encoding="utf-8"), (
         "the `su` stub was never reached, so the assertions below are asserting on nothing"
     )
 
@@ -142,7 +143,7 @@ def test_a_converged_run_reports_no_change(harness):
     `changed_when` reads exactly those two words out of stdout, so this is the
     difference between a provision that restarts the forge and one that does not.
     """
-    harness.marker.write_text(_expected_hash() + "\n")
+    harness.marker.write_text(_expected_hash() + "\n", encoding="utf-8")
 
     result = harness.run()
 
@@ -163,11 +164,11 @@ def test_the_write_still_happens_on_a_converged_run(harness):
     applied to Gitea directly, and the write is what reconciles the fields Gitea
     will accept. Only the report is conditional.
     """
-    harness.marker.write_text(_expected_hash() + "\n")
+    harness.marker.write_text(_expected_hash() + "\n", encoding="utf-8")
 
     harness.run()
 
-    assert "update-oauth" in harness.calls.read_text(), (
+    assert "update-oauth" in harness.calls.read_text(encoding="utf-8"), (
         "update-oauth was skipped on a converged run — out-of-band drift in the "
         "auth source would now persist until someone deleted the marker by hand"
     )
@@ -180,7 +181,7 @@ def test_a_first_run_reports_a_change_and_records_the_state(harness):
     result = harness.run()
 
     assert "Updated" in result.stdout, f"a run with no recorded state must report a change; got:\n{result.stdout}"
-    assert harness.marker.read_text().strip() == _expected_hash()
+    assert harness.marker.read_text(encoding="utf-8").strip() == _expected_hash()
 
 
 def test_a_rotated_secret_still_reports_a_change(harness):
@@ -191,7 +192,7 @@ def test_a_rotated_secret_still_reports_a_change(harness):
     marker holds the OLD secret; the new one must be seen and announced, so the
     handler fires and the running process picks it up.
     """
-    harness.marker.write_text(_expected_hash(secret="the-previous-secret") + "\n")
+    harness.marker.write_text(_expected_hash(secret="the-previous-secret") + "\n", encoding="utf-8")
 
     result = harness.run()
 
@@ -199,12 +200,14 @@ def test_a_rotated_secret_still_reports_a_change(harness):
         f"a rotated client secret reported no change; got:\n{result.stdout}\n"
         "Gitea would keep serving the old secret with the provision reporting success."
     )
-    assert harness.marker.read_text().strip() == _expected_hash()
+    assert harness.marker.read_text(encoding="utf-8").strip() == _expected_hash()
 
 
 def test_a_changed_discovery_url_also_reports_a_change(harness):
     """The marker covers the whole configuration, not the secret alone."""
-    harness.marker.write_text(_expected_hash(discovery="https://old.example.test/.well-known/x") + "\n")
+    harness.marker.write_text(
+        _expected_hash(discovery="https://old.example.test/.well-known/x") + "\n", encoding="utf-8"
+    )
 
     assert "Updated" in harness.run().stdout
 
@@ -217,20 +220,20 @@ def test_a_failed_write_does_not_record_success(harness):
     subsequent provision, which is strictly worse than the noise this ticket
     removes.
     """
-    harness.marker.write_text(_expected_hash(secret="the-previous-secret") + "\n")
-    stale = harness.marker.read_text()
+    harness.marker.write_text(_expected_hash(secret="the-previous-secret") + "\n", encoding="utf-8")
+    stale = harness.marker.read_text(encoding="utf-8")
 
     result = harness.run(STUB_UPDATE_FAILS="1")
 
     assert result.returncode != 0, "a failing update-oauth must fail the task"
-    assert harness.marker.read_text() == stale, (
+    assert harness.marker.read_text(encoding="utf-8") == stale, (
         "the marker was updated despite the write failing; the next run would "
         "report converged over configuration Gitea never received"
     )
 
 
 def _task(name: str) -> dict:
-    tasks = yaml.safe_load((ROLE / "tasks/main.yml").read_text())
+    tasks = yaml.safe_load((ROLE / "tasks/main.yml").read_text(encoding="utf-8"))
     for task in tasks:
         if task.get("name") == name:
             return task
@@ -291,14 +294,14 @@ def test_the_state_encoding_cannot_confuse_two_configurations(harness):
     """
     a = harness.run(secret="rotated|", discovery="https://idp.example.test/x")
     assert "Updated" in a.stdout
-    first = harness.marker.read_text().strip()
+    first = harness.marker.read_text(encoding="utf-8").strip()
 
     b = harness.run(secret="rotated", discovery="|https://idp.example.test/x")
     assert "Updated" in b.stdout, (
         "the second configuration was read as identical to the first, so a real "
         "change would have been announced as none"
     )
-    assert harness.marker.read_text().strip() != first
+    assert harness.marker.read_text(encoding="utf-8").strip() != first
 
 
 def test_the_group_mapping_is_part_of_the_recorded_state(harness):
@@ -310,7 +313,7 @@ def test_the_group_mapping_is_part_of_the_recorded_state(harness):
     provision after adding it reports "already matches": the flags are stored,
     Gitea ignores them, and the provision reports success.
     """
-    harness.marker.write_text(_expected_hash(groups=()) + "\n")
+    harness.marker.write_text(_expected_hash(groups=()) + "\n", encoding="utf-8")
 
     assert "Updated" in harness.run().stdout, (
         "the group mapping is not in the recorded state; adding or changing it would "
@@ -327,10 +330,10 @@ def test_both_writes_carry_the_group_mapping(harness, verb):
     included.
     """
     if verb == "add-oauth":
-        stub = (harness.tmp / "bin" / "su").read_text().replace("7\\tauthelia", "7\\tgithub")
-        (harness.tmp / "bin" / "su").write_text(stub)
+        stub = (harness.tmp / "bin" / "su").read_text(encoding="utf-8").replace("7\\tauthelia", "7\\tgithub")
+        (harness.tmp / "bin" / "su").write_text(stub, encoding="utf-8")
     harness.run()
-    calls = [c for c in harness.calls.read_text().splitlines() if verb in c]
+    calls = [c for c in harness.calls.read_text(encoding="utf-8").splitlines() if verb in c]
     assert calls, f"the script never ran {verb}; the harness is not driving this path"
     flags = " ".join(calls[-1].split())
     for expected in (
@@ -352,14 +355,14 @@ def test_the_mapped_groups_are_the_ones_authelia_declares():
     (services/user/update.go, v1.25.5). The failure is quiet either way, and it
     shows only at the login.
     """
-    text = SCRIPT.read_text()
+    text = SCRIPT.read_text(encoding="utf-8")
     declared = {
         name: text.split(f'{name}="', 1)[1].split('"', 1)[0]
         for name in ("OIDC_GROUP_CLAIM", "OIDC_ADMIN_GROUP", "OIDC_REQUIRED_GROUP")
     }
     assert (declared["OIDC_GROUP_CLAIM"], declared["OIDC_ADMIN_GROUP"], declared["OIDC_REQUIRED_GROUP"]) == GROUP_FIELDS
 
-    common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
+    common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
     users = common["apps"]["services"]["security"]["authelia"]["users"]
     by_identity = {u.get("identity") or u.get("username"): set(u.get("groups") or []) for u in users}
 

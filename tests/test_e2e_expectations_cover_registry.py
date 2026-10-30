@@ -47,7 +47,7 @@ def test_there_is_a_contract_snapshot_to_compare() -> None:
 
 @pytest.mark.parametrize("snapshot", sorted(SNAPSHOT_DIR.glob("*.yaml")), ids=lambda path: path.stem)
 def test_the_expectation_agrees_with_the_contract_on_authentication(snapshot: pathlib.Path) -> None:
-    auth = yaml.safe_load(snapshot.read_text())["auth"]
+    auth = yaml.safe_load(snapshot.read_text(encoding="utf-8"))["auth"]
     if auth == "oidc":
         pytest.skip("an OIDC contract is refused at render (#2573), so no such product is deployed")
 

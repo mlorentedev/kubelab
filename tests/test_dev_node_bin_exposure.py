@@ -41,7 +41,7 @@ DEFAULTS = ROLE / "defaults/main.yml"
 def _tasks() -> list[dict]:
     """Every task in the role, including those nested in a block."""
     flat: list[dict] = []
-    for task in yaml.safe_load((ROLE / "tasks/main.yml").read_text()):
+    for task in yaml.safe_load((ROLE / "tasks/main.yml").read_text(encoding="utf-8")):
         flat.append(task)
         flat.extend(task.get("block") or [])
     return flat
@@ -99,7 +99,7 @@ def test_the_wrapper_does_not_write_through_the_old_symlink() -> None:
 
 
 def _local_bin_task() -> dict:
-    declared = yaml.safe_load(DEFAULTS.read_text())["dev_node_local_bin_wrapped"]
+    declared = yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))["dev_node_local_bin_wrapped"]
     for task in _tasks():
         if task.get("loop") == "{{ dev_node_local_bin_wrapped }}":
             return task
@@ -114,7 +114,7 @@ def test_the_doctrine_cli_is_reachable_from_a_non_interactive_session() -> None:
     found" for both, and nothing reported it, because a human checking by hand
     logs in interactively and sees the tool.
     """
-    declared = yaml.safe_load(DEFAULTS.read_text())["dev_node_local_bin_wrapped"]
+    declared = yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))["dev_node_local_bin_wrapped"]
     assert "dotf" in declared, (
         "dotf must be exposed: the standing orders instruct every agent to run it, "
         "and a remote agent's PATH does not include ~/.local/bin"
@@ -147,7 +147,7 @@ def test_local_bin_is_not_appended_to_the_system_path_instead() -> None:
     line — and put a user-writable directory on root's PATH. The wrapper list is
     also what a reviewer reads to know what /usr/local/bin exposes.
     """
-    text = (ROLE / "tasks/main.yml").read_text()
+    text = (ROLE / "tasks/main.yml").read_text(encoding="utf-8")
     code = [ln for ln in text.splitlines() if ln.strip() and not ln.lstrip().startswith("#")]
     assert not any("/etc/environment" in ln for ln in code), (
         "no task may write /etc/environment: that places a user-writable directory "
@@ -159,7 +159,7 @@ def test_the_template_renders_for_both_source_directories() -> None:
     """One template, two `wrapper_src_dir` values — render both, do not assume."""
     env = Environment(loader=FileSystemLoader(str(ROLE / "templates")), undefined=StrictUndefined)
     template = env.get_template("mise-bin-wrapper.sh.j2")
-    declared = yaml.safe_load(DEFAULTS.read_text())["dev_node_local_bin_wrapped"]
+    declared = yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))["dev_node_local_bin_wrapped"]
 
     for src_dir, items in ((MISE_NODE_BIN, WRAPPED), (LOCAL_BIN, declared)):
         for item in items:

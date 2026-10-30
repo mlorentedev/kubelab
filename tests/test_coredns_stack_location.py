@@ -21,7 +21,7 @@ LIVE_PROJECT = "coredns"
 
 
 def test_the_role_runs_under_its_own_become() -> None:
-    tasks = yaml.safe_load((ROLE / "tasks/main.yml").read_text())
+    tasks = yaml.safe_load((ROLE / "tasks/main.yml").read_text(encoding="utf-8"))
     unprivileged = [t.get("name") for t in tasks if not (t.get("block") and t.get("become") is True)]
     assert not unprivileged, (
         "every task must sit in a block that declares `become: true`, so the result does not "
@@ -30,13 +30,13 @@ def test_the_role_runs_under_its_own_become() -> None:
 
 
 def test_the_stack_directory_is_absolute() -> None:
-    directory = yaml.safe_load((ROLE / "defaults/main.yml").read_text())["coredns_remote_dir"]
+    directory = yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))["coredns_remote_dir"]
     assert str(directory).startswith("/"), f"coredns_remote_dir must be absolute, got {directory!r}"
 
 
 def test_the_compose_project_is_pinned_to_the_live_volume() -> None:
-    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text())
-    template = (ROLE / "templates/docker-compose.yml.j2").read_text()
+    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))
+    template = (ROLE / "templates/docker-compose.yml.j2").read_text(encoding="utf-8")
     assert re.search(r"^name: \{\{ coredns_project \}\}$", template, re.M), (
         "the compose file must pin its project name; derived from the directory, it changes "
         "whenever the directory does, and the Pi-hole volume with it"
@@ -50,5 +50,5 @@ def test_pihole_loads_the_forwarding_config_by_declaration() -> None:
     """Pi-hole v6 ignores /etc/dnsmasq.d unless told otherwise, and the forwarding to
     CoreDNS lives there. It used to be switched on by a `sed` inside the volume, so a
     new volume silently lost every staging name."""
-    template = (ROLE / "templates/docker-compose.yml.j2").read_text()
+    template = (ROLE / "templates/docker-compose.yml.j2").read_text(encoding="utf-8")
     assert "FTLCONF_misc_etc_dnsmasq_d=true" in template

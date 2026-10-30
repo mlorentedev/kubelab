@@ -66,7 +66,7 @@ def _source_dirs(tf: str) -> list[Path]:
 
 class TestArchiveExcludes:
     def test_every_archive_file_excludes_python_bytecode(self) -> None:
-        tf = KILLSWITCH_TF.read_text()
+        tf = KILLSWITCH_TF.read_text(encoding="utf-8")
         blocks = _archive_file_blocks(tf)
         assert blocks, "no archive_file block found; this test is watching nothing"
         for name, body in blocks:
@@ -86,7 +86,7 @@ class TestTheArtefactIsDeterminedByGit:
     """The general property, stated without naming a language or a file type."""
 
     def test_no_untracked_files_in_a_packaged_source_directory(self) -> None:
-        dirs = _source_dirs(KILLSWITCH_TF.read_text())
+        dirs = _source_dirs(KILLSWITCH_TF.read_text(encoding="utf-8"))
         assert dirs, "no source_dir resolved; this test is watching nothing"
 
         for source_dir in dirs:
@@ -105,7 +105,7 @@ class TestTheArtefactIsDeterminedByGit:
             if not stray:
                 continue
 
-            tf = KILLSWITCH_TF.read_text()
+            tf = KILLSWITCH_TF.read_text(encoding="utf-8")
             unexcluded = [s for s in stray if "__pycache__" not in s and not s.endswith(".pyc")]
             assert not unexcluded, (
                 f"{source_dir.relative_to(REPO)} contains gitignored files that archive_file "
@@ -123,4 +123,4 @@ class TestTheArtefactIsDeterminedByGit:
 def test_exclude_list_covers_both_shapes(needle: str) -> None:
     # Both forms matter: `__pycache__/**` misses a stray .pyc beside the source,
     # and `*.pyc` alone leaves the directory entry itself in the archive.
-    assert needle in KILLSWITCH_TF.read_text()
+    assert needle in KILLSWITCH_TF.read_text(encoding="utf-8")

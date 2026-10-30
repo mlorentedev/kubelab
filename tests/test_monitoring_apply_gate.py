@@ -96,10 +96,10 @@ def _monitor(key: str, monitor_id: int | None = None) -> dict[str, Any]:
 def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     seed_dir = tmp_path / monitoring.EXPORT_DIR
     seed_dir.mkdir(parents=True)
-    (seed_dir / monitoring.TAGS_FILE).write_text(json.dumps([{"name": "on-demand", "color": "#000"}]))
+    (seed_dir / monitoring.TAGS_FILE).write_text(json.dumps([{"name": "on-demand", "color": "#000"}]), encoding="utf-8")
 
     def run(seed: list[dict[str, Any]], live: list[dict[str, Any]], **flags: bool) -> FakeKuma:
-        (seed_dir / monitoring.MONITORS_FILE).write_text(json.dumps(seed))
+        (seed_dir / monitoring.MONITORS_FILE).write_text(json.dumps(seed), encoding="utf-8")
         kuma = FakeKuma(live)
         run.last = kuma  # type: ignore[attr-defined]
         monkeypatch.setattr(monitoring, "_connect", lambda _root: (kuma, {}))

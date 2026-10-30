@@ -309,7 +309,7 @@ class TestTheDrillWatchesTheRuleThatExists:
     """
 
     def _titles(self) -> set[str]:
-        doc = yaml.safe_load(DISK_RULES.read_text())
+        doc = yaml.safe_load(DISK_RULES.read_text(encoding="utf-8"))
         return {rule["title"] for group in doc["groups"] for rule in group["rules"] if "title" in rule}
 
     def test_the_drill_alert_name_is_a_title_the_repo_declares(self) -> None:
@@ -321,7 +321,7 @@ class TestTheDrillWatchesTheRuleThatExists:
 
     def test_the_drilled_rule_is_the_pvc_rule_by_uid_too(self) -> None:
         """Title equality alone would survive two rules swapping titles."""
-        doc = yaml.safe_load(DISK_RULES.read_text())
+        doc = yaml.safe_load(DISK_RULES.read_text(encoding="utf-8"))
         by_title = {rule["title"]: rule["uid"] for group in doc["groups"] for rule in group["rules"]}
         assert by_title[pvc_drill.DRILL_ALERT_NAME] == "obs015-pvc-unbound-failure"
 
@@ -372,8 +372,8 @@ class TestTheAdviceMatchesWhatWasMeasured:
         where two of the three wrong figures lived, and a check that only looked
         at the module it imports would have missed both."""
         sources = [
-            pathlib.Path(pvc_drill.__file__).read_text(),
-            (pathlib.Path(pvc_drill.__file__).parents[1] / "cli" / "observability.py").read_text(),
+            pathlib.Path(pvc_drill.__file__).read_text(encoding="utf-8"),
+            (pathlib.Path(pvc_drill.__file__).parents[1] / "cli" / "observability.py").read_text(encoding="utf-8"),
         ]
         assert any("RESOLVE_LATENCY_MIN" in s for s in sources), "the constant is not referenced anywhere"
         for src in sources:

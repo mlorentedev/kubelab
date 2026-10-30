@@ -28,7 +28,7 @@ class NodeInfo:
 def _load_common_config() -> dict:
     """Load common.yaml for networking values (VPS IP, Tailscale CIDR, etc.)."""
     config_path = _REPO_ROOT / "infra" / "config" / "values" / "common.yaml"
-    with open(config_path) as f:
+    with open(config_path, encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
@@ -54,7 +54,7 @@ def _init_default_ssh_user() -> None:
     if not inventory_path.exists():
         return
     try:
-        with open(inventory_path) as f:
+        with open(inventory_path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
         if data is None:
             return
@@ -112,7 +112,7 @@ def load_inventory(
     if not inventory_path.exists():
         return []
 
-    with open(inventory_path) as f:
+    with open(inventory_path, encoding="utf-8") as f:
         data = yaml.safe_load(f)
 
     retired = retired_addresses(_COMMON["networking"] if networking is None else networking)

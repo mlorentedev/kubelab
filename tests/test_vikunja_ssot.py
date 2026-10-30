@@ -20,7 +20,7 @@ NOT_HUMAN = {"machine", "reviewer"}
 
 @pytest.fixture(scope="module")
 def apps() -> dict:
-    return yaml.safe_load(COMMON.read_text())["apps"]
+    return yaml.safe_load(COMMON.read_text(encoding="utf-8"))["apps"]
 
 
 @pytest.fixture(scope="module")

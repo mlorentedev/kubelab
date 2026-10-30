@@ -174,7 +174,7 @@ class TestTheMakefileNoLongerCarriesTheFootgun:
 
 
 def _recipe(target: str) -> str:
-    lines = MAKEFILE.read_text().splitlines()
+    lines = MAKEFILE.read_text(encoding="utf-8").splitlines()
     out: list[str] = []
     collecting = False
     for line in lines:

@@ -141,7 +141,7 @@ def load_registry(path: Path | None = None) -> Registry:
 def _load(path: Path) -> Registry:
     try:
         # A SafeLoader subclass: no Python tags, only the duplicate-key refusal added.
-        data = yaml.load(path.read_text(), Loader=_UniqueKeyLoader)  # noqa: S506
+        data = yaml.load(path.read_text(encoding="utf-8"), Loader=_UniqueKeyLoader)  # noqa: S506
     except (OSError, yaml.YAMLError) as exc:
         raise RegistryError(f"{path}: cannot read the product registry: {exc}") from exc
     try:
@@ -199,7 +199,7 @@ def product(app: str, path: Path | None = None) -> Product:
 def platform_registry() -> str:
     """The platform's image registry (``registry`` in ``common.yaml``), read without SOPS."""
     path = PROJECT_ROOT / COMMON_VALUES_RELPATH
-    value = (yaml.safe_load(path.read_text()) or {}).get("registry")
+    value = (yaml.safe_load(path.read_text(encoding="utf-8")) or {}).get("registry")
     if not value:
         raise RegistryError(f"{path}: no top-level `registry` to derive product images from")
     return str(value)

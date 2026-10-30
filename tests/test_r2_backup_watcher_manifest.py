@@ -37,13 +37,13 @@ NAME = "r2-backup-watcher"
 
 def _probe_default(var: str, script: pathlib.Path = PROBE) -> str:
     """The value a script falls back to for `$var`, e.g. `${STAGING_DIR:-...}`."""
-    match = re.search(rf"\$\{{{var}:-([^}}]*)\}}", script.read_text())
+    match = re.search(rf"\$\{{{var}:-([^}}]*)\}}", script.read_text(encoding="utf-8"))
     assert match, f"{script.name} has no ${{{var}:-...}} default"
     return match.group(1)
 
 
 def _targets() -> list[list[str]]:
-    lines = TARGETS.read_text().splitlines()
+    lines = TARGETS.read_text(encoding="utf-8").splitlines()
     return [line.split() for line in lines if line.strip() and not line.startswith("#")]
 
 
@@ -102,7 +102,7 @@ def test_probe_reads_the_paths_the_nodes_write() -> None:
     `no capture sentinel` while the backups are fine, or, worse, a probe edited
     to match a wrong path would stop checking anything real.
     """
-    defaults = yaml.safe_load(NODE_BACKUP_DEFAULTS.read_text())
+    defaults = yaml.safe_load(NODE_BACKUP_DEFAULTS.read_text(encoding="utf-8"))
     staging = defaults["node_backup_staging_dir"]
     sentinel = defaults["node_backup_capture_sentinel"].replace("{{ node_backup_staging_dir }}", staging)
 
@@ -111,13 +111,13 @@ def test_probe_reads_the_paths_the_nodes_write() -> None:
 
 
 def test_runs_the_pinned_restic_image(rendered: dict) -> None:
-    expected = yaml.safe_load(COMMON.read_text())["backup"]["watcher"]["image"]
+    expected = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["backup"]["watcher"]["image"]
     assert rendered["container"]["image"] == expected
 
 
 def test_sizes_with_the_pinned_rclone_image(rendered: dict) -> None:
     """BACKUP-075: an exact tag from `common.yaml`, never a floating one."""
-    expected = yaml.safe_load(COMMON.read_text())["backup"]["watcher"]["size_image"]
+    expected = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["backup"]["watcher"]["size_image"]
     assert re.fullmatch(r"rclone/rclone:\d+\.\d+\.\d+", expected), expected
     assert rendered["init"]["name"] == "r2-size"
     assert rendered["init"]["image"] == expected
@@ -159,7 +159,7 @@ def test_the_sizing_step_runs_the_committed_script(rendered: dict) -> None:
     mounts = {m["mountPath"]: m["name"] for m in rendered["init"]["volumeMounts"]}
     volume = next(v for v in rendered["pod"]["volumes"] if v["name"] == mounts[mount_dir])
     configmap = rendered["configmaps"][volume["configMap"]["name"]]
-    assert configmap["data"]["size.sh"] == SIZE.read_text()
+    assert configmap["data"]["size.sh"] == SIZE.read_text(encoding="utf-8")
     assert rendered["init"]["command"] + rendered["init"].get("args", []) == ["/bin/sh", f"{mount_dir}/size.sh"]
 
 
@@ -177,8 +177,8 @@ def test_runs_the_committed_probe_against_the_committed_targets(rendered: dict) 
 
     volume = next(v for v in rendered["pod"]["volumes"] if v["name"] == mounts[mount_dir])
     configmap = rendered["configmaps"][volume["configMap"]["name"]]
-    assert configmap["data"]["probe.sh"] == PROBE.read_text()
-    assert configmap["data"]["targets.txt"] == TARGETS.read_text()
+    assert configmap["data"]["probe.sh"] == PROBE.read_text(encoding="utf-8")
+    assert configmap["data"]["targets.txt"] == TARGETS.read_text(encoding="utf-8")
 
     # Run by `sh`, not by its mode bits, and without `-e`: the probe owns its exits.
     command = rendered["container"]["command"] + rendered["container"].get("args", [])
@@ -202,7 +202,7 @@ def _restic_calls_per_node() -> int:
     Hardcoding the count is how this test kept passing after BACKUP-058 added a
     third call and the worst case outgrew the deadline (review, 2026-09-30).
     """
-    source = PROBE.read_text()
+    source = PROBE.read_text(encoding="utf-8")
     return len(re.findall(r"\$\(restic_read ", source))
 
 
@@ -220,7 +220,9 @@ def test_lives_long_enough_to_report(rendered: dict) -> None:
     size_timeout = int(_probe_default("SIZE_TIMEOUT", SIZE))
     calls = _restic_calls_per_node()
     assert calls >= 3, f"counted {calls} restic_read calls in probe.sh; the pattern is stale"
-    assert len(re.findall(r"^\s*measure (?:bucket|node) ", SIZE.read_text(), re.M)) == 2, "size.sh's calls are stale"
+    assert len(re.findall(r"^\s*measure (?:bucket|node) ", SIZE.read_text(encoding="utf-8"), re.M)) == 2, (
+        "size.sh's calls are stale"
+    )
     # The init container runs first: one listing per bucket, plus one per node below its bucket's root.
     sizing = _target_listings() * size_timeout
     worst_case = sizing + _target_nodes() * calls * timeout

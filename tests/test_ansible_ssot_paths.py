@@ -105,7 +105,7 @@ def _yaml_expressions(node: Any, key: str | None = None) -> Iterator[str]:
 
 
 def expressions(path: Path) -> Iterator[str]:
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     if path.suffix == ".j2":
         for m in JINJA.finditer(JINJA_COMMENT.sub("", text)):
             yield m.group(1) or m.group(2)
@@ -148,7 +148,7 @@ def _merge(base: Any, over: Any) -> Any:
 
 
 def _load(path: Path) -> dict:
-    return yaml.safe_load(path.read_text()) or {}
+    return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
 
 
 # `gitea_config` and `gitea_secrets` are the prod trees whatever env the play
@@ -232,9 +232,11 @@ def test_what_is_not_a_root_read_is_skipped() -> None:
 
 def test_a_jinja_comment_and_a_yaml_comment_are_not_read(tmp_path: Path) -> None:
     template = tmp_path / "t.j2"
-    template.write_text("{# config.gone.away #}{{ config.apps.x }}\n")
+    template.write_text("{# config.gone.away #}{{ config.apps.x }}\n", encoding="utf-8")
     playbook = tmp_path / "p.yml"
-    playbook.write_text("# {{ config.gone.away }}\n- when: config.global.y\n  debug: {msg: '{{ secrets.z }}'}\n")
+    playbook.write_text(
+        "# {{ config.gone.away }}\n- when: config.global.y\n  debug: {msg: '{{ secrets.z }}'}\n", encoding="utf-8"
+    )
     assert list(expressions(template)) == [" config.apps.x "]
     assert sorted(expressions(playbook)) == [" secrets.z ", "config.global.y"]
 

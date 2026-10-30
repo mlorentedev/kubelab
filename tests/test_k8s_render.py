@@ -28,7 +28,7 @@ def _fail(stderr: str = "boom") -> MagicMock:
 
 
 def _write(tmp: Path, body: str, name: str = "m.yaml") -> Path:
-    (tmp / name).write_text(body)
+    (tmp / name).write_text(body, encoding="utf-8")
     return tmp
 
 

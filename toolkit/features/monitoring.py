@@ -203,11 +203,11 @@ def export_monitors(project_root: Path) -> Path:
         export_dir.mkdir(parents=True, exist_ok=True)
 
         monitors_path = export_dir / MONITORS_FILE
-        monitors_path.write_text(json.dumps(clean_monitors, indent=2, default=str) + "\n")
+        monitors_path.write_text(json.dumps(clean_monitors, indent=2, default=str) + "\n", encoding="utf-8")
         logger.success(f"Exported {len(clean_monitors)} monitors → {monitors_path}")
 
         notifications_path = export_dir / NOTIFICATIONS_FILE
-        notifications_path.write_text(json.dumps(clean_notifications, indent=2, default=str) + "\n")
+        notifications_path.write_text(json.dumps(clean_notifications, indent=2, default=str) + "\n", encoding="utf-8")
         logger.success(f"Exported {len(clean_notifications)} notifications → {notifications_path}")
 
         return monitors_path
@@ -248,8 +248,10 @@ def import_monitors(project_root: Path) -> None:
             logger.error(f"No monitors file found at {monitors_path}. Run export first.")
             raise SystemExit(1)
 
-        monitors_data = json.loads(monitors_path.read_text())
-        notifications_data = json.loads(notifications_path.read_text()) if notifications_path.exists() else []
+        monitors_data = json.loads(monitors_path.read_text(encoding="utf-8"))
+        notifications_data = (
+            json.loads(notifications_path.read_text(encoding="utf-8")) if notifications_path.exists() else []
+        )
 
         # Use Uptime Kuma's backup import format
         backup_data = json.dumps(
@@ -341,7 +343,7 @@ def apply_monitors(project_root: Path, *, check: bool = False, prune: bool = Fal
             logger.error(f"No seed file at {monitors_path}. Run 'make monitoring-export' first.")
             raise SystemExit(1)
 
-        seed_monitors = json.loads(monitors_path.read_text())
+        seed_monitors = json.loads(monitors_path.read_text(encoding="utf-8"))
 
         # Marry the push tokens to the seed before anything reads it, so the
         # diff and the write path both see the same monitor. Raises rather than
@@ -398,7 +400,7 @@ def apply_monitors(project_root: Path, *, check: bool = False, prune: bool = Fal
         tags_path = export_dir / TAGS_FILE
         tag_id_map: dict[str, int] = {}
         if tags_path.exists():
-            seed_tags = json.loads(tags_path.read_text())
+            seed_tags = json.loads(tags_path.read_text(encoding="utf-8"))
             existing_tags = {t["name"]: t["id"] for t in api.get_tags()}
             for t in seed_tags:
                 if t["name"] in existing_tags:

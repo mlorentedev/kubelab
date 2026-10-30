@@ -60,7 +60,7 @@ def _lesson_files(category: pathlib.Path) -> set[str]:
 
 
 def _rows(category: pathlib.Path) -> list[str]:
-    return _ROW_TARGET.findall((category / "_index.md").read_text())
+    return _ROW_TARGET.findall((category / "_index.md").read_text(encoding="utf-8"))
 
 
 def test_there_are_categories_to_check() -> None:
@@ -99,7 +99,7 @@ class TestNoCommittedCount:
         ids=lambda p: p.parent.name,
     )
     def test_no_index_states_a_lesson_count(self, index: pathlib.Path) -> None:
-        stated = _COUNT.findall(index.read_text())
+        stated = _COUNT.findall(index.read_text(encoding="utf-8"))
         assert not stated, (
             f"{index.relative_to(REPO_ROOT)} states a lesson count ({stated[0]}). Two PRs that each add "
             "a lesson rewrite that line from different bases and merge with no conflict (#2525). "
@@ -107,7 +107,7 @@ class TestNoCommittedCount:
         )
 
     def test_the_top_level_table_has_no_count_column(self) -> None:
-        rows = _CATEGORY_COUNT.findall((LESSONS / "_index.md").read_text())
+        rows = _CATEGORY_COUNT.findall((LESSONS / "_index.md").read_text(encoding="utf-8"))
         assert not rows, f"docs/lessons/_index.md has a per-category count again: {rows[0]!r} (#2525)"
 
     def test_the_guard_matches_the_shapes_it_replaced(self) -> None:
@@ -131,6 +131,6 @@ class TestNoUnfinishedMerge:
 class TestTopLevelIndex:
     def test_every_category_directory_appears(self) -> None:
         """A whole category missing from the top level hides all of its lessons at once."""
-        text = (LESSONS / "_index.md").read_text()
+        text = (LESSONS / "_index.md").read_text(encoding="utf-8")
         for category in _categories():
             assert f"({category.name}/_index.md)" in text, f"category {category.name} is not linked from the top level"

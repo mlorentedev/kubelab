@@ -32,9 +32,9 @@ _ROOT = Path(__file__).resolve().parents[1]
 @pytest.fixture
 def ansible_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     (tmp_path / "playbooks").mkdir()
-    (tmp_path / "playbooks" / "site.yml").write_text("---\n")
+    (tmp_path / "playbooks" / "site.yml").write_text("---\n", encoding="utf-8")
     (tmp_path / "generated" / "prod").mkdir(parents=True)
-    (tmp_path / "generated" / "prod" / "hosts.yml").write_text("---\n")
+    (tmp_path / "generated" / "prod" / "hosts.yml").write_text("---\n", encoding="utf-8")
     monkeypatch.setattr(infra, "settings", SimpleNamespace(ansible_dir=tmp_path))
     return tmp_path
 
@@ -218,7 +218,7 @@ def _recipes() -> dict[str, str]:
     """Makefile target -> its recipe text (tab-indented lines under the target)."""
     recipes: dict[str, str] = {}
     current = None
-    for line in (_ROOT / "Makefile").read_text().splitlines():
+    for line in (_ROOT / "Makefile").read_text(encoding="utf-8").splitlines():
         match = re.match(r"^([A-Za-z0-9_.-]+):(?!=)", line)
         if match:
             current = match.group(1)
@@ -282,7 +282,7 @@ def test_the_recipe_parser_sees_every_run() -> None:
     Counted against the raw file rather than a list of target names, so a new
     target, or one the parser splits or skips, cannot fall outside the check.
     """
-    lines = (_ROOT / "Makefile").read_text().splitlines()
+    lines = (_ROOT / "Makefile").read_text(encoding="utf-8").splitlines()
     in_file = sum(1 for line in lines if line.startswith("\t") and "infra ansible run" in line)
     parsed = sum(recipe.count("infra ansible run") for recipe in _recipes().values())
     assert in_file > 0, "no recipe runs a playbook: the Makefile moved or the pattern is stale"
@@ -297,7 +297,7 @@ def test_the_recipe_parser_sees_every_run() -> None:
 # generator's own reads, because SOPS does hold a part of it the generator never
 # reads: the lab edge's site secrets at `networking.edge`, which the rpi4 play
 # takes from SOPS itself (#2665).
-_GENERATOR_SOURCE = (_ROOT / "toolkit" / "features" / "generator_ansible.py").read_text()
+_GENERATOR_SOURCE = (_ROOT / "toolkit" / "features" / "generator_ansible.py").read_text(encoding="utf-8")
 
 
 def _networking_reads(source: str) -> tuple[set[str], list[int]]:
@@ -430,7 +430,7 @@ def test_a_secret_under_networking_the_generator_never_reads_is_allowed() -> Non
 )
 def test_no_sops_file_declares_what_the_inventory_is_built_from(path: Path) -> None:
     """Key names are plaintext in a SOPS file, so this needs no decryption key."""
-    declared = _declared(yaml.safe_load(path.read_text()) or {})
+    declared = _declared(yaml.safe_load(path.read_text(encoding="utf-8")) or {})
     assert not declared, (
         f"{path.name} declares {declared}. The inventory is generated from plaintext values "
         "only, so these keys would never reach it. Keep them in common.yaml / <env>.yaml."

@@ -70,7 +70,7 @@ def _compose_templates() -> list[Path]:
 def _roles_binding_tailscale() -> list[tuple[str, Path, list[str]]]:
     out = []
     for tpl in _compose_templates():
-        hits = [m.group(0).strip() for m in _TS_BOUND_PORT.finditer(tpl.read_text())]
+        hits = [m.group(0).strip() for m in _TS_BOUND_PORT.finditer(tpl.read_text(encoding="utf-8"))]
         if hits:
             role = tpl.relative_to(ROLES).parts[0]
             out.append((role, tpl, hits))
@@ -81,7 +81,7 @@ def _role_has_boot_ordering(role: str) -> bool:
     """Does any unit template in this role implement remedy 2, fully?"""
     role_dir = ROLES / role
     for unit in role_dir.rglob("*.service.j2"):
-        text = unit.read_text()
+        text = unit.read_text(encoding="utf-8")
         if _ORDERED_AFTER_TAILSCALED.search(text) and _WAITS_FOR_ADDRESS.search(text):
             return True
     return False

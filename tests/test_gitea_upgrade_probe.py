@@ -47,7 +47,11 @@ class FakeServer:
         method = argv[argv.index("-X") + 1]
         path = argv[-1].split("/api/v1", 1)[1]
         if method == "GET" and path.count("/") == 3:
-            return 0, json.dumps({"has_issues": not self.broken.get("no_issues"), "default_merge_style": self.merge_style}), ""
+            return (
+                0,
+                json.dumps({"has_issues": not self.broken.get("no_issues"), "default_merge_style": self.merge_style}),
+                "",
+            )
         if method == "POST" and path.endswith("/issues"):
             return (22, "", "") if self.broken.get("issue") else (0, json.dumps({"number": 7}), "")
         if method == "POST" and path.endswith("/comments"):
@@ -125,7 +129,7 @@ def test_the_forge_runs_a_gitea_with_workflow_concurrency() -> None:
     1.26.x leaked groups across branches, deadlocked and regressed, and only 1.27.3 stops an
     unapproved fork run from cancelling a trusted one (GHSA-4j4g-m7mr-hp5j; OPS-038 proposal).
     Raise the floor with each upgrade that is rehearsed."""
-    image = yaml.safe_load(COMMON.read_text())["apps"]["services"]["core"]["gitea"]["image"]
+    image = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["apps"]["services"]["core"]["gitea"]["image"]
     version = re.search(r":(\d+)\.(\d+)\.(\d+)", image)
     assert version, f"{image}: the pin names no version, so the floor cannot be read"
     assert tuple(map(int, version.groups())) >= (1, 27, 3), image

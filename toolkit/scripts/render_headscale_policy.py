@@ -43,7 +43,7 @@ _POLICY_DEFAULTS = (
 
 
 def _networking(common_yaml: Path = COMMON_YAML) -> dict[str, Any]:
-    return yaml.safe_load(common_yaml.read_text())["networking"]
+    return yaml.safe_load(common_yaml.read_text(encoding="utf-8"))["networking"]
 
 
 def build_hosts(common_yaml: Path = COMMON_YAML) -> dict[str, str]:
@@ -88,7 +88,7 @@ def render_policy(hosts: dict[str, str] | None = None, segments: list[dict[str, 
 
 def headscale_image(common_yaml: Path = COMMON_YAML) -> str:
     """Headscale image:tag from the SSOT — keeps the gate on the deployed version."""
-    cfg = yaml.safe_load(common_yaml.read_text())
+    cfg = yaml.safe_load(common_yaml.read_text(encoding="utf-8"))
     return cfg["apps"]["services"]["core"]["headscale"]["image"]
 
 

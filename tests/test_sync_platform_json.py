@@ -63,7 +63,9 @@ class TestPlatformManifestGeneration:
         assert aws1["status"] == "standby"
         assert aws1["runtime"] == "standby"
 
-        common = yaml.safe_load((Path(__file__).parents[1] / "infra/config/values/common.yaml").read_text())
+        common = yaml.safe_load(
+            (Path(__file__).parents[1] / "infra/config/values/common.yaml").read_text(encoding="utf-8")
+        )
         retired = {key for key, node in common["networking"]["nodes"].items() if node.get("retired")}
         # The set, not a count: a stale or over-broad regeneration fails it.
         assert {n["id"] for n in nodes if n["status"] == "standby"} == {"aws1", *retired}

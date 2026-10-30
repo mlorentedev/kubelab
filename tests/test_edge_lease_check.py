@@ -40,7 +40,9 @@ from tests.ansible_jinja import ansible_env
 
 REPO = Path(__file__).resolve().parents[1]
 SCRIPT = REPO / "infra" / "ansible" / "roles" / "gateway" / "files" / "edge-lease-check.sh"
-NETWORKING = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text())["networking"]
+NETWORKING = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text(encoding="utf-8"))[
+    "networking"
+]
 UPLINK = NETWORKING["edge"]["uplink"]["interface"]
 INTERNAL = {
     "lan": NETWORKING["lan_cidr"],
@@ -130,9 +132,9 @@ def _run(
     leases.mkdir(exist_ok=True)
     if with_interface:
         (sys_net / interface).mkdir(parents=True, exist_ok=True)
-        (sys_net / interface / "ifindex").write_text(f"{IFINDEX}\n")
+        (sys_net / interface / "ifindex").write_text(f"{IFINDEX}\n", encoding="utf-8")
     if lease is not None:
-        (leases / IFINDEX).write_text(lease)
+        (leases / IFINDEX).write_text(lease, encoding="utf-8")
     nets = INTERNAL if networks is None else networks
     args = [f"{name}={cidr}" for name, cidr in nets.items()]
     env = {
@@ -342,8 +344,8 @@ def test_an_implausible_interface_name_is_refused(tmp_path: Path, awk_bin: Path)
 # ------------------------------------------------------------------- the units
 
 ROLE = REPO / "infra" / "ansible" / "roles" / "gateway"
-TASKS: list[dict[str, Any]] = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text())
-DEFAULTS: dict[str, Any] = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text())
+TASKS: list[dict[str, Any]] = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text(encoding="utf-8"))
+DEFAULTS: dict[str, Any] = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text(encoding="utf-8"))
 SERVICE = "kubelab-edge-lease-check.service"
 PATH_UNIT = "kubelab-edge-lease-check.path"
 TIMER = "kubelab-edge-lease-check.timer"
@@ -403,11 +405,11 @@ def test_the_path_unit_watches_networkds_lease_directory() -> None:
 def test_the_units_pass_systemd_analyze_verify(tmp_path: Path) -> None:
     if shutil.which("systemd-analyze") is None:
         pytest.skip("systemd-analyze is not installed")
-    (tmp_path / SERVICE).write_text(_render(SERVICE, gateway_lease_check_path="/bin/true"))
-    (tmp_path / PATH_UNIT).write_text(_render(PATH_UNIT))
-    (tmp_path / TIMER).write_text(_render(TIMER))
+    (tmp_path / SERVICE).write_text(_render(SERVICE, gateway_lease_check_path="/bin/true"), encoding="utf-8")
+    (tmp_path / PATH_UNIT).write_text(_render(PATH_UNIT), encoding="utf-8")
+    (tmp_path / TIMER).write_text(_render(TIMER), encoding="utf-8")
     for stub in ("kubelab-notify@.service", "kubelab-notify-recovered@.service"):
-        (tmp_path / stub).write_text("[Service]\nType=oneshot\nExecStart=/bin/true\n")
+        (tmp_path / stub).write_text("[Service]\nType=oneshot\nExecStart=/bin/true\n", encoding="utf-8")
     proc = subprocess.run(
         ["systemd-analyze", "verify", "--man=no", *(str(tmp_path / unit) for unit in (SERVICE, PATH_UNIT, TIMER))],
         capture_output=True,
@@ -509,13 +511,15 @@ def test_an_ifindex_the_check_cannot_read_is_blind_not_a_collision(
     if ifindex is None:
         (sys_net / "ifindex").mkdir()
     else:
-        (sys_net / "ifindex").write_text(ifindex)
+        (sys_net / "ifindex").write_text(ifindex, encoding="utf-8")
     result = _run(tmp_path, awk_bin, _site_lease(), with_interface=False)
     assert result.returncode == 2, _output(result)
 
 
 def test_the_playbook_maps_the_internal_networks_from_the_ssot() -> None:
-    plays = yaml.safe_load((REPO / "infra" / "ansible" / "playbooks" / "provision-rpi4.yml").read_text())
+    plays = yaml.safe_load(
+        (REPO / "infra" / "ansible" / "playbooks" / "provision-rpi4.yml").read_text(encoding="utf-8")
+    )
     for play in plays:
         for role in play.get("roles", []):
             if isinstance(role, dict) and role.get("role", "").endswith("/gateway"):

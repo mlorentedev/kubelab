@@ -210,7 +210,7 @@ class _Fake:
             data.mkdir(parents=True)
             for name, value in self.restored.items():
                 if name != self.missing:
-                    (data / name).write_text(value)
+                    (data / name).write_text(value, encoding="utf-8")
             if self.missing != "db.sqlite":
                 _db(data / "db.sqlite", corrupt=self.corrupt_db)
             return 0, "", ""

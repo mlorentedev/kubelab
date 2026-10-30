@@ -34,7 +34,7 @@ REAL_FAILURE_LINE = json.dumps(
 
 def _rule() -> dict:
     for path in sorted(pathlib.Path(ALERTING_DIR).glob("*.yaml")):
-        for group in (yaml.safe_load(path.read_text()) or {}).get("groups") or []:
+        for group in (yaml.safe_load(path.read_text(encoding="utf-8")) or {}).get("groups") or []:
             for rule in group.get("rules") or []:
                 if rule.get("uid") == UID:
                     return rule

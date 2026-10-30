@@ -14,7 +14,7 @@ import yaml
 
 from tests.test_agent_stack_role import COMMON, ROLE, _environment, _resolved, _tasks
 
-SLACK = yaml.safe_load(COMMON.read_text())["apps"]["services"]["ai"]["hermes_kubelab"]["slack"]
+SLACK = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["apps"]["services"]["ai"]["hermes_kubelab"]["slack"]
 TOKENS = {"agent_stack_slack_bot_token": "xoxb-sentinel", "agent_stack_slack_app_token": "xapp-sentinel"}
 OPEN_SWITCHES = ("SLACK_ALLOW_ALL_USERS", "GATEWAY_ALLOW_ALL_USERS")
 
@@ -117,7 +117,7 @@ def test_a_top_level_channel_message_needs_a_mention() -> None:
 
 
 def test_the_playbook_reads_both_tokens_from_prods_vault() -> None:
-    playbook = (ROLE.parents[1] / "playbooks/provision-ace2.yml").read_text()
+    playbook = (ROLE.parents[1] / "playbooks/provision-ace2.yml").read_text(encoding="utf-8")
     for name in ("slack_bot_token", "slack_app_token"):
         assert (
             f"agent_stack_{name}: \"{{{{ gitea_secrets.apps.services.ai.hermes_kubelab.{name} | default('') }}}}\""

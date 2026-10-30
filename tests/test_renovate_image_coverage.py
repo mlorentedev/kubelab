@@ -79,7 +79,7 @@ def test_every_image_is_either_tracked_or_explicitly_ignored() -> None:
     Untracked-and-unlisted is the state that looks identical to covered.
     """
     config = _config()
-    tracked = {m.group("depName") for m in _python_pattern().finditer(COMMON.read_text())}
+    tracked = {m.group("depName") for m in _python_pattern().finditer(COMMON.read_text(encoding="utf-8"))}
     ignored = set(config["ignoreDeps"])
 
     unaccounted = sorted(

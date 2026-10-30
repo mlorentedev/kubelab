@@ -14,7 +14,7 @@ from tests.test_agent_stack_role import COMMON, ROLE, _environment, _resolved
 from toolkit.features.secrets_manager import SECRET_CATALOG
 
 KEY = "apps.services.ai.hermes_kubelab.tavily_api_key"
-CONFIG = yaml.safe_load(COMMON.read_text())["apps"]["services"]["ai"]["hermes_kubelab"]["agent_config"]
+CONFIG = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["apps"]["services"]["ai"]["hermes_kubelab"]["agent_config"]
 
 
 def _env_text(**overrides: object) -> str:
@@ -50,7 +50,8 @@ def test_the_key_is_named_in_no_file_of_the_role_but_the_gateway_env() -> None:
     mentions = {
         str(path.relative_to(ROLE))
         for path in ROLE.rglob("*")
-        if path.is_file() and re.search("agent_stack_tavily_api_key|TAVILY_API_KEY", path.read_text(errors="ignore"))
+        if path.is_file()
+        and re.search("agent_stack_tavily_api_key|TAVILY_API_KEY", path.read_text(errors="ignore", encoding="utf-8"))
     }
     assert mentions == allowed
 

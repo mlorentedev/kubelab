@@ -604,8 +604,8 @@ def argocd_rbac_disagreements(
 
     from toolkit.core.io import docker_user_args
 
-    (work_dir / "policy.csv").write_text(policy_csv)
-    (work_dir / "kubeconfig").write_text(_OFFLINE_KUBECONFIG)
+    (work_dir / "policy.csv").write_text(policy_csv, encoding="utf-8")
+    (work_dir / "kubeconfig").write_text(_OFFLINE_KUBECONFIG, encoding="utf-8")
     # One container for every case: `can` exits 0 for Yes and 1 for No.
     script = "".join(
         f"argocd admin settings rbac can '{s}' '{a}' '{r}' '{o}' --policy-file /w/policy.csv"

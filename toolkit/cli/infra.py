@@ -628,7 +628,7 @@ def argo_spoke_url(
 
     common = settings.project_root / "infra" / "config" / "values" / "common.yaml"
     try:
-        url = argocd_spokes.apiserver_url(yaml.safe_load(common.read_text()), env)
+        url = argocd_spokes.apiserver_url(yaml.safe_load(common.read_text(encoding="utf-8")), env)
     except KeyError as exc:
         logger.error(str(exc))
         raise typer.Exit(1) from exc
@@ -1177,7 +1177,7 @@ def _load_cluster_bootstrap() -> list[BootstrapEntry]:
     cannot create them (ADR-041). File order is preserved (stable apply order).
     """
     common_path = settings.project_root / "infra" / "config" / "values" / "common.yaml"
-    with open(common_path) as f:
+    with open(common_path, encoding="utf-8") as f:
         config = yaml.safe_load(f)
     return [BootstrapEntry.from_dict(entry) for entry in config.get("cluster_bootstrap", [])]
 

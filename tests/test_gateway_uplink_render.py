@@ -42,8 +42,10 @@ def _netplan_or_skip() -> None:
 REPO = Path(__file__).resolve().parents[1]
 ROLE = REPO / "infra" / "ansible" / "roles" / "gateway"
 TEMPLATES = ROLE / "templates"
-TASKS: list[dict[str, Any]] = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text())
-NETWORKING = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text())["networking"]
+TASKS: list[dict[str, Any]] = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text(encoding="utf-8"))
+NETWORKING = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text(encoding="utf-8"))[
+    "networking"
+]
 EDGE = NETWORKING["edge"]
 
 KINDS = ("wifi_open", "wifi_psk", "ethernet")
@@ -85,7 +87,7 @@ def _generate(kind: str, root: Path) -> Path:
     """Run `netplan generate` on the rendered file; returns where it writes networkd's units."""
     (root / "etc" / "netplan").mkdir(parents=True)
     rendered = root / "etc" / "netplan" / "10-kubelab-edge.yaml"
-    rendered.write_text(_render("netplan-edge.yaml.j2", kind))
+    rendered.write_text(_render("netplan-edge.yaml.j2", kind), encoding="utf-8")
     rendered.chmod(0o600)
     subprocess.run(["netplan", "generate", "--root-dir", str(root)], check=True, capture_output=True)
     return root / "run" / "systemd" / "network"
@@ -174,7 +176,7 @@ def test_netplan_configures_the_lan_without_a_carrier(kind: str, tmp_path: Path)
     """Asked of netplan itself: the key above is the one networkd reads."""
     _netplan_or_skip()
     generated = _generate(kind, tmp_path)
-    network = _ini((generated / f"10-netplan-{LAN}.network").read_text())
+    network = _ini((generated / f"10-netplan-{LAN}.network").read_text(encoding="utf-8"))
     assert network["Network"]["ConfigureWithoutCarrier"] == "yes"
 
 
@@ -216,7 +218,7 @@ def test_netplan_generates_the_file_the_drop_in_names(kind: str, tmp_path: Path)
     """Asked of netplan itself: the drop-in's directory is only right if this file exists."""
     _netplan_or_skip()
     generated = _generate(kind, tmp_path)
-    network = _ini((generated / f"10-netplan-{UPLINK}.network").read_text())
+    network = _ini((generated / f"10-netplan-{UPLINK}.network").read_text(encoding="utf-8"))
     # netplan 1.x writes the legacy `[DHCP]` section, which networkd reads as DHCPv4.
     sections = [network[name] for name in ("DHCP", "DHCPv4") if network.has_section(name)]
     dhcp = {key: value for section in sections for key, value in section.items()}
@@ -276,7 +278,9 @@ def test_an_unknown_kind_fails_the_check() -> None:
 
 
 def _gateway_vars() -> dict[str, Any]:
-    plays = yaml.safe_load((REPO / "infra" / "ansible" / "playbooks" / "provision-rpi4.yml").read_text())
+    plays = yaml.safe_load(
+        (REPO / "infra" / "ansible" / "playbooks" / "provision-rpi4.yml").read_text(encoding="utf-8")
+    )
     for play in plays:
         for role in play.get("roles", []):
             if isinstance(role, dict) and role.get("role", "").endswith("/gateway"):
@@ -298,9 +302,9 @@ def test_the_validate_command_accepts_the_rendered_file_and_refuses_a_broken_one
     _netplan_or_skip()
     validate = _task_writing("/etc/netplan/10-kubelab-edge.yaml")["validate"]
     good = tmp_path / "good.yaml"
-    good.write_text(_render("netplan-edge.yaml.j2"))
+    good.write_text(_render("netplan-edge.yaml.j2"), encoding="utf-8")
     bad = tmp_path / "bad.yaml"
-    bad.write_text("network:\n  version: 2\n  ethernets:\n    eth0:\n      dhcp4: maybe\n")
+    bad.write_text("network:\n  version: 2\n  ethernets:\n    eth0:\n      dhcp4: maybe\n", encoding="utf-8")
     for path, accepted in ((good, True), (bad, False)):
         result = subprocess.run(shlex.split(validate % path), capture_output=True, check=False)
         assert (result.returncode == 0) is accepted, result.stderr

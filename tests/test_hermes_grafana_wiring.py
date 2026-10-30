@@ -16,7 +16,7 @@ from toolkit.features.secrets_manager import SECRET_CATALOG
 
 KEY = "apps.services.ai.hermes_kubelab.grafana_token"
 TOKEN = "glsa_" + "wiring" + "_" + "0123456789"  # assembled, so a scanner sees no credential
-HERMES = yaml.safe_load(COMMON.read_text())["apps"]["services"]["ai"]["hermes_kubelab"]
+HERMES = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["apps"]["services"]["ai"]["hermes_kubelab"]
 SCRIPT_TOOLS = {"firing_alerts", "errors_by_app", "log_volume_by_app", "recent_errors"}
 
 
@@ -48,11 +48,17 @@ def test_the_token_enters_the_env_file_and_one_server() -> None:
 
 
 def test_the_token_is_named_only_where_it_must_be() -> None:
-    allowed = {"templates/hermes.env.j2", "templates/hermes-config.yaml.j2", "defaults/main.yml", "files/hermes-mcp/grafana-reader.py"}
+    allowed = {
+        "templates/hermes.env.j2",
+        "templates/hermes-config.yaml.j2",
+        "defaults/main.yml",
+        "files/hermes-mcp/grafana-reader.py",
+    }
     mentions = {
         str(path.relative_to(ROLE))
         for path in ROLE.rglob("*")
-        if path.is_file() and re.search("agent_stack_grafana_token|GRAFANA_TOKEN", path.read_text(errors="ignore"))
+        if path.is_file()
+        and re.search("agent_stack_grafana_token|GRAFANA_TOKEN", path.read_text(errors="ignore", encoding="utf-8"))
     }
     assert mentions == allowed
     terminal = _config(agent_stack_grafana_token=TOKEN)["terminal"]
@@ -62,7 +68,7 @@ def test_the_token_is_named_only_where_it_must_be() -> None:
 def test_the_model_can_call_exactly_the_tools_the_script_serves() -> None:
     server = _config(agent_stack_grafana_token=TOKEN)["mcp_servers"]["grafana"]
     assert set(server["tools"]["include"]) == SCRIPT_TOOLS
-    source = (ROLE / "files/hermes-mcp/grafana-reader.py").read_text()
+    source = (ROLE / "files/hermes-mcp/grafana-reader.py").read_text(encoding="utf-8")
     assert all(f'"{name}"' in source or f"{name}:" in source for name in SCRIPT_TOOLS)
 
 

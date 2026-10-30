@@ -38,7 +38,7 @@ RECORD_TASK = "Record the review-notice token in SOPS"
 
 
 def _task(name: str) -> dict[str, Any]:
-    for task in yaml.safe_load((ROLE / "tasks/main.yml").read_text()):
+    for task in yaml.safe_load((ROLE / "tasks/main.yml").read_text(encoding="utf-8")):
         if isinstance(task, dict) and task.get("name") == name:
             return task
     raise AssertionError(f"no task named {name!r} in beelink_services/tasks/main.yml")
@@ -51,7 +51,7 @@ def test_the_grant_is_comments_and_nothing_else() -> None:
     leaked value can do more than comment; the `read:repository` the reviewer holds is
     exactly what it must NOT have, since reading the PR is not part of the job.
     """
-    declared = yaml.safe_load(COMMON.read_text())["apps"]["services"]["core"]["gitea"]["token_scopes"]
+    declared = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["apps"]["services"]["core"]["gitea"]["token_scopes"]
     grant = {s.strip() for s in declared["review_notice"].split(",") if s.strip()}
 
     assert grant == set(REVIEW_NOTICE_SCOPES), (
@@ -82,7 +82,7 @@ def test_the_token_is_catalogued_like_the_reviewers() -> None:
 
 
 def test_the_playbook_reads_the_grant_and_the_secret_from_the_ssot() -> None:
-    playbook = PLAYBOOK.read_text()
+    playbook = PLAYBOOK.read_text(encoding="utf-8")
 
     assert "token_scopes.review_notice" in playbook, "the grant must come from common.yaml, not a literal"
     assert "gitea_secrets.apps.services.core.gitea.review_notice_token" in playbook

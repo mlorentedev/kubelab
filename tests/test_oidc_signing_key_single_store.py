@@ -34,18 +34,18 @@ ENV_NAME = KEY_PATH.upper().replace(".", "_")
 
 def _template_key_path() -> str:
     """The in-container path the Authelia template reads the key from."""
-    paths = re.findall(r'secret "([^"]+oidc-jwks\.pem)"', TEMPLATE.read_text())
+    paths = re.findall(r'secret "([^"]+oidc-jwks\.pem)"', TEMPLATE.read_text(encoding="utf-8"))
     assert len(paths) == 1, f"expected one key path in {TEMPLATE.name}, found {paths}"
     return paths[0]
 
 
 class TestTheDevStackReadsSops:
     def test_no_host_file_is_mounted(self) -> None:
-        volumes = yaml.safe_load(COMPOSE.read_text())["services"]["authelia"].get("volumes", [])
+        volumes = yaml.safe_load(COMPOSE.read_text(encoding="utf-8"))["services"]["authelia"].get("volumes", [])
         assert not [v for v in volumes if "oidc-jwks" in str(v)], "the key must not come from a host file"
 
     def test_the_key_is_a_secret_sourced_from_the_sops_variable(self) -> None:
-        compose = yaml.safe_load(COMPOSE.read_text())
+        compose = yaml.safe_load(COMPOSE.read_text(encoding="utf-8"))
         mounts = [m for m in compose["services"]["authelia"].get("secrets", []) if isinstance(m, dict)]
         target = _template_key_path()
         sources = [m["source"] for m in mounts if m.get("target") == target]
@@ -130,7 +130,7 @@ def test_the_guard_reads_every_tracked_text_file_and_no_generated_one() -> None:
     planted = ROOT / "infra/config/authelia/generated/_guard_probe.yml"
     created = [d for d in planted.parents if not d.exists()]
     planted.parent.mkdir(parents=True, exist_ok=True)
-    planted.write_text(f"{ENV_NAME}: planted\n")
+    planted.write_text(f"{ENV_NAME}: planted\n", encoding="utf-8")
     try:
         rels = {rel for rel, _ in _tracked_texts()}
     finally:
