@@ -27,6 +27,8 @@ These are past the envelope's 8 items, or are found defects whose fix is wider t
 - #2845 (#1700): a lessons index that still holds conflict markers is refused.
 - #2849 (#2848): the Pi-hole flush test read a helper `pihole-FTL` process as a restart. It failed master at 517896d8 with `'279 203' == '203'`, while the daemon, 203, was still running.
 
+#2840 and #2845 each add a row at the top of `docs/lessons/toolkit-tooling/_index.md`. Both were merged with master at 11:40Z, after #2846's row. Whichever lands second needs one more merge: put its row above the other, newest first.
+
 ## Filed, no PR
 
 - #1196 (existing, TEST-001): the Kuma Socket.IO timeout failed #2840's Tests, with evidence added. The failed job was re-run.
@@ -65,3 +67,7 @@ These are past the envelope's 8 items, or are found defects whose fix is wider t
 | 10:45–11:15 | reviews | #2838 (`--pull` read twice; variable-keyed runs fenced; QEMU F flag asserted), #2842 (a served page, not only a logged one), #2845 (indexes at any depth): applied, with mutants red. #2844 answered. Triage posted on each | PR comments |
 | 11:03 | #2846 | landed | 21529cdb |
 | 11:05 | found | Pi-hole flush test misreads a helper process; filed #2848, fixed in #2849 | #2849 |
+| 11:10 | #2838 | QEMU registration must carry the F flag; PO fails, POF passes | 64588c60 |
+| 11:35 | #2838 | PR-Agent: the probe variable could be reset from another key. Every setter is now pinned to the key the test sizes; mutant red | 19d002ed |
+| 11:40 | #2840, #2845 | merged master (index conflict with #2846's row); #2840's Kuma flake (#1196) re-runs on the new head | 70168170, ef400656 |
+| 11:40 | #2849 | CI green; marked ready | 93151a53 |
