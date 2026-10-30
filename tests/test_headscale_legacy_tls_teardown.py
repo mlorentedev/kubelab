@@ -60,11 +60,11 @@ _BARE_VAR = re.compile(r"^\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}$")
 
 
 def _defaults() -> dict[str, Any]:
-    return yaml.safe_load((ROLE / "defaults/main.yml").read_text())
+    return yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))
 
 
 def _tasks() -> list[dict]:
-    return yaml.safe_load((ROLE / "tasks/main.yml").read_text())
+    return yaml.safe_load((ROLE / "tasks/main.yml").read_text(encoding="utf-8"))
 
 
 def _module(task: dict, names: tuple[str, ...]) -> dict | None:
@@ -91,7 +91,7 @@ def _resolve(value: Any) -> Any:
 
 
 def _vps_play() -> dict:
-    plays = yaml.safe_load(VPS_PLAYBOOK.read_text())
+    plays = yaml.safe_load(VPS_PLAYBOOK.read_text(encoding="utf-8"))
     assert len(plays) == 1, "deploy-vps.yml is expected to be one play"
     return plays[0]
 
@@ -338,10 +338,10 @@ class TestNothingReinstallsWhatTheTeardownRemoves:
             if "generated" in path.parts or "inventories" in path.parts:
                 continue
             try:
-                doc = yaml.safe_load(path.read_text())
+                doc = yaml.safe_load(path.read_text(encoding="utf-8"))
             except yaml.YAMLError:
                 continue
-            found.extend(_apt_installs(doc, str(path.relative_to(REPO)), _role_defaults(path)))
+            found.extend(_apt_installs(doc, path.relative_to(REPO).as_posix(), _role_defaults(path)))
         return found
 
     def test_the_scan_sees_installs(self) -> None:
@@ -368,7 +368,7 @@ def _role_defaults(path: Path) -> dict[str, Any]:
     if parts[0] != "roles":
         return {}
     defaults = ANSIBLE / "roles" / parts[1] / "defaults/main.yml"
-    return (yaml.safe_load(defaults.read_text()) or {}) if defaults.exists() else {}
+    return (yaml.safe_load(defaults.read_text(encoding="utf-8")) or {}) if defaults.exists() else {}
 
 
 def _package_names(name: Any, defaults: dict[str, Any]) -> set[str]:

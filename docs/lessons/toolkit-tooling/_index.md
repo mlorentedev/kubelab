@@ -5,6 +5,7 @@ Newest first. Back to [all categories](../_index.md).
 | # | Lesson | Date |
 |---|---|---|
 | 669 | [Under `pipefail`, a reader that stops early fails the pipe it answered](lesson-669-under-pipefail-a-reader-that-stops-early-fails-the-pipe-it-answered.md) | 2026-10-30 |
+| 666 | [Native Windows breaks the toolkit on uids, path separators and drive letters, not only on encodings](lesson-666-native-windows-breaks-the-toolkit-on-uids-separators-and-drive-letters.md) | 2026-10-30 |
 | 643 | [A proxy that forwards `delattr` must also forward its `__dict__`](lesson-643-a-proxy-that-forwards-delattr-must-also-forward-its-dict.md) | 2026-10-28 |
 | 631 | [An e2e probe that folds a refusal into a timeout skips the outage it exists to find](lesson-631-an-e2e-probe-that-folds-a-refusal-into-a-timeout-skips-the-outage-it-exists-to-find.md) | 2026-10-26 |
 | 627 | [Rich reads the brackets in a log message as markup: a stray close raises, an unknown tag vanishes](lesson-627-rich-reads-the-brackets-in-a-log-message-as-markup-a-stray-close-raises-an-unknown-tag-vanishes.md) | 2026-10-26 |
