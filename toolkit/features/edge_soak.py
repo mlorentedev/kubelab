@@ -36,6 +36,9 @@ KERNEL_LOG = "/var/log/kern.log"
 # rsyslog enters `active` about 15 s into a boot on the edge. One that entered it
 # later was restarted, and may not hold this boot's banner.
 RSYSLOG_START_LIMIT_S = 300
+# The reading takes about 4 s. ConnectTimeout bounds the connection, not a session
+# that stops answering after it.
+SESSION_TIMEOUT_S = 60
 
 BANNER = re.compile(r" kernel: Linux version ")
 PROBE = re.compile(r" kernel: rtw_\w+ \S+: Firmware version ")
@@ -96,12 +99,11 @@ def soak_command(networking: dict[str, Any]) -> list[str]:
 
 
 def _classify(boot: list[str], reading: Reading) -> None:
-    """Sort the lines after the banner. The first probe is the boot's own."""
-    paths: set[str] = set()
+    """Sort the lines after the banner. The first probe is the boot's own, and a port
+    is the adapter's if the driver names it anywhere in the boot, before or after."""
+    paths = {match.group(1) for line in boot if (match := DRIVER_PATH.search(line))}
     probed = False
     for line in boot:
-        if match := DRIVER_PATH.search(line):
-            paths.add(match.group(1))
         if PROBE.search(line):
             (reading.resets if probed else reading.other).append(line)
             probed = True
@@ -142,8 +144,11 @@ def read(output: str) -> Reading:
     if not banners:
         reading.unreadable = f"no kernel banner in {KERNEL_LOG}*, so this boot's lines cannot be told apart"
         return reading
-    reading.boot = log[banners[-1]]
-    _classify(log[banners[-1] + 1 :], reading)
+    reading.boot, boot = log[banners[-1]], log[banners[-1] + 1 :]
+    if not any(PROBE.search(line) for line in boot):
+        reading.unreadable = "no probe of the uplink adapter in this boot, so no line names its port"
+        return reading
+    _classify(boot, reading)
     return reading
 
 
@@ -175,7 +180,17 @@ def report(reading: Reading) -> list[str]:
 def run_soak(networking: dict[str, Any]) -> tuple[int, list[str]]:
     """Read the soak on the edge: 0 passed, 1 failed, 2 in progress, 3 cannot be
     read, 255 SSH. The remote side's errors (an unreadable file) reach stderr."""
-    result = subprocess.run(soak_command(networking), check=False, stdout=subprocess.PIPE, text=True, errors="replace")
+    try:
+        result = subprocess.run(
+            soak_command(networking),
+            check=False,
+            stdout=subprocess.PIPE,
+            text=True,
+            errors="replace",
+            timeout=SESSION_TIMEOUT_S,
+        )
+    except subprocess.TimeoutExpired:
+        return 255, [f"the edge stopped answering: no reading after {SESSION_TIMEOUT_S} s"]
     if result.returncode == 255:
         return 255, []
     reading = read(result.stdout)

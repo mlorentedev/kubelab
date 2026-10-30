@@ -115,6 +115,12 @@ def test_a_previous_boot_is_not_read_whatever_its_lines_are_stamped() -> None:
     assert _read([*PREVIOUS_BOOT, *THIS_BOOT]).resets == []
 
 
+def test_a_disconnect_logged_before_the_driver_names_its_port_still_fails_the_soak() -> None:
+    """The port is the adapter's if the driver names it anywhere in the boot (#2811 review)."""
+    reading = _read([THIS_BOOT[0], _line("29T22:05:38.000000", DISCONNECT), *THIS_BOOT[1:]], uptime=49 * HOUR)
+    assert reading.code == FAILED
+
+
 # ------------------------------------------------------------- failing closed
 
 
@@ -130,6 +136,13 @@ def test_an_rsyslog_that_did_not_run_from_the_boot_means_the_soak_cannot_be_read
     reading = _read([*PREVIOUS_BOOT, *THIS_BOOT], uptime=49 * HOUR, state=state, entered_us=entered_us)
     assert reading.code == UNREADABLE
     assert "rsyslog" in reading.unreadable
+
+
+def test_a_boot_in_which_the_adapter_never_probed_cannot_be_read() -> None:
+    """With no probe, no line names the adapter's port, so no reset could be seen."""
+    reading = _read([THIS_BOOT[0], _line("30T02:00:00.000000", DISCONNECT)], uptime=49 * HOUR)
+    assert reading.code == UNREADABLE
+    assert "probe" in reading.unreadable
 
 
 def test_no_uptime_means_the_soak_cannot_be_read() -> None:
@@ -232,6 +245,22 @@ def test_an_ssh_failure_is_not_a_verdict() -> None:
     with mock.patch("toolkit.features.edge_soak.subprocess.run") as run:
         run.return_value = subprocess.CompletedProcess([], 255, stdout="")
         result = CliRunner().invoke(app, ["edge", "soak"])
+    assert result.exit_code == 255
+    assert "verdict:" not in result.output
+
+
+def test_a_hung_session_ends_with_no_verdict() -> None:
+    """ConnectTimeout bounds the connection, not a session that stops answering."""
+    from typer.testing import CliRunner
+
+    from toolkit.cli.infra import app
+
+    from toolkit.features.edge_soak import SESSION_TIMEOUT_S
+
+    timeout = subprocess.TimeoutExpired("ssh", SESSION_TIMEOUT_S)
+    with mock.patch("toolkit.features.edge_soak.subprocess.run", side_effect=timeout) as run:
+        result = CliRunner().invoke(app, ["edge", "soak"])
+    assert run.call_args.kwargs["timeout"] == SESSION_TIMEOUT_S
     assert result.exit_code == 255
     assert "verdict:" not in result.output
 
