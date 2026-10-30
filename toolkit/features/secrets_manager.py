@@ -2490,7 +2490,15 @@ class SecretsManager:
 
         decrypted = yaml.safe_load(result.stdout) or {}
         value = self._resolve_key(decrypted, key_path)
-        return str(value) if value is not None else None
+        if value is None:
+            return None
+        if isinstance(value, (list, dict)):
+            # JSON, not str(): a repr is neither readable as JSON nor writable back
+            # with `secrets set --json`, so a structured value could not round-trip.
+            import json
+
+            return json.dumps(value)
+        return str(value)
 
     def set_secret(self, env: str, key_path: str, value: object) -> bool:
         """Set a single secret value in the SOPS vault.
