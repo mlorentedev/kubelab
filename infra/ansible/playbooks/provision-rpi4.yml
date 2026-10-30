@@ -98,6 +98,8 @@
       delegate_to: localhost
       become: false
       changed_when: false
+      # No route at all is the assert's to explain, with its fix.
+      failed_when: false
       # A dry run is refused on the same path as the run it rehearses.
       check_mode: false
       when:
@@ -116,8 +118,15 @@
 
     - name: Check that the run's packets leave by the homelab LAN
       assert:
-        that: not (_edge_route.stdout | from_json).tailnet
+        that:
+          - _edge_route.rc == 0
+          - not (_edge_route.stdout | from_json).tailnet
         fail_msg: >-
+          {% if _edge_route.rc != 0 -%}
+          ERROR: this controller has no route to the edge's LAN address: {{ _edge_route.stderr }}.
+          WHY: it is not on the lab switch, and it does not reach the LAN over the tailnet either.
+          FIX: plug the laptop into the switch and run `make edge-lan-link`.
+          {%- else -%}
           ERROR: this run reaches the edge's LAN address from
           {{ (_edge_route.stdout | from_json).source }}, an address on the tailnet.
           WHY: this controller accepts the subnet route the edge advertises, and Tailscale's
@@ -126,6 +135,7 @@
           FIX: from the laptop on the switch, run `make edge-lan-link`, whose profile routes the
           LAN ahead of the tailnet. Without NetworkManager, run
           `sudo tailscale set --accept-routes=false` while on the switch (#922).
+          {%- endif %}
         quiet: true
       when:
         - "'all' in ansible_run_tags or 'tagged' in ansible_run_tags or 'gateway' in ansible_run_tags"

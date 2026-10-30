@@ -12,9 +12,13 @@
 
 from __future__ import annotations
 
+import errno
+import importlib.util
 import ipaddress
 import json
+import os
 import re
+import socket
 import subprocess
 import sys
 from pathlib import Path
@@ -366,21 +370,50 @@ def _route_guard() -> tuple[int, dict[str, Any], int, dict[str, Any]]:
     return read, tasks[read], check, tasks[check]
 
 
-def _route_holds(tailnet: bool) -> bool:
+def _route_holds(route: dict[str, Any]) -> bool:
+    """The assert's verdict, its conditions taken in order the way Ansible's are."""
     _, _, _, guard = _route_guard()
     that = guard["assert"]["that"]
     env = ansible_env(".")
-    route = {"stdout": json.dumps({"source": "192.0.2.10", "tailnet": tailnet})}
     return all(
         env.compile_expression(check)(_edge_route=route) for check in (that if isinstance(that, list) else [that])
     )
 
 
+def _routed(tailnet: bool) -> dict[str, Any]:
+    return {"rc": 0, "stdout": json.dumps({"source": "192.0.2.10", "tailnet": tailnet}), "stderr": ""}
+
+
 def test_a_run_whose_packets_ride_the_tailnet_is_refused() -> None:
     """#2801. The address check passed while the session rode the tailnet: the
     controller accepted the edge's subnet route, which Tailscale looks up first."""
-    assert _route_holds(tailnet=False)
-    assert not _route_holds(tailnet=True)
+    assert _route_holds(_routed(tailnet=False))
+    assert not _route_holds(_routed(tailnet=True))
+
+
+def test_a_controller_with_no_route_to_the_edge_is_told_the_fix(monkeypatch: pytest.MonkeyPatch, capsys) -> None:
+    """Off the switch and without the subnet route, the kernel has no route to the
+    edge's LAN address. The run is refused with the fix, not with a traceback."""
+    spec = importlib.util.spec_from_file_location("route_source", ROUTE_SOURCE)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    def unreachable(self: socket.socket, address: tuple[str, int]) -> None:
+        raise OSError(errno.ENETUNREACH, os.strerror(errno.ENETUNREACH))
+
+    monkeypatch.setattr(socket.socket, "connect", unreachable)
+    assert module.main("172.16.1.1", "100.64.0.0/10") == 1
+    out = capsys.readouterr()
+    assert out.out == "" and "Traceback" not in out.err
+    read = {"rc": 1, "stdout": out.out, "stderr": out.err.strip()}
+
+    _, read_task, _, guard = _route_guard()
+    assert read_task.get("failed_when") is False, "a failed read would end the play before the assert"
+    assert not _route_holds(read)
+    message = ansible_env(".").from_string(guard["assert"]["fail_msg"]).render(_edge_route=read)
+    assert "no route to 172.16.1.1" in message and "make edge-lan-link" in message
+    assert "an address on the tailnet" not in message
 
 
 def test_the_path_is_read_on_the_controller_before_any_role() -> None:

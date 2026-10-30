@@ -9,7 +9,8 @@ source address the kernel picks for it does. Connecting a UDP socket asks the
 kernel for that route and sends nothing.
 
 Usage: route-source.py <destination> <tailnet cidr>
-Prints one JSON object: {"source": "<address>", "tailnet": true|false}
+Prints one JSON object: {"source": "<address>", "tailnet": true|false}, or, when this
+machine has no route to the destination, a line on stderr and exit 1.
 
 The edge play runs it; `make edge-boot-check` loads `route` from it.
 """
@@ -30,7 +31,13 @@ def route(destination: str, tailnet: str) -> dict[str, object]:
 
 
 def main(destination: str, tailnet: str) -> int:
-    print(json.dumps(route(destination, tailnet)))
+    try:
+        path = route(destination, tailnet)
+    except OSError as e:
+        # No route at all: the caller names the fix, so a traceback would only bury it.
+        print(f"no route to {destination}: {e.strerror or e}", file=sys.stderr)
+        return 1
+    print(json.dumps(path))
     return 0
 
 
