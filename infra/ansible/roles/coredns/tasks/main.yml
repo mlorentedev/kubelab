@@ -20,6 +20,17 @@
         mode: "0644"
       register: coredns_compose
 
+    # The edge's own pulls leave by the uplink it shapes, so its plays size them
+    # like a node behind it (#2742). Before the config templates: a pull refused
+    # after a Corefile change would stop the play before its restart, and the
+    # rerun, seeing no change, would leave CoreDNS on the old Corefile.
+    - name: Pull the DNS stack's images
+      ansible.builtin.import_tasks: "{{ playbook_dir }}/_includes/image-pull.yml"
+      vars:
+        image_pull_name: the DNS stack
+        image_pull_images: ["{{ coredns_image }}", "{{ pihole_image }}"]
+        image_pull_command: docker compose -f {{ coredns_remote_dir }}/docker-compose.yml pull
+
     - name: Template Corefile
       template:
         src: Corefile.j2
@@ -33,10 +44,6 @@
         dest: "{{ coredns_remote_dir }}/pihole-forwarding.conf"
         mode: "0644"
       register: pihole_conf
-
-    - name: Pull images
-      command: docker compose -f {{ coredns_remote_dir }}/docker-compose.yml pull
-      changed_when: false
 
     # A container whose start failed on a bind is left attached to no network.
     # dockerd brings it back that way at every boot, with its ports requested
