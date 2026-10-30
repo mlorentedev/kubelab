@@ -235,6 +235,7 @@ def test_a_healthy_boot_passes_every_check(edge: Edge) -> None:
         result.stdout.splitlines()
     )
     assert f"OK   wait for {UPLINK} at boot bounded (10s; systemd's default 1min 30s)" in result.stdout.splitlines()
+    assert f"OK   {LAN} has a carrier" in result.stdout.splitlines()
 
 
 def test_a_route_line_that_ends_at_its_prefix_still_counts(edge: Edge) -> None:
@@ -274,6 +275,9 @@ BROKEN = {
         lambda e: e.write(f"route_exact_{LAN}", f"172.16.10.0/24 proto kernel scope link src {LAN_ADDRESS}\n"),
         "route to",
     ),
+    # The address, its route and the DNS answer on it all hold without a cable
+    # (#2732), so only the carrier says the switch is there (#2800).
+    "switch cable out": (lambda e: e.unplug_lan(), f"{LAN} has a carrier"),
     "no LAN address": (lambda e: e.remove(f"addr_{LAN}"), "LAN address"),
     # A prefix of the declared one, so a match that stops at the address's end is not enough.
     "another LAN address": (
@@ -650,6 +654,20 @@ def test_without_the_switch_cable_the_rest_still_passes(edge: Edge) -> None:
     result = edge.run(expect="no-lan")
     assert result.returncode == 0, result.stdout
     assert f"OK   {LAN} present without a carrier, as this case expects" in result.stdout
+
+
+def test_without_the_uplink_a_cable_that_is_out_still_fails(edge: Edge) -> None:
+    """Only the no-lan case expects the switch to be gone."""
+    edge.unplug_uplink()
+    edge.unplug_lan()
+    assert _failures(edge.run(expect="no-uplink")) == [f"FAIL {LAN} has a carrier"]
+
+
+def test_the_no_lan_case_reads_the_carrier_once(edge: Edge) -> None:
+    """The case's own line replaces the plain one, so a missing cable is not also a failure."""
+    edge.unplug_lan()
+    lines = edge.run(expect="no-lan").stdout.splitlines()
+    assert [line for line in lines if "carrier" in line] == [f"OK   {LAN} present without a carrier, as this case expects"]
 
 
 def test_a_cable_that_is_there_fails_the_no_lan_case(edge: Edge) -> None:
