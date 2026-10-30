@@ -17,12 +17,14 @@ import ipaddress
 import json
 import re
 import subprocess
+from functools import cache
 from pathlib import Path
 
 import pytest
 import yaml
 
 from tests.ansible_jinja import ansible_env
+from toolkit.features.generator_ansible import AnsibleGenerator
 
 REPO = Path(__file__).resolve().parents[1]
 PLAYBOOKS = REPO / "infra/ansible/playbooks"
@@ -169,24 +171,52 @@ def _networking() -> dict:
     return yaml.safe_load(COMMON.read_text(encoding="utf-8"))["networking"]
 
 
-def _nodes(hosts: str | list[str], networking: dict) -> set[str]:
-    """The nodes a play's `hosts:` names: a node, a group a node declares, or all."""
-    nodes = networking["nodes"]
-    found: set[str] = set()
-    for pattern in hosts if isinstance(hosts, list) else hosts.split(","):
-        pattern = pattern.strip()
-        if pattern == "all":
-            found |= set(nodes)
-        elif pattern in nodes:
-            found.add(pattern)
+@cache
+def _inventory() -> tuple[dict[str, frozenset[str]], frozenset[str]]:
+    """The groups the inventory generator emits, the derived ones included, and the
+    hosts it retires: a play can name those, and they resolve to nothing."""
+    common = yaml.safe_load(COMMON.read_text(encoding="utf-8"))
+    networking = common["networking"]
+    inventory = AnsibleGenerator()._build_inventory(networking, backup_sources=common["backup"]["sources"])
+    groups = {name: frozenset((group or {}).get("hosts") or {}) for name, group in inventory["all"]["children"].items()}
+    blocks = [*networking["nodes"].items(), *((k, v) for k, v in networking.items() if isinstance(v, dict))]
+    retired = frozenset(block.get("hostname", key) for key, block in blocks if isinstance(block, dict) and block.get("retired"))
+    return groups, retired
+
+
+def _nodes(hosts: str | list[str], networking: dict | None = None) -> set[str]:
+    """The hosts a play's `hosts:` names, resolved against the generated inventory:
+    unions, then `&` narrows, then `!` drops. A name it does not emit fails."""
+    groups, retired = _inventory()
+    every = set().union(*groups.values())
+
+    def resolve(name: str) -> set[str]:
+        if name == "all":
+            return every
+        if name in groups:
+            return set(groups[name])
+        if name in every:
+            return {name}
+        assert name in retired, f"hosts: {name!r} is no host or group the inventory emits"
+        return set()
+
+    found, narrowed, dropped = set(), [], set()
+    for term in hosts if isinstance(hosts, list) else re.split(r"[:,]", hosts):
+        term = term.strip()
+        if term.startswith("&"):
+            narrowed.append(resolve(term[1:]))
+        elif term.startswith("!"):
+            dropped |= resolve(term[1:])
         else:
-            found |= {name for name, node in nodes.items() if pattern in (node.get("ansible_groups") or [])}
-    return found
+            found |= resolve(term)
+    for group in narrowed:
+        found &= group
+    return found - dropped
 
 
 def _behind_the_edge(node: str, networking: dict) -> bool:
     """On the switch, or on the lab Wi-Fi the edge serves: both leave by its uplink."""
-    lan_ip = networking["nodes"][node].get("lan_ip")
+    lan_ip = networking["nodes"].get(node, {}).get("lan_ip")
     sides = (networking["lan_cidr"], networking["edge"]["lab_wifi"]["cidr"])
     return bool(lan_ip) and any(ipaddress.ip_address(lan_ip) in ipaddress.ip_network(side) for side in sides)
 
@@ -233,6 +263,17 @@ def test_only_plays_of_nodes_behind_the_edge_size_their_pulls():
         assert nodes and all(_behind_the_edge(node, networking) for node in nodes), (
             f"{name}: {hosts} is not behind the edge"
         )
+
+
+def test_every_play_names_hosts_the_inventory_emits():
+    """A name that resolved to nothing used to count as outside the edge, unchecked."""
+    for name, play in _plays():
+        _nodes(play["hosts"])
+    assert _nodes("node_backup:&on_demand") == {"ace2", "beelink", "rpi4"}
+    assert _nodes("node_backup:!rpi3") == {"ace2", "beelink", "kubelab-vps", "rpi4"}
+    assert _nodes("aws1") == set(), "retired: emitted by no inventory"
+    with pytest.raises(AssertionError, match="no host or group"):
+        _nodes("bealink")
 
 
 def test_a_node_on_the_lab_wifi_is_behind_the_edge():
@@ -315,6 +356,11 @@ def _templates_rendering(role: str, dest: str) -> set[str]:
     return found
 
 
+def _bare(image: str) -> str:
+    """`"{{ x }}"`, `{{ x }}` and `x` all name x; anything else is kept whole, so it fails to match."""
+    return re.sub(r"^\{\{\s*(.+?)\s*\}\}$", r"\1", image.strip("'\""))
+
+
 def _images_pulled(template: Path) -> set[str]:
     """The image of each service a compose pull fetches: every one not built on the node.
 
@@ -323,7 +369,7 @@ def _images_pulled(template: Path) -> set[str]:
     for service in re.split(r"^  (?=[^\s#].*:\s*$)", template.read_text(encoding="utf-8"), flags=re.M):
         image = re.search(r"^\s+image:\s*(.+?)\s*$", service, re.M)
         if image and not re.search(r"^\s+pull_policy:\s*never\b", service, re.M):
-            found.add(re.sub(r"^\{\{\s*(.+?)\s*\}\}$", r"\1", image.group(1)))
+            found.add(_bare(image.group(1)))
     return found
 
 
@@ -391,9 +437,8 @@ def test_uptime_kuma_is_pulled_through_the_include():
 def test_the_hermes_images_are_sized_on_the_agents_own_daemon():
     """Rootless: the daemon that holds them, and that a held image is read from, is the agent's."""
     stack, sandbox = _imports(ROLES / "agent_stack/tasks/hermes.yml")
-    compose = (ROLES / "agent_stack/templates/compose-hermes.yml.j2").read_text(encoding="utf-8")
-    declared = re.findall(r"^\s+image: (\{\{ [\w.]+ \}\})$", compose, re.MULTILINE)
-    assert sorted(stack["vars"]["image_pull_images"]) == sorted(declared), "an image the compose pull fetches unsized"
+    declared = _images_pulled(ROLES / "agent_stack/templates/compose-hermes.yml.j2")
+    assert {_bare(i) for i in stack["vars"]["image_pull_images"]} == declared, "an image the compose pull fetches unsized"
     assert stack["vars"]["image_pull_command"].endswith("pull")
     assert sandbox["vars"]["image_pull_images"] == ["{{ agent_stack_hermes.sandbox.image }}"]
     assert sandbox["vars"]["image_pull_command"] == "docker pull {{ agent_stack_hermes.sandbox.image }}"
