@@ -12,8 +12,8 @@ tags: [kubelab, toolkit-tooling, windows]
 
 **Context**: Clearing the Windows baseline before the Headscale upgrade work (VPN-ACL-006).
 On native Windows (PowerShell, or Git Bash, which still runs Windows Python), 19 Headscale
-tests and 21 app-drill tests failed. Both restore drills and the Argo CD RBAC evaluator
-could not start a container at all.
+tests failed (17 once #2820 had fixed two of them) and 21 app-drill tests failed. Both
+restore drills and the Argo CD RBAC evaluator could not start a container at all.
 
 **Problem**: lesson-289 covers the encoding half, and it recurred here: `read_text()`
 decoded UTF-8 sources with cp1252. Three other defects had nothing to do with encoding:
