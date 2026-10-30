@@ -32,7 +32,8 @@ def _docker_ready() -> bool:
 
 
 @pytest.fixture(scope="module")
-def base_url() -> Iterator[str]:
+def errors_container() -> Iterator[tuple[str, str]]:
+    """The running image's container name and base URL."""
     if not _docker_ready():
         if os.environ.get("CI"):
             pytest.fail("docker is required in CI to run the built errors image")
@@ -55,10 +56,16 @@ def base_url() -> Iterator[str]:
         else:
             logs = subprocess.run(["docker", "logs", name], capture_output=True, text=True).stderr[-400:]
             raise RuntimeError(f"the errors image did not answer /health within 10s: {logs}")
-        yield url
+        yield name, url
     finally:
         subprocess.run(["docker", "rm", "-f", name], capture_output=True)
         subprocess.run(["docker", "rmi", "-f", tag], capture_output=True)
+
+
+
+@pytest.fixture(scope="module")
+def base_url(errors_container: tuple[str, str]) -> str:
+    return errors_container[1]
 
 
 def _get(url: str, accept: str | None = None) -> tuple[int, dict[str, str], str]:
@@ -129,3 +136,21 @@ def test_brand_assets_keep_their_long_cache(base_url: str) -> None:
     asset = next(p for p in root.rglob("*") if p.is_file())
     _, headers, _ = _get(f"{base_url}/brand/{asset.relative_to(root)}")
     assert "immutable" in headers["cache-control"]
+
+
+@pytest.mark.parametrize(
+    ("path", "accept"),
+    [("/errors/502.html", None), ("/errors/502.html", "application/json"), ("/errors/502.json", None)],
+)
+def test_the_error_pages_served_are_logged(errors_container: tuple[str, str], path: str, accept: str | None) -> None:
+    """The edge records which error pages it serves (OPS-030 AC4). Both /errors/ locations
+    inherit `access_log` from the server, so a location that turns it off must fail here."""
+    name, url = errors_container
+    probe = uuid.uuid4().hex
+    _get(f"{url}{path}?probe={probe}", accept=accept)
+    for _ in range(25):
+        logs = subprocess.run(["docker", "logs", name], capture_output=True, text=True).stdout
+        if probe in logs:
+            return
+        time.sleep(0.2)
+    pytest.fail(f"{path} (Accept: {accept}) was served with no access log line")
