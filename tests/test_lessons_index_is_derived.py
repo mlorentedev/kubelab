@@ -357,6 +357,77 @@ class TestADuplicatedNumberIsRefused:
         assert index.read_text() == before, "the index was rewritten over a colliding corpus"
 
 
+def _conflicted(index: pathlib.Path) -> None:
+    """Wrap the index's first row in the markers git leaves after a conflict.
+
+    Built from repeated characters so this source file holds no marker line of its
+    own: `check-merge-conflict` would flag it during any merge of this file.
+    """
+    lines = index.read_text().splitlines(keepends=True)
+    at = next(i for i, line in enumerate(lines) if lessons_index.LESSON_ROW.match(line))
+    lines[at:at] = ["<" * 7 + " HEAD\n"]
+    lines[at + 2 : at + 2] = [
+        "=" * 7 + "\n",
+        "| 9 | [Theirs](lesson-9-theirs.md) | 2026-01-02 |\n",
+        ">" * 7 + " theirs\n",
+    ]
+    index.write_text("".join(lines))
+
+
+class TestAnUnfinishedMergeIsRefused:
+    """#1700: an index that still holds conflict markers is a merge nobody finished.
+
+    The rows on both sides of the markers are well formed, so every row test passes
+    over it, and `--fix` used to reorder them across the markers and report success.
+    """
+
+    def test_it_is_a_hazard_naming_the_file(self, tmp_path: pathlib.Path) -> None:
+        lessons = _repo_with_lessons(tmp_path, {"alpha": ["lesson-1-one.md", "lesson-2-two.md"]})
+        _conflicted(lessons / "alpha" / "_index.md")
+
+        found = lessons_index.hazards(lessons)
+
+        assert len(found) == 1, [str(h) for h in found]
+        assert "alpha/_index.md" in found[0].detail
+        assert "merge" in found[0].headline.lower()
+
+    @pytest.mark.parametrize("mode", ["--fix", "--check"])
+    def test_the_cli_refuses_with_its_own_exit_code_and_writes_nothing(self, tmp_path: pathlib.Path, mode: str) -> None:
+        """Exit 2, not the 1 of a row out of order: `--fix` is the wrong remedy here."""
+        lessons = _repo_with_lessons(tmp_path, {"alpha": ["lesson-1-one.md", "lesson-2-two.md"]})
+        index = lessons / "alpha" / "_index.md"
+        _conflicted(index)
+        before = index.read_text()
+
+        result = runner.invoke(tools_app, ["lessons-index", "--root", str(lessons), mode])
+
+        assert result.exit_code == 2, result.output
+        assert "alpha/_index.md" in result.output
+        assert "merge is not finished" in result.output
+        assert index.read_text() == before
+
+    def test_the_top_level_index_is_read_too(self, tmp_path: pathlib.Path) -> None:
+        lessons = _repo_with_lessons(tmp_path, {"alpha": ["lesson-1-one.md"]})
+        top = lessons / "_index.md"
+        top.write_text(top.read_text() + "<" * 7 + " HEAD\n" + "=" * 7 + "\n" + ">" * 7 + " theirs\n")
+
+        assert lessons_index.unmerged_indexes(lessons) == {"_index.md": [8, 9, 10]}
+
+    @pytest.mark.parametrize(
+        "line",
+        ["<" * 7 + " HEAD", "=" * 7, ">" * 7 + " feature/x", "|" * 7 + " merged common ancestors", "<" * 7],
+    )
+    def test_every_marker_git_writes_is_recognised(self, line: str) -> None:
+        assert lessons_index.CONFLICT_MARKER.match(line)
+
+    @pytest.mark.parametrize(
+        "line", ["| 1 | [A](lesson-1-a.md) | 2026-01-01 |", "=" * 8, "<" * 6 + " x", "a " + "=" * 7]
+    )
+    def test_ordinary_lines_are_not_markers(self, line: str) -> None:
+        """The floor: a predicate that matched a table row would refuse every index."""
+        assert not lessons_index.CONFLICT_MARKER.match(line)
+
+
 class TestALessonThatHeadHasAndTheTreeDoesNotIsRefused:
     """Measured 2026-09-05: the counters were adjusted DOWNWARD and passed."""
 

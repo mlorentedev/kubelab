@@ -538,7 +538,7 @@ def lessons_index(
     """
     from toolkit.features import lessons_index as index
 
-    # Hazards first. `--fix` over a colliding or shrunken corpus tidies the
+    # Hazards first. `--fix` over a colliding, shrunken or unmerged corpus tidies the
     # indexes and reports success over a broken corpus — the exact trap
     # #1678 AC5 names. Refusing has to happen before anything is written.
     try:

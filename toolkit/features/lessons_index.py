@@ -41,6 +41,13 @@ broken corpus. Both were measured while the indexes still held counts:
   and printed `Passed`. A correct count over a corpus missing a document is the
   self-consistent lie #1649 already names.
 
+- **an index still holds conflict markers** (#1700). Measured 2026-09-06 on
+  #1696: `--fix` rewrote the HEAD side of a conflicted `_index.md`, reported
+  success, and the lesson tests passed, because the markers sit between rows
+  that are each well formed. Committing then stages the markers behind a green
+  suite. The remedy is to finish the merge, not to reorder rows, so it is a
+  hazard of its own rather than a "rows out of order".
+
 So the rows are reordered LAST, and only over a corpus that is safe to touch.
 `hazards()` asks the prior question and `reconcile()` is never reached when the
 answer is bad -- which is why it lives in its own function rather than inside
@@ -77,6 +84,12 @@ LESSON_ROW = re.compile(r"^\| \d+ \| \[.*\]\((?P<file>lesson-[^)]+\.md)\) \| (?P
 #: the one operation the corpus most often needs -- and a gate with no door is a
 #: gate people learn to pass with `--no-verify`.
 LESSON_NAME = re.compile(r"^lesson-(?P<number>\d+)-(?P<slug>.+)\.md$")
+
+
+#: The lines git writes into a conflicted file: ours, the base (diff3/zdiff3),
+#: the separator and theirs. Seven characters at column 0, which no table row,
+#: heading or prose line in an index starts with.
+CONFLICT_MARKER = re.compile(r"^(?:[<>|]{7}(?: .*)?|={7})$")
 
 
 class CannotCheck(Exception):
@@ -228,6 +241,24 @@ def removed_lessons(root: pathlib.Path) -> list[str]:
     return gone
 
 
+def unmerged_indexes(root: pathlib.Path) -> dict[str, list[int]]:
+    """Index files holding conflict markers, with the line numbers of each marker.
+
+    THE single predicate for this class, imported by
+    `tests/test_lesson_index_integrity.py` as `number_collisions` is by its test.
+    Every index is read, the top level included, because a reader navigates
+    through all of them and a marker in any one is an unfinished merge.
+    """
+    found: dict[str, list[int]] = {}
+    for index in [root / "_index.md", *sorted(root.glob("*/_index.md"))]:
+        if not index.exists():
+            continue
+        lines = index.read_text(encoding="utf-8").splitlines()
+        if at := [n for n, line in enumerate(lines, start=1) if CONFLICT_MARKER.match(line)]:
+            found[relative_posix(index, root)] = at
+    return found
+
+
 def hazards(root: pathlib.Path, allow_removal: bool = False) -> list[Hazard]:
     """Conditions under which rewriting the indexes is the wrong operation.
 
@@ -239,6 +270,18 @@ def hazards(root: pathlib.Path, allow_removal: bool = False) -> list[Hazard]:
     not downgraded to "no hazards found".
     """
     found: list[Hazard] = []
+
+    if unmerged := unmerged_indexes(root):
+        found.append(
+            Hazard(
+                headline=f"{len(unmerged)} lesson index file(s) hold conflict markers: the merge is not finished.",
+                detail="\n".join(f"    {rel}: line(s) {', '.join(map(str, at))}" for rel, at in unmerged.items())
+                + "\n\n  The rows on either side of a marker are well formed, so reordering them"
+                + "\n  would succeed and leave the markers in the file, and the row tests would"
+                + "\n  pass over them (#1700).",
+                remedy="Resolve each conflict in the file(s) above and `git add` them, then re-run.",
+            )
+        )
 
     if collisions := number_collisions(root):
         found.append(
