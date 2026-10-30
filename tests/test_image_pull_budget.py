@@ -396,9 +396,11 @@ _JINJA = re.compile(r"\{\{.*?\}\}|\{%.*?%\}", re.S)
 _RUNS = re.compile(r"\bdocker\s+(?:container\s+)?(?:run|create)\s+([^;|&\n]*)")
 _BOOTSTRAPS = re.compile(r"\bdocker\s+buildx\s+(?:create|inspect)\b([^;|&\n]*--bootstrap\b[^;|&\n]*)")
 # `docker run` options that take no value; any other without `=` takes the next word.
+# Every flag `docker run --help` lists with no value type (Docker 28.3), and the
+# short forms. A flag missing here eats the image, which `_runs` then reports.
 _FLAGS = {"--rm", "--privileged", "-d", "--detach", "-i", "--interactive", "-t", "--tty", "-it", "-ti", "--init"}
 _FLAGS |= {"--read-only", "-q", "--quiet", "-P", "--publish-all", "--no-healthcheck", "--oom-kill-disable"}
-_FLAGS |= {"--sig-proxy"}
+_FLAGS |= {"--sig-proxy", "--disable-content-trust", "--use-api-socket", "--help"}
 
 
 def _command_text(task: dict) -> str:
@@ -428,6 +430,8 @@ def _runs(task: dict) -> set[str]:
                 break
             if word not in _FLAGS and "=" not in word:
                 next(words, None)
+        else:
+            images.add(f"no image read in: {args.strip()}")
     for args in _BOOTSTRAPS.findall(text):
         # `--driver-opt` takes a comma-separated key=value list, so `image=` need not come first.
         image = re.search(r"--driver-opt[= ](?:[^\s,]*,)*image=([^\s,]+)", args)
@@ -471,6 +475,10 @@ def test_the_run_guard_reads_the_image_however_the_command_is_written():
     with_network = "docker buildx create --driver-opt network=host,image=registry/buildkit:1 --bootstrap"
     assert _runs({"command": with_network}) == {"registry/buildkit:1"}
     assert _runs({"command": "docker run --sig-proxy a:1"}) == {"a:1"}
+    assert _runs({"command": "docker run --use-api-socket --disable-content-trust a:1"}) == {"a:1"}
+    # A run read to its end with no image is not "fetches nothing": a flag this parser
+    # takes for one with a value ate the image, so the guard has to see it and fail.
+    assert _runs({"command": "docker run --some-new-flag a:1"}) == {"no image read in: --some-new-flag a:1"}
     assert _runs({"command": "docker buildx create --name multiarch --driver docker-container --use"}) == set()
     assert _runs({"command": "docker ps --filter name=run"}) == set()
 
