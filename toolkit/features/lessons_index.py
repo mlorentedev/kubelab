@@ -246,13 +246,11 @@ def unmerged_indexes(root: pathlib.Path) -> dict[str, list[int]]:
 
     THE single predicate for this class, imported by
     `tests/test_lesson_index_integrity.py` as `number_collisions` is by its test.
-    Every index is read, the top level included, because a reader navigates
-    through all of them and a marker in any one is an unfinished merge.
+    Every index is read, the top level and any depth included, because a reader
+    navigates through all of them and a marker in any one is an unfinished merge.
     """
     found: dict[str, list[int]] = {}
-    for index in [root / "_index.md", *sorted(root.glob("*/_index.md"))]:
-        if not index.exists():
-            continue
+    for index in sorted(root.rglob("_index.md")):
         lines = index.read_text(encoding="utf-8").splitlines()
         if at := [n for n, line in enumerate(lines, start=1) if CONFLICT_MARKER.match(line)]:
             found[relative_posix(index, root)] = at

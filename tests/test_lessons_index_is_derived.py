@@ -413,6 +413,14 @@ class TestAnUnfinishedMergeIsRefused:
 
         assert lessons_index.unmerged_indexes(lessons) == {"_index.md": [8, 9, 10]}
 
+    def test_an_index_at_any_depth_is_read(self, tmp_path: pathlib.Path) -> None:
+        lessons = _repo_with_lessons(tmp_path, {"alpha": ["lesson-1-one.md"]})
+        nested = lessons / "alpha" / "group" / "_index.md"
+        nested.parent.mkdir()
+        nested.write_text("<" * 7 + " HEAD\n")
+
+        assert lessons_index.unmerged_indexes(lessons) == {"alpha/group/_index.md": [1]}
+
     @pytest.mark.parametrize(
         "line",
         ["<" * 7 + " HEAD", "=" * 7, ">" * 7 + " feature/x", "|" * 7 + " merged common ancestors", "<" * 7],
