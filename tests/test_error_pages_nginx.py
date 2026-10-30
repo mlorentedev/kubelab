@@ -142,15 +142,24 @@ def test_brand_assets_keep_their_long_cache(base_url: str) -> None:
 
 
 @pytest.mark.parametrize(
-    ("path", "accept"),
-    [("/errors/502.html", None), ("/errors/502.html", "application/json"), ("/errors/502.json", None)],
+    ("path", "accept", "served"),
+    [
+        ("/errors/502.html", None, "text/html"),
+        ("/errors/502.html", "application/json", "application/json"),
+        ("/errors/502.json", None, "application/json"),
+    ],
 )
-def test_the_error_pages_served_are_logged(errors_container: tuple[str, str], path: str, accept: str | None) -> None:
+def test_the_error_pages_served_are_logged(
+    errors_container: tuple[str, str], path: str, accept: str | None, served: str
+) -> None:
     """The edge records which error pages it serves (OPS-030 AC4). Both /errors/ locations
     inherit `access_log` from the server, so a location that turns it off must fail here."""
     name, url = errors_container
     probe = uuid.uuid4().hex
-    _get(f"{url}{path}?probe={probe}", accept=accept)
+    code, headers, _ = _get(f"{url}{path}?probe={probe}", accept=accept)
+    # A 404 is logged too, and `$request` names the path asked for, not the one served:
+    # only the answer shows that a page was served, and which location served it.
+    assert (code, headers["content-type"].split(";")[0]) == (200, served)
     for _ in range(25):
         logs = subprocess.run(["docker", "logs", name], capture_output=True, text=True).stdout
         if probe in logs:
