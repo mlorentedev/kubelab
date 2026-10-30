@@ -21,4 +21,4 @@ tags: [kubelab, observability, rsyslog, journald, rpi4, edge]
 
 **Rule**: On a host without a real-time clock, order log lines by where they were written, not by their timestamps, and measure durations with the monotonic clock. Read a log file that a power cut can reach with NULs stripped and `grep -a`, or a missed match reads as a clean result. See also lesson-641: a journal's size cap drops a boot's first seconds.
 
-**Tags**: `#rsyslog` `#journald` `#edge` `#pr-2807`
+**Tags**: `#rsyslog` `#journald` `#edge` `#pr-2811`
