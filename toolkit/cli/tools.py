@@ -436,9 +436,9 @@ def mutate_cmd(
 
     Exit codes: 0 the test failed against the mutant (the guard is red), 1 the test
     passed against it (the guard misses the mutant), 2 refused before mutating
-    (dirty tree, no unique match, or the test does not pass unmutated), 3 the test
-    did not run to a verdict against the mutant (a collection error is not the
-    guard going red).
+    (dirty tree, no unique match, a test that does not pass unmutated or one pytest
+    did not collect), 3 the test did not run to a verdict against the mutant (a
+    collection error is not the guard going red).
     """
     import os
     import shlex

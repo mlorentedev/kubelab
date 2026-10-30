@@ -9,6 +9,7 @@ record it four times, every time by someone who knew the rule. These tests drive
 from __future__ import annotations
 
 import subprocess
+import sys
 from collections.abc import Callable
 from pathlib import Path
 
@@ -105,7 +106,7 @@ def test_only_a_failing_test_counts_as_red(repo: Path, mutant_status: int, verdi
     assert seen == [ORIGINAL, ORIGINAL.replace("x > 0", "x >= 0")], "the baseline ran, then the mutant"
 
 
-@pytest.mark.parametrize("baseline", [1, 2, 3, 4, 5])
+@pytest.mark.parametrize("baseline", [1, 2, 3, 4])
 def test_a_test_that_does_not_pass_without_the_mutation_refuses(repo: Path, baseline: int) -> None:
     """A red baseline certifies every mutant as RED (measured 2026-10-13: two
     tests failing for an unrelated reason made all mutants of a Terraform-runner
@@ -117,6 +118,30 @@ def test_a_test_that_does_not_pass_without_the_mutation_refuses(repo: Path, base
     assert seen == [ORIGINAL], "the test ran once, against the unmutated file"
     assert (repo / "guard.py").read_bytes() == ORIGINAL.encode()
     assert _git(repo, "status", "--porcelain") == ""
+
+
+def test_a_baseline_that_collects_nothing_says_so_and_names_the_marker(repo: Path) -> None:
+    """pytest exits 5 when it collects nothing, which is what the repository's
+    `-m "not e2e and not infra"` makes of an infra test (#2637). That is not a red
+    baseline, and `-k` cannot select a test the marker expression deselected."""
+    run_test, seen = _statuses(repo, 5, 1)
+    with pytest.raises(mutate.Refused, match=r"collected no test \(pytest exit 5\)") as err:
+        mutate.run(repo, Path("guard.py"), "x > 0", "x >= 0", run_test)
+    assert "red baseline" not in str(err.value)
+    assert "-m infra" in str(err.value), "the refusal says how to select a deselected test"
+    assert seen == [ORIGINAL]
+    assert (repo / "guard.py").read_bytes() == ORIGINAL.encode()
+
+
+def test_a_marker_in_the_target_selects_a_test_the_default_markers_deselect() -> None:
+    """The advice above holds only while a `-m` after the addopts wins over theirs."""
+    root = Path(__file__).resolve().parents[1]
+    infra = next(path for path in sorted((root / "tests/infra").glob("test_*.py")))
+    argv = [sys.executable, "-m", "pytest", "-q", "--no-cov", "-p", "no:cacheprovider", "--collect-only", str(infra)]
+    deselected = subprocess.run(argv, cwd=root, capture_output=True, text=True)
+    selected = subprocess.run([*argv, "-m", "infra"], cwd=root, capture_output=True, text=True)
+    assert deselected.returncode == 5, deselected.stdout[-300:]
+    assert selected.returncode == 0, selected.stdout[-300:]
 
 
 def test_a_green_baseline_then_a_red_mutant_is_red_with_two_runs(repo: Path) -> None:

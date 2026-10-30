@@ -43,6 +43,7 @@ class Verdict(Enum):
 #: tests did not run to a verdict (2 interrupted or a collection error, 3
 #: internal error, 4 usage error, 5 nothing collected).
 _PYTEST = {0: Verdict.GREEN, 1: Verdict.RED}
+_NOTHING_COLLECTED = 5
 
 
 def _dirty(repo: Path) -> str:
@@ -77,7 +78,13 @@ def run(repo: Path, file: Path, find: str, replace: str, run_test: Callable[[], 
     if (count := text.count(find)) != 1:
         raise Refused(f"{file}: the text to replace matches {count} times; it must match exactly once")
 
-    if (baseline := run_test()) != 0:
+    if (baseline := run_test()) == _NOTHING_COLLECTED:
+        raise Refused(
+            f"{file}: pytest collected no test (pytest exit 5), so there is nothing to compare. The usual "
+            'cause is a marker the repository\'s addopts deselect (`-m "not e2e and not infra"`): name it in '
+            "the target, e.g. TEST='tests/infra/x.py -m infra'. A `-m` given there overrides the default."
+        )
+    if baseline != 0:
         raise Refused(
             f"{file}: the test does not pass without the mutation (pytest exit {baseline}), so its result "
             "against a mutant proves nothing: a red baseline is red against every mutation. Deselect the "
