@@ -15,6 +15,7 @@ from __future__ import annotations
 import importlib.util
 import ipaddress
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -27,9 +28,20 @@ REPO = Path(__file__).resolve().parents[1]
 PLAYBOOKS = REPO / "infra/ansible/playbooks"
 INCLUDE = PLAYBOOKS / "_includes/image-pull.yml"
 ESTIMATOR = PLAYBOOKS / "files/image-pull-estimate.py"
-AGENT_STACK = REPO / "infra/ansible/roles/agent_stack/tasks/main.yml"
+ROLES = REPO / "infra/ansible/roles"
+AGENT_STACK = ROLES / "agent_stack/tasks/main.yml"
 COMMON = REPO / "infra/config/values/common.yaml"
 SSOT = "{{ config.networking.edge.uplink.bandwidth.down_kbit }}"
+
+# Roles that still pull bare on a node behind the edge, each with what holds it (#2742).
+# Converting one removes it here, and a new bare pull fails until it is sized or listed.
+UNSIZED_ROLES = {
+    "beelink_services": "several images in one stack: which ones the include reads is a ruling",
+    "coredns": "the LAN's bootstrap DNS: converted once the include has run on a node",
+    "docker": "the smoke pull, a small image under `timeout`: to be declared an exception",
+}
+# Plays of a node behind the edge that run a sized role without sizing it.
+UNSIZED_PLAYS = {"provision-rpi4.yml": "the edge itself: it comes with coredns"}
 
 # Measured on 2026-10-29 for ghcr.io/open-webui/open-webui:v0.12.0 (amd64, 19 layers).
 OPEN_WEBUI_BYTES = 1_618_157_731
@@ -105,6 +117,28 @@ def _decide(down_kbit: int, nbytes: int, **extra) -> tuple[bool, int]:
     return allowed.render(**names) == "True", int(bound)
 
 
+def test_the_estimate_is_stated_before_the_pull_whatever_it_decides():
+    """`make provision` runs without -v, so a registered estimate alone says nothing."""
+    names = list(_tasks())
+    assert names.index("State the estimate for") < names.index("Refuse a pull of") < names.index("Pull")
+    task = _tasks()["State the estimate for"]
+    assert task["when"] == "image_pull_down_kbit | default(0) | int > 0"
+    env = ansible_env(".")
+    env.filters["from_json"] = json.loads
+    images = [{"image": "a:1", "bytes": OPEN_WEBUI_BYTES}, {"image": "b:2", "bytes": 0}]
+    message = env.from_string(task["ansible.builtin.debug"]["msg"]).render(
+        image_pull_name="Open WebUI",
+        image_pull_down_kbit=2970,
+        _image_pull_bytes=OPEN_WEBUI_BYTES,
+        _image_pull_seconds=4359,
+        _image_pull_estimate={"stdout": json.dumps({"bytes": OPEN_WEBUI_BYTES, "images": images})},
+    )
+    assert message == (
+        "Open WebUI: 1.6 GB to fetch (a:1 1.6 GB, b:2 0 Bytes), about 72.7 min at the edge's"
+        " 2970 kbit/s, against a budget of 30 min."
+    )
+
+
 def test_a_pull_past_the_budget_is_refused_unless_the_run_allows_it():
     # 1.62 GB at 2970 kbit/s is 4359 s, past the 1800 s default.
     assert _decide(2970, OPEN_WEBUI_BYTES) == (False, 4359 * 2 + 300)
@@ -132,25 +166,146 @@ def test_the_pull_is_polled_and_retried_rather_than_held():
     assert _tasks()["Estimate the download of"]["check_mode"] is False, "a dry run reports the estimate"
 
 
+def _networking() -> dict:
+    return yaml.safe_load(COMMON.read_text(encoding="utf-8"))["networking"]
+
+
+def _nodes(hosts: str | list[str], networking: dict) -> set[str]:
+    """The nodes a play's `hosts:` names: a node, a group a node declares, or all."""
+    nodes = networking["nodes"]
+    found: set[str] = set()
+    for pattern in hosts if isinstance(hosts, list) else hosts.split(","):
+        pattern = pattern.strip()
+        if pattern == "all":
+            found |= set(nodes)
+        elif pattern in nodes:
+            found.add(pattern)
+        else:
+            found |= {name for name, node in nodes.items() if pattern in (node.get("ansible_groups") or [])}
+    return found
+
+
+def _behind_the_edge(node: str, networking: dict) -> bool:
+    """On the switch, or on the lab Wi-Fi the edge serves: both leave by its uplink."""
+    lan_ip = networking["nodes"][node].get("lan_ip")
+    sides = (networking["lan_cidr"], networking["edge"]["lab_wifi"]["cidr"])
+    return bool(lan_ip) and any(ipaddress.ip_address(lan_ip) in ipaddress.ip_network(side) for side in sides)
+
+
+def _plays() -> list[tuple[str, dict]]:
+    found = []
+    for path in sorted(PLAYBOOKS.glob("*.yml")):
+        for play in yaml.safe_load(path.read_text(encoding="utf-8")) or []:
+            if isinstance(play, dict) and "hosts" in play:
+                found.append((path.name, play))
+    return found
+
+
+ROLE_MODULES = ("include_role", "import_role", "ansible.builtin.include_role", "ansible.builtin.import_role")
+
+
+def _roles(play: dict) -> set[str]:
+    """The roles a play runs: its `roles:` list, and any `include_role`/`import_role` in its tasks."""
+    found = {Path(entry["role"] if isinstance(entry, dict) else entry).name for entry in play.get("roles") or []}
+    for key in ("pre_tasks", "tasks", "post_tasks", "handlers"):
+        for task in _task_list(play.get(key)):
+            for module in ROLE_MODULES:
+                if isinstance(task.get(module), dict):
+                    found.add(Path(task[module]["name"]).name)
+    return found
+
+
 def _plays_setting_the_downlink() -> dict[str, str]:
     found = {}
-    for path in PLAYBOOKS.glob("*.yml"):
-        for play in yaml.safe_load(path.read_text(encoding="utf-8")) or []:
-            if isinstance(play, dict) and "image_pull_down_kbit" in (play.get("vars") or {}):
-                assert play["vars"]["image_pull_down_kbit"] == SSOT, f"{path.name}: read the SSOT, not a copy"
-                found[path.name] = play["hosts"]
+    for name, play in _plays():
+        if "image_pull_down_kbit" in (play.get("vars") or {}):
+            assert play["vars"]["image_pull_down_kbit"] == SSOT, f"{name}: read the SSOT, not a copy"
+            found[name] = play["hosts"]
     return found
 
 
 def test_only_plays_of_nodes_behind_the_edge_size_their_pulls():
-    networking = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["networking"]
-    lan = ipaddress.ip_network(networking["lan_cidr"])
+    networking = _networking()
     plays = _plays_setting_the_downlink()
-    assert plays.get("provision-ace2.yml") == "ace2"
-    for name, host in plays.items():
-        assert ipaddress.ip_address(networking["nodes"][host]["lan_ip"]) in lan, (
-            f"{name}: {host} is not behind the edge"
+    names = ("provision-ace1.yml", "provision-ace2.yml", "provision-bee.yml", "provision-rpi3.yml")
+    assert {plays.get(name) for name in names} == {"ace1", "ace2", "beelink", "rpi3"}
+    for name, hosts in plays.items():
+        nodes = _nodes(hosts, networking)
+        assert nodes and all(_behind_the_edge(node, networking) for node in nodes), (
+            f"{name}: {hosts} is not behind the edge"
         )
+
+
+def test_a_node_on_the_lab_wifi_is_behind_the_edge():
+    """The edge serves the lab Wi-Fi from its AP and routes it out the same uplink."""
+    networking = _networking()
+    wifi = ipaddress.ip_network(networking["edge"]["lab_wifi"]["cidr"])
+    on_wifi = {n for n, node in networking["nodes"].items() if node.get("lan_ip") and ipaddress.ip_address(node["lan_ip"]) in wifi}
+    assert "rpi3" in on_wifi
+    assert all(_behind_the_edge(node, networking) for node in on_wifi)
+
+
+def _task_list(tasks: list | None):
+    for task in tasks or []:
+        if not isinstance(task, dict):
+            continue
+        yield task
+        for key in ("block", "rescue", "always"):
+            yield from _task_list(task.get(key))
+
+
+def _pulls_bare(task: dict) -> bool:
+    """A task that pulls an image without the include: a command, or a module told to."""
+    if "_includes/image-pull.yml" in str(task.get("ansible.builtin.import_tasks", task.get("import_tasks", ""))):
+        return False
+    text = " ".join(
+        str(task.get(key, "")) for key in ("command", "shell", "ansible.builtin.command", "ansible.builtin.shell")
+    )
+    text += " " + " ".join(str(item) for item in task.get("loop") or [])
+    image_pull = re.search(r"\bpull\b", text) and re.search(r"\b(docker|compose)\b", text)
+    return bool(image_pull) or _module_pulls(task)
+
+
+def _module_pulls(task: dict) -> bool:
+    """community.docker fetches an image the daemon lacks unless told never to."""
+
+    def args(name: str) -> dict | None:
+        found = task.get(f"community.docker.{name}", task.get(name))
+        return found if isinstance(found, dict) else None
+
+    fetching = [m for m in (args("docker_container"), args("docker_compose_v2")) if m is not None]
+    image = args("docker_image") or {}
+    return any(m.get("pull") != "never" for m in fetching) or image.get("source") == "pull"
+
+
+def _roles_pulling_bare() -> set[str]:
+    found = set()
+    for path in ROLES.glob("*/tasks/*.yml"):
+        if any(_pulls_bare(task) for task in _task_list(yaml.safe_load(path.read_text(encoding="utf-8")))):
+            found.add(path.parts[-3])
+    return found
+
+
+def test_no_role_on_a_node_behind_the_edge_pulls_outside_the_include():
+    networking = _networking()
+    behind = set()
+    for _, play in _plays():
+        if any(_behind_the_edge(node, networking) for node in _nodes(play["hosts"], networking)):
+            behind |= _roles(play)
+    assert {"glances", "agent_stack"} <= behind, "the resolution lost the roles it was written for"
+    assert _roles_pulling_bare() & behind == set(UNSIZED_ROLES)
+
+
+def test_a_play_behind_the_edge_that_runs_a_sized_pull_sizes_it():
+    networking = _networking()
+    sized = {path.parts[-3] for path in ROLES.glob("*/tasks/*.yml") if "_includes/image-pull.yml" in path.read_text()}
+    assert sized >= {"agent_stack", "glances"}
+    unsized = set()
+    for name, play in _plays():
+        behind = any(_behind_the_edge(node, networking) for node in _nodes(play["hosts"], networking))
+        if behind and _roles(play) & sized and "image_pull_down_kbit" not in (play.get("vars") or {}):
+            unsized.add(name)
+    assert unsized == set(UNSIZED_PLAYS)
 
 
 def test_open_webui_is_pulled_through_the_include():
@@ -160,3 +315,56 @@ def test_open_webui_is_pulled_through_the_include():
     assert "_includes/image-pull.yml" in block
     assert 'image_pull_images: ["{{ agent_stack_webui.image }}"]' in block
     assert text.count("compose-webui.yml pull") == 1, "a second, bare pull of the same stack"
+
+
+def _imports(path: Path) -> list[dict]:
+    return [
+        task
+        for task in _task_list(yaml.safe_load(path.read_text(encoding="utf-8")))
+        if "_includes/image-pull.yml" in str(task.get("ansible.builtin.import_tasks", ""))
+    ]
+
+
+def test_glances_is_pulled_through_the_include():
+    (pull,) = _imports(ROLES / "glances/tasks/main.yml")
+    assert pull["vars"]["image_pull_images"] == ["{{ glances_image }}"]
+    assert pull["vars"]["image_pull_command"].endswith("/compose.yml pull")
+
+
+def test_uptime_kuma_is_pulled_through_the_include():
+    (pull,) = _imports(ROLES / "rpi3_services/tasks/main.yml")
+    assert pull["vars"]["image_pull_images"] == ["{{ uptime_kuma_image }}"]
+    assert pull["vars"]["image_pull_command"].endswith("/compose.yml pull")
+
+
+def test_the_hermes_images_are_sized_on_the_agents_own_daemon():
+    """Rootless: the daemon that holds them, and that a held image is read from, is the agent's."""
+    stack, sandbox = _imports(ROLES / "agent_stack/tasks/hermes.yml")
+    compose = (ROLES / "agent_stack/templates/compose-hermes.yml.j2").read_text(encoding="utf-8")
+    declared = re.findall(r"^\s+image: (\{\{ [\w.]+ \}\})$", compose, re.MULTILINE)
+    assert sorted(stack["vars"]["image_pull_images"]) == sorted(declared), "an image the compose pull fetches unsized"
+    assert stack["vars"]["image_pull_command"].endswith("pull")
+    assert sandbox["vars"]["image_pull_images"] == ["{{ agent_stack_hermes.sandbox.image }}"]
+    assert sandbox["vars"]["image_pull_command"] == "docker pull {{ agent_stack_hermes.sandbox.image }}"
+    for task in (stack, sandbox):
+        assert task["become_user"] == "{{ agent_stack_agent_user }}"
+        assert task["environment"] == "{{ agent_stack_agent_daemon_env }}"
+
+
+def test_the_guard_reads_image_pulls_and_roles_however_they_are_written():
+    assert _pulls_bare({"ansible.builtin.command": "docker compose -f x.yml pull"})
+    assert _pulls_bare({"command": "docker {{ item }}", "loop": ["pull a:1"]})
+    assert _pulls_bare({"community.docker.docker_container": {"name": "x", "pull": True}})
+    assert _pulls_bare({"ansible.builtin.command": {"argv": ["docker", "pull", "a:1"]}})
+    # The docker modules fetch an image the daemon lacks unless told never to.
+    assert _pulls_bare({"community.docker.docker_container": {"name": "x", "image": "a:1"}})
+    assert _pulls_bare({"docker_container": {"name": "x", "image": "a:1", "pull": False}})
+    assert not _pulls_bare({"community.docker.docker_container": {"name": "x", "image": "a:1", "pull": "never"}})
+    assert _pulls_bare({"community.docker.docker_compose_v2": {"project_src": "/opt/x"}})
+    assert not _pulls_bare({"community.docker.docker_compose_v2": {"project_src": "/opt/x", "pull": "never"}})
+    assert _pulls_bare({"community.docker.docker_image": {"name": "a:1", "source": "pull"}})
+    assert not _pulls_bare({"community.docker.docker_image": {"name": "a:1", "source": "local"}})
+    assert not _pulls_bare({"ansible.builtin.command": "git -C /opt/x pull --ff-only"})
+    play = {"roles": ["../roles/a"], "tasks": [{"block": [{"include_role": {"name": "../roles/b"}}]}]}
+    play["pre_tasks"] = [{"ansible.builtin.import_role": {"name": "c"}}]
+    assert _roles(play) == {"a", "b", "c"}

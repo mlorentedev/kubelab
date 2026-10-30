@@ -56,6 +56,10 @@
   vars:
     deploy_env: prod
 
+    # rpi3 is on the lab Wi-Fi the edge serves, so its image pulls share the
+    # edge's shaped downlink and are sized against it first (_includes/image-pull.yml, #2742).
+    image_pull_down_kbit: "{{ config.networking.edge.uplink.bandwidth.down_kbit }}"
+
   pre_tasks:
     - name: Load base config (SSOT)
       include_vars:

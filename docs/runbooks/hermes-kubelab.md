@@ -115,18 +115,22 @@ directory (mcpo's digest, or the filesystem server's lockfile) changes nothing
 on ace2 until the next provision, which rebuilds it; an unchanged context is a
 cached build and reports no change.
 
-ace2 is behind the lab edge, so the Open WebUI pull is sized first against
-`networking.edge.uplink.bandwidth.down_kbit` (#2742). A new tag of about 1.6 GB
-takes over an hour at the edge's downlink, past the 30 minute budget, and the
-play stops before pulling with the estimate. Rerun with
+ace2 is behind the lab edge, so its pulls are sized first against
+`networking.edge.uplink.bandwidth.down_kbit` (#2742): Open WebUI, hermes-kubelab
+with its tailscale sidecar, and the sandbox, the last two on the agent's rootless
+daemon, which holds them. A new Open WebUI tag of about 1.6 GB takes over an hour
+at the edge's downlink, and a new hermes-agent tag about 50 minutes (1.18 GB with
+the sidecar, measured for v0.22.1), both past the 30 minute budget, so the play
+stops before pulling with the estimate. Rerun with
 `EXTRA='image_pull_allow_slow=true'` to pull anyway; each attempt is bounded by
 twice the estimate and retried twice. An image ace2 already holds costs nothing,
 so its pull gets 300 s: if that tag has moved and the pull times out, rerun with
 `EXTRA='image_pull_timeout_seconds=<seconds>'`, which bounds each attempt
 outright.
 
-`CHECK=1` runs it in check mode and changes nothing. It still prints the
-estimate.
+`CHECK=1` runs it in check mode and changes nothing. It still states each
+estimate, in the task `State the estimate for <name>`: size per image, minutes
+at the edge's downlink, and the budget.
 
 ## Stop
 
