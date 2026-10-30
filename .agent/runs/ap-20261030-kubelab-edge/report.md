@@ -19,7 +19,7 @@ Host: the laptop held `systemd-inhibit --what=idle:sleep` from arming until 11:5
 
 These are past the envelope's 8 items, or are found defects whose fix is wider than the item. An earlier draft of this report said each one's reviewer output was triaged. At 10:30Z `dotf pr triage-queue` showed it was not: #2842, #2844 and #2845 had PR-Agent reviews nobody had answered, and #2838 had a new one. They were answered by 11:00Z, see the ledger.
 
-- #2838 (#2822): the guard sees images a task fetches by running them. beelink_services' qemu registration no longer pulls an unpinned image. Since the first review: a run the parser cannot read fails the guard (127fb594); `--pull`'s value is read once (85219a7c); every setter of the probe variable is pinned to the key the test sizes (19d002ed); and the registration is held to the `F` flag on every run, an existing one included (64588c60, 0cff0d4e). bee was not re-provisioned with it; its measured `flags: POF` passes.
+- #2838 (#2822): the guard sees images a task fetches by running them. beelink_services' qemu registration no longer pulls an unpinned image. Since the first review: a run the parser cannot read fails the guard (127fb594); `--pull`'s value is read once (85219a7c); every setter of the probe variable is pinned to the key the test sizes (19d002ed); the registration is held to the `F` flag on every run, an existing one included (64588c60, 0cff0d4e); and `raw` tasks and every env's values file are read too (a1ec4dfc, c21aebba). bee was not re-provisioned with it; its measured `flags: POF` passes.
 - #2840 (#2839, TOOL-127): `make mutate` accepts an empty TO as a deletion.
 - #2841 (#2506): only Kuma's not-found answer counts as a confirmed monitor delete.
 - #2842 (#2617), #2844 (#2621 item 2): the errors tests read the access log and the rendered overlays.
@@ -45,6 +45,7 @@ CI at 11:58Z: Tests was still running on #2838 (now 25ec074b), #2840 (d6e2c550) 
 - **Outside the envelope's remote write.** `make provision NODE=ace2 ENV=prod TAGS=docker` for #2835 restarted dockerd and glances on ace2. There was also a check-mode `deploy-vps` run. Read-only SSH reads ran on bee, ace2 and rpi4: ace2's journal, and rpi4's wpa_supplicant journal for the beacon-loss question on #2703. The run also used a local Kuma container for the #2841 integration test, local errors-image `docker run`s, and two read-only prod e2e subsets (`-k open_webui`).
 - **Outside `allowed_commands`.** `python3` heredocs did exact-string file edits, and `docker run --help` enumerated `_FLAGS` for #2838. Neither changed anything outside a worktree.
 - **Self-corrections.** On #2808 the run withdrew the 03:36Z e2e figures without reading the log. The log proved them right, and the withdrawal was itself an unverified claim. Reverted in 37756262. The #2837 triage said "CI is green" while Tests was running, and was corrected within a minute (comment 6520012685).
+- **A frozen path, after the run.** At 15:15Z, with the operator back, `infra/config/values/prod.yaml` was edited to prove #2838's overlay check goes red, on a committed tree, then restored with `git checkout HEAD`. `git status` was empty afterwards.
 - **The 03:36Z and 09:33Z runs.** They ran from bb218821 and fba90b14. `git log bb218821..fba90b14 -- tests/e2e/` is empty, so the two runs differ by ace2's state alone.
 
 ## Ledger
@@ -78,3 +79,4 @@ CI at 11:58Z: Tests was still running on #2838 (now 25ec074b), #2840 (d6e2c550) 
 | 11:55 | reviews | triage posted on #2838, #2840, #2845, #2849; `dotf pr triage-queue` exit 0 | comments 6522061184, 6522061745, 6522088436, 6521922967 |
 | 11:58 | #2838 | lesson-671 and the PR body updated for the every-run F check | 25ec074b |
 | 11:58 | host | sleep inhibitor released | |
+| 15:05–15:20 | #2838 | after the run, with the operator back: PR-Agent's late review on 25ec074b. `raw` tasks read; the probe image read from every values file, since an env's file overrides `common.yaml`. Mutants red | a1ec4dfc, c21aebba, comment 6526072894 |
