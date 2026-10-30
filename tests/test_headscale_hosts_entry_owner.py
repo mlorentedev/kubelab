@@ -58,13 +58,13 @@ def _writers_of_the_headscale_line(root: pathlib.Path = ANSIBLE) -> list[str]:
     patterns = ("roles/*/tasks/**/*.y*ml", "roles/*/handlers/**/*.y*ml", "playbooks/**/*.y*ml")
     files = {f for pattern in patterns for f in root.glob(pattern)}
     for path in sorted(files):
-        for task in _tasks(yaml.safe_load(path.read_text())):
+        for task in _tasks(yaml.safe_load(path.read_text(encoding="utf-8"))):
             if _delegates_to_owner(task):
                 continue
             own = {k: v for k, v in task.items() if k not in ("block", "rescue", "always", "tasks")}
             text = str(own)
             if _replaces_the_hosts_file(task) or ("/etc/hosts" in text and any(m in text for m in HEADSCALE_MARKERS)):
-                found.append(f"{path.relative_to(root)}: {task.get('name', '<unnamed>')}")
+                found.append(f"{path.relative_to(root).as_posix()}: {task.get('name', '<unnamed>')}")
     return found
 
 
