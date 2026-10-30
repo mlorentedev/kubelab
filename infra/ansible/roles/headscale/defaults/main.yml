@@ -48,9 +48,11 @@ headscale_policy_private_users: ["kubelab@", "manu@", "work@"]
 headscale_policy_private_destinations: ["agents@", "tag:hermes", "lan-rpi4"]
 
 # Tenant segments (VPN-ACL-014). Read from SOPS at deploy time, so no tenant's
-# tags, users or ports enter this repository. Each one is
+# tags, users or ports enter this repository. SOPS keys each one by name under
+# apps.services.core.headscale.segments (`sops set` cannot write a top-level list);
+# deploy-vps.yml hands the role the list of values, each
 #   {owner: <headscale user>, hosts_tag: tag:x, clients_tag: tag:y, ports: [int]}
-# and grants exactly clients_tag -> hosts_tag on those ports. Empty: segment-free.
+# which grants exactly clients_tag -> hosts_tag on those ports. Empty: segment-free.
 headscale_policy_segments: []
 
 # A quoted `*`, `*:*` or `*:<ports>`: how a wildcard grant appears in a policy file.

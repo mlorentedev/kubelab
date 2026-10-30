@@ -8,11 +8,16 @@ settings are applied, not only accepted (TOOL-063).
 from __future__ import annotations
 
 import json
+import re
+from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 
-from toolkit.features.gitea_upgrade_probe import run_probes
+from toolkit.features.gitea_upgrade_probe import KNOWN_BASELINE_FAILURES, run_probes
+
+COMMON = Path(__file__).resolve().parent.parent / "infra/config/values/common.yaml"
 
 TOKEN = "PROBE-TOKEN-THAT-MUST-NOT-PRINT"
 
@@ -104,3 +109,23 @@ def test_a_stale_merge_base_fails_the_drill() -> None:
     """OPS-039: 23 stale merge bases measured on 1.25.5 were gone from the first snapshot taken on 1.27.3, so the
     check is no longer excused. Any stale row on the restored copy now fails."""
     assert not _run(FakeServer(stale_merge_bases=1))
+
+
+def test_the_baseline_exclusions_do_not_widen() -> None:
+    """A doctor check excused here never fails the drill, so a new entry would quiet a corrupt
+    migrated database. Only a check measured failing on the old version with the same data
+    belongs here, with its reason (TOOL-124)."""
+    assert set(KNOWN_BASELINE_FAILURES) == {"Garbage collect LFS"}
+    assert all(reason.strip() for reason in KNOWN_BASELINE_FAILURES.values())
+
+
+def test_the_forge_runs_a_gitea_with_workflow_concurrency() -> None:
+    """OPS-038 upgraded the forge for `concurrency` with `cancel-in-progress` (go-gitea/gitea#32751).
+    The floor is the version it rehearsed, 1.27.3, not 1.26.0 where the feature first shipped:
+    1.26.x leaked groups across branches, deadlocked and regressed, and only 1.27.3 stops an
+    unapproved fork run from cancelling a trusted one (GHSA-4j4g-m7mr-hp5j; OPS-038 proposal).
+    Raise the floor with each upgrade that is rehearsed."""
+    image = yaml.safe_load(COMMON.read_text())["apps"]["services"]["core"]["gitea"]["image"]
+    version = re.search(r":(\d+)\.(\d+)\.(\d+)", image)
+    assert version, f"{image}: the pin names no version, so the floor cannot be read"
+    assert tuple(map(int, version.groups())) >= (1, 27, 3), image

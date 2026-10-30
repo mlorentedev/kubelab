@@ -29,6 +29,19 @@ created: "2026-10-30"
   expression evaluated by Jinja),
   `test_owner_creation_runs_before_the_render_quotes_its_argument_and_prints_no_name`.
 
+## Rollout evidence
+
+- **Step 1, 2026-10-30** (deploy with no segment, from the operator's controller). The
+  policy was read back through the audit identity: policy get and 
+odes list both
+  exited 0. The effective policy equals 
+ender_policy() (segment-free), ignoring
+  comments and whitespace. It carries the template marker and no wildcard grant, and
+  rule 1 lists kubelab@, manu@, work@, gents@, 	ag:hermes and lan-rpi4,
+  each on every port. The server holds 14 nodes, 9 online, as before.
+- **Step 2, 2026-10-30.** The segment is written to prod.enc.yaml under a neutral
+  key. Decrypted: one entry, with fields owner, hosts_tag, clients_tag and
+  ports; the ports are the integers [22, 45000].
 ## Test status
 
 - `pytest tests/test_headscale_segments.py tests/test_headscale_role.py

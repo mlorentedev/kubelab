@@ -37,10 +37,12 @@ unchecked step.
 
 ## Rollout (production, operator-approved window; not authorized by this spec)
 
-- [ ] Deploy once with no segment in SOPS (`make deploy TARGET=vps ENV=prod`), so
+- [x] Deploy once with no segment in SOPS (`make deploy TARGET=vps ENV=prod`), so
   `.prev` becomes a policy this template rendered. Check the probe, then read the
   effective policy through the audit identity and compare it with the render.
-- [ ] Write the segment to SOPS at `apps.services.core.headscale.segments`.
+- [x] Write the segment to SOPS at `apps.services.core.headscale.segments`. ✓ 2026-10-30,
+  under the neutral key `tenant-1`: SOPS key names are plaintext, so the tenant's name
+  stays inside the encrypted value. A mapping, because `sops set` cannot write a list (#2852).
 - [ ] Deploy again. The role creates the owner user if missing, then renders and
   reloads the segment. Repeat both checks.
 - [ ] A third deploy reports `changed=0`.
