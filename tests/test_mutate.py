@@ -366,6 +366,8 @@ def test_an_empty_replacement_reaches_the_command_as_a_deletion() -> None:
     assert '--to "$TO"' in _recipe("TO=")
     assert '--to "$TO"' in _recipe("TO=x")
     assert "--to" not in _recipe()
+    # A TO set in a makefile never reaches the recipe's shell, so `--to "$TO"` would be a deletion.
+    assert "--to" not in _recipe("--eval=TO := x")
 
 
 def test_an_empty_envvar_is_no_replacement_but_an_empty_argument_is(
