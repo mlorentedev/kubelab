@@ -369,3 +369,14 @@ def test_sops_holds_segments_as_a_mapping_the_play_turns_into_the_role_list() ->
 
     assert _play_segments(secrets) == [SEGMENT]
     assert _play_segments({}) == []
+
+
+def test_the_play_calls_dict2items_with_its_default_names() -> None:
+    """Ansible is not in the test environment, so `_play_segments` stubs `dict2items`.
+    The stub returns `key`/`value`, which matches the real filter only with its default
+    names; `map(attribute='value')` relies on them. A `key_name=` or `value_name=`
+    argument would pass the stub and break the deploy, so the call must take none."""
+    call = re.search(r"dict2items\s*(\([^)]*\))?", _play_segments_expr())
+
+    assert call is not None, "the play no longer turns the SOPS mapping into a list"
+    assert call.group(1) in (None, "()"), f"dict2items takes arguments: {call.group(0)}"
