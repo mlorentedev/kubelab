@@ -14,6 +14,9 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
+import subprocess
+from functools import cache
 from pathlib import Path
 
 import pytest
@@ -22,7 +25,7 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 PAGES_DIR = ROOT / "edge" / "errors" / "html" / "errors"
 NGINX_CONF = ROOT / "edge" / "errors" / "nginx.conf"
-K8S = ROOT / "infra" / "k8s"
+OVERLAYS = ["staging", "prod"]
 
 
 def _expand(spec: str | int) -> set[int]:
@@ -31,15 +34,22 @@ def _expand(spec: str | int) -> set[int]:
     return set(range(int(low), int(high or low) + 1))
 
 
+@cache
 def _middleware_statuses() -> set[int]:
-    """Statuses that some `errors` Middleware sends to `/errors/{status}.html`."""
+    """Statuses that an `errors` Middleware an overlay deploys sends to `/errors/{status}.html`.
+
+    Read from the rendered overlays, as `test_error_pages_coverage.py` reads routes: a file
+    no kustomization lists is never applied, so its Middleware targets nothing (#2621).
+    """
+    if shutil.which("kubectl") is None:
+        pytest.skip("kubectl not on PATH: cannot render the overlays (a skip is CANNOT CHECK, not OK)")
     found: set[int] = set()
-    for path in sorted(K8S.rglob("*.yaml")):
-        try:
-            docs = list(yaml.safe_load_all(path.read_text(encoding="utf-8")))
-        except yaml.YAMLError:
-            continue  # a patch or template that is not plain YAML cannot declare a Middleware
-        for doc in docs:
+    for overlay in OVERLAYS:
+        out = subprocess.run(
+            ["kubectl", "kustomize", str(ROOT / "infra/k8s/overlays" / overlay)], capture_output=True, text=True
+        )
+        assert out.returncode == 0, out.stderr
+        for doc in yaml.safe_load_all(out.stdout):
             if not isinstance(doc, dict) or doc.get("kind") != "Middleware":
                 continue
             errors = (doc.get("spec") or {}).get("errors") or {}

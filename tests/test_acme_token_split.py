@@ -13,6 +13,7 @@ from __future__ import annotations
 import pathlib
 import re
 
+from tests.repo_files import repo_files
 from toolkit.features import secrets_manager, terraform_runner
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -27,7 +28,7 @@ ACME_VARS = ("k3s_traefik_acme_cloudflare_token", "traefik_cf_dns_api_token")
 
 
 def _ansible_files() -> list[pathlib.Path]:
-    return sorted(p for ext in ("*.yml", "*.yaml", "*.j2") for p in ANSIBLE.rglob(ext))
+    return repo_files(ANSIBLE, "*.yml", "*.yaml", "*.j2")
 
 
 def test_every_acme_variable_reads_the_acme_key() -> None:

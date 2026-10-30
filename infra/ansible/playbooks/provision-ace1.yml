@@ -107,6 +107,9 @@
       no_log: true
       tags: [always]  # prerequisite: secrets needed by any tag-filtered role
 
+    - import_tasks: _includes/require-secrets.yml
+      tags: [always]
+
     - name: Generate Headscale pre-auth key (via VPS)
       command: >
         docker exec headscale headscale preauthkeys create

@@ -153,6 +153,9 @@
       no_log: true
       tags: [always]
 
+    - import_tasks: _includes/require-secrets.yml
+      tags: [always]
+
     - name: "Invariant: cloud-init swap directive applied"
       assert:
         that:

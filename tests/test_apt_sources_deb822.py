@@ -18,6 +18,7 @@ import pytest
 import yaml
 
 from tests.ansible_jinja import ansible_env
+from tests.repo_files import repo_files
 
 REPO = Path(__file__).resolve().parents[1]
 ANSIBLE = REPO / "infra/ansible"
@@ -56,7 +57,7 @@ def _deb822_task_files() -> list[Path]:
 def test_no_task_adds_a_source_with_the_deprecated_module() -> None:
     found = [
         f"{path.relative_to(REPO)}:{text.count(chr(10), 0, match.start()) + 1}"
-        for path in sorted(p for suffix in ("*.yml", "*.yaml") for p in ANSIBLE.rglob(suffix))
+        for path in repo_files(ANSIBLE, "*.yml", "*.yaml")
         for text in [path.read_text(encoding="utf-8")]
         for match in APT_REPOSITORY.finditer(text)
     ]

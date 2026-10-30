@@ -1,0 +1,16 @@
+# {{ ansible_managed }}
+[Unit]
+# Delivers the notices n8n did not take, oldest first (#2787). It names no
+# notifier on failure, deliberately: a notice that the spool could not be
+# delivered would wait in that same spool. While notices wait it stays failed,
+# and that is their trace on `systemctl --failed` and in Glances.
+Description=KubeLab delivery of the kept failure notices (#2787)
+
+[Service]
+Type=oneshot
+ExecStart={{ node_notify_script_path }} --flush
+# Holds the lock wait and one refused delivery, as the notifiers do, and the
+# deliveries before it -- tests/test_node_notify_role.py asserts the first part.
+TimeoutStartSec={{ node_notify_spool_timeout_seconds }}
+StandardOutput=journal
+StandardError=journal

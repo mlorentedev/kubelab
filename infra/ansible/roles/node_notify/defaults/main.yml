@@ -79,6 +79,21 @@ node_notify_lock_wait_seconds: 40
 node_notify_timeout_seconds: 90
 node_notify_recovered_unit_name: "kubelab-notify-recovered@.service"
 
+# A notice n8n does not take waits in the spool and counts as sent (#2787):
+# behind a down edge a LAN node's pages failed at once on DNS, and nothing sent
+# them later. `<spool unit>.timer` runs the script's `--flush` every `interval`,
+# which delivers the spool oldest first and stops at the first refusal, so a
+# notice never overtakes an older one. The flush's timeout holds the lock wait
+# and one refused delivery, as the notifiers' does, and room for the rest; a
+# notice still undelivered after `max_age` is dropped, so one payload n8n
+# refuses for good cannot hold the others behind it forever.
+# tests/test_node_notify_dedup.py runs the spool end to end.
+node_notify_spool_dir: /var/spool/kubelab-notify
+node_notify_spool_unit_name: kubelab-notify-spool
+node_notify_spool_interval_seconds: 300
+node_notify_spool_timeout_seconds: 300
+node_notify_spool_max_age_seconds: 604800
+
 # What this role supersedes is removed by `node_maintenance`, right after the
 # reload that leaves the old unit unreferenced -- see the note at the end of
 # this role's tasks for why the order is load-bearing rather than a matter of

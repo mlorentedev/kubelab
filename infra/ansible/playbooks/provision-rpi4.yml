@@ -171,6 +171,9 @@
       no_log: true
       tags: [always]
 
+    - import_tasks: _includes/require-secrets.yml
+      tags: [always]
+
   roles:
     # FIRST, as on rpi3, and before the gateway role in any case. The regulatory
     # domain is the site's (`networking.edge.uplink.regdomain`), which the gateway

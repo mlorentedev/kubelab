@@ -49,6 +49,66 @@
     mode: "0644"
   notify: Reload systemd
 
+# The spool (#2787): notices n8n did not take, delivered later by a timer.
+- name: Create the spool for notices n8n did not take
+  file:
+    path: "{{ node_notify_spool_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Install the spool delivery unit
+  template:
+    src: kubelab-notify-spool.service.j2
+    dest: "/etc/systemd/system/{{ node_notify_spool_unit_name }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd
+
+- name: Install the spool delivery timer
+  template:
+    src: kubelab-notify-spool.timer.j2
+    dest: "/etc/systemd/system/{{ node_notify_spool_unit_name }}.timer"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd
+
+# The reload is here rather than in the handler, which runs at the end of the
+# play: systemd cannot start a timer it has not loaded. It reports no change.
+- name: Enable the spool delivery timer
+  systemd:
+    name: "{{ node_notify_spool_unit_name }}.timer"
+    enabled: true
+    state: started
+    daemon_reload: true
+
+# A page refused before the spool existed left its notifier failed, and no
+# later run clears it (#2787: six on ace2, 2026-10-29). The pages themselves are
+# lost; what is cleared is the stale failed state. The spool unit is not
+# matched: it fails while notices wait, and that is the trace to keep.
+- name: Find the notifiers a refused page left failed
+  command:
+    argv:
+      - systemctl
+      - list-units
+      - --state=failed
+      - --plain
+      - --no-legend
+      - --full
+      - "{{ node_notify_unit_name | replace('@.service', '@*.service') }}"
+      - "{{ node_notify_recovered_unit_name | replace('@.service', '@*.service') }}"
+  register: node_notify_failed_notifiers
+  changed_when: false
+  check_mode: false
+
+- name: Clear the failed state of those notifiers
+  command:
+    argv: "{{ ['systemctl', 'reset-failed'] + node_notify_failed_notifiers.stdout_lines | map('split') | map('first') | list }}"
+  when: node_notify_failed_notifiers.stdout_lines | length > 0
+
 # NOTE: the single-purpose notifier this replaces is removed by
 # `node_maintenance`, not here, and the reason is ordering rather than
 # ownership. Removing it from this role would delete the unit file while

@@ -276,6 +276,9 @@
       tags: [always]
       no_log: true
 
+    - import_tasks: _includes/require-secrets.yml
+      tags: [always]
+
     # TLS SAN: ansible_host (100.64.0.2) + public_ip (162.55.57.175) from inventory
     - name: Build TLS SAN list
       set_fact:

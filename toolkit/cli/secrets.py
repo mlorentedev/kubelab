@@ -571,6 +571,10 @@ def set_secret(
             help="Read the value from environment variable VAR (for `dotf secrets run -- toolkit ...`)",
         ),
     ] = None,
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Parse the value as JSON and store the structure (a list or a mapping)"),
+    ] = False,
 ) -> None:
     """Set a secret value in the SOPS vault.
 
@@ -590,6 +594,12 @@ def set_secret(
     Example:
       toolkit secrets set aws.access_key_id AKIA... --env common
       printf %s "$TOKEN" | toolkit secrets set apps.x.token --env staging --stdin
+
+    --json stores a structure instead of a string, for keys a role reads as a mapping.
+    sops cannot store a top-level list, so key list entries by name. Invalid JSON
+    writes nothing:
+
+      toolkit secrets set apps.services.core.headscale.segments.<name> --env prod --json '{"owner": "x", ...}'
     """
     valid_envs = ("common", "dev", "staging", "prod")
     if env not in valid_envs:
@@ -613,8 +623,25 @@ def set_secret(
         logger.error("Provide a VALUE argument or use --stdin")
         raise typer.Exit(1)
 
+    stored: object = value
+    if as_json:
+        import json
+
+        try:
+            stored = json.loads(value)
+        except json.JSONDecodeError as exc:
+            # The position only: the message must not echo a secret back.
+            logger.error(
+                f"--json: the value is not valid JSON (line {exc.lineno}, column {exc.colno}); nothing written"
+            )
+            raise typer.Exit(1) from None
+        if isinstance(stored, list):
+            # sops 3.13.1 refuses a top-level array in `sops set`, by argument and by stdin.
+            logger.error("--json: sops cannot store a top-level list; key the entries by name in a mapping instead")
+            raise typer.Exit(1)
+
     mgr = _get_manager()
-    if mgr.set_secret(env, key, value):
+    if mgr.set_secret(env, key, stored):
         logger.success(f"Secret '{key}' set in {env}")
     else:
         logger.error(f"Failed to set secret '{key}' in {env}")

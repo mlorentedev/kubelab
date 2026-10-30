@@ -36,6 +36,8 @@ import re
 
 import pytest
 
+from toolkit.features.lessons_index import unmerged_indexes
+
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 LESSONS = REPO_ROOT / "docs" / "lessons"
 
@@ -113,6 +115,17 @@ class TestNoCommittedCount:
         assert _COUNT.findall("598 lessons, one file each. Newest: 2026-10-18.\n")
         assert _COUNT.findall("56 lessons, newest first. Back to [all categories](../_index.md).\n")
         assert _CATEGORY_COUNT.findall("| [kubernetes](kubernetes/_index.md) | 56 | Cluster |\n")
+
+
+class TestNoUnfinishedMerge:
+    """#1700: markers sit between well-formed rows, so every row test above passes over them."""
+
+    def test_no_index_holds_conflict_markers(self) -> None:
+        unmerged = unmerged_indexes(LESSONS)
+        assert not unmerged, (
+            f"conflict markers in docs/lessons/: {unmerged} (file: line numbers). The merge is not "
+            "finished; resolve each conflict, then run `toolkit tools lessons-index --fix`."
+        )
 
 
 class TestTopLevelIndex:

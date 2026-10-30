@@ -58,11 +58,18 @@
       changed_when: false
       check_mode: false
       no_log: true
+      # `always`, like the assert below: under TAGS= it would otherwise stop a
+      # run whose load was skipped.
+      tags: [always]
 
     - name: Parse decrypted secrets
       set_fact:
         secrets: "{{ sops_common.stdout | from_yaml }}"
       no_log: true
+      tags: [always]
+
+    - import_tasks: _includes/require-secrets.yml
+      tags: [always]
 
   roles:
     # `make maintain TIMER=1` re-installs kubelab-maintenance.service, whose

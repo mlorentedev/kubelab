@@ -59,8 +59,10 @@ the rendered template.
 - [OPEN, deploy-time] On v0.28, `policy check` is syntax-only. Whether the reload
   accepts the segment owner is proven by the effective policy read through the audit
   identity after the deploy, not by CI.
-- [OPEN, operator] The split-zone resolver address still reaches every node. It is
-  unreachable under the policy, but visible.
+- [ACCEPTED, operator 2026-10-30, pathfinder only] The split-zone resolver address
+  still reaches every node. It is unreachable under the policy, but visible.
+  Retiring the extra record stays with OPS-019 (#964). The acceptance covers the
+  pathfinder node only: enrolling a second tenant node needs the residual decided again.
 - [ACCEPTED] The segment-free fallback is rendered from the same hosts map as the
   failed policy. If that map caused the failure, the fallback can fail too. The map is
   built from `common.yaml` by the same code that renders today's policy, and the

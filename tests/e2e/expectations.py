@@ -254,6 +254,18 @@ EXPECTATIONS: dict[str, ServiceExpectation] = {
 }
 
 
+def skip_reason(svc_name: str, exp: ServiceExpectation, env: str) -> str | None:
+    """Why the ordinary suite should skip this service in `env` right now, or None.
+
+    The declaration is read before the probe. An env that never runs the service
+    has no backend there, so a refusal from the node it targets elsewhere is not
+    an outage of this env and must not fail it.
+    """
+    if env in exp.skip_in_envs:
+        return f"{svc_name} skipped in {env}"
+    return on_demand_skip_reason(svc_name, exp)
+
+
 def on_demand_skip_reason(svc_name: str, exp: ServiceExpectation) -> str | None:
     """Why the ordinary suite should skip this service right now, or None.
 

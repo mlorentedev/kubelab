@@ -60,14 +60,19 @@ def _beelink_tailscale_ip() -> str:
 #: variable anywhere in the stack would break it for no security reason.
 _EXTERNAL = dict(
     ansible_managed="Ansible managed",
-    gitea_image="gitea/gitea:1.27.3",
     gitea_domain="gitea.kubelab.live",
 )
 
 
 def _vars() -> dict:
     defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text()) or {}
-    return {**defaults, **_EXTERNAL, "tailscale_ip": _beelink_tailscale_ip()}
+    common = yaml.safe_load(COMMON.read_text())
+    return {
+        **defaults,
+        **_EXTERNAL,
+        "gitea_image": common["apps"]["services"]["core"]["gitea"]["image"],
+        "tailscale_ip": _beelink_tailscale_ip(),
+    }
 
 
 def _gitea_environment() -> dict[str, str]:

@@ -4,6 +4,10 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 679 | [A test that walks a directory reads what this machine left there](lesson-679-a-test-that-walks-a-directory-reads-what-this-machine-left-there.md) | 2026-10-30 |
+| 675 | [A probe read before the declaration fails an env on another env's outage](lesson-675-a-probe-read-before-the-declaration-fails-an-env-on-another-envs-outage.md) | 2026-10-30 |
+| 674 | [A parser that matches rows passes over whatever is not a row](lesson-674-a-parser-that-matches-rows-passes-over-whatever-is-not-a-row.md) | 2026-10-30 |
+| 672 | [click reads an empty environment variable as unset](lesson-672-click-reads-an-empty-environment-variable-as-unset.md) | 2026-10-30 |
 | 669 | [Under `pipefail`, a reader that stops early fails the pipe it answered](lesson-669-under-pipefail-a-reader-that-stops-early-fails-the-pipe-it-answered.md) | 2026-10-30 |
 | 666 | [Native Windows breaks the toolkit on uids, path separators and drive letters, not only on encodings](lesson-666-native-windows-breaks-the-toolkit-on-uids-separators-and-drive-letters.md) | 2026-10-30 |
 | 643 | [A proxy that forwards `delattr` must also forward its `__dict__`](lesson-643-a-proxy-that-forwards-delattr-must-also-forward-its-dict.md) | 2026-10-28 |

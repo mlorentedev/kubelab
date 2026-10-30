@@ -339,10 +339,48 @@ def test_the_fallback_is_the_segment_free_policy_not_an_allow_all() -> None:
 # --- tenant data never lives in this repository ----------------------------------
 
 
+def _play_segments_expr() -> str:
+    """The Jinja expression deploy-vps.yml hands the role as headscale_policy_segments."""
+    play = yaml.safe_load((REPO / "infra/ansible/playbooks/deploy-vps.yml").read_text(encoding="utf-8"))
+    roles = [r for p in play for r in p.get("roles") or [] if isinstance(r, dict)]
+    value = next(
+        r["vars"]["headscale_policy_segments"] for r in roles if "headscale_policy_segments" in r.get("vars", {})
+    )
+    return str(value).strip().removeprefix("{{").removesuffix("}}")
+
+
+def _play_segments(secrets: dict[str, Any]) -> list[dict[str, Any]]:
+    env = Environment()
+    env.filters["dict2items"] = lambda d: [{"key": k, "value": v} for k, v in d.items()]
+    return list(env.compile_expression(_play_segments_expr())(secrets=secrets) or [])
+
+
 def test_segments_reach_the_role_only_from_sops() -> None:
-    play = (REPO / "infra/ansible/playbooks/deploy-vps.yml").read_text(encoding="utf-8")
-    line = next(ln for ln in play.splitlines() if "headscale_policy_segments" in ln)
-    expr = line + play.split(line, 1)[1].split("\n", 3)[1]
+    expr = _play_segments_expr()
 
     assert "secrets" in expr and "config." not in expr
     assert DEFAULTS["headscale_policy_segments"] == []
+
+
+def test_sops_holds_segments_as_a_mapping_the_play_turns_into_the_role_list() -> None:
+    """`sops set` cannot write a top-level JSON array (sops 3.13.1 refuses it, by argument
+    and by stdin), so SOPS keys each segment by name and the play hands the role a list."""
+    secrets = {"apps": {"services": {"core": {"headscale": {"segments": {"tenant-a": SEGMENT}}}}}}
+
+    assert _play_segments(secrets) == [SEGMENT]
+    assert _play_segments({}) == []
+
+
+def test_the_play_calls_dict2items_with_its_default_names() -> None:
+    """Ansible is not in the test environment, so `_play_segments` stubs `dict2items`.
+    The stub returns `key`/`value`, which matches the real filter only with its default
+    names; `map(attribute='value')` relies on them. A `key_name=` or `value_name=`
+    argument would pass the stub and break the deploy, so the call must take none."""
+    expr = _play_segments_expr()
+    calls = re.findall(r"dict2items\s*(\([^)]*\))?", expr)
+
+    assert calls, "the play no longer turns the SOPS mapping into a list"
+    assert all(args in ("", "()") for args in calls), f"dict2items takes arguments in: {expr}"
+    assert re.search(r"dict2items\s*(\(\s*\))?\s*\|\s*map\(attribute='value'\)", expr), (
+        "dict2items no longer feeds map(attribute='value')"
+    )
