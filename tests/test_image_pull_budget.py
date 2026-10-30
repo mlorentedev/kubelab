@@ -405,7 +405,7 @@ _FLAGS |= {"--sig-proxy", "--disable-content-trust", "--use-api-socket", "--help
 
 def _command_text(task: dict) -> str:
     text = ""
-    for key in ("command", "shell", "ansible.builtin.command", "ansible.builtin.shell"):
+    for key in ("command", "shell", "raw", "ansible.builtin.command", "ansible.builtin.shell", "ansible.builtin.raw"):
         value = task.get(key)
         if isinstance(value, dict):
             value = value.get("cmd") or " ".join(map(str, value.get("argv") or []))
@@ -455,8 +455,17 @@ def test_no_role_on_a_node_behind_the_edge_runs_an_image_it_did_not_pull():
 
 def test_the_ledgered_probe_image_is_the_one_its_reason_sizes():
     """UNSIZED_RUNS keys the probe by its variable, so a bigger image in common.yaml would pass unsized."""
-    probe = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["apps"]["services"]["ai"]["hermes_kubelab"]["probe"]
-    assert probe["image"].split(":")[0] == "busybox", "size the new probe image, then update its UNSIZED_RUNS reason"
+    images = {}
+    for values in sorted(COMMON.parent.glob("*.yaml")):  # an env's file overrides common.yaml for that env
+        node = yaml.safe_load(values.read_text(encoding="utf-8")) or {}
+        for key in ("apps", "services", "ai", "hermes_kubelab", "probe", "image"):
+            node = node.get(key) if isinstance(node, dict) else None
+        if node is not None:
+            images[values.name] = node
+    assert "common.yaml" in images
+    assert {i.split(":")[0] for i in images.values()} == {"busybox"}, (
+        f"size the new probe image, then update its UNSIZED_RUNS reason: {images}"
+    )
     # The image read above is the one the variable resolves to only while every setter reads that key.
     setters = {
         line.strip()
@@ -481,6 +490,7 @@ def test_the_run_guard_reads_the_image_however_the_command_is_written():
     assert _runs({"command": "docker run --pull never --rm a:1"}) == set()
     assert _runs({"command": "docker run --pull=never a:1"}) == set()
     assert _runs({"command": "docker run --pull always a:1 sh"}) == {"a:1"}
+    assert _runs({"ansible.builtin.raw": "docker run --rm a:1"}) == {"a:1"}
     assert _runs({"command": "docker run --pull=missing a:1"}) == {"a:1"}
     bootstrap = "docker buildx create --name m --driver docker-container --bootstrap"
     assert _runs({"command": bootstrap}) == {"moby/buildkit"}
