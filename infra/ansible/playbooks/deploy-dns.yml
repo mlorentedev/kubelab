@@ -21,10 +21,13 @@
       include_vars:
         file: "{{ playbook_dir }}/../../config/values/{{ deploy_env }}.yaml"
         name: env_overrides
+      tags: [always]
 
+    # The role reads config through the play var image_pull_down_kbit (#2817).
     - name: Merge configs (env overrides win)
       set_fact:
         config: "{{ common | combine(env_overrides, recursive=True) }}"
+      tags: [always]
 
   roles:
     - role: ../roles/coredns
