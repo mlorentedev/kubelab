@@ -160,6 +160,61 @@
   environment:
     XDG_RUNTIME_DIR: "/run/user/{{ _agent_stack_agent_uid }}"
 
+# The agent's daemon reads its own daemon.json, not /etc/docker's, so without one it
+# keeps Docker's 5 attempts per layer, which lose a multi-GB pull behind the edge
+# (#2834). The key is in dockerd's reload set, so a change reloads the daemon and the
+# hermes containers keep running. One key only: an option dockerd-rootless.sh also
+# passes as a flag would stop the daemon from starting.
+- name: Create the agent daemon's config directory
+  ansible.builtin.file:
+    path: "{{ agent_stack_agent_home }}/.config/docker"
+    state: directory
+    owner: "{{ agent_stack_agent_user }}"
+    group: "{{ agent_stack_agent_user }}"
+    mode: "0700"
+
+- name: Configure the agent's daemon
+  ansible.builtin.copy:
+    content: |
+      {
+        "max-download-attempts": {{ docker_max_download_attempts | int }}
+      }
+    dest: "{{ agent_stack_agent_home }}/.config/docker/daemon.json"
+    owner: "{{ agent_stack_agent_user }}"
+    group: "{{ agent_stack_agent_user }}"
+    mode: "0644"
+  register: _agent_stack_agent_daemon_json
+
+# systemd sends the HUP to rootlesskit, which forwards it to dockerd (rootlesskit
+# v3.3.0, pkg/parent/parent.go and pkg/child/child.go).
+- name: Reload the agent's daemon for its config
+  ansible.builtin.systemd:
+    name: docker.service
+    scope: user
+    state: reloaded
+  become_user: "{{ agent_stack_agent_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ _agent_stack_agent_uid }}"
+  when: _agent_stack_agent_daemon_json is changed
+
+# A HUP that never reached dockerd changes nothing and says nothing, so the reload is
+# read back from the daemon's own `reload` event, which carries the value it now uses.
+- name: Read the attempts the agent's daemon reloaded with
+  ansible.builtin.shell: >-
+    docker events --since {{ ansible_date_time.epoch }} --until "$(date +%s)"
+    --filter type=daemon --filter event=reload
+    --format '{% raw %}{{index .Actor.Attributes "max-download-attempts"}}{% endraw %}'
+  become_user: "{{ agent_stack_agent_user }}"
+  environment:
+    DOCKER_HOST: "{{ agent_stack_agent_docker_host }}"
+    XDG_RUNTIME_DIR: "/run/user/{{ _agent_stack_agent_uid }}"
+  register: _agent_stack_agent_reload
+  changed_when: false
+  until: (_agent_stack_agent_reload.stdout_lines | last | default('0') | int) == (docker_max_download_attempts | int)
+  retries: 10
+  delay: 3
+  when: _agent_stack_agent_daemon_json is changed and not ansible_check_mode
+
 - name: Read the agent daemon's security options
   ansible.builtin.command:
     cmd: docker info --format '{% raw %}{{json .SecurityOptions}}{% endraw %}'

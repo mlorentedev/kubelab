@@ -16,14 +16,19 @@
 # A node behind the edge shares the uplink the edge shapes to
 # networking.edge.uplink.bandwidth.down_kbit (ADR-075), so a multi-GB pull there
 # takes most of an hour, and on 2026-10-27 one ended in an EOF after 52 minutes.
-# The play of such a node sets image_pull_down_kbit from that key. The include
-# then estimates the bytes to fetch before pulling, states the estimate, refuses past
-# image_pull_budget_seconds unless image_pull_allow_slow, and bounds each attempt
-# by the estimate. A retry runs the pull again from nothing: on the overlay2 store
-# a failed pull drops every layer it fetched (measured on ace2, 2026-10-30), so the
-# retry that keeps progress is dockerd's own, per layer, set by the docker role's
-# max-download-attempts. Without the var the pull is bounded by image_pull_timeout_seconds and
-# nothing is estimated. Set explicitly, image_pull_timeout_seconds bounds each
+# The play of such a node sets image_pull_down_kbit from that key, and
+# image_pull_goodput, the share of it a pull gets, from pull_goodput beside it. The
+# include then estimates the bytes to fetch before pulling, states the estimate,
+# refuses past image_pull_budget_seconds unless image_pull_allow_slow, and bounds
+# each attempt by the estimate plus dockerd's pauses. A retry runs the pull again
+# from nothing: on the overlay2 store a failed pull drops every layer it fetched
+# (measured on ace2, 2026-10-30), so the retry that keeps progress is dockerd's own,
+# per layer, up to docker_max_download_attempts, which the play passes to the
+# daemon's role too (#2834). dockerd pauses 5k seconds after its k-th failed attempt
+# at a layer, so the bound adds 5·n(n−1)/2 seconds: past it the pull is killed
+# and every layer dropped. Unset, the attempts are Docker's own 5, what a daemon
+# nothing configures keeps. Without image_pull_down_kbit the pull is bounded by
+# image_pull_timeout_seconds and nothing is estimated. Set explicitly, image_pull_timeout_seconds bounds each
 # attempt on any node: the lever for an estimate that is wrong, such as a held
 # tag that has since moved.
 
@@ -44,7 +49,11 @@
     _image_pull_bytes: "{{ (_image_pull_estimate.stdout | from_json).bytes | int }}"
     _image_pull_seconds: >-
       {{ (((_image_pull_estimate.stdout | from_json).bytes | int) * 8
-          / ((image_pull_down_kbit | int) * 1000)) | round(0, 'ceil') | int }}
+          / ((image_pull_down_kbit | int) * 1000 * (image_pull_goodput | default(1) | float)))
+         | round(0, 'ceil') | int }}
+    _image_pull_pauses: >-
+      {{ 5 * (docker_max_download_attempts | default(5) | int)
+           * ((docker_max_download_attempts | default(5) | int) - 1) // 2 }}
   when: image_pull_down_kbit | default(0) | int > 0
 
 # Stated whether or not the pull goes ahead: a run without -v shows nothing of a
@@ -55,9 +64,12 @@
       {{ image_pull_name }}: {{ _image_pull_bytes | int | filesizeformat }} to fetch
       ({% for item in (_image_pull_estimate.stdout | from_json).images %}{{ item.image }}
       {{ item.bytes | filesizeformat }}{{ ', ' if not loop.last }}{% endfor %}), about
-      {{ ((_image_pull_seconds | int) / 60) | round(1) }} min at the edge's
-      {{ image_pull_down_kbit }} kbit/s, against a budget of
+      {{ ((_image_pull_seconds | int) / 60) | round(1) }} min at the
+      {{ ((image_pull_goodput | default(1) | float) * 100) | round | int }}% of the edge's
+      {{ image_pull_down_kbit }} kbit/s a pull gets, against a budget of
       {{ ((image_pull_budget_seconds | default(1800) | int) / 60) | round | int }} min.
+      dockerd's pauses between its {{ docker_max_download_attempts | default(5) | int }}
+      attempts at a layer can add {{ ((_image_pull_pauses | int) / 60) | round(1) }} min.
   when: image_pull_down_kbit | default(0) | int > 0
 
 - name: Refuse a pull of {{ image_pull_name }} that outlasts its budget
@@ -92,7 +104,7 @@
   async: >-
     {{ image_pull_timeout_seconds | int
        if image_pull_timeout_seconds | default(none) is not none
-       else ((_image_pull_seconds | int) * 2 + 300)
+       else ((_image_pull_seconds | int) * 2 + 300 + (_image_pull_pauses | int))
        if image_pull_down_kbit | default(0) | int > 0
        else 3600 }}
   poll: 15

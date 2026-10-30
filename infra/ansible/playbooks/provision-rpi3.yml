@@ -61,6 +61,9 @@
     # rpi3 is on the lab Wi-Fi the edge serves, so its image pulls share the
     # edge's shaped downlink and are sized against it first (_includes/image-pull.yml, #2742).
     image_pull_down_kbit: "{{ config.networking.edge.uplink.bandwidth.down_kbit }}"
+    image_pull_goodput: "{{ config.networking.edge.uplink.bandwidth.pull_goodput }}"
+    # Not docker_max_download_attempts: rpi3's Docker install is unmanaged and keeps
+    # Docker's 5 attempts, which the pull's bound then assumes (#1032).
 
   pre_tasks:
     - name: Load base config (SSOT)
