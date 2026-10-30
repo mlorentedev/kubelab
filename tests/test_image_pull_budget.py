@@ -423,7 +423,9 @@ def _runs(task: dict) -> set[str]:
     for args in _RUNS.findall(text):
         words = iter(args.split())
         for word in words:
-            if word in ("--pull=never", "--pull") and (word == "--pull=never" or next(words, "") == "never"):
+            if word == "--pull":  # read its value once, as the `=` form carries it
+                word = f"--pull={next(words, '')}"
+            if word == "--pull=never":
                 break
             if not word.startswith("-"):
                 images.add(word)
@@ -455,6 +457,9 @@ def test_the_ledgered_probe_image_is_the_one_its_reason_sizes():
     """UNSIZED_RUNS keys the probe by its variable, so a bigger image in common.yaml would pass unsized."""
     probe = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["apps"]["services"]["ai"]["hermes_kubelab"]["probe"]
     assert probe["image"].split(":")[0] == "busybox", "size the new probe image, then update its UNSIZED_RUNS reason"
+    # Any other key named by a variable would pass whatever image it resolves to.
+    by_variable = {image for _, image in UNSIZED_RUNS if "{{" in image}
+    assert by_variable == {"{{ agent_stack_agent_probe_image }}"}, "pin what the new variable resolves to, as above"
 
 
 def test_the_run_guard_reads_the_image_however_the_command_is_written():
@@ -467,6 +472,8 @@ def test_the_run_guard_reads_the_image_however_the_command_is_written():
     assert _runs({"shell": "set -e\ndocker create -e A=1 b:2 && echo ok"}) == {"b:2"}
     assert _runs({"command": "docker run --pull never --rm a:1"}) == set()
     assert _runs({"command": "docker run --pull=never a:1"}) == set()
+    assert _runs({"command": "docker run --pull always a:1 sh"}) == {"a:1"}
+    assert _runs({"command": "docker run --pull=missing a:1"}) == {"a:1"}
     bootstrap = "docker buildx create --name m --driver docker-container --bootstrap"
     assert _runs({"command": bootstrap}) == {"moby/buildkit"}
     assert _runs({"command": "docker buildx create --driver-opt image=moby/buildkit:v0.20.0 --bootstrap"}) == {
