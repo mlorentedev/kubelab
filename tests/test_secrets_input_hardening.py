@@ -176,6 +176,61 @@ class TestSecretsSetFromEnv:
 # ─────────────────────────── secrets init idempotency ──────────────────────────
 
 
+class TestSecretsSetJson:
+    """`--json` stores a structured value (a list or a mapping) instead of a string.
+
+    Without it a list could not be written through the toolkit at all: the value
+    always reached `sops set` as one JSON string (VPN-ACL-014's tenant segments).
+    """
+
+    SEGMENTS = '[{"owner":"o","hosts_tag":"tag:h","clients_tag":"tag:c","ports":[22]}]'
+
+    def _invoke(self, args: list[str], **kwargs: str):
+        mgr = MagicMock()
+        mgr.set_secret.return_value = True
+        with patch("toolkit.cli.secrets._get_manager", return_value=mgr):
+            result = runner.invoke(app, ["secrets", "set", "apps.x.k", *args, "--env", "prod"], **kwargs)
+        return result, mgr
+
+    def test_a_json_value_reaches_the_manager_parsed(self) -> None:
+        result, mgr = self._invoke([self.SEGMENTS, "--json"])
+        assert result.exit_code == 0, result.output
+        mgr.set_secret.assert_called_once_with(
+            "prod", "apps.x.k", [{"owner": "o", "hosts_tag": "tag:h", "clients_tag": "tag:c", "ports": [22]}]
+        )
+
+    def test_json_from_stdin(self) -> None:
+        result, mgr = self._invoke(["--stdin", "--json"], input=self.SEGMENTS + "\n")
+        assert result.exit_code == 0, result.output
+        assert mgr.set_secret.call_args.args[2][0]["ports"] == [22]
+
+    def test_invalid_json_is_an_error_and_writes_nothing(self) -> None:
+        result, mgr = self._invoke(["[{not json", "--json"])
+        assert result.exit_code != 0
+        mgr.set_secret.assert_not_called()
+
+    def test_without_the_flag_a_json_looking_value_stays_a_string(self) -> None:
+        result, mgr = self._invoke([self.SEGMENTS])
+        assert result.exit_code == 0, result.output
+        mgr.set_secret.assert_called_once_with("prod", "apps.x.k", self.SEGMENTS)
+
+    def test_the_manager_hands_sops_the_structure_not_a_quoted_string(self, tmp_path) -> None:
+        sops_file = tmp_path / "prod.enc.yaml"
+        sops_file.write_text("sops: {}\n", encoding="utf-8")
+        mgr = SecretsManager.__new__(SecretsManager)
+        cm = MagicMock()
+        cm.secrets_path = tmp_path
+        with (
+            patch.object(SecretsManager, "_cm", return_value=cm),
+            patch("subprocess.run", return_value=MagicMock(returncode=0, stderr="")) as run,
+        ):
+            assert mgr.set_secret("prod", "apps.x.k", [{"ports": [22]}])
+        assert run.call_args.args[0][-1] == '[{"ports": [22]}]'
+
+
+# ─────────────────────────── secrets init idempotency ──────────────────────────
+
+
 class TestInitIdempotent:
     ENV = "staging"
 
