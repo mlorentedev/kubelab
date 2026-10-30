@@ -211,7 +211,9 @@ edge down under a LAN node) does not lose it (#2787). The notice is kept in
 with the time it happened in the title (`(at <UTC>Z, delivered late)`). While
 notices wait, `kubelab-notify-spool.service` stays failed: `ls` the spool and
 read that unit's journal for n8n's answer. A notice still waiting after a week
-is dropped, and that journal names it.
+is dropped, and that journal names it. A file in the spool that the script did
+not name (`<nanoseconds>-<unit>`) is moved aside to `.unreadable-<name>`, out of
+the delivery order, and the journal says so; read it, then remove it by hand.
 
 **A failed delivery has already been retried** (ANSIBLE-038). `curl` retries
 transient failures — connection refused, timeouts, and 5xx — up to 3 times
