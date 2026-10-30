@@ -46,6 +46,7 @@ unchecked step.
 - [x] Deploy again. The role creates the owner user if missing, then renders and
   reloads the segment. Repeat both checks. ✓ 2026-10-30: `changed=3`, read back equal.
 - [x] A third deploy reports `changed=0`. ✓ 2026-10-30: `ok=32 changed=0 failed=0`.
+  Idempotency only; acceptance rests on the previous step's read-back.
 
 ## Closing
 

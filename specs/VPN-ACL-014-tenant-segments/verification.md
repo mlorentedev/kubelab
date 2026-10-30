@@ -31,6 +31,14 @@ created: "2026-10-30"
 
 ## Rollout evidence
 
+Comparison method for every "equals `render_policy()`" below: from a checkout at the
+deployed `origin/master`, the render came from
+`toolkit/scripts/render_headscale_policy.py:render_policy(segments=...)`, with the
+segments decrypted from `prod.enc.yaml`. The live policy came from `policy get`
+through the audit identity. Both were parsed as JSON after stripping HuJSON comments
+and trailing commas, and the two objects compared equal. Raw outputs stay out of the
+repository.
+
 - **Step 1, 2026-10-30** (deploy with no segment, from the operator's controller). The
   policy was read back through the audit identity: `policy get` and `nodes list -o json`
   both exited 0. The effective policy equals `render_policy()` (segment-free), ignoring
@@ -54,7 +62,9 @@ created: "2026-10-30"
   - There is no wildcard grant.
   - The 14 nodes are unchanged, 9 online.
 - **Convergence, 2026-10-30.** The next deploy reported
-  `ok=32 changed=0 unreachable=0 failed=0`.
+  `ok=32 changed=0 unreachable=0 failed=0`. This proves idempotency only: with nothing
+  changed the reload handler did not fire, so it says nothing about policy acceptance.
+  Acceptance rests on step 3's read-back.
 
 ## Test status
 
