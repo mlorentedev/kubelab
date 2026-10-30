@@ -1,0 +1,56 @@
+# Arming envelope for one unattended run. The run reads the committed copy only.
+version: 1
+run_id: "ap-20261030-kubelab-edge"
+armed_by: manu
+armed_at: 2026-10-30T05:40:00Z
+expires_at: 2026-10-30T17:40:00Z
+objective: >-
+  Refill ace2's agent_stack images through the shaped uplink to completion (#2703)
+  and close what depends on it (#2812, NET-005 B11), landing #2824's fix; then work
+  ansible and toolkit backlog items that pass the 3 a.m. test and need no operator.
+scope:
+  write_paths:
+    - "infra/ansible/roles/**"
+    - "infra/ansible/playbooks/**"
+    - "infra/ansible/*.yml"
+    - "tests/**"
+    - "toolkit/**"
+    - "Makefile"
+    - "scripts/**"
+    - "docs/lessons/**"
+    - "docs/runbooks/**"
+    - "specs/NET-005-lab-edge-site-modes/**"
+    - ".agent/runs/**"
+  frozen_paths:
+    - ".github/**"
+    - "harness/**"
+    - "**/AGENTS.md"
+    - "**/CLAUDE.md"
+    - "infra/config/secrets/**"
+    - "infra/config/values/**"
+    - "toolkit/features/credentials.py"
+    - "toolkit/features/oidc_clients.py"
+    - "infra/k8s/**"
+  max_files: 16
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make, poetry, ssh, systemd-inhibit]
+queue:
+  source: bitacora
+  filter: >-
+    #2824, #2703, #2812, NET-005 B11 (#2808); then kubelab Backlog bug/chore items
+    in ansible/tests/toolkit scope, P1 before P2 before P3: #2792, #2817, #2765, #2637
+  max_items: 8
+budget:
+  max_iterations: 10
+  max_minutes_per_iteration: 60
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant
+  push: true
+  open_pr: true
+  advisor_tier: top
+# Host constraints: the refill provision on ace2 (TAGS=agent_stack, slow-pull
+# overrides) is the one remote write; its reruns are the same command. ssh is
+# read-only diagnostics otherwise. No provision of the edge, no reboot, no dongle,
+# no failure injection while the refill runs. common.yaml's down_kbit is the
+# operator's decision. The wake lock is a systemd-inhibit held to expires_at.
