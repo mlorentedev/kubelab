@@ -15,19 +15,25 @@ created: "2026-10-30"
 - [x] AC3: `test_a_malformed_segment_is_refused` (12 cases),
   `test_two_segments_sharing_a_tag_are_refused`, `test_the_segment_label_never_prints_tenant_data`.
   The assert expressions are evaluated by Jinja exactly as written in the role.
-- [x] AC4: `test_the_wildcard_pattern_tells_old_policies_from_new_ones`,
-  `test_a_previous_policy_with_a_wildcard_is_not_restored_while_segments_exist`,
-  `test_the_fallback_is_the_segment_free_policy_not_an_allow_all`.
-- [ ] AC5: `test_segments_reach_the_role_only_from_sops` passes; the pinned-image
-  `policy-check` runs in CI.
+- [x] AC4: `test_the_wildcard_pattern_tells_old_policies_from_new_ones` (wildcard ports
+  included), `test_only_a_policy_this_template_rendered_carries_the_marker`,
+  `test_a_previous_policy_is_restored_only_when_safe` (the rescue's own expression,
+  evaluated by Jinja), `test_the_fallback_is_the_segment_free_policy_not_an_allow_all`.
+- [x] AC5: `test_segments_reach_the_role_only_from_sops`. CI on `fef5715d`: `Drift / prod`
+  and `Drift / staging` passed, and they run `toolkit infra headscale policy-check`
+  (segment-free and synthetic segment) on the pinned image.
+- [x] AC6: `test_every_node_the_live_server_held_is_accounted_for` (the 2026-10-30 node
+  list), `test_a_node_rule_one_would_cut_off_stops_the_deploy`,
+  `test_a_tenant_node_is_accounted_for_by_its_segment`.
 
 ## Test status
 
 - `pytest tests/test_headscale_segments.py tests/test_headscale_role.py
-  tests/test_headscale_probe_hub_source.py`: 63 passed (Windows, 2026-10-30).
+  tests/test_headscale_probe_hub_source.py`: 71 passed (Windows, 2026-10-30).
 - The other Headscale test files fail on this Windows workstation for portability
-  reasons fixed in #2826, not for this change.
-- `make mutate`: five mutants, all RED.
+  reasons fixed in #2826, not for this change (17, unchanged by this branch).
+- `make mutate`: nine mutants, all RED (five for the first commit, four for the
+  live-node guard, the marker and the wildcard-port pattern).
 
 ## Decisions made during implementation
 

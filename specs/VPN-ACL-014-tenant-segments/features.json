@@ -22,8 +22,8 @@
   },
   {
     "id": "VPN-ACL-014-tenant-segments-AC4",
-    "behavior": "No rollback path restores a wildcard grant while segments are declared, and a failed probe leaves every private flow.",
-    "verification": "python -m pytest -o addopts= -p no:cacheprovider tests/test_headscale_segments.py -k 'wildcard_pattern or previous_policy or fallback' -q",
+    "behavior": "No rollback path restores a wildcard grant, or a policy this template did not render, while segments are declared; a failed probe leaves every private flow.",
+    "verification": "python -m pytest -o addopts= -p no:cacheprovider tests/test_headscale_segments.py -k 'wildcard_pattern or marker or restored_only_when_safe or previous_policy or fallback' -q",
     "state": "pending",
     "evidence": ""
   },
@@ -31,6 +31,13 @@
     "id": "VPN-ACL-014-tenant-segments-AC5",
     "behavior": "Segments reach the role only from SOPS, and the CI policy check validates segment-free and synthetic-segment renders on the pinned image.",
     "verification": "python -m pytest -o addopts= -p no:cacheprovider tests/test_headscale_segments.py -k sops -q && poetry run toolkit infra headscale policy-check",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "VPN-ACL-014-tenant-segments-AC6",
+    "behavior": "The deploy stops before rendering if a node Headscale holds is not reached by rule 1 or accounted for by a segment.",
+    "verification": "python -m pytest -o addopts= -p no:cacheprovider tests/test_headscale_segments.py -k 'accounted or cut_off or live_node_check' -q",
     "state": "pending",
     "evidence": ""
   }

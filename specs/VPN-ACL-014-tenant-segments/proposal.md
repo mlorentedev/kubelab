@@ -52,14 +52,18 @@ the rendered template.
 
 ## Risks / open questions
 
-- [RESOLVED] Equivalence beyond the measured nodes. A future node under an unknown
-  user would no longer be reachable. That is intended: a new identity must be added
-  to the role defaults deliberately.
+- [RESOLVED] Equivalence beyond the measured nodes. Before rendering, the role reads
+  the nodes Headscale holds and stops if rule 1 or a segment does not account for
+  one, so a node under an unlisted user is a failed deploy, not a lost flow.
 - [OPEN, deploy-time] On v0.28, `policy check` is syntax-only. Whether the reload
   accepts the segment owner is proven by the effective policy read through the audit
   identity after the deploy, not by CI.
 - [OPEN, operator] The split-zone resolver address still reaches every node. It is
   unreachable under the policy, but visible.
+- [ACCEPTED] The segment-free fallback is rendered from the same hosts map as the
+  failed policy. If that map caused the failure, the fallback can fail too. The map is
+  built from `common.yaml` by the same code that renders today's policy, and the
+  `.prev` restore path does not depend on it.
 
 ## Acceptance criteria
 
@@ -71,10 +75,13 @@ the rendered template.
 - [ ] AC3: The role refuses a segment owned by a private identity, reusing a private
   tag, with a malformed tag or port list, or sharing a tag with another segment, and
   it prints no tenant data.
-- [ ] AC4: Neither rollback path can restore a wildcard grant while segments are
-  declared, and a failed probe still leaves every private flow working.
+- [ ] AC4: Neither rollback path can restore a wildcard grant, or a policy this
+  template did not render, while segments are declared, and a failed probe still
+  leaves every private flow working.
 - [ ] AC5: Segments reach the role only from SOPS, and the CI policy check validates
   both the segment-free and a synthetic segment render on the pinned image.
+- [ ] AC6: The deploy stops before rendering if a node Headscale holds would not be
+  reached by rule 1 or accounted for by a segment.
 
 ## References
 
