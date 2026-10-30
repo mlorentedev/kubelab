@@ -59,9 +59,7 @@ def test_no_rule_grants_a_wildcard(segments: list[dict[str, Any]] | None) -> Non
 
 
 def test_rule_one_reaches_every_identity_the_policy_knows_except_tenants() -> None:
-    """Equivalence with the old wildcard, for every node that exists: each one is owned
-    by a user rule 1 names, or carries a tag tagOwners declares, and the only advertised
-    subnet is lan-rpi4 (measured 2026-10-30: 14 nodes, users kubelab and manu, tag:hermes)."""
+    """Every identity the policy declares besides tenants is a rule 1 destination."""
     policy = _policy()
     rule_one = policy["acls"][0]
     known = set(rule_one["src"]) | {o for owners in policy["tagOwners"].values() for o in owners}
@@ -70,6 +68,23 @@ def test_rule_one_reaches_every_identity_the_policy_knows_except_tenants() -> No
     assert {"kubelab@", "manu@", "work@"} == set(rule_one["src"])
     assert {_endpoint(d) for d in rule_one["dst"]} == known
     assert all(d.endswith(":*") for d in rule_one["dst"]), "rule 1 kept every port before; it must still"
+
+
+def test_rule_one_reaches_every_node_and_route_the_live_server_holds() -> None:
+    """Equivalence with the old wildcard, checked against the server rather than the policy:
+    the node list read through the audit identity on 2026-10-30. A tagged node is reached
+    through one of its tags (a tag replaces its user), an untagged one through its user,
+    and every approved route through a host alias that resolves to it."""
+    live = json.loads((REPO / "tests/fixtures/headscale_nodes_2026-10-30.json").read_text(encoding="utf-8"))
+    policy = _policy()
+    reached = {_endpoint(d) for d in policy["acls"][0]["dst"]}
+    hosts = policy["hosts"]
+
+    for node in live["nodes"]:
+        identities = set(node["tags"]) if node["tags"] else {f"{node['user']}@"}
+        assert identities & reached, f"rule 1 no longer reaches {node['given_name']} ({identities})"
+        for route in node["approved_routes"]:
+            assert any(hosts.get(alias) == route for alias in reached), f"rule 1 no longer reaches the route {route}"
 
 
 # --- a declared segment is isolated ------------------------------------------------
