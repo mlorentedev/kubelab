@@ -339,18 +339,18 @@ class TestSecretFile:
     """Where the password lives, read from SOPS key names -- which are plaintext, so no decryption."""
 
     def test_an_env_file_key_wins_over_common(self, tmp_path: Path) -> None:
-        (tmp_path / "prod.enc.yaml").write_text("a:\n  b: ENC[x]\n")
-        (tmp_path / "common.enc.yaml").write_text("a:\n  b: ENC[y]\n")
+        (tmp_path / "prod.enc.yaml").write_text("a:\n  b: ENC[x]\n", encoding="utf-8")
+        (tmp_path / "common.enc.yaml").write_text("a:\n  b: ENC[y]\n", encoding="utf-8")
         assert bg.secret_file("a.b", "prod", tmp_path) == "prod"
 
     def test_a_key_only_in_common_resolves_to_common(self, tmp_path: Path) -> None:
-        (tmp_path / "prod.enc.yaml").write_text("x: ENC[x]\n")
-        (tmp_path / "common.enc.yaml").write_text("a:\n  b: ENC[y]\n")
+        (tmp_path / "prod.enc.yaml").write_text("x: ENC[x]\n", encoding="utf-8")
+        (tmp_path / "common.enc.yaml").write_text("a:\n  b: ENC[y]\n", encoding="utf-8")
         assert bg.secret_file("a.b", "prod", tmp_path) == "common"
 
     def test_a_key_in_neither_is_an_error(self, tmp_path: Path) -> None:
-        (tmp_path / "prod.enc.yaml").write_text("x: 1\n")
-        (tmp_path / "common.enc.yaml").write_text("y: 1\n")
+        (tmp_path / "prod.enc.yaml").write_text("x: 1\n", encoding="utf-8")
+        (tmp_path / "common.enc.yaml").write_text("y: 1\n", encoding="utf-8")
         with pytest.raises(bg.BreakGlassError, match="a.b"):
             bg.secret_file("a.b", "prod", tmp_path)
 

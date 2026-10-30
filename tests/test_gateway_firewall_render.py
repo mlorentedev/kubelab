@@ -26,7 +26,9 @@ from tests.ansible_jinja import ansible_env
 
 REPO = Path(__file__).resolve().parents[1]
 TEMPLATES = REPO / "infra" / "ansible" / "roles" / "gateway" / "templates"
-EDGE = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text())["networking"]["edge"]
+EDGE = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text(encoding="utf-8"))["networking"][
+    "edge"
+]
 
 LAN = "eth0"
 UPLINK = EDGE["uplink"]["interface"]
@@ -208,10 +210,12 @@ def test_only_the_uplink_is_masqueraded(chains, oif) -> None:
 def test_the_masquerade_follows_the_profile_not_a_literal() -> None:
     """The old defaults named `enx*` and `wlan0`, interfaces the uplink drops never covered."""
     role = REPO / "infra" / "ansible" / "roles" / "gateway"
-    defaults = yaml.safe_load((role / "defaults" / "main.yml").read_text())
+    defaults = yaml.safe_load((role / "defaults" / "main.yml").read_text(encoding="utf-8"))
     assert defaults["gateway_uplink_interface"] == UPLINK
-    assert "enx" not in (role / "defaults" / "main.yml").read_text()
-    plays = yaml.safe_load((REPO / "infra" / "ansible" / "playbooks" / "provision-rpi4.yml").read_text())
+    assert "enx" not in (role / "defaults" / "main.yml").read_text(encoding="utf-8")
+    plays = yaml.safe_load(
+        (REPO / "infra" / "ansible" / "playbooks" / "provision-rpi4.yml").read_text(encoding="utf-8")
+    )
     gateway = next(
         role["vars"] for play in plays for role in play.get("roles", []) if str(role.get("role")).endswith("/gateway")
     )

@@ -21,7 +21,9 @@ from tests.test_agent_stack_role import COMMON, REPO, ROLE, _environment, _resol
 BRIDGE = ROLE / "files/mcp-bridge"
 WRITERS = {"write_file", "edit_file", "create_directory", "move_file"}
 KEY = "mcp-bridge-key-sentinel"
-HERMES_DOCS = yaml.safe_load(COMMON.read_text())["apps"]["services"]["ai"]["hermes_kubelab"]["docs_mirror"]
+HERMES_DOCS = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["apps"]["services"]["ai"]["hermes_kubelab"][
+    "docs_mirror"
+]
 CONFIGURED = {"agent_stack_vault_token": "vault-token-sentinel", "_agent_stack_mcp_bridge_key": KEY}
 
 
@@ -40,7 +42,7 @@ def _env(**overrides: object) -> dict[str, str]:
 
 
 def _ssot() -> dict:
-    return yaml.safe_load(COMMON.read_text())["apps"]["services"]["ai"]["open_webui"]["mcp_bridge"]
+    return yaml.safe_load(COMMON.read_text(encoding="utf-8"))["apps"]["services"]["ai"]["open_webui"]["mcp_bridge"]
 
 
 def _connections(**overrides: object) -> list[dict]:
@@ -57,7 +59,7 @@ def test_the_bridge_runs_only_with_open_webui_and_the_vault() -> None:
     assert "mcp-bridge" not in _compose()["services"], "no vault token, no bridge"
     assert "TOOL_SERVER_CONNECTIONS" not in _env()
     assert "mcp-bridge" in _compose(**CONFIGURED)["services"]
-    gate = yaml.safe_load((ROLE / "defaults/main.yml").read_text())["agent_stack_mcp_bridge_configured"]
+    gate = yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))["agent_stack_mcp_bridge_configured"]
     assert "agent_stack_webui_configured" in gate and "agent_stack_vault_configured" in gate
 
 
@@ -109,20 +111,20 @@ def test_the_key_reaches_the_bridge_by_env_file_only() -> None:
 
 
 def test_the_base_image_is_pinned_by_digest() -> None:
-    [base] = re.findall(r"^FROM (\S+)$", (BRIDGE / "Dockerfile").read_text(), re.M)
+    [base] = re.findall(r"^FROM (\S+)$", (BRIDGE / "Dockerfile").read_text(encoding="utf-8"), re.M)
     assert re.fullmatch(r"ghcr\.io/open-webui/mcpo:[\w.-]+@sha256:[0-9a-f]{64}", base), base
 
 
 def test_the_image_runs_as_nobody_and_installs_from_the_lockfile() -> None:
-    dockerfile = (BRIDGE / "Dockerfile").read_text()
+    dockerfile = (BRIDGE / "Dockerfile").read_text(encoding="utf-8")
     assert re.search(r"^USER 65534:65534$", dockerfile, re.M)
     assert "npm ci" in dockerfile and "npm install" not in dockerfile
 
 
 def test_the_lockfile_holds_the_pinned_server() -> None:
-    [(name, spec)] = json.loads((BRIDGE / "package.json").read_text())["dependencies"].items()
+    [(name, spec)] = json.loads((BRIDGE / "package.json").read_text(encoding="utf-8"))["dependencies"].items()
     assert re.fullmatch(r"\d+\.\d+\.\d+", spec), f"{name} is pinned exactly, not {spec!r}"
-    lock = json.loads((BRIDGE / "package-lock.json").read_text())
+    lock = json.loads((BRIDGE / "package-lock.json").read_text(encoding="utf-8"))
     assert lock["packages"][f"node_modules/{name}"]["version"] == spec
 
 
@@ -130,25 +132,27 @@ def test_the_launcher_keeps_the_key_out_of_argv_and_guards_every_endpoint() -> N
     """mcpo takes its key only as `--api-key`. Passed on the command line, it would
     sit in /proc/<pid>/cmdline, which every user on ace2 can read, the agent's
     included. The launcher hands it to mcpo inside the process."""
-    launcher = (BRIDGE / "launch.py").read_text()
+    launcher = (BRIDGE / "launch.py").read_text(encoding="utf-8")
     assert 'os.environ.pop("MCP_BRIDGE_API_KEY")' in launcher
     assert "--strict-auth" in launcher, "the spec and the docs need the key too"
     assert re.search(
-        r'^ENTRYPOINT \["python", "/opt/mcp-bridge/launch.py"\]$', (BRIDGE / "Dockerfile").read_text(), re.M
+        r'^ENTRYPOINT \["python", "/opt/mcp-bridge/launch.py"\]$',
+        (BRIDGE / "Dockerfile").read_text(encoding="utf-8"),
+        re.M,
     )
 
 
 def test_only_the_read_tools_are_served() -> None:
     """mcpo creates no endpoint for a disabled tool (measured: 404), and the mount
     is read-only besides."""
-    [(name, server)] = json.loads((BRIDGE / "config.json").read_text())["mcpServers"].items()
+    [(name, server)] = json.loads((BRIDGE / "config.json").read_text(encoding="utf-8"))["mcpServers"].items()
     assert name == "vault"
     assert server["args"] == ["/vault", HERMES_DOCS["mount"]], "the server's only allowed directories are the mounts"
     assert set(server["disabledTools"]) == WRITERS
 
 
 def test_dependabot_watches_the_base_image_and_the_server() -> None:
-    updates = yaml.safe_load((REPO / ".github/dependabot.yml").read_text())["updates"]
+    updates = yaml.safe_load((REPO / ".github/dependabot.yml").read_text(encoding="utf-8"))["updates"]
     directory = "/" + str(BRIDGE.relative_to(REPO))
     watched = {u["package-ecosystem"] for u in updates if u["directory"] == directory}
     assert watched == {"docker", "npm"}
@@ -188,13 +192,13 @@ def test_the_image_is_built_before_the_project_starts() -> None:
 
 
 def test_the_bridge_is_probed_after_the_mirror_is_filled() -> None:
-    main = yaml.safe_load((ROLE / "tasks/main.yml").read_text())
+    main = yaml.safe_load((ROLE / "tasks/main.yml").read_text(encoding="utf-8"))
     imports = [t["ansible.builtin.import_tasks"] for t in main if "ansible.builtin.import_tasks" in t]
     assert imports.index("mcp_bridge.yml") == imports.index("vault_mirror.yml") + 1
 
 
 def test_the_probes_measure_from_open_webuis_side() -> None:
-    probes = yaml.safe_load((ROLE / "tasks/mcp_bridge.yml").read_text())
+    probes = yaml.safe_load((ROLE / "tasks/mcp_bridge.yml").read_text(encoding="utf-8"))
     [block] = probes
     assert block["when"] == "agent_stack_mcp_bridge_configured | bool"
     names = " | ".join(t["name"] for t in block["block"])

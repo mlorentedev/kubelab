@@ -35,7 +35,7 @@ FEATURE = REPO / "toolkit/features/review_attestation.py"
 
 @pytest.fixture(scope="module")
 def publish_step() -> str:
-    wf = yaml.safe_load(WORKFLOW.read_text())
+    wf = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
     for job in wf["jobs"].values():
         for step in job.get("steps", []):
             if "commit status" in str(step.get("name", "")).lower():
@@ -67,7 +67,7 @@ def test_both_zero_exit_states_still_exist_in_the_classifier() -> None:
     """Guard the guard: if the classifier stopped emitting `disclosed`, the
     wording split above would be defending a distinction that no longer exists.
     """
-    src = FEATURE.read_text()
+    src = FEATURE.read_text(encoding="utf-8")
     assert '"attested"' in src and '"disclosed"' in src
 
 
@@ -90,7 +90,7 @@ def test_a_failure_still_reads_as_one(publish_step: str) -> None:
 
 @pytest.fixture(scope="module")
 def classify_step() -> str:
-    wf = yaml.safe_load(WORKFLOW.read_text())
+    wf = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
     for job in wf["jobs"].values():
         for step in job.get("steps", []):
             if step.get("id") == "attest":
@@ -127,7 +127,7 @@ def test_a_disclosed_pr_with_a_declined_notice_reports_disclosed(tmp_path: Path)
 
     from toolkit.cli.tools import app
 
-    registry = json.loads((REPO / "harness/review-attestation.json").read_text())
+    registry = json.loads((REPO / "harness/review-attestation.json").read_text(encoding="utf-8"))
     escape = registry["escape"]
     payload = {
         "number": 2206,
@@ -140,7 +140,7 @@ def test_a_disclosed_pr_with_a_declined_notice_reports_disclosed(tmp_path: Path)
         "files": [{"path": "infra/config/secrets/prod.enc.yaml"}],
     }
     payload_file = tmp_path / "payload.json"
-    payload_file.write_text(json.dumps(payload))
+    payload_file.write_text(json.dumps(payload), encoding="utf-8")
     state_file = tmp_path / "state"
 
     result = CliRunner().invoke(
@@ -148,7 +148,7 @@ def test_a_disclosed_pr_with_a_declined_notice_reports_disclosed(tmp_path: Path)
     )
 
     assert result.exit_code == 0, result.output
-    assert state_file.read_text().strip() == "disclosed"
+    assert state_file.read_text(encoding="utf-8").strip() == "disclosed"
 
 
 # --------------------------------------------------------------------------- #
@@ -160,7 +160,7 @@ def test_a_disclosed_pr_with_a_declined_notice_reports_disclosed(tmp_path: Path)
 
 def _stub(bin_dir: Path, name: str, script: str) -> None:
     path = bin_dir / name
-    path.write_text(f"#!/usr/bin/env bash\n{script}\n")
+    path.write_text(f"#!/usr/bin/env bash\n{script}\n", encoding="utf-8")
     path.chmod(0o755)
 
 
@@ -200,7 +200,7 @@ def test_a_review_is_claimed_only_for_the_attested_state(
             "GITHUB_RUN_ID": "1",
         },
     )
-    sent = calls.read_text()
+    sent = calls.read_text(encoding="utf-8")
     assert f"state={expected[0]} " in sent and f"description={expected[1]} " in sent, sent
 
 
@@ -210,7 +210,7 @@ def test_a_zero_exit_with_no_state_file_is_a_gate_error(classify_step: str, tmp_
     _stub(tmp_path / "bin", "poetry", "exit 0")  # passes, writes no state
     output = tmp_path / "github-output"
     _run_step(classify_step, tmp_path, {"RUNNER_TEMP": str(tmp_path / "runner"), "GITHUB_OUTPUT": str(output)})
-    assert "code=2\n" in output.read_text()
+    assert "code=2\n" in output.read_text(encoding="utf-8")
 
 
 def test_a_state_file_the_cli_cannot_write_is_exit_2(tmp_path: Path) -> None:
@@ -220,7 +220,7 @@ def test_a_state_file_the_cli_cannot_write_is_exit_2(tmp_path: Path) -> None:
 
     from toolkit.cli.tools import app
 
-    registry = json.loads((REPO / "harness/review-attestation.json").read_text())
+    registry = json.loads((REPO / "harness/review-attestation.json").read_text(encoding="utf-8"))
     escape = registry["escape"]
     payload_file = tmp_path / "payload.json"
     payload_file.write_text(
@@ -235,7 +235,8 @@ def test_a_state_file_the_cli_cannot_write_is_exit_2(tmp_path: Path) -> None:
                 "author": {"login": "mlorentedev"},
                 "files": [],
             }
-        )
+        ),
+        encoding="utf-8",
     )
 
     def run(state_file: Path) -> int:

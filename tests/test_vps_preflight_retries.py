@@ -168,7 +168,7 @@ def _run_preflight(tmp_path: Path, fail_first: int) -> tuple[subprocess.Complete
     )
     elapsed = time.monotonic() - started
     count_file = tmp_path / "count"
-    calls = int(count_file.read_text().strip()) if count_file.exists() else 0
+    calls = int(count_file.read_text(encoding="utf-8").strip()) if count_file.exists() else 0
     return result, calls, elapsed
 
 
@@ -183,7 +183,7 @@ def test_a_cold_path_that_times_out_once_does_not_fail_the_provision(tmp_path: P
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert calls == 2, "one timeout, then the answer"
-    assert "stubuser@stub-vps.example.invalid" in (tmp_path / "argv").read_text()
+    assert "stubuser@stub-vps.example.invalid" in (tmp_path / "argv").read_text(encoding="utf-8")
 
 
 @pytest.mark.allow_host_clients(

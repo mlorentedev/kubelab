@@ -21,7 +21,7 @@ from tests.test_agent_stack_role import _environment, _resolved, _tasks
 
 REPO = Path(__file__).resolve().parent.parent
 ROLE = REPO / "infra/ansible/roles/agent_stack"
-COMMON = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
+COMMON = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
 HERMES = COMMON["apps"]["services"]["ai"]["hermes_kubelab"]
 ZONE = HERMES["vault_zone"]
 SYNC = HERMES["vault_sync"]
@@ -48,7 +48,7 @@ def _git_env() -> dict[str, str]:
 
 def _write(repo: Path, path: str, text: str = "change\n") -> None:
     (repo / path).parent.mkdir(parents=True, exist_ok=True)
-    (repo / path).write_text(text)
+    (repo / path).write_text(text, encoding="utf-8")
 
 
 class Vault:
@@ -71,7 +71,9 @@ class Vault:
         self.clone.mkdir(mode=0o700)  # what the role creates for ReadWritePaths
         hooks = tmp / "hooks"
         hooks.mkdir()
-        (hooks / "pre-commit").write_text(_render("pre-commit-zone.sh.j2", agent_stack_vault_zone=ZONE))
+        (hooks / "pre-commit").write_text(
+            _render("pre-commit-zone.sh.j2", agent_stack_vault_zone=ZONE), encoding="utf-8"
+        )
         (hooks / "pre-commit").chmod(0o755)
         libexec = tmp / "libexec"
         libexec.mkdir()
@@ -84,7 +86,8 @@ class Vault:
                 agent_stack_vault_hooks=str(hooks),
                 agent_stack_vault_libexec=str(libexec),
                 agent_stack_hermes={**HERMES, "vault_sync": {**SYNC, "remote": self.remote.as_uri()}},
-            )
+            ),
+            encoding="utf-8",
         )
         self.script.chmod(0o755)
         # pgrep would see every git of this user on the machine running the tests.
@@ -98,7 +101,7 @@ class Vault:
 
     def pgrep(self, *pids: int) -> None:
         lines = "".join(f"echo {pid}\n" for pid in pids)
-        (self.bin / "pgrep").write_text(f"#!/bin/sh\n{lines}exit {0 if pids else 1}\n")
+        (self.bin / "pgrep").write_text(f"#!/bin/sh\n{lines}exit {0 if pids else 1}\n", encoding="utf-8")
         (self.bin / "pgrep").chmod(0o755)
 
     def rootless_pid(self, pid: int | None) -> None:
@@ -106,7 +109,7 @@ class Vault:
         if pid is None:
             (self.state / "child_pid").unlink(missing_ok=True)
         else:
-            (self.state / "child_pid").write_text(f"{pid}\n")
+            (self.state / "child_pid").write_text(f"{pid}\n", encoding="utf-8")
 
     def nsenter(self) -> None:
         """Entering a user namespace needs the real daemon; this records the call and runs the rest.
@@ -119,14 +122,19 @@ class Vault:
             f'echo "$*" >> "{self.tmp / "nsenter.log"}"\n'
             f'echo "in_userns=${{VAULT_SYNC_IN_USERNS:-}}" >> "{self.tmp / "nsenter.log"}"\n'
             'while [ "${1#-}" != "$1" ]; do case "$1" in --target) shift 2 ;; *) shift ;; esac; done\n'
-            'exec "$@"\n'
+            'exec "$@"\n',
+            encoding="utf-8",
         )
         (self.bin / "nsenter").chmod(0o755)
 
     def nsenter_calls(self) -> list[str]:
         if not self.nsenter_log.exists():
             return []
-        return [line for line in self.nsenter_log.read_text().splitlines() if not line.startswith("in_userns=")]
+        return [
+            line
+            for line in self.nsenter_log.read_text(encoding="utf-8").splitlines()
+            if not line.startswith("in_userns=")
+        ]
 
     def sync(self) -> subprocess.CompletedProcess[str]:
         env = {
@@ -285,10 +293,10 @@ def test_an_unpushed_commit_outside_the_zone_fails_and_pushes_nothing(synced: Va
 def test_the_push_refuses_outside_the_zone_even_without_the_recovery_step(synced: Vault) -> None:
     """The last check stands alone: with the step that takes unpushed commits
     back edited out of the script, a stray commit still never reaches the remote."""
-    script = synced.script.read_text()
+    script = synced.script.read_text(encoding="utf-8")
     begin = script.index('if [ "$(vgit rev-parse HEAD)" != "$base" ]; then')
     end = script.index("fi\n", begin) + len("fi\n")
-    synced.script.write_text(script[:begin] + script[end:])
+    synced.script.write_text(script[:begin] + script[end:], encoding="utf-8")
     before = synced.head()
     _write(synced.clone, "10_projects/kubelab/roadmap.md", "ours\n")
     _git(synced.clone, "add", "-A")
@@ -305,7 +313,7 @@ def test_upstream_changing_a_file_the_agent_changed_fails_instead_of_merging(syn
     _write(synced.clone, f"{ZONE}/notes.md", "ours\n")
     assert synced.sync().returncode == 1
     assert synced.head() == theirs
-    assert (synced.clone / ZONE / "notes.md").read_text() == "ours\n"
+    assert (synced.clone / ZONE / "notes.md").read_text(encoding="utf-8") == "ours\n"
 
 
 def test_a_remote_that_moved_during_the_push_is_left_to_the_next_run(synced: Vault) -> None:
@@ -316,7 +324,8 @@ def test_a_remote_that_moved_during_the_push_is_left_to_the_next_run(synced: Vau
     # Lands `side` on the branch and refuses this push, as a writer winning the race would.
     hook = synced.remote / "hooks/pre-receive"
     hook.write_text(
-        f'#!/bin/sh\nenv -i PATH="$PATH" git --git-dir="$PWD" update-ref refs/heads/{BRANCH} refs/heads/side\nexit 1\n'
+        f'#!/bin/sh\nenv -i PATH="$PATH" git --git-dir="$PWD" update-ref refs/heads/{BRANCH} refs/heads/side\nexit 1\n',
+        encoding="utf-8",
     )
     hook.chmod(0o755)
     _write(synced.clone, f"{ZONE}/notes.md", "ours\n")
@@ -333,14 +342,14 @@ def test_a_remote_that_moved_during_the_push_is_left_to_the_next_run(synced: Vau
 
 def test_a_refused_push_with_the_remote_unmoved_fails(synced: Vault) -> None:
     hook = synced.remote / "hooks/pre-receive"
-    hook.write_text("#!/bin/sh\nexit 1\n")
+    hook.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
     hook.chmod(0o755)
     _write(synced.clone, f"{ZONE}/notes.md", "ours\n")
     assert synced.sync().returncode == 1
 
 
 def test_the_token_is_in_neither_the_remote_url_nor_the_clone_config(synced: Vault) -> None:
-    config = (synced.clone / ".git/config").read_text()
+    config = (synced.clone / ".git/config").read_text(encoding="utf-8")
     assert "credential" not in config
     assert _git(synced.clone, "remote", "get-url", "origin").stdout.strip() == synced.remote.as_uri()
     assert SYNC["remote"].startswith("https://") and "@" not in SYNC["remote"]
@@ -348,11 +357,11 @@ def test_the_token_is_in_neither_the_remote_url_nor_the_clone_config(synced: Vau
 
 def test_the_credential_helper_answers_get_from_systemds_credential(tmp_path: Path) -> None:
     helper = tmp_path / "vault-credential"
-    helper.write_text(_render("vault-credential.sh.j2"))
+    helper.write_text(_render("vault-credential.sh.j2"), encoding="utf-8")
     helper.chmod(0o755)
     creds = tmp_path / "creds"
     creds.mkdir()
-    (creds / "vault-token").write_text("token-sentinel\n")
+    (creds / "vault-token").write_text("token-sentinel\n", encoding="utf-8")
     env = {**os.environ, "CREDENTIALS_DIRECTORY": str(creds)}
     get = subprocess.run([str(helper), "get"], capture_output=True, text=True, env=env, check=True)
     assert get.stdout == "username=x-access-token\npassword=token-sentinel\n"
@@ -391,7 +400,7 @@ def test_the_sync_runs_inside_the_rootless_daemons_user_namespace(vault: Vault) 
 
 def test_the_namespace_is_entered_once_not_in_a_loop(vault: Vault) -> None:
     assert vault.sync().returncode == 0
-    assert (vault.tmp / "nsenter.log").read_text().splitlines()[1] == "in_userns=1"
+    assert (vault.tmp / "nsenter.log").read_text(encoding="utf-8").splitlines()[1] == "in_userns=1"
     assert len(vault.nsenter_calls()) == 1
 
 
@@ -410,7 +419,7 @@ def test_a_run_without_the_daemon_fails_and_syncs_nothing(synced: Vault) -> None
 def test_a_daemon_that_is_gone_fails_instead_of_syncing_from_the_host(synced: Vault) -> None:
     _write(synced.clone, f"{ZONE}/jobs/digest.md")
     before = synced.head()
-    (synced.bin / "nsenter").write_text("#!/bin/sh\necho 'nsenter: no such process' >&2\nexit 1\n")
+    (synced.bin / "nsenter").write_text("#!/bin/sh\necho 'nsenter: no such process' >&2\nexit 1\n", encoding="utf-8")
     result = synced.sync()
     assert result.returncode != 0
     assert synced.head() == before
@@ -497,7 +506,7 @@ def test_the_deny_list_is_evaluated_on_the_path_the_runtime_takes() -> None:
     """A host path in the sandbox turns every guard back on; the evaluator's
     `docker` models the sandbox without one, so it would measure the wrong path."""
     env = _env()
-    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text())
+    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))
     expr = defaults["_agent_stack_hermes_env_type"]
     # As Ansible hands it over: the rendered default, a string.
     assert env.from_string(expr).render(agent_stack_vault_configured="True") == "local"
@@ -512,6 +521,6 @@ def test_a_changed_config_removes_the_sandboxes_made_from_the_old_one() -> None:
 
 
 def test_the_clone_is_provisioned_before_hermes_mounts_it() -> None:
-    main = yaml.safe_load((ROLE / "tasks/main.yml").read_text())
+    main = yaml.safe_load((ROLE / "tasks/main.yml").read_text(encoding="utf-8"))
     imports = [t.get("ansible.builtin.import_tasks") for t in main if "ansible.builtin.import_tasks" in t]
     assert imports.index("vault_zone.yml") < imports.index("hermes.yml")

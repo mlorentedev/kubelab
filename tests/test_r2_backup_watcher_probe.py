@@ -193,23 +193,24 @@ def fleet(tmp_path: pathlib.Path, request):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     restic = bin_dir / "restic"
-    restic.write_text(FAKE_RESTIC)
+    restic.write_text(FAKE_RESTIC, encoding="utf-8")
     restic.chmod(0o755)
     nc = bin_dir / "nc"
-    nc.write_text(FAKE_NC)
+    nc.write_text(FAKE_NC, encoding="utf-8")
     nc.chmod(0o755)
     targets = tmp_path / "targets.txt"
     targets.write_text(
         "# header comment\n"
         f"rpi3 {PREFIX}/rpi3 {IDS['rpi3']} {ADDRESSES['rpi3']} 22 always-on uptime_kuma\n"
-        f"vps {PREFIX}/kubelab-vps {IDS['kubelab-vps']} {ADDRESSES['vps']} 22 always-on authelia n8n\n"
+        f"vps {PREFIX}/kubelab-vps {IDS['kubelab-vps']} {ADDRESSES['vps']} 22 always-on authelia n8n\n",
+        encoding="utf-8",
     )
     for name, repository_id in IDS.items():
-        (fake / f"{name}.id").write_text(f"{repository_id}\n")
-    (fake / "rpi3.ls").write_text(_listing("uptime_kuma"))
-    (fake / "kubelab-vps.ls").write_text(_listing("authelia", "n8n"))
+        (fake / f"{name}.id").write_text(f"{repository_id}\n", encoding="utf-8")
+    (fake / "rpi3.ls").write_text(_listing("uptime_kuma"), encoding="utf-8")
+    (fake / "kubelab-vps.ls").write_text(_listing("authelia", "n8n"), encoding="utf-8")
     sizes = tmp_path / "sizes.txt"
-    sizes.write_text(_sizes())
+    sizes.write_text(_sizes(), encoding="utf-8")
     env = {
         "PATH": f"{bin_dir}:{os.environ['PATH']}",
         "FAKE_DIR": str(fake),
@@ -263,7 +264,7 @@ def test_the_probe_lists_one_directory_not_the_whole_tree(fleet) -> None:
     # Judged by the calls, like the lock: the fake logs and refuses a recursive one.
     fake, _, env = fleet
     rc, _, (summary,) = _run(env)
-    calls = (fake / "calls").read_text().splitlines()
+    calls = (fake / "calls").read_text(encoding="utf-8").splitlines()
     assert "ls kubelab-vps" in calls
     assert not [c for c in calls if c.startswith("recursive ")], calls
     assert rc == 0 and summary["healthy"] == 1
@@ -278,7 +279,7 @@ def test_the_probe_never_takes_a_lock(fleet) -> None:
     """
     fake, _, env = fleet
     rc, _, (summary,) = _run(env)
-    calls = (fake / "calls").read_text().splitlines()
+    calls = (fake / "calls").read_text(encoding="utf-8").splitlines()
     assert calls, "the probe made no restic call at all"
     assert not [c for c in calls if c.startswith("locked ")], calls
     assert rc == 0 and summary["healthy"] == 1
@@ -307,28 +308,30 @@ def test_each_breakage_fails_its_node_and_the_fleet(fleet, breakage, field, valu
     fake, _, env = fleet
     vps = "kubelab-vps"
     if breakage == "missing source":
-        (fake / f"{vps}.ls").write_text(_listing("authelia"))
+        (fake / f"{vps}.ls").write_text(_listing("authelia"), encoding="utf-8")
     elif breakage == "source is a file":
-        (fake / f"{vps}.ls").write_text(_listing("authelia", files=("n8n",)))
+        (fake / f"{vps}.ls").write_text(_listing("authelia", files=("n8n",)), encoding="utf-8")
     elif breakage == "source only as a longer name":
-        (fake / f"{vps}.ls").write_text(_listing("authelia", "n8n-old"))
+        (fake / f"{vps}.ls").write_text(_listing("authelia", "n8n-old"), encoding="utf-8")
     elif breakage == "no repository":
-        (fake / f"{vps}.fail").write_text("Fatal: repository does not exist: unable to open config file\n")
+        (fake / f"{vps}.fail").write_text(
+            "Fatal: repository does not exist: unable to open config file\n", encoding="utf-8"
+        )
     elif breakage == "wrong password":
-        (fake / f"{vps}.fail").write_text("Fatal: wrong password or no key found\n")
+        (fake / f"{vps}.fail").write_text("Fatal: wrong password or no key found\n", encoding="utf-8")
     elif breakage == "zero snapshots":
-        (fake / f"{vps}.snaps").write_text("[]\n")
+        (fake / f"{vps}.snaps").write_text("[]\n", encoding="utf-8")
     elif breakage == "missing sentinel":
-        (fake / f"{vps}.ls").write_text(_listing("authelia", "n8n", sentinel=False))
+        (fake / f"{vps}.ls").write_text(_listing("authelia", "n8n", sentinel=False), encoding="utf-8")
     elif breakage == "restic crashes":
-        (fake / f"{vps}.crash").write_text("")
+        (fake / f"{vps}.crash").write_text("", encoding="utf-8")
     elif breakage == "restic hangs":
-        (fake / f"{vps}.hang").write_text("")
+        (fake / f"{vps}.hang").write_text("", encoding="utf-8")
     elif breakage == "repository replaced":
-        (fake / f"{vps}.id").write_text("3" * 64 + "\n")
+        (fake / f"{vps}.id").write_text("3" * 64 + "\n", encoding="utf-8")
     elif breakage == "repository id not declared":
         targets = pathlib.Path(env["WATCHER_TARGETS"])
-        targets.write_text(targets.read_text().replace(IDS[vps], "-"))
+        targets.write_text(targets.read_text(encoding="utf-8").replace(IDS[vps], "-"), encoding="utf-8")
 
     started = time.monotonic()
     rc, nodes, (summary,) = _run(env)
@@ -347,7 +350,7 @@ def test_each_breakage_fails_its_node_and_the_fleet(fleet, breakage, field, valu
 def test_a_broken_node_is_not_masked_by_a_healthy_one_after_it(fleet) -> None:
     fake, targets, env = fleet
     # The broken node is probed FIRST and a healthy one last.
-    (fake / "rpi3.fail").write_text("Fatal: repository does not exist\n")
+    (fake / "rpi3.fail").write_text("Fatal: repository does not exist\n", encoding="utf-8")
     rc, nodes, (summary,) = _run(env)
     assert [n["node"] for n in nodes] == ["rpi3", "vps"]
     assert nodes[-1]["healthy"] == 1
@@ -367,8 +370,8 @@ def test_a_pod_without_its_secret_still_reports_unhealthy(fleet, missing) -> Non
 def test_each_node_opens_with_its_own_password(fleet) -> None:
     """BACKUP-057: a moved node's repository takes its own password, the rest the shared one."""
     fake, _, env = fleet
-    (fake / "rpi3.password").write_text("fixture-rpi3")
-    (fake / "kubelab-vps.password").write_text("fixture-shared")
+    (fake / "rpi3.password").write_text("fixture-rpi3", encoding="utf-8")
+    (fake / "kubelab-vps.password").write_text("fixture-shared", encoding="utf-8")
     env = {**env, "RESTIC_PASSWORD_RPI3": "fixture-rpi3", "RESTIC_PASSWORD_VPS": "fixture-shared"}
     del env["RESTIC_PASSWORD"]
     rc, nodes, (summary,) = _run(env)
@@ -377,7 +380,7 @@ def test_each_node_opens_with_its_own_password(fleet) -> None:
 
 def test_a_node_given_another_nodes_password_is_unreadable(fleet) -> None:
     fake, _, env = fleet
-    (fake / "rpi3.password").write_text("fixture-rpi3")
+    (fake / "rpi3.password").write_text("fixture-rpi3", encoding="utf-8")
     env = {**env, "RESTIC_PASSWORD_RPI3": "fixture-shared", "RESTIC_PASSWORD_VPS": "fixture-shared"}
     rc, nodes, (summary,) = _run(env)
     assert _node(nodes, "rpi3")["healthy"] == 0 and "wrong password" in _node(nodes, "rpi3")["reason"]
@@ -401,7 +404,7 @@ def test_a_secret_from_before_per_node_passwords_still_opens_the_fleet(fleet) ->
     """The shared RESTIC_PASSWORD stands in until PR 5, so the probe Argo syncs at merge
     keeps working against a Secret `apply-secrets` has not rewritten yet."""
     fake, _, env = fleet
-    (fake / "rpi3.password").write_text(env["RESTIC_PASSWORD"])
+    (fake / "rpi3.password").write_text(env["RESTIC_PASSWORD"], encoding="utf-8")
     rc, nodes, (summary,) = _run(env)
     assert rc == 0 and summary["healthy"] == 1, nodes
 
@@ -420,8 +423,8 @@ def test_a_last_target_without_a_newline_is_still_probed(fleet) -> None:
     green nothing in the output would reveal.
     """
     fake, targets, env = fleet
-    targets.write_text(targets.read_text().rstrip("\n"))
-    (fake / "kubelab-vps.fail").write_text("Fatal: repository does not exist\n")
+    targets.write_text(targets.read_text(encoding="utf-8").rstrip("\n"), encoding="utf-8")
+    (fake / "kubelab-vps.fail").write_text("Fatal: repository does not exist\n", encoding="utf-8")
     rc, nodes, (summary,) = _run(env)
     assert {n["node"] for n in nodes} == {"rpi3", "vps"}
     assert summary["nodes"] == 2
@@ -431,7 +434,7 @@ def test_a_last_target_without_a_newline_is_still_probed(fleet) -> None:
 def test_an_empty_target_list_is_not_a_healthy_fleet(fleet) -> None:
     # Zero nodes checked is zero evidence, not a pass.
     _, targets, env = fleet
-    targets.write_text("# only a header\n")
+    targets.write_text("# only a header\n", encoding="utf-8")
     rc, _, (summary,) = _run(env)
     assert rc != 0 and summary["healthy"] == 0
 
@@ -443,7 +446,7 @@ def test_a_rejected_credential_is_named_in_the_nodes_reason(fleet) -> None:
     answer. So `unreadable:` is not empty for a bad credential (#1939).
     """
     fake, _, env = fleet
-    (fake / "kubelab-vps.refuse").write_text("")
+    (fake / "kubelab-vps.refuse").write_text("", encoding="utf-8")
     started = time.monotonic()
     rc, nodes, (summary,) = _run(env)
     assert time.monotonic() - started < 20, "a refused credential must be cut off by RESTIC_TIMEOUT"
@@ -454,7 +457,7 @@ def test_a_rejected_credential_is_named_in_the_nodes_reason(fleet) -> None:
 
 
 def _write_sizes(env: dict[str, str], text: str) -> None:
-    pathlib.Path(env["WATCHER_SIZES"]).write_text(text)
+    pathlib.Path(env["WATCHER_SIZES"]).write_text(text, encoding="utf-8")
 
 
 def test_each_node_reports_its_prefix_and_the_fleet_its_buckets(fleet) -> None:
@@ -477,7 +480,7 @@ def test_the_probe_never_walks_the_snapshots_to_size_them(fleet) -> None:
     """`stats --mode raw-data` cost follows the snapshot count; it outran 600 s on the Beelink."""
     fake, _, env = fleet
     rc, _, (summary,) = _run(env)
-    calls = (fake / "calls").read_text().splitlines()
+    calls = (fake / "calls").read_text(encoding="utf-8").splitlines()
     assert not [c for c in calls if c.startswith("stats ")], calls
     assert rc == 0 and summary["healthy"] == 1
 
@@ -515,10 +518,10 @@ OTHER_BUCKET_BYTES = 777_000_001
 
 def _split_buckets(targets: pathlib.Path) -> None:
     """Move vps into a bucket of its own, keeping its repository name for the fake."""
-    text = targets.read_text().replace(
+    text = targets.read_text(encoding="utf-8").replace(
         f"{PREFIX}/kubelab-vps", f"{PREFIX.rsplit('/', 1)[0]}/{OTHER_BUCKET}/kubelab-vps"
     )
-    targets.write_text(text)
+    targets.write_text(text, encoding="utf-8")
 
 
 def test_the_fleet_sums_every_bucket_once(fleet) -> None:
@@ -569,7 +572,7 @@ def test_each_node_logs_how_long_its_listing_took(fleet) -> None:
 def test_a_probe_that_stops_early_reports_no_fleet_size(fleet) -> None:
     """A partial sum would understate the fleet, which is the one error the size rule must not make."""
     fake, _, env = fleet
-    (fake / "kubelab-vps.hang").write_text("")
+    (fake / "kubelab-vps.hang").write_text("", encoding="utf-8")
     # The shell runs its TERM trap once the foreground restic returns, which
     # RESTIC_TIMEOUT bounds: the same order a pod's activeDeadlineSeconds sees.
     env = {**env, "RESTIC_TIMEOUT": "4"}
@@ -617,7 +620,7 @@ def test_each_node_reports_its_newest_snapshot_age_reachability_and_class(fleet)
 )
 def test_the_snapshot_time_is_converted_to_utc_from_any_offset(fleet, stamp, utc) -> None:
     fake, _, env = fleet
-    (fake / "kubelab-vps.snaps").write_text(_snaps(stamp))
+    (fake / "kubelab-vps.snaps").write_text(_snaps(stamp), encoding="utf-8")
     rc, nodes, _ = _run(env)
     vps = _node(nodes, "vps")
     assert rc == 0 and vps["healthy"] == 1
@@ -632,7 +635,7 @@ def test_the_newest_of_several_snapshots_is_the_one_reported(fleet) -> None:
     report a stale backup for a node that shipped an hour ago.
     """
     fake, _, env = fleet
-    (fake / "kubelab-vps.snaps").write_text(_snaps("2026-09-20T00:00:00Z", "2026-09-26T05:00:00Z"))
+    (fake / "kubelab-vps.snaps").write_text(_snaps("2026-09-20T00:00:00Z", "2026-09-26T05:00:00Z"), encoding="utf-8")
     rc, nodes, _ = _run(env)
     vps = _node(nodes, "vps")
     assert vps["newest_snapshot"] == "2026-09-26T05:00:00Z"
@@ -642,7 +645,9 @@ def test_the_newest_of_several_snapshots_is_the_one_reported(fleet) -> None:
 def test_a_snapshot_list_with_spaces_after_its_colons_still_reads(fleet) -> None:
     """restic prints compact JSON today; a pretty-printed answer is the same answer."""
     fake, _, env = fleet
-    (fake / "kubelab-vps.snaps").write_text('[{"time": "2026-09-26T00:00:00Z", "id": "x", "short_id": "s"}]\n')
+    (fake / "kubelab-vps.snaps").write_text(
+        '[{"time": "2026-09-26T00:00:00Z", "id": "x", "short_id": "s"}]\n', encoding="utf-8"
+    )
     _, nodes, _ = _run(env)
     assert _node(nodes, "vps")["snapshot_age_seconds"] == 6 * 3600
 
@@ -653,9 +658,9 @@ def test_no_snapshot_to_read_is_null_never_a_fresh_looking_age(fleet, breakage) 
     unhealthy, so the health rule pages instead: never a 0 that reads as fresh."""
     fake, _, env = fleet
     if breakage == "restic fails":
-        (fake / "kubelab-vps.fail").write_text("Fatal: wrong password or no key found\n")
+        (fake / "kubelab-vps.fail").write_text("Fatal: wrong password or no key found\n", encoding="utf-8")
     else:
-        (fake / "kubelab-vps.snaps").write_text("[]\n")
+        (fake / "kubelab-vps.snaps").write_text("[]\n", encoding="utf-8")
     rc, nodes, _ = _run(env)
     vps = _node(nodes, "vps")
     assert vps["newest_snapshot"] is None and vps["snapshot_age_seconds"] is None
@@ -666,7 +671,7 @@ def test_an_unparseable_snapshot_time_is_null_and_fails_the_node(fleet) -> None:
     """A time the probe cannot read would leave the freshness rule blind for that
     node with nothing paging, so it fails closed, like an unreadable repository id."""
     fake, _, env = fleet
-    (fake / "kubelab-vps.snaps").write_text(_snaps("26/09/2026 00:00"))
+    (fake / "kubelab-vps.snaps").write_text(_snaps("26/09/2026 00:00"), encoding="utf-8")
     rc, nodes, (summary,) = _run(env)
     vps = _node(nodes, "vps")
     assert vps["newest_snapshot"] is None and vps["snapshot_age_seconds"] is None
@@ -676,17 +681,21 @@ def test_an_unparseable_snapshot_time_is_null_and_fails_the_node(fleet) -> None:
 
 def test_the_probe_knocks_on_each_nodes_declared_port_with_a_timeout(fleet) -> None:
     fake, targets, env = fleet
-    targets.write_text(targets.read_text().replace(f"{ADDRESSES['rpi3']} 22 ", f"{ADDRESSES['rpi3']} 2222 "))
+    targets.write_text(
+        targets.read_text(encoding="utf-8").replace(f"{ADDRESSES['rpi3']} 22 ", f"{ADDRESSES['rpi3']} 2222 "),
+        encoding="utf-8",
+    )
     _run(env)
-    calls = [c for c in (fake / "calls").read_text().splitlines() if c.startswith("nc ")]
+    calls = [c for c in (fake / "calls").read_text(encoding="utf-8").splitlines() if c.startswith("nc ")]
     assert f"nc -z -w 1 {ADDRESSES['rpi3']} 2222" in calls, calls
     assert f"nc -z -w 1 {ADDRESSES['vps']} 22" in calls, calls
 
 
 def _make_on_demand(targets: pathlib.Path, node: str) -> None:
-    lines = targets.read_text().splitlines(keepends=True)
+    lines = targets.read_text(encoding="utf-8").splitlines(keepends=True)
     targets.write_text(
-        "".join(ln.replace(" always-on ", " on-demand ") if ln.startswith(f"{node} ") else ln for ln in lines)
+        "".join(ln.replace(" always-on ", " on-demand ") if ln.startswith(f"{node} ") else ln for ln in lines),
+        encoding="utf-8",
     )
 
 
@@ -694,7 +703,7 @@ def test_an_on_demand_node_that_is_off_stays_healthy(fleet) -> None:
     """Off is that node's normal state (ADR-028): the class is what makes 0 fine."""
     fake, targets, env = fleet
     _make_on_demand(targets, "rpi3")
-    (fake / f"{ADDRESSES['rpi3']}.down").write_text("")
+    (fake / f"{ADDRESSES['rpi3']}.down").write_text("", encoding="utf-8")
     rc, nodes, (summary,) = _run(env)
     rpi3 = _node(nodes, "rpi3")
     assert rpi3["reachable"] == 0 and rpi3["class"] == "on-demand"
@@ -707,7 +716,7 @@ def test_an_always_on_node_the_probe_cannot_reach_fails_the_fleet(fleet, failure
     `reachable=0` there means the probe is broken (a port, an ACL, the pod's
     route), and a broken probe would read every on-demand node as off forever."""
     fake, _, env = fleet
-    (fake / f"{ADDRESSES['vps']}.{failure}").write_text("")
+    (fake / f"{ADDRESSES['vps']}.{failure}").write_text("", encoding="utf-8")
     started = time.monotonic()
     rc, nodes, (summary,) = _run(env)
     assert time.monotonic() - started < 20, "a silent address must be cut off by the timeout"

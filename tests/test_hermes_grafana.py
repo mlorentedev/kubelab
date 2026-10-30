@@ -33,7 +33,7 @@ def _module(monkeypatch: pytest.MonkeyPatch, **env: str) -> types.ModuleType:
     monkeypatch.setattr(urllib.request, "_opener", None)  # the script installs its own; do not leak it
     module = types.ModuleType("grafana_reader")
     module.__dict__["__name__"] = "grafana_reader"
-    exec(compile(SCRIPT.read_text(), str(SCRIPT), "exec"), module.__dict__)  # noqa: S102
+    exec(compile(SCRIPT.read_text(encoding="utf-8"), str(SCRIPT), "exec"), module.__dict__)  # noqa: S102
     return module
 
 
@@ -57,7 +57,9 @@ def _answer(monkeypatch: pytest.MonkeyPatch, payload: object, calls: list | None
 
 
 def _call(module: types.ModuleType, name: str, **arguments: object) -> dict:
-    reply = module.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": name, "arguments": arguments}})
+    reply = module.handle(
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": name, "arguments": arguments}}
+    )
     return reply["result"]
 
 
@@ -85,7 +87,12 @@ def test_the_server_speaks_initialize_list_and_ping(monkeypatch: pytest.MonkeyPa
     replies = [json.loads(line) for line in out.getvalue().splitlines()]
     assert [r["id"] for r in replies] == [1, 2, 3], "a notification gets no reply"
     assert replies[0]["result"]["protocolVersion"] == "2025-03-26"
-    assert {t["name"] for t in replies[1]["result"]["tools"]} == {"firing_alerts", "errors_by_app", "log_volume_by_app", "recent_errors"}
+    assert {t["name"] for t in replies[1]["result"]["tools"]} == {
+        "firing_alerts",
+        "errors_by_app",
+        "log_volume_by_app",
+        "recent_errors",
+    }
 
 
 def test_garbage_and_unknown_methods_are_errors_not_crashes(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -97,8 +104,20 @@ def test_garbage_and_unknown_methods_are_errors_not_crashes(monkeypatch: pytest.
     assert second["error"]["code"] == -32601
 
 
-@pytest.mark.parametrize("frame", ["null", "7", '"text"', '[{"jsonrpc":"2.0","id":1,"method":"ping"}]', '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":[1]}', '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"firing_alerts","arguments":[1]}}'])
-def test_a_malformed_frame_is_answered_and_the_server_keeps_serving(monkeypatch: pytest.MonkeyPatch, frame: str) -> None:
+@pytest.mark.parametrize(
+    "frame",
+    [
+        "null",
+        "7",
+        '"text"',
+        '[{"jsonrpc":"2.0","id":1,"method":"ping"}]',
+        '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":[1]}',
+        '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"firing_alerts","arguments":[1]}}',
+    ],
+)
+def test_a_malformed_frame_is_answered_and_the_server_keeps_serving(
+    monkeypatch: pytest.MonkeyPatch, frame: str
+) -> None:
     """A frame that is valid JSON but not a request must not kill the process that holds all four tools."""
     module = _module(monkeypatch)
     out = io.StringIO()
@@ -214,7 +233,13 @@ def test_an_unexpected_loki_answer_is_unavailable(monkeypatch: pytest.MonkeyPatc
 
 def test_alerts_are_listed_and_an_empty_list_says_so(monkeypatch: pytest.MonkeyPatch) -> None:
     module = _module(monkeypatch)
-    firing = [{"labels": {"alertname": "DiskFull", "severity": "critical"}, "annotations": {"summary": "vps at 95%"}, "startsAt": "2026-10-17T01:00:00Z"}]
+    firing = [
+        {
+            "labels": {"alertname": "DiskFull", "severity": "critical"},
+            "annotations": {"summary": "vps at 95%"},
+            "startsAt": "2026-10-17T01:00:00Z",
+        }
+    ]
     _answer(monkeypatch, firing)
     assert "DiskFull severity=critical" in _text(_call(module, "firing_alerts"))
     _answer(monkeypatch, [])
@@ -233,7 +258,14 @@ def test_errors_are_ranked_and_a_silent_app_is_named(monkeypatch: pytest.MonkeyP
 
 def test_the_request_carries_the_token_and_the_output_never_does(monkeypatch: pytest.MonkeyPatch) -> None:
     module, calls = _module(monkeypatch), []
-    line = f"retry failed Authorization: Bearer {TOKEN}xx and " + "glsa_other_token_99 " + "tvly-" + "abc123 " + "sk-" + "a" * 30
+    line = (
+        f"retry failed Authorization: Bearer {TOKEN}xx and "
+        + "glsa_other_token_99 "
+        + "tvly-"
+        + "abc123 "
+        + "sk-"
+        + "a" * 30
+    )
     _answer(monkeypatch, {"status": "success", "data": {"result": [{"stream": {}, "values": [["1", line]]}]}}, calls)
     text = _text(_call(module, "recent_errors", app="api"))
     assert calls[0].get_header("Authorization") == f"Bearer {TOKEN}"

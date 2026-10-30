@@ -28,7 +28,7 @@ def _flat(items: list[dict]) -> list[dict]:
 
 
 def _tasks() -> list[dict]:
-    return _flat(yaml.safe_load((ROLE / "tasks/hermes.yml").read_text()))
+    return _flat(yaml.safe_load((ROLE / "tasks/hermes.yml").read_text(encoding="utf-8")))
 
 
 def _task(name: str) -> dict:
@@ -61,10 +61,12 @@ def test_the_persona_holds_no_operator_detail_the_repository_must_not_carry() ->
 
 
 def test_the_profile_is_read_on_the_node_and_never_through_the_controller() -> None:
-    text = (ROLE / "tasks/hermes.yml").read_text()
+    text = (ROLE / "tasks/hermes.yml").read_text(encoding="utf-8")
     assert "slurp" not in text
     assert "lookup('file'" not in text and "lookup('ansible.builtin.file'" not in text
-    assert (ROLE / "defaults/main.yml").read_text().count("80_agents/operator/hermes-kubelab/profile.md") == 1
+    assert (ROLE / "defaults/main.yml").read_text(encoding="utf-8").count(
+        "80_agents/operator/hermes-kubelab/profile.md"
+    ) == 1
 
 
 def test_no_task_that_touches_the_profile_prints_it() -> None:
@@ -79,7 +81,7 @@ def test_no_task_that_touches_the_profile_prints_it() -> None:
 
 def test_the_profile_joins_from_the_vault_mirror_not_the_agents_clone() -> None:
     """The agent writes its zone and holds the clone's token; the mirror is root's."""
-    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text())
+    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))
     assert defaults["agent_stack_hermes_profile_source"].startswith("{{ agent_stack_vault_mirror }}/")
 
 

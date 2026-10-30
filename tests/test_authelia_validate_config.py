@@ -155,7 +155,7 @@ def test_the_validated_image_is_the_pinned_one() -> None:
     """The image comes from the rendered Deployment, so the SSOT pin is what gets validated."""
     pin = next(
         i
-        for i in yaml.safe_load((REPO / "infra/k8s/base/kustomization.yaml").read_text())["images"]
+        for i in yaml.safe_load((REPO / "infra/k8s/base/kustomization.yaml").read_text(encoding="utf-8"))["images"]
         if i["name"] == "authelia/authelia"
     )
     for overlay in OVERLAYS:

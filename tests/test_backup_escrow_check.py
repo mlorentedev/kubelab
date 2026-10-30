@@ -162,7 +162,9 @@ class _CM:
 
 
 def test_the_fleet_is_the_committed_backup_sources() -> None:
-    committed = sorted(yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())["backup"]["sources"])
+    committed = sorted(
+        yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text(encoding="utf-8"))["backup"]["sources"]
+    )
     escrow = Escrow()
     for n in committed:
         escrow.values.setdefault(be.escrow_id(n), f"fixture-{n}")
@@ -191,7 +193,7 @@ def test_a_source_without_a_password_in_sops_fails_it_and_is_named_as_sops() -> 
 
 
 def test_the_target_defaults_to_prod() -> None:
-    recipe = (REPO / "Makefile").read_text().split("\nbackup-escrow-check:\n", 1)[1].split("\n\n", 1)[0]
+    recipe = (REPO / "Makefile").read_text(encoding="utf-8").split("\nbackup-escrow-check:\n", 1)[1].split("\n\n", 1)[0]
     assert "backup escrow-check --env $(or $(filter staging prod,$(ENV)),prod)" in recipe
 
 

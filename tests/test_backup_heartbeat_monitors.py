@@ -36,9 +36,9 @@ import pytest
 import yaml
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
-COMMON = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
-MONITORS = json.loads((REPO / "infra/config/uptime-kuma/monitors.json").read_text())
-TAGS_SEED = json.loads((REPO / "infra/config/uptime-kuma/tags.json").read_text())
+COMMON = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
+MONITORS = json.loads((REPO / "infra/config/uptime-kuma/monitors.json").read_text(encoding="utf-8"))
+TAGS_SEED = json.loads((REPO / "infra/config/uptime-kuma/tags.json").read_text(encoding="utf-8"))
 SHIP = REPO / "infra/ansible/roles/node_backup/templates/node-backup-ship.sh.j2"
 
 MUTED = frozenset(COMMON["apps"]["services"]["observability"]["uptime_kuma"]["muted_notification_tags"])
@@ -172,7 +172,7 @@ def _heartbeat_block() -> str:
     """
     import jinja2
 
-    defaults = yaml.safe_load((REPO / "infra/ansible/roles/node_backup/defaults/main.yml").read_text())
+    defaults = yaml.safe_load((REPO / "infra/ansible/roles/node_backup/defaults/main.yml").read_text(encoding="utf-8"))
     ctx = {
         **defaults,
         "ansible_managed": "Ansible managed",
@@ -181,7 +181,9 @@ def _heartbeat_block() -> str:
         "node_backup_env": "prod",
         "node_backup_r2_repository": "s3:x",
     }
-    rendered = jinja2.Environment(undefined=jinja2.StrictUndefined).from_string(SHIP.read_text()).render(**ctx)
+    rendered = (
+        jinja2.Environment(undefined=jinja2.StrictUndefined).from_string(SHIP.read_text(encoding="utf-8")).render(**ctx)
+    )
     marker = "# --- coverage heartbeat"
     assert marker in rendered, "the heartbeat block is gone from the ship script"
     return rendered[rendered.index(marker) :]
@@ -200,10 +202,10 @@ def test_a_failed_heartbeat_never_fails_the_ship(tmp_path: pathlib.Path, curl_ex
     bindir = tmp_path / "bin"
     bindir.mkdir()
     stub = bindir / "curl"
-    stub.write_text(f"#!/usr/bin/env bash\ncat > /dev/null\nexit {curl_exit}\n")
+    stub.write_text(f"#!/usr/bin/env bash\ncat > /dev/null\nexit {curl_exit}\n", encoding="utf-8")
     stub.chmod(0o755)
     token = tmp_path / "token"
-    token.write_text("Abc-123_xyz")
+    token.write_text("Abc-123_xyz", encoding="utf-8")
 
     block = _heartbeat_block().replace("/opt/node-backup-heartbeat-token", str(token))
     proc = subprocess.run(
@@ -233,10 +235,10 @@ def test_the_token_never_reaches_curls_argv(tmp_path: pathlib.Path) -> None:
     bindir.mkdir()
     seen = tmp_path / "argv"
     stub = bindir / "curl"
-    stub.write_text(f'#!/usr/bin/env bash\nprintf "%s\\n" "$@" > {seen}\ncat > /dev/null\n')
+    stub.write_text(f'#!/usr/bin/env bash\nprintf "%s\\n" "$@" > {seen}\ncat > /dev/null\n', encoding="utf-8")
     stub.chmod(0o755)
     token = tmp_path / "token"
-    token.write_text("SECRETTOKENVALUE")
+    token.write_text("SECRETTOKENVALUE", encoding="utf-8")
 
     block = _heartbeat_block().replace("/opt/node-backup-heartbeat-token", str(token))
     subprocess.run(
@@ -248,7 +250,7 @@ def test_the_token_never_reaches_curls_argv(tmp_path: pathlib.Path) -> None:
         timeout=60,
         check=True,
     )
-    argv = seen.read_text()
+    argv = seen.read_text(encoding="utf-8")
     assert "SECRETTOKENVALUE" not in argv, (
         f"the push token is in curl's argv, readable via ps for the life of the call:\n{argv}"
     )
@@ -266,10 +268,10 @@ def test_an_implausible_token_is_refused_rather_than_posted(tmp_path: pathlib.Pa
     bindir.mkdir()
     called = tmp_path / "called"
     stub = bindir / "curl"
-    stub.write_text(f"#!/usr/bin/env bash\ntouch {called}\ncat > /dev/null\n")
+    stub.write_text(f"#!/usr/bin/env bash\ntouch {called}\ncat > /dev/null\n", encoding="utf-8")
     stub.chmod(0o755)
     token = tmp_path / "token"
-    token.write_text("../../evil?x=")
+    token.write_text("../../evil?x=", encoding="utf-8")
 
     block = _heartbeat_block().replace("/opt/node-backup-heartbeat-token", str(token))
     proc = subprocess.run(
@@ -300,7 +302,7 @@ def test_the_domain_has_no_default_so_a_missing_one_fails_the_apply() -> None:
     """
     import jinja2
 
-    defaults = yaml.safe_load((REPO / "infra/ansible/roles/node_backup/defaults/main.yml").read_text())
+    defaults = yaml.safe_load((REPO / "infra/ansible/roles/node_backup/defaults/main.yml").read_text(encoding="utf-8"))
     assert "node_backup_heartbeat_domain" not in defaults, (
         'the heartbeat domain has a role default again. Any value here — `""` '
         "included — makes the variable defined, so StrictUndefined cannot catch a "
@@ -311,7 +313,7 @@ def test_the_domain_has_no_default_so_a_missing_one_fails_the_apply() -> None:
     # the ship template with the role's own defaults must raise, because that is
     # the whole protection.
     with pytest.raises(jinja2.exceptions.UndefinedError):
-        jinja2.Environment(undefined=jinja2.StrictUndefined).from_string(SHIP.read_text()).render(
+        jinja2.Environment(undefined=jinja2.StrictUndefined).from_string(SHIP.read_text(encoding="utf-8")).render(
             # The role's own defaults, plus only what Ansible supplies at runtime.
             # Anything the defaults already carry is left alone — overriding it
             # here would be this test inventing a context the apply never has.
@@ -335,7 +337,7 @@ def test_a_manual_run_takes_the_same_path_the_timer_does() -> None:
     Being the real path is also what makes it useful for AC9: it is how an
     operator makes a heartbeat arrive without waiting for a 4h window.
     """
-    playbook = yaml.safe_load((REPO / "infra/ansible/playbooks/backup-node.yml").read_text())
+    playbook = yaml.safe_load((REPO / "infra/ansible/playbooks/backup-node.yml").read_text(encoding="utf-8"))
     [play] = playbook
     # Either rendering (the frequent unit, or INTEGRITY=1's weekly one) is a
     # ship unit; neither may be capture. BACKUP-063 made the name a selection.
@@ -361,7 +363,7 @@ def test_the_dry_run_does_not_report_a_failure_it_invented() -> None:
     that had never been asked to run. A rehearsal that reports a failure the
     real run would not have is worse than no rehearsal.
     """
-    playbook = yaml.safe_load((REPO / "infra/ansible/playbooks/backup-node.yml").read_text())
+    playbook = yaml.safe_load((REPO / "infra/ansible/playbooks/backup-node.yml").read_text(encoding="utf-8"))
     [play] = playbook
     by_name = {t["name"]: t for t in play["tasks"]}
 
@@ -453,7 +455,7 @@ def test_the_receipt_survives_the_capture_that_wipes_staging() -> None:
     """
     import yaml as _yaml
 
-    defaults = _yaml.safe_load((REPO / "infra/ansible/roles/node_backup/defaults/main.yml").read_text())
+    defaults = _yaml.safe_load((REPO / "infra/ansible/roles/node_backup/defaults/main.yml").read_text(encoding="utf-8"))
     receipt = str(defaults["node_backup_shutdown_receipt"])
     staging = str(defaults["node_backup_staging_dir"])
     assert not receipt.startswith(staging), (
@@ -577,7 +579,7 @@ def test_the_shutdown_evidence_is_in_a_directory_the_role_owns(key: str) -> None
     deleted receipt reads exactly like a shutdown that did not ship. So they
     live in the directory the role creates root-only, which no sweep names.
     """
-    defaults = yaml.safe_load((REPO / "infra/ansible/roles/node_backup/defaults/main.yml").read_text())
+    defaults = yaml.safe_load((REPO / "infra/ansible/roles/node_backup/defaults/main.yml").read_text(encoding="utf-8"))
     path = str(defaults[key])
     owned = str(defaults["node_backup_repository_id_dir"])
     assert pathlib.PurePosixPath(path).parent == pathlib.PurePosixPath(owned), (
@@ -598,7 +600,7 @@ def test_the_role_moves_unread_evidence_from_the_old_paths_and_never_deletes_it(
     benign "no shutdown sequence ran".
     """
     tasks = yaml.safe_load((REPO / "infra/ansible/roles/node_backup/tasks/main.yml").read_text(encoding="utf-8"))
-    defaults = yaml.safe_load((REPO / "infra/ansible/roles/node_backup/defaults/main.yml").read_text())
+    defaults = yaml.safe_load((REPO / "infra/ansible/roles/node_backup/defaults/main.yml").read_text(encoding="utf-8"))
     olds = ["/var/log/node-backup-shutdown.receipt", "/var/log/node-backup-shutdown.attempted"]
 
     def index(predicate: Any) -> int:
@@ -627,5 +629,7 @@ def test_the_role_moves_unread_evidence_from_the_old_paths_and_never_deletes_it(
 
     # Every reader and writer takes the path from defaults, so the moved file is the one read.
     templates = REPO / "infra/ansible/roles/node_backup/templates"
-    hardcoded = [p.name for p in sorted(templates.iterdir()) if any(old in p.read_text() for old in olds)]
+    hardcoded = [
+        p.name for p in sorted(templates.iterdir()) if any(old in p.read_text(encoding="utf-8") for old in olds)
+    ]
     assert not hardcoded, f"{hardcoded} hardcode an old receipt path instead of the defaults"

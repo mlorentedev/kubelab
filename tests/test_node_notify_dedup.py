@@ -51,7 +51,7 @@ class Node:
         self.environment = root / "environment"
         (root / "bin").mkdir()
         self.environment.mkdir()
-        (root / "secret").write_text("tok")
+        (root / "secret").write_text("tok", encoding="utf-8")
         script = _render(
             "kubelab-notify.sh.j2",
             node_notify_secret_file=str(root / "secret"),
@@ -60,7 +60,7 @@ class Node:
             **render,
         )
         self.script = root / "notify.sh"
-        self.script.write_text(script)
+        self.script.write_text(script, encoding="utf-8")
         self.script.chmod(0o700)
         # `systemctl show -p <property> <unit>`: the unit's last result, or the
         # Environment= its unit file declares. Every call is logged, so a test
@@ -86,15 +86,15 @@ class Node:
 
     def _shim(self, name: str, body: str) -> None:
         path = self.root / "bin" / name
-        path.write_text(f"#!/bin/bash\n{body}\n")
+        path.write_text(f"#!/bin/bash\n{body}\n", encoding="utf-8")
         path.chmod(path.stat().st_mode | stat.S_IXUSR)
 
     def declare(self, environment: str, unit: str = UNIT) -> None:
         """What `Environment=` lines the unit's file carries, as systemd prints them."""
-        (self.environment / unit).write_text(environment)
+        (self.environment / unit).write_text(environment, encoding="utf-8")
 
     def set_result(self, value: str) -> None:
-        self.result.write_text(value)
+        self.result.write_text(value, encoding="utf-8")
 
     def _env(self) -> dict[str, str]:
         return {
@@ -135,7 +135,7 @@ class Node:
     def locked(self, unit: str = UNIT) -> Iterator[None]:
         """Hold the unit's lock, as a notice of it does while its page is out."""
         self.state.mkdir(exist_ok=True)
-        with open(self.state / f"{unit}.lock", "w") as handle:
+        with open(self.state / f"{unit}.lock", "w", encoding="utf-8") as handle:
             fcntl.flock(handle, fcntl.LOCK_EX)
             yield
 
@@ -143,20 +143,20 @@ class Node:
     def spool_locked(self) -> Iterator[None]:
         """Hold the spool's lock, as a flush does while it delivers what waits there."""
         self.spool.mkdir(exist_ok=True)
-        with open(self.spool / ".lock", "w") as handle:
+        with open(self.spool / ".lock", "w", encoding="utf-8") as handle:
             fcntl.flock(handle, fcntl.LOCK_EX)
             yield
 
     def envelopes(self) -> list[dict[str, Any]]:
         if not self.sent.exists():
             return []
-        return [json.loads(line) for line in self.sent.read_text().splitlines()]
+        return [json.loads(line) for line in self.sent.read_text(encoding="utf-8").splitlines()]
 
     def titles(self) -> list[str]:
         return [envelope["title"] for envelope in self.envelopes()]
 
     def attempts(self) -> int:
-        return len(self.tried.read_text().splitlines()) if self.tried.exists() else 0
+        return len(self.tried.read_text(encoding="utf-8").splitlines()) if self.tried.exists() else 0
 
     def spooled(self) -> list[Path]:
         """The notices waiting for delivery, oldest first; a file still being written is not one."""
@@ -165,13 +165,17 @@ class Node:
     def starts(self) -> list[str]:
         if not self.systemctl.exists():
             return []
-        return [line for line in self.systemctl.read_text().splitlines() if line.startswith("start")]
+        return [line for line in self.systemctl.read_text(encoding="utf-8").splitlines() if line.startswith("start")]
 
     def resets(self) -> list[str]:
         """The units the script asked systemd to clear the failed state of."""
         if not self.systemctl.exists():
             return []
-        return [line.split()[-1] for line in self.systemctl.read_text().splitlines() if line.startswith("reset-failed")]
+        return [
+            line.split()[-1]
+            for line in self.systemctl.read_text(encoding="utf-8").splitlines()
+            if line.startswith("reset-failed")
+        ]
 
     def age_state(self, seconds: int, unit: str = UNIT) -> None:
         """Pretend the incident began `seconds` ago, and so did its last page, if one was delivered.
@@ -182,14 +186,16 @@ class Node:
         self.write_state(*self.read_state(unit), unit=unit, first_ago=seconds, last_ago=seconds)
 
     def read_state(self, unit: str = UNIT) -> tuple[int, int, int]:
-        count, first, last = (self.state / unit).read_text().split()
+        count, first, last = (self.state / unit).read_text(encoding="utf-8").split()
         return int(count), int(first), int(last)
 
     def write_state(
         self, count: int, first: int, last: int, *, first_ago: int = 0, last_ago: int = 0, unit: str = UNIT
     ) -> None:
         self.state.mkdir(exist_ok=True)
-        (self.state / unit).write_text(f"{count} {first - first_ago} {last - last_ago if last else 0}\n")
+        (self.state / unit).write_text(
+            f"{count} {first - first_ago} {last - last_ago if last else 0}\n", encoding="utf-8"
+        )
 
 
 @pytest.fixture
@@ -278,7 +284,7 @@ def test_a_refused_page_is_kept_and_the_next_failure_sends_nothing(node: Node) -
     It now waits in the spool, and counts as sent: the next failure of the unit
     neither tries again nor keeps a second copy.
     """
-    node.curl_exit.write_text("6")
+    node.curl_exit.write_text("6", encoding="utf-8")
     result = node.run()
     assert result.returncode == 0, "a kept notice failed its notifier, the trace #2787 found on ace2"
     assert node.titles() == []
@@ -292,13 +298,13 @@ def test_a_refused_page_is_kept_and_the_next_failure_sends_nothing(node: Node) -
 
 
 def test_the_flush_delivers_a_kept_page_once_with_the_time_it_happened(node: Node) -> None:
-    node.curl_exit.write_text("6")
+    node.curl_exit.write_text("6", encoding="utf-8")
     before = int(time.time())
     node.run()
     after = int(time.time())
-    node.curl_exit.write_text("0")
+    node.curl_exit.write_text("0", encoding="utf-8")
     # n8n takes this one request: a flush that left the notice in the spool would send it again, refused.
-    node.curl_next.write_text("6")
+    node.curl_next.write_text("6", encoding="utf-8")
     assert node.flush().returncode == 0
     [title] = node.titles()
     found = re.search(r"failed on \S+ \(at (\S+)Z, delivered late\)$", title)
@@ -306,14 +312,14 @@ def test_the_flush_delivers_a_kept_page_once_with_the_time_it_happened(node: Nod
     at = calendar.timegm(time.strptime(found.group(1), "%Y-%m-%dT%H:%M:%S"))
     assert before <= at <= after, f"{found.group(1)}Z is not when the page was refused"
     assert node.spooled() == []
-    node.curl_exit.write_text("0")
+    node.curl_exit.write_text("0", encoding="utf-8")
     node.flush()
     assert len(node.titles()) == 1, "a second flush delivered the page again"
 
 
 def test_a_refused_flush_keeps_the_notice_and_fails(node: Node) -> None:
     """The spool unit failing is the trace of a notice not yet delivered."""
-    node.curl_exit.write_text("6")
+    node.curl_exit.write_text("6", encoding="utf-8")
     node.run()
     assert node.flush().returncode != 0
     assert len(node.spooled()) == 1
@@ -321,7 +327,7 @@ def test_a_refused_flush_keeps_the_notice_and_fails(node: Node) -> None:
 
 def test_a_refused_flush_stops_at_the_oldest_notice(node: Node) -> None:
     """Order is the point of the spool: the next notice must not go out ahead of a refused one."""
-    node.curl_exit.write_text("6")
+    node.curl_exit.write_text("6", encoding="utf-8")
     node.run()
     node.run(unit="node-backup-ship.service")
     tried = node.attempts()
@@ -337,9 +343,9 @@ def test_a_notice_does_not_overtake_one_still_kept(node: Node) -> None:
     first, and the failure delivered after it would open an alarm for an
     incident already closed.
     """
-    node.curl_exit.write_text("6")
+    node.curl_exit.write_text("6", encoding="utf-8")
     node.run()
-    node.curl_exit.write_text("0")
+    node.curl_exit.write_text("0", encoding="utf-8")
     node.set_result("success")
     tried = node.attempts()
     assert node.run("--recovered").returncode == 0
@@ -372,9 +378,9 @@ def test_a_flush_that_finds_the_spool_busy_leaves_it_to_the_run_holding_it(tmp_p
     timer's next run takes whatever is left.
     """
     node = Node(tmp_path, node_notify_lock_wait_seconds=1)
-    node.curl_exit.write_text("6")
+    node.curl_exit.write_text("6", encoding="utf-8")
     node.run()
-    node.curl_exit.write_text("0")
+    node.curl_exit.write_text("0", encoding="utf-8")
     tried = node.attempts()
     with node.spool_locked():
         result = node.flush()
@@ -387,17 +393,17 @@ def test_a_flush_that_finds_the_spool_busy_leaves_it_to_the_run_holding_it(tmp_p
 def test_a_refused_recovery_is_kept_and_closes_the_incident(node: Node) -> None:
     node.run()
     node.set_result("success")
-    node.curl_exit.write_text("6")
+    node.curl_exit.write_text("6", encoding="utf-8")
     assert node.run("--recovered").returncode == 0
     assert not (node.state / UNIT).exists()
     assert node.resets() == [NOTIFIER]
     [kept] = node.spooled()
-    assert json.loads(kept.read_text())["status"] == "resolved"
+    assert json.loads(kept.read_text(encoding="utf-8"))["status"] == "resolved"
 
 
 def test_a_reminder_of_a_page_still_kept_is_folded_into_it(node: Node) -> None:
     """Hours of outage would otherwise deliver one late `still failing` per hour, all at once."""
-    node.curl_exit.write_text("6")
+    node.curl_exit.write_text("6", encoding="utf-8")
     node.run()
     node.age_state(REMINDER + 5)
     node.run()
@@ -408,20 +414,20 @@ def test_a_reminder_is_folded_only_into_a_page_of_its_own_unit(node: Node) -> No
     """Another unit's kept page says nothing about this one, whose reminder is kept behind it."""
     other = "node-backup-ship.service"
     node.run()
-    node.curl_exit.write_text("6")
+    node.curl_exit.write_text("6", encoding="utf-8")
     node.run(unit=other)
     node.age_state(REMINDER + 5)
     node.run()
     kept = node.spooled()
     assert len(kept) == 2, "a reminder was folded into another unit's page"
     assert kept[1].name.endswith(f"-{UNIT}"), [path.name for path in kept]
-    assert "still failing" in json.loads(kept[1].read_text())["title"]
+    assert "still failing" in json.loads(kept[1].read_text(encoding="utf-8"))["title"]
 
 
 def test_exercising_the_path_still_fails_when_nothing_was_delivered(node: Node) -> None:
     """`make maintain-notify-test` reads the notifier's exit status as the delivery result."""
     node.set_result("success")
-    node.curl_exit.write_text("6")
+    node.curl_exit.write_text("6", encoding="utf-8")
     assert node.run().returncode != 0
     assert node.spooled() == []
 
@@ -436,7 +442,7 @@ def test_a_reset_systemd_refuses_does_not_fail_a_delivered_recovery(node: Node) 
     """The recovery reached the phone; failing here would leave a new failed unit for a closed incident."""
     node.run()
     node.set_result("success")
-    node.reset_exit.write_text("1")
+    node.reset_exit.write_text("1", encoding="utf-8")
     assert node.run("--recovered").returncode == 0
     assert node.resets() == [NOTIFIER], "the reset was never attempted"
     assert not (node.state / UNIT).exists()
@@ -485,12 +491,12 @@ def test_a_unit_that_keeps_failing_past_the_ttl_still_closes_its_incident(node: 
     incident outlives the TTL as one incident: no second `failed` page, and the
     recovery that follows still finds it.
     """
-    node.curl_exit.write_text("6")
+    node.curl_exit.write_text("6", encoding="utf-8")
     node.run()
     for _ in range(TTL // REMINDER + 2):
         node.age_state(REMINDER + 5)
         node.run()
-    node.curl_exit.write_text("0")
+    node.curl_exit.write_text("0", encoding="utf-8")
     node.set_result("success")
     assert node.run("--recovered").returncode == 0
     assert node.resets() == [NOTIFIER]
@@ -574,10 +580,10 @@ def test_a_page_neither_delivered_nor_kept_does_not_count_as_sent(node: Node) ->
     half-way leaves nothing the flush would deliver.
     """
     node._shim("python3", f'[ -n "${{NOTIFY_AT:-}}" ] && exit 1; exec {shutil.which("python3")} "$@"')
-    node.curl_exit.write_text("6")
+    node.curl_exit.write_text("6", encoding="utf-8")
     assert node.run().returncode != 0
     assert node.spooled() == [], "a half-written notice is waiting to be delivered"
-    node.curl_exit.write_text("0")
+    node.curl_exit.write_text("0", encoding="utf-8")
     node.run()
     [title] = node.titles()
     assert "failed on" in title and "still failing" not in title, title
@@ -588,7 +594,7 @@ def test_a_notice_older_than_the_spool_keeps_is_dropped(node: Node) -> None:
     max_age = int(_defaults()["node_notify_spool_max_age_seconds"])  # type: ignore[call-overload]
     node.spool.mkdir()
     old = node.spool / f"{(int(time.time()) - max_age - 60) * 10**9}-{UNIT}"
-    old.write_text('{"title": "old"}')
+    old.write_text('{"title": "old"}', encoding="utf-8")
     result = node.flush()
     assert result.returncode == 0, result.stderr
     assert node.attempts() == 0 and node.spooled() == []
@@ -597,11 +603,11 @@ def test_a_notice_older_than_the_spool_keeps_is_dropped(node: Node) -> None:
 
 def test_a_file_the_spool_never_named_does_not_hold_the_notices_behind_it(node: Node) -> None:
     """A name that is not `<nanoseconds>-<unit>` has no age, so nothing would ever drop it."""
-    node.curl_exit.write_text("6")
+    node.curl_exit.write_text("6", encoding="utf-8")
     node.run()
     stray = node.spool / "0stray"
-    stray.write_text('{"title": "stray"}')
-    node.curl_exit.write_text("0")
+    stray.write_text('{"title": "stray"}', encoding="utf-8")
+    node.curl_exit.write_text("0", encoding="utf-8")
     result = node.flush()
     assert result.returncode == 0, result.stderr
     [title] = node.titles()
@@ -635,7 +641,7 @@ def test_a_hand_invocation_for_a_healthy_unit_still_announces_itself_and_keeps_n
 
 def test_a_corrupt_state_file_does_not_silence_the_unit(node: Node) -> None:
     node.state.mkdir()
-    (node.state / UNIT).write_text("garbage\n")
+    (node.state / UNIT).write_text("garbage\n", encoding="utf-8")
     node.run()
     assert len(node.titles()) == 1
 
@@ -663,7 +669,7 @@ def test_the_recovery_unit_is_installed_and_runs_the_recovery_mode() -> None:
 
     unit = _render("kubelab-notify-recovered@.service.j2")
     assert "--recovered %i" in unit
-    tasks = yaml.safe_load((NOTIFY_ROLE / "tasks/main.yml").read_text())
+    tasks = yaml.safe_load((NOTIFY_ROLE / "tasks/main.yml").read_text(encoding="utf-8"))
     [task] = [t for t in tasks if t.get("template", {}).get("src") == "kubelab-notify-recovered@.service.j2"]
     assert "node_notify_recovered_unit_name" in task["template"]["dest"]
 

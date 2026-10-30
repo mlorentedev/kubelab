@@ -49,7 +49,7 @@ GITHUB_HOSTED_LABEL = "ubuntu-latest"
 
 def _ssot() -> dict:
     """The runner's declaration, read once and shared by both renderers."""
-    common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
+    common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
     return common["apps"]["services"]["automation"]["gitea_runner"]
 
 
@@ -70,7 +70,7 @@ def _template_vars(runner: dict) -> dict:
     duplicating this list — and so a field added later is exercised by both branches
     instead of silently defaulting in one.
     """
-    common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
+    common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
     gitea = common["apps"]["services"]["core"]["gitea"]
     return dict(
         ansible_managed="Ansible managed",
@@ -338,7 +338,7 @@ def test_the_registration_token_is_injected_not_literal() -> None:
     live credential in git, which is what the whole secret-delivery path exists to
     avoid.
     """
-    raw = (ROLE / "templates" / COMPOSE_TEMPLATE).read_text()
+    raw = (ROLE / "templates" / COMPOSE_TEMPLATE).read_text(encoding="utf-8")
 
     assert 'GITEA_RUNNER_REGISTRATION_TOKEN: "{{ act_runner_token }}"' in raw, (
         "the runner's registration token must come from a Jinja variable fed by SOPS, "
@@ -382,7 +382,7 @@ def test_the_mint_is_gated_on_the_secret_being_absent() -> None:
     would silently deregister its own runner. The bot and admin token mints in this
     same file already carry this gate; this asserts the third one does too.
     """
-    tasks = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text())
+    tasks = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text(encoding="utf-8"))
     minting = [t for t in tasks if "act_runner" in yaml.safe_dump(t) and ("generate-runner-token" in yaml.safe_dump(t))]
 
     assert minting, "no task mints the runner registration token"
@@ -456,7 +456,7 @@ def test_the_compose_file_is_rendered_again_after_the_token_is_minted() -> None:
     has the token in SOPS. It only ever reappears on a rebuild, which is once a
     year and always under pressure.
     """
-    tasks = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text())
+    tasks = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text(encoding="utf-8"))
     renders = [
         t
         for t in tasks
@@ -516,10 +516,10 @@ def test_every_notify_names_a_handler_that_exists() -> None:
                 found |= _notified(item)
         return found
 
-    handlers = yaml.safe_load((ROLE / "handlers" / "main.yml").read_text())
+    handlers = yaml.safe_load((ROLE / "handlers" / "main.yml").read_text(encoding="utf-8"))
     defined = {h["name"] for h in handlers if isinstance(h, dict) and "name" in h}
 
-    tasks = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text())
+    tasks = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text(encoding="utf-8"))
     wanted = _notified(tasks) | _notified(handlers)
 
     assert wanted, "no task in this role notifies a handler — the parser is reading nothing"
@@ -550,7 +550,7 @@ def test_the_actions_cache_lives_in_the_runner_volume() -> None:
 
     # The exclusion's ruling covers the cache only while it names this volume and
     # says it holds the cache; a rename on either side must fail here.
-    common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
+    common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
     excluded = common["backup"]["excluded"]["beelink"]
     assert volume in excluded, f"backup.excluded.beelink does not name {volume}: {sorted(excluded)}"
     assert "cache" in excluded[volume]["reason"], f"the exclusion of {volume} does not rule on the cache"
@@ -607,7 +607,9 @@ def test_idle_cleanup_is_enabled_and_matches_the_reaper_window() -> None:
     runner_cfg = _config()["runner"]
     assert _seconds(runner_cfg["workdir_cleanup_age"]) > 0
     assert _seconds(runner_cfg["idle_cleanup_interval"]) > 0
-    reaper = yaml.safe_load((REPO / "infra/ansible/roles/node_maintenance/defaults/main.yml").read_text())
+    reaper = yaml.safe_load(
+        (REPO / "infra/ansible/roles/node_maintenance/defaults/main.yml").read_text(encoding="utf-8")
+    )
     reaper_seconds = reaper["maintenance_docker_reclaim_min_age_hours"] * 3600
     assert _seconds(runner_cfg["workdir_cleanup_age"]) == reaper_seconds, (
         "the runner's sweep and the node_maintenance reaper must agree on when a volume is stale"

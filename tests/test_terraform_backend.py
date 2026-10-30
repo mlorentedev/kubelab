@@ -56,7 +56,9 @@ def test_each_root_declares_only_its_key_in_an_s3_backend(root: str) -> None:
 
 def test_no_terraform_file_anywhere_declares_a_local_backend() -> None:
     offenders = [
-        str(p.relative_to(REPO)) for p in TERRAFORM_DIR.rglob("*.tf") if re.search(r'backend\s+"local"', p.read_text())
+        str(p.relative_to(REPO))
+        for p in TERRAFORM_DIR.rglob("*.tf")
+        if re.search(r'backend\s+"local"', p.read_text(encoding="utf-8"))
     ]
     assert not offenders, offenders
 

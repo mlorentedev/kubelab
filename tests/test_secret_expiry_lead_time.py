@@ -87,7 +87,7 @@ def _stated_lives(spec: SecretSpec) -> list[int]:
     """Lives stated where the catalog entry points: its hint, its rotate note, and runbooks the note names."""
     lines = [spec.format_hint, spec.rotate_note]
     for runbook in re.findall(r"docs/runbooks/[\w.-]+\.md", spec.rotate_note):
-        lines += (_ROOT / runbook).read_text().splitlines()
+        lines += (_ROOT / runbook).read_text(encoding="utf-8").splitlines()
     return [int(n) for line in lines if _LIFE_WORDS.search(line) for n in _DAYS.findall(line)]
 
 

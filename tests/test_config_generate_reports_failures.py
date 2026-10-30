@@ -96,7 +96,7 @@ def test_a_failed_generator_still_has_its_output_reverted(tmp_path: Path) -> Non
     """A generator that writes, then fails, must not leave a tracked file dirty."""
     tracked = "infra/k8s/overlays/staging/generated/deployments.yaml"
     generator = tmp_path / "toolkit"
-    generator.write_text(f"#!/bin/sh\necho '# partial write' >> {REPO / tracked}\nexit 1\n")
+    generator.write_text(f"#!/bin/sh\necho '# partial write' >> {REPO / tracked}\nexit 1\n", encoding="utf-8")
     generator.chmod(0o755)
     # Restore the file's own bytes, never `git checkout`: the gate refuses exactly when
     # this tree holds uncommitted overlay edits, and a checkout would discard them.

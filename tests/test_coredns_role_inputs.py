@@ -25,14 +25,14 @@ INCLUDE_KEYS = ("include_role", "import_role", "ansible.builtin.include_role", "
 
 
 def _defaults() -> dict:
-    return yaml.safe_load((ROLE / "defaults/main.yml").read_text())
+    return yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))
 
 
 def _template_inputs() -> set[str]:
     env = Environment()
     names: set[str] = set()
     for path in (ROLE / "templates").glob("*.j2"):
-        names |= meta.find_undeclared_variables(env.parse(path.read_text()))
+        names |= meta.find_undeclared_variables(env.parse(path.read_text(encoding="utf-8")))
     return names
 
 
@@ -41,7 +41,7 @@ def _callers() -> list[tuple[Path, dict, dict]]:
     found = []
     # The playbooks directory itself, from the same listing as the reference count below.
     for path in (p for p in repo_files(PLAYBOOKS, "*.yml") if p.parent == PLAYBOOKS):
-        for play in yaml.safe_load(path.read_text()) or []:
+        for play in yaml.safe_load(path.read_text(encoding="utf-8")) or []:
             for role in play.get("roles") or []:
                 name = role.get("role", "") if isinstance(role, dict) else role
                 if name.rstrip("/").endswith("roles/coredns"):
@@ -74,7 +74,7 @@ def _references(node: object) -> int:
 
 
 def _defaults_paths() -> set[str]:
-    text = (ROLE / "defaults/main.yml").read_text()
+    text = (ROLE / "defaults/main.yml").read_text(encoding="utf-8")
     return set(re.findall(r"\{\{\s*common\.([a-z0-9_.]+)", text))
 
 
@@ -110,7 +110,7 @@ def test_every_caller_loads_common_as_the_defaults_expect() -> None:
 
 def test_the_defaults_resolve_against_the_ssot() -> None:
     """Every `common.*` path the defaults read exists, so a renamed key fails here, not on the node."""
-    common = yaml.safe_load(COMMON.read_text())
+    common = yaml.safe_load(COMMON.read_text(encoding="utf-8"))
     for dotted in _defaults_paths():
         node = common
         for part in dotted.split("."):
@@ -124,7 +124,7 @@ def test_every_reference_to_the_role_is_a_caller_these_tests_read() -> None:
     for path in repo_files(ANSIBLE, "*.y*ml"):
         if ROLE in path.parents:
             continue
-        for doc in yaml.safe_load_all(path.read_text()):
+        for doc in yaml.safe_load_all(path.read_text(encoding="utf-8")):
             seen += _references(doc)
     assert seen == len(_callers()), (
         f"{seen} references to the coredns role, {len(_callers())} of them play-level `roles:` entries "
@@ -147,11 +147,11 @@ def test_the_env_provision_rpi4_merged_agrees_with_common() -> None:
     paths with a different value.
     """
     # The pre-flight play pins nothing; the play that renders the role carries the env.
-    plays = yaml.safe_load((PLAYBOOKS / "provision-rpi4.yml").read_text())
+    plays = yaml.safe_load((PLAYBOOKS / "provision-rpi4.yml").read_text(encoding="utf-8"))
     [play] = [p for p in plays if "_rpi4_env" in (p.get("vars") or {})]
     env = play["vars"]["_rpi4_env"]
-    common = yaml.safe_load(COMMON.read_text())
-    overlay = yaml.safe_load((COMMON.parent / f"{env}.yaml").read_text()) or {}
+    common = yaml.safe_load(COMMON.read_text(encoding="utf-8"))
+    overlay = yaml.safe_load((COMMON.parent / f"{env}.yaml").read_text(encoding="utf-8")) or {}
     for dotted in sorted(_defaults_paths()):
         overridden, value = _get(overlay, dotted)
         if overridden:

@@ -26,9 +26,11 @@ import yaml
 
 REPO = Path(__file__).resolve().parents[1]
 ROLE = REPO / "infra" / "ansible" / "roles" / "gateway"
-TASKS: list[dict[str, Any]] = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text())
-DEFAULTS: dict[str, Any] = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text())
-NETWORKING = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text())["networking"]
+TASKS: list[dict[str, Any]] = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text(encoding="utf-8"))
+DEFAULTS: dict[str, Any] = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text(encoding="utf-8"))
+NETWORKING = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text(encoding="utf-8"))[
+    "networking"
+]
 SCRIPT = ROLE / "files" / "edge-boot-check.sh"
 SHELL = shutil.which("dash") or "/bin/sh"
 LAN, UPLINK, AP = "eth0", NETWORKING["edge"]["uplink"]["interface"], NETWORKING["edge"]["lab_wifi"]["interface"]
@@ -52,7 +54,7 @@ GRACE = DEFAULTS["gateway_liveness_grace"]
 # The page the liveness check's failure sends, which cannot leave without the uplink:
 # the unit's own OnFailure= line, with `%n` resolved the way systemd resolves it.
 PAGE = (
-    re.search(r"^OnFailure=(\S+)$", (ROLE / "templates" / f"{LIVENESS}.j2").read_text(), re.M)
+    re.search(r"^OnFailure=(\S+)$", (ROLE / "templates" / f"{LIVENESS}.j2").read_text(encoding="utf-8"), re.M)
     .group(1)
     .replace("%n", LIVENESS)
 )
@@ -122,7 +124,7 @@ class Edge:
         ):
             directory.mkdir(parents=True)
         for name, body in FAKES.items():
-            (self.bin / name).write_text(f"#!/bin/sh\n{body}")
+            (self.bin / name).write_text(f"#!/bin/sh\n{body}", encoding="utf-8")
             (self.bin / name).chmod(0o755)
         self.write("ruleset", "")
         self.write("show_RuntimeWatchdogUSec_manager", "15s")
@@ -151,16 +153,16 @@ class Edge:
             self.write_sys(interface, "1")
 
     def write(self, name: str, text: str) -> None:
-        (self.fake / name).write_text(text)
+        (self.fake / name).write_text(text, encoding="utf-8")
 
     def read(self, name: str) -> str:
-        return (self.fake / name).read_text().strip()
+        return (self.fake / name).read_text(encoding="utf-8").strip()
 
     def remove(self, name: str) -> None:
         (self.fake / name).unlink()
 
     def write_sys(self, interface: str, carrier: str) -> None:
-        (self.net / interface / "carrier").write_text(f"{carrier}\n")
+        (self.net / interface / "carrier").write_text(f"{carrier}\n", encoding="utf-8")
 
     def order(self, ruleset: float, networkd: float, network: float = 16.2) -> None:
         """When each unit reached the state the check reads, in seconds since boot; 0 never."""
@@ -186,11 +188,11 @@ class Edge:
 
     def misses(self, count: int) -> None:
         """The uplink misses the liveness check has counted in a row this boot."""
-        (self.liveness / "uplink.misses").write_text(f"{count}\n")
+        (self.liveness / "uplink.misses").write_text(f"{count}\n", encoding="utf-8")
 
     def booted(self, minutes: float, next_run: float = 0) -> None:
         """Minutes since boot, and when the liveness timer runs next, in minutes since boot."""
-        self.uptime.write_text(f"{minutes * 60:.2f} 1000.00\n")
+        self.uptime.write_text(f"{minutes * 60:.2f} 1000.00\n", encoding="utf-8")
         self.write("next_elapse", f"t {round(next_run * 60e6)}\n")
 
     def unplug_lan(self) -> None:
@@ -536,7 +538,9 @@ def test_the_wait_it_reads_is_the_one_the_role_bounds() -> None:
     assert task["template"]["dest"].startswith(
         "/etc/systemd/system/sys-subsystem-net-devices-{{ gateway_uplink_interface }}.device.d/"
     )
-    assert 'since_boot JobRunningTimeoutUSec "sys-subsystem-net-devices-$uplink.device"' in SCRIPT.read_text()
+    assert 'since_boot JobRunningTimeoutUSec "sys-subsystem-net-devices-$uplink.device"' in SCRIPT.read_text(
+        encoding="utf-8"
+    )
 
 
 def test_an_uplink_that_is_there_fails_the_no_uplink_case(edge: Edge) -> None:
@@ -611,12 +615,12 @@ def test_a_wait_does_not_hide_a_failure(edge: Edge) -> None:
 def test_the_wait_reads_what_the_role_deploys() -> None:
     """The grace from the unit's own Environment=, the misses from its RuntimeDirectory=,
     and the next run from its timer, by the object path systemd escapes its name to."""
-    script = SCRIPT.read_text()
-    unit = (ROLE / "templates" / f"{LIVENESS}.j2").read_text()
+    script = SCRIPT.read_text(encoding="utf-8")
+    unit = (ROLE / "templates" / f"{LIVENESS}.j2").read_text(encoding="utf-8")
     assert "Environment=EDGE_LIVENESS_GRACE={{ gateway_liveness_grace }}" in unit
     runtime = re.search(r"^RuntimeDirectory=(\S+)$", unit, re.M).group(1)
     assert f"EDGE_LIVENESS_DIR:-/run/{runtime}}}" in script
-    liveness = (ROLE / "files" / "edge-liveness.sh").read_text()
+    liveness = (ROLE / "files" / "edge-liveness.sh").read_text(encoding="utf-8")
     assert "miss uplink" in liveness
     assert "run_dir=${RUNTIME_DIRECTORY:" in liveness
     assert 'echo "$count" >"$run_dir/$1.misses"' in liveness
@@ -667,7 +671,9 @@ def test_the_no_lan_case_reads_the_carrier_once(edge: Edge) -> None:
     """The case's own line replaces the plain one, so a missing cable is not also a failure."""
     edge.unplug_lan()
     lines = edge.run(expect="no-lan").stdout.splitlines()
-    assert [line for line in lines if "carrier" in line] == [f"OK   {LAN} present without a carrier, as this case expects"]
+    assert [line for line in lines if "carrier" in line] == [
+        f"OK   {LAN} present without a carrier, as this case expects"
+    ]
 
 
 def test_a_cable_that_is_there_fails_the_no_lan_case(edge: Edge) -> None:
@@ -730,18 +736,21 @@ UNIT_OF_ROLE = {"docker": "docker", "tailscale": "tailscaled"}
 
 def test_it_checks_the_units_and_containers_the_roles_start() -> None:
     """A renamed unit or container would leave its check looking at nothing."""
-    roles = {role: yaml.safe_load((ROLE.parent / role / "tasks" / "main.yml").read_text()) for role in UNIT_OF_ROLE}
+    roles = {
+        role: yaml.safe_load((ROLE.parent / role / "tasks" / "main.yml").read_text(encoding="utf-8"))
+        for role in UNIT_OF_ROLE
+    }
     started = {
         t["systemd"]["name"]
         for tasks in (TASKS, *roles.values())
         for t in tasks
         if "systemd" in t and "name" in t["systemd"]
     }
-    text = SCRIPT.read_text()
+    text = SCRIPT.read_text(encoding="utf-8")
     for unit in ("hostapd", "dnsmasq", *UNIT_OF_ROLE.values(), *(u for u in UNITS if u.startswith("kubelab-edge"))):
         assert unit in started or f"{unit}.service" in started or unit.removesuffix(".service") in started
         assert unit in text
-    compose = (REPO / "infra/ansible/roles/coredns/templates/docker-compose.yml.j2").read_text()
+    compose = (REPO / "infra/ansible/roles/coredns/templates/docker-compose.yml.j2").read_text(encoding="utf-8")
     assert set(re.findall(r"container_name: (\S+)", compose)) == {"coredns", "pihole"}
 
 
@@ -766,7 +775,7 @@ def test_the_command_passes_the_ssot_values() -> None:
         LAN_CIDR,
     ]
     assert BOOT_CHECK_PATH == DEFAULTS["gateway_boot_check_path"]
-    playbook = (REPO / "infra/ansible/playbooks/provision-rpi4.yml").read_text()
+    playbook = (REPO / "infra/ansible/playbooks/provision-rpi4.yml").read_text(encoding="utf-8")
     assert f'gateway_interface: "{LAN_INTERFACE}"' in playbook
 
 
@@ -803,7 +812,7 @@ def test_the_command_exits_with_the_checks_code(argv: list[str], code: int) -> N
 
 
 def test_the_makefile_target_calls_the_command() -> None:
-    makefile = (REPO / "Makefile").read_text()
+    makefile = (REPO / "Makefile").read_text(encoding="utf-8")
     target = re.search(r"^edge-boot-check:.*\n((?:\t.*\n)+)", makefile, re.M)
     assert target, "no edge-boot-check target"
     assert "infra edge boot-check $(if $(CASE),--case $(CASE)) $(if $(VIA),--via $(VIA))" in target.group(1)

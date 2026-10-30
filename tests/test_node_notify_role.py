@@ -62,7 +62,7 @@ def _defaults() -> dict[str, object]:
     """
     merged: dict[str, object] = {}
     for role in (NOTIFY_ROLE, MAINTENANCE_ROLE):
-        merged.update(yaml.safe_load((role / "defaults/main.yml").read_text()))
+        merged.update(yaml.safe_load((role / "defaults/main.yml").read_text(encoding="utf-8")))
     return merged
 
 
@@ -126,7 +126,7 @@ def test_onfailure_target_names_a_unit_the_role_actually_installs():
     installer = next(
         (
             task
-            for task in yaml.safe_load((NOTIFY_ROLE / "tasks/main.yml").read_text())
+            for task in yaml.safe_load((NOTIFY_ROLE / "tasks/main.yml").read_text(encoding="utf-8"))
             if str(task.get("template", {}).get("src", "")) == f"{template_unit}.j2"
         ),
         None,
@@ -146,7 +146,7 @@ def test_notify_unit_execstart_matches_the_script_the_role_deploys():
     # The script path is the first token; `%i` follows it as the argument.
     exec_start = re.search(r"^ExecStart=(\S+)( .*)?$", unit, re.MULTILINE)
     assert exec_start, "notify unit has no ExecStart"
-    tasks = (NOTIFY_ROLE / "tasks/main.yml").read_text()
+    tasks = (NOTIFY_ROLE / "tasks/main.yml").read_text(encoding="utf-8")
     # `==`, not `in`. As a substring check an ExecStart of `/opt` passed, because
     # `/opt` is a substring of `/opt/kubelab-notify.sh` — the assertion accepted
     # a unit pointing at a directory. Raised by review on #1212.
@@ -541,13 +541,13 @@ def test_a_unit_naming_only_the_recovery_notice_is_a_consumer(tmp_path: Path) ->
         "mentions": "# OnFailure=kubelab-notify@%n.service",
     }.items():
         (tmp_path / role / "templates").mkdir(parents=True)
-        (tmp_path / role / "templates" / "x.service.j2").write_text(f"[Unit]\n{line}\n")
+        (tmp_path / role / "templates" / "x.service.j2").write_text(f"[Unit]\n{line}\n", encoding="utf-8")
     assert _notifier_consumers(tmp_path) == {"pages", "recovers"}
 
 
 def _role_tags(playbook: Path, role_name: str) -> set[str] | None:
     """Tags on one role entry in a playbook, or None if it does not include it."""
-    for play in yaml.safe_load(playbook.read_text()) or []:
+    for play in yaml.safe_load(playbook.read_text(encoding="utf-8")) or []:
         if not isinstance(play, dict):
             continue
         for entry in play.get("roles") or []:
@@ -652,7 +652,7 @@ def _applied_roles(playbook: Path) -> list[str]:
     """Every role a playbook applies, in the order Ansible runs them: each play's
     pre_tasks, roles, tasks and post_tasks, play after play."""
     order: list[str] = []
-    for play in yaml.safe_load(playbook.read_text()) or []:
+    for play in yaml.safe_load(playbook.read_text(encoding="utf-8")) or []:
         if not isinstance(play, dict):
             continue
         order += _task_roles(play.get("pre_tasks"))
@@ -675,7 +675,8 @@ def test_the_order_spans_plays_and_included_roles(tmp_path: Path) -> None:
                     "tasks": [{"ansible.builtin.import_role": {"name": "node_backup"}}],
                 },
             ]
-        )
+        ),
+        encoding="utf-8",
     )
     assert _applied_roles(playbook) == ["gateway", "rpi3_services", "node_notify", "node_backup"]
 
@@ -685,7 +686,7 @@ def test_the_notifier_and_its_consumers_are_applied_as_roles(playbook: Path):
     """The tag pairing above reads `roles:` only, and tags on an `include_role`
     task do not reach the role's own tasks. A notifier or consumer included from
     a task list would escape that guard, so neither may be."""
-    plays = [play for play in yaml.safe_load(playbook.read_text()) or [] if isinstance(play, dict)]
+    plays = [play for play in yaml.safe_load(playbook.read_text(encoding="utf-8")) or [] if isinstance(play, dict)]
     included = {
         role
         for play in plays
@@ -745,10 +746,10 @@ def test_the_delivery_test_can_name_the_unit_it_simulates() -> None:
     instruction true of `ansible-playbook` and false of every sanctioned entry
     point. Found by needing it.
     """
-    playbook = (REPO / "infra/ansible/playbooks/maintenance-notify-test.yml").read_text()
+    playbook = (REPO / "infra/ansible/playbooks/maintenance-notify-test.yml").read_text(encoding="utf-8")
     assert "notify_test_unit" in playbook, "the playbook no longer takes the override"
 
-    makefile = (REPO / "Makefile").read_text()
+    makefile = (REPO / "Makefile").read_text(encoding="utf-8")
     target = makefile[makefile.index("maintain-notify-test:") :]
     target = target[: target.index("\n.PHONY:")]
     assert "$(_EXTRA)" in target, (
@@ -805,7 +806,7 @@ def test_the_fleet_default_stays_log() -> None:
 def test_the_role_refuses_a_default_the_router_does_not_route(severity: str, ok: bool) -> None:
     from tests.ansible_jinja import ansible_env
 
-    tasks = yaml.safe_load((NOTIFY_ROLE / "tasks/main.yml").read_text())
+    tasks = yaml.safe_load((NOTIFY_ROLE / "tasks/main.yml").read_text(encoding="utf-8"))
     [check] = [t["assert"]["that"] for t in tasks if "node_notify_severity" in str(t.get("assert"))]
     env = ansible_env(str(NOTIFY_ROLE / "templates"))
     assert all(env.compile_expression(c)(node_notify_severity=severity) for c in check) is ok
@@ -869,7 +870,7 @@ SPOOL_TIMER = "kubelab-notify-spool.timer.j2"
 
 
 def _tasks() -> list[dict]:
-    return yaml.safe_load((NOTIFY_ROLE / "tasks/main.yml").read_text())
+    return yaml.safe_load((NOTIFY_ROLE / "tasks/main.yml").read_text(encoding="utf-8"))
 
 
 def _expand(text: object) -> str:

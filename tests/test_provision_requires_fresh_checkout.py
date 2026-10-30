@@ -38,7 +38,7 @@ def _git(cwd: Path, *args: str) -> str:
 def _commit(repo: Path, relpath: str, text: str) -> None:
     path = repo / relpath
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
+    path.write_text(text, encoding="utf-8")
     _git(repo, "add", relpath)
     _git(repo, "commit", "-q", "-m", f"change {relpath}")
 
@@ -110,9 +110,9 @@ def test_the_refusal_names_the_files_the_cause_and_the_way_out() -> None:
 def calls(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> list[tuple[str, Any]]:
     """Records generate and ansible-playbook; the guard's git answer is set per test."""
     (tmp_path / "playbooks").mkdir()
-    (tmp_path / "playbooks" / "provision-bee.yml").write_text("---\n")
+    (tmp_path / "playbooks" / "provision-bee.yml").write_text("---\n", encoding="utf-8")
     (tmp_path / "generated" / "prod").mkdir(parents=True)
-    (tmp_path / "generated" / "prod" / "hosts.yml").write_text("---\n")
+    (tmp_path / "generated" / "prod" / "hosts.yml").write_text("---\n", encoding="utf-8")
     monkeypatch.setattr(infra, "settings", SimpleNamespace(ansible_dir=tmp_path))
     log: list[tuple[str, Any]] = []
 

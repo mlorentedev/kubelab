@@ -31,7 +31,7 @@ def _bindings(template: Path) -> list[tuple[str | None, str]]:
     """
     hosts: list[tuple[str | None, str]] = []
     indent = None
-    for line in template.read_text().splitlines():
+    for line in template.read_text(encoding="utf-8").splitlines():
         stripped = line.strip()
         if indent is not None:
             if not stripped or stripped.startswith("#"):
@@ -105,7 +105,7 @@ def _uri_urls(role: Path) -> list[tuple[str, str]]:
                 walk(task.get(nested))
 
     for path in role.glob("tasks/*.yml"):
-        walk(yaml.safe_load(path.read_text()))
+        walk(yaml.safe_load(path.read_text(encoding="utf-8")))
     return found
 
 
@@ -136,11 +136,13 @@ def test_a_loopback_check_on_a_tailnet_port_is_still_caught(tmp_path: Path) -> N
     (role / "tasks").mkdir()
     (role / "templates/compose.yml.j2").write_text(
         'services:\n  a:\n    ports:\n      - "{{ tailscale_ip }}:3080:8080"\n'
-        '  b:\n    ports:\n      - "127.0.0.1:{{ api_port }}:{{ api_port }}"\n'
+        '  b:\n    ports:\n      - "127.0.0.1:{{ api_port }}:{{ api_port }}"\n',
+        encoding="utf-8",
     )
     (role / "tasks/main.yml").write_text(
         "- name: ok\n  ansible.builtin.uri:\n    url: http://127.0.0.1:{{ api_port }}/health\n"
-        "- name: wrong\n  ansible.builtin.uri:\n    url: http://localhost:3080/health\n"
+        "- name: wrong\n  ansible.builtin.uri:\n    url: http://localhost:3080/health\n",
+        encoding="utf-8",
     )
     with pytest.raises(AssertionError, match="'wrong'"):
         test_no_health_check_asks_the_loopback_on_a_port_bound_elsewhere(role)

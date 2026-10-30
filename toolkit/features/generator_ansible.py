@@ -449,7 +449,9 @@ class AnsibleGenerator(BaseGenerator):
             "# Regenerate: toolkit infra ansible generate --env {env}\n"
             "---\n"
         )
-        output_path.write_text(header + yaml.dump(inventory, default_flow_style=False, sort_keys=False))
+        output_path.write_text(
+            header + yaml.dump(inventory, default_flow_style=False, sort_keys=False), encoding="utf-8"
+        )
         logger.info(f"  Inventory: {output_path} ({len(host_names)} hosts, {len(children)} groups)")
 
     def validate(self) -> bool:

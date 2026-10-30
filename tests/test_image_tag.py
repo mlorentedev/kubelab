@@ -28,7 +28,7 @@ def _write_values(root: Path, api_version: str) -> Path:
     values_dir.mkdir(parents=True, exist_ok=True)
     path = values_dir / "staging.yaml"
     indented = f"      version: {api_version}" if api_version else "      domain: api.staging"
-    path.write_text(_VALUES_TEMPLATE.format(api_version=indented))
+    path.write_text(_VALUES_TEMPLATE.format(api_version=indented), encoding="utf-8")
     return path
 
 

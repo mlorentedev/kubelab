@@ -50,7 +50,7 @@ def _declared_volumes() -> set[str]:
     """
     names: set[str] = set()
     in_block = False
-    for raw in COMPOSE_TEMPLATE.read_text().splitlines():
+    for raw in COMPOSE_TEMPLATE.read_text(encoding="utf-8").splitlines():
         if raw.startswith("volumes:"):
             in_block = True
             continue
@@ -65,7 +65,7 @@ def _declared_volumes() -> set[str]:
 
 @pytest.fixture(scope="module")
 def backup() -> dict:
-    return yaml.safe_load(COMMON_YAML.read_text())["backup"]
+    return yaml.safe_load(COMMON_YAML.read_text(encoding="utf-8"))["backup"]
 
 
 def test_the_template_declares_volumes_at_all(backup: dict) -> None:

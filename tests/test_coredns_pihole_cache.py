@@ -34,7 +34,7 @@ EXEC_PREFIX = "docker exec pihole "
 
 
 def _tasks() -> list[dict]:
-    play = yaml.safe_load(TASKS.read_text())
+    play = yaml.safe_load(TASKS.read_text(encoding="utf-8"))
     return [task for block in play for task in block.get("block", [block])]
 
 
@@ -104,7 +104,7 @@ def _docker(*args: str, check: bool = True) -> str:
 
 def _corefile(path: Path, address: str) -> None:
     # Rewritten in place: a single-file bind mount follows the inode, not the name.
-    path.write_text(f"example.test {{\n  hosts {{\n    {address} {NAME}\n    ttl 3600\n  }}\n}}\n")
+    path.write_text(f"example.test {{\n  hosts {{\n    {address} {NAME}\n    ttl 3600\n  }}\n}}\n", encoding="utf-8")
 
 
 def _answer(container: str, server: str = "127.0.0.1") -> tuple[int, str] | None:
@@ -135,7 +135,7 @@ def test_the_flush_serves_a_moved_record_without_restarting_pihole(docker_mount_
         if os.environ.get("CI"):
             pytest.fail("docker not on PATH in CI: the Pi-hole flush went untested")
         pytest.skip("docker not on PATH: cannot run Pi-hole (a skip is CANNOT CHECK, not OK)")
-    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text())
+    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))
     flush = _task(FLUSH)["command"].removeprefix(EXEC_PREFIX).split()
     tag = uuid.uuid4().hex[:8]
     network, coredns, pihole = f"dns007-{tag}", f"dns007-coredns-{tag}", f"dns007-pihole-{tag}"
@@ -147,7 +147,7 @@ def test_the_flush_serves_a_moved_record_without_restarting_pihole(docker_mount_
                 "-v", f"{corefile}:/etc/coredns/Corefile:ro",
                 defaults["coredns_image"], "-conf", "/etc/coredns/Corefile")  # fmt: skip
         coredns_ip = _docker("inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", coredns)
-        forwarding.write_text(f"server=/example.test/{coredns_ip}#53\n")
+        forwarding.write_text(f"server=/example.test/{coredns_ip}#53\n", encoding="utf-8")
         _docker("run", "-d", "--name", pihole, "--network", network,
                 "-e", "FTLCONF_misc_etc_dnsmasq_d=true",
                 "-v", f"{forwarding}:/etc/dnsmasq.d/forwarding.conf:ro",

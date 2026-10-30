@@ -22,10 +22,10 @@ ROLE = REPO / "infra/ansible/roles/coredns"
 
 
 def _compose() -> dict:
-    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text())
+    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))
     # Values derived from common.yaml name no port, so a placeholder renders them.
     context = {key: "placeholder" if "{{" in str(value) else value for key, value in defaults.items()}
-    source = (ROLE / "templates/docker-compose.yml.j2").read_text()
+    source = (ROLE / "templates/docker-compose.yml.j2").read_text(encoding="utf-8")
     template = Environment(undefined=StrictUndefined).from_string(source)
     return yaml.safe_load(template.render(**context))
 
@@ -95,7 +95,7 @@ def _tasks() -> list[dict]:
                 out.extend(walk(task.get(key) or []))
         return out
 
-    return walk(yaml.safe_load((ROLE / "tasks/main.yml").read_text()))
+    return walk(yaml.safe_load((ROLE / "tasks/main.yml").read_text(encoding="utf-8")))
 
 
 def test_a_container_left_on_no_network_is_recreated() -> None:

@@ -32,7 +32,7 @@ def _flat(items: list[dict]) -> list[dict]:
 
 
 def _hermes_tasks() -> list[dict]:
-    return _flat(yaml.safe_load((ROLE / "tasks/hermes.yml").read_text()))
+    return _flat(yaml.safe_load((ROLE / "tasks/hermes.yml").read_text(encoding="utf-8")))
 
 
 def _task(name: str) -> dict:
@@ -113,7 +113,7 @@ def test_the_copy_is_root_owned_so_the_agent_cannot_rewrite_what_it_uses() -> No
 
 def test_the_skills_come_from_the_vault_mirror_not_from_the_agents_clone() -> None:
     """The agent holds the clone's token and writes its zone; the mirror is root's."""
-    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text())
+    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))
     assert defaults["agent_stack_hermes_skills_source"].startswith("{{ agent_stack_vault_mirror }}/")
 
 

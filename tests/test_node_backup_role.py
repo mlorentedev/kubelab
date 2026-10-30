@@ -54,7 +54,7 @@ RPI3_SOURCES = {
 
 def _defaults() -> dict[str, object]:
     """The role's own defaults — so a renamed variable fails here, not on a node."""
-    return yaml.safe_load(DEFAULTS.read_text())
+    return yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))
 
 
 def _apt_packages() -> set[str]:
@@ -67,7 +67,7 @@ def _apt_packages() -> set[str]:
     (both halves of lesson-357).
     """
     packages: set[str] = set()
-    for task in yaml.safe_load((ROLE / "tasks/main.yml").read_text()):
+    for task in yaml.safe_load((ROLE / "tasks/main.yml").read_text(encoding="utf-8")):
         if "apt" not in task:
             continue
         name = task["apt"]["name"]
@@ -218,7 +218,7 @@ def test_volume_mountpoints_are_resolved_before_the_capture_script_renders():
     the template fails on an undefined map; without `changed_when: false` a
     re-run can never show `changed=0`.
     """
-    tasks = yaml.safe_load((ROLE / "tasks/main.yml").read_text())
+    tasks = yaml.safe_load((ROLE / "tasks/main.yml").read_text(encoding="utf-8"))
     names = [task.get("name", "") for task in tasks]
     resolve = next(i for i, task in enumerate(tasks) if task.get("register") == "node_backup_volume_inspect")
     render = next(
@@ -354,7 +354,7 @@ def _capture(tmp_path: Path, source: dict[str, object], shims: dict[str, str] | 
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     for name, body in {"sqlite3": FAKE_SQLITE3, **(shims or {})}.items():
-        (bin_dir / name).write_text(body)
+        (bin_dir / name).write_text(body, encoding="utf-8")
         (bin_dir / name).chmod(0o755)
     staging = tmp_path / "staging"
     script = tmp_path / "capture.sh"
@@ -366,7 +366,8 @@ def _capture(tmp_path: Path, source: dict[str, object], shims: dict[str, str] | 
             node_backup_location="always-on",
             node_backup_staging_dir=str(staging),
             node_backup_capture_sentinel=str(staging / ".capture-complete"),
-        )
+        ),
+        encoding="utf-8",
     )
     env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"}
     # A bound, so a capture that loops fails the test instead of hanging the suite.
@@ -377,13 +378,13 @@ def _capture(tmp_path: Path, source: dict[str, object], shims: dict[str, str] | 
 
 
 def _files(root: Path) -> dict[str, str]:
-    return {str(f.relative_to(root)): f.read_text() for f in sorted(root.rglob("*")) if f.is_file()}
+    return {str(f.relative_to(root)): f.read_text(encoding="utf-8") for f in sorted(root.rglob("*")) if f.is_file()}
 
 
 def _tree(tmp_path: Path, files: dict[str, str]) -> None:
     for name, content in files.items():
         (tmp_path / "src" / name).parent.mkdir(parents=True, exist_ok=True)
-        (tmp_path / "src" / name).write_text(content)
+        (tmp_path / "src" / name).write_text(content, encoding="utf-8")
 
 
 def test_a_database_in_a_subdirectory_keeps_its_snapshot(tmp_path: Path) -> None:
@@ -494,7 +495,7 @@ def test_a_snapshot_and_the_directories_above_it_take_their_sources_owner(tmp_pa
     _tree(tmp_path, {"a/b/x.db": "RAW"})
     log = tmp_path / "chown.log"
     staged = _capture(tmp_path, {"sqlite": "a/b/x.db"}, shims={"chown": f'#!/bin/sh\necho "$@" >> "{log}"\n'})
-    assert log.read_text().splitlines() == [
+    assert log.read_text(encoding="utf-8").splitlines() == [
         f"--reference=a/b {staged}/a/b",
         f"--reference=a {staged}/a",
         f"--reference={tmp_path}/src/a/b/x.db {staged}/a/b/x.db",
@@ -561,9 +562,9 @@ def test_credential_file_paths_are_the_same_variable_on_both_sides():
     reference the SAME Jinja variable, not a literal path duplicated in two
     places — the ship_script_path drift guard, applied to all three
     credential files this role writes and then reads back."""
-    ship_tpl_src = (TEMPLATES / "node-backup-ship.sh.j2").read_text()
-    prune_tpl_src = (TEMPLATES / "node-backup-prune.sh.j2").read_text()
-    tasks_src = (ROLE / "tasks/main.yml").read_text()
+    ship_tpl_src = (TEMPLATES / "node-backup-ship.sh.j2").read_text(encoding="utf-8")
+    prune_tpl_src = (TEMPLATES / "node-backup-prune.sh.j2").read_text(encoding="utf-8")
+    tasks_src = (ROLE / "tasks/main.yml").read_text(encoding="utf-8")
     for var in (
         "node_backup_restic_password_file",
         "node_backup_r2_access_key_file",
@@ -605,8 +606,8 @@ def test_ship_unit_execstart_matches_the_script_the_role_installs():
     # places — so renaming the default in one spot cannot silently orphan the
     # other. Checked against the templates' own unrendered source, since the
     # rendered path is already asserted above.
-    unit_src = (TEMPLATES / "node-backup-ship.service.j2").read_text()
-    tasks_src = (ROLE / "tasks/main.yml").read_text()
+    unit_src = (TEMPLATES / "node-backup-ship.service.j2").read_text(encoding="utf-8")
+    tasks_src = (ROLE / "tasks/main.yml").read_text(encoding="utf-8")
     assert "{{ node_backup_ship_script_path }}" in unit_src
     assert "{{ node_backup_ship_script_path }}" in tasks_src
 
@@ -662,8 +663,8 @@ def test_sentinel_path_is_the_same_variable_on_both_sides():
     """Same drift guard as the credential files: the writer (capture) and the
     reader (ship) must reference one variable, not a duplicated literal."""
     ref = "{{ node_backup_capture_sentinel }}"
-    assert ref in (TEMPLATES / "node-backup-capture.sh.j2").read_text()
-    assert ref in (TEMPLATES / "node-backup-ship.sh.j2").read_text()
+    assert ref in (TEMPLATES / "node-backup-capture.sh.j2").read_text(encoding="utf-8")
+    assert ref in (TEMPLATES / "node-backup-ship.sh.j2").read_text(encoding="utf-8")
 
 
 def _directive_lines(unit: str) -> list[str]:
@@ -692,7 +693,7 @@ def test_ship_unit_does_not_hard_require_capture():
 
 
 def _plays() -> list[dict]:
-    return yaml.safe_load((REPO / "infra/ansible/playbooks/backup.yml").read_text())
+    return yaml.safe_load((REPO / "infra/ansible/playbooks/backup.yml").read_text(encoding="utf-8"))
 
 
 def test_always_on_nodes_do_not_ignore_unreachable():
@@ -818,7 +819,7 @@ def test_both_plays_share_one_role_invocation():
 
 
 def _common() -> dict:
-    return yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
+    return yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
 
 
 def _generated_inventory() -> dict:
@@ -901,7 +902,9 @@ def test_the_role_needs_no_external_decompressor():
         "sqlite3 must remain the role's only apt package — counted across every apt task, not just the first one"
     )
 
-    tasks = [t for f in ("main.yml", "restic.yml") for t in yaml.safe_load((ROLE / "tasks" / f).read_text())]
+    tasks = [
+        t for f in ("main.yml", "restic.yml") for t in yaml.safe_load((ROLE / "tasks" / f).read_text(encoding="utf-8"))
+    ]
     shells = " ".join(str(t.get("shell", "")) for t in tasks)
     assert "bunzip2" not in shells, "no external decompressor — use stdlib bz2"
     assert "import bz2" in shells, "decompression must come from Python's stdlib"
@@ -912,7 +915,7 @@ def test_restic_is_decompressed_via_a_temp_path_never_onto_the_install_path():
     even runs, so any failure leaves a broken binary where the capture and
     ship scripts expect a working one."""
     # The install lives in the file node_backup shares with dev_node (BACKUP-071).
-    tasks_src = (ROLE / "tasks/restic.yml").read_text()
+    tasks_src = (ROLE / "tasks/restic.yml").read_text(encoding="utf-8")
     decompress = next(t for t in yaml.safe_load(tasks_src) if "bz2" in str(t.get("shell", "")))
     # Anchored to the SSOT variable, not to an expanded path: the folded
     # scalar carries the Jinja reference verbatim, and asserting on it also
@@ -1270,7 +1273,7 @@ def test_the_restic_version_probe_runs_in_check_mode() -> None:
     download that keys on it reports `changed` on every node: `make backup CHECK=1`
     then claims every node needs restic. The probe only reads, so it runs anyway.
     """
-    tasks = yaml.safe_load((ROLE / "tasks/restic.yml").read_text())
+    tasks = yaml.safe_load((ROLE / "tasks/restic.yml").read_text(encoding="utf-8"))
     probe = next(t for t in tasks if t.get("register") == "node_backup_restic_installed")
     assert probe.get("check_mode") is False
 
@@ -1344,7 +1347,7 @@ def test_the_prune_timer_is_daily_and_persistent():
 
 
 def test_the_role_installs_and_arms_the_prune():
-    tasks = yaml.safe_load((ROLE / "tasks/main.yml").read_text())
+    tasks = yaml.safe_load((ROLE / "tasks/main.yml").read_text(encoding="utf-8"))
     templated = {t["template"]["src"]: t["template"]["dest"] for t in tasks if "template" in t}
     assert templated["node-backup-prune.sh.j2"] == "{{ node_backup_prune_script_path }}"
     assert templated["node-backup-prune.service.j2"] == "/etc/systemd/system/{{ node_backup_prune_service_name }}"
@@ -1379,7 +1382,7 @@ def test_every_rendered_unit_passes_systemd_analyze_verify(tmp_path):
         "node-backup-capture.service": "[Service]\nType=oneshot\nExecStart=/bin/true\n",
     }
     for name, text in units.items():
-        (tmp_path / name).write_text(text)
+        (tmp_path / name).write_text(text, encoding="utf-8")
     # Every unit the role renders; the capture unit is only a stub for `Wants=`.
     targets = [str(tmp_path / n) for n in units if n != "node-backup-capture.service"]
     proc = subprocess.run(

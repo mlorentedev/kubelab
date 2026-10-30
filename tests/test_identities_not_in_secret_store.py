@@ -129,7 +129,7 @@ class TestTheConfigDerivesEachAdminUsername:
     @pytest.mark.parametrize("env", ["dev", "staging", "prod"])
     def test_the_merged_config_runs_the_derivation(self, env: str) -> None:
         """The real loader over the real declarations, whatever the vault holds or lacks."""
-        common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
+        common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
         superadmin = common["apps"]["auth"]["identities"]["superadmin"]
         login = common["apps"]["services"]["security"]["authelia"]["break_glass"]["grafana"]["login"]
         services = ConfigurationManager(env, REPO).get_merged_config()["apps"]["services"]
@@ -228,7 +228,7 @@ def test_no_vault_holds_a_username(vault: Path) -> None:
     from toolkit.features.secrets_manager import baselined_orphans
 
     external = {s.key_path for s in SECRET_CATALOG if s.kind == SecretKind.EXTERNAL} | set(baselined_orphans())
-    doc = {k: v for k, v in (yaml.safe_load(vault.read_text()) or {}).items() if k != "sops"}
+    doc = {k: v for k, v in (yaml.safe_load(vault.read_text(encoding="utf-8")) or {}).items() if k != "sops"}
     held = [
         path
         for path in _key_paths(doc)

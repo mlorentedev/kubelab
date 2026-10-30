@@ -34,11 +34,13 @@ import pytest
 import yaml
 
 REPO = Path(__file__).resolve().parents[1]
-NETWORKING = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text())["networking"]
+NETWORKING = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text(encoding="utf-8"))[
+    "networking"
+]
 LAN_CIDR = NETWORKING["lan_cidr"]
 TAILSCALE_TABLE_RULE = 5270  # `from all lookup 52`, measured on the operator's laptop
 GATEWAY_DEFAULTS = yaml.safe_load(
-    (REPO / "infra" / "ansible" / "roles" / "gateway" / "defaults" / "main.yml").read_text()
+    (REPO / "infra" / "ansible" / "roles" / "gateway" / "defaults" / "main.yml").read_text(encoding="utf-8")
 )
 ADAPTER = "enx020000000001"
 DEVICES = f"{ADAPTER}:ethernet:connected\nveth01916b3:ethernet:unmanaged\nwlp1s0:wifi:connected\n"

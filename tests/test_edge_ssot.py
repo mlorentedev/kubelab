@@ -36,7 +36,7 @@ MAC = re.compile(r"^[0-9a-f]{2}(:[0-9a-f]{2}){5}$")
 
 @pytest.fixture(scope="module")
 def networking() -> dict[str, Any]:
-    return yaml.safe_load((VALUES / "common.yaml").read_text())["networking"]
+    return yaml.safe_load((VALUES / "common.yaml").read_text(encoding="utf-8"))["networking"]
 
 
 @pytest.fixture(scope="module")
@@ -125,7 +125,7 @@ def test_no_trust_list_names_the_lab_cidr(networking: dict[str, Any], edge: dict
         assert not ipaddress.ip_network(entry).subnet_of(lab), entry
     # Parsed, not matched by line: a block list would put its second route on a
     # line a regex never reads.
-    routes = _values_of(yaml.safe_load(PLAYBOOK.read_text()), "tailscale_advertise_routes")
+    routes = _values_of(yaml.safe_load(PLAYBOOK.read_text(encoding="utf-8")), "tailscale_advertise_routes")
     assert routes
     advertised = " ".join(str(route) for route in routes)
     assert "lab_wifi" not in advertised
@@ -134,19 +134,19 @@ def test_no_trust_list_names_the_lab_cidr(networking: dict[str, Any], edge: dict
 
 @pytest.mark.parametrize("values", sorted(VALUES.glob("*.yaml")), ids=lambda p: p.name)
 def test_no_site_identifying_key_is_committed_under_the_edge(values: Path) -> None:
-    tree = yaml.safe_load(values.read_text()) or {}
+    tree = yaml.safe_load(values.read_text(encoding="utf-8")) or {}
     edge = (tree.get("networking") or {}).get("edge") or {}
     assert not _keys(edge) & SITE_IDENTIFYING_KEYS, f"{values.name}: these belong in SOPS"
 
 
 def test_the_rpi4_playbook_carries_no_literal_mac_or_ip() -> None:
-    text = PLAYBOOK.read_text()
+    text = PLAYBOOK.read_text(encoding="utf-8")
     assert not re.search(r"\b[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}\b", text), "MACs belong in networking.nodes.<node>.mac"
     assert not re.search(r"\b\d{1,3}(\.\d{1,3}){3}\b", text), "addresses belong in common.yaml"
 
 
 def test_every_homelab_reservation_reads_its_mac_from_the_ssot(networking: dict[str, Any]) -> None:
-    text = PLAYBOOK.read_text()
+    text = PLAYBOOK.read_text(encoding="utf-8")
     for name in ("ace1", "ace2", "beelink", "jetson"):
         assert MAC.match(networking["nodes"][name]["mac"]), name
         assert f"config.networking.nodes.{name}.mac" in text, name

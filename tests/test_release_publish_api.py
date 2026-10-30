@@ -20,7 +20,7 @@ WORKFLOW = REPO / ".github/workflows/release.yml"
 
 def _workflow() -> dict[str, Any]:
     # PyYAML reads the bare `on:` key as True.
-    return yaml.safe_load(WORKFLOW.read_text())
+    return yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
 
 
 def _job() -> dict[str, Any]:
@@ -59,7 +59,7 @@ def test_the_publish_reads_the_resolved_version() -> None:
 
 def test_a_failed_tag_lookup_prints_its_reason() -> None:
     script = _step("sha")["run"]
-    assert "if ! SHA=" in script, "a bare SHA=\"$(...)\" exits on failure with the reason inside the variable"
+    assert "if ! SHA=" in script, 'a bare SHA="$(...)" exits on failure with the reason inside the variable'
     assert "::error::" in script and "$SHA" in script.split("::error::", 1)[1].split("\n", 1)[0]
 
 

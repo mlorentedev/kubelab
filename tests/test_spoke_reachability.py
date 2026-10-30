@@ -152,7 +152,7 @@ class TestTheMakefileNoLongerAsksTheWrongQuestion:
 
 def _recipe(target: str) -> str:
     """The recipe lines of one Makefile target."""
-    lines = MAKEFILE.read_text().splitlines()
+    lines = MAKEFILE.read_text(encoding="utf-8").splitlines()
     out: list[str] = []
     collecting = False
     for line in lines:
