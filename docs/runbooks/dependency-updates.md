@@ -125,6 +125,11 @@ from the registry, counting only images the node lacks, and refuses one past
 pulling. Rerun it with `EXTRA='image_pull_allow_slow=true'` when the Beelink can
 spend that long. Each attempt is bounded by twice the estimate.
 
+The edge's own DNS stack pulls through the same uplink, so a Pi-hole or CoreDNS
+bump is sized the same way by `make deploy TARGET=dns ENV=prod` and by the rpi4
+provision. On arm64 the pair is about 64 MB today (Pi-hole 44, CoreDNS 20), a
+few minutes, well inside the budget.
+
 ## The apply chain (merge → production)
 
 Merging a dependency PR does not by itself ship it. For **runtime** dependencies the change reaches
