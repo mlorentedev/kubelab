@@ -1,0 +1,95 @@
+{
+  "_source": "docker exec headscale headscale nodes list -o json, read through the SEC-037 audit identity on 2026-10-30T05:33:13Z; only identity fields kept",
+  "nodes": [
+    {
+      "given_name": "ace1",
+      "user": "kubelab",
+      "tags": [],
+      "approved_routes": []
+    },
+    {
+      "given_name": "ace2",
+      "user": "kubelab",
+      "tags": [],
+      "approved_routes": []
+    },
+    {
+      "given_name": "aws1",
+      "user": "kubelab",
+      "tags": [],
+      "approved_routes": []
+    },
+    {
+      "given_name": "beelink",
+      "user": "kubelab",
+      "tags": [],
+      "approved_routes": []
+    },
+    {
+      "given_name": "gcp1",
+      "user": "kubelab",
+      "tags": [],
+      "approved_routes": []
+    },
+    {
+      "given_name": "hermes-kubelab",
+      "user": "tagged-devices",
+      "tags": [
+        "tag:hermes"
+      ],
+      "approved_routes": []
+    },
+    {
+      "given_name": "hermes-nan",
+      "user": "tagged-devices",
+      "tags": [
+        "tag:hermes"
+      ],
+      "approved_routes": []
+    },
+    {
+      "given_name": "kubelab-jet1",
+      "user": "kubelab",
+      "tags": [],
+      "approved_routes": []
+    },
+    {
+      "given_name": "kubelab-vps",
+      "user": "kubelab",
+      "tags": [],
+      "approved_routes": []
+    },
+    {
+      "given_name": "localhost",
+      "user": "manu",
+      "tags": [],
+      "approved_routes": []
+    },
+    {
+      "given_name": "macmini",
+      "user": "kubelab",
+      "tags": [],
+      "approved_routes": []
+    },
+    {
+      "given_name": "msi",
+      "user": "kubelab",
+      "tags": [],
+      "approved_routes": []
+    },
+    {
+      "given_name": "rpi3",
+      "user": "kubelab",
+      "tags": [],
+      "approved_routes": []
+    },
+    {
+      "given_name": "rpi4",
+      "user": "kubelab",
+      "tags": [],
+      "approved_routes": [
+        "172.16.1.0/24"
+      ]
+    }
+  ]
+}
