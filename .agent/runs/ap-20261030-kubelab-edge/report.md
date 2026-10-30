@@ -71,3 +71,6 @@ These are past the envelope's 8 items, or are found defects whose fix is wider t
 | 11:35 | #2838 | PR-Agent: the probe variable could be reset from another key. Every setter is now pinned to the key the test sizes; mutant red | 19d002ed |
 | 11:40 | #2840, #2845 | merged master (index conflict with #2846's row); #2840's Kuma flake (#1196) re-runs on the new head | 70168170, ef400656 |
 | 11:40 | #2849 | CI green; marked ready | 93151a53 |
+| 11:45 | #2840 | PR-Agent: a TO set in a makefile would reach `--to` empty. `--to` now passes only for a command-line or environment TO; assertion red first | d6e2c550 |
+| 11:50 | #2838 | CodeRabbit: the F check skipped a registration that already existed. It now runs on every run, check mode included where there is one to read | 0cff0d4e |
+| 11:55 | reviews | triage posted on #2838, #2840, #2849 | comments 6522061184, 6522061745, 6521922967 |
