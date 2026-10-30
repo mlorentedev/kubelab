@@ -1,6 +1,8 @@
 ---
 - name: Bootstrap infrastructure nodes
   hosts: all
+  # A later failure must not drop the handlers earlier tasks notified (#2824).
+  force_handlers: true
   become: true
 
   pre_tasks:
