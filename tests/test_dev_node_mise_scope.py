@@ -15,6 +15,7 @@ installed. It now installs only what `mise ls --missing` names.
 
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
 
 import jinja2
@@ -40,15 +41,20 @@ def _install_task() -> dict:
     return _mise("install")
 
 
-def test_the_install_names_exactly_the_toolchains_the_role_pins() -> None:
+def _render(text: str) -> str:
     defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text())
-    cmd = jinja2.Template(_install_task()["ansible.builtin.command"]["cmd"]).render(
-        dev_node_home="/home/u", dev_node_toolchains=defaults["dev_node_toolchains"]
-    )
-    binary, verb, *tools = cmd.split()
+    return jinja2.Template(text).render(dev_node_home="/home/u", dev_node_toolchains=defaults["dev_node_toolchains"])
+
+
+def test_the_install_names_exactly_the_toolchains_the_role_pins() -> None:
+    """The tools the install and the read name are the ones the rendered config pins:
+    a key the template does not render would be installed at whatever mise resolves."""
+    binary, verb, *tools = _render(_install_task()["ansible.builtin.command"]["cmd"]).split()
     assert (binary, verb) == ("/home/u/.local/bin/mise", "install")
     assert tools, "a bare `mise install` installs every config's tools, the dotfiles' included"
-    assert set(tools) == set(defaults["dev_node_toolchains"]) == {"node", "go", "python"}
+    pinned = tomllib.loads(_render((ROLE / "templates/mise-config.toml.j2").read_text()))["tools"]
+    assert set(tools) == set(pinned) == {"node", "go", "python"}
+    assert _render(_mise("ls --missing")["ansible.builtin.command"]["cmd"]).split()[3:] == tools
 
 
 def test_the_install_runs_only_for_a_missing_toolchain() -> None:
