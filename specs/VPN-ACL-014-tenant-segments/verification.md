@@ -32,16 +32,17 @@ created: "2026-10-30"
 ## Rollout evidence
 
 - **Step 1, 2026-10-30** (deploy with no segment, from the operator's controller). The
-  policy was read back through the audit identity: policy get and 
-odes list both
-  exited 0. The effective policy equals 
-ender_policy() (segment-free), ignoring
+  policy was read back through the audit identity: `policy get` and `nodes list -o json`
+  both exited 0. The effective policy equals `render_policy()` (segment-free), ignoring
   comments and whitespace. It carries the template marker and no wildcard grant, and
-  rule 1 lists kubelab@, manu@, work@, gents@, 	ag:hermes and lan-rpi4,
+  rule 1 lists `kubelab@`, `manu@`, `work@`, `agents@`, `tag:hermes` and `lan-rpi4`,
   each on every port. The server holds 14 nodes, 9 online, as before.
-- **Step 2, 2026-10-30.** The segment is written to prod.enc.yaml under a neutral
-  key. Decrypted: one entry, with fields owner, hosts_tag, clients_tag and
-  ports; the ports are the integers [22, 45000].
+- **Step 2, 2026-10-30.** The segment is written to `prod.enc.yaml` under a neutral
+  key. Decrypted: one entry, with fields `owner`, `hosts_tag`, `clients_tag` and
+  `ports`; the ports are the integers `[22, 45000]`. A dry run on `f29189df` with the
+  real SOPS data rendered 1 segment, with no validation failure, none of the 14 live
+  nodes cut off, and no wildcard.
+
 ## Test status
 
 - `pytest tests/test_headscale_segments.py tests/test_headscale_role.py

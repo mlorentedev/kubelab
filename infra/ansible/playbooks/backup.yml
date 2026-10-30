@@ -101,6 +101,9 @@
       no_log: true
       tags: [always]
 
+    - import_tasks: _includes/require-secrets.yml
+      tags: [always]
+
   roles: &backup_roles
     # The notifier every node_backup unit names in its `OnFailure=`. Included
     # HERE and not only in the provision playbooks, because `make backup` is a

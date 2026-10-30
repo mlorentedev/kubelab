@@ -129,6 +129,9 @@
       no_log: true
       tags: [always]
 
+    - import_tasks: _includes/require-secrets.yml
+      tags: [always]
+
     # Separate values tree AND vault for the one thing on this node whose
     # environment identity is not deploy_env (ANSIBLE-037). Both built into
     # their own facts rather than merged over `config`/`secrets`, so they cannot

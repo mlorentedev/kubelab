@@ -99,6 +99,9 @@
       no_log: true
       tags: [always]
 
+    - import_tasks: _includes/require-secrets.yml
+      tags: [always]
+
   roles:
     # FIRST, deliberately. A container's memory limit is fixed at create time,
     # so if the kernel gains the memory cgroup controller only after the service

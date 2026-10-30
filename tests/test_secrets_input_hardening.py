@@ -178,10 +178,11 @@ class TestSecretsSetFromEnv:
 
 
 class TestSecretsSetJson:
-    """`--json` stores a structured value (a list or a mapping) instead of a string.
+    """`--json` stores a mapping, which may hold nested arrays, instead of a string.
 
-    Without it a list could not be written through the toolkit at all: the value
-    always reached `sops set` as one JSON string (VPN-ACL-014's tenant segments).
+    Without it a structured value could not be written through the toolkit at all:
+    the value always reached `sops set` as one JSON string. A top-level list is
+    refused, because sops itself cannot store one (VPN-ACL-014's tenant segments).
     """
 
     SEGMENTS = '{"seg": {"owner":"o","hosts_tag":"tag:h","clients_tag":"tag:c","ports":[22]}}'
