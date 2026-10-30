@@ -1,31 +1,40 @@
 # Pilot-run envelope: local run branch only, never pushed or merged.
+# Re-armed by the operator on 2026-10-30: segment-first path, run until 09:00 local.
 version: 1
-run_id: "vpn-acl-006-20261030T0356Z"
+run_id: "segment-20261030T0545Z"
 armed_by: manu
-armed_at: 2026-10-30T03:56:33Z
-expires_at: 2026-10-30T06:00:00Z
-objective: "Publish the VPN-ACL-006 spec and land the read-only AC1 preflight (#248), plus land #2820."
+armed_at: 2026-10-30T05:40:47Z
+expires_at: 2026-10-30T15:00:00Z
+objective: "Land #2823/#2826, record the Headscale audit in NODE-001, and land an inert tenant-segment policy mechanism."
 scope:
   write_paths:
-    - "specs/VPN-ACL-006-headscale-upgrade/**"
+    - "specs/**"
     - "toolkit/features/headscale_upgrade.py"
-    - "tests/test_headscale_upgrade.py"
-    - "tests/test_headscale_hosts_entry_owner.py"
+    - "toolkit/scripts/render_headscale_policy.py"
+    - "toolkit/core/io.py"
+    - "tests/**"
+    - "infra/ansible/roles/headscale/**"
+    - "infra/ansible/playbooks/deploy-vps.yml"
+    - "infra/config/values/common.yaml"
+    - "docs/runbooks/headscale*"
+    - "docs/lessons/**"
     - ".agent/runs/**"
-  frozen_paths: [".github/**", "harness/**", "**/AGENTS.md", "infra/**", ".agent/unattended.yml"]
-  max_files: 8
+    - "pixelnam-lab:specs/NODE-001-pxn-edge-01-pathfinder/**"
+  frozen_paths: [".github/**", "harness/**", "**/AGENTS.md", "**/*.enc.yaml", ".agent/unattended.yml"]
+  max_files: 12
   max_loc: 300
-allowed_commands: [dotf, gh, git, make, python, pre-commit]
+allowed_commands: [dotf, gh, git, make, python, poetry, pre-commit, ssh-lab-control-read-only]
 queue:
   source: bitacora
-  filter: "#248 VPN-ACL-006: PR 1 (spec) and PR 2 (AC1 read-only preflight) only; policy, rollout and production excluded"
-  max_items: 3
+  filter: "#248 AC1 PR, #2826, Headscale tenant-segment mechanism (no corporate values in public repos), NODE-001 audit record"
+  max_items: 4
 budget:
-  max_iterations: 6
-  max_minutes_per_iteration: 40
+  max_iterations: 10
+  max_minutes_per_iteration: 60
   max_consecutive_failures: 2
 authority:
   merge: standing-grant
   push: true
   open_pr: true
   advisor_tier: top
+  production: never
