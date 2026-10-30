@@ -8,6 +8,7 @@ record it four times, every time by someone who knew the rule. These tests drive
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from collections.abc import Callable
@@ -345,3 +346,47 @@ def test_a_failing_test_target_refuses_through_the_command(tmp_path: Path, monke
     # Deselecting the unrelated failure gives a usable baseline, and the verdict is real.
     deselected = [*args[:-1], "test_limits.py -k test_mode"]
     assert CliRunner().invoke(tools.app, deselected).exit_code == mutate.Verdict.RED.exit_code
+
+
+def _recipe(*variables: str) -> str:
+    """What `make mutate` would run, with TO left out of the environment unless given."""
+    env = {k: v for k, v in os.environ.items() if k not in {"FROM", "TO"}}
+    repo = Path(__file__).resolve().parent.parent
+    args = ["make", "-n", "-C", str(repo), "mutate", "FILE=f.py", "FROM=a", "TEST=t.py", *variables]
+    return subprocess.run(args, capture_output=True, text=True, check=True, env=env).stdout
+
+
+def test_an_empty_replacement_reaches_the_command_as_a_deletion() -> None:
+    """`TO=` deletes FROM (#2839). click reads an empty envvar as unset, so make has to pass it as an argument."""
+    assert '--to "$TO"' in _recipe("TO=")
+    assert '--to "$TO"' in _recipe("TO=x")
+    assert "--to" not in _recipe()
+
+
+def test_an_empty_envvar_is_no_replacement_but_an_empty_argument_is(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Why the recipe passes `--to`: the same empty TO refuses as an envvar and deletes as an argument."""
+    from typer.testing import CliRunner
+
+    from toolkit.cli import tools
+
+    _git(tmp_path, "init", "-q")
+    _git(tmp_path, "config", "user.email", "t@example.invalid")
+    _git(tmp_path, "config", "user.name", "t")
+    (tmp_path / ".gitignore").write_text("__pycache__/\n")
+    (tmp_path / "limits.py").write_text("MODE = 0o600\n")
+    (tmp_path / "test_limits.py").write_text(
+        "from limits import MODE\n\n\ndef test_mode():\n    assert MODE == 0o600\n"
+    )
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-qm", "base")
+    monkeypatch.setattr(tools.settings, "project_root", tmp_path)
+
+    # Deleting the octal prefix leaves `MODE = 600`: still valid Python, and the test goes red.
+    args = ["mutate", "--file", "limits.py", "--from", "0o", "--test", "test_limits.py"]
+    refused = CliRunner().invoke(tools.app, args, env={"TO": ""})
+    assert refused.exit_code == 2
+    assert "Missing option '--to'" in refused.output
+    assert CliRunner().invoke(tools.app, [*args, "--to", ""]).exit_code == mutate.Verdict.RED.exit_code
+    assert (tmp_path / "limits.py").read_text() == "MODE = 0o600\n"
