@@ -212,8 +212,12 @@ def test_no_role_on_a_node_behind_the_edge_upgrades_outside_the_include():
             for key in ("pre_tasks", "tasks", "post_tasks", "handlers"):
                 found |= {f"{name}: {t.get('name')}" for t in _task_list(play.get(key)) if _upgrades(t)}
     assert "base_system" in behind, "the resolution lost the role it was written for"
-    for path in ROLES.glob("*/tasks/*.yml"):
-        if path.parts[-3] in behind:
+    read = set()
+    for path in [*ROLES.glob("*/tasks/**/*.yml"), *ROLES.glob("*/handlers/**/*.yml")]:
+        role = path.relative_to(ROLES).parts[0]
+        if role in behind:
+            read.add(path.relative_to(ROLES).as_posix())
             tasks = _task_list(yaml.safe_load(path.read_text(encoding="utf-8")))
-            found |= {f"{path.parts[-3]}: {t.get('name')}" for t in tasks if _upgrades(t)}
+            found |= {f"{role}: {t.get('name')}" for t in tasks if _upgrades(t)}
+    assert {"base_system/tasks/main.yml", "base_system/handlers/main.yml"} <= read, sorted(read)
     assert found == set(UNSIZED_UPGRADES)
