@@ -84,11 +84,17 @@ def run(repo: Path, file: Path, find: str, replace: str, run_test: Callable[[], 
             'cause is a marker the repository\'s addopts deselect (`-m "not e2e and not infra"`): name it in '
             "the target, e.g. TEST='tests/infra/x.py -m infra'. A `-m` given there overrides the default."
         )
-    if baseline != 0:
+    if baseline == 1:
         raise Refused(
-            f"{file}: the test does not pass without the mutation (pytest exit {baseline}), so its result "
+            f"{file}: the test does not pass without the mutation (pytest exit 1), so its result "
             "against a mutant proves nothing: a red baseline is red against every mutation. Deselect the "
             "unrelated failures (e.g. TEST='tests/x.py -k <passing tests>') and run again."
+        )
+    if baseline != 0:
+        raise Refused(
+            f"{file}: pytest did not run the test to a result without the mutation (pytest exit {baseline}: "
+            "2 an interrupt or a collection error, 3 an internal error, 4 a usage error), so there is no "
+            "baseline to compare. pytest's output above names the cause."
         )
 
     path.write_bytes(text.replace(find, replace).encode())
