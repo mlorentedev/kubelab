@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 662 | [The edge's kernel log outlives its journal, but is neither clean text nor in time order](lesson-662-the-edges-kernel-log-outlives-its-journal-but-is-neither-clean-text-nor-in-time-order.md) | 2026-10-30 |
 | 659 | [A fix that relaxes what one check needs takes away the coverage another got from it](lesson-659-a-fix-that-relaxes-what-one-check-needs-takes-away-the-coverage-another-got-from-it.md) | 2026-10-29 |
 | 656 | [An unfinished boot is judged by its jobs' own timeouts, because a randomized catch-up makes any clock bound false](lesson-656-an-unfinished-boot-is-judged-by-its-jobs-own-timeouts-because-a-randomized-catch-up-makes-any-clock-bound-false.md) | 2026-10-29 |
 | 651 | [A check that judges another check inside its grace must read that grace](lesson-651-a-check-that-judges-another-inside-its-grace-must-read-that-grace.md) | 2026-10-29 |

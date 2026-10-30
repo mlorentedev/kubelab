@@ -185,6 +185,16 @@ T4 reaches the edge over the tailnet, since the cable it would use is the one th
 
 Record each case's full output in the spec's `verification.md`, under `### B14-EVIDENCE`, with the case and the date. A `FAIL` line names what the boot did not bring back: read that unit's journal for this boot (`journalctl -b -u <unit>`), and file the cause before re-running the case.
 
+## Uplink soak
+
+The USB uplink's driver (rtw88) is the part least proven on this kernel, so the edge holds a 48-hour soak before it is trusted (NET-005 B12). The soak is the current boot. It passes once the boot has run 48 hours with no reset of the adapter, meaning the adapter dropping off USB or its driver probing it again. A reboot starts the soak again.
+
+```bash
+make edge-soak
+```
+
+It reads the edge's `kern.log` over the LAN, because the journal there holds about 8 hours (#2807). It prints the boot's resets, its `failed to leave lps state` warnings and its other uplink lines, then a verdict. `toolkit infra edge soak` exits 0 when the soak passed, 1 on a reset, 2 while the boot holds but has not reached 48 hours, and 3 when the log cannot tell: no kernel banner in it, or an rsyslog that did not start with this boot. Through make every non-zero code is 2, so read the `verdict:` line. The LPS warnings are listed and not counted: the operator decides at the end of the soak whether they warrant turning the driver's power saving off, which starts a new soak. The boot's time can be hours early, since the RPi4 has no clock across a power cut (lesson-662); its length comes from the uptime. Record the output at the end under `### B12-EVIDENCE` in the spec's `verification.md`.
+
 ## Edge alerts
 
 Prod's watcher probes the edge and every always-on node behind it over the tailnet, and pages when one stops answering or when the watcher itself goes silent (ADR-075 D6, AC12). Its alerts and their first steps are added to this section by the watcher's change (#2672).

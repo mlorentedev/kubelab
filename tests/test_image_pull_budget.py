@@ -38,11 +38,11 @@ SSOT = "{{ config.networking.edge.uplink.bandwidth.down_kbit }}"
 # Roles that still pull bare on a node behind the edge, each with what holds it (#2742).
 # Converting one removes it here, and a new bare pull fails until it is sized or listed.
 UNSIZED_ROLES = {
-    "coredns": "the LAN's bootstrap DNS: converted once the include has run on a node",
-    "docker": "the smoke pull, a small image under `timeout`: to be declared an exception",
+    "docker": "the smoke pull: busybox, a few MB, off unless a play sets docker_smoke_build,"
+    " and bounded by its own `timeout`, whose failure already names the uplink (#2722)",
 }
 # Plays of a node behind the edge that run a sized role without sizing it.
-UNSIZED_PLAYS = {"provision-rpi4.yml": "the edge itself: it comes with coredns"}
+UNSIZED_PLAYS: dict[str, str] = {}
 
 # Measured on 2026-10-29 for ghcr.io/open-webui/open-webui:v0.12.0 (amd64, 19 layers).
 OPEN_WEBUI_BYTES = 1_618_157_731
@@ -258,6 +258,8 @@ def test_only_plays_of_nodes_behind_the_edge_size_their_pulls():
     plays = _plays_setting_the_downlink()
     names = ("provision-ace1.yml", "provision-ace2.yml", "provision-bee.yml", "provision-rpi3.yml")
     assert {plays.get(name) for name in names} == {"ace1", "ace2", "beelink", "rpi3"}
+    # The edge's own pulls leave by the uplink it shapes, so they are sized the same way.
+    assert {plays.get(name) for name in ("provision-rpi4.yml", "deploy-dns.yml")} == {"gateway"}
     for name, hosts in plays.items():
         nodes = _nodes(hosts, networking)
         assert nodes and all(_behind_the_edge(node, networking) for node in nodes), (
@@ -389,20 +391,31 @@ def test_a_compose_pull_estimates_every_image_its_stack_fetches():
                 named = re.search(rf"(?<![\w.]){re.escape(image)}(?![\w.])", str(args["image_pull_images"]))
                 assert named, f"{role}: {src} pulls {image}, which is not estimated"
                 checked.add(image)
-    assert {"glances_image", "gitea_image", "runner_image", "act_runner_image"} <= checked
+    assert {"glances_image", "gitea_image", "runner_image", "act_runner_image", "coredns_image", "pihole_image"} <= checked
     assert "agent_stack_mcp_bridge_image" not in checked, "built on the node, never pulled"
 
 
 def test_a_play_behind_the_edge_that_runs_a_sized_pull_sizes_it():
     networking = _networking()
     sized = {path.parts[-3] for path in ROLES.glob("*/tasks/*.yml") if "_includes/image-pull.yml" in path.read_text()}
-    assert sized >= {"agent_stack", "glances"}
+    assert sized >= {"agent_stack", "glances", "coredns"}
     unsized = set()
     for name, play in _plays():
         behind = any(_behind_the_edge(node, networking) for node in _nodes(play["hosts"], networking))
         if behind and _roles(play) & sized and "image_pull_down_kbit" not in (play.get("vars") or {}):
             unsized.add(name)
     assert unsized == set(UNSIZED_PLAYS)
+
+
+def test_a_play_that_sizes_a_pull_gathers_the_architecture_it_estimates_for():
+    """The estimate reads the layers for `ansible_architecture`, a fact: a play that
+    skips fact gathering fails at the estimate, not at the pull (#2742)."""
+    sized = {path.parts[-3] for path in ROLES.glob("*/tasks/*.yml") if "_includes/image-pull.yml" in path.read_text()}
+    for name, play in _plays():
+        if _roles(play) & sized:
+            assert play.get("gather_facts", True) is not False, f"{name}: runs a sized pull without facts"
+            subset = play.get("gather_subset")
+            assert subset is None or {"all", "min", "platform"} & set(subset), f"{name}: no platform facts"
 
 
 def test_open_webui_is_pulled_through_the_include():
@@ -464,3 +477,46 @@ def test_the_guard_reads_image_pulls_and_roles_however_they_are_written():
     play = {"roles": ["../roles/a"], "tasks": [{"block": [{"include_role": {"name": "../roles/b"}}]}]}
     play["pre_tasks"] = [{"ansible.builtin.import_role": {"name": "c"}}]
     assert _roles(play) == {"a", "b", "c"}
+
+
+#: Roles whose sized pull still comes after a template whose change gates a restart
+#: or a recreate, each with the ticket that moves it. **It may only shrink**: a role
+#: fixed must leave it, and a role added to it is the reviewable act.
+PULL_AFTER_GATED_TEMPLATES: dict[str, str] = {
+    "agent_stack": "#2812",
+    "beelink_services": "#2812",
+    "glances": "#2812",
+    "rpi3_services": "#2812",
+}
+
+_INCLUDES = ("import_tasks", "ansible.builtin.import_tasks", "include_tasks", "ansible.builtin.include_tasks")
+_WRITES = ("template", "ansible.builtin.template", "copy", "ansible.builtin.copy")
+# `x.changed`, `x is changed` and `x is not changed` all make a later task act on the write.
+_GATES = re.compile(r"\b(\w+)(?:\.changed\b|\s+is\s+(?:not\s+)?changed\b)")
+
+
+def test_a_sized_pull_runs_before_the_writes_whose_change_a_later_task_acts_on():
+    """A refused pull stops the play. Past a write whose change gates a restart, the
+    rerun sees no change and skips the restart, so the service keeps the old file
+    (#2810). A notified handler is lost the same way: nothing forces handlers here."""
+    checked, early = set(), {}
+    for path in ROLES.glob("*/tasks/*.yml"):
+        tasks = list(_task_list(yaml.safe_load(path.read_text(encoding="utf-8"))))
+        pulls = [i for i, t in enumerate(tasks) if any("_includes/image-pull.yml" in str(t.get(k, "")) for k in _INCLUDES)]
+        if not pulls:
+            continue
+        role = path.parts[-3]
+        acted_on = {m.group(1) for t in tasks for m in _GATES.finditer(str(t))}
+        for i, task in enumerate(tasks):
+            if any(k in task for k in _WRITES) and (task.get("register") in acted_on or "notify" in task):
+                checked.add(role)
+                if i < pulls[0]:
+                    early.setdefault(role, []).append(task["name"])
+    assert {"coredns", "glances", "rpi3_services", "agent_stack", "beelink_services"} <= checked, (
+        f"the guard lost a role it was written for: it reads {sorted(checked)}"
+    )
+    assert set(early) == set(PULL_AFTER_GATED_TEMPLATES), early
+
+
+def test_the_order_guard_reads_both_ways_a_task_gates_on_a_change():
+    assert {m.group(1) for m in _GATES.finditer("a.changed or b is changed and c is not changed")} == {"a", "b", "c"}
