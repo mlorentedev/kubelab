@@ -8,11 +8,13 @@ took the first snapshot where the others took the last (lesson-505).
 from __future__ import annotations
 
 import json
+import sys
+import tempfile
 from pathlib import Path
 
 import pytest
 
-from toolkit.features.restore_drill import latest_snapshot, scratch, wait_until
+from toolkit.features.restore_drill import latest_snapshot, private_scratch_supported, scratch, wait_until
 
 GOOD = {"short_id": "a59acffe", "time": "2026-10-02T00:01:11Z", "hostname": "kubelab-vps", "paths": ["/staging"]}
 
@@ -147,3 +149,31 @@ def test_a_scratch_without_a_container_is_not_clean_when_the_data_stays(capsys) 
         pass
     assert not box.clean
     assert "it holds a node's files, delete it now" in _out(capsys)
+
+
+@pytest.mark.parametrize(
+    ("platform", "version", "private"),
+    [
+        ("win32", (3, 12, 3), False),  # CVE-2024-4030: mkdtemp made no owner-only ACL
+        ("win32", (3, 12, 4), True),
+        ("win32", (3, 13, 0), True),
+        ("linux", (3, 12, 0), True),  # mkdtemp has always used 0o700 on POSIX
+    ],
+)
+def test_a_scratch_is_private_only_where_mkdtemp_makes_it_so(monkeypatch, platform, version, private) -> None:
+    monkeypatch.setattr(sys, "platform", platform)
+    monkeypatch.setattr(sys, "version_info", (*version, "final", 0))
+
+    assert private_scratch_supported() is private
+
+
+def test_a_host_that_cannot_make_a_private_scratch_refuses_before_creating_one(monkeypatch) -> None:
+    created: list[str] = []
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(sys, "version_info", (3, 12, 3, "final", 0))
+    monkeypatch.setattr(tempfile, "mkdtemp", lambda **kw: created.append("dir") or "unused")
+
+    with pytest.raises(RuntimeError, match="CVE-2024-4030"):
+        with scratch(lambda argv, *, env=None: (0, "", ""), "nodedrill", holds="a node's files", container=False):
+            pass
+    assert created == []
