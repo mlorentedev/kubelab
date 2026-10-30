@@ -734,6 +734,14 @@ def test_dockerd_keeps_a_layer_through_the_edges_eofs():
     assert 5 * attempts * (attempts - 1) / 2 <= _PAUSE_LIMIT_SECONDS
 
 
+def test_a_pull_gets_a_share_of_the_downlink_and_no_more():
+    """The goodput is the share of down_kbit a pull gets, 54% on the Open WebUI refill
+    (#2703). At 0 every sized estimate divides by zero, and above 1 the estimate gets
+    back the optimism that refill measured."""
+    goodput = _networking()["edge"]["uplink"]["bandwidth"]["pull_goodput"]
+    assert 0 < goodput <= 1
+
+
 ATTEMPTS = "{{ config.networking.edge.uplink.max_download_attempts }}"
 GOODPUT = "{{ config.networking.edge.uplink.bandwidth.pull_goodput }}"
 RENDERED_ATTEMPTS = '"max-download-attempts": {{ docker_max_download_attempts | int }}'
@@ -755,8 +763,9 @@ def _copy_dest(task: dict) -> str:
 
 
 def test_both_daemons_render_the_one_attempts_value():
-    """The agent's rootless daemon reads its own daemon.json, not /etc/docker's, so it
-    kept Docker's 5 while the system daemon had 40 (#2834)."""
+    """The agent's rootless daemon reads its own daemon.json, not /etc/docker's (#2834).
+    Its containerd image store reads no attempts, so there the file has no effect
+    until the store changes (#2868)."""
     system = _daemon_json(ROLES / "docker/tasks/main.yml", "/etc/docker/daemon.json")
     rootless = _daemon_json(
         ROLES / "agent_stack/tasks/agent_user.yml", "{{ agent_stack_agent_home }}/.config/docker/daemon.json"
@@ -785,6 +794,43 @@ def test_every_play_behind_the_edge_passes_the_edges_values():
     assert setting >= {*names, "deploy-dns.yml"}
     assert unconfigured == set(UNCONFIGURED_DAEMONS)
     assert all(_behind_the_edge(node, networking) for node in _nodes("rpi3", networking))
+
+
+EDGE_VARS = {"docker_max_download_attempts", "image_pull_goodput", "image_pull_down_kbit"}
+
+
+def _set_above_play_vars(path: Path) -> list[tuple[str, set[str]]]:
+    """The edge's values a file sets where Ansible ranks them above play vars: role
+    params and `vars:` on a `roles:` entry, `vars:` on a block or task (an
+    include_role's among them), set_fact, and a role's vars/ files."""
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if path.parent.name == "vars":
+        return [(path.name, set(data or {}) & EDGE_VARS)]
+    found = []
+    for play in data if isinstance(data, list) else []:
+        if not isinstance(play, dict):
+            continue
+        for entry in play.get("roles") or []:
+            if isinstance(entry, dict):
+                found.append((str(entry.get("role")), (set(entry) | set(entry.get("vars") or {})) & EDGE_VARS))
+        tasks = [play] if "hosts" not in play else []
+        for key in ("pre_tasks", "tasks", "post_tasks", "handlers"):
+            tasks += play.get(key) or []
+        for task in _task_list(tasks):
+            fact = task.get("set_fact") or task.get("ansible.builtin.set_fact") or {}
+            given = set(task.get("vars") or {}) | (set(fact) if isinstance(fact, dict) else set())
+            found.append((str(task.get("name")), given & EDGE_VARS))
+    return found
+
+
+def test_nothing_overrides_the_edges_values_the_plays_pass():
+    """The play test reads play vars, and a value set above them would reach the role
+    instead with no test seeing it: a `vars:` on the docker entry setting 5 attempts
+    passed every test (ANSIBLE-086 review)."""
+    paths = repo_files(PLAYBOOKS, "*.yml") + repo_files(ROLES, "*.yml")
+    for path in paths:
+        for where, given in _set_above_play_vars(path):
+            assert not given, f"{path.relative_to(REPO)}: {where} sets {sorted(given)} over the play's"
 
 
 def test_the_bound_covers_dockerds_pauses_and_the_estimate_its_goodput():
