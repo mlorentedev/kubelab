@@ -18,6 +18,7 @@ import shlex
 import shutil
 import sqlite3
 import stat
+import tempfile
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -139,6 +140,7 @@ class _Fake:
         self.workdir: Optional[Path] = None
         self.exists = False
         self.key_mode: Optional[int] = None
+        self.key_dir: Optional[Path] = None
 
     @staticmethod
     def _edit(path: Path, change: Callable[[sqlite3.Connection], None]) -> None:
@@ -188,7 +190,8 @@ class _Fake:
         if argv[:2] == ["docker", "run"]:
             self.exists = True  # created even when it then fails to start
             mount = next(a for a in argv if a.endswith(":/run/drill:ro"))
-            self.key_mode = stat.S_IMODE(Path(mount.removesuffix(":/run/drill:ro"), "key").stat().st_mode)
+            self.key_dir = Path(mount.removesuffix(":/run/drill:ro"))
+            self.key_mode = stat.S_IMODE((self.key_dir / "key").stat().st_mode)
             return self.run_rc, "cid", "boom" if self.run_rc else ""
         if argv[:2] == ["docker", "inspect"]:
             return 0, "true\n" if self.running else "false\n", ""
@@ -390,7 +393,10 @@ def test_the_key_travels_only_as_a_private_file_into_a_container_with_no_network
     assert user == docker_user_args()
     assert IMAGES[service] in start  # the image the live Deployment runs
     assert f"{APPS[service].key_env}=/run/drill/key" in start
-    if os.name == "posix":  # Windows has no POSIX mode bits: a private file there is an ACL, not 0600
+    # The key's directory is a scratch under the per-user temp dir on every OS; on Windows,
+    # which has no POSIX mode bits, that directory's ACL is what keeps the key private.
+    assert fake.key_dir is not None and fake.key_dir.resolve().is_relative_to(Path(tempfile.gettempdir()).resolve())
+    if os.name == "posix":
         assert fake.key_mode == 0o600
     assert not any(KEY in arg for call in fake.calls for arg in call)
 

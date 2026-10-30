@@ -27,7 +27,9 @@ prints its answer through a logger the pod sets to `warn` (lesson-500).
 The restore holds encrypted secrets and the key that opens them. Both stay in a
 `0700` directory, the key reaches the container only as a `0600` file named by a
 `*_FILE` variable, only table names, row ids and counts are printed, and the
-container and the directory are removed on every exit path.
+container and the directory are removed on every exit path. Native Windows has
+no POSIX modes: there the directory is created under the per-user `%TEMP%`, and
+its ACL, not `0700`/`0600`, is what keeps the key private.
 """
 
 from __future__ import annotations
