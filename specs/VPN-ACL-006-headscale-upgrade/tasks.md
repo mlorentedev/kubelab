@@ -44,7 +44,7 @@ not inferred from this entire document being one delivery.
   `toolkit/features/headscale_upgrade.py`, using existing SSOT/config helpers.
   ✓ 2026-10-30: a pure function of handed facts; collecting them is task 6.
 - [x] [AC1] Repeat the same command; require GREEN and assert the fake runner
-  observed zero mutation commands for every refusal. ✓ 2026-10-30: 39 passed;
+  observed zero mutation commands for every refusal. ✓ 2026-10-30: 41 passed;
   the module imports nothing that can reach a process, a file or the network.
 
 ### 2. Version/configuration compatibility

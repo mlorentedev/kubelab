@@ -18,7 +18,7 @@ remains pending.
 
 | Criterion | Required evidence | Current result |
 |---|---|---|
-| AC1 | Client/bridge compatibility and approval preflight tests | Decision logic IMPLEMENTED (#2823): `-k eligibility` 39 passed, 7 mutants RED. Fact collection and its wiring not built; acceptance pending |
+| AC1 | Client/bridge compatibility and approval preflight tests | Decision logic IMPLEMENTED (#2823): `-k eligibility` 41 passed, 7 mutants RED. The parser reads the live v0.28 node list of 2026-10-30 (14 nodes, all never-expiring, no refusal). Fact collection and its wiring not built; acceptance pending |
 | AC2 | Candidate image/config/consumer checks | NOT IMPLEMENTED |
 | AC3 | Required private/subnet traffic plus no unintended broadening | NOT RUN |
 | AC4 | Consistent backup, synthetic migration and old-version full restore | NOT RUN |
