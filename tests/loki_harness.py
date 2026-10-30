@@ -155,8 +155,12 @@ def run_loki() -> Iterator[Loki]:
             # Future slots keep every window inside the ingester's range.
             "-validation.create-grace-period=8760h",
         ],
-        capture_output=True, text=True, check=True,
+        capture_output=True, text=True,
     )  # fmt: skip
+    if started.returncode != 0:
+        # No container exists yet. Exit 125 is Docker's own failure (a pull refused or
+        # rate-limited, a daemon error), and its stderr is the one line that says which.
+        pytest.fail(f"docker run exited {started.returncode}: {started.stderr.strip()[-800:]}")
     container = started.stdout.strip()
     try:
         port = (
