@@ -60,15 +60,18 @@
       include_vars:
         file: "{{ playbook_dir }}/../../config/values/common.yaml"
         name: common
+      tags: [always]
 
     - name: Load environment overrides
       include_vars:
         file: "{{ playbook_dir }}/../../config/values/{{ deploy_env }}.yaml"
         name: env_overrides
+      tags: [always]
 
     - name: Merge configs (env overrides win)
       set_fact:
         config: "{{ common | combine(env_overrides, recursive=True) }}"
+      tags: [always]
 
     - name: Decrypt common secrets (controller-side)
       command: sops -d {{ playbook_dir }}/../../config/secrets/common.enc.yaml
@@ -78,6 +81,7 @@
       changed_when: false
       check_mode: false
       no_log: true
+      tags: [always]
 
     # The node pairs live in the env file (BACKUP-057 PR 3), the passwords in
     # common. Merged the way the toolkit merges them, env over common.
@@ -89,11 +93,13 @@
       changed_when: false
       check_mode: false
       no_log: true
+      tags: [always]
 
     - name: Parse decrypted secrets
       set_fact:
         secrets: "{{ sops_common.stdout | from_yaml | combine(sops_env.stdout | from_yaml, recursive=True) }}"
       no_log: true
+      tags: [always]
 
   roles: &backup_roles
     # The notifier every node_backup unit names in its `OnFailure=`. Included

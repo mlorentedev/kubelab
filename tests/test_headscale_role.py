@@ -78,7 +78,7 @@ class TestPolicyPathParameterized:
         assert cfg["policy"]["path"] == ""
 
     def test_template_source_not_hardcoded(self) -> None:
-        src = (TEMPLATES / "config.yaml.j2").read_text()
+        src = (TEMPLATES / "config.yaml.j2").read_text(encoding="utf-8")
         assert 'path: ""' not in src, "policy.path must be templated, not the hardcoded empty literal"
         assert "headscale_policy_path" in src, "config.yaml.j2 must reference the headscale_policy_path var"
 
@@ -87,7 +87,7 @@ class TestReloadHandler:
     """Policy reload is SIGHUP via docker, never a restart (finding #1)."""
 
     def _handlers(self) -> list[dict]:
-        return yaml.safe_load((ROLE / "handlers/main.yml").read_text())
+        return yaml.safe_load((ROLE / "handlers/main.yml").read_text(encoding="utf-8"))
 
     def test_reload_handler_uses_sighup(self) -> None:
         reload_handlers = [h for h in self._handlers() if "reload" in str(h.get("name", "")).lower()]
@@ -107,7 +107,7 @@ class TestPolicyFileDeploy:
     """The policy file is deployed conditionally and notifies the SIGHUP reload."""
 
     def _tasks(self) -> list[dict]:
-        return yaml.safe_load((ROLE / "tasks/main.yml").read_text())
+        return yaml.safe_load((ROLE / "tasks/main.yml").read_text(encoding="utf-8"))
 
     def _template_task(self) -> dict:
         """The task that renders policy.hujson.j2 (distinct from the backup/rescue tasks)."""
@@ -147,7 +147,7 @@ class TestPolicyHujsonContent:
     def test_hosts_come_from_ssot_not_hardcoded(self) -> None:
         # the template DATA must contain NO IP literals — every address comes from the var.
         # (Comments may reference IPs for documentation; strip them before the check.)
-        src_body = re.sub(r"//[^\n]*", "", (TEMPLATES / "policy.hujson.j2").read_text())
+        src_body = re.sub(r"//[^\n]*", "", (TEMPLATES / "policy.hujson.j2").read_text(encoding="utf-8"))
         assert not re.search(r"\d{1,3}(\.\d{1,3}){3}", src_body), "policy.hujson.j2 must not hardcode IPs/CIDRs"
         # and the rendered hosts must equal the common.yaml values
         ssot = _hosts_from_ssot()
@@ -184,12 +184,14 @@ class TestPolicyHujsonContent:
         assert "agents@" in owners, "agents@ must own tag:hermes so the agent can register with it"
         assert all(o.endswith("@") for o in owners), "user references need the user@ form on v0.28"
 
-    def test_permissive_first_rule_preserves_existing_identities(self) -> None:
-        acls = _load_hujson(_render_policy())["acls"]
-        permissive = [a for a in acls if a["dst"] == ["*:*"]]
-        assert permissive, "rule 1 must preserve all current flows (dst *:*)"
-        src = permissive[0]["src"]
-        assert {"kubelab@", "manu@", "work@"} <= set(src), "existing users must keep allow-all (user@ form)"
+    def test_rule_one_preserves_existing_identities_without_a_wildcard(self) -> None:
+        """Rule 1 used to be `dst *:*`. It names its destinations since VPN-ACL-014;
+        the equivalence with the old wildcard is held in test_headscale_segments.py."""
+        rule_one = _load_hujson(_render_policy())["acls"][0]
+        assert {"kubelab@", "manu@", "work@"} == set(rule_one["src"]), (
+            "existing users must keep their rule (user@ form)"
+        )
+        assert "lan-rpi4:*" in rule_one["dst"], "the rpi4 LAN route must stay reachable"
 
     @staticmethod
     def _hermes_dst() -> list[str]:
@@ -225,7 +227,7 @@ class TestPolicyHujsonContent:
 
 
 def _net() -> dict:
-    return yaml.safe_load(COMMON_YAML.read_text())["networking"]
+    return yaml.safe_load(COMMON_YAML.read_text(encoding="utf-8"))["networking"]
 
 
 def _fake_runner(down_ips: frozenset[str] = frozenset(), blocked: frozenset[str] = frozenset()):
@@ -341,7 +343,7 @@ class TestAutoRevert:
     """The role backs up the policy, probes after reload, and reverts on failure."""
 
     def _tasks(self) -> list[dict]:
-        return yaml.safe_load((ROLE / "tasks/main.yml").read_text())
+        return yaml.safe_load((ROLE / "tasks/main.yml").read_text(encoding="utf-8"))
 
     def test_policy_backed_up_before_write(self) -> None:
         backups = [t for t in self._tasks() if "back up" in str(t.get("name", "")).lower()]
@@ -356,13 +358,15 @@ class TestAutoRevert:
         assert "kill --signal=HUP" in rescue_yaml, "rescue must SIGHUP-reload the reverted policy"
         assert any("fail" in task for task in blocks[0]["rescue"]), "rescue must fail the play after reverting"
 
-    def test_first_activation_reverts_to_allow_all(self) -> None:
-        # Codex P1: with no .prev (first activation), a failed probe must revert to an explicit
-        # allow-all, not strand the mesh on the just-loaded ACL.
+    def test_first_activation_reverts_to_a_policy_that_keeps_every_private_flow(self) -> None:
+        # Codex P1: with no restorable .prev, a failed probe must not strand the mesh on the
+        # just-loaded ACL. Since VPN-ACL-014 the fallback is the segment-free policy, not an
+        # allow-all: it keeps every private flow and grants a tenant segment nothing.
         rescue = [t for t in self._tasks() if "block" in t and "rescue" in t][0]["rescue"]
-        rescue_yaml = yaml.safe_dump(rescue)
-        assert '"*:*"' in rescue_yaml or "'*:*'" in rescue_yaml, "no-.prev path must write an allow-all policy"
-        assert "not hs_prev.stat.exists" in rescue_yaml, "allow-all fallback must guard on the no-previous-policy case"
+        fallback = [t for t in rescue if (t.get("template") or {}).get("src") == "policy.hujson.j2"]
+        assert fallback, "the no-.prev path must render the policy, not leave the mesh on the failed one"
+        assert fallback[0]["vars"]["headscale_policy_segments"] == []
+        assert "not (hs_prev_safe | bool)" in str(fallback[0]["when"]), "fallback must guard on no restorable policy"
 
     def test_probe_runs_via_cli_not_direct_script(self) -> None:
         blocks = [t for t in self._tasks() if "block" in t]

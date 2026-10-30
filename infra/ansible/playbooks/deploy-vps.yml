@@ -11,15 +11,18 @@
       include_vars:
         file: "{{ playbook_dir }}/../../config/values/common.yaml"
         name: common
+      tags: [always]
 
     - name: Load environment overrides
       include_vars:
         file: "{{ playbook_dir }}/../../config/values/{{ deploy_env }}.yaml"
         name: env_overrides
+      tags: [always]
 
     - name: Merge configs (env overrides win)
       set_fact:
         config: "{{ common | combine(env_overrides, recursive=True) }}"
+      tags: [always]
 
     - name: Decrypt common secrets (controller-side)
       command: sops -d {{ playbook_dir }}/../../config/secrets/common.enc.yaml
@@ -28,6 +31,7 @@
       changed_when: false
       check_mode: false
       no_log: true
+      tags: [always]
 
     - name: Decrypt env secrets (controller-side)
       command: sops -d {{ playbook_dir }}/../../config/secrets/{{ deploy_env }}.enc.yaml
@@ -36,27 +40,32 @@
       changed_when: false
       check_mode: false
       no_log: true
+      tags: [always]
 
     - name: Merge secrets (env overrides common)
       set_fact:
         secrets: "{{ (sops_common.stdout | from_yaml) | combine(sops_env.stdout | from_yaml, recursive=True) }}"
       no_log: true
+      tags: [always]
 
     - name: Build Headscale split DNS from staging zones (SSOT)
       set_fact:
         _headscale_dns_split: "{{ _headscale_dns_split | default({}) | combine({item: [config.networking.nodes.rpi4.tailscale_ip]}) }}"
       loop: "{{ config.networking.staging_zones }}"
+      tags: [always]
 
     - name: Build Headscale extra records from vpn_extra_records (SSOT)
       set_fact:
         _headscale_dns_extra_records: "{{ _headscale_dns_extra_records | default([]) + [{'name': item.name ~ '.' ~ config.global.base_domain, 'type': 'A', 'value': config.networking.nodes[item.node].tailscale_ip}] }}"
       loop: "{{ config.networking.vpn_extra_records | default([]) }}"
+      tags: [always]
 
     # ADR-041 / VPN-ACL-002: ACL host aliases (name -> Tailscale IP) for policy.hujson, from SSOT.
     - name: Build Headscale ACL host aliases from SSOT (node Tailscale IPs)
       set_fact:
         _headscale_policy_hosts: "{{ _headscale_policy_hosts | default({}) | combine({item.key: item.value.tailscale_ip}) }}"
       loop: "{{ config.networking.nodes | dict2items }}"
+      tags: [always]
 
     # Mirrors `build_hosts` in toolkit/scripts/render_headscale_policy.py, which
     # the CI gate renders from -- the two must agree or the gate compares this
@@ -67,6 +76,7 @@
     - name: Add VPS and rpi4 LAN route to Headscale ACL hosts (SSOT)
       set_fact:
         _headscale_policy_hosts: "{{ _headscale_policy_hosts | default({}) | combine({'vps': config.networking.vps.tailscale_ip, 'lan-rpi4': config.networking.lan_cidr}) }}"
+      tags: [always]
 
   roles:
     # --- Error pages (Docker Compose — only when K3s is NOT the ingress) ---
@@ -179,3 +189,8 @@
           {{ secrets.get('apps', {}).get('services', {}).get('core', {})
           .get('headscale', {}).get('audit_sources', {}) }}
         headscale_audit_user: "{{ config.networking.ssh_users.cloud }}"
+        # VPN-ACL-014: tenant segments are inventory of another organisation, so they
+        # come from SOPS and never from common.yaml. Absent: the policy is segment-free.
+        headscale_policy_segments: >-
+          {{ secrets.get('apps', {}).get('services', {}).get('core', {})
+          .get('headscale', {}).get('segments', []) }}

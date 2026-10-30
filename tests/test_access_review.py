@@ -964,6 +964,24 @@ def test_a_container_that_never_starts_names_docker_s_error(monkeypatch: pytest.
         access_review.argocd_rbac_disagreements("", "role:readonly", "img", tmp_path)
 
 
+def test_the_evaluator_starts_on_a_host_without_uids(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Native Windows has no `os.getuid`. Removing it here makes a uid call creeping back fail on Linux CI too."""
+    from toolkit.features import access_review
+
+    seen: list[list[str]] = []
+
+    def answered(argv: list[str], **_k: object) -> subprocess.CompletedProcess[str]:
+        seen.append(argv)
+        return subprocess.CompletedProcess(argv, 0, "0\n" * len(access_review.ARGOCD_RBAC_CASES), "")
+
+    monkeypatch.delattr(os, "getuid", raising=False)
+    monkeypatch.delattr(os, "getgid", raising=False)
+    monkeypatch.setattr(subprocess, "run", answered)
+    access_review.argocd_rbac_disagreements("", "role:readonly", "img", tmp_path)
+
+    assert seen and "--user" not in seen[0]
+
+
 def test_kubectl_output_that_is_not_json_is_a_review_error(monkeypatch: pytest.MonkeyPatch) -> None:
     from toolkit.features import access_review
 

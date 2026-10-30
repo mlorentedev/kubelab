@@ -144,6 +144,7 @@
       set_fact:
         _k3s_tls_san:
           - "{{ config.networking.aws.tailscale_dns }}"
+      tags: [always]
 
   roles:
     - role: ../roles/base_system

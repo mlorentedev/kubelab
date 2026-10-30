@@ -438,12 +438,17 @@ def node_reclaim(
 
 @headscale_app.command("policy-check")
 def headscale_policy_check() -> None:
-    """Render policy.hujson from the SSOT and validate it with `headscale policy check` (Docker)."""
-    from toolkit.scripts.render_headscale_policy import policy_check, render_policy
+    """Render policy.hujson from the SSOT and validate it with `headscale policy check` (Docker).
 
-    rc = policy_check(render_policy())
-    if rc != 0:
-        raise typer.Exit(rc)
+    Checks it twice: segment-free, as the repository renders it, and with a synthetic
+    tenant segment, so the segment syntax is proven on the pinned image too (VPN-ACL-014).
+    """
+    from toolkit.scripts.render_headscale_policy import EXAMPLE_SEGMENT, policy_check, render_policy
+
+    for segments in ([], [EXAMPLE_SEGMENT]):
+        rc = policy_check(render_policy(segments=segments))
+        if rc != 0:
+            raise typer.Exit(rc)
 
 
 @headscale_app.command("probe")

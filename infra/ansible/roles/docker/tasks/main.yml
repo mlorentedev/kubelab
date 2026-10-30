@@ -86,6 +86,14 @@
     update_cache: yes
 
 # --- Configure (before starting daemon) ---
+# max-download-attempts: dockerd resumes a layer from its partial file on each of
+# its own attempts, but after the last one it fails the pull and drops every layer
+# the pull registered, so a retry of the whole pull starts from nothing. Behind the
+# edge a pull's connections end in `unexpected EOF` every few minutes, 2 to 12 apart,
+# and Docker's default of 5 lost a 1.6 GB pull three times running (ace2, 2026-10-30).
+# The pause after attempt k is 5k seconds, uncapped: 40 attempts sleep at most
+# 65 minutes in all, which is also how long a blob that never downloads takes to
+# fail. tests/test_image_pull_budget.py holds it between those two bounds.
 - name: Configure Docker daemon
   copy:
     content: |
@@ -96,6 +104,7 @@
           "max-file": "{{ docker_log_max_files }}"
         },
         "storage-driver": "overlay2",
+        "max-download-attempts": 40,
         "live-restore": true,
         "userland-proxy": false,
         "experimental": false,
