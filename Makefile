@@ -1162,12 +1162,14 @@ benchmark-disk:
 
 .PHONY: deploy
 deploy:
-	@test -n "$(TARGET)" || (echo "Usage: make deploy TARGET=vps|dns|k3s|harden-nodes ENV=staging|prod [CHECK=1] [FORCE=1]" && exit 1)
-	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make deploy TARGET=vps|dns|k3s|harden-nodes ENV=staging|prod [CHECK=1] [FORCE=1]" && exit 1)
+	@test -n "$(TARGET)" || (echo "Usage: make deploy TARGET=vps|dns|k3s|harden-nodes ENV=staging|prod [CHECK=1] [TAGS=tag1,tag2] [FORCE=1]" && exit 1)
+	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make deploy TARGET=vps|dns|k3s|harden-nodes ENV=staging|prod [CHECK=1] [TAGS=tag1,tag2] [FORCE=1]" && exit 1)
 	$(eval _CHECK := $(if $(CHECK),--check,))
+	# A play builds what its roles read under any TAGS: tests/test_pre_task_facts.py (#2817).
+	$(eval _TAGS := $(if $(TAGS),--tags $(TAGS),))
 	# Refuse a checkout behind origin/master on what Ansible renders; only FORCE=1 overrides, FORCE=0 does not (OPS-042).
 	$(eval _FRESH := --require-fresh $(if $(filter 1,$(FORCE)),--force,))
-	@$(TOOLKIT) infra ansible run -p deploy-$(TARGET) -e $(ENV) $(_CHECK) $(_FRESH)
+	@$(TOOLKIT) infra ansible run -p deploy-$(TARGET) -e $(ENV) $(_CHECK) $(_TAGS) $(_FRESH)
 
 # Run ONE node-path backup now, rather than waiting for its timer (BACKUP-044).
 #

@@ -15,6 +15,7 @@
       include_vars:
         file: "{{ playbook_dir }}/../../config/values/common.yaml"
         name: common
+      tags: [always]
 
     - name: Load environment overrides
       include_vars:
