@@ -207,31 +207,30 @@
 # multiarch/qemu-user-static image instead, an image fetch for what the node
 # already holds (#2822).
 - name: Register QEMU binfmt_misc from the package's configuration
+  systemd:
+    name: systemd-binfmt
+    state: restarted
   when: not _binfmt.stat.exists
-  block:
-    - name: Load the binfmt_misc registrations
-      systemd:
-        name: systemd-binfmt
-        state: restarted
 
-    # Check mode restarted nothing, so it has no registration to read back.
-    - name: Read the QEMU registration back
-      slurp:
-        path: /proc/sys/fs/binfmt_misc/qemu-aarch64
-      register: _binfmt_loaded
-      failed_when: false
-      when: not ansible_check_mode
+# Read on every run, so a registration that predates this role is held to the flag
+# too. Only a check run that skipped the restart above has nothing to read.
+- name: Read the QEMU registration
+  slurp:
+    path: /proc/sys/fs/binfmt_misc/qemu-aarch64
+  register: _binfmt_loaded
+  failed_when: false
+  when: _binfmt.stat.exists or not ansible_check_mode
 
-    # F loads the interpreter at registration, so a container without it still runs
-    # arm64 binaries. bee reads `flags: POF` (2026-10-30).
-    - name: Verify QEMU binfmt_misc is registered with the F flag
-      assert:
-        that: >-
-          (_binfmt_loaded.content | default('') | b64decode) is search('(?m)^flags: \\S*F')
-        fail_msg: >-
-          systemd-binfmt registered no qemu-aarch64, or one without the F flag a container
-          needs, so qemu-user-static installed no binfmt.d entry fit for it.
-      when: not ansible_check_mode
+# F loads the interpreter at registration, so a container without it still runs
+# arm64 binaries. bee reads `flags: POF` (2026-10-30).
+- name: Verify QEMU binfmt_misc is registered with the F flag
+  assert:
+    that: >-
+      (_binfmt_loaded.content | default('') | b64decode) is search('(?m)^flags: \\S*F')
+    fail_msg: >-
+      No qemu-aarch64 is registered, or it lacks the F flag a container needs: the
+      qemu-user-static package installed no binfmt.d entry fit for it.
+  when: _binfmt.stat.exists or not ansible_check_mode
 
 - name: Check if buildx builder is healthy
   command: docker buildx inspect multiarch
