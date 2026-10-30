@@ -2036,7 +2036,9 @@ test:
 # commit/mutate/checkout line that lost work when a hook refused the commit
 # (lesson-480). Refuses a dirty tree; restores the file from its own bytes.
 # FROM and TO reach the toolkit through the environment, so quotes need no
-# escaping; write a literal `$` as `$$`.
+# escaping; write a literal `$` as `$$`. An empty TO deletes FROM: click reads an
+# empty envvar as unset, so a TO from the command line or the environment, the two
+# origins make exports to the shell, is passed as `--to` too (#2839).
 #   make mutate FILE=toolkit/x.py FROM='> 0' TO='>= 0' TEST=tests/test_x.py
 # Exit 0 only when the test went red. make reports every other outcome as its own
 # exit 2; the toolkit's code is the N in `Error N`: 1 = stayed green, 2 = refused
@@ -2045,7 +2047,7 @@ test:
 # (pytest errored or collected nothing against the mutant).
 .PHONY: mutate
 mutate:
-	@$(TOOLKIT) tools mutate --file "$(FILE)" --test "$(TEST)"
+	@$(TOOLKIT) tools mutate --file "$(FILE)" --test "$(TEST)" $(if $(filter command line environment,$(origin TO)),--to "$$TO")
 
 .PHONY: test-fast
 test-fast:
