@@ -370,14 +370,98 @@ def _roles_pulling_bare() -> set[str]:
     return found
 
 
-def test_no_role_on_a_node_behind_the_edge_pulls_outside_the_include():
+def _roles_behind_the_edge() -> set[str]:
     networking = _networking()
     behind = set()
     for _, play in _plays():
         if any(_behind_the_edge(node, networking) for node in _nodes(play["hosts"], networking)):
             behind |= _roles(play)
+    return behind
+
+
+def test_no_role_on_a_node_behind_the_edge_pulls_outside_the_include():
+    behind = _roles_behind_the_edge()
     assert {"glances", "agent_stack"} <= behind, "the resolution lost the roles it was written for"
     assert _roles_pulling_bare() & behind == set(UNSIZED_ROLES)
+
+
+# Images a role behind the edge still fetches by running them, each with what holds
+# it (#2822). Keyed by image, so a ledgered role that runs a new one fails too.
+UNSIZED_RUNS: dict[tuple[str, str], str] = {
+    ("agent_stack", "{{ agent_stack_agent_probe_image }}"): "the cgroup and egress probes:"
+    " busybox, about 2 MB, pinned in common.yaml",
+    ("docker", "hello-world"): "the install check, 10 kB",
+}
+_JINJA = re.compile(r"\{\{.*?\}\}|\{%.*?%\}", re.S)
+_RUNS = re.compile(r"\bdocker\s+(?:container\s+)?(?:run|create)\s+([^;|&\n]*)")
+_BOOTSTRAPS = re.compile(r"\bdocker\s+buildx\s+(?:create|inspect)\b([^;|&\n]*--bootstrap\b[^;|&\n]*)")
+# `docker run` options that take no value; any other without `=` takes the next word.
+_FLAGS = {"--rm", "--privileged", "-d", "--detach", "-i", "--interactive", "-t", "--tty", "-it", "-ti", "--init"}
+_FLAGS |= {"--read-only", "-q", "--quiet", "-P", "--publish-all", "--no-healthcheck", "--oom-kill-disable"}
+
+
+def _command_text(task: dict) -> str:
+    text = ""
+    for key in ("command", "shell", "ansible.builtin.command", "ansible.builtin.shell"):
+        value = task.get(key)
+        if isinstance(value, dict):
+            value = value.get("cmd") or " ".join(map(str, value.get("argv") or []))
+        text += f" {value or ''}"
+    return text
+
+
+def _runs(task: dict) -> set[str]:
+    """The images a task fetches by running them: `docker run` unless `--pull never`,
+    and a buildx docker-container builder it bootstraps (BuildKit's image)."""
+    held = _JINJA.findall(_command_text(task))
+    index = iter(range(len(held)))
+    text = _JINJA.sub(lambda _: f"\0{next(index)}\0", _command_text(task))  # a Jinja expression is one word
+    images = set()
+    for args in _RUNS.findall(text):
+        words = iter(args.split())
+        for word in words:
+            if word in ("--pull=never", "--pull") and (word == "--pull=never" or next(words, "") == "never"):
+                break
+            if not word.startswith("-"):
+                images.add(word)
+                break
+            if word not in _FLAGS and "=" not in word:
+                next(words, None)
+    for args in _BOOTSTRAPS.findall(text):
+        image = re.search(r"--driver-opt[= ]image=(\S+)", args)
+        images.add(image.group(1) if image else "moby/buildkit")
+    return {re.sub(r"\0(\d+)\0", lambda m: held[int(m.group(1))], image) for image in images}
+
+
+def test_no_role_on_a_node_behind_the_edge_runs_an_image_it_did_not_pull():
+    behind = _roles_behind_the_edge()
+    found = {
+        (path.parts[-3], image)
+        for path in ROLES.glob("*/tasks/*.yml")
+        if path.parts[-3] in behind
+        for task in _task_list(yaml.safe_load(path.read_text(encoding="utf-8")))
+        for image in _runs(task)
+    }
+    assert found == set(UNSIZED_RUNS), "pull a new image through the include before it runs, or list it with its reason"
+
+
+def test_the_run_guard_reads_the_image_however_the_command_is_written():
+    assert _runs({"command": "docker run --rm --privileged multiarch/qemu-user-static --reset -p yes"}) == {
+        "multiarch/qemu-user-static"
+    }
+    probe = "docker run --rm --network none --memory {{ m }} --cpus {{ c }} {{ image }} cat /x"
+    assert _runs({"ansible.builtin.command": {"cmd": probe}}) == {"{{ image }}"}
+    assert _runs({"command": {"argv": ["docker", "container", "run", "-it", "--name=x", "a:1", "sh"]}}) == {"a:1"}
+    assert _runs({"shell": "set -e\ndocker create -e A=1 b:2 && echo ok"}) == {"b:2"}
+    assert _runs({"command": "docker run --pull never --rm a:1"}) == set()
+    assert _runs({"command": "docker run --pull=never a:1"}) == set()
+    bootstrap = "docker buildx create --name m --driver docker-container --bootstrap"
+    assert _runs({"command": bootstrap}) == {"moby/buildkit"}
+    assert _runs({"command": "docker buildx create --driver-opt image=moby/buildkit:v0.20.0 --bootstrap"}) == {
+        "moby/buildkit:v0.20.0"
+    }
+    assert _runs({"command": "docker buildx create --name multiarch --driver docker-container --use"}) == set()
+    assert _runs({"command": "docker ps --filter name=run"}) == set()
 
 
 def _include_calls() -> list[tuple[str, dict]]:
