@@ -402,6 +402,18 @@ def test_the_key_travels_only_as_a_private_file_into_a_container_with_no_network
 
 
 @pytest.mark.parametrize("service", ["authelia", "n8n"])
+def test_a_host_without_uids_still_runs_the_drill(drill, tmp_path, service, monkeypatch) -> None:
+    """Native Windows has no `os.getuid`. Removing it here makes a uid call creeping back fail on Linux CI too."""
+    monkeypatch.delattr(os, "getuid", raising=False)
+    monkeypatch.delattr(os, "getgid", raising=False)
+    fake = _fake(tmp_path, service)
+
+    assert drill(fake) is True
+    start = next(c for c in fake.calls if c[:2] == ["docker", "run"])
+    assert "--user" not in start
+
+
+@pytest.mark.parametrize("service", ["authelia", "n8n"])
 def test_live_is_read_from_the_file_never_by_running_the_app_in_its_pod(drill, tmp_path, service) -> None:
     fake = _fake(tmp_path, service)
     drill(fake)

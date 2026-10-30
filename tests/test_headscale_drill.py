@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sqlite3
 from pathlib import Path
 from typing import Optional
@@ -287,6 +288,17 @@ def test_the_restored_server_has_no_network_runs_as_the_caller_and_the_image_it_
     user = start[start.index("--user") : start.index("--user") + 2] if "--user" in start else []
     assert user == docker_user_args()
     assert IMAGE in start and start[-1] == "serve"
+
+
+def test_a_host_without_uids_still_runs_the_drill(drill, monkeypatch) -> None:
+    """Native Windows has no `os.getuid`. Removing it here makes a uid call creeping back fail on Linux CI too."""
+    monkeypatch.delattr(os, "getuid", raising=False)
+    monkeypatch.delattr(os, "getgid", raising=False)
+    fake = _Fake()
+
+    assert drill(fake) is True
+    start = next(c for c in fake.calls if c[:2] == ["docker", "run"])
+    assert "--user" not in start
 
 
 @pytest.mark.parametrize("missing", ["db.sqlite", "noise_private.key", "derp_server_private.key"])
