@@ -126,8 +126,17 @@ def reads_in(expression: str, path: str = "") -> Iterator[Read]:
         yield Read(path, root.group(1), tuple(segments), optional, hyphen)
 
 
+# The toolkit's output, gitignored (`infra/ansible/.gitignore`): what it holds in a
+# checkout is whatever an old run left there, which no playbook reads.
+GENERATED = ANSIBLE / "generated"
+
+
 def _files() -> list[Path]:
-    return [p for p in sorted(ANSIBLE.rglob("*")) if p.suffix in {".yml", ".yaml", ".j2"} and p.is_file()]
+    return [
+        p
+        for p in sorted(ANSIBLE.rglob("*"))
+        if p.suffix in {".yml", ".yaml", ".j2"} and p.is_file() and GENERATED not in p.parents
+    ]
 
 
 def _reads() -> list[Read]:
