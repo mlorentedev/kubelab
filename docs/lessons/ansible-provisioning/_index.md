@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 667 | [A play that cannot force its handlers needs its later roles to notify nothing](lesson-667-a-play-that-cannot-force-its-handlers-needs-roles-that-do-not-notify.md) | 2026-10-30 |
 | 664 | [A budget that fails the play mid-role drops the handlers notified before it; skip the step when nothing after it needs it](lesson-664-a-budget-that-fails-mid-role-drops-the-handlers-before-it.md) | 2026-10-29 |
 | 663 | [A bare `mise install` installs every config it reads, and reports installing when nothing is missing](lesson-663-a-bare-mise-install-installs-every-config-it-reads.md) | 2026-10-29 |
 | 661 | [A dry run reads the file the previous run rendered, not the one this run would write](lesson-661-a-dry-run-reads-the-file-the-previous-run-rendered.md) | 2026-10-29 |
