@@ -25,6 +25,7 @@ times out, so no network is touched.
 from __future__ import annotations
 
 import errno
+import pathlib
 import socket
 from collections.abc import Iterator
 from types import SimpleNamespace
@@ -34,13 +35,18 @@ import httpx
 import pytest
 
 from tests.e2e import expectations
+from tests.e2e import test_auth_flow as e2e_auth_flow
+from tests.e2e import test_content as e2e_content
 from tests.e2e import test_health as e2e_health
+from tests.e2e import test_security_headers as e2e_headers
 from tests.e2e.expectations import (
+    EXPECTATIONS,
     OFFLINE_STATUS,
     BackendRefused,
     ServiceExpectation,
     backend_reachable,
     on_demand_skip_reason,
+    skip_reason,
 )
 
 LOOPBACK = "127.0.0.1"
@@ -137,6 +143,78 @@ def test_a_reachable_backend_gives_no_skip_reason(monkeypatch: pytest.MonkeyPatc
 
     assert _skip_reason() is None
     assert backend_reachable(LOOPBACK, listening_port) is True
+
+
+def test_a_declared_skip_is_read_before_the_backend_is_probed(
+    monkeypatch: pytest.MonkeyPatch, closed_port: int
+) -> None:
+    """An env that never runs the service has nothing there to probe, so a refusal is not its outage."""
+    _declare_backend(monkeypatch, closed_port)
+    exp = ServiceExpectation(on_demand_backend="some_node", skip_in_envs=("staging",))
+
+    assert skip_reason("some_service", exp, "staging") == "some_service skipped in staging"
+    with pytest.raises(BackendRefused):
+        skip_reason("some_service", exp, "prod")
+
+
+# Every e2e path that reads the probe. A staging run failed the two security-header
+# tests on Open WebUI, which only prod runs, because ace2 refused while its image
+# store was empty: those tests probed before they read the declaration.
+_PROBING_CALLERS = {
+    "auth_flow": lambda env: e2e_auth_flow._resolve("open_webui", {}, env),
+    "content": lambda env: e2e_content._resolve("open_webui", {}, env),
+    "health": lambda env: e2e_health._resolve("open_webui", {}, env),
+    "hsts": lambda env: e2e_headers.TestSecurityHeaders().test_hsts_header(
+        "open_webui", {}, cast(httpx.Client, None), env
+    ),
+    "security_headers": lambda env: e2e_headers.TestSecurityHeaders().test_security_headers_present(
+        "open_webui", {}, cast(httpx.Client, None), env
+    ),
+}
+
+
+@pytest.mark.parametrize("caller", sorted(_PROBING_CALLERS))
+def test_a_refusing_backend_skips_an_env_that_never_runs_the_service(
+    monkeypatch: pytest.MonkeyPatch, closed_port: int, caller: str
+) -> None:
+    assert "staging" in EXPECTATIONS["open_webui"].skip_in_envs
+    _declare_backend(monkeypatch, closed_port)
+
+    with pytest.raises(pytest.skip.Exception, match="open_webui skipped in staging"):
+        _PROBING_CALLERS[caller]("staging")
+
+
+@pytest.mark.parametrize("caller", sorted(_PROBING_CALLERS))
+def test_a_refusing_backend_fails_an_env_that_runs_the_service(
+    monkeypatch: pytest.MonkeyPatch, closed_port: int, caller: str
+) -> None:
+    """The other half: reading the declaration first must not drop the probe where the service runs."""
+    assert "prod" not in EXPECTATIONS["open_webui"].skip_in_envs
+    _declare_backend(monkeypatch, closed_port)
+
+    # A skip is a BaseException that `pytest.raises` does not catch: it would mark this
+    # test skipped, never failed, so a caller that stopped probing would pass unseen.
+    try:
+        _PROBING_CALLERS[caller]("prod")
+    except BackendRefused:
+        return
+    except pytest.skip.Exception as skipped:
+        pytest.fail(f"{caller} skipped prod instead of probing its backend: {skipped}")
+    pytest.fail(f"{caller} returned without probing its backend")
+
+
+def test_no_e2e_test_probes_without_reading_the_declaration() -> None:
+    """`skip_reason` is the one place that orders the two; a new caller that probes directly would not be.
+
+    Every module under tests/e2e/ is read, helpers and conftest included, not only test files.
+    """
+    e2e = pathlib.Path(expectations.__file__).parent
+    direct = [
+        f.name
+        for f in sorted(e2e.glob("*.py"))
+        if f.name != "expectations.py" and "on_demand_skip_reason(" in f.read_text(encoding="utf-8")
+    ]
+    assert direct == [], f"call skip_reason(svc_name, exp, env) instead of on_demand_skip_reason in: {direct}"
 
 
 def test_a_service_with_no_on_demand_backend_is_never_probed() -> None:
