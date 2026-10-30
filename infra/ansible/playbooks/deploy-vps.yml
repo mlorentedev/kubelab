@@ -48,6 +48,9 @@
       no_log: true
       tags: [always]
 
+    - import_tasks: _includes/require-secrets.yml
+      tags: [always]
+
     - name: Build Headscale split DNS from staging zones (SSOT)
       set_fact:
         _headscale_dns_split: "{{ _headscale_dns_split | default({}) | combine({item: [config.networking.nodes.rpi4.tailscale_ip]}) }}"
