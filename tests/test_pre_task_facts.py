@@ -33,17 +33,21 @@ def _tags(item: dict) -> frozenset[str]:
     return frozenset([tags] if isinstance(tags, str) else tags)
 
 
-def _flat(tasks: list | None, inherited: frozenset[str] = frozenset()):
-    """Each task with the tags it runs under, a block's included."""
+def _flat(tasks: list | None, inherited: frozenset[str] = frozenset(), headers: tuple[dict, ...] = ()):
+    """Each task with the tags it runs under and the blocks around it.
+
+    A block's `when` and `vars` are evaluated for each task in it, under that task's tags.
+    """
     for task in tasks or []:
         if not isinstance(task, dict):
             continue
         tags = inherited | _tags(task)
         if any(key in task for key in ("block", "rescue", "always")):
+            header = {key: value for key, value in task.items() if key not in ("block", "rescue", "always")}
             for key in ("block", "rescue", "always"):
-                yield from _flat(task.get(key), tags)
+                yield from _flat(task.get(key), tags, (*headers, header))
         else:
-            yield task, tags
+            yield task, tags, headers
 
 
 def _expressions(node, key: str | None = None):
@@ -75,7 +79,7 @@ def _written(task: dict) -> set[str]:
 def _shared(tasks: list | None, seen: set[Path]) -> list[str]:
     """The expressions of every playbook include these tasks import, and of the includes those import."""
     expressions: list[str] = []
-    for task, _ in _flat(tasks):
+    for task, _, _ in _flat(tasks):
         target = next((task[module] for module in IMPORTS if isinstance(task.get(module), str)), "")
         if "{{ playbook_dir }}/" not in target:
             continue
@@ -103,7 +107,7 @@ def _role(name: str) -> tuple[list[str], frozenset[str]]:
                 parsed = yaml.safe_load(text)
                 expressions += _expressions(parsed)
                 if directory in ("tasks", "handlers") and isinstance(parsed, list):
-                    tags |= {tag for _, task_tags in _flat(parsed) for tag in task_tags}
+                    tags |= {tag for _, task_tags, _ in _flat(parsed) for tag in task_tags}
                     expressions += _shared(parsed, seen)
             else:
                 expressions += JINJA.findall(text)
@@ -139,8 +143,8 @@ def _readers(play: dict):
 def _direct_readers(play: dict):
     base = _tags(play)
     for key in ("pre_tasks", "tasks", "post_tasks"):
-        for task, tags in _flat(play.get(key), base):
-            yield f"{key}: {task.get('name')}", tags, list(_expressions(task))
+        for task, tags, headers in _flat(play.get(key), base):
+            yield f"{key}: {task.get('name')}", tags, list(_expressions([task, *headers]))
             for module in ROLE_MODULES:
                 if isinstance(task.get(module), dict):
                     name = Path(task[module]["name"]).name
@@ -162,7 +166,7 @@ def _reads(expressions: list[str], name: str) -> bool:
 def _unbuilt(play: dict) -> list[str]:
     readers = list(_readers(play))
     found = []
-    for writer, writer_tags in _flat(play.get("pre_tasks"), _tags(play)):
+    for writer, writer_tags, _ in _flat(play.get("pre_tasks"), _tags(play)):
         if "always" in writer_tags:
             continue
         for name in sorted(_written(writer)):
@@ -220,5 +224,14 @@ def test_a_play_var_that_names_another_reads_what_that_one_reads():
         "vars": {"down": "{{ uplink.down_kbit }}", "uplink": "{{ config.networking.edge.uplink.bandwidth }}"},
         "pre_tasks": [{"name": "Merge configs", "set_fact": {"config": "{{ {} }}"}}],
         "tasks": [{"name": "Use it", "debug": {"msg": "{{ down }}"}, "tags": ["dns"]}],
+    }
+    assert _unbuilt(play) == ["'Merge configs' builds config, read by tasks: Use it ['dns']"]
+
+
+def test_a_blocks_condition_is_read_by_each_task_in_it_under_that_tasks_tags():
+    play = {
+        "hosts": "gateway",
+        "pre_tasks": [{"name": "Merge configs", "set_fact": {"config": "{{ {} }}"}}],
+        "tasks": [{"block": [{"name": "Use it", "debug": {"msg": "ok"}, "tags": ["dns"]}], "when": "config.dns.on"}],
     }
     assert _unbuilt(play) == ["'Merge configs' builds config, read by tasks: Use it ['dns']"]
