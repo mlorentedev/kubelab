@@ -20,6 +20,8 @@ make edge-lan-link
 
 It adds the NetworkManager profile `kubelab-edge-lan`, which takes an address from the edge's DHCP and routes `networking.lan_cidr` out the wire, ahead of the tailnet. It takes neither the edge's default route nor its DNS, so the laptop keeps its own internet. `STATIC=1` holds a fixed address instead, for when the edge serves no DHCP (a freshly flashed SD card, or a profile that cut the LAN). `REMOVE=1` deletes the profile. It needs NetworkManager, so it runs on the Linux laptop; a Mac has no implementation yet.
 
+The profile does not connect on its own: a cable plugged in again comes up under NetworkManager's default profile, which has no rule, and the LAN traffic leaves through the tailnet again. Run `make edge-lan-link` after every replug. A gateway provision checks the path rather than the address and refuses a run whose packets ride the tailnet, or that has no route to the edge at all, and `make edge-boot-check` says which path it took (#2801).
+
 ## The human steps
 
 ADR-075 D9 allows three, and this runbook asks for no others:

@@ -88,6 +88,7 @@ def ansible_env(templates_dir: str, **kwargs: Any) -> Environment:
     env.filters["bool"] = _to_bool
     # Jinja's own `tojson` HTML-escapes; Ansible's `to_json` is plain json.dumps.
     env.filters["to_json"] = json.dumps
+    env.filters["from_json"] = json.loads
     env.filters["b64decode"] = _b64decode
     env.filters["regex_replace"] = _regex_replace
     env.filters["flatten"] = _flatten

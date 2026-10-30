@@ -77,8 +77,8 @@ Partial results, kept apart from the `### B<n>-EVIDENCE` headings on purpose: `f
 - **B5.** The AP is provisioned and serving: the 2026-10-28 boot check reads hostapd active, the DHCP server listening and the lab Wi-Fi on `wlan0`. Left: saved devices rejoining, rpi3 on its reservation and Kuma's route answering, each observed.
 - **B6.** Both nodes' Tailscale prefs were compared read-only with their plays (lesson-629). rpi4 matched. rpi3 accepted routes its play declares off, which the role's `tailscale set` convergence then corrected (#2685). The 2026-10-28 boot check reads the subnet route primary on the tailnet. Left: `make headscale-rejoin` for both nodes, rpi3's `TAGS=tailscale` second run at `changed=0`, and the Headscale expiry read.
 - **B11.** ace1, bee and ace2 each had a default route through the RPi4 and a 204 from the connectivity probe (2026-10-27). Left: a `DHCPACK(eth0)` at this step (the one on record is task 11's, from before the uplink existed) and `make test-e2e ENV=staging`.
-- **B12.** The second provision (2026-10-28) reported `ok=182 changed=1 failed=0`. The one change is apt's cache refresh (`cache_valid_time: 3600`), which fires on time elapsed, not on drift. Left: a run that reports `changed=0` as written, and the 48-hour soak's rtw88 check.
-- **B14.** T3 and T4 pass on the configuration #2768 to #2773 produced; T1 and T2 ran before it (see `### Hard-reset runs, 2026-10-29` below). Left, after B12: T1 and T2 on the configuration B12's `changed=0` run confirms, with the ruleset and networkd times read for both, and T3 and T4 again if that run changes the `gateway` role.
+- **B12.** The second provision (2026-10-28) reported `ok=182 changed=1 failed=0`. The one change is apt's cache refresh (`cache_valid_time: 3600`), which fires on time elapsed, not on drift. On 2026-10-29 the edge's provision at 973113b9 read `changed=0`, the configuration B14 ran on. Left: the 48-hour soak's rtw88 check.
+- **B14.** Done. Every case passed after B12's `changed=0` provision, and again on #2797's configuration once T3 had found #2794. The first check after T4's cable went back in could not tell a cable from none (#2800). Redone over the LAN with #2800's carrier line, it reads `eth0 has a carrier`, 28 of 28 `OK`. See `### B14-EVIDENCE` below.
 - **B7, B8, B9, B10, B13.** Not started.
 
 ### Hard-reset runs, 2026-10-29
@@ -93,9 +93,241 @@ Each case was checked with `make edge-boot-check` 10 minutes after power returne
 - **T3 no uplink adapter**, 05:28: every check `OK`, the adapter missing and `kubelab-edge-liveness.service` failed on it, as the case expects. Ruleset at 9.7 s, networkd at 15.5 s. Two earlier checks of the same boot ran inside the liveness grace and read FAIL (#2774). The boot had not finished, with tailnet-bound units still queued (#2776).
 - **T3, adapter plugged back**: the first replug started nothing. `udevadm monitor` showed why: the add event that renames the adapter carries `ID_RENAMING=1`, and the move event that activates it carried no `SYSTEMD_WANTS` (lesson-650). Fixed by #2773 and provisioned with `TAGS=gateway`: `ok=90 changed=3 failed=0`. On the replug at 06:28, the move event carried `SYSTEMD_WANTS`, the supplicant started in the same second as the rename, and the check 2 minutes later passed every check, lease, default route, shaper, tailnet session and subnet route included (#2766, closed).
 - **T4 no switch cable**, 07:11, through the tailnet: 26 of 26. `eth0` was present without a carrier, and its address, its route and DNS on the LAN address all held (#2732). Startup 52.1 s, ruleset at 10.7 s and networkd at 16.9 s. The shaper came up at boot through #2773's rule.
-- **Cable plugged back**, 07:12: 25 of 25.
+- **Cable plugged back**, 07:12: 25 of 25. The check has no line for `eth0`'s carrier, and since #2769 the LAN address, route and DNS hold without one, so this does not show the cable was back (#2800).
 
 T1 and T2 ran on the configuration from before #2768 to #2773. T4 is a power cut on the current configuration with everything plugged in but the switch cable, so it also covers T2's path on that configuration. Every boot whose order was read (T1, T3, T4) loaded the ruleset before systemd-networkd started.
+
+### B14-EVIDENCE: the hard-reset test, 2026-10-29
+
+Run after B12's `changed=0` provision of the edge, at 973113b9. Each case was checked with `make edge-boot-check` once the boot had finished and, for T3, after the liveness grace. Boot times are the edge's clock, which NTP had synced for T1 and T2 (CET, UTC+1); the later boots ran on it unsynced.
+
+T1 and T2 passed. T3 passed every check, but its boot waited 90 s for the missing adapter: #2794, fixed by #2797, which bounds that wait to 10 s and makes the check fail on systemd's default. As this section's B14 line required once a change touched the `gateway` role, T1, T3 and T4 then ran again on #2797's configuration and passed; T4 is a power cut, so it also covers T2's path there. Every boot loaded the ruleset before systemd-networkd started.
+
+#### T1 warm reboot, 2026-10-29 (boot 17:08:28 CET; edge provisioned at 973113b9, idempotent run changed=0 just before)
+
+```text
+INFO Startup finished in 6.866s (kernel) + 30.030s (userspace) = 36.897s
+OK   boot finished
+INFO ruleset loaded at 9.3s, systemd-networkd started at 12.2s
+OK   ruleset inet kubelab loaded
+OK   ruleset loaded before systemd-networkd started
+OK   hardware watchdog armed
+OK   hostapd.service active
+OK   dnsmasq.service active
+OK   docker.service active
+OK   tailscaled.service active
+OK   kubelab-edge-liveness.timer active
+OK   kubelab-edge-lease-check.timer active
+OK   kubelab-edge-lease-check.path active
+OK   DHCP server listening
+OK   wlan0 serves the lab Wi-Fi
+OK   container coredns up
+OK   container coredns publishes its ports
+OK   container pihole up
+OK   container pihole publishes its ports
+OK   LAN address on eth0
+OK   route to 172.16.1.0/24 on eth0
+OK   DNS answers on the LAN address
+OK   lease on uplink0
+OK   default route out uplink0
+OK   kubelab-edge-shaper.service active
+OK   tailnet session running
+OK   subnet route 172.16.1.0/24 primary on the tailnet
+OK   no failed unit
+```
+
+After the boot: `/etc/hosts` still carries the `KUBELAB DNS RESILIENCE` block and `cloud-init status` reads `disabled` (#2777).
+
+#### T2 power cut, 2026-10-29 (boot 17:20:19 CET, `journalctl --list-boots` shows the new boot)
+
+```text
+INFO Startup finished in 7.380s (kernel) + 30.337s (userspace) = 37.717s
+OK   boot finished
+INFO ruleset loaded at 10.0s, systemd-networkd started at 13.1s
+OK   ruleset inet kubelab loaded
+OK   ruleset loaded before systemd-networkd started
+OK   hardware watchdog armed
+OK   hostapd.service active
+OK   dnsmasq.service active
+OK   docker.service active
+OK   tailscaled.service active
+OK   kubelab-edge-liveness.timer active
+OK   kubelab-edge-lease-check.timer active
+OK   kubelab-edge-lease-check.path active
+OK   DHCP server listening
+OK   wlan0 serves the lab Wi-Fi
+OK   container coredns up
+OK   container coredns publishes its ports
+OK   container pihole up
+OK   container pihole publishes its ports
+OK   LAN address on eth0
+OK   route to 172.16.1.0/24 on eth0
+OK   DNS answers on the LAN address
+OK   lease on uplink0
+OK   default route out uplink0
+OK   kubelab-edge-shaper.service active
+OK   tailnet session running
+OK   subnet route 172.16.1.0/24 primary on the tailnet
+OK   no failed unit
+```
+
+The `KUBELAB DNS RESILIENCE` block survived the power cut too. `systemd-timesyncd` synchronized 24.5 s after boot (ntp.ubuntu.com).
+
+#### T3 no uplink adapter, 2026-10-29 (boot 17:32:01 CET, dongle unplugged before the power cut)
+
+```text
+INFO Startup finished in 7.789s (kernel) + 2min 47.238s (userspace) = 2min 55.027s
+OK   boot finished
+INFO ruleset loaded at 10.4s, systemd-networkd started at 13.4s
+OK   ruleset inet kubelab loaded
+OK   ruleset loaded before systemd-networkd started
+OK   hardware watchdog armed
+OK   hostapd.service active
+OK   dnsmasq.service active
+OK   docker.service active
+OK   tailscaled.service active
+OK   kubelab-edge-liveness.timer active
+OK   kubelab-edge-lease-check.timer active
+OK   kubelab-edge-lease-check.path active
+OK   DHCP server listening
+OK   wlan0 serves the lab Wi-Fi
+OK   container coredns up
+OK   container coredns publishes its ports
+OK   container pihole up
+OK   container pihole publishes its ports
+OK   LAN address on eth0
+OK   route to 172.16.1.0/24 on eth0
+OK   DNS answers on the LAN address
+OK   uplink adapter uplink0: missing, as this case expects
+OK   kubelab-edge-liveness.service failed on the missing uplink
+INFO failed scheduled runs nobody was paged for: node-backup-ship.service
+OK   no failed unit
+```
+
+The boot took 2 min 47 s of userspace against 30 s in T1/T2. `systemd-analyze critical-chain` puts `network.target` at 1 min 31.6 s: netplan's `netplan-wpa-uplink0.service` waited the default 90 s device timeout for `uplink0` (`Job sys-subsystem-net-devices-uplink0.device/start timed out` at 99.4 s, then `Dependency failed for netplan-wpa-uplink0.service`). docker, the LAN DNS containers and tailscaled started after it. The rest of the 2 min 47 s is `node-backup-ship.service` (2 min) and `tailscale-watchdog.service` (1 min), oneshots ending on their own timeouts.
+
+#### #2797 provisioned, 2026-10-29 (`make provision NODE=rpi4 ENV=prod BOOTSTRAP=1 TAGS=gateway` from the branch)
+
+First run `changed=3`: the boot check, the drop-in directory, the drop-in; the `reload systemd` handler ran. Second run `changed=0`. Without a reboot, `make edge-boot-check` read `OK   wait for uplink0 at boot bounded (10s; systemd's default 1min 30s)`; the same unit read `1min 30s` before the provision.
+
+#### T1 warm reboot on #2797, 2026-10-29
+
+```text
+INFO Startup finished in 7.234s (kernel) + 29.677s (userspace) = 36.912s
+INFO ruleset loaded at 9.8s, systemd-networkd started at 12.8s, network.target reached at 13.0s
+OK   wait for uplink0 at boot bounded (10s; systemd's default 1min 30s)
+```
+
+Every other line `OK`, `no failed unit`. The adapter's device job started at 8.70 s and the device was found at 12.84 s (4.1 s of the 10 s bound); `netplan-wpa-uplink0.service` started at 12.89 s.
+
+#### T3 again on #2797, 2026-10-29 (dongle unplugged, power cut)
+
+```text
+INFO Startup finished in 7.590s (kernel) + 31.635s (userspace) = 39.226s
+OK   boot finished
+INFO ruleset loaded at 10.1s, systemd-networkd started at 13.1s, network.target reached at 19.3s
+OK   wait for uplink0 at boot bounded (10s; systemd's default 1min 30s)
+OK   uplink adapter uplink0: missing, as this case expects
+WAIT kubelab-edge-liveness.service failed on the missing uplink: not yet, 0 of 3 misses counted
+OK   no failed unit
+```
+
+Userspace drops from 2 min 47 s (T3 before the fix) to 31.6 s; `network.target` from 99.4 s to 19.3 s (`systemd-analyze critical-chain` reads `network.target @11.724s`). `netplan-wpa-uplink0.service` is inactive with `Result=success`, and the device unit carries `JobRunningTimeoutUSec=10s`.
+
+The journal lines of the 10 s device timeout could not be read. At 9.97 s journald renamed the uncleanly shut down `system.journal`; four minutes after boot neither that file nor the first 65 s of the boot is in any file, while archived files from 19:02 (3.5 h older) remain, at 18.6M of the 20M cap. Files written around a power cut are vacuumed first, not the oldest (#2702, comment of 2026-10-29).
+
+Rerun after the liveness counted its misses (it failed about 9 min after boot):
+
+```text
+OK   uplink adapter uplink0: missing, as this case expects
+OK   kubelab-edge-liveness.service failed on the missing uplink
+INFO failed scheduled runs nobody was paged for: node-backup-ship.service tailscale-watchdog.service
+OK   no failed unit
+```
+
+Every other line as above, exit 0. T3 passes on #2797.
+
+#### T3 recovery: dongle replugged, no reboot
+
+The udev rule started the supplicant: `uplink0 UP 172.16.0.251/23`, `netplan-wpa-uplink0.service` active. The first `make edge-boot-check` read `OK lease on uplink0`, `OK default route out uplink0`, `OK kubelab-edge-shaper.service active`, and three FAILs: `tailnet session running`, `subnet route 172.16.1.0/24 primary on the tailnet`, and `failed units: kubelab-notify@kubelab-edge-liveness.service.service`. The last is the outage's own page: the liveness failed at 435 s, and its notifier could not resolve n8n.kubelab.live with no uplink (four attempts, exit 6). The next successful liveness run sent the recovery page (`kubelab-notify-recovered@...` finished at 496.8 s), which clears the failed notifier by design (#2733). A minute later the check passed, exit 0, every line `OK` but `INFO failed scheduled runs nobody was paged for: node-backup-ship.service tailscale-watchdog.service`.
+
+#### T4 no switch cable on #2797, 2026-10-29 (power cut, everything plugged in but `eth0`'s cable), through the tailnet, 10 min after boot
+
+```text
+INFO Startup finished in 7.300s (kernel) + 30.097s (userspace) = 37.397s
+OK   boot finished
+INFO ruleset loaded at 9.6s, systemd-networkd started at 12.6s, network.target reached at 12.9s
+OK   ruleset inet kubelab loaded
+OK   ruleset loaded before systemd-networkd started
+OK   wait for uplink0 at boot bounded (10s; systemd's default 1min 30s)
+OK   hardware watchdog armed
+OK   hostapd.service active
+OK   dnsmasq.service active
+OK   docker.service active
+OK   tailscaled.service active
+OK   kubelab-edge-liveness.timer active
+OK   kubelab-edge-lease-check.timer active
+OK   kubelab-edge-lease-check.path active
+OK   DHCP server listening
+OK   wlan0 serves the lab Wi-Fi
+OK   container coredns up
+OK   container coredns publishes its ports
+OK   container pihole up
+OK   container pihole publishes its ports
+OK   eth0 present without a carrier, as this case expects
+OK   LAN address on eth0
+OK   route to 172.16.1.0/24 on eth0
+OK   DNS answers on the LAN address
+OK   lease on uplink0
+OK   default route out uplink0
+OK   kubelab-edge-shaper.service active
+OK   tailnet session running
+OK   subnet route 172.16.1.0/24 primary on the tailnet
+OK   no failed unit
+```
+
+Exit 0. On this cold boot the adapter's device job was queued at 8.72 s (`Expecting device sys-subsystem-net-devices-uplink0.device`) and the kernel renamed the adapter at 12.60 s, 3.9 s later; the warm reboot (T1) took 4.1 s. Both leave about 6 s of the 10 s bound. The persistent journal of this boot again begins at 47.7 s, so the early lines were read from dmesg (#2702).
+
+#### Cable plugged back after T4, 2026-10-29
+
+The first check did not prove it. `make edge-boot-check` read 27 of 27 `OK`, exit 0, with the switch powered off. It ran over the tailnet, and it has no line for `eth0`'s carrier, while the LAN address, route and DNS hold without one since #2769. It cannot tell a cable from none (#2800). The 07:12 run above has the same limit.
+
+Redone over the LAN (`ip route get 172.16.1.1` via `enx00249b1b0d6b`, after `make edge-lan-link`), on the same boot as T4: no reboot came between, and `Startup finished` reads the same. Before it, `make provision NODE=rpi4 ENV=prod BOOTSTRAP=1 TAGS=gateway` from #2804's branch read `changed=1` (the boot check), then `changed=0`.
+
+```text
+INFO Startup finished in 7.300s (kernel) + 30.097s (userspace) = 37.397s
+OK   boot finished
+INFO ruleset loaded at 9.6s, systemd-networkd started at 12.6s, network.target reached at 12.9s
+OK   ruleset inet kubelab loaded
+OK   ruleset loaded before systemd-networkd started
+OK   wait for uplink0 at boot bounded (10s; systemd's default 1min 30s)
+OK   hardware watchdog armed
+OK   hostapd.service active
+OK   dnsmasq.service active
+OK   docker.service active
+OK   tailscaled.service active
+OK   kubelab-edge-liveness.timer active
+OK   kubelab-edge-lease-check.timer active
+OK   kubelab-edge-lease-check.path active
+OK   DHCP server listening
+OK   wlan0 serves the lab Wi-Fi
+OK   container coredns up
+OK   container coredns publishes its ports
+OK   container pihole up
+OK   container pihole publishes its ports
+OK   eth0 has a carrier
+OK   LAN address on eth0
+OK   route to 172.16.1.0/24 on eth0
+OK   DNS answers on the LAN address
+OK   lease on uplink0
+OK   default route out uplink0
+OK   kubelab-edge-shaper.service active
+OK   tailnet session running
+OK   subnet route 172.16.1.0/24 primary on the tailnet
+OK   no failed unit
+```
+
+Exit 0. `eth0 has a carrier` is the line the first check lacked. Of the files #2804 changes, the edge runs only `edge-boot-check.sh`, so it changes what the check reads, not what the edge does at boot, and T1 to T4 stand. T4 was judged by its case's own line, `eth0 present without a carrier`, which predates #2804. That the new line fails when a case that expects the cable finds none is `test_without_the_uplink_a_cable_that_is_out_still_fails`.
 
 - [ ] Criterion 1 -> commit `<hash>` / test `<name>`
 - [ ] Criterion 2 -> commit `<hash>` / test `<name>`

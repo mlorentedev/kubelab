@@ -213,6 +213,24 @@ def edge_status() -> None:
     raise typer.Exit(code)
 
 
+def _say_the_path(net: dict[str, Any], via: str) -> None:
+    """Say which path the check takes: a pass over the tailnet says nothing of the LAN (#2801)."""
+    from toolkit.features.edge_status import path_to_edge
+
+    try:
+        path = path_to_edge(net, via)
+    except OSError as e:
+        logger.warning(f"Could not read the path to the edge: {e}")
+        return
+    if via == "lan" and path["tailnet"]:
+        logger.warning(
+            f"This machine reaches the edge's LAN address from {path['source']}, an address on the tailnet, "
+            "so this check does not show that the LAN path works (#2801). Over the LAN: `make edge-lan-link`."
+        )
+    else:
+        logger.info(f"Reaching the edge from {path['source']}, over the {'tailnet' if path['tailnet'] else 'LAN'}")
+
+
 @edge_app.command("boot-check")
 def edge_boot_check(
     case: Annotated[
@@ -234,6 +252,7 @@ def edge_boot_check(
         raise typer.Exit(64)
     net = ConfigurationManager("prod", settings.project_root).get_plaintext_values()["networking"]
     try:
+        _say_the_path(net, via)
         code = run_boot_check(net, case, via)
     except EdgeNotDeclaredError as e:
         logger.error(str(e))

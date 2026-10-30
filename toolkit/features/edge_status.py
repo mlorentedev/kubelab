@@ -9,7 +9,9 @@ through the edge, from the lab Wi-Fi.
 
 from __future__ import annotations
 
+import importlib.util
 import subprocess
+from pathlib import Path
 from typing import Any
 
 from toolkit.features.k8s_connect import resolve_ssh_user
@@ -22,6 +24,8 @@ BOOT_CHECK_PATH = "/usr/local/sbin/kubelab-edge-boot-check"
 LAN_INTERFACE = "eth0"
 # What a hard-reset case takes away, as the boot check's EDGE_EXPECT names it.
 BOOT_CASES = ("no-uplink", "no-lan")
+# How the edge play reads the path a run takes; the boot check reads it the same way.
+ROUTE_SOURCE = Path(__file__).resolve().parents[2] / "infra" / "ansible" / "playbooks" / "files" / "route-source.py"
 
 
 class EdgeNotDeclaredError(Exception):
@@ -56,6 +60,20 @@ def _ssh(networking: dict[str, Any], via: str = "lan") -> list[str]:
         f"HostKeyAlias={node['tailscale_ip']}",
         f"{resolve_ssh_user(networking, name)}@{node['tailscale_ip' if via == 'tailnet' else 'lan_ip']}",
     ]
+
+
+def path_to_edge(networking: dict[str, Any], via: str = "lan") -> dict[str, Any]:
+    """The address this machine sends from to reach the edge, and whether it is on
+    the tailnet. A machine that accepts the edge's subnet route reaches its LAN
+    address over the tailnet, whatever address it targets (#2801)."""
+    spec = importlib.util.spec_from_file_location("route_source", ROUTE_SOURCE)
+    assert spec and spec.loader, ROUTE_SOURCE
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    _, node = _edge(networking)
+    address = node["tailscale_ip" if via == "tailnet" else "lan_ip"]
+    path: dict[str, Any] = module.route(address, networking["tailscale_cidr"])
+    return path
 
 
 def status_command(networking: dict[str, Any]) -> list[str]:
