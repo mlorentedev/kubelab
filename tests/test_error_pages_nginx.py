@@ -41,7 +41,8 @@ def errors_container() -> Iterator[tuple[str, str]]:
     tag = f"errors-test:{uuid.uuid4().hex[:8]}"
     name = f"errors-test-{uuid.uuid4().hex[:8]}"
     subprocess.run(["docker", "build", "-q", "-t", tag, str(CONTEXT)], check=True, capture_output=True)
-    subprocess.run(["docker", "run", "-d", "--rm", "--name", name, "-p", "127.0.0.1::8080", tag], check=True, capture_output=True)
+    run = ["docker", "run", "-d", "--rm", "--name", name, "-p", "127.0.0.1::8080", tag]
+    subprocess.run(run, check=True, capture_output=True)
     try:
         port = subprocess.run(
             ["docker", "port", name, "8080/tcp"], check=True, capture_output=True, text=True
@@ -71,11 +72,12 @@ def base_url(errors_container: tuple[str, str]) -> str:
 def _get(url: str, accept: str | None = None) -> tuple[int, dict[str, str], str]:
     req = urllib.request.Request(url, headers={"Accept": accept} if accept else {})
     try:
-        resp: HTTPResponse = urllib.request.urlopen(req, timeout=5)
+        resp: HTTPResponse | urllib.error.HTTPError = urllib.request.urlopen(req, timeout=5)
+        code = resp.status
     except urllib.error.HTTPError as err:
-        resp = err  # type: ignore[assignment]
+        resp, code = err, err.code
     headers = {k.lower(): v for k, v in resp.headers.items()}
-    return resp.status if hasattr(resp, "status") else resp.code, headers, resp.read().decode(errors="replace")
+    return code, headers, resp.read().decode(errors="replace")
 
 
 @pytest.mark.parametrize("status", [502, 503, 504])
