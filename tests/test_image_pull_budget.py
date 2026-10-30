@@ -36,7 +36,6 @@ SSOT = "{{ config.networking.edge.uplink.bandwidth.down_kbit }}"
 # Roles that still pull bare on a node behind the edge, each with what holds it (#2742).
 # Converting one removes it here, and a new bare pull fails until it is sized or listed.
 UNSIZED_ROLES = {
-    "beelink_services": "several images in one stack: which ones the include reads is a ruling",
     "coredns": "the LAN's bootstrap DNS: converted once the include has run on a node",
     "docker": "the smoke pull, a small image under `timeout`: to be declared an exception",
 }
@@ -294,6 +293,58 @@ def test_no_role_on_a_node_behind_the_edge_pulls_outside_the_include():
             behind |= _roles(play)
     assert {"glances", "agent_stack"} <= behind, "the resolution lost the roles it was written for"
     assert _roles_pulling_bare() & behind == set(UNSIZED_ROLES)
+
+
+def _include_calls() -> list[tuple[str, dict]]:
+    """Each call of the include from a role: the role, and the vars it passes."""
+    found = []
+    for path in sorted(ROLES.glob("*/tasks/*.yml")):
+        for task in _task_list(yaml.safe_load(path.read_text(encoding="utf-8"))):
+            if "_includes/image-pull.yml" in str(task.get("ansible.builtin.import_tasks", task.get("import_tasks", ""))):
+                found.append((path.parts[-3], task["vars"]))
+    return found
+
+
+def _templates_rendering(role: str, dest: str) -> set[str]:
+    found = set()
+    for path in (ROLES / role / "tasks").glob("*.yml"):
+        for task in _task_list(yaml.safe_load(path.read_text(encoding="utf-8"))):
+            module = task.get("template", task.get("ansible.builtin.template"))
+            if isinstance(module, dict) and module.get("dest") == dest:
+                found.add(module["src"])
+    return found
+
+
+def _images_pulled(template: Path) -> set[str]:
+    """The image of each service a compose pull fetches: every one not built on the node.
+
+    A service starts at any key two spaces in, its name a template or not."""
+    found = set()
+    for service in re.split(r"^  (?=[^\s#].*:\s*$)", template.read_text(encoding="utf-8"), flags=re.M):
+        image = re.search(r"^\s+image:\s*(.+?)\s*$", service, re.M)
+        if image and not re.search(r"^\s+pull_policy:\s*never\b", service, re.M):
+            found.add(re.sub(r"^\{\{\s*(.+?)\s*\}\}$", r"\1", image.group(1)))
+    return found
+
+
+def test_a_compose_pull_estimates_every_image_its_stack_fetches():
+    """A call lists its images itself, so a service added to the stack and not to the
+    list would be fetched without being counted (#2742)."""
+    checked = set()
+    for role, args in _include_calls():
+        compose = re.search(r"-f\s+(.+?)\s+pull\b", args["image_pull_command"])
+        if not compose:
+            continue
+        templates = _templates_rendering(role, compose.group(1))
+        assert templates, f"{role}: no template renders {compose.group(1)}"
+        for src in templates:
+            for image in _images_pulled(ROLES / role / "templates" / src):
+                # A whole name: `runner_image` is inside `act_runner_image`.
+                named = re.search(rf"(?<![\w.]){re.escape(image)}(?![\w.])", str(args["image_pull_images"]))
+                assert named, f"{role}: {src} pulls {image}, which is not estimated"
+                checked.add(image)
+    assert {"glances_image", "gitea_image", "runner_image", "act_runner_image"} <= checked
+    assert "agent_stack_mcp_bridge_image" not in checked, "built on the node, never pulled"
 
 
 def test_a_play_behind_the_edge_that_runs_a_sized_pull_sizes_it():
