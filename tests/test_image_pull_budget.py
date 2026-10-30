@@ -398,6 +398,7 @@ _BOOTSTRAPS = re.compile(r"\bdocker\s+buildx\s+(?:create|inspect)\b([^;|&\n]*--b
 # `docker run` options that take no value; any other without `=` takes the next word.
 _FLAGS = {"--rm", "--privileged", "-d", "--detach", "-i", "--interactive", "-t", "--tty", "-it", "-ti", "--init"}
 _FLAGS |= {"--read-only", "-q", "--quiet", "-P", "--publish-all", "--no-healthcheck", "--oom-kill-disable"}
+_FLAGS |= {"--sig-proxy"}
 
 
 def _command_text(task: dict) -> str:
@@ -428,7 +429,8 @@ def _runs(task: dict) -> set[str]:
             if word not in _FLAGS and "=" not in word:
                 next(words, None)
     for args in _BOOTSTRAPS.findall(text):
-        image = re.search(r"--driver-opt[= ]image=(\S+)", args)
+        # `--driver-opt` takes a comma-separated key=value list, so `image=` need not come first.
+        image = re.search(r"--driver-opt[= ](?:[^\s,]*,)*image=([^\s,]+)", args)
         images.add(image.group(1) if image else "moby/buildkit")
     return {re.sub(r"\0(\d+)\0", lambda m: held[int(m.group(1))], image) for image in images}
 
@@ -443,6 +445,12 @@ def test_no_role_on_a_node_behind_the_edge_runs_an_image_it_did_not_pull():
         for image in _runs(task)
     }
     assert found == set(UNSIZED_RUNS), "pull a new image through the include before it runs, or list it with its reason"
+
+
+def test_the_ledgered_probe_image_is_the_one_its_reason_sizes():
+    """UNSIZED_RUNS keys the probe by its variable, so a bigger image in common.yaml would pass unsized."""
+    probe = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["apps"]["services"]["ai"]["hermes_kubelab"]["probe"]
+    assert probe["image"].split(":")[0] == "busybox", "size the new probe image, then update its UNSIZED_RUNS reason"
 
 
 def test_the_run_guard_reads_the_image_however_the_command_is_written():
@@ -460,6 +468,9 @@ def test_the_run_guard_reads_the_image_however_the_command_is_written():
     assert _runs({"command": "docker buildx create --driver-opt image=moby/buildkit:v0.20.0 --bootstrap"}) == {
         "moby/buildkit:v0.20.0"
     }
+    with_network = "docker buildx create --driver-opt network=host,image=registry/buildkit:1 --bootstrap"
+    assert _runs({"command": with_network}) == {"registry/buildkit:1"}
+    assert _runs({"command": "docker run --sig-proxy a:1"}) == {"a:1"}
     assert _runs({"command": "docker buildx create --name multiarch --driver docker-container --use"}) == set()
     assert _runs({"command": "docker ps --filter name=run"}) == set()
 
