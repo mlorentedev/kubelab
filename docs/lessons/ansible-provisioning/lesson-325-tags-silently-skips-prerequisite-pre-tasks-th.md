@@ -21,6 +21,8 @@ tags: [kubelab, ansible-provisioning]
 - **Reusing an existing secret's key path for a new consumer is only safe if that consumer resolves config exactly the same way every existing consumer does.** Before wiring a secret into a new set of callers, simulate (or trace by hand) the actual merge/override chain each caller goes through — "it's the same key, so it'll be the same value" is an assumption, not a fact, the moment more than one file can define that key.
 - **Both of these were caught by measuring the actual resolved state (a live error; a simulated merge output) rather than reading the Ansible source and reasoning about what "should" happen.** Neither is discoverable by code review alone — `--tags` skip behavior and merge-precedence collisions both only manifest at the exact invocation that exercises them.
 
+**Recurrence (2026-10-29, SEC-037 #2734):** the fix above reached the `provision-*` playbooks, not `deploy-vps.yml`, whose `pre_tasks` (config load, SOPS decrypt) still carry no `tags: [always]`. SEC-037's spec then prescribed `deploy-vps --tags headscale` for its live apply, which would have failed on undefined `config` and `secrets`. It was caught before running by reading the playbook, and the apply used the full `make deploy TARGET=vps ENV=prod`. A lesson that names four playbooks fixes four playbooks: a guard that fails on any playbook whose fact-building `pre_tasks` lack `always` is what would have covered the fifth.
+
 **Tags:** `#ansible` `#tags` `#secrets` `#sops` `#merge-order` `#ansible-035` `#gotcha`
 
 ---
