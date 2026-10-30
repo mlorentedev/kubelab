@@ -33,6 +33,14 @@ def _role_notifies(role: str) -> bool:
     return any(_notifies(yaml.safe_load(path.read_text(encoding="utf-8"))) for path in files)
 
 
+def test_no_shared_task_file_notifies_or_flushes():
+    """Roles and plays import these, and the resolution reads only `roles/<role>/tasks`
+    and a play's own tasks, which sees everything only while these notify nothing."""
+    for path in sorted((ROLES.parent / "playbooks/_includes").glob("*.yml")):
+        tasks = list(_task_list(yaml.safe_load(path.read_text(encoding="utf-8"))))
+        assert not any("notify" in task or task.get("meta") == "flush_handlers" for task in tasks), path.name
+
+
 def _plays_behind_the_edge_that_notify() -> dict[str, dict]:
     networking = _networking()
     found = {}
@@ -70,7 +78,9 @@ def test_the_edges_play_runs_its_handlers_inside_its_roles_instead():
     [play] = [play for _, play in _plays() if "gateway" in _roles(play)]
     assert play.get("force_handlers") is not True
     roles = [Path(entry["role"] if isinstance(entry, dict) else entry).name for entry in play["roles"]]
-    last = max(i for i, role in enumerate(roles) if _flushes(role))
+    flushing = [i for i, role in enumerate(roles) if _flushes(role)]
+    assert flushing, "no role in the edge's play flushes its handlers"
+    last = flushing[-1]
     assert roles.index("gateway") <= last, "gateway flushes what the roles before it notified"
     unflushed = [role for role in roles[last + 1 :] if _role_notifies(role)]
     assert not unflushed, (

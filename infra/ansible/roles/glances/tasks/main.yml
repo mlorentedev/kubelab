@@ -82,6 +82,8 @@
     mode: "0644"
   register: _glances_conf
 
+# Applied by "Start Glances container" below, whose `up -d` recreates a container
+# whose compose spec changed. No handler: the edge's play cannot force one (#2824).
 - name: Template Glances Docker Compose stack
   template:
     src: compose.yml.j2
