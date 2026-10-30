@@ -151,6 +151,23 @@ def test_no_uptime_means_the_soak_cannot_be_read() -> None:
     assert read("\n".join(THIS_BOOT)).code == UNREADABLE
 
 
+def test_an_empty_uptime_means_the_soak_cannot_be_read() -> None:
+    """`cut` printing nothing leaves the label alone on its line."""
+    from toolkit.features.edge_soak import read
+
+    output = _output(THIS_BOOT).replace("uptime 14400.00", "uptime ")
+    assert "uptime \n" in output
+    assert read(output).code == UNREADABLE
+
+
+def test_a_log_file_that_could_not_be_read_means_the_soak_cannot_be_read() -> None:
+    from toolkit.features.edge_soak import READ_FAILED
+
+    reading = _read([f"{READ_FAILED}/var/log/kern.log.2.gz", *THIS_BOOT], uptime=49 * HOUR)
+    assert reading.code == UNREADABLE
+    assert "kern.log.2.gz" in reading.unreadable
+
+
 # ------------------------------------------------------------------ the report
 
 
@@ -198,6 +215,19 @@ def test_nul_bytes_from_a_power_cut_do_not_hide_the_lines(tmp_path: Path) -> Non
     text = "\n".join(THIS_BOOT) + "\n"
     (tmp_path / "kern.log").write_bytes(b"\0" * 512 + text.encode())
     assert _run_log_command(tmp_path) == THIS_BOOT
+
+
+def test_a_file_zcat_cannot_read_is_marked_in_the_lines(tmp_path: Path) -> None:
+    """The loop's status is lost in the pipe, so a rotation that fails must say so in
+    the lines themselves, or the reading passes without it."""
+    from toolkit.features.edge_soak import READ_FAILED
+
+    whole = gzip.compress((PREVIOUS_BOOT[0] + "\n").encode())
+    (tmp_path / "kern.log.2.gz").write_bytes(whole[: len(whole) // 2])
+    (tmp_path / "kern.log").write_text("\n".join(THIS_BOOT) + "\n")
+    lines = _run_log_command(tmp_path)
+    assert f"{READ_FAILED}{tmp_path / 'kern.log.2.gz'}" in lines
+    assert lines[-len(THIS_BOOT) :] == THIS_BOOT
 
 
 def test_only_the_lines_the_reading_uses_are_sent(tmp_path: Path) -> None:
@@ -249,12 +279,22 @@ def test_an_ssh_failure_is_not_a_verdict() -> None:
     assert "verdict:" not in result.output
 
 
+def test_a_read_that_exits_with_an_error_is_not_a_verdict() -> None:
+    """grep's 2 is an error partway: the lines before it can look like a clean soak."""
+    from toolkit.features.edge_soak import run_soak
+
+    with mock.patch("toolkit.features.edge_soak.subprocess.run") as run:
+        run.return_value = subprocess.CompletedProcess([], 2, stdout=_output(THIS_BOOT, uptime=49 * HOUR))
+        code, lines = run_soak(NETWORKING)
+    assert code == UNREADABLE
+    assert "exited 2" in lines[-1]
+
+
 def test_a_hung_session_ends_with_no_verdict() -> None:
     """ConnectTimeout bounds the connection, not a session that stops answering."""
     from typer.testing import CliRunner
 
     from toolkit.cli.infra import app
-
     from toolkit.features.edge_soak import SESSION_TIMEOUT_S
 
     timeout = subprocess.TimeoutExpired("ssh", SESSION_TIMEOUT_S)

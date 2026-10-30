@@ -17,8 +17,9 @@ measured on the edge, decide how it is read:
   stale time, hours early after a power cut. The file is read in the order it was
   written, never by timestamp, and the current boot starts at its last banner.
 
-The reading fails closed. With no banner, or with an rsyslog that has not run since
-the start of this boot, it says it cannot tell instead of reporting a clean soak.
+The reading fails closed. With no banner, a log file it could not read, or an rsyslog
+that has not run since the start of this boot, it says it cannot tell instead of
+reporting a clean soak.
 """
 
 from __future__ import annotations
@@ -46,6 +47,8 @@ PROBE = re.compile(r" kernel: rtw_\w+ \S+: Firmware version ")
 DRIVER_PATH = re.compile(r" kernel: rtw_\w+ (\d+-[\d.]+):")
 DISCONNECT = re.compile(r" kernel: usb (\d+-[\d.]+): USB disconnect")
 LPS = "failed to leave lps state"
+# Printed in place of a file zcat could not read, so the reading knows it is partial.
+READ_FAILED = "kern.log read failed: "
 # Linux names a USB adapter after its MAC until the role renames it (ADR-075 C7).
 MAC_NAMED = re.compile(r"\b(wlx|enx)[0-9a-f]{12}\b")
 MAC = re.compile(r"\b[0-9a-f]{2}(?::[0-9a-f]{2}){5}\b", re.IGNORECASE)
@@ -74,11 +77,14 @@ class Reading:
 
 def log_command(path: str = KERNEL_LOG) -> str:
     """The pipeline that prints the lines the reading uses, oldest file first."""
-    # `ls -rv` puts kern.log.4.gz first and kern.log last; -v keeps .10 after .9.
+    # `ls -rv` puts kern.log.4.gz first and kern.log last; -v keeps .10 after .9. A
+    # file zcat cannot read leaves a marker line, on a line of its own after any
+    # partial output: the loop's own status is lost in the pipe, and a reading
+    # without that file's lines could pass.
     return (
-        f'for f in $(ls -rv {path}*); do zcat -f "$f"; done'
+        f'for f in $(ls -rv {path}*); do zcat -f "$f" || printf "\\n%s\\n" "{READ_FAILED}$f"; done'
         " | tr -d '\\000'"
-        " | LC_ALL=C grep -aE 'kernel: (Linux version|rtw_|usb [0-9.-]+: USB disconnect)'"
+        f" | LC_ALL=C grep -aE '^{READ_FAILED}|kernel: (Linux version|rtw_|usb [0-9.-]+: USB disconnect)'"
     )
 
 
@@ -119,11 +125,14 @@ def read(output: str) -> Reading:
     """Read what `remote_command` printed."""
     facts: dict[str, str] = {}
     log: list[str] = []
+    failed: list[str] = []
     for line in output.splitlines():
-        if " kernel: " in line:
+        if line.startswith(READ_FAILED):
+            failed.append(line.removeprefix(READ_FAILED))
+        elif " kernel: " in line:
             log.append(line)
         elif line.startswith("uptime "):
-            facts["uptime"] = line.split()[1]
+            facts["uptime"] = line.removeprefix("uptime ").strip()
         elif "=" in line:
             key, _, value = line.partition("=")
             facts[key] = value
@@ -139,6 +148,9 @@ def read(output: str) -> Reading:
             f"rsyslog is {facts.get('ActiveState', 'unknown')}, active since {entered_s:.0f} s into this boot: "
             "kern.log may not hold this boot's banner"
         )
+        return reading
+    if failed:
+        reading.unreadable = f"zcat could not read {', '.join(failed)}, so a reset in it would be missed"
         return reading
     banners = [i for i, line in enumerate(log) if BANNER.search(line)]
     if not banners:
@@ -194,4 +206,8 @@ def run_soak(networking: dict[str, Any]) -> tuple[int, list[str]]:
     if result.returncode == 255:
         return 255, []
     reading = read(result.stdout)
+    # grep's status: 1 is no line at all, which `read` already cannot tell from, and
+    # 2 is an error partway, after which the lines it printed may be incomplete.
+    if result.returncode != 0 and not reading.unreadable:
+        reading.unreadable = f"the read on the edge exited {result.returncode}, so its lines may be incomplete"
     return reading.code, report(reading)
