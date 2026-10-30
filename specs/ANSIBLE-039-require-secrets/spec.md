@@ -29,7 +29,7 @@ Out:
 ## Checklist
 
 - [x] Failing tests first: the static rule, its resolution on a hand-built play, and the run of the real assert (four cases, one of them `include_tasks` to show why the import is static).
-- [x] The include, eleven plays across ten playbooks, `maintain.yml`'s tags.
+- [x] The include, twelve plays across eleven playbooks, `maintain.yml`'s tags.
 - [x] Mutants red: `include_tasks` in a play, `that: true`, the opt-out removed, the import's `always` replaced, the import removed.
 - [x] Lesson: lesson-677.
 
