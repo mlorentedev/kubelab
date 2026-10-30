@@ -184,11 +184,35 @@ def test_a_refusing_backend_skips_an_env_that_never_runs_the_service(
         _PROBING_CALLERS[caller]("staging")
 
 
+@pytest.mark.parametrize("caller", sorted(_PROBING_CALLERS))
+def test_a_refusing_backend_fails_an_env_that_runs_the_service(
+    monkeypatch: pytest.MonkeyPatch, closed_port: int, caller: str
+) -> None:
+    """The other half: reading the declaration first must not drop the probe where the service runs."""
+    assert "prod" not in EXPECTATIONS["open_webui"].skip_in_envs
+    _declare_backend(monkeypatch, closed_port)
+
+    # A skip is a BaseException that `pytest.raises` does not catch: it would mark this
+    # test skipped, never failed, so a caller that stopped probing would pass unseen.
+    try:
+        _PROBING_CALLERS[caller]("prod")
+    except BackendRefused:
+        return
+    except pytest.skip.Exception as skipped:
+        pytest.fail(f"{caller} skipped prod instead of probing its backend: {skipped}")
+    pytest.fail(f"{caller} returned without probing its backend")
+
+
 def test_no_e2e_test_probes_without_reading_the_declaration() -> None:
-    """`skip_reason` is the one place that orders the two; a new test that probes directly would not be."""
+    """`skip_reason` is the one place that orders the two; a new caller that probes directly would not be.
+
+    Every module under tests/e2e/ is read, helpers and conftest included, not only test files.
+    """
     e2e = pathlib.Path(expectations.__file__).parent
     direct = [
-        f.name for f in sorted(e2e.glob("test_*.py")) if "on_demand_skip_reason(" in f.read_text(encoding="utf-8")
+        f.name
+        for f in sorted(e2e.glob("*.py"))
+        if f.name != "expectations.py" and "on_demand_skip_reason(" in f.read_text(encoding="utf-8")
     ]
     assert direct == [], f"call skip_reason(svc_name, exp, env) instead of on_demand_skip_reason in: {direct}"
 
