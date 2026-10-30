@@ -919,6 +919,8 @@ def test_provisioning_clears_the_notifiers_a_refused_page_left_failed() -> None:
     The spool unit is left alone: it fails while notices wait, and that is the
     trace to keep.
     """
+    from tests.ansible_jinja import task_runs
+
     [listing] = [t for t in _tasks() if "list-units" in t.get("command", {}).get("argv", [])]
     argv = [_expand(arg) for arg in listing["command"]["argv"]]
     assert "--state=failed" in argv
@@ -934,7 +936,11 @@ def test_provisioning_clears_the_notifiers_a_refused_page_left_failed() -> None:
         assert any(fnmatch.fnmatchcase(unit, pattern) for pattern in patterns) is expected, unit
     assert listing["changed_when"] is False and listing["check_mode"] is False
     [reset] = [t for t in _tasks() if "reset-failed" in t.get("command", {}).get("argv", [])]
-    assert listing["register"] in str(reset["when"]), "a rerun with nothing failed must report changed=0"
+    # Evaluated, not read: a gate that always runs would call `systemctl reset-failed`
+    # with no unit, which clears every failed unit on the node, the spool unit included.
+    listed = {"stdout_lines": [f"{next(iter(cleared))} loaded failed failed Notify n8n of a failed unit"]}
+    assert not task_runs(reset, {listing["register"]: {"stdout_lines": []}}), "a rerun with nothing failed ran"
+    assert task_runs(reset, {listing["register"]: listed}), "a failed notifier was left failed"
 
 
 def test_the_cleanup_resets_each_unit_the_listing_names() -> None:

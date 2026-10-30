@@ -44,6 +44,8 @@ class Node:
         self.tried = root / "attempts.jsonl"
         self.result = root / "result"
         self.curl_exit = root / "curl-exit"
+        # The exit the next request gets after this one: n8n taking one request, then none.
+        self.curl_next = root / "curl-next"
         self.systemctl = root / "systemctl.log"
         self.reset_exit = root / "reset-exit"
         self.environment = root / "environment"
@@ -77,6 +79,7 @@ class Node:
             "curl",
             'cat >/dev/null; d=""; while [ $# -gt 0 ]; do [ "$1" = -d ] && d="$2"; shift; done;'
             ' printf "%s\\n" "$d" >> "$NODE_TRIED"; rc="$(cat "$NODE_CURL_EXIT" 2>/dev/null || echo 0)";'
+            ' [ -f "$NODE_CURL_NEXT" ] && mv "$NODE_CURL_NEXT" "$NODE_CURL_EXIT";'
             ' [ "$rc" = 0 ] && printf "%s\\n" "$d" >> "$NODE_SENT"; exit "$rc"',
         )
         self.set_result("exit-code")
@@ -101,6 +104,7 @@ class Node:
             "NODE_SENT": str(self.sent),
             "NODE_TRIED": str(self.tried),
             "NODE_CURL_EXIT": str(self.curl_exit),
+            "NODE_CURL_NEXT": str(self.curl_next),
             "NODE_SYSTEMCTL": str(self.systemctl),
             "NODE_RESET_EXIT": str(self.reset_exit),
             "NODE_ENVIRONMENT": str(self.environment),
@@ -132,6 +136,14 @@ class Node:
         """Hold the unit's lock, as a notice of it does while its page is out."""
         self.state.mkdir(exist_ok=True)
         with open(self.state / f"{unit}.lock", "w", encoding="utf-8") as handle:
+            fcntl.flock(handle, fcntl.LOCK_EX)
+            yield
+
+    @contextmanager
+    def spool_locked(self) -> Iterator[None]:
+        """Hold the spool's lock, as a flush does while it delivers what waits there."""
+        self.spool.mkdir(exist_ok=True)
+        with open(self.spool / ".lock", "w", encoding="utf-8") as handle:
             fcntl.flock(handle, fcntl.LOCK_EX)
             yield
 
@@ -291,6 +303,8 @@ def test_the_flush_delivers_a_kept_page_once_with_the_time_it_happened(node: Nod
     node.run()
     after = int(time.time())
     node.curl_exit.write_text("0", encoding="utf-8")
+    # n8n takes this one request: a flush that left the notice in the spool would send it again, refused.
+    node.curl_next.write_text("6", encoding="utf-8")
     assert node.flush().returncode == 0
     [title] = node.titles()
     found = re.search(r"failed on \S+ \(at (\S+)Z, delivered late\)$", title)
@@ -298,6 +312,7 @@ def test_the_flush_delivers_a_kept_page_once_with_the_time_it_happened(node: Nod
     at = calendar.timegm(time.strptime(found.group(1), "%Y-%m-%dT%H:%M:%S"))
     assert before <= at <= after, f"{found.group(1)}Z is not when the page was refused"
     assert node.spooled() == []
+    node.curl_exit.write_text("0", encoding="utf-8")
     node.flush()
     assert len(node.titles()) == 1, "a second flush delivered the page again"
 
@@ -342,6 +357,39 @@ def test_a_notice_does_not_overtake_one_still_kept(node: Node) -> None:
     assert node.spooled() == []
 
 
+def test_a_notice_finding_the_spool_locked_is_kept_behind_the_flush(node: Node) -> None:
+    """A flush holds the spool while it delivers what waits there.
+
+    A notice sent directly in that window, with the spool empty when it looked,
+    could still reach n8n ahead of one the flush has yet to deliver.
+    """
+    with node.spool_locked():
+        result = node.run()
+    assert result.returncode == 0, result.stderr
+    assert node.attempts() == 0, "the notice went out while a flush held the spool"
+    assert len(node.spooled()) == 1
+    assert node.starts() == [f"start --no-block {SPOOL_UNIT}"], "nothing asked for the spool to be delivered"
+
+
+def test_a_flush_that_finds_the_spool_busy_leaves_it_to_the_run_holding_it(tmp_path: Path) -> None:
+    """Two flushes delivering at once would send the same notice twice.
+
+    The run holding the spool decides the outcome, so this one exits 0 and the
+    timer's next run takes whatever is left.
+    """
+    node = Node(tmp_path, node_notify_lock_wait_seconds=1)
+    node.curl_exit.write_text("6", encoding="utf-8")
+    node.run()
+    node.curl_exit.write_text("0", encoding="utf-8")
+    tried = node.attempts()
+    with node.spool_locked():
+        result = node.flush()
+    assert result.returncode == 0, result.stderr
+    assert node.attempts() == tried, "a flush delivered while another held the spool"
+    assert len(node.spooled()) == 1
+    assert "busy" in result.stderr
+
+
 def test_a_refused_recovery_is_kept_and_closes_the_incident(node: Node) -> None:
     node.run()
     node.set_result("success")
@@ -360,6 +408,20 @@ def test_a_reminder_of_a_page_still_kept_is_folded_into_it(node: Node) -> None:
     node.age_state(REMINDER + 5)
     node.run()
     assert len(node.spooled()) == 1
+
+
+def test_a_reminder_is_folded_only_into_a_page_of_its_own_unit(node: Node) -> None:
+    """Another unit's kept page says nothing about this one, whose reminder is kept behind it."""
+    other = "node-backup-ship.service"
+    node.run()
+    node.curl_exit.write_text("6", encoding="utf-8")
+    node.run(unit=other)
+    node.age_state(REMINDER + 5)
+    node.run()
+    kept = node.spooled()
+    assert len(kept) == 2, "a reminder was folded into another unit's page"
+    assert kept[1].name.endswith(f"-{UNIT}"), [path.name for path in kept]
+    assert "still failing" in json.loads(kept[1].read_text(encoding="utf-8"))["title"]
 
 
 def test_exercising_the_path_still_fails_when_nothing_was_delivered(node: Node) -> None:
