@@ -491,6 +491,7 @@ def test_the_run_guard_reads_the_image_however_the_command_is_written():
     assert _runs({"command": "docker run --pull=never a:1"}) == set()
     assert _runs({"command": "docker run --pull always a:1 sh"}) == {"a:1"}
     assert _runs({"ansible.builtin.raw": "docker run --rm a:1"}) == {"a:1"}
+    assert _runs({"raw": "docker create b:2"}) == {"b:2"}
     assert _runs({"command": "docker run --pull=missing a:1"}) == {"a:1"}
     bootstrap = "docker buildx create --name m --driver docker-container --bootstrap"
     assert _runs({"command": bootstrap}) == {"moby/buildkit"}
