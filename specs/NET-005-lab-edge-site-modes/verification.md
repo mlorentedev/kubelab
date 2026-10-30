@@ -73,11 +73,11 @@ Partial results, kept apart from the `### B<n>-EVIDENCE` headings on purpose: `f
 
 - **B2.** The full play with `BOOTSTRAP=1` over the LAN finished `ok=182 changed=6 failed=0`. For the boot that began 2026-10-27T00:52Z (`/proc/stat` btime), systemd's monotonic timestamps put `inet kubelab` active at 9.6 s and systemd-networkd's start at 15.5 s; the journal could not say, because its size cap had dropped the boot's first seconds (lesson-641). Left: `networkctl renew uplink0` with the drops loaded, and the renewed lease in the journal.
 - **B3.** Not recorded. The portal login (B4) came first, so at this site the reading can no longer precede it. Left: the gate's result, and with it task 31's decision.
-- **B4.** The portal login went through `make edge-lan-link ROUTE=1` with the laptop's own Wi-Fi off. The form left through the adapter, and `make edge-status` then read `uplink: up`. Left: the uplink's MAC read unchanged after a reboot and after a re-provision, and undoing the hand changes (the `lab-bootstrap` profile, "Wired connection 1").
-- **B5.** The AP is provisioned and serving: the 2026-10-28 boot check reads hostapd active, the DHCP server listening and the lab Wi-Fi on `wlan0`. Left: saved devices rejoining, rpi3 on its reservation and Kuma's route answering, each observed.
-- **B6.** Both nodes' Tailscale prefs were compared read-only with their plays (lesson-629). rpi4 matched. rpi3 accepted routes its play declares off, which the role's `tailscale set` convergence then corrected (#2685). The 2026-10-28 boot check reads the subnet route primary on the tailnet. Left: `make headscale-rejoin` for both nodes, rpi3's `TAGS=tailscale` second run at `changed=0`, and the Headscale expiry read.
-- **B11.** ace1, bee and ace2 each had a default route through the RPi4 and a 204 from the connectivity probe (2026-10-27). Left: a `DHCPACK(eth0)` at this step (the one on record is task 11's, from before the uplink existed) and `make test-e2e ENV=staging`.
-- **B12.** The second provision (2026-10-28) reported `ok=182 changed=1 failed=0`. The one change is apt's cache refresh (`cache_valid_time: 3600`), which fires on time elapsed, not on drift. On 2026-10-29 the edge's provision at 973113b9 read `changed=0`, the configuration B14 ran on. Left: the 48-hour soak's rtw88 check.
+- **B4.** The portal login went through `make edge-lan-link ROUTE=1` with the laptop's own Wi-Fi off. The form left through the adapter, and `make edge-status` then read `uplink: up`. Completed 2026-10-30, see `### B4-EVIDENCE` below.
+- **B5.** The AP is provisioned and serving: the 2026-10-28 boot check reads hostapd active, the DHCP server listening and the lab Wi-Fi on `wlan0`. On 2026-10-30 dnsmasq's leases held rpi3 on its reservation (`10.0.0.157`, `b8:27:eb:3d:8e:54`) and saved devices back on the lab Wi-Fi (a phone, a tablet, a watch). Left: Kuma's route answering, observed.
+- **B6.** Both nodes' Tailscale prefs were compared read-only with their plays (lesson-629). rpi4 matched. rpi3 accepted routes its play declares off, which the role's `tailscale set` convergence then corrected (#2685). The 2026-10-28 boot check reads the subnet route primary on the tailnet. On 2026-10-30 `make headscale-rejoin NODE=rpi4` was a no-op over the LAN (`ok=23 changed=0`, no key minted), and rpi3's full provision at c737c74e, which carries the `tailscale` role, read `changed=0` on its second run. `NODE=rpi3` from the switch could not reach rpi3 (`10.0.0.157`, timed out before any task ran): it runs over the lab Wi-Fi address, so the controller has to be on the lab Wi-Fi (`docs/runbooks/lab-edge.md`). Left: `make headscale-rejoin NODE=rpi3` from the lab Wi-Fi, and the Headscale expiry read if either node rejoins for real.
+- **B11.** ace1, bee and ace2 each had a default route through the RPi4 and a 204 from the connectivity probe (2026-10-27). On 2026-10-30 dnsmasq's journal held a `DHCPACK(eth0)` for the operator's laptop on the switch, at `172.16.1.91` through `make edge-lan-link`. Left: `make test-e2e ENV=staging`.
+- **B12.** The second provision (2026-10-28) reported `ok=182 changed=1 failed=0`. The one change is apt's cache refresh (`cache_valid_time: 3600`), which fires on time elapsed, not on drift. On 2026-10-29 the edge's provision at 973113b9 read `changed=0`, the configuration B14 ran on. Left: the 48-hour soak's rtw88 check, which the journal cannot give: on 2026-10-30 the edge's journal held about 8 hours (19.7M against `SystemMaxUse=20M`, #2702). The boot that began 2026-10-29T21:50Z logged `firmware failed to leave lps state` twice in its first 3 hours, with no disconnect, lease change or liveness action in either minute, power save `on` and `disable_lps_deep` `N`. The operator chose to observe through the soak rather than change the role, which would restart it. #2807 tracks a durable reading and the LPS decision.
 - **B14.** Done. Every case passed after B12's `changed=0` provision, and again on #2797's configuration once T3 had found #2794. The first check after T4's cable went back in could not tell a cable from none (#2800). Redone over the LAN with #2800's carrier line, it reads `eth0 has a carrier`, 28 of 28 `OK`. See `### B14-EVIDENCE` below.
 - **B7, B8, B9, B10, B13.** Not started.
 
@@ -328,6 +328,21 @@ OK   no failed unit
 ```
 
 Exit 0. `eth0 has a carrier` is the line the first check lacked. Of the files #2804 changes, the edge runs only `edge-boot-check.sh`, so it changes what the check reads, not what the edge does at boot, and T1 to T4 stand. T4 was judged by its case's own line, `eth0 present without a carrier`, which predates #2804. That the new line fails when a case that expects the cable finds none is `test_without_the_uplink_a_cable_that_is_out_still_fails`.
+
+### B4-EVIDENCE: the portal login and a stable uplink MAC, 2026-10-30
+
+- The portal login went through `make edge-lan-link ROUTE=1` with the laptop's own Wi-Fi off (2026-10-28, under "Bring-up progress").
+- After the hard-reset boots of 2026-10-29, the re-provisions of the same day (`BOOTSTRAP=1`, then `TAGS=gateway`) and the boot that began 2026-10-29T21:50Z, `make edge-status` read:
+
+```text
+uplink: up
+lease: yes
+public resolver: answers
+lease resolver: answers
+uplink MAC: matches SOPS
+```
+
+- The hand changes listed under "Decisions made during implementation" are gone: `nmcli con delete lab-bootstrap` and `nmcli con delete "Wired connection 1"`, run by the operator. The second profile was deleted rather than reverted: it sat on the same adapter as `kubelab-edge-lan`, the profile `make edge-lan-link` renders, and reverted to its defaults it would compete for that adapter and could take the laptop's default route. `kubelab-edge-lan` stayed active and the route to the LAN stayed on the adapter.
 
 - [ ] Criterion 1 -> commit `<hash>` / test `<name>`
 - [ ] Criterion 2 -> commit `<hash>` / test `<name>`
