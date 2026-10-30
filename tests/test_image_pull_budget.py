@@ -744,8 +744,9 @@ def test_dockerd_keeps_a_layer_through_the_edges_eofs():
 
 def test_a_pull_gets_a_share_of_the_downlink_and_no_more():
     """The goodput is the share of down_kbit a pull gets, 54% on the Open WebUI refill
-    (#2703). At 0 every sized estimate divides by zero, and above 1 the estimate gets
-    back the optimism that refill measured."""
+    (#2703). At 0 every sized estimate divides by zero, and above 1 a pull would get
+    more than the link carries. The value in between is a measurement, kept in
+    common.yaml rather than pinned here, so a new one changes one file."""
     goodput = _networking()["edge"]["uplink"]["bandwidth"]["pull_goodput"]
     assert 0 < goodput <= 1
 
@@ -807,10 +808,31 @@ def test_every_play_behind_the_edge_passes_the_edges_values():
 EDGE_VARS = {"docker_max_download_attempts", "image_pull_goodput", "image_pull_down_kbit"}
 
 
+def _vars_file_keys(base: Path, ref: str) -> set[str]:
+    """The keys a vars file sets. A file named by a template cannot be read here, so
+    it counts as setting every one of the edge's values."""
+    if "{{" in ref:
+        return set(EDGE_VARS)
+    return set(yaml.safe_load((base / ref).read_text(encoding="utf-8")) or {})
+
+
+def _task_sets(task: dict, base: Path) -> set[str]:
+    """The variables a task sets above play vars: its own `vars:`, a set_fact, and an
+    include_vars that loads a file without namespacing it under `name:`."""
+    fact = task.get("set_fact") or task.get("ansible.builtin.set_fact") or {}
+    given = set(task.get("vars") or {}) | (set(fact) if isinstance(fact, dict) else set())
+    loaded = task.get("include_vars", task.get("ansible.builtin.include_vars"))
+    args = loaded if isinstance(loaded, dict) else {"file": loaded}
+    if loaded is not None and "name" not in args:
+        given |= _vars_file_keys(base, str(args.get("file") or "{{ dir }}"))
+    return given
+
+
 def _set_above_play_vars(path: Path) -> list[tuple[str, set[str]]]:
     """The edge's values a file sets where Ansible ranks them above play vars: role
-    params and `vars:` on a `roles:` entry, `vars:` on a block or task (an
-    include_role's among them), set_fact, and a role's vars/ files."""
+    params and `vars:` on a `roles:` entry, a play's vars_files, a block's or task's
+    `vars:` (an include_role's among them), set_fact, include_vars into the top
+    namespace, and a role's vars/ files."""
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     if path.parent.name == "vars":
         return [(path.name, set(data or {}) & EDGE_VARS)]
@@ -821,13 +843,13 @@ def _set_above_play_vars(path: Path) -> list[tuple[str, set[str]]]:
         for entry in play.get("roles") or []:
             if isinstance(entry, dict):
                 found.append((str(entry.get("role")), (set(entry) | set(entry.get("vars") or {})) & EDGE_VARS))
+        for ref in play.get("vars_files") or []:
+            found.append((f"vars_files {ref}", _vars_file_keys(path.parent, str(ref)) & EDGE_VARS))
         tasks = [play] if "hosts" not in play else []
         for key in ("pre_tasks", "tasks", "post_tasks", "handlers"):
             tasks += play.get(key) or []
         for task in _task_list(tasks):
-            fact = task.get("set_fact") or task.get("ansible.builtin.set_fact") or {}
-            given = set(task.get("vars") or {}) | (set(fact) if isinstance(fact, dict) else set())
-            found.append((str(task.get("name")), given & EDGE_VARS))
+            found.append((str(task.get("name")), _task_sets(task, path.parent) & EDGE_VARS))
     return found
 
 
