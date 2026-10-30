@@ -477,3 +477,34 @@ def test_the_guard_reads_image_pulls_and_roles_however_they_are_written():
     play = {"roles": ["../roles/a"], "tasks": [{"block": [{"include_role": {"name": "../roles/b"}}]}]}
     play["pre_tasks"] = [{"ansible.builtin.import_role": {"name": "c"}}]
     assert _roles(play) == {"a", "b", "c"}
+
+
+#: Roles whose sized pull still comes after a template whose change gates a restart
+#: or a recreate, each with the ticket that moves it. **It may only shrink**: a role
+#: fixed must leave it, and a role added to it is the reviewable act.
+PULL_AFTER_GATED_TEMPLATES: dict[str, str] = {
+    "agent_stack": "#2812",
+    "glances": "#2812",
+    "rpi3_services": "#2812",
+}
+
+
+def test_a_sized_pull_runs_before_the_templates_whose_change_a_later_task_acts_on():
+    """A refused pull stops the play. Past a template whose change gates a restart, the
+    rerun sees no change and skips the restart, so the service keeps the old file (#2810)."""
+    checked, early = 0, {}
+    for path in ROLES.glob("*/tasks/*.yml"):
+        tasks = list(_task_list(yaml.safe_load(path.read_text(encoding="utf-8"))))
+        pulls = [
+            i for i, t in enumerate(tasks) if "_includes/image-pull.yml" in str(t.get("ansible.builtin.import_tasks", ""))
+        ]
+        if not pulls:
+            continue
+        acted_on = {m.group(1) for t in tasks for m in re.finditer(r"\b(\w+)\.changed\b", str(t))}
+        for i, task in enumerate(tasks):
+            if ("template" in task or "ansible.builtin.template" in task) and task.get("register") in acted_on:
+                checked += 1
+                if i < pulls[0]:
+                    early.setdefault(path.parts[-3], []).append(task["name"])
+    assert checked, "no template gates a later task: the guard reads nothing"
+    assert set(early) == set(PULL_AFTER_GATED_TEMPLATES), early
