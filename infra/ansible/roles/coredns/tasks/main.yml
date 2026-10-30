@@ -29,7 +29,6 @@
       vars:
         image_pull_name: the DNS stack
         image_pull_images: ["{{ coredns_image }}", "{{ pihole_image }}"]
-        image_pull_command: docker compose -f {{ coredns_remote_dir }}/docker-compose.yml pull
 
     - name: Template Corefile
       template:
