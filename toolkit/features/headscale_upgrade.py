@@ -32,10 +32,13 @@ import json
 import re
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 MIN_CLIENT_VERSION = (1, 80, 0)
 KNOWN_BAD_TARGETS = frozenset({(0, 29, 0)})
+# Go's zero time.Time, which versions before v0.29 stored for a node that never expires.
+GO_ZERO_TIME = datetime(1, 1, 1, tzinfo=timezone.utc)
+_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 _TAG = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
 _DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -79,25 +82,26 @@ class Verdict:
 def _expiry(raw: object) -> datetime | None:
     """When the node key expires, or None if it never does.
 
-    Absent and the Go zero time (0001-01-01, which older versions stored for "no
-    expiry") both mean never. A Timestamp arrives as an object whose `seconds` is a
-    number (encoding/json) or a string (protojson), or as an RFC 3339 string.
-    Anything else raises: reading it as "never" would pass an expired node silently.
+    Absent and Go's zero time are the only two ways to say never. A Timestamp
+    arrives as an object whose `seconds` is a number (encoding/json) or a string
+    (protojson), or as an RFC 3339 string. Any other moment is real, even one
+    before 1970, and any other shape raises: reading it as "never" would pass an
+    expired node silently.
     """
     if raw is None:
         return None
     try:
         if isinstance(raw, dict) and "seconds" in raw:
-            seconds = int(raw["seconds"])
-            return datetime.fromtimestamp(seconds, tz=timezone.utc) if seconds > 0 else None
-        if isinstance(raw, str):
+            moment = _EPOCH + timedelta(seconds=int(raw["seconds"]))
+        elif isinstance(raw, str):
             moment = datetime.fromisoformat(raw)
             if moment.tzinfo is None:
                 raise ValueError("no UTC offset")
-            return moment if moment.year > 1 else None
-    except (TypeError, ValueError) as exc:
+        else:
+            raise ValueError("unknown shape")
+    except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError(f"unreadable node expiry: {raw!r}") from exc
-    raise ValueError(f"unreadable node expiry: {raw!r}")
+    return None if moment == GO_ZERO_TIME else moment
 
 
 def parse_node_states(payload: str) -> list[NodeState]:

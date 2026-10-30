@@ -18,11 +18,13 @@ import pytest
 
 import toolkit.features.headscale_upgrade as preflight
 from tests.test_headscale_nodes import _LIVE_PAYLOAD
-from toolkit.features.headscale_upgrade import Facts, evaluate, parse_node_states
+from toolkit.features.headscale_upgrade import GO_ZERO_TIME, Facts, evaluate, parse_node_states
 
 NOW = datetime(2026, 10, 30, tzinfo=timezone.utc)
 PAST = int(datetime(2026, 10, 1, tzinfo=timezone.utc).timestamp())
 FUTURE = int(datetime(2027, 1, 1, tzinfo=timezone.utc).timestamp())
+# Go's zero time as Unix seconds, computed rather than pasted (-62135596800).
+ZERO_TIME_SECONDS = int((GO_ZERO_TIME - datetime(1970, 1, 1, tzinfo=timezone.utc)).total_seconds())
 DIGEST = "sha256:" + "a" * 64
 TARGET = f"headscale/headscale:v0.29.6@{DIGEST}"
 
@@ -124,7 +126,7 @@ def test_eligibility_refuses_a_required_node_online_with_an_expired_key() -> Non
     "raw",
     [
         _node("gcp1", online=False, expiry=PAST),  # expired but offline: nothing to drop
-        _node("gcp1", expiry=-62135596800),  # 0001-01-01: the pre-v0.29 "no expiry" sentinel
+        _node("gcp1", expiry=ZERO_TIME_SECONDS),  # 0001-01-01: the pre-v0.29 "no expiry" sentinel
         _node("gcp1"),  # no expiry at all
     ],
 )
@@ -156,6 +158,8 @@ def test_eligibility_reads_the_suffix_from_the_shape_headscale_really_returns() 
         ({"seconds": str(PAST), "nanos": 1}, True),  # protojson renders it as a string
         ("2026-10-01T00:00:00Z", True),  # protojson renders a Timestamp as RFC 3339
         ("0001-01-01T00:00:00Z", False),  # the zero-time sentinel, as RFC 3339
+        ({"seconds": -1}, True),  # before 1970 is a real past moment, never a "no expiry"
+        ({"seconds": ZERO_TIME_SECONDS + 1}, True),  # one second off the sentinel is not the sentinel
     ],
 )
 def test_eligibility_reads_every_expiry_shape_headscale_can_emit(raw: object, expired: bool) -> None:
