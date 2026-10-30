@@ -41,8 +41,13 @@ def test_a_lesson_early_in_a_large_index_is_found(tmp_path: Path) -> None:
     assert f"OK ({LESSONS} lessons)" in result.stdout
 
 
-# A reader that stops early: `grep -q`, `grep -m N`, `head`.
-EARLY_EXIT = re.compile(r"\|\s*(?:grep\s+-[A-Za-z]*[qm]|head)\b")
+# A reader that stops early: `grep -q` (`--quiet`, `--silent`), `grep -m N`
+# (`--max-count`), in any option cluster or position, and `head`. One `|` or `|&`:
+# after `||` the reader runs only when the writer has already failed.
+EARLY_EXIT = re.compile(
+    r"(?<!\|)\|(?!\|)&?\s*"
+    r"(?:grep(?:\s+-\S+)*?\s+(?:-[A-Za-z]*[qm]\S*|--(?:quiet|silent|max-count)\b)|head\b)"
+)
 
 
 def test_no_repository_script_pipes_into_a_reader_that_stops_early() -> None:
@@ -57,3 +62,19 @@ def test_no_repository_script_pipes_into_a_reader_that_stops_early() -> None:
         if EARLY_EXIT.search(line) and not line.lstrip().startswith("#")
     ]
     assert not found, f"feed the reader a here-string or a file instead: {found}"
+
+
+def test_the_guard_reads_every_spelling_of_a_reader_that_stops_early() -> None:
+    early = [
+        "printf '%s\\n' \"$targets\" | grep -qxF -- \"$name\"",  # the line #2765 fixed
+        "x | grep -q y",
+        "x | grep -E -q y",
+        "x | grep -m1 y",
+        "x | grep --quiet y",
+        "x | grep --max-count=1 y",
+        "x |& grep -q y",
+        "x | head -1",
+    ]
+    late = ["a || grep -q b", "x | grep -c y", "x | grep -x pattern-with-m", "x | headers", "grep -q y file"]
+    assert [line for line in early if not EARLY_EXIT.search(line)] == []
+    assert [line for line in late if EARLY_EXIT.search(line)] == []
