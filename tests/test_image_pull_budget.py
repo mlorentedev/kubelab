@@ -484,27 +484,39 @@ def test_the_guard_reads_image_pulls_and_roles_however_they_are_written():
 #: fixed must leave it, and a role added to it is the reviewable act.
 PULL_AFTER_GATED_TEMPLATES: dict[str, str] = {
     "agent_stack": "#2812",
+    "beelink_services": "#2812",
     "glances": "#2812",
     "rpi3_services": "#2812",
 }
 
+_INCLUDES = ("import_tasks", "ansible.builtin.import_tasks", "include_tasks", "ansible.builtin.include_tasks")
+_WRITES = ("template", "ansible.builtin.template", "copy", "ansible.builtin.copy")
+# `x.changed`, `x is changed` and `x is not changed` all make a later task act on the write.
+_GATES = re.compile(r"\b(\w+)(?:\.changed\b|\s+is\s+(?:not\s+)?changed\b)")
 
-def test_a_sized_pull_runs_before_the_templates_whose_change_a_later_task_acts_on():
-    """A refused pull stops the play. Past a template whose change gates a restart, the
-    rerun sees no change and skips the restart, so the service keeps the old file (#2810)."""
-    checked, early = 0, {}
+
+def test_a_sized_pull_runs_before_the_writes_whose_change_a_later_task_acts_on():
+    """A refused pull stops the play. Past a write whose change gates a restart, the
+    rerun sees no change and skips the restart, so the service keeps the old file
+    (#2810). A notified handler is lost the same way: nothing forces handlers here."""
+    checked, early = set(), {}
     for path in ROLES.glob("*/tasks/*.yml"):
         tasks = list(_task_list(yaml.safe_load(path.read_text(encoding="utf-8"))))
-        pulls = [
-            i for i, t in enumerate(tasks) if "_includes/image-pull.yml" in str(t.get("ansible.builtin.import_tasks", ""))
-        ]
+        pulls = [i for i, t in enumerate(tasks) if any("_includes/image-pull.yml" in str(t.get(k, "")) for k in _INCLUDES)]
         if not pulls:
             continue
-        acted_on = {m.group(1) for t in tasks for m in re.finditer(r"\b(\w+)\.changed\b", str(t))}
+        role = path.parts[-3]
+        acted_on = {m.group(1) for t in tasks for m in _GATES.finditer(str(t))}
         for i, task in enumerate(tasks):
-            if ("template" in task or "ansible.builtin.template" in task) and task.get("register") in acted_on:
-                checked += 1
+            if any(k in task for k in _WRITES) and (task.get("register") in acted_on or "notify" in task):
+                checked.add(role)
                 if i < pulls[0]:
-                    early.setdefault(path.parts[-3], []).append(task["name"])
-    assert checked, "no template gates a later task: the guard reads nothing"
+                    early.setdefault(role, []).append(task["name"])
+    assert {"coredns", "glances", "rpi3_services", "agent_stack", "beelink_services"} <= checked, (
+        f"the guard lost a role it was written for: it reads {sorted(checked)}"
+    )
     assert set(early) == set(PULL_AFTER_GATED_TEMPLATES), early
+
+
+def test_the_order_guard_reads_both_ways_a_task_gates_on_a_change():
+    assert {m.group(1) for m in _GATES.finditer("a.changed or b is changed and c is not changed")} == {"a", "b", "c"}
