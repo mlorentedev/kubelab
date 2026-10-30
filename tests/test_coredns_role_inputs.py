@@ -39,7 +39,8 @@ def _template_inputs() -> set[str]:
 def _callers() -> list[tuple[Path, dict, dict]]:
     """(playbook, play, role entry) for every play that runs the coredns role."""
     found = []
-    for path in sorted(PLAYBOOKS.glob("*.yml")):
+    # The playbooks directory itself, from the same listing as the reference count below.
+    for path in (p for p in repo_files(PLAYBOOKS, "*.yml") if p.parent == PLAYBOOKS):
         for play in yaml.safe_load(path.read_text()) or []:
             for role in play.get("roles") or []:
                 name = role.get("role", "") if isinstance(role, dict) else role

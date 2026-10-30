@@ -15,8 +15,10 @@ from tests.repo_files import REPO, repo_files
 ANSIBLE = REPO / "infra/ansible"
 # A recursive walk rooted at the Ansible tree, under the names the tests give it:
 # `ANSIBLE.rglob(`, `ANSIBLE_DIR.rglob(`, `(REPO / "infra/ansible").rglob(`,
-# `ansible.glob("**/...`. A root under another name is not seen.
-WALK = re.compile(r"""ansible\w*["']?\)?\.(?:rglob\(|glob\(["']\*\*)""", re.IGNORECASE)
+# `ansible.glob("**/...`, `ANSIBLE.glob(f"**/{x}")`. A glob under a subdirectory,
+# `glob("roles/*/tasks/**/...")`, never reaches `generated/` and is left alone. Not
+# seen: a root under another name, or a pattern held in a variable.
+WALK = re.compile(r"""ansible\w*["']?\)?\.(?:rglob\(|glob\(f?["']\*\*)""", re.IGNORECASE)
 
 
 def _planted(rel: str, text: str) -> tuple[bool, bool]:
@@ -24,7 +26,8 @@ def _planted(rel: str, text: str) -> tuple[bool, bool]:
     path = REPO / rel
     created = [d for d in path.parents if not d.exists()]
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
+    with path.open("x", encoding="utf-8") as probe:  # never over a file that is already there
+        probe.write(text)
     try:
         return path in repo_files(ANSIBLE, "*.yml"), path in repo_files(ANSIBLE, "*.j2")
     finally:
@@ -63,6 +66,8 @@ def test_the_walk_pattern_sees_each_shape_the_tests_used() -> None:
         'ansible.rglob("*.service")',
         '(REPO / "infra/ansible").rglob("*")',
         'ANSIBLE.glob("**/*.yml")',
+        'ANSIBLE.glob(f"**/{suffix}")',
     ):
         assert WALK.search(shape), shape
-    assert not WALK.search('ROLES.rglob("*.j2")')
+    for shape in ('ROLES.rglob("*.j2")', 'ANSIBLE.glob(f"roles/*/tasks/**/{suffix}")'):
+        assert not WALK.search(shape), shape
