@@ -214,15 +214,24 @@
         name: systemd-binfmt
         state: restarted
 
+    # Check mode restarted nothing, so it has no registration to read back.
     - name: Read the QEMU registration back
-      stat:
+      slurp:
         path: /proc/sys/fs/binfmt_misc/qemu-aarch64
       register: _binfmt_loaded
+      failed_when: false
+      when: not ansible_check_mode
 
-    - name: Verify QEMU binfmt_misc is registered
+    # F loads the interpreter at registration, so a container without it still runs
+    # arm64 binaries. bee reads `flags: POF` (2026-10-30).
+    - name: Verify QEMU binfmt_misc is registered with the F flag
       assert:
-        that: _binfmt_loaded.stat.exists or ansible_check_mode
-        fail_msg: systemd-binfmt registered no qemu-aarch64, so qemu-user-static installed no binfmt.d entry for it.
+        that: >-
+          (_binfmt_loaded.content | default('') | b64decode) is search('(?m)^flags: \\S*F')
+        fail_msg: >-
+          systemd-binfmt registered no qemu-aarch64, or one without the F flag a container
+          needs, so qemu-user-static installed no binfmt.d entry fit for it.
+      when: not ansible_check_mode
 
 - name: Check if buildx builder is healthy
   command: docker buildx inspect multiarch
