@@ -327,7 +327,7 @@ OK   subnet route 172.16.1.0/24 primary on the tailnet
 OK   no failed unit
 ```
 
-Exit 0. `eth0 has a carrier` is the line the first check lacked. #2800 changes what the check reads, not what the edge does at boot, so T1 to T4 stand.
+Exit 0. `eth0 has a carrier` is the line the first check lacked. Of the files #2804 changes, the edge runs only `edge-boot-check.sh`, so it changes what the check reads, not what the edge does at boot, and T1 to T4 stand. T4 was judged by its case's own line, `eth0 present without a carrier`, which predates #2804. That the new line fails when a case that expects the cable finds none is `test_without_the_uplink_a_cable_that_is_out_still_fails`.
 
 - [ ] Criterion 1 -> commit `<hash>` / test `<name>`
 - [ ] Criterion 2 -> commit `<hash>` / test `<name>`
