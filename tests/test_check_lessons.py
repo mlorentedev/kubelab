@@ -111,6 +111,7 @@ def test_the_guard_reads_every_spelling_of_a_reader_that_stops_early() -> None:
         "x |& grep -q y",
         "x | head -1",
         "x \\\n  | grep -q y",
+        "x | \\\n  grep -q y",
         "x |\n  grep -q y",
     ]
     late = [
@@ -119,6 +120,7 @@ def test_the_guard_reads_every_spelling_of_a_reader_that_stops_early() -> None:
         "x | grep -c y",
         "x | grep -x pattern-with-m",
         "x | grep -c y; grep -q z file",
+        "x | grep -c -- -q",
         "x | headers",
         "grep -q y file",
         "# x | grep -q y",
