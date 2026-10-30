@@ -1,6 +1,6 @@
 # Run ap-20261030-kubelab-edge
 
-Verdict: DRAFT, written at 10:15Z while #2808, #2837 and #2846 wait on CI. Reason: `queue-empty`. All four named Backlog items are closed (#2792, #2817, #2765, #2637), and the run already used its 8 items: the 4 named items plus #2824, #2703, #2812 and B11. No new ticket is picked after this point.
+Verdict: ended. Reason: `queue-empty`. All four named Backlog items are closed (#2792, #2817, #2765, #2637), and the run already used its 8 items: the 4 named items plus #2824, #2703, #2812 and B11. No new ticket is picked after this point.
 
 Host: the laptop held `systemd-inhibit --what=idle:sleep` from arming to 17:40Z, so the window was covered.
 
@@ -17,7 +17,7 @@ Host: the laptop held `systemd-inhibit --what=idle:sleep` from arming to 17:40Z,
 
 ## Done but unmerged (left for you)
 
-These are past the envelope's 8 items, or are found defects whose fix is wider than the item. Each one is CLEAN and its reviewer output is triaged.
+These are past the envelope's 8 items, or are found defects whose fix is wider than the item. An earlier draft of this report said each one's reviewer output was triaged. At 10:30Z `dotf pr triage-queue` showed it was not: #2842, #2844 and #2845 had PR-Agent reviews nobody had answered, and #2838 had a new one. They were answered by 11:00Z, see the ledger.
 
 - #2838 (#2822): the guard sees images a task fetches by running them. beelink_services' qemu registration no longer pulls an unpinned image. PR-Agent's flag-set finding was applied in 127fb594, and a run the parser cannot read now fails the guard.
 - #2840 (#2839, TOOL-127): `make mutate` accepts an empty TO as a deletion.
@@ -25,12 +25,16 @@ These are past the envelope's 8 items, or are found defects whose fix is wider t
 - #2842 (#2617), #2844 (#2621 item 2): the errors tests read the access log and the rendered overlays.
 - #2843 (#2620): the drill's doctor exclusions and the forge's version floor are pinned. See item 4.
 - #2845 (#1700): a lessons index that still holds conflict markers is refused.
+- #2849 (#2848): the Pi-hole flush test read a helper `pihole-FTL` process as a restart. It failed master at 517896d8 with `'279 203' == '203'`, while the daemon, 203, was still running.
+
+## Filed, no PR
+
+- #1196 (existing, TEST-001): the Kuma Socket.IO timeout failed #2840's Tests, with evidence added. The failed job was re-run.
+- #2847 (TOOL-128, Backlog P2): `make mutate` loses every `$` in FROM and TO to make's expansion. Found while mutating `nginx.conf` for #2842.
 
 ## Landed under the grant
 
-#2827 (#2824) 06:56, #2828 (#2792) 07:28, #2829 (#2637) 08:01, #2833 (#2765) 08:45, #2835 (#2703 resume) 08:53, #2836 (#2817) 09:39. Before arming: #2825 05:27.
-
-To land here: #2837 (#2812), #2808 (B11), #2846 (a defect found working B11).
+#2827 (#2824) 06:56, #2828 (#2792) 07:28, #2829 (#2637) 08:01, #2833 (#2765) 08:45, #2835 (#2703 resume) 08:53, #2836 (#2817) 09:39, #2837 (#2812) 10:23, #2808 (B11) 10:24, #2846 (a defect found working B11) 11:03. Before arming: #2825 05:27.
 
 ## Disclosures
 
@@ -56,3 +60,8 @@ To land here: #2837 (#2812), #2808 (B11), #2846 (a defect found working B11).
 | 09:51 | found | e2e probe read before the declaration | #2846 |
 | 07:59–09:21 | past the 8 items | #2822, #2839, #2506, #2617, #2620, #2621, #1700 | PRs above, unmerged |
 | 10:00 | reviews | #2837, #2838 triaged; #2808 text clarified (0101cdbc) | PR comments |
+| 10:23–10:24 | #2812, B11 | landed | #2837, #2808 |
+| 10:40 | #2846 | PR-Agent's three findings: two applied (guard reads every e2e module; a prod-side test, which first passed against a non-probing mutant because a skip escapes `pytest.raises`), one declined | c93ef2e5 |
+| 10:45–11:15 | reviews | #2838 (`--pull` read twice; variable-keyed runs fenced; QEMU F flag asserted), #2842 (a served page, not only a logged one), #2845 (indexes at any depth): applied, with mutants red. #2844 answered. Triage posted on each | PR comments |
+| 11:03 | #2846 | landed | 21529cdb |
+| 11:05 | found | Pi-hole flush test misreads a helper process; filed #2848, fixed in #2849 | #2849 |
