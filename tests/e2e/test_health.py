@@ -13,8 +13,8 @@ from .expectations import (
     BackendRefused,
     ServiceExpectation,
     backend_reachable,
-    on_demand_skip_reason,
     on_demand_target,
+    skip_reason,
 )
 
 pytestmark = pytest.mark.e2e
@@ -27,10 +27,7 @@ def _resolve(
 ) -> tuple[ServiceHealthConfig, ServiceExpectation]:
     """Resolve service config + expectation, skip if not applicable."""
     exp = EXPECTATIONS[svc_name]
-    if env in exp.skip_in_envs:
-        pytest.skip(f"{svc_name} skipped in {env}")
-
-    reason = on_demand_skip_reason(svc_name, exp)
+    reason = skip_reason(svc_name, exp, env)
     if reason:
         pytest.skip(reason)
 
