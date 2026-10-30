@@ -214,6 +214,8 @@ read that unit's journal for n8n's answer. A notice still waiting after a week
 is dropped, and that journal names it. A file in the spool that the script did
 not name (`<nanoseconds>-<unit>`) is moved aside to `.unreadable-<name>`, out of
 the delivery order, and the journal says so; read it, then remove it by hand.
+A `.new.*` file is a notice whose write died before it was renamed in. It was
+never in the delivery order and nothing removes it: remove it by hand.
 
 **A failed delivery has already been retried** (ANSIBLE-038). `curl` retries
 transient failures — connection refused, timeouts, and 5xx — up to 3 times
@@ -223,7 +225,9 @@ failed, not one unlucky packet. Two consequences when reading its journal:
 - The unit legitimately takes tens of seconds against an unreachable n8n. It
   is not hung; `TimeoutStartSec=90` is the real ceiling. It may also first wait
   up to 40s for the unit's lock while another notice of the same unit is
-  delivered, so a recovery never overtakes its own failure page (#2733).
+  delivered, so a recovery does not overtake its own failure page (#2733).
+  That holds because the wait outlasts one delivery's ~30s, and
+  `tests/test_node_notify_role.py` keeps the two apart.
 - The retry lives in `curl`, **not** as `Restart=` on the unit. If you add
   `Restart=` you get both, and systemd will re-run the whole script — journal
   read and payload encode included — to retry one HTTP request. The rationale
@@ -240,7 +244,11 @@ make maintain-notify-test NODE=all         # the whole fleet
 This starts the notify unit directly and asserts `Result=success` and
 `ExecMainStatus=0`. Because the unit's `curl` uses `-f`, exit 0 means n8n
 really answered 2xx — it is an end-to-end delivery check, not a "the file is
-installed" check. **It really notifies**: expect the message to arrive, and
+installed" check. That holds while `kubelab-maintenance.service`'s last run
+succeeded, which makes the notice an exercise, sent directly. If its last run
+failed, the notice is a page, and a refused page is kept in the spool with the
+unit still at exit 0: after the test, `ls /var/spool/kubelab-notify` must show
+no notice. **It really notifies**: expect the message to arrive, and
 ignore it. A delivery test that suppressed delivery would prove nothing.
 
 Run it after any change to the notify script or its unit — ANSIBLE-038's
