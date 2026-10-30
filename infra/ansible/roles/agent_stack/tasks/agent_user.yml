@@ -210,10 +210,15 @@
     XDG_RUNTIME_DIR: "/run/user/{{ _agent_stack_agent_uid }}"
   register: _agent_stack_agent_reload
   changed_when: false
-  until: (_agent_stack_agent_reload.stdout_lines | last | default('0') | int) == (docker_max_download_attempts | int)
+  check_mode: false
+  # A dry run reloads nothing, so it has no event to wait for.
+  until: >-
+    (_agent_stack_agent_reload.stdout_lines | last | default('0') | int) == (docker_max_download_attempts | int)
+    or ansible_check_mode
+  ignore_errors: "{{ ansible_check_mode }}"
   retries: 10
   delay: 3
-  when: _agent_stack_agent_daemon_json is changed and not ansible_check_mode
+  when: _agent_stack_agent_daemon_json is changed
 
 - name: Read the agent daemon's security options
   ansible.builtin.command:
