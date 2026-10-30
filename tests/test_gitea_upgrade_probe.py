@@ -120,10 +120,12 @@ def test_the_baseline_exclusions_do_not_widen() -> None:
 
 
 def test_the_forge_runs_a_gitea_with_workflow_concurrency() -> None:
-    """OPS-038 upgraded the forge for `concurrency` with `cancel-in-progress`, which Gitea has
-    only from 1.26.0 (go-gitea/gitea#32751). A pin below it brings back runs that hold a
-    runner slot after a push supersedes them."""
+    """OPS-038 upgraded the forge for `concurrency` with `cancel-in-progress` (go-gitea/gitea#32751).
+    The floor is the version it rehearsed, 1.27.3, not 1.26.0 where the feature first shipped:
+    1.26.x leaked groups across branches, deadlocked and regressed, and only 1.27.3 stops an
+    unapproved fork run from cancelling a trusted one (GHSA-4j4g-m7mr-hp5j; OPS-038 proposal).
+    Raise the floor with each upgrade that is rehearsed."""
     image = yaml.safe_load(COMMON.read_text())["apps"]["services"]["core"]["gitea"]["image"]
     version = re.search(r":(\d+)\.(\d+)\.(\d+)", image)
     assert version, f"{image}: the pin names no version, so the floor cannot be read"
-    assert tuple(map(int, version.groups())) >= (1, 26, 0), image
+    assert tuple(map(int, version.groups())) >= (1, 27, 3), image
