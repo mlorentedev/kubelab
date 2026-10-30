@@ -37,13 +37,13 @@ unchecked step.
 
 ## Rollout (production, operator-approved window; not authorized by this spec)
 
-- [ ] Create the segment owner user in Headscale.
+- [ ] Deploy once with no segment in SOPS (`make deploy TARGET=vps ENV=prod`), so
+  `.prev` becomes a policy this template rendered. Check the probe, then read the
+  effective policy through the audit identity and compare it with the render.
 - [ ] Write the segment to SOPS at `apps.services.core.headscale.segments`.
-- [ ] Deploy once with no segment (`make deploy TARGET=vps ENV=prod`), so `.prev`
-  becomes a wildcard-free policy. Check the probe, then read the effective policy through
-  the audit identity and compare it with the render.
-- [ ] Deploy again with the segment, and repeat both checks.
-- [ ] A second deploy reports `changed=0`.
+- [ ] Deploy again. The role creates the owner user if missing, then renders and
+  reloads the segment. Repeat both checks.
+- [ ] A third deploy reports `changed=0`.
 
 ## Closing
 

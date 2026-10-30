@@ -25,6 +25,9 @@ created: "2026-10-30"
 - [x] AC6: `test_every_node_the_live_server_held_is_accounted_for` (the 2026-10-30 node
   list), `test_a_node_rule_one_would_cut_off_stops_the_deploy`,
   `test_a_tenant_node_is_accounted_for_by_its_segment`.
+- [x] AC7: `test_a_missing_owner_is_created_once_and_an_existing_one_never` (the loop
+  expression evaluated by Jinja),
+  `test_owner_creation_runs_before_the_render_quotes_its_argument_and_prints_no_name`.
 
 ## Test status
 

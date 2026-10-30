@@ -40,5 +40,12 @@
     "verification": "python -m pytest -o addopts= -p no:cacheprovider tests/test_headscale_segments.py -k 'accounted or cut_off or live_node_check' -q",
     "state": "pending",
     "evidence": ""
+  },
+  {
+    "id": "VPN-ACL-014-tenant-segments-AC7",
+    "behavior": "Before rendering, the role creates each segment owner Headscale lacks, and only those, printing no owner name.",
+    "verification": "python -m pytest -o addopts= -p no:cacheprovider tests/test_headscale_segments.py -k owner -q",
+    "state": "pending",
+    "evidence": ""
   }
 ]

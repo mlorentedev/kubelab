@@ -37,14 +37,15 @@ the rendered template.
 - Rollback keeps the isolation. The first-activation fallback is the segment-free
   policy instead of an allow-all. While segments are declared, a `.prev` with a
   wildcard grant is not restored.
+- The role creates each segment owner Headscale does not hold, before rendering, so a
+  policy never names an unknown user (VPN-ACL-013, #2190 describes how such a reload
+  can be rejected while the deploy reports green).
 - `toolkit infra headscale policy-check` also validates a synthetic segment on the
   pinned image.
 
 ## Out of scope
 
-- Deploying to production. The segment owner user must exist first, because a policy
-  naming an unknown user can be rejected on reload while the deploy reports green
-  (VPN-ACL-013, #2190). The morning checklist covers this.
+- Deploying to production.
 - Tightening rule 1 toward least privilege (VPN-ACL-004), or `tag:hermes`
   (VPN-ACL-012).
 - Per-segment DNS. Headscale v0.28 delivers DNS configuration to every node.
@@ -82,6 +83,8 @@ the rendered template.
   both the segment-free and a synthetic segment render on the pinned image.
 - [ ] AC6: The deploy stops before rendering if a node Headscale holds would not be
   reached by rule 1 or accounted for by a segment.
+- [ ] AC7: Before rendering, the role creates each segment owner Headscale lacks, and
+  only those, printing no owner name.
 
 ## References
 
