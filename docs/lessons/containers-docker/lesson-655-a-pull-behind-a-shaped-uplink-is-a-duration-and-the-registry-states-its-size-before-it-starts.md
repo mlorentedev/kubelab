@@ -33,7 +33,8 @@ layers. The include refuses past `image_pull_budget_seconds` (30 minutes) unless
 `poll: 15` and `until`/`retries`. Each poll is its own SSH round trip, so the pull
 no longer depends on one session staying up for an hour. A retry runs the pull
 again: whether it reuses the layers an interrupted attempt fetched depends on the
-node's image store (classic or containerd), and was not measured. Ansible's
+node's image store (classic or containerd), and was not measured. Measured
+since on overlay2: it does not (lesson-670). Ansible's
 `until` loop wraps the async poll, and
 `async_wrapper` kills a job that outlives its bound. Only a play whose node is
 behind the edge sets `image_pull_down_kbit`, from the SSOT key (#2742).
