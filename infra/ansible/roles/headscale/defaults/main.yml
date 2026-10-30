@@ -39,6 +39,24 @@ headscale_policy_path: ""
 # default (policy task is dormant until headscale_policy_path is set).
 headscale_policy_hosts: {}
 
+# Rule 1 of the policy (VPN-ACL-014): these users keep reaching every identity
+# below, as they did through the old wildcard destination. A wildcard would also
+# reach every tenant segment, and a grant in either direction makes both peers
+# visible, so the destinations are named instead.
+headscale_policy_private_users: ["kubelab@", "manu@", "work@"]
+# What rule 1 reaches besides those users: the agent identities and the rpi4 LAN route.
+headscale_policy_private_destinations: ["agents@", "tag:hermes", "lan-rpi4"]
+
+# Tenant segments (VPN-ACL-014). Read from SOPS at deploy time, so no tenant's
+# tags, users or ports enter this repository. Each one is
+#   {owner: <headscale user>, hosts_tag: tag:x, clients_tag: tag:y, ports: [int]}
+# and grants exactly clients_tag -> hosts_tag on those ports. Empty: segment-free.
+headscale_policy_segments: []
+
+# A quoted `*` or `*:*`: how a wildcard grant appears in a policy file. The rescue
+# path refuses to restore a previous policy that has one while segments are declared.
+headscale_policy_wildcard_pattern: '"\*(:\*)?"'
+
 # Audit identities (SEC-037). Each entry is {name, key}: `name` becomes the key's
 # comment and `key` is the bare public key. A key that carries the forced command
 # but is no longer declared is removed on the next run.

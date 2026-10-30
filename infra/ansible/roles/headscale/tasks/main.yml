@@ -38,6 +38,38 @@
   # (measured during OPS-023, 2026-09-26).
   changed_when: false
 
+# VPN-ACL-014: a tenant segment comes from SOPS, so nothing upstream checks its shape.
+# Refuse a malformed one before the policy is rendered: a segment owned by a private
+# user, or reusing a private tag, would put the tenant's nodes inside rule 1.
+- name: Refuse a malformed tenant segment
+  assert:
+    that:
+      - item.owner is string and item.owner | length > 0
+      - (item.owner ~ '@') not in headscale_policy_private_users + headscale_policy_private_destinations
+      - item.hosts_tag is string and item.hosts_tag.startswith('tag:')
+      - item.clients_tag is string and item.clients_tag.startswith('tag:')
+      - item.hosts_tag != item.clients_tag
+      - item.hosts_tag not in headscale_policy_private_destinations
+      - item.clients_tag not in headscale_policy_private_destinations
+      - item.ports is sequence and item.ports is not string and item.ports | length > 0
+      - item.ports | select('integer') | select('gt', 0) | select('le', 65535) | list | length == item.ports | length
+    fail_msg: "a tenant segment in SOPS is malformed; see the VPN-ACL-014 spec for its shape"
+  loop: "{{ headscale_policy_segments }}"
+  loop_control:
+    index_var: segment_index
+    label: "segment {{ segment_index }}"
+  when: headscale_policy_path | length > 0
+
+- name: Refuse tenant segments that share a tag
+  assert:
+    that:
+      - >-
+        (headscale_policy_segments | map(attribute='hosts_tag') | list
+        + headscale_policy_segments | map(attribute='clients_tag') | list) | unique | list | length
+        == 2 * (headscale_policy_segments | length)
+    fail_msg: "two tenant segments in SOPS share a tag"
+  when: headscale_policy_path | length > 0
+
 # ADR-041 / VPN-ACL-001: render the HuJSON ACL policy into the bind-mounted
 # config dir (appears at headscale_policy_path inside the container). Dormant
 # while headscale_policy_path is "" (default → allow-all). On change this fires
@@ -115,25 +147,41 @@
         path: "{{ headscale_config_dir }}/{{ headscale_policy_path | basename }}.prev"
       register: hs_prev
 
+    - name: Read the previous policy
+      slurp:
+        src: "{{ headscale_config_dir }}/{{ headscale_policy_path | basename }}.prev"
+      register: hs_prev_text
+      when: hs_prev.stat.exists
+
+    # VPN-ACL-014: a previous policy from before segmentation grants a wildcard, and
+    # restoring it would hand every tenant node the private peers. While segments are
+    # declared, such a file is not a known-good policy.
+    - name: Decide whether the previous policy may be restored
+      set_fact:
+        hs_prev_safe: >-
+          {{ hs_prev.stat.exists and (headscale_policy_segments | length == 0
+          or not ((hs_prev_text.content | b64decode) is search(headscale_policy_wildcard_pattern))) }}
+
     - name: Restore the previous known-good policy
       copy:
         src: "{{ headscale_config_dir }}/{{ headscale_policy_path | basename }}.prev"
         dest: "{{ headscale_config_dir }}/{{ headscale_policy_path | basename }}"
         remote_src: true
         mode: "0644"
-      when: hs_prev.stat.exists
+      when: hs_prev_safe | bool
 
-    # First activation (no .prev): there is nothing to restore, so revert to an EXPLICIT
-    # allow-all — a failed probe must never strand the mesh on the just-loaded ACL (Codex P1).
-    - name: First activation — revert to an explicit allow-all policy
-      copy:
+    # No restorable previous policy (first activation, or one with a wildcard while
+    # segments exist): revert to the policy rendered with no segment. It keeps every
+    # private flow and grants a tenant nothing, so a failed probe neither strands the
+    # mesh nor undoes the isolation. Never an allow-all.
+    - name: Revert to the segment-free policy
+      template:
+        src: policy.hujson.j2
         dest: "{{ headscale_config_dir }}/{{ headscale_policy_path | basename }}"
         mode: "0644"
-        content: |
-          // AUTO-REVERT fallback (no prior policy on first activation): explicit allow-all,
-          // so a failed connectivity probe cannot strand the mesh on a partial ACL.
-          { "acls": [ { "action": "accept", "src": ["*"], "dst": ["*:*"] } ] }
-      when: not hs_prev.stat.exists
+      vars:
+        headscale_policy_segments: []
+      when: not (hs_prev_safe | bool)
 
     - name: Reload the reverted policy (SIGHUP)
       command: docker kill --signal=HUP headscale
@@ -142,8 +190,8 @@
       fail:
         msg: >-
           Connectivity probe failed after the policy reload; reverted to
-          {{ 'the previous known-good policy' if hs_prev.stat.exists
-             else 'an explicit allow-all (first activation, no prior policy)' }}.
+          {{ 'the previous known-good policy' if hs_prev_safe | bool
+             else 'the segment-free policy (no restorable previous policy)' }}.
           Inspect `toolkit infra headscale probe`.
 
 # SEC-037: restricted read-only SSH identities for unattended audits.

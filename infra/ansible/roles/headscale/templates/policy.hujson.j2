@@ -1,14 +1,19 @@
-// Managed by Ansible — Headscale ACL policy (ADR-041 / VPN-ACL-002).
+// Managed by Ansible — Headscale ACL policy (ADR-041 / VPN-ACL-002, VPN-ACL-014).
 // Source: infra/ansible/roles/headscale/templates/policy.hujson.j2
 //
 // hosts are rendered from the networking SSOT (common.yaml → headscale_policy_hosts);
-// never hardcode IPs here. Rules are the PERMISSIVE-FIRST baseline:
-//   1) every existing identity (users) keeps allow-all — and because a tag REPLACES
-//      the user in ACL evaluation, tagged agents are NOT matched by rule 1, so it
-//      cannot grant an agent anything while preserving every current mesh flow
-//      (admin→all, ArgoCD hub↔spoke :6443, rpi4 172.16.1.0/24 route, intra-K3s, monitoring).
+// never hardcode IPs here. Rules:
+//   1) the existing users keep reaching every existing identity and the rpi4 LAN
+//      route, on every port, as before. The destinations are named, never a
+//      wildcard: a wildcard would also reach every tenant segment, and a grant in
+//      either direction makes both peers visible (VPN-ACL-014). Headscale v0.29's
+//      narrower wildcard needs the same (VPN-ACL-006). A tag REPLACES the user in
+//      ACL evaluation, so tagged agents are not sources here.
 //   2) tag:hermes gets a narrow, node-like-controlled egress (additive, agent-only).
+//   3) each tenant segment (headscale_policy_segments, from SOPS): its clients reach
+//      only the declared ports on its hosts; its hosts originate nothing.
 // Tightening rule 1 toward least-privilege is VPN-ACL-004 (deny risk lives there).
+{% set rule_one_dst = headscale_policy_private_users + headscale_policy_private_destinations %}
 {
   "hosts": {
 {% for name, addr in headscale_policy_hosts.items() %}
@@ -23,12 +28,16 @@
   // (Corrects ADR-041's "tagOwners = kubelab admin" — surfaced onboarding hermes.)
   "tagOwners": {
     "tag:hermes": ["kubelab@", "agents@"],
+{% for segment in headscale_policy_segments %}
+    "{{ segment.hosts_tag }}": ["{{ segment.owner }}@"],
+    "{{ segment.clients_tag }}": ["{{ segment.owner }}@"],
+{% endfor %}
   },
 
   "acls": [
-    // 1) permissive-first: existing identities keep allow-all (excludes tagged agents).
+    // 1) existing users: every existing identity, the LAN route, every port.
     //    Headscale v0.28 requires the "user@" form for user references in ACLs.
-    { "action": "accept", "src": ["kubelab@", "manu@", "work@"], "dst": ["*:*"] },
+    { "action": "accept", "src": ["{{ headscale_policy_private_users | join('", "') }}"], "dst": ["{{ rule_one_dst | join(':*", "') }}:*"] },
 
     // 2) agent egress — node-like, controlled. Gitea via the prod ingress
     //    (vps:443, token auth over TLS). The `beelink:9000` grant left with the
@@ -38,5 +47,10 @@
     //    Gitea, and for whatever ADR-035 Stage 1 registers next.
     //    No rule grants tag:hermes → vps:8080 (Headscale CP), *:6443 (K3s API), or peer :22.
     { "action": "accept", "src": ["tag:hermes"], "dst": ["vps:443"] },
+{% for segment in headscale_policy_segments %}
+
+    // 3) a tenant segment: its clients reach its hosts on the declared ports only.
+    { "action": "accept", "src": ["{{ segment.clients_tag }}"], "dst": ["{{ segment.hosts_tag }}:{{ segment.ports | join('", "' ~ segment.hosts_tag ~ ':') }}"] },
+{% endfor %}
   ],
 }
