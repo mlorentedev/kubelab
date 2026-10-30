@@ -1,0 +1,31 @@
+# Pilot-run envelope: local run branch only, never pushed or merged.
+version: 1
+run_id: "vpn-acl-006-20261030T0356Z"
+armed_by: manu
+armed_at: 2026-10-30T03:56:33Z
+expires_at: 2026-10-30T06:00:00Z
+objective: "Publish the VPN-ACL-006 spec and land the read-only AC1 preflight (#248), plus land #2820."
+scope:
+  write_paths:
+    - "specs/VPN-ACL-006-headscale-upgrade/**"
+    - "toolkit/features/headscale_upgrade.py"
+    - "tests/test_headscale_upgrade.py"
+    - "tests/test_headscale_hosts_entry_owner.py"
+    - ".agent/runs/**"
+  frozen_paths: [".github/**", "harness/**", "**/AGENTS.md", "infra/**", ".agent/unattended.yml"]
+  max_files: 8
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make, python, pre-commit]
+queue:
+  source: bitacora
+  filter: "#248 VPN-ACL-006: PR 1 (spec) and PR 2 (AC1 read-only preflight) only; policy, rollout and production excluded"
+  max_items: 3
+budget:
+  max_iterations: 6
+  max_minutes_per_iteration: 40
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant
+  push: true
+  open_pr: true
+  advisor_tier: top
