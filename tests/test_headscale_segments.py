@@ -20,6 +20,7 @@ import pytest
 import yaml
 from jinja2 import Environment
 
+from tests.ansible_jinja import ansible_env, task_runs
 from toolkit.scripts.render_headscale_policy import EXAMPLE_SEGMENT, render_policy
 
 REPO = Path(__file__).resolve().parents[1]
@@ -133,7 +134,7 @@ def _assert_task(name: str) -> dict[str, Any]:
 
 def _failed_checks(segment: dict[str, Any], segments: list[dict[str, Any]] | None = None) -> list[str]:
     """The role's own assert expressions, evaluated by Jinja as Ansible evaluates them."""
-    env = Environment()
+    env = ansible_env(str(ROLE / "templates"))
     variables = {**DEFAULTS, "item": segment, "headscale_policy_segments": segments or [segment]}
     per_item = _assert_task("Refuse a malformed tenant segment")["assert"]["that"]
     whole = _assert_task("Refuse tenant segments that share a tag")["assert"]["that"]
@@ -155,6 +156,17 @@ def _failed_checks(segment: dict[str, Any], segments: list[dict[str, Any]] | Non
         {"ports": ["22"]},
         {"ports": [True]},
         {"ports": "22"},
+        # Values are interpolated into the HuJSON policy, so a stray character corrupts it.
+        {"hosts_tag": 'tag:a"b'},
+        {"hosts_tag": "tag:a b"},
+        {"clients_tag": "tag:a{b"},
+        {"clients_tag": "tag:a,b"},
+        {"hosts_tag": "tag:tenant-a-hosts\n"},
+        {"hosts_tag": "tag:"},
+        {"owner": 'ten"ant'},
+        {"owner": "ten ant"},
+        {"owner": "tenant@x"},
+        {"owner": "tenant-a\n"},
     ],
 )
 def test_a_malformed_segment_is_refused(change: dict[str, Any]) -> None:
@@ -324,6 +336,40 @@ def test_owner_creation_runs_before_the_render_quotes_its_argument_and_prints_no
     )
     assert "item | quote" in task["command"]
     assert "item" not in task["loop_control"]["label"]
+
+
+UNKNOWN_USERS_CHECK = "Refuse tenant segments while Headscale's users are unknown"
+
+
+def _refused_for_unknown_users(rc: int, segments: list[dict[str, Any]]) -> bool:
+    task = _assert_task(UNKNOWN_USERS_CHECK)
+    variables = {
+        **DEFAULTS,
+        "headscale_policy_path": "/etc/headscale/policy.hujson",
+        "headscale_policy_segments": segments,
+        "hs_users_list": {"rc": rc},
+    }
+    if not task_runs(task, variables):
+        return False
+    env = ansible_env(str(ROLE / "templates"))
+    return not all(env.compile_expression(expr)(**variables) for expr in task["assert"]["that"])
+
+
+def test_segments_are_refused_when_headscale_users_could_not_be_read() -> None:
+    """A missing container is tolerated by the read, so its owners would never be created."""
+    assert _refused_for_unknown_users(1, [SEGMENT])
+    assert not _refused_for_unknown_users(0, [SEGMENT])
+    assert not _refused_for_unknown_users(1, [])
+
+
+def test_the_unknown_users_check_sits_between_the_read_and_owner_creation() -> None:
+    names = [t.get("name") for t in TASKS]
+
+    assert (
+        names.index("Read the users Headscale holds")
+        < names.index(UNKNOWN_USERS_CHECK)
+        < names.index("Create each segment owner Headscale does not hold yet")
+    )
 
 
 def test_the_fallback_is_the_segment_free_policy_not_an_allow_all() -> None:
