@@ -27,6 +27,7 @@ import pytest
 import yaml
 
 from tests.ansible_jinja import ansible_env
+from tests.repo_files import repo_files
 
 REPO = Path(__file__).resolve().parent.parent
 ANSIBLE = REPO / "infra/ansible"
@@ -334,8 +335,8 @@ class TestNothingReinstallsWhatTheTeardownRemoves:
 
     def _installers(self) -> list[tuple[str, set[str]]]:
         found: list[tuple[str, set[str]]] = []
-        for path in sorted(ANSIBLE.rglob("*.yml")):
-            if "generated" in path.parts or "inventories" in path.parts:
+        for path in repo_files(ANSIBLE, "*.yml"):
+            if "inventories" in path.parts:
                 continue
             try:
                 doc = yaml.safe_load(path.read_text(encoding="utf-8"))

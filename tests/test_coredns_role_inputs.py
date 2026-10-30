@@ -14,6 +14,8 @@ from pathlib import Path
 import yaml
 from jinja2 import Environment, meta
 
+from tests.repo_files import repo_files
+
 REPO = Path(__file__).resolve().parent.parent
 ROLE = REPO / "infra/ansible/roles/coredns"
 PLAYBOOKS = REPO / "infra/ansible/playbooks"
@@ -37,7 +39,8 @@ def _template_inputs() -> set[str]:
 def _callers() -> list[tuple[Path, dict, dict]]:
     """(playbook, play, role entry) for every play that runs the coredns role."""
     found = []
-    for path in sorted(PLAYBOOKS.glob("*.yml")):
+    # The playbooks directory itself, from the same listing as the reference count below.
+    for path in (p for p in repo_files(PLAYBOOKS, "*.yml") if p.parent == PLAYBOOKS):
         for play in yaml.safe_load(path.read_text()) or []:
             for role in play.get("roles") or []:
                 name = role.get("role", "") if isinstance(role, dict) else role
@@ -118,7 +121,7 @@ def test_the_defaults_resolve_against_the_ssot() -> None:
 def test_every_reference_to_the_role_is_a_caller_these_tests_read() -> None:
     """A third caller via include_role, a short name, a .yaml file or another directory is still seen."""
     seen = 0
-    for path in sorted(ANSIBLE.rglob("*.y*ml")):
+    for path in repo_files(ANSIBLE, "*.y*ml"):
         if ROLE in path.parents:
             continue
         for doc in yaml.safe_load_all(path.read_text()):

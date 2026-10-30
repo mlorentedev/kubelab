@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 679 | [A test that walks a directory reads what this machine left there](lesson-679-a-test-that-walks-a-directory-reads-what-this-machine-left-there.md) | 2026-10-30 |
 | 675 | [A probe read before the declaration fails an env on another env's outage](lesson-675-a-probe-read-before-the-declaration-fails-an-env-on-another-envs-outage.md) | 2026-10-30 |
 | 674 | [A parser that matches rows passes over whatever is not a row](lesson-674-a-parser-that-matches-rows-passes-over-whatever-is-not-a-row.md) | 2026-10-30 |
 | 672 | [click reads an empty environment variable as unset](lesson-672-click-reads-an-empty-environment-variable-as-unset.md) | 2026-10-30 |

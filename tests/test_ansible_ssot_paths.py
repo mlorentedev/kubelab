@@ -37,6 +37,8 @@ from typing import Any
 import pytest
 import yaml
 
+from tests.repo_files import repo_files
+
 REPO = Path(__file__).resolve().parent.parent
 ANSIBLE = REPO / "infra/ansible"
 VALUES = REPO / "infra/config/values"
@@ -127,7 +129,7 @@ def reads_in(expression: str, path: str = "") -> Iterator[Read]:
 
 
 def _files() -> list[Path]:
-    return [p for p in sorted(ANSIBLE.rglob("*")) if p.suffix in {".yml", ".yaml", ".j2"} and p.is_file()]
+    return repo_files(ANSIBLE, "*.yml", "*.yaml", "*.j2")
 
 
 def _reads() -> list[Read]:
