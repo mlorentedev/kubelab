@@ -35,8 +35,8 @@ created: "2026-10-30"
   tests/test_headscale_probe_hub_source.py`: 71 passed (Windows, 2026-10-30).
 - The other Headscale test files fail on this Windows workstation for portability
   reasons fixed in #2826, not for this change (17, unchanged by this branch).
-- `make mutate`: nine mutants, all RED (five for the first commit, four for the
-  live-node guard, the marker and the wildcard-port pattern).
+- `make mutate`: ten mutants, all RED (five for the first commit, four for the
+  live-node guard, the marker and the wildcard-port pattern, one for owner creation).
 
 ## Decisions made during implementation
 
