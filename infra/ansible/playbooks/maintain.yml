@@ -16,6 +16,8 @@
 
 - name: Node maintenance
   hosts: all
+  # A later failure must not drop the handlers earlier tasks notified (#2824).
+  force_handlers: true
   become: true
   # Gathered below, after the legacy exit: `setup` itself is a module, so a
   # play-level gather fails on a host that cannot run modules before any task
