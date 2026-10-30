@@ -12,8 +12,15 @@
 
 from __future__ import annotations
 
+import errno
+import importlib.util
 import ipaddress
+import json
+import os
 import re
+import socket
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -339,6 +346,106 @@ def test_the_guard_covers_every_run_that_applies_the_gateway(run: list[str], ski
     """The scope the role's own assert had: a run that leaves the gateway role out changes no uplink."""
     _, guard = _lan_guard()
     assert task_runs(guard, {"ansible_run_tags": run, "ansible_skip_tags": skip}) is guarded
+
+
+ROUTE_SOURCE = ANSIBLE / "playbooks" / "files" / "route-source.py"
+
+
+def _route_source(destination: str, tailnet: str) -> dict[str, Any]:
+    out = subprocess.run([sys.executable, str(ROUTE_SOURCE), destination, tailnet], capture_output=True, check=True)
+    return json.loads(out.stdout)
+
+
+# The kernel sends to 127.0.0.2 from 127.0.0.1, so source and destination differ and
+# each range holds one of them: a check that read the destination answers the opposite.
+@pytest.mark.parametrize(("tailnet", "on_it"), [("127.0.0.1/32", True), ("127.0.0.2/32", False)])
+def test_the_path_is_read_from_the_source_address_the_kernel_picks(tailnet: str, on_it: bool) -> None:
+    assert _route_source("127.0.0.2", tailnet) == {"source": "127.0.0.1", "tailnet": on_it}
+
+
+def _route_guard() -> tuple[int, dict[str, Any], int, dict[str, Any]]:
+    tasks = _edge_play().get("pre_tasks", [])
+    read = next(i for i, t in enumerate(tasks) if "route-source.py" in str(t))
+    check = next(i for i, t in enumerate(tasks) if "_edge_route" in str(t.get("assert")))
+    return read, tasks[read], check, tasks[check]
+
+
+def _route_holds(route: dict[str, Any]) -> bool:
+    """The assert's verdict, its conditions taken in order the way Ansible's are."""
+    _, _, _, guard = _route_guard()
+    that = guard["assert"]["that"]
+    env = ansible_env(".")
+    return all(
+        env.compile_expression(check)(_edge_route=route) for check in (that if isinstance(that, list) else [that])
+    )
+
+
+def _routed(tailnet: bool) -> dict[str, Any]:
+    return {"rc": 0, "stdout": json.dumps({"source": "192.0.2.10", "tailnet": tailnet}), "stderr": ""}
+
+
+def test_a_run_whose_packets_ride_the_tailnet_is_refused() -> None:
+    """#2801. The address check passed while the session rode the tailnet: the
+    controller accepted the edge's subnet route, which Tailscale looks up first."""
+    assert _route_holds(_routed(tailnet=False))
+    assert not _route_holds(_routed(tailnet=True))
+
+
+def test_a_controller_with_no_route_to_the_edge_is_told_the_fix(monkeypatch: pytest.MonkeyPatch, capsys) -> None:
+    """Off the switch and without the subnet route, the kernel has no route to the
+    edge's LAN address. The run is refused with the fix, not with a traceback."""
+    spec = importlib.util.spec_from_file_location("route_source", ROUTE_SOURCE)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    def unreachable(self: socket.socket, address: tuple[str, int]) -> None:
+        raise OSError(errno.ENETUNREACH, os.strerror(errno.ENETUNREACH))
+
+    monkeypatch.setattr(socket.socket, "connect", unreachable)
+    assert module.main("172.16.1.1", "100.64.0.0/10") == 1
+    out = capsys.readouterr()
+    assert out.out == "" and "Traceback" not in out.err
+    read = {"rc": 1, "stdout": out.out, "stderr": out.err.strip()}
+
+    _, read_task, _, guard = _route_guard()
+    assert read_task.get("failed_when") is False, "a failed read would end the play before the assert"
+    assert not _route_holds(read)
+    message = ansible_env(".").from_string(guard["assert"]["fail_msg"]).render(_edge_route=read)
+    assert "no route to 172.16.1.1" in message and "make edge-lan-link" in message
+    assert "an address on the tailnet" not in message
+
+
+def test_the_path_is_read_on_the_controller_before_any_role() -> None:
+    address, _ = _lan_guard()
+    read, read_task, check, check_task = _route_guard()
+    assert address < read < check, (address, read, check)
+    assert read_task.get("delegate_to") == "localhost"
+    assert read_task.get("become") is False
+    assert read_task.get("check_mode") is False, "a dry run must refuse the same path"
+    _, address_task = _lan_guard()
+    for task in (read_task, check_task):
+        assert "always" in task.get("tags", []), task.get("name")
+        assert task.get("when") == address_task.get("when"), task.get("name")
+
+
+def test_the_session_from_before_the_read_is_closed_before_the_verdict() -> None:
+    """A refused run's session outlives it under a socket name every run shares; once
+    `make edge-lan-link` moves the route, the rerun would hang on it (#2801)."""
+    read, _, check, _ = _route_guard()
+    tasks = _edge_play().get("pre_tasks", [])
+    resets = [i for i, t in enumerate(tasks) if t.get("meta") == "reset_connection"]
+    assert len(resets) == 1 and read < resets[0] < check, (read, resets, check)
+    reset = tasks[resets[0]]
+    # Ansible ignores `when` on this meta task, with a warning: a condition would read as one.
+    assert "when" not in reset
+    assert "always" in reset.get("tags", [])
+
+
+def test_the_refusal_names_the_way_out() -> None:
+    _, _, _, guard = _route_guard()
+    message = guard["assert"]["fail_msg"]
+    assert all(part in message for part in ("ERROR:", "WHY:", "FIX:", "make edge-lan-link", "--accept-routes=false"))
 
 
 def test_the_role_keeps_no_second_copy_of_the_guard() -> None:

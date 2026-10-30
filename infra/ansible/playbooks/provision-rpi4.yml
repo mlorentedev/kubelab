@@ -83,6 +83,65 @@
         - "'gateway' not in ansible_skip_tags"
       tags: [always]
 
+    # The address does not say the path. A controller that accepts the subnet
+    # route the edge advertises reaches its LAN address over the tailnet, because
+    # Tailscale's routing table is looked up before the LAN's (#2801). The source
+    # address the controller's kernel picks for it does say.
+    - name: Read the path this run takes to the edge
+      command:
+        argv:
+          - "{{ ansible_playbook_python }}"
+          - "{{ playbook_dir }}/files/route-source.py"
+          - "{{ config.networking.nodes.rpi4.lan_ip }}"
+          - "{{ config.networking.tailscale_cidr }}"
+      register: _edge_route
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      # No route at all is the assert's to explain, with its fix.
+      failed_when: false
+      # A dry run is refused on the same path as the run it rehearses.
+      check_mode: false
+      when:
+        - "'all' in ansible_run_tags or 'tagged' in ansible_run_tags or 'gateway' in ansible_run_tags"
+        - "'gateway' not in ansible_skip_tags"
+      tags: [always]
+
+    # The session already open was opened on the path the facts came over, and
+    # Ansible keeps it for 60 s under one socket name that every run shares. Left
+    # open on the tailnet, it strands when `make edge-lan-link` moves the route,
+    # and the rerun the refusal asks for hangs on it (#2801). Closed here, the
+    # next task opens one on the path just read. A meta task takes no `when`.
+    - name: Close the session opened before the path was read
+      meta: reset_connection
+      tags: [always]
+
+    - name: Check that the run's packets leave by the homelab LAN
+      assert:
+        that:
+          - _edge_route.rc == 0
+          - not (_edge_route.stdout | from_json).tailnet
+        fail_msg: >-
+          {% if _edge_route.rc != 0 -%}
+          ERROR: this controller has no route to the edge's LAN address: {{ _edge_route.stderr }}.
+          WHY: it is not on the lab switch, and it does not reach the LAN over the tailnet either.
+          FIX: plug the laptop into the switch and run `make edge-lan-link`.
+          {%- else -%}
+          ERROR: this run reaches the edge's LAN address from
+          {{ (_edge_route.stdout | from_json).source }}, an address on the tailnet.
+          WHY: this controller accepts the subnet route the edge advertises, and Tailscale's
+          routing table is looked up before the LAN's, so the session rides the tailnet the
+          uplink carries (ADR-075 D7, #2801).
+          FIX: from the laptop on the switch, run `make edge-lan-link`, whose profile routes the
+          LAN ahead of the tailnet. Without NetworkManager, run
+          `sudo tailscale set --accept-routes=false` while on the switch (#922).
+          {%- endif %}
+        quiet: true
+      when:
+        - "'all' in ansible_run_tags or 'tagged' in ansible_run_tags or 'gateway' in ansible_run_tags"
+        - "'gateway' not in ansible_skip_tags"
+      tags: [always]
+
     - name: Decrypt common secrets (controller-side)
       command: sops -d {{ playbook_dir }}/../../config/secrets/common.enc.yaml
       register: sops_common
