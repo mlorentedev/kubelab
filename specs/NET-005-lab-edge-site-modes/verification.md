@@ -332,7 +332,7 @@ Exit 0. `eth0 has a carrier` is the line the first check lacked. Of the files #2
 ### B11-EVIDENCE: the homelab switch behind the edge, 2026-10-30
 
 - **Lease.** dnsmasq's journal holds a `DHCPACK(eth0)` for the operator's laptop on the switch, at `172.16.1.91`, through `make edge-lan-link`.
-- **Through the uplink.** On 2026-10-27 ace1, bee and ace2 each had a default route through the RPi4 and a 204 from the connectivity probe. On 2026-10-30 ace2's empty image store was refilled through the uplink: 3.42 GB at ace2's NIC over 4.1 hours, with `make provision NODE=ace2 ENV=prod` ending `failed=0` and a second run reading `changed=0` (#2703).
+- **Through the uplink.** On 2026-10-27 ace1, bee and ace2 each had a default route through the RPi4 and a 204 from the connectivity probe. On 2026-10-30 ace2's empty image store was refilled through the uplink: 3.42 GB at ace2's NIC over 4.1 hours, with `make provision NODE=ace2 ENV=prod TAGS=agent_stack` ending `failed=0` and a second run reading `changed=0` (#2703).
 - **e2e.** At 09:33Z, `make test-e2e ENV=staging` from master `fba90b14`, with the homelab powered: 68 passed, 21 skipped, 0 failed. Open WebUI has no staging route, so its tests skip there by declaration (`skip_in_envs`). Against prod, the same subset (`-k open_webui`) gave 8 passed.
 - **Correction.** An earlier entry recorded a 03:36Z staging run as 68 passed, 19 skipped, 2 failed, both failures Open WebUI refused on ace2's `100.64.0.5:3080`. The code contradicts it: every Open WebUI test reads `skip_in_envs` before it probes ace2, and nothing under `tests/e2e/` changed between 2026-10-27 and that run. Its log was not kept, so those figures are withdrawn rather than explained.
 
