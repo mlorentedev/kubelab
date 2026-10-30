@@ -204,14 +204,18 @@ make the alert path depend on ace1 (staging n8n's host) being powered on.
 
 **Responding to one**: check the linked node's `kubelab-maintenance.service`
 journal (see "Checking status" above) for the actual failure. A delivery
-failure of the notification itself (wrong token, n8n unreachable) shows up
-as `kubelab-notify@kubelab-maintenance.service.service` itself failing —
-check that unit's own journal separately if the alert never arrived but you
-suspect a run failed.
+failure of the notification itself (wrong token, n8n unreachable, the lab
+edge down under a LAN node) does not lose it (#2787). The notice is kept in
+`/var/spool/kubelab-notify`, one file per notice, and
+`kubelab-notify-spool.timer` delivers the spool every 5 minutes, oldest first,
+with the time it happened in the title (`(at <UTC>Z, delivered late)`). While
+notices wait, `kubelab-notify-spool.service` stays failed: `ls` the spool and
+read that unit's journal for n8n's answer. A notice still waiting after a week
+is dropped, and that journal names it.
 
 **A failed delivery has already been retried** (ANSIBLE-038). `curl` retries
 transient failures — connection refused, timeouts, and 5xx — up to 3 times
-with a 5s delay, so the unit failing means roughly 4 attempts over ~30s all
+with a 5s delay, so a kept notice means roughly 4 attempts over ~30s all
 failed, not one unlucky packet. Two consequences when reading its journal:
 
 - The unit legitimately takes tens of seconds against an unreachable n8n. It

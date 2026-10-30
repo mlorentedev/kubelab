@@ -95,6 +95,8 @@ def ansible_env(templates_dir: str, **kwargs: Any) -> Environment:
     env.filters["flatten"] = _flatten
     # Ansible's `comment` filter, in its default (shell-style) form.
     env.filters["comment"] = lambda text: "\n".join(f"# {line}" for line in str(text).splitlines())
+    # Ansible's `split` is str.split.
+    env.filters["split"] = lambda value, sep=None, maxsplit=-1: str(value).split(sep, maxsplit)
     # Ansible's `quote` is shlex.quote.
     env.filters["quote"] = lambda value: shlex.quote(str(value))
     env.tests["match"] = _match

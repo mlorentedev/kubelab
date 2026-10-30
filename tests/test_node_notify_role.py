@@ -30,6 +30,7 @@ The contract encoded here:
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import os
 import re
@@ -347,7 +348,12 @@ def test_config_stdin_delivers_the_token_byte_exact(token: str):
     up TLS here would test openssl rather than the escaping.
     """
     script = _render("kubelab-notify.sh.j2")
-    block = script[script.index("TOKEN_ESC=") :]
+    # The escaping and the function that sends, run on their own: the script
+    # around them parses its arguments and reads a journal (#2787 moved them up).
+    escape = "".join(re.findall(r"^TOKEN_ESC=.*\n", script, re.M))
+    deliver = re.search(r"^deliver\(\) \{\n.*?^\}\n", script, re.M | re.S)
+    assert escape and deliver, "the token escaping or the deliver function is gone"
+    block = f'{escape}{deliver.group(0)}deliver "$PAYLOAD"\n'
 
     captured: list[bytes] = []
     port = _serve_one_request(captured)
@@ -430,7 +436,10 @@ def _flag(script: str, name: str) -> int:
     return int(match.group(1))
 
 
-@pytest.mark.parametrize("unit_template", ["kubelab-notify@.service.j2", "kubelab-notify-recovered@.service.j2"])
+@pytest.mark.parametrize(
+    "unit_template",
+    ["kubelab-notify@.service.j2", "kubelab-notify-recovered@.service.j2", "kubelab-notify-spool.service.j2"],
+)
 def test_notify_unit_timeout_exceeds_the_script_retry_budget(unit_template: str):
     """A retry longer than TimeoutStartSec is worse than no retry at all.
 
@@ -851,3 +860,94 @@ def test_the_recovery_scan_sees_the_units_that_page() -> None:
     keys = {_key(t) for t in _paging_units()}
     assert len(keys) >= 10, keys
     assert set(NO_RECOVERY) <= keys
+
+
+# --- the spool (#2787) -----------------------------------------------------
+
+SPOOL_SERVICE = "kubelab-notify-spool.service.j2"
+SPOOL_TIMER = "kubelab-notify-spool.timer.j2"
+
+
+def _tasks() -> list[dict]:
+    return yaml.safe_load((NOTIFY_ROLE / "tasks/main.yml").read_text())
+
+
+def _expand(text: object) -> str:
+    """A task field as Ansible would template it from the role's defaults."""
+    return Environment(undefined=StrictUndefined).from_string(str(text)).render(**_defaults())
+
+
+def _installing(src: str) -> str:
+    [task] = [t for t in _tasks() if t.get("template", {}).get("src") == src]
+    return _expand(task["template"]["dest"])
+
+
+def test_the_spool_unit_runs_the_flush_and_pages_nobody() -> None:
+    """A notice that the spool could not be delivered would wait in that same spool."""
+    unit = _render(SPOOL_SERVICE)
+    script = re.escape(str(_defaults()["node_notify_script_path"]))
+    assert re.search(rf"^ExecStart={script} --flush$", unit, re.M)
+    assert not re.search(r"^On(?:Failure|Success)=", unit, re.M)
+    assert _installing(SPOOL_SERVICE) == f"/etc/systemd/system/{_defaults()['node_notify_spool_unit_name']}.service"
+
+
+def test_the_spool_is_delivered_on_a_timer_the_role_enables() -> None:
+    timer = _render(SPOOL_TIMER)
+    interval = _defaults()["node_notify_spool_interval_seconds"]
+    assert re.search(rf"^OnUnitActiveSec={interval}$", timer, re.M)
+    assert re.search(r"^OnBootSec=", timer, re.M), "a node that boots with notices kept would wait for nothing"
+    assert re.search(r"^WantedBy=timers.target$", timer, re.M)
+    name = f"{_defaults()['node_notify_spool_unit_name']}.timer"
+    assert _installing(SPOOL_TIMER) == f"/etc/systemd/system/{name}"
+    [enable] = [t for t in _tasks() if _expand(t.get("systemd", {}).get("name", "")) == name]
+    assert enable["systemd"]["enabled"] is True and enable["systemd"]["state"] == "started"
+    assert enable["systemd"].get("daemon_reload") is True, "systemd cannot start a timer it has not loaded"
+
+
+def test_the_role_declares_the_spool_private() -> None:
+    """The notices carry journal lines; the spool is root's alone, as the state is."""
+    spool = _defaults()["node_notify_spool_dir"]
+    [task] = [t for t in _tasks() if _expand(t.get("file", {}).get("path", "")) == spool]
+    assert task["file"]["state"] == "directory"
+    assert str(task["file"]["mode"]) == "0700"
+
+
+def test_provisioning_clears_the_notifiers_a_refused_page_left_failed() -> None:
+    """#2787: ace2 held six failed notifiers that no later run would ever clear.
+
+    The spool unit is left alone: it fails while notices wait, and that is the
+    trace to keep.
+    """
+    [listing] = [t for t in _tasks() if "list-units" in t.get("command", {}).get("argv", [])]
+    argv = [_expand(arg) for arg in listing["command"]["argv"]]
+    assert "--state=failed" in argv
+    patterns = [arg for arg in argv if "*" in arg]
+    instance = "@node-backup-ship.service.service"
+    cleared = {
+        str(_defaults()["node_notify_unit_name"]).replace("@.service", instance): True,
+        str(_defaults()["node_notify_recovered_unit_name"]).replace("@.service", instance): True,
+        f"{_defaults()['node_notify_spool_unit_name']}.service": False,
+        "kubelab-maintenance.service": False,
+    }
+    for unit, expected in cleared.items():
+        assert any(fnmatch.fnmatchcase(unit, pattern) for pattern in patterns) is expected, unit
+    assert listing["changed_when"] is False and listing["check_mode"] is False
+    [reset] = [t for t in _tasks() if "reset-failed" in t.get("command", {}).get("argv", [])]
+    assert listing["register"] in str(reset["when"]), "a rerun with nothing failed must report changed=0"
+
+
+def test_the_cleanup_resets_each_unit_the_listing_names() -> None:
+    """The reset's argv is built from `list-units` lines, which start with the unit's name."""
+    from tests.ansible_jinja import ansible_env
+
+    [reset] = [t for t in _tasks() if "reset-failed" in t.get("command", {}).get("argv", [])]
+    expression = str(reset["command"]["argv"]).strip().removeprefix("{{").removesuffix("}}")
+    units = [
+        str(_defaults()["node_notify_unit_name"]).replace("@.service", "@node-backup-ship.service.service"),
+        str(_defaults()["node_notify_recovered_unit_name"]).replace("@.service", "@node-backup-ship.service.service"),
+    ]
+    listed = [f"{unit} loaded failed failed Notify n8n of a failed unit" for unit in units]
+    argv = ansible_env(str(NOTIFY_ROLE / "templates")).compile_expression(expression)(
+        node_notify_failed_notifiers={"stdout_lines": listed}
+    )
+    assert argv == ["systemctl", "reset-failed", *units]

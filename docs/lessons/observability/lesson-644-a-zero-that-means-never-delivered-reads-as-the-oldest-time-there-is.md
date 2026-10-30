@@ -20,4 +20,6 @@ Honoring an undelivered incident also opened a race the discard had hidden: a re
 
 **Rule**: A sentinel that stands for "has not happened" must never reach arithmetic that treats it as a time. Where a 0 means "never", every comparison against it has to say what "never" should mean there. A test that passes through the sentinel's side effect is no evidence the behavior was designed. A fix that makes a state reachable makes its races reachable too: check what else could read the state while it is in that form.
 
+**Since #2787**: a refused page is kept and delivered later, so it no longer leaves its notifier failed, and the next failure no longer pages again (lesson-678). The age rules above still hold for a state with no page recorded. `test_the_next_failure_after_a_refused_first_page_is_still_the_first_page` was replaced by tests of the spool.
+
 **Tags**: `#notify` `#systemd` `#sentinel` `#issue-2733`

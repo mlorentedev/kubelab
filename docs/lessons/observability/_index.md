@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 678 | [A retry inside one request cannot outlive an outage of the path it takes](lesson-678-a-retry-inside-one-request-cannot-outlive-an-outage-of-its-path.md) | 2026-10-30 |
 | 673 | [Uptime Kuma has no not-found answer, so only its null-row error confirms a delete](lesson-673-uptime-kuma-has-no-not-found-answer-so-only-its-null-row-error-confirms-a-delete.md) | 2026-10-30 |
 | 662 | [The edge's kernel log outlives its journal, but is neither clean text nor in time order](lesson-662-the-edges-kernel-log-outlives-its-journal-but-is-neither-clean-text-nor-in-time-order.md) | 2026-10-30 |
 | 659 | [A fix that relaxes what one check needs takes away the coverage another got from it](lesson-659-a-fix-that-relaxes-what-one-check-needs-takes-away-the-coverage-another-got-from-it.md) | 2026-10-29 |
