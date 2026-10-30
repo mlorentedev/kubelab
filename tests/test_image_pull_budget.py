@@ -586,15 +586,17 @@ _PAUSE_LIMIT_SECONDS = 2 * 3600
 
 
 def test_dockerd_keeps_a_layer_through_the_edges_eofs():
-    """A pull behind the edge ends in `unexpected EOF` every 7 to 8 minutes per layer
-    (ace2, 2026-10-30). dockerd resumes the layer from its partial file on each of its
-    own attempts, but after the last one it fails the pull and drops every layer the
-    pull registered, so the play's retry starts from nothing. Open WebUI's largest
-    layer is 1.1 GB, which at the 0.7 to 2 Mbit/s measured takes 1.3 to 3.8 hours: up to
-    30 EOFs. Docker's default of 5 attempts lost all of it, three times."""
+    """Behind the edge a pull's connections end in `unexpected EOF` every few minutes:
+    18 times in 111 minutes, 2 to 12 minutes apart (ace2, 2026-10-30). dockerd resumes
+    the layer from its partial file on each of its own attempts, and does not reset the
+    count when an attempt made progress. After the last one it fails the pull and drops
+    every layer the pull registered, so the play's retry starts from nothing. Open
+    WebUI's largest layer is 1.1 GB, which at the 0.7 to 2 Mbit/s a shared layer got
+    takes 1.3 to 3.8 hours: up to 37 EOFs. Docker's default of 5 lost all of it, three
+    times."""
     tasks = yaml.safe_load((ROLES / "docker/tasks/main.yml").read_text(encoding="utf-8"))
     [content] = [t["copy"]["content"] for t in tasks if (t.get("copy") or {}).get("dest") == "/etc/docker/daemon.json"]
     attempts = re.search(r'"max-download-attempts":\s*(\d+)', content)
     assert attempts, "daemon.json keeps Docker's 5 attempts per layer"
-    assert int(attempts[1]) >= 30
+    assert int(attempts[1]) >= 37
     assert 5 * int(attempts[1]) * (int(attempts[1]) - 1) / 2 <= _PAUSE_LIMIT_SECONDS
