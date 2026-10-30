@@ -1,6 +1,8 @@
 ---
 - name: Deploy DNS gateway (CoreDNS + Pi-hole)
   hosts: gateway
+  # A later failure must not drop the handlers earlier tasks notified (#2824).
+  force_handlers: true
   # The image estimate reads the layers for ansible_architecture, a platform fact.
   gather_facts: true
   gather_subset: [min]
