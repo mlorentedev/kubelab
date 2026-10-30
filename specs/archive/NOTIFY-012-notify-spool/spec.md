@@ -1,7 +1,7 @@
 ---
 id: NOTIFY-012-notify-spool
 type: spec
-status: active
+status: archived
 created: "2026-10-30"
 owner: manu
 issue: "kubelab#2787"
@@ -41,6 +41,14 @@ Out:
 - [x] A node provisioned with the role: the timer is active, the failed notifiers are cleared, and a rerun reports changed=0. ace2, 2026-10-30, from master at cd932def with `TAGS=maintenance`: two failed notifiers before, none after; timer enabled and active; spool 0700 root; rerun `changed=0`.
 
 - [x] Independent review findings dispositioned (PASS-WITH-GAPS, before the pool review). Five more mutants red, 21 in all: the spool's lock dropped from the direct-send check, a flush without its lock, a reminder folded into another unit's page, and the cleanup gate as `>= 0` and as `== 0`. The no-removal mutant now goes red by an assertion, not by the harness timeout.
+
+- [x] Pool review PASS (`review.md`, nan/mimo-v2.6-flash, at `be11baf5`). Its three Minor findings (a kept reminder's stale count, the role's `reset-failed` race, a backlog that outlasts one flush) are #2870. F5 is answered: `make maintain-notify-test NODE=ace2 ENV=prod` delivered through live n8n on 2026-10-30, after the provision from `cd932def`, and the spool held 0 notices afterwards.
+
+## Promotion candidates
+
+- [x] Lesson? yes: docs/lessons/observability/lesson-678-a-retry-inside-one-request-cannot-outlive-an-outage-of-its-path.md (and lesson-647 qualified)
+- [x] ADR? no: the spool is local to the node_notify role and changes no contract between components
+- [x] Pattern? no: a durable spool in front of a webhook is used by this role only so far
 
 ## Evidence
 
