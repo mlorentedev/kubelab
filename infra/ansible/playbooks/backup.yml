@@ -20,6 +20,8 @@
   # declared as `location` in common.yaml. Both groups are generated
   # (BACKUP-062), so a fifth backup node needs no edit here.
   hosts: node_backup:&always_on
+  # A later failure must not drop the handlers earlier tasks notified (#2824).
+  force_handlers: true
   become: true
   gather_facts: true
   # NO ignore_unreachable here, deliberately. These two are always-on
@@ -171,6 +173,8 @@
 
 - name: Deploy node-path backup to the on-demand nodes (BACKUP-044 Part 3)
   hosts: node_backup:&on_demand
+  # A later failure must not drop the handlers earlier tasks notified (#2824).
+  force_handlers: true
   become: true
   gather_facts: true
   # Beelink and RPi4 are on-demand homelab nodes (ADR-028) and are routinely
