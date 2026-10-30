@@ -809,11 +809,18 @@ EDGE_VARS = {"docker_max_download_attempts", "image_pull_goodput", "image_pull_d
 
 
 def _vars_file_keys(base: Path, ref: str) -> set[str]:
-    """The keys a vars file sets. A file named by a template cannot be read here, so
-    it counts as setting every one of the edge's values."""
+    """The keys a vars file sets. A relative name in a role's task file is looked up
+    in the role's vars/ first, as Ansible does. A file named by a template, or one
+    not found, cannot be read here, so it counts as setting every edge value."""
     if "{{" in ref:
         return set(EDGE_VARS)
-    return set(yaml.safe_load((base / ref).read_text(encoding="utf-8")) or {})
+    candidates = [base / ref]
+    if base.parent.parent == ROLES:
+        candidates.insert(0, base.parent / "vars" / ref)
+    found = next((c for c in candidates if c.is_file()), None)
+    if found is None:
+        return set(EDGE_VARS)
+    return set(yaml.safe_load(found.read_text(encoding="utf-8")) or {})
 
 
 def _task_sets(task: dict, base: Path) -> set[str]:
@@ -851,6 +858,18 @@ def _set_above_play_vars(path: Path) -> list[tuple[str, set[str]]]:
         for task in _task_list(tasks):
             found.append((str(task.get("name")), _task_sets(task, path.parent) & EDGE_VARS))
     return found
+
+
+def test_a_role_task_includes_vars_from_the_role(tmp_path, monkeypatch):
+    """A relative include_vars in a role's task file names a file in the role's vars/,
+    which Ansible searches first, and a name found nowhere counts as every value."""
+    role = tmp_path / "edge"
+    (role / "tasks").mkdir(parents=True)
+    (role / "vars").mkdir()
+    (role / "vars" / "pull.yml").write_text("docker_max_download_attempts: 5\n", encoding="utf-8")
+    monkeypatch.setitem(globals(), "ROLES", tmp_path)
+    assert _vars_file_keys(role / "tasks", "pull.yml") == {"docker_max_download_attempts"}
+    assert _vars_file_keys(role / "tasks", "absent.yml") == EDGE_VARS
 
 
 def test_nothing_overrides_the_edges_values_the_plays_pass():

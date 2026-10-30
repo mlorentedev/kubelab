@@ -10,7 +10,7 @@ issue: "kubelab#2834"
 
 ## Intent
 
-Behind the lab edge a pull's connections end in `unexpected EOF` about every 10 minutes. dockerd resumes a layer on each of its own attempts and drops every layer once a layer runs out of them. #2835 gave the system daemon 40 attempts. agent_stack's rootless daemon, which holds the hermes-kubelab images (4.5 GB and 1.6 GB), reads its own `daemon.json`, and nothing renders one, so it keeps Docker's 5. The include that sizes pulls also misjudges them: it bounds an attempt by transfer time alone, while dockerd can sleep up to 65 minutes between its 40 attempts, and its estimate assumes a pull gets all of `down_kbit`, when the Open WebUI refill got 54% of it (#2703).
+Behind the lab edge a pull's connections end in `unexpected EOF` about every 10 minutes. dockerd resumes a layer on each of its own attempts and drops every layer once a layer runs out of them. #2835 gave the system daemon 40 attempts. agent_stack's rootless daemon, which holds the hermes-kubelab images (4.5 GB and 1.6 GB), reads its own `daemon.json`, and nothing renders one. (The review later found that its image store reads no attempts at all, so its limit is not Docker's 5 but unknown: #2868.) The include that sizes pulls also misjudges them: it bounds an attempt by transfer time alone, while dockerd can sleep up to 65 minutes between its 40 attempts, and its estimate assumes a pull gets all of `down_kbit`, when the Open WebUI refill got 54% of it (#2703).
 
 ## Scope
 
