@@ -156,11 +156,17 @@ def _direct_readers(play: dict):
         expressions, inner = _role(name)
         own = {key: value for key, value in entry.items() if key != "role"}
         yield f"role {name}", base | _tags(entry) | inner, expressions + list(_expressions(own))
+    # A notified handler runs under whatever selection ran its notifier, whatever its own tags say.
+    for task, tags, headers in _flat(play.get("handlers"), base):
+        yield f"handlers: {task.get('name')}", tags | {"always"}, list(_expressions([task, *headers]))
 
 
 def _reads(expressions: list[str], name: str) -> bool:
     pattern = re.compile(rf"(?<![\w.]){re.escape(name)}\b")
     return any(pattern.search(expression) for expression in expressions)
+
+
+UNTAGGED = frozenset({"untagged"})
 
 
 def _unbuilt(play: dict) -> list[str]:
@@ -171,9 +177,10 @@ def _unbuilt(play: dict) -> list[str]:
             continue
         for name in sorted(_written(writer)):
             for label, tags, expressions in readers:
-                if not tags or not _reads(expressions, name):
+                if not _reads(expressions, name):
                     continue
-                if "always" in tags or not tags <= writer_tags:
+                # `--tags untagged` selects exactly the tasks that carry no tag.
+                if "always" in tags or not (tags or UNTAGGED) <= (writer_tags or UNTAGGED):
                     found.append(f"{writer.get('name')!r} builds {name}, read by {label} {sorted(tags)}")
     return found
 
@@ -235,3 +242,24 @@ def test_a_blocks_condition_is_read_by_each_task_in_it_under_that_tasks_tags():
         "tasks": [{"block": [{"name": "Use it", "debug": {"msg": "ok"}, "tags": ["dns"]}], "when": "config.dns.on"}],
     }
     assert _unbuilt(play) == ["'Merge configs' builds config, read by tasks: Use it ['dns']"]
+
+
+def test_an_untagged_reader_needs_its_fact_under_tags_untagged():
+    play = {
+        "hosts": "gateway",
+        "pre_tasks": [{"name": "Merge configs", "set_fact": {"config": "{{ {} }}"}, "tags": ["dns"]}],
+        "tasks": [{"name": "Use it", "debug": {"msg": "{{ config.dns }}"}}],
+    }
+    assert _unbuilt(play) == ["'Merge configs' builds config, read by tasks: Use it []"]
+    del play["pre_tasks"][0]["tags"]
+    assert _unbuilt(play) == []
+
+
+def test_a_play_handler_reads_its_fact_under_whatever_notified_it():
+    play = {
+        "hosts": "gateway",
+        "pre_tasks": [{"name": "Merge configs", "set_fact": {"config": "{{ {} }}"}, "tags": ["dns"]}],
+        "tasks": [{"name": "Change it", "command": "true", "notify": "Reload", "tags": ["dns", "edge"]}],
+        "handlers": [{"name": "Reload", "debug": {"msg": "{{ config.dns }}"}}],
+    }
+    assert _unbuilt(play) == ["'Merge configs' builds config, read by handlers: Reload ['always']"]
