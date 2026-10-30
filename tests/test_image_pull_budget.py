@@ -650,9 +650,7 @@ def test_the_guard_reads_image_pulls_and_roles_however_they_are_written():
 #: Roles whose sized pull still comes after a template whose change gates a restart
 #: or a recreate, each with the ticket that moves it. **It may only shrink**: a role
 #: fixed must leave it, and a role added to it is the reviewable act.
-PULL_AFTER_GATED_TEMPLATES: dict[str, str] = {
-    "agent_stack": "#2812, once ace2's image store is refilled (#2703)",
-}
+PULL_AFTER_GATED_TEMPLATES: dict[str, str] = {}
 
 _INCLUDES = ("import_tasks", "ansible.builtin.import_tasks", "include_tasks", "ansible.builtin.include_tasks")
 _WRITES = ("template", "ansible.builtin.template", "copy", "ansible.builtin.copy")
