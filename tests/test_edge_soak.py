@@ -230,6 +230,21 @@ def test_a_file_zcat_cannot_read_is_marked_in_the_lines(tmp_path: Path) -> None:
     assert lines[-len(THIS_BOOT) :] == THIS_BOOT
 
 
+def test_a_reset_in_the_file_reaches_the_verdict_through_the_pipeline(tmp_path: Path) -> None:
+    """The verdict tests feed `read` lines already filtered, so a filter that dropped a
+    class of line would leave every one of them green."""
+    from toolkit.features.edge_soak import read
+
+    dropped = _line("30T02:00:00.000000", DISCONNECT)
+    (tmp_path / "kern.log.1").write_text("\n".join(PREVIOUS_BOOT) + "\n")
+    (tmp_path / "kern.log").write_text("\n".join([*THIS_BOOT, dropped]) + "\n")
+    reading = read(_output(_run_log_command(tmp_path), uptime=50 * HOUR))
+    assert (reading.code, reading.resets, len(reading.lps)) == (FAILED, [dropped], 1)
+    reprobed = _line("30T02:00:03.000000", PROBE)
+    (tmp_path / "kern.log").write_text("\n".join([*THIS_BOOT, reprobed]) + "\n")
+    assert read(_output(_run_log_command(tmp_path), uptime=50 * HOUR)).resets == [reprobed]
+
+
 def test_only_the_lines_the_reading_uses_are_sent(tmp_path: Path) -> None:
     noise = _line("30T01:00:00.000000", "[UFW BLOCK] IN=eth0 OUT= SRC=192.0.2.1 DST=192.0.2.2")
     driver = _line("29T22:05:39.905110", "usbcore: registered new interface driver rtw_8822bu")
