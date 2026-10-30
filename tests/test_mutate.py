@@ -133,11 +133,16 @@ def test_a_baseline_that_collects_nothing_says_so_and_names_the_marker(repo: Pat
     assert (repo / "guard.py").read_bytes() == ORIGINAL.encode()
 
 
-def test_a_marker_in_the_target_selects_a_test_the_default_markers_deselect() -> None:
-    """The advice above holds only while a `-m` after the addopts wins over theirs."""
+def test_a_marker_in_the_target_selects_a_test_the_default_markers_deselect(tmp_path: Path) -> None:
+    """The advice above holds only while a `-m` after the addopts wins over theirs.
+
+    The sample is written here, under the repository's own pytest configuration, so
+    the result depends on that configuration and on nothing else in `tests/infra`."""
     root = Path(__file__).resolve().parents[1]
-    infra = next(path for path in sorted((root / "tests/infra").glob("test_*.py")))
-    argv = [sys.executable, "-m", "pytest", "-q", "--no-cov", "-p", "no:cacheprovider", "--collect-only", str(infra)]
+    infra = tmp_path / "test_sample.py"
+    infra.write_text("import pytest\n\n\n@pytest.mark.infra\ndef test_live():\n    pass\n")
+    argv = [sys.executable, "-m", "pytest", "-c", str(root / "pyproject.toml"), "-q", "--no-cov"]
+    argv += ["-p", "no:cacheprovider", "--collect-only", str(infra)]
     deselected = subprocess.run(argv, cwd=root, capture_output=True, text=True)
     selected = subprocess.run([*argv, "-m", "infra"], cwd=root, capture_output=True, text=True)
     assert deselected.returncode == 5, deselected.stdout[-300:]
