@@ -77,15 +77,34 @@ class Verdict:
 
 
 def _expiry(raw: object) -> datetime | None:
-    """A timestamp object, or None for no expiry: absent, or the 0001-01-01 sentinel older versions stored."""
-    if not isinstance(raw, dict) or "seconds" not in raw:
+    """When the node key expires, or None if it never does.
+
+    Absent and the Go zero time (0001-01-01, which older versions stored for "no
+    expiry") both mean never. A Timestamp arrives as an object whose `seconds` is a
+    number (encoding/json) or a string (protojson), or as an RFC 3339 string.
+    Anything else raises: reading it as "never" would pass an expired node silently.
+    """
+    if raw is None:
         return None
-    seconds = int(raw["seconds"])
-    return datetime.fromtimestamp(seconds, tz=timezone.utc) if seconds > 0 else None
+    try:
+        if isinstance(raw, dict) and "seconds" in raw:
+            seconds = int(raw["seconds"])
+            return datetime.fromtimestamp(seconds, tz=timezone.utc) if seconds > 0 else None
+        if isinstance(raw, str):
+            moment = datetime.fromisoformat(raw)
+            if moment.tzinfo is None:
+                raise ValueError("no UTC offset")
+            return moment if moment.year > 1 else None
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"unreadable node expiry: {raw!r}") from exc
+    raise ValueError(f"unreadable node expiry: {raw!r}")
 
 
 def parse_node_states(payload: str) -> list[NodeState]:
-    """`headscale nodes list --output json`. An absent `online` means offline (proto3 omits false)."""
+    """`headscale nodes list --output json`. An absent `online` means offline (proto3 omits false).
+
+    Raises ValueError on an expiry it cannot read, rather than treating the node as never expiring.
+    """
     return [
         NodeState(
             hostname=entry.get("name", ""),
