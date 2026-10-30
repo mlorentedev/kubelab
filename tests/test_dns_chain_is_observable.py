@@ -56,11 +56,11 @@ def _compose_text() -> str:
     reproducing the playbook's variable wiring here -- a second declaration free
     to drift from the first.
     """
-    return COMPOSE_TPL.read_text()
+    return COMPOSE_TPL.read_text(encoding="utf-8")
 
 
 def _seed() -> list[dict]:
-    data = json.loads(SEED.read_text())
+    data = json.loads(SEED.read_text(encoding="utf-8"))
     return data if isinstance(data, list) else data.get("monitors", data)
 
 
@@ -97,7 +97,7 @@ def test_the_compose_hardcodes_no_lan_address():
     satisfy the test above, bring back the bind that fails without a carrier,
     and violate the repo's rule that every address lives in `networking.*`.
     """
-    common = yaml.safe_load(COMMON.read_text())
+    common = yaml.safe_load(COMMON.read_text(encoding="utf-8"))
     lan_ip = common["networking"]["nodes"]["rpi4"]["lan_ip"]
     assert lan_ip, "networking.nodes.rpi4.lan_ip is the SSOT this compose must read"
     assert not re.search(rf"\b{re.escape(lan_ip)}\b", _compose_text()), (
@@ -178,7 +178,7 @@ def test_the_sync_can_actually_write_a_dns_monitors_own_fields(field: str):
 
 def test_every_dns_monitor_resolves_against_our_own_resolver():
     """Pointing it at a public resolver would make it green for the wrong reason."""
-    common = yaml.safe_load(COMMON.read_text())
+    common = yaml.safe_load(COMMON.read_text(encoding="utf-8"))
     ours = {
         common["networking"]["nodes"]["rpi4"]["tailscale_ip"],
         common["networking"]["nodes"]["rpi4"]["lan_ip"],

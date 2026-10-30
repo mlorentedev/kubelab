@@ -29,10 +29,12 @@ from tests.ansible_jinja import ansible_env
 REPO = Path(__file__).resolve().parents[1]
 ROLE = REPO / "infra" / "ansible" / "roles" / "gateway"
 TEMPLATES = ROLE / "templates"
-TASKS: list[dict[str, Any]] = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text())
-HANDLERS: list[dict[str, Any]] = yaml.safe_load((ROLE / "handlers" / "main.yml").read_text())
-DEFAULTS: dict[str, Any] = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text())
-NETWORKING = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text())["networking"]
+TASKS: list[dict[str, Any]] = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text(encoding="utf-8"))
+HANDLERS: list[dict[str, Any]] = yaml.safe_load((ROLE / "handlers" / "main.yml").read_text(encoding="utf-8"))
+DEFAULTS: dict[str, Any] = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text(encoding="utf-8"))
+NETWORKING = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text(encoding="utf-8"))[
+    "networking"
+]
 EDGE = NETWORKING["edge"]
 LAB = EDGE["lab_wifi"]
 
@@ -420,7 +422,9 @@ def test_the_regulatory_domain_persists_for_cfg80211() -> None:
 
 
 def _gateway_vars() -> dict[str, Any]:
-    plays = yaml.safe_load((REPO / "infra" / "ansible" / "playbooks" / "provision-rpi4.yml").read_text())
+    plays = yaml.safe_load(
+        (REPO / "infra" / "ansible" / "playbooks" / "provision-rpi4.yml").read_text(encoding="utf-8")
+    )
     for play in plays:
         for role in play.get("roles", []):
             if isinstance(role, dict) and role.get("role", "").endswith("/gateway"):

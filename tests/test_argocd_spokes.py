@@ -93,7 +93,7 @@ class TestSpokeUrlCLI:
         from toolkit.config.settings import settings
 
         common = settings.project_root / "infra" / "config" / "values" / "common.yaml"
-        expected = argocd_spokes.apiserver_url(yaml.safe_load(common.read_text()), "staging")
+        expected = argocd_spokes.apiserver_url(yaml.safe_load(common.read_text(encoding="utf-8")), "staging")
 
         result = CliRunner().invoke(app, ["argo", "spoke-url", "--env", "staging"])
 

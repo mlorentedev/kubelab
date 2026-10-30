@@ -31,9 +31,11 @@ from tests.ansible_jinja import ansible_env
 
 REPO = Path(__file__).resolve().parents[1]
 ROLE = REPO / "infra" / "ansible" / "roles" / "gateway"
-TASKS: list[dict[str, Any]] = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text())
-DEFAULTS: dict[str, Any] = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text())
-NETWORKING = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text())["networking"]
+TASKS: list[dict[str, Any]] = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text(encoding="utf-8"))
+DEFAULTS: dict[str, Any] = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text(encoding="utf-8"))
+NETWORKING = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text(encoding="utf-8"))[
+    "networking"
+]
 SCRIPT = ROLE / "files" / "edge-status.sh"
 UPLINK = NETWORKING["edge"]["uplink"]["interface"]
 SHELL = shutil.which("dash") or "/bin/sh"
@@ -84,35 +86,35 @@ class Edge:
         for name in ("fake", "bin", "leases", "etc"):
             (self.root / name).mkdir()
         for name, body in (("curl", CURL), ("dig", DIG)):
-            (self.root / "bin" / name).write_text(f"#!/bin/sh\n{body}")
+            (self.root / "bin" / name).write_text(f"#!/bin/sh\n{body}", encoding="utf-8")
             (self.root / "bin" / name).chmod(0o755)
         device = self.root / "net" / UPLINK
         device.mkdir(parents=True)
-        (device / "ifindex").write_text(f"{IFINDEX}\n")
+        (device / "ifindex").write_text(f"{IFINDEX}\n", encoding="utf-8")
         self.mac(UPLINK_MAC.lower())
         (self.root / "etc" / "link").write_text(
-            _render("uplink.link", gateway_uplink_mac=UPLINK_MAC, gateway_uplink_interface=UPLINK)
+            _render("uplink.link", gateway_uplink_mac=UPLINK_MAC, gateway_uplink_interface=UPLINK), encoding="utf-8"
         )
-        (self.root / "etc" / "resolv.conf").write_text(_render("resolv.conf"))
+        (self.root / "etc" / "resolv.conf").write_text(_render("resolv.conf"), encoding="utf-8")
         self.lease(dns=LEASE_DNS)
 
     def mac(self, value: str) -> None:
-        (self.root / "net" / UPLINK / "address").write_text(f"{value}\n")
+        (self.root / "net" / UPLINK / "address").write_text(f"{value}\n", encoding="utf-8")
 
     def lease(self, *, dns: str | None) -> None:
         lines = ["# This is private data. Do not parse.", f"ADDRESS={LEASE_ADDRESS}"]
         if dns:
             lines.append(f"DNS={dns} 198.51.100.2")
-        (self.root / "leases" / IFINDEX).write_text("\n".join(lines) + "\n")
+        (self.root / "leases" / IFINDEX).write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     def no_lease(self) -> None:
         (self.root / "leases" / IFINDEX).unlink()
 
     def answers(self, server: str, address: str) -> None:
-        (self.root / "fake" / f"dns_{server}").write_text(f"{CHECK_HOST}.\n{address}\n")
+        (self.root / "fake" / f"dns_{server}").write_text(f"{CHECK_HOST}.\n{address}\n", encoding="utf-8")
 
     def http(self, code: str) -> None:
-        (self.root / "fake" / "http_code").write_text(code)
+        (self.root / "fake" / "http_code").write_text(code, encoding="utf-8")
 
     def run(self, *args: str) -> subprocess.CompletedProcess[str]:
         calls = self.root / "fake" / "calls"
@@ -128,7 +130,7 @@ class Edge:
         result = subprocess.run(
             [SHELL, str(SCRIPT), *(args or (UPLINK,))], capture_output=True, text=True, env=env, check=False
         )
-        self.calls = calls.read_text().splitlines() if calls.exists() else []
+        self.calls = calls.read_text(encoding="utf-8").splitlines() if calls.exists() else []
         return result
 
 
@@ -322,7 +324,7 @@ def test_it_prints_no_site_data(edge: Edge, code: str) -> None:
 
 
 def test_the_script_reads_the_files_the_role_writes() -> None:
-    text = SCRIPT.read_text()
+    text = SCRIPT.read_text(encoding="utf-8")
     assert f"EDGE_LINK_FILE:-{_task_dest('uplink.link.j2')}" in text
     assert f"EDGE_RESOLV_CONF:-{_task_dest('resolv.conf.j2')}" in text
 
@@ -379,7 +381,7 @@ def test_the_command_exits_with_the_edges_code(code: int) -> None:
 
 
 def test_the_makefile_target_calls_the_command() -> None:
-    makefile = (REPO / "Makefile").read_text()
+    makefile = (REPO / "Makefile").read_text(encoding="utf-8")
     target = re.search(r"^edge-status:.*\n((?:\t.*\n)+)", makefile, re.M)
     assert target, "no edge-status target"
     assert "infra edge status" in target.group(1)

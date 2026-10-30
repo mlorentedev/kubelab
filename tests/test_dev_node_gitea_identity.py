@@ -52,7 +52,7 @@ FORGE_SECRET_ROOT = "gitea_secrets."
 def _dev_node_vars() -> dict[str, str]:
     """Every `vars:` entry on the `dev_node` role in ace2's playbook."""
     found: dict[str, str] = {}
-    for doc in yaml.safe_load_all(ACE2_PLAYBOOK.read_text()):
+    for doc in yaml.safe_load_all(ACE2_PLAYBOOK.read_text(encoding="utf-8")):
         for play in doc if isinstance(doc, list) else [doc]:
             if not isinstance(play, dict):
                 continue
@@ -70,7 +70,7 @@ def _dev_node_vars() -> dict[str, str]:
 def _play_vars() -> dict[str, str]:
     """Play-level `vars:` in ace2's playbook (where `gitea_identity_env` belongs)."""
     found: dict[str, str] = {}
-    for doc in yaml.safe_load_all(ACE2_PLAYBOOK.read_text()):
+    for doc in yaml.safe_load_all(ACE2_PLAYBOOK.read_text(encoding="utf-8")):
         for play in doc if isinstance(doc, list) else [doc]:
             if isinstance(play, dict):
                 for name, value in (play.get("vars") or {}).items():

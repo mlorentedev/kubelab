@@ -146,9 +146,7 @@ class TestFileSet:
 class TestValues:
     def test_a_second_changed_key_ends_it(self, decl, apps) -> None:
         """The gap the file-only signature left: any key in the two files rode along."""
-        before, after = bump(
-            "web", NEW, values_extra=lambda t: t.replace("enable_blog: false", "enable_blog: true", 1)
-        )
+        before, after = bump("web", NEW, values_extra=lambda t: t.replace("enable_blog: false", "enable_blog: true", 1))
         shape = classify_diff(changes(VALUES, OVERLAY), before, after, apps, decl)
         assert shape.verdict == "not-mechanical"
 
@@ -185,7 +183,9 @@ class TestOverlay:
         assert shape.verdict == "not-mechanical"
 
     def test_a_tag_other_than_the_values_change_ends_it(self, decl, apps) -> None:
-        before, after = bump("web", NEW, overlay_extra=lambda t: t.replace(f"kubelab-web:{NEW}", "kubelab-web:sha-0000000"))
+        before, after = bump(
+            "web", NEW, overlay_extra=lambda t: t.replace(f"kubelab-web:{NEW}", "kubelab-web:sha-0000000")
+        )
         shape = classify_diff(changes(VALUES, OVERLAY), before, after, apps, decl)
         assert shape.verdict == "not-mechanical"
 
@@ -228,7 +228,12 @@ class TestDeclaration:
 
     @pytest.mark.parametrize(
         "block",
-        [None, {}, {"env": "staging"}, {"env": "staging", "values_file": "", "overlay_files": [], "version_path": [], "tag_pattern": ""}],
+        [
+            None,
+            {},
+            {"env": "staging"},
+            {"env": "staging", "values_file": "", "overlay_files": [], "version_path": [], "tag_pattern": ""},
+        ],
     )
     def test_a_malformed_declaration_refuses(self, tmp_path: pathlib.Path, block: Any) -> None:
         import json
@@ -265,11 +270,22 @@ class TestDeclaration:
         out = tmp_path / "v.json"
         result = CliRunner().invoke(
             app,
-            ["deploy-shape", "--pr", "7", "--repo", REPO, "--registry", args["registry"],
-             "--products", args["products"], "--out", str(out)],
+            [
+                "deploy-shape",
+                "--pr",
+                "7",
+                "--repo",
+                REPO,
+                "--registry",
+                args["registry"],
+                "--products",
+                args["products"],
+                "--out",
+                str(out),
+            ],
         )
         assert result.exit_code == 2, result.output
-        assert json.loads(out.read_text())["verdict"] == "unknown"
+        assert json.loads(out.read_text(encoding="utf-8"))["verdict"] == "unknown"
 
     def test_the_module_names_no_declared_path(self) -> None:
         """The paths live in the declaration; a copy in code is how the two drift."""
@@ -296,7 +312,11 @@ class FakeApi:
     def json(self, path: str) -> Any:
         if path == f"repos/{REPO}/pulls/7":
             head = self.heads.pop(0) if len(self.heads) > 1 else self.heads[0]
-            return {"state": "open", "head": {"sha": head}, "base": {"ref": "master", "repo": {"default_branch": "master"}}}
+            return {
+                "state": "open",
+                "head": {"sha": head},
+                "base": {"ref": "master", "repo": {"default_branch": "master"}},
+            }
         if path not in self.routes:
             raise RuntimeError(f"unexpected API call: {path}")
         value = self.routes[path]

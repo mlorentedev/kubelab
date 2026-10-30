@@ -26,7 +26,9 @@ from tests.ansible_jinja import ansible_env
 
 REPO = Path(__file__).resolve().parents[1]
 TEMPLATES = REPO / "infra" / "ansible" / "roles" / "gateway" / "templates"
-EDGE = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text())["networking"]["edge"]
+EDGE = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text(encoding="utf-8"))["networking"][
+    "edge"
+]
 
 LAN = "eth0"
 UPLINK = EDGE["uplink"]["interface"]

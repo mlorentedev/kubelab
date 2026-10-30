@@ -454,7 +454,11 @@ def test_a_compose_stack_fetches_no_image_its_role_does_not_pull():
 
 def test_a_play_behind_the_edge_that_runs_a_sized_pull_sizes_it():
     networking = _networking()
-    sized = {path.parts[-3] for path in ROLES.glob("*/tasks/*.yml") if "_includes/image-pull.yml" in path.read_text()}
+    sized = {
+        path.parts[-3]
+        for path in ROLES.glob("*/tasks/*.yml")
+        if "_includes/image-pull.yml" in path.read_text(encoding="utf-8")
+    }
     assert sized >= {"agent_stack", "glances", "coredns"}
     unsized = set()
     for name, play in _plays():
@@ -467,7 +471,11 @@ def test_a_play_behind_the_edge_that_runs_a_sized_pull_sizes_it():
 def test_a_play_that_sizes_a_pull_gathers_the_architecture_it_estimates_for():
     """The estimate reads the layers for `ansible_architecture`, a fact: a play that
     skips fact gathering fails at the estimate, not at the pull (#2742)."""
-    sized = {path.parts[-3] for path in ROLES.glob("*/tasks/*.yml") if "_includes/image-pull.yml" in path.read_text()}
+    sized = {
+        path.parts[-3]
+        for path in ROLES.glob("*/tasks/*.yml")
+        if "_includes/image-pull.yml" in path.read_text(encoding="utf-8")
+    }
     for name, play in _plays():
         if _roles(play) & sized:
             assert play.get("gather_facts", True) is not False, f"{name}: runs a sized pull without facts"

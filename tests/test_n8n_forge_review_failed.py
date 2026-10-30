@@ -37,7 +37,9 @@ from toolkit.features.n8n_import import (
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = "forge-review-failed.json"
-FIXTURE = json.loads((REPO_ROOT / "tests" / "fixtures" / "grafana" / "forge-review-failed-webhook.json").read_text())
+FIXTURE = json.loads(
+    (REPO_ROOT / "tests" / "fixtures" / "grafana" / "forge-review-failed-webhook.json").read_text(encoding="utf-8")
+)
 RULES = REPO_ROOT / "infra" / "k8s" / "base" / "services" / "grafana-alerting" / "rules.yaml"
 
 DOMAIN = "gitea.kubelab.live"
@@ -258,7 +260,9 @@ def test_the_comment_list_is_read_whole_and_bounded_to_this_failure():
 
     assert node["parameters"]["options"]["response"]["response"]["fullResponse"] is True
     url = node["parameters"]["url"]
-    assert "/comments?since={{ $json.since }}&limit=50" in url  # 30 a page by default; the marker is newer than startsAt
+    assert (
+        "/comments?since={{ $json.since }}&limit=50" in url
+    )  # 30 a page by default; the marker is newer than startsAt
     assert node["parameters"]["method"] == "GET"
 
 
@@ -299,7 +303,7 @@ def test_the_forge_host_is_resolved_from_the_same_place_the_forge_is_served_from
 def test_the_workflow_filters_on_the_rule_that_is_committed():
     rule = next(
         r
-        for g in yaml.safe_load(RULES.read_text())["groups"]
+        for g in yaml.safe_load(RULES.read_text(encoding="utf-8"))["groups"]
         for r in g["rules"]
         if r["uid"] == "tool093-reviewer-failed"
     )

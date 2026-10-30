@@ -586,7 +586,7 @@ def test_the_drill_reads_the_files_keys_and_target_the_ssot_declares(monkeypatch
     from toolkit.features.configuration import ConfigurationManager
 
     repo = Path(__file__).resolve().parents[1]
-    common = yaml.safe_load((repo / "infra/config/values/common.yaml").read_text())
+    common = yaml.safe_load((repo / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
     seen: list[dict] = []
     asked: list[str] = []
     # Hermetic: no SOPS is decrypted; the key lookup is recorded instead.

@@ -34,7 +34,7 @@ def _digest() -> types.ModuleType:
     """Compiled from source, never imported: an import writes a .pyc into the role's
     files/, which other tests read as text."""
     module = types.ModuleType("daily_digest")
-    exec(compile(SCRIPT.read_text(), str(SCRIPT), "exec"), module.__dict__)  # noqa: S102
+    exec(compile(SCRIPT.read_text(encoding="utf-8"), str(SCRIPT), "exec"), module.__dict__)  # noqa: S102
     return module
 
 
@@ -225,7 +225,7 @@ def test_the_database_is_opened_read_only(tmp_path: Path) -> None:
 
 
 def _hermes() -> dict:
-    return yaml.safe_load(COMMON.read_text())["apps"]["services"]["ai"]["hermes_kubelab"]
+    return yaml.safe_load(COMMON.read_text(encoding="utf-8"))["apps"]["services"]["ai"]["hermes_kubelab"]
 
 
 def test_the_digest_job_is_a_script_job_with_no_agent_and_runs_in_the_morning() -> None:
@@ -247,7 +247,7 @@ def test_the_gateways_memories_are_the_zones_memories_directory() -> None:
     `memories/`, mounted over the data directory's. The sync then commits them with
     nothing else changed, and no new privilege is given to the user that holds the
     vault token."""
-    compose = (ROLE / "templates/compose-hermes.yml.j2").read_text()
+    compose = (ROLE / "templates/compose-hermes.yml.j2").read_text(encoding="utf-8")
     wanted = (
         "{{ agent_stack_vault_clone }}/{{ agent_stack_vault_zone }}/memories:{{ agent_stack_hermes_home }}/memories"
     )
@@ -260,7 +260,7 @@ def test_the_gateways_memories_are_the_zones_memories_directory() -> None:
 
 def test_the_memories_directory_exists_before_the_gateway_mounts_it() -> None:
     """A missing source is created by Docker, owned by root, and the gateway could not write it."""
-    zone = (ROLE / "tasks/vault_zone.yml").read_text()
+    zone = (ROLE / "tasks/vault_zone.yml").read_text(encoding="utf-8")
     tasks = yaml.safe_load(zone)
 
     def flat(items: list[dict]) -> list[dict]:
@@ -281,7 +281,7 @@ def test_the_memories_directory_exists_before_the_gateway_mounts_it() -> None:
 def test_the_scripts_cleanup_refuses_to_run_on_an_empty_glob() -> None:
     """Remove what the role no longer ships, but never from a checkout that ships
     nothing: an empty glob would clear the node's scripts and every job would fail."""
-    tasks = yaml.safe_load((ROLE / "tasks/hermes.yml").read_text())
+    tasks = yaml.safe_load((ROLE / "tasks/hermes.yml").read_text(encoding="utf-8"))
 
     def flat(items: list[dict]) -> list[dict]:
         out = []
@@ -311,13 +311,13 @@ def test_the_sync_skips_the_gateways_unreadable_plumbing_in_the_memories(tmp_pat
     import shlex
     import subprocess
 
-    template = (ROLE / "templates/vault-sync.sh.j2").read_text()
+    template = (ROLE / "templates/vault-sync.sh.j2").read_text(encoding="utf-8")
     assert "-c 'core.excludesFile={{ agent_stack_vault_ignore }}'" in template
     assert ":(exclude" not in re.sub(r"^#.*$", "", template, flags=re.MULTILINE), "no exclude pathspec in the sync"
     [line] = re.findall(r"^vgit add --all -- .*$", template, re.MULTILINE)
     args = shlex.split(line.replace("$zone", "zone"))[1:]
 
-    tasks = yaml.safe_load((ROLE / "tasks/vault_zone.yml").read_text())
+    tasks = yaml.safe_load((ROLE / "tasks/vault_zone.yml").read_text(encoding="utf-8"))
     [task] = [t for t in tasks if t.get("name") == "Install the vault sync's ignore file"]
     assert task["ansible.builtin.copy"]["owner"] == "root", "the agent's user cannot edit what it is judged by"
     patterns = [
@@ -325,14 +325,14 @@ def test_the_sync_skips_the_gateways_unreadable_plumbing_in_the_memories(tmp_pat
     ]
     ignore = tmp_path / "vault-ignore"
     assert patterns and all("/memories/" in entry for entry in patterns), "anchored to the memories, not the clone"
-    ignore.write_text("\n".join(patterns).replace("{{ agent_stack_vault_zone }}", "zone") + "\n")
+    ignore.write_text("\n".join(patterns).replace("{{ agent_stack_vault_zone }}", "zone") + "\n", encoding="utf-8")
 
     repo = tmp_path / "clone"
     memories = repo / "zone" / "memories"
     memories.mkdir(parents=True)
-    (memories / "MEMORY.md").write_text("a fact\n")
+    (memories / "MEMORY.md").write_text("a fact\n", encoding="utf-8")
     for name in ("MEMORY.md.lock", ".mem_abc123"):
-        (memories / name).write_text("")
+        (memories / name).write_text("", encoding="utf-8")
         (memories / name).chmod(0o000)
     env = {**os.environ, "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}
     subprocess.run(["git", "init", "-q", str(repo)], check=True, env=env)

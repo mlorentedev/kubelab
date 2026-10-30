@@ -41,8 +41,8 @@ def _role_vars() -> dict:
     `coredns_public_records` is a controller-side file lookup in the role; here
     it is the same file read directly.
     """
-    common = yaml.safe_load(COMMON.read_text())
-    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text())
+    common = yaml.safe_load(COMMON.read_text(encoding="utf-8"))
+    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))
     assert "services.json" in defaults["coredns_public_records"], (
         "the role no longer reads the public records list; this test reads the wrong source"
     )
@@ -56,13 +56,13 @@ def _role_vars() -> dict:
         return value
 
     ctx = {k: render(defaults[k]) for k in ("base_domain", "node_ips", "service_domains", "vps_public_ip")}
-    ctx["coredns_public_records"] = json.loads(SERVICES_JSON.read_text())
+    ctx["coredns_public_records"] = json.loads(SERVICES_JSON.read_text(encoding="utf-8"))
     return ctx
 
 
 def _prod_zone() -> dict[str, str]:
     """name -> address, as the rendered prod zone's hosts block answers it."""
-    text = (ROLE / "templates/Corefile.j2").read_text()
+    text = (ROLE / "templates/Corefile.j2").read_text(encoding="utf-8")
     zone = text.split("# --- Prod zone ---", 1)[1]
     rendered = jinja2.Environment(undefined=jinja2.StrictUndefined).from_string(zone).render(**_role_vars())
     hosts_block = rendered.split("hosts {", 1)[1].split("fallthrough", 1)[0]
@@ -128,6 +128,8 @@ def test_every_pinned_name_is_served() -> None:
 
 def test_the_check_covers_uptime_kuma() -> None:
     """Guard the guard: the name that broke must be one the test actually checks."""
-    domain = yaml.safe_load(COMMON.read_text())["apps"]["services"]["observability"]["uptime_kuma"]["domain"]
+    domain = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["apps"]["services"]["observability"]["uptime_kuma"][
+        "domain"
+    ]
     assert domain in _prod_zone()
     assert domain in _prod_route_hosts()

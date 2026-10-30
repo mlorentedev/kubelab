@@ -225,7 +225,7 @@ def _resolve(tmp_path: pathlib.Path, **env_overrides: str) -> tuple[int, dict[st
         text=True,
         timeout=60,
     )
-    parsed = dict(line.split("=", 1) for line in output.read_text().splitlines() if "=" in line)
+    parsed = dict(line.split("=", 1) for line in output.read_text(encoding="utf-8").splitlines() if "=" in line)
     return proc.returncode, parsed, proc.stdout + proc.stderr
 
 
@@ -347,7 +347,8 @@ def _stub_toolkit(tmp_path: pathlib.Path, route_stdout: str, route_code: int, li
         f'if [ "$2" = list ]; then [ {list_code} = 0 ] || {{ echo "registry unreadable"; exit {list_code}; }}; '
         f'printf "%s\\n" "{products}"; exit 0; fi\n'
         f"cat <<'ROUTE'\n{route_stdout}\nROUTE\n"
-        f"exit {route_code}\n"
+        f"exit {route_code}\n",
+        encoding="utf-8",
     )
     stub.chmod(0o755)
     return str(stub)
@@ -428,11 +429,12 @@ def _contract(tmp_path: pathlib.Path, forge: str, release_answer: str, release_c
         "#!/usr/bin/env bash\n"
         f'echo "$*" >> "{calls}"\n'
         'case "$2" in\n'
-        f"  show) echo '{{\"ok\": true, \"app\": \"x\", \"forge\": \"{forge}\"}}' ;;\n"
+        f'  show) echo \'{{"ok": true, "app": "x", "forge": "{forge}"}}\' ;;\n'
         f"  release-contract) cat <<'ANSWER'\n{release_answer}\nANSWER\n    exit {release_code} ;;\n"
         "  render) ;;\n"
         '  *) echo "unexpected toolkit call: $*" >&2; exit 1 ;;\n'
-        "esac\n"
+        "esac\n",
+        encoding="utf-8",
     )
     stub.chmod(0o755)
     calls.touch()
@@ -447,7 +449,7 @@ def _contract(tmp_path: pathlib.Path, forge: str, release_answer: str, release_c
     proc = subprocess.run(  # noqa: S603
         ["bash", "-c", step["run"]], cwd=tmp_path, env=env, capture_output=True, text=True, timeout=60
     )
-    return proc.returncode, proc.stdout + proc.stderr, calls.read_text().splitlines()
+    return proc.returncode, proc.stdout + proc.stderr, calls.read_text(encoding="utf-8").splitlines()
 
 
 def test_the_release_contract_is_rendered_before_the_promotion() -> None:

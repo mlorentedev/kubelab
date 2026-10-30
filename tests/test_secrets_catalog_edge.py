@@ -33,7 +33,7 @@ _BY_KEY = {spec.key_path: spec for spec in SECRET_CATALOG}
 
 
 def _kind() -> str:
-    common = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text())
+    common = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text(encoding="utf-8"))
     return common["networking"]["edge"]["uplink"]["kind"]
 
 

@@ -40,12 +40,12 @@ def _merge(base: dict[str, Any], over: dict[str, Any]) -> dict[str, Any]:
 
 def _config() -> dict[str, Any]:
     """common.yaml with prod's overrides, as the playbook's `config` fact (deploy_env: prod)."""
-    common = yaml.safe_load((VALUES / "common.yaml").read_text())
-    return _merge(common, yaml.safe_load((VALUES / "prod.yaml").read_text()) or {})
+    common = yaml.safe_load((VALUES / "common.yaml").read_text(encoding="utf-8"))
+    return _merge(common, yaml.safe_load((VALUES / "prod.yaml").read_text(encoding="utf-8")) or {})
 
 
 def _role_vars() -> dict[str, str]:
-    plays = yaml.safe_load(PLAYBOOK.read_text())
+    plays = yaml.safe_load(PLAYBOOK.read_text(encoding="utf-8"))
     play = next(p for p in plays if any("rpi3_services" in str(r.get("role")) for r in p.get("roles", [])))
     return next(r for r in play["roles"] if "rpi3_services" in str(r["role"]))["vars"]
 
@@ -107,7 +107,7 @@ def _jump() -> str:
 
 
 def _rules() -> list[str]:
-    template = (ROLE / "templates/kuma-allowlist.rules.j2").read_text()
+    template = (ROLE / "templates/kuma-allowlist.rules.j2").read_text(encoding="utf-8")
     text = Environment(undefined=StrictUndefined, trim_blocks=True, lstrip_blocks=True).from_string(template)
     rendered = text.render(ansible_managed="managed", uptime_kuma_allowed_sources=allowed_sources(), **_published())
     return [line for line in rendered.splitlines() if line and not line.startswith("#")]
@@ -148,14 +148,16 @@ def test_the_jump_lands_in_the_same_transaction_as_the_chain() -> None:
 
 def _deploy_dir() -> str:
     """Where the role writes the rules file: the play's value if it sets one, else the role default."""
-    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text())
+    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))
     return str(_role_vars().get("rpi3_deploy_dir", defaults["rpi3_deploy_dir"]))
 
 
 def _unit() -> str:
-    template = (ROLE / "templates/kubelab-kuma-allowlist.service.j2").read_text()
-    return Environment(undefined=StrictUndefined).from_string(template).render(
-        ansible_managed="managed", rpi3_deploy_dir=_deploy_dir(), **_published()
+    template = (ROLE / "templates/kubelab-kuma-allowlist.service.j2").read_text(encoding="utf-8")
+    return (
+        Environment(undefined=StrictUndefined)
+        .from_string(template)
+        .render(ansible_managed="managed", rpi3_deploy_dir=_deploy_dir(), **_published())
     )
 
 

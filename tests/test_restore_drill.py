@@ -90,7 +90,7 @@ def _tmp(tmp_path: Path, monkeypatch) -> None:
 def test_a_drill_that_ends_clean_says_so() -> None:
     with scratch(_Docker(), "pgdrill", holds="a dump") as box:
         assert box.workdir.is_dir() and box.name.startswith("pgdrill-")
-        (box.workdir / "dump.sql").write_text("rows")
+        (box.workdir / "dump.sql").write_text("rows", encoding="utf-8")
     assert box.clean and not box.workdir.exists()
 
 
@@ -137,7 +137,7 @@ def test_a_scratch_without_a_container_never_calls_docker_and_is_clean_once_the_
         raise AssertionError(f"a directory-only drill ran {argv[0]}")
 
     with scratch(no_docker, "nodedrill", holds="a node's files", container=False) as box:
-        (box.workdir / "webui.db").write_text("rows")
+        (box.workdir / "webui.db").write_text("rows", encoding="utf-8")
     assert box.clean and not box.workdir.exists()
 
 

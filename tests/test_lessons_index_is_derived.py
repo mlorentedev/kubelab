@@ -78,7 +78,7 @@ class TestTheDeriverActuallyDerives:
         longer merge two stale copies of one number into a wrong one.
         """
         root = _tree(tmp_path / "lessons", {"alpha": 3, "beta": 2})
-        (root / "alpha" / "lesson-900-arrived.md").write_text("---\nid: x\n---\n")
+        (root / "alpha" / "lesson-900-arrived.md").write_text("---\nid: x\n---\n", encoding="utf-8")
         index = root / "alpha" / "_index.md"
         _set_rows(index, ["| 900 | [Arrived](lesson-900-arrived.md) | 2026-02-01 |", *_rows(index)])
         assert lessons_index.reconcile(root) == []
@@ -95,18 +95,18 @@ class TestTheDeriverActuallyDerives:
         root = _tree(tmp_path / "lessons", {"alpha": 3, "beta": 2})
         index = root / "alpha" / "_index.md"
         _reverse_rows(index)
-        before = index.read_text()
+        before = index.read_text(encoding="utf-8")
         assert lessons_index.reconcile(root, apply=False)
-        assert index.read_text() == before
+        assert index.read_text(encoding="utf-8") == before
 
 
 def _rows(index: pathlib.Path) -> list[str]:
-    return [line for line in index.read_text().splitlines() if lessons_index.LESSON_ROW.match(line)]
+    return [line for line in index.read_text(encoding="utf-8").splitlines() if lessons_index.LESSON_ROW.match(line)]
 
 
 def _set_rows(index: pathlib.Path, rows: list[str]) -> None:
-    head = [line for line in index.read_text().splitlines() if not lessons_index.LESSON_ROW.match(line)]
-    index.write_text("\n".join(head + rows) + "\n")
+    head = [line for line in index.read_text(encoding="utf-8").splitlines() if not lessons_index.LESSON_ROW.match(line)]
+    index.write_text("\n".join(head + rows) + "\n", encoding="utf-8")
 
 
 def _reverse_rows(index: pathlib.Path) -> None:
@@ -146,7 +146,7 @@ class TestTheRowsAreOrderedNotHandPlaced:
         root = _tree(tmp_path / "lessons", {"alpha": 2})
         index = root / "alpha" / "_index.md"
         _set_rows(index, list(reversed(_rows(index))))
-        index.write_text(index.read_text().rstrip("\n"))
+        index.write_text(index.read_text(encoding="utf-8").rstrip("\n"), encoding="utf-8")
         lessons_index.reconcile(root, apply=True)
         assert len(_rows(index)) == 2
 
@@ -174,7 +174,7 @@ class TestTheHookIsWired:
     """A deriver nobody runs is a script, not a mechanism."""
 
     def test_the_hook_exists_and_fixes(self) -> None:
-        cfg = yaml.safe_load(PRE_COMMIT.read_text())
+        cfg = yaml.safe_load(PRE_COMMIT.read_text(encoding="utf-8"))
         local = [r for r in cfg["repos"] if r.get("repo") == "local"]
         hooks = [h for r in local for h in r["hooks"] if h["id"] == "lessons-index-order"]
         assert hooks, "the lessons-index-order hook is not declared"
@@ -182,7 +182,7 @@ class TestTheHookIsWired:
 
     def test_the_hook_watches_the_lessons_tree(self) -> None:
         """`files:` decides whether the commit-time hook sees the change."""
-        cfg = yaml.safe_load(PRE_COMMIT.read_text())
+        cfg = yaml.safe_load(PRE_COMMIT.read_text(encoding="utf-8"))
         hook = next(
             h for r in cfg["repos"] if r.get("repo") == "local" for h in r["hooks"] if h["id"] == "lessons-index-order"
         )
@@ -207,7 +207,7 @@ class TestTheHookIsWired:
         than fixes: rewriting files during a push would leave the working tree
         ahead of what is being pushed.
         """
-        cfg = yaml.safe_load(PRE_COMMIT.read_text())
+        cfg = yaml.safe_load(PRE_COMMIT.read_text(encoding="utf-8"))
         hooks = {h["id"]: h for r in cfg["repos"] if r.get("repo") == "local" for h in r["hooks"]}
 
         commit_hook = hooks["lessons-index-order"]
@@ -221,7 +221,7 @@ class TestTheHookIsWired:
             "a pre-push stage declared here would never execute -- core.hooksPath points at .github/hooks"
         )
 
-        script = PRE_PUSH.read_text()
+        script = PRE_PUSH.read_text(encoding="utf-8")
         assert "toolkit tools lessons-index" in script, (
             "nothing guards the merge route: a clean merge skips pre-commit entirely, "
             "so the push-time check must live in the script git actually runs"
@@ -349,12 +349,12 @@ class TestADuplicatedNumberIsRefused:
         )
         index = lessons / "alpha" / "_index.md"
         _reverse_rows(index)
-        before = index.read_text()
+        before = index.read_text(encoding="utf-8")
 
         result = runner.invoke(tools_app, ["lessons-index", "--root", str(lessons), "--fix"])
 
         assert result.exit_code == 2, result.output
-        assert index.read_text() == before, "the index was rewritten over a colliding corpus"
+        assert index.read_text(encoding="utf-8") == before, "the index was rewritten over a colliding corpus"
 
 
 def _conflicted(index: pathlib.Path) -> None:
@@ -363,7 +363,7 @@ def _conflicted(index: pathlib.Path) -> None:
     Built from repeated characters so this source file holds no marker line of its
     own: `check-merge-conflict` would flag it during any merge of this file.
     """
-    lines = index.read_text().splitlines(keepends=True)
+    lines = index.read_text(encoding="utf-8").splitlines(keepends=True)
     at = next(i for i, line in enumerate(lines) if lessons_index.LESSON_ROW.match(line))
     lines[at:at] = ["<" * 7 + " HEAD\n"]
     lines[at + 2 : at + 2] = [
@@ -371,7 +371,7 @@ def _conflicted(index: pathlib.Path) -> None:
         "| 9 | [Theirs](lesson-9-theirs.md) | 2026-01-02 |\n",
         ">" * 7 + " theirs\n",
     ]
-    index.write_text("".join(lines))
+    index.write_text("".join(lines), encoding="utf-8")
 
 
 class TestAnUnfinishedMergeIsRefused:
@@ -397,19 +397,22 @@ class TestAnUnfinishedMergeIsRefused:
         lessons = _repo_with_lessons(tmp_path, {"alpha": ["lesson-1-one.md", "lesson-2-two.md"]})
         index = lessons / "alpha" / "_index.md"
         _conflicted(index)
-        before = index.read_text()
+        before = index.read_text(encoding="utf-8")
 
         result = runner.invoke(tools_app, ["lessons-index", "--root", str(lessons), mode])
 
         assert result.exit_code == 2, result.output
         assert "alpha/_index.md" in result.output
         assert "merge is not finished" in result.output
-        assert index.read_text() == before
+        assert index.read_text(encoding="utf-8") == before
 
     def test_the_top_level_index_is_read_too(self, tmp_path: pathlib.Path) -> None:
         lessons = _repo_with_lessons(tmp_path, {"alpha": ["lesson-1-one.md"]})
         top = lessons / "_index.md"
-        top.write_text(top.read_text() + "<" * 7 + " HEAD\n" + "=" * 7 + "\n" + ">" * 7 + " theirs\n")
+        top.write_text(
+            top.read_text(encoding="utf-8") + "<" * 7 + " HEAD\n" + "=" * 7 + "\n" + ">" * 7 + " theirs\n",
+            encoding="utf-8",
+        )
 
         assert lessons_index.unmerged_indexes(lessons) == {"_index.md": [8, 9, 10]}
 
@@ -417,7 +420,7 @@ class TestAnUnfinishedMergeIsRefused:
         lessons = _repo_with_lessons(tmp_path, {"alpha": ["lesson-1-one.md"]})
         nested = lessons / "alpha" / "group" / "_index.md"
         nested.parent.mkdir()
-        nested.write_text("<" * 7 + " HEAD\n")
+        nested.write_text("<" * 7 + " HEAD\n", encoding="utf-8")
 
         assert lessons_index.unmerged_indexes(lessons) == {"alpha/group/_index.md": [1]}
 
@@ -521,12 +524,12 @@ class TestALessonThatHeadHasAndTheTreeDoesNotIsRefused:
         (lessons / "alpha" / "lesson-2-two.md").unlink()
         index = lessons / "alpha" / "_index.md"
         _reverse_rows(index)
-        before = index.read_text()
+        before = index.read_text(encoding="utf-8")
 
         result = runner.invoke(tools_app, ["lessons-index", "--root", str(lessons), "--fix"])
 
         assert result.exit_code == 2, result.output
-        assert index.read_text() == before, "the index was rewritten over a shrunken corpus"
+        assert index.read_text(encoding="utf-8") == before, "the index was rewritten over a shrunken corpus"
 
     def test_allow_removal_opens_the_door(self, tmp_path: pathlib.Path) -> None:
         """A deliberate deletion must have an exit, or the gate gets --no-verify'd."""

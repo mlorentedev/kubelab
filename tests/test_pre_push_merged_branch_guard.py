@@ -46,7 +46,7 @@ def _fake_gh(tmp_path: Path, body: str) -> Path:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir(exist_ok=True)
     gh = bin_dir / "gh"
-    gh.write_text(f"#!{BASH}\n{body}\n")
+    gh.write_text(f"#!{BASH}\n{body}\n", encoding="utf-8")
     gh.chmod(gh.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
     return bin_dir
 
@@ -185,7 +185,7 @@ def _fake_poetry(tmp_path: Path, body: str) -> Path:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir(exist_ok=True)
     poetry = bin_dir / "poetry"
-    poetry.write_text(f"#!{BASH}\n{body}\n")
+    poetry.write_text(f"#!{BASH}\n{body}\n", encoding="utf-8")
     poetry.chmod(poetry.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
     return bin_dir
 

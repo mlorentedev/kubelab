@@ -185,7 +185,9 @@ def image_repositories(
     namespace, so only the last segment of an image is kept.
     """
     if common is None:
-        common = yaml.safe_load((PROJECT_ROOT / product_registry.COMMON_VALUES_RELPATH).read_text()) or {}
+        common = (
+            yaml.safe_load((PROJECT_ROOT / product_registry.COMMON_VALUES_RELPATH).read_text(encoding="utf-8")) or {}
+        )
     repos: dict[str, str] = {}
     for app in apps:
         if app == "errors":

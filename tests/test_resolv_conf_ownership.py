@@ -36,7 +36,7 @@ SHARED_PREFLIGHT_PLAYBOOKS = ("provision-ace1", "provision-ace2", "provision-bee
 
 
 def _tasks() -> list[dict]:
-    return yaml.safe_load((BASE_SYSTEM / "tasks/main.yml").read_text())
+    return yaml.safe_load((BASE_SYSTEM / "tasks/main.yml").read_text(encoding="utf-8"))
 
 
 def _index_of(tasks: list[dict], predicate) -> int:
@@ -121,7 +121,7 @@ def test_the_link_task_notifies_a_handler_that_exists() -> None:
     notify = [notify] if isinstance(notify, str) else (notify or [])
     assert HANDLER in notify, f"the link task must notify {HANDLER!r}; it notifies {notify!r}"
 
-    handlers = yaml.safe_load((BASE_SYSTEM / "handlers/main.yml").read_text())
+    handlers = yaml.safe_load((BASE_SYSTEM / "handlers/main.yml").read_text(encoding="utf-8"))
     declared = {h.get("name") for h in handlers}
     assert HANDLER in declared, f"handler {HANDLER!r} is notified but not declared in {declared}"
 
@@ -142,7 +142,7 @@ def test_the_connectivity_preflight_is_shared_not_copied(playbook: str) -> None:
     have repaired it. Measured on ace2: the IP probe returned OK in the same
     second the name probe returned curl rc=6.
     """
-    text = (PLAYBOOKS / f"{playbook}.yml").read_text()
+    text = (PLAYBOOKS / f"{playbook}.yml").read_text(encoding="utf-8")
     assert "_includes/check-internet.yml" in text, (
         f"{playbook} must use the shared connectivity pre-flight; a private copy "
         "drifts, and the copy is what turned a self-healing fault into a hard stop"
@@ -162,7 +162,7 @@ def test_the_shared_preflight_separates_reachability_from_resolution() -> None:
     systemd-resolved is active, so that is the condition that decides between
     aborting and continuing.
     """
-    tasks = yaml.safe_load((PLAYBOOKS / "_includes/check-internet.yml").read_text())
+    tasks = yaml.safe_load((PLAYBOOKS / "_includes/check-internet.yml").read_text(encoding="utf-8"))
 
     fatal = [t for t in tasks if "fail" in t]
     assert fatal, "an unrepairable resolution fault must abort rather than proceed into apt"

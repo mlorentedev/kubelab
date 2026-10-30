@@ -56,7 +56,9 @@ _EDGE = r"(?<![A-Za-z0-9-])"
 PROD = re.compile(_EDGE + r"([a-z0-9-]+)\.kubelab\.live\b")
 # Read from the SSOT, as the CoreDNS role renders it (`staging.{{ common.global.base_domain }}`),
 # so a domain rename moves the scan with it instead of leaving it an empty sample.
-BASE_DOMAIN = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())["global"]["base_domain"]
+BASE_DOMAIN = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text(encoding="utf-8"))["global"][
+    "base_domain"
+]
 STAGING_APEX = f"staging.{BASE_DOMAIN}"
 STAGING = re.compile(_EDGE + r"([a-z0-9-]+)\." + re.escape(STAGING_APEX) + r"\b")
 PERSONAL = re.compile(_EDGE + r"([a-z0-9-]+)\.mlorente\.dev\b")
@@ -74,7 +76,7 @@ def _docs() -> dict[str, str]:
         for path in root.rglob("*.md"):
             rel = str(path.relative_to(REPO))
             if rel not in NOT_CURRENT:
-                texts[rel] = _unescape(path.read_text())
+                texts[rel] = _unescape(path.read_text(encoding="utf-8"))
     return texts
 
 
@@ -87,12 +89,12 @@ def _mentioned(pattern: re.Pattern[str]) -> dict[str, set[str]]:
 
 
 def _published(zone: str = "kubelab") -> set[str]:
-    records = json.loads((REPO / "infra/terraform/dns/services.json").read_text())
+    records = json.loads((REPO / "infra/terraform/dns/services.json").read_text(encoding="utf-8"))
     return {r["name"] for r in records if r.get("zone") == zone} | {"www"}
 
 
 def _staging_labels() -> set[str]:
-    common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
+    common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
     return {zone.split(".")[0] for zone in common["networking"]["staging_zones"]}
 
 
@@ -100,7 +102,7 @@ def _staging_manifests() -> str:
     texts = []
     for root in (REPO / "infra/k8s/base", REPO / "infra/k8s/overlays/staging"):
         for pattern in ("*.yaml", "*.yml"):
-            texts += [path.read_text() for path in root.rglob(pattern)]
+            texts += [path.read_text(encoding="utf-8") for path in root.rglob(pattern)]
     return "\n".join(texts)
 
 

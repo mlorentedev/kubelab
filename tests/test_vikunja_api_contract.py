@@ -23,7 +23,7 @@ FIXTURE = Path(__file__).parent / "fixtures" / "vikunja" / "swagger-paths-1.0.0.
 
 
 def _swagger_patterns() -> list[tuple[str, re.Pattern[str], set[str]]]:
-    paths = json.loads(FIXTURE.read_text())["paths"]
+    paths = json.loads(FIXTURE.read_text(encoding="utf-8"))["paths"]
     return [(p, re.compile("^" + re.sub(r"\{[^}]+\}", r"[^/]+", p) + "$"), set(m)) for p, m in paths.items()]
 
 

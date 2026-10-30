@@ -30,7 +30,7 @@ MAKEFILE = REPO / "Makefile"
 
 
 def _play() -> dict:
-    plays = yaml.safe_load(PLAYBOOK.read_text())
+    plays = yaml.safe_load(PLAYBOOK.read_text(encoding="utf-8"))
     assert len(plays) == 1, "one play"
     return plays[0]
 
@@ -40,7 +40,7 @@ def _tasks() -> list[dict]:
 
 
 def _recipe() -> str:
-    text = MAKEFILE.read_text()
+    text = MAKEFILE.read_text(encoding="utf-8")
     m = re.search(r"^backup-repo-reinit:.*?(?=^\S|\Z)", text, re.S | re.M)
     assert m, "Makefile has no backup-repo-reinit target"
     return m.group(0)
@@ -63,7 +63,7 @@ def test_the_marker_path_comes_from_the_role_defaults() -> None:
     play = _play()
     assert "../roles/node_backup/defaults/main.yml" in play.get("vars_files", [])
     destinations = play["vars"]["reinit_destinations"]
-    defaults = yaml.safe_load(DEFAULTS.read_text())
+    defaults = yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))
     for dest, path in destinations.items():
         var = f"node_backup_{dest}_repository_id_file"
         assert var in defaults, f"{dest}: the role declares no {var}"

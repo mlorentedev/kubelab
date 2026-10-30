@@ -98,7 +98,7 @@ def _code_node_sources() -> dict[str, str]:
     """Every committed Code node's JavaScript, keyed `workflow::node`."""
     sources: dict[str, str] = {}
     for path in sorted(WORKFLOW_DIR.glob("*.json")):
-        document = json.loads(path.read_text())
+        document = json.loads(path.read_text(encoding="utf-8"))
         for node in document.get("nodes", []):
             if node.get("type") != CODE_NODE_TYPE:
                 continue

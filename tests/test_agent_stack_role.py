@@ -37,12 +37,12 @@ CONFIGURED = "agent_stack_webui_configured | bool"
 
 
 def _common() -> dict:
-    return yaml.safe_load(COMMON.read_text())
+    return yaml.safe_load(COMMON.read_text(encoding="utf-8"))
 
 
 def _context() -> dict:
     common = _common()
-    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text())
+    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))
     return {
         **defaults,
         "ansible_managed": "managed",
@@ -59,7 +59,9 @@ def _context() -> dict:
         "agent_stack_hermes": common["apps"]["services"]["ai"]["hermes_kubelab"],
         "agent_stack_vault_zone": common["apps"]["services"]["ai"]["hermes_kubelab"]["vault_zone"],
         "agent_stack_headscale_url": f"https://{common['apps']['services']['core']['headscale']['domain']}",
-        "agent_stack_deny_rules": yaml.safe_load((ROLE / "files/guardrails-denylist.yaml").read_text())["rules"],
+        "agent_stack_deny_rules": yaml.safe_load((ROLE / "files/guardrails-denylist.yaml").read_text(encoding="utf-8"))[
+            "rules"
+        ],
         "_agent_stack_agent_uid": 999,
         "_agent_stack_hermes_api_key": "hermes-api-key-sentinel",
         "_agent_stack_mcp_bridge_key": "mcp-bridge-key-sentinel",
@@ -111,7 +113,7 @@ def _tasks() -> list[dict]:
     """Every task in every file of the role, including those nested in a block."""
     flat: list[dict] = []
     for path in sorted((ROLE / "tasks").glob("*.yml")):
-        for task in yaml.safe_load(path.read_text()) or []:
+        for task in yaml.safe_load(path.read_text(encoding="utf-8")) or []:
             flat.append(task)
             flat.extend(task.get("block") or [])
     return flat
@@ -158,7 +160,7 @@ def test_the_env_file_is_private_and_never_logged() -> None:
 @pytest.mark.parametrize("compose_file", COMPOSE_FILES)
 @pytest.mark.parametrize("secret", SECRET_INPUTS)
 def test_no_secret_reaches_the_compose_file(secret: str, compose_file: str) -> None:
-    source = (ROLE / "templates" / compose_file).read_text()
+    source = (ROLE / "templates" / compose_file).read_text(encoding="utf-8")
     assert secret not in source
     assert _context()[secret] not in _render(compose_file)
 
@@ -213,7 +215,7 @@ def test_open_webui_is_not_deployed_without_an_oidc_secret_and_a_break_glass_pas
     """With the form on and an empty database, the first visitor to sign up becomes admin
     (`auths.py` gates the first signup on neither ENABLE_SIGNUP nor anything else). The
     seeded break-glass account is what closes that, so no seed, no start."""
-    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text())
+    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))
     gate = defaults["agent_stack_webui_configured"]
     assert "agent_stack_webui_oidc_client_secret | length > 0" in gate
     assert "agent_stack_webui_admin_password | length > 0" in gate
@@ -240,7 +242,7 @@ def test_the_redirect_uri_is_the_public_name_the_client_registers() -> None:
 
 
 def test_the_role_runs_on_ace2_after_dev_node() -> None:
-    plays = yaml.safe_load((REPO / "infra/ansible/playbooks/provision-ace2.yml").read_text())
+    plays = yaml.safe_load((REPO / "infra/ansible/playbooks/provision-ace2.yml").read_text(encoding="utf-8"))
     roles = [r["role"].rsplit("/", 1)[-1] for r in plays[1]["roles"]]
     assert "agent_stack" in roles
     assert roles.index("agent_stack") > roles.index("dev_node")
@@ -251,7 +253,7 @@ def test_open_webui_reads_the_one_nan_key_pr_agent_uses() -> None:
     from toolkit.features.secrets_manager import SECRET_CATALOG
 
     key = "apps.services.automation.pr_agent.nan_api_key"
-    plays = yaml.safe_load((REPO / "infra/ansible/playbooks/provision-ace2.yml").read_text())
+    plays = yaml.safe_load((REPO / "infra/ansible/playbooks/provision-ace2.yml").read_text(encoding="utf-8"))
     [stack] = [r for r in plays[1]["roles"] if r["role"].endswith("agent_stack")]
     # Prod's vault: the key is registered `envs=("prod",)`, and `secrets` here is staging's.
     assert stack["vars"]["agent_stack_nan_api_key"] == "{{ gitea_secrets." + key + " | default('') }}"
@@ -267,12 +269,12 @@ def test_open_webui_reads_the_one_nan_key_pr_agent_uses() -> None:
     stray = sorted(
         f"{store.name}:{path}"
         for store in sorted((REPO / "infra/config/secrets").glob("*.enc.yaml"))
-        for path in _key_paths(yaml.safe_load(store.read_text()))
+        for path in _key_paths(yaml.safe_load(store.read_text(encoding="utf-8")))
         if path.endswith(".nan_api_key")
         and not (path in specs and store.name.split(".")[0] in ("common", *specs[path].envs))
     )
     assert not stray, f"a NaN key outside the catalog, or in a vault its spec does not cover: {stray}"
-    assert key in _key_paths(yaml.safe_load((REPO / "infra/config/secrets/prod.enc.yaml").read_text()))
+    assert key in _key_paths(yaml.safe_load((REPO / "infra/config/secrets/prod.enc.yaml").read_text(encoding="utf-8")))
 
 
 def _key_paths(node: object, prefix: str = "") -> list[str]:

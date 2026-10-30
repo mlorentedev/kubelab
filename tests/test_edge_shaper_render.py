@@ -30,11 +30,11 @@ from tests.ansible_jinja import ansible_env
 
 REPO = Path(__file__).resolve().parents[1]
 ROLE = REPO / "infra" / "ansible" / "roles" / "gateway"
-TASKS: list[dict[str, Any]] = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text())
-DEFAULTS: dict[str, Any] = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text())
-UPLINK = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text())["networking"]["edge"][
-    "uplink"
-]
+TASKS: list[dict[str, Any]] = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text(encoding="utf-8"))
+DEFAULTS: dict[str, Any] = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text(encoding="utf-8"))
+UPLINK = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text(encoding="utf-8"))[
+    "networking"
+]["edge"]["uplink"]
 UNIT = "kubelab-edge-shaper.service"
 INTERFACE = UPLINK["interface"]
 DEVICE = f"sys-subsystem-net-devices-{INTERFACE}.device"
@@ -186,9 +186,9 @@ def test_the_unit_passes_systemd_analyze_verify(tmp_path: Path) -> None:
     for binary in ("/usr/sbin/tc", "/usr/sbin/ip"):
         if not Path(binary).exists():
             pytest.skip(f"{binary} is not installed")
-    (tmp_path / UNIT).write_text(_render())
+    (tmp_path / UNIT).write_text(_render(), encoding="utf-8")
     for notifier in ("kubelab-notify@.service", "kubelab-notify-recovered@.service"):
-        (tmp_path / notifier).write_text("[Service]\nType=oneshot\nExecStart=/bin/true\n")
+        (tmp_path / notifier).write_text("[Service]\nType=oneshot\nExecStart=/bin/true\n", encoding="utf-8")
     proc = subprocess.run(
         ["systemd-analyze", "verify", "--man=no", str(tmp_path / UNIT)],
         capture_output=True,
@@ -262,7 +262,9 @@ def test_check_mode_skips_the_shaper_until_its_unit_is_written() -> None:
 
 
 def test_the_playbook_maps_the_profiles_rates() -> None:
-    plays = yaml.safe_load((REPO / "infra" / "ansible" / "playbooks" / "provision-rpi4.yml").read_text())
+    plays = yaml.safe_load(
+        (REPO / "infra" / "ansible" / "playbooks" / "provision-rpi4.yml").read_text(encoding="utf-8")
+    )
     for play in plays:
         for role in play.get("roles", []):
             if isinstance(role, dict) and role.get("role", "").endswith("/gateway"):

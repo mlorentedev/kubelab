@@ -41,9 +41,9 @@ def test_the_lock_is_tracked_and_not_ignored() -> None:
 
 def test_a_negated_pattern_is_not_read_as_ignoring_the_lock(tmp_path: pathlib.Path) -> None:
     subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
-    (tmp_path / ".gitignore").write_text("*.lock\n!poetry.lock\n")
+    (tmp_path / ".gitignore").write_text("*.lock\n!poetry.lock\n", encoding="utf-8")
     assert _ignoring_pattern(tmp_path) is None
-    (tmp_path / ".gitignore").write_text("*.lock\n")
+    (tmp_path / ".gitignore").write_text("*.lock\n", encoding="utf-8")
     assert _ignoring_pattern(tmp_path) == ".gitignore:1:*.lock\tpoetry.lock"
 
 

@@ -69,7 +69,7 @@ def _directives(path: Path) -> dict[str, list[str]]:
     carries them.
     """
     out: dict[str, list[str]] = {}
-    for line in path.read_text().splitlines():
+    for line in path.read_text(encoding="utf-8").splitlines():
         stripped = line.strip()
         if not stripped or stripped.startswith(("#", ";", "[", "{#")):
             continue
@@ -237,7 +237,7 @@ def _start_timeout(path: Path) -> str:
     oneshot's start has none.
     """
     value = "infinity"
-    for line in path.read_text().splitlines():
+    for line in path.read_text(encoding="utf-8").splitlines():
         key, sep, rest = line.strip().partition("=")
         if sep and key in ("TimeoutStartSec", "TimeoutSec"):
             value = rest.strip() or "infinity"
@@ -246,7 +246,9 @@ def _start_timeout(path: Path) -> str:
 
 def _role_default(name: str, var: str) -> str:
     """The role default a templated directive names, so the bound is read, not assumed."""
-    defaults = yaml.safe_load((REPO / "infra/ansible" / name.split("/templates/")[0] / "defaults/main.yml").read_text())
+    defaults = yaml.safe_load(
+        (REPO / "infra/ansible" / name.split("/templates/")[0] / "defaults/main.yml").read_text(encoding="utf-8")
+    )
     assert var in defaults, f"{name}: {var} is not a default of its role"
     return str(defaults[var])
 
@@ -310,7 +312,7 @@ def test_an_unknown_unit_is_named_not_a_key_error() -> None:
 def test_the_last_assignment_bounds_the_start(lines: str, expected: str, tmp_path: Path) -> None:
     """systemd keeps the last assignment, and `TimeoutSec=` sets the start timeout too."""
     unit = tmp_path / "unit.service"
-    unit.write_text(f"[Service]\nType=oneshot\n{lines}\n")
+    unit.write_text(f"[Service]\nType=oneshot\n{lines}\n", encoding="utf-8")
     assert _start_timeout(unit) == expected
 
 
@@ -320,7 +322,7 @@ def test_every_stack_on_the_tailnet_address_waits_for_it() -> None:
     publishing = {
         path.relative_to(ROLES).parts[0]
         for path in ROLES.glob("*/templates/*compose*.j2")
-        if "tailscale_ip }}:" in path.read_text()
+        if "tailscale_ip }}:" in path.read_text(encoding="utf-8")
     }
     assert publishing, "no compose template publishes on the address; the glob is stale"
     waiting = {name.split("/")[0] for name in UNITS}
@@ -328,7 +330,11 @@ def test_every_stack_on_the_tailnet_address_waits_for_it() -> None:
 
 
 def _drift(stdout: str, rc: int = 0) -> bool:
-    (decide,) = [t for t in yaml.safe_load(DRIFT.read_text()) if "compose_port_drift" in (t.get("set_fact") or {})]
+    (decide,) = [
+        t
+        for t in yaml.safe_load(DRIFT.read_text(encoding="utf-8"))
+        if "compose_port_drift" in (t.get("set_fact") or {})
+    ]
     expression = decide["set_fact"]["compose_port_drift"]
     env = ansible_env(str(DRIFT.parent))
     rendered = env.from_string(expression).render(
@@ -390,7 +396,7 @@ else:
 
 
 def _drift_tasks() -> list[dict]:
-    return yaml.safe_load(DRIFT.read_text())
+    return yaml.safe_load(DRIFT.read_text(encoding="utf-8"))
 
 
 def _run_read(containers: list[dict[str, Any]], tmp_path: Path) -> tuple[int, str]:
@@ -402,7 +408,7 @@ def _run_read(containers: list[dict[str, Any]], tmp_path: Path) -> tuple[int, st
         .render(compose_port_drift_file="/opt/stack/compose.yml")
     )
     stub = tmp_path / "docker"
-    stub.write_text(DOCKER_STUB)
+    stub.write_text(DOCKER_STUB, encoding="utf-8")
     stub.chmod(0o755)
     env = {**os.environ, "PATH": f"{tmp_path}:{os.environ['PATH']}", "STUB_CONTAINERS": json.dumps(containers)}
     result = subprocess.run(["/bin/sh", "-c", command], capture_output=True, text=True, env=env, check=False)
@@ -453,7 +459,7 @@ def test_the_read_runs_in_a_dry_run() -> None:
 
 
 def _tasks(role: str) -> list[dict]:
-    return yaml.safe_load((ROLES / role / "tasks/main.yml").read_text())
+    return yaml.safe_load((ROLES / role / "tasks/main.yml").read_text(encoding="utf-8"))
 
 
 @pytest.mark.parametrize("role", sorted(STACKS))
@@ -544,7 +550,7 @@ def test_the_provision_waits_for_the_unit_it_started(role: str) -> None:
 
 
 def _settle_tasks() -> tuple[dict, dict]:
-    tasks = yaml.safe_load(SETTLED.read_text())
+    tasks = yaml.safe_load(SETTLED.read_text(encoding="utf-8"))
     (wait,) = [t for t in tasks if t.get("register") == "_stack_unit_settled"]
     (check,) = [t for t in tasks if "assert" in t]
     return wait, check

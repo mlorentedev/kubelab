@@ -31,7 +31,7 @@ ROLE = REPO / "infra/ansible/roles/dev_node"
 def _tasks() -> list[dict]:
     """Every task in the role, including those nested in a block."""
     flat: list[dict] = []
-    for task in yaml.safe_load((ROLE / "tasks/main.yml").read_text()):
+    for task in yaml.safe_load((ROLE / "tasks/main.yml").read_text(encoding="utf-8")):
         flat.append(task)
         flat.extend(task.get("block") or [])
     return flat

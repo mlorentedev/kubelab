@@ -92,7 +92,7 @@ class _Fake:
             body = f"CREATE DATABASE vikunja;\nINSERT '{SECRET}';\n"
             if self.trailer:
                 body += f"--\n{TRAILER}\n--\n"
-            Path(stdout_path).write_text(body)
+            Path(stdout_path).write_text(body, encoding="utf-8")
             self.dump_path = Path(stdout_path)
             return 0, "", ""
         if "get" in argv and "deploy" in argv:
@@ -119,7 +119,7 @@ class _Fake:
             log = 'psql:<stdin>:1: ERROR:  role "postgres" already exists\n'
             if self.load_rc:
                 log += f"psql:<stdin>:2: ERROR:  invalid input syntax: {SECRET}\n"
-            Path(stdout_path).write_text(log)
+            Path(stdout_path).write_text(log, encoding="utf-8")
             return 0, "", ""
         if "datname" in (stdin or ""):
             return 0, "postgres\nvikunja\n", ""
@@ -250,7 +250,9 @@ def test_the_drill_reads_the_path_the_capture_stages() -> None:
     from toolkit.features.postgres_drill import staging_dir
 
     repo = Path(__file__).resolve().parents[1]
-    template = (repo / "infra/ansible/roles/node_backup/templates/node-backup-capture.sh.j2").read_text()
+    template = (repo / "infra/ansible/roles/node_backup/templates/node-backup-capture.sh.j2").read_text(
+        encoding="utf-8"
+    )
     assert 'mv "$PG_PARTIAL_{{ service }}" "$STAGING/{{ service }}/pg_dumpall.sql"' in template
     assert staging_dir(repo) == "/opt/node-backup/staging"
 

@@ -20,7 +20,7 @@ SEED_PATH = REPO_ROOT / "infra/config/uptime-kuma/monitors.json"
 
 
 def _seed() -> list[dict]:
-    return json.loads(SEED_PATH.read_text())
+    return json.loads(SEED_PATH.read_text(encoding="utf-8"))
 
 
 class TestSeedKeys:

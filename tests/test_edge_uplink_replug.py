@@ -30,10 +30,10 @@ from tests.ansible_jinja import ansible_env, task_runs
 
 REPO = Path(__file__).resolve().parents[1]
 ROLE = REPO / "infra" / "ansible" / "roles" / "gateway"
-TASKS: list[dict[str, Any]] = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text())
-INTERFACE = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text())["networking"]["edge"][
-    "uplink"
-]["interface"]
+TASKS: list[dict[str, Any]] = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text(encoding="utf-8"))
+INTERFACE = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text(encoding="utf-8"))[
+    "networking"
+]["edge"]["uplink"]["interface"]
 DEVICE = f"sys-subsystem-net-devices-{INTERFACE}.device"
 SHAPER = "kubelab-edge-shaper.service"
 SUPPLICANT = f"netplan-wpa-{INTERFACE}.service"
@@ -146,7 +146,7 @@ def test_udev_accepts_the_rendered_rule(kind: str, tmp_path: Path) -> None:
     if probe.returncode != 0:
         pytest.skip("udevadm has no verify verb (systemd < 254)")
     rules = tmp_path / "90-rendered.rules"
-    rules.write_text(_rule(kind))
+    rules.write_text(_rule(kind), encoding="utf-8")
     proc = subprocess.run(
         ["udevadm", "verify", "--resolve-names=never", str(rules)], capture_output=True, text=True, check=False
     )
@@ -208,7 +208,9 @@ def test_a_changed_drop_in_reloads_systemd() -> None:
 
 def test_no_unit_the_role_ships_is_installed_into_the_devices_wants() -> None:
     for template in (ROLE / "templates").glob("*.j2"):
-        assert not re.search(r"^WantedBy=sys-subsystem-net-devices-", template.read_text(), re.MULTILINE), template
+        assert not re.search(
+            r"^WantedBy=sys-subsystem-net-devices-", template.read_text(encoding="utf-8"), re.MULTILINE
+        ), template
 
 
 def test_the_role_removes_the_shapers_old_link_on_the_device() -> None:
@@ -232,7 +234,7 @@ def test_no_task_enables_the_shaper() -> None:
 
 
 DEVICE_DROP_IN_DIR = f"/etc/systemd/system/{DEVICE}.d"
-DEFAULTS: dict[str, Any] = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text())
+DEFAULTS: dict[str, Any] = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text(encoding="utf-8"))
 # systemd's DefaultDeviceTimeoutSec, the bound a missing adapter held network.target for (#2794).
 SYSTEMD_DEVICE_TIMEOUT = 90
 

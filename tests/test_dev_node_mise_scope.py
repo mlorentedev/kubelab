@@ -27,7 +27,7 @@ ROLE = REPO / "infra/ansible/roles/dev_node"
 
 def _tasks() -> list[dict]:
     tasks: list[dict] = []
-    for task in yaml.safe_load((ROLE / "tasks/main.yml").read_text()):
+    for task in yaml.safe_load((ROLE / "tasks/main.yml").read_text(encoding="utf-8")):
         tasks.extend([task, *(task.get("block") or [])])
     return tasks
 
@@ -42,7 +42,7 @@ def _install_task() -> dict:
 
 
 def _render(text: str) -> str:
-    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text())
+    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))
     return jinja2.Template(text).render(dev_node_home="/home/u", dev_node_toolchains=defaults["dev_node_toolchains"])
 
 
@@ -52,7 +52,7 @@ def test_the_install_names_exactly_the_toolchains_the_role_pins() -> None:
     binary, verb, *tools = _render(_install_task()["ansible.builtin.command"]["cmd"]).split()
     assert (binary, verb) == ("/home/u/.local/bin/mise", "install")
     assert tools, "a bare `mise install` installs every config's tools, the dotfiles' included"
-    pinned = tomllib.loads(_render((ROLE / "templates/mise-config.toml.j2").read_text()))["tools"]
+    pinned = tomllib.loads(_render((ROLE / "templates/mise-config.toml.j2").read_text(encoding="utf-8")))["tools"]
     assert set(tools) == set(pinned) == {"node", "go", "python"}
     assert _render(_mise("ls --missing")["ansible.builtin.command"]["cmd"]).split()[3:] == tools
 

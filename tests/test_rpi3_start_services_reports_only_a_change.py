@@ -18,7 +18,7 @@ TASKS = ROLE / "tasks/main.yml"
 
 
 def test_start_services_derives_changed_from_compose_output() -> None:
-    (task,) = [t for t in yaml.safe_load(TASKS.read_text()) if t.get("name") == "Start services"]
+    (task,) = [t for t in yaml.safe_load(TASKS.read_text(encoding="utf-8")) if t.get("name") == "Start services"]
     changed_when = task.get("changed_when")
     assert changed_when is not True, "changed_when: true makes every run report a change"
     registered = task.get("register")
@@ -38,7 +38,7 @@ def test_only_a_container_outside_the_stack_is_force_removed() -> None:
     Same guard as `roles/glances`: remove it only when it exists and is not labelled
     with this stack's compose project.
     """
-    tasks = yaml.safe_load(TASKS.read_text())
+    tasks = yaml.safe_load(TASKS.read_text(encoding="utf-8"))
     removals = [t for t in tasks if "docker rm -f uptime-kuma" in str(t.get("command", ""))]
     assert removals, "the legacy cleanup is gone; delete this test with it"
     for task in removals:
@@ -57,9 +57,9 @@ def test_the_stack_project_is_the_deploy_directory_name() -> None:
     container on every run.
     """
     # Read as text: the template carries Jinja control blocks YAML cannot parse.
-    compose = (ROLE / "templates/compose.yml.j2").read_text()
+    compose = (ROLE / "templates/compose.yml.j2").read_text(encoding="utf-8")
     assert not re.search(r"^name\s*:", compose, re.MULTILINE), (
         "a top-level name: makes the project label differ from the directory"
     )
-    deploy_dir = yaml.safe_load((ROLE / "defaults/main.yml").read_text())["rpi3_deploy_dir"]
+    deploy_dir = yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))["rpi3_deploy_dir"]
     assert re.fullmatch(r"[a-z0-9][a-z0-9_-]*", Path(deploy_dir).name), deploy_dir

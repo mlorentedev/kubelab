@@ -78,7 +78,7 @@ class ConfigurationManager:
             return {}
 
         try:
-            with open(path) as f:
+            with open(path, encoding="utf-8") as f:
                 return yaml.safe_load(f) or {}
         except Exception as e:
             self._get_logger().error(f"Failed to load {path}: {e}")
@@ -390,7 +390,7 @@ class ConfigurationManager:
         file_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Write empty YAML, then encrypt via SOPS (uses .sops.yaml creation_rules)
-        file_path.write_text("{}\n")
+        file_path.write_text("{}\n", encoding="utf-8")
         try:
             subprocess.run(
                 ["sops", "--encrypt", "--in-place", str(file_path)],
@@ -421,7 +421,7 @@ class ConfigurationManager:
     def _encrypt_sops_file(self, file_path: Path, data: Dict[str, Any]) -> bool:
         """Write data to file and encrypt with SOPS. Single encrypt operation."""
         updated_yaml = yaml.dump(data, default_flow_style=False, sort_keys=False)
-        file_path.write_text(updated_yaml)
+        file_path.write_text(updated_yaml, encoding="utf-8")
         try:
             subprocess.run(
                 ["sops", "--encrypt", "--in-place", str(file_path)],
