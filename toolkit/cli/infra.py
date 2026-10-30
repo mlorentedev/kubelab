@@ -260,6 +260,29 @@ def edge_boot_check(
     raise typer.Exit(code)
 
 
+@edge_app.command("soak")
+def edge_soak() -> None:
+    """Say whether the uplink adapter has held 48 hours of this boot with no reset (B12).
+
+    Reads the edge's kern.log over its LAN address and exits 0 when the soak passed,
+    1 when the adapter reset, 2 when it holds so far but has not reached 48 hours,
+    3 when the log cannot tell, and 255 when SSH itself fails.
+    """
+    from toolkit.features.configuration import ConfigurationManager
+    from toolkit.features.edge_soak import run_soak
+    from toolkit.features.edge_status import EdgeNotDeclaredError
+
+    net = ConfigurationManager("prod", settings.project_root).get_plaintext_values()["networking"]
+    try:
+        code, lines = run_soak(net)
+    except EdgeNotDeclaredError as e:
+        logger.error(str(e))
+        raise typer.Exit(1) from e
+    for line in lines:
+        typer.echo(line)
+    raise typer.Exit(code)
+
+
 @edge_app.command("lan-link")
 def edge_lan_link(
     route: Annotated[
@@ -415,12 +438,17 @@ def node_reclaim(
 
 @headscale_app.command("policy-check")
 def headscale_policy_check() -> None:
-    """Render policy.hujson from the SSOT and validate it with `headscale policy check` (Docker)."""
-    from toolkit.scripts.render_headscale_policy import policy_check, render_policy
+    """Render policy.hujson from the SSOT and validate it with `headscale policy check` (Docker).
 
-    rc = policy_check(render_policy())
-    if rc != 0:
-        raise typer.Exit(rc)
+    Checks it twice: segment-free, as the repository renders it, and with a synthetic
+    tenant segment, so the segment syntax is proven on the pinned image too (VPN-ACL-014).
+    """
+    from toolkit.scripts.render_headscale_policy import EXAMPLE_SEGMENT, policy_check, render_policy
+
+    for segments in ([], [EXAMPLE_SEGMENT]):
+        rc = policy_check(render_policy(segments=segments))
+        if rc != 0:
+            raise typer.Exit(rc)
 
 
 @headscale_app.command("probe")

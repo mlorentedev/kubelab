@@ -1,10 +1,12 @@
 ---
 id: SEC-037-headscale-audit-identity
 type: spec
-status: draft
+status: archived
 created: "2026-10-27"
 owner: manu
 issue: "mlorentedev/kubelab#2734"
+review: waived
+review_waived_reason: "Reviewed on PR #2764 by CodeRabbit and pr-agent (five findings, all applied), mutation-tested, and verified live on the VPS (AC3). An adversarial pass would re-review merged, deployed code."
 ---
 # SEC-037: Headscale audit identity
 
@@ -79,12 +81,12 @@ on the public address (#2224); any write command in the allowlist, ever.
       literal in `common.yaml` under `audit_identities`. ✓ 2026-10-28
 - [x] [AC2] Add `tasks/audit_identity.yml`, defaults (`headscale_audit_identities: []`),
       the include, the `deploy-vps.yml` wiring and the `common.yaml` declaration. ✓ 2026-10-28
-- [ ] [AC2] `make lint-ansible` and the targeted `pytest` run green; PR with
-      `Closes #2734`.
-- [ ] [AC3] Operator adds the source address to SOPS and runs
-      `deploy-vps --tags headscale` twice: second run `changed=0`.
-- [ ] [AC3] From the client: `true` and an allowlisted read exit 0; `bash` and
-      `hostname; id` exit 126; `journalctl -t headscale-audit` shows both.
+- [x] [AC2] `make lint-ansible` and the targeted `pytest` run green; PR with
+      `Closes #2734`. ✓ 2026-10-28 (#2764, CI green)
+- [x] [AC3] Operator runs the full `make deploy TARGET=vps ENV=prod` twice:
+      second run `changed=0`. No source address yet (see Evidence). ✓ 2026-10-29
+- [x] [AC3] From the client: `true` and an allowlisted read exit 0; `bash` and
+      `hostname; id` exit 126; `journalctl -t headscale-audit` shows both. ✓ 2026-10-29
 
 Acceptance criteria: AC1 forced command proven by tests in CI; AC2 the role
 declares and installs it idempotently with no plaintext source address; AC3 a
@@ -97,7 +99,8 @@ live apply converges and the restricted key works and is refused as designed.
   portability bug: busybox `tr -c '[:print:]'` treats the class as literal
   characters, so the log sanitizer uses the octal range `\001-\037\177`.
 - Design additions while implementing: the key comment comes from `name`, never
-  from the key file (the generated comment carried a host name); the source address is catalogued in `SECRET_CATALOG`
+  from the key file (the generated comment carried a host name); the source
+  address is catalogued in `SECRET_CATALOG`
   (`apps.services.core.headscale.audit_sources.audit_automation`, EXTERNAL, prod)
   so the orphan audit does not flag it once the operator adds it.
 - yamllint and `shellcheck -s sh` clean on the changed files. `make lint-ansible`
@@ -109,13 +112,31 @@ live apply converges and the restricted key works and is refused as designed.
   source, and the allowlist guard reads every `case` arm. Mutations: dropping
   the declared-key filter and adding an unquoted `approve-routes*` arm both go red.
 
+- 2026-10-29, live (AC3): from msi, `make deploy TARGET=vps ENV=prod` with
+  `CHECK=1`, then twice; the second run reported `changed=0`. On the host the
+  script is `root:root 0755` and `authorized_keys` holds one line carrying it.
+  From the client: `true`, `headscale version` and `nodes list -o json` (valid
+  JSON) exited 0, while `bash` and `hostname; id` exited 126 with
+  `command not allowed`. `journalctl -t headscale-audit` showed the allowed and
+  refused attempts.
+- The checklist's `deploy-vps --tags headscale` was wrong: the playbook's
+  `pre_tasks` (config load, SOPS decrypt) carry no `always` tag, so a tag
+  filter skips them and the role fails on undefined facts. lesson-325 recorded
+  this mechanism on 2026-08-14 for the provision playbooks, and `deploy-vps.yml`
+  was never brought in line. The full deploy is the supported path.
+- `from=` is not set: the client's egress is a corporate address that may
+  rotate, and a stale pin would silently lock the audit out. The key is still
+  bound to `restrict` and the read-only allowlist. To pin later, set
+  `apps.services.core.headscale.audit_sources.audit_automation` (an address or
+  CIDR) in `common.enc.yaml` and run the deploy again.
+
 ## Next
 
-PR with `Closes #2734`. After merge: operator adds the source address to SOPS
-and applies `deploy-vps --tags headscale` twice (AC3).
+Done. Follow-ups: the `deploy-vps.yml` pre_tasks tag gap (lesson-325
+recurrence) and the stable controller path for the VPS.
 
 ## Promotion candidates
 
-- [ ] Lesson? `no`
-- [ ] ADR? `no`
-- [ ] Pattern? `no`
+- [x] Lesson? yes: docs/lessons/ansible-provisioning/lesson-325-tags-silently-skips-prerequisite-pre-tasks-th.md (recurrence appended)
+- [x] ADR? no: no new architectural decision; the forced-command design is local to the headscale role and is recorded in this spec
+- [x] Pattern? no: restricted forced-command SSH identities appear in this repo only so far; the pixelnam-lab prototype is retired in favour of this one

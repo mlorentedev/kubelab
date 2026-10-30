@@ -20,6 +20,7 @@ from __future__ import annotations
 import base64
 import json
 import re
+import shlex
 from typing import Any
 
 from jinja2 import Environment, FileSystemLoader
@@ -94,6 +95,8 @@ def ansible_env(templates_dir: str, **kwargs: Any) -> Environment:
     env.filters["flatten"] = _flatten
     # Ansible's `comment` filter, in its default (shell-style) form.
     env.filters["comment"] = lambda text: "\n".join(f"# {line}" for line in str(text).splitlines())
+    # Ansible's `quote` is shlex.quote.
+    env.filters["quote"] = lambda value: shlex.quote(str(value))
     env.tests["match"] = _match
     env.tests["regex"] = _regex
     env.tests["search"] = lambda value, pattern: re.search(pattern, value) is not None

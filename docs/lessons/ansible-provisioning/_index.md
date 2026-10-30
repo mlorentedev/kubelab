@@ -4,6 +4,10 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 667 | [A play that cannot force its handlers needs its later roles to notify nothing](lesson-667-a-play-that-cannot-force-its-handlers-needs-roles-that-do-not-notify.md) | 2026-10-30 |
+| 664 | [A budget that fails the play mid-role drops the handlers notified before it; skip the step when nothing after it needs it](lesson-664-a-budget-that-fails-mid-role-drops-the-handlers-before-it.md) | 2026-10-29 |
+| 663 | [A bare `mise install` installs every config it reads, and reports installing when nothing is missing](lesson-663-a-bare-mise-install-installs-every-config-it-reads.md) | 2026-10-29 |
+| 661 | [A dry run reads the file the previous run rendered, not the one this run would write](lesson-661-a-dry-run-reads-the-file-the-previous-run-rendered.md) | 2026-10-29 |
 | 660 | [An address check says where a run lands, not the path its packets take](lesson-660-an-address-check-says-where-a-run-lands-not-the-path-its-packets-take.md) | 2026-10-29 |
 | 658 | [Interpreter discovery takes the SSH user's PATH, so a dev-tool shim runs every module as root](lesson-658-interpreter-discovery-follows-the-ssh-users-path.md) | 2026-10-29 |
 | 654 | [A file two roles agree on is still rewritten by a writer outside Ansible](lesson-654-a-file-two-roles-agree-on-is-still-rewritten-by-a-writer-outside-ansible.md) | 2026-10-29 |

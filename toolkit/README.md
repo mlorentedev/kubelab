@@ -106,6 +106,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit infra edge` | The lab edge (rpi4): uplink status (NET-005) |
 | `toolkit infra edge boot-check` | Say whether a boot brought back everything the edge serves (the hard-reset test). |
 | `toolkit infra edge lan-link` | Join this laptop to the lab LAN with a NetworkManager profile (NET-005 AC11). |
+| `toolkit infra edge soak` | Say whether the uplink adapter has held 48 hours of this boot with no reset (B12). |
 | `toolkit infra edge status` | Say whether the edge's uplink is up, behind a portal, or dead. |
 | `toolkit infra headscale` | Headscale VPN ACL policy + mesh probe (ADR-041) |
 | `toolkit infra headscale policy-check` | Render policy.hujson from the SSOT and validate it with `headscale policy check` (Docker). |

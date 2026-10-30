@@ -181,11 +181,22 @@
         mode: "0644"
       tags: [dev_node, mise]
 
+    # Named, not bare: mise installs every tool in every config it reads, and the
+    # operator's dotfiles add theirs in conf.d/, which their own deploy installs.
+    # The install runs only for a missing toolchain: mise prints "installing N
+    # tools" when all N are already there, so its output cannot say what changed.
+    - name: Read the pinned toolchains mise is missing
+      ansible.builtin.command:
+        cmd: "{{ dev_node_home }}/.local/bin/mise ls --missing {{ dev_node_toolchains | list | join(' ') }}"
+      register: _mise_missing
+      changed_when: false
+      check_mode: false
+      tags: [dev_node, mise]
+
     - name: Install the pinned toolchains (node, go, python)
       ansible.builtin.command:
-        cmd: "{{ dev_node_home }}/.local/bin/mise install"
-      register: _mise_install
-      changed_when: "'installing' in (_mise_install.stderr | lower) or 'installing' in (_mise_install.stdout | lower)"
+        cmd: "{{ dev_node_home }}/.local/bin/mise install {{ dev_node_toolchains | list | join(' ') }}"
+      when: _mise_missing.stdout | trim | length > 0
       tags: [dev_node, mise]
 
     # --- Agent CLI tooling (Claude Code, etc.) ---

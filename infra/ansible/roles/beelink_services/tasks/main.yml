@@ -7,6 +7,18 @@
 # a re-imaged node, and its cost is one systemctl probe.
 # =============================================================================
 
+# The Beelink is behind the lab edge: the stack's pull is sized against the edge's
+# downlink, bounded and retried (#2742). The list is the images compose.yml.j2
+# pulls, act_runner's only when the template renders it; a test fails if the two
+# drift apart. First, so a refused pull leaves the node as it was: past the
+# templates, the rerun would see no change and skip the handlers they notify (#2812).
+- name: Pull the service images
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/_includes/image-pull.yml"
+  vars:
+    image_pull_name: the Beelink services
+    image_pull_images: >-
+      {{ [gitea_image, runner_image] + ([act_runner_image] if act_runner_enabled | bool else []) }}
+
 # --- Cleanup legacy Ollama (bare metal) ---
 - name: Check if Ollama service exists
   command: systemctl cat ollama
@@ -218,11 +230,6 @@
   when: _buildx_check.rc != 0
 
 # --- Deploy ---
-- name: Pull service images
-  command: docker compose -f {{ beelink_deploy_dir }}/compose.yml pull
-  register: _pull
-  changed_when: "'Pull complete' in _pull.stderr or 'Downloaded' in _pull.stderr"
-
 # Enabling does not start a unit, so a unit that failed at boot stayed failed and
 # its stack unbound until the next boot (#2500). Starting a failed unit recreates
 # the stack once its address exists; on a healthy node the unit is already active

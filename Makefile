@@ -1945,6 +1945,13 @@ edge-status: ## Report the lab edge's uplink: up, portal or dead
 edge-boot-check: ## Check what the edge brought back after a boot [CASE=no-uplink|no-lan] [VIA=tailnet]
 	@$(TOOLKIT) infra edge boot-check $(if $(CASE),--case $(CASE)) $(if $(VIA),--via $(VIA))
 
+# Say whether the uplink adapter has held 48 hours of this boot with no reset, the
+# soak in NET-005 B12. Reads the edge's kern.log over the LAN, since its journal
+# holds about 8 hours (#2807). Exits 0 passed, 1 reset, 2 in progress, 3 cannot tell.
+.PHONY: edge-soak
+edge-soak: ## Read the edge's uplink soak: 48 h of this boot with no adapter reset
+	@$(TOOLKIT) infra edge soak
+
 # Join this laptop to the lab LAN, the edge's management path (NET-005 AC11).
 # ROUTE=1 makes the edge the default route, for the portal login with the
 # laptop's own Wi-Fi off; STATIC=1 holds a fixed address when the edge serves
@@ -2031,9 +2038,9 @@ test:
 #   make mutate FILE=toolkit/x.py FROM='> 0' TO='>= 0' TEST=tests/test_x.py
 # Exit 0 only when the test went red. make reports every other outcome as its own
 # exit 2; the toolkit's code is the N in `Error N`: 1 = stayed green, 2 = refused
-# (dirty tree, no unique match, or TEST does not pass unmutated: a red baseline
-# certifies every mutant as red), 3 = no verdict (pytest errored or collected
-# nothing against the mutant).
+# (dirty tree, no unique match, or TEST unmutated fails, collects nothing or errors
+# before a result: a red baseline certifies every mutant as red), 3 = no verdict
+# (pytest errored or collected nothing against the mutant).
 .PHONY: mutate
 mutate:
 	@$(TOOLKIT) tools mutate --file "$(FILE)" --test "$(TEST)"

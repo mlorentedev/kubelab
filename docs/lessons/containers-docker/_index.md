@@ -4,6 +4,8 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 670 | [dockerd resumes a layer only within its own attempts, and a failed pull drops every layer](lesson-670-dockerd-resumes-a-layer-only-within-its-own-attempts-and-a-failed-pull-drops-every-layer.md) | 2026-10-30 |
+| 665 | [A guard that must fail the play goes before the role's first write, so the pull it guards needs nothing rendered](lesson-665-a-guard-that-must-fail-the-play-goes-before-the-roles-first-write.md) | 2026-10-30 |
 | 655 | [A pull behind a shaped uplink is a duration, and the registry states its size before it starts](lesson-655-a-pull-behind-a-shaped-uplink-is-a-duration-and-the-registry-states-its-size-before-it-starts.md) | 2026-10-29 |
 | 653 | [A oneshot that waits holds a job, and the boot is finished only once no job is left](lesson-653-a-oneshot-that-waits-holds-a-job-and-the-boot-is-finished-only-once-no-job-is-left.md) | 2026-10-29 |
 | 649 | [A smoke build tests the builder the shell selected, not the engine](lesson-649-a-smoke-build-tests-the-builder-the-shell-selected-not-the-engine.md) | 2026-10-29 |

@@ -6,7 +6,12 @@
 #     vars:
 #       image_pull_name: Open WebUI
 #       image_pull_images: ["{{ agent_stack_webui.image }}"]
-#       image_pull_command: docker compose -p agent-stack-webui -f /opt/agent-stack/compose-webui.yml pull
+#
+# The images are pulled by name, so the pull needs nothing on disk. A role runs it
+# before any write whose change a later task acts on: a refused pull then leaves
+# the node as it was, and the rerun still sees that change (#2812). Every image a
+# role's Compose stack would fetch must be in the list, which
+# tests/test_image_pull_budget.py checks against the role's templates.
 #
 # A node behind the edge shares the uplink the edge shapes to
 # networking.edge.uplink.bandwidth.down_kbit (ADR-075), so a multi-GB pull there
@@ -14,9 +19,10 @@
 # The play of such a node sets image_pull_down_kbit from that key. The include
 # then estimates the bytes to fetch before pulling, states the estimate, refuses past
 # image_pull_budget_seconds unless image_pull_allow_slow, and bounds each attempt
-# by the estimate. A retry runs the pull again; whether it reuses the layers an
-# interrupted attempt fetched depends on the node's image store, and was not
-# measured. Without the var the pull is bounded by image_pull_timeout_seconds and
+# by the estimate. A retry runs the pull again from nothing: on the overlay2 store
+# a failed pull drops every layer it fetched (measured on ace2, 2026-10-30), so the
+# retry that keeps progress is dockerd's own, per layer, set by the docker role's
+# max-download-attempts. Without the var the pull is bounded by image_pull_timeout_seconds and
 # nothing is estimated. Set explicitly, image_pull_timeout_seconds bounds each
 # attempt on any node: the lever for an estimate that is wrong, such as a held
 # tag that has since moved.
@@ -74,11 +80,13 @@
     quiet: true
 
 - name: Pull {{ image_pull_name }}
-  ansible.builtin.command: "{{ image_pull_command }}"
+  ansible.builtin.shell: >-
+    set -e;
+    for image in {{ image_pull_images | map('quote') | join(' ') }}; do docker pull "$image"; done
   register: _image_pull
-  changed_when: >-
-    'Pull complete' in (_image_pull.stderr | default(''))
-    or 'Downloaded' in (_image_pull.stderr | default('') ~ _image_pull.stdout | default(''))
+  # `docker pull` reports on stdout, where `docker compose pull` used stderr. An
+  # image already present reads "Image is up to date".
+  changed_when: "'Downloaded newer image' in (_image_pull.stdout | default(''))"
   # Polled rather than held: each poll is its own SSH round trip, so the pull
   # does not depend on one session staying up for an hour.
   async: >-

@@ -11,6 +11,8 @@
 # --- Play 1: K3s Server ---
 - name: Deploy K3s server
   hosts: k3s_servers
+  # A later failure must not drop the handlers earlier tasks notified (#2824).
+  force_handlers: true
   become: true
   gather_facts: true
 
