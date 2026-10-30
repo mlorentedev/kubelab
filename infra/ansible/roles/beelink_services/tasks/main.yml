@@ -203,13 +203,13 @@
   register: _binfmt
 
 # The package ships its registrations in /usr/lib/binfmt.d, with the F flag a
-# container needs, and systemd-binfmt loads them. This used to run the unpinned
+# container needs, and systemd-binfmt loads the one named. Not a restart of
+# systemd-binfmt.service: its ExecStop unregisters every handler, including any
+# registered outside binfmt.d. This used to run the unpinned
 # multiarch/qemu-user-static image instead, an image fetch for what the node
 # already holds (#2822).
 - name: Register QEMU binfmt_misc from the package's configuration
-  systemd:
-    name: systemd-binfmt
-    state: restarted
+  command: /usr/lib/systemd/systemd-binfmt /usr/lib/binfmt.d/qemu-aarch64.conf
   when: not _binfmt.stat.exists
 
 # Read on every run, so a registration that predates this role is held to the flag

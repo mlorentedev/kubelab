@@ -389,7 +389,7 @@ def test_no_role_on_a_node_behind_the_edge_pulls_outside_the_include():
 # it (#2822). Keyed by image, so a ledgered role that runs a new one fails too.
 UNSIZED_RUNS: dict[tuple[str, str], str] = {
     ("agent_stack", "{{ agent_stack_agent_probe_image }}"): "the cgroup and egress probes:"
-    " busybox, about 2 MB, pinned in common.yaml",
+    " busybox:1.37.0, about 2 MB, pinned in common.yaml",
     ("docker", "hello-world"): "the install check, 10 kB",
 }
 _JINJA = re.compile(r"\{\{.*?\}\}|\{%.*?%\}", re.S)
@@ -463,7 +463,9 @@ def test_the_ledgered_probe_image_is_the_one_its_reason_sizes():
         if node is not None:
             images[values.name] = node
     assert "common.yaml" in images
-    assert {i.split(":")[0] for i in images.values()} == {"busybox"}, (
+    # The whole reference, tag included: the reason sizes one image, so a new tag is a new image.
+    reason = UNSIZED_RUNS[("agent_stack", "{{ agent_stack_agent_probe_image }}")]
+    assert all(f" {image}," in reason for image in images.values()), (
         f"size the new probe image, then update its UNSIZED_RUNS reason: {images}"
     )
     # The image read above is the one the variable resolves to only while every setter reads that key.
