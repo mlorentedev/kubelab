@@ -138,9 +138,10 @@
   loop: "{{ base_system_held_packages | intersect(ansible_facts.packages | default({}) | list) }}"
   when: not (legacy_python | default(false))
 
-- name: Upgrade all packages
-  apt:
-    upgrade: dist
+# Sized against the lab edge's downlink where the play sets image_pull_down_kbit
+# (#2809). After the holds, so the estimate leaves out the packages they keep.
+- name: Upgrade all packages, sized behind the edge
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/_includes/apt-upgrade.yml"
   when: not (legacy_python | default(false))
 
 - name: Hold them again after a run that released them
