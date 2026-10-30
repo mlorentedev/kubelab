@@ -6,6 +6,9 @@ an implicit read is a crash or silent mojibake on Windows and nothing at all on
 Linux, which is why CI never caught it (lesson-289, lesson-666). ruff's PLW1514
 misses a `read_text()` on anything it cannot type as a Path, such as an attribute,
 so this walks the syntax tree itself.
+
+Scope is file I/O. A text-mode subprocess decodes with the child's codec, which is
+not always UTF-8, so that half of the class is decided per call in #2865 (TOOL-129).
 """
 
 from __future__ import annotations
@@ -19,7 +22,10 @@ TEXT_METHODS = {"read_text", "write_text"}
 # Openers whose default mode is binary: text only when the mode says `t`.
 BINARY_DEFAULT_MODULES = {"gzip", "bz2", "lzma"}
 # `os.open` returns a descriptor and archive openers return bytes: no encoding to name.
-NOT_TEXT_MODULES = {"os", "tarfile", "zipfile"}
+# `webbrowser.open` and PIL's `Image.open` take no text mode at all.
+NOT_TEXT_MODULES = {"os", "tarfile", "zipfile", "webbrowser", "Image"}
+# Openers shaped like the builtin, `(file, mode, ...)`: text unless the mode says `b`.
+BUILTIN_SHAPED_MODULES = {"io", "codecs"}
 TEMPFILE_OPENERS = {"NamedTemporaryFile", "TemporaryFile", "SpooledTemporaryFile"}
 
 
@@ -57,7 +63,7 @@ def _opens_text(func: ast.expr, call: ast.Call) -> bool:
     if owner in BINARY_DEFAULT_MODULES:  # gzip/bz2/lzma read and write bytes unless the mode says `t`
         mode = _mode(call, 1)
         return isinstance(mode, ast.Constant) and isinstance(mode.value, str) and "t" in mode.value
-    if owner == "io":
+    if owner in BUILTIN_SHAPED_MODULES:
         return _text_mode(call)
     return _text_mode(call, 0)  # `Path.open(mode)`: the mode is the first argument
 
@@ -101,6 +107,7 @@ def test_the_scan_sees_each_form_it_must_refuse(tmp_path: Path) -> None:
         "    os.fdopen(fd, 'w')\n"
         "    gzip.open(p, 'wt')\n"
         "    tempfile.NamedTemporaryFile('w')\n"
+        "    codecs.open(p, 'r')\n"
         "def ok(p, fd):\n"
         "    p.read_text(encoding='utf-8')\n"
         "    open(p, 'rb')\n"
@@ -112,8 +119,11 @@ def test_the_scan_sees_each_form_it_must_refuse(tmp_path: Path) -> None:
         "    os.fdopen(fd, 'wb')\n"
         "    gzip.open(p)\n"
         "    tarfile.open(p, 'w:gz')\n"
-        "    tempfile.NamedTemporaryFile()\n",
+        "    tempfile.NamedTemporaryFile()\n"
+        "    codecs.open(p, 'rb')\n"
+        "    webbrowser.open('https://example.test')\n"
+        "    Image.open(p)\n",
         encoding="utf-8",
     )
 
-    assert unspecified_encodings(("pkg",), tmp_path) == [f"pkg/m.py:{n}" for n in (5, 7, 8, 9, 10, 11, 12, 13)]
+    assert unspecified_encodings(("pkg",), tmp_path) == [f"pkg/m.py:{n}" for n in (5, 7, 8, 9, 10, 11, 12, 13, 14)]
