@@ -40,14 +40,16 @@
 
 # VPN-ACL-014: a tenant segment comes from SOPS, so nothing upstream checks its shape.
 # Refuse a malformed one before the policy is rendered: a segment owned by a private
-# user, or reusing a private tag, would put the tenant's nodes inside rule 1.
+# user, or reusing a private tag, would put the tenant's nodes inside rule 1. The owner
+# and tags are interpolated into the HuJSON policy, so they are held to Headscale's and
+# Tailscale's own name characters: a quote, space or brace would corrupt the policy.
 - name: Refuse a malformed tenant segment
   assert:
     that:
-      - item.owner is string and item.owner | length > 0
+      - item.owner is string and item.owner is regex('[A-Za-z][A-Za-z0-9._-]+', match_type='fullmatch')
       - (item.owner ~ '@') not in headscale_policy_private_users + headscale_policy_private_destinations
-      - item.hosts_tag is string and item.hosts_tag.startswith('tag:')
-      - item.clients_tag is string and item.clients_tag.startswith('tag:')
+      - item.hosts_tag is string and item.hosts_tag is regex('tag:[A-Za-z][A-Za-z0-9-]*', match_type='fullmatch')
+      - item.clients_tag is string and item.clients_tag is regex('tag:[A-Za-z][A-Za-z0-9-]*', match_type='fullmatch')
       - item.hosts_tag != item.clients_tag
       - item.hosts_tag not in headscale_policy_private_destinations
       - item.clients_tag not in headscale_policy_private_destinations
@@ -110,6 +112,17 @@
   changed_when: false
   check_mode: false
   failed_when: hs_users_list.rc != 0 and 'No such container' not in hs_users_list.stderr
+  when: headscale_policy_path | length > 0 and headscale_policy_segments | length > 0
+
+# The read above tolerates a missing container, which would skip owner creation while
+# the policy still names `owner@`. With segments declared that is a refusal, not a skip.
+- name: Refuse tenant segments while Headscale's users are unknown
+  assert:
+    that:
+      - hs_users_list.rc == 0
+    fail_msg: >-
+      tenant segments are declared but Headscale's users could not be listed, so their
+      owners cannot be created; deploy once without segments so the container exists
   when: headscale_policy_path | length > 0 and headscale_policy_segments | length > 0
 
 - name: Create each segment owner Headscale does not hold yet

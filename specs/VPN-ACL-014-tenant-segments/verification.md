@@ -74,6 +74,25 @@ repository.
   reasons fixed in #2826, not for this change (17, unchanged by this branch).
 - `make mutate`: ten mutants, all RED (five for the first commit, four for the
   live-node guard, the marker and the wildcard-port pattern, one for owner creation).
+- After the review fixes: `pytest tests/test_headscale_segments.py
+  tests/test_headscale_role.py tests/test_secrets_input_hardening.py`: 106 passed
+  (Windows, 2026-10-30). The 12 new cases were red before the role change.
+
+## Review dispositions
+
+`review.md` (2026-10-30, `nan/glm5.3-flash`, at `51a4a80d`): PASS-WITH-GAPS, no
+Blocker. Two earlier runs wrote no verdict: a network outage, then the 45-minute
+deadline. The review also confirmed `toolkit infra headscale policy-check` green in CI
+(`check-config-drift.yml` at `51a4a80d`), which closes that `tasks.md` item.
+
+| Finding | Disposition |
+|---|---|
+| F1, Major: a tag or owner containing `"`, a space or a brace passed validation and would corrupt the interpolated policy | Applied. The assert holds the owner to `[A-Za-z][A-Za-z0-9._-]+` and both tags to `tag:[A-Za-z][A-Za-z0-9-]*`, full match, so a trailing newline fails too. Ten refusal cases added to `test_a_malformed_segment_is_refused`, which now evaluates with the Ansible tests. |
+| F2, Minor: a `.prev` rendered under an older segment set is restored on a failed probe | Accepted. The restored grants are themselves isolated segment grants, so isolation holds, and the next successful deploy re-renders from SOPS. |
+| F3, Minor: with segments declared and the container missing, owner creation was skipped while the policy named the owner | Applied. New task "Refuse tenant segments while Headscale's users are unknown" between the users read and owner creation; two tests. |
+| F4, Minor: the live-node fixture test goes stale as nodes are added | Accepted. It is a regression check on the 2026-10-30 inventory; the deploy-time guard is the live enforcement. Refresh the fixture at the next live read. |
+| F5, Minor: a hand-edited `.prev` carrying the marker could be restored | Accepted. Operator self-inflicted, and the defaults comment already names the residual. |
+| Q1: `features.json` states are `pending` with empty evidence | Left to the harness: only it sets `state: passing` after running the verification; the archive reads the review, not those states. |
 
 ## Decisions made during implementation
 

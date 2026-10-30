@@ -52,6 +52,6 @@ unchecked step.
 
 - [x] Every acceptance criterion has a test and a `features.json` entry whose
   selector is non-empty.
-- [ ] `toolkit infra headscale policy-check` green in CI (Docker is not available
+- [x] `toolkit infra headscale policy-check` green in CI (Docker is not available
   on the authoring workstation).
-- [ ] Rollout evidence in `verification.md`; independent review before archive.
+- [x] Rollout evidence in `verification.md`; independent review before archive.
