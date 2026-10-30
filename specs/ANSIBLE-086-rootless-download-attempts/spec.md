@@ -33,7 +33,7 @@ Out:
 - [x] `common.yaml` keys, play vars, docker role, agent_stack copy + reload + event check, include.
 - [x] Mutants red: a play that drops a var, a role that renders a literal, the include without the pause term or the goodput.
 - [x] `make provision NODE=ace2 ENV=prod TAGS=agent_stack`: the file exists, the reload event reads 40, hermes containers' `StartedAt` unchanged; a rerun reports `changed=0`. The event proved the config store and not the retry gate. The agent's daemon reads no attempts on its store, as the review found.
-- [ ] Review findings dispositioned: reload and read-back removed (F1, which also makes F2 and F3 moot); the goodput bounds test (F4); role-entry `vars:` may not override the edge's values (F5); the store question ticketed (#2868); lesson-676 corrected. Mutants red for the two new tests. A provision of ace2 with `TAGS=agent_stack` reports `changed=0`.
+- [x] Review findings dispositioned: reload and read-back removed (F1, which also makes F2 and F3 moot); the goodput bounds test (F4); nothing may set the edge's values above play vars (F5); the store question ticketed (#2868); lesson-676 corrected. Five mutants red for the two new tests. ace2, 2026-10-30, from this change at 31e5fc6f with `TAGS=agent_stack`: `ok=212 changed=0 failed=0`.
 
 ## Evidence
 
