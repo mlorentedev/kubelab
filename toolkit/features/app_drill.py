@@ -28,8 +28,8 @@ The restore holds encrypted secrets and the key that opens them. Both stay in a
 `0700` directory, the key reaches the container only as a `0600` file named by a
 `*_FILE` variable, only table names, row ids and counts are printed, and the
 container and the directory are removed on every exit path. Native Windows has
-no POSIX modes: there the directory is created under the per-user `%TEMP%`, and
-its ACL, not `0700`/`0600`, is what keeps the key private.
+no POSIX modes: there the directory's owner-only ACL comes from Python 3.12.4 or
+later (CVE-2024-4030), and the drill refuses to start on an older Python.
 """
 
 from __future__ import annotations

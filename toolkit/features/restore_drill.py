@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import secrets
 import shutil
+import sys
 import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -166,6 +167,16 @@ class Scratch:
     clean: bool = False
 
 
+# Before 3.12.4, Python on Windows created mkdtemp's directory without an owner-only
+# ACL (CVE-2024-4030), so a restored secret inherited whatever %TEMP% allows.
+WINDOWS_PRIVATE_MKDTEMP = (3, 12, 4)
+
+
+def private_scratch_supported() -> bool:
+    """Whether `tempfile.mkdtemp` gives this host a directory only its owner can open."""
+    return not sys.platform.startswith("win") or tuple(sys.version_info[:3]) >= WINDOWS_PRIVATE_MKDTEMP
+
+
 @contextmanager
 def scratch(
     run: Run,
@@ -182,7 +193,13 @@ def scratch(
     directory holds, for the message that asks for it to be deleted by hand.
     `container=False` is for a drill that only restores files: it never starts
     one, so docker is not asked about it (and need not be installed).
+    Refuses before creating anything where the directory would not be private.
     """
+    if not private_scratch_supported():
+        raise RuntimeError(
+            "refusing to restore into a scratch directory: on Windows, Python before "
+            f"{'.'.join(map(str, WINDOWS_PRIVATE_MKDTEMP))} does not make it private (CVE-2024-4030)"
+        )
     box = Scratch(Path(tempfile.mkdtemp(prefix=f"{prefix}-")), f"{prefix}-{secrets.token_hex(4)}")
     try:
         yield box
