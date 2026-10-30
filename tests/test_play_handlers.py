@@ -9,7 +9,8 @@ have notified theirs. The rerun finds their files already written and fires none
 `force_handlers: true` keeps them: they run at the end of the play, where they would
 have run had it passed. The edge's own play is the exception. The gateway role runs
 its handlers inside the role, in the order the uplink needs, and a play-level
-`force_handlers` would also run the uplink's netplan handlers after a failure.
+`force_handlers` would also run the uplink's netplan handlers after a failure. So
+no role after the edge's last flush may notify at all.
 """
 
 from __future__ import annotations
@@ -59,9 +60,22 @@ def test_a_play_behind_the_edge_keeps_its_handlers_through_a_later_failure():
     assert not unforced, f"set `force_handlers: true` on: {unforced}"
 
 
-def test_the_edges_play_runs_its_handlers_inside_the_gateway_role_instead():
-    gateway = [play for _, play in _plays() if "gateway" in _roles(play)]
-    assert gateway, "the edge's play is gone, or no longer reads as applying the gateway role"
-    assert all(play.get("force_handlers") is not True for play in gateway)
-    tasks = yaml.safe_load((ROLES / "gateway/tasks/main.yml").read_text(encoding="utf-8"))
-    assert any(task.get("meta") == "flush_handlers" for task in _task_list(tasks))
+def _flushes(role: str) -> bool:
+    files = (ROLES / role / "tasks").glob("**/*.yml")
+    tasks = (task for path in files for task in _task_list(yaml.safe_load(path.read_text(encoding="utf-8"))))
+    return any(task.get("meta") == "flush_handlers" for task in tasks)
+
+
+def test_the_edges_play_runs_its_handlers_inside_its_roles_instead():
+    [play] = [play for _, play in _plays() if "gateway" in _roles(play)]
+    assert play.get("force_handlers") is not True
+    roles = [Path(entry["role"] if isinstance(entry, dict) else entry).name for entry in play["roles"]]
+    last = max(i for i, role in enumerate(roles) if _flushes(role))
+    assert roles.index("gateway") <= last, "gateway flushes what the roles before it notified"
+    unflushed = [role for role in roles[last + 1 :] if _role_notifies(role)]
+    assert not unflushed, (
+        f"{unflushed} notify after the edge's last flush ({roles[last]}), and the edge's play cannot "
+        "force handlers. Act in the task on a `register`ed change instead; or flush inside the role "
+        "if only the edge runs it (a flush in a fleet role fires netplan and tailscaled handlers "
+        "mid-play on nodes reached over the tailnet); or split the play after the gateway role."
+    )

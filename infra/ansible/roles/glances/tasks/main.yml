@@ -68,7 +68,7 @@
 # exist yet — which Glances would then skip, leaving the API wide open with no
 # error anywhere.
 #
-# Registered rather than notifying `Restart glances`: a handler fires at the
+# Registered rather than notifying a restart handler: a handler fires at the
 # END of the play, i.e. AFTER "Verify Glances health" below. A config-only
 # change would then be validated against the container that is about to be
 # replaced, and the play would go green on a Glances that had not read the new
@@ -89,7 +89,6 @@
     owner: root
     group: root
     mode: "0644"
-  notify: Restart glances
 
 # A container's resource limits are fixed at CREATE time, so a limit declared
 # while the kernel could not enforce it stays discarded through every restart —
