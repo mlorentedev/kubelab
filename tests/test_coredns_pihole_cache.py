@@ -114,6 +114,11 @@ def _answer(container: str, server: str = "127.0.0.1") -> tuple[int, str] | None
     return (int(fields[1]), fields[4]) if len(fields) == 5 and fields[3] == "A" else None
 
 
+def _ftl(container: str) -> set[int]:
+    """Every pihole-FTL process: the daemon, and any helper the `pihole` script runs under that name."""
+    return {int(pid) for pid in _docker("exec", container, "pidof", "pihole-FTL").split()}
+
+
 def _until(probe, expected: str, timeout: float = 120) -> tuple[int, str]:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -157,12 +162,13 @@ def test_the_flush_serves_a_moved_record_without_restarting_pihole(docker_mount_
         answer = _answer(pihole)
         assert answer and answer[1] == OLD, f"Pi-hole did not serve the cached answer: {answer}"
 
-        ftl = _docker("exec", pihole, "pidof", "pihole-FTL")
+        ftl = min(_ftl(pihole))  # the daemon, which started first
         _docker("exec", pihole, *flush)
 
         # Seconds, against the up to 3600 the cached answer had left.
         _until(lambda: _answer(pihole), NEW, timeout=10)
-        assert _docker("exec", pihole, "pidof", "pihole-FTL") == ftl, "the flush restarted FTL"
+        # A restart ends the daemon; a helper alive at either read must not count as one (#2848).
+        assert ftl in _ftl(pihole), "the flush restarted FTL"
     finally:
         _docker("rm", "-f", coredns, pihole, check=False)
         _docker("network", "rm", network, check=False)
