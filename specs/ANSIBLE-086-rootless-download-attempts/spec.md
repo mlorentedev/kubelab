@@ -28,10 +28,10 @@ Out:
 
 ## Checklist
 
-- [ ] Failing tests first: the attempts value read from `common.yaml` and held to 37–… by the pause bound; both daemons render the play var; every docker-role and agent_stack play sets it from the key; every sized play sets the goodput; the bound covers the pause budget; the estimate divides by the goodput and states it.
-- [ ] `common.yaml` keys, play vars, docker role, agent_stack copy + reload + event check, include.
-- [ ] Mutants red: a play that drops a var, a role that renders a literal, the include without the pause term or the goodput.
-- [ ] `make provision NODE=ace2 ENV=prod TAGS=agent_stack`: the file exists, the reload event reads 40, hermes containers' `StartedAt` unchanged; a rerun reports `changed=0`.
+- [x] Failing tests first: the attempts value read from `common.yaml` and held to 37–… by the pause bound; both daemons render the play var; every docker-role and agent_stack play sets it from the key; every sized play sets the goodput; the bound covers the pause budget; the estimate divides by the goodput and states it.
+- [x] `common.yaml` keys, play vars, docker role, agent_stack copy + reload + event check, include.
+- [x] Mutants red: a play that drops a var, a role that renders a literal, the include without the pause term or the goodput.
+- [x] `make provision NODE=ace2 ENV=prod TAGS=agent_stack`: the file exists, the reload event reads 40, hermes containers' `StartedAt` unchanged; a rerun reports `changed=0`.
 
 ## Evidence
 
@@ -39,10 +39,10 @@ See the PR body.
 
 ## Next
 
-Implement.
+Review and land.
 
 ## Promotion candidates
 
-- [ ] Lesson? Decide at the end: a rootless daemon reads its own `daemon.json`, and a reload is proved by the daemon's own event, not by the unit.
-- [ ] ADR? `no`
-- [ ] Pattern? `no`
+- [x] Lesson: lesson-676, a rootless daemon reads its own `daemon.json`, and a reload is proved by the daemon's own event, not by the unit.
+- [x] ADR? `no`
+- [x] Pattern? `no`
