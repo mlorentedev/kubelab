@@ -32,17 +32,20 @@ not inferred from this entire document being one delivery.
 
 ### 1. Eligibility before mutation
 
-- [ ] [P] [AC1] Add synthetic eligibility cases in proposed
+- [x] [P] [AC1] Add synthetic eligibility cases in proposed
   `tests/test_headscale_upgrade.py`: old/unknown native and embedded client
   versions, absent approval, invalid version transition, unverified image,
   required nodes whose key is expired yet online, and required nodes whose
-  given name carries the pre-v0.29 random suffix.
-- [ ] [AC1] Run `python -m pytest -o addopts= tests\test_headscale_upgrade.py -k eligibility -q`.
-  Expected RED: the preflight behavior is not implemented.
-- [ ] [AC1] Add only the tested eligibility behavior to proposed
+  given name carries the pre-v0.29 random suffix. ✓ 2026-10-30 (#2823)
+- [x] [AC1] Run `python -m pytest -o addopts= tests\test_headscale_upgrade.py -k eligibility -q`.
+  Expected RED: the preflight behavior is not implemented. ✓ 2026-10-30:
+  collection error, `ModuleNotFoundError`.
+- [x] [AC1] Add only the tested eligibility behavior to proposed
   `toolkit/features/headscale_upgrade.py`, using existing SSOT/config helpers.
-- [ ] [AC1] Repeat the same command; require GREEN and assert the fake runner
-  observed zero mutation commands for every refusal.
+  ✓ 2026-10-30: a pure function of handed facts; collecting them is task 6.
+- [x] [AC1] Repeat the same command; require GREEN and assert the fake runner
+  observed zero mutation commands for every refusal. ✓ 2026-10-30: 39 passed;
+  the module imports nothing that can reach a process, a file or the network.
 
 ### 2. Version/configuration compatibility
 

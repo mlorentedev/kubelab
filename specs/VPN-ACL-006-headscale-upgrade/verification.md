@@ -18,7 +18,7 @@ remains pending.
 
 | Criterion | Required evidence | Current result |
 |---|---|---|
-| AC1 | Client/bridge compatibility and approval preflight tests | NOT IMPLEMENTED |
+| AC1 | Client/bridge compatibility and approval preflight tests | Decision logic IMPLEMENTED (#2823): `-k eligibility` 39 passed, 7 mutants RED. Fact collection and its wiring not built; acceptance pending |
 | AC2 | Candidate image/config/consumer checks | NOT IMPLEMENTED |
 | AC3 | Required private/subnet traffic plus no unintended broadening | NOT RUN |
 | AC4 | Consistent backup, synthetic migration and old-version full restore | NOT RUN |
