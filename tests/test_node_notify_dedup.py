@@ -533,6 +533,21 @@ def test_a_notice_older_than_the_spool_keeps_is_dropped(node: Node) -> None:
     assert old.name in result.stderr, "a notice was dropped without a word"
 
 
+def test_a_file_the_spool_never_named_does_not_hold_the_notices_behind_it(node: Node) -> None:
+    """A name that is not `<nanoseconds>-<unit>` has no age, so nothing would ever drop it."""
+    node.curl_exit.write_text("6")
+    node.run()
+    stray = node.spool / "0stray"
+    stray.write_text('{"title": "stray"}')
+    node.curl_exit.write_text("0")
+    result = node.flush()
+    assert result.returncode == 0, result.stderr
+    [title] = node.titles()
+    assert "failed on" in title, title
+    assert node.spooled() == [] and stray.name in result.stderr
+    assert (node.spool / f".unreadable-{stray.name}").exists(), "a file the script did not write was deleted"
+
+
 def test_a_stale_incident_is_a_new_incident(node: Node) -> None:
     """A unit nobody wired a recovery for must not report an old count as `still failing`."""
     node.run()

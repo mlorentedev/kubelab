@@ -147,9 +147,19 @@ if [ "$MODE" = flush ]; then
     done
     [ -n "$oldest" ] || exit 0
     name="${oldest##*/}"
+    stamp="${name%%-*}"
+    # Only this script names a notice, `<nanoseconds>-<unit>`. Any other name has
+    # no age, and bash's arithmetic on it abandons this whole block, so the flush
+    # would fail on it at every run; it is set aside, out of the glob, and said so.
+    case "$stamp" in
+      ''|*[!0-9]*)
+        echo "set aside $name: not a notice this script kept" >&2
+        mv -f "$oldest" "$SPOOL/.unreadable-$name"
+        continue ;;
+    esac
     # A payload n8n refuses for good would hold every later notice behind it.
     # Past the age, it is dropped and said so here, in this unit's journal.
-    if [ $(( $(date +%s) - ${name%%-*} / 1000000000 )) -gt {{ node_notify_spool_max_age_seconds }} ]; then
+    if [ $(( $(date +%s) - 10#$stamp / 1000000000 )) -gt {{ node_notify_spool_max_age_seconds }} ]; then
       echo "dropped $name: undelivered for more than {{ node_notify_spool_max_age_seconds }}s" >&2
       rm -f "$oldest"
       continue

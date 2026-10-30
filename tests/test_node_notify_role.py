@@ -934,3 +934,20 @@ def test_provisioning_clears_the_notifiers_a_refused_page_left_failed() -> None:
     assert listing["changed_when"] is False and listing["check_mode"] is False
     [reset] = [t for t in _tasks() if "reset-failed" in t.get("command", {}).get("argv", [])]
     assert listing["register"] in str(reset["when"]), "a rerun with nothing failed must report changed=0"
+
+
+def test_the_cleanup_resets_each_unit_the_listing_names() -> None:
+    """The reset's argv is built from `list-units` lines, which start with the unit's name."""
+    from tests.ansible_jinja import ansible_env
+
+    [reset] = [t for t in _tasks() if "reset-failed" in t.get("command", {}).get("argv", [])]
+    expression = str(reset["command"]["argv"]).strip().removeprefix("{{").removesuffix("}}")
+    units = [
+        str(_defaults()["node_notify_unit_name"]).replace("@.service", "@node-backup-ship.service.service"),
+        str(_defaults()["node_notify_recovered_unit_name"]).replace("@.service", "@node-backup-ship.service.service"),
+    ]
+    listed = [f"{unit} loaded failed failed Notify n8n of a failed unit" for unit in units]
+    argv = ansible_env(str(NOTIFY_ROLE / "templates")).compile_expression(expression)(
+        node_notify_failed_notifiers={"stdout_lines": listed}
+    )
+    assert argv == ["systemctl", "reset-failed", *units]
