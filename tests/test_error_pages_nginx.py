@@ -71,9 +71,10 @@ def base_url(errors_container: tuple[str, str]) -> str:
 
 def _get(url: str, accept: str | None = None) -> tuple[int, dict[str, str], str]:
     req = urllib.request.Request(url, headers={"Accept": accept} if accept else {})
+    resp: HTTPResponse | urllib.error.HTTPError
     try:
-        resp: HTTPResponse | urllib.error.HTTPError = urllib.request.urlopen(req, timeout=5)
-        code = resp.status
+        ok: HTTPResponse = urllib.request.urlopen(req, timeout=5)
+        resp, code = ok, ok.status
     except urllib.error.HTTPError as err:
         resp, code = err, err.code
     headers = {k.lower(): v for k, v in resp.headers.items()}
