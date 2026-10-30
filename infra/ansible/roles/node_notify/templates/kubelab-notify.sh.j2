@@ -15,7 +15,9 @@
 # `count first last` per unit in `{{ node_notify_state_dir }}`: the first failure
 # pages, a reminder with the count follows every
 # {{ node_notify_reminder_seconds }}s, and a recovery page closes the incident.
-# A page that failed to deliver is not recorded as sent.
+# A notice n8n does not take waits in {{ node_notify_spool_dir }} and counts
+# as sent: `--flush`, which {{ node_notify_spool_unit_name }}.timer runs, delivers
+# the spool in order once the channel answers (#2787).
 # Posts an envelope at the severity the unit declares
 # (`Environment=KUBELAB_NOTIFY_SEVERITY=page`, else `{{ node_notify_severity }}`)
 # to n8n's public /webhook/notify ingress -- n8n routes by severity and forwards
@@ -34,23 +36,144 @@
 # webhook_secret carries on this node's own env).
 set -euo pipefail
 
+MODE=failure
+case "${1:-}" in
+  --recovered) MODE=recovered; shift ;;
+  --flush) MODE=flush ;;
+esac
+
+TOKEN="$(cat {{ node_notify_secret_file }})"
+
+# ANSIBLE-038 f4: the token goes to curl through a config on STDIN, never as
+# an argv element. As `-H "Authorization: Bearer ${TOKEN}"` it was readable in
+# `ps` / /proc/<pid>/cmdline for the ~1s of the call. Low practical risk (root
+# oneshot, short window) but fleet_webhook_secret is fleet-wide and rotates
+# only by re-provisioning every node, so its blast radius is wide.
+#
+# Note this is a DIFFERENT mechanism from the shell-injection finding that was
+# refuted in #1088: expanding a variable inside double quotes does not
+# re-parse its value, and that still holds. Whether the value is re-parsed and
+# where the value ends up are separate questions; only the second one bites.
+#
+# The escaping below is load-bearing, not defensive dressing. curl's config
+# parser processes \ and " inside a quoted value, so an unescaped token is
+# silently CORRUPTED rather than rejected -- measured against a local listener:
+# a token containing `"` arrived as `Bearer tok`, and the unquoted config form
+# dropped the header entirely. Either way n8n answers 403 and the failure
+# notification is lost, which is strictly worse than the exposure being fixed.
+TOKEN_ESC=${TOKEN//\\/\\\\}
+TOKEN_ESC=${TOKEN_ESC//\"/\\\"}
+
+# -f: a 4xx/5xx from n8n makes curl (and so `deliver`, under set -o pipefail)
+# return non-zero, so a delivery failure is never silently swallowed: a notice
+# is then kept in the spool below, and the exercise of a healthy unit fails
+# its own unit.
+#
+# ANSIBLE-038 f1: bounded timeouts. Without them curl uses its defaults and an
+# unreachable n8n stalls this unit until systemd kills it.
+#
+# 5/10 rather than the 10/15 #1088 suggested, and the tighter pair is the point
+# rather than a drift: the finding's own words are "a 30s stall on a path whose
+# entire job is to report promptly". A single attempt is not the reliability
+# budget here -- there are four of them (--retry 3), so a genuinely slow n8n is
+# covered by retrying rather than by waiting longer on the first try, and the
+# operator learns sooner when it is unreachable. Both pairs fit under the
+# unit's timeout (30s worst case here, 35s at 10/15), so this is a choice
+# within the budget, not a constraint imposed by it. Settled when #1088 closed;
+# recorded here because a reviewer re-raised it, correctly, from a comment that
+# explained the retry arithmetic and not this.
+#
+# ANSIBLE-038 f5: the retry lives HERE rather than as Restart= on the unit.
+# systemd would re-run the whole script (re-reading the journal, re-encoding)
+# and its start-limit interacts badly with RestartSec; curl retries the request
+# alone. --retry covers exactly the transient cases that motivated the finding:
+# connection refused (--retry-connrefused), timeouts, and 5xx -- verified
+# against a listener returning 503 twice, which curl rode out and delivered.
+#
+# The budget is chosen so the worst case fits inside TimeoutStartSec. Measured
+# against a blackholed address (RFC 5737 TEST-NET-3, packets dropped rather
+# than refused, which is the slow case): without --retry-max-time the same
+# retry count took 35.0s and systemd's 30s timeout would have killed the unit
+# mid-flight -- i.e. adding a retry naively would have turned a clean failure
+# into a truncated one. --retry-max-time 20 stops curl starting a NEW attempt
+# after 20s, so worst case is 20s + one final --max-time 10 attempt = 30s,
+# under the unit's TimeoutStartSec less the lock wait taken below.
+deliver() {
+  printf 'header = "Authorization: Bearer %s"\n' "$TOKEN_ESC" | curl -sS -f --config - \
+    --connect-timeout 5 --max-time 10 \
+    --retry 3 --retry-delay 5 --retry-connrefused --retry-max-time 20 \
+    -X POST "https://{{ node_notify_domain }}/webhook/notify" \
+    -H "Content-Type: application/json" \
+    -d "$1" \
+    -o /dev/null
+}
+
+# The spool (#2787). A notice n8n did not take is kept here, oldest first by its
+# name, `<nanoseconds>-<unit>`, and counts as sent: on a LAN node DNS goes
+# through the edge, so with the edge down every page failed at once and nothing
+# sent it later (six failed notifiers on ace2, 2026-10-29). One lock covers the
+# spool: a flush holds it while it delivers, and a notice holds it while it sends
+# directly, which it does only when the spool is empty, so no notice of a unit
+# overtakes one still kept. A recovery that did would close an alarm before n8n
+# had opened it.
+SPOOL="{{ node_notify_spool_dir }}"
+install -d -m 0700 "$SPOOL"
+exec 8>"$SPOOL/.lock"
+
+# Any notice kept, or the unit given, still waiting in the spool.
+kept() {
+  local f name
+  for f in "$SPOOL"/[0-9]*; do
+    [ -e "$f" ] || continue
+    name="${f##*/}"
+    if [ -z "${1:-}" ] || [ "${name#*-}" = "$1" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+if [ "$MODE" = flush ]; then
+  # Another flush, or a notice sending directly, has the spool: it is being
+  # delivered, and the next run takes whatever is left.
+  flock -w {{ node_notify_lock_wait_seconds }} 8 || { echo "the spool is busy; leaving it to the next run" >&2; exit 0; }
+  # The C collation sorts the names as the numbers they start with.
+  LC_ALL=C
+  while :; do
+    oldest=""
+    for f in "$SPOOL"/[0-9]*; do
+      [ -e "$f" ] && oldest="$f"
+      break
+    done
+    [ -n "$oldest" ] || exit 0
+    name="${oldest##*/}"
+    # A payload n8n refuses for good would hold every later notice behind it.
+    # Past the age, it is dropped and said so here, in this unit's journal.
+    if [ $(( $(date +%s) - ${name%%-*} / 1000000000 )) -gt {{ node_notify_spool_max_age_seconds }} ]; then
+      echo "dropped $name: undelivered for more than {{ node_notify_spool_max_age_seconds }}s" >&2
+      rm -f "$oldest"
+      continue
+    fi
+    # Stops at the first refusal: what follows waits behind it, in order. A
+    # non-zero exit keeps this unit failed while notices wait, which is their trace.
+    if ! deliver "$(cat "$oldest")"; then
+      echo "n8n did not take $name; it stays in the spool" >&2
+      exit 1
+    fi
+    rm -f "$oldest"
+  done
+fi
+
 # The unit is systemd-supplied via `%i`, but this script is also runnable by
 # hand and its argument reaches `journalctl -u`. Constrained to the character
 # set a systemd unit name can actually contain, so a hand invocation cannot
 # turn it into an option or a second argument.
-MODE=failure
-if [ "${1:-}" = "--recovered" ]; then
-  MODE=recovered
-  shift
-fi
-UNIT="${1:?usage: $(basename "$0") [--recovered] <unit-name>}"
+UNIT="${1:?usage: $(basename "$0") [--recovered] <unit-name> | --flush}"
 case "$UNIT" in
   -*|*[!A-Za-z0-9@:.\\_-]*)
     echo "refusing to notify for an implausible unit name: $UNIT" >&2
     exit 64 ;;
 esac
-
-TOKEN="$(cat {{ node_notify_secret_file }})"
 
 # Trim to keep the envelope body small; n8n/Apprise render it as-is.
 #
@@ -152,9 +275,10 @@ if [ "$MODE" = recovered ]; then
   KIND=recovered
 elif [ -n "$UNIT_RESULT" ] && [ "$UNIT_RESULT" != success ]; then
   COUNT=$((COUNT + 1))
-  # The count is recorded before the send, the delivery time only after it: a
-  # page that never arrived must not silence the next one, and while none of
-  # this incident has arrived, the next one is still its first page.
+  # The count is recorded before the send, the delivery time only once the page
+  # is out or kept (#2787): a page neither delivered nor kept must not silence
+  # the next one, and while none of this incident has gone, the next one is
+  # still its first page.
   printf '%s %s %s\n' "$COUNT" "$FIRST" "$LAST" > "$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
   if [ "$LAST" -eq 0 ]; then
     KIND=first
@@ -163,6 +287,16 @@ elif [ -n "$UNIT_RESULT" ] && [ "$UNIT_RESULT" != success ]; then
   else
     exit 0
   fi
+fi
+
+# A reminder while the page it follows still waits in the spool says nothing
+# that page will not, and hours of outage would deliver one per hour, all at
+# once (#2787). It is folded into the kept page, and still renews the state:
+# otherwise the incident would outlive the TTL and start over with a second
+# `failed` page.
+if [ "$KIND" = again ] && kept "$UNIT"; then
+  printf '%s %s %s\n' "$COUNT" "$FIRST" "$NOW" > "$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
+  exit 0
 fi
 
 # The level the unit declares beside its `OnFailure=` line (#2684), read from
@@ -235,78 +369,55 @@ if kind == 'recovered':
 print(json.dumps(envelope))
 ")"
 
-# ANSIBLE-038 f4: the token goes to curl through a config on STDIN, never as
-# an argv element. As `-H "Authorization: Bearer ${TOKEN}"` it was readable in
-# `ps` / /proc/<pid>/cmdline for the ~1s of the call. Low practical risk (root
-# oneshot, short window) but fleet_webhook_secret is fleet-wide and rotates
-# only by re-provisioning every node, so its blast radius is wide.
-#
-# Note this is a DIFFERENT mechanism from the shell-injection finding that was
-# refuted in #1088: expanding a variable inside double quotes does not
-# re-parse its value, and that still holds. Whether the value is re-parsed and
-# where the value ends up are separate questions; only the second one bites.
-#
-# The escaping below is load-bearing, not defensive dressing. curl's config
-# parser processes \ and " inside a quoted value, so an unescaped token is
-# silently CORRUPTED rather than rejected -- measured against a local listener:
-# a token containing `"` arrived as `Bearer tok`, and the unquoted config form
-# dropped the header entirely. Either way n8n answers 403 and the failure
-# notification is lost, which is strictly worse than the exposure being fixed.
-TOKEN_ESC=${TOKEN//\\/\\\\}
-TOKEN_ESC=${TOKEN_ESC//\"/\\\"}
+# The exercise of a healthy unit is the delivery test (`make maintain-notify-test`
+# reads this exit status), so it is sent directly and never kept.
+if [ -z "$KIND" ]; then
+  deliver "$PAYLOAD"
+  exit 0
+fi
 
-# -f: a 4xx/5xx from n8n makes curl (and this script, under set -o pipefail)
-# exit non-zero, so a delivery failure is visible as THIS unit failing --
-# `systemctl status kubelab-notify@<unit>.service` / its journal -- rather
-# than silently swallowed.
-#
-# ANSIBLE-038 f1: bounded timeouts. Without them curl uses its defaults and an
-# unreachable n8n stalls this unit until systemd kills it.
-#
-# 5/10 rather than the 10/15 #1088 suggested, and the tighter pair is the point
-# rather than a drift: the finding's own words are "a 30s stall on a path whose
-# entire job is to report promptly". A single attempt is not the reliability
-# budget here -- there are four of them (--retry 3), so a genuinely slow n8n is
-# covered by retrying rather than by waiting longer on the first try, and the
-# operator learns sooner when it is unreachable. Both pairs fit under the
-# unit's timeout (30s worst case here, 35s at 10/15), so this is a choice
-# within the budget, not a constraint imposed by it. Settled when #1088 closed;
-# recorded here because a reviewer re-raised it, correctly, from a comment that
-# explained the retry arithmetic and not this.
-#
-# ANSIBLE-038 f5: the retry lives HERE rather than as Restart= on the unit.
-# systemd would re-run the whole script (re-reading the journal, re-encoding)
-# and its start-limit interacts badly with RestartSec; curl retries the request
-# alone. --retry covers exactly the transient cases that motivated the finding:
-# connection refused (--retry-connrefused), timeouts, and 5xx -- verified
-# against a listener returning 503 twice, which curl rode out and delivered.
-#
-# The budget is chosen so the worst case fits inside TimeoutStartSec. Measured
-# against a blackholed address (RFC 5737 TEST-NET-3, packets dropped rather
-# than refused, which is the slow case): without --retry-max-time the same
-# retry count took 35.0s and systemd's 30s timeout would have killed the unit
-# mid-flight -- i.e. adding a retry naively would have turned a clean failure
-# into a truncated one. --retry-max-time 20 stops curl starting a NEW attempt
-# after 20s, so worst case is 20s + one final --max-time 10 attempt = 30s,
-# under the unit's TimeoutStartSec less the lock wait above.
-printf 'header = "Authorization: Bearer %s"\n' "$TOKEN_ESC" | curl -sS -f --config - \
-  --connect-timeout 5 --max-time 10 \
-  --retry 3 --retry-delay 5 --retry-connrefused --retry-max-time 20 \
-  -X POST "https://{{ node_notify_domain }}/webhook/notify" \
-  -H "Content-Type: application/json" \
-  -d "$PAYLOAD" \
-  -o /dev/null
+# Kept for the flush, stamped with the time it happened: n8n shows a late page
+# when it arrives, not when its unit failed. Written aside and renamed in, so a
+# write that dies half-way leaves nothing the flush would deliver.
+keep() {
+  local tmp
+  tmp="$(mktemp "$SPOOL/.new.XXXXXX")"
+  printf '%s' "$PAYLOAD" | NOTIFY_AT="$NOW" python3 -c "
+import json, os, sys, time
+envelope = json.load(sys.stdin)
+at = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(int(os.environ['NOTIFY_AT'])))
+envelope['title'] += f' (at {at}, delivered late)'
+print(json.dumps(envelope))
+" > "$tmp"
+  mv "$tmp" "$SPOOL/$(date +%s%N)-$UNIT"
+}
 
-# Recorded only now that the page is out (curl failing aborts the script above).
+# Sent directly only with the spool's lock and nothing in it; otherwise kept
+# behind what waits there, and the flush started now rather than at the timer's
+# next run, since the spool may have held this notice back only for the order.
+if flock -n 8 && ! kept; then
+  if ! deliver "$PAYLOAD"; then
+    echo "n8n did not take the notice; kept in $SPOOL" >&2
+    keep
+  fi
+else
+  keep
+  systemctl start --no-block {{ node_notify_spool_unit_name }}.service \
+    || echo "could not start {{ node_notify_spool_unit_name }}.service; its timer will run it" >&2
+fi
+
+# Recorded only now that the page is out or kept (a write that failed aborts
+# the script above).
 #
-# A delivered recovery also clears the failed state a refused page left on the
-# failure notifier (#2733). The next failure of the unit restarts that same
-# instance and replaces its result, but a recovered unit does not fail again,
-# so the failed notifier outlived the incident it reported, on
-# `systemctl --failed` and in Glances. Cleared only here: until the recovery is
-# out, that failed state is the one trace of a page the operator never got. A
-# reset systemd refuses is logged and does not fail this run, which would leave
-# a new failed unit for an incident that is closed.
+# A recovery, delivered or kept, also clears the failed state a refused page
+# left on the failure notifier (#2733). The next failure of the unit restarts
+# that same instance and replaces its result, but a recovered unit does not
+# fail again, so the failed notifier outlived the incident it reported, on
+# `systemctl --failed` and in Glances. Since #2787 a refused page is kept
+# instead of failing its notifier; this clears what an older script left, and
+# the role clears the rest when it is applied. A reset systemd refuses is
+# logged and does not fail this run, which would leave a new failed unit for
+# an incident that is closed.
 case "${KIND:-}" in
   first|again) printf '%s %s %s\n' "$COUNT" "$FIRST" "$(date +%s)" > "$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE" ;;
   recovered)

@@ -3,10 +3,13 @@
 Runs the SHIPPED `kubelab-notify.sh` end to end with `systemctl`, `journalctl` and `curl`
 replaced by shims on PATH: the claim is about what reaches the operator's phone, so the
 test counts the requests the script makes, never the text that describes them.
+`titles()` is what reached the phone; `attempts()` is every request, refused ones included.
+A notice n8n refused waits in the spool until `--flush` delivers it (#2787).
 """
 
 from __future__ import annotations
 
+import calendar
 import fcntl
 import json
 import os
@@ -36,7 +39,9 @@ class Node:
     def __init__(self, root: Path, **render: object) -> None:
         self.root = root
         self.state = root / "state"
+        self.spool = root / "spool"
         self.sent = root / "sent.jsonl"
+        self.tried = root / "attempts.jsonl"
         self.result = root / "result"
         self.curl_exit = root / "curl-exit"
         self.systemctl = root / "systemctl.log"
@@ -49,6 +54,7 @@ class Node:
             "kubelab-notify.sh.j2",
             node_notify_secret_file=str(root / "secret"),
             node_notify_state_dir=str(self.state),
+            node_notify_spool_dir=str(self.spool),
             **render,
         )
         self.script = root / "notify.sh"
@@ -61,14 +67,17 @@ class Node:
             "systemctl",
             'printf "%s\\n" "$*" >> "$NODE_SYSTEMCTL"; case "$*" in'
             ' reset-failed*) exit "$(cat "$NODE_RESET_EXIT" 2>/dev/null || echo 0)" ;;'
+            " start*) exit 0 ;;"
             ' *Environment*) printf "Environment=%s\\n" "$(cat "$NODE_ENVIRONMENT/${@: -1}" 2>/dev/null)" ;;'
             ' *) printf "Result=%s\\n" "$(cat "$NODE_RESULT")" ;; esac',
         )
         self._shim("journalctl", 'echo "unit output"')
+        # Every request lands in the attempts, and only an accepted one in what was sent.
         self._shim(
             "curl",
             'cat >/dev/null; d=""; while [ $# -gt 0 ]; do [ "$1" = -d ] && d="$2"; shift; done;'
-            ' printf "%s\\n" "$d" >> "$NODE_SENT"; exit "$(cat "$NODE_CURL_EXIT" 2>/dev/null || echo 0)"',
+            ' printf "%s\\n" "$d" >> "$NODE_TRIED"; rc="$(cat "$NODE_CURL_EXIT" 2>/dev/null || echo 0)";'
+            ' [ "$rc" = 0 ] && printf "%s\\n" "$d" >> "$NODE_SENT"; exit "$rc"',
         )
         self.set_result("exit-code")
 
@@ -90,6 +99,7 @@ class Node:
             "PATH": f"{self.root / 'bin'}:{os.environ['PATH']}",
             "NODE_RESULT": str(self.result),
             "NODE_SENT": str(self.sent),
+            "NODE_TRIED": str(self.tried),
             "NODE_CURL_EXIT": str(self.curl_exit),
             "NODE_SYSTEMCTL": str(self.systemctl),
             "NODE_RESET_EXIT": str(self.reset_exit),
@@ -99,6 +109,12 @@ class Node:
     def run(self, *args: str, unit: str = UNIT) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             ["bash", str(self.script), *args, unit], capture_output=True, text=True, env=self._env(), timeout=60
+        )
+
+    def flush(self) -> subprocess.CompletedProcess[str]:
+        """The spool unit's run: deliver what n8n refused before."""
+        return subprocess.run(
+            ["bash", str(self.script), "--flush"], capture_output=True, text=True, env=self._env(), timeout=60
         )
 
     def start(self, *args: str, unit: str = UNIT) -> subprocess.Popen[str]:
@@ -126,6 +142,18 @@ class Node:
 
     def titles(self) -> list[str]:
         return [envelope["title"] for envelope in self.envelopes()]
+
+    def attempts(self) -> int:
+        return len(self.tried.read_text().splitlines()) if self.tried.exists() else 0
+
+    def spooled(self) -> list[Path]:
+        """The notices waiting for delivery, oldest first; a file still being written is not one."""
+        return sorted(self.spool.glob("[0-9]*")) if self.spool.exists() else []
+
+    def starts(self) -> list[str]:
+        if not self.systemctl.exists():
+            return []
+        return [line for line in self.systemctl.read_text().splitlines() if line.startswith("start")]
 
     def resets(self) -> list[str]:
         """The units the script asked systemd to clear the failed state of."""
@@ -213,38 +241,127 @@ NOTIFIER = _ON_FAILURE.group(1).replace("%n", UNIT)
 
 
 def test_a_delivered_recovery_clears_the_failed_page_of_its_incident(node: Node) -> None:
-    """#2733: a page n8n refused leaves its notifier failed, and nothing else ever runs it again.
+    """#2733: a page n8n refused left its notifier failed, and nothing else ever ran it again.
 
     The next failure of the unit would restart the same instance and replace its
     result, but a recovered unit does not fail again, so the failed notifier
     outlived the incident it reported, on `systemctl --failed` and in Glances.
+    Since #2787 a refused page is kept rather than failing its notifier, so the
+    state here is one the script before it left: an incident with no page recorded.
     """
-    node.curl_exit.write_text("22")
-    node.run()
-    node.curl_exit.write_text("0")
+    node.write_state(1, int(time.time()), 0)
     node.set_result("success")
     assert node.run("--recovered").returncode == 0
     assert "recovered" in node.titles()[-1], "the recovery of an incident whose page was refused was not sent"
     assert node.resets() == [NOTIFIER]
 
 
-def test_the_next_failure_after_a_refused_first_page_is_still_the_first_page(node: Node) -> None:
-    """`still failing (2 failures since the first page)` would name a page nobody received."""
-    node.curl_exit.write_text("22")
+# What the spool's unit is called, read from the unit the role installs beside it.
+SPOOL_UNIT = f"{_defaults()['node_notify_spool_unit_name']}.service"
+
+
+def test_a_refused_page_is_kept_and_the_next_failure_sends_nothing(node: Node) -> None:
+    """#2787: behind a down edge the page failed at once on DNS, and nothing sent it later.
+
+    It now waits in the spool, and counts as sent: the next failure of the unit
+    neither tries again nor keeps a second copy.
+    """
+    node.curl_exit.write_text("6")
+    result = node.run()
+    assert result.returncode == 0, "a kept notice failed its notifier, the trace #2787 found on ace2"
+    assert node.titles() == []
+    [kept] = node.spooled()
+    assert kept.name.endswith(f"-{UNIT}")
+    assert stat.S_IMODE(kept.stat().st_mode) == 0o600
+    tried = node.attempts()
+    node.run()
+    assert node.attempts() == tried, "the next failure tried again for a notice already kept"
+    assert len(node.spooled()) == 1
+
+
+def test_the_flush_delivers_a_kept_page_once_with_the_time_it_happened(node: Node) -> None:
+    node.curl_exit.write_text("6")
+    before = int(time.time())
+    node.run()
+    after = int(time.time())
+    node.curl_exit.write_text("0")
+    assert node.flush().returncode == 0
+    [title] = node.titles()
+    found = re.search(r"failed on \S+ \(at (\S+)Z, delivered late\)$", title)
+    assert found, title
+    at = calendar.timegm(time.strptime(found.group(1), "%Y-%m-%dT%H:%M:%S"))
+    assert before <= at <= after, f"{found.group(1)}Z is not when the page was refused"
+    assert node.spooled() == []
+    node.flush()
+    assert len(node.titles()) == 1, "a second flush delivered the page again"
+
+
+def test_a_refused_flush_keeps_the_notice_and_fails(node: Node) -> None:
+    """The spool unit failing is the trace of a notice not yet delivered."""
+    node.curl_exit.write_text("6")
+    node.run()
+    assert node.flush().returncode != 0
+    assert len(node.spooled()) == 1
+
+
+def test_a_refused_flush_stops_at_the_oldest_notice(node: Node) -> None:
+    """Order is the point of the spool: the next notice must not go out ahead of a refused one."""
+    node.curl_exit.write_text("6")
+    node.run()
+    node.run(unit="node-backup-ship.service")
+    tried = node.attempts()
+    node.flush()
+    assert node.attempts() == tried + 1
+    assert len(node.spooled()) == 2
+
+
+def test_a_notice_does_not_overtake_one_still_kept(node: Node) -> None:
+    """n8n's router reads a `page` that is not marked resolved as a failure.
+
+    A recovery sent while its failure still waited in the spool would arrive
+    first, and the failure delivered after it would open an alarm for an
+    incident already closed.
+    """
+    node.curl_exit.write_text("6")
     node.run()
     node.curl_exit.write_text("0")
-    node.run()
-    [title] = node.titles()[1:]
-    assert "failed" in title and "still failing" not in title, title
+    node.set_result("success")
+    tried = node.attempts()
+    assert node.run("--recovered").returncode == 0
+    assert node.attempts() == tried, "the recovery went out ahead of the failure it closes"
+    assert node.starts() == [f"start --no-block {SPOOL_UNIT}"], "nothing asked for the spool to be delivered"
+    assert node.flush().returncode == 0
+    failure, recovery = node.titles()
+    assert "failed on" in failure and "recovered" in recovery, node.titles()
+    assert node.spooled() == []
 
 
-def test_an_undelivered_recovery_leaves_the_failed_page_in_place(node: Node) -> None:
-    """The operator has heard of neither the failure nor the recovery: the failed state is the only trace."""
+def test_a_refused_recovery_is_kept_and_closes_the_incident(node: Node) -> None:
     node.run()
     node.set_result("success")
-    node.curl_exit.write_text("22")
-    assert node.run("--recovered").returncode != 0
-    assert node.resets() == []
+    node.curl_exit.write_text("6")
+    assert node.run("--recovered").returncode == 0
+    assert not (node.state / UNIT).exists()
+    assert node.resets() == [NOTIFIER]
+    [kept] = node.spooled()
+    assert json.loads(kept.read_text())["status"] == "resolved"
+
+
+def test_a_reminder_of_a_page_still_kept_is_folded_into_it(node: Node) -> None:
+    """Hours of outage would otherwise deliver one late `still failing` per hour, all at once."""
+    node.curl_exit.write_text("6")
+    node.run()
+    node.age_state(REMINDER + 5)
+    node.run()
+    assert len(node.spooled()) == 1
+
+
+def test_exercising_the_path_still_fails_when_nothing_was_delivered(node: Node) -> None:
+    """`make maintain-notify-test` reads the notifier's exit status as the delivery result."""
+    node.set_result("success")
+    node.curl_exit.write_text("6")
+    assert node.run().returncode != 0
+    assert node.spooled() == []
 
 
 def test_a_healthy_run_with_no_incident_resets_nothing(node: Node) -> None:
@@ -264,10 +381,12 @@ def test_a_reset_systemd_refuses_does_not_fail_a_delivered_recovery(node: Node) 
 
 
 def test_an_undelivered_incident_ages_from_its_first_failure(node: Node) -> None:
-    """#2733: measured from a `last` of 0, an incident whose only page was refused read as stale at once."""
-    node.curl_exit.write_text("22")
-    node.run()
-    node.curl_exit.write_text("0")
+    """#2733: measured from a `last` of 0, an incident whose only page was refused read as stale at once.
+
+    A `last` of 0 is now a page neither delivered nor kept: the script before
+    #2787 left it, and so does a notice that dies before it is spooled.
+    """
+    node.write_state(1, int(time.time()), 0)
     node.age_state(REMINDER + 5)
     node.set_result("success")
     assert node.run("--recovered").returncode == 0
@@ -277,9 +396,7 @@ def test_an_undelivered_incident_ages_from_its_first_failure(node: Node) -> None
 
 def test_an_undelivered_incident_past_its_ttl_still_recovers(node: Node) -> None:
     """#2757: a unit whose runs are further apart than the TTL lost its recovery and the reset."""
-    node.curl_exit.write_text("22")
-    node.run()
-    node.curl_exit.write_text("0")
+    node.write_state(1, int(time.time()), 0)
     node.age_state(TTL + 5)
     node.set_result("success")
     assert node.run("--recovered").returncode == 0
@@ -302,18 +419,22 @@ def test_a_slow_unit_closes_the_incident_its_delivered_page_opened(node: Node) -
 def test_a_unit_that_keeps_failing_past_the_ttl_still_closes_its_incident(node: Node) -> None:
     """The edge liveness check runs every minute, so with the uplink out its pages fail for hours.
 
-    Each failure renews the state, and past the TTL one starts the incident over
-    instead of dropping it, so the recovery that follows still finds it.
+    The reminders folded into the kept page still renew the state, so the
+    incident outlives the TTL as one incident: no second `failed` page, and the
+    recovery that follows still finds it.
     """
-    node.curl_exit.write_text("22")
+    node.curl_exit.write_text("6")
     node.run()
-    node.age_state(TTL + 5)
-    node.run()
+    for _ in range(TTL // REMINDER + 2):
+        node.age_state(REMINDER + 5)
+        node.run()
     node.curl_exit.write_text("0")
     node.set_result("success")
     assert node.run("--recovered").returncode == 0
-    assert "recovered" in node.titles()[-1], node.titles()
     assert node.resets() == [NOTIFIER]
+    assert node.flush().returncode == 0
+    failure, recovery = node.titles()
+    assert "failed on" in failure and "recovered" in recovery, node.titles()
 
 
 def test_a_long_incident_reminded_recently_is_not_stale(node: Node) -> None:
@@ -384,13 +505,32 @@ def test_a_success_with_nothing_failing_sends_nothing(node: Node) -> None:
     assert node.titles() == [], "every healthy run of a recovery-wired unit would page"
 
 
-def test_a_failed_delivery_does_not_count_as_a_page(node: Node) -> None:
-    """If n8n is down the operator has heard nothing; the next failure must try again."""
-    node.curl_exit.write_text("22")
+def test_a_page_neither_delivered_nor_kept_does_not_count_as_sent(node: Node) -> None:
+    """If the spool cannot take it the operator has heard nothing; the next failure must try again.
+
+    The spool copy is written aside and renamed into place, so a write that dies
+    half-way leaves nothing the flush would deliver.
+    """
+    node._shim("python3", f'[ -n "${{NOTIFY_AT:-}}" ] && exit 1; exec {shutil.which("python3")} "$@"')
+    node.curl_exit.write_text("6")
     assert node.run().returncode != 0
+    assert node.spooled() == [], "a half-written notice is waiting to be delivered"
     node.curl_exit.write_text("0")
     node.run()
-    assert len(node.titles()) == 2, "a page that never arrived was treated as sent"
+    [title] = node.titles()
+    assert "failed on" in title and "still failing" not in title, title
+
+
+def test_a_notice_older_than_the_spool_keeps_is_dropped(node: Node) -> None:
+    """A payload n8n refuses for good would otherwise hold every later notice behind it."""
+    max_age = int(_defaults()["node_notify_spool_max_age_seconds"])  # type: ignore[call-overload]
+    node.spool.mkdir()
+    old = node.spool / f"{(int(time.time()) - max_age - 60) * 10**9}-{UNIT}"
+    old.write_text('{"title": "old"}')
+    result = node.flush()
+    assert result.returncode == 0, result.stderr
+    assert node.attempts() == 0 and node.spooled() == []
+    assert old.name in result.stderr, "a notice was dropped without a word"
 
 
 def test_a_stale_incident_is_a_new_incident(node: Node) -> None:
