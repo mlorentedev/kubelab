@@ -43,8 +43,8 @@ def _merge(base: dict[str, Any], over: dict[str, Any]) -> dict[str, Any]:
 
 def _prod_config() -> dict[str, Any]:
     """common.yaml with prod.yaml over it, which is what `deploy-vps.yml` calls `config`."""
-    common = yaml.safe_load((VALUES / "common.yaml").read_text())
-    prod = yaml.safe_load((VALUES / "prod.yaml").read_text())
+    common = yaml.safe_load((VALUES / "common.yaml").read_text(encoding="utf-8"))
+    prod = yaml.safe_load((VALUES / "prod.yaml").read_text(encoding="utf-8"))
     return _merge(common, prod)
 
 
@@ -69,7 +69,7 @@ def _rendered() -> dict[str, Any]:
 
 def _runbook_compose() -> dict[str, Any]:
     """The first yaml block under the runbook's `### 1.2` heading."""
-    text = RUNBOOK.read_text()
+    text = RUNBOOK.read_text(encoding="utf-8")
     section = re.search(r"^### 1\.2 .*?(?=^### )", text, re.S | re.M)
     assert section, "the runbook has no section 1.2"
     block = re.search(r"```yaml\n(.*?)```", section.group(0), re.S)

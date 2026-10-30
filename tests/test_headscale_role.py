@@ -78,7 +78,7 @@ class TestPolicyPathParameterized:
         assert cfg["policy"]["path"] == ""
 
     def test_template_source_not_hardcoded(self) -> None:
-        src = (TEMPLATES / "config.yaml.j2").read_text()
+        src = (TEMPLATES / "config.yaml.j2").read_text(encoding="utf-8")
         assert 'path: ""' not in src, "policy.path must be templated, not the hardcoded empty literal"
         assert "headscale_policy_path" in src, "config.yaml.j2 must reference the headscale_policy_path var"
 
@@ -87,7 +87,7 @@ class TestReloadHandler:
     """Policy reload is SIGHUP via docker, never a restart (finding #1)."""
 
     def _handlers(self) -> list[dict]:
-        return yaml.safe_load((ROLE / "handlers/main.yml").read_text())
+        return yaml.safe_load((ROLE / "handlers/main.yml").read_text(encoding="utf-8"))
 
     def test_reload_handler_uses_sighup(self) -> None:
         reload_handlers = [h for h in self._handlers() if "reload" in str(h.get("name", "")).lower()]
@@ -107,7 +107,7 @@ class TestPolicyFileDeploy:
     """The policy file is deployed conditionally and notifies the SIGHUP reload."""
 
     def _tasks(self) -> list[dict]:
-        return yaml.safe_load((ROLE / "tasks/main.yml").read_text())
+        return yaml.safe_load((ROLE / "tasks/main.yml").read_text(encoding="utf-8"))
 
     def _template_task(self) -> dict:
         """The task that renders policy.hujson.j2 (distinct from the backup/rescue tasks)."""
@@ -147,7 +147,7 @@ class TestPolicyHujsonContent:
     def test_hosts_come_from_ssot_not_hardcoded(self) -> None:
         # the template DATA must contain NO IP literals — every address comes from the var.
         # (Comments may reference IPs for documentation; strip them before the check.)
-        src_body = re.sub(r"//[^\n]*", "", (TEMPLATES / "policy.hujson.j2").read_text())
+        src_body = re.sub(r"//[^\n]*", "", (TEMPLATES / "policy.hujson.j2").read_text(encoding="utf-8"))
         assert not re.search(r"\d{1,3}(\.\d{1,3}){3}", src_body), "policy.hujson.j2 must not hardcode IPs/CIDRs"
         # and the rendered hosts must equal the common.yaml values
         ssot = _hosts_from_ssot()
@@ -225,7 +225,7 @@ class TestPolicyHujsonContent:
 
 
 def _net() -> dict:
-    return yaml.safe_load(COMMON_YAML.read_text())["networking"]
+    return yaml.safe_load(COMMON_YAML.read_text(encoding="utf-8"))["networking"]
 
 
 def _fake_runner(down_ips: frozenset[str] = frozenset(), blocked: frozenset[str] = frozenset()):
@@ -341,7 +341,7 @@ class TestAutoRevert:
     """The role backs up the policy, probes after reload, and reverts on failure."""
 
     def _tasks(self) -> list[dict]:
-        return yaml.safe_load((ROLE / "tasks/main.yml").read_text())
+        return yaml.safe_load((ROLE / "tasks/main.yml").read_text(encoding="utf-8"))
 
     def test_policy_backed_up_before_write(self) -> None:
         backups = [t for t in self._tasks() if "back up" in str(t.get("name", "")).lower()]

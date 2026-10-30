@@ -13,6 +13,7 @@ file, and the container and the directory go on every exit path.
 from __future__ import annotations
 
 import json
+import os
 import shlex
 import shutil
 import sqlite3
@@ -22,6 +23,7 @@ from typing import Callable, Optional
 
 import pytest
 
+from toolkit.core.io import docker_user_args
 from toolkit.features.app_drill import APPS, SEQUENCE, compare, parse_rows, rows_sql, run_drill
 
 STAGING = "/opt/node-backup/staging"
@@ -186,7 +188,7 @@ class _Fake:
         if argv[:2] == ["docker", "run"]:
             self.exists = True  # created even when it then fails to start
             mount = next(a for a in argv if a.endswith(":/run/drill:ro"))
-            self.key_mode = stat.S_IMODE(Path(mount.split(":")[0], "key").stat().st_mode)
+            self.key_mode = stat.S_IMODE(Path(mount.removesuffix(":/run/drill:ro"), "key").stat().st_mode)
             return self.run_rc, "cid", "boom" if self.run_rc else ""
         if argv[:2] == ["docker", "inspect"]:
             return 0, "true\n" if self.running else "false\n", ""
@@ -384,10 +386,12 @@ def test_the_key_travels_only_as_a_private_file_into_a_container_with_no_network
     drill(fake)
     start = next(c for c in fake.calls if c[:2] == ["docker", "run"])
     assert start[start.index("--network") + 1] == "none"
-    assert "--user" in start
+    user = start[start.index("--user") : start.index("--user") + 2] if "--user" in start else []
+    assert user == docker_user_args()
     assert IMAGES[service] in start  # the image the live Deployment runs
     assert f"{APPS[service].key_env}=/run/drill/key" in start
-    assert fake.key_mode == 0o600
+    if os.name == "posix":  # Windows has no POSIX mode bits: a private file there is an ACL, not 0600
+        assert fake.key_mode == 0o600
     assert not any(KEY in arg for call in fake.calls for arg in call)
 
 
