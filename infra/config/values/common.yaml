@@ -67,8 +67,8 @@ networking:
       # temporary site (3.3 and 1.5 Mbps); which one is the download is
       # re-measured on the RPi4 at bring-up.
       bandwidth:
-        down_kbit: 2970
-        up_kbit: 1350
+        down_kbit: 50000
+        up_kbit: 10000
         # The share of down_kbit an image pull gets, against which a pull is sized
         # (_includes/image-pull.yml). Open WebUI's 1.62 GB took 133.7 min on ace2,
         # against 72.7 at down_kbit, with the shaper binding (#2703, 2026-10-30).
