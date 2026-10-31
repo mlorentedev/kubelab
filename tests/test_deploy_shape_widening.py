@@ -111,7 +111,8 @@ class TestMergingActorDoesNotWiden:
             hits = [name for name, rx in MERGE_CALLS.items() if rx.search(text)]
             if hits:
                 found[wf.name] = hits
-        assert set(found) == set(MERGERS), (
+        # Exact kinds, not just names: a REST merge in a declared merger would skip the head pin.
+        assert found == {workflow: ["gh pr merge"] for workflow in MERGERS}, (
             f"workflows that merge pull requests: {found}; declared: {sorted(MERGERS)}. A new merger is "
             f"{DECIDED}."
         )

@@ -22,7 +22,8 @@ the real drift: live had four contexts, master declared five.
 
 **Solution**: Run the reconcile from a checkout of `origin/master`
 (`git checkout --detach origin/master`), then re-read the live object:
-`gh api repos/mlorentedev/kubelab/branches/master/protection/required_status_checks --jq .contexts`.
+`gh api repos/mlorentedev/kubelab/branches/master/protection/required_status_checks --jq '{contexts, checks}'`
+(`checks` carries each context's `app_id` pin, which `contexts` does not show).
 
 **Rule**: A reconciler applies the declaration in the tree it runs from. Before you apply live state
 from a merged change, check that the checkout contains that change (`git merge-base --is-ancestor

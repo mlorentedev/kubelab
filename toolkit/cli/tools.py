@@ -444,7 +444,12 @@ def deploy_merge_cmd(
         admitted = load_products(products).products
         default_branch = api.json(f"repos/{repo}")["default_branch"]
         required = dm.required_contexts(common, repo, default_branch)
-        open_prs = api.json(f"repos/{repo}/pulls?state=open&base={default_branch}&per_page=100")
+        open_prs: list[dict[str, Any]] = []
+        for page in range(1, 51):  # GitHub caps per_page at 100; 50 pages is past any real queue
+            batch = api.json(f"repos/{repo}/pulls?state=open&base={default_branch}&per_page=100&page={page}")
+            open_prs += batch
+            if len(batch) < 100:
+                break
     except Exception as exc:  # noqa: BLE001 — nothing is judged on a declaration that cannot be read
         logger.error(f"deploy-merge: cannot read the declarations or the open PRs: {exc}")
         raise typer.Exit(2) from exc

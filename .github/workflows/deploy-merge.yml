@@ -47,14 +47,16 @@ permissions:
 jobs:
   merge:
     name: Merge mechanical deploys
+    # A dispatch on another branch would judge with that branch's code. This
+    # only stops an accidental one: a branch can edit this line too.
+    if: github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       # No `ref:`. For schedule and workflow_run, github.sha is the default
       # branch's tip, never a PR's head, so the judge and its declarations are
       # master's, as in the repository's other scheduled workflows. A dispatch
-      # runs on the ref it names, and so does this file, which a branch can
-      # already change.
+      # is limited to the default branch by the job's `if:`.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           fetch-depth: 1
@@ -104,9 +106,11 @@ jobs:
               echo "::notice::#${n} moved since it was judged empty; the next run judges it again"
               continue
             fi
+            # Close first: a close that fails leaves no comment, so a persistent API
+            # failure cannot post one per run. A closed PR is not judged again.
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/pulls/${n}" -f state=closed >/dev/null
             body="Closed: this pull request has no changed files at ${sha}, so there is nothing to merge."
             gh api -X POST "repos/${GITHUB_REPOSITORY}/issues/${n}/comments" -f body="${body} Reopen it to undo." >/dev/null
-            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/pulls/${n}" -f state=closed >/dev/null
             echo "closed #${n} (empty at ${sha})" | tee -a "$GITHUB_STEP_SUMMARY"
           done
 
