@@ -10,7 +10,7 @@ created: "2026-08-27"
 Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
 
 - [x] AC1 -> PR1 (#2594) and its amendment (#2613): live statuses below
-- [x] AC2 -> PR2 (#2615): the `status` path and replay are live; PR6 (#2880, `ba9862a`): the in-cluster `delivery-watcher` bounds the no-status case (#2645 B); both are seen live below. Header drift in `deploy-verify.yml`: #2881
+- [ ] AC2 -> PR2 (#2615): the `status` path and the red replay are live. PR6 (#2880, `ba9862a`): the in-cluster `delivery-watcher` bounds the no-status case (#2645 B); only its green path is seen live, in both envs. Open until a `healthy: 0` line and the alert firing are seen live. Header drift in `deploy-verify.yml`: #2881
 - [ ] AC3 -> PR3, after web#435 serves `commit` on staging
 - [x] AC4 -> PR4 (#2579) and GITOPS-007 (#2584, `fix/gitops-007-superseded`): `tests/test_product_verify.py` (48 tests); live runs below
 - [x] AC5 -> #1276, `tests/test_argocd_notification_triggers.py`
@@ -47,7 +47,7 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
   - Not seen live: the red path. It is covered by `tests/test_delivery_watcher.py`. Prod is read after merge.
 - Live, 2026-10-31, PR6 in prod after #2880 merged (`ba9862a`):
   - The first scheduled run is in Loki (`toolkit obs logs --env prod --service delivery-watcher`): `[06:30:04] {"metric": "argo_delivery", "argo_env": "prod", "sha": "f612c91…", "age_seconds": 325, "state": "success", "healthy": 1}`.
-  - Grafana on `kubelab-vps` evaluates `gitops003-argo-delivery` (Loki responses from 06:29:20Z), and nothing is firing (`toolkit obs alerts --env prod`).
+  - Grafana on `kubelab-vps` evaluates `gitops003-argo-delivery` without error (Loki responses from 06:29:20Z) and it is not firing (`toolkit obs alerts --env prod`). That shows the rule loads and evaluates on a healthy series, not that it fires: the red path is still covered only by `tests/test_delivery_watcher.py`.
 
 ## Decisions made during implementation
 

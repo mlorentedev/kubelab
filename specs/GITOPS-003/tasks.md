@@ -62,6 +62,7 @@ created: "2026-08-27"
 - [x] ✓ 2026-10-31 [AC2] Implement `infra/k8s/base/services/delivery-watcher/watch.py` (stdlib only) and the CronJob (every 10 min, `backoffLimit: 0`, no token, non-root), its ingress-only NetworkPolicy, the image pin in `common.yaml`, and the prod patch of `ARGO_ENV`
 - [x] ✓ 2026-10-31 [AC2] Grafana rule `gitops003-argo-delivery` in `grafana-alerting/delivery-rules.yaml`: `last_over_time(... unwrap healthy [30m]) by (namespace) < 1`, `for: 10m`, `noDataState: Alerting`, runbook `#deploy-verify-is-red`
 - [x] ✓ 2026-10-31 [AC2] Validate in staging (Loki shows the line for master HEAD), then in prod after merge; record both in `verification.md`
+- [ ] [AC2] See the red path live: a `healthy: 0` line and `gitops003-argo-delivery` firing in staging (master HEAD with no staging status, e.g. the slot repointed for over 10 minutes); record it in `verification.md`, then tick AC2
 - [x] ✓ 2026-10-31 [AC2] Lesson: a GitHub `schedule` here is a few-times-a-day signal, not a cron
 
 ## Closing
