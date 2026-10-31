@@ -283,6 +283,34 @@ def edge_soak() -> None:
     raise typer.Exit(code)
 
 
+@edge_app.command("measure")
+def edge_measure(
+    seconds: Annotated[int, typer.Option("--seconds", help="Length of each direction's window")] = 60,
+) -> None:
+    """Measure the uplink's line rate on the edge, one window per direction (AC8).
+
+    Counts on the uplink adapter, before the shaper, and exits 0 with the rates, 2
+    when the shaper bound a window (the rate is then a lower bound), 3 when a server
+    refused the streams or nothing arrived, and 255 when SSH itself fails.
+    """
+    from datetime import datetime, timezone
+
+    from toolkit.features.configuration import ConfigurationManager
+    from toolkit.features.edge_measure import run_measure
+    from toolkit.features.edge_status import EdgeNotDeclaredError
+
+    net = ConfigurationManager("prod", settings.project_root).get_plaintext_values()["networking"]
+    when = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
+    try:
+        code, lines = run_measure(net, when, seconds)
+    except EdgeNotDeclaredError as e:
+        logger.error(str(e))
+        raise typer.Exit(1) from e
+    for line in lines:
+        typer.echo(line)
+    raise typer.Exit(code)
+
+
 @edge_app.command("lan-link")
 def edge_lan_link(
     route: Annotated[

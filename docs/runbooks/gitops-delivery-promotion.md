@@ -51,6 +51,14 @@ Pre-merge preview (optional): a feature-branch CI build also produces `sha-<pr-s
 
 `deploy-verify.yml` (GITOPS-003, #1478) reads the commit status Argo CD posts as `argocd/kubelab-<env>`. A merge is not a deploy: Argo makes one automated attempt per revision and does not retry a failed one ([lesson-407](../lessons/gitops-delivery/lesson-407-a-failed-auto-sync-is-not-retried-and-a-merge-is-not-a-deploy.md)).
 
+The Grafana alert **"Argo CD has not applied master HEAD"** (`gitops003-argo-delivery`) is the same question asked from inside the cluster. The `delivery-watcher` CronJob checks master HEAD's status every 10 minutes, because GitHub starts `deploy-verify`'s scheduled sweep only every few hours ([lesson-681](../lessons/ci-automation/lesson-681-a-github-schedule-here-is-a-few-times-a-day-signal-not-a-cron.md)). Read its last line with `toolkit obs logs --env <env> --service delivery-watcher`:
+
+- `state: failure` or `error`: the sync at that commit failed.
+- `state: null` with `healthy: 0`: no status arrived.
+- A `reason` and no `healthy`: GitHub could not be asked (rate limit, network, or the run's deadline). Neither the alert nor this line says anything about the deploy then. Fresh lines resolve it; the next run is at most 10 minutes away.
+
+For the first two, follow the steps below.
+
 First read which red it is, from the run's error annotation:
 
 - **A failure description** (the `Argo CD status` job, or `wait-status` printing `failure`/`error`): the sync at that commit failed, and the text is Argo's `operationState.message`.

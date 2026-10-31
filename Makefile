@@ -1954,6 +1954,13 @@ edge-boot-check: ## Check what the edge brought back after a boot [CASE=no-uplin
 edge-soak: ## Read the edge's uplink soak: 48 h of this boot with no adapter reset
 	@$(TOOLKIT) infra edge soak
 
+# Measure the uplink's line rate on the edge (AC8, #2876): the adapter's own counters,
+# before the shaper, over one window per direction. Run it twice and shape at 90% of
+# the lower reading. Exits 0 measured, 2 shaper binding (lift it), 3 cannot tell.
+.PHONY: edge-measure
+edge-measure: ## Measure the edge uplink's line rate, before the shaper [SECONDS=60]
+	@$(TOOLKIT) infra edge measure $(if $(SECONDS),--seconds $(SECONDS))
+
 # Join this laptop to the lab LAN, the edge's management path (NET-005 AC11).
 # ROUTE=1 makes the edge the default route, for the portal login with the
 # laptop's own Wi-Fi off; STATIC=1 holds a fixed address when the edge serves

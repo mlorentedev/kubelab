@@ -696,6 +696,11 @@ argocd:
   # Pinned for the same reason one layer down: the GCP hub installs its own helm
   # at boot, and an unattended recreate must not pick up whatever is current.
   helm_version: "v3.18.4"
+  # The in-cluster delivery watcher (GITOPS-003 AC2, #2645): reads master HEAD's
+  # `argocd/kubelab-<env>` status from GitHub. Runs a stdlib-only script, so any
+  # interpreter release works; pinned so the CronJob never upgrades itself.
+  delivery_watcher:
+    image: python:3.13.16-alpine
   # Hub: clusters.hub -> networking.<provider>.tailscale_dns — MagicDNS (ADR-025).
   # Named via clusters.hub rather than a provider literal: this comment said
   # networking.aws until prod moved to gcp1, and a comment restating one side of

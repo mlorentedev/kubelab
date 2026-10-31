@@ -106,6 +106,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit infra edge` | The lab edge (rpi4): uplink status (NET-005) |
 | `toolkit infra edge boot-check` | Say whether a boot brought back everything the edge serves (the hard-reset test). |
 | `toolkit infra edge lan-link` | Join this laptop to the lab LAN with a NetworkManager profile (NET-005 AC11). |
+| `toolkit infra edge measure` | Measure the uplink's line rate on the edge, one window per direction (AC8). |
 | `toolkit infra edge soak` | Say whether the uplink adapter has held 48 hours of this boot with no reset (B12). |
 | `toolkit infra edge status` | Say whether the edge's uplink is up, behind a portal, or dead. |
 | `toolkit infra headscale` | Headscale VPN ACL policy + mesh probe (ADR-041) |
@@ -228,6 +229,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit tools certs status` | Show certificate status for an environment. |
 | `toolkit tools cli-reference` | Keep the README's command table equal to the command tree it describes. |
 | `toolkit tools delivery-health` | Refuse a delivery workflow whose newest run never started. |
+| `toolkit tools deploy-merge` | Judge every open PR to the default branch: merge, close or skip (DELIVERY-004 AC6). |
 | `toolkit tools deploy-shape` | Judge whether a PR is a mechanical staging deploy (DELIVERY-004, #1619). |
 | `toolkit tools lessons-index` | Order each category's lesson rows newest first (by date, then by number within a date, #1912), after refusing a corpus a rewrite would hide. |
 | `toolkit tools mutate` | Run the test unmutated, apply one replacement, run it again, restore the file. |
