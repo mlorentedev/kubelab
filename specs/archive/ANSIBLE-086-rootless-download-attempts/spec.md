@@ -50,7 +50,7 @@ PASS (`review.md`, nan/deepseek-v4-flash, at `5481b860`). Dispositions:
 
 ## Next
 
-Review and land.
+None: archived after the pool review. Follow-ups: #2868, #2873, mlorentedev/dotfiles#2980.
 
 ## Promotion candidates
 
