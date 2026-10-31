@@ -77,7 +77,16 @@ It also reports whether a public resolver and the lease's resolver answer, and w
    make provision NODE=rpi4 ENV=prod BOOTSTRAP=1
    ```
 
-5. **Prove the tailnet.** A site is accepted only once the edge's tailnet session is up through it (ADR-075 D7). If the edge is off the mesh, rejoin it:
+5. **Measure the line and set the shaper.** The bandwidth declared in step 1 is a guess until the uplink is up. Lift it well above the site's rate (`networking.edge.uplink.bandwidth`, by a PR), provision `TAGS=gateway`, then measure twice:
+
+   ```bash
+   make edge-measure
+   make edge-measure
+   ```
+
+   It counts on the uplink adapter, before the shaper. Exit 2 means the shaper bound the window, so the rate is only a lower bound and the shaper has to be lifted further. Set `down_kbit` and `up_kbit` to 90% of the lower reading in each direction, which the target prints, and provision `TAGS=gateway` again. Read the `link:` line first: a low receive rate at good signal is interference, and `networking.edge.uplink.band` can move the uplink to the other band (lesson-680).
+
+6. **Prove the tailnet.** A site is accepted only once the edge's tailnet session is up through it (ADR-075 D7). If the edge is off the mesh, rejoin it:
 
    ```bash
    make headscale-rejoin NODE=rpi4
