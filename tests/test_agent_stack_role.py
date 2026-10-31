@@ -172,13 +172,16 @@ def _env() -> dict[str, str]:
 
 
 def test_sso_signs_up_and_the_form_admits_only_the_seeded_break_glass_account() -> None:
-    """The form is the break-glass door (ADR-062 D4). Nobody can sign up through it.
+    """The form is the break-glass door (ADR-062 D4), hidden but reachable at
+    `/auth?form=signin`. Nobody can sign up through it.
 
-    `ENABLE_LOGIN_FORM=false` would only hide the form: `/api/v1/auths/signin` keeps
-    taking passwords (v0.12.0, lesson-520), so it never made SSO the only door.
+    `ENABLE_LOGIN_FORM=false` only hides the form: `/api/v1/auths/signin` keeps
+    taking passwords (v0.12.0, lesson-520). v0.12.0 sends a visitor to Authelia
+    only while the form is hidden (#2482), and `?form=` shows it again.
     """
     env = _env()
-    assert env["ENABLE_LOGIN_FORM"] == "true"
+    assert env["ENABLE_LOGIN_FORM"] == "false", "the auto-redirect to Authelia needs the form hidden"
+    assert env["OAUTH_AUTO_REDIRECT"] == "true", "people start at Authelia, not at Open WebUI's page"
     assert env["ENABLE_PASSWORD_AUTH"] == "true", "the sign-in endpoint refuses passwords without it"
     assert env["ENABLE_SIGNUP"] == "false"
     assert env["ENABLE_OAUTH_SIGNUP"] == "true"
@@ -188,6 +191,13 @@ def test_sso_signs_up_and_the_form_admits_only_the_seeded_break_glass_account() 
     assert env["WEBUI_ADMIN_PASSWORD"] == "admin-password-sentinel"
     assert env["OAUTH_CLIENT_SECRET"] == "oidc-secret-sentinel"
     assert env["ENABLE_OLLAMA_API"] == "false"
+
+
+def test_break_glass_opens_the_hidden_form_not_the_idp() -> None:
+    """With the form hidden, Open WebUI's page redirects to Authelia: exactly what is
+    down when the break-glass path is in use. `?form=` shows the form and stops it."""
+    decl = _common()["apps"]["services"]["security"]["authelia"]["break_glass"]["open-webui"]
+    assert decl.get("path") == "/auth?form=signin"
 
 
 def test_tiers_come_from_authelia_groups_and_anyone_else_is_refused() -> None:
