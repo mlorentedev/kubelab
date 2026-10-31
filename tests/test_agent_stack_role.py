@@ -193,11 +193,26 @@ def test_sso_signs_up_and_the_form_admits_only_the_seeded_break_glass_account() 
     assert env["ENABLE_OLLAMA_API"] == "false"
 
 
-def test_break_glass_opens_the_hidden_form_not_the_idp() -> None:
+def test_break_glass_opens_the_hidden_form_not_the_idp(monkeypatch: pytest.MonkeyPatch) -> None:
     """With the form hidden, Open WebUI's page redirects to Authelia: exactly what is
-    down when the break-glass path is in use. `?form=` shows the form and stops it."""
+    down when the break-glass path is in use. `?form=` shows the form and stops it.
+
+    Reads the URL the command prints, not the declaration (pr-agent on #2655), so
+    the guard goes red if the command stops appending the declared path. Only the
+    live lookup is replaced: the declaration is the committed one."""
+    from typer.testing import CliRunner
+
+    from toolkit.cli import auth
+    from toolkit.main import app
+
     decl = _common()["apps"]["services"]["security"]["authelia"]["break_glass"]["open-webui"]
-    assert decl.get("path") == "/auth?form=signin"
+    ace2 = "http://ace2.test:3080"
+    monkeypatch.setattr(auth.shutil, "which", lambda _: "/usr/bin/kubectl")
+    monkeypatch.setattr(auth.bg, "resolve", lambda *_: (decl, None, break_glass.Direct(url=ace2)))
+
+    result = CliRunner().invoke(app, ["auth", "break-glass", "open-webui", "--env", "prod", "--dry-run"])
+    assert result.exit_code == 0, result.output
+    assert f"way in:   {ace2}/auth?form=signin " in result.output
 
 
 def test_tiers_come_from_authelia_groups_and_anyone_else_is_refused() -> None:
