@@ -103,11 +103,11 @@ Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`.
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
+- [x] `proposal.md` frontmatter set to `status: archived`
 - [x] Independent review recorded (`review.md` with a `PASS` or `PASS-WITH-GAPS` verdict from a session that did not implement)
-- [ ] Folder moved: `specs/IDP-042-product-contract-registry/` -> `specs/archive/IDP-042-product-contract-registry/`
+- [x] Folder moved: `specs/IDP-042-product-contract-registry/` -> `specs/archive/IDP-042-product-contract-registry/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018); #1815 closed with the PR that removed the literal; the epic #1931 checklist ticked for both
-- [ ] Promotions above executed (if any)
+- [x] Promotions above executed (if any)
 
 ## Closeout review, 2026-10-21 (round 2, `nan/deepseek-v4-flash`, on `d7a0d8db`): FAIL
 
