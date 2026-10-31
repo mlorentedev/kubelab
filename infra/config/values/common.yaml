@@ -63,16 +63,18 @@ networking:
       # The AP's fixed 2.4 GHz channel, per site: picked at bring-up from a scan
       # of the site's spectrum. Must be one the regdomain allows.
       channel: 6
-      # Shaped slightly below the measured rate (AC8). Read from a laptop at the
-      # temporary site (3.3 and 1.5 Mbps); which one is the download is
-      # re-measured on the RPi4 at bring-up.
+      # Shaped at 90% of the lower of two measured rates (AC8), so the queue forms
+      # here. Measured 2026-10-31 on the site's paid plan with the shaper lifted:
+      # the uplink adapter's own rx/tx counters over two 60 s runs of six parallel
+      # streams each way, 4730/4939 kbit/s down and 3934/4068 up. The free plan
+      # read 3.3 and 1.5 Mbps.
       bandwidth:
-        down_kbit: 50000
-        up_kbit: 10000
+        down_kbit: 4250
+        up_kbit: 3550
         # The share of down_kbit an image pull gets, against which a pull is sized
         # (_includes/image-pull.yml). Open WebUI's 1.62 GB took 133.7 min on ace2,
         # against 72.7 at down_kbit, with the shaper binding (#2703, 2026-10-30).
-        # Re-measured with the site, like down_kbit.
+        # Measured on the free plan; not yet re-measured on the paid one.
         pull_goodput: 0.54
       # dockerd's attempts at each layer of a pull, for every daemon behind the edge
       # and for the bound on a pull's attempt (#2834). A pull's connections end in
