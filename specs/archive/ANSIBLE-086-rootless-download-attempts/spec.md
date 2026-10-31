@@ -1,7 +1,7 @@
 ---
 id: ANSIBLE-086-rootless-download-attempts
 type: spec
-status: active
+status: archived
 created: "2026-10-30"
 owner: manu
 issue: "kubelab#2834"
@@ -39,12 +39,21 @@ Out:
 
 See the PR body.
 
+## Pool review
+
+PASS (`review.md`, nan/deepseek-v4-flash, at `5481b860`). Dispositions:
+
+- F1 Minor: the pull budget compares only the transfer estimate, while the bound adds dockerd's pauses. Ticketed: #2873.
+- F2 Minor: a fast-track spec's contract digests are empty, so the archive cannot see a stale review. Ticketed in the tooling: mlorentedev/dotfiles#2980.
+- F3 Minor: the rootless `daemon.json` has no effect. No action: the task's comment says so, and #2868 decides the store.
+- F4 Question: `pull_goodput` comes from one refill, so the estimate is a best case under a shared shaper. Accepted: the value is a measurement, `common.yaml` says to re-measure it with the site, and the uplink change after the edge's soak is that re-measurement.
+
 ## Next
 
 Review and land.
 
 ## Promotion candidates
 
-- [x] Lesson: lesson-676, a rootless daemon reads its own `daemon.json`, and a setting is proved by its consumer: a reload event proves the config store, and no more.
-- [x] ADR? `no`
-- [x] Pattern? `no`
+- [x] Lesson? yes: docs/lessons/containers-docker/lesson-676-a-rootless-dockerd-reads-its-own-daemon-json-and-only-its-reload-event-proves-a-reload.md
+- [x] ADR? no: the change corrects a role's verification step and decides nothing between components
+- [x] Pattern? no: "prove a setting by its consumer" is recorded in lesson-676; it has one instance so far
