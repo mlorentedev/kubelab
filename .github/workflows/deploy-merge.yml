@@ -48,8 +48,10 @@ jobs:
   merge:
     name: Merge mechanical deploys
     # A dispatch on another branch would judge with that branch's code. This
-    # only stops an accidental one: a branch can edit this line too.
-    if: github.ref_name == github.event.repository.default_branch
+    # only stops an accidental one: a branch can edit this line too. Scoped to
+    # the dispatch event: a schedule payload carries no `repository`, so an
+    # unscoped comparison would skip every sweep.
+    if: github.event_name != 'workflow_dispatch' || github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
