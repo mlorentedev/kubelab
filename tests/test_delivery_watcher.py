@@ -23,8 +23,9 @@ import pathlib
 import subprocess
 import sys
 import threading
+import time
 from datetime import datetime, timedelta, timezone
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Iterator
 
 import pytest
@@ -43,6 +44,7 @@ class FakeGitHub:
         self.statuses: list[dict[str, str]] = []
         self.head_status = 200
         self.statuses_status = 200
+        self.delay = 0.0
         self.requests: list[str] = []
 
     def head(self) -> dict[str, object]:
@@ -66,6 +68,7 @@ def github() -> Iterator[tuple[FakeGitHub, str]]:
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802 - http.server's naming
             fake.requests.append(self.path)
+            time.sleep(fake.delay)
             if self.path == "/repos/mlorentedev/kubelab/commits/master":
                 code, body = fake.head_status, fake.head()
             elif self.path.startswith(f"/repos/mlorentedev/kubelab/commits/{SHA}/statuses"):
@@ -82,7 +85,7 @@ def github() -> Iterator[tuple[FakeGitHub, str]]:
         def log_message(self, *_: object) -> None:
             pass
 
-    server = HTTPServer(("127.0.0.1", 0), Handler)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -91,7 +94,7 @@ def github() -> Iterator[tuple[FakeGitHub, str]]:
         server.shutdown()
 
 
-def _run(api: str, env: str = "prod") -> tuple[int, list[dict[str, object]]]:
+def _run(api: str, env: str = "prod", deadline: int = 60) -> tuple[int, list[dict[str, object]]]:
     proc = subprocess.run(
         [sys.executable, "-I", str(WATCH)],
         env={
@@ -101,6 +104,7 @@ def _run(api: str, env: str = "prod") -> tuple[int, list[dict[str, object]]]:
             "BRANCH": "master",
             "ARGO_ENV": env,
             "GRACE_SECONDS": str(GRACE),
+            "DEADLINE_SECONDS": str(deadline),
         },
         capture_output=True,
         text=True,
@@ -114,8 +118,8 @@ def _status(env: str, state: str) -> dict[str, str]:
     return {"context": f"argocd/kubelab-{env}", "state": state, "description": f"{state} at {SHA[:7]}"}
 
 
-def _only_line(api: str, env: str = "prod") -> dict[str, object]:
-    code, lines = _run(api, env)
+def _only_line(api: str, env: str = "prod", deadline: int = 60) -> dict[str, object]:
+    code, lines = _run(api, env, deadline)
     assert code == 0, "the watcher owns its exits: every verdict, unknown included, exits 0"
     assert len(lines) == 1, f"one run must print exactly one line, got {lines}"
     line = lines[0]
@@ -212,3 +216,13 @@ def test_it_reads_github_and_nothing_else(github: tuple[FakeGitHub, str]) -> Non
     fake.statuses = [_status("prod", "success")]
     _only_line(api)
     assert len(fake.requests) == 2
+
+
+def test_a_run_past_its_deadline_still_prints_its_line(github: tuple[FakeGitHub, str]) -> None:
+    """urlopen's timeout does not bound a DNS lookup. Killed by the Job's deadline, the
+    run would print nothing; the watcher stops itself first and says why."""
+    fake, api = github
+    fake.delay = 10
+    line = _only_line(api, deadline=2)
+    assert "healthy" not in line
+    assert "deadline" in str(line["reason"])

@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import sys
 import urllib.error
 import urllib.request
@@ -33,6 +34,10 @@ REPOSITORY = os.environ["REPOSITORY"]
 BRANCH = os.environ.get("BRANCH", "master")
 ARGO_ENV = os.environ["ARGO_ENV"]
 GRACE_SECONDS = int(os.environ.get("GRACE_SECONDS", "600"))
+# Below the Job's `activeDeadlineSeconds` (120). urlopen's timeout bounds the
+# connection and each read, not the DNS lookup, so the run bounds itself: a Job
+# killed by its deadline would print nothing.
+DEADLINE_SECONDS = int(os.environ.get("DEADLINE_SECONDS", "90"))
 CONTEXT = f"argocd/kubelab-{ARGO_ENV}"
 FAILED = {"failure", "error"}
 
@@ -80,12 +85,20 @@ def _verdict() -> dict[str, object]:
     return {"sha": sha, "age_seconds": age, "state": state, "healthy": healthy}
 
 
+def _out_of_time(*_: object) -> None:
+    raise Unknown(f"run passed its {DEADLINE_SECONDS}s deadline")
+
+
 def main() -> int:
     line: dict[str, object] = {"metric": "argo_delivery", "argo_env": ARGO_ENV}
+    signal.signal(signal.SIGALRM, _out_of_time)
+    signal.alarm(DEADLINE_SECONDS)
     try:
         line.update(_verdict())
     except (Unknown, KeyError, TypeError) as exc:
         line["reason"] = str(exc) or type(exc).__name__
+    finally:
+        signal.alarm(0)
     print(json.dumps(line), flush=True)
     return 0
 
