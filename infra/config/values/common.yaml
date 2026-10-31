@@ -2085,7 +2085,7 @@ apps:
           open-webui:
             # A local account of nobody, the Grafana shape (#951). The login form
             # stays on for it: `ENABLE_LOGIN_FORM=false` only hides the form, and
-            # `/api/v1/auths/signin` keeps taking passwords either way (v0.12.0,
+            # `/api/v1/auths/signin` keeps taking passwords either way (v0.12.5,
             # lesson-520). `WEBUI_ADMIN_EMAIL` seeds it on an empty database, before
             # the first request, so no visitor can sign up as the first admin. Open
             # WebUI signs in by email, which is why rotation uses it. The public
@@ -2153,7 +2153,7 @@ apps:
         # because ace2 is (ADR-068 D1): while ace2 is off, the chat does not answer.
         state_promotion: singleton
         location: on-demand
-        image: ghcr.io/open-webui/open-webui:v0.12.0
+        image: ghcr.io/open-webui/open-webui:v0.12.5
         # The public name people use (#2135, ADR-068 D5 amended): prod Traefik
         # terminates TLS and forwards to ace2 over the tailnet. While ace2 is
         # off, it answers the error page.
