@@ -4,6 +4,9 @@
 [Unit]
 Description=BACKUP-057 node-backup retention and prune ({{ inventory_hostname }})
 OnFailure=kubelab-notify@%n.service
+# Closes the incident the line above opened, and clears an undelivered page's
+# failed notifier (#2423, #2749). Quiet when nothing was failing.
+OnSuccess=kubelab-notify-recovered@%n.service
 
 [Service]
 Type=oneshot

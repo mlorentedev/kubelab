@@ -27,7 +27,7 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 import pytest
 
-from tests.e2e.expectations import EXPECTATIONS, on_demand_skip_reason
+from tests.e2e.expectations import EXPECTATIONS, skip_reason
 from toolkit.features.health_check import ServiceHealthConfig
 
 pytestmark = pytest.mark.e2e
@@ -46,8 +46,8 @@ def webui(env: str, services_by_name: dict[str, ServiceHealthConfig]) -> Service
 
 
 @pytest.fixture
-def webui_up(webui: ServiceHealthConfig) -> ServiceHealthConfig:
-    reason = on_demand_skip_reason(SERVICE, EXPECTATIONS[SERVICE])
+def webui_up(webui: ServiceHealthConfig, env: str) -> ServiceHealthConfig:
+    reason = skip_reason(SERVICE, EXPECTATIONS[SERVICE], env)
     if reason:
         pytest.skip(reason)
     return webui

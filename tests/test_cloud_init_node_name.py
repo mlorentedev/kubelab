@@ -46,7 +46,9 @@ def script() -> str:
     that matches the prose explaining a thing passes a file that only talks
     about it (lesson-363). Every assertion here must see real script lines.
     """
-    return "\n".join(line for line in CLOUD_INIT.read_text().splitlines() if not line.lstrip().startswith("#"))
+    return "\n".join(
+        line for line in CLOUD_INIT.read_text(encoding="utf-8").splitlines() if not line.lstrip().startswith("#")
+    )
 
 
 def test_the_k3s_install_pins_the_node_name(script: str) -> None:

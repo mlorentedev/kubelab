@@ -214,7 +214,7 @@ class TestImageRepositories:
 
         from toolkit.config.settings import PROJECT_ROOT
 
-        text = (PROJECT_ROOT / ".github" / "workflows" / workflow).read_text()
+        text = (PROJECT_ROOT / ".github" / "workflows" / workflow).read_text(encoding="utf-8")
         match = re.search(r"REGISTRY_PREFIX: \$\{\{ vars\.REGISTRY_PREFIX \|\| '([^']+)' \}\}", text)
         assert match, f"{workflow} no longer declares REGISTRY_PREFIX's default"
         assert f"{match.group(1)}-{app}" == image_repositories([app])[app]
@@ -230,7 +230,9 @@ class TestImageRepositories:
         from toolkit.config.settings import PROJECT_ROOT
 
         for env in ("staging", "prod"):
-            values = yaml.safe_load((PROJECT_ROOT / f"infra/config/values/{env}.yaml").read_text()) or {}
+            values = (
+                yaml.safe_load((PROJECT_ROOT / f"infra/config/values/{env}.yaml").read_text(encoding="utf-8")) or {}
+            )
             platform = (values.get("apps") or {}).get("platform") or {}
             moved = [app for app, block in platform.items() if "image_name" in (block or {})]
             assert moved == [], f"values/{env}.yaml overrides image_name for {moved}"

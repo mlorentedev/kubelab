@@ -4,6 +4,15 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 676 | [A rootless dockerd reads its own daemon.json, and only its reload event proves a reload](lesson-676-a-rootless-dockerd-reads-its-own-daemon-json-and-only-its-reload-event-proves-a-reload.md) | 2026-10-30 |
+| 671 | [An image is fetched by whatever needs it, not only by a pull](lesson-671-an-image-is-fetched-by-whatever-needs-it-not-only-by-a-pull.md) | 2026-10-30 |
+| 670 | [dockerd resumes a layer only within its own attempts, and a failed pull drops every layer](lesson-670-dockerd-resumes-a-layer-only-within-its-own-attempts-and-a-failed-pull-drops-every-layer.md) | 2026-10-30 |
+| 665 | [A guard that must fail the play goes before the role's first write, so the pull it guards needs nothing rendered](lesson-665-a-guard-that-must-fail-the-play-goes-before-the-roles-first-write.md) | 2026-10-30 |
+| 655 | [A pull behind a shaped uplink is a duration, and the registry states its size before it starts](lesson-655-a-pull-behind-a-shaped-uplink-is-a-duration-and-the-registry-states-its-size-before-it-starts.md) | 2026-10-29 |
+| 653 | [A oneshot that waits holds a job, and the boot is finished only once no job is left](lesson-653-a-oneshot-that-waits-holds-a-job-and-the-boot-is-finished-only-once-no-job-is-left.md) | 2026-10-29 |
+| 649 | [A smoke build tests the builder the shell selected, not the engine](lesson-649-a-smoke-build-tests-the-builder-the-shell-selected-not-the-engine.md) | 2026-10-29 |
+| 632 | [An image prune keeps what a container holds, so the container prune decides which stacks lose their image](lesson-632-an-image-prune-keeps-what-a-container-holds-so-the-container-prune-decides-which-stacks-lose-their-image.md) | 2026-10-27 |
+| 624 | [A bounded wait at boot fails for good when the address arrives after the bound](lesson-624-a-bounded-wait-at-boot-fails-for-good-when-the-address-arrives-after-the-bound.md) | 2026-10-26 |
 | 618 | [A bind mount on Colima ignores ownership, so a container-uid guard goes red only on Linux](lesson-618-a-bind-mount-on-colima-ignores-ownership-so-a-container-uid-guard-goes-red-only-on-linux.md) | 2026-10-22 |
 | 610 | [A DOCKER-USER rule matched by original destination also catches the replies](lesson-610-a-docker-user-rule-matched-by-original-destination-also-catches-the-replies.md) | 2026-10-21 |
 | 603 | [A throwaway gateway that mounts the live config fails for reasons the check never meant to test](lesson-603-a-probe-that-borrows-the-live-config-needs-the-live-mounts-or-its-own-minimal-one.md) | 2026-10-18 |

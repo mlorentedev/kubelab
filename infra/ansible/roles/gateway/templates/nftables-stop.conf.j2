@@ -1,0 +1,7 @@
+# Managed by Ansible (gateway role). The package stops nftables with
+# `flush ruleset`, and its postinst runs `try-restart` on every upgrade. That
+# would take Docker's, ufw's and Tailscale's rules with it, so a stop removes
+# only the edge's own table. The start loads it again from /etc/nftables.conf.
+[Service]
+ExecStop=
+ExecStop=-/usr/sbin/nft delete table inet kubelab

@@ -36,7 +36,7 @@ COMMON = REPO / "infra/config/values/common.yaml"
 
 @pytest.fixture(scope="module")
 def plays() -> list[dict]:
-    return yaml.safe_load(PLAYBOOK.read_text())
+    return yaml.safe_load(PLAYBOOK.read_text(encoding="utf-8"))
 
 
 def _code(path: Path) -> str:
@@ -52,7 +52,9 @@ def _code(path: Path) -> str:
     that documents the thing is apparently the default mistake, not an unlucky
     one; strip comments before asserting on order, always.
     """
-    return "\n".join(line for line in path.read_text().splitlines() if not line.lstrip().startswith("#"))
+    return "\n".join(
+        line for line in path.read_text(encoding="utf-8").splitlines() if not line.lstrip().startswith("#")
+    )
 
 
 def _all_tasks(plays: list[dict]) -> list[dict]:
@@ -106,7 +108,7 @@ def test_only_the_gcp_hub_qualifies_today(plays: list[dict]) -> None:
     does not, because a recreate rotates it. If that ever stops being true, this
     fails rather than silently widening the purge.
     """
-    net = yaml.safe_load(COMMON.read_text())["networking"]
+    net = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["networking"]
     ephemeral = [
         key
         for key, block in net.items()
@@ -140,7 +142,7 @@ class TestTheConditionEvaluates:
 
         from jinja2 import Environment
 
-        plays = yaml.safe_load(PLAYBOOK.read_text())
+        plays = yaml.safe_load(PLAYBOOK.read_text(encoding="utf-8"))
         expr = next(
             p["vars"]["_node_address_is_ephemeral"]
             for p in plays
@@ -174,7 +176,7 @@ class TestTheConditionEvaluates:
 
             from jinja2 import Environment, StrictUndefined
 
-            plays = yaml.safe_load(PLAYBOOK.read_text())
+            plays = yaml.safe_load(PLAYBOOK.read_text(encoding="utf-8"))
             expr = next(
                 p["vars"]["_node_address_is_ephemeral"]
                 for p in plays
@@ -199,7 +201,7 @@ def test_wait_node_ready_generates_the_inventory_it_needs() -> None:
     generates the inventory itself, so the requirement holds as long as this
     target goes through `run` and does not opt out with `--skip-generate`.
     """
-    makefile = (Path(__file__).resolve().parent.parent / "Makefile").read_text()
+    makefile = (Path(__file__).resolve().parent.parent / "Makefile").read_text(encoding="utf-8")
     recipe = re.search(r"^wait-node-ready:[^\n]*\n((?:\t.*\n)+)", makefile, re.M)
     assert recipe, "wait-node-ready has no recipe"
     body = recipe.group(1)

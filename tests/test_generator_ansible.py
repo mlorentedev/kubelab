@@ -270,3 +270,66 @@ class TestRetiredCloudNodes:
         AnsibleGenerator()._build_inventory(_networking())
 
         assert "networking.aws is retired" in "".join(capsys.readouterr()), "a retired node left the inventory silently"
+
+
+class TestRetiredHomelabNodes:
+    """`retired` on a `networking.nodes` entry means the same as on a cloud block.
+
+    The Jetson left the lab for some weeks and comes back. Until it does, every
+    consumer that enumerates nodes reached for a machine that is not there:
+    `make test-infra` reported it as six SSH and ping failures. The flag keeps
+    the declaration whole, so its return is one edit.
+
+    Each case flags a node itself, so the suite holds whether or not one is
+    retired today: the return must not also be four test edits.
+    """
+
+    @staticmethod
+    def _one_retired() -> tuple[dict[str, Any], str, dict[str, Any]]:
+        net = _networking()
+        key, node = next(iter(net["nodes"].items()))
+        node["retired"] = True
+        return net, key, node
+
+    def test_a_retired_homelab_node_produces_no_host(self) -> None:
+        net, key, node = self._one_retired()
+
+        hosts = _hosts(AnsibleGenerator()._build_inventory(net))
+
+        assert node.get("hostname", key) not in hosts, f"retired node {key} reached the inventory"
+
+    def test_clearing_the_flag_brings_the_host_back(self) -> None:
+        net, key, node = self._one_retired()
+        net["nodes"][key] = {**node, "retired": False}
+
+        hosts = _hosts(AnsibleGenerator()._build_inventory(net))
+
+        assert node.get("hostname", key) in hosts, "un-retiring must restore the host, or the flag is a one-way door"
+
+    def test_skipping_a_retired_homelab_node_is_announced(self, capsys) -> None:
+        net, key, _ = self._one_retired()
+
+        AnsibleGenerator()._build_inventory(net)
+
+        assert f"networking.nodes.{key} is retired" in "".join(capsys.readouterr()), (
+            "a retired node left the inventory silently"
+        )
+
+
+class TestSystemPythonInterpreter:
+    """A provision runs its modules as root with the node's own Python (#2802).
+
+    Discovery took the first interpreter the SSH user's PATH found, so on the
+    developer node a mise shim ran every module as root and hung in `poll()`.
+    """
+
+    @pytest.mark.parametrize("transport", sorted(VALID_TRANSPORTS))
+    def test_every_host_runs_the_system_python(self, transport: str) -> None:
+        inv = AnsibleGenerator()._build_inventory(_networking(), transport=transport)
+        assert inv["all"]["vars"]["ansible_python_interpreter"] == "/usr/bin/python3"
+        overrides = {
+            name: hv["ansible_python_interpreter"]
+            for name, hv in _hosts(inv).items()
+            if "ansible_python_interpreter" in hv
+        }
+        assert overrides == {}, f"hosts choosing another interpreter: {overrides}"

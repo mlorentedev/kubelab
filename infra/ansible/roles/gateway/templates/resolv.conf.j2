@@ -1,0 +1,5 @@
+# Managed by Ansible (gateway role). systemd-resolved is masked on the edge, and
+# upstream DNS stays plaintext: encrypted DNS fails before a portal login (ADR-075 D3).
+{% for server in gateway_dns_servers.split(',') %}
+nameserver {{ server }}
+{% endfor %}

@@ -436,9 +436,9 @@ def mutate_cmd(
 
     Exit codes: 0 the test failed against the mutant (the guard is red), 1 the test
     passed against it (the guard misses the mutant), 2 refused before mutating
-    (dirty tree, no unique match, or the test does not pass unmutated), 3 the test
-    did not run to a verdict against the mutant (a collection error is not the
-    guard going red).
+    (dirty tree, no unique match, or a test that fails unmutated, that pytest did
+    not collect, or that it did not run to a result), 3 the test did not run to a
+    verdict against the mutant (a collection error is not the guard going red).
     """
     import os
     import shlex
@@ -538,7 +538,7 @@ def lessons_index(
     """
     from toolkit.features import lessons_index as index
 
-    # Hazards first. `--fix` over a colliding or shrunken corpus tidies the
+    # Hazards first. `--fix` over a colliding, shrunken or unmerged corpus tidies the
     # indexes and reports success over a broken corpus — the exact trap
     # #1678 AC5 names. Refusing has to happen before anything is written.
     try:

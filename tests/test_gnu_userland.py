@@ -19,9 +19,17 @@ def test_base64_takes_the_gnu_wrap_flag() -> None:
     assert result.stdout == b"a3ViZWxhYg=="
 
 
-def test_chown_takes_long_options() -> None:
-    result = subprocess.run(["chown", "--version"], capture_output=True, text=True, check=False)
-    assert result.returncode == 0 and "GNU coreutils" in result.stdout, result.stderr
+def test_chown_takes_long_options(tmp_path) -> None:
+    """The scripts call `chown --reference`; BSD chown has no long options.
+
+    Checked by behavior, not by the `--version` banner: Ubuntu 25.10 ships uutils
+    coreutils, which takes the same options and does not print "GNU coreutils".
+    """
+    ref, target = tmp_path / "ref", tmp_path / "target"
+    ref.touch()
+    target.touch()
+    result = subprocess.run(["chown", f"--reference={ref}", str(target)], capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stderr
 
 
 def test_a_gnu_timeout_already_on_path_is_accepted(tmp_path, monkeypatch) -> None:
@@ -30,7 +38,7 @@ def test_a_gnu_timeout_already_on_path_is_accepted(tmp_path, monkeypatch) -> Non
 
     for tool in conftest.GNU_TOOLS:
         fake = tmp_path / tool
-        fake.write_text(f"#!/bin/sh\necho '{tool} (GNU coreutils) 9.5'\n")
+        fake.write_text(f"#!/bin/sh\necho '{tool} (GNU coreutils) 9.5'\n", encoding="utf-8")
         fake.chmod(0o755)
     monkeypatch.setattr(conftest.sys, "platform", "darwin")
     monkeypatch.setattr(conftest, "GNU_COREUTILS", (tmp_path / "absent",))
@@ -48,7 +56,7 @@ def test_a_gnu_timeout_alone_is_not_enough(tmp_path, monkeypatch) -> None:
     # PATH is the fakes only: on Linux /usr/bin/chown is GNU and would pass this.
     for tool, version in (("timeout", "timeout (GNU coreutils) 9.5"), ("chown", "usage: chown"), ("base64", "usage")):
         fake = tmp_path / tool
-        fake.write_text(f"#!/bin/sh\necho '{version}'\n")
+        fake.write_text(f"#!/bin/sh\necho '{version}'\n", encoding="utf-8")
         fake.chmod(0o755)
     monkeypatch.setattr(conftest.sys, "platform", "darwin")
     monkeypatch.setattr(conftest, "GNU_COREUTILS", (tmp_path / "absent",))
@@ -68,7 +76,7 @@ def test_gnubin_is_prepended_when_path_is_bsd(tmp_path, monkeypatch) -> None:
     for tool in conftest.GNU_TOOLS:
         for directory, output in ((gnubin, f"{tool} (GNU coreutils) 9.5"), (bsd, f"usage: {tool}")):
             fake = directory / tool
-            fake.write_text(f"#!/bin/sh\necho '{output}'\n")
+            fake.write_text(f"#!/bin/sh\necho '{output}'\n", encoding="utf-8")
             fake.chmod(0o755)
     monkeypatch.setattr(conftest.sys, "platform", "darwin")
     monkeypatch.setattr(conftest, "GNU_COREUTILS", (gnubin,))

@@ -1,0 +1,34 @@
+# Managed by Ansible (gateway role). The edge's kernel settings (ADR-075 D3).
+#
+# rp_filter enforces max(conf/all, the interface's own value), and Ubuntu ships
+# all=2, so all=0 is what lets the uplink be strict. An interface takes
+# conf/default when it is created, and follows later writes to it only until its
+# own key is set. eth0 and the AP are named so their value does not depend on
+# that order; tailscale0 and the Docker bridges come later and take the default.
+#
+# The uplink may not exist yet. Its keys carry "-" so a failed write is ignored,
+# and systemd's udev rule re-applies them when the device appears.
+net.ipv4.conf.all.rp_filter = 0
+net.ipv4.conf.default.rp_filter = 2
+net.ipv4.conf.{{ gateway_interface }}.rp_filter = 2
+net.ipv4.conf.{{ gateway_ap_interface }}.rp_filter = 2
+-net.ipv4.conf.{{ gateway_uplink_interface }}.rp_filter = 1
+-net.ipv6.conf.{{ gateway_uplink_interface }}.disable_ipv6 = 1
+
+# The kernel takes max(all, the interface's own) for both ARP keys, so `all`
+# reaches the uplink whenever it appears. No inside interface answers ARP for
+# an address on another one, so the stricter setting costs nothing there.
+net.ipv4.conf.all.arp_ignore = 1
+net.ipv4.conf.all.arp_announce = 2
+
+# send_redirects is on when all OR the interface says so, so every scope is set.
+{% for scope in ['all', 'default', gateway_interface, gateway_ap_interface, gateway_uplink_interface] %}
+{% set prefix = '-' if scope == gateway_uplink_interface else '' %}
+{% for key in ['accept_redirects', 'send_redirects', 'accept_source_route'] %}
+{{ prefix }}net.ipv4.conf.{{ scope }}.{{ key }} = 0
+{% endfor %}
+{% endfor %}
+{% for scope in ['all', 'default'] %}
+net.ipv6.conf.{{ scope }}.accept_redirects = 0
+net.ipv6.conf.{{ scope }}.accept_source_route = 0
+{% endfor %}

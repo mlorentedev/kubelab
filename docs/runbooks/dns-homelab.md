@@ -72,7 +72,7 @@ make deploy TARGET=dns ENV=prod CHECK=1   # dry run: read the diff first
 make deploy TARGET=dns ENV=prod           # render, restart what changed, verify
 ```
 
-`make provision NODE=rpi4 ENV=prod` runs the same role as part of the full node provision. The two must agree. Never copy files to the node by hand, and never keep the stack under `~`: a remote `~` is a different directory with and without `become` (lesson-519).
+`make provision NODE=rpi4 ENV=prod BOOTSTRAP=1` runs the same role as part of the full node provision, from the switch, since the full provision also applies the `gateway` role. The two must agree. Never copy files to the node by hand, and never keep the stack under `~`: a remote `~` is a different directory with and without `become` (lesson-519).
 
 **Port mapping**:
 - Pi-hole: port 53 (DNS) + port 80 (admin UI)
@@ -225,9 +225,9 @@ dig vpn.kubelab.live +short
 
 ## Troubleshooting
 
-### CoreDNS unhealthy
+### CoreDNS shows no health status
 
-The default CoreDNS Docker image does not include `dig`. The healthcheck uses `dig` which fails. This is cosmetic — CoreDNS still works. Fix by using a wget-based healthcheck or ignoring the status.
+The CoreDNS image is distroless, with no shell and no `dig`, so the compose file declares no healthcheck and `docker ps` shows the container as plain `Up`. Two signals stand in for it. Pi-hole's healthcheck resolves a staging name through CoreDNS, so an unhealthy Pi-hole with CoreDNS running points at the hop between them. CoreDNS's `health` plugin is published on the edge's loopback only (`127.0.0.1:8080`), because a bind to a node address that is missing at start takes the whole container's ports with it (#2732). `make edge-boot-check` reads both containers.
 
 ### Port 5353 already in use
 
@@ -268,14 +268,14 @@ sudo tailscale down && sudo tailscale up --login-server=https://vpn.kubelab.live
 
 **Automatic fix** (already deployed):
 1. **Corefile**: `vpn.kubelab.live` resolves to public IP `162.55.57.175` (not Tailscale IP)
-2. **`/etc/hosts` on RPi4**: `162.55.57.175 vpn.kubelab.live` as permanent fallback
-3. **Systemd watchdog**: `tailscale-watchdog.timer` auto-reconnects every 5 min
+2. **`/etc/hosts` on RPi4**: `162.55.57.175 vpn.kubelab.live` as permanent fallback, in the `dns_resilience` block. cloud-init is off on the edge (`base_system_disable_cloud_init`, on in `provision-rpi4.yml`), so a reboot no longer rewrites the file and drops the block (#2777)
+3. **Systemd watchdog**: `tailscale-watchdog.timer` runs `tailscale up` every 5 min when the node is stopped or logged out. The `tailscale` role renders it with its own flags (`tailscale_watchdog`, on in `provision-rpi4.yml`), bounded so a run with no route out gives up after 60 s instead of holding the boot (#2675).
 
-**Manual fix** (if all else fails):
+**Manual fix** (if all else fails): `make headscale-rejoin NODE=rpi4` registers the node with every flag its play declares and a single-use key. By hand:
 ```bash
 # SSH to RPi4 via LAN (172.16.1.1)
 echo "162.55.57.175 vpn.kubelab.live" | sudo tee -a /etc/hosts
-sudo tailscale up --login-server=https://vpn.kubelab.live --accept-dns=false --advertise-routes=172.16.1.0/24
+sudo tailscale up --reset --login-server=https://vpn.kubelab.live --accept-dns=false --accept-routes=false --advertise-routes=172.16.1.0/24
 # After connected, remove temporary entry (if not using permanent /etc/hosts)
 sudo sed -i '/162.55.57.175 vpn.kubelab.live/d' /etc/hosts
 ```
@@ -300,8 +300,8 @@ All changes below survive reboot:
 | Headscale split DNS | In `/opt/headscale/config/config.yaml` | File on disk |
 | RPi4 `--accept-dns=false` | Tailscale remembers flags | Persists across restarts |
 | RPi4 resolv.conf | `chattr +i` protected | Immutable |
-| RPi4 `/etc/hosts` vpn entry | `162.55.57.175 vpn.kubelab.live` | Bootstrap fallback |
-| RPi4 Tailscale watchdog | `tailscale-watchdog.timer` (systemd, enabled) | Auto-reconnects every 5 min |
+| RPi4 `/etc/hosts` vpn entry | `162.55.57.175 vpn.kubelab.live`, in the `dns_resilience` block | Survives a reboot because cloud-init is off on the edge (`/etc/cloud/cloud-init.disabled`, #2777) |
+| RPi4 Tailscale watchdog | `tailscale-watchdog.timer`, rendered by the `tailscale` role | Re-runs `tailscale up` every 5 min when stopped or logged out |
 
 ## Files in repo
 

@@ -61,17 +61,15 @@ services:
       # DOCKER-USER holds no rule for it, so a published port is governed by its
       # bind address and nothing else (#959).
       #
-      # Bound to the LAN address, NOT the Tailscale one. That distinction cost
-      # ninety minutes of staging DNS on 2026-08-22: on boot Docker restores
-      # containers under `restart: unless-stopped` and got there before
-      # tailscaled had assigned 100.64.0.10. The bind failed, and a failed bind
-      # takes the container's WHOLE port publication with it — including
-      # `5353:53` above, which is how Pi-hole reaches CoreDNS. The container ran,
-      # `docker inspect` still listed the bindings, and nothing served.
-      #
-      # The LAN address is on a physical interface the network stack configures
-      # before Docker starts, so there is no race to lose. #959's protection is
-      # kept; only the boot-order dependency is dropped.
+      # Bound to loopback, never to a node address. A bind that fails takes the
+      # container's WHOLE port publication with it, including `5353:53` above,
+      # which is how Pi-hole reaches CoreDNS. Both node addresses have failed it:
+      # - The Tailscale one, on 2026-08-22: Docker restored the container before
+      #   tailscaled had assigned it, and staging DNS was down for ninety minutes.
+      # - The LAN one, on 2026-10-29: with the switch cable out, networkd had not
+      #   configured it (#2732, T4 of the edge's hard-reset test).
+      # Loopback exists before Docker starts. Nothing probes this port from
+      # another host, so the bind costs no consumer.
       - "{{ coredns_health_bind_ip }}:{{ coredns_health_port }}:8080/tcp"
     volumes:
       - ./Corefile:/etc/coredns/Corefile:ro
@@ -86,7 +84,8 @@ services:
     # CoreDNS outage this was meant to catch would arrive at an indicator that
     # was already red. Docker healthchecks run *inside* the container, so no
     # in-container probe is possible here; the signal moves out instead, to the
-    # `health`/`ready` endpoints published above.
+    # `health` endpoint published above and to Pi-hole's check, which resolves
+    # through CoreDNS.
 
 volumes:
   pihole_data:

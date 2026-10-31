@@ -24,7 +24,7 @@ from toolkit.features.product_render import SNAPSHOT_DIR
 
 
 def _tables() -> dict[str, list[dict[str, Any]]]:
-    config = yaml.safe_load(platform_manifest.COMMON_YAML_PATH.read_text())
+    config = yaml.safe_load(platform_manifest.COMMON_YAML_PATH.read_text(encoding="utf-8"))
     staging, prod, _shared = platform_manifest.build_service_tables(config)
     return {"staging": staging, "prod": prod}
 
@@ -57,7 +57,7 @@ def test_there_is_a_contract_snapshot_to_compare() -> None:
 @pytest.mark.parametrize("env", ["staging", "prod"])
 @pytest.mark.parametrize("snapshot", sorted(SNAPSHOT_DIR.glob("*.yaml")), ids=lambda path: path.stem)
 def test_a_product_tile_links_to_its_contract_hostname(snapshot: pathlib.Path, env: str) -> None:
-    host = yaml.safe_load(snapshot.read_text())["hostnames"][env]
+    host = yaml.safe_load(snapshot.read_text(encoding="utf-8"))["hostnames"][env]
     tile = _tile(_tables()[env], snapshot.stem)
 
     assert tile is not None, f"{env}: no tile for {snapshot.stem}"

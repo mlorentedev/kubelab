@@ -1,6 +1,8 @@
 ---
 coredns_image: "coredns/coredns:1.12.1"
-pihole_image: "pihole/pihole:latest"
+# The LAN resolver: a deploy pulls this, so a rolling tag would upgrade it unasked.
+# The dev stack (infra/stacks/services/core/pihole) runs the same tag; bump both.
+pihole_image: "pihole/pihole:2026.10.0"
 # Absolute, like every other service under /opt. A remote `~` is the home of
 # whoever the task runs as, so `~/coredns` was /home/<user>/coredns from
 # deploy-dns.yml and /root/coredns from provision-rpi4.yml: one stack, two
@@ -16,8 +18,9 @@ coredns_legacy_dirs:
   - /root/coredns
   - "/home/{{ common.networking.ssh_users.homelab }}/coredns"
 coredns_port: 5353
-# CoreDNS `health` plugin, published for external probing because the image is
-# distroless and cannot be probed from inside. `ready` (:8181) stays unpublished.
+# CoreDNS `health` plugin, published because the image is distroless and cannot
+# be probed from inside; it answers on the host only, at coredns_health_bind_ip.
+# `ready` (:8181) stays unpublished.
 coredns_health_port: 8080
 pihole_port: 53
 pihole_web_port: 80
@@ -37,11 +40,10 @@ base_domain: "{{ common.global.base_domain }}"
 staging_domain: "staging.{{ common.global.base_domain }}"
 staging_zones: "{{ common.networking.staging_zones }}"
 vps_public_ip: "{{ common.networking.vps.public_ip }}"
-# Where CoreDNS binds its health port. The LAN address deliberately, not
-# `node_ips.rpi4`: Docker restores containers on boot before tailscaled has
-# assigned the Tailscale address, and a failed bind drops the whole
-# container's port publication. See the comment in docker-compose.yml.j2.
-coredns_health_bind_ip: "{{ common.networking.nodes.rpi4.lan_ip }}"
+# Where CoreDNS binds its health port: loopback, because a node address may not
+# exist when Docker starts, and a failed bind drops the whole container's port
+# publication. See the comment in docker-compose.yml.j2.
+coredns_health_bind_ip: "127.0.0.1"
 node_ips:
   vps: "{{ common.networking.vps.tailscale_ip }}"
   ace1: "{{ common.networking.nodes.ace1.tailscale_ip }}"

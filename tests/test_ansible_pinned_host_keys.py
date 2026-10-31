@@ -141,7 +141,7 @@ class TestRunRefusesWithoutThePinnedFile:
         from toolkit.cli import infra
 
         (tmp_path / "playbooks").mkdir()
-        (tmp_path / "playbooks" / "site.yml").write_text("---\n")
+        (tmp_path / "playbooks" / "site.yml").write_text("---\n", encoding="utf-8")
         (tmp_path / "generated" / "prod").mkdir(parents=True)
         monkeypatch.setattr(infra, "settings", SimpleNamespace(ansible_dir=tmp_path))
         return tmp_path
@@ -151,7 +151,7 @@ class TestRunRefusesWithoutThePinnedFile:
         if as_list:
             args = ["-o", "StrictHostKeyChecking=yes", "-o", f"UserKnownHostsFile={known_hosts}"]
         inv = {"all": {"vars": {"ansible_ssh_common_args": args}, "children": {}}}
-        (ansible_dir / "generated" / "prod" / "hosts.yml").write_text(yaml.safe_dump(inv))
+        (ansible_dir / "generated" / "prod" / "hosts.yml").write_text(yaml.safe_dump(inv), encoding="utf-8")
 
     def _run(self, monkeypatch: pytest.MonkeyPatch) -> list[str]:
         from types import SimpleNamespace
@@ -197,7 +197,7 @@ class TestRunRefusesWithoutThePinnedFile:
         self, ansible_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, as_list: bool
     ) -> None:
         pinned = tmp_path / "known_hosts_pinned"
-        pinned.write_text("")
+        pinned.write_text("", encoding="utf-8")
         self._inventory(ansible_dir, pinned, as_list=as_list)
         ran = self._run(monkeypatch)
         assert len(ran) == 1 and ran[0].startswith("ansible-playbook")

@@ -55,7 +55,7 @@ help:
 	@echo ""
 	@echo "Infrastructure (Ansible):"
 	@echo "  make provision NODE=x ENV=y  Provision a node (NODE=ace1|ace2|aws1|bee|rpi3|rpi4|jetson|vps, ENV=staging|prod|hub) [TAGS=tag1,tag2] [EXTRA='k=v']"
-	@echo "  make maintain NODE=x         Disk cleanup (NODE=aws1|ace1|ace2|beelink|vps|all) [TIMER=1] [TAGS=tag1,tag2]"
+	@echo "  make maintain NODE=x         Disk cleanup (NODE=gcp1|ace1|ace2|beelink|vps|rpi3|rpi4|all) [TIMER=1] [TAGS=tag1,tag2]"
 	@echo "  make reboot NODE=x ENV=y     Reboot a node only if it has a pending reboot, one host at a time [EXTRA='reboot_force=true reboot_allow_vps=true'] [CHECK=1]"
 	@echo "  make node-reclaim NODE=x     Remove orphaned buildx builders + CI job volumes over SSH [APPLY=1] (works at 0 bytes free, where Ansible cannot)"
 	@echo "  make deploy TARGET=x ENV=y  Deploy services (TARGET=vps|dns|k3s|harden-nodes)"
@@ -183,10 +183,10 @@ setup-certs:
 setup-ansible:
 	@if command -v ansible-galaxy >/dev/null 2>&1; then \
 		echo "Installing Ansible Galaxy collections..."; \
-		ansible-galaxy collection install -r infra/ansible/requirements.yml >/dev/null 2>&1; \
+		ansible-galaxy collection install -r infra/ansible/requirements.yml && \
 		echo "✓ Ansible collections installed"; \
 	else \
-		echo "⚠ ansible-galaxy not found — skipping Ansible setup (install with: pip install ansible)"; \
+		echo "⚠ ansible-galaxy not found — skipping Ansible setup (install with: pip install ansible-core)"; \
 	fi
 
 .PHONY: regen-certs
@@ -229,10 +229,10 @@ setup-local-dns:
 # Idempotent: re-running in an already-bootstrapped worktree is ~1s no-op. A venv
 # whose scripts name another directory (a renamed worktree with an in-project
 # `.venv`) is not ready: it is rebuilt, and restored if the rebuild fails.
-# `poetry.lock` is gitignored, so a long-lived checkout keeps the lock of the
-# day it was first installed. Once pyproject.toml moves on (a new dependency),
-# `poetry install` refuses the stale lock and the checkout cannot import what
-# master now needs. Relock only when stale; CI resolves fresh the same way.
+# `poetry.lock` is committed (TOOL-125), so a checkout installs what CI installs.
+# A lock can still trail pyproject.toml in a branch that edits a dependency, and
+# `poetry install` refuses it: relock only when stale, and the lock's diff is
+# then the change to commit beside pyproject.toml.
 # Discovered as TOOL-010 after Wave 1 DT-010 PR hit `make sync-homepage`
 # failures in a fresh worktree (no .venv -> toolkit package not importable).
 .PHONY: worktree-init
@@ -1042,30 +1042,13 @@ provision:
 	# invocation, which is exactly what these targets exist to prevent.
 	$(eval _EXTRA := $(if $(EXTRA),--extra-vars "$(EXTRA)",))
 	# `ansible run` generates the inventory it runs against (TOOL-090), in the
-	# mode it is given: BOOTSTRAP (LAN IPs) and TRANSPORT reach the generator
-	# through run's own flags, and a failed generation stops the playbook. The
-	# restore line after a bootstrap/bastion run is a generate on its own: it
-	# puts the mesh inventory back on disk for anything that reads the file
-	# without running (a raw ansible-playbook, or `run --skip-generate`). It runs
-	# either way, so it is `;`. The exit is the run's status when the run failed,
-	# else the restore's: a failed restore leaves the bootstrap inventory on disk,
-	# and a success would hide that.
-	@if [ -n "$(BOOTSTRAP)" ] || [ -n "$(TRANSPORT)" ]; then \
-		echo "=== Inventory for this run: $(if $(BOOTSTRAP),LAN IPs,mesh)$(if $(TRANSPORT), via $(TRANSPORT),) ==="; \
-		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_BOOT) $(_TRANSPORT) $(_K) $(_TAGS) $(_CHECK) $(_EXTRA) $(_FRESH); \
-		_exit=$$?; \
-		echo "=== Restoring: inventory with mesh Tailscale IPs ==="; \
-		$(TOOLKIT) infra ansible generate --env $(_ENV); \
-		_restore=$$?; \
-		[ $$_exit -ne 0 ] && exit $$_exit; \
-		exit $$_restore; \
-	else \
-		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_K) $(_TAGS) $(_CHECK) $(_EXTRA) $(_FRESH); \
-	fi
+	# mode it is given, and after a BOOTSTRAP or TRANSPORT run puts the mesh one
+	# back on disk itself, failed run or not (see `ansible_run`).
+	@$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_BOOT) $(_TRANSPORT) $(_K) $(_TAGS) $(_CHECK) $(_EXTRA) $(_FRESH)
 
 .PHONY: maintain
 maintain:
-	@test -n "$(NODE)" || (echo "Usage: make maintain NODE=aws1|ace1|ace2|beelink|vps|rpi3|rpi4|all [TIMER=1] [TAGS=tag1,tag2] [CHECK=1]" && exit 1)
+	@test -n "$(NODE)" || (echo "Usage: make maintain NODE=gcp1|ace1|ace2|beelink|vps|rpi3|rpi4|all [TIMER=1] [TAGS=tag1,tag2] [CHECK=1]" && exit 1)
 	$(eval _ENV := $(or $(filter staging prod,$(ENV)),staging))
 	$(eval _TIMER := $(if $(TIMER),--extra-vars "install_timer=true",))
 	$(eval _TAGS := $(if $(TAGS),--tags $(TAGS),))
@@ -1079,13 +1062,17 @@ maintain:
 # Reboot the nodes `make maintain` reported as needing it. The playbook skips
 # hosts with no pending reboot, takes one host at a time, and refuses the VPS
 # (Headscale) unless EXTRA='reboot_allow_vps=true'. No inline logic here.
+# BOOTSTRAP=1 reaches a node by its LAN IP, for one that is off the tailnet:
+# the edge with its uplink down is the case it was added for.
 .PHONY: reboot
 reboot:
-	@test -n "$(NODE)" || (echo "Usage: make reboot NODE=ace1|ace2|beelink|gcp1|vps|rpi3|rpi4 [ENV=staging|prod|hub] [EXTRA='reboot_force=true reboot_allow_vps=true'] [CHECK=1]" && exit 1)
+	@test -n "$(NODE)" || (echo "Usage: make reboot NODE=ace1|ace2|beelink|gcp1|vps|rpi3|rpi4 [ENV=staging|prod|hub] [BOOTSTRAP=1] [TRANSPORT=bastion] [EXTRA='reboot_force=true reboot_allow_vps=true'] [CHECK=1]" && exit 1)
 	$(eval _ENV := $(or $(filter staging prod hub,$(ENV)),staging))
+	$(eval _BOOT := $(if $(BOOTSTRAP),--bootstrap,))
+	$(eval _TRANSPORT := $(if $(TRANSPORT),--transport $(TRANSPORT),))
 	$(eval _EXTRA := $(if $(EXTRA),--extra-vars "$(EXTRA)",))
 	$(eval _CHECK := $(if $(CHECK),--check,))
-	@$(TOOLKIT) infra ansible run -p reboot -e $(_ENV) -l $(NODE) $(_EXTRA) $(_CHECK)
+	@$(TOOLKIT) infra ansible run -p reboot -e $(_ENV) -l $(NODE) $(_BOOT) $(_TRANSPORT) $(_EXTRA) $(_CHECK)
 
 # Emergency reclaim for the residue `make maintain` structurally cannot reach
 # (OPS-024/#1657). Two reasons it is a separate path and not a tag on that one:
@@ -1126,7 +1113,7 @@ node-reclaim: ## Remove orphaned buildx builders and CI job volumes over SSH (AP
 # documented and unreachable.
 .PHONY: maintain-notify-test
 maintain-notify-test:
-	@test -n "$(NODE)" || (echo "Usage: make maintain-notify-test NODE=aws1|ace1|ace2|beelink|vps|rpi3|rpi4|all [ENV=staging|prod|hub] [EXTRA='notify_test_unit=<unit>']" && exit 1)
+	@test -n "$(NODE)" || (echo "Usage: make maintain-notify-test NODE=gcp1|ace1|ace2|beelink|vps|rpi3|rpi4|all [ENV=staging|prod|hub] [EXTRA='notify_test_unit=<unit>']" && exit 1)
 	$(eval _ENV := $(or $(filter staging prod hub,$(ENV)),staging))
 	$(eval _EXTRA := $(if $(EXTRA),--extra-vars "$(EXTRA)",))
 	@if [ "$(NODE)" = "all" ]; then \
@@ -1149,6 +1136,15 @@ headscale-recycle-stale:
 	$(eval _APPLY := $(if $(APPLY),--apply,))
 	@$(TOOLKIT) infra headscale recycle-stale --name $(NODE) $(_APPLY)
 
+# Put a node back on the mesh (NET-005 task 32). The toolkit runs the node's own
+# play, tailscale role only, over the LAN, and the role mints a single-use key on
+# Headscale only when the node is off the mesh. ENV defaults to prod, where the
+# edge is provisioned.
+.PHONY: headscale-rejoin
+headscale-rejoin: ## Rejoin a node to the mesh with a single-use key (NODE=rpi4)
+	@test -n "$(NODE)" || (echo "Usage: make headscale-rejoin NODE=<node> [ENV=prod|staging]" && exit 1)
+	@$(TOOLKIT) infra headscale rejoin --node $(NODE) --env $(or $(filter staging prod,$(ENV)),prod)
+
 # Disk ceiling on a live node (GCP-001 AC8). Random 4K, `--direct=1`, bounded
 # file, unconditional cleanup — the reasoning is in the playbook's header, where
 # it stays next to the flags it justifies.
@@ -1166,12 +1162,14 @@ benchmark-disk:
 
 .PHONY: deploy
 deploy:
-	@test -n "$(TARGET)" || (echo "Usage: make deploy TARGET=vps|dns|k3s|harden-nodes ENV=staging|prod [CHECK=1] [FORCE=1]" && exit 1)
-	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make deploy TARGET=vps|dns|k3s|harden-nodes ENV=staging|prod [CHECK=1] [FORCE=1]" && exit 1)
+	@test -n "$(TARGET)" || (echo "Usage: make deploy TARGET=vps|dns|k3s|harden-nodes ENV=staging|prod [CHECK=1] [TAGS=tag1,tag2] [FORCE=1]" && exit 1)
+	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make deploy TARGET=vps|dns|k3s|harden-nodes ENV=staging|prod [CHECK=1] [TAGS=tag1,tag2] [FORCE=1]" && exit 1)
 	$(eval _CHECK := $(if $(CHECK),--check,))
+	# A play builds what its roles read under any TAGS: tests/test_pre_task_facts.py (#2817).
+	$(eval _TAGS := $(if $(TAGS),--tags $(TAGS),))
 	# Refuse a checkout behind origin/master on what Ansible renders; only FORCE=1 overrides, FORCE=0 does not (OPS-042).
 	$(eval _FRESH := --require-fresh $(if $(filter 1,$(FORCE)),--force,))
-	@$(TOOLKIT) infra ansible run -p deploy-$(TARGET) -e $(ENV) $(_CHECK) $(_FRESH)
+	@$(TOOLKIT) infra ansible run -p deploy-$(TARGET) -e $(ENV) $(_CHECK) $(_TAGS) $(_FRESH)
 
 # Run ONE node-path backup now, rather than waiting for its timer (BACKUP-044).
 #
@@ -1934,6 +1932,37 @@ alerts:
 	$(eval _ENV := $(if $(filter staging prod hub,$(ENV)),$(ENV),prod))
 	@$(TOOLKIT) obs alerts --env $(_ENV)
 
+# Say whether the lab edge's uplink is up, behind a portal, or dead (NET-005 AC5).
+# Reaches the edge over its LAN address, so it answers from the lab switch or the
+# lab Wi-Fi while the tailnet is down with the uplink. make exits 2 for any failure;
+# `toolkit infra edge status` keeps the edge's code (0 up, 2 portal, 3 dead, 4 unknown).
+.PHONY: edge-status
+edge-status: ## Report the lab edge's uplink: up, portal or dead
+	@$(TOOLKIT) infra edge status
+
+# Say whether a boot brought back everything the edge serves: the hard-reset test
+# in docs/runbooks/lab-edge.md. CASE names what the case took away (no-uplink,
+# no-lan); VIA=tailnet reaches the edge when the LAN is what was taken away.
+.PHONY: edge-boot-check
+edge-boot-check: ## Check what the edge brought back after a boot [CASE=no-uplink|no-lan] [VIA=tailnet]
+	@$(TOOLKIT) infra edge boot-check $(if $(CASE),--case $(CASE)) $(if $(VIA),--via $(VIA))
+
+# Say whether the uplink adapter has held 48 hours of this boot with no reset, the
+# soak in NET-005 B12. Reads the edge's kern.log over the LAN, since its journal
+# holds about 8 hours (#2807). Exits 0 passed, 1 reset, 2 in progress, 3 cannot tell.
+.PHONY: edge-soak
+edge-soak: ## Read the edge's uplink soak: 48 h of this boot with no adapter reset
+	@$(TOOLKIT) infra edge soak
+
+# Join this laptop to the lab LAN, the edge's management path (NET-005 AC11).
+# ROUTE=1 makes the edge the default route, for the portal login with the
+# laptop's own Wi-Fi off; STATIC=1 holds a fixed address when the edge serves
+# no DHCP (a fresh SD card, a provision that cut the LAN); REMOVE=1 deletes the
+# profile; IFACE names the adapter when there is more than one.
+.PHONY: edge-lan-link
+edge-lan-link: ## Join this laptop to the lab LAN [ROUTE=1] [STATIC=1] [REMOVE=1] [IFACE=<device>]
+	@$(TOOLKIT) infra edge lan-link $(if $(filter 1,$(ROUTE)),--route) $(if $(filter 1,$(STATIC)),--static) $(if $(filter 1,$(REMOVE)),--remove) $(if $(IFACE),--interface $(IFACE))
+
 # Run a CronJob once now, print its log and delete the Job (TOOL-084). For the
 # watchers (`r2-backup-watcher`, ...) the log IS the verdict, so this is how to
 # re-check without waiting for the schedule. No default ENV: an allow-list, not
@@ -2007,16 +2036,18 @@ test:
 # commit/mutate/checkout line that lost work when a hook refused the commit
 # (lesson-480). Refuses a dirty tree; restores the file from its own bytes.
 # FROM and TO reach the toolkit through the environment, so quotes need no
-# escaping; write a literal `$` as `$$`.
+# escaping; write a literal `$` as `$$`. An empty TO deletes FROM: click reads an
+# empty envvar as unset, so a TO from the command line or the environment, the two
+# origins make exports to the shell, is passed as `--to` too (#2839).
 #   make mutate FILE=toolkit/x.py FROM='> 0' TO='>= 0' TEST=tests/test_x.py
 # Exit 0 only when the test went red. make reports every other outcome as its own
 # exit 2; the toolkit's code is the N in `Error N`: 1 = stayed green, 2 = refused
-# (dirty tree, no unique match, or TEST does not pass unmutated: a red baseline
-# certifies every mutant as red), 3 = no verdict (pytest errored or collected
-# nothing against the mutant).
+# (dirty tree, no unique match, or TEST unmutated fails, collects nothing or errors
+# before a result: a red baseline certifies every mutant as red), 3 = no verdict
+# (pytest errored or collected nothing against the mutant).
 .PHONY: mutate
 mutate:
-	@$(TOOLKIT) tools mutate --file "$(FILE)" --test "$(TEST)"
+	@$(TOOLKIT) tools mutate --file "$(FILE)" --test "$(TEST)" $(if $(filter command line environment,$(origin TO)),--to "$$TO")
 
 .PHONY: test-fast
 test-fast:

@@ -132,7 +132,7 @@ def _process_spec(
         return False
 
     try:
-        template_text = template_full.read_text()
+        template_text = template_full.read_text(encoding="utf-8")
     except OSError as exc:
         logger.error(f"  Failed to read template '{template_full}': {exc}")
         return False
@@ -146,7 +146,7 @@ def _process_spec(
     audit_path = project_root / "infra/k8s/overlays" / env / "middlewares/.rendered" / f"{spec.name}.yaml"
     try:
         audit_path.parent.mkdir(parents=True, exist_ok=True)
-        audit_path.write_text(rendered)
+        audit_path.write_text(rendered, encoding="utf-8")
     except OSError as exc:
         logger.error(f"  Failed to write audit copy '{audit_path}': {exc}")
         return False

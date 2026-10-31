@@ -255,7 +255,7 @@ class TestKubectlServicePortForward:
 
     def test_yields_local_port_and_terminates_on_exit(self, tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
         fake_kubeconfig = tmp_path / "kubelab-staging-config"
-        fake_kubeconfig.write_text("")
+        fake_kubeconfig.write_text("", encoding="utf-8")
         monkeypatch.setattr(obs, "_kubeconfig_path", lambda env: fake_kubeconfig)
         mock_proc = self._mock_proc()
         monkeypatch.setattr(subprocess, "Popen", lambda *a, **kw: mock_proc)
@@ -269,7 +269,7 @@ class TestKubectlServicePortForward:
 
     def test_process_exiting_early_raises_before_yielding(self, tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
         fake_kubeconfig = tmp_path / "kubelab-staging-config"
-        fake_kubeconfig.write_text("")
+        fake_kubeconfig.write_text("", encoding="utf-8")
         monkeypatch.setattr(obs, "_kubeconfig_path", lambda env: fake_kubeconfig)
         mock_proc = self._mock_proc()
         mock_proc.poll.return_value = 1  # exited immediately, e.g. "svc/grafana" not found
@@ -293,7 +293,7 @@ class TestReadClusterSecretKey:
 
     def test_decodes_the_base64_value_on_success(self, tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
         fake_kubeconfig = tmp_path / "kubelab-staging-config"
-        fake_kubeconfig.write_text("")
+        fake_kubeconfig.write_text("", encoding="utf-8")
         monkeypatch.setattr(obs, "_kubeconfig_path", lambda env: fake_kubeconfig)
         encoded = base64.b64encode(b"glsa_secrettoken").decode()
         monkeypatch.setattr(subprocess, "run", lambda *a, **kw: MagicMock(returncode=0, stdout=encoded))
@@ -301,7 +301,7 @@ class TestReadClusterSecretKey:
 
     def test_nonzero_exit_returns_none(self, tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
         fake_kubeconfig = tmp_path / "kubelab-staging-config"
-        fake_kubeconfig.write_text("")
+        fake_kubeconfig.write_text("", encoding="utf-8")
         monkeypatch.setattr(obs, "_kubeconfig_path", lambda env: fake_kubeconfig)
         monkeypatch.setattr(subprocess, "run", lambda *a, **kw: MagicMock(returncode=1, stdout=""))
         assert read_cluster_secret_key("staging", "grafana-admin", "alerts-ro-token") is None

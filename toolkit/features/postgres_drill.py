@@ -67,7 +67,7 @@ def _default_run(
         # By default stderr goes to the file too: psql reports a failed statement
         # on stderr, and its text can carry row data. restic's stderr carries no
         # rows and is returned instead, so it cannot corrupt the dump it writes.
-        with open(stdout_path, "w", opener=lambda p, f: os.open(p, f, 0o600)) as sink:
+        with open(stdout_path, "w", encoding="utf-8", opener=lambda p, f: os.open(p, f, 0o600)) as sink:
             stderr = subprocess.STDOUT if stderr_to_file else subprocess.PIPE
             to_file = subprocess.run(argv, stdout=sink, stderr=stderr, env=merged, check=False)
         err = "" if stderr_to_file else to_file.stderr.decode("utf-8", "replace")
@@ -295,7 +295,7 @@ def _load_dump(run: Run, name: str, dump: Path, workdir: Path) -> bool:
         ],
         stdout_path=str(log),
     )
-    errors = [line for line in log.read_text(errors="replace").splitlines() if "ERROR:" in line]
+    errors = [line for line in log.read_text(errors="replace", encoding="utf-8").splitlines() if "ERROR:" in line]
     failed = [line for line in errors if not ("role " in line and "already exists" in line)]
     if failed:
         # Counted, never printed: a failed statement's text can carry row data.
@@ -309,7 +309,7 @@ def staging_dir(project_root: Path) -> str:
     import yaml
 
     defaults = project_root / "infra/ansible/roles/node_backup/defaults/main.yml"
-    return str(yaml.safe_load(defaults.read_text())["node_backup_staging_dir"])
+    return str(yaml.safe_load(defaults.read_text(encoding="utf-8"))["node_backup_staging_dir"])
 
 
 def drill_postgres(env: str = "prod", project_root: Optional[Path] = None) -> bool:

@@ -32,8 +32,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
+from jinja2 import ChainableUndefined
+
 from tests.ansible_jinja import ansible_env
-from jinja2 import ChainableUndefined, Environment, FileSystemLoader
 
 REPO = Path(__file__).resolve().parent.parent
 ROLE = REPO / "infra/ansible/roles/beelink_services"
@@ -46,7 +47,7 @@ def _beelink_tailscale_ip() -> str:
     A test that hardcodes an address keeps passing after the address changes,
     which makes it a slower version of no test at all. Raised in review of #1399.
     """
-    common = yaml.safe_load(COMMON.read_text())
+    common = yaml.safe_load(COMMON.read_text(encoding="utf-8"))
     return common["networking"]["nodes"]["beelink"]["tailscale_ip"]
 
 
@@ -60,14 +61,19 @@ def _beelink_tailscale_ip() -> str:
 #: variable anywhere in the stack would break it for no security reason.
 _EXTERNAL = dict(
     ansible_managed="Ansible managed",
-    gitea_image="gitea/gitea:1.27.3",
     gitea_domain="gitea.kubelab.live",
 )
 
 
 def _vars() -> dict:
-    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text()) or {}
-    return {**defaults, **_EXTERNAL, "tailscale_ip": _beelink_tailscale_ip()}
+    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8")) or {}
+    common = yaml.safe_load(COMMON.read_text(encoding="utf-8"))
+    return {
+        **defaults,
+        **_EXTERNAL,
+        "gitea_image": common["apps"]["services"]["core"]["gitea"]["image"],
+        "tailscale_ip": _beelink_tailscale_ip(),
+    }
 
 
 def _gitea_environment() -> dict[str, str]:
@@ -123,7 +129,7 @@ def test_the_setting_is_a_value_and_not_only_a_comment():
     comment and the value beneath it AGREED, and both were wrong about the
     client. Prose is never the evidence.
     """
-    raw = (ROLE / "templates/compose.yml.j2").read_text()
+    raw = (ROLE / "templates/compose.yml.j2").read_text(encoding="utf-8")
     assert "REQUIRE_SIGNIN_VIEW" in raw
     mentions = raw.count("REQUIRE_SIGNIN_VIEW")
     assert "GITEA__service__REQUIRE_SIGNIN_VIEW" in _gitea_environment(), (
@@ -181,7 +187,7 @@ def test_the_healthcheck_does_not_use_an_endpoint_the_hardening_closes():
         f"the gitea healthcheck is {test_cmd!r}, which REQUIRE_SIGNIN_VIEW closes — "
         "the container would report unhealthy forever"
     )
-    raw = (ROLE / "templates/compose.yml.j2").read_text()
+    raw = (ROLE / "templates/compose.yml.j2").read_text(encoding="utf-8")
     assert re.search(r"test:.*gitea_health_path", raw), (
         "the healthcheck must interpolate gitea_health_path rather than repeat a literal path — "
         "a second copy of the value is what diverged in the first place"
@@ -214,7 +220,7 @@ def test_no_live_copy_of_the_health_path_survives():
     ]
     offenders = []
     for path in role_files:
-        for lineno, line in enumerate(path.read_text().splitlines(), 1):
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             stripped = line.strip()
             if stripped.startswith("#") or stripped.startswith("//"):
                 continue  # prose may cite the old path; only live code counts

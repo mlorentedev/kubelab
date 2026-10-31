@@ -23,11 +23,27 @@ from jinja2 import Environment, FileSystemLoader
 
 REPO = Path(__file__).resolve().parents[2]
 TEMPLATES = REPO / "infra/ansible/roles/headscale/templates"
+ROLE_DEFAULTS = REPO / "infra/ansible/roles/headscale/defaults/main.yml"
 COMMON_YAML = REPO / "infra/config/values/common.yaml"
+
+# A synthetic tenant segment (VPN-ACL-014). Real ones live in SOPS; this one only
+# lets the CI gate prove the segment syntax parses on the pinned Headscale.
+EXAMPLE_SEGMENT: dict[str, Any] = {
+    "owner": "tenant-example",
+    "hosts_tag": "tag:tenant-example-hosts",
+    "clients_tag": "tag:tenant-example-clients",
+    "ports": [22, 3389],
+}
+# The role defaults the template reads, beside the hosts and segments passed in.
+_POLICY_DEFAULTS = (
+    "headscale_policy_private_users",
+    "headscale_policy_private_destinations",
+    "headscale_policy_marker",
+)
 
 
 def _networking(common_yaml: Path = COMMON_YAML) -> dict[str, Any]:
-    return yaml.safe_load(common_yaml.read_text())["networking"]
+    return yaml.safe_load(common_yaml.read_text(encoding="utf-8"))["networking"]
 
 
 def build_hosts(common_yaml: Path = COMMON_YAML) -> dict[str, str]:
@@ -50,20 +66,29 @@ def build_hosts(common_yaml: Path = COMMON_YAML) -> dict[str, str]:
     return hosts
 
 
-def render_policy(hosts: dict[str, str] | None = None) -> str:
-    """Render policy.hujson.j2. trim_blocks matches Ansible's default render."""
+def render_policy(hosts: dict[str, str] | None = None, segments: list[dict[str, Any]] | None = None) -> str:
+    """Render policy.hujson.j2 as the role does. trim_blocks matches Ansible's default render.
+
+    `segments` defaults to none, which is what the repository alone can render:
+    real tenant segments come from SOPS at deploy time.
+    """
     env = Environment(
         loader=FileSystemLoader(str(TEMPLATES)),
         keep_trailing_newline=True,
         trim_blocks=True,
         lstrip_blocks=True,
     )
-    return env.get_template("policy.hujson.j2").render(headscale_policy_hosts=hosts or build_hosts())
+    defaults = yaml.safe_load(ROLE_DEFAULTS.read_text(encoding="utf-8"))
+    return env.get_template("policy.hujson.j2").render(
+        headscale_policy_hosts=hosts or build_hosts(),
+        headscale_policy_segments=segments or [],
+        **{key: defaults[key] for key in _POLICY_DEFAULTS},
+    )
 
 
 def headscale_image(common_yaml: Path = COMMON_YAML) -> str:
     """Headscale image:tag from the SSOT — keeps the gate on the deployed version."""
-    cfg = yaml.safe_load(common_yaml.read_text())
+    cfg = yaml.safe_load(common_yaml.read_text(encoding="utf-8"))
     return cfg["apps"]["services"]["core"]["headscale"]["image"]
 
 

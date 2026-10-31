@@ -325,7 +325,7 @@ def test_the_gating_conditionals_yield_booleans() -> None:
 
 APT_MARK_STUB = """#!/bin/sh
 case "$1" in
-    showhold) exit 0 ;;
+    showhold) [ -z "$SHOWHOLD" ] || printf '%s\n' $SHOWHOLD; exit 0 ;;
     hold) case " $FAIL_HOLD " in *" $2 "*) exit 100 ;; esac; exit 0 ;;
 esac
 exit 0
@@ -342,7 +342,9 @@ printf '%s' "$state"
 """
 
 
-def _run_hold_block(tmp_path: pathlib.Path, fail_hold: list[str], states: dict[str, str]) -> tuple[set[str], set[str]]:
+def _run_hold_block(
+    tmp_path: pathlib.Path, fail_hold: list[str], states: dict[str, str], held_before: tuple[str, ...] = ()
+) -> tuple[set[str], set[str]]:
     """Run the timer script's rendered hold block against stubbed apt-mark and dpkg-query."""
     script = _render()
     start = script.index('    HELD_BEFORE="$(apt-mark showhold')
@@ -354,7 +356,7 @@ def _run_hold_block(tmp_path: pathlib.Path, fail_hold: list[str], states: dict[s
     for name, body in (("apt-mark", APT_MARK_STUB), ("dpkg-query", DPKG_QUERY_STUB)):
         (bin_dir / name).write_text(body, encoding="utf-8")
         (bin_dir / name).chmod(0o755)
-    env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "FAIL_HOLD": " ".join(fail_hold)}
+    env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "FAIL_HOLD": " ".join(fail_hold), "SHOWHOLD": " ".join(held_before)}
     env.update({f"STATE_{pkg.replace('.', '_').replace('-', '_')}": st for pkg, st in states.items()})
 
     out = subprocess.run(["bash", "-c", harness], env=env, capture_output=True, text=True, check=True).stdout

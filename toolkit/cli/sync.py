@@ -318,10 +318,10 @@ def _sync_r2_watcher_targets(check: bool) -> bool:
     root = _repo_root()
     # common.yaml only: `backup.sources` and the node hostnames are not per-env,
     # and the file lives in base/, so both clusters read the same render.
-    config = yaml.safe_load((root / "infra/config/values/common.yaml").read_text())
+    config = yaml.safe_load((root / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
     if check:
         current = root / WATCHER_TARGETS_PATH
-        if not current.exists() or current.read_text() != render_watcher_targets(config):
+        if not current.exists() or current.read_text(encoding="utf-8") != render_watcher_targets(config):
             logger.error(f"r2-watcher-targets: {WATCHER_TARGETS_PATH} is stale; run `make sync-r2-watcher-targets`")
             return False
         logger.success(f"r2-watcher-targets: {WATCHER_TARGETS_PATH} is current")
@@ -347,10 +347,10 @@ def _sync_terraform_backend(check: bool) -> bool:
     from toolkit.features import terraform_backend
 
     root = _repo_root()
-    config = yaml.safe_load((root / "infra/config/values/common.yaml").read_text())
+    config = yaml.safe_load((root / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
     path = root / "infra/terraform" / terraform_backend.BACKEND_FILE
     if check:
-        if not path.exists() or path.read_text() != terraform_backend.render(config):
+        if not path.exists() or path.read_text(encoding="utf-8") != terraform_backend.render(config):
             logger.error(f"terraform-backend: {path.name} is stale; run `make sync-terraform-backend`")
             return False
         logger.success(f"terraform-backend: {path.name} is current")

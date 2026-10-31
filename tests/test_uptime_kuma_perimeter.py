@@ -120,14 +120,14 @@ def test_the_bare_host_carries_the_forward_auth_last_and_both_rules_keep_the_gua
 @pytest.mark.parametrize("env", sorted(HOSTS))
 def test_authelia_gates_the_host_instead_of_bypassing_it(env: str) -> None:
     """With the ForwardAuth on and a `bypass` rule, Authelia answers 200 to everyone: no perimeter at all."""
-    rules = yaml.safe_load(AUTHELIA[env].read_text())["access_control"]["rules"]
+    rules = yaml.safe_load(AUTHELIA[env].read_text(encoding="utf-8"))["access_control"]["rules"]
     policies = [r["policy"] for r in rules if r.get("domain") == HOSTS[env]]
     assert policies == ["one_factor"], f"{env}: {HOSTS[env]} must have one explicit one_factor rule"
 
 
 def test_the_self_check_probes_a_public_path_and_follows_no_redirect() -> None:
     """Following redirects, a gated URL lands on Authelia's portal, which answers 200: a false UP."""
-    monitors = json.loads(MONITORS.read_text())
+    monitors = json.loads(MONITORS.read_text(encoding="utf-8"))
     (check,) = [m for m in monitors if m["key"] == "services-monitoring-uptime-kuma-prod"]
     url = urlparse(check["url"])
     assert url.hostname == HOSTS["prod"]

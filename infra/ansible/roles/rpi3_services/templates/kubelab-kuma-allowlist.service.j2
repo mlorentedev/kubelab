@@ -13,8 +13,15 @@ OnFailure=kubelab-notify@%n.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+# `iptables -w` waits for the xtables lock with no limit, and Docker holds it
+# while it starts. Bounded so a hang fails the unit, which says so, instead of
+# holding the boot: a oneshot has no start timeout unless it sets one (#2786).
+TimeoutStartSec=60
 ExecStartPre=/bin/sh -c 'while iptables -w -D DOCKER-USER -p tcp -m conntrack --ctorigdst {{ tailscale_ip }} --ctorigdstport {{ uptime_kuma_port }} -j KUMA-ALLOW 2>/dev/null; do :; done'
 ExecStart=/usr/sbin/iptables-restore -w 5 --noflush {{ rpi3_deploy_dir }}/kuma-allowlist.rules
+# Closes the incident a failed start opened (#2423, #2749). Not OnSuccess=: on a
+# RemainAfterExit unit that fires when the unit stops.
+ExecStartPost=-/usr/bin/systemctl start --no-block kubelab-notify-recovered@%n.service
 ExecStop=/bin/sh -c 'while iptables -w -D DOCKER-USER -p tcp -m conntrack --ctorigdst {{ tailscale_ip }} --ctorigdstport {{ uptime_kuma_port }} -j KUMA-ALLOW 2>/dev/null; do :; done'
 
 [Install]

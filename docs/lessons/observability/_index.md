@@ -4,6 +4,15 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 678 | [A retry inside one request cannot outlive an outage of the path it takes](lesson-678-a-retry-inside-one-request-cannot-outlive-an-outage-of-its-path.md) | 2026-10-30 |
+| 673 | [Uptime Kuma has no not-found answer, so only its null-row error confirms a delete](lesson-673-uptime-kuma-has-no-not-found-answer-so-only-its-null-row-error-confirms-a-delete.md) | 2026-10-30 |
+| 662 | [The edge's kernel log outlives its journal, but is neither clean text nor in time order](lesson-662-the-edges-kernel-log-outlives-its-journal-but-is-neither-clean-text-nor-in-time-order.md) | 2026-10-30 |
+| 659 | [A fix that relaxes what one check needs takes away the coverage another got from it](lesson-659-a-fix-that-relaxes-what-one-check-needs-takes-away-the-coverage-another-got-from-it.md) | 2026-10-29 |
+| 656 | [An unfinished boot is judged by its jobs' own timeouts, because a randomized catch-up makes any clock bound false](lesson-656-an-unfinished-boot-is-judged-by-its-jobs-own-timeouts-because-a-randomized-catch-up-makes-any-clock-bound-false.md) | 2026-10-29 |
+| 651 | [A check that judges another check inside its grace must read that grace](lesson-651-a-check-that-judges-another-inside-its-grace-must-read-that-grace.md) | 2026-10-29 |
+| 647 | [Every unit that pages must also close its page](lesson-647-every-unit-that-pages-must-also-close-its-page.md) | 2026-10-28 |
+| 644 | [A zero that means "never delivered" reads as the oldest time there is](lesson-644-a-zero-that-means-never-delivered-reads-as-the-oldest-time-there-is.md) | 2026-10-28 |
+| 641 | [A boot order read from the journal fails once its size cap drops the boot's first seconds](lesson-641-a-boot-order-read-from-the-journal-fails-once-its-size-cap-drops-the-boots-first-seconds.md) | 2026-10-27 |
 | 595 | [An hourly job that reports state repeats a standing problem, and fills the gaps it cannot see with guesses](lesson-595-an-hourly-job-that-reports-state-repeats-a-standing-problem-and-fills-the-gaps-it-cannot-see-with-guesses.md) | 2026-10-18 |
 | 594 | [A failure hook with no memory pages every run of a unit that keeps failing](lesson-594-a-failure-hook-with-no-memory-pages-every-run-of-a-unit-that-keeps-failing.md) | 2026-10-18 |
 | 593 | [Slack fills an attachment's fallback with a placeholder when the webhook sends only blocks](lesson-593-slack-fills-an-attachments-fallback-with-a-placeholder-when-the-webhook-sends-only-blocks.md) | 2026-10-18 |

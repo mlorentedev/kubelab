@@ -18,15 +18,32 @@ After=docker.service tailscaled.service network-online.target
 Wants=network-online.target tailscaled.service
 
 [Service]
-Type=oneshot
+# exec, not oneshot (#2776). A oneshot waits inside its start job, and systemd
+# records the boot as finished only once no job is left: with the tailnet
+# unreachable the wait below fails and is retried every 30 s, so the boot of a
+# site with no uplink never finished. An exec unit's job ends once its command
+# runs. The provision waits for the stack instead (stack-unit-settled.yml).
+Type=exec
 RemainAfterExit=yes
-# Comfortably above the wait script's own bound, so its explicit failure is what
-# surfaces rather than an opaque systemd timeout.
-TimeoutStartSec=180
-ExecStartPre={{ beelink_deploy_dir }}/wait-for-tailscale-addr.sh {{ tailscale_ip }}
+# Bounds the wait and compose together, as TimeoutStartSec did for the oneshot,
+# and comfortably above the wait's own bound so its explicit failure is what
+# surfaces. The bound stops once the command has exited and the unit is `exited`.
+RuntimeMaxSec=180
+# The wait below is bounded, and nothing runs a unit again once it failed at
+# boot. An address that arrives later, because the tailnet is unreachable until
+# the lab edge's uplink is up, left every stack bound to it unbound for a day on
+# 2026-10-26 (#2500). So retry: 30 s keeps a wait that fails fast clear of
+# systemd's default start limit (5 starts in 10 s), which would end the retries.
+# Only the wait is retried: compose exits 1 on an error of its own (a port held,
+# a broken mount), and retrying that would recreate the whole stack every 30 s
+# and never reach `failed`, where node_notify's OnFailure sees it. The wait
+# fails with 75 instead, below, so it still retries.
+Restart=on-failure
+RestartSec=30
+RestartPreventExitStatus=1
 # `--force-recreate` is the whole fix for ANSIBLE-053, and it is not defensive.
 #
-# The wait script above is necessary and NOT sufficient. Measured 2026-08-23: on
+# The wait for the address is necessary and NOT sufficient. Measured 2026-08-23: on
 # a cold boot it reported `100.64.0.3 is up on tailscale0 after 20s`, the unit
 # then ran, reported success — and both port-publishing services (gitea and the
 # object store OPS-023 later retired) came up attached to NO network,
@@ -53,7 +70,11 @@ ExecStartPre={{ beelink_deploy_dir }}/wait-for-tailscale-addr.sh {{ tailscale_ip
 # Cost: a few seconds per boot, and pre-boot `docker logs` are lost — persistent
 # journald (ANSIBLE-023) already covers that. Service data is in bind mounts and
 # is untouched by a recreate.
-ExecStart=/usr/bin/docker compose -f {{ beelink_deploy_dir }}/compose.yml up -d --force-recreate
+# --pull never: the provision pulls before it starts this unit. A pull here
+# is cut at RuntimeMaxSec on a slow link, a timeout restarts the unit, and
+# each retry pulls again, so the stack never starts and never reaches
+# `failed`. A missing image instead exits 1, which fails the unit.
+ExecStart=/bin/sh -c '{{ beelink_deploy_dir }}/wait-for-tailscale-addr.sh {{ tailscale_ip }} || exit 75; exec /usr/bin/docker compose -f {{ beelink_deploy_dir }}/compose.yml up -d --force-recreate --pull never'
 ExecStop=/usr/bin/docker compose -f {{ beelink_deploy_dir }}/compose.yml stop
 
 [Install]

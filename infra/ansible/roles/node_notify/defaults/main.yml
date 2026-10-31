@@ -13,6 +13,11 @@
 #
 #     OnFailure=kubelab-notify@%n.service
 #
+# and closes the incident with `OnSuccess=kubelab-notify-recovered@%n.service`,
+# or on a RemainAfterExit unit with an ExecStartPost that starts it, since
+# OnSuccess= fires there on stop. tests/test_node_notify_role.py holds every
+# unit that pages to one of the two (#2689).
+#
 # `%n` is the full unit name, suffix included, and it becomes the instance —
 # verified against a live systemd, not assumed: `OnFailure=x@%n.service` on
 # `foo.service` resolves to `x@foo.service.service`, and `%i` inside it is
@@ -41,17 +46,53 @@ node_notify_body_bytes: 2000
 
 # n8n routes by severity. `log` is the ratified level for fleet maintenance and
 # backup failures (2026-08-15) — they are actionable, not page-worthy.
+#
+# A unit whose failure needs a person now says so itself, in the unit that wires
+# it here (#2684). `Environment=` belongs in [Service]: systemd ignores it in
+# [Unit], and the unit would post at this default.
+#
+#     [Unit]
+#     OnFailure=kubelab-notify@%n.service
+#     [Service]
+#     Environment=KUBELAB_NOTIFY_SEVERITY=page
+#
+# The script reads it from systemd at run time. A value rendered into the script
+# would differ by play: maintain.yml and backup.yml apply this role too, with no
+# vars, and the last play to run would set the level for every unit on the node.
 node_notify_severity: log
 
 # One page per incident (#2423). The state is `<count> <first> <last>` per unit.
-# A failing unit is reminded at most once per `reminder`, and a state older than
-# `ttl` is a finished incident nobody closed, so it starts over. The ttl must
+# A failing unit is reminded at most once per `reminder`, and to a failure a state
+# older than `ttl` is a finished incident nobody closed, so it starts over. A
+# recovery closes the incident whatever its age (#2757). The ttl must
 # outlast the reminder (a failing unit refreshes the state each reminder), and
 # tests/test_node_notify_dedup.py asserts it.
 node_notify_state_dir: /var/lib/kubelab-notify
 node_notify_reminder_seconds: 3600
 node_notify_state_ttl_seconds: 21600
+# A unit's failure and recovery notices take one lock (#2733), so a recovery
+# waits for a page still in flight instead of overtaking it. The wait outlasts
+# one whole delivery (curl's worst case is 30s), and both notifier units' timeout
+# holds that wait plus their own delivery. tests/test_node_notify_role.py
+# asserts both.
+node_notify_lock_wait_seconds: 40
+node_notify_timeout_seconds: 90
 node_notify_recovered_unit_name: "kubelab-notify-recovered@.service"
+
+# A notice n8n does not take waits in the spool and counts as sent (#2787):
+# behind a down edge a LAN node's pages failed at once on DNS, and nothing sent
+# them later. `<spool unit>.timer` runs the script's `--flush` every `interval`,
+# which delivers the spool oldest first and stops at the first refusal, so a
+# notice never overtakes an older one. The flush's timeout holds the lock wait
+# and one refused delivery, as the notifiers' does, and room for the rest; a
+# notice still undelivered after `max_age` is dropped, so one payload n8n
+# refuses for good cannot hold the others behind it forever.
+# tests/test_node_notify_dedup.py runs the spool end to end.
+node_notify_spool_dir: /var/spool/kubelab-notify
+node_notify_spool_unit_name: kubelab-notify-spool
+node_notify_spool_interval_seconds: 300
+node_notify_spool_timeout_seconds: 300
+node_notify_spool_max_age_seconds: 604800
 
 # What this role supersedes is removed by `node_maintenance`, right after the
 # reload that leaves the old unit unreferenced -- see the note at the end of

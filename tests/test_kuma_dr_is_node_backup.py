@@ -25,7 +25,7 @@ def _tracked_text_files():
         path = ROOT / name
         if name and path.resolve() != THIS_FILE and path.is_file():
             try:
-                yield path, path.read_text()
+                yield path, path.read_text(encoding="utf-8")
             except UnicodeDecodeError:
                 continue  # binary
 
@@ -46,18 +46,18 @@ def test_nothing_tracked_names_the_retired_commands():
 
 
 def test_the_runbook_points_at_node_backup_for_kuma():
-    text = (ROOT / "docs" / "runbooks" / "monitoring.md").read_text()
+    text = (ROOT / "docs" / "runbooks" / "monitoring.md").read_text(encoding="utf-8")
     assert "make backup-node NODE=rpi3" in text
     assert "offsite-backup-restore.md" in text
 
 
 def test_what_the_runbook_points_at_exists():
-    restore = (ROOT / "docs" / "runbooks" / "offsite-backup-restore.md").read_text()
+    restore = (ROOT / "docs" / "runbooks" / "offsite-backup-restore.md").read_text(encoding="utf-8")
     # The anchor the runbook links (#restoring--normal-case) must be a real heading,
     # and that section must cover SQLite consumers, which is what Kuma is.
     assert re.search(r"^## Restoring \u2014 normal case$", restore, re.M)
     section = restore.split("## Restoring \u2014 normal case", 1)[1]
     assert "Uptime Kuma" in section.split("\n## ", 1)[0]
-    makefile = (ROOT / "Makefile").read_text()
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
     for target in ("backup-node", "backup-coverage"):
         assert re.search(rf"^{target}:", makefile, re.M), f"make {target} does not exist"

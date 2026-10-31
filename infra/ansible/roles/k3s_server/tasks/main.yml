@@ -86,6 +86,75 @@
     - Wait for Traefik rollout
   when: k3s_traefik_acme_enabled and k3s_traefik_acme_cloudflare_token | length > 0
 
+# --- Traefik local plugins (#2565) ---
+# Fetched here, while the provision has egress, so that a Traefik start never needs it:
+# see k3s_traefik_local_plugins. One directory per version, which the HelmChartConfig
+# mounts, so a version bump changes the config and Traefik rolls onto the new source.
+- name: Create a directory per Traefik plugin version
+  file:
+    path: "{{ k3s_traefik_local_plugins_dir }}/{{ item.name }}/{{ item.version }}"
+    state: directory
+    mode: "0755"
+  loop: "{{ k3s_traefik_local_plugins }}"
+  loop_control:
+    label: "{{ item.name }} {{ item.version }}"
+  when: k3s_configure_traefik
+
+- name: Download each Traefik plugin's source at its pinned version
+  get_url:
+    url: "https://{{ item.module }}/archive/refs/tags/{{ item.version }}.tar.gz"
+    dest: "{{ k3s_traefik_local_plugins_dir }}/{{ item.name }}/{{ item.version }}.tar.gz"
+    checksum: "sha256:{{ item.sha256 }}"
+    mode: "0644"
+  loop: "{{ k3s_traefik_local_plugins }}"
+  loop_control:
+    label: "{{ item.name }} {{ item.version }}"
+  when: k3s_configure_traefik
+
+# `creates` names the manifest every Traefik plugin carries, so a directory that was
+# created but never filled (an interrupted run) is unpacked again.
+- name: Unpack each Traefik plugin
+  unarchive:
+    src: "{{ k3s_traefik_local_plugins_dir }}/{{ item.name }}/{{ item.version }}.tar.gz"
+    dest: "{{ k3s_traefik_local_plugins_dir }}/{{ item.name }}/{{ item.version }}"
+    remote_src: true
+    extra_opts: [--strip-components=1]
+    creates: "{{ k3s_traefik_local_plugins_dir }}/{{ item.name }}/{{ item.version }}/.traefik.yml"
+  loop: "{{ k3s_traefik_local_plugins }}"
+  loop_control:
+    label: "{{ item.name }} {{ item.version }}"
+  when: k3s_configure_traefik
+
+- name: Find Traefik plugin versions no longer declared
+  find:
+    paths: "{{ k3s_traefik_local_plugins_dir }}/{{ item.name }}"
+    file_type: any
+    excludes: ["{{ item.version }}", "{{ item.version }}.tar.gz"]
+  loop: "{{ k3s_traefik_local_plugins }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: _k3s_stale_plugin_versions
+  when: k3s_configure_traefik
+
+- name: Find Traefik plugins no longer declared
+  find:
+    paths: "{{ k3s_traefik_local_plugins_dir }}"
+    file_type: directory
+    excludes: "{{ k3s_traefik_local_plugins | map(attribute='name') | list }}"
+  register: _k3s_stale_plugins
+  when: k3s_configure_traefik
+
+- name: Remove Traefik plugin versions no longer declared
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop: >-
+    {{ ((_k3s_stale_plugin_versions.results | default([]) | selectattr('files', 'defined')
+         | map(attribute='files') | flatten)
+        + (_k3s_stale_plugins.files | default([])))
+       | map(attribute='path') | list }}
+  when: k3s_configure_traefik
+
 # --- Traefik HelmChartConfig (ports + plugins, ADR-015) ---
 - name: Template Traefik HelmChartConfig
   template:

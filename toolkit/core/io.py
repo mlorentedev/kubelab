@@ -1,7 +1,21 @@
 """Cross-platform-safe I/O for the toolkit (TOOL-020)."""
 
+import os
 import sys
 from pathlib import Path
+
+
+def docker_user_args() -> list[str]:
+    """`--user <uid>:<gid>` for `docker run`, so a bind mount stays writable and owned by the caller.
+
+    Empty where the host has no uids: native Windows has no `os.getuid`, and Docker
+    Desktop maps bind mounts without uid ownership, so there is nothing to match.
+    """
+    getuid = getattr(os, "getuid", None)
+    getgid = getattr(os, "getgid", None)
+    if getuid is None or getgid is None:
+        return []
+    return ["--user", f"{getuid()}:{getgid()}"]
 
 
 def force_utf8_stdio() -> None:

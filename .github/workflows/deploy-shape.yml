@@ -6,19 +6,27 @@ name: deploy-shape
 # `mechanical` in harness/review-attestation.json, judged by
 # toolkit/features/deploy_shape.py. Assert-only: nothing here merges.
 #
-# Published as a check-run named `deploy-shape`, because a required context
-# needs a third answer that a commit status cannot give:
+# Published as a commit status named `deploy-shape`, with the verdict in its
+# description:
 #
 #   mechanical       success   every condition holds at the head sha
-#   not-mechanical   neutral   a normal PR; neutral passes branch protection
+#   not-mechanical   success   a normal PR, which takes the normal review path
 #   unknown          failure   could not read or parse: fails closed
 #
-# This check is what people and branch protection see. It is NOT what grants
-# anything: a same-repository PR can add a workflow that posts a check-run of
+# Never a check-run (DELIVERY-011, #2714). One posted with GITHUB_TOKEN is not
+# attached to this workflow's suite but to the first github-actions suite on
+# the sha, often review-attestation's or Spec Gate's. Those run again on the
+# same sha by design, and branch protection stops seeing the check-runs of a
+# superseded suite: the required context then reads "Expected" with every
+# check green. A status belongs to no suite, which is why review-attestation
+# is one too.
+#
+# This status is what people and branch protection see. It is NOT what grants
+# anything: a same-repository PR can add a workflow that posts a status of
 # this name. review-attestation and the merge job recompute the verdict
 # themselves from master's code at the sha they verified.
 #
-# Fork PRs get a read-only token and cannot publish the check, as with
+# Fork PRs get a read-only token and cannot publish the status, as with
 # review-attestation; accepted (DELIVERY-004 proposal, Risks).
 
 on:
@@ -33,7 +41,7 @@ concurrency:
 permissions:
   contents: read
   pull-requests: read
-  checks: write   # the check-run is the product
+  statuses: write   # the commit status is the product
 
 jobs:
   judge:
@@ -49,7 +57,7 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           fetch-depth: 1
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7
         with:
           python-version: '3.12'
 
@@ -79,7 +87,7 @@ jobs:
 
       # The verdict names the sha it judged; the event's sha is only the
       # fallback for a verdict that could not name one (unknown).
-      - name: Publish the check-run
+      - name: Publish the status
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CODE: ${{ steps.judge.outputs.code }}
@@ -90,23 +98,23 @@ jobs:
           sha="$(jq -r '.head_sha // empty' "$verdict_file" 2>/dev/null || true)"
           reason="$(jq -r '.reason // empty' "$verdict_file" 2>/dev/null || true)"
           case "$CODE" in
-            0) conclusion=success; title="mechanical staging deploy" ;;
-            1) conclusion=neutral; title="not a mechanical deploy: review applies" ;;
-            *) conclusion=failure; title="could not judge the diff shape" ;;
+            0) state=success; title="mechanical staging deploy" ;;
+            1) state=success; title="not a mechanical deploy: review applies" ;;
+            *) state=failure; title="could not judge the diff shape" ;;
           esac
-          gh api -X POST "repos/${GITHUB_REPOSITORY}/check-runs" \
-            -f name="deploy-shape" \
-            -f head_sha="${sha:-$EVENT_SHA}" \
-            -f status=completed \
-            -f conclusion="$conclusion" \
-            -f "output[title]=$title" \
-            -f "output[summary]=${reason:-no verdict was written}" \
-            -f details_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" >/dev/null
-          echo "deploy-shape: ${conclusion} (${reason:-no verdict})"
+          # GitHub refuses a status description over 140 characters; the full
+          # reason is in this run's log, which the status links to.
+          description="${title}: ${reason:-no verdict was written}"
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/statuses/${sha:-$EVENT_SHA}" \
+            -f state="$state" \
+            -f context="deploy-shape" \
+            -f description="${description:0:140}" \
+            -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" >/dev/null
+          echo "deploy-shape: ${state}, ${title} (${reason:-no verdict})"
 
       # Fails the JOB only when the predicate could not answer, as
       # review-attestation does: `not-mechanical` is a verdict and lives in the
-      # check-run; `unknown` is the gate malfunctioning, and a green job over it
+      # status; `unknown` is the gate malfunctioning, and a green job over it
       # would deliver "could not tell" as silence.
       - name: Fail the run only when the shape could not be judged
         env:

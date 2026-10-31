@@ -221,7 +221,7 @@ def _run_step(
         text=True,
         timeout=120,
     )
-    return proc, calls.read_text().splitlines()
+    return proc, calls.read_text(encoding="utf-8").splitlines()
 
 
 def _remote_branches(remote: pathlib.Path) -> list[str]:
@@ -302,7 +302,7 @@ def test_the_update_renames_the_pr_to_the_sha_it_now_offers(
     _run_step(tmp_path, work, receiver, tag=TAG_ONE, calls_path=calls)
     _run_step(tmp_path, work, receiver, tag=TAG_TWO, calls_path=calls, STUB_OPEN_PR=OPEN_PR)
 
-    patch = next(c for c in calls.read_text().splitlines() if "-X PATCH" in c)
+    patch = next(c for c in calls.read_text(encoding="utf-8").splitlines() if "-X PATCH" in c)
     assert TAG_TWO in patch, f"the update did not carry the new sha: {patch!r}"
     assert TAG_ONE not in patch, f"the update still names the previous sha: {patch!r}"
 

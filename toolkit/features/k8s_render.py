@@ -151,7 +151,7 @@ def render_and_apply(
     # in the manifest an unmapped one, so a forgotten map fails closed instead of
     # handing kubectl the literal `RESOLVE_*` string.
     try:
-        text = render_text(manifest_path.read_text(), entry.render, resolver=resolver)
+        text = render_text(manifest_path.read_text(encoding="utf-8"), entry.render, resolver=resolver)
     except RenderError as exc:
         if entry.optional:
             logger.warning(f"[{entry.name}] skipped (optional): {exc}")

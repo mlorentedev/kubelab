@@ -31,7 +31,7 @@ def _walk(tasks: list | None):
 def test_no_inline_copy_content_uses_ansible_managed() -> None:
     offenders = []
     for path in sorted(ROLES.glob("*/tasks/*.yml")):
-        for task in _walk(yaml.safe_load(path.read_text())):
+        for task in _walk(yaml.safe_load(path.read_text(encoding="utf-8"))):
             for key in ("ansible.builtin.copy", "copy"):
                 body = task.get(key)
                 if isinstance(body, dict) and "ansible_managed" in str(body.get("content", "")):

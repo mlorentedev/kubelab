@@ -160,6 +160,32 @@
   environment:
     XDG_RUNTIME_DIR: "/run/user/{{ _agent_stack_agent_uid }}"
 
+# The agent's daemon reads its own daemon.json, not /etc/docker's (#2834). Its
+# max-download-attempts is read only by the overlay2 graphdriver's download manager,
+# once, at daemon start. This daemon runs the containerd image store, which reads no
+# attempts at all, so the key has no effect here until the store changes (#2868).
+# Nothing reloads the daemon for it: a reload would update the config store and its
+# event, and nothing a pull uses. One key only: an option dockerd-rootless.sh also
+# passes as a flag would stop the daemon from starting.
+- name: Create the agent daemon's config directory
+  ansible.builtin.file:
+    path: "{{ agent_stack_agent_home }}/.config/docker"
+    state: directory
+    owner: "{{ agent_stack_agent_user }}"
+    group: "{{ agent_stack_agent_user }}"
+    mode: "0700"
+
+- name: Configure the agent's daemon
+  ansible.builtin.copy:
+    content: |
+      {
+        "max-download-attempts": {{ docker_max_download_attempts | int }}
+      }
+    dest: "{{ agent_stack_agent_home }}/.config/docker/daemon.json"
+    owner: "{{ agent_stack_agent_user }}"
+    group: "{{ agent_stack_agent_user }}"
+    mode: "0644"
+
 - name: Read the agent daemon's security options
   ansible.builtin.command:
     cmd: docker info --format '{% raw %}{{json .SecurityOptions}}{% endraw %}'

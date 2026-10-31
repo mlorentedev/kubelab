@@ -27,7 +27,7 @@ PROPOSAL = REPO_ROOT / "specs/GITOPS-003/proposal.md"
 
 @pytest.fixture(scope="module")
 def wf() -> dict:
-    return yaml.safe_load(WORKFLOW.read_text())
+    return yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
 
 
 def _step(job: dict, name: str) -> dict:
@@ -67,7 +67,7 @@ def test_the_sweep_checks_prod_only(wf: dict) -> None:
 
 
 def test_the_sweep_budget_is_the_measured_n(wf: dict) -> None:
-    minutes = int(re.search(r"\*\*N = (\d+) minutes\*\*", PROPOSAL.read_text()).group(1))
+    minutes = int(re.search(r"\*\*N = (\d+) minutes\*\*", PROPOSAL.read_text(encoding="utf-8")).group(1))
     step_env = _step(wf["jobs"]["sweep"], "Wait for master HEAD's status")["env"]
     assert int(step_env["MIN_AGE_SECONDS"]) == minutes * 60
 
@@ -75,7 +75,7 @@ def test_the_sweep_budget_is_the_measured_n(wf: dict) -> None:
 def test_failure_messages_link_a_runbook_section_that_exists(wf: dict) -> None:
     anchor = wf["env"]["RUNBOOK"].split("#", 1)[1]
     assert wf["env"]["RUNBOOK"].split("/blob/master/", 1)[1].split("#")[0] == str(RUNBOOK.relative_to(REPO_ROOT))
-    titles = re.findall(r"^## (.+)$", RUNBOOK.read_text(), re.M)
+    titles = re.findall(r"^## (.+)$", RUNBOOK.read_text(encoding="utf-8"), re.M)
     headings = [re.sub(r"[^a-z0-9 -]", "", t.lower()).replace(" ", "-") for t in titles]
     assert anchor in headings
 

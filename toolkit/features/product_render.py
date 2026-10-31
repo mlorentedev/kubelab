@@ -78,7 +78,7 @@ def rendered(
 def _merged_app(app: str, env: str, values_dir: Path) -> dict[str, Any]:
     merged: dict[str, Any] = {}
     for source in ("common", env):
-        data = yaml.safe_load((values_dir / f"{source}.yaml").read_text()) or {}
+        data = yaml.safe_load((values_dir / f"{source}.yaml").read_text(encoding="utf-8")) or {}
         merged.update(((data.get("apps") or {}).get("platform") or {}).get(app) or {})
     return merged
 
@@ -108,7 +108,7 @@ def write(contract: Contract, app: str, env: str, *, values_dir: Path = VALUES_D
     path = values_dir / f"{env}.yaml"
     ruamel = YAML()
     ruamel.preserve_quotes = True
-    doc = ruamel.load(path.read_text())
+    doc = ruamel.load(path.read_text(encoding="utf-8"))
     block = ((doc.get("apps") or {}).get("platform") or {}).get(app)
     if block is None:
         raise ContractError(
@@ -125,7 +125,7 @@ def write(contract: Contract, app: str, env: str, *, values_dir: Path = VALUES_D
             # tests/test_values_version_key_placement.py); insert before version.
             position = list(block).index("version") if "version" in block else len(block)
             block.insert(position, key, value)
-    with path.open("w") as handle:
+    with path.open("w", encoding="utf-8", newline="\n") as handle:
         ruamel.dump(doc, handle)
     return list(differences)
 
@@ -150,7 +150,7 @@ def _env_dir(env: str, snapshot_dir: Path) -> Path:
 
 
 def _pinned(env: str, values_dir: Path) -> set[str]:
-    data = yaml.safe_load((values_dir / f"{env}.yaml").read_text()) or {}
+    data = yaml.safe_load((values_dir / f"{env}.yaml").read_text(encoding="utf-8")) or {}
     platform = (data.get("apps") or {}).get("platform") or {}
     return {app for app, block in platform.items() if isinstance(block, dict) and "version" in block}
 

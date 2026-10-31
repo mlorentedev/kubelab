@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from uptime_kuma_api import UptimeKumaApi
+from uptime_kuma_api import UptimeKumaApi, UptimeKumaException
 
 from toolkit.core.logging import logger
 from toolkit.features.configuration import ConfigurationManager
@@ -203,11 +203,11 @@ def export_monitors(project_root: Path) -> Path:
         export_dir.mkdir(parents=True, exist_ok=True)
 
         monitors_path = export_dir / MONITORS_FILE
-        monitors_path.write_text(json.dumps(clean_monitors, indent=2, default=str) + "\n")
+        monitors_path.write_text(json.dumps(clean_monitors, indent=2, default=str) + "\n", encoding="utf-8")
         logger.success(f"Exported {len(clean_monitors)} monitors → {monitors_path}")
 
         notifications_path = export_dir / NOTIFICATIONS_FILE
-        notifications_path.write_text(json.dumps(clean_notifications, indent=2, default=str) + "\n")
+        notifications_path.write_text(json.dumps(clean_notifications, indent=2, default=str) + "\n", encoding="utf-8")
         logger.success(f"Exported {len(clean_notifications)} notifications → {notifications_path}")
 
         return monitors_path
@@ -248,8 +248,10 @@ def import_monitors(project_root: Path) -> None:
             logger.error(f"No monitors file found at {monitors_path}. Run export first.")
             raise SystemExit(1)
 
-        monitors_data = json.loads(monitors_path.read_text())
-        notifications_data = json.loads(notifications_path.read_text()) if notifications_path.exists() else []
+        monitors_data = json.loads(monitors_path.read_text(encoding="utf-8"))
+        notifications_data = (
+            json.loads(notifications_path.read_text(encoding="utf-8")) if notifications_path.exists() else []
+        )
 
         # Use Uptime Kuma's backup import format
         backup_data = json.dumps(
@@ -269,6 +271,12 @@ def import_monitors(project_root: Path) -> None:
         api.disconnect()
 
 
+# Kuma has no not-found answer: `getMonitor` reads a null row and replies ok:false
+# with V8's TypeError message (server/server.js, 2.2.1). Any other failure, a
+# timeout or a lost login among them, says nothing about whether a delete landed.
+_MONITOR_GONE = "Cannot read properties of null"
+
+
 def _assert_deleted(api: UptimeKumaApi, deleted_ids: list[int], timeout: float = 30.0) -> None:
     """Block until every id is gone, or raise. Never proceed on an unmet precondition.
 
@@ -279,6 +287,7 @@ def _assert_deleted(api: UptimeKumaApi, deleted_ids: list[int], timeout: float =
     `get_monitors()` returns a client-side cache fed by socket events and can lag
     a write by many seconds, so polling it would replace a fixed guess with a
     longer one and still be racing. `get_monitor(id)` is an authoritative read.
+    Only its not-found answer counts as gone; any other error propagates (#2506).
     """
     if not deleted_ids:
         return
@@ -291,8 +300,9 @@ def _assert_deleted(api: UptimeKumaApi, deleted_ids: list[int], timeout: float =
             try:
                 api.get_monitor(monitor_id)
                 still_here.append(monitor_id)
-            except Exception:
-                pass  # Gone — which is the outcome we are waiting for.
+            except UptimeKumaException as error:
+                if _MONITOR_GONE not in str(error):
+                    raise
         pending = still_here
         if pending:
             time.sleep(0.5)
@@ -333,7 +343,7 @@ def apply_monitors(project_root: Path, *, check: bool = False, prune: bool = Fal
             logger.error(f"No seed file at {monitors_path}. Run 'make monitoring-export' first.")
             raise SystemExit(1)
 
-        seed_monitors = json.loads(monitors_path.read_text())
+        seed_monitors = json.loads(monitors_path.read_text(encoding="utf-8"))
 
         # Marry the push tokens to the seed before anything reads it, so the
         # diff and the write path both see the same monitor. Raises rather than
@@ -390,7 +400,7 @@ def apply_monitors(project_root: Path, *, check: bool = False, prune: bool = Fal
         tags_path = export_dir / TAGS_FILE
         tag_id_map: dict[str, int] = {}
         if tags_path.exists():
-            seed_tags = json.loads(tags_path.read_text())
+            seed_tags = json.loads(tags_path.read_text(encoding="utf-8"))
             existing_tags = {t["name"]: t["id"] for t in api.get_tags()}
             for t in seed_tags:
                 if t["name"] in existing_tags:
