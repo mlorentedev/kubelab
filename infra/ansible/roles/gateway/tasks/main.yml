@@ -148,12 +148,13 @@
     that:
       - gateway_uplink_kind in ['wifi_open', 'wifi_psk', 'ethernet']
       - gateway_uplink_regdomain | length == 2
+      - gateway_uplink_band in ['', '5GHz', '2.4GHz']
       - gateway_uplink_mac | length > 0
       - gateway_uplink_kind == 'ethernet' or gateway_uplink_ssid | length > 0
       - gateway_uplink_kind != 'wifi_psk' or gateway_uplink_psk | length > 0
     fail_msg: >-
       The site profile in common.yaml needs networking.edge.uplink.kind (wifi_open, wifi_psk
-      or ethernet) and a two-letter regdomain. The {{ gateway_uplink_kind }} uplink needs
+      or ethernet), a two-letter regdomain, and a band of 5GHz, 2.4GHz or "". The {{ gateway_uplink_kind }} uplink needs
       networking.edge.uplink.mac in prod SOPS, plus .ssid for a Wi-Fi kind and .psk for
       wifi_psk. The operator stores them with `toolkit secrets set`; the role never invents them.
     quiet: true

@@ -63,6 +63,10 @@ networking:
       # The AP's fixed 2.4 GHz channel, per site: picked at bring-up from a scan
       # of the site's spectrum. Must be one the regdomain allows.
       channel: 6
+      # The band the uplink associates on, per site: "5GHz", "2.4GHz", or "" for
+      # either. At the hotel site 2.4 GHz received at MCS 1 (13 Mbit/s) at -57 dBm,
+      # beside the lab AP's own 2.4 GHz channel, while its APs also serve 5 GHz.
+      band: "5GHz"
       # Shaped at 90% of the lower of two measured rates (AC8), so the queue forms
       # here. Measured 2026-10-31 on the site's paid plan with the shaper lifted:
       # the uplink adapter's own rx/tx counters over two 60 s runs of six parallel
