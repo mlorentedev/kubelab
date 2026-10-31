@@ -55,6 +55,15 @@ created: "2026-08-27"
 - [x] ✓ 2026-10-22 [P] [AC6] Write failing `tests/infra` check: the notifications token answers an authenticated GET with 200. **Done as** `GET /repos/mlorentedev/kubelab/commits/master/statuses`, not `/rate_limit`: `/rate_limit` answers 200 for any valid token, which says nothing about kubelab. The check proves validity and stated expiry only: kubelab is public, so the GET answers 200 for any valid token whatever it may write. The write grant is not verified; that probe is #2644
 - [x] ✓ 2026-10-22 [AC6] Implement it (read the token via the same SOPS path as `secrets apply`; never print it): `tests/infra/test_argocd_status_token_live.py`, plus the stated expiry through `secret_expiry.github_pat_expiry`, the function `toolkit secrets check-expiry` already maps to this key
 
+### PR6 — `delivery-watcher` bounds the no-status case (AC2, #2645 B)
+
+- [x] ✓ 2026-10-31 [AC2] Record the sweep as measured: 40 `schedule` runs from 10-23 to 10-31, all green, 3 to 6 h apart (`verification.md`)
+- [ ] [P] [AC2] Write failing tests `tests/test_delivery_watcher.py` against the real `watch.py` with a simulated GitHub: `success` → `healthy: 1`; `failure`/`error` → 0 at any age; no status younger than N → 1, older → 0; the newest status of the context wins; GitHub unreachable or non-200 → a line with no `healthy`; exactly one line per run
+- [ ] [AC2] Implement `infra/k8s/base/services/delivery-watcher/watch.py` (stdlib only) and the CronJob (every 10 min, `backoffLimit: 0`, no token, non-root), its ingress-only NetworkPolicy, the image pin in `common.yaml`, and the prod patch of `ARGO_ENV`
+- [ ] [AC2] Grafana rule `gitops003-argo-delivery` in `grafana-alerting/delivery-rules.yaml`: `last_over_time(... unwrap healthy [30m]) by (namespace) < 1`, `for: 10m`, `noDataState: Alerting`, runbook `#deploy-verify-is-red`
+- [ ] [AC2] Validate in staging (Loki shows the line for master HEAD), then in prod after merge; record both in `verification.md`
+- [ ] [AC2] Lesson: a GitHub `schedule` here is a few-times-a-day signal, not a cron
+
 ## Closing
 
 - [ ] Every acceptance criterion from `proposal.md` is covered by at least one test
