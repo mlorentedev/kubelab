@@ -47,7 +47,8 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
   - Not seen live: the red path. It is covered by `tests/test_delivery_watcher.py`. Prod is read after merge.
 - Live, 2026-10-31, PR6 in prod after #2880 merged (`ba9862a`):
   - The first scheduled run is in Loki (`toolkit obs logs --env prod --service delivery-watcher`): `[06:30:04] {"metric": "argo_delivery", "argo_env": "prod", "sha": "f612c91…", "age_seconds": 325, "state": "success", "healthy": 1}`.
-  - Grafana on `kubelab-vps` evaluates `gitops003-argo-delivery` without error (Loki responses from 06:29:20Z) and it is not firing (`toolkit obs alerts --env prod`). That shows the rule loads and evaluates on a healthy series, not that it fires: the red path is still covered only by `tests/test_delivery_watcher.py`.
+  - Runs at 06:40, 06:50, 07:00 and 07:10 printed the same `healthy: 1` line, each 10 minutes apart.
+  - Grafana on `kubelab-vps` started evaluating `gitops003-argo-delivery` at 06:29:20Z (Loki responses), before the first line, so that first evaluation saw no data. At 07:18:16Z, `toolkit obs alerts --env prod` reports nothing firing or pending. With `noDataState: Alerting` and `for: 10m`, a rule that still read no data would be firing by then, so the rule reads the healthy series. That does not show it fires: the red path is still covered only by `tests/test_delivery_watcher.py`.
 
 ## Decisions made during implementation
 
