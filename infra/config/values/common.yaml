@@ -73,8 +73,8 @@ networking:
       # streams each way, 4730/4939 kbit/s down and 3934/4068 up. The free plan
       # read 3.3 and 1.5 Mbps.
       bandwidth:
-        down_kbit: 4250
-        up_kbit: 3550
+        down_kbit: 50000
+        up_kbit: 20000
         # The share of down_kbit an image pull gets, against which a pull is sized
         # (_includes/image-pull.yml). Open WebUI's 1.62 GB took 133.7 min on ace2,
         # against 72.7 at down_kbit, with the shaper binding (#2703, 2026-10-30).
