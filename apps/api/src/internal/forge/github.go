@@ -2,7 +2,6 @@ package forge
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -26,7 +25,7 @@ type GitHub struct {
 	HTTP    *http.Client
 }
 
-type githubItem struct {
+type restItem struct {
 	Number    int       `json:"number"`
 	Title     string    `json:"title"`
 	State     string    `json:"state"`
@@ -52,66 +51,22 @@ func (g *GitHub) ListItems(ctx context.Context, src Source, since time.Time) ([]
 	if !since.IsZero() {
 		q.Set("since", since.UTC().Format(time.RFC3339))
 	}
-	next := fmt.Sprintf("%s/repos/%s/%s/issues?%s", g.BaseURL, src.Owner, src.Repo, q.Encode())
-
-	base, err := url.Parse(g.BaseURL)
-	if err != nil {
-		return nil, &SourceError{Source: src, Err: fmt.Errorf("parse base url: %w", err)}
-	}
-
-	var items []Item
-	for pages := 0; next != ""; pages++ {
-		if pages == githubMaxPages {
-			return nil, &SourceError{Source: src, Err: fmt.Errorf("more than %d pages", githubMaxPages)}
-		}
-		page, link, err := g.page(ctx, next)
-		if err != nil {
-			return nil, &SourceError{Source: src, Err: err}
-		}
-		if link != "" && !sameOrigin(base, link) {
-			return nil, &SourceError{Source: src, Err: fmt.Errorf("next page points off %s", base.Host)}
-		}
-		for _, raw := range page {
-			items = append(items, raw.neutral(src))
-		}
-		next = link
-	}
-	return items, nil
+	first := fmt.Sprintf("%s/repos/%s/%s/issues?%s", g.BaseURL, src.Owner, src.Repo, q.Encode())
+	return readPages(ctx, src, pagedRead{
+		BaseURL:  g.BaseURL,
+		First:    first,
+		MaxPages: githubMaxPages,
+		HTTP:     g.HTTP,
+		Auth: func(req *http.Request) {
+			req.Header.Set("Accept", "application/vnd.github+json")
+			if g.Token != "" {
+				req.Header.Set("Authorization", "Bearer "+g.Token)
+			}
+		},
+	})
 }
 
-func (g *GitHub) page(ctx context.Context, pageURL string) ([]githubItem, string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, nil)
-	if err != nil {
-		return nil, "", err
-	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	if g.Token != "" {
-		req.Header.Set("Authorization", "Bearer "+g.Token)
-	}
-	client := g.HTTP
-	if client == nil {
-		client = http.DefaultClient
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode/100 != 2 {
-		return nil, "", fmt.Errorf("github answered %s", resp.Status)
-	}
-	var page []githubItem
-	if err := json.NewDecoder(resp.Body).Decode(&page); err != nil {
-		return nil, "", fmt.Errorf("decode github page: %w", err)
-	}
-	link := ""
-	if m := nextLink.FindStringSubmatch(resp.Header.Get("Link")); m != nil {
-		link = m[1]
-	}
-	return page, link, nil
-}
-
-func (r githubItem) neutral(src Source) Item {
+func (r restItem) neutral(src Source) Item {
 	it := Item{
 		Source:    src,
 		Number:    r.Number,
