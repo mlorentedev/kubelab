@@ -101,6 +101,20 @@ def test_missing_counters_cannot_be_read() -> None:
     assert reading.code == UNREADABLE
 
 
+def test_a_direction_with_no_shaper_rate_cannot_be_read() -> None:
+    """Without the qdisc its drops read 0, so a capped window would look like the line."""
+    reading = m.read(_output(shaper=""))
+    assert reading.code == UNREADABLE
+    assert "no down shaper rate" in m.report(reading, "now")[0]
+
+
+def test_an_ssh_failure_says_so(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(m, "measure_command", lambda *_: ["ssh"])
+    monkeypatch.setattr(m.subprocess, "run", lambda *_, **__: subprocess.CompletedProcess([], 255, ""))
+    code, lines = m.run_measure({}, "now")
+    assert code == 255 and "SSH" in lines[0]
+
+
 @pytest.mark.parametrize(("rate", "kbit"), [("24Mbit", 24000), ("3600Kbit", 3600), ("1Gbit", 1_000_000), ("", 0)])
 def test_tc_rates_read_as_kbit(rate: str, kbit: float) -> None:
     assert m._kbit(rate) == kbit

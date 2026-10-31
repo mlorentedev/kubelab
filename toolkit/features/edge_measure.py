@@ -144,6 +144,11 @@ def read(output: str) -> Reading:
                 reading.unreadable = f"the edge printed an unreadable counter line: {line}"
                 return reading
     for direction, counter, drops in (("down", "rx", "drops_down"), ("up", "tx", "drops_up")):
+        # A lifted shaper still prints a rate. None means the qdisc was not where the
+        # command looked, so its drops read 0 too and a capped window would pass as the line.
+        if not reading.shaper.get(direction):
+            reading.unreadable = f"no {direction} shaper rate: the edge printed no CAKE qdisc for it"
+            return reading
         start, end = stamps.get(f"{direction}-start"), stamps.get(f"{direction}-end")
         if not start or not end or end["t"] <= start["t"]:
             reading.unreadable = f"no {direction} window: the edge printed no counters around it"
@@ -213,6 +218,6 @@ def run_measure(networking: dict[str, Any], when: str, seconds: int = SECONDS) -
     except subprocess.TimeoutExpired:
         return 255, [f"the edge stopped answering: no reading after {budget} s"]
     if result.returncode == 255:
-        return 255, []
+        return 255, ["the edge did not answer over SSH: is the LAN cable up (make edge-lan-link)?"]
     reading = read(result.stdout)
     return reading.code, report(reading, when)
