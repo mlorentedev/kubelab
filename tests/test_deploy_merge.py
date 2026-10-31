@@ -199,7 +199,7 @@ class TestWorkflowTriggers:
         import yaml
 
         wf = yaml.safe_load((REPO_ROOT / ".github/workflows/deploy-merge.yml").read_text(encoding="utf-8"))
-        guard = wf["jobs"]["merge"].get("if", "")
-        assert "github.event.repository" not in guard or guard.startswith(
-            "github.event_name != 'workflow_dispatch' ||"
-        ), guard
+        # Exact: an absent guard would let a dispatch on a branch judge with that branch's code.
+        assert wf["jobs"]["merge"].get("if") == (
+            "github.event_name != 'workflow_dispatch' || github.ref_name == github.event.repository.default_branch"
+        )
