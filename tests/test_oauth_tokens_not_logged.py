@@ -36,7 +36,7 @@ from toolkit.features import oidc_clients
 from toolkit.features.configuration import ConfigurationManager
 
 REPO = Path(__file__).resolve().parent.parent
-COMMON = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
+COMMON = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
 VECTOR_DIR = REPO / "infra/k8s/base/services/vector-config"
 VECTOR_TESTS = Path(__file__).resolve().parent / "fixtures" / "vector-redaction-tests.yaml"
 _ALG = "access_token_signed_response_alg"
@@ -73,7 +73,7 @@ def test_a_client_that_declares_no_alg_renders_none() -> None:
 
 @pytest.mark.parametrize("env", ["staging", "prod"])
 def test_each_rendered_clients_file_carries_it(env: str) -> None:
-    rendered = yaml.safe_load(oidc_clients.clients_file(env).read_text())
+    rendered = yaml.safe_load(oidc_clients.clients_file(env).read_text(encoding="utf-8"))
     clients = rendered["identity_providers"]["oidc"]["clients"]
     grafana = next(c for c in clients if c["client_id"] == "grafana")
     assert grafana.get(_ALG) == _declared("grafana")[_ALG]
@@ -143,7 +143,9 @@ def test_vector_rolls_when_its_config_changes(overlay: str) -> None:
 def test_dev_vector_loads_the_mounted_config() -> None:
     """The image's default config is a bundled demo, not the file Compose mounts, so a
     redaction written there is dead unless the service points Vector at it."""
-    compose = yaml.safe_load((REPO / "infra/stacks/services/observability/loki/compose.base.yml").read_text())
+    compose = yaml.safe_load(
+        (REPO / "infra/stacks/services/observability/loki/compose.base.yml").read_text(encoding="utf-8")
+    )
     vector = compose["services"]["vector"]
     mounted = {v.split(":")[1] for v in vector["volumes"] if v.split(":")[0].endswith("config/loki/vector.toml")}
     assert mounted, "the dev Vector config is not mounted"
@@ -152,7 +154,7 @@ def test_dev_vector_loads_the_mounted_config() -> None:
 
 
 def _vector_image() -> str:
-    kustomization = yaml.safe_load((REPO / "infra/k8s/base/kustomization.yaml").read_text())
+    kustomization = yaml.safe_load((REPO / "infra/k8s/base/kustomization.yaml").read_text(encoding="utf-8"))
     pin = next(i for i in kustomization["images"] if i["name"] == "timberio/vector")
     return f"{pin.get('newName', pin['name'])}:{pin['newTag']}"
 
@@ -177,7 +179,7 @@ def test_vector_redacts_every_token_kind_and_nothing_else(target: str, docker_mo
         pytest.skip("docker not on PATH: cannot run Vector (a skip is CANNOT CHECK, not OK)")
     config, transform = VECTOR_CONFIGS[target]
     tests = docker_mount_dir / "tests.yaml"
-    tests.write_text(VECTOR_TESTS.read_text().replace("parse_logs", transform))
+    tests.write_text(VECTOR_TESTS.read_text(encoding="utf-8").replace("parse_logs", transform), encoding="utf-8")
     out = subprocess.run(
         [
             "docker",

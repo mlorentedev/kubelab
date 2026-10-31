@@ -12,6 +12,9 @@ Description=KubeLab node maintenance
 # `%n` is this unit's own full name, suffix included, and it becomes the
 # instance -- so the notifier knows which unit to read the journal of.
 OnFailure=kubelab-notify@%n.service
+# Closes the incident the line above opened, and clears an undelivered page's
+# failed notifier (#2423, #2749). Quiet when nothing was failing.
+OnSuccess=kubelab-notify-recovered@%n.service
 
 [Service]
 Type=oneshot

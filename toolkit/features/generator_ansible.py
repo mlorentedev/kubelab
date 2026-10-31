@@ -203,7 +203,10 @@ class AnsibleGenerator(BaseGenerator):
                 "vars": {
                     "ansible_ssh_private_key_file": ssh_key,
                     "ansible_ssh_common_args": pinned_args,
-                    "ansible_python_interpreter": "auto_silent",
+                    # The node's own Python, not discovery: discovery takes the first
+                    # interpreter the SSH user's PATH finds, and on ace2 that was a
+                    # mise shim that hung every module run as root (#2802).
+                    "ansible_python_interpreter": "/usr/bin/python3",
                 },
                 "children": {},
             }
@@ -238,6 +241,9 @@ class AnsibleGenerator(BaseGenerator):
 
         jump_targets = self._lan_jump_targets(networking)
         for node_key, node in networking.get("nodes", {}).items():
+            self._warn_if_retired(f"nodes.{node_key}", node)
+            if node.get("retired"):
+                continue
             entry = self._homelab_node(node_key, node, networking, bootstrap)
             if node_key in jump_targets:
                 entry["ssh_lan_jump_targets"] = jump_targets[node_key]
@@ -443,7 +449,9 @@ class AnsibleGenerator(BaseGenerator):
             "# Regenerate: toolkit infra ansible generate --env {env}\n"
             "---\n"
         )
-        output_path.write_text(header + yaml.dump(inventory, default_flow_style=False, sort_keys=False))
+        output_path.write_text(
+            header + yaml.dump(inventory, default_flow_style=False, sort_keys=False), encoding="utf-8"
+        )
         logger.info(f"  Inventory: {output_path} ({len(host_names)} hosts, {len(children)} groups)")
 
     def validate(self) -> bool:

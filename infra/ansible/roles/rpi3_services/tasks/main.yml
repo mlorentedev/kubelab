@@ -2,6 +2,17 @@
 # rpi3_services owns Uptime Kuma only since DASH-DT-014b. Glances was
 # extracted to the shared `roles/glances/` role (one role for all nodes,
 # tailscale_ip bind, more secure than the previous 0.0.0.0 bind here).
+
+# rpi3 is on the lab Wi-Fi, which leaves by the edge's uplink: sized against its
+# downlink when the play sets image_pull_down_kbit, bounded and retried (#2742).
+# First, so a refused pull leaves the node as it was: past the allowlist rules,
+# their rerun would see no change and leave the old rules live (#2812).
+- name: Pull the Uptime Kuma image
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/_includes/image-pull.yml"
+  vars:
+    image_pull_name: Uptime Kuma
+    image_pull_images: ["{{ uptime_kuma_image }}"]
+
 # A container named uptime-kuma from outside this stack (the pre-Ansible ad-hoc
 # deployment) would hold the name and break `compose up`. Remove only that one:
 # removing it unconditionally took the external monitor of prod down on every
@@ -139,12 +150,34 @@
   when: not ansible_check_mode
   tags: [allowlist]
 
-- name: Pull service images
-  command: docker compose -f {{ rpi3_deploy_dir }}/compose.yml pull
-  changed_when: false
+# Enabling does not start a unit, so a unit that failed at boot stayed failed and
+# its stack unbound until the next boot (#2500). Starting a failed unit recreates
+# the stack once its address exists; on a healthy node the unit is already active
+# and this is a no-op.
+- name: Start the Compose stack unit
+  systemd:
+    name: kubelab-rpi3.service
+    state: started
+  # Same --check guard as the enable task above (#1983).
+  when: not (ansible_check_mode and not _rpi3_unit_file.stat.exists)
+  tags: [boot]
+
+# Before the compose run below: it would race the unit's own recreate.
+- name: Wait for the Compose stack unit to bring the stack up
+  import_tasks: "{{ playbook_dir }}/_includes/stack-unit-settled.yml"
+  vars:
+    stack_unit_settled_name: kubelab-rpi3.service
+  tags: [boot]
+
+- name: Check for a port binding that was never established
+  import_tasks: "{{ playbook_dir }}/_includes/compose-port-drift.yml"
+  vars:
+    compose_port_drift_file: "{{ rpi3_deploy_dir }}/compose.yml"
 
 - name: Start services
-  command: docker compose -f {{ rpi3_deploy_dir }}/compose.yml up -d
+  command: >-
+    docker compose -f {{ rpi3_deploy_dir }}/compose.yml up -d
+    {{ '--force-recreate' if compose_port_drift | bool else '' }}
   register: _compose_up
   # compose v2 writes progress to stderr. `Running` is no change; Started and
   # Created (which Recreated contains) are.

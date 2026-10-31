@@ -1,6 +1,7 @@
 """`make worktree-init` must recover a checkout whose local lock went stale.
 
-`poetry.lock` is gitignored, so each checkout keeps the lock of the day it was
+A checkout's lock can trail pyproject.toml: until TOOL-125 committed it,
+`poetry.lock` was gitignored and each checkout kept the lock of the day it was
 first installed. When pyproject.toml gains a dependency, `poetry install`
 refuses that lock ("pyproject.toml changed significantly since poetry.lock was
 last generated") and the checkout cannot import what master now needs. Measured

@@ -90,6 +90,12 @@ node_app = typer.Typer(
     no_args_is_help=True,
 )
 
+edge_app = typer.Typer(
+    name="edge",
+    help="The lab edge (rpi4): uplink status (NET-005)",
+    no_args_is_help=True,
+)
+
 app.add_typer(ansible_app, name="ansible")
 app.add_typer(terraform_app, name="terraform")
 app.add_typer(k8s_app, name="k8s")
@@ -98,6 +104,7 @@ app.add_typer(argo_app, name="argo")
 app.add_typer(headscale_app, name="headscale")
 app.add_typer(n8n_app, name="n8n")
 app.add_typer(node_app, name="node")
+app.add_typer(edge_app, name="edge")
 app.add_typer(vps_app, name="vps")
 
 
@@ -184,6 +191,128 @@ def vps_snapshot(
 def _snapshot_line(image: dict[str, Any]) -> str:
     size = f"{image['image_size']} GB" if image.get("image_size") else "size pending"
     return f"{image.get('description')} is {image.get('status')} (image {image.get('id')}, {size})"
+
+
+@edge_app.command("status")
+def edge_status() -> None:
+    """Say whether the edge's uplink is up, behind a portal, or dead.
+
+    Runs the gateway role's check on the edge over its LAN address and exits with
+    its code: 0 up, 2 portal, 3 dead, 4 unknown (255 when SSH itself fails).
+    """
+    from toolkit.features.configuration import ConfigurationManager
+    from toolkit.features.edge_status import EdgeNotDeclaredError, run_status
+
+    # Plaintext values only: the check needs addresses, not secrets.
+    net = ConfigurationManager("prod", settings.project_root).get_plaintext_values()["networking"]
+    try:
+        code = run_status(net)
+    except EdgeNotDeclaredError as e:
+        logger.error(str(e))
+        raise typer.Exit(1) from e
+    raise typer.Exit(code)
+
+
+def _say_the_path(net: dict[str, Any], via: str) -> None:
+    """Say which path the check takes: a pass over the tailnet says nothing of the LAN (#2801)."""
+    from toolkit.features.edge_status import path_to_edge
+
+    try:
+        path = path_to_edge(net, via)
+    except OSError as e:
+        logger.warning(f"Could not read the path to the edge: {e}")
+        return
+    if via == "lan" and path["tailnet"]:
+        logger.warning(
+            f"This machine reaches the edge's LAN address from {path['source']}, an address on the tailnet, "
+            "so this check does not show that the LAN path works (#2801). Over the LAN: `make edge-lan-link`."
+        )
+    else:
+        logger.info(f"Reaching the edge from {path['source']}, over the {'tailnet' if path['tailnet'] else 'LAN'}")
+
+
+@edge_app.command("boot-check")
+def edge_boot_check(
+    case: Annotated[
+        str | None, typer.Option("--case", help="What the hard-reset case took away: no-uplink or no-lan")
+    ] = None,
+    via: Annotated[str, typer.Option("--via", help="Reach the edge over its lan or tailnet address")] = "lan",
+) -> None:
+    """Say whether a boot brought back everything the edge serves (the hard-reset test).
+
+    Runs the gateway role's boot check on the edge, one line per check, and exits 0
+    when every check passed, 1 when one failed, 2 when none failed but one cannot be
+    judged yet (its WAIT line says when to run it again), and 255 when SSH itself fails.
+    """
+    from toolkit.features.configuration import ConfigurationManager
+    from toolkit.features.edge_status import BOOT_CASES, EdgeNotDeclaredError, run_boot_check
+
+    if case not in (None, *BOOT_CASES) or via not in ("lan", "tailnet"):
+        logger.error(f"--case takes {' or '.join(BOOT_CASES)}, and --via lan or tailnet")
+        raise typer.Exit(64)
+    net = ConfigurationManager("prod", settings.project_root).get_plaintext_values()["networking"]
+    try:
+        _say_the_path(net, via)
+        code = run_boot_check(net, case, via)
+    except EdgeNotDeclaredError as e:
+        logger.error(str(e))
+        raise typer.Exit(1) from e
+    raise typer.Exit(code)
+
+
+@edge_app.command("soak")
+def edge_soak() -> None:
+    """Say whether the uplink adapter has held 48 hours of this boot with no reset (B12).
+
+    Reads the edge's kern.log over its LAN address and exits 0 when the soak passed,
+    1 when the adapter reset, 2 when it holds so far but has not reached 48 hours,
+    3 when the log cannot tell, and 255 when SSH itself fails.
+    """
+    from toolkit.features.configuration import ConfigurationManager
+    from toolkit.features.edge_soak import run_soak
+    from toolkit.features.edge_status import EdgeNotDeclaredError
+
+    net = ConfigurationManager("prod", settings.project_root).get_plaintext_values()["networking"]
+    try:
+        code, lines = run_soak(net)
+    except EdgeNotDeclaredError as e:
+        logger.error(str(e))
+        raise typer.Exit(1) from e
+    for line in lines:
+        typer.echo(line)
+    raise typer.Exit(code)
+
+
+@edge_app.command("lan-link")
+def edge_lan_link(
+    route: Annotated[
+        bool, typer.Option("--route", help="Make the edge the default route, for the portal login")
+    ] = False,
+    remove: Annotated[bool, typer.Option("--remove", help="Delete the profile")] = False,
+    static: Annotated[bool, typer.Option("--static", help="A fixed address, for when the edge serves no DHCP")] = False,
+    interface: Annotated[
+        str | None, typer.Option("--interface", help="The adapter on the lab switch, if not the only one")
+    ] = None,
+) -> None:
+    """Join this laptop to the lab LAN with a NetworkManager profile (NET-005 AC11).
+
+    DHCP from the edge, or a fixed address when it serves none, the lab LAN routed
+    out the wire ahead of the tailnet, and by default neither the edge's default
+    route nor its DNS.
+    """
+    from toolkit.features.configuration import ConfigurationManager
+    from toolkit.features.edge_lan_link import LanLinkRefused, apply
+
+    if route + remove + static > 1:
+        logger.error("--route, --static and --remove contradict each other: pick one")
+        raise typer.Exit(1)
+    net = ConfigurationManager("prod", settings.project_root).get_plaintext_values()["networking"]
+    try:
+        code = apply(net["lan_cidr"], route=route, remove=remove, static=static, interface=interface)
+    except LanLinkRefused as e:
+        logger.error(str(e))
+        raise typer.Exit(1) from e
+    raise typer.Exit(code)
 
 
 @node_app.command("reclaim")
@@ -309,12 +438,17 @@ def node_reclaim(
 
 @headscale_app.command("policy-check")
 def headscale_policy_check() -> None:
-    """Render policy.hujson from the SSOT and validate it with `headscale policy check` (Docker)."""
-    from toolkit.scripts.render_headscale_policy import policy_check, render_policy
+    """Render policy.hujson from the SSOT and validate it with `headscale policy check` (Docker).
 
-    rc = policy_check(render_policy())
-    if rc != 0:
-        raise typer.Exit(rc)
+    Checks it twice: segment-free, as the repository renders it, and with a synthetic
+    tenant segment, so the segment syntax is proven on the pinned image too (VPN-ACL-014).
+    """
+    from toolkit.scripts.render_headscale_policy import EXAMPLE_SEGMENT, policy_check, render_policy
+
+    for segments in ([], [EXAMPLE_SEGMENT]):
+        rc = policy_check(render_policy(segments=segments))
+        if rc != 0:
+            raise typer.Exit(rc)
 
 
 @headscale_app.command("probe")
@@ -325,6 +459,48 @@ def headscale_probe() -> None:
     rc = run_probe()
     if rc != 0:
         raise typer.Exit(rc)
+
+
+@headscale_app.command("rejoin")
+def headscale_rejoin(
+    node: Annotated[str, typer.Option("--node", help="Node whose provision-<node> play to run, e.g. rpi4")],
+    env: Annotated[str, typer.Option("--env", "-e", help="Target environment")] = "prod",
+) -> None:
+    """Put a node back on the mesh with a single-use, one-hour key (NET-005 task 32).
+
+    Runs the node's play, tailscale role only, over its LAN address: a node off the
+    mesh answers on nothing else. The role mints the key on Headscale only when the
+    node is off the mesh, so a node that is on it is a no-op. The mesh inventory is
+    put back whatever the run did.
+    """
+    from toolkit.features.generator_ansible import ansible_generator
+    from toolkit.features.headscale_nodes import REJOIN_EXTRA_VARS, REJOIN_TAGS, RejoinRefused, rejoin_playbook
+
+    try:
+        playbook = rejoin_playbook(settings.ansible_dir / "playbooks", node)
+    except RejoinRefused as exc:
+        logger.error(str(exc))
+        raise typer.Exit(1) from exc
+
+    ran = False
+    try:
+        ansible_run(
+            playbook=playbook,
+            env=env,
+            tags=REJOIN_TAGS,
+            extra_vars=REJOIN_EXTRA_VARS,
+            bootstrap=True,
+            require_fresh=True,
+        )
+        ran = True
+    finally:
+        logger.info("Restoring: inventory with mesh Tailscale IPs")
+        restored = ansible_generator.generate(env)
+        if not restored.get("success"):
+            logger.error(f"The LAN inventory is still on disk: {restored.get('error')}")
+            # Raised in `finally`, an exit would replace a failed run's own: only a clean run takes it.
+            if ran:
+                raise typer.Exit(1)
 
 
 @headscale_app.command("recycle-stale")
@@ -452,7 +628,7 @@ def argo_spoke_url(
 
     common = settings.project_root / "infra" / "config" / "values" / "common.yaml"
     try:
-        url = argocd_spokes.apiserver_url(yaml.safe_load(common.read_text()), env)
+        url = argocd_spokes.apiserver_url(yaml.safe_load(common.read_text(encoding="utf-8")), env)
     except KeyError as exc:
         logger.error(str(exc))
         raise typer.Exit(1) from exc
@@ -1001,7 +1177,7 @@ def _load_cluster_bootstrap() -> list[BootstrapEntry]:
     cannot create them (ADR-041). File order is preserved (stable apply order).
     """
     common_path = settings.project_root / "infra" / "config" / "values" / "common.yaml"
-    with open(common_path) as f:
+    with open(common_path, encoding="utf-8") as f:
         config = yaml.safe_load(f)
     return [BootstrapEntry.from_dict(entry) for entry in config.get("cluster_bootstrap", [])]
 
@@ -1610,6 +1786,29 @@ def _refuse_if_behind_master(ansible_dir: Path, *, force: bool) -> None:
     raise typer.Exit(1) from None
 
 
+def _refuse_if_collections_off_declaration(ansible_dir: Path, *, force: bool) -> None:
+    """ANSIBLE-070: the roles run the controller's Galaxy collections, so a pin it never installed changes nothing."""
+    from toolkit.features import provision_freshness
+
+    try:
+        declared = provision_freshness.declared_collections(provision_freshness.repo_root(ansible_dir))
+        off = provision_freshness.collections_off_declaration(declared)
+    except provision_freshness.FreshnessError as exc:
+        if force:
+            logger.warning(f"Could not compare the Galaxy collections (FORCE=1, continuing): {exc}")
+            return
+        logger.error(f"Could not compare the Galaxy collections with {provision_freshness.REQUIREMENTS}: {exc}")
+        logger.info("Fix ansible-galaxy, or FORCE=1 to run without the check")
+        raise typer.Exit(1) from None
+    if not off:
+        return
+    if force:
+        logger.warning(f"FORCE=1: running with {len(off)} Galaxy collections off their pins")
+        return
+    logger.error(provision_freshness.collections_refusal_message(off))
+    raise typer.Exit(1) from None
+
+
 @ansible_app.command("run")
 def ansible_run(
     playbook: Annotated[str, typer.Option("--playbook", "-p", help="Playbook name (without .yml)")],
@@ -1665,6 +1864,7 @@ def ansible_run(
 
     if require_fresh and not check:
         _refuse_if_behind_master(ansible_dir, force=force)
+        _refuse_if_collections_off_declaration(ansible_dir, force=force)
 
     if not skip_generate:
         from toolkit.features.generator_ansible import ansible_generator
@@ -1701,13 +1901,38 @@ def ansible_run(
         cmd += f" --extra-vars '{extra_vars}'"
 
     logger.info(f"Running: {cmd}")
-    result = command.run(cmd, cwd=ansible_dir, check=False, capture_output=False)
+    restore = not skip_generate and (bootstrap or transport != "mesh")
+    try:
+        result = command.run(cmd, cwd=ansible_dir, check=False, capture_output=False)
+    finally:
+        restored = _restore_mesh_inventory(env) if restore else True
 
-    if result.returncode == 0:
-        logger.success(f"Playbook '{playbook}' completed successfully")
-    else:
+    # The run's failure is the one reported; a failed restore after a good run
+    # still fails, because the inventory on disk is then the bootstrap one.
+    if result.returncode != 0:
         logger.error(f"Playbook '{playbook}' failed")
         raise typer.Exit(1) from None
+    if not restored:
+        raise typer.Exit(1) from None
+    logger.success(f"Playbook '{playbook}' completed successfully")
+
+
+def _restore_mesh_inventory(env: str) -> bool:
+    """Put the mesh inventory back on disk after a bootstrap or bastion run.
+
+    Whatever reads the file without running (a raw ansible-playbook, `run
+    --skip-generate`) would otherwise address every node by its LAN IP or through
+    the bastion. This was a branch of `make provision` (TOOL-036); here every
+    target that passes `--bootstrap` or `--transport` gets it, failed run or not.
+    """
+    from toolkit.features.generator_ansible import ansible_generator
+
+    logger.info("Restoring the inventory with mesh Tailscale IPs")
+    restored = ansible_generator.generate(env)
+    if not restored.get("success"):
+        logger.error(f"Mesh inventory not restored, the one on disk is this run's: {restored.get('error')}")
+        return False
+    return True
 
 
 @ansible_app.command("syntax-check")

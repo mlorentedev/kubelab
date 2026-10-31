@@ -52,6 +52,8 @@
 # ---------------------------------------------------------------------------
 - name: Provision ace2 — On-demand LLM compute node
   hosts: ace2
+  # A later failure must not drop the handlers earlier tasks notified (#2824).
+  force_handlers: true
   become: true
   gather_facts: true
 
@@ -70,6 +72,13 @@
     # does not fail — it provisions a node with an empty credential and reports
     # failed=0. Guarded by tests/test_dev_node_gitea_identity.py.
     gitea_identity_env: prod
+
+    # ace2 is behind the lab edge, so its image pulls share the edge's shaped
+    # downlink and are sized against it first (_includes/image-pull.yml, #2742).
+    image_pull_down_kbit: "{{ config.networking.edge.uplink.bandwidth.down_kbit }}"
+    image_pull_goodput: "{{ config.networking.edge.uplink.bandwidth.pull_goodput }}"
+    # dockerd's attempts at a layer, for the node's daemons and the pull's bound (#2834).
+    docker_max_download_attempts: "{{ config.networking.edge.uplink.max_download_attempts }}"
 
   pre_tasks:
     - name: Load base config (SSOT)
@@ -118,6 +127,9 @@
       set_fact:
         secrets: "{{ (sops_common.stdout | from_yaml) | combine(sops_env.stdout | from_yaml, recursive=True) }}"
       no_log: true
+      tags: [always]
+
+    - import_tasks: _includes/require-secrets.yml
       tags: [always]
 
     # Separate values tree AND vault for the one thing on this node whose
@@ -246,6 +258,27 @@
         # `gitea_identity_env` above for why that distinction is load-bearing.
         dev_node_gitea_bot_token: "{{ gitea_secrets.apps.services.core.gitea.bot_token | default('') }}"
 
+    # The fleet's failure-notification path, and the fleet webhook secret it
+    # reads. Applied BEFORE every role whose units name its templates
+    # (`OnFailure=kubelab-notify@`, `OnSuccess=kubelab-notify-recovered@`): a
+    # unit started first runs with no template behind the name, and systemd
+    # drops each page as "not found" until this role runs (#2728).
+    - role: ../roles/node_notify
+      # `maintenance` and NOT a `notify` tag of its own, deliberately.
+      # node_maintenance re-points its unit at this role's template and then
+      # removes the single-purpose notifier it replaces, so a selector that
+      # reaches one of the two without the other leaves the node
+      # notification-dark: systemd logs "unit not found" on the next failure
+      # and nobody is told.
+      #
+      # Found by a `--check` run scoped to a `notify` tag that used to exist
+      # here. Sharing node_maintenance's tag makes the unsafe scoping
+      # unreachable rather than merely documented, which is the difference
+      # between a rule and a comment. Asserted in tests/test_node_notify_role.py.
+      # `agent_stack` too: its vault sync pages through this notifier, so
+      # `TAGS=agent_stack` must install it (and node_maintenance with it).
+      tags: [maintenance, agent_stack]
+
     # The operator's agent tooling (ADR-068, spec AI-009-hermes-ace2). This PR
     # carries Open WebUI only. Its identity provider is PROD Authelia, the same
     # fact `gitea_identity_env` encodes for the forge: ace2 is staging, the IdP
@@ -315,25 +348,6 @@
           - "/home/{{ config.networking.ssh_users.homelab }}/.ssh"
           - "/home/{{ config.networking.ssh_users.homelab }}/.kube"
           - /var/run/docker.sock
-
-    # The fleet's failure-notification path, and the fleet webhook secret it
-    # reads. Ordered BEFORE node_maintenance deliberately: that role's unit
-    # declares `OnFailure=kubelab-notify@%n.service`, and this one installs the
-    # template it names while removing the single-purpose unit it replaces.
-    - role: ../roles/node_notify
-      # `maintenance` and NOT a `notify` tag of its own, deliberately. This role
-      # REMOVES the unit `kubelab-maintenance.service` still names until
-      # node_maintenance re-templates it, so a selector that reaches this role
-      # without reaching that one leaves the node notification-dark: systemd
-      # logs "unit not found" on the next failure and nobody is told.
-      #
-      # Found by a `--check` run scoped to a `notify` tag that used to exist
-      # here. Sharing node_maintenance's tag makes the unsafe scoping
-      # unreachable rather than merely documented, which is the difference
-      # between a rule and a comment. Asserted in tests/test_node_notify_role.py.
-      # `agent_stack` too: its vault sync pages through this notifier, so
-      # `TAGS=agent_stack` must install it (and node_maintenance with it).
-      tags: [maintenance, agent_stack]
 
     # ANSIBLE-035: install-only (maintenance_run_cleanup: false) — cleanup
     # runs on the timer's own weekly schedule, not synchronously on every

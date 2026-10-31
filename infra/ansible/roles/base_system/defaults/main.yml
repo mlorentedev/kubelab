@@ -33,11 +33,11 @@ base_packages:
 # Entries in base_packages that only exist on Ubuntu, not Debian (OPS-017).
 # software-properties-common ships `add-apt-repository` — PPA tooling for a
 # concept Debian doesn't have; nothing in this repo's roles actually needs
-# the package itself. `apt_repository` (used by roles/docker and
-# roles/dev_node) talks to python3-apt directly, not this CLI. Filtered by
-# the real `ansible_facts['distribution']` fact in tasks/main.yml rather than
-# a per-node override — same reasoning ANSIBLE-035 gives for rejecting a
-# per-node key: it invites drift nobody audits.
+# the package itself. `deb822_repository` (used by roles/docker and
+# roles/dev_node) needs python3-debian, which those roles install, not this
+# CLI. Filtered by the real `ansible_facts['distribution']` fact in
+# tasks/main.yml rather than a per-node override — same reasoning ANSIBLE-035
+# gives for rejecting a per-node key: it invites drift nobody audits.
 base_packages_ubuntu_only:
   - software-properties-common
 
@@ -78,3 +78,20 @@ logrotate_randomized_delay: "10m"
 # top of node_maintenance maintenance_active_log_max_mb truncate).
 # Silently skipped on nodes where rsyslog is inactive (e.g. rpi3 trixie).
 rsyslog_logrotate_size_cap: "50M"
+
+# --- packages a provision upgrades only on purpose (#2722) ---
+# "Upgrade all packages" is a full dist-upgrade on every `make provision`, so
+# without a hold a run for any other reason moves these too. On 2026-10-27 one
+# moved the Beelink's Docker as a side effect. A node
+# lists them in its play. node_maintenance finds them already held and leaves
+# them held. To upgrade them, run one provision that releases and re-holds:
+#   make provision NODE=<node> ENV=<env> EXTRA='base_system_release_holds=true'
+base_system_held_packages: []
+base_system_release_holds: false
+
+# --- cloud-init (#2777) ---
+# Stop cloud-init on a node whose image's user-data sets manage_etc_hosts: it
+# rewrites /etc/hosts at every boot, replacing this role's 127.0.1.1 line and
+# dropping dns_resilience's block. Nodes installed from the ISO already carry
+# the marker, which the installer writes. The edge's play turns it on.
+base_system_disable_cloud_init: false

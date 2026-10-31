@@ -37,11 +37,11 @@ RECORD_TASK = "Record the reviewer token in SOPS"
 
 
 def _identities() -> dict[str, str]:
-    return yaml.safe_load(COMMON.read_text())["apps"]["auth"]["identities"]
+    return yaml.safe_load(COMMON.read_text(encoding="utf-8"))["apps"]["auth"]["identities"]
 
 
 def _task(name: str) -> dict[str, Any]:
-    for task in yaml.safe_load((ROLE / "tasks/main.yml").read_text()):
+    for task in yaml.safe_load((ROLE / "tasks/main.yml").read_text(encoding="utf-8")):
         if isinstance(task, dict) and task.get("name") == name:
             return task
     raise AssertionError(f"no task named {name!r} in beelink_services/tasks/main.yml")
@@ -61,7 +61,7 @@ def test_the_reviewer_is_its_own_row_in_the_identity_map() -> None:
 
 
 def test_the_playbook_resolves_the_reviewer_through_the_map() -> None:
-    playbook = PLAYBOOK.read_text()
+    playbook = PLAYBOOK.read_text(encoding="utf-8")
     reviewer = _identities()["reviewer"]
     live = [line for line in playbook.splitlines() if reviewer in line and not line.strip().startswith("#")]
     assert not live, f"the reviewer account name appears literally in provision-bee.yml: {live}"
@@ -101,7 +101,7 @@ def test_the_reviewer_token_is_recorded_over_stdin() -> None:
 
 
 def test_the_container_receives_the_reviewer_name_for_the_bootstrap_script() -> None:
-    compose = (ROLE / "templates/compose.yml.j2").read_text()
+    compose = (ROLE / "templates/compose.yml.j2").read_text(encoding="utf-8")
     assert 'GITEA_REVIEWER_USER: "{{ gitea_reviewer_user }}"' in compose
     assert 'GITEA_REVIEWER_EMAIL: "{{ gitea_reviewer_email }}"' in compose
 
@@ -117,7 +117,7 @@ def harness(tmp_path: pathlib.Path) -> Any:
 
     def build(*, existing: tuple[str, ...], prohibited: bool) -> None:
         rows = "".join(f"{i}\\t{name}\\t{name}@example.test\\n" for i, name in enumerate(existing, start=2))
-        (bin_dir / "wget").write_text("#!/bin/sh\nexit 0\n")
+        (bin_dir / "wget").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
         (bin_dir / "su").write_text(
             f"""#!/bin/sh
 cmd="$3"
@@ -127,7 +127,8 @@ case "$cmd" in
   *"admin auth list"*) printf 'ID\\tName\\n7\\tauthelia\\n' ;;
   *) exit 0 ;;
 esac
-"""
+""",
+            encoding="utf-8",
         )
         (bin_dir / "curl").write_text(
             f"""#!/bin/sh
@@ -136,13 +137,14 @@ case "$*" in
   *PATCH*) exit 0 ;;
   *) printf '{{"prohibit_login":{str(prohibited).lower()}}}' ;;
 esac
-"""
+""",
+            encoding="utf-8",
         )
         for stub in ("wget", "su", "curl"):
             (bin_dir / stub).chmod(0o755)
 
     marker = tmp_path / "state"
-    marker.write_text("")
+    marker.write_text("", encoding="utf-8")
 
     def run(**extra: str) -> subprocess.CompletedProcess[str]:
         env = {
@@ -169,14 +171,14 @@ def test_the_reviewer_account_is_created_when_absent(harness: Any) -> None:
     result = harness.run(**REVIEWER_ENV)
     assert result.returncode == 0, result.stderr
     assert "Created machine account 'mentor'" in result.stdout
-    assert "admin user create --username mentor" in harness.calls.read_text()
+    assert "admin user create --username mentor" in harness.calls.read_text(encoding="utf-8")
 
 
 def test_the_reviewer_account_keeps_a_working_token(harness: Any) -> None:
     """The login flag stays off: `prohibit_login` kills API tokens (lesson-400, re-measured 2026-09-24)."""
     harness.build(existing=("mentor",), prohibited=True)
     result = harness.run(**REVIEWER_ENV)
-    calls = harness.calls.read_text()
+    calls = harness.calls.read_text(encoding="utf-8")
     assert "Updated machine account login state" in result.stdout
     assert "admin/users/mentor" in calls and "PATCH" in calls
 
@@ -192,7 +194,7 @@ def test_no_reviewer_is_provisioned_when_none_is_declared(harness: Any) -> None:
     harness.build(existing=(), prohibited=False)
     result = harness.run(GITEA_BOT_USER="hefesto", GITEA_BOT_EMAIL="hefesto@example.test")
     assert result.returncode == 0, result.stderr
-    assert "mentor" not in harness.calls.read_text()
+    assert "mentor" not in harness.calls.read_text(encoding="utf-8")
 
 
 def test_the_admin_password_never_reaches_curl_argv(harness: Any) -> None:
@@ -203,6 +205,6 @@ def test_the_admin_password_never_reaches_curl_argv(harness: Any) -> None:
     """
     harness.build(existing=("mentor",), prohibited=True)
     harness.run(GITEA_BOT_USER="hefesto", GITEA_BOT_EMAIL="hefesto@example.test", **REVIEWER_ENV)
-    calls = harness.calls.read_text()
+    calls = harness.calls.read_text(encoding="utf-8")
     assert "PATCH" in calls, "the fixture must drive the PATCH path too"
     assert "operator:pw" not in calls

@@ -51,11 +51,20 @@
 # ---------------------------------------------------------------------------
 - name: Provision ace1 — K3s staging all-in-one
   hosts: ace1
+  # A later failure must not drop the handlers earlier tasks notified (#2824).
+  force_handlers: true
   become: true
   gather_facts: true
 
   vars:
     deploy_env: staging
+
+    # ace1 is behind the lab edge, so its image pulls share the edge's shaped
+    # downlink and are sized against it first (_includes/image-pull.yml, #2742).
+    image_pull_down_kbit: "{{ config.networking.edge.uplink.bandwidth.down_kbit }}"
+    image_pull_goodput: "{{ config.networking.edge.uplink.bandwidth.pull_goodput }}"
+    # dockerd's attempts at a layer, for the node's daemons and the pull's bound (#2834).
+    docker_max_download_attempts: "{{ config.networking.edge.uplink.max_download_attempts }}"
 
   pre_tasks:
     - name: Load base config (SSOT)
@@ -100,6 +109,9 @@
         secrets: "{{ (sops_common.stdout | from_yaml) | combine(sops_env.stdout | from_yaml, recursive=True) }}"
       no_log: true
       tags: [always]  # prerequisite: secrets needed by any tag-filtered role
+
+    - import_tasks: _includes/require-secrets.yml
+      tags: [always]
 
     - name: Generate Headscale pre-auth key (via VPS)
       command: >

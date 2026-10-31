@@ -4,6 +4,13 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 657 | [A missing Wi-Fi adapter holds network.target for systemd's 90-second device timeout](lesson-657-a-missing-wifi-adapter-holds-network-target-for-the-device-timeout.md) | 2026-10-29 |
+| 650 | [A renamed network device becomes active on its move event, not its add](lesson-650-a-renamed-network-device-becomes-active-on-its-move-event-not-its-add.md) | 2026-10-29 |
+| 648 | [A static address on a link without a carrier is not configured](lesson-648-a-static-address-on-a-link-without-a-carrier-is-not-configured.md) | 2026-10-29 |
+| 646 | [A unit started with networkd never starts for an adapter that appears later](lesson-646-a-unit-started-with-networkd-never-starts-for-an-adapter-that-appears-later.md) | 2026-10-28 |
+| 639 | [Emptying a resolver's cache is not restarting it](lesson-639-emptying-a-resolvers-cache-is-not-restarting-it.md) | 2026-10-27 |
+| 633 | [A CoreDNS template for one type answers SERVFAIL for every other type, and musl fails the lookup](lesson-633-a-coredns-template-for-one-type-answers-servfail-for-every-other.md) | 2026-10-26 |
+| 621 | [ufw sees only the forwarded traffic that Docker and Tailscale leave to it](lesson-621-ufw-does-not-govern-forwarded-traffic.md) | 2026-10-25 |
 | 560 | [A green DNS deploy is not what clients resolve until the cache in front expires](lesson-560-a-green-dns-deploy-is-not-what-clients-resolve-until-the-cache-in-front-expires.md) | 2026-10-11 |
 | 559 | [A resolver entry must name who serves the name, not where the workload runs](lesson-559-a-resolver-entry-must-name-who-serves-the-name-not-where-the-workload-runs.md) | 2026-10-11 |
 | 548 | [An egress rule on the destination drops the replies of a listener owned by the same uid](lesson-548-an-egress-rule-on-the-destination-drops-the-replies-of-a-listener-owned-by-the-same-uid.md) | 2026-10-10 |

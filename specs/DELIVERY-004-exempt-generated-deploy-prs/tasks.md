@@ -20,9 +20,9 @@ created: "2026-09-04"
 - [x] [AC1] `toolkit/features/deploy_shape.py`: pure `classify()` + an API reader (gh) that fails closed.
 - [x] [AC2] `mechanical` block in `harness/review-attestation.json`; extend the no-policy-in-module test to both modules.
 - [x] [AC1] `toolkit tools deploy-shape` CLI: JSON verdict, exit 0 mechanical / 1 not mechanical / 2 unknown.
-- [x] [AC1] `.github/workflows/deploy-shape.yml`: master's code, check-run `success`/`neutral`/`failure`.
+- [x] [AC1] `.github/workflows/deploy-shape.yml`: master's code. Published as a commit status since #2717 (`success` for both evaluated verdicts, the verdict in the description; `failure` for unknown). It was a check-run `success`/`neutral`/`failure` until then.
 - [x] [AC2] `review-attestation`: drop the file-only staging signature; exempt on a recomputed `mechanical` at the attested head sha.
-- [x] [AC3] `deploy-shape` added to `required_contexts` (#2643) and applied live from `origin/master` `91ff4b97`. A neutral run passes protection: #2653 at `5c5d7afd` had `deploy-shape: neutral`, every other required context green, and `mergeable_state: clean`. ✓ 2026-10-22
+- [x] [AC3] `deploy-shape` added to `required_contexts` (#2643) and applied live from `origin/master` `91ff4b97`. A neutral run passes protection: #2653 at `5c5d7afd` had `deploy-shape: neutral`, every other required context green, and `mergeable_state: clean`. ✓ 2026-10-22. Correction (#2714, #2717): a check-run posted with `GITHUB_TOKEN` joins another workflow's suite, so protection only sometimes counted it, and #2653 was one of the lucky cases. The commit status is what makes AC3 hold: PRs merged after #2717 with `deploy-shape` present only as a status (#2869, #2874).
 - [x] Lesson in `docs/lessons/` (lesson-613) ✓ 2026-10-21
 
 ## PR 2 — widening tests (AC4, AC5)

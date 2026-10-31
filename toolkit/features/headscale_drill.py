@@ -43,6 +43,7 @@ from typing import Any, Callable, Optional
 
 import yaml
 
+from toolkit.core.io import docker_user_args
 from toolkit.core.logging import logger
 from toolkit.features.restore_drill import latest_snapshot, report, restore_source, scratch, wait_until
 
@@ -372,7 +373,7 @@ def _serve(
     """Start the restored server with no network and wait until its CLI answers."""
     config = workdir / "config"
     config.mkdir()
-    (config / "config.yaml").write_text(_drill_config(cidr))
+    (config / "config.yaml").write_text(_drill_config(cidr), encoding="utf-8")
     # No network: a copy of the control plane must never be reachable by a node.
     rc, _, err = run(
         [
@@ -383,8 +384,7 @@ def _serve(
             name,
             "--network",
             "none",
-            "--user",
-            f"{os.getuid()}:{os.getgid()}",
+            *docker_user_args(),
             "-v",
             f"{data}:/var/lib/headscale",
             "-v",

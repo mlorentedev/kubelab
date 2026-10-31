@@ -55,7 +55,7 @@ MIGRATED_GATES = {
 def _v2_filter_nodes() -> list[tuple[str, dict]]:
     found = []
     for path in sorted(WORKFLOW_DIR.glob("*.json")):
-        for node in json.loads(path.read_text())["nodes"]:
+        for node in json.loads(path.read_text(encoding="utf-8"))["nodes"]:
             if node["type"] in FILTER_NODE_TYPES and node.get("typeVersion", 1) >= 2:
                 found.append((path.name, node))
     return found
@@ -118,7 +118,7 @@ def test_v2_filter_node_carries_the_v2_filter_shape(workflow: str, node: dict) -
 @pytest.mark.parametrize(("key", "field"), MIGRATED_GATES.items(), ids=[k[1] for k in MIGRATED_GATES])
 def test_migrated_gate_still_tests_its_original_field_for_true(key: tuple[str, str], field: str) -> None:
     workflow, name = key
-    nodes = json.loads((WORKFLOW_DIR / workflow).read_text())["nodes"]
+    nodes = json.loads((WORKFLOW_DIR / workflow).read_text(encoding="utf-8"))["nodes"]
     node = next(n for n in nodes if n["name"] == name)
     rows = node["parameters"]["conditions"]["conditions"]
     assert len(rows) == 1, f"{name!r} should test exactly one condition, has {len(rows)}"

@@ -56,7 +56,7 @@ def _load_values_doc(env: str) -> tuple[YAML, Path, Any]:
         raise FileNotFoundError(f"Values file not found: {path}")
     yaml = YAML()
     yaml.preserve_quotes = True
-    return yaml, path, yaml.load(path.read_text())
+    return yaml, path, yaml.load(path.read_text(encoding="utf-8"))
 
 
 def _require_platform_app(app: str, reason: str) -> None:
@@ -179,13 +179,13 @@ def _replace_scalar_in_place(path: Path, mapping: Any, key: str, old: str, new: 
     the scalar's position; the write touches that position only.
     """
     line_no, col = mapping.lc.value(key)
-    lines = path.read_text().splitlines(keepends=True)
+    lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
     head, tail = lines[line_no][:col], lines[line_no][col:]
     match = re.match(rf"""(["']?)({re.escape(old)})\1(?=\s|#|$)""", tail)
     if not match:
         raise ValueError(f"{key} at {path.name}:{line_no + 1} is not a one-line scalar '{old}'; edit it by hand")
     lines[line_no] = head + tail[: match.start(2)] + new + tail[match.end(2) :]
-    path.write_text("".join(lines))
+    path.write_text("".join(lines), encoding="utf-8")
 
 
 def promote(env: str, app: str, version: str) -> None:
@@ -242,7 +242,7 @@ def promote(env: str, app: str, version: str) -> None:
         # which image runs where a reader looks first (GITOPS-004).
         app_cfg.insert(0, "version", version)
 
-    with values_path.open("w") as fh:
+    with values_path.open("w", encoding="utf-8", newline="\n") as fh:
         yaml.dump(data, fh)
     logger.info(f"{env}: {app} version {previous} -> {version}")
 

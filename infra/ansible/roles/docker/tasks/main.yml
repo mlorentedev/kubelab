@@ -23,6 +23,8 @@
     - /etc/apt/keyrings/docker.gpg~
   register: _legacy_gpg
 
+# The glob also matches today's docker.sources. That is harmless: it runs before
+# the source is written, and only on a node that still had the .gpg key.
 - name: Remove old Docker repository entries (migration from .gpg to .asc)
   shell: rm -f /etc/apt/sources.list.d/*docker*
   when: _legacy_gpg is changed
@@ -40,11 +42,37 @@
     dest: /etc/apt/keyrings/docker.asc
     mode: "0644"
 
-- name: Add Docker repository
-  apt_repository:
-    repo: "deb [arch={{ docker_arch }} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ansible_facts.distribution_release }} stable"
+- name: Install the library deb822_repository needs
+  apt:
+    name: python3-debian
     state: present
+    # The first apt step a tagged run reaches: it refreshes an index never fetched
+    # or over an hour old, as the role's other installs do.
     update_cache: true
+    cache_valid_time: 3600
+
+# deb822, as Docker's install page writes it (docker.sources), because
+# apt_repository goes away in ansible-core 2.25 (#2737).
+- name: Add Docker repository
+  deb822_repository:
+    name: docker
+    types: [deb]
+    uris: https://download.docker.com/linux/ubuntu
+    suites: ["{{ ansible_facts.distribution_release }}"]
+    components: [stable]
+    architectures: ["{{ docker_arch }}"]
+    signed_by: /etc/apt/keyrings/docker.asc
+    state: present
+
+# The one-line source apt_repository derived from the URL (lesson-037; measured
+# on bee, ace1, ace2 and rpi4 on 2026-10-28). Removed only now that
+# docker.sources is in place, so the node is never without the repository; left
+# beside it, apt warns the target is configured twice. The install below
+# refreshes the index.
+- name: Remove the Docker source the old task wrote
+  file:
+    path: /etc/apt/sources.list.d/download_docker_com_linux_ubuntu.list
+    state: absent
 
 - name: Install Docker packages
   apt:
@@ -58,6 +86,9 @@
     update_cache: yes
 
 # --- Configure (before starting daemon) ---
+# max-download-attempts: the play passes networking.edge.uplink.max_download_attempts,
+# where the reason is recorded (#2834). It has no default here, so a play that does
+# not pass it fails rather than leave a node behind the edge on Docker's 5.
 - name: Configure Docker daemon
   copy:
     content: |
@@ -68,6 +99,7 @@
           "max-file": "{{ docker_log_max_files }}"
         },
         "storage-driver": "overlay2",
+        "max-download-attempts": {{ docker_max_download_attempts | int }},
         "live-restore": true,
         "userland-proxy": false,
         "experimental": false,
@@ -179,3 +211,74 @@
       - docker_test.rc == 0
     fail_msg: "Docker installation test failed"
     success_msg: "Docker installation verified successfully"
+
+# A play turns this on for the run that upgrades its engine (#2722), so a build
+# that makes no progress fails the play rather than holding the runner until its
+# 3 h job timeout. The hang on record was a 2.31 GB base layer pulling at about
+# 80 KB/s, so the base image is pulled first under its own timeout: the uplink
+# fails as a pull and the build's timeout measures the engine alone. The pinned
+# image stays in the store; `cacheonly` keeps no build result behind.
+- name: Pull the smoke build's base image
+  command: timeout --kill-after=30 {{ docker_smoke_build_timeout_seconds }} docker pull {{ docker_smoke_build_image }}
+  register: _docker_smoke_pull
+  changed_when: false
+  failed_when: false
+  when:
+    - docker_smoke_build | bool
+    - not ansible_check_mode
+
+- name: Verify the smoke build's base image pulled
+  assert:
+    that: _docker_smoke_pull.rc == 0
+    fail_msg: >-
+      {{ ('Pulling ' ~ docker_smoke_build_image ~ ' did not finish in ' ~ docker_smoke_build_timeout_seconds
+          ~ ' s: the registry or the uplink, not the engine. The build did not run.')
+         if _docker_smoke_pull.rc in [124, 137] else
+         ('Pulling ' ~ docker_smoke_build_image ~ ' failed with rc ' ~ _docker_smoke_pull.rc ~ ': '
+          ~ (_docker_smoke_pull.stderr_lines | default([]))[-5:] | join(' | ')
+          ~ '. The build did not run.') }}
+  when:
+    - docker_smoke_build | bool
+    - not ansible_check_mode
+
+# `default` is the engine's own BuildKit, the one the Gitea jobs build on.
+# Without it the build runs on whichever builder root last selected, and on the
+# Beelink that is `multiarch`, a docker-container builder that pulls its own image
+# first. The build sleeps past the 10 s in which dockerd logs its session
+# healthcheck lines, which also appear on builds that pass, and `timeout` turns a
+# hang into a failed play: 124 on its TERM, or 137 on the KILL that follows when a
+# client blocked on its build ignores the TERM.
+- name: Smoke-build an image on this engine
+  shell: |
+    set -o pipefail
+    printf 'FROM %s\nRUN sleep 20\n' '{{ docker_smoke_build_image }}' \
+      | timeout --kill-after=30 {{ docker_smoke_build_timeout_seconds }} \
+        docker buildx build --builder default --no-cache --progress=plain --output type=cacheonly -
+  args:
+    executable: /bin/bash
+  register: _docker_smoke_build
+  changed_when: false
+  failed_when: false
+  when:
+    - docker_smoke_build | bool
+    - not ansible_check_mode
+
+- name: Verify the smoke build finished
+  assert:
+    that: _docker_smoke_build.rc == 0
+    fail_msg: >-
+      {{ ('The smoke build made no progress in ' ~ docker_smoke_build_timeout_seconds
+          ~ ' s. Read the step it stopped in with docker buildx history logs on this node,'
+          ~ ' and record it on #2722. Last output: '
+          ~ (_docker_smoke_build.stderr_lines | default([]))[-5:] | join(' | '))
+         if _docker_smoke_build.rc == 124 else
+         ('The smoke build was killed after ' ~ (_docker_smoke_build.delta | default('?'))
+          ~ '. Past the ' ~ docker_smoke_build_timeout_seconds ~ ' s timeout, it made no progress and'
+          ~ ' its client ignored the TERM: record it on #2722. Sooner, something else killed it,'
+          ~ ' most often the OOM killer (journalctl -k).')
+         if _docker_smoke_build.rc == 137 else
+         ('The smoke build failed with rc ' ~ _docker_smoke_build.rc ~ ': '
+          ~ (_docker_smoke_build.stderr_lines | default([]))[-5:] | join(' | ')) }}
+  when:
+    - docker_smoke_build | bool
+    - not ansible_check_mode

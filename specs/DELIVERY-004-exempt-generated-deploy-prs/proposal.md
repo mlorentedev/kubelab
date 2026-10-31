@@ -63,8 +63,8 @@ reading the PR only through the API. Its three outcomes are distinct:
 
 | Outcome | Meaning | Published as |
 |---|---|---|
-| `mechanical` | all four hold at the verified head sha | check-run `deploy-shape`, `success` |
-| `not-mechanical` | evaluated, and some condition does not hold | `neutral` (passes protection; the PR takes the normal review path) |
+| `mechanical` | all four hold at the verified head sha | commit status `deploy-shape`, `success` |
+| `not-mechanical` | evaluated, and some condition does not hold | `success`, the verdict in the description (the PR takes the normal review path) |
 | `unknown` | anything could not be read or parsed | `failure` (fails closed) |
 
 A contract-change deploy PR (it also carries `contracts/<app>.yaml` and contract-owned
@@ -75,7 +75,7 @@ the forfeit asymmetry working as designed.
 
 ### Consumers recompute; they never read the check's conclusion
 
-A same-repository PR can add a workflow that posts a check-run named `deploy-shape`
+A same-repository PR can add a workflow that posts a status named `deploy-shape`
 with `GITHUB_TOKEN`. So the check is the **visible** assertion, and every consumer
 that *grants* something recomputes the predicate itself from master's code at the
 head sha it verified:
@@ -120,6 +120,10 @@ follow-up recorded on mlorentedev/dotfiles#2836 (SEC-017).
 - **A neutral check-run must satisfy a required check.** GitHub documents `success`,
   `neutral` and `skipped` as passing. Verified on a real PR before the context is added
   to protection, because a required context that never passes blocks every merge.
+  Resolved by DELIVERY-011 (#2714): the neutral check-run did pass, but only where
+  GitHub filed it under a suite that never re-ran. It files an API-created check-run
+  under the first github-actions suite on the sha, and once that workflow runs again
+  protection reads the context as "Expected". The verdict is now a commit status.
 - **Fork PRs** get a read-only token and cannot publish the check, the same as
   `review-attestation` today. Accepted; noted so it is a decision.
 - **Compromised product CI** reaches staging with no human. Bounded: staging only,
@@ -133,16 +137,17 @@ follow-up recorded on mlorentedev/dotfiles#2836 (SEC-017).
 The operator's (a)-(d) are the contract; each AC names which it proves.
 
 - [ ] **AC1 (a)** — `deploy-shape` runs on every PR to master from master's code and
-  publishes `success` / `neutral` / `failure` as above. Unit tests cover each condition's
-  negative case; it is `success` on #2576 and #2581 (version-only) and `neutral` on a
-  contract-change shape and on a human PR. Any read or parse failure is `failure`.
+  publishes the status as above: `success` with the verdict in its description, or
+  `failure`. Unit tests cover each condition's negative case; it is `mechanical` on
+  #2576 and #2581 (version-only) and `not-mechanical` on a contract-change shape and on
+  a human PR. Any read or parse failure is `failure`.
 - [ ] **AC2 (c)** — The class is declared in `harness/review-attestation.json`;
   neither module names its paths. `review-attestation` exempts a staging deploy only when
   the recomputed predicate is `mechanical` at the head sha it attests; the file-only
   staging signature is removed. A PR with the right two files and any other change in
   them is not exempt.
 - [ ] **AC3 (a)** — `deploy-shape` is added to `ci.branch_protection` `required_contexts`
-  after a neutral run is observed passing protection on a real PR; the live reconcile is
+  after a not-mechanical run is observed passing protection on a real PR; the live reconcile is
   the operator's.
 - [ ] **AC4 (c)** — Widening tests: committed tests go red if the declared file set, the
   version path, the tag pattern or the env widen, or if the merging job's `if:` or merge

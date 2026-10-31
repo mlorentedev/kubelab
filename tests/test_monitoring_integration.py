@@ -57,7 +57,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 def _pinned_image() -> str:
     """Read the Uptime Kuma image from the config SSOT (common.yaml)."""
-    values = yaml.safe_load((REPO_ROOT / "infra/config/values/common.yaml").read_text())
+    values = yaml.safe_load((REPO_ROOT / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
     return values["apps"]["services"]["observability"]["uptime_kuma"]["image"]
 
 
@@ -231,7 +231,7 @@ def apply_seed(kuma_url, monkeypatch, tmp_path):
     def _apply(seed: list[dict], *, prune: bool = False) -> None:
         export_dir = tmp_path / monitoring.EXPORT_DIR
         export_dir.mkdir(parents=True, exist_ok=True)
-        (export_dir / monitoring.MONITORS_FILE).write_text(json.dumps(seed))
+        (export_dir / monitoring.MONITORS_FILE).write_text(json.dumps(seed), encoding="utf-8")
         # The seed directory is both files: tags are converged like any field
         # (#1974), so a seed without its tag declarations cannot converge.
         shutil.copyfile(REPO_ROOT / monitoring.EXPORT_DIR / monitoring.TAGS_FILE, export_dir / monitoring.TAGS_FILE)
@@ -305,7 +305,7 @@ SELF_URL = f"http://{SELF_HOST}:3001"
 
 
 def _real_seed() -> list[dict]:
-    seed = json.loads((REPO_ROOT / "infra/config/uptime-kuma/monitors.json").read_text())
+    seed = json.loads((REPO_ROOT / "infra/config/uptime-kuma/monitors.json").read_text(encoding="utf-8"))
     for monitor in seed:
         if monitor.get("url"):
             monitor["url"] = SELF_URL
@@ -456,7 +456,7 @@ class TestBootstrapAgainstAFreshInstance:
         )
         export_dir = tmp_path / monitoring.EXPORT_DIR
         export_dir.mkdir(parents=True, exist_ok=True)
-        (export_dir / monitoring.MONITORS_FILE).write_text(json.dumps(self._seed()))
+        (export_dir / monitoring.MONITORS_FILE).write_text(json.dumps(self._seed()), encoding="utf-8")
 
         monitoring.bootstrap(tmp_path)
 
@@ -479,7 +479,7 @@ class TestBootstrapAgainstAFreshInstance:
         )
         export_dir = tmp_path / monitoring.EXPORT_DIR
         export_dir.mkdir(parents=True, exist_ok=True)
-        (export_dir / monitoring.MONITORS_FILE).write_text(json.dumps(self._seed()))
+        (export_dir / monitoring.MONITORS_FILE).write_text(json.dumps(self._seed()), encoding="utf-8")
         monitoring.bootstrap(tmp_path)
 
         monitoring.bootstrap(tmp_path)  # must not raise, must not duplicate
@@ -542,7 +542,7 @@ class TestPushMonitorRoundTrip:
         apply_seed(self._seed())
 
         monkeypatch.setattr(monitoring, "_connect", lambda _root: (_client(kuma_url), {"url": kuma_url}))
-        exported = json.loads(monitoring.export_monitors(tmp_path).read_text())
+        exported = json.loads(monitoring.export_monitors(tmp_path).read_text(encoding="utf-8"))
 
         [entry] = exported
         assert "pushToken" not in entry, "export would have committed a live credential to a public repo"
@@ -564,7 +564,7 @@ class TestPushMonitorRoundTrip:
         before = {m["name"]: (m["id"], m["pushToken"]) for m in live()}
 
         monkeypatch.setattr(monitoring, "_connect", lambda _root: (_client(kuma_url), {"url": kuma_url}))
-        exported = json.loads(monitoring.export_monitors(tmp_path).read_text())
+        exported = json.loads(monitoring.export_monitors(tmp_path).read_text(encoding="utf-8"))
         assert all("pushToken" not in e for e in exported)
 
         create, edit, delete = diff_monitors(

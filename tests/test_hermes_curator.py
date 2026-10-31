@@ -57,7 +57,7 @@ def _load():
     module = types.ModuleType("curator_analyze")
     module.__file__ = str(SCRIPT)
     sys.modules["curator_analyze"] = module
-    exec(compile(SCRIPT.read_text(), str(SCRIPT), "exec"), module.__dict__)  # noqa: S102
+    exec(compile(SCRIPT.read_text(encoding="utf-8"), str(SCRIPT), "exec"), module.__dict__)  # noqa: S102
     return module
 
 
@@ -72,7 +72,7 @@ def _vault(root: Path, sessions: dict[str, str]) -> Path:
     for name, bullet in sessions.items():
         path = root / "10_projects" / "demo" / "sessions" / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(f"---\nid: s\n---\n\n## Findings\n\n{bullet}\n\n## Next action\n\n{OTHER}\n")
+        path.write_text(f"---\nid: s\n---\n\n## Findings\n\n{bullet}\n\n## Next action\n\n{OTHER}\n", encoding="utf-8")
     return root
 
 
@@ -93,7 +93,7 @@ def test_a_root_cause_seen_on_two_dates_is_a_candidate(analyzer, tmp_path: Path)
     vault = _vault(tmp_path / "vault", {"2026-01-01-a.md": SAME_CAUSE, "2026-02-02-b.md": SAME_CAUSE_AGAIN})
     out = tmp_path / "zone/curator/candidates.json"
     assert _run(analyzer, vault, out) == 0
-    report = json.loads(out.read_text())
+    report = json.loads(out.read_text(encoding="utf-8"))
     [candidate] = report["candidates"]
     assert candidate["dates"] == ["2026-01-01", "2026-02-02"]
     assert report["corpus_files"] == 2 + len(FILLER)
@@ -103,7 +103,7 @@ def test_a_lesson_seen_once_is_not_a_candidate(analyzer, tmp_path: Path) -> None
     vault = _vault(tmp_path / "vault", {"2026-01-01-a.md": SAME_CAUSE})
     out = tmp_path / "candidates.json"
     assert _run(analyzer, vault, out) == 0
-    assert json.loads(out.read_text())["candidates"] == []
+    assert json.loads(out.read_text(encoding="utf-8"))["candidates"] == []
 
 
 def test_the_next_action_section_is_not_a_lesson(analyzer, tmp_path: Path) -> None:
@@ -111,7 +111,7 @@ def test_the_next_action_section_is_not_a_lesson(analyzer, tmp_path: Path) -> No
     vault = _vault(tmp_path / "vault", {"2026-01-01-a.md": SAME_CAUSE, "2026-02-02-b.md": SAME_CAUSE_AGAIN})
     out = tmp_path / "candidates.json"
     _run(analyzer, vault, out)
-    excerpts = json.dumps(json.loads(out.read_text()))
+    excerpts = json.dumps(json.loads(out.read_text(encoding="utf-8")))
     assert "Mermaid" not in excerpts
 
 
@@ -119,10 +119,10 @@ def test_the_file_is_replaced_whole_and_nothing_else_is_written(analyzer, tmp_pa
     vault = _vault(tmp_path / "vault", {"2026-01-01-a.md": SAME_CAUSE})
     out = tmp_path / "zone/curator/candidates.json"
     out.parent.mkdir(parents=True)
-    out.write_text("{}")
+    out.write_text("{}", encoding="utf-8")
     assert _run(analyzer, vault, out) == 0
     assert [p.name for p in out.parent.iterdir()] == ["candidates.json"], "no temporary file is left behind"
-    assert "candidates" in json.loads(out.read_text())
+    assert "candidates" in json.loads(out.read_text(encoding="utf-8"))
 
 
 def test_a_directory_that_is_not_a_vault_is_refused(analyzer, tmp_path: Path, capsys) -> None:
@@ -179,23 +179,25 @@ def test_a_path_that_climbs_out_of_the_lessons_is_not_extracted(analyzer, tmp_pa
 def test_a_repository_dropped_from_the_list_stops_feeding_the_corpus(analyzer, tmp_path: Path, monkeypatch) -> None:
     cache = tmp_path / "cache"
     (cache / "mlorentedev_gone").mkdir(parents=True)
-    (cache / "mlorentedev_gone" / "lesson-001-old.md").write_text(SAME_CAUSE)
+    (cache / "mlorentedev_gone" / "lesson-001-old.md").write_text(SAME_CAUSE, encoding="utf-8")
     (cache / "mlorentedev_kept").mkdir()
-    (cache / "mlorentedev_kept" / "lesson-002-new.md").write_text(SAME_CAUSE)
+    (cache / "mlorentedev_kept" / "lesson-002-new.md").write_text(SAME_CAUSE, encoding="utf-8")
     monkeypatch.setattr(analyzer, "fetch_github_lessons", lambda repos, c: {r: 1 for r in repos})
     vault = _vault(tmp_path / "vault", {"2026-01-01-a.md": SAME_CAUSE})
     out = tmp_path / "c.json"
     assert _run(analyzer, vault, out) == 0
-    vault_only = json.loads(out.read_text())["corpus_files"]
+    vault_only = json.loads(out.read_text(encoding="utf-8"))["corpus_files"]
     assert _run(analyzer, vault, out, "--repos", "mlorentedev/kept", "--cache-dir", str(cache)) == 0
-    assert json.loads(out.read_text())["corpus_files"] == vault_only + 1, "only the repository asked for is added"
+    assert json.loads(out.read_text(encoding="utf-8"))["corpus_files"] == vault_only + 1, (
+        "only the repository asked for is added"
+    )
 
 
 def test_a_fetched_lesson_names_its_repository_and_category_as_its_source(analyzer, tmp_path: Path) -> None:
     cache = tmp_path / "cache"
     (cache / "mlorentedev_demo" / "containers").mkdir(parents=True)
     lesson = cache / "mlorentedev_demo" / "containers" / "lesson-001-sync.md"
-    lesson.write_text(SAME_CAUSE)
+    lesson.write_text(SAME_CAUSE, encoding="utf-8")
     units = analyzer.load_corpus([lesson], tmp_path / "vault", (cache,))
     assert {u["source"] for u in units} == {"mlorentedev_demo/containers/lesson-001-sync.md"}
 
@@ -259,7 +261,7 @@ def test_the_unit_reads_the_agents_clone_not_the_root_only_mirror() -> None:
 
 
 def test_the_script_the_unit_runs_is_roots_and_outside_the_agents_home() -> None:
-    tasks = yaml.safe_load((ROLE / "tasks/curator.yml").read_text())
+    tasks = yaml.safe_load((ROLE / "tasks/curator.yml").read_text(encoding="utf-8"))
     [install] = [t for b in tasks for t in b.get("block", []) if t.get("name") == "Install the analyzer"]
     copy = install["ansible.builtin.copy"]
     assert copy["owner"] == "root" and copy["dest"].startswith("{{ agent_stack_vault_libexec }}/")
@@ -272,7 +274,7 @@ def test_the_timer_catches_up_a_week_the_node_slept_through() -> None:
 
 
 def test_the_provision_proves_the_analyzer_read_a_corpus() -> None:
-    tasks = yaml.safe_load((ROLE / "tasks/curator.yml").read_text())
+    tasks = yaml.safe_load((ROLE / "tasks/curator.yml").read_text(encoding="utf-8"))
     names = [t.get("name") for b in tasks for t in b.get("block", [])]
     assert names.index("Run the analyzer once") < names.index("Read the candidates back")
     assert names.index("Verify the analyzer read a corpus") < names.index("Enable the analyzer timer")
@@ -287,7 +289,7 @@ def test_every_repository_is_an_owner_slash_name() -> None:
 
 
 def _assert_that() -> list[str]:
-    tasks = yaml.safe_load((ROLE / "tasks/curator.yml").read_text())
+    tasks = yaml.safe_load((ROLE / "tasks/curator.yml").read_text(encoding="utf-8"))
     task = next(t for b in tasks for t in b.get("block", []) if t.get("name") == "Verify this run wrote the candidates")
     return task["ansible.builtin.assert"]["that"]
 
@@ -302,7 +304,9 @@ def _holds(before: dict, after: dict) -> bool:
 
 def test_the_read_back_testifies_for_this_run_and_not_for_last_weeks_file() -> None:
     names = [
-        t.get("name") for b in yaml.safe_load((ROLE / "tasks/curator.yml").read_text()) for t in b.get("block", [])
+        t.get("name")
+        for b in yaml.safe_load((ROLE / "tasks/curator.yml").read_text(encoding="utf-8"))
+        for t in b.get("block", [])
     ]
     assert (
         names.index("Note when the candidates were last written")

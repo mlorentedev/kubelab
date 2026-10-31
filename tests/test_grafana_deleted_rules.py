@@ -38,7 +38,7 @@ MUST_STAY_DELETED = "obs015-crowdsec-ban-surge"
 
 
 def _load(path: pathlib.Path) -> dict:
-    return yaml.safe_load(path.read_text()) or {}
+    return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
 
 
 def _deleted_uids() -> set[str]:

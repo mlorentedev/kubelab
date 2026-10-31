@@ -115,6 +115,21 @@ make sync-k8s-images && git commit -am "chore: sync image tags"
 Staging first, always: ace1 runs `selfHeal: false` precisely so a deploy from a
 worktree persists long enough to test against.
 
+### A bump pulled behind the lab edge can stop its provision
+
+A node behind the lab edge pulls through an uplink shaped to
+`networking.edge.uplink.bandwidth.down_kbit`. Its provision estimates each pull
+from the registry, counting only images the node lacks, and refuses one past
+30 min (#2742). A `myoung34/github-runner` bump is about 852 MB on amd64, about
+38 min at 2970 kbit/s, so the next `make provision NODE=bee` stops before
+pulling. Rerun it with `EXTRA='image_pull_allow_slow=true'` when the Beelink can
+spend that long. Each attempt is bounded by twice the estimate.
+
+The edge's own DNS stack pulls through the same uplink, so a Pi-hole or CoreDNS
+bump is sized the same way by `make deploy TARGET=dns ENV=prod` and by the rpi4
+provision. On arm64 the pair is about 64 MB today (Pi-hole 44, CoreDNS 20), a
+few minutes, well inside the budget.
+
 ## The apply chain (merge → production)
 
 Merging a dependency PR does not by itself ship it. For **runtime** dependencies the change reaches

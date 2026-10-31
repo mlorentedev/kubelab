@@ -26,6 +26,11 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
+    # A release waits three days before it is proposed (TOOL-125). pytest 9.2.0
+    # broke every PR four hours after its upload; a regression like that is
+    # usually fixed in a point release within days. Security updates do not wait.
+    cooldown:
+      default-days: 3
     open-pull-requests-limit: 5
     labels:
       - "dependencies"

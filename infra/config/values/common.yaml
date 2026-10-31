@@ -48,6 +48,56 @@ branding:
 networking:
   lan_cidr: "172.16.1.0/24"
   tailscale_cidr: "100.64.0.0/10"
+  # The lab's edge (ADR-075, NET-005): the RPi4 does NAT, DHCP, DNS and the lab
+  # Wi-Fi, and only `uplink` changes from one site to the next. What would locate
+  # a site or let a stranger on it claim the lab's paid access (SSIDs, PSKs, the
+  # uplink adapter's MAC, portal domains) is in SOPS (prod) under this same
+  # path, never here; tests/test_edge_ssot.py fails if one lands in a values file.
+  edge:
+    uplink:
+      kind: "wifi_open"          # wifi_open | wifi_psk | ethernet
+      # Stable name the gateway role's .link file gives the adapter, matched by
+      # its permanent MAC, so no profile depends on the kernel's wlx<mac> name.
+      interface: "uplink0"
+      regdomain: "US"
+      # The AP's fixed 2.4 GHz channel, per site: picked at bring-up from a scan
+      # of the site's spectrum. Must be one the regdomain allows.
+      channel: 6
+      # Shaped slightly below the measured rate (AC8). Read from a laptop at the
+      # temporary site (3.3 and 1.5 Mbps); which one is the download is
+      # re-measured on the RPi4 at bring-up.
+      bandwidth:
+        down_kbit: 2970
+        up_kbit: 1350
+        # The share of down_kbit an image pull gets, against which a pull is sized
+        # (_includes/image-pull.yml). Open WebUI's 1.62 GB took 133.7 min on ace2,
+        # against 72.7 at down_kbit, with the shaper binding (#2703, 2026-10-30).
+        # Re-measured with the site, like down_kbit.
+        pull_goodput: 0.54
+      # dockerd's attempts at each layer of a pull, for every daemon behind the edge
+      # and for the bound on a pull's attempt (#2834). A pull's connections end in
+      # `unexpected EOF` about every 10 minutes here. dockerd resumes the layer on each
+      # of its own attempts, but after the last it fails the pull and drops every
+      # layer the pull fetched. Docker's default of 5 lost a 1.6 GB pull three times
+      # running (ace2, 2026-10-30). The pause after attempt k is 5k seconds, uncapped:
+      # 40 attempts sleep at most 65 minutes in all, which is also how long a blob
+      # that never downloads takes to fail. tests/test_image_pull_budget.py holds it
+      # between those two bounds.
+      max_download_attempts: 40
+    # The lab's own Wi-Fi, the same at every site. It reuses the old home network
+    # so rpi3 (no screen) and saved devices rejoin unchanged; the AP takes the
+    # old home router's address. A future uplink may land in this common ISP
+    # default; the edge reports that collision (AC7).
+    lab_wifi:
+      interface: "wlan0"
+      cidr: "10.0.0.0/24"
+      gateway: "10.0.0.1"
+      dhcp_range:
+        start: "10.0.0.50"
+        end: "10.0.0.199"
+      # Nodes with a fixed lease: address from networking.nodes.<node>.lan_ip,
+      # MAC from networking.nodes.<node>.mac.
+      reservations: ["rpi3"]
   # Trusted CIDRs — consumed by Authelia access_control as "internal" networks.
   # Single source for all services that need a trusted-network definition.
   trusted_cidrs:
@@ -314,6 +364,7 @@ networking:
       hostname: "ace1"
       tailscale_ip: "100.64.0.11"
       lan_ip: "172.16.1.2"
+      mac: "68:1d:ef:38:c5:6f"       # DHCP reservation on the RPi4's LAN
       lan_interface: "enp1s0"
       ansible_groups: ["k3s_servers", "docker_hosts", "minipc"]
     ace2:
@@ -323,6 +374,7 @@ networking:
       hostname: "ace2"
       tailscale_ip: "100.64.0.5"
       lan_ip: "172.16.1.5"
+      mac: "68:1d:ef:38:c5:8b"       # DHCP reservation on the RPi4's LAN
       lan_interface: "enp1s0"
       ansible_groups: ["compute_nodes", "docker_hosts", "minipc"]  # ADR-058 D1: dev-node
       # Open WebUI's compose network on the system daemon (spec AI-009 AC4).
@@ -340,14 +392,13 @@ networking:
       location: "on-demand"
       hostname: "rpi4"
       tailscale_ip: "100.64.0.10"
-      # Dual-segment gateway: inner LAN (172.16.1.0/24, eth0) advertised to
-      # Tailscale, AND WiFi outer (10.0.0.0/24, wlan0) used by ProxyJump for
-      # ace1/ace2/bee/jet1 access from outside the inner segment. lan_ip is
-      # the inner side (matches networking.lan_cidr); wifi_lan_ip is the
-      # outer side, reachable via the rpi4-lan SSH alias when Tailscale is
-      # down. Both DHCP-reserved on the home router.
+      # The lab's edge (ADR-075): lan_ip is the homelab LAN side (eth0, inside
+      # networking.lan_cidr, advertised on the tailnet); wifi_lan_ip is its
+      # address on the lab Wi-Fi it serves (wlan0, the AP), so it equals
+      # networking.edge.lab_wifi.gateway. The rpi4-lan SSH alias reaches it there
+      # when Tailscale is down.
       lan_ip: "172.16.1.1"
-      wifi_lan_ip: "10.0.0.131"
+      wifi_lan_ip: "10.0.0.1"
       # The LAN jump host: the one node whose sshd forwards a TCP connection on
       # to the inner-LAN nodes, so the `*-lan` SSH aliases (ProxyJump rpi4) work.
       # Every other node keeps `AllowTcpForwarding no`. The forwards are limited
@@ -365,11 +416,12 @@ networking:
       location: "always-on"
       hostname: "rpi3"
       tailscale_ip: "100.64.0.6"
-      # WiFi outer segment (10.0.0.0/24), reachable via rpi3-lan SSH alias.
-      # NOT on the inner lan_cidr (172.16.1.0/24, behind rpi4 gateway/NAT) —
-      # rpi3 lives on the WiFi side, no rpi4 ProxyJump needed. Static DHCP
-      # reservation on home router for MAC b8:27:eb:3d:8e:54 (SSOT-003).
+      # On the lab Wi-Fi (networking.edge.lab_wifi), reachable via the rpi3-lan
+      # SSH alias. NOT on the inner lan_cidr (172.16.1.0/24): rpi3 lives on the
+      # Wi-Fi side, no rpi4 ProxyJump needed. Its lease is reserved by the RPi4's
+      # lab Wi-Fi DHCP from this lan_ip and mac (SSOT-003).
       lan_ip: "10.0.0.157"
+      mac: "b8:27:eb:3d:8e:54"
       lan_interface: "wlan0"
       ansible_groups: ["monitoring", "docker_hosts"]
       dashboard:
@@ -381,17 +433,26 @@ networking:
       hostname: "beelink"
       tailscale_ip: "100.64.0.3"
       lan_ip: "172.16.1.3"
+      mac: "78:55:36:06:18:14"       # DHCP reservation on the RPi4's LAN
       lan_interface: "enp1s0"
       ansible_groups: ["platform_nodes", "docker_hosts"]  # ADR-028: Gitea + CI runners + Glances
       dashboard:
         display_name: "Beelink"
     jetson:
+      # Out of the lab for some weeks (October 2026) and coming back. `retired`
+      # means what it means on `networking.aws`: this block is how the node is
+      # rebuilt, not a machine that answers today. The generated inventory and
+      # the infra suite skip it. Its DHCP reservation, its DNS entry and rpi4's
+      # `PermitOpen` stay, so its return is this one flag: remove it, regenerate
+      # the inventory, run `make test-infra ENV=prod`.
+      retired: true
       # ADR-028 tier. Machine-readable projection of the topology the ADR
       # narrates; consumed by the backup trigger model (BACKUP-044).
       location: "on-demand"
       hostname: "jetson"
       tailscale_ip: "100.64.0.8"
       lan_ip: "172.16.1.4"
+      mac: "00:04:4b:e5:5f:28"       # DHCP reservation on the RPi4's LAN
       ansible_groups: ["compute"]
       legacy_python: true
       dashboard:
@@ -502,16 +563,19 @@ ci:
         strict: false
         # Exact check-run / commit-status names, verified against a real head sha
         # rather than transcribed from the workflow: a required context that never
-        # reports blocks every merge forever. `review-attestation` is a commit
-        # STATUS, the rest are check-runs; both kinds are matched by name here.
+        # reports blocks every merge forever. `review-attestation` and
+        # `deploy-shape` are commit STATUSES, the rest are check-runs; both kinds
+        # are matched by name here.
         # `Tests` runs unconditionally on every pull request (ci.yml has no `if:`
         # and no paths filter on it), so requiring it costs no extra CI minutes —
         # only the latency of waiting for a job that was already running.
-        # `deploy-shape` is the check-run that deploy-shape.yml publishes, NOT its
+        # `deploy-shape` is the status that deploy-shape.yml publishes, NOT its
         # job ("Judge the diff shape"), which fails only when nothing could be judged.
-        # The check-run carries all three verdicts: success (a mechanical staging
-        # deploy), neutral (any other PR; GitHub counts neutral as passing) and
-        # failure (unknown, fail closed). DELIVERY-004 AC3, #1619.
+        # The status is success for a mechanical staging deploy and for any other
+        # PR (the verdict is in its description), and failure when unknown (fail
+        # closed). DELIVERY-004 AC3, #1619. It was a check-run until DELIVERY-011
+        # (#2714): GitHub filed it under another workflow's suite, and once that
+        # workflow ran again on the sha the context read "Expected" for good.
         required_contexts:
           - Validate
           - Detect Changes
@@ -1512,6 +1576,16 @@ apps:
         default_port: 8080
         stun_port: 3478
         health_path: /health
+        # SEC-037 (#2734): restricted read-only SSH identities on the VPS deploy user.
+        # Each key is authorized with `restrict` and the forced command
+        # /usr/local/bin/headscale-audit (role `headscale`), never exclusively.
+        # `name` becomes the key's comment; `key` is the bare public key. An optional
+        # source address lives in SOPS at `audit_sources.<name>` (network inventory,
+        # public repo). Revoke by deleting the entry and deploying: the role removes
+        # every key carrying its forced command that is no longer declared here.
+        audit_identities:
+          - name: audit_automation
+            key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILevHjcCW1uOUGcyMnWTFqixFPv4RcEue2nx29crqND0"
 
     # Automation & CI/CD
     automation:

@@ -54,14 +54,14 @@ _EPOCH = int(time.time()) + 86400
 
 def loki_image() -> str:
     """The image prod runs, from the kustomize `images:` pin, never a second copy."""
-    kustomization = yaml.safe_load((REPO / "infra/k8s/base/kustomization.yaml").read_text())
+    kustomization = yaml.safe_load((REPO / "infra/k8s/base/kustomization.yaml").read_text(encoding="utf-8"))
     pin = next(i for i in kustomization["images"] if i["name"] == "grafana/loki")
     return f"grafana/loki:{pin['newTag']}"
 
 
 def vector_stream_labels() -> set[str]:
     """The label names Vector's Loki sink puts on every stream in prod."""
-    config = yaml.safe_load(VECTOR_CONFIG.read_text())
+    config = yaml.safe_load(VECTOR_CONFIG.read_text(encoding="utf-8"))
     return set(config["sinks"]["loki"]["labels"])
 
 
@@ -79,7 +79,7 @@ def stream_labels(**values: str) -> dict[str, str]:
 def rule_expr(uid: str, ref: str = "A") -> str:
     """A rule's query, verbatim from the rules YAML."""
     for path in sorted(ALERTING_DIR.glob("*.yaml")):
-        for group in (yaml.safe_load(path.read_text()) or {}).get("groups") or []:
+        for group in (yaml.safe_load(path.read_text(encoding="utf-8")) or {}).get("groups") or []:
             for rule in group.get("rules") or []:
                 if rule.get("uid") == uid:
                     item = next(d for d in rule["data"] if d["refId"] == ref)
@@ -155,8 +155,12 @@ def run_loki() -> Iterator[Loki]:
             # Future slots keep every window inside the ingester's range.
             "-validation.create-grace-period=8760h",
         ],
-        capture_output=True, text=True, check=True,
+        capture_output=True, text=True,
     )  # fmt: skip
+    if started.returncode != 0:
+        # No container exists yet. Exit 125 is Docker's own failure (a pull refused or
+        # rate-limited, a daemon error), and its stderr is the one line that says which.
+        pytest.fail(f"docker run exited {started.returncode}: {started.stderr.strip()[-800:]}")
     container = started.stdout.strip()
     try:
         port = (

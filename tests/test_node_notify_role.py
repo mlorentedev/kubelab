@@ -30,6 +30,7 @@ The contract encoded here:
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import os
 import re
@@ -61,7 +62,7 @@ def _defaults() -> dict[str, object]:
     """
     merged: dict[str, object] = {}
     for role in (NOTIFY_ROLE, MAINTENANCE_ROLE):
-        merged.update(yaml.safe_load((role / "defaults/main.yml").read_text()))
+        merged.update(yaml.safe_load((role / "defaults/main.yml").read_text(encoding="utf-8")))
     return merged
 
 
@@ -125,7 +126,7 @@ def test_onfailure_target_names_a_unit_the_role_actually_installs():
     installer = next(
         (
             task
-            for task in yaml.safe_load((NOTIFY_ROLE / "tasks/main.yml").read_text())
+            for task in yaml.safe_load((NOTIFY_ROLE / "tasks/main.yml").read_text(encoding="utf-8"))
             if str(task.get("template", {}).get("src", "")) == f"{template_unit}.j2"
         ),
         None,
@@ -145,7 +146,7 @@ def test_notify_unit_execstart_matches_the_script_the_role_deploys():
     # The script path is the first token; `%i` follows it as the argument.
     exec_start = re.search(r"^ExecStart=(\S+)( .*)?$", unit, re.MULTILINE)
     assert exec_start, "notify unit has no ExecStart"
-    tasks = (NOTIFY_ROLE / "tasks/main.yml").read_text()
+    tasks = (NOTIFY_ROLE / "tasks/main.yml").read_text(encoding="utf-8")
     # `==`, not `in`. As a substring check an ExecStart of `/opt` passed, because
     # `/opt` is a substring of `/opt/kubelab-notify.sh` — the assertion accepted
     # a unit pointing at a directory. Raised by review on #1212.
@@ -225,7 +226,7 @@ def _encode_via_rendered_script(journal_bytes: bytes, result: str = "exit-code")
         [sys.executable, "-c", body.group(1)],
         input=journal_bytes,
         capture_output=True,
-        env={**os.environ, "FAILED_UNIT": "node-backup-ship.service", "UNIT_RESULT": result},
+        env={**os.environ, "FAILED_UNIT": "node-backup-ship.service", "UNIT_RESULT": result, "NOTIFY_SEVERITY": "log"},
     )
     assert proc.returncode == 0, f"encoder crashed: {proc.stderr.decode(errors='replace')}"
     return json.loads(proc.stdout)
@@ -347,7 +348,12 @@ def test_config_stdin_delivers_the_token_byte_exact(token: str):
     up TLS here would test openssl rather than the escaping.
     """
     script = _render("kubelab-notify.sh.j2")
-    block = script[script.index("TOKEN_ESC=") :]
+    # The escaping and the function that sends, run on their own: the script
+    # around them parses its arguments and reads a journal (#2787 moved them up).
+    escape = "".join(re.findall(r"^TOKEN_ESC=.*\n", script, re.M))
+    deliver = re.search(r"^deliver\(\) \{\n.*?^\}\n", script, re.M | re.S)
+    assert escape and deliver, "the token escaping or the deliver function is gone"
+    block = f'{escape}{deliver.group(0)}deliver "$PAYLOAD"\n'
 
     captured: list[bytes] = []
     port = _serve_one_request(captured)
@@ -381,7 +387,6 @@ def test_the_envelope_names_the_unit_that_actually_failed() -> None:
     assert "node-backup-ship.service" in envelope["title"], (
         f"the failing unit is missing from the envelope title: {envelope['title']!r}"
     )
-    assert envelope["severity"] == "log"
 
 
 def test_the_journal_excerpt_is_scoped_to_the_current_boot() -> None:
@@ -431,7 +436,11 @@ def _flag(script: str, name: str) -> int:
     return int(match.group(1))
 
 
-def test_notify_unit_timeout_exceeds_the_script_retry_budget():
+@pytest.mark.parametrize(
+    "unit_template",
+    ["kubelab-notify@.service.j2", "kubelab-notify-recovered@.service.j2", "kubelab-notify-spool.service.j2"],
+)
+def test_notify_unit_timeout_exceeds_the_script_retry_budget(unit_template: str):
     """A retry longer than TimeoutStartSec is worse than no retry at all.
 
     systemd would kill the unit mid-attempt, so a delivery still in progress is
@@ -440,17 +449,23 @@ def test_notify_unit_timeout_exceeds_the_script_retry_budget():
     retry without moving the timeout would have manufactured this failure.
 
     Worst case is ``--retry-max-time`` (after which curl starts no NEW attempt)
-    plus one final attempt bounded by ``--max-time``.
+    plus one final attempt bounded by ``--max-time``. Before it, the script may
+    wait for the unit's lock while another notice of it is delivered (#2733):
+    the wait must outlast that delivery, and the timeout must hold both.
     """
     script = _render("kubelab-notify.sh.j2")
     worst_case = _flag(script, "--retry-max-time") + _flag(script, "--max-time")
+    lock_wait = _flag(script, "flock -w")
+    assert lock_wait > worst_case, (
+        f"a {lock_wait}s lock wait gives up while a {worst_case}s delivery of the same unit can still be in flight"
+    )
 
-    unit = _render("kubelab-notify@.service.j2")
+    unit = _render(unit_template)
     timeout = re.search(r"^TimeoutStartSec=(\d+)$", unit, re.MULTILINE)
-    assert timeout, "notify unit has no TimeoutStartSec"
+    assert timeout, f"{unit_template} has no TimeoutStartSec"
 
-    assert int(timeout.group(1)) > worst_case, (
-        f"TimeoutStartSec={timeout.group(1)}s cannot contain a {worst_case}s retry budget"
+    assert int(timeout.group(1)) > lock_wait + worst_case, (
+        f"TimeoutStartSec={timeout.group(1)}s cannot contain a {lock_wait}s lock wait and a {worst_case}s retry budget"
     )
 
 
@@ -493,15 +508,16 @@ def test_token_value_is_not_shell_interpreted():
 PLAYBOOKS = sorted((REPO / "infra/ansible/playbooks").glob("*.yml"))
 
 
-def _notifier_consumers() -> set[str]:
-    """Every role with a unit template declaring `OnFailure=kubelab-notify@`.
+def _notifier_consumers(roles_dir: Path = REPO / "infra/ansible/roles") -> set[str]:
+    """Every role with a unit template naming one of the notifier's templates:
+    `OnFailure=kubelab-notify@` or `OnSuccess=kubelab-notify-recovered@`.
 
     Derived from the templates rather than listed here, because the case this
     guard exists for is a NEW consumer whose playbook wiring was forgotten — and
     a literal list is exactly the thing that would not contain it.
     """
     roles = set()
-    for template in (REPO / "infra/ansible/roles").glob("*/templates/*.j2"):
+    for template in roles_dir.glob("*/templates/*.j2"):
         # Anchored to the start of a line, so the DIRECTIVE matches and a
         # comment mentioning it does not. Without the anchor the scan counted
         # `node_notify` itself as a consumer of its own notifier — its unit
@@ -509,14 +525,29 @@ def _notifier_consumers() -> set[str]:
         # assertion below then compared that role's tags with themselves and
         # passed trivially. A guard agreeing with itself, found by mutating the
         # directive away and watching the vacuity check stay green (lesson-357).
-        if re.search(r"^OnFailure=kubelab-notify@", template.read_text(encoding="utf-8"), re.M):
+        directive = r"^On(?:Failure=kubelab-notify|Success=kubelab-notify-recovered)@"
+        if re.search(directive, template.read_text(encoding="utf-8"), re.M):
             roles.add(template.parents[1].name)
     return roles
 
 
+def test_a_unit_naming_only_the_recovery_notice_is_a_consumer(tmp_path: Path) -> None:
+    """`OnSuccess=kubelab-notify-recovered@` names a node_notify template as much as
+    `OnFailure=` does, so a role whose units declare only that one still has to be
+    paired with the notifier and applied after it. A comment naming either is not one."""
+    for role, line in {
+        "pages": "OnFailure=kubelab-notify@%n.service",
+        "recovers": "OnSuccess=kubelab-notify-recovered@%n.service",
+        "mentions": "# OnFailure=kubelab-notify@%n.service",
+    }.items():
+        (tmp_path / role / "templates").mkdir(parents=True)
+        (tmp_path / role / "templates" / "x.service.j2").write_text(f"[Unit]\n{line}\n", encoding="utf-8")
+    assert _notifier_consumers(tmp_path) == {"pages", "recovers"}
+
+
 def _role_tags(playbook: Path, role_name: str) -> set[str] | None:
     """Tags on one role entry in a playbook, or None if it does not include it."""
-    for play in yaml.safe_load(playbook.read_text()) or []:
+    for play in yaml.safe_load(playbook.read_text(encoding="utf-8")) or []:
         if not isinstance(play, dict):
             continue
         for entry in play.get("roles") or []:
@@ -534,7 +565,7 @@ def test_the_derived_consumer_set_is_not_empty() -> None:
     coverage it does not have. So the scan asserts on itself first.
     """
     assert _notifier_consumers(), (
-        "no role template declares `OnFailure=kubelab-notify@`, so the pairing guard below checks nothing at all"
+        "no role template names the notifier, so the pairing guard below checks nothing at all"
     )
 
 
@@ -604,6 +635,107 @@ def test_the_notifier_and_its_consumers_are_selected_together(playbook: Path):
     )
 
 
+INCLUDES = ("include_role", "import_role", "ansible.builtin.include_role", "ansible.builtin.import_role")
+
+
+def _task_roles(tasks: list | None) -> list[str]:
+    """Roles a task list includes or imports, in order, inside blocks too."""
+    names: list[str] = []
+    for task in tasks or []:
+        for key in ("block", "rescue", "always"):
+            names += _task_roles(task.get(key))
+        names += [str((task[key] or {}).get("name", "")).split("/")[-1] for key in INCLUDES if key in task]
+    return names
+
+
+def _applied_roles(playbook: Path) -> list[str]:
+    """Every role a playbook applies, in the order Ansible runs them: each play's
+    pre_tasks, roles, tasks and post_tasks, play after play."""
+    order: list[str] = []
+    for play in yaml.safe_load(playbook.read_text(encoding="utf-8")) or []:
+        if not isinstance(play, dict):
+            continue
+        order += _task_roles(play.get("pre_tasks"))
+        order += [str(e.get("role", "") if isinstance(e, dict) else e).split("/")[-1] for e in play.get("roles") or []]
+        order += _task_roles(play.get("tasks")) + _task_roles(play.get("post_tasks"))
+    return order
+
+
+def test_the_order_spans_plays_and_included_roles(tmp_path: Path) -> None:
+    """A consumer one play or one include_role ahead of the notifier is still ahead of it."""
+    playbook = tmp_path / "provision-x.yml"
+    playbook.write_text(
+        yaml.safe_dump(
+            [
+                {"hosts": "x", "roles": ["gateway"]},
+                {
+                    "hosts": "x",
+                    "pre_tasks": [{"block": [{"include_role": {"name": "../roles/rpi3_services"}}]}],
+                    "roles": [{"role": "../roles/node_notify"}],
+                    "tasks": [{"ansible.builtin.import_role": {"name": "node_backup"}}],
+                },
+            ]
+        ),
+        encoding="utf-8",
+    )
+    assert _applied_roles(playbook) == ["gateway", "rpi3_services", "node_notify", "node_backup"]
+
+
+@pytest.mark.parametrize("playbook", PLAYBOOKS, ids=lambda p: p.stem)
+def test_the_notifier_and_its_consumers_are_applied_as_roles(playbook: Path):
+    """The tag pairing above reads `roles:` only, and tags on an `include_role`
+    task do not reach the role's own tasks. A notifier or consumer included from
+    a task list would escape that guard, so neither may be."""
+    plays = [play for play in yaml.safe_load(playbook.read_text(encoding="utf-8")) or [] if isinstance(play, dict)]
+    included = {
+        role
+        for play in plays
+        for key in ("pre_tasks", "tasks", "post_tasks", "handlers")
+        for role in _task_roles(play.get(key))
+    }
+    paired = included & (_notifier_consumers() | {"node_notify"})
+    assert not paired, f"{playbook.stem} includes {sorted(paired)} from a task list, where no tag guard reads them"
+
+
+def _ahead_of_the_notifier(order: list[str]) -> list[str]:
+    """The consumers applied before node_notify; every one of them when it is absent."""
+    first = order.index("node_notify") if "node_notify" in order else len(order)
+    return [role for role in order[:first] if role in _notifier_consumers() - {"node_notify"}]
+
+
+@pytest.mark.parametrize(
+    ("order", "late"),
+    [
+        (["node_notify", "gateway"], []),
+        (["gateway", "node_notify"], ["gateway"]),
+        (["gateway"], ["gateway"]),
+        (["dns_resilience", "node_notify"], []),
+    ],
+)
+def test_a_consumer_ahead_of_the_notifier_is_late(order: list[str], late: list[str]) -> None:
+    assert _ahead_of_the_notifier(order) == late
+
+
+@pytest.mark.parametrize("playbook", PLAYBOOKS, ids=lambda p: p.stem)
+def test_the_notifier_is_installed_before_the_units_that_name_it(playbook: Path):
+    """Selecting both together is not enough: a consumer applied first starts units
+    whose template does not exist yet. On a first provision, or a run that stops
+    between the two, systemd logs `Failed to enqueue OnFailure= job ... not found`
+    at every run and the failure goes unannounced (#2728). The lab edge did that
+    across two boots while `gateway` ran before `node_notify`."""
+    late = _ahead_of_the_notifier(_applied_roles(playbook))
+    assert not late, f"{playbook.stem} applies {late} before node_notify, so their units name a missing template"
+
+
+@pytest.mark.parametrize("playbook", PLAYBOOKS, ids=lambda p: p.stem)
+def test_every_applied_role_is_named_literally(playbook: Path):
+    """The guards above match role names as written. A templated one
+    (`name: "{{ role }}"`) reaches them as its template text, matches no consumer,
+    and so passes the pairing and the ordering whatever it resolves to."""
+    templated = [role for role in _applied_roles(playbook) if "{{" in role]
+    assert not templated, f"{playbook.stem} applies {templated}, which no guard here can resolve"
+
+
 def test_the_delivery_test_can_name_the_unit_it_simulates() -> None:
     """A documented override that no caller can pass is not an override.
 
@@ -614,10 +746,10 @@ def test_the_delivery_test_can_name_the_unit_it_simulates() -> None:
     instruction true of `ansible-playbook` and false of every sanctioned entry
     point. Found by needing it.
     """
-    playbook = (REPO / "infra/ansible/playbooks/maintenance-notify-test.yml").read_text()
+    playbook = (REPO / "infra/ansible/playbooks/maintenance-notify-test.yml").read_text(encoding="utf-8")
     assert "notify_test_unit" in playbook, "the playbook no longer takes the override"
 
-    makefile = (REPO / "Makefile").read_text()
+    makefile = (REPO / "Makefile").read_text(encoding="utf-8")
     target = makefile[makefile.index("maintain-notify-test:") :]
     target = target[: target.index("\n.PHONY:")]
     assert "$(_EXTRA)" in target, (
@@ -660,3 +792,169 @@ def test_an_unknown_unit_is_not_announced_as_a_failure() -> None:
     """
     envelope = _encode_via_rendered_script(b"", result="")
     assert "failed" not in envelope["title"], f"an unknown unit is announced as {envelope['title']!r}"
+
+
+def test_the_fleet_default_stays_log() -> None:
+    """Ratified 2026-08-15: maintenance and backup failures are actionable, not page-worthy.
+
+    #2684 rejected raising it for a whole node: a unit that needs a person declares so itself.
+    """
+    assert _defaults()["node_notify_severity"] == "log"
+
+
+@pytest.mark.parametrize(("severity", "ok"), [("log", True), ("page", True), ("critical", False), ("", False)])
+def test_the_role_refuses_a_default_the_router_does_not_route(severity: str, ok: bool) -> None:
+    from tests.ansible_jinja import ansible_env
+
+    tasks = yaml.safe_load((NOTIFY_ROLE / "tasks/main.yml").read_text(encoding="utf-8"))
+    [check] = [t["assert"]["that"] for t in tasks if "node_notify_severity" in str(t.get("assert"))]
+    env = ansible_env(str(NOTIFY_ROLE / "templates"))
+    assert all(env.compile_expression(c)(node_notify_severity=severity) for c in check) is ok
+
+
+# --- every unit that pages closes its page (#2689) ---------------------------
+#
+# A unit that pages and never reports a recovery keeps its incident open: a fixed
+# unit that fails again inside the reminder window is counted into the old
+# incident instead of paging, and an undelivered page stays a failed notifier
+# until a delivered recovery clears it (#2749). The edge's hard-reset test found
+# both on a backup unit, so the rule is held over every unit, not opted into.
+
+ROLES = REPO / "infra/ansible/roles"
+PAGES = re.compile(r"^OnFailure=kubelab-notify@%n\.service$", re.M)
+ON_SUCCESS = "OnSuccess=kubelab-notify-recovered@%n.service"
+START_POST = "ExecStartPost=-/usr/bin/systemctl start --no-block kubelab-notify-recovered@%n.service"
+
+#: Units that page and declare no recovery, each with the reason.
+NO_RECOVERY = {
+    "node_backup/node-backup-shutdown.service.j2": (
+        "its run ends when it stops, inside the shutdown transaction, where systemd "
+        "starts no unit; a recovery hook would log a refused job at every poweroff"
+    ),
+}
+
+
+def _paging_units() -> list[Path]:
+    return sorted(t for t in ROLES.glob("*/templates/*.service.j2") if PAGES.search(t.read_text(encoding="utf-8")))
+
+
+def _key(template: Path) -> str:
+    return f"{template.parents[1].name}/{template.name}"
+
+
+@pytest.mark.parametrize("template", _paging_units(), ids=_key)
+def test_every_unit_that_pages_closes_its_page(template: Path) -> None:
+    """`OnSuccess=` on a RemainAfterExit unit fires when it stops, not when its start
+    succeeds, so such a unit starts the recovery from its last ExecStartPost."""
+    lines = template.read_text(encoding="utf-8").splitlines()
+    if _key(template) in NO_RECOVERY:
+        assert ON_SUCCESS not in lines and START_POST not in lines
+    elif "RemainAfterExit=yes" in lines:
+        assert START_POST in lines and ON_SUCCESS not in lines
+        assert [line for line in lines if line.startswith("ExecStart")][-1] == START_POST
+    else:
+        assert ON_SUCCESS in lines
+
+
+def test_the_recovery_scan_sees_the_units_that_page() -> None:
+    """Vacuity guard (lesson-357), and no exemption outlives its unit."""
+    keys = {_key(t) for t in _paging_units()}
+    assert len(keys) >= 10, keys
+    assert set(NO_RECOVERY) <= keys
+
+
+# --- the spool (#2787) -----------------------------------------------------
+
+SPOOL_SERVICE = "kubelab-notify-spool.service.j2"
+SPOOL_TIMER = "kubelab-notify-spool.timer.j2"
+
+
+def _tasks() -> list[dict]:
+    return yaml.safe_load((NOTIFY_ROLE / "tasks/main.yml").read_text(encoding="utf-8"))
+
+
+def _expand(text: object) -> str:
+    """A task field as Ansible would template it from the role's defaults."""
+    return Environment(undefined=StrictUndefined).from_string(str(text)).render(**_defaults())
+
+
+def _installing(src: str) -> str:
+    [task] = [t for t in _tasks() if t.get("template", {}).get("src") == src]
+    return _expand(task["template"]["dest"])
+
+
+def test_the_spool_unit_runs_the_flush_and_pages_nobody() -> None:
+    """A notice that the spool could not be delivered would wait in that same spool."""
+    unit = _render(SPOOL_SERVICE)
+    script = re.escape(str(_defaults()["node_notify_script_path"]))
+    assert re.search(rf"^ExecStart={script} --flush$", unit, re.M)
+    assert not re.search(r"^On(?:Failure|Success)=", unit, re.M)
+    assert _installing(SPOOL_SERVICE) == f"/etc/systemd/system/{_defaults()['node_notify_spool_unit_name']}.service"
+
+
+def test_the_spool_is_delivered_on_a_timer_the_role_enables() -> None:
+    timer = _render(SPOOL_TIMER)
+    interval = _defaults()["node_notify_spool_interval_seconds"]
+    assert re.search(rf"^OnUnitActiveSec={interval}$", timer, re.M)
+    assert re.search(r"^OnBootSec=", timer, re.M), "a node that boots with notices kept would wait for nothing"
+    assert re.search(r"^WantedBy=timers.target$", timer, re.M)
+    name = f"{_defaults()['node_notify_spool_unit_name']}.timer"
+    assert _installing(SPOOL_TIMER) == f"/etc/systemd/system/{name}"
+    [enable] = [t for t in _tasks() if _expand(t.get("systemd", {}).get("name", "")) == name]
+    assert enable["systemd"]["enabled"] is True and enable["systemd"]["state"] == "started"
+    assert enable["systemd"].get("daemon_reload") is True, "systemd cannot start a timer it has not loaded"
+
+
+def test_the_role_declares_the_spool_private() -> None:
+    """The notices carry journal lines; the spool is root's alone, as the state is."""
+    spool = _defaults()["node_notify_spool_dir"]
+    [task] = [t for t in _tasks() if _expand(t.get("file", {}).get("path", "")) == spool]
+    assert task["file"]["state"] == "directory"
+    assert str(task["file"]["mode"]) == "0700"
+
+
+def test_provisioning_clears_the_notifiers_a_refused_page_left_failed() -> None:
+    """#2787: ace2 held six failed notifiers that no later run would ever clear.
+
+    The spool unit is left alone: it fails while notices wait, and that is the
+    trace to keep.
+    """
+    from tests.ansible_jinja import task_runs
+
+    [listing] = [t for t in _tasks() if "list-units" in t.get("command", {}).get("argv", [])]
+    argv = [_expand(arg) for arg in listing["command"]["argv"]]
+    assert "--state=failed" in argv
+    patterns = [arg for arg in argv if "*" in arg]
+    instance = "@node-backup-ship.service.service"
+    cleared = {
+        str(_defaults()["node_notify_unit_name"]).replace("@.service", instance): True,
+        str(_defaults()["node_notify_recovered_unit_name"]).replace("@.service", instance): True,
+        f"{_defaults()['node_notify_spool_unit_name']}.service": False,
+        "kubelab-maintenance.service": False,
+    }
+    for unit, expected in cleared.items():
+        assert any(fnmatch.fnmatchcase(unit, pattern) for pattern in patterns) is expected, unit
+    assert listing["changed_when"] is False and listing["check_mode"] is False
+    [reset] = [t for t in _tasks() if "reset-failed" in t.get("command", {}).get("argv", [])]
+    # Evaluated, not read: a gate that always runs would call `systemctl reset-failed`
+    # with no unit, which clears every failed unit on the node, the spool unit included.
+    listed = {"stdout_lines": [f"{next(iter(cleared))} loaded failed failed Notify n8n of a failed unit"]}
+    assert not task_runs(reset, {listing["register"]: {"stdout_lines": []}}), "a rerun with nothing failed ran"
+    assert task_runs(reset, {listing["register"]: listed}), "a failed notifier was left failed"
+
+
+def test_the_cleanup_resets_each_unit_the_listing_names() -> None:
+    """The reset's argv is built from `list-units` lines, which start with the unit's name."""
+    from tests.ansible_jinja import ansible_env
+
+    [reset] = [t for t in _tasks() if "reset-failed" in t.get("command", {}).get("argv", [])]
+    expression = str(reset["command"]["argv"]).strip().removeprefix("{{").removesuffix("}}")
+    units = [
+        str(_defaults()["node_notify_unit_name"]).replace("@.service", "@node-backup-ship.service.service"),
+        str(_defaults()["node_notify_recovered_unit_name"]).replace("@.service", "@node-backup-ship.service.service"),
+    ]
+    listed = [f"{unit} loaded failed failed Notify n8n of a failed unit" for unit in units]
+    argv = ansible_env(str(NOTIFY_ROLE / "templates")).compile_expression(expression)(
+        node_notify_failed_notifiers={"stdout_lines": listed}
+    )
+    assert argv == ["systemctl", "reset-failed", *units]

@@ -40,9 +40,9 @@ class MergeApi(FakeApi):
 
 def green(statuses: dict[str, str] | None = None, checks: dict[str, str] | None = None) -> dict[str, Any]:
     """Routes for the commit's statuses and check-runs; every required context green by default."""
-    statuses = {"review-attestation": "success", **(statuses or {})}
-    checks = {"Validate": "success", "Detect Changes": "success", "Tests": "success", "deploy-shape": "success",
-              **(checks or {})}
+    # review-attestation and deploy-shape are commit statuses (#2717); the rest are check-runs.
+    statuses = {"review-attestation": "success", "deploy-shape": "success", **(statuses or {})}
+    checks = {"Validate": "success", "Detect Changes": "success", "Tests": "success", **(checks or {})}
     return {
         f"repos/{REPO}/commits/{HEAD}/status": {
             "statuses": [{"context": c, "state": s} for c, s in statuses.items() if s is not None]

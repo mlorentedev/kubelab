@@ -34,12 +34,12 @@ COMMON = REPO / "infra/config/values/common.yaml"
 
 
 def _monitors() -> list[dict]:
-    data = json.loads(MONITORS.read_text())
+    data = json.loads(MONITORS.read_text(encoding="utf-8"))
     return data if isinstance(data, list) else data["monitors"]
 
 
 def _networking() -> dict:
-    return yaml.safe_load(COMMON.read_text())["networking"]
+    return yaml.safe_load(COMMON.read_text(encoding="utf-8"))["networking"]
 
 
 def _by_key(key: str) -> dict:
@@ -118,7 +118,7 @@ class TestOpenWebUIIsWatched:
     a sleeping homelab must not page at 3 AM, and a dead chat must still show."""
 
     def _webui(self) -> dict:
-        return yaml.safe_load(COMMON.read_text())["apps"]["services"]["ai"]["open_webui"]
+        return yaml.safe_load(COMMON.read_text(encoding="utf-8"))["apps"]["services"]["ai"]["open_webui"]
 
     def test_the_url_is_the_declared_address_and_health_path(self) -> None:
         """AI-010 (#2069) moves the address; this fails until the monitor follows."""
@@ -134,6 +134,6 @@ class TestOpenWebUIIsWatched:
         """The tag alone mutes nothing: the apply path ignores the seed's
         `notificationIDList` and attaches the default notification unless a tag
         is in `muted_notification_tags`, so assert the decision itself."""
-        kuma = yaml.safe_load(COMMON.read_text())["apps"]["services"]["observability"]["uptime_kuma"]
+        kuma = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["apps"]["services"]["observability"]["uptime_kuma"]
         muted = frozenset(kuma["muted_notification_tags"])
         assert not wants_notifications(_by_key("services-ai-open-webui"), muted)

@@ -159,7 +159,7 @@ class Root:
 def _render_gcp(ctx: Context) -> str:
     from toolkit.features import gcp_tfvars
 
-    names = gcp_tfvars.declared_variables((ctx.module_dir / "variables.tf").read_text())
+    names = gcp_tfvars.declared_variables((ctx.module_dir / "variables.tf").read_text(encoding="utf-8"))
     return gcp_tfvars.render(dict(ctx.config), names)
 
 
@@ -478,7 +478,7 @@ def _run_in(
                 # message is the missing key itself.
                 raise RunnerError(f"cannot render the {root.name} inputs from common.yaml: {exc}") from exc
             fd = os.open(rendered, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-            with os.fdopen(fd, "w") as fh:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
                 fh.write(content)
             var_args.append(f"-var-file={rendered}")
 
@@ -714,7 +714,7 @@ class _History:
         key = f"{self._prefix()}{lineage}/{serial}.tfstate"
         body = tmp / "history.tfstate"
         fd = os.open(body, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w") as fh:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
             json.dump(state, fh)
         try:
             put = self._s3api("put-object", "--key", key, "--body", str(body), "--if-none-match", "*")
@@ -830,7 +830,7 @@ def _restore(tf: Callable[..., Result], root: Root, history: _History, tmp: Path
     restored = {**old, "serial": int(current["serial"]) + 1 if current is not None else int(serial)}
     body = tmp / "restore.tfstate"
     fd = os.open(body, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(fd, "w") as fh:
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
         json.dump(restored, fh)
     try:
         rc = tf("state", "push", str(body)).returncode

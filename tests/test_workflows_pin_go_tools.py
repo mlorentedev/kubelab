@@ -15,7 +15,7 @@ FLOATING = re.compile(r"go\s+install\s+\S+@(latest|master|main)\b")
 
 def _go_install_lines():
     for path in sorted(WORKFLOWS.glob("*.y*ml")):
-        for number, line in enumerate(path.read_text().splitlines(), 1):
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             if "go install" in line:
                 yield path.name, number, line.strip()
 

@@ -426,7 +426,7 @@ def cloudflare_account_token_expiry(token: str, timeout: float = 15.0) -> dateti
 
     from toolkit.config.settings import PROJECT_ROOT
 
-    common = yaml.safe_load((PROJECT_ROOT / "infra" / "config" / "values" / "common.yaml").read_text())
+    common = yaml.safe_load((PROJECT_ROOT / "infra" / "config" / "values" / "common.yaml").read_text(encoding="utf-8"))
     account_id = common["backup"]["r2"]["account_id"]
     return _cloudflare_verify_expiry(f"/accounts/{account_id}/tokens/verify", token, timeout)
 
