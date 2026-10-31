@@ -44,6 +44,8 @@ IMAGE_SOURCES = [
     "backup.watcher.image",
     # BACKUP-075: the watcher's sizing step.
     "backup.watcher.size_image",
+    # GITOPS-003 AC2: the delivery watcher's interpreter.
+    "argocd.delivery_watcher.image",
 ]
 
 # Third-party images whose manifest lives ONLY in the prod overlay (TOOL-080's
