@@ -63,16 +63,24 @@ networking:
       # The AP's fixed 2.4 GHz channel, per site: picked at bring-up from a scan
       # of the site's spectrum. Must be one the regdomain allows.
       channel: 6
-      # Shaped slightly below the measured rate (AC8). Read from a laptop at the
-      # temporary site (3.3 and 1.5 Mbps); which one is the download is
-      # re-measured on the RPi4 at bring-up.
+      # The band the uplink associates on, per site: "5GHz", "2.4GHz", or "" for
+      # either. At the hotel site 2.4 GHz received at MCS 1 (13 Mbit/s) at -57 dBm,
+      # beside the lab AP's own 2.4 GHz channel, while its APs also serve 5 GHz.
+      band: "5GHz"
+      # Shaped at 90% of the lower of two measured rates (AC8), so the queue forms
+      # here. Measured 2026-10-31 03:20Z on the site's paid plan, 5 GHz, with the
+      # shaper lifted: the uplink adapter's own rx/tx counters over two 60 s runs of
+      # six parallel streams each way, 27070/26700 kbit/s down and 4041/4026 up. A
+      # second server read 14 Mbit/s down from the edge and the laptop alike, so that
+      # bound is the server's path, not the line. On 2.4 GHz the same plan read
+      # 4730/4939 down; the free plan read 3.3 and 1.5 Mbps.
       bandwidth:
-        down_kbit: 2970
-        up_kbit: 1350
+        down_kbit: 24000
+        up_kbit: 3600
         # The share of down_kbit an image pull gets, against which a pull is sized
         # (_includes/image-pull.yml). Open WebUI's 1.62 GB took 133.7 min on ace2,
         # against 72.7 at down_kbit, with the shaper binding (#2703, 2026-10-30).
-        # Re-measured with the site, like down_kbit.
+        # Measured on the free plan; not yet re-measured on the paid one.
         pull_goodput: 0.54
       # dockerd's attempts at each layer of a pull, for every daemon behind the edge
       # and for the bound on a pull's attempt (#2834). A pull's connections end in
