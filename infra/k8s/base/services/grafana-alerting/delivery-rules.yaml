@@ -17,8 +17,11 @@ groups:
       - uid: gitops003-argo-delivery
         title: Argo CD has not applied master HEAD
         condition: C
-        # Two consecutive runs of the 10-minute watcher must agree: `last_over_time`
-        # holds one run's line until the next replaces it.
+        # `last_over_time` holds the last verdict until a later one replaces it, so
+        # this fires when no run in the next 10 minutes contradicts a red verdict.
+        # A later run that could not ask GitHub (no `healthy`) does not clear it:
+        # the last known state stands. A failed sync is definitive on one run
+        # anyway, since Argo CD does not retry it.
         for: 10m
         # A GitHub that could not be asked prints no `healthy` (watch.py), and so
         # does a watcher that stopped. Both are no data, and both must page.

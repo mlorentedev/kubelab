@@ -1,6 +1,6 @@
 """Did Argo CD apply master HEAD in this environment? One JSON line per run (GITOPS-003 AC2).
 
-Reads master HEAD and its `argocd/kubelab-<ARGO_ENV>` commit status from the
+Reads master HEAD and its `argocd/kubelab-<ARGO_ENV>` combined commit status from the
 GitHub API, anonymously (the repository is public), and prints one
 `argo_delivery` line. Vector ships it to Loki; grafana-alerting/delivery-rules.yaml
 pages on `healthy` < 1.
@@ -70,11 +70,13 @@ def _verdict() -> dict[str, object]:
     landed = datetime.fromisoformat(str(head["commit"]["committer"]["date"]).replace("Z", "+00:00"))
     age = int((datetime.now(timezone.utc) - landed).total_seconds())
 
-    statuses = _get(f"/repos/{REPOSITORY}/commits/{sha}/statuses?per_page=100")
-    if not isinstance(statuses, list):
-        raise Unknown("statuses read is not a list")
-    # GitHub lists statuses newest first, so the first one of the context is current.
-    state = next((s.get("state") for s in statuses if s.get("context") == CONTEXT), None)
+    # The combined status keeps only the newest status of each context, so other
+    # contexts can never page Argo's out of the response, as the list endpoint's
+    # 100-per-page cap could.
+    combined = _get(f"/repos/{REPOSITORY}/commits/{sha}/status")
+    if not isinstance(combined, dict) or not isinstance(combined.get("statuses"), list):
+        raise Unknown("combined status read is not an object with statuses")
+    state = next((s.get("state") for s in combined["statuses"] if s.get("context") == CONTEXT), None)
 
     if state in FAILED:
         healthy = 0

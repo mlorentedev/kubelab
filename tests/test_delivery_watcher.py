@@ -71,8 +71,13 @@ def github() -> Iterator[tuple[FakeGitHub, str]]:
             time.sleep(fake.delay)
             if self.path == "/repos/mlorentedev/kubelab/commits/master":
                 code, body = fake.head_status, fake.head()
-            elif self.path.startswith(f"/repos/mlorentedev/kubelab/commits/{SHA}/statuses"):
-                code, body = fake.statuses_status, fake.statuses
+            elif self.path == f"/repos/mlorentedev/kubelab/commits/{SHA}/status":
+                # The combined status: GitHub keeps the newest status of each
+                # context, in one response however many statuses were posted.
+                latest: dict[str, dict[str, str]] = {}
+                for s in fake.statuses:
+                    latest.setdefault(s["context"], s)
+                code, body = fake.statuses_status, {"sha": SHA, "statuses": list(latest.values())}
             else:
                 code, body = 404, {"message": "Not Found"}
             payload = json.dumps(body).encode()
@@ -184,7 +189,7 @@ def test_only_this_environment_counts(github: tuple[FakeGitHub, str]) -> None:
 
 
 def test_the_newest_status_of_the_context_wins(github: tuple[FakeGitHub, str]) -> None:
-    """GitHub lists statuses newest first: a later success clears an earlier failure."""
+    """A later success clears an earlier failure, and the other way round."""
     fake, api = github
     fake.statuses = [_status("prod", "success"), _status("prod", "failure")]
     assert _only_line(api)["healthy"] == 1
@@ -226,3 +231,12 @@ def test_a_run_past_its_deadline_still_prints_its_line(github: tuple[FakeGitHub,
     line = _only_line(api, deadline=2)
     assert "healthy" not in line
     assert "deadline" in str(line["reason"])
+
+
+def test_other_contexts_cannot_crowd_out_argo(github: tuple[FakeGitHub, str]) -> None:
+    """The list endpoint pages at 100: enough newer statuses would push Argo's off page one."""
+    fake, api = github
+    fake.statuses = [_status(f"other-{i}", "success") for i in range(150)] + [_status("prod", "success")]
+    for s in fake.statuses[:150]:
+        s["context"] = s["context"].replace("argocd/kubelab-", "ci/")
+    assert _only_line(api)["healthy"] == 1
