@@ -8,6 +8,8 @@ gateway_ap_interface: "wlan0"
 # stay empty until the operator stores them; the role's check names what is missing.
 gateway_uplink_kind: ""
 gateway_uplink_regdomain: ""
+# "5GHz", "2.4GHz", or "" to let the adapter pick (Wi-Fi kinds only).
+gateway_uplink_band: ""
 gateway_uplink_mac: ""
 gateway_uplink_ssid: ""
 gateway_uplink_psk: ""

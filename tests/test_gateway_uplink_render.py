@@ -69,18 +69,19 @@ def _vars(kind: str, **overrides: Any) -> dict[str, Any]:
         "gateway_ap_interface": AP,
         "gateway_uplink_kind": kind,
         "gateway_uplink_regdomain": EDGE["uplink"]["regdomain"],
+        "gateway_uplink_band": "",
         **SECRETS,
         **overrides,
     }
 
 
-def _render(template: str, kind: str = "wifi_open") -> str:
+def _render(template: str, kind: str = "wifi_open", **overrides: Any) -> str:
     env = ansible_env(str(TEMPLATES), trim_blocks=True, keep_trailing_newline=True)
-    return env.get_template(template).render(**_vars(kind))
+    return env.get_template(template).render(**_vars(kind, **overrides))
 
 
-def _netplan(kind: str) -> dict[str, Any]:
-    return yaml.safe_load(_render("netplan-edge.yaml.j2", kind))["network"]
+def _netplan(kind: str, **overrides: Any) -> dict[str, Any]:
+    return yaml.safe_load(_render("netplan-edge.yaml.j2", kind, **overrides))["network"]
 
 
 def _generate(kind: str, root: Path) -> Path:
@@ -199,6 +200,22 @@ def test_a_psk_site_is_joined_with_its_passphrase() -> None:
     assert uplink["regulatory-domain"] == EDGE["uplink"]["regdomain"]
 
 
+@pytest.mark.parametrize("band", ["5GHz", "2.4GHz"])
+def test_a_site_band_pins_the_access_point(band: str) -> None:
+    """A band holds the uplink off a congested one (#2875): netplan renders it as
+    wpa_supplicant's freq_list."""
+    ssid = SECRETS["gateway_uplink_ssid"]
+    assert _netplan("wifi_open", gateway_uplink_band=band)["wifis"][UPLINK]["access-points"] == {ssid: {"band": band}}
+    psk = _netplan("wifi_psk", gateway_uplink_band=band)["wifis"][UPLINK]["access-points"][ssid]
+    assert psk == {"password": SECRETS["gateway_uplink_psk"], "band": band}
+
+
+def test_the_site_band_is_one_netplan_knows() -> None:
+    assert EDGE["uplink"]["band"] in ("", "5GHz", "2.4GHz")
+    assert _passes("wifi_open", gateway_uplink_band=EDGE["uplink"]["band"])
+    assert not _passes("wifi_open", gateway_uplink_band="6GHz")
+
+
 def test_the_ethernet_kind_renders_no_wifi() -> None:
     assert "wifis" not in _netplan("ethernet")
     assert SECRETS["gateway_uplink_ssid"] not in _render("netplan-edge.yaml.j2", "ethernet")
@@ -291,7 +308,7 @@ def _gateway_vars() -> dict[str, Any]:
 def test_the_playbook_maps_the_profile_and_its_secrets() -> None:
     """Secrets default to empty so the role's check, not a Jinja error, names what is missing."""
     variables = _gateway_vars()
-    for key in ("kind", "regdomain", "interface"):
+    for key in ("kind", "regdomain", "interface", "band"):
         assert variables[f"gateway_uplink_{key}"] == f"{{{{ config.networking.edge.uplink.{key} }}}}"
     for key in ("mac", "ssid", "psk"):
         assert variables[f"gateway_uplink_{key}"] == f"{{{{ secrets.networking.edge.uplink.{key} | default('') }}}}"

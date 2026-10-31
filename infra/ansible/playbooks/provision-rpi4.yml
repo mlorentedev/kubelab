@@ -231,6 +231,7 @@
         gateway_uplink_interface: "{{ config.networking.edge.uplink.interface }}"
         gateway_uplink_kind: "{{ config.networking.edge.uplink.kind }}"
         gateway_uplink_regdomain: "{{ config.networking.edge.uplink.regdomain }}"
+        gateway_uplink_band: "{{ config.networking.edge.uplink.band }}"
         gateway_uplink_mac: "{{ secrets.networking.edge.uplink.mac | default('') }}"
         gateway_uplink_ssid: "{{ secrets.networking.edge.uplink.ssid | default('') }}"
         gateway_uplink_psk: "{{ secrets.networking.edge.uplink.psk | default('') }}"
