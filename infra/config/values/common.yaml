@@ -68,13 +68,15 @@ networking:
       # beside the lab AP's own 2.4 GHz channel, while its APs also serve 5 GHz.
       band: "5GHz"
       # Shaped at 90% of the lower of two measured rates (AC8), so the queue forms
-      # here. Measured 2026-10-31 on the site's paid plan with the shaper lifted:
-      # the uplink adapter's own rx/tx counters over two 60 s runs of six parallel
-      # streams each way, 4730/4939 kbit/s down and 3934/4068 up. The free plan
-      # read 3.3 and 1.5 Mbps.
+      # here. Measured 2026-10-31 03:20Z on the site's paid plan, 5 GHz, with the
+      # shaper lifted: the uplink adapter's own rx/tx counters over two 60 s runs of
+      # six parallel streams each way, 27070/26700 kbit/s down and 4041/4026 up. A
+      # second server read 14 Mbit/s down from the edge and the laptop alike, so that
+      # bound is the server's path, not the line. On 2.4 GHz the same plan read
+      # 4730/4939 down; the free plan read 3.3 and 1.5 Mbps.
       bandwidth:
-        down_kbit: 50000
-        up_kbit: 20000
+        down_kbit: 24000
+        up_kbit: 3600
         # The share of down_kbit an image pull gets, against which a pull is sized
         # (_includes/image-pull.yml). Open WebUI's 1.62 GB took 133.7 min on ace2,
         # against 72.7 at down_kbit, with the shaper binding (#2703, 2026-10-30).
