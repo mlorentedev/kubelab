@@ -416,6 +416,58 @@ def deploy_shape_cmd(
     raise typer.Exit(2)
 
 
+@app.command("deploy-merge")
+def deploy_merge_cmd(
+    repo: Annotated[str, typer.Option("--repo", envvar="GITHUB_REPOSITORY", help="owner/name")],
+    out: Annotated[Path, typer.Option("--out", help="Write the switch and the decisions here as JSON")],
+    registry: Annotated[Path, typer.Option("--registry", help="Registry declaring the class")] = Path(
+        "harness/review-attestation.json"
+    ),
+    products: Annotated[Path, typer.Option("--products", help="Product registry")] = Path("infra/config/products.yaml"),
+    common: Annotated[Path, typer.Option("--common", help="Declares the required contexts")] = Path(
+        "infra/config/values/common.yaml"
+    ),
+) -> None:
+    """Judge every open PR to the default branch: merge, close or skip (DELIVERY-004 AC6).
+
+    Writes decisions only; deploy-merge.yml acts on them, and only when the switch
+    `mechanical.merge` is on. Exits 0 when every open PR was judged, 2 when the
+    list or the declarations could not be read. Run it from the default branch's tree.
+    """
+    from toolkit.features import deploy_merge as dm
+    from toolkit.features import deploy_shape as ds
+    from toolkit.features.product_registry import load_registry as load_products
+
+    api = ds.GhApi()
+    try:
+        decl = ds.load_declaration(registry)
+        admitted = load_products(products).products
+        default_branch = api.json(f"repos/{repo}")["default_branch"]
+        required = dm.required_contexts(common, repo, default_branch)
+        open_prs: list[dict[str, Any]] = []
+        for page in range(1, 51):  # GitHub caps per_page at 100; 50 pages is past any real queue
+            batch = api.json(f"repos/{repo}/pulls?state=open&base={default_branch}&per_page=100&page={page}")
+            open_prs += batch
+            if len(batch) < 100:
+                break
+    except Exception as exc:  # noqa: BLE001 — nothing is judged on a declaration that cannot be read
+        logger.error(f"deploy-merge: cannot read the declarations or the open PRs: {exc}")
+        raise typer.Exit(2) from exc
+
+    enabled = dm.merge_enabled(registry)
+    decisions = [dm.judge(pr["number"], repo, api, decl, admitted, required) for pr in open_prs]
+    try:
+        payload = {"enabled": enabled, "decisions": [d.as_dict() for d in decisions]}
+        out.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    except OSError as exc:
+        logger.error(f"deploy-merge: cannot write {out}: {exc}")
+        raise typer.Exit(2) from exc
+    mode = "on" if enabled else "off, nothing will be merged or closed"
+    logger.info(f"deploy-merge: switch {mode}; {len(decisions)} open PR(s) judged")
+    for d in decisions:
+        logger.info(f"  #{d.pr} {d.action} at {d.head_sha or 'no sha'}: {d.reason}")
+
+
 # =============================================================================
 # MUTATION CHECK (#2104)
 # =============================================================================
