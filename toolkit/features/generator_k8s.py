@@ -69,6 +69,7 @@ class K8sGenerator(BaseGenerator):
         ("services.yaml.j2", "services.yaml"),
         ("configmaps.yaml.j2", "configmaps.yaml"),
         ("ingress.yaml.j2", "ingress.yaml"),
+        ("hooks.yaml.j2", "hooks.yaml"),
     ]
 
     def generate(self, env: str) -> dict[str, Any]:
@@ -294,6 +295,7 @@ class K8sGenerator(BaseGenerator):
             "namespace": namespace,
             "apps": apps,
             "cert_resolver": cert_resolver,
+            "route_probe_image": env_vars.get("ARGOCD_ROUTE_PROBE_IMAGE", ""),
         }
 
     @classmethod
@@ -438,7 +440,31 @@ class K8sGenerator(BaseGenerator):
                     "priority": int(entry.get("priority", 100)),
                 }
             )
+            if "probe" in entry:
+                routes[-1]["probe"] = self._build_probe(entry["probe"], component, entry["path_prefix"])
         return routes
+
+    _PROBE_FIELDS = ("method", "path", "expect_status", "expect_content_type")
+
+    @classmethod
+    def _build_probe(cls, raw: dict[str, Any], component: str, path_prefix: str) -> dict[str, Any]:
+        """The request a route's `PostSync` hook sends, and the answer it requires (GITOPS-003 AC3).
+
+        Every expectation is required: a probe missing one would pass on any
+        answer, including the static site's, which is the failure it exists for.
+        """
+        missing = [f for f in cls._PROBE_FIELDS if f not in raw]
+        if missing:
+            raise ValueError(f"extra_route {path_prefix} on {component}: probe lacks {', '.join(missing)}")
+        slug = path_prefix.strip("/").replace("/", "-") or "root"
+        return {
+            "name": f"{component}-route-probe-{slug}",
+            "method": raw["method"],
+            "path": raw["path"],
+            "body": raw.get("body", ""),
+            "expect_status": int(raw["expect_status"]),
+            "expect_content_type": raw["expect_content_type"],
+        }
 
     def _has_secret_vars(self, component: str) -> bool:
         """Whether a K8s Secret is defined for this component (→ mount it via envFrom).
