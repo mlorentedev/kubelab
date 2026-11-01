@@ -341,6 +341,32 @@ def edge_shape_check(
     raise typer.Exit(code)
 
 
+@edge_app.command("ap-halt")
+def edge_ap_halt() -> None:
+    """Halt the lab Wi-Fi's radio on purpose and watch the edge bring it back (B10).
+
+    Unloads the AP's driver on the edge over its LAN address, as a firmware halt
+    would take the interface away, then reads the AP every 20 s until the liveness
+    ladder has it serving again. Exits 0 when it serves again, 1 when it does not
+    within 12 minutes, 3 when nothing was injected (the AP was not serving, or the
+    driver would not unload), and 255 when SSH fails before the fault.
+    """
+    from toolkit.features.configuration import ConfigurationManager
+    from toolkit.features.edge_ap_halt import run_ap_halt
+    from toolkit.features.edge_status import EdgeNotDeclaredError
+
+    net = ConfigurationManager("prod", settings.project_root).get_plaintext_values()["networking"]
+    try:
+        _say_the_path(net, "lan")
+        code, lines = run_ap_halt(net)
+    except EdgeNotDeclaredError as e:
+        logger.error(str(e))
+        raise typer.Exit(1) from e
+    for line in lines:
+        typer.echo(line)
+    raise typer.Exit(code)
+
+
 @edge_app.command("lan-link")
 def edge_lan_link(
     route: Annotated[

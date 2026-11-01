@@ -81,7 +81,8 @@ Partial results, kept apart from the `### B<n>-EVIDENCE` headings on purpose: `f
 - **B14.** Done. Every case passed after B12's `changed=0` provision, and again on #2797's configuration once T3 had found #2794. The first check after T4's cable went back in could not tell a cable from none (#2800). Redone over the LAN with #2800's carrier line, it reads `eth0 has a carrier`, 28 of 28 `OK`. See `### B14-EVIDENCE` below.
 - **B7.** Completed 2026-11-01, see `### B7-EVIDENCE` below.
 - **B9.** Completed 2026-11-01, see `### B9-EVIDENCE` below.
-- **B8, B10, B13.** Not started.
+- **B10.** Completed 2026-11-01, see `### B10-EVIDENCE` below.
+- **B8, B13.** Not started.
 
 ### Hard-reset runs, 2026-10-29
 
@@ -366,6 +367,36 @@ verdict: measured; record the bound in verification.md
 - **e2e.** At 09:33Z, `make test-e2e ENV=staging` from master `fba90b14`, with the homelab powered: 68 passed, 21 skipped, 0 failed. Open WebUI has no staging route, so its tests skip there by declaration (`skip_in_envs`). Against prod, the same subset (`-k open_webui`) gave 8 passed.
 - **The 03:36Z run.** The same command at 03:36Z gave 68 passed, 19 skipped, 2 failed: `test_security_headers_present[open_webui]` and `test_hsts_header[open_webui]` in `tests/e2e/test_security_headers.py`, both refused on ace2's `100.64.0.5:3080`. On master those two tests call the probe before they read `skip_in_envs` (`test_security_headers.py:41` then `:44`, and `:75` then `:78`), and a refusal raises, so at 03:36Z ace2's empty image store failed them before the declaration was reached. At 09:33Z ace2 answered, the probe returned, and the declaration after it skipped them, which is how 2 failed and 19 skipped became 21 skipped with no code change between the runs. The failures were a test defect, not a staging regression, so the tick stands. #2846 reads the declaration first, after which a staging run no longer depends on ace2 for Open WebUI.
 
+### B10-EVIDENCE: a halted radio comes back with no human step, 2026-11-01
+
+`make edge-ap-halt` from the switch, at 2026-11-01T01:58:33Z. It reads the interface and driver from the deployed liveness unit, checks that the AP serves by the ladder's own test (the interface up and `hostapd_cli status` reading `state=ENABLED`), unloads the driver, reads that the interface is gone, and then reads the AP every 20 s:
+
+```text
+interface: wlan0, driver: brcmfmac
+before: up ENABLED
+unload alone: refused modprobe: FATAL: Module brcmfmac is in use.
+unload with holders: ok brcmfmac_wcc
+after the unload: absent
+ladder: 9 line(s)
+  2026-11-01T02:59:28+01:00 rpi4 systemd[1]: Starting kubelab-edge-liveness.service - Check the lab Wi-Fi and the uplink, and recover a halted radio...
+  2026-11-01T02:59:29+01:00 rpi4 kubelab-edge-liveness[338288]: lab Wi-Fi: wlan0 is not serving (1 of 3 misses before a driver reload)
+  2026-11-01T02:59:29+01:00 rpi4 systemd[1]: Finished kubelab-edge-liveness.service - Check the lab Wi-Fi and the uplink, and recover a halted radio.
+  2026-11-01T03:00:29+01:00 rpi4 systemd[1]: Starting kubelab-edge-liveness.service - Check the lab Wi-Fi and the uplink, and recover a halted radio...
+  2026-11-01T03:00:29+01:00 rpi4 kubelab-edge-liveness[338620]: lab Wi-Fi: wlan0 is not serving (2 of 3 misses before a driver reload)
+  2026-11-01T03:00:30+01:00 rpi4 systemd[1]: Finished kubelab-edge-liveness.service - Check the lab Wi-Fi and the uplink, and recover a halted radio.
+  2026-11-01T03:01:30+01:00 rpi4 systemd[1]: Starting kubelab-edge-liveness.service - Check the lab Wi-Fi and the uplink, and recover a halted radio...
+  2026-11-01T03:01:30+01:00 rpi4 kubelab-edge-liveness[338969]: lab Wi-Fi: wlan0 has not served for 3 checks; reloading brcmfmac and restarting hostapd
+  2026-11-01T03:01:31+01:00 rpi4 systemd[1]: Failed to start kubelab-edge-liveness.service - Check the lab Wi-Fi and the uplink, and recover a halted radio.
+edge rebooted: no
+verdict: recovered, the AP served again 178 s after the unload
+```
+
+- The ladder's first step was enough: the driver reload at the third miss brought the AP back, and the edge did not reboot. The run that reloaded exits non-zero on purpose, so it pages, and the next clean run closes the incident (`node_notify`).
+- A first run at 00:58:54Z gave the same result, 178 s and no reboot, but judged the AP by `systemctl is-active hostapd`, a weaker test than the ladder's, and did not yet read the interface after the unload. The run above is the command as merged.
+- `brcmfmac_wcc` holds `brcmfmac` on the serving edge as well, as read earlier with `wlan0` down. A bare `modprobe -r brcmfmac` is refused, which is why both the command and the ladder unload the holders with it.
+- After recovery from each run, `make edge-boot-check` read every check `OK` (28 after the second), including `wlan0 serves the lab Wi-Fi`, `DHCP server listening` and `no failed unit`.
+- `make watcher-run NAME=edge-watcher ENV=prod` read `rpi3 up=1` and `rpi4 up=1`: rpi3 was back on the lab Wi-Fi and reachable from prod over the tailnet.
+
 ### B7-EVIDENCE: the radio honours two PSKs at once, 2026-11-01
 
 The `[OPEN]` risk that gates AC10 is closed: brcmfmac does not offload the AP's handshake on this edge, and `wpa_psk_file` holds two keys at once.
@@ -411,7 +442,7 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 
   Both are replaced by the AC11 target and removed once it exists.
 - **The uplink is checked, never rebooted for (AC13), 2026-10-25.** Task 28 has the liveness check the uplink's lease, and AC13 recovers the edge "where a reboot can". A present adapter with no lease is the site (down, out of range, a changed passphrase), which a reboot cannot fix, and the reboot would cost rpi3 its Wi-Fi and the homelab its route. So the check reports it after the grace and does nothing else. An adapter that disappeared gets its driver reloaded once per incident; an unplugged one looks the same, so the edge does no more.
-- **The AP's `operstate` under hostapd (AC13), pending B10.** The check reads `up`, as task 28 words it; brcmfmac turns the carrier on when it starts the BSS. B10 reads it on the edge with the AP serving. A driver that reported anything else would escalate on a healthy AP: one driver reload, one reboot, another reload, then the latch holds and pages. B10 also shows whether the unload succeeds on the serving edge: `brcmfmac_wcc` holding `brcmfmac` was read with `wlan0` down and no hostapd, and the ladder stops hostapd before the unload.
+- **The AP's `operstate` under hostapd (AC13), read in B10.** On 2026-11-01, with the AP serving, the edge read `up` and hostapd `ENABLED` (`before: up ENABLED`, `### B10-EVIDENCE`), so the check does not escalate on a healthy AP. The unload alone was refused there too, with hostapd serving, and the ladder's holder-aware reload is what recovered the radio. The original note follows. The check reads `up`, as task 28 words it; brcmfmac turns the carrier on when it starts the BSS. B10 reads it on the edge with the AP serving. A driver that reported anything else would escalate on a healthy AP: one driver reload, one reboot, another reload, then the latch holds and pages. B10 also shows whether the unload succeeds on the serving edge: `brcmfmac_wcc` holding `brcmfmac` was read with `wlan0` down and no hostapd, and the ladder stops hostapd before the unload.
 - **The prod probe's alert bound (AC12), derived 2026-10-25, pending B8.** From the literals, not measured: the watcher runs every 5 minutes, the target rule takes the best result in 10 minutes and holds for 5, and its group evaluates every minute. A cut just after a probe answered goes Alerting about 16 minutes later; the root policy's `group_wait` adds 30 seconds before the page leaves. The silent rule's window is 15 minutes and it holds for 5, so it goes Alerting about 20 minutes after the last line. B8 measures both from a phone on cellular.
 - **No `page` label on the edge rules (AC12, task 25).** Task 25 asks for "the `page` routing label". No rule in `grafana-alerting/` carries one: the tier comes from each environment's root policy, `apprise-page` in prod and `apprise-log` in staging. A label nothing routes on would read as routing and do nothing, so the rules carry none and reach the page tier the way every other prod rule does.
 - **Repeat until acknowledged (AC12, task 26), read 2026-10-25.** Prod's root policy has `repeat_interval: 4h`: Grafana re-sends a firing alert every 4 hours until it resolves or is silenced, and a silence is Grafana's acknowledgement. The page tier is Apprise to Telegram, which has no acknowledgement of its own. So the page repeats until acknowledged, every 4 hours. Whether that is often enough for a phone that held back the first push is the operator's call. The options, in the PR: accept 4 hours; add a child route in `overlays/prod/grafana-alerting/policies.yaml` for the two edge alerts with a shorter `repeat_interval` (same receiver as the root, so no `continue` is needed); or repeat in n8n.

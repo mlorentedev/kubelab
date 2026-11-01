@@ -104,6 +104,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit infra argo verify-product` | Verify a product is deployed at origin/master HEAD by consequence (GITOPS-003, #1478). |
 | `toolkit infra argo wait-status` | Wait for the commit status Argo CD posts per sync (GITOPS-003 AC2, #1478). |
 | `toolkit infra edge` | The lab edge (rpi4): uplink status (NET-005) |
+| `toolkit infra edge ap-halt` | Halt the lab Wi-Fi's radio on purpose and watch the edge bring it back (B10). |
 | `toolkit infra edge boot-check` | Say whether a boot brought back everything the edge serves (the hard-reset test). |
 | `toolkit infra edge lan-link` | Join this laptop to the lab LAN with a NetworkManager profile (NET-005 AC11). |
 | `toolkit infra edge measure` | Measure the uplink's line rate on the edge, one window per direction (AC8). |

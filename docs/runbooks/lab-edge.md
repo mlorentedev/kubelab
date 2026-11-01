@@ -154,6 +154,14 @@ The radio's firmware can halt, after a weak client or an eighth station, and onl
 
 Do not stop hostapd by hand while the liveness timer runs: the ladder reads a stopped hostapd as a halted radio, reloads the driver under you, and at the next miss reboots the edge. There is no target to pause it yet (#2683).
 
+To prove the ladder on the edge itself (NET-005 B10), halt the radio on purpose from the switch:
+
+```bash
+make edge-ap-halt
+```
+
+It reads the AP's interface and driver from the deployed liveness unit and refuses to inject anything unless the AP is serving. It then unloads the driver, first on its own and, when that is refused, with the modules that hold it, and reads the AP every 20 seconds until it serves again. The lab Wi-Fi, and rpi3 with it, drops for about three minutes, the grace before the reload, so expect rpi3's and the liveness unit's pages. If the reload does not bring the radio back, the next miss reboots the edge, and the command keeps reading through the reboot. It prints both unload results, the ladder's lines, whether the edge rebooted and how long the AP took to serve. `toolkit infra edge ap-halt` exits 0 when the AP serves again, 1 when it does not within 12 minutes, 3 when nothing was injected and 255 when SSH failed before the fault. Through make every non-zero code is 2, so read the `verdict:` line. Then run `make edge-boot-check` and record both outputs under `### B10-EVIDENCE`.
+
 ## Reaching the edge from the switch
 
 When the uplink is dead, behind a portal, or misconfigured, the tailnet is gone and the switch is the way in. The edge keeps `eth0` open to the homelab LAN for exactly this.
