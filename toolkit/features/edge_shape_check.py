@@ -16,9 +16,11 @@ Three hosts take part, each reached on the path that does not cross the load:
   which direction the load took and that it crossed the uplink at all.
 
 The shaper is lifted by stopping its unit, whose ExecStop deletes its qdiscs, and
-restored by starting it. The restore always runs, is retried once, and is read
-back: a CAKE root qdisc on the uplink and the unit active. A restore that cannot
-be read back fails the run, whatever the measurements say.
+restored by starting it. The restore runs on any error and on Ctrl-C, is retried
+once, and is read back: a CAKE root qdisc on the uplink and the unit active. A
+restore that cannot be read back fails the run, whatever the measurements say. A
+process killed outright leaves the unit stopped until the edge boots or the
+operator starts it, which `make edge-boot-check` reports.
 """
 
 from __future__ import annotations
@@ -45,6 +47,9 @@ LOAD_HOST, CLIENT_HOST = "beelink", "rpi3"
 # load's direction. curl's `000` cannot tell a request cut at the window's end
 # from one that never connected, so the counters decide whether the load ran.
 MIN_LOAD_MBIT = 1.0
+# A probe that wrote fewer connects than a third of the window stopped early, and
+# a p95 over what is left says nothing. The starved unshaped upload wrote 12.
+MIN_SAMPLES = WINDOW_S // 3
 
 # Run in this order: the shaped windows first, so the shaper is lifted for the
 # shortest time.
@@ -262,8 +267,9 @@ def _window(
     elif direction and (carried is None or carried < MIN_LOAD_MBIT):
         rate = "unread" if carried is None else f"{carried:.1f} Mbit/s"
         window.unreadable = f"the load did not cross the uplink ({direction} {rate})"
-    elif not window.connects_ms and not window.failures:
-        window.unreadable = "the probe on rpi3 recorded nothing"
+    elif len(window.connects_ms) + window.failures < MIN_SAMPLES:
+        samples = len(window.connects_ms) + window.failures
+        window.unreadable = f"the probe on rpi3 recorded {samples} connect(s), fewer than {MIN_SAMPLES}"
     return window
 
 

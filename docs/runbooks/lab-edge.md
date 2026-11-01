@@ -214,7 +214,7 @@ It reads the edge's `kern.log` over the LAN, because the journal there holds abo
 
 ## Shaper check
 
-The uplink is shaped both ways so that a homelab host's bulk transfer does not starve a lab Wi-Fi client (NET-005 AC8, B9). `make edge-shape-check` measures it: bee pulls and then pushes `make edge-measure`'s streams for 30 seconds each, while rpi3, a lab Wi-Fi client, times one TCP connect a second. It runs the shaped windows first, then stops `kubelab-edge-shaper.service` for the two unshaped ones, about a minute in which rpi3, Uptime Kuma and anyone on the lab Wi-Fi are slow. The shaper is started again whatever happens, retried once, and read back (the unit active and CAKE on the uplink).
+The uplink is shaped both ways so that a homelab host's bulk transfer does not starve a lab Wi-Fi client (NET-005 AC8, B9). `make edge-shape-check` measures it: bee pulls and then pushes `make edge-measure`'s streams for 30 seconds each, while rpi3, a lab Wi-Fi client, times one TCP connect a second. It runs the shaped windows first, then stops `kubelab-edge-shaper.service` for the two unshaped ones, about a minute in which rpi3, Uptime Kuma and anyone on the lab Wi-Fi are slow. The shaper is started again on any error and on Ctrl-C, retried once, and read back (the unit active and CAKE on the uplink). A run killed outright (SIGTERM, SIGKILL, a closed terminal) leaves it stopped: `make edge-boot-check` reports the shaper, and `make provision NODE=rpi4 ENV=prod TAGS=gateway` or a reboot starts the unit again.
 
 ```bash
 make edge-shape-check              # measure and print each window

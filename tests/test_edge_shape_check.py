@@ -32,7 +32,7 @@ class Hosts:
         cake: bool = True,
         failing_starts: tuple[int, ...] = (),
         refuse_load: bool = False,
-        probe: str = "0.020 200\n",
+        probe: str = "0.020 200\n" * 20,
     ) -> None:
         self.cake = cake
         # Start 0 is the read before the run; 1 and 2 are the restore and its retry.
@@ -139,14 +139,17 @@ def test_a_load_cut_by_the_window_s_end_is_a_reading() -> None:
     assert "load answered 0 cut 6 refused 0" in lines[2]
 
 
-def test_a_probe_with_nothing_recorded_is_no_reading() -> None:
-    code, _ = _go(Hosts(probe=""))
+@pytest.mark.parametrize("probe", ["", "0.020 200\n"])
+def test_a_probe_that_stopped_early_is_no_reading(probe: str) -> None:
+    # One connect passes any bound; it is not a window's worth.
+    code, lines = _go(Hosts(probe=probe), bound=100)
     assert code == 3
+    assert "fewer than" in lines[0]
 
 
 @pytest.mark.parametrize("bound", [None, 100])
 def test_a_connect_lost_under_a_shaped_load_fails_with_or_without_a_bound(bound: float | None) -> None:
-    code, lines = _go(Hosts(probe="0.020 200\n0.000 000\n"), bound=bound)
+    code, lines = _go(Hosts(probe="0.020 200\n" * 20 + "0.000 000\n"), bound=bound)
     assert code == 1
     assert "1 failed" in lines[1]
     assert lines[-1].startswith("verdict: FAILED, connects lost under a shaped load")
@@ -169,8 +172,8 @@ def test_a_load_that_did_not_cross_the_uplink_is_no_reading() -> None:
 
 
 def test_a_bound_judges_the_shaped_windows_by_their_p95() -> None:
-    assert _go(Hosts(probe="0.040 200\n"), bound=100)[0] == 0
-    assert _go(Hosts(probe="0.400 200\n"), bound=100)[0] == 1
+    assert _go(Hosts(probe="0.040 200\n" * 20), bound=100)[0] == 0
+    assert _go(Hosts(probe="0.400 200\n" * 20), bound=100)[0] == 1
 
 
 def test_an_unshaped_uplink_before_the_run_is_refused() -> None:
