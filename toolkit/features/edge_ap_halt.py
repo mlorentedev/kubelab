@@ -68,13 +68,15 @@ def inject_script() -> str:
             'ap=$2; driver=$3; [ -n "$driver" ] || { echo "result ' + NO_UNIT + '"; exit 0; }',
             'printf "interface %s\\ndriver %s\\n" "$ap" "$driver"',
             'printf "boot %s\\nclock %s\\n" "$(cat /proc/sys/kernel/random/boot_id)" "$(date -u +%s)"',
-            'state=$(cat "/sys/class/net/$ap/operstate" 2>/dev/null || echo absent)',
+            # The ladder's own overrides, so a test can run this script on a fake sysfs.
+            "sys_net=${EDGE_SYS_NET:-/sys/class/net}; sys_module=${EDGE_SYS_MODULE:-/sys/module}",
+            'state=$(cat "$sys_net/$ap/operstate" 2>/dev/null || echo absent)',
             f"hostapd={_hostapd_state('$ap')}",
             'printf "before %s %s\\n" "$state" "$hostapd"',
             '[ "$state" = up ] && [ "$hostapd" = ENABLED ] || { echo "result ' + NOT_SERVING + '"; exit 0; }',
             'if out=$(sudo -n modprobe -r "$driver" 2>&1); then echo "bare-unload ok"; else',
             '  printf "bare-unload refused %s\\n" "$(echo "$out" | head -1)"',
-            '  holders=$(ls "/sys/module/$driver/holders" 2>/dev/null | tr "\\n" " ")',
+            '  holders=$(ls "$sys_module/$driver/holders" 2>/dev/null | tr "\\n" " ")',
             '  if out=$(sudo -n modprobe -r $holders "$driver" 2>&1); then printf "holder-unload ok %s\\n" "$holders"',
             '  else printf "holder-unload failed %s\\n" "$(echo "$out" | head -1)"; echo "result '
             + UNLOAD_FAILED
@@ -82,7 +84,7 @@ def inject_script() -> str:
             "fi",
             # The fault is observed, not assumed: an interface still up after the
             # unload proves nothing about the ladder.
-            'after=$(cat "/sys/class/net/$ap/operstate" 2>/dev/null || echo absent)',
+            'after=$(cat "$sys_net/$ap/operstate" 2>/dev/null || echo absent)',
             'printf "after %s\\n" "$after"',
             '[ "$after" != up ] || { echo "result ' + NOT_HALTED + '"; exit 0; }',
             f'echo "result {INJECTED}"',

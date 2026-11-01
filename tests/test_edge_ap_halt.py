@@ -197,6 +197,48 @@ def test_the_inject_script_takes_the_interface_and_driver_from_the_unit(tmp_path
     assert "modprobe" not in (bin_dir / "sudo.log").read_text(encoding="utf-8")
 
 
+FAKE_SUDO = """#!/bin/sh
+echo "$*" >> "$0.log"
+shift  # -n
+case "$*" in
+  *hostapd_cli*) echo "state=ENABLED" ;;
+  "modprobe -r brcmfmac") echo "modprobe: FATAL: Module brcmfmac is in use."; exit 1 ;;
+  "modprobe -r brcmfmac_wcc brcmfmac") rm "$EDGE_SYS_NET/wlan0/operstate" ;;
+  *) exit 1 ;;
+esac
+"""
+
+
+@pytest.mark.skipif(shutil.which("sh") is None, reason="needs a POSIX shell")
+def test_the_inject_script_tries_the_unload_alone_then_with_its_holders(tmp_path: Path) -> None:
+    """Run the real script on a fake sysfs whose driver has a holder: the bare
+    unload is refused, the unload with the holder takes the interface away, and
+    the script observes it gone."""
+    bin_dir, net, module = tmp_path / "bin", tmp_path / "net" / "wlan0", tmp_path / "module" / "brcmfmac" / "holders"
+    for directory in (bin_dir, net, module):
+        directory.mkdir(parents=True)
+    (net / "operstate").write_text("up\n", encoding="utf-8")
+    (module / "brcmfmac_wcc").touch()
+    (bin_dir / "systemctl").write_text(f'#!/bin/sh\necho "{EXEC_START}"\n', encoding="utf-8")
+    (bin_dir / "sudo").write_text(FAKE_SUDO, encoding="utf-8")
+    for tool in ("systemctl", "sudo"):
+        (bin_dir / tool).chmod(0o755)
+    env = {
+        **os.environ,
+        "PATH": f"{bin_dir}:{os.environ['PATH']}",
+        "EDGE_SYS_NET": str(tmp_path / "net"),
+        "EDGE_SYS_MODULE": str(tmp_path / "module"),
+    }
+    out = subprocess.run(["sh", "-c", h.inject_script()], env=env, capture_output=True, text=True, check=True).stdout
+    facts = h.parse(out)
+    assert facts["before"] == "up ENABLED"
+    assert facts["bare-unload"] == "refused modprobe: FATAL: Module brcmfmac is in use."
+    assert facts["holder-unload"] == "ok brcmfmac_wcc"
+    assert (facts["after"], facts["result"]) == ("absent", h.INJECTED)
+    modprobes = [line for line in (bin_dir / "sudo.log").read_text(encoding="utf-8").splitlines() if "modprobe" in line]
+    assert modprobes == ["-n modprobe -r brcmfmac", "-n modprobe -r brcmfmac_wcc brcmfmac"]
+
+
 def test_the_scripts_parse_as_posix_sh() -> None:
     for script in (h.inject_script(), h.poll_script("wlan0", 1)):
         subprocess.run(["sh", "-n", "-c", script], check=True)
