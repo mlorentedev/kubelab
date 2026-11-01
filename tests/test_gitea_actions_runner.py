@@ -121,6 +121,9 @@ def _template_vars(runner: dict) -> dict:
         act_runner_artifact_retention_days=runner["artifact_retention_days"],
         act_runner_run_retention_days=runner["run_retention_days"],
         docker_dns_servers=["100.100.100.100", "1.1.1.1"],
+        gitea_dns_servers=yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))[
+            "gitea_dns_servers"
+        ],
     )
 
 

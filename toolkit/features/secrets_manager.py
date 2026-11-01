@@ -766,6 +766,25 @@ SECRET_CATALOG: list[SecretSpec] = [
         envs=("prod",),
     ),
     SecretSpec(
+        key_path="apps.services.core.gitea.issue_reader_token",
+        description=(
+            "Read-only Gitea API token on the reviewer's account (apps.auth.identities.reviewer); "
+            "read:issue, used by the forge task view's API to list issues and pull requests (CONSOLE-004)"
+        ),
+        # EXTERNAL for the reason `bot_token` gives: only Gitea honours what it mints.
+        kind=SecretKind.EXTERNAL,
+        services=("gitea", "api"),
+        rotate_note=(
+            "`make gitea-rotate-token TOKEN=issue_reader ENV=prod APPLY=1` (revoke, then unset), then "
+            "`make provision NODE=bee ENV=prod TAGS=gitea` to re-mint, then `make apply-secrets ENV=prod` "
+            "so the API's Secret carries the new value. The mint task is gated on this key being "
+            "absent; never mint a second token by hand."
+        ),
+        # NEVER, for the reason measured on `bot_token`: Gitea's token API has no expiry field.
+        expiry=Expiry.NEVER,
+        envs=("prod",),
+    ),
+    SecretSpec(
         key_path="apps.services.core.gitea.github_migration_token",
         description=(
             "Fine-grained GitHub PAT that Gitea's migration endpoint uses to READ "
