@@ -31,7 +31,7 @@ def _injected(result: str = h.INJECTED, **extra: str) -> str:
         "driver": "brcmfmac",
         "boot": "b1",
         "clock": "1000",
-        "before": "up active",
+        "before": "up ENABLED",
         "bare-unload": "refused modprobe: FATAL: Module brcmfmac is in use.",
         "holder-unload": "ok brcmfmac_wcc",
         "after": "absent",
@@ -40,7 +40,7 @@ def _injected(result: str = h.INJECTED, **extra: str) -> str:
     return "\n".join(f"{k} {v}" for k, v in lines.items()) + f"\nresult {result}\n"
 
 
-def _poll(state: str = "up active", boot: str = "b1", ladder: tuple[str, ...] = ()) -> str:
+def _poll(state: str = "up ENABLED", boot: str = "b1", ladder: tuple[str, ...] = ()) -> str:
     return f"boot {boot}\nstate {state}\n" + "".join(f"ladder {line}\n" for line in ladder)
 
 
@@ -95,10 +95,44 @@ def test_an_ap_still_down_at_the_deadline_fails() -> None:
     assert lines[-1].startswith("verdict: FAILED")
 
 
-def test_a_half_up_ap_is_not_serving() -> None:
-    # The interface up with hostapd still starting is not the ladder's test passing.
-    code, _ = _go(Edge((0, _injected()), [(0, _poll("up activating"))]))
+@pytest.mark.parametrize("state", ["up DISABLED", "up unanswered", "absent ENABLED"])
+def test_only_the_ladder_s_serving_test_counts(state: str) -> None:
+    # The interface up with hostapd not ENABLED is not the ladder's test passing.
+    code, _ = _go(Edge((0, _injected()), [(0, _poll(state))]))
     assert code == 1
+
+
+def test_a_recovery_seen_after_the_deadline_is_not_one() -> None:
+    edge = Edge((0, _injected()), [])
+    late = h.DEADLINE_S + 5
+
+    def run(_net: dict[str, Any], script: str) -> tuple[int, str]:
+        edge.scripts.append(script)
+        if len(edge.scripts) == 1:
+            return 0, _injected()
+        edge.now = late  # the poll's SSH session ran past the deadline
+        return 0, _poll()
+
+    code, lines = h.run_ap_halt(NET, run=run, clock=lambda: edge.now, sleep=edge.sleep)
+    assert code == 1
+    assert lines[-1].startswith("verdict: FAILED")
+
+
+def test_the_last_wait_stops_at_the_deadline() -> None:
+    edge = Edge((0, _injected()), [])
+    waits: list[float] = []
+
+    def sleep(seconds: float) -> None:
+        waits.append(seconds)
+        edge.sleep(seconds)
+
+    edge.now = 0.0
+    h.run_ap_halt(NET, run=edge.run, clock=lambda: edge.now, sleep=sleep)
+    assert sum(waits) == h.DEADLINE_S
+
+
+def test_the_poll_keeps_the_unit_s_failures() -> None:
+    assert "-e 'Failed to start'" in h.poll_script("wlan0", 1)
 
 
 @pytest.mark.parametrize(
@@ -151,16 +185,16 @@ def test_the_inject_script_takes_the_interface_and_driver_from_the_unit(tmp_path
     (bin_dir / "systemctl").write_text(
         f'#!/bin/sh\ncase "$1" in show) echo "{exec_start}" ;; is-active) echo active ;; esac\n', encoding="utf-8"
     )
-    (bin_dir / "sudo").write_text('#!/bin/sh\necho called >> "$0.log"\nexit 1\n', encoding="utf-8")
+    (bin_dir / "sudo").write_text('#!/bin/sh\necho "$@" >> "$0.log"\nexit 1\n', encoding="utf-8")
     for tool in ("systemctl", "sudo"):
         (bin_dir / tool).chmod(0o755)
     env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"}
     out = subprocess.run(["sh", "-c", h.inject_script()], env=env, capture_output=True, text=True, check=True).stdout
     facts = h.parse(out)
     assert (facts["interface"], facts["driver"]) == ("kubelab-test-absent0", "brcmfmac")
-    assert facts["before"] == "absent active"
+    assert facts["before"] == "absent unanswered"
     assert facts["result"] == h.NOT_SERVING
-    assert not (bin_dir / "sudo.log").exists()
+    assert "modprobe" not in (bin_dir / "sudo.log").read_text(encoding="utf-8")
 
 
 def test_the_scripts_parse_as_posix_sh() -> None:

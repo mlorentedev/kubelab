@@ -34,6 +34,8 @@ LIVENESS_UNIT = "kubelab-edge-liveness.service"
 DEADLINE_S = 12 * 60
 POLL_S = 20
 SESSION_TIMEOUT_S = 60
+# hostapd's control socket, from `ctrl_interface` in the gateway role's hostapd.conf.j2.
+HOSTAPD_DIR = "/run/hostapd"
 
 INJECTED, NOT_SERVING, UNLOAD_FAILED, NO_UNIT, NOT_HALTED = (
     "injected",
@@ -47,6 +49,15 @@ INJECTED, NOT_SERVING, UNLOAD_FAILED, NO_UNIT, NOT_HALTED = (
 _ARGV = r"s/.*argv\[\]=\([^;]*\);.*/\1/p"
 
 
+def _hostapd_state(ap: str) -> str:
+    """The ladder's own test of the AP: hostapd's `state=` for the interface, or
+    `unanswered` when its control socket does not answer."""
+    return (
+        f'$(s=$(sudo -n timeout 10 hostapd_cli -p {HOSTAPD_DIR} -i "{ap}" status 2>/dev/null'
+        """ | sed -n 's/^state=//p'); echo "${s:-unanswered}")"""
+    )
+
+
 def inject_script() -> str:
     """What the edge runs to inject the fault. It prints `key value` lines, and the
     last one is `result <outcome>`."""
@@ -58,9 +69,9 @@ def inject_script() -> str:
             'printf "interface %s\\ndriver %s\\n" "$ap" "$driver"',
             'printf "boot %s\\nclock %s\\n" "$(cat /proc/sys/kernel/random/boot_id)" "$(date -u +%s)"',
             'state=$(cat "/sys/class/net/$ap/operstate" 2>/dev/null || echo absent)',
-            "hostapd=$(systemctl is-active hostapd)",
+            f"hostapd={_hostapd_state('$ap')}",
             'printf "before %s %s\\n" "$state" "$hostapd"',
-            '[ "$state" = up ] && [ "$hostapd" = active ] || { echo "result ' + NOT_SERVING + '"; exit 0; }',
+            '[ "$state" = up ] && [ "$hostapd" = ENABLED ] || { echo "result ' + NOT_SERVING + '"; exit 0; }',
             'if out=$(sudo -n modprobe -r "$driver" 2>&1); then echo "bare-unload ok"; else',
             '  printf "bare-unload refused %s\\n" "$(echo "$out" | head -1)"',
             '  holders=$(ls "/sys/module/$driver/holders" 2>/dev/null | tr "\\n" " ")',
@@ -85,9 +96,11 @@ def poll_script(interface: str, since: int) -> str:
         [
             'printf "boot %s\\n" "$(cat /proc/sys/kernel/random/boot_id)"',
             f'printf "state %s %s\\n" "$(cat /sys/class/net/{interface}/operstate 2>/dev/null || echo absent)"'
-            ' "$(systemctl is-active hostapd)"',
+            f' "{_hostapd_state(interface)}"',
+            # The unit's own failure lines too: a run that fails before it logs
+            # anything about the lab Wi-Fi still shows in the report.
             f"sudo -n journalctl -u {LIVENESS_UNIT} --since @{since} -o short-iso --no-pager 2>/dev/null"
-            " | grep -F 'lab Wi-Fi' | sed 's/^/ladder /'",
+            " | grep -F -e 'lab Wi-Fi' -e 'Failed to start' | sed 's/^/ladder /'",
         ]
     )
 
@@ -125,8 +138,8 @@ class Outcome:
 
 
 def serving(facts: dict[str, Any]) -> bool:
-    """The ladder's own test: the interface is up and hostapd runs."""
-    return facts.get("state") == "up active"
+    """The ladder's own test: the interface is up and hostapd reports it ENABLED."""
+    return facts.get("state") == "up ENABLED"
 
 
 def report(outcome: Outcome) -> list[str]:
@@ -192,8 +205,8 @@ def run_ap_halt(
     if outcome.injected.get("result") != INJECTED:
         return outcome.code, report(outcome)
     start = clock()
-    while clock() - start < DEADLINE_S:
-        sleep(POLL_S)
+    while (remaining := DEADLINE_S - (clock() - start)) > 0:
+        sleep(min(POLL_S, remaining))
         code, out = run(networking, poll_script(outcome.injected["interface"], int(outcome.injected["clock"])))
         if code != 0:
             outcome.unreachable_polls += 1
@@ -202,7 +215,8 @@ def run_ap_halt(
         outcome.rebooted = outcome.rebooted or facts.get("boot") != outcome.injected.get("boot")
         # After a reboot the journal's current boot holds the ladder's later lines only.
         outcome.ladder = _merge(outcome.ladder, facts["ladder"])
-        if serving(facts):
+        # A poll that answers after the deadline is not a recovery within it.
+        if serving(facts) and clock() - start <= DEADLINE_S:
             outcome.recovered_after_s = int(clock() - start)
             break
     return outcome.code, report(outcome)
