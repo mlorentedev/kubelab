@@ -202,8 +202,8 @@ class TestModelChainFollowsTheReviewerPool:
         before deepseek. deepseek ran out of its 65536-token output cap mid-reasoning on 3
         of 7 forge reviews in 72 h (`finish_reason: length`, empty content), each costing
         about 9 minutes of two failed attempts before glm, which finished all three
-        (lesson-685). The pin is the order's reason, so a re-port of the pool cannot
-        quietly bring an older order back."""
+        (lesson-685). The measurement lives in the lesson; this test only holds the order
+        it led to, so a re-port of the pool cannot quietly bring an older order back."""
         data = _pr_agent_config().get("data") or {}
 
         assert data["CONFIG__MODEL"] == "openai/glm5.3-flash"
