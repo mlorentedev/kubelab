@@ -50,7 +50,9 @@ def _seconds(duration: str) -> int:
 
 def _probe_interval() -> int:
     """Seconds between watcher runs, from the CronJob's `schedule:`, never retyped."""
-    cron = next(d for d in yaml.safe_load_all(WATCHER_MANIFEST.read_text()) if d and d.get("kind") == "CronJob")
+    cron = next(
+        d for d in yaml.safe_load_all(WATCHER_MANIFEST.read_text(encoding="utf-8")) if d and d.get("kind") == "CronJob"
+    )
     schedule = cron["spec"]["schedule"]
     minute, *rest = schedule.split()
     every = re.fullmatch(r"\*/(\d+)", minute)
@@ -62,7 +64,7 @@ PROBE_INTERVAL = _probe_interval()
 
 
 def _rule(uid: str) -> dict:
-    for group in yaml.safe_load(RULES.read_text())["groups"]:
+    for group in yaml.safe_load(RULES.read_text(encoding="utf-8"))["groups"]:
         for rule in group["rules"]:
             if rule["uid"] == uid:
                 return rule
@@ -83,7 +85,7 @@ def _threshold(uid: str) -> dict:
 
 
 def test_the_rules_ship_in_the_grafana_alerting_generator() -> None:
-    kustomization = yaml.safe_load((REPO / "infra/k8s/base/kustomization.yaml").read_text())
+    kustomization = yaml.safe_load((REPO / "infra/k8s/base/kustomization.yaml").read_text(encoding="utf-8"))
     generator = next(g for g in kustomization["configMapGenerator"] if g["name"] == "grafana-alerting")
     assert "services/grafana-alerting/edge-rules.yaml" in generator["files"]
 
@@ -137,12 +139,12 @@ def _probe(tmp_path: pathlib.Path, down: set[str]) -> list[dict]:
     fake, bin_dir = run / "fake", run / "bin"
     fake.mkdir(parents=True)
     bin_dir.mkdir()
-    (bin_dir / "nc").write_text(FAKE_NC)
+    (bin_dir / "nc").write_text(FAKE_NC, encoding="utf-8")
     (bin_dir / "nc").chmod(0o755)
     for node in down:
         (fake / f"{TARGETS[node]}.down").touch()
     targets = run / "targets.txt"
-    targets.write_text("".join(f"{node} {address} 22\n" for node, address in TARGETS.items()))
+    targets.write_text("".join(f"{node} {address} 22\n" for node, address in TARGETS.items()), encoding="utf-8")
     env = {
         "PATH": f"{bin_dir}:{os.environ['PATH']}",
         "FAKE_DIR": str(fake),

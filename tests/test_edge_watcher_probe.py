@@ -49,11 +49,12 @@ def edge(tmp_path: pathlib.Path, request):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     nc = bin_dir / "nc"
-    nc.write_text(FAKE_NC)
+    nc.write_text(FAKE_NC, encoding="utf-8")
     nc.chmod(0o755)
     targets = tmp_path / "targets.txt"
     targets.write_text(
-        "# Generated header\n\n" + "".join(f"{node} {address} {port}\n" for node, (address, port) in TARGETS.items())
+        "# Generated header\n\n" + "".join(f"{node} {address} {port}\n" for node, (address, port) in TARGETS.items()),
+        encoding="utf-8",
     )
     env = {
         "PATH": f"{bin_dir}:{os.environ['PATH']}",
@@ -104,7 +105,7 @@ def test_every_target_that_answers_is_up(edge) -> None:
 
 def test_it_knocks_on_each_target_s_address_and_port(edge) -> None:
     edge.run()
-    calls = (edge.fake / "calls").read_text().splitlines()
+    calls = (edge.fake / "calls").read_text(encoding="utf-8").splitlines()
     for address, port in TARGETS.values():
         assert f"nc -z -w 1 {address} {port}" in calls
 
@@ -131,7 +132,7 @@ def test_a_missing_nc_reports_every_target_down(edge) -> None:
 
 
 def test_a_row_without_a_port_is_reported_down(edge) -> None:
-    edge.targets.write_text("rpi3 192.0.2.6\nrpi4 192.0.2.10 22\n")
+    edge.targets.write_text("rpi3 192.0.2.6\nrpi4 192.0.2.10 22\n", encoding="utf-8")
     result = edge.run()
     assert _up(result) == {"rpi3": 0, "rpi4": 1}
 
@@ -142,7 +143,7 @@ def test_no_targets_fails_the_job(edge, content: str | None) -> None:
     if content is None:
         edge.targets.unlink()
     else:
-        edge.targets.write_text(content)
+        edge.targets.write_text(content, encoding="utf-8")
     result = edge.run()
     assert result.returncode != 0
     assert _lines(result) == []

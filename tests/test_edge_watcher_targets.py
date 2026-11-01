@@ -18,7 +18,7 @@ import yaml
 from toolkit.features.backup_destination import EDGE_WATCHER_TARGETS_PATH, render_edge_watcher_targets
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
-COMMON = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
+COMMON = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
 
 
 def _rows(text: str) -> dict[str, list[str]]:
@@ -36,7 +36,7 @@ def _copy() -> dict:
 
 
 def test_the_committed_targets_match_the_ssot() -> None:
-    committed = (REPO / EDGE_WATCHER_TARGETS_PATH).read_text()
+    committed = (REPO / EDGE_WATCHER_TARGETS_PATH).read_text(encoding="utf-8")
     assert committed == render_edge_watcher_targets(COMMON), (
         f"{EDGE_WATCHER_TARGETS_PATH} is stale. Regenerate it with `make sync-edge-watcher-targets`."
     )

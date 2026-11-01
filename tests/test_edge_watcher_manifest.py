@@ -18,12 +18,12 @@ REPO = pathlib.Path(__file__).resolve().parent.parent
 WATCHER_DIR = REPO / "infra/k8s/base/services/edge-watcher"
 PROBE = WATCHER_DIR / "probe.sh"
 TARGETS = WATCHER_DIR / "targets.txt"
-COMMON = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
+COMMON = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
 NAME = "edge-watcher"
 
 
 def _probe_default(var: str) -> str:
-    match = re.search(rf"\$\{{{var}:-([^}}]*)\}}", PROBE.read_text())
+    match = re.search(rf"\$\{{{var}:-([^}}]*)\}}", PROBE.read_text(encoding="utf-8"))
     assert match, f"probe.sh has no ${{{var}:-...}} default"
     return match.group(1)
 
@@ -68,8 +68,8 @@ def test_runs_the_committed_probe_against_the_committed_targets(rendered: dict) 
     name = volume["configMap"]["name"]
     assert re.fullmatch(r"edge-watcher-probe-[a-z0-9]{10}", name), f"{name} carries no hash suffix"
     configmap = rendered["configmaps"][name]
-    assert configmap["data"]["probe.sh"] == PROBE.read_text()
-    assert configmap["data"]["targets.txt"] == TARGETS.read_text()
+    assert configmap["data"]["probe.sh"] == PROBE.read_text(encoding="utf-8")
+    assert configmap["data"]["targets.txt"] == TARGETS.read_text(encoding="utf-8")
     command = rendered["container"]["command"] + rendered["container"].get("args", [])
     assert command == ["/bin/sh", f"{mount_dir}/probe.sh"]
 
@@ -83,7 +83,9 @@ def test_one_run_is_one_report(rendered: dict) -> None:
 
 def test_lives_long_enough_to_report_every_target(rendered: dict) -> None:
     """Each target is bounded at REACH_TIMEOUT + 2 seconds; the deadline must outlast all of them hung."""
-    targets = [line for line in TARGETS.read_text().splitlines() if line.strip() and not line.startswith("#")]
+    targets = [
+        line for line in TARGETS.read_text(encoding="utf-8").splitlines() if line.strip() and not line.startswith("#")
+    ]
     worst_case = len(targets) * (int(_probe_default("REACH_TIMEOUT")) + 2)
     assert rendered["job"]["activeDeadlineSeconds"] > worst_case
 

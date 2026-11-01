@@ -542,10 +542,10 @@ def write_edge_watcher_targets(project_root: Path, config: dict[str, Any]) -> bo
     """Write the edge watcher's targets file. True if it changed."""
     target = project_root / EDGE_WATCHER_TARGETS_PATH
     rendered = render_edge_watcher_targets(config)
-    if target.exists() and target.read_text() == rendered:
+    if target.exists() and target.read_text(encoding="utf-8") == rendered:
         return False
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(rendered)
+    target.write_text(rendered, encoding="utf-8")
     return True
 
 
