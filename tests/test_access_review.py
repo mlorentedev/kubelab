@@ -48,7 +48,7 @@ from toolkit.features.access_review import (
 )
 
 REPO = Path(__file__).resolve().parent.parent
-COMMON = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
+COMMON = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
 
 
 # --------------------------------------------------------------------------- the declaration
@@ -94,9 +94,11 @@ def test_the_role_account_operates_and_never_administers() -> None:
 
 def test_every_app_spells_the_admin_group_the_same_way() -> None:
     """The group name is a literal in three consumers; they must agree with the review."""
-    grafana = (REPO / "infra/k8s/base/services/grafana-config/grafana.env").read_text()
-    argocd = yaml.safe_load((REPO / "infra/helm/argocd/values.yaml").read_text())["configs"]["rbac"]["policy.csv"]
-    gitea = (REPO / "infra/ansible/roles/beelink_services/files/gitea-bootstrap.sh").read_text()
+    grafana = (REPO / "infra/k8s/base/services/grafana-config/grafana.env").read_text(encoding="utf-8")
+    argocd = yaml.safe_load((REPO / "infra/helm/argocd/values.yaml").read_text(encoding="utf-8"))["configs"]["rbac"][
+        "policy.csv"
+    ]
+    gitea = (REPO / "infra/ansible/roles/beelink_services/files/gitea-bootstrap.sh").read_text(encoding="utf-8")
     assert f"'{ADMIN_GROUP}'" in grafana
     assert f"'{OPERATOR_GROUP}'" in grafana
     assert re.search(rf"^\s*g,\s*{ADMIN_GROUP},\s*role:admin\s*$", argocd, re.M)
@@ -112,11 +114,11 @@ def _role_paths() -> list[tuple[str, str]]:
     key = "GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH="
     found = []
     for path in REPO.glob("infra/k8s/**/grafana*.env"):
-        for line in path.read_text().splitlines():
+        for line in path.read_text(encoding="utf-8").splitlines():
             if line.startswith(key):
                 found.append((str(path.relative_to(REPO)), line[len(key) :].strip()))
     for path in REPO.glob("infra/stacks/**/grafana/compose*.yml"):
-        for service in (yaml.safe_load(path.read_text()).get("services") or {}).values():
+        for service in (yaml.safe_load(path.read_text(encoding="utf-8")).get("services") or {}).values():
             for entry in service.get("environment") or []:
                 if isinstance(entry, str) and entry.startswith(key):
                     found.append((str(path.relative_to(REPO)), entry[len(key) :].strip()))
@@ -183,10 +185,10 @@ def test_each_app_maps_every_declared_tier(tiers: Any, expected: dict[str, str])
 
 def test_argo_cd_reads_groups_from_userinfo() -> None:
     """Otherwise `g, admins, role:admin` matches nobody and everyone is read-only."""
-    cm = yaml.safe_load((REPO / "infra/helm/argocd/values.yaml").read_text())["configs"]["cm"]
+    cm = yaml.safe_load((REPO / "infra/helm/argocd/values.yaml").read_text(encoding="utf-8"))["configs"]["cm"]
     oidc = yaml.safe_load(cm["oidc.config"])
     assert oidc.get("enableUserInfoGroups") is True
-    grafana = (REPO / "infra/k8s/base/services/grafana-config/grafana.env").read_text()
+    grafana = (REPO / "infra/k8s/base/services/grafana-config/grafana.env").read_text(encoding="utf-8")
     match = re.search(r"GF_AUTH_GENERIC_OAUTH_API_URL=https://[^/]+(\S+)", grafana)
     assert match, "Grafana's UserInfo URL is not declared"
     userinfo_path = match.group(1)
@@ -361,7 +363,7 @@ def test_the_argo_cd_bound_is_the_token_lifespan_authelia_actually_issues() -> N
         REPO / "infra/k8s/base/services/authelia-config/configuration.yml",
         REPO / "infra/k8s/overlays/prod/authelia-config/configuration.yml",
     ):
-        oidc = (yaml.safe_load(path.read_text()).get("identity_providers") or {}).get("oidc") or {}
+        oidc = (yaml.safe_load(path.read_text(encoding="utf-8")).get("identity_providers") or {}).get("oidc") or {}
         assert "lifespans" not in oidc, f"{path.relative_to(REPO)} sets lifespans: update ARGOCD_TOKEN_LIFESPAN"
     clients = COMMON["apps"]["services"]["security"]["authelia"]["oidc_clients"]
     argocd = next(c for c in clients if c["client_id"] == "argocd")
@@ -802,7 +804,7 @@ def test_grafana_reports_how_each_account_signs_in() -> None:
 
 
 def _shipped_rbac() -> dict[str, str]:
-    return yaml.safe_load((REPO / "infra/helm/argocd/values.yaml").read_text())["configs"]["rbac"]
+    return yaml.safe_load((REPO / "infra/helm/argocd/values.yaml").read_text(encoding="utf-8"))["configs"]["rbac"]
 
 
 def _docker_or_skip() -> None:
@@ -962,6 +964,24 @@ def test_a_container_that_never_starts_names_docker_s_error(monkeypatch: pytest.
     monkeypatch.setattr(subprocess, "run", refused)
     with pytest.raises(ReviewError, match="pull access denied"):
         access_review.argocd_rbac_disagreements("", "role:readonly", "img", tmp_path)
+
+
+def test_the_evaluator_starts_on_a_host_without_uids(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Native Windows has no `os.getuid`. Removing it here makes a uid call creeping back fail on Linux CI too."""
+    from toolkit.features import access_review
+
+    seen: list[list[str]] = []
+
+    def answered(argv: list[str], **_k: object) -> subprocess.CompletedProcess[str]:
+        seen.append(argv)
+        return subprocess.CompletedProcess(argv, 0, "0\n" * len(access_review.ARGOCD_RBAC_CASES), "")
+
+    monkeypatch.delattr(os, "getuid", raising=False)
+    monkeypatch.delattr(os, "getgid", raising=False)
+    monkeypatch.setattr(subprocess, "run", answered)
+    access_review.argocd_rbac_disagreements("", "role:readonly", "img", tmp_path)
+
+    assert seen and "--user" not in seen[0]
 
 
 def test_kubectl_output_that_is_not_json_is_a_review_error(monkeypatch: pytest.MonkeyPatch) -> None:

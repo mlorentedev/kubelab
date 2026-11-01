@@ -29,7 +29,7 @@ SKIPPED_WITHOUT_SOPS = {"oidc": "tests/test_oidc_clients.py"}
 
 
 def _steps(job: str) -> list[dict]:
-    return yaml.safe_load(CI.read_text())["jobs"][job]["steps"]
+    return yaml.safe_load(CI.read_text(encoding="utf-8"))["jobs"][job]["steps"]
 
 
 def test_the_required_tests_job_runs_validate_sync() -> None:
@@ -39,13 +39,15 @@ def test_the_required_tests_job_runs_validate_sync() -> None:
 
 def test_the_local_definition_of_done_still_names_it() -> None:
     """CI mirrors `make check`; if the local gate drops validate-sync, revisit this one."""
-    check = next(line for line in (REPO / "Makefile").read_text().splitlines() if line.startswith("check:"))
+    check = next(
+        line for line in (REPO / "Makefile").read_text(encoding="utf-8").splitlines() if line.startswith("check:")
+    )
     assert "validate-sync" in check, check
 
 
 def _sops_gated_labels() -> list[str]:
     """Each `failures.append(<label>)` inside an `if not _sops_available()` branch's else, in `sync_all`."""
-    tree = ast.parse(SYNC.read_text())
+    tree = ast.parse(SYNC.read_text(encoding="utf-8"))
     [sync_all] = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "sync_all"]
     labels: list[str] = []
     for node in ast.walk(sync_all):

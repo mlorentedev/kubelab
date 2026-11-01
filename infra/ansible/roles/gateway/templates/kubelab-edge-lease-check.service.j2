@@ -1,0 +1,26 @@
+# {{ ansible_managed }}
+# Checks the uplink's lease against the networks the lab owns (NET-005 AC7). A
+# collision, or a lease the check cannot read, pages once per incident, and the
+# next clean run closes it (node_notify).
+[Unit]
+Description=Check the uplink's DHCP lease against the lab's internal networks
+# One lease write is several inotify events and the check takes milliseconds, so
+# the default limit (5 starts in 10 s) would put the unit in failed and page.
+StartLimitIntervalSec=0
+OnFailure=kubelab-notify@%n.service
+OnSuccess=kubelab-notify-recovered@%n.service
+
+[Service]
+Type=oneshot
+# The check reads two files and takes milliseconds. A oneshot has no start
+# timeout unless it sets one, and its start job holds the boot (#2786).
+TimeoutStartSec=30
+# A lease inside a lab network can clash with a host on the LAN, and only a
+# person can answer it, so it pages rather than logs (ADR-075 D6, #2684).
+# node_notify reads this from systemd when the unit fails.
+Environment=KUBELAB_NOTIFY_SEVERITY=page
+ExecStart={{ gateway_lease_check_path }} {{ gateway_uplink_interface }} {{ gateway_lease_check_networks.items() | map('join', '=') | join(' ') }}
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes

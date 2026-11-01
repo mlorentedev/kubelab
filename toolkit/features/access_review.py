@@ -600,11 +600,12 @@ def argocd_rbac_disagreements(
     WORK_DIR is bind-mounted into the container, so it must be under $HOME: Colima
     and Docker Desktop share nothing else, and an empty mount makes every case No.
     """
-    import os
     import subprocess
 
-    (work_dir / "policy.csv").write_text(policy_csv)
-    (work_dir / "kubeconfig").write_text(_OFFLINE_KUBECONFIG)
+    from toolkit.core.io import docker_user_args
+
+    (work_dir / "policy.csv").write_text(policy_csv, encoding="utf-8")
+    (work_dir / "kubeconfig").write_text(_OFFLINE_KUBECONFIG, encoding="utf-8")
     # One container for every case: `can` exits 0 for Yes and 1 for No.
     script = "".join(
         f"argocd admin settings rbac can '{s}' '{a}' '{r}' '{o}' --policy-file /w/policy.csv"
@@ -614,7 +615,7 @@ def argocd_rbac_disagreements(
     try:
         out = subprocess.run(
             # The image runs as uid 999, which cannot enter a 0700 temporary directory.
-            ["docker", "run", "--rm", "--user", f"{os.getuid()}:{os.getgid()}"]
+            ["docker", "run", "--rm", *docker_user_args()]
             + ["-e", "KUBECONFIG=/w/kubeconfig", "-v", f"{work_dir}:/w:ro"]
             + [image, "sh", "-c", script],
             capture_output=True,

@@ -178,7 +178,7 @@ def test_repo_prefix_agrees_with_the_derived_repository_url():
     Minor finding in the BACKUP-044 adversarial review and not a Blocker. Loud
     is not the same as guarded, though, and the guard is one assertion.
     """
-    common = yaml.safe_load((REPO_ROOT / "infra/config/values/common.yaml").read_text())
+    common = yaml.safe_load((REPO_ROOT / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
     r2 = common["backup"]["r2"]
 
     derived = repo_url(

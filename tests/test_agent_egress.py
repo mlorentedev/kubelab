@@ -42,19 +42,19 @@ def _render(path: Path, **extra: object) -> str:
         "agent_stack_egress_table": "{{ agent_stack_dir }}/agent-egress.nft",
         **extra,
     }
-    return env.from_string(path.read_text()).render(**context)
+    return env.from_string(path.read_text(encoding="utf-8")).render(**context)
 
 
 def _agent_tasks() -> list[dict]:
     flat: list[dict] = []
-    for task in yaml.safe_load((ROLE / "tasks/agent_user.yml").read_text()):
+    for task in yaml.safe_load((ROLE / "tasks/agent_user.yml").read_text(encoding="utf-8")):
         flat.append(task)
         flat.extend(task.get("block") or [])
     return flat
 
 
 def _role_vars() -> dict:
-    for role in yaml.safe_load(PLAYBOOK.read_text())[-1]["roles"]:
+    for role in yaml.safe_load(PLAYBOOK.read_text(encoding="utf-8"))[-1]["roles"]:
         if isinstance(role, dict) and role.get("role", "").endswith("agent_stack"):
             return role.get("vars") or {}
     raise AssertionError("agent_stack is not in provision-ace2.yml")
@@ -98,8 +98,8 @@ def test_the_private_ranges_come_from_the_ssot() -> None:
     assert _role_vars()["agent_stack_private_ranges"] == (
         "{{ config.networking.trusted_cidrs + [docker_address_pool_base] }}"
     )
-    net = yaml.safe_load(COMMON.read_text())["networking"]
-    pool = yaml.safe_load((REPO / "infra/ansible/roles/docker/defaults/main.yml").read_text())
+    net = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["networking"]
+    pool = yaml.safe_load((REPO / "infra/ansible/roles/docker/defaults/main.yml").read_text(encoding="utf-8"))
     assert net["trusted_cidrs"] + [pool["docker_address_pool_base"]] == PRIVATE
     # Every RFC 1918 block, so the LAN, docker0 and every user bridge are in.
     for block in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"):
@@ -131,13 +131,13 @@ def test_the_table_replaces_itself_and_nothing_else() -> None:
 
 
 def test_the_ranges_come_from_the_networking_ssot() -> None:
-    net = yaml.safe_load(COMMON.read_text())["networking"]
+    net = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["networking"]
     assert (net["tailscale_cidr"], net["ipv6_prefix"]) == tuple(RANGES)
     assert _role_vars()["agent_stack_tailnet_ranges"] == [
         "{{ config.networking.tailscale_cidr }}",
         "{{ config.networking.ipv6_prefix }}",
     ]
-    src = re.sub(r"#[^\n]*", "", TABLE.read_text())
+    src = re.sub(r"#[^\n]*", "", TABLE.read_text(encoding="utf-8"))
     assert not re.search(r"\d{1,3}(\.\d{1,3}){3}|fd7a", src), "the template must not hardcode a range"
 
 
@@ -223,12 +223,12 @@ def test_every_provision_proves_the_tailnet_refused_and_the_internet_open() -> N
 def test_the_agents_containers_resolve_outside_the_refused_ranges() -> None:
     """MagicDNS is 100.100.100.100, inside 100.64.0.0/10: listed, it is a resolver
     every query fails on before falling through, so it must not be listed."""
-    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text())
+    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))
     servers = defaults["agent_stack_hermes_dns_servers"]
     assert servers
     for server in servers:
         address = ipaddress.ip_address(server)
         assert not any(address in ipaddress.ip_network(r) for r in RANGES), server
-    compose = (ROLE / "templates/compose-hermes.yml.j2").read_text()
+    compose = (ROLE / "templates/compose-hermes.yml.j2").read_text(encoding="utf-8")
     assert "agent_stack_hermes_dns_servers" in compose
     assert "agent_stack_docker_dns_servers" not in compose

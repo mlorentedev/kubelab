@@ -380,6 +380,21 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
+  name: delivery-watcher-ingress
+  labels:
+    app.kubernetes.io/name: delivery-watcher
+    app.kubernetes.io/part-of: kubelab
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: delivery-watcher
+  policyTypes:
+    - Ingress
+---
+# A CronJob: it only calls out.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
   name: edge-watcher-ingress
   labels:
     app.kubernetes.io/name: edge-watcher

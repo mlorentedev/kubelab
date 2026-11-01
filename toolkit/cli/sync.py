@@ -316,10 +316,10 @@ def _sync_rendered_from_common(
     import yaml
 
     root = _repo_root()
-    config = yaml.safe_load((root / "infra/config/values/common.yaml").read_text())
+    config = yaml.safe_load((root / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
     if check:
         current = root / path
-        if not current.exists() or current.read_text() != render(config):
+        if not current.exists() or current.read_text(encoding="utf-8") != render(config):
             logger.error(f"{label}: {path} is stale; run `make sync-{label}`")
             return False
         logger.success(f"{label}: {path} is current")
@@ -386,10 +386,10 @@ def _sync_terraform_backend(check: bool) -> bool:
     from toolkit.features import terraform_backend
 
     root = _repo_root()
-    config = yaml.safe_load((root / "infra/config/values/common.yaml").read_text())
+    config = yaml.safe_load((root / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
     path = root / "infra/terraform" / terraform_backend.BACKEND_FILE
     if check:
-        if not path.exists() or path.read_text() != terraform_backend.render(config):
+        if not path.exists() or path.read_text(encoding="utf-8") != terraform_backend.render(config):
             logger.error(f"terraform-backend: {path.name} is stale; run `make sync-terraform-backend`")
             return False
         logger.success(f"terraform-backend: {path.name} is current")

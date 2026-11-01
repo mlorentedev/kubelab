@@ -1,22 +1,31 @@
 ---
 - name: Bootstrap infrastructure nodes
   hosts: all
+  # A later failure must not drop the handlers earlier tasks notified (#2824).
+  force_handlers: true
   become: true
+
+  vars:
+    # `all` includes nodes behind the lab edge, whose pulls need these attempts (#2834).
+    docker_max_download_attempts: "{{ config.networking.edge.uplink.max_download_attempts }}"
 
   pre_tasks:
     - name: Load base config (SSOT)
       include_vars:
         file: "{{ playbook_dir }}/../../config/values/common.yaml"
         name: common
+      tags: [always]
 
     - name: Load environment overrides
       include_vars:
         file: "{{ playbook_dir }}/../../config/values/{{ deploy_env }}.yaml"
         name: env_overrides
+      tags: [always]
 
     - name: Merge configs (env overrides win)
       set_fact:
         config: "{{ common | combine(env_overrides, recursive=True) }}"
+      tags: [always]
 
     # SEC-006. The VPS is the only node with a public IP, so it is the only one
     # whose inbound list is declared centrally; every other host keeps
@@ -31,6 +40,7 @@
       set_fact:
         firewall_allowed_ports: "{{ config.networking.firewall.vps_inbound }}"
       when: "'vps' in group_names"
+      tags: [always]
 
   roles:
     - role: ../roles/base_system

@@ -119,7 +119,7 @@ def _in_order(text: str, *parts: str) -> bool:
 def _declared_nan_chain(pool_file: Path) -> tuple[str, str]:
     """NAN_MODEL and NAN_FALLBACKS as the preflight would hand them over: every
     NaN model the pool declares, answering, in pool order."""
-    pool = json.loads(pool_file.read_text())
+    pool = json.loads(pool_file.read_text(encoding="utf-8"))
     nan = [m["pr_agent"]["model"] for m in pool["pool"] if m.get("pr_agent", {}).get("model", "").startswith("openai/")]
     return nan[0], json.dumps(nan[1:])
 
@@ -134,13 +134,13 @@ class Route:
         self.stdin_log = tmp_path / "stdin.log"
         self.summary = tmp_path / "summary"
         self.pool = tmp_path / "pool.json"
-        self.pool.write_text(json.dumps(FIXTURE_POOL))
+        self.pool.write_text(json.dumps(FIXTURE_POOL), encoding="utf-8")
         bindir = tmp_path / "bin"
         bindir.mkdir()
         curl = bindir / "curl"
-        curl.write_text(FAKE_CURL)
+        curl.write_text(FAKE_CURL, encoding="utf-8")
         curl.chmod(0o755)
-        self.argv_log.write_text("")
+        self.argv_log.write_text("", encoding="utf-8")
         self.env = {k: v for k, v in os.environ.items() if k not in ROUTE_VARS}
         self.env.update(
             PATH=f"{bindir}{os.pathsep}{os.environ['PATH']}",
@@ -159,7 +159,7 @@ class Route:
         return self.execute(self.out, overrides)
 
     def execute(self, out: Path, overrides: dict[str, str | None]) -> subprocess.CompletedProcess[str]:
-        out.write_text("")
+        out.write_text("", encoding="utf-8")
         merged: dict[str, str] = dict(self.env)
         for name, value in overrides.items():
             if value is None:
@@ -177,11 +177,11 @@ class Route:
 
     def get(self, key: str) -> str:
         """One `key=value` line of the last run's output file."""
-        match = re.search(rf"^{re.escape(key)}=(.*)$", self.out.read_text(), re.MULTILINE)
+        match = re.search(rf"^{re.escape(key)}=(.*)$", self.out.read_text(encoding="utf-8"), re.MULTILINE)
         return match.group(1) if match else ""
 
     def reset_argv(self) -> None:
-        self.argv_log.write_text("")
+        self.argv_log.write_text("", encoding="utf-8")
 
     def every_point(self, total: int, **overrides: str | None) -> dict[str, int]:
         """How many points of [0, total) draw each reviewer."""
@@ -189,7 +189,7 @@ class Route:
         def one(point: int) -> str:
             out = self.tmp_path / f"point-{point}"
             self.execute(out, {"PR_AGENT_DRAW": str(point), **overrides})
-            match = re.search(r"^reviewer=(.*)$", out.read_text(), re.MULTILINE)
+            match = re.search(r"^reviewer=(.*)$", out.read_text(encoding="utf-8"), re.MULTILINE)
             return match.group(1) if match else ""
 
         with ThreadPoolExecutor(max_workers=8) as pool:
@@ -237,7 +237,7 @@ def test_an_anthropic_member_with_no_declared_effort_runs_at_medium(route: Route
     pool = json.loads(json.dumps(FIXTURE_POOL))
     for member in pool["pool"]:
         member.get("pr_agent", {}).pop("reasoning_effort", None)
-    route.pool.write_text(json.dumps(pool))
+    route.pool.write_text(json.dumps(pool), encoding="utf-8")
     proc = route.run(PR_AGENT_DRAW="0")
     assert proc.returncode == 0, _output(proc)
     assert route.get("anthropic_model") == HAIKU
@@ -270,7 +270,7 @@ def test_the_random_draw_reaches_every_member_the_heaviest_most(route: Route) ->
     def one(i: int) -> str:
         out = route.tmp_path / f"random-{i}"
         route.execute(out, {})
-        match = re.search(r"^reviewer=(.*)$", out.read_text(), re.MULTILINE)
+        match = re.search(r"^reviewer=(.*)$", out.read_text(encoding="utf-8"), re.MULTILINE)
         return match.group(1) if match else ""
 
     with ThreadPoolExecutor(max_workers=8) as pool:
@@ -286,7 +286,7 @@ def test_the_shipped_pool_draws_each_member_exactly_its_declared_weight(route: R
     """The shipped pool, not the fixture: every point of its total weight draws
     the member that owns it, so the shares in harness/reviewer-pool.json are the
     shares CI runs."""
-    pool = json.loads(SHIPPED_POOL.read_text())
+    pool = json.loads(SHIPPED_POOL.read_text(encoding="utf-8"))
     nan_model, nan_fallbacks = _declared_nan_chain(SHIPPED_POOL)
     weights = {
         m["pr_agent"]["model"]: m["pr_agent"]["weight"] for m in pool["pool"] if "weight" in m.get("pr_agent", {})
@@ -307,14 +307,14 @@ def test_the_shipped_weights_are_the_ones_adr_070_adopted() -> None:
     to the ADR fails here, and the test above only proves the draw honours
     whatever the pool says. dotfiles read ADR-046's 'Weights at adoption:' line;
     kubelab's ADR-070 states them as 'starting weights:'."""
-    line = next((ln for ln in ADR.read_text().splitlines() if "starting weights:" in ln), None)
+    line = next((ln for ln in ADR.read_text(encoding="utf-8").splitlines() if "starting weights:" in ln), None)
     assert line, "ADR-070 states no 'starting weights:' line"
     adopted = {
         pair.split()[0].lower(): int(pair.split()[1])
         for pair in line.split("starting weights:", 1)[1].strip().rstrip(".").split(",")
     }
     assert len(adopted) == 4, adopted
-    pool = json.loads(SHIPPED_POOL.read_text())
+    pool = json.loads(SHIPPED_POOL.read_text(encoding="utf-8"))
     shipped = _shared_by_short_name(
         {m["pr_agent"]["model"]: m["pr_agent"]["weight"] for m in pool["pool"] if "weight" in m.get("pr_agent", {})}
     )
@@ -328,7 +328,7 @@ def test_the_shipped_pool_routes_to_sonnet_at_1500_changed_lines_and_not_below(r
     the shipped pool on both sides."""
     nan_model, nan_fallbacks = _declared_nan_chain(SHIPPED_POOL)
     env = {"POOL_FILE": str(SHIPPED_POOL), "NAN_MODEL": nan_model, "NAN_FALLBACKS": nan_fallbacks}
-    assert json.loads(SHIPPED_POOL.read_text())["pr_agent_risk"]["min_changed_lines"] == 1500
+    assert json.loads(SHIPPED_POOL.read_text(encoding="utf-8"))["pr_agent_risk"]["min_changed_lines"] == 1500
 
     proc = route.run(**env, PR_CHANGED_LINES="1500", PR_AGENT_DRAW="0")
     assert proc.returncode == 0, _output(proc)
@@ -352,7 +352,7 @@ def test_a_pr_at_the_line_threshold_reviews_first_on_the_risk_member_nan_second(
     assert route.get("second") == "nan"
     assert route.get("anthropic_model") == SONNET
     assert route.get("anthropic_effort") == "medium"
-    assert '"model":"claude-sonnet-5-5"' in route.argv_log.read_text()
+    assert '"model":"claude-sonnet-5-5"' in route.argv_log.read_text(encoding="utf-8")
 
     route.run(PR_CHANGED_LINES="899", PR_AGENT_DRAW="0")
     assert route.get("route") == "draw"
@@ -369,7 +369,7 @@ def test_the_label_routes_a_small_pr_to_the_risk_member_and_only_the_exact_label
 
 def test_the_risk_member_is_probed_only_for_a_risky_pr(route: Route) -> None:
     route.run(PR_CHANGED_LINES="10", PR_AGENT_DRAW="0")
-    assert "claude-sonnet" not in route.argv_log.read_text()
+    assert "claude-sonnet" not in route.argv_log.read_text(encoding="utf-8")
 
 
 def test_a_risk_member_that_does_not_answer_sends_the_pr_to_the_draw_with_a_note(route: Route) -> None:
@@ -396,25 +396,25 @@ def test_provider_nan_and_nan_only_never_take_the_risk_route(route: Route) -> No
     route.reset_argv()
     route.run(PR_AGENT_PROVIDER="nan-only", PR_CHANGED_LINES="5000", PR_AGENT_DRAW="0")
     assert route.get("first") == "nan"
-    assert route.argv_log.read_text() == ""
+    assert route.argv_log.read_text(encoding="utf-8") == ""
 
 
 # --- the allowlist ---------------------------------------------------------------
 
 
 def test_a_pool_naming_an_anthropic_model_outside_the_allowlist_fails_before_any_probe(route: Route) -> None:
-    pool = json.loads(route.pool.read_text())
+    pool = json.loads(route.pool.read_text(encoding="utf-8"))
     pool["pool"][3]["pr_agent"]["model"] = "anthropic/claude-opus-5-5"
-    route.pool.write_text(json.dumps(pool))
+    route.pool.write_text(json.dumps(pool), encoding="utf-8")
     proc = route.run(PR_AGENT_DRAW="0")
     assert proc.returncode == 1, _output(proc)
     assert _in_order(_output(proc), "::error::", "anthropic/claude-opus-5-5", "allowlist"), _output(proc)
-    assert route.argv_log.read_text() == ""
-    assert route.out.read_text() == ""
+    assert route.argv_log.read_text(encoding="utf-8") == ""
+    assert route.out.read_text(encoding="utf-8") == ""
 
 
 def test_the_allowlist_is_exactly_haiku_and_sonnet() -> None:
-    declared = [ln for ln in ROUTE.read_text().splitlines() if ln.startswith("ALLOWED_ANTHROPIC=")]
+    declared = [ln for ln in ROUTE.read_text(encoding="utf-8").splitlines() if ln.startswith("ALLOWED_ANTHROPIC=")]
     assert declared == ['ALLOWED_ANTHROPIC="anthropic/claude-haiku-5-5 anthropic/claude-sonnet-5-5"']
 
 
@@ -452,7 +452,7 @@ def test_no_key_means_no_probe_and_no_anthropic_member_with_the_remedy(route: Ro
     assert proc.returncode == 0, _output(proc)
     assert route.get("second") == "none"
     assert route.get("route") == "draw"
-    assert route.argv_log.read_text() == ""
+    assert route.argv_log.read_text(encoding="utf-8") == ""
     assert "dotf secrets sync ci --repo o/r PR_AGENT_ANTHROPIC_API_KEY" in route.get("note")
 
 
@@ -470,8 +470,8 @@ def test_a_preflight_that_failed_on_its_setup_stops_the_draw_instead_of_paying_f
     proc = route.run(NAN_OUTCOME="failure", NAN_MODEL="", NAN_FALLBACKS="", NAN_PREFLIGHT_EXIT="2")
     assert proc.returncode == 1, _output(proc)
     assert "::error::The NaN preflight failed on its setup (exit 2)" in _output(proc)
-    assert route.argv_log.read_text() == ""
-    assert route.out.read_text() == ""
+    assert route.argv_log.read_text(encoding="utf-8") == ""
+    assert route.out.read_text(encoding="utf-8") == ""
 
 
 def test_a_preflight_in_which_no_model_answered_exit_1_still_hands_over_to_anthropic(route: Route) -> None:
@@ -485,7 +485,7 @@ def test_no_member_at_all_answers_first_none_and_the_job_summary_says_so(route: 
     assert proc.returncode == 0, _output(proc)
     assert route.get("first") == "none"
     assert route.get("second") == "none"
-    assert "No member answered" in route.summary.read_text()
+    assert "No member answered" in route.summary.read_text(encoding="utf-8")
 
 
 # --- the override ----------------------------------------------------------------
@@ -509,11 +509,11 @@ def test_provider_nan_only_never_probes_or_schedules_anthropic(route: Route) -> 
     assert proc.returncode == 0, _output(proc)
     assert route.get("first") == "nan"
     assert route.get("second") == "none"
-    assert route.argv_log.read_text() == ""
+    assert route.argv_log.read_text(encoding="utf-8") == ""
     # Even with NaN down, the switch holds: no review rather than spending.
     route.run(NAN_OUTCOME="failure", NAN_MODEL="", PR_AGENT_PROVIDER="nan-only")
     assert route.get("first") == "none"
-    assert route.argv_log.read_text() == ""
+    assert route.argv_log.read_text(encoding="utf-8") == ""
 
 
 def test_a_forced_provider_with_no_member_that_answered_draws_from_the_rest_loudly(route: Route) -> None:
@@ -527,8 +527,8 @@ def test_an_unknown_override_fails_before_any_probe(route: Route) -> None:
     proc = route.run(PR_AGENT_PROVIDER="nan_only")
     assert proc.returncode == 1, _output(proc)
     assert "::error::PR_AGENT_PROVIDER is nan_only" in _output(proc)
-    assert route.argv_log.read_text() == ""
-    assert route.out.read_text() == ""
+    assert route.argv_log.read_text(encoding="utf-8") == ""
+    assert route.out.read_text(encoding="utf-8") == ""
 
 
 # --- the key, the request, the outputs -------------------------------------------
@@ -537,15 +537,15 @@ def test_an_unknown_override_fails_before_any_probe(route: Route) -> None:
 def test_the_key_travels_on_curls_stdin_never_on_its_argv(route: Route) -> None:
     proc = route.run(PR_CHANGED_LINES="5000", PR_AGENT_DRAW="0")
     assert proc.returncode == 0, _output(proc)
-    assert KEY not in route.argv_log.read_text()
-    assert f'header = "x-api-key: {KEY}"' in route.stdin_log.read_text()
+    assert KEY not in route.argv_log.read_text(encoding="utf-8")
+    assert f'header = "x-api-key: {KEY}"' in route.stdin_log.read_text(encoding="utf-8")
     assert "sk-ant-test" not in _output(proc)
-    assert "sk-ant-test" not in route.out.read_text()
+    assert "sk-ant-test" not in route.out.read_text(encoding="utf-8")
 
 
 def test_the_probe_asks_for_the_pools_model_briefly_on_the_messages_api(route: Route) -> None:
     route.run(PR_AGENT_DRAW="0")
-    argv = route.argv_log.read_text()
+    argv = route.argv_log.read_text(encoding="utf-8")
     for expected in (
         '"model":"claude-haiku-5-5"',
         '"max_tokens":64',
@@ -557,16 +557,16 @@ def test_the_probe_asks_for_the_pools_model_briefly_on_the_messages_api(route: R
 
 def test_the_job_summary_names_the_member_drawn_the_risk_route_and_the_second_attempt(route: Route) -> None:
     route.run(GITHUB_STEP_SUMMARY=str(route.summary), PR_AGENT_DRAW="5")
-    summary = route.summary.read_text()
+    summary = route.summary.read_text(encoding="utf-8")
     assert f"Drawn to review first: `{HAIKU}`" in summary
     assert "nothing is published: nan." in summary
-    route.summary.write_text("")
+    route.summary.write_text("", encoding="utf-8")
     route.run(GITHUB_STEP_SUMMARY=str(route.summary), PR_LABELS='["deep-review"]')
-    assert f"Routed by risk (the deep-review label) to `{SONNET}`" in route.summary.read_text()
+    assert f"Routed by risk (the deep-review label) to `{SONNET}`" in route.summary.read_text(encoding="utf-8")
 
 
 def test_it_runs_under_bash_e_as_a_workflow_step_does(route: Route) -> None:
-    route.out.write_text("")
+    route.out.write_text("", encoding="utf-8")
     proc = subprocess.run(  # noqa: S603
         ["bash", "-e", str(ROUTE), "--output", str(route.out)],
         env=route.env,
@@ -659,7 +659,8 @@ class RealRoute:
                         {"id": "anthropic-review/claude-haiku-5-5", "pr_agent": {"model": HAIKU, "weight": 1}},
                     ]
                 }
-            )
+            ),
+            encoding="utf-8",
         )
         self.env = {k: v for k, v in os.environ.items() if k not in ROUTE_VARS}
         self.env.update(
@@ -674,7 +675,7 @@ class RealRoute:
         )
 
     def run(self, **overrides: str) -> subprocess.CompletedProcess[str]:
-        self.out.write_text("")
+        self.out.write_text("", encoding="utf-8")
         return subprocess.run(  # noqa: S603
             [str(ROUTE), "--output", str(self.out)],
             env={**self.env, **overrides},
@@ -685,7 +686,7 @@ class RealRoute:
         )
 
     def get(self, key: str) -> str:
-        match = re.search(rf"^{re.escape(key)}=(.*)$", self.out.read_text(), re.MULTILINE)
+        match = re.search(rf"^{re.escape(key)}=(.*)$", self.out.read_text(encoding="utf-8"), re.MULTILINE)
         return match.group(1) if match else ""
 
 

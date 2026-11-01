@@ -64,6 +64,50 @@ builder prune -af` while CI jobs were running. Provision such a change when CI i
 Emergency path (disk already full, Ansible cannot run):
 `make node-reclaim NODE=beelink APPLY=1 [IMAGES_ALL=1]`.
 
+## The CI node: Docker moves only on purpose (#2722)
+
+Neither this timer nor a provision upgrades the Beelink's `docker-ce`, `docker-ce-cli` and
+`containerd.io`. The timer holds them for its own run, as it does on every node. A provision
+would otherwise move them through `base_system`'s full dist-upgrade, so `provision-bee.yml`
+lists them in `base_system_held_packages` and the role holds them before that upgrade.
+The timer finds them already held and leaves them held.
+
+To upgrade them, run one provision that releases them, upgrades and holds them again:
+
+```bash
+make provision NODE=bee ENV=prod EXTRA='base_system_release_holds=true'
+```
+
+The same run then smoke-builds an image on the new engine (`docker_smoke_build`, in the
+`docker` role) and fails the play if the build errors or makes no progress within
+`docker_smoke_build_timeout_seconds`. It first pulls the pinned base image under the same
+timeout, so a slow uplink or an unreachable registry fails as a pull, with a message that says
+so, and the build never starts. The build then runs on `default`, the engine's own BuildKit,
+which is where the Gitea jobs build. It does not use the builder root has selected: on the
+Beelink that is `multiarch`, a docker-container builder that would first pull its own BuildKit
+image (lesson-649). Its step sleeps 20 s, past the 10 s in which dockerd logs
+`session healthcheck failed` and then `failed fatally`. Those lines appear on builds that pass
+too, so they are not evidence of a failure. Read the failure before blaming the engine:
+rc 124 is a build that made no progress, the message quotes its last lines of output, and
+`docker buildx history logs` on the node shows the step it stopped in. The one hang on record
+(2026-10-27) was a 2.31 GB base layer pulling at about 80 KB/s, not the engine. rc 137 is a
+kill, and the message gives the time it took: past the timeout it is the same failure with a
+client that ignored the TERM, sooner it is something else, most often the OOM killer
+(`journalctl -k`). Any other rc
+quotes the build's own error. A failed smoke build leaves the new engine installed and held, so the runner
+builds on it until someone acts: record it on #2722. The pulled base image stays in the
+engine's store; the build itself leaves nothing behind.
+
+To run the check against the engine already installed, without moving any package:
+
+```bash
+make provision NODE=bee ENV=prod TAGS=docker EXTRA='docker_smoke_build=true'
+```
+
+A pass says the engine finished a 20 s build minutes after it started. It does not prove
+a long build sound: a pull of a multi-GB base image over the edge's uplink can still outlast
+the runner's job timeout (#2742).
+
 ## Checking status
 
 ```bash
@@ -160,18 +204,30 @@ make the alert path depend on ace1 (staging n8n's host) being powered on.
 
 **Responding to one**: check the linked node's `kubelab-maintenance.service`
 journal (see "Checking status" above) for the actual failure. A delivery
-failure of the notification itself (wrong token, n8n unreachable) shows up
-as `kubelab-notify@kubelab-maintenance.service.service` itself failing —
-check that unit's own journal separately if the alert never arrived but you
-suspect a run failed.
+failure of the notification itself (wrong token, n8n unreachable, the lab
+edge down under a LAN node) does not lose it (#2787). The notice is kept in
+`/var/spool/kubelab-notify`, one file per notice, and
+`kubelab-notify-spool.timer` delivers the spool every 5 minutes, oldest first,
+with the time it happened in the title (`(at <UTC>Z, delivered late)`). While
+notices wait, `kubelab-notify-spool.service` stays failed: `ls` the spool and
+read that unit's journal for n8n's answer. A notice still waiting after a week
+is dropped, and that journal names it. A file in the spool that the script did
+not name (`<nanoseconds>-<unit>`) is moved aside to `.unreadable-<name>`, out of
+the delivery order, and the journal says so; read it, then remove it by hand.
+A `.new.*` file is a notice whose write died before it was renamed in. It was
+never in the delivery order and nothing removes it: remove it by hand.
 
 **A failed delivery has already been retried** (ANSIBLE-038). `curl` retries
 transient failures — connection refused, timeouts, and 5xx — up to 3 times
-with a 5s delay, so the unit failing means roughly 4 attempts over ~30s all
+with a 5s delay, so a kept notice means roughly 4 attempts over ~30s all
 failed, not one unlucky packet. Two consequences when reading its journal:
 
 - The unit legitimately takes tens of seconds against an unreachable n8n. It
-  is not hung; `TimeoutStartSec=45` is the real ceiling.
+  is not hung; `TimeoutStartSec=90` is the real ceiling. It may also first wait
+  up to 40s for the unit's lock while another notice of the same unit is
+  delivered, so a recovery does not overtake its own failure page (#2733).
+  That holds because the wait outlasts one delivery's ~30s, and
+  `tests/test_node_notify_role.py` keeps the two apart.
 - The retry lives in `curl`, **not** as `Restart=` on the unit. If you add
   `Restart=` you get both, and systemd will re-run the whole script — journal
   read and payload encode included — to retry one HTTP request. The rationale
@@ -188,7 +244,11 @@ make maintain-notify-test NODE=all         # the whole fleet
 This starts the notify unit directly and asserts `Result=success` and
 `ExecMainStatus=0`. Because the unit's `curl` uses `-f`, exit 0 means n8n
 really answered 2xx — it is an end-to-end delivery check, not a "the file is
-installed" check. **It really notifies**: expect the message to arrive, and
+installed" check. That holds while `kubelab-maintenance.service`'s last run
+succeeded, which makes the notice an exercise, sent directly. If its last run
+failed, the notice is a page, and a refused page is kept in the spool with the
+unit still at exit 0: after the test, `ls /var/spool/kubelab-notify` must show
+no notice. **It really notifies**: expect the message to arrive, and
 ignore it. A delivery test that suppressed delivery would prove nothing.
 
 Run it after any change to the notify script or its unit — ANSIBLE-038's

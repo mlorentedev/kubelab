@@ -103,10 +103,17 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit infra argo unregister-spoke` | Detach ONE hub from ONE spoke, without pruning the spoke. |
 | `toolkit infra argo verify-product` | Verify a product is deployed at origin/master HEAD by consequence (GITOPS-003, #1478). |
 | `toolkit infra argo wait-status` | Wait for the commit status Argo CD posts per sync (GITOPS-003 AC2, #1478). |
+| `toolkit infra edge` | The lab edge (rpi4): uplink status (NET-005) |
+| `toolkit infra edge boot-check` | Say whether a boot brought back everything the edge serves (the hard-reset test). |
+| `toolkit infra edge lan-link` | Join this laptop to the lab LAN with a NetworkManager profile (NET-005 AC11). |
+| `toolkit infra edge measure` | Measure the uplink's line rate on the edge, one window per direction (AC8). |
+| `toolkit infra edge soak` | Say whether the uplink adapter has held 48 hours of this boot with no reset (B12). |
+| `toolkit infra edge status` | Say whether the edge's uplink is up, behind a portal, or dead. |
 | `toolkit infra headscale` | Headscale VPN ACL policy + mesh probe (ADR-041) |
 | `toolkit infra headscale policy-check` | Render policy.hujson from the SSOT and validate it with `headscale policy check` (Docker). |
 | `toolkit infra headscale probe` | Probe the preserved mesh flows after a policy reload (auto-revert gate, ADR-041). |
 | `toolkit infra headscale recycle-stale` | Reclaim a canonical node name from a dead record after a preemption (#1369). |
+| `toolkit infra headscale rejoin` | Put a node back on the mesh with a single-use, one-hour key (NET-005 task 32). |
 | `toolkit infra k8s` | Kubernetes management commands |
 | `toolkit infra k8s access` | Cluster-access transport (ADR-052): bring up/tear down/inspect the local->apiserver tunnel |
 | `toolkit infra k8s access connect` | Bring up the cluster-access transport (idempotent). |
@@ -223,6 +230,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit tools certs status` | Show certificate status for an environment. |
 | `toolkit tools cli-reference` | Keep the README's command table equal to the command tree it describes. |
 | `toolkit tools delivery-health` | Refuse a delivery workflow whose newest run never started. |
+| `toolkit tools deploy-merge` | Judge every open PR to the default branch: merge, close or skip (DELIVERY-004 AC6). |
 | `toolkit tools deploy-shape` | Judge whether a PR is a mechanical staging deploy (DELIVERY-004, #1619). |
 | `toolkit tools lessons-index` | Order each category's lesson rows newest first (by date, then by number within a date, #1912), after refusing a corpus a rewrite would hide. |
 | `toolkit tools mutate` | Run the test unmutated, apply one replacement, run it again, restore the file. |

@@ -1,0 +1,41 @@
+---
+# Wait for a stack unit the caller just started to finish bringing its stack up,
+# and fail the play when it did not. Imported (not included) so the caller's tags
+# apply.
+#
+#   - import_tasks: "{{ playbook_dir }}/_includes/stack-unit-settled.yml"
+#     vars:
+#       stack_unit_settled_name: kubelab-glances.service
+#
+# A oneshot's start returns once its ExecStart has exited, so for one this reads a
+# result the start already waited for. A `Type=exec` unit's start returns as soon
+# as its command is executed, and the stack comes up afterwards (#2776). Without
+# this wait, the `docker compose up -d` a role runs next would race the unit's own
+# `up -d --force-recreate` on the same project, and a stack that never came up
+# would pass the play.
+#
+# The bound must outlast the unit's own (TimeoutStartSec or RuntimeMaxSec, 180 s):
+# past it the unit has already restarted or failed, and this reads that.
+# tests/test_tailscale_bound_boot_units.py holds the two to each other.
+
+- name: Wait for {{ stack_unit_settled_name }} to bring its stack up
+  command: systemctl show -p SubState --value {{ stack_unit_settled_name }}
+  register: _stack_unit_settled
+  changed_when: false
+  # The check below reads the state and says what it means.
+  failed_when: false
+  until: _stack_unit_settled.stdout not in ['start-pre', 'start', 'start-post', 'running']
+  retries: 40
+  delay: 5
+  when: not ansible_check_mode
+
+- name: Check that {{ stack_unit_settled_name }} brought its stack up
+  assert:
+    that: _stack_unit_settled.stdout == 'exited'
+    fail_msg: >-
+      {{ stack_unit_settled_name }} is {{ _stack_unit_settled.stdout | default('', true) or 'unreadable' }},
+      not exited, so its stack is not up. `journalctl -u {{ stack_unit_settled_name }} -b` says why:
+      auto-restart means the wait for the address, or compose, outlasted its bound
+      and the unit is retrying; failed is compose's own error.
+    quiet: true
+  when: not ansible_check_mode

@@ -60,7 +60,7 @@ def _notifier(tmp_path: Path, ref: dict[str, str] | None = None) -> N8nImportSpe
         ],
         "connections": {},
     }
-    (tmp_path / "gitea-notifier.json").write_text(json.dumps(doc))
+    (tmp_path / "gitea-notifier.json").write_text(json.dumps(doc), encoding="utf-8")
     return N8nImportSpec(
         workflow_path=Path("gitea-notifier.json"),
         secret_key_path="apps.services.automation.notify.webhook_secret",
@@ -124,7 +124,7 @@ def test_a_workflow_with_its_own_webhook_credential_and_this_one_imports(
     """`read_workflow_ids` once took every Header Auth id on a workflow for its own and
     refused two. The shared one is not the workflow's, so it must not count."""
     spec = _notifier(tmp_path)
-    doc = json.loads((tmp_path / spec.workflow_path).read_text())
+    doc = json.loads((tmp_path / spec.workflow_path).read_text(encoding="utf-8"))
     assert read_workflow_ids(doc) == (doc["id"], OWN_CREDENTIAL_ID)
 
     vault = _with_token()

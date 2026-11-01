@@ -4,9 +4,58 @@ gateway_lan_cidr: "172.16.1.1/24"
 # The playbook passes both from networking.edge (ADR-075 D1).
 gateway_uplink_interface: "uplink0"
 gateway_ap_interface: "wlan0"
+# The site profile, from networking.edge.uplink. The secrets come from prod SOPS and
+# stay empty until the operator stores them; the role's check names what is missing.
+gateway_uplink_kind: ""
+gateway_uplink_regdomain: ""
+# "5GHz", "2.4GHz", or "" to let the adapter pick (Wi-Fi kinds only).
+gateway_uplink_band: ""
+gateway_uplink_mac: ""
+gateway_uplink_ssid: ""
+gateway_uplink_psk: ""
+# How long the boot waits for the uplink adapter before going on without it (#2794).
+# systemd's own bound is 90 s, and network.target waited all of it on a missing
+# adapter. An adapter that appears later is still served: the udev rule starts
+# what it needs.
+gateway_uplink_device_timeout_seconds: 10
+# The lab Wi-Fi, from networking.edge.lab_wifi. The SSID and PSKs come from prod SOPS;
+# each PSK entry is {keyid, psk}.
+gateway_ap_ssid: ""
+gateway_ap_psks: []
+# No copy of networking.edge.lab_wifi and uplink.channel here: the play passes them,
+# and a run without them stops at "Check the lab Wi-Fi addresses" instead of
+# rendering a stale subnet.
+gateway_ap_channel: ""
+gateway_ap_cidr: ""
+gateway_ap_address: ""
+gateway_ap_dhcp_range_start: ""
+gateway_ap_dhcp_range_end: ""
+# null, not []: an empty list is a play that reserves no node; null is a play that
+# passed nothing, and the check below stops it before rpi3 loses its fixed lease.
+gateway_ap_reservations: null
 gateway_dhcp_range_start: "172.16.1.50"
 gateway_dhcp_range_end: "172.16.1.150"
 gateway_dhcp_lease: "12h"
+# The edge's own resolvers (resolv.conf). Not its clients': they get Pi-hole.
 gateway_dns_servers: "8.8.8.8,1.1.1.1"
+# Reports the uplink as up, behind a portal or dead; `make edge-status` runs it.
+gateway_status_path: "/usr/local/sbin/kubelab-edge-status"
+# Reports what a boot brought back; `make edge-boot-check` runs it (the hard-reset test).
+gateway_boot_check_path: "/usr/local/sbin/kubelab-edge-boot-check"
 gateway_dhcp_reservations: []
 gateway_tailscale_min_version: "1.96.2"
+# The uplink lease check (NET-005 AC7). The playbook passes the networks from the SSOT.
+gateway_lease_check_path: "/usr/local/sbin/kubelab-edge-lease-check"
+gateway_lease_check_networks: {}
+# The uplink shaper (NET-005 AC8). The playbook passes the rates from
+# networking.edge.uplink.bandwidth; the role refuses zero, which CAKE reads as unlimited.
+gateway_uplink_down_kbit: 0
+gateway_uplink_up_kbit: 0
+gateway_uplink_ifb: "ifb4{{ gateway_uplink_interface }}"
+# Self-recovery (NET-005 AC13). The BCM2835 watchdog cannot hold more than 15 s.
+gateway_watchdog_sec: 15
+gateway_ap_driver: "brcmfmac"
+gateway_liveness_path: "/usr/local/sbin/kubelab-edge-liveness"
+# Misses in a row before the driver reload, and reboots allowed per hour.
+gateway_liveness_grace: 3
+gateway_liveness_max_reboots: 2

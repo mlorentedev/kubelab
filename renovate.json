@@ -15,7 +15,8 @@
   ],
   "commitMessagePrefix": "fix(deps):",
   "enabledManagers": [
-    "custom.regex"
+    "custom.regex",
+    "ansible-galaxy"
   ],
   "customManagers": [
     {
@@ -41,6 +42,17 @@
         "patch"
       ],
       "groupName": "service images (minor+patch)"
+    },
+    {
+      "description": "Galaxy collections in infra/ansible/requirements.yml, pinned exactly (ANSIBLE-070). Patch+minor arrive as one weekly PR; majors stay individual. After a merge each controller runs `make setup-ansible`, and `make provision`/`make deploy` refuse one that has not.",
+      "matchManagers": [
+        "ansible-galaxy"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "groupName": "ansible collections (minor+patch)"
     },
     {
       "description": "Headscale. Its clients are the Tailscale daemons on 8 nodes, pinned separately and NOT tracked here \u2014 so a server bump can outrun them. It is also the bootstrap dependency for the whole mesh: if the control plane rejects the clients, the VPN used to reach the VPS and fix it is the thing that broke. Never grouped, never silent.",

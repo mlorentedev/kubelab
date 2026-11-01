@@ -59,7 +59,11 @@ def _recipe_lines() -> list[tuple[int, str]]:
     tell a warning from an instance would forbid the repo from documenting its
     own bug.
     """
-    return [(n, line) for n, line in enumerate(MAKEFILE.read_text().splitlines(), start=1) if line.startswith("\t")]
+    return [
+        (n, line)
+        for n, line in enumerate(MAKEFILE.read_text(encoding="utf-8").splitlines(), start=1)
+        if line.startswith("\t")
+    ]
 
 
 class TestNoTargetUsesTheUnreachableDefault:
@@ -175,6 +179,8 @@ ENV_TARGETS: dict[str, tuple[str, str]] = {
     # still not covered by it.
     "alerts": ("--env", "prod"),
     "drill-pvc-unbound": ("--env", "staging"),
+    # Added with the target (NET-005 task 32): the key is minted on prod's Headscale.
+    "headscale-rejoin": ("--env", "prod"),
 }
 
 #: Resolves an environment but passes it under no flag at all, so the
@@ -200,7 +206,7 @@ def _targets_resolving_an_env() -> set[str]:
     """Which target owns each recipe line that resolves an environment."""
     found: set[str] = set()
     current: str | None = None
-    for line in MAKEFILE.read_text().splitlines():
+    for line in MAKEFILE.read_text(encoding="utf-8").splitlines():
         m = re.match(r"^([a-zA-Z0-9_-]+):", line)
         if m:
             current = m.group(1)

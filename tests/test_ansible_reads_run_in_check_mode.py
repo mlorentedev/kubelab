@@ -37,6 +37,12 @@ WRITES_THAT_REPORT_NO_CHANGE = {
     ("docker", "Test Docker functionality"): (
         "a smoke test: it pulls hello-world and runs a container, which a dry run must not"
     ),
+    ("docker", "Pull the smoke build's base image"): (
+        "it pulls an image into the engine's store, which a dry run must not"
+    ),
+    ("docker", "Smoke-build an image on this engine"): (
+        "a smoke build: it runs a build step on the engine, which a dry run must not"
+    ),
 }
 
 
@@ -65,7 +71,7 @@ def _role(path: str) -> str:
 def _candidates() -> list[tuple[str, dict]]:
     found: list[tuple[str, dict]] = []
     for path in sorted(ROLES.glob("*/tasks/*.yml")):
-        for task in _flatten(yaml.safe_load(path.read_text())):
+        for task in _flatten(yaml.safe_load(path.read_text(encoding="utf-8"))):
             if _is_read(task):
                 found.append((str(path.relative_to(REPO)), task))
     return found

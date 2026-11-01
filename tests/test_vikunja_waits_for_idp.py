@@ -92,7 +92,7 @@ def test_vikunja_starts_only_after_its_idp_answers(overlay: str) -> None:
 def _generator_env_files() -> list[Path]:
     files = []
     for kust in (REPO / "infra/k8s").rglob("kustomization.yaml"):
-        doc = yaml.safe_load(kust.read_text()) or {}
+        doc = yaml.safe_load(kust.read_text(encoding="utf-8")) or {}
         for gen in doc.get("configMapGenerator", []):
             # `env:` (singular) is still accepted by kustomize.
             files += [kust.parent / f for f in [*gen.get("envs", []), *([gen["env"]] if gen.get("env") else [])]]
@@ -109,7 +109,7 @@ def test_generator_env_values_carry_no_literal_quotes() -> None:
     assert REPO / "infra/k8s/base/services/vikunja-config/vikunja.env" in files, "the walk misses vikunja.env"
     quoted = []
     for path in files:
-        for n, line in enumerate(path.read_text().splitlines(), 1):
+        for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             line = line.strip()
             if not line or line.startswith("#") or "=" not in line:
                 continue

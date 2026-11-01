@@ -153,7 +153,7 @@ def _default_runner(cmd: list[str]) -> int:
 def run_probe(net: dict[str, Any] | None = None, runner: Callable[[list[str]], int] = _default_runner) -> int:
     """Probe all preserved flows. Returns 0 if every REQUIRED flow passes, else 1."""
     if net is None:
-        net = yaml.safe_load(COMMON_YAML.read_text())["networking"]
+        net = yaml.safe_load(COMMON_YAML.read_text(encoding="utf-8"))["networking"]
     failed = False
     for flow in preserved_flows(net):
         verdict = check_flow(flow, net, runner)

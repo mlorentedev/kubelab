@@ -67,7 +67,9 @@ def _step(job: str, step_id: str) -> dict:
 
 def test_every_dispatch_reaches_the_registry() -> None:
     """Q5: no `types` list, so the registry decides and a new product needs no workflow edit."""
-    assert _triggers()["repository_dispatch"] in (None, {}), "a `types` list makes the workflow decide, not the registry"
+    assert _triggers()["repository_dispatch"] in (None, {}), (
+        "a `types` list makes the workflow decide, not the registry"
+    )
     assert set(_triggers()["workflow_dispatch"]["inputs"]) == {"app", "tag", "dry_run"}
 
 
@@ -159,7 +161,7 @@ def _toolkit_answering_for(registry: pathlib.Path, tmp_path: pathlib.Path, monke
         result = CliRunner().invoke(toolkit_app, argv)
         answers[" ".join(argv)] = {"stdout": result.stdout, "code": result.exit_code}
     table = tmp_path / "toolkit-answers.json"
-    table.write_text(json.dumps(answers))
+    table.write_text(json.dumps(answers), encoding="utf-8")
     stub = tmp_path / "toolkit-stub"
     stub.write_text(
         f"#!{sys.executable}\n"
@@ -168,7 +170,8 @@ def _toolkit_answering_for(registry: pathlib.Path, tmp_path: pathlib.Path, monke
         "if answer is None:\n"
         "    sys.exit(f'unexpected toolkit call: {sys.argv[1:]}')\n"
         "sys.stdout.write(answer['stdout'])\n"
-        "sys.exit(answer['code'])\n"
+        "sys.exit(answer['code'])\n",
+        encoding="utf-8",
     )
     stub.chmod(0o755)
     return str(stub)
@@ -195,7 +198,7 @@ def _run(
     """
     bindir = tmp_path / "bin"
     bindir.mkdir(exist_ok=True)
-    (bindir / "gh").write_text(_GH_STUB)
+    (bindir / "gh").write_text(_GH_STUB, encoding="utf-8")
     (bindir / "gh").chmod(0o755)
     calls = tmp_path / "gh_calls"
     calls.touch()
@@ -219,8 +222,8 @@ def _run(
     proc = subprocess.run(  # noqa: S603
         ["bash", "-e", "-c", step["run"]], cwd=work, env=env, capture_output=True, text=True, timeout=60
     )
-    outputs = dict(line.split("=", 1) for line in output.read_text().splitlines() if "=" in line)
-    return proc.returncode, outputs, proc.stdout + proc.stderr, calls.read_text().splitlines()
+    outputs = dict(line.split("=", 1) for line in output.read_text(encoding="utf-8").splitlines() if "=" in line)
+    return proc.returncode, outputs, proc.stdout + proc.stderr, calls.read_text(encoding="utf-8").splitlines()
 
 
 def _dispatch(tmp_path: pathlib.Path, toolkit: str, event: str = "third-image-published", **env: str):
@@ -228,7 +231,13 @@ def _dispatch(tmp_path: pathlib.Path, toolkit: str, event: str = "third-image-pu
         tmp_path,
         "resolve",
         "target",
-        **{"EVENT": "repository_dispatch", "EVENT_TYPE": event, "PAYLOAD_TAG": f"sha-{SHORT}", "TOOLKIT": toolkit, **env},
+        **{
+            "EVENT": "repository_dispatch",
+            "EVENT_TYPE": event,
+            "PAYLOAD_TAG": f"sha-{SHORT}",
+            "TOOLKIT": toolkit,
+            **env,
+        },
     )
 
 
@@ -451,11 +460,11 @@ def _fetch(tmp_path: pathlib.Path, body: str | None) -> tuple[int, str, list[str
     work = tmp_path / "work"
     (work / "infra/config/products/contracts").mkdir(parents=True)
     (work / "infra/config").joinpath("products.yaml").write_text(
-        (REPO_ROOT / "infra/config/products.yaml").read_text()
+        (REPO_ROOT / "infra/config/products.yaml").read_text(encoding="utf-8"), encoding="utf-8"
     )
     scenario = {}
     if body is not None:
-        (tmp_path / "served.yaml").write_text(body)
+        (tmp_path / "served.yaml").write_text(body, encoding="utf-8")
         scenario["STUB_CONTRACT"] = str(tmp_path / "served.yaml")
     code, _, log, calls = _run(
         tmp_path,
@@ -474,18 +483,20 @@ def _fetch(tmp_path: pathlib.Path, body: str | None) -> tuple[int, str, list[str
 @_needs_bash
 def test_a_valid_contract_is_snapshotted_verbatim(tmp_path: pathlib.Path) -> None:
     """Design point 9: the reviewer sees the contract diff in the staging PR, byte for byte."""
-    body = WEB_CONTRACT.read_text()
+    body = WEB_CONTRACT.read_text(encoding="utf-8")
     code, log, calls, snapshot = _fetch(tmp_path, body)
 
     assert code == 0, log
     assert snapshot.read_bytes() == body.encode()
-    assert calls == [f"api -H Accept: application/vnd.github.raw repos/mlorentedev/web/contents/kubelab.yaml?ref={FULL}"]
+    assert calls == [
+        f"api -H Accept: application/vnd.github.raw repos/mlorentedev/web/contents/kubelab.yaml?ref={FULL}"
+    ]
 
 
 @_needs_bash
 def test_an_invalid_contract_fails_with_error_why_fix_and_writes_nothing(tmp_path: pathlib.Path) -> None:
     """AC2: the three labelled lines reach the run page, and no snapshot is left to commit."""
-    code, log, _, snapshot = _fetch(tmp_path, WEB_CONTRACT.read_text().replace("port: 8080", "port: 0"))
+    code, log, _, snapshot = _fetch(tmp_path, WEB_CONTRACT.read_text(encoding="utf-8").replace("port: 8080", "port: 0"))
 
     assert code != 0
     assert all(f"{label}: " in log for label in ("ERROR", "WHY", "FIX")), log
@@ -507,7 +518,7 @@ def test_the_contract_is_fetched_from_where_the_registry_says() -> None:
 
 @_needs_bash
 def test_a_contract_that_names_a_repository_is_refused(tmp_path: pathlib.Path) -> None:
-    code, log, _, snapshot = _fetch(tmp_path, WEB_CONTRACT.read_text() + "repository: evil/fork\n")
+    code, log, _, snapshot = _fetch(tmp_path, WEB_CONTRACT.read_text(encoding="utf-8") + "repository: evil/fork\n")
 
     assert code != 0, log
     assert not snapshot.exists()
@@ -516,7 +527,7 @@ def test_a_contract_that_names_a_repository_is_refused(tmp_path: pathlib.Path) -
 @_needs_bash
 def test_a_contract_valid_alone_is_still_checked_against_the_registry(tmp_path: pathlib.Path) -> None:
     """The schema accepts any image; only the registry knows it is not web's (design point 2)."""
-    body = WEB_CONTRACT.read_text().replace("mlorentedev/kubelab-web", "mlorentedev/kubelab-api")
+    body = WEB_CONTRACT.read_text(encoding="utf-8").replace("mlorentedev/kubelab-web", "mlorentedev/kubelab-api")
     code, log, _, snapshot = _fetch(tmp_path, body)
 
     assert code != 0, log

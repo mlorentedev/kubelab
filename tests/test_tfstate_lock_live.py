@@ -49,7 +49,7 @@ def _aws(r2: dict[str, Any], *args: str) -> subprocess.CompletedProcess[str]:
 def test_exactly_one_of_many_concurrent_lock_takers_wins(r2: dict[str, Any]) -> None:
     with tempfile.TemporaryDirectory() as tmp:
         body = Path(tmp) / "lock"
-        body.write_text("{}")
+        body.write_text("{}", encoding="utf-8")
         for _ in range(TRIALS):
             key = f"probe/{uuid.uuid4()}.tflock"
             try:

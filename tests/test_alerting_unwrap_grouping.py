@@ -32,7 +32,7 @@ ALERTING_DIR = REPO_ROOT / "infra/k8s/base/services/grafana-alerting"
 #: Deployment. A small explicit list, same shape as this repo's other
 #: registries (SECRET_CATALOG, MIDDLEWARE_CATALOG) — a container added here
 #: needs a human decision, not a heuristic guess at its workload kind.
-CRONJOB_CONTAINERS = {"disk-watcher", "edge-watcher", "quota-watcher", "r2-backup-watcher"}
+CRONJOB_CONTAINERS = {"delivery-watcher", "disk-watcher", "edge-watcher", "quota-watcher", "r2-backup-watcher"}
 
 _LAST_OVER_TIME_UNWRAP = re.compile(
     r'\{container="(?P<container>[^"]+)"\}.*?\|\s*unwrap\s+\w+\s*\n\s*\[[^\]]+\]\s*\)(?P<tail>\s*by\s*\([^)]*\))?',

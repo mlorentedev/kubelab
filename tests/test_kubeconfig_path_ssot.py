@@ -51,7 +51,7 @@ def _offending_lines() -> list[str]:
     for path in sorted(TOOLKIT_ROOT.rglob("*.py")):
         if path == OWNER:
             continue
-        for lineno, line in enumerate(path.read_text().splitlines(), start=1):
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
             if KUBECONFIG_NAME_PATTERN.search(line):
                 hits.append(f"{path.relative_to(REPO_ROOT)}:{lineno}: {line.strip()}")
     return hits
@@ -67,7 +67,7 @@ def test_only_k8s_kubeconfig_derives_the_kubeconfig_path() -> None:
 
 def test_the_owner_still_matches_the_pattern() -> None:
     """Positive control: the shape this guard hunts for must still exist."""
-    assert KUBECONFIG_NAME_PATTERN.search(OWNER.read_text()), (
+    assert KUBECONFIG_NAME_PATTERN.search(OWNER.read_text(encoding="utf-8")), (
         f"{OWNER.relative_to(REPO_ROOT)} no longer contains a "
         f"{KUBECONFIG_NAME_PATTERN.pattern!r} literal — the scan above is now "
         "looking for a shape that exists nowhere and can never fail. Update "

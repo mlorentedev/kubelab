@@ -7,8 +7,8 @@
 # Docker, Tailscale VPN, Pi-hole, and CoreDNS.
 #
 # Prerequisites:
-#   - Ubuntu Server flashed on SD card with netplan configured
-#   - See vault runbook: 40-runbooks/rpi4-bootstrap.md
+#   - Ubuntu Server flashed on the SD card; the gateway role renders netplan
+#   - See docs/runbooks/rpi4-bootstrap.md
 #
 # Usage:
 #   make provision NODE=rpi4 ENV=prod
@@ -46,6 +46,12 @@
     # RPi4 is infrastructure — always uses prod config (base_domain: kubelab.live)
     # Hardcoded to prevent CLI -e deploy_env=staging from breaking CoreDNS zones
     _rpi4_env: prod
+    # The edge's own image pulls leave by the uplink it shapes, so they are sized
+    # against it first, like a node behind it (_includes/image-pull.yml, #2742).
+    image_pull_down_kbit: "{{ config.networking.edge.uplink.bandwidth.down_kbit }}"
+    image_pull_goodput: "{{ config.networking.edge.uplink.bandwidth.pull_goodput }}"
+    # dockerd's attempts at a layer, for the node's daemons and the pull's bound (#2834).
+    docker_max_download_attempts: "{{ config.networking.edge.uplink.max_download_attempts }}"
 
   pre_tasks:
     - name: Load base config (SSOT)
@@ -63,6 +69,83 @@
     - name: Merge configs (env overrides win)
       set_fact:
         config: "{{ common | combine(env_overrides, recursive=True) }}"
+      tags: [always]
+
+    # ADR-075 D7: applying the uplink can cut a session that rides the tailnet it
+    # carries. Checked here, before any role, because the gateway role runs after
+    # others that change the edge: from inside it, a refused run had already made
+    # them (#2775). Every run that applies the gateway role is checked.
+    - name: Check that the run comes over the homelab LAN
+      assert:
+        that: ansible_host == config.networking.nodes.rpi4.lan_ip
+        fail_msg: >-
+          ERROR: this run reaches the edge at {{ ansible_host }}, not at its LAN address.
+          WHY: edge changes run over the homelab LAN, because applying the uplink can cut a
+          session that rides the tailnet (ADR-075 D7).
+          FIX: from the laptop on the switch, run `make provision NODE=rpi4 ENV=prod BOOTSTRAP=1`.
+        quiet: true
+      when:
+        - "'all' in ansible_run_tags or 'tagged' in ansible_run_tags or 'gateway' in ansible_run_tags"
+        - "'gateway' not in ansible_skip_tags"
+      tags: [always]
+
+    # The address does not say the path. A controller that accepts the subnet
+    # route the edge advertises reaches its LAN address over the tailnet, because
+    # Tailscale's routing table is looked up before the LAN's (#2801). The source
+    # address the controller's kernel picks for it does say.
+    - name: Read the path this run takes to the edge
+      command:
+        argv:
+          - "{{ ansible_playbook_python }}"
+          - "{{ playbook_dir }}/files/route-source.py"
+          - "{{ config.networking.nodes.rpi4.lan_ip }}"
+          - "{{ config.networking.tailscale_cidr }}"
+      register: _edge_route
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      # No route at all is the assert's to explain, with its fix.
+      failed_when: false
+      # A dry run is refused on the same path as the run it rehearses.
+      check_mode: false
+      when:
+        - "'all' in ansible_run_tags or 'tagged' in ansible_run_tags or 'gateway' in ansible_run_tags"
+        - "'gateway' not in ansible_skip_tags"
+      tags: [always]
+
+    # The session already open was opened on the path the facts came over, and
+    # Ansible keeps it for 60 s under one socket name that every run shares. Left
+    # open on the tailnet, it strands when `make edge-lan-link` moves the route,
+    # and the rerun the refusal asks for hangs on it (#2801). Closed here, the
+    # next task opens one on the path just read. A meta task takes no `when`.
+    - name: Close the session opened before the path was read
+      meta: reset_connection
+      tags: [always]
+
+    - name: Check that the run's packets leave by the homelab LAN
+      assert:
+        that:
+          - _edge_route.rc == 0
+          - not (_edge_route.stdout | from_json).tailnet
+        fail_msg: >-
+          {% if _edge_route.rc != 0 -%}
+          ERROR: this controller has no route to the edge's LAN address: {{ _edge_route.stderr }}.
+          WHY: it is not on the lab switch, and it does not reach the LAN over the tailnet either.
+          FIX: plug the laptop into the switch and run `make edge-lan-link`.
+          {%- else -%}
+          ERROR: this run reaches the edge's LAN address from
+          {{ (_edge_route.stdout | from_json).source }}, an address on the tailnet.
+          WHY: this controller accepts the subnet route the edge advertises, and Tailscale's
+          routing table is looked up before the LAN's, so the session rides the tailnet the
+          uplink carries (ADR-075 D7, #2801).
+          FIX: from the laptop on the switch, run `make edge-lan-link`, whose profile routes the
+          LAN ahead of the tailnet. Without NetworkManager, run
+          `sudo tailscale set --accept-routes=false` while on the switch (#922).
+          {%- endif %}
+        quiet: true
+      when:
+        - "'all' in ansible_run_tags or 'tagged' in ansible_run_tags or 'gateway' in ansible_run_tags"
+        - "'gateway' not in ansible_skip_tags"
       tags: [always]
 
     - name: Decrypt common secrets (controller-side)
@@ -91,15 +174,54 @@
       no_log: true
       tags: [always]
 
+    - import_tasks: _includes/require-secrets.yml
+      tags: [always]
+
   roles:
+    # FIRST, as on rpi3, and before the gateway role in any case. The regulatory
+    # domain is the site's (`networking.edge.uplink.regdomain`), which the gateway
+    # role sets through modprobe.d (#2670). A value on the command line would always
+    # win, because kmod applies it after modprobe.d and the kernel keeps the last
+    # value, so it is removed here (#2668). The removal takes effect at the next
+    # boot. No reboot without -e rpi_boot_allow_reboot=true.
+    - role: ../roles/rpi_boot
+      tags: [boot]
+      vars:
+        rpi_boot_absent_params:
+          - cfg80211.ieee80211_regdom
+
     - role: ../roles/base_system
       tags: [base]
       vars:
         base_system_hostname: "{{ config.networking.nodes.rpi4.hostname }}"
         base_system_timezone: "{{ config.global.timezone }}"
+        # Its image's user-data has cloud-init rewrite /etc/hosts at every boot (#2777).
+        base_system_disable_cloud_init: true
 
     - role: ../roles/ssh_hardening
       tags: [ssh]
+
+    # The fleet's failure-notification path, and the fleet webhook secret it
+    # reads. Applied BEFORE every role whose units name its templates
+    # (`OnFailure=kubelab-notify@`, `OnSuccess=kubelab-notify-recovered@`): a
+    # unit started first runs with no template behind the name, and systemd
+    # drops each page as "not found" until this role runs (#2728).
+    - role: ../roles/node_notify
+      # `maintenance` and NOT a `notify` tag of its own, deliberately.
+      # node_maintenance re-points its unit at this role's template and then
+      # removes the single-purpose notifier it replaces, so a selector that
+      # reaches one of the two without the other leaves the node
+      # notification-dark: systemd logs "unit not found" on the next failure
+      # and nobody is told.
+      #
+      # Found by a `--check` run scoped to a `notify` tag that used to exist
+      # here. Sharing node_maintenance's tag makes the unsafe scoping
+      # unreachable rather than merely documented, which is the difference
+      # between a rule and a comment. Asserted in tests/test_node_notify_role.py.
+      # `gateway` too: the edge's lease check, shaper and liveness page through
+      # this notifier, so `TAGS=gateway` must install it (and node_maintenance
+      # with it), as `agent_stack` does on ace2.
+      tags: [maintenance, gateway]
 
     - role: ../roles/gateway
       tags: [gateway]
@@ -107,7 +229,29 @@
         gateway_interface: "eth0"
         gateway_lan_cidr: "{{ config.networking.nodes.rpi4.lan_ip }}/24"
         gateway_uplink_interface: "{{ config.networking.edge.uplink.interface }}"
+        gateway_uplink_kind: "{{ config.networking.edge.uplink.kind }}"
+        gateway_uplink_regdomain: "{{ config.networking.edge.uplink.regdomain }}"
+        gateway_uplink_band: "{{ config.networking.edge.uplink.band }}"
+        gateway_uplink_mac: "{{ secrets.networking.edge.uplink.mac | default('') }}"
+        gateway_uplink_ssid: "{{ secrets.networking.edge.uplink.ssid | default('') }}"
+        gateway_uplink_psk: "{{ secrets.networking.edge.uplink.psk | default('') }}"
+        gateway_uplink_down_kbit: "{{ config.networking.edge.uplink.bandwidth.down_kbit }}"
+        gateway_uplink_up_kbit: "{{ config.networking.edge.uplink.bandwidth.up_kbit }}"
+        gateway_lease_check_networks:
+          lan: "{{ config.networking.lan_cidr }}"
+          lab: "{{ config.networking.edge.lab_wifi.cidr }}"
+          tailnet: "{{ config.networking.tailscale_cidr }}"
         gateway_ap_interface: "{{ config.networking.edge.lab_wifi.interface }}"
+        gateway_ap_channel: "{{ config.networking.edge.uplink.channel }}"
+        gateway_ap_cidr: "{{ config.networking.edge.lab_wifi.cidr }}"
+        gateway_ap_address: "{{ config.networking.edge.lab_wifi.gateway }}"
+        gateway_ap_dhcp_range_start: "{{ config.networking.edge.lab_wifi.dhcp_range.start }}"
+        gateway_ap_dhcp_range_end: "{{ config.networking.edge.lab_wifi.dhcp_range.end }}"
+        gateway_ap_reservations: "{{ config.networking.edge.lab_wifi.reservations | map('extract', config.networking.nodes) | list }}"
+        gateway_ap_ssid: "{{ secrets.networking.edge.lab_wifi.ssid | default('') }}"
+        gateway_ap_psks:
+          - keyid: current
+            psk: "{{ secrets.networking.edge.lab_wifi.psk | default('') }}"
         gateway_dhcp_reservations:
           - mac: "{{ config.networking.nodes.ace1.mac }}"
             hostname: "kubelab-ace1"
@@ -138,6 +282,10 @@
         tailscale_accept_dns: false
         tailscale_accept_routes: false
         tailscale_advertise_routes: "{{ config.networking.lan_cidr }}"
+        # The user `make headscale-rejoin` mints the edge's key under.
+        tailscale_headscale_user_id: "{{ config.apps.services.core.headscale.infra_user_id }}"
+        # Brought under the role from a hand-made unit (#2675).
+        tailscale_watchdog: true
 
     - role: ../roles/coredns
       tags: [coredns]
@@ -152,27 +300,10 @@
         glances_cpu_limit: "{{ config.apps.services.observability.glances.resources.cpu_limit }}"
         glances_memory_limit: "{{ config.apps.services.observability.glances.resources.memory_limit }}"
 
-    # The fleet's failure-notification path, and the fleet webhook secret it
-    # reads. Ordered BEFORE node_maintenance deliberately: that role's unit
-    # declares `OnFailure=kubelab-notify@%n.service`, and this one installs the
-    # template it names while removing the single-purpose unit it replaces.
-    - role: ../roles/node_notify
-      # `maintenance` and NOT a `notify` tag of its own, deliberately. This role
-      # REMOVES the unit `kubelab-maintenance.service` still names until
-      # node_maintenance re-templates it, so a selector that reaches this role
-      # without reaching that one leaves the node notification-dark: systemd
-      # logs "unit not found" on the next failure and nobody is told.
-      #
-      # Found by a `--check` run scoped to a `notify` tag that used to exist
-      # here. Sharing node_maintenance's tag makes the unsafe scoping
-      # unreachable rather than merely documented, which is the difference
-      # between a rule and a comment. Asserted in tests/test_node_notify_role.py.
-      tags: [maintenance]
-
     # ANSIBLE-035: install-only (maintenance_run_cleanup: false) — cleanup
     # runs on the timer's own weekly schedule, not synchronously on every
     # provisioning run. See roles/node_maintenance/defaults/main.yml.
     - role: ../roles/node_maintenance
-      tags: [maintenance]
+      tags: [maintenance, gateway]
       vars:
         maintenance_run_cleanup: false

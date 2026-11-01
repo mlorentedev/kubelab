@@ -3,8 +3,9 @@
 # RPi3 Provisioning — External Monitoring Node
 #
 # Deploys: base system hardening (ufw, journald persistence), SSH
-# hardening, Uptime Kuma + Glances via Docker Compose.
-# RPi3 is Debian 13 (trixie), aarch64, Docker + Tailscale already installed.
+# hardening, the Tailscale client, Uptime Kuma + Glances via Docker Compose.
+# RPi3 is Debian 13 (trixie), aarch64, Docker already installed. Tailscale was
+# installed by hand too; the tailscale role now owns its flags and rejoin (#2685).
 # The docker role is deliberately NOT included here — it hardcodes Docker's
 # Ubuntu apt repo and rpi3's existing Docker install is of unknown origin
 # (no docker-ce dpkg entries at all, per #959). See ANSIBLE-036.
@@ -49,11 +50,20 @@
 # ---------------------------------------------------------------------------
 - name: Provision RPi3 — External monitoring node
   hosts: rpi3
+  # A later failure must not drop the handlers earlier tasks notified (#2824).
+  force_handlers: true
   become: true
   gather_facts: true
 
   vars:
     deploy_env: prod
+
+    # rpi3 is on the lab Wi-Fi the edge serves, so its image pulls share the
+    # edge's shaped downlink and are sized against it first (_includes/image-pull.yml, #2742).
+    image_pull_down_kbit: "{{ config.networking.edge.uplink.bandwidth.down_kbit }}"
+    image_pull_goodput: "{{ config.networking.edge.uplink.bandwidth.pull_goodput }}"
+    # Not docker_max_download_attempts: rpi3's Docker install is unmanaged and keeps
+    # Docker's 5 attempts, which the pull's bound then assumes (#1032).
 
   pre_tasks:
     - name: Load base config (SSOT)
@@ -89,6 +99,9 @@
       no_log: true
       tags: [always]
 
+    - import_tasks: _includes/require-secrets.yml
+      tags: [always]
+
   roles:
     # FIRST, deliberately. A container's memory limit is fixed at create time,
     # so if the kernel gains the memory cgroup controller only after the service
@@ -118,11 +131,53 @@
     - role: ../roles/ssh_hardening
       tags: [ssh]
 
+    # `tailscale` too, as on every play with the tailscale role: a rejoin runs
+    # `--tags tailscale`, and a node off the mesh resolves the login server only
+    # through this /etc/hosts line, since its resolver is MagicDNS (#1259).
     - role: ../roles/dns_resilience
-      tags: [dns]
+      tags: [dns, tailscale]
       vars:
         headscale_ip: "{{ config.networking.vps.public_ip }}"
         headscale_domain: "{{ config.apps.services.core.headscale.domain }}"
+
+    # On the mesh it installs nothing over the existing client and only
+    # converges the flags below with `tailscale set`. Off the mesh it runs
+    # `tailscale up` with a key minted by `make headscale-rejoin NODE=rpi3`
+    # (#2685), whose `--reset` drops every flag not given here, so these are
+    # the node's whole set. MagicDNS stays on (the role's default): the host
+    # resolves `*.staging` through it. No subnet route either way: rpi3 sits
+    # on the lab Wi-Fi, not on `lan_cidr`.
+    - role: ../roles/tailscale
+      tags: [tailscale]
+      vars:
+        tailscale_headscale_url: "https://{{ config.apps.services.core.headscale.domain }}"
+        tailscale_accept_dns: true
+        tailscale_accept_routes: false
+        # The user `make headscale-rejoin` mints the key under, and the one
+        # Headscale lists rpi3 under today (`kubelab`).
+        tailscale_headscale_user_id: "{{ config.apps.services.core.headscale.infra_user_id }}"
+
+    # The fleet's failure-notification path, and the fleet webhook secret it
+    # reads. Applied BEFORE every role whose units name its templates
+    # (`OnFailure=kubelab-notify@`, `OnSuccess=kubelab-notify-recovered@`): a
+    # unit started first runs with no template behind the name, and systemd
+    # drops each page as "not found" until this role runs (#2728).
+    - role: ../roles/node_notify
+      # `maintenance` and NOT a `notify` tag of its own, deliberately.
+      # node_maintenance re-points its unit at this role's template and then
+      # removes the single-purpose notifier it replaces, so a selector that
+      # reaches one of the two without the other leaves the node
+      # notification-dark: systemd logs "unit not found" on the next failure
+      # and nobody is told.
+      #
+      # Found by a `--check` run scoped to a `notify` tag that used to exist
+      # here. Sharing node_maintenance's tag makes the unsafe scoping
+      # unreachable rather than merely documented, which is the difference
+      # between a rule and a comment. Asserted in tests/test_node_notify_role.py.
+      # `services` and `uptime_kuma` too: rpi3_services' allowlist unit pages
+      # through this template (#2482), so `TAGS=uptime_kuma` must install it, and
+      # node_maintenance with it, as `agent_stack` does on ace2.
+      tags: [maintenance, services, uptime_kuma]
 
     - role: ../roles/rpi3_services
       tags: [services, uptime_kuma]
@@ -152,26 +207,6 @@
         glances_port: "{{ config.apps.services.observability.glances.default_port }}"
         glances_cpu_limit: "{{ config.apps.services.observability.glances.resources.cpu_limit }}"
         glances_memory_limit: "{{ config.apps.services.observability.glances.resources.memory_limit }}"
-
-    # The fleet's failure-notification path, and the fleet webhook secret it
-    # reads. Ordered BEFORE node_maintenance deliberately: that role's unit
-    # declares `OnFailure=kubelab-notify@%n.service`, and this one installs the
-    # template it names while removing the single-purpose unit it replaces.
-    - role: ../roles/node_notify
-      # `maintenance` and NOT a `notify` tag of its own, deliberately. This role
-      # REMOVES the unit `kubelab-maintenance.service` still names until
-      # node_maintenance re-templates it, so a selector that reaches this role
-      # without reaching that one leaves the node notification-dark: systemd
-      # logs "unit not found" on the next failure and nobody is told.
-      #
-      # Found by a `--check` run scoped to a `notify` tag that used to exist
-      # here. Sharing node_maintenance's tag makes the unsafe scoping
-      # unreachable rather than merely documented, which is the difference
-      # between a rule and a comment. Asserted in tests/test_node_notify_role.py.
-      # `services` and `uptime_kuma` too: rpi3_services' allowlist unit pages
-      # through this template (#2482), so `TAGS=uptime_kuma` must install it, and
-      # node_maintenance with it, as `agent_stack` does on ace2.
-      tags: [maintenance, services, uptime_kuma]
 
     # ANSIBLE-035: install-only (maintenance_run_cleanup: false) — cleanup
     # runs on the timer's own weekly schedule, not synchronously on every

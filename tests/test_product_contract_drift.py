@@ -75,9 +75,9 @@ def values_copy(tmp_path: Path) -> Path:
 
 def _edit_web(values_dir: Path, env: str, key: str, value: object) -> None:
     path = values_dir / f"{env}.yaml"
-    data = yaml.safe_load(path.read_text())
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
     data["apps"]["platform"]["web"][key] = value
-    path.write_text(yaml.safe_dump(data))
+    path.write_text(yaml.safe_dump(data), encoding="utf-8")
 
 
 def test_a_derived_key_edited_by_hand_is_drift(values_copy: Path) -> None:
@@ -90,7 +90,7 @@ def test_a_derived_key_edited_by_hand_is_drift(values_copy: Path) -> None:
 
 def test_a_snapshot_that_no_longer_validates_is_refused(tmp_path: Path) -> None:
     broken = tmp_path / "web.yaml"
-    broken.write_text(WEB.read_text().replace("port: 8080", "port: '8080'"))
+    broken.write_text(WEB.read_text(encoding="utf-8").replace("port: 8080", "port: '8080'"), encoding="utf-8")
 
     with pytest.raises(ContractError):
         validate_contract(broken)
@@ -98,12 +98,14 @@ def test_a_snapshot_that_no_longer_validates_is_refused(tmp_path: Path) -> None:
 
 def test_write_restores_the_contract_keys_and_never_touches_version(values_copy: Path) -> None:
     _edit_web(values_copy, "prod", "default_port", 9090)
-    before = yaml.safe_load((values_copy / "prod.yaml").read_text())["apps"]["platform"]["web"]["version"]
+    before = yaml.safe_load((values_copy / "prod.yaml").read_text(encoding="utf-8"))["apps"]["platform"]["web"][
+        "version"
+    ]
 
     changed = write(validate_contract(WEB), "web", "prod", values_dir=values_copy)
 
     assert changed == ["default_port"]
-    after = yaml.safe_load((values_copy / "prod.yaml").read_text())["apps"]["platform"]["web"]
+    after = yaml.safe_load((values_copy / "prod.yaml").read_text(encoding="utf-8"))["apps"]["platform"]["web"]
     assert after["default_port"] == 8080
     assert after["version"] == before
     assert drift(validate_contract(WEB), "web", "prod", values_dir=values_copy)[0] == {}
@@ -118,12 +120,14 @@ def test_a_hostname_change_moves_the_site_keys_with_the_domain(env: str, values_
     """
     old = getattr(validate_contract(WEB).hostnames, env)
     moved = tmp_path / "web.yaml"
-    moved.write_text(WEB.read_text().replace(f"{env}: {old}\n", f"{env}: new.{old}\n"))
+    moved.write_text(
+        WEB.read_text(encoding="utf-8").replace(f"{env}: {old}\n", f"{env}: new.{old}\n"), encoding="utf-8"
+    )
 
     changed = write(validate_contract(moved), "web", env, values_dir=values_copy)
 
     assert sorted(changed) == ["domain", "site_domain", "site_url"]
-    after = yaml.safe_load((values_copy / f"{env}.yaml").read_text())["apps"]["platform"]["web"]
+    after = yaml.safe_load((values_copy / f"{env}.yaml").read_text(encoding="utf-8"))["apps"]["platform"]["web"]
     assert (after["domain"], after["site_domain"], after["site_url"]) == (
         f"new.{old}",
         f"new.{old}",
@@ -132,20 +136,20 @@ def test_a_hostname_change_moves_the_site_keys_with_the_domain(env: str, values_
 
 
 def test_write_on_a_clean_tree_changes_nothing(values_copy: Path) -> None:
-    original = (values_copy / "staging.yaml").read_text()
+    original = (values_copy / "staging.yaml").read_text(encoding="utf-8")
 
     assert write(validate_contract(WEB), "web", "staging", values_dir=values_copy) == []
-    assert (values_copy / "staging.yaml").read_text() == original
+    assert (values_copy / "staging.yaml").read_text(encoding="utf-8") == original
 
 
 def test_write_inserts_a_missing_key_before_version_and_changes_nothing_else(values_copy: Path) -> None:
     """A key right only in common.yaml is corrected in the env file, beside its siblings."""
     _edit_web(values_copy, "common", "health_path", "/elsewhere")
-    original = (values_copy / "prod.yaml").read_text().splitlines()
+    original = (values_copy / "prod.yaml").read_text(encoding="utf-8").splitlines()
 
     assert write(validate_contract(WEB), "web", "prod", values_dir=values_copy) == ["health_path"]
 
-    updated = (values_copy / "prod.yaml").read_text().splitlines()
+    updated = (values_copy / "prod.yaml").read_text(encoding="utf-8").splitlines()
     added = [line for line in updated if line not in original]
     assert [line.strip() for line in added] == ["health_path: /"]
     assert len(updated) == len(original) + 1
@@ -178,9 +182,11 @@ def test_render_check_exits_one_and_names_the_drifted_keys(values_copy: Path, mo
 
 def test_render_refuses_oidc(tmp_path: Path) -> None:
     contract = tmp_path / "web.yaml"
-    contract.write_text(WEB.read_text().replace("auth: public", "auth: oidc"))
+    contract.write_text(WEB.read_text(encoding="utf-8").replace("auth: public", "auth: oidc"), encoding="utf-8")
 
-    result = CliRunner().invoke(app, ["product", "render", "--contract", str(contract), "--env", "prod", "--app", "web"])
+    result = CliRunner().invoke(
+        app, ["product", "render", "--contract", str(contract), "--env", "prod", "--app", "web"]
+    )
 
     assert result.exit_code == 1
     assert "ERROR:" in result.output
@@ -231,9 +237,13 @@ def test_a_contract_change_to_a_prod_owned_key_leaves_the_tree_green(values_copy
     contract and renders prod. Both envs are clean after each half.
     """
     staging = snapshot_path("web", "staging", snapshots_copy)
-    edited = staging.read_text().replace("port: 8080", "port: 9090").replace("prod: mlorente.dev", "prod: new.dev")
-    assert edited != staging.read_text()
-    staging.write_text(edited)
+    edited = (
+        staging.read_text(encoding="utf-8")
+        .replace("port: 8080", "port: 9090")
+        .replace("prod: mlorente.dev", "prod: new.dev")
+    )
+    assert edited != staging.read_text(encoding="utf-8")
+    staging.write_text(edited, encoding="utf-8")
 
     assert write(validate_contract(staging), "web", "staging", values_dir=values_copy) == ["default_port"]
     assert _drift_per_env(snapshots_copy, values_copy) == {"staging": {}, "prod": {}}
@@ -251,7 +261,7 @@ def test_a_contract_change_to_a_prod_owned_key_leaves_the_tree_green(values_copy
 
 def test_a_prod_snapshot_edited_without_a_render_is_drift(values_copy: Path, snapshots_copy: Path) -> None:
     prod = snapshot_path("web", "prod", snapshots_copy)
-    prod.write_text(prod.read_text().replace("port: 8080", "port: 9090"))
+    prod.write_text(prod.read_text(encoding="utf-8").replace("port: 8080", "port: 9090"), encoding="utf-8")
 
     assert _drift_per_env(snapshots_copy, values_copy)["prod"] == {"default_port": (9090, 8080)}
 
@@ -307,9 +317,9 @@ def test_the_exempt_set_is_exactly_the_in_tree_entries() -> None:
 def test_write_refuses_an_app_with_no_values_block(values_copy: Path) -> None:
     """--check reports six drifts here; --write must refuse with ERROR / WHY / FIX, not raise KeyError."""
     path = values_copy / "prod.yaml"
-    data = yaml.safe_load(path.read_text())
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
     del data["apps"]["platform"]["web"]
-    path.write_text(yaml.safe_dump(data))
+    path.write_text(yaml.safe_dump(data), encoding="utf-8")
 
     assert drift(validate_contract(WEB), "web", "prod", values_dir=values_copy)[1] == len(OWNED_KEYS)
     with pytest.raises(ContractError) as excinfo:
@@ -343,7 +353,7 @@ def test_every_auth_level_in_the_values_is_one_the_contract_can_render() -> None
                 walk(child)
 
     for env_file in VALUES_DIR.glob("*.yaml"):
-        walk((yaml.safe_load(env_file.read_text()) or {}).get("apps"))
+        walk((yaml.safe_load(env_file.read_text(encoding="utf-8")) or {}).get("apps"))
 
     assert {"bypass", "one_factor"} <= found
     assert found <= renderable, f"auth levels the contract cannot express: {found - renderable}"

@@ -54,11 +54,11 @@ def _db(path: Path, corrupt: bool = False) -> None:
 def _good_app(data: Path) -> None:
     _db(data / "app.db")
     _db(data / "nested/state.db")
-    (data / "config.json").write_text(CONTENT)
+    (data / "config.json").write_text(CONTENT, encoding="utf-8")
 
 
 def _good_plain(data: Path) -> None:
-    (data / "notes.txt").write_text(CONTENT)
+    (data / "notes.txt").write_text(CONTENT, encoding="utf-8")
 
 
 class _Fake:
@@ -163,7 +163,7 @@ def test_a_corrupt_database_fails_by_name(capsys) -> None:
 def test_a_declared_database_that_did_not_come_back_fails(capsys) -> None:
     def lost(data: Path) -> None:
         _db(data / "app.db")
-        (data / "config.json").write_text(CONTENT)
+        (data / "config.json").write_text(CONTENT, encoding="utf-8")
 
     assert _drill(_Fake(app=lost)) is False
     assert "FAIL app: nested/state.db: declared database is missing from the restore" in _said(capsys)
@@ -173,7 +173,7 @@ def test_an_excluded_path_that_came_back_fails(capsys) -> None:
     def leaky(data: Path) -> None:
         _good_app(data)
         (data / "cache").mkdir()
-        (data / "cache/model.bin").write_text("x")
+        (data / "cache/model.bin").write_text("x", encoding="utf-8")
 
     assert _drill(_Fake(app=leaky)) is False
     assert "FAIL app: cache: declared exclude is present in the restore" in _said(capsys)
@@ -277,7 +277,7 @@ def _resolve(monkeypatch, node: str) -> dict:
 
 
 def test_ace2_reaches_the_drill_with_the_sources_the_ssot_declares(monkeypatch) -> None:
-    common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
+    common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
     seen = _resolve(monkeypatch, "ace2")
     assert seen["result"] is True
     assert seen["sources"] == common["backup"]["sources"]["ace2"]

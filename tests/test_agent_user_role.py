@@ -24,12 +24,12 @@ USER_SOCKET_MOUNT = "/run/user/{{ _agent_stack_agent_uid }}/docker.sock:/var/run
 
 
 def _defaults() -> dict:
-    return yaml.safe_load((ROLE / "defaults/main.yml").read_text())
+    return yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))
 
 
 def _agent_tasks() -> list[dict]:
     flat: list[dict] = []
-    for task in yaml.safe_load((ROLE / "tasks/agent_user.yml").read_text()):
+    for task in yaml.safe_load((ROLE / "tasks/agent_user.yml").read_text(encoding="utf-8")):
         flat.append(task)
         flat.extend(task.get("block") or [])
     return flat
@@ -40,14 +40,14 @@ def _task_with(module: str) -> list[dict]:
 
 
 def _role_vars() -> dict:
-    for role in yaml.safe_load(PLAYBOOK.read_text())[-1]["roles"]:
+    for role in yaml.safe_load(PLAYBOOK.read_text(encoding="utf-8"))[-1]["roles"]:
         if isinstance(role, dict) and role.get("role", "").endswith("agent_stack"):
             return role.get("vars") or {}
     raise AssertionError("agent_stack is not in provision-ace2.yml")
 
 
 def test_the_main_file_includes_the_agent_user_tasks() -> None:
-    main = yaml.safe_load((ROLE / "tasks/main.yml").read_text())
+    main = yaml.safe_load((ROLE / "tasks/main.yml").read_text(encoding="utf-8"))
     # Imported, never included: an include's tasks lose the role's tag, so
     # `make provision TAGS=agent_stack` would silently skip them.
     imports = [task for task in main if "ansible.builtin.import_tasks" in task]
@@ -56,7 +56,7 @@ def test_the_main_file_includes_the_agent_user_tasks() -> None:
 
 
 def test_the_user_name_comes_from_the_ssot() -> None:
-    common = yaml.safe_load(COMMON.read_text())
+    common = yaml.safe_load(COMMON.read_text(encoding="utf-8"))
     assert common["apps"]["services"]["ai"]["hermes_kubelab"]["user"] == "hermes-kubelab"
     assert _role_vars()["agent_stack_agent_user"] == "{{ config.apps.services.ai.hermes_kubelab.user }}"
 
@@ -76,7 +76,7 @@ def test_the_user_holds_no_privilege() -> None:
 def test_no_task_grants_sudo() -> None:
     for path in ROLE.rglob("*"):
         if path.is_file():
-            assert "sudoers" not in path.read_text(), f"{path.relative_to(REPO)} mentions sudoers"
+            assert "sudoers" not in path.read_text(encoding="utf-8"), f"{path.relative_to(REPO)} mentions sudoers"
 
 
 def test_the_daemon_is_the_users_own_socket() -> None:
@@ -96,7 +96,7 @@ def test_no_file_in_the_role_can_render_the_rootful_socket() -> None:
         # user's socket AT the rootful path inside its container, the one place
         # the image looks for a socket to join the group of. The host side,
         # the only side that decides which daemon answers, is the user's own.
-        text = path.read_text().replace(USER_SOCKET_MOUNT, "")
+        text = path.read_text(encoding="utf-8").replace(USER_SOCKET_MOUNT, "")
         for socket in ROOTFUL_SOCKETS:
             assert socket not in text, f"{path.relative_to(REPO)} names {socket}"
 

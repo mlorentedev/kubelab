@@ -7,6 +7,18 @@
 # a re-imaged node, and its cost is one systemctl probe.
 # =============================================================================
 
+# The Beelink is behind the lab edge: the stack's pull is sized against the edge's
+# downlink, bounded and retried (#2742). The list is the images compose.yml.j2
+# pulls, act_runner's only when the template renders it; a test fails if the two
+# drift apart. First, so a refused pull leaves the node as it was: past the
+# templates, the rerun would see no change and skip the handlers they notify (#2812).
+- name: Pull the service images
+  ansible.builtin.import_tasks: "{{ playbook_dir }}/_includes/image-pull.yml"
+  vars:
+    image_pull_name: the Beelink services
+    image_pull_images: >-
+      {{ [gitea_image, runner_image] + ([act_runner_image] if act_runner_enabled | bool else []) }}
+
 # --- Cleanup legacy Ollama (bare metal) ---
 - name: Check if Ollama service exists
   command: systemctl cat ollama
@@ -190,9 +202,35 @@
     path: /proc/sys/fs/binfmt_misc/qemu-aarch64
   register: _binfmt
 
-- name: Register QEMU binfmt_misc
-  command: docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+# The package ships its registrations in /usr/lib/binfmt.d, with the F flag a
+# container needs, and systemd-binfmt loads the one named. Not a restart of
+# systemd-binfmt.service: its ExecStop unregisters every handler, including any
+# registered outside binfmt.d. This used to run the unpinned
+# multiarch/qemu-user-static image instead, an image fetch for what the node
+# already holds (#2822).
+- name: Register QEMU binfmt_misc from the package's configuration
+  command: /usr/lib/systemd/systemd-binfmt /usr/lib/binfmt.d/qemu-aarch64.conf
   when: not _binfmt.stat.exists
+
+# Read on every run, so a registration that predates this role is held to the flag
+# too. Only a check run that skipped the restart above has nothing to read.
+- name: Read the QEMU registration
+  slurp:
+    path: /proc/sys/fs/binfmt_misc/qemu-aarch64
+  register: _binfmt_loaded
+  failed_when: false
+  when: _binfmt.stat.exists or not ansible_check_mode
+
+# F loads the interpreter at registration, so a container without it still runs
+# arm64 binaries. bee reads `flags: POF` (2026-10-30).
+- name: Verify QEMU binfmt_misc is registered with the F flag
+  assert:
+    that: >-
+      (_binfmt_loaded.content | default('') | b64decode) is search('(?m)^flags: \\S*F')
+    fail_msg: >-
+      No qemu-aarch64 is registered, or it lacks the F flag a container needs: the
+      qemu-user-static package installed no binfmt.d entry fit for it.
+  when: _binfmt.stat.exists or not ansible_check_mode
 
 - name: Check if buildx builder is healthy
   command: docker buildx inspect multiarch
@@ -218,13 +256,33 @@
   when: _buildx_check.rc != 0
 
 # --- Deploy ---
-- name: Pull service images
-  command: docker compose -f {{ beelink_deploy_dir }}/compose.yml pull
-  register: _pull
-  changed_when: "'Pull complete' in _pull.stderr or 'Downloaded' in _pull.stderr"
+# Enabling does not start a unit, so a unit that failed at boot stayed failed and
+# its stack unbound until the next boot (#2500). Starting a failed unit recreates
+# the stack once its address exists; on a healthy node the unit is already active
+# and this is a no-op.
+- name: Start the Compose stack unit
+  systemd:
+    name: kubelab-compose.service
+    state: started
+  when: not ansible_check_mode
+  tags: [boot]
+
+# Before the compose run below: it would race the unit's own recreate.
+- name: Wait for the Compose stack unit to bring the stack up
+  import_tasks: "{{ playbook_dir }}/_includes/stack-unit-settled.yml"
+  vars:
+    stack_unit_settled_name: kubelab-compose.service
+  tags: [boot]
+
+- name: Check for a port binding that was never established
+  import_tasks: "{{ playbook_dir }}/_includes/compose-port-drift.yml"
+  vars:
+    compose_port_drift_file: "{{ beelink_deploy_dir }}/compose.yml"
 
 - name: Start services
-  command: docker compose -f {{ beelink_deploy_dir }}/compose.yml up -d
+  command: >-
+    docker compose -f {{ beelink_deploy_dir }}/compose.yml up -d
+    {{ '--force-recreate' if compose_port_drift | bool else '' }}
   register: _compose_up
   changed_when: "'Started' in _compose_up.stderr or 'Created' in _compose_up.stderr"
 

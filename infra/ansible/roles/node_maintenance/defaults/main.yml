@@ -14,7 +14,7 @@ maintenance_install_timer: true
 # to a day. The cost is a re-pull of `runner-images` after each prune, which
 # act_runner's `force_pull: true` already pays on every job anyway.
 maintenance_timer_schedule: "{{ 'daily' if maintenance_docker_reclaim | bool else 'weekly' }}"
-# Override for nodes with K3s but not in k3s_servers group (e.g. aws1 hub)
+# Override for nodes with K3s but not in k3s_servers group (the hub, gcp1)
 maintenance_is_k3s_node: false
 
 # ANSIBLE-035: gates the disk-cleanup tasks (APT/journal/rsyslog/snap/
@@ -47,8 +47,13 @@ maintenance_security_updates: true
 #   k3s              — the cluster.
 #   tailscale        — the path this fleet is administered over. A failed
 #     upgrade removes the way in to fix it.
-# These are patched deliberately, by an operator who can watch, which is what
-# `make maintain NODE=x` is for.
+# These are patched deliberately, by an operator who can watch: `make provision`,
+# whose `base_system` role runs a full `apt upgrade: dist`. Not `make maintain`,
+# which runs this role and so holds them too. A node whose play lists them in
+# `base_system_held_packages` (the Beelink's CI engine, #2722) moves them only in
+# a provision run with `base_system_release_holds=true`. A hold already in place
+# before a run (that one, or an operator's pin) is left alone; the run releases
+# only its own.
 maintenance_patch_blacklist:
   - docker-ce
   - docker-ce-cli

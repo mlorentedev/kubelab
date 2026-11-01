@@ -1,0 +1,26 @@
+[
+  {
+    "id": 1003,
+    "number": 728,
+    "title": "Example open pull request",
+    "state": "open",
+    "html_url": "https://gitea.example/org/repo/pulls/728",
+    "updated_at": "2026-10-21T08:00:00Z",
+    "user": {"login": "alice"},
+    "assignees": null,
+    "labels": [],
+    "pull_request": {"merged": false, "merged_at": null, "draft": false, "html_url": "https://gitea.example/org/repo/pulls/728"}
+  },
+  {
+    "id": 1004,
+    "number": 727,
+    "title": "Example closed pull request",
+    "state": "closed",
+    "html_url": "https://gitea.example/org/repo/pulls/727",
+    "updated_at": "2026-10-19T16:45:00Z",
+    "user": {"login": "bob"},
+    "assignees": null,
+    "labels": [],
+    "pull_request": {"merged": true, "merged_at": "2026-10-19T16:45:00Z", "draft": false, "html_url": "https://gitea.example/org/repo/pulls/727"}
+  }
+]

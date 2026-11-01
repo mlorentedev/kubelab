@@ -16,6 +16,15 @@ created: "2026-10-25"
 
 Accepted, 2026-10-25, in the spec's first PR, which also adds the ADR-028 amendment block, so the two never disagree on `master`. Drafted with the operator during NET-005 (kubelab#2661). Spec: `specs/NET-005-lab-edge-site-modes/`.
 
+## Amendment — 2026-10-29 (the LAN transport rule covers the runs that apply the uplink)
+
+D7 said every edge change runs over the homelab LAN. The check that enforces it (#2775, `provision-rpi4.yml`) refuses only a run that applies the `gateway` role: a full provision, `TAGS=gateway`, or any tag selection that includes it. The operator chose to narrow the rule to that check rather than widen the check to every tag:
+
+- What can cut the session is the uplink and its ruleset, and both belong to the `gateway` role.
+- A wider rule would send every routine edge change, such as a DNS zone or an SSH setting, to the switch, and would take remote management away from an always-on node.
+
+D7's Transport paragraph is edited to match.
+
 ## Context
 
 The homelab and the operator's personal devices sat behind a home ISP router that did the NAT and the Wi-Fi. The RPi4 was a client of that Wi-Fi, a NAT gateway and DHCP server for the homelab LAN, and the staging DNS gateway (Pi-hole + CoreDNS). ADR-028 §6 classed it on-demand: "When staging is off, RPi4 can be off."
@@ -99,7 +108,7 @@ The rejected rows above are the fallbacks, triggered by a refused station or a f
 
 ### D3. Nothing on the uplink is trusted
 
-**Who owns the firewall.** ufw stays, because `base_system` installs it on every node. ufw governs what the host itself accepts. It does not govern routed or DNAT'd traffic: Tailscale's `ts-forward` and Docker's `DOCKER-USER` and `DOCKER-FORWARD` chains run before ufw's rules in the forward path and accept their own traffic. So for everything forwarded, the `gateway` role's nftables table `inet kubelab` is the control, and its drops must be complete on their own. A drop in any nftables base chain is final whatever its priority. The drops therefore hold over ufw's `DEFAULT_FORWARD_POLICY="ACCEPT"`, over Docker's chains and over Tailscale's.
+**Who owns the firewall.** ufw stays, because `base_system` installs it on every node. ufw governs what the host itself accepts, and only part of what it forwards: Tailscale's `ts-forward` and Docker's `DOCKER-USER` and `DOCKER-FORWARD` chains usually run before ufw's rules in the forward path and accept their own traffic, which never reaches ufw. What they leave, the edge's own NAT among it, does reach ufw's forward policy, so that policy stays ACCEPT. *(Corrected 2026-10-25, lesson-621: this said ufw does not govern routed or DNAT'd traffic at all.)* So for everything forwarded, the `gateway` role's nftables table `inet kubelab` is the control, and its drops must be complete on their own. A drop in any nftables base chain is final whatever its priority. The drops therefore hold over ufw's `DEFAULT_FORWARD_POLICY="ACCEPT"`, over Docker's chains and over Tailscale's.
 
 `inet kubelab` drops:
 
@@ -147,7 +156,7 @@ A remote power cycle is not provided, and it is recorded as debt. A warm reboot 
 
 ### D6. Alerts have two origins, both into the ADR-044 fabric
 
-- **From the edge, when the uplink still carries traffic:** a lease whose address falls inside the homelab LAN, the lab Wi-Fi or the tailnet CIDR. The detecting unit fails, and `node_notify` posts to prod n8n (`tag: page`). A colliding address leaves routing intact, since the longer internal prefix wins. It can still clash with a host that dnsmasq leases the same address on `eth0`. The runbook names the response: check the address against the pool and the reservations, and if it clashes, NET-006 (#2662) becomes urgent. A gateway inside one of those CIDRs is the other case: it leaves the RPi4 with no usable default route, so it cannot post. That case surfaces through the prod probe below.
+- **From the edge, when the uplink still carries traffic:** a lease whose address falls inside the homelab LAN, the lab Wi-Fi or the tailnet CIDR. The detecting unit fails, and `node_notify` posts to prod n8n at `page`, the severity the unit declares for itself (#2684). A colliding address leaves routing intact, since the longer internal prefix wins. It can still clash with a host that dnsmasq leases the same address on `eth0`. The runbook names the response: check the address against the pool and the reservations, and if it clashes, NET-006 (#2662) becomes urgent. A gateway inside one of those CIDRs is the other case: it leaves the RPi4 with no usable default route, so it cannot post. That case surfaces through the prod probe below.
 - **From prod, when the edge cannot speak:** a dead uplink, a portal that has taken the uplink back, or a dead RPi4. A captive or dead uplink blocks HTTPS and the tailnet, so the edge cannot report its own silence. A prod workload probes the edge over the tailnet on a schedule and logs the result. Vector ships it to Loki, and a Grafana rule alerts on failure or on absence (`noDataState: Alerting`), the pattern of `r2-backup-watcher` and OBS-015.
 
 The same probe watches rpi3, whose Uptime Kuma now shares the edge's fate (ADR-023, ADR-028, ADR-062 P2) and goes silent, not just wrong, when the edge dies. The independence rule still holds for prod, which shares nothing with the edge. For the homelab and for Kuma's own voice, the shared fate is accepted and covered by this probe.
@@ -160,7 +169,7 @@ The page must reach the operator over a path that does not run through the edge.
 
 ### D7. Provisioning cannot cut its own session, and every site proves its tailnet
 
-**Transport.** Edge changes run over the homelab LAN, from the operator's laptop on the switch: `make provision NODE=rpi4 ENV=prod BOOTSTRAP=1`, never over the tailnet that the uplink carries. `eth0` input stays open to the homelab LAN as the recovery path, and every nftables ruleset is checked with `nft -c` before it loads.
+**Transport.** A run that applies the `gateway` role, which renders the uplink and its ruleset, runs over the homelab LAN, from the operator's laptop on the switch: `make provision NODE=rpi4 ENV=prod BOOTSTRAP=1`, never over the tailnet that the uplink carries. The play refuses such a run at any other address before any role runs (#2775). Runs that leave the `gateway` role out, such as `TAGS=dns` or `TAGS=ssh`, are not held to it (amended 2026-10-29, see Amendment). `eth0` input stays open to the homelab LAN as the recovery path, and every nftables ruleset is checked with `nft -c` before it loads.
 
 **Order.** Each step comes before the one that needs it:
 

@@ -92,7 +92,7 @@ This PR loads the drops before any uplink exists. `iifname` matches a name, so r
 
 ### PR 4 — The uplink
 
-12. [ ] [P] [AC6] [AC9] Test first, `tests/test_gateway_uplink_render.py`. For each `kind`, the netplan render binds the profile's interface with DHCPv4 and these settings:
+12. [x] (✓ 2026-10-25, #2667) [P] [AC6] [AC9] Test first, `tests/test_gateway_uplink_render.py`. For each `kind`, the netplan render binds the profile's interface with DHCPv4 and these settings:
     - `use-routes`, `use-dns`, `use-ntp`, `use-domains` and `use-hostname` all `false`;
     - `dhcp-identifier: mac`;
     - no IPv6.
@@ -103,7 +103,7 @@ This PR loads the drops before any uplink exists. `iifname` matches a name, so r
     - for every `kind`, `eth0` renders static at `networking.nodes.rpi4.lan_ip`. The RPi4 has no screen, so the LAN is the recovery path and no profile may drop it.
 
     Watch it fail.
-13. [ ] [AC6] [AC5] Implement:
+13. [x] (✓ 2026-10-25, #2667) [AC6] [AC5] Implement:
     - `templates/netplan-edge.yaml.j2` and `templates/dhcp-gateway.conf.j2`;
     - the `.link` file `templates/uplink.link.j2`, which matches `PermanentMACAddress` from SOPS and sets `Name=uplink0` and `MACAddressPolicy=none`. It is rendered with `no_log`. `networking.edge.uplink.mac` names the adapter the current `kind` uses: the USB Wi-Fi adapter for `wifi_open` and `wifi_psk`, the USB Ethernet adapter for `ethernet`. Changing `kind` changes that key in the same edit, and the render test fails if a `kind` reaches the template without it;
     - the netplan task runs with `no_log: true` and mode `0600`, since the file holds the uplink SSID and, for `wifi_psk`, its PSK, and `--diff` would print it;
@@ -111,12 +111,12 @@ This PR loads the drops before any uplink exists. `iifname` matches a name, so r
     - netplan is validated with `netplan generate` before the handler applies it, and the play waits with `wait_for_connection` after the apply, so a profile that cuts the LAN fails visibly. Recovery from that is editing the SD card from another machine; the runbook (task 35) says how.
 
     Green.
-14. [ ] [AC1] [AC3] Test first, in `tests/test_gateway_role_tasks.py`: in `roles/gateway/tasks/main.yml`, the nftables task comes before the netplan task, so an uplink never comes up without its drops. It is green by construction after task 6; the test keeps it so.
-15. [ ] [P] [AC1] Test first, in `tests/test_gateway_firewall_render.py`: the masquerade list is derived from `networking.edge.uplink.interface`, not from the old `enx*`/`wlan0` literals in `defaults/main.yml`. Implement. Green.
+14. [x] (✓ 2026-10-25, #2667) [AC1] [AC3] Test first, in `tests/test_gateway_role_tasks.py`: in `roles/gateway/tasks/main.yml`, the nftables task comes before the netplan task, so an uplink never comes up without its drops. It is green by construction after task 6; the test keeps it so.
+15. [x] (✓ 2026-10-25, #2667) [P] [AC1] Test first, in `tests/test_gateway_firewall_render.py`: the masquerade list is derived from `networking.edge.uplink.interface`, not from the old `enx*`/`wlan0` literals in `defaults/main.yml`. Implement. Green.
 
 ### PR 5 — The access point
 
-16. [ ] [P] [AC2] Test first, `tests/test_gateway_ap_render.py`:
+16. [x] (✓ 2026-10-25, #2670) [P] [AC2] Test first, `tests/test_gateway_ap_render.py`:
     - `hostapd.conf` sets `interface=wlan0`, `hw_mode=g`, the profile's `channel`, `country_code` with `ieee80211d=1`, `wpa=2`, `wpa_key_mgmt=WPA-PSK`, `rsn_pairwise=CCMP` and `ieee80211w=0`. It has no `wps_state`, an absolute `wpa_psk_file` path, and an `ssid` from a variable;
     - the PSK file has one `keyid=<id> 00:00:00:00:00:00 <psk>` line per entry, with mode `0600`;
     - a networkd unit for `wlan0` sets the gateway address and `ConfigureWithoutCarrier=yes`;
@@ -125,7 +125,7 @@ This PR loads the drops before any uplink exists. `iifname` matches a name, so r
     - the role stops, disables and masks `netplan-wpa-wlan0.service` and `wpa_supplicant.service` before it starts hostapd. Removing the home SSID from netplan does not stop a running supplicant, and hostapd cannot take an interface a supplicant holds.
 
     Watch it fail.
-17. [ ] [AC2] Implement:
+17. [x] (✓ 2026-10-25, #2670) [AC2] Implement:
     - unmask and enable `hostapd`;
     - the templates, rendered with `no_log`;
     - handlers: `hostapd_cli reload_wpa_psk` for the PSK file, and a restart for the config;
@@ -136,20 +136,20 @@ This PR loads the drops before any uplink exists. `iifname` matches a name, so r
 
 ### PR 6 — Collision detection and shaping
 
-18. [ ] [P] [AC7] Test first, `tests/test_edge_lease_check.py`. Feed `roles/gateway/files/edge-lease-check.sh` lease fixtures (address, gateway, routes) and the CIDRs from the SSOT:
+18. [x] (✓ 2026-10-25, #2671) [P] [AC7] Test first, `tests/test_edge_lease_check.py`. Feed `roles/gateway/files/edge-lease-check.sh` lease fixtures (address, gateway, routes) and the CIDRs from the SSOT:
     - each collision kind exits non-zero with a message naming the kind;
     - a clean lease exits 0.
 
     Watch it fail.
-19. [ ] [AC7] Implement the script. A systemd path unit watches networkd's lease directory and runs it, with `OnFailure=kubelab-notify@%n.service` (the `node_notify` role). Green.
-20. [ ] [P] [AC8] Test first, `tests/test_edge_shaper_render.py`:
+19. [x] (✓ 2026-10-25, #2671) [AC7] Implement the script. A systemd path unit watches networkd's lease directory and runs it, with `OnFailure=kubelab-notify@%n.service` (the `node_notify` role). Green.
+20. [x] (✓ 2026-10-25, #2671) [P] [AC8] Test first, `tests/test_edge_shaper_render.py`:
     - egress is `cake bandwidth <up> nat dual-srchost`;
     - ingress goes through an IFB device with `cake bandwidth <down> nat dual-dsthost ingress`;
     - both rates come from `bandwidth`, scaled below the measured rate;
     - the unit is bound to the uplink device.
 
     Watch it fail.
-21. [ ] [AC8] Implement the shaper unit. Green.
+21. [x] (✓ 2026-10-25, #2671) [AC8] Implement the shaper unit. Green.
 
 ### PR 7 — The prod probe
 
@@ -175,38 +175,48 @@ This PR loads the drops before any uplink exists. `iifname` matches a name, so r
 
 ### PR 8 — Self-recovery
 
-28. [ ] [P] [AC13] Test first, `tests/test_edge_recovery_render.py`:
+28. [x] (✓ 2026-10-25, #2673) [P] [AC13] Test first, `tests/test_edge_recovery_render.py`:
     - `/etc/systemd/system.conf.d/watchdog.conf` sets `RuntimeWatchdogSec=15s`;
     - the liveness service checks that hostapd reports `ENABLED` with `wlan0` up, and that the uplink holds a lease;
     - on failure it reloads `brcmfmac` first and reboots second;
     - a state file caps reboots per hour, so a radio that never recovers cannot cause a boot loop.
 
     Watch it fail.
-29. [ ] [AC13] Implement the units and their timer. Green.
+29. [x] (✓ 2026-10-25, #2673) [AC13] Implement the units and their timer. Green.
+
+    The uplink is reported and never rebooted for, and a vanished adapter gets one driver reload per incident. See `verification.md`.
 
 ### PR 9 — Edge status and login mode
 
-30. [ ] [P] [AC5] Test first, `tests/test_edge_status.py`. The status script, fed recorded responses, classifies the uplink:
+30. [x] (✓ 2026-10-25) [P] [AC5] Test first, `tests/test_edge_status.py`. The status script, fed recorded responses, classifies the uplink:
     - `204` from a connectivity check bound to the uplink is `up`;
     - a redirect or `200` is `portal`;
     - no answer is `dead`.
 
     It exits 0 only for `up`, and with a distinct non-zero code for `portal` and for `dead`, so a script can tell them apart. It also reports whether a public resolver and the lease's resolver answer, and whether the uplink MAC matches SOPS, without printing it. `make edge-status` runs it over SSH. Implement. Green.
+
+    Built as `kubelab-edge-status`, run over SSH to the edge's LAN address (the tailnet rides on the uplink it reports on). The script reads the lease file unprivileged, which B3 confirms on the edge.
 31. [ ] [AC5] **Built only if B3 finds that only the site's resolver answers before login.** Test first: `make edge-login-mode MODE=on` renders one Pi-hole `server=/<domain>/<lease DNS>` line per portal domain in SOPS. `MODE=off` removes them and runs `docker restart pihole`, as the `coredns` role does: Pi-hole v6's `pihole reloaddns` does not reload dnsmasq configs, and the cache would otherwise keep the portal's answers. This task also registers `portal_domains` in `SECRET_CATALOG`. Implement through the toolkit and the `coredns` role. Green. If B3 shows public resolvers answer, record that and skip this task.
+
+    Not built with task 30: it waits for B3's answer.
 
 ### PR 10 — Operator steps as targets
 
-32. [ ] [P] [AC11] Test first, `tests/test_headscale_rejoin.py`, with subprocess mocked: `make headscale-rejoin NODE=<n>`:
+32. [x] (✓ 2026-10-25) [P] [AC11] Test first, `tests/test_headscale_rejoin.py`, with subprocess mocked: `make headscale-rejoin NODE=<n>`:
     - mints a single-use Headscale pre-auth key that expires within an hour;
     - runs the tailscale role's `tailscale up` only when `tailscale status` is not `Running`;
     - passes every non-default flag from the SSOT (tailscale/tailscale#5597).
 
     Implement in `toolkit/features/headscale_nodes.py` and `infra/ansible/roles/tailscale/tasks/main.yml`. Green.
-33. [ ] [P] [AC11] [AC5] Test first, `tests/test_edge_lan_link.py`: `make edge-lan-link` renders a NetworkManager profile on the operator's laptop, from `networking.lan_cidr`, with DHCP from the RPi4. It has two modes:
+
+    Built with the role minting the key, as the hermes sidecar does: on Headscale, only when the node is off the mesh and no key was passed in, and only when the rejoin asks (`tailscale_mint_key`), so the key never reaches the toolkit. The toolkit runs the node's play, tailscale role only, over the LAN, and refuses a play without the role: rpi3's has none, so `NODE=rpi3` is refused until it does. The hand-made `tailscale-watchdog` on the RPi4 keeps its own flags (NET-007, #2675).
+33. [x] (✓ 2026-10-25, code) [P] [AC11] [AC5] Test first, `tests/test_edge_lan_link.py`: `make edge-lan-link` renders a NetworkManager profile on the operator's laptop, from `networking.lan_cidr`, with DHCP from the RPi4. It has two modes:
     - management: `never-default`, `ignore-auto-dns`, no IPv6;
     - `ROUTE=1`: the RPi4 becomes the default route, for the portal login with the laptop's own Wi-Fi off.
 
     `REMOVE=1` deletes the profile. Implement. Green. Then undo the hand changes listed in `verification.md`: remove the `lab-bootstrap` profile and revert "Wired connection 1".
+
+    Built as the profile `kubelab-edge-lan`, with a third mode, `STATIC=1`, that holds a fixed address when the edge serves no DHCP (a fresh SD card, or a provision that cut the LAN), as the hand profile did. The profile also routes `networking.lan_cidr` out the wire ahead of tailscale's `lookup 52`: the edge advertises that CIDR, and a laptop that accepts routes would otherwise reach the LAN through the tailnet. NetworkManager only. The undo is not done yet: `lab-bootstrap` is the operator's path to the edge today, so it moves to B4, after the target has carried a session.
 
 ### PR 11 — PSK rotation
 
@@ -216,42 +226,52 @@ This PR loads the drops before any uplink exists. `iifname` matches a name, so r
 
     If B7 found the radio offloads the handshake, the rotate target takes the fallback in ADR-075 D8 instead. Implement in `toolkit/features/edge_psk.py`. Green.
 
+    The rotate target reloads hostapd's PSK file itself once the play ends, not only through the role's handler. A play that fails between the file's deploy and the handler flush loses the notification, and the next run finds the file unchanged (lesson-620's class). The retire check above detects that loss; the explicit reload repairs it.
+
 ### PR 12 — Reclassification, runbook, lesson
 
-35. [ ] [AC11] [AC5] Extend the runbook `docs/runbooks/lab-edge.md`, which PR 7 started with the alert sections:
+35. [x] (✓ 2026-10-25, #2681) [AC11] [AC5] Runbook `docs/runbooks/lab-edge.md`:
     - a site change, the three human steps, and the portal login through a client routed by the RPi4;
     - the 5-day renewal and the paid plan's expiry, and what Uptime Kuma shows while the portal holds the uplink;
     - the collision response, the login mode, rotation, recovery from the switch, and the uplink stand-in;
     - recovery when a profile cuts the LAN: the SD card's netplan edited from another machine.
 
     Test first, `tests/test_edge_runbook_commands.py`: every fenced shell command in the runbook starts with `make `. Replace the netplan heredoc in `docs/runbooks/rpi4-bootstrap.md`, fix its `ES` regulatory domain, and update `docs/runbooks/hardware-setup.md`'s topology. Replace the MAC-derived adapter names in `docs/troubleshooting/networking-dns.md` with `enx<MAC>` (ADR-075 C7).
+
+    Done 2026-10-25. `tests/test_edge_runbook_commands.py` also fails on any `enx<MAC>` name in `docs/runbooks/` and `docs/troubleshooting/`; its ledger, which held `networking-dns.md` and `headscale-setup.md`, is empty now that both name `enx<MAC>`. `networking-dns.md`'s NAT entry is marked historical, since the masquerade names `uplink0`. The heredoc became a LAN-only `eth0` file, which also recovers an edge whose profile cut the LAN, so the regulatory domain left it with the uplink. Gaps found and ticketed: the subnet route's approval (#2678), the portal's Pi-hole allowlist (#2679), and the gateway role installing packages before it renders the uplink, which a fresh card may not survive (#2680). The edge's own DHCP is missing on a fresh card too, so `make edge-lan-link` gained `STATIC=1` (task 33). The runbook describes PRs 5 to 8, so it lands after them; PR 7 adds its alerts section.
 36. [ ] [AC2] Set `networking.nodes.rpi4.location: always-on` and run `make sync-r2-watcher-targets`. Add the RPi4's push monitor if `tests/test_backup_heartbeat_monitors.py` requires one for always-on nodes. `make test` is green.
-37. [ ] Housekeeping: write the lesson `docs/lessons/<category>/lesson-NNN-ufw-does-not-govern-forwarded-traffic.md`, which records the false intersection claim and the evidence that refuted it, and add it to the index. Add a Critical-gotchas line to `CLAUDE.md` saying that on the RPi4 edge, `inet kubelab` alone restricts forwarded traffic. Mark `docs/lessons/networking-dns/lesson-110-nftables-masquerade-must-include-wlan0-not-ju.md` superseded by the new lesson, since ADR-075 moves the masquerade off `wlan0`, and correct `docs/runbooks/rpi4-sd-card-provisioning.md`, which still calls `enx*` and `wlan0` uplinks.
+
+    Deferred to after B12: an always-on RPi4 enters the R2 watcher's targets, which page while the edge is offline, as it is until the bring-up.
+37. [x] (✓ 2026-10-25: the lesson, as lesson-621, the `CLAUDE.md` line and lesson-110's mark in #2677; `docs/runbooks/rpi4-sd-card-provisioning.md` retired as superseded by `rpi4-bootstrap.md` in #2681, since the script it runs was deleted in #115) Housekeeping: write the lesson `docs/lessons/<category>/lesson-NNN-ufw-does-not-govern-forwarded-traffic.md`, which records the false intersection claim and the evidence that refuted it, and add it to the index. Add a Critical-gotchas line to `CLAUDE.md` saying that on the RPi4 edge, `inet kubelab` alone restricts forwarded traffic. Mark `docs/lessons/networking-dns/lesson-110-nftables-masquerade-must-include-wlan0-not-ju.md` superseded by the new lesson, since ADR-075 moves the masquerade off `wlan0`, and correct `docs/runbooks/rpi4-sd-card-provisioning.md`, which still calls `enx*` and `wlan0` uplinks.
 38. [ ] Housekeeping, in another repository: point the dotfiles `rpi4-lan` alias at the new `wifi_lan_ip`, as a dotfiles PR.
 
 ## Bring-up and live proof
 
 Run at the temporary site in this order, after the PR each step needs. Every result goes into `verification.md`. Each step's result goes under a `### B<n>-EVIDENCE` heading there, because that heading is what the live part of a `features.json` verification looks for.
 
-- [ ] B1. [AC1] Human step 1: the dongle moves to the RPi4, on a USB 2.0 port with an extension cable.
+A step gets that heading only once every part of its criterion is observed. Partial results go under "Bring-up progress" in `verification.md`, which names what each open step still lacks.
+
+- [x] (✓ 2026-10-26) B1. [AC1] Human step 1: the dongle moves to the RPi4, on a USB 2.0 port with an extension cable.
 - [ ] B2. [AC1] [AC3] Provision over the LAN with `BOOTSTRAP=1`, through PR 4. The journal shows `inet kubelab` loaded before `uplink0` came up. Then, with the drops still loaded, `networkctl renew uplink0` renews the lease: the journal shows the renewed DHCPv4 lease on `uplink0`, and the B2 evidence records it (AC1).
 - [ ] B3. [AC5] **DNS gate.** Before any login, `make edge-status` reports whether a public resolver and the lease's resolver answer. It decides task 31.
-- [ ] B4. [AC5] Human step 2: the portal login, from the laptop on the switch with `make edge-lan-link ROUTE=1` and its own Wi-Fi off. Then the uplink's MAC is reported identical after a reboot and a re-provision, by `make edge-status`, before anything is paid.
+- [x] (✓ 2026-10-30) B4. [AC5] Human step 2: the portal login, from the laptop on the switch with `make edge-lan-link ROUTE=1` and its own Wi-Fi off. Then the uplink's MAC is reported identical after a reboot and a re-provision, by `make edge-status`, before anything is paid.
+  Once `make edge-lan-link` has carried the session, undo the hand changes listed in `verification.md`: delete the `lab-bootstrap` profile and revert "Wired connection 1" (task 33).
 - [ ] B5. [AC2] Provision the AP (PR 5). Saved devices rejoin. rpi3 takes its reservation, and Kuma's route answers.
-- [ ] B6. [AC1] `make headscale-rejoin NODE=rpi4` and `NODE=rpi3` are each a no-op, or they rejoin. The RPi4 advertises `networking.lan_cidr`.
+- [ ] B6. [AC1] `make headscale-rejoin NODE=rpi4` and `NODE=rpi3` are each a no-op, or they rejoin. The RPi4 advertises `networking.lan_cidr`. rpi3's flags were set by hand before its play declared them (#2685), and `--reset` drops any flag a play does not declare: while rpi3 is still on the mesh, read its `RouteAll`, `CorpDNS` and `AdvertiseRoutes` from `tailscale debug prefs` and compare them with the play, since a difference is what its next rejoin changes. `make provision NODE=rpi3 ENV=prod TAGS=tailscale` on the Running node reports `changed=0` (#2685's second criterion). After any real rejoin, read the node's expiry in Headscale: it registers again with a fresh pre-auth key, and ADR-075 relies on rpi3's node key not expiring.
 - [ ] B7. [AC10] **On-device multi-PSK check.** Write two wildcard entries and connect a client with the first entry's PSK. Record which entry works and the `keyid` hostapd logs. If only the last works, try `brcmfmac.feature_disable` through `modprobe.d` and record the result. It decides task 34's path.
 - [ ] B8. [AC3] [AC7] [AC9] [AC12] The uplink stand-in (the MSI's hotspot):
   - exposure scans over IPv4 and IPv6;
-  - hostile DHCP with option 121 and its own DNS;
+  - hostile DHCP with option 121 and its own DNS. The uplink does not request option 121 (`use-routes: false`), so the stand-in's server must send it unasked (dnsmasq `dhcp-option-force=121,...`), or the lease carries no route to check;
   - a colliding address and a colliding gateway;
   - a DNS-only block like a portal's, which must page with the phone on cellular;
   - the dongle unplugged, which must page;
   - rpi3 stopped while the RPi4 is up, which must page.
 - [ ] B9. [AC8] Connect-time bounds under a bulk upload and a bulk download, each with and without the shaper.
 - [ ] B10. [AC13] `modprobe -r brcmfmac` simulates a halt. The lab Wi-Fi returns with no human step.
-- [ ] B11. [AC4] A host on the homelab switch gets a DHCP lease from the RPi4 (`DHCPACK(eth0)` in dnsmasq's journal), the homelab nodes reach the internet through the uplink, and `make test-e2e ENV=staging` passes with the homelab powered.
+- [x] (✓ 2026-10-30) B11. [AC4] A host on the homelab switch gets a DHCP lease from the RPi4 (`DHCPACK(eth0)` in dnsmasq's journal), the homelab nodes reach the internet through the uplink, and `make test-e2e ENV=staging` passes with the homelab powered.
 - [ ] B12. [AC1] A second provisioning run reports `changed=0`. Over a 48-hour soak, the kernel log shows no rtw88 reset.
 - [ ] B13. [AC1] At the next site: the Ethernet kind, live. The spec stays in `verifying` until then.
+- [x] (✓ 2026-10-29) B14. [AC13] [AC1] [AC3] The hard-reset test in `docs/runbooks/lab-edge.md`, after B12: a warm reboot, a power cut, a power cut without the uplink adapter and one without the switch cable, each checked by `make edge-boot-check`. Every boot has the ruleset active before systemd-networkd starts, so before the uplink can have an address, and every case passes (T4 found #2732, fixed by #2769; T3 found #2794, fixed by #2797). The check after T4's cable went back in reads `eth0`'s carrier since #2800, and passed over the LAN.
 
 ## Closing
 

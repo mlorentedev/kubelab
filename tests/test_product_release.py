@@ -67,7 +67,7 @@ def digests(monkeypatch: pytest.MonkeyPatch) -> _Registry:
 def gh(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch):
     bindir = tmp_path / "bin"
     bindir.mkdir()
-    (bindir / "gh").write_text(_GH_STUB)
+    (bindir / "gh").write_text(_GH_STUB, encoding="utf-8")
     (bindir / "gh").chmod(0o755)
     calls = tmp_path / "gh_calls"
     calls.touch()
@@ -75,9 +75,9 @@ def gh(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("GH_CALLS", str(calls))
     monkeypatch.setenv("STUB_SHA", FULL)
     contract = tmp_path / "kubelab.yaml"
-    contract.write_text(WEB_CONTRACT.read_text())
+    contract.write_text(WEB_CONTRACT.read_text(encoding="utf-8"), encoding="utf-8")
     monkeypatch.setenv("STUB_CONTRACT", str(contract))
-    return lambda: calls.read_text().splitlines()
+    return lambda: calls.read_text(encoding="utf-8").splitlines()
 
 
 def _fetch(out: pathlib.Path, *argv: str) -> tuple[int, dict]:
@@ -160,7 +160,9 @@ def test_a_release_without_a_contract_is_refused(gh, digests, tmp_path: pathlib.
 
 def test_a_contract_the_registry_refuses_is_not_written(gh, digests, tmp_path: pathlib.Path, monkeypatch) -> None:
     widened = tmp_path / "widened.yaml"
-    widened.write_text(WEB_CONTRACT.read_text().replace("mlorentedev/kubelab-web", "someone/else"))
+    widened.write_text(
+        WEB_CONTRACT.read_text(encoding="utf-8").replace("mlorentedev/kubelab-web", "someone/else"), encoding="utf-8"
+    )
     monkeypatch.setenv("STUB_CONTRACT", str(widened))
     out = tmp_path / "web.yaml"
 

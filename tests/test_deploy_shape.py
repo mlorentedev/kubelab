@@ -146,9 +146,7 @@ class TestFileSet:
 class TestValues:
     def test_a_second_changed_key_ends_it(self, decl, apps) -> None:
         """The gap the file-only signature left: any key in the two files rode along."""
-        before, after = bump(
-            "web", NEW, values_extra=lambda t: t.replace("enable_blog: false", "enable_blog: true", 1)
-        )
+        before, after = bump("web", NEW, values_extra=lambda t: t.replace("enable_blog: false", "enable_blog: true", 1))
         shape = classify_diff(changes(VALUES, OVERLAY), before, after, apps, decl)
         assert shape.verdict == "not-mechanical"
 
@@ -185,7 +183,9 @@ class TestOverlay:
         assert shape.verdict == "not-mechanical"
 
     def test_a_tag_other_than_the_values_change_ends_it(self, decl, apps) -> None:
-        before, after = bump("web", NEW, overlay_extra=lambda t: t.replace(f"kubelab-web:{NEW}", "kubelab-web:sha-0000000"))
+        before, after = bump(
+            "web", NEW, overlay_extra=lambda t: t.replace(f"kubelab-web:{NEW}", "kubelab-web:sha-0000000")
+        )
         shape = classify_diff(changes(VALUES, OVERLAY), before, after, apps, decl)
         assert shape.verdict == "not-mechanical"
 
@@ -228,7 +228,12 @@ class TestDeclaration:
 
     @pytest.mark.parametrize(
         "block",
-        [None, {}, {"env": "staging"}, {"env": "staging", "values_file": "", "overlay_files": [], "version_path": [], "tag_pattern": ""}],
+        [
+            None,
+            {},
+            {"env": "staging"},
+            {"env": "staging", "values_file": "", "overlay_files": [], "version_path": [], "tag_pattern": ""},
+        ],
     )
     def test_a_malformed_declaration_refuses(self, tmp_path: pathlib.Path, block: Any) -> None:
         import json
@@ -265,11 +270,22 @@ class TestDeclaration:
         out = tmp_path / "v.json"
         result = CliRunner().invoke(
             app,
-            ["deploy-shape", "--pr", "7", "--repo", REPO, "--registry", args["registry"],
-             "--products", args["products"], "--out", str(out)],
+            [
+                "deploy-shape",
+                "--pr",
+                "7",
+                "--repo",
+                REPO,
+                "--registry",
+                args["registry"],
+                "--products",
+                args["products"],
+                "--out",
+                str(out),
+            ],
         )
         assert result.exit_code == 2, result.output
-        assert json.loads(out.read_text())["verdict"] == "unknown"
+        assert json.loads(out.read_text(encoding="utf-8"))["verdict"] == "unknown"
 
     def test_the_module_names_no_declared_path(self) -> None:
         """The paths live in the declaration; a copy in code is how the two drift."""
@@ -296,7 +312,11 @@ class FakeApi:
     def json(self, path: str) -> Any:
         if path == f"repos/{REPO}/pulls/7":
             head = self.heads.pop(0) if len(self.heads) > 1 else self.heads[0]
-            return {"state": "open", "head": {"sha": head}, "base": {"ref": "master", "repo": {"default_branch": "master"}}}
+            return {
+                "state": "open",
+                "head": {"sha": head},
+                "base": {"ref": "master", "repo": {"default_branch": "master"}},
+            }
         if path not in self.routes:
             raise RuntimeError(f"unexpected API call: {path}")
         value = self.routes[path]
@@ -365,7 +385,7 @@ class TestEvaluate:
 
 
 class TestRequiredContext:
-    """AC3 (a): branch protection requires the published check by its exact name.
+    """AC3 (a): branch protection requires the published status by its exact name.
 
     A required context is matched by name, so the declaration and the name the
     workflow publishes must be the same string, or no PR on master ever merges.
@@ -373,11 +393,11 @@ class TestRequiredContext:
 
     WORKFLOW = REPO_ROOT / ".github/workflows/deploy-shape.yml"
 
-    def test_the_published_check_run_name_is_required_on_master(self) -> None:
+    def test_the_published_status_name_is_required_on_master(self) -> None:
         config = yaml.safe_load((REPO_ROOT / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
         required = config["ci"]["branch_protection"]["mlorentedev/kubelab"]["master"]["required_contexts"]
-        published = re.findall(r'-f name="([^"]+)"', self.WORKFLOW.read_text(encoding="utf-8"))
-        assert published == ["deploy-shape"], f"the workflow publishes {published}, expected one check-run"
+        published = re.findall(r'-f context="([^"]+)"', self.WORKFLOW.read_text(encoding="utf-8"))
+        assert published == ["deploy-shape"], f"the workflow publishes {published}, expected one status"
         assert published[0] in required, (
             "deploy-shape is not a required context on master: without it a not-mechanical "
             "verdict is advisory and an unknown one blocks nothing (DELIVERY-004 AC3)"
@@ -399,8 +419,22 @@ class TestRequiredContext:
         )
         assert {"opened", "synchronize", "reopened"} <= set(trigger.get("types") or [])
 
+    def test_the_verdict_is_a_commit_status_never_a_check_run(self) -> None:
+        """DELIVERY-011 (#2714): a check-run posted with GITHUB_TOKEN joins the first
+        github-actions suite on the sha, not this workflow's. When that workflow runs
+        again on the sha, branch protection stops seeing the older suite's check-runs
+        and the required context reads "Expected" with every check green. A status
+        belongs to no suite."""
+        text = self.WORKFLOW.read_text(encoding="utf-8")
+        posts = re.findall(r'gh api -X POST "repos/\$\{GITHUB_REPOSITORY\}/([a-z-]+)/', text)
+        assert posts == ["statuses"], f"the workflow posts to {posts}, expected one commit status"
+        assert "check-runs" not in text.split("\njobs:", 1)[1], "a step still creates a check-run"
+        permissions = yaml.safe_load(text)["permissions"]
+        assert permissions.get("statuses") == "write", f"permissions: {permissions}"
+        assert "checks" not in permissions, f"permissions still grant checks: {permissions}"
+
     def test_the_job_name_is_not_what_is_required(self) -> None:
-        """The job fails only on `unknown`; the check-run carries all three verdicts."""
+        """The job fails only on `unknown`; the status carries the verdict."""
         config = yaml.safe_load((REPO_ROOT / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
         required = config["ci"]["branch_protection"]["mlorentedev/kubelab"]["master"]["required_contexts"]
         jobs = yaml.safe_load(self.WORKFLOW.read_text(encoding="utf-8"))["jobs"]

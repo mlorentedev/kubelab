@@ -60,7 +60,8 @@ def mirror(tmp_path: Path) -> tuple[Remote, Path, Path]:
             "vault-mirror.sh.j2",
             agent_stack_vault_mirror=str(root),
             agent_stack_hermes={**HERMES, "vault_sync": {**SYNC, "remote": remote.bare.as_uri()}},
-        )
+        ),
+        encoding="utf-8",
     )
     script.chmod(0o755)
     return remote, root, script
@@ -77,7 +78,7 @@ def test_the_first_run_checks_out_the_tip_with_no_git_directory_in_the_tree(mirr
     _, root, script = mirror
     assert _run(script).returncode == 0
     tree = root / "tree"
-    assert (tree / "10_projects/kubelab/roadmap.md").read_text() == "seed\n"
+    assert (tree / "10_projects/kubelab/roadmap.md").read_text(encoding="utf-8") == "seed\n"
     # The bridge mounts the tree alone: no history, no remote, no config.
     assert not (tree / ".git").exists()
 
@@ -87,7 +88,7 @@ def test_a_run_follows_the_remote_and_keeps_one_commit(mirror) -> None:
     _run(script)
     tip = remote.commit("10_projects/kubelab/roadmap.md", "moved on\n")
     assert _run(script).returncode == 0
-    assert (root / "tree/10_projects/kubelab/roadmap.md").read_text() == "moved on\n"
+    assert (root / "tree/10_projects/kubelab/roadmap.md").read_text(encoding="utf-8") == "moved on\n"
     gitdir = root / "git"
     assert _git(gitdir, "rev-parse", "HEAD").stdout.strip() == tip
     assert _git(gitdir, "rev-list", "--count", "HEAD").stdout.strip() == "1"
@@ -97,10 +98,10 @@ def test_anything_written_into_the_tree_is_discarded(mirror) -> None:
     _, root, script = mirror
     _run(script)
     tree = root / "tree"
-    (tree / "10_projects/kubelab/roadmap.md").write_text("tampered\n")
-    (tree / "planted.md").write_text("not the vault\n")
+    (tree / "10_projects/kubelab/roadmap.md").write_text("tampered\n", encoding="utf-8")
+    (tree / "planted.md").write_text("not the vault\n", encoding="utf-8")
     assert _run(script).returncode == 0
-    assert (tree / "10_projects/kubelab/roadmap.md").read_text() == "seed\n"
+    assert (tree / "10_projects/kubelab/roadmap.md").read_text(encoding="utf-8") == "seed\n"
     assert not (tree / "planted.md").exists()
 
 
@@ -122,7 +123,7 @@ def test_an_unreachable_remote_fails_and_keeps_the_last_tree(mirror, tmp_path: P
     (tmp_path / "origin.git").rename(tmp_path / "moved.git")
     result = _run(script)
     assert result.returncode != 0
-    assert (root / "tree/10_projects/kubelab/roadmap.md").read_text() == "seed\n"
+    assert (root / "tree/10_projects/kubelab/roadmap.md").read_text(encoding="utf-8") == "seed\n"
 
 
 # --------------------------------------------------------------------------- the unit

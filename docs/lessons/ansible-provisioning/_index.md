@@ -4,6 +4,26 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 677 | [A tag on `include_tasks` stays on the include line; only `import_tasks` gives it to the tasks inside](lesson-677-a-tag-on-include-tasks-stays-on-the-include-line.md) | 2026-10-30 |
+| 667 | [A play that cannot force its handlers needs its later roles to notify nothing](lesson-667-a-play-that-cannot-force-its-handlers-needs-roles-that-do-not-notify.md) | 2026-10-30 |
+| 664 | [A budget that fails the play mid-role drops the handlers notified before it; skip the step when nothing after it needs it](lesson-664-a-budget-that-fails-mid-role-drops-the-handlers-before-it.md) | 2026-10-29 |
+| 663 | [A bare `mise install` installs every config it reads, and reports installing when nothing is missing](lesson-663-a-bare-mise-install-installs-every-config-it-reads.md) | 2026-10-29 |
+| 661 | [A dry run reads the file the previous run rendered, not the one this run would write](lesson-661-a-dry-run-reads-the-file-the-previous-run-rendered.md) | 2026-10-29 |
+| 660 | [An address check says where a run lands, not the path its packets take](lesson-660-an-address-check-says-where-a-run-lands-not-the-path-its-packets-take.md) | 2026-10-29 |
+| 658 | [Interpreter discovery takes the SSH user's PATH, so a dev-tool shim runs every module as root](lesson-658-interpreter-discovery-follows-the-ssh-users-path.md) | 2026-10-29 |
+| 654 | [A file two roles agree on is still rewritten by a writer outside Ansible](lesson-654-a-file-two-roles-agree-on-is-still-rewritten-by-a-writer-outside-ansible.md) | 2026-10-29 |
+| 652 | [A guard inside a role refuses after the roles before it changed the host](lesson-652-a-guard-inside-a-role-refuses-after-the-roles-before-it-changed-the-host.md) | 2026-10-29 |
+| 645 | [A hold scoped to the maintenance timer leaves every provision free to upgrade](lesson-645-a-hold-scoped-to-the-maintenance-timer-leaves-every-provision-free-to-upgrade.md) | 2026-10-28 |
+| 642 | [A version floor in `requirements.yml` never upgrades a controller](lesson-642-a-version-floor-never-upgrades-a-controller.md) | 2026-10-28 |
+| 640 | [A guard that pairs two roles by tag says nothing about which runs first](lesson-640-a-guard-that-pairs-two-roles-by-tag-says-nothing-about-which-runs-first.md) | 2026-10-27 |
+| 638 | [A guard scoped to one stack leaves its defect open in every other role](lesson-638-a-guard-scoped-to-one-stack-leaves-its-defect-open-in-every-other-role.md) | 2026-10-27 |
+| 637 | [A dry run creates no directory, so the next task writing into it fails the check](lesson-637-a-dry-run-creates-no-directory-so-the-next-task-writing-into-it-fails-the-check.md) | 2026-10-27 |
+| 636 | [A flag that removes a node must reach every list of nodes, the hand-kept one included](lesson-636-a-flag-that-removes-a-node-must-reach-every-list-of-nodes-including-the-hand-kept-one.md) | 2026-10-27 |
+| 630 | [Purging a package removes its unit files but not their failed state, so `systemctl --failed` keeps listing them](lesson-630-purging-a-package-removes-its-unit-files-but-not-their-failed-state.md) | 2026-10-26 |
+| 629 | [A flag only `tailscale up` applies drifts unseen while the node stays on the mesh](lesson-629-a-flag-only-tailscale-up-applies-drifts-unseen-while-the-node-stays-on-the-mesh.md) | 2026-10-26 |
+| 623 | [A var one play gives a shared role lasts only until the next play that applies the role to the same host](lesson-623-a-var-one-play-gives-a-shared-role-lasts-until-the-next-play-that-applies-it.md) | 2026-10-25 |
+| 622 | [A kernel parameter one node must lose can be another node's Wi-Fi country](lesson-622-a-kernel-parameter-one-node-must-lose-can-be-another-nodes-wi-fi-country.md) | 2026-10-25 |
+| 620 | [A deferred handler is lost when a later role fails, and the re-run reports changed=0](lesson-620-a-deferred-handler-is-lost-when-a-later-role-fails.md) | 2026-10-25 |
 | 604 | [A provision applies the checkout, so a branch behind master rolls the node back without failing](lesson-604-a-provision-applies-the-checkout-so-a-branch-behind-master-rolls-the-node-back-without-failing.md) | 2026-10-17 |
 | 589 | [A file written by a subuid with mkstemp is unreadable to its host owner, and no ACL fixes it](lesson-589-a-file-written-by-a-subuid-with-mkstemp-is-unreadable-to-its-host-owner-and-no-acl-fixes-it.md) | 2026-10-17 |
 | 588 | [A guard keyed on an error string breaks when the role itself changes what produced the string](lesson-588-a-guard-keyed-on-an-error-string-breaks-when-the-role-changes-what-produced-it.md) | 2026-10-17 |

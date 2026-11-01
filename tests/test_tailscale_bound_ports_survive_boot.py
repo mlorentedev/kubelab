@@ -18,18 +18,25 @@ dead for roughly ninety minutes and three separate green signals covered it.
 
 TWO REMEDIES ARE VALID, and a role must use one of them:
 
-1. **Bind to an address that exists before Docker starts** -- a LAN address on a
-   physical interface. No race to lose. This is what `coredns` does, because
-   rpi4 has a LAN address (`networking.nodes.rpi4.lan_ip`).
+1. **Bind to an address that exists before Docker starts** -- loopback, or none
+   at all (publish bare). No race to lose. This is what `coredns` does. A LAN
+   address on a physical interface is NOT such an address: networkd configures a
+   static address only once the link has a carrier, and coredns's LAN bind failed
+   the same way with the switch cable out (#2732, lesson-648).
 
-2. **Order the start after the address exists** -- a systemd oneshot with
-   `After=tailscaled.service` and `ExecStartPre=wait-for-tailscale-addr.sh`.
+2. **Order the start after the address exists** -- a systemd unit with
+   `After=tailscaled.service` that runs `wait-for-tailscale-addr.sh` before compose.
    This is what `beelink_services` and `glances` already do, and it is the only
    option for a node with no LAN address (rpi3 is not on 172.16.1.0/24).
 
 What must never happen again is a THIRD case: a Tailscale-bound port with
 neither remedy. That is what this guard forbids, fleet-wide, so the next role
 to follow #959's advice cannot silently inherit the race.
+
+It recognizes a Tailscale bind by the name of the variable it binds. A LAN bind
+has no such name: coredns's went through `coredns_health_bind_ip`. So the LAN
+half of remedy 1 is not checked here. `tests/test_coredns_port_binds.py` checks
+it by rendering the compose of coredns, the one role that ever bound a LAN address.
 """
 
 from __future__ import annotations
@@ -63,7 +70,7 @@ def _compose_templates() -> list[Path]:
 def _roles_binding_tailscale() -> list[tuple[str, Path, list[str]]]:
     out = []
     for tpl in _compose_templates():
-        hits = [m.group(0).strip() for m in _TS_BOUND_PORT.finditer(tpl.read_text())]
+        hits = [m.group(0).strip() for m in _TS_BOUND_PORT.finditer(tpl.read_text(encoding="utf-8"))]
         if hits:
             role = tpl.relative_to(ROLES).parts[0]
             out.append((role, tpl, hits))
@@ -74,7 +81,7 @@ def _role_has_boot_ordering(role: str) -> bool:
     """Does any unit template in this role implement remedy 2, fully?"""
     role_dir = ROLES / role
     for unit in role_dir.rglob("*.service.j2"):
-        text = unit.read_text()
+        text = unit.read_text(encoding="utf-8")
         if _ORDERED_AFTER_TAILSCALED.search(text) and _WAITS_FOR_ADDRESS.search(text):
             return True
     return False
@@ -119,7 +126,7 @@ def test_a_tailscale_bound_port_is_ordered_after_the_address_exists(role: str):
         "and runs `wait-for-tailscale-addr.sh`. At boot Docker will race "
         "tailscaled; when it wins, the bind fails and the container loses ALL its "
         "published ports while still reporting `running`.\n\n"
-        "Either bind to the node's LAN address (as `coredns` does), or copy the "
+        "Either bind loopback or publish bare (as `coredns` does), or copy the "
         "unit `beelink_services` and `glances` already use."
     )
 
@@ -128,6 +135,6 @@ def test_the_wait_script_the_units_reference_actually_exists():
     """A unit referencing a missing script fails at boot, which is the worst time."""
     script = REPO_ROOT / "infra/ansible/playbooks/files/wait-for-tailscale-addr.sh"
     assert script.is_file(), (
-        f"{script} is missing, but service templates reference it in ExecStartPre. "
+        f"{script} is missing, but service templates run it before compose. "
         "Every node using remedy 2 would fail to start its stack at boot."
     )

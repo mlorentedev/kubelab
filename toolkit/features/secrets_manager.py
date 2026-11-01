@@ -118,8 +118,15 @@ class SecretSpec:
     # Defaults to UNKNOWN so a new entry surfaces as unclassified rather than
     # being quietly assumed immortal.
     expiry: Expiry = Expiry.UNKNOWN
+    # How many days before expiry the reports turn this credential red (TOOL-126,
+    # #2744). None takes the report's window, 90 days by default. A credential
+    # whose whole life is 90 days or less needs its own, or it is red from the day
+    # it is issued and the column stops being read.
+    warn_days: int | None = None
 
     def __post_init__(self) -> None:
+        if self.warn_days is not None and self.warn_days <= 0:
+            raise ValueError(f"{self.key_path}: warn_days must be a positive number of days, got {self.warn_days}")
         # A username is not a secret, and an entry the toolkit mints is one
         # `credentials generate` and `rotate` may rewrite: on 2026-08-23 rotating
         # `basic_auth.user` renamed Gitea's only admin. Identities live in
@@ -681,7 +688,9 @@ SECRET_CATALOG: list[SecretSpec] = [
         key_path="apps.services.core.gitea.admin_token",
         description=(
             "Gitea API token for the superadmin (apps.auth.identities.superadmin); "
-            "creates organizations and reads whole-forge state for the reconciler"
+            "creates organizations and reads whole-forge state for the reconciler. "
+            "Scopes: read:admin, write:organization, read:repository, read:user. "
+            "It cannot read issues (no read:issue): the forge task view needs its own token"
         ),
         # EXTERNAL for the same reason as `bot_token`: Gitea mints it, only Gitea
         # honours it, and a generated string would pass every audit while
@@ -1226,7 +1235,7 @@ SECRET_CATALOG: list[SecretSpec] = [
         description="Fine-grained GitHub PAT, Commit statuses write on kubelab only (Argo CD notifications)",
         kind=SecretKind.EXTERNAL,
         services=("argocd",),
-        format_hint="fine-grained PAT (github_pat_…), statuses:write on kubelab, expiry set",
+        format_hint="fine-grained PAT (github_pat_…), statuses:write on kubelab, 90d expiry",
         rotate_note=(
             "Mint a new fine-grained token (Settings > Developer settings > Fine-grained tokens), "
             "repository access `mlorentedev/kubelab` only, Commit statuses: Read and write. "
@@ -1234,6 +1243,7 @@ SECRET_CATALOG: list[SecretSpec] = [
             "then `make deploy-argocd`, then revoke the old one."
         ),
         envs=("prod",),
+        warn_days=14,
     ),
     SecretSpec(
         key_path="argocd.github_webhook_secret",
@@ -1245,6 +1255,29 @@ SECRET_CATALOG: list[SecretSpec] = [
         rotate_note="Rotate on the GitHub webhook + common.enc.yaml, then `make deploy-argocd`.",
         envs=("prod",),
         sync_to_secret_manager=True,
+    ),
+    # =========================================================================
+    # Headscale host (VPS) — SEC-037
+    # =========================================================================
+    SecretSpec(
+        key_path="apps.services.core.headscale.audit_sources.audit_automation",
+        expiry=Expiry.NEVER,
+        description=(
+            "Source address the `audit_automation` audit key may connect from, rendered as "
+            "`from=` on its authorized_keys entry. Not a credential: network inventory, kept "
+            "out of the public tree. The key itself is declared in common.yaml (audit_identities)."
+        ),
+        kind=SecretKind.EXTERNAL,
+        services=("headscale",),
+        format_hint="an IPv4/IPv6 address or CIDR, or a comma-separated list of them",
+        value_pattern=r"[0-9A-Fa-f:./]+(,[0-9A-Fa-f:./]+)*",
+        rotate_note=(
+            "Update common.enc.yaml, then `make deploy TARGET=vps ENV=prod` "
+            "(or deploy-vps with `--tags headscale`). Removing it drops the `from=` pin."
+        ),
+        # The VPS is prod-only. The value lives in common.enc.yaml, which deploy-vps
+        # merges under the env file (`envs` is the audit dimension, ANSIBLE-033).
+        envs=("prod",),
     ),
     # =========================================================================
     # GCP hub (ADR-063) — read by cloud-init from Secret Manager, not by a human
@@ -1399,10 +1432,14 @@ SECRET_CATALOG: list[SecretSpec] = [
         description="Cloudflare account API token, Account API Tokens: Edit (mints the backup R2 tokens)",
         kind=SecretKind.EXTERNAL,
         services=("toolkit",),
+        format_hint="Cloudflare account API token with a TTL, 90d expiry",
         envs=("prod",),
+        warn_days=14,
         rotate_note=(
-            "Create a new account token (Account API Tokens: Edit, with a TTL) in the Cloudflare "
-            "dashboard, `toolkit secrets set` it in common, revoke the old one. Nothing deployed reads it."
+            "To extend it, edit the token in the Cloudflare dashboard and move its TTL (Edit, not "
+            "Roll): the value is kept, so SOPS does not change. To replace it (suspected exposure), "
+            "create a new account token (Account API Tokens: Edit, with a TTL), `toolkit secrets set` "
+            "it in common, revoke the old one. Nothing deployed reads it."
         ),
     ),
     # Offsite backup destination (BACKUP-044 / #1056, ADR-049 D3). Stored in
@@ -1603,13 +1640,15 @@ SECRET_CATALOG: list[SecretSpec] = [
         description="Fine-grained GitHub PAT giving the ace2 dev node its own machine identity (gh + git over HTTPS)",
         kind=SecretKind.EXTERNAL,
         services=("dev-node",),
-        format_hint="fine-grained PAT (github_pat_…), contents+pull-requests write, checks+statuses read, 90d expiry",
+        format_hint="fine-grained PAT (github_pat_…), contents+pull-requests write, checks+statuses read, ≤90d expiry",
         rotate_note=(
-            "EXPIRES — see docs/runbooks/dev-node-token-rotation.md. Mint a replacement, "
-            "`toolkit secrets set` it in common.enc.yaml, `make provision NODE=ace2 ENV=staging "
-            "TAGS=dev_node`, then revoke the old one."
+            "EXPIRES — see docs/runbooks/dev-node-token-rotation.md. Regenerate it on GitHub "
+            "(same name, new value), `toolkit secrets set` it in common.enc.yaml, then "
+            "`make provision NODE=ace2 ENV=staging TAGS=dev_node`. A token minted new instead "
+            "leaves the old one live: revoke it."
         ),
         envs=("staging",),
+        warn_days=14,
     ),
     # Apprise notification gateway (NOTIFY-001, ADR-044). Promoted to staging+prod.
     # bot-token is shared (common SOPS); chat IDs are per-env (dedicated Telegram
@@ -2453,13 +2492,22 @@ class SecretsManager:
 
         decrypted = yaml.safe_load(result.stdout) or {}
         value = self._resolve_key(decrypted, key_path)
-        return str(value) if value is not None else None
+        if value is None:
+            return None
+        if isinstance(value, (list, dict)):
+            # JSON, not str(): a repr is neither readable as JSON nor writable back
+            # with `secrets set --json`, so a structured value could not round-trip.
+            import json
 
-    def set_secret(self, env: str, key_path: str, value: str) -> bool:
+            return json.dumps(value)
+        return str(value)
+
+    def set_secret(self, env: str, key_path: str, value: object) -> bool:
         """Set a single secret value in the SOPS vault.
 
         Uses `sops set` to write the value directly into the encrypted file.
-        The key_path is dot-separated (e.g., 'aws.access_key_id').
+        The key_path is dot-separated (e.g., 'aws.access_key_id'). A string is
+        stored as a string; a list or a mapping is stored as that structure.
         """
         cm = self._cm(env)
         sops_file = cm.secrets_path / f"{env}.enc.yaml"

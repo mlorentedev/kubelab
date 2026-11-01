@@ -24,7 +24,7 @@ _E2E_DIR = Path(__file__).resolve().parent
 def _build_connectivity_domains() -> dict[str, str]:
     """Build probe domains from config values (single source of truth)."""
     common_path = _REPO_ROOT / "infra" / "config" / "values" / "common.yaml"
-    with open(common_path) as f:
+    with open(common_path, encoding="utf-8") as f:
         common = yaml.safe_load(f)
     default_domain = common["global"]["base_domain"]
 
@@ -32,7 +32,7 @@ def _build_connectivity_domains() -> dict[str, str]:
     for env in ("dev", "staging", "prod"):
         env_path = _REPO_ROOT / "infra" / "config" / "values" / f"{env}.yaml"
         if env_path.exists():
-            with open(env_path) as f:
+            with open(env_path, encoding="utf-8") as f:
                 env_config = yaml.safe_load(f) or {}
             base = env_config.get("global", {}).get("base_domain", default_domain)
         else:

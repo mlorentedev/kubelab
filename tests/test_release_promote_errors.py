@@ -21,7 +21,7 @@ WORKFLOW = REPO / ".github/workflows/release.yml"
 
 
 def _open_pr_step() -> dict[str, Any]:
-    job = yaml.safe_load(WORKFLOW.read_text())["jobs"]["promote-errors"]
+    job = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))["jobs"]["promote-errors"]
     return next(s for s in job["steps"] if s.get("name") == "Open errors promotion PR")
 
 

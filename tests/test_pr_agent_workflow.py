@@ -224,7 +224,7 @@ def test_the_publish_check_reads_the_marker_from_the_shared_registry() -> None:
     assert "harness/review-attestation.json" in guard
     assert "review_markers" in guard
     # The marker itself must NOT appear as a literal in the workflow or the script.
-    registry = json.loads((REPO_ROOT / "harness/review-attestation.json").read_text())
+    registry = json.loads((REPO_ROOT / "harness/review-attestation.json").read_text(encoding="utf-8"))
     marker = next(
         r["review_markers"][0]
         for r in registry["reviewers"]
@@ -497,7 +497,7 @@ def test_declare_unreviewed_step_reads_the_escape_from_the_registry_not_a_litera
     assert "harness/review-attestation.json" in step["run"]
     assert "escape.label" in step["run"]
     assert "escape.section" in step["run"]
-    registry = json.loads((REPO_ROOT / "harness/review-attestation.json").read_text())
+    registry = json.loads((REPO_ROOT / "harness/review-attestation.json").read_text(encoding="utf-8"))
     assert registry["escape"]["label"] not in step["run"], (
         "the escape label is hardcoded in the workflow; the registry is the SSOT"
     )
@@ -586,8 +586,8 @@ def _run_reviewable_step(tmp_path: pathlib.Path, toml_text: str, files: list[str
     assert proc.returncode == 0, (
         f"the reviewable step exited {proc.returncode}.\n--- stdout ---\n{proc.stdout}\n--- stderr ---\n{proc.stderr}"
     )
-    parsed = dict(line.split("=", 1) for line in output.read_text().splitlines() if "=" in line)
-    calls_made = calls.read_text().splitlines()
+    parsed = dict(line.split("=", 1) for line in output.read_text(encoding="utf-8").splitlines() if "=" in line)
+    calls_made = calls.read_text(encoding="utf-8").splitlines()
     return parsed.get("any"), calls_made
 
 
@@ -810,8 +810,8 @@ def _run_resolve(tmp_path: pathlib.Path, **scenario: str) -> tuple[dict[str, str
         f"resolution failure — the verdict is `skip`, not a broken job.\n"
         f"--- stdout ---\n{proc.stdout}\n--- stderr ---\n{proc.stderr}"
     )
-    parsed = dict(line.split("=", 1) for line in output.read_text().splitlines() if "=" in line)
-    return parsed, calls.read_text().splitlines()
+    parsed = dict(line.split("=", 1) for line in output.read_text(encoding="utf-8").splitlines() if "=" in line)
+    return parsed, calls.read_text(encoding="utf-8").splitlines()
 
 
 @_needs_bash
@@ -932,14 +932,14 @@ def _fallback_model_names() -> set[str]:
     transport, while the pool says `nan/mimo-v2.6-flash` because that is the provider
     a reviewer records. Same model, two namespaces.
     """
-    raw = re.search(r"^fallback_models\s*=\s*\[(.*?)\]", PR_AGENT_CONFIG.read_text(), re.M | re.S)
+    raw = re.search(r"^fallback_models\s*=\s*\[(.*?)\]", PR_AGENT_CONFIG.read_text(encoding="utf-8"), re.M | re.S)
     assert raw, "fallback_models not found in .pr_agent.toml"
     return {m.split("/")[-1] for m in re.findall(r'"([^"]+)"', raw.group(1))}
 
 
 def _primary_model_name() -> str:
     """The model PR-Agent actually reviews with, transport prefix stripped."""
-    m = re.search(r'^model\s*=\s*"([^"]+)"', PR_AGENT_CONFIG.read_text(), re.M)
+    m = re.search(r'^model\s*=\s*"([^"]+)"', PR_AGENT_CONFIG.read_text(encoding="utf-8"), re.M)
     assert m, "model not found in .pr_agent.toml"
     return m.group(1).split("/")[-1]
 
@@ -959,7 +959,9 @@ def test_every_model_pr_agent_reviews_with_is_admitted_in_the_reviewer_pool() ->
     # Matched on each member's `pr_agent.model` (TOOL-082), not on the id: a
     # member admitted for the adversarial review is not thereby a CI reviewer.
     admitted = {
-        e["pr_agent"]["model"].split("/")[-1] for e in json.loads(REVIEWER_POOL.read_text())["pool"] if "pr_agent" in e
+        e["pr_agent"]["model"].split("/")[-1]
+        for e in json.loads(REVIEWER_POOL.read_text(encoding="utf-8"))["pool"]
+        if "pr_agent" in e
     }
     for model in {_primary_model_name()} | _fallback_model_names():
         assert model in admitted, (
@@ -1292,7 +1294,7 @@ def _run_open_step(tmp_path: pathlib.Path, state: str) -> dict[str, str]:
         ["bash", "-c", step["run"]], cwd=tmp_path, env=env, capture_output=True, text=True, timeout=60
     )
     assert proc.returncode == 0, proc.stdout + proc.stderr
-    return dict(line.split("=", 1) for line in output.read_text().splitlines() if "=" in line)
+    return dict(line.split("=", 1) for line in output.read_text(encoding="utf-8").splitlines() if "=" in line)
 
 
 @_needs_bash
@@ -1471,7 +1473,7 @@ def test_the_anthropic_models_the_workflow_configures_are_the_allowlist() -> Non
     env = _attempts()["pr_agent_anthropic_first"]["env"]
     assert set(json.loads(env["CONFIG__CLAUDE_ADAPTIVE_THINKING_MODELS_OVERRIDE"])) == allowed
     assert allowed <= set(json.loads(env["CONFIG__NO_TEMPERATURE_MODELS"]))
-    pool = json.loads(REVIEWER_POOL.read_text())["pool"]
+    pool = json.loads(REVIEWER_POOL.read_text(encoding="utf-8"))["pool"]
     named = {m["pr_agent"]["model"] for m in pool if m.get("pr_agent", {}).get("model", "").startswith("anthropic/")}
     assert named == allowed
 
@@ -1511,8 +1513,10 @@ def test_the_job_outlasts_its_worst_two_attempt_path() -> None:
     nan = int(attempts["pr_agent"]["timeout-minutes"]) * 60
     preflight = 90 * (1 + len(json.loads(_preflight_env()["DECLARED_FALLBACK_MODELS"])))
     draw = 2 * 30
-    assert re.search(r"PREFLIGHT_TIMEOUT:-90\}", (REPO_ROOT / "scripts/pr-agent-model-preflight.sh").read_text())
-    assert re.search(r"ROUTE_PROBE_TIMEOUT:-30\}", ROUTE.read_text())
+    assert re.search(
+        r"PREFLIGHT_TIMEOUT:-90\}", (REPO_ROOT / "scripts/pr-agent-model-preflight.sh").read_text(encoding="utf-8")
+    )
+    assert re.search(r"ROUTE_PROBE_TIMEOUT:-30\}", ROUTE.read_text(encoding="utf-8"))
     overhead = 3 * 60
     assert anthropic + nan + preflight + draw + overhead < int(_review_job()["timeout-minutes"]) * 60
 

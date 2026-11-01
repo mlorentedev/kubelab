@@ -19,7 +19,7 @@ from toolkit.features import terraform_runner as tr
 from toolkit.features.terraform_plan_guard import refused, summary
 
 REPO = Path(__file__).resolve().parent.parent
-MAKEFILE = (REPO / "Makefile").read_text()
+MAKEFILE = (REPO / "Makefile").read_text(encoding="utf-8")
 
 
 def _plan(*changes: tuple[str, list[str], str | None]) -> dict:
@@ -174,7 +174,7 @@ def test_untaint_is_a_target_that_touches_state_only() -> None:
 
 def test_every_dns_record_outlives_a_slow_create() -> None:
     """The cause of lesson-543 is the provider's 30s default timeout."""
-    text = "".join(p.read_text() for p in sorted((REPO / "infra/terraform/dns").glob("*.tf")))
+    text = "".join(p.read_text(encoding="utf-8") for p in sorted((REPO / "infra/terraform/dns").glob("*.tf")))
     records = re.findall(r'^resource "cloudflare_record" "(\w+)" \{(.*?)^\}', text, re.M | re.S)
     assert records
     for name, body in records:

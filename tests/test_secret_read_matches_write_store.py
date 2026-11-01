@@ -221,7 +221,9 @@ def _run_envs() -> tuple[str, tuple[str, ...]]:
     environment the target accepts that has a SOPS file, not only the declared one.
     """
     var = re.search(r"-e (\w+)=\{env\}", (REPO / "toolkit/cli/infra.py").read_text(encoding="utf-8"))
-    target = re.search(r"^provision:.*?\$\(filter ([\w ]+),\$\(ENV\)\)", (REPO / "Makefile").read_text(), re.M | re.S)
+    target = re.search(
+        r"^provision:.*?\$\(filter ([\w ]+),\$\(ENV\)\)", (REPO / "Makefile").read_text(encoding="utf-8"), re.M | re.S
+    )
     assert var and target, "the provision path changed: re-derive what it overrides"
     envs = tuple(e for e in target.group(1).split() if (SECRETS / f"{e}.enc.yaml").exists())
     return var.group(1), envs

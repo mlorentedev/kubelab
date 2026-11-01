@@ -63,12 +63,35 @@ networking:
       # The AP's fixed 2.4 GHz channel, per site: picked at bring-up from a scan
       # of the site's spectrum. Must be one the regdomain allows.
       channel: 6
-      # Shaped slightly below the measured rate (AC8). Read from a laptop at the
-      # temporary site (3.3 and 1.5 Mbps); which one is the download is
-      # re-measured on the RPi4 at bring-up.
+      # The band the uplink associates on, per site: "5GHz", "2.4GHz", or "" for
+      # either. At the hotel site 2.4 GHz received at MCS 1 (13 Mbit/s) at -57 dBm,
+      # beside the lab AP's own 2.4 GHz channel, while its APs also serve 5 GHz.
+      band: "5GHz"
+      # Shaped at 90% of the lower of two measured rates (AC8), so the queue forms
+      # here. Measured 2026-10-31 03:20Z on the site's paid plan, 5 GHz, with the
+      # shaper lifted: the uplink adapter's own rx/tx counters over two 60 s runs of
+      # six parallel streams each way, 27070/26700 kbit/s down and 4041/4026 up. A
+      # second server read 14 Mbit/s down from the edge and the laptop alike, so that
+      # bound is the server's path, not the line. On 2.4 GHz the same plan read
+      # 4730/4939 down; the free plan read 3.3 and 1.5 Mbps.
       bandwidth:
-        down_kbit: 2970
-        up_kbit: 1350
+        down_kbit: 24000
+        up_kbit: 3600
+        # The share of down_kbit an image pull gets, against which a pull is sized
+        # (_includes/image-pull.yml). Open WebUI's 1.62 GB took 133.7 min on ace2,
+        # against 72.7 at down_kbit, with the shaper binding (#2703, 2026-10-30).
+        # Measured on the free plan; not yet re-measured on the paid one.
+        pull_goodput: 0.54
+      # dockerd's attempts at each layer of a pull, for every daemon behind the edge
+      # and for the bound on a pull's attempt (#2834). A pull's connections end in
+      # `unexpected EOF` about every 10 minutes here. dockerd resumes the layer on each
+      # of its own attempts, but after the last it fails the pull and drops every
+      # layer the pull fetched. Docker's default of 5 lost a 1.6 GB pull three times
+      # running (ace2, 2026-10-30). The pause after attempt k is 5k seconds, uncapped:
+      # 40 attempts sleep at most 65 minutes in all, which is also how long a blob
+      # that never downloads takes to fail. tests/test_image_pull_budget.py holds it
+      # between those two bounds.
+      max_download_attempts: 40
     # The lab's own Wi-Fi, the same at every site. It reuses the old home network
     # so rpi3 (no screen) and saved devices rejoin unchanged; the AP takes the
     # old home router's address. A future uplink may land in this common ISP
@@ -424,6 +447,13 @@ networking:
       dashboard:
         display_name: "Beelink"
     jetson:
+      # Out of the lab for some weeks (October 2026) and coming back. `retired`
+      # means what it means on `networking.aws`: this block is how the node is
+      # rebuilt, not a machine that answers today. The generated inventory and
+      # the infra suite skip it. Its DHCP reservation, its DNS entry and rpi4's
+      # `PermitOpen` stay, so its return is this one flag: remove it, regenerate
+      # the inventory, run `make test-infra ENV=prod`.
+      retired: true
       # ADR-028 tier. Machine-readable projection of the topology the ADR
       # narrates; consumed by the backup trigger model (BACKUP-044).
       location: "on-demand"
@@ -541,16 +571,19 @@ ci:
         strict: false
         # Exact check-run / commit-status names, verified against a real head sha
         # rather than transcribed from the workflow: a required context that never
-        # reports blocks every merge forever. `review-attestation` is a commit
-        # STATUS, the rest are check-runs; both kinds are matched by name here.
+        # reports blocks every merge forever. `review-attestation` and
+        # `deploy-shape` are commit STATUSES, the rest are check-runs; both kinds
+        # are matched by name here.
         # `Tests` runs unconditionally on every pull request (ci.yml has no `if:`
         # and no paths filter on it), so requiring it costs no extra CI minutes —
         # only the latency of waiting for a job that was already running.
-        # `deploy-shape` is the check-run that deploy-shape.yml publishes, NOT its
+        # `deploy-shape` is the status that deploy-shape.yml publishes, NOT its
         # job ("Judge the diff shape"), which fails only when nothing could be judged.
-        # The check-run carries all three verdicts: success (a mechanical staging
-        # deploy), neutral (any other PR; GitHub counts neutral as passing) and
-        # failure (unknown, fail closed). DELIVERY-004 AC3, #1619.
+        # The status is success for a mechanical staging deploy and for any other
+        # PR (the verdict is in its description), and failure when unknown (fail
+        # closed). DELIVERY-004 AC3, #1619. It was a check-run until DELIVERY-011
+        # (#2714): GitHub filed it under another workflow's suite, and once that
+        # workflow ran again on the sha the context read "Expected" for good.
         required_contexts:
           - Validate
           - Detect Changes
@@ -663,6 +696,11 @@ argocd:
   # Pinned for the same reason one layer down: the GCP hub installs its own helm
   # at boot, and an unattended recreate must not pick up whatever is current.
   helm_version: "v3.18.4"
+  # The in-cluster delivery watcher (GITOPS-003 AC2, #2645): reads master HEAD's
+  # `argocd/kubelab-<env>` status from GitHub. Runs a stdlib-only script, so any
+  # interpreter release works; pinned so the CronJob never upgrades itself.
+  delivery_watcher:
+    image: python:3.13.16-alpine
   # Hub: clusters.hub -> networking.<provider>.tailscale_dns — MagicDNS (ADR-025).
   # Named via clusters.hub rather than a provider literal: this comment said
   # networking.aws until prod moved to gcp1, and a comment restating one side of
@@ -1551,6 +1589,16 @@ apps:
         default_port: 8080
         stun_port: 3478
         health_path: /health
+        # SEC-037 (#2734): restricted read-only SSH identities on the VPS deploy user.
+        # Each key is authorized with `restrict` and the forced command
+        # /usr/local/bin/headscale-audit (role `headscale`), never exclusively.
+        # `name` becomes the key's comment; `key` is the bare public key. An optional
+        # source address lives in SOPS at `audit_sources.<name>` (network inventory,
+        # public repo). Revoke by deleting the entry and deploying: the role removes
+        # every key carrying its forced command that is no longer declared here.
+        audit_identities:
+          - name: audit_automation
+            key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILevHjcCW1uOUGcyMnWTFqixFPv4RcEue2nx29crqND0"
 
     # Automation & CI/CD
     automation:

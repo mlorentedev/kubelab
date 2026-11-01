@@ -161,6 +161,16 @@
   when: agent_stack_webui_configured | bool
   tags: [agent_stack]
   block:
+    # Several GB through the edge's shaped uplink: sized before it starts (#2742).
+    # First, so a refused pull leaves every file below as it was and the rerun
+    # still sees the change that recreates the container (#2812). The MCP bridge
+    # is built further down, not pulled (`pull_policy: never`).
+    - name: Pull the Open WebUI image
+      ansible.builtin.import_tasks: "{{ playbook_dir }}/_includes/image-pull.yml"
+      vars:
+        image_pull_name: Open WebUI
+        image_pull_images: ["{{ agent_stack_webui.image }}"]
+
     # Registered, not notified: the recreate has to happen before the drift
     # checks below read the container, not at the end of the play.
     - name: Render the Open WebUI env file
@@ -223,13 +233,6 @@
         mode: "0600"
       when: agent_stack_mcp_bridge_configured | bool
       no_log: true
-
-    - name: Pull the Open WebUI image
-      ansible.builtin.command: >-
-        docker compose -p {{ agent_stack_webui_project }}
-        -f {{ agent_stack_dir }}/compose-webui.yml pull
-      register: _agent_stack_pull
-      changed_when: "'Pull complete' in _agent_stack_pull.stderr or 'Downloaded' in _agent_stack_pull.stderr"
 
     # Built from the context above. The image ID is the measurement: a cached
     # build of an unchanged context gives the same one, so a rerun is no change.
@@ -366,12 +369,21 @@
         group: root
         mode: "0644"
 
-    - name: Enable the Open WebUI unit at boot
+    # Started, not only enabled: a unit whose wait for the address failed at boot
+    # stays failed until something starts it (#2500). On a unit already active
+    # this is a no-op; on one that is not, its ExecStart recreates the container.
+    - name: Enable and start the Open WebUI unit
       ansible.builtin.systemd:
         name: agent-stack-webui.service
         enabled: true
+        state: started
         daemon_reload: true
       when: not ansible_check_mode
+
+    - name: Wait for the Open WebUI unit to bring Open WebUI up
+      ansible.builtin.import_tasks: "{{ playbook_dir }}/_includes/stack-unit-settled.yml"
+      vars:
+        stack_unit_settled_name: agent-stack-webui.service
 
 # Imported, not included: an include is dynamic and its tasks do not inherit
 # the role's `agent_stack` tag, so `--tags agent_stack` would skip all of them.

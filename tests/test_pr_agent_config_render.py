@@ -166,7 +166,7 @@ def _nan_chain_from_pool() -> list[str]:
     NaN as an OpenAI model. A `route: risk` member has no weight and is drawn
     only by CI's risk route, so it is not a fallback either.
     """
-    pool = json.loads(REVIEWER_POOL.read_text())["pool"]
+    pool = json.loads(REVIEWER_POOL.read_text(encoding="utf-8"))["pool"]
     members = [
         entry["pr_agent"]
         for entry in pool

@@ -3,15 +3,26 @@
 Runs the SHIPPED `kubelab-notify.sh` end to end with `systemctl`, `journalctl` and `curl`
 replaced by shims on PATH: the claim is about what reaches the operator's phone, so the
 test counts the requests the script makes, never the text that describes them.
+`titles()` is what reached the phone; `attempts()` is every request, refused ones included.
+A notice n8n refused waits in the spool until `--flush` delivers it (#2787).
 """
 
 from __future__ import annotations
 
+import calendar
+import fcntl
 import json
 import os
+import re
+import shlex
+import shutil
 import stat
 import subprocess
+import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -25,61 +36,166 @@ TTL = int(_defaults()["node_notify_state_ttl_seconds"])  # type: ignore[call-ove
 class Node:
     """A scratch directory standing in for one node: the rendered script, its state and its shims."""
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, **render: object) -> None:
         self.root = root
         self.state = root / "state"
+        self.spool = root / "spool"
         self.sent = root / "sent.jsonl"
+        self.tried = root / "attempts.jsonl"
         self.result = root / "result"
         self.curl_exit = root / "curl-exit"
+        # The exit the next request gets after this one: n8n taking one request, then none.
+        self.curl_next = root / "curl-next"
+        self.systemctl = root / "systemctl.log"
+        self.reset_exit = root / "reset-exit"
+        self.environment = root / "environment"
         (root / "bin").mkdir()
-        (root / "secret").write_text("tok")
+        self.environment.mkdir()
+        (root / "secret").write_text("tok", encoding="utf-8")
         script = _render(
             "kubelab-notify.sh.j2",
             node_notify_secret_file=str(root / "secret"),
             node_notify_state_dir=str(self.state),
+            node_notify_spool_dir=str(self.spool),
+            **render,
         )
         self.script = root / "notify.sh"
-        self.script.write_text(script)
+        self.script.write_text(script, encoding="utf-8")
         self.script.chmod(0o700)
-        self._shim("systemctl", 'printf "Result=%s\\n" "$(cat "$NODE_RESULT")"')
+        # `systemctl show -p <property> <unit>`: the unit's last result, or the
+        # Environment= its unit file declares. Every call is logged, so a test
+        # can see what the script asked systemd to do.
+        self._shim(
+            "systemctl",
+            'printf "%s\\n" "$*" >> "$NODE_SYSTEMCTL"; case "$*" in'
+            ' reset-failed*) exit "$(cat "$NODE_RESET_EXIT" 2>/dev/null || echo 0)" ;;'
+            " start*) exit 0 ;;"
+            ' *Environment*) printf "Environment=%s\\n" "$(cat "$NODE_ENVIRONMENT/${@: -1}" 2>/dev/null)" ;;'
+            ' *) printf "Result=%s\\n" "$(cat "$NODE_RESULT")" ;; esac',
+        )
         self._shim("journalctl", 'echo "unit output"')
+        # Every request lands in the attempts, and only an accepted one in what was sent.
         self._shim(
             "curl",
             'cat >/dev/null; d=""; while [ $# -gt 0 ]; do [ "$1" = -d ] && d="$2"; shift; done;'
-            ' printf "%s\\n" "$d" >> "$NODE_SENT"; exit "$(cat "$NODE_CURL_EXIT" 2>/dev/null || echo 0)"',
+            ' printf "%s\\n" "$d" >> "$NODE_TRIED"; rc="$(cat "$NODE_CURL_EXIT" 2>/dev/null || echo 0)";'
+            ' [ -f "$NODE_CURL_NEXT" ] && mv "$NODE_CURL_NEXT" "$NODE_CURL_EXIT";'
+            ' [ "$rc" = 0 ] && printf "%s\\n" "$d" >> "$NODE_SENT"; exit "$rc"',
         )
         self.set_result("exit-code")
 
     def _shim(self, name: str, body: str) -> None:
         path = self.root / "bin" / name
-        path.write_text(f"#!/bin/bash\n{body}\n")
+        path.write_text(f"#!/bin/bash\n{body}\n", encoding="utf-8")
         path.chmod(path.stat().st_mode | stat.S_IXUSR)
 
-    def set_result(self, value: str) -> None:
-        self.result.write_text(value)
+    def declare(self, environment: str, unit: str = UNIT) -> None:
+        """What `Environment=` lines the unit's file carries, as systemd prints them."""
+        (self.environment / unit).write_text(environment, encoding="utf-8")
 
-    def run(self, *args: str, unit: str = UNIT) -> subprocess.CompletedProcess[str]:
-        env = {
+    def set_result(self, value: str) -> None:
+        self.result.write_text(value, encoding="utf-8")
+
+    def _env(self) -> dict[str, str]:
+        return {
             **os.environ,
             "PATH": f"{self.root / 'bin'}:{os.environ['PATH']}",
             "NODE_RESULT": str(self.result),
             "NODE_SENT": str(self.sent),
+            "NODE_TRIED": str(self.tried),
             "NODE_CURL_EXIT": str(self.curl_exit),
+            "NODE_CURL_NEXT": str(self.curl_next),
+            "NODE_SYSTEMCTL": str(self.systemctl),
+            "NODE_RESET_EXIT": str(self.reset_exit),
+            "NODE_ENVIRONMENT": str(self.environment),
         }
+
+    def run(self, *args: str, unit: str = UNIT) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            ["bash", str(self.script), *args, unit], capture_output=True, text=True, env=env, timeout=60
+            ["bash", str(self.script), *args, unit], capture_output=True, text=True, env=self._env(), timeout=60
         )
 
-    def titles(self) -> list[str]:
+    def flush(self) -> subprocess.CompletedProcess[str]:
+        """The spool unit's run: deliver what n8n refused before."""
+        return subprocess.run(
+            ["bash", str(self.script), "--flush"], capture_output=True, text=True, env=self._env(), timeout=60
+        )
+
+    def start(self, *args: str, unit: str = UNIT) -> subprocess.Popen[str]:
+        """The script in the background, as systemd starts a second notice while the first is still out."""
+        return subprocess.Popen(
+            ["bash", str(self.script), *args, unit],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=self._env(),
+        )
+
+    @contextmanager
+    def locked(self, unit: str = UNIT) -> Iterator[None]:
+        """Hold the unit's lock, as a notice of it does while its page is out."""
+        self.state.mkdir(exist_ok=True)
+        with open(self.state / f"{unit}.lock", "w", encoding="utf-8") as handle:
+            fcntl.flock(handle, fcntl.LOCK_EX)
+            yield
+
+    @contextmanager
+    def spool_locked(self) -> Iterator[None]:
+        """Hold the spool's lock, as a flush does while it delivers what waits there."""
+        self.spool.mkdir(exist_ok=True)
+        with open(self.spool / ".lock", "w", encoding="utf-8") as handle:
+            fcntl.flock(handle, fcntl.LOCK_EX)
+            yield
+
+    def envelopes(self) -> list[dict[str, Any]]:
         if not self.sent.exists():
             return []
-        return [json.loads(line)["title"] for line in self.sent.read_text().splitlines()]
+        return [json.loads(line) for line in self.sent.read_text(encoding="utf-8").splitlines()]
+
+    def titles(self) -> list[str]:
+        return [envelope["title"] for envelope in self.envelopes()]
+
+    def attempts(self) -> int:
+        return len(self.tried.read_text(encoding="utf-8").splitlines()) if self.tried.exists() else 0
+
+    def spooled(self) -> list[Path]:
+        """The notices waiting for delivery, oldest first; a file still being written is not one."""
+        return sorted(self.spool.glob("[0-9]*")) if self.spool.exists() else []
+
+    def starts(self) -> list[str]:
+        if not self.systemctl.exists():
+            return []
+        return [line for line in self.systemctl.read_text(encoding="utf-8").splitlines() if line.startswith("start")]
+
+    def resets(self) -> list[str]:
+        """The units the script asked systemd to clear the failed state of."""
+        if not self.systemctl.exists():
+            return []
+        return [
+            line.split()[-1]
+            for line in self.systemctl.read_text(encoding="utf-8").splitlines()
+            if line.startswith("reset-failed")
+        ]
 
     def age_state(self, seconds: int, unit: str = UNIT) -> None:
-        """Pretend the last page went out `seconds` ago."""
-        path = self.state / unit
-        count, first, last = path.read_text().split()
-        path.write_text(f"{count} {first} {int(last) - seconds}\n")
+        """Pretend the incident began `seconds` ago, and so did its last page, if one was delivered.
+
+        A `last` of 0 means none was, and stays 0: aged, it would turn negative,
+        which the script reads as a corrupt state and drops.
+        """
+        self.write_state(*self.read_state(unit), unit=unit, first_ago=seconds, last_ago=seconds)
+
+    def read_state(self, unit: str = UNIT) -> tuple[int, int, int]:
+        count, first, last = (self.state / unit).read_text(encoding="utf-8").split()
+        return int(count), int(first), int(last)
+
+    def write_state(
+        self, count: int, first: int, last: int, *, first_ago: int = 0, last_ago: int = 0, unit: str = UNIT
+    ) -> None:
+        self.state.mkdir(exist_ok=True)
+        (self.state / unit).write_text(
+            f"{count} {first - first_ago} {last - last_ago if last else 0}\n", encoding="utf-8"
+        )
 
 
 @pytest.fixture
@@ -135,6 +251,314 @@ def test_a_success_after_failures_sends_one_recovery_and_clears_the_state(node: 
     assert "failed" in node.titles()[-1] and len(node.titles()) == 3, "a new incident pages again"
 
 
+# The failure notifier for UNIT, read from the consumers' own `OnFailure=` line rather
+# than rebuilt by the formula the script uses, so the two cannot agree by construction.
+_ON_FAILURE = re.search(r"^OnFailure=(\S+)$", _render("kubelab-maintenance.service.j2"), re.MULTILINE)
+assert _ON_FAILURE, "the maintenance unit no longer declares OnFailure="
+NOTIFIER = _ON_FAILURE.group(1).replace("%n", UNIT)
+
+
+def test_a_delivered_recovery_clears_the_failed_page_of_its_incident(node: Node) -> None:
+    """#2733: a page n8n refused left its notifier failed, and nothing else ever ran it again.
+
+    The next failure of the unit would restart the same instance and replace its
+    result, but a recovered unit does not fail again, so the failed notifier
+    outlived the incident it reported, on `systemctl --failed` and in Glances.
+    Since #2787 a refused page is kept rather than failing its notifier, so the
+    state here is one the script before it left: an incident with no page recorded.
+    """
+    node.write_state(1, int(time.time()), 0)
+    node.set_result("success")
+    assert node.run("--recovered").returncode == 0
+    assert "recovered" in node.titles()[-1], "the recovery of an incident whose page was refused was not sent"
+    assert node.resets() == [NOTIFIER]
+
+
+# What the spool's unit is called, read from the unit the role installs beside it.
+SPOOL_UNIT = f"{_defaults()['node_notify_spool_unit_name']}.service"
+
+
+def test_a_refused_page_is_kept_and_the_next_failure_sends_nothing(node: Node) -> None:
+    """#2787: behind a down edge the page failed at once on DNS, and nothing sent it later.
+
+    It now waits in the spool, and counts as sent: the next failure of the unit
+    neither tries again nor keeps a second copy.
+    """
+    node.curl_exit.write_text("6", encoding="utf-8")
+    result = node.run()
+    assert result.returncode == 0, "a kept notice failed its notifier, the trace #2787 found on ace2"
+    assert node.titles() == []
+    [kept] = node.spooled()
+    assert kept.name.endswith(f"-{UNIT}")
+    assert stat.S_IMODE(kept.stat().st_mode) == 0o600
+    tried = node.attempts()
+    node.run()
+    assert node.attempts() == tried, "the next failure tried again for a notice already kept"
+    assert len(node.spooled()) == 1
+
+
+def test_the_flush_delivers_a_kept_page_once_with_the_time_it_happened(node: Node) -> None:
+    node.curl_exit.write_text("6", encoding="utf-8")
+    before = int(time.time())
+    node.run()
+    after = int(time.time())
+    node.curl_exit.write_text("0", encoding="utf-8")
+    # n8n takes this one request: a flush that left the notice in the spool would send it again, refused.
+    node.curl_next.write_text("6", encoding="utf-8")
+    assert node.flush().returncode == 0
+    [title] = node.titles()
+    found = re.search(r"failed on \S+ \(at (\S+)Z, delivered late\)$", title)
+    assert found, title
+    at = calendar.timegm(time.strptime(found.group(1), "%Y-%m-%dT%H:%M:%S"))
+    assert before <= at <= after, f"{found.group(1)}Z is not when the page was refused"
+    assert node.spooled() == []
+    node.curl_exit.write_text("0", encoding="utf-8")
+    node.flush()
+    assert len(node.titles()) == 1, "a second flush delivered the page again"
+
+
+def test_a_refused_flush_keeps_the_notice_and_fails(node: Node) -> None:
+    """The spool unit failing is the trace of a notice not yet delivered."""
+    node.curl_exit.write_text("6", encoding="utf-8")
+    node.run()
+    assert node.flush().returncode != 0
+    assert len(node.spooled()) == 1
+
+
+def test_a_refused_flush_stops_at_the_oldest_notice(node: Node) -> None:
+    """Order is the point of the spool: the next notice must not go out ahead of a refused one."""
+    node.curl_exit.write_text("6", encoding="utf-8")
+    node.run()
+    node.run(unit="node-backup-ship.service")
+    tried = node.attempts()
+    node.flush()
+    assert node.attempts() == tried + 1
+    assert len(node.spooled()) == 2
+
+
+def test_a_notice_does_not_overtake_one_still_kept(node: Node) -> None:
+    """n8n's router reads a `page` that is not marked resolved as a failure.
+
+    A recovery sent while its failure still waited in the spool would arrive
+    first, and the failure delivered after it would open an alarm for an
+    incident already closed.
+    """
+    node.curl_exit.write_text("6", encoding="utf-8")
+    node.run()
+    node.curl_exit.write_text("0", encoding="utf-8")
+    node.set_result("success")
+    tried = node.attempts()
+    assert node.run("--recovered").returncode == 0
+    assert node.attempts() == tried, "the recovery went out ahead of the failure it closes"
+    assert node.starts() == [f"start --no-block {SPOOL_UNIT}"], "nothing asked for the spool to be delivered"
+    assert node.flush().returncode == 0
+    failure, recovery = node.titles()
+    assert "failed on" in failure and "recovered" in recovery, node.titles()
+    assert node.spooled() == []
+
+
+def test_a_notice_finding_the_spool_locked_is_kept_behind_the_flush(node: Node) -> None:
+    """A flush holds the spool while it delivers what waits there.
+
+    A notice sent directly in that window, with the spool empty when it looked,
+    could still reach n8n ahead of one the flush has yet to deliver.
+    """
+    with node.spool_locked():
+        result = node.run()
+    assert result.returncode == 0, result.stderr
+    assert node.attempts() == 0, "the notice went out while a flush held the spool"
+    assert len(node.spooled()) == 1
+    assert node.starts() == [f"start --no-block {SPOOL_UNIT}"], "nothing asked for the spool to be delivered"
+
+
+def test_a_flush_that_finds_the_spool_busy_leaves_it_to_the_run_holding_it(tmp_path: Path) -> None:
+    """Two flushes delivering at once would send the same notice twice.
+
+    The run holding the spool decides the outcome, so this one exits 0 and the
+    timer's next run takes whatever is left.
+    """
+    node = Node(tmp_path, node_notify_lock_wait_seconds=1)
+    node.curl_exit.write_text("6", encoding="utf-8")
+    node.run()
+    node.curl_exit.write_text("0", encoding="utf-8")
+    tried = node.attempts()
+    with node.spool_locked():
+        result = node.flush()
+    assert result.returncode == 0, result.stderr
+    assert node.attempts() == tried, "a flush delivered while another held the spool"
+    assert len(node.spooled()) == 1
+    assert "busy" in result.stderr
+
+
+def test_a_refused_recovery_is_kept_and_closes_the_incident(node: Node) -> None:
+    node.run()
+    node.set_result("success")
+    node.curl_exit.write_text("6", encoding="utf-8")
+    assert node.run("--recovered").returncode == 0
+    assert not (node.state / UNIT).exists()
+    assert node.resets() == [NOTIFIER]
+    [kept] = node.spooled()
+    assert json.loads(kept.read_text(encoding="utf-8"))["status"] == "resolved"
+
+
+def test_a_reminder_of_a_page_still_kept_is_folded_into_it(node: Node) -> None:
+    """Hours of outage would otherwise deliver one late `still failing` per hour, all at once."""
+    node.curl_exit.write_text("6", encoding="utf-8")
+    node.run()
+    node.age_state(REMINDER + 5)
+    node.run()
+    assert len(node.spooled()) == 1
+
+
+def test_a_reminder_is_folded_only_into_a_page_of_its_own_unit(node: Node) -> None:
+    """Another unit's kept page says nothing about this one, whose reminder is kept behind it."""
+    other = "node-backup-ship.service"
+    node.run()
+    node.curl_exit.write_text("6", encoding="utf-8")
+    node.run(unit=other)
+    node.age_state(REMINDER + 5)
+    node.run()
+    kept = node.spooled()
+    assert len(kept) == 2, "a reminder was folded into another unit's page"
+    assert kept[1].name.endswith(f"-{UNIT}"), [path.name for path in kept]
+    assert "still failing" in json.loads(kept[1].read_text(encoding="utf-8"))["title"]
+
+
+def test_exercising_the_path_still_fails_when_nothing_was_delivered(node: Node) -> None:
+    """`make maintain-notify-test` reads the notifier's exit status as the delivery result."""
+    node.set_result("success")
+    node.curl_exit.write_text("6", encoding="utf-8")
+    assert node.run().returncode != 0
+    assert node.spooled() == []
+
+
+def test_a_healthy_run_with_no_incident_resets_nothing(node: Node) -> None:
+    node.set_result("success")
+    node.run("--recovered")
+    assert node.resets() == []
+
+
+def test_a_reset_systemd_refuses_does_not_fail_a_delivered_recovery(node: Node) -> None:
+    """The recovery reached the phone; failing here would leave a new failed unit for a closed incident."""
+    node.run()
+    node.set_result("success")
+    node.reset_exit.write_text("1", encoding="utf-8")
+    assert node.run("--recovered").returncode == 0
+    assert node.resets() == [NOTIFIER], "the reset was never attempted"
+    assert not (node.state / UNIT).exists()
+
+
+def test_an_undelivered_incident_ages_from_its_first_failure(node: Node) -> None:
+    """#2733: measured from a `last` of 0, an incident whose only page was refused read as stale at once.
+
+    A `last` of 0 is now a page neither delivered nor kept: the script before
+    #2787 left it, and so does a notice that dies before it is spooled.
+    """
+    node.write_state(1, int(time.time()), 0)
+    node.age_state(REMINDER + 5)
+    node.set_result("success")
+    assert node.run("--recovered").returncode == 0
+    assert "recovered" in node.titles()[-1], "an incident within its TTL lost its recovery"
+    assert node.resets() == [NOTIFIER]
+
+
+def test_an_undelivered_incident_past_its_ttl_still_recovers(node: Node) -> None:
+    """#2757: a unit whose runs are further apart than the TTL lost its recovery and the reset."""
+    node.write_state(1, int(time.time()), 0)
+    node.age_state(TTL + 5)
+    node.set_result("success")
+    assert node.run("--recovered").returncode == 0
+    assert "recovered" in node.titles()[-1], node.titles()
+    assert node.resets() == [NOTIFIER]
+    assert not (node.state / UNIT).exists()
+
+
+def test_a_slow_unit_closes_the_incident_its_delivered_page_opened(node: Node) -> None:
+    """A unit on a timer slower than the TTL: its next success is still the recovery (#2757)."""
+    node.run()
+    node.age_state(TTL + 5)
+    node.set_result("success")
+    assert node.run("--recovered").returncode == 0
+    titles = node.titles()
+    assert len(titles) == 2 and "recovered" in titles[1], titles
+    assert not (node.state / UNIT).exists()
+
+
+def test_a_unit_that_keeps_failing_past_the_ttl_still_closes_its_incident(node: Node) -> None:
+    """The edge liveness check runs every minute, so with the uplink out its pages fail for hours.
+
+    The reminders folded into the kept page still renew the state, so the
+    incident outlives the TTL as one incident: no second `failed` page, and the
+    recovery that follows still finds it.
+    """
+    node.curl_exit.write_text("6", encoding="utf-8")
+    node.run()
+    for _ in range(TTL // REMINDER + 2):
+        node.age_state(REMINDER + 5)
+        node.run()
+    node.curl_exit.write_text("0", encoding="utf-8")
+    node.set_result("success")
+    assert node.run("--recovered").returncode == 0
+    assert node.resets() == [NOTIFIER]
+    assert node.flush().returncode == 0
+    failure, recovery = node.titles()
+    assert "failed on" in failure and "recovered" in recovery, node.titles()
+
+
+def test_a_long_incident_reminded_recently_is_not_stale(node: Node) -> None:
+    """Its age runs from the last delivered page, not from the first failure."""
+    node.run()
+    node.write_state(*node.read_state(), first_ago=TTL + 5, last_ago=REMINDER + 5)
+    node.run()
+    assert "still failing" in node.titles()[-1], node.titles()
+
+
+def test_a_recovery_waits_for_a_page_still_in_flight(node: Node) -> None:
+    """#2733: a recovery that overtook the page would close the incident before the page landed.
+
+    The failure notice records the count, then sends, then records the delivery,
+    all under the unit's lock. The test holds that lock in its place.
+    """
+    node.write_state(1, int(time.time()), 0)
+    node.set_result("success")
+    with node.locked():
+        recovery = node.start("--recovered")
+        time.sleep(0.5)
+        assert node.titles() == [], "the recovery did not wait for the page in flight"
+        # The page lands, a second failure with it, and the notice records the delivery.
+        node.write_state(2, node.read_state()[1], int(time.time()))
+    assert recovery.wait(timeout=30) == 0, recovery.stderr.read() if recovery.stderr else ""
+    [title] = node.titles()
+    assert "recovered" in title and "2" in title, f"the recovery read the state before the lock: {title}"
+    assert not (node.state / UNIT).exists()
+    assert node.resets() == [NOTIFIER]
+
+
+def test_a_recovery_that_waited_reads_the_result_the_unit_has_now(node: Node) -> None:
+    """The unit failed again while the recovery waited: it must not close the new incident."""
+    node.write_state(1, int(time.time()), 0)
+    node.set_result("success")
+    with node.locked():
+        recovery = node.start("--recovered")
+        time.sleep(0.5)
+        node.set_result("exit-code")
+        node.write_state(2, node.read_state()[1], int(time.time()))
+    assert recovery.wait(timeout=30) == 0, recovery.stderr.read() if recovery.stderr else ""
+    assert not any("recovered" in t for t in node.titles()), node.titles()
+    assert (node.state / UNIT).exists(), "a recovery read before the lock closed an open incident"
+    assert node.resets() == []
+
+
+def test_a_notice_whose_lock_is_held_past_the_wait_still_goes_out(tmp_path: Path) -> None:
+    """A late page beats a lost one, and failing here would leave a failed notifier of its own."""
+    node = Node(tmp_path, node_notify_lock_wait_seconds=1)
+    with node.locked():
+        result = node.run()
+    assert result.returncode == 0, result.stderr
+    assert "failed" in node.titles()[0]
+    assert "without the lock" in result.stderr
+
+
 def test_a_hand_run_of_the_recovery_mode_while_the_unit_fails_closes_nothing(node: Node) -> None:
     node.run()
     node.run()
@@ -149,13 +573,47 @@ def test_a_success_with_nothing_failing_sends_nothing(node: Node) -> None:
     assert node.titles() == [], "every healthy run of a recovery-wired unit would page"
 
 
-def test_a_failed_delivery_does_not_count_as_a_page(node: Node) -> None:
-    """If n8n is down the operator has heard nothing; the next failure must try again."""
-    node.curl_exit.write_text("22")
+def test_a_page_neither_delivered_nor_kept_does_not_count_as_sent(node: Node) -> None:
+    """If the spool cannot take it the operator has heard nothing; the next failure must try again.
+
+    The spool copy is written aside and renamed into place, so a write that dies
+    half-way leaves nothing the flush would deliver.
+    """
+    node._shim("python3", f'[ -n "${{NOTIFY_AT:-}}" ] && exit 1; exec {shutil.which("python3")} "$@"')
+    node.curl_exit.write_text("6", encoding="utf-8")
     assert node.run().returncode != 0
-    node.curl_exit.write_text("0")
+    assert node.spooled() == [], "a half-written notice is waiting to be delivered"
+    node.curl_exit.write_text("0", encoding="utf-8")
     node.run()
-    assert len(node.titles()) == 2, "a page that never arrived was treated as sent"
+    [title] = node.titles()
+    assert "failed on" in title and "still failing" not in title, title
+
+
+def test_a_notice_older_than_the_spool_keeps_is_dropped(node: Node) -> None:
+    """A payload n8n refuses for good would otherwise hold every later notice behind it."""
+    max_age = int(_defaults()["node_notify_spool_max_age_seconds"])  # type: ignore[call-overload]
+    node.spool.mkdir()
+    old = node.spool / f"{(int(time.time()) - max_age - 60) * 10**9}-{UNIT}"
+    old.write_text('{"title": "old"}', encoding="utf-8")
+    result = node.flush()
+    assert result.returncode == 0, result.stderr
+    assert node.attempts() == 0 and node.spooled() == []
+    assert old.name in result.stderr, "a notice was dropped without a word"
+
+
+def test_a_file_the_spool_never_named_does_not_hold_the_notices_behind_it(node: Node) -> None:
+    """A name that is not `<nanoseconds>-<unit>` has no age, so nothing would ever drop it."""
+    node.curl_exit.write_text("6", encoding="utf-8")
+    node.run()
+    stray = node.spool / "0stray"
+    stray.write_text('{"title": "stray"}', encoding="utf-8")
+    node.curl_exit.write_text("0", encoding="utf-8")
+    result = node.flush()
+    assert result.returncode == 0, result.stderr
+    [title] = node.titles()
+    assert "failed on" in title, title
+    assert node.spooled() == [] and stray.name in result.stderr
+    assert (node.spool / f".unreadable-{stray.name}").exists(), "a file the script did not write was deleted"
 
 
 def test_a_stale_incident_is_a_new_incident(node: Node) -> None:
@@ -183,7 +641,7 @@ def test_a_hand_invocation_for_a_healthy_unit_still_announces_itself_and_keeps_n
 
 def test_a_corrupt_state_file_does_not_silence_the_unit(node: Node) -> None:
     node.state.mkdir()
-    (node.state / UNIT).write_text("garbage\n")
+    (node.state / UNIT).write_text("garbage\n", encoding="utf-8")
     node.run()
     assert len(node.titles()) == 1
 
@@ -211,6 +669,99 @@ def test_the_recovery_unit_is_installed_and_runs_the_recovery_mode() -> None:
 
     unit = _render("kubelab-notify-recovered@.service.j2")
     assert "--recovered %i" in unit
-    tasks = yaml.safe_load((NOTIFY_ROLE / "tasks/main.yml").read_text())
+    tasks = yaml.safe_load((NOTIFY_ROLE / "tasks/main.yml").read_text(encoding="utf-8"))
     [task] = [t for t in tasks if t.get("template", {}).get("src") == "kubelab-notify-recovered@.service.j2"]
     assert "node_notify_recovered_unit_name" in task["template"]["dest"]
+
+
+PAGE = "KUBELAB_NOTIFY_SEVERITY=page"
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(PAGE, id="alone"),
+        pytest.param(f"LANG=C.UTF-8 {PAGE} STATE=/var/lib/x", id="among-others"),
+    ]
+)
+def paged(node: Node, request: pytest.FixtureRequest) -> Node:
+    """A unit that declares `page`, as systemd prints it: `Environment=` then the variables, space-separated."""
+    node.declare(request.param)
+    return node
+
+
+def test_a_unit_that_declares_page_pages_and_every_other_unit_keeps_the_default(paged: Node) -> None:
+    """#2684: the edge's own units need a person now, the rest of the fleet does not."""
+    paged.run()
+    paged.run(unit="node-backup-ship.service")
+    assert [e["severity"] for e in paged.envelopes()] == ["page", "log"]
+
+
+def test_a_paged_unit_keeps_its_severity_on_the_reminder(paged: Node) -> None:
+    paged.run()
+    paged.age_state(REMINDER + 5)
+    paged.run()
+    assert [e["severity"] for e in paged.envelopes()] == ["page", "page"]
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed: the router was NOT run")
+def test_the_recovery_of_a_paged_unit_closes_the_alarm_instead_of_raising_another(paged: Node) -> None:
+    """The router sends a `page` envelope as a failure unless it is marked resolved."""
+    from tests.test_n8n_notify_router import _route
+
+    paged.run()
+    paged.set_result("success")
+    paged.run("--recovered")
+    page, recovery = (_route(envelope) for envelope in paged.envelopes())
+    assert (page["tag"], page["type"]) == ("page", "failure")
+    assert (recovery["tag"], recovery["type"]) == ("page", "info"), recovery["title"]
+
+
+def test_exercising_the_path_for_a_healthy_paged_unit_is_not_an_alarm(paged: Node) -> None:
+    """`make maintain-notify-test` starts the notifier by hand for a unit that did not fail."""
+    paged.set_result("success")
+    paged.run()
+    assert [e["severity"] for e in paged.envelopes()] == ["log"]
+
+
+@pytest.mark.parametrize(
+    "declared",
+    [
+        pytest.param("KUBELAB_NOTIFY_SEVERITY=critical", id="a-level-the-router-does-not-route"),
+        pytest.param("KUBELAB_NOTIFY_SEVERITY=", id="empty"),
+        pytest.param("XKUBELAB_NOTIFY_SEVERITY=page", id="another-variable"),
+        pytest.param("", id="nothing"),
+    ],
+)
+def test_anything_but_a_declared_page_keeps_the_default(node: Node, declared: str) -> None:
+    node.declare(declared)
+    node.run()
+    assert [e["severity"] for e in node.envelopes()] == ["log"]
+
+
+def test_the_shaper_pages_again_after_a_fix_and_a_new_failure(node: Node) -> None:
+    """#2689. The shaper is RemainAfterExit, so `OnSuccess=` would fire only when it
+    stops: a fix closed nothing, and a failure within the reminder window after it
+    was counted into the old incident instead of paging.
+
+    The recovery is the shaper's own `ExecStartPost=`, read from its rendered unit,
+    and the notifier it starts runs the command that template declares.
+    """
+    from tests.test_edge_shaper_render import UNIT as SHAPER
+    from tests.test_edge_shaper_render import _directives
+    from tests.test_edge_shaper_render import _render as _render_shaper
+
+    hook = shlex.split(_directives(_render_shaper())["ExecStartPost"][0].lstrip("-"))
+    assert hook[1:4] == ["start", "--no-block", "kubelab-notify-recovered@%n.service"], hook
+    recovered = re.search(r"^ExecStart=\S+ (.+)$", _render("kubelab-notify-recovered@.service.j2"), re.MULTILINE)
+    assert recovered, "the recovery notifier no longer declares ExecStart="
+    recover = [arg.replace("%i", SHAPER) for arg in shlex.split(recovered.group(1))]
+    assert recover[-1] == SHAPER
+
+    node.run(unit=SHAPER)
+    node.set_result("success")
+    node.run(*recover[:-1], unit=recover[-1])
+    node.set_result("exit-code")
+    node.run(unit=SHAPER)
+    titles = node.titles()
+    kinds = ["recovered" if " recovered on " in t else "failed" if " failed on " in t else t for t in titles]
+    assert kinds == ["failed", "recovered", "failed"], titles

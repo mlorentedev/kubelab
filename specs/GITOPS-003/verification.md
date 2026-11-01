@@ -10,7 +10,7 @@ created: "2026-08-27"
 Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
 
 - [x] AC1 -> PR1 (#2594) and its amendment (#2613): live statuses below
-- [ ] AC2 -> PR2 (#2615, merged `8582fe5`): `status` path and replay proven live below; the prod `schedule` sweep has not run yet
+- [ ] AC2 -> PR2 (#2615): the `status` path and the red replay are live. PR6 (#2880, `ba9862a`): the in-cluster `delivery-watcher` bounds the no-status case (#2645 B); only its green path is seen live, in both envs. Open until a `healthy: 0` line and the alert firing are seen live. Header drift in `deploy-verify.yml`: #2881
 - [ ] AC3 -> PR3, after web#435 serves `commit` on staging
 - [x] AC4 -> PR4 (#2579) and GITOPS-007 (#2584, `fix/gitops-007-superseded`): `tests/test_product_verify.py` (48 tests); live runs below
 - [x] AC5 -> #1276, `tests/test_argocd_notification_triggers.py`
@@ -39,6 +39,16 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
   - `workflow_dispatch` replay of `1489265` (a commit that never got an Argo status), env staging, timeout 30 → run 39742730971 **failure**: `FAILED: no status arrived for argocd/kubelab-staging (deadline of 30s reached)`, then `##[error]Runbook: .../gitops-delivery-promotion.md#deploy-verify-is-red`.
   - Replay of `4c9cda6`, env prod → run 39742733932 **success**: `SUCCESS: argocd/kubelab-prod is success: Synced at 4c9cda6`.
   - Not yet seen: a `schedule` run. None by 08:07Z (the 07:37 and 08:07 slots), Not a one-off backlog: scheduled runs in this repository start 4 to 9.5 h late every day (delivery-health and config-drift, 10 days measured), so the sweep's latency is hours, not N. Tracked in #2645; AC2 stays open until it is decided and the first sweep is read.
+- Read 2026-10-31, the sweep: `deploy-verify` `schedule` runs exist and are green, 40 of them from 2026-10-23T19:30Z to 2026-10-31T02:16Z, but 3 to 6 h apart instead of every 30 minutes (e.g. 18:49Z, 22:55Z, 02:16Z). Over the same week Argo posted `argocd/kubelab-prod` and `argocd/kubelab-staging` `success` on every master commit sampled (`38c1f081..9706719f`), each followed by green `status` runs. The sweep works, but only as a signal that arrives a few times a day; #2645 B (PR6) bounds the no-status case instead.
+- Live, 2026-10-31, PR6 (#2880) in staging. Staging was pointed at `feat/gitops-003-delivery-watcher` from 04:50Z to 04:59Z (`make argo-set-revision`), then back to `master`.
+  - `make watcher-run NAME=delivery-watcher ENV=staging` → `the Job succeeded in 17s`. This proves the pinned image, the non-root read-only pod with no token, and egress to GitHub under the NetworkPolicy.
+  - Loki (`toolkit obs logs --env staging --service delivery-watcher`) holds the line: `{"metric": "argo_delivery", "argo_env": "staging", "sha": "e7ecfe4…", "age_seconds": 1791, "state": "success", "healthy": 1}`.
+  - Grafana loaded `gitops003-argo-delivery` and evaluated it at 04:58:40Z: a Loki response with `framesLength=1`, and the rule not firing (`toolkit obs alerts --env staging`).
+  - Not seen live: the red path. It is covered by `tests/test_delivery_watcher.py`. Prod is read after merge.
+- Live, 2026-10-31, PR6 in prod after #2880 merged (`ba9862a`):
+  - The first scheduled run is in Loki (`toolkit obs logs --env prod --service delivery-watcher`): `[06:30:04] {"metric": "argo_delivery", "argo_env": "prod", "sha": "f612c91…", "age_seconds": 325, "state": "success", "healthy": 1}`.
+  - Runs at 06:40, 06:50, 07:00 and 07:10 printed the same `healthy: 1` line, each 10 minutes apart.
+  - Grafana on `kubelab-vps` started evaluating `gitops003-argo-delivery` at 06:29:20Z (Loki responses), before the first line, so that first evaluation saw no data. At 07:18:16Z, `toolkit obs alerts --env prod` reports nothing firing or pending. With `noDataState: Alerting` and `for: 10m`, a rule that still read no data would be firing by then, so the rule reads the healthy series. That does not show it fires: the red path is still covered only by `tests/test_delivery_watcher.py`.
 
 ## Decisions made during implementation
 

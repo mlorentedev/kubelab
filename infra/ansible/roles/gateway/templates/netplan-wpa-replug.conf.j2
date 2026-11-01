@@ -1,0 +1,6 @@
+# {{ ansible_managed }}
+# Stops the uplink's supplicant when its adapter leaves, so the udev rule
+# (90-kubelab-uplink.rules) starts it again when the adapter comes back (#2766).
+# netplan's Requires= does not stop it on an unplug.
+[Unit]
+BindsTo=sys-subsystem-net-devices-{{ gateway_uplink_interface }}.device

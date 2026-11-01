@@ -36,7 +36,7 @@ def _web_image(app: str) -> str:
 
 
 def _contract(**changes: Any) -> Contract:
-    data: dict[str, Any] = yaml.safe_load(FIXTURE.read_text())
+    data: dict[str, Any] = yaml.safe_load(FIXTURE.read_text(encoding="utf-8"))
     data.update(changes)
     return Contract.model_validate(data)
 
@@ -119,10 +119,10 @@ def test_a_product_may_keep_the_hostnames_it_already_declares() -> None:
 @pytest.mark.parametrize("key", ["repository", "repo", "source", "remote"])
 def test_a_contract_naming_the_registrys_own_repository_is_refused(tmp_path: Path, key: str) -> None:
     """Refused even when the value is right: the contract is not where the repository comes from."""
-    data = yaml.safe_load(FIXTURE.read_text())
+    data = yaml.safe_load(FIXTURE.read_text(encoding="utf-8"))
     data[key] = "mlorentedev/web"
     path = tmp_path / "kubelab.yaml"
-    path.write_text(yaml.safe_dump(data))
+    path.write_text(yaml.safe_dump(data), encoding="utf-8")
 
     with pytest.raises(ContractError) as excinfo:
         validate_against_platform(path, "web", image_for=_web_image)
@@ -179,7 +179,7 @@ def test_webs_real_contract_passes_against_the_real_registry() -> None:
 def test_the_registry_override_is_what_web_must_declare(tmp_path: Path) -> None:
     """Q7: without the override the rule yields .../web; the contract must carry the override's name."""
     path = tmp_path / "kubelab.yaml"
-    path.write_text(FIXTURE.read_text().replace("kubelab-web", "web"))
+    path.write_text(FIXTURE.read_text(encoding="utf-8").replace("kubelab-web", "web"), encoding="utf-8")
 
     with pytest.raises(ContractError) as excinfo:
         validate_registered(path, "web", REGISTRY)
