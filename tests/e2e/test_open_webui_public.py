@@ -11,7 +11,7 @@ once, by hand, at rollout. Nothing would have noticed a regression.
   the one Open WebUI sends refuses every SSO login.
 - CORS echoes exactly the two declared origins, the public name and ace2's
   tailnet address.
-- The auth page sends people to Authelia (#2482), which v0.12.0 decides from
+- The auth page sends people to Authelia (#2482), which v0.12.5 decides from
   the config it serves before sign-in.
 
 The refusal is Traefik's, so it is asserted even with ace2 powered off. The
@@ -97,11 +97,11 @@ def test_cors_echoes_the_declared_origins_and_no_other(
 
 
 def test_the_auth_page_sends_people_to_authelia(webui_up: ServiceHealthConfig, http_client: httpx.Client) -> None:
-    """#2482: v0.12.0 redirects in the browser, from what `/api/config` advertises
+    """#2482: v0.12.5 redirects in the browser, from what `/api/config` advertises
     before sign-in. The redirect needs both: the flag, and the form hidden."""
     r = http_client.get(f"https://{webui_up.domain}/api/config")
     assert r.status_code == 200, r.status_code
     config = r.json()
     assert config["oauth"]["auto_redirect"] is True, "the auth page shows Open WebUI's own login"
-    assert config["features"]["enable_login_form"] is False, "the form is visible, so v0.12.0 never redirects"
+    assert config["features"]["enable_login_form"] is False, "the form is visible, so v0.12.5 never redirects"
     assert list(config["oauth"]["providers"]) == ["oidc"], "a second provider turns the redirect off"
