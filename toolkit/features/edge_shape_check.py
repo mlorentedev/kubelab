@@ -41,6 +41,10 @@ PROBE_URL = "https://speed.cloudflare.com/__down?bytes=0"
 PROBE_FILE = "/tmp/kubelab-shape-probe"
 SESSION_TIMEOUT_S = 90
 LOAD_HOST, CLIENT_HOST = "beelink", "rpi3"
+# A load window is a reading only if the uplink carried at least this much in the
+# load's direction. curl's `000` cannot tell a request cut at the window's end
+# from one that never connected, so the counters decide whether the load ran.
+MIN_LOAD_MBIT = 1.0
 
 # Run in this order: the shaped windows first, so the shaper is lifted for the
 # shortest time.
@@ -252,8 +256,12 @@ def _window(
         span = end["t"] - start["t"]
         window.down_mbit = (end["rx"] - start["rx"]) * 8 / span / 1e6
         window.up_mbit = (end["tx"] - start["tx"]) * 8 / span / 1e6
+    carried = window.down_mbit if direction == "down" else window.up_mbit
     if direction and window.answered + window.cut == 0:
         window.unreadable = f"the server refused every load request ({window.refused} refused)"
+    elif direction and (carried is None or carried < MIN_LOAD_MBIT):
+        rate = "unread" if carried is None else f"{carried:.1f} Mbit/s"
+        window.unreadable = f"the load did not cross the uplink ({direction} {rate})"
     elif not window.connects_ms and not window.failures:
         window.unreadable = "the probe on rpi3 recorded nothing"
     return window
@@ -320,10 +328,15 @@ def _verdict(check: Check, bound_ms: float | None) -> tuple[int, list[str]]:
         lines.append("verdict: cannot tell, a window has no reading")
         return 3, lines
     shaped = [w for w in check.windows if w.shaped and w.direction]
+    # A connect lost under a shaped load is starvation, bound or not.
+    lost = [w.name for w in shaped if w.failures]
+    if lost:
+        lines.append(f"verdict: FAILED, connects lost under a shaped load: {', '.join(lost)}")
+        return 1, lines
     if bound_ms is not None:
-        over = [w.name for w in shaped if (w.p95() or float("inf")) > bound_ms or w.failures]
+        over = [w.name for w in shaped if (w.p95() or float("inf")) > bound_ms]
         if over:
-            lines.append(f"verdict: FAILED, over {bound_ms:.0f} ms at p95 or with failed connects: {', '.join(over)}")
+            lines.append(f"verdict: FAILED, over {bound_ms:.0f} ms at p95: {', '.join(over)}")
             return 1, lines
         lines.append(f"verdict: within {bound_ms:.0f} ms at p95 under both shaped loads")
         return 0, lines

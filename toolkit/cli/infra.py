@@ -322,8 +322,8 @@ def edge_shape_check(
     bee loads the uplink, a download then an upload, while rpi3 on the lab Wi-Fi
     times a TCP connect every second; then again with the shaper lifted, which is
     always restored and read back. Exits 0 measured (and within --bound-ms when
-    given), 1 a shaped window over the bound, 3 cannot tell or the shaper not
-    restored, and 255 when the edge does not answer.
+    given), 1 a shaped window lost a connect or is over the bound, 3 cannot tell
+    or the shaper not restored, and 255 when the edge does not answer.
     """
     from toolkit.features.configuration import ConfigurationManager
     from toolkit.features.edge_shape_check import run_shape_check

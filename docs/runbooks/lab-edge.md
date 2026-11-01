@@ -221,7 +221,7 @@ make edge-shape-check              # measure and print each window
 make edge-shape-check BOUND_MS=150 # also judge the shaped windows' p95 connect
 ```
 
-Each window prints the uplink's rate in each direction from the adapter's counters, the load's answered and refused requests, and the client's connect p50, p95, max and failures. `toolkit infra edge shape-check` exits 0 when measured (and within the bound), 1 when a shaped window is over it or lost a connect, 3 when a window has no reading or the shaper was not restored, and 255 when the edge did not answer. Through make every non-zero code is 2, so read the `verdict:` line. A `SHAPER NOT RESTORED` verdict names the provision that restores it. Record the output and the bound under `### B9-EVIDENCE` in the spec's `verification.md`.
+Each window prints the uplink's rate in each direction from the adapter's counters, the load's answered and refused requests, and the client's connect p50, p95, max and failures. `toolkit infra edge shape-check` exits 0 when measured (and within the bound), 1 when a shaped window lost a connect or is over the bound, 3 when a window has no reading (a load whose direction the uplink counters do not show at 1 Mbit/s or more counts as none) or the shaper was not restored, and 255 when the edge did not answer. Through make every non-zero code is 2, so read the `verdict:` line. A `SHAPER NOT RESTORED` verdict names the provision that restores it. Record the output and the bound under `### B9-EVIDENCE` in the spec's `verification.md`.
 
 ## Edge alerts
 

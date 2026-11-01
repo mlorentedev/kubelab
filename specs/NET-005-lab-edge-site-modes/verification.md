@@ -346,9 +346,9 @@ shaper: restored, CAKE on the uplink
 verdict: measured; record the bound in verification.md
 ```
 
-- **The bound: p95 connect at most 100 ms under either shaped load, with no failed connect** (`make edge-shape-check BOUND_MS=100`). Shaped, the client stays within 2x its idle p95 (36 ms): 64 ms under the download and 45 ms under the upload. A run 4 minutes earlier read 73 ms under the shaped download, the highest shaped p95 seen, so the bound has room above both.
+- **The bound: p95 connect at most 100 ms under either shaped load, with no failed connect** (`make edge-shape-check BOUND_MS=100`). Shaped, the client stays within 2x its idle p95 (36 ms): 64 ms under the download and 45 ms under the upload. A run 4 minutes earlier read 73 ms under the shaped download, the highest shaped p95 seen, so the bound has room above both. The bound is set from this unbounded run; no run with `BOUND_MS=100` is recorded here.
 - **Without the shaper** the upload is the one that starves the client: p50 491 ms, 15x its shaped value, and only 12 connects in 30 s against 23, because each took half a second. The download unshaped reads p95 106 ms; the earlier run's unshaped download had a 1103 ms maximum. This is why the upload is shaped, at 3600 kbit, below the 3.8 Mbit/s the uplink carried unshaped.
-- **The uploads' `cut 6`.** Six 10 MB uploads cannot finish in 30 s at 3.3 Mbit/s, so every request is still running when the window ends and curl reports `000`, as `make edge-measure` reads it. The earlier run counted those as refused and could not tell; the counters' 3.3 up show the load crossed the uplink.
+- **The uploads' `cut 6`.** Six 10 MB uploads cannot finish in 30 s at 3.3 Mbit/s, so every request is still running when the window ends and curl reports `000`, as `make edge-measure` reads it. The earlier run counted those as refused and could not tell; the counters' 3.3 up show the load crossed the uplink. Since the review of #2895 the check requires that: a load window whose direction the counters do not show at 1 Mbit/s or more is no reading, and every load window above clears it.
 - The shaper was read back as restored after both runs: `kubelab-edge-shaper.service` active and a CAKE root qdisc on the uplink.
 
 ### B12-EVIDENCE: a second provision with no change, and the soak, 2026-11-01

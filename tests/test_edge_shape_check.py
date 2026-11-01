@@ -43,6 +43,8 @@ class Hosts:
         self.probe = probe
         self.log: list[str] = []
         self.rx = 0.0
+        # Bytes the uplink carries per window, in each direction.
+        self.per_window = 30e6
 
     def run(self, command: list[str], script: str) -> tuple[int, str]:
         host = command[-1].split("@", 1)[1]
@@ -56,8 +58,8 @@ class Hosts:
                 self.starts += 1
             return 0, f"unit {'active' if self.cake else 'inactive'}\ncake {'yes' if self.cake else 'no'}\n"
         if "statistics" in script:
-            self.rx += 30e6
-            return 0, f"rx={self.rx:.0f} tx={self.rx / 10:.0f} t={self.rx / 1e6:.1f}\n"
+            self.rx += 1
+            return 0, f"rx={self.rx * self.per_window:.0f} tx={self.rx * self.per_window / 2:.0f} t={self.rx * 30:.1f}\n"
         if "nohup" in script:
             self.log.append(f"probe {host}")
             return 0, "started\n"
@@ -142,10 +144,28 @@ def test_a_probe_with_nothing_recorded_is_no_reading() -> None:
     assert code == 3
 
 
-def test_failed_connects_are_counted_and_fail_a_bound() -> None:
-    code, lines = _go(Hosts(probe="0.020 200\n0.000 000\n"), bound=100)
+@pytest.mark.parametrize("bound", [None, 100])
+def test_a_connect_lost_under_a_shaped_load_fails_with_or_without_a_bound(bound: float | None) -> None:
+    code, lines = _go(Hosts(probe="0.020 200\n0.000 000\n"), bound=bound)
     assert code == 1
     assert "1 failed" in lines[1]
+    assert lines[-1].startswith("verdict: FAILED, connects lost under a shaped load")
+
+
+def test_a_load_that_did_not_cross_the_uplink_is_no_reading() -> None:
+    # Every stream died before connecting: curl prints 000, as it does for a cut
+    # request, but the counters show nothing moved.
+    hosts = Hosts()
+    hosts.per_window = 0
+    original = hosts.run
+
+    def dead_uplink(command: list[str], script: str) -> tuple[int, str]:
+        code, out = original(command, script)
+        return (code, "code 000\n" * 6) if "seq" in script else (code, out)
+
+    code, lines = s.run_shape_check(NETWORKING, None, run=dead_uplink, sleep=lambda _: None)
+    assert code == 3
+    assert "the load did not cross the uplink" in lines[1]
 
 
 def test_a_bound_judges_the_shaped_windows_by_their_p95() -> None:
@@ -163,8 +183,8 @@ def test_an_unshaped_uplink_before_the_run_is_refused() -> None:
 
 def test_the_rates_come_from_the_uplink_counters() -> None:
     _, lines = _go(Hosts())
-    # 30 MB in 30 s each window: 8 Mbit/s down, a tenth of it up.
-    assert "uplink 8.0 down / 0.8 up Mbit/s" in lines[1]
+    # 30 MB in 30 s each window: 8 Mbit/s down, half of it up.
+    assert "uplink 8.0 down / 4.0 up Mbit/s" in lines[1]
 
 
 def test_the_scripts_parse_as_posix_sh() -> None:
