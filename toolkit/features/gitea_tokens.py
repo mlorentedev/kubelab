@@ -85,6 +85,13 @@ ROTATABLE_TOKENS: dict[str, RotatableToken] = {
         token_name="kubelab-review-notice",
         identity="reviewer",
     ),
+    # The forge task view's reader (CONSOLE-004, #2570): a third token on the
+    # reviewer's account, read-only, for the API that lists issues and pull requests.
+    "issue_reader": RotatableToken(
+        secret_key="apps.services.core.gitea.issue_reader_token",
+        token_name="kubelab-issue-reader",
+        identity="reviewer",
+    ),
 }
 
 #: What the reviewer's token must hold -- exactly, not at least. The requirement is a
@@ -100,6 +107,13 @@ REVIEWER_SCOPES: frozenset[str] = frozenset({"write:issue", "read:repository"})
 #: measurement that makes it sufficient is the reviewer's own (`POST issues/{n}/comments`
 #: answers 201 to `write:issue` alone); reading the PR is not part of the job.
 REVIEW_NOTICE_SCOPES: frozenset[str] = frozenset({"write:issue"})
+
+#: What the forge task view's reader must hold -- exactly. A decision: the API reads
+#: and never writes with this token (its writes get a narrower identity, AC3 of
+#: CONSOLE-004). `GET /repos/{o}/{r}/issues` is an issue-scope route and serves pull
+#: requests with `type=pulls`, so no repository scope is asked for. Not yet measured
+#: against a live Gitea; the first read is, and a 403 widens this deliberately.
+ISSUE_READER_SCOPES: frozenset[str] = frozenset({"read:issue"})
 
 
 @dataclass(frozen=True)

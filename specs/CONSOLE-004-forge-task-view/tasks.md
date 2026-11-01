@@ -40,7 +40,10 @@ created: "2026-10-21"
 - [ ] [AC1] Implement the Gitea and GitHub adapters to make the contract tests pass
   - [x] ✓ 2026-10-22 GitHub adapter: pagination, `since`, token only when set and never sent to another host (#2635)
   - [x] ✓ 2026-10-22 Gitea adapter: issues and pull requests are two listings, either failing fails the read
-  - [ ] [AC4] A `read:issue` credential for the Gitea reader of its own: SOPS key, `SECRET_CATALOG` entry and a recorded expiry, minted by `beelink_services` provisioning with a scope variable like `admin_token`, never by hand in the UI. `admin_token` and `bot_token` lack `read:issue`, and the reviewer's token is not the reader's
+  - [x] ✓ 2026-11-01 A `read:issue` credential for the Gitea reader of its own: `issue_reader_token`, a third token on the reviewer's account (no new account), minted by `beelink_services` provisioning from `token_scopes.issue_reader`, catalogued, rotatable with `make gitea-rotate-token TOKEN=issue_reader`. No expiry is recorded because Gitea's token API has no expiry field (as `bot_token`). The token exists only after `make provision NODE=bee ENV=prod TAGS=gitea` runs
+  - [ ] [AC4] Deliver `issue_reader_token` to the API: K8s Secret through `k8s_secrets.py` and an env var the Gitea reader reads, with the NetworkPolicy and a test that the value never lands in a ConfigMap
+  - [ ] [AC4] Measure the grant: the first live read of an issue list with `type=pulls` confirms `read:issue` alone suffices; a 403 widens `token_scopes.issue_reader` deliberately, with `ISSUE_READER_SCOPES`
+  - [ ] [AC4] The webhook receiver's host must pass Gitea's `ALLOWED_HOST_LIST`: Gitea 1.27.3 refuses to deliver to a host that resolves to a Tailscale address (100.64.0.2), as the PR-Agent hook found (lane `fix-gitea-webhook-allowed-host`). Decide the receiver's address against that list before the receiver is built
 - [ ] [AC1] Regression test: a source that is down renders unreachable with its last read time, never empty
 - [ ] [P] [AC4] Webhook receiver: reject an invalid HMAC, store the event before projecting it
   - [x] ✓ 2026-10-22 Signature verification for both forges, GitHub `sha256=` prefix and Gitea bare hex (#2636)
