@@ -1,5 +1,5 @@
 ---
-id: lesson-682-a-commit-that-changes-only-a-hook-starts-no-sync-so-the-hook-never-runs
+id: lesson-683-a-commit-that-changes-only-a-hook-starts-no-sync-so-the-hook-never-runs
 type: lesson
 status: active
 created: "2026-11-01"
