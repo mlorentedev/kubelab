@@ -348,25 +348,27 @@ Exit 0. `eth0 has a carrier` is the line the first check lacked. Of the files #2
 
 ### B10-EVIDENCE: a halted radio comes back with no human step, 2026-11-01
 
-`make edge-ap-halt` from the switch, at 2026-11-01T00:58:54Z. It reads the interface and driver from the deployed liveness unit, checks that the AP serves, unloads the driver and reads the AP every 20 s:
+`make edge-ap-halt` from the switch, at 2026-11-01T01:58:33Z. It reads the interface and driver from the deployed liveness unit, checks that the AP serves by the ladder's own test (the interface up and `hostapd_cli status` reading `state=ENABLED`), unloads the driver, reads that the interface is gone, and then reads the AP every 20 s:
 
 ```text
 interface: wlan0, driver: brcmfmac
-before: up active
+before: up ENABLED
 unload alone: refused modprobe: FATAL: Module brcmfmac is in use.
 unload with holders: ok brcmfmac_wcc
+after the unload: absent
 ladder: 9 line(s)
-  ...01:59:51+01:00 lab Wi-Fi: wlan0 is not serving (1 of 3 misses before a driver reload)
-  ...02:00:51+01:00 lab Wi-Fi: wlan0 is not serving (2 of 3 misses before a driver reload)
-  ...02:01:55+01:00 lab Wi-Fi: wlan0 has not served for 3 checks; reloading brcmfmac and restarting hostapd
-  ...02:01:56+01:00 Failed to start kubelab-edge-liveness.service
+  ...02:59:29+01:00 lab Wi-Fi: wlan0 is not serving (1 of 3 misses before a driver reload)
+  ...03:00:29+01:00 lab Wi-Fi: wlan0 is not serving (2 of 3 misses before a driver reload)
+  ...03:01:30+01:00 lab Wi-Fi: wlan0 has not served for 3 checks; reloading brcmfmac and restarting hostapd
+  ...03:01:31+01:00 Failed to start kubelab-edge-liveness.service
 edge rebooted: no
 verdict: recovered, the AP served again 178 s after the unload
 ```
 
 - The ladder's first step was enough: the driver reload at the third miss brought the AP back, and the edge did not reboot. The run that reloaded exits non-zero on purpose, so it pages, and the next clean run closes the incident (`node_notify`).
+- A first run at 00:58:54Z gave the same result, 178 s and no reboot, but judged the AP by `systemctl is-active hostapd`, a weaker test than the ladder's, and did not yet read the interface after the unload. The run above is the command as merged.
 - `brcmfmac_wcc` holds `brcmfmac` on the serving edge as well, as read earlier with `wlan0` down. A bare `modprobe -r brcmfmac` is refused, which is why both the command and the ladder unload the holders with it.
-- After recovery, `make edge-boot-check` read every check `OK`, including `wlan0 serves the lab Wi-Fi`, `DHCP server listening` and `no failed unit`.
+- After recovery from each run, `make edge-boot-check` read every check `OK` (28 after the second), including `wlan0 serves the lab Wi-Fi`, `DHCP server listening` and `no failed unit`.
 - `make watcher-run NAME=edge-watcher ENV=prod` read `rpi3 up=1` and `rpi4 up=1`: rpi3 was back on the lab Wi-Fi and reachable from prod over the tailnet.
 
 ### B4-EVIDENCE: the portal login and a stable uplink MAC, 2026-10-30
