@@ -1,0 +1,158 @@
+# Grafana alerting — the lab edge, seen from outside it (NET-005 AC12, ADR-075 D6).
+#
+# Reads the `edge_probe` lines of `edge-watcher` (services/edge-watcher.yaml): one
+# line per target per run, `up` 1 or 0, every 5 minutes. Runs in both
+# environments from the shared base; the root notification policy decides which
+# Apprise tier it reaches (prod pages, staging archives). Only prod is outside the
+# edge's fate: staging's cluster sits behind the same uplink it would report on.
+#
+# Evaluated against lines from the real probe by tests/test_edge_alerting_rules.py.
+---
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: edge
+    folder: kubelab
+    interval: 1m
+    rules:
+      - uid: net005-edge-target-down
+        title: Lab edge target unreachable from prod
+        condition: C
+        # With the 10 m window, a target fires after about three failed probes in
+        # a row; one probe that answers clears it.
+        for: 5m
+        noDataState: Alerting
+        execErrState: Alerting
+        annotations:
+          summary: >-
+            Either a node behind the lab edge has not answered prod's TCP probe over the
+            tailnet for 10 minutes, or the edge watcher stopped reporting (no data). With
+            every target down, the edge's uplink is the suspect: unplugged, captive or
+            expired. With one down while the others answer, that node is. Read the
+            watcher's `edge_probe` lines first: no lines at all means the watcher, not
+            the edge.
+          runbook_url: https://github.com/mlorentedev/kubelab/blob/master/docs/runbooks/lab-edge.md#edge-target-down
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: loki
+            model:
+              refId: A
+              datasource:
+                type: loki
+                uid: loki
+              editorMode: code
+              queryType: range
+              # Per target: the best result in 10 minutes, two probes. The probe's
+              # `node` is extracted as `edge_node`, because Vector's own `node`
+              # label is the K8s node the Job ran on, and a plain `| json` would
+              # group every target into it (lesson-512). Every run is a new pod,
+              # so the `by` also folds the per-pod streams into one series.
+              expr: >-
+                max_over_time(
+                  {container="edge-watcher"}
+                    | json edge_node="node", metric="metric", up="up"
+                    | metric=`edge_probe`
+                    | unwrap up
+                  [10m]
+                ) by (edge_node)
+          - refId: B
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              reducer: last
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+          - refId: C
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: lt
+                    params: [1]
+              datasource:
+                type: __expr__
+                uid: __expr__
+      # The probe prints a line for every target on every run, so no line at all
+      # is the watcher, never the edge. The target rule pages on no data too; this
+      # one names the cause, so a page that says "watcher silent" sends the
+      # responder to the cluster, not to the hotel.
+      - uid: net005-edge-watcher-silent
+        title: Lab edge watcher stopped reporting
+        condition: C
+        for: 5m
+        noDataState: Alerting
+        execErrState: Alerting
+        annotations:
+          summary: >-
+            The edge watcher logged no `edge_probe` line for 15 minutes, three runs: no
+            data. Either its CronJob is not running (suspended, failing to pull, or never
+            deployed), or the probe found no targets and failed. The edge's health is
+            unknown, not good. The target rule fires on the same cause.
+          runbook_url: https://github.com/mlorentedev/kubelab/blob/master/docs/runbooks/lab-edge.md#edge-watcher-silent
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: loki
+            model:
+              refId: A
+              datasource:
+                type: loki
+                uid: loki
+              editorMode: code
+              queryType: range
+              expr: >-
+                sum(
+                  count_over_time(
+                    {container="edge-watcher"}
+                      | json metric="metric"
+                      | metric=`edge_probe`
+                    [15m]
+                  )
+                ) by (namespace)
+          - refId: B
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              reducer: last
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+          - refId: C
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: lt
+                    params: [1]
+              datasource:
+                type: __expr__
+                uid: __expr__

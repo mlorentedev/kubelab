@@ -104,8 +104,11 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit infra argo verify-product` | Verify a product is deployed at origin/master HEAD by consequence (GITOPS-003, #1478). |
 | `toolkit infra argo wait-status` | Wait for the commit status Argo CD posts per sync (GITOPS-003 AC2, #1478). |
 | `toolkit infra edge` | The lab edge (rpi4): uplink status (NET-005) |
+| `toolkit infra edge ap-halt` | Halt the lab Wi-Fi's radio on purpose and watch the edge bring it back (B10). |
 | `toolkit infra edge boot-check` | Say whether a boot brought back everything the edge serves (the hard-reset test). |
 | `toolkit infra edge lan-link` | Join this laptop to the lab LAN with a NetworkManager profile (NET-005 AC11). |
+| `toolkit infra edge measure` | Measure the uplink's line rate on the edge, one window per direction (AC8). |
+| `toolkit infra edge shape-check` | Check that the shaper keeps a lab Wi-Fi client usable under bulk load (B9, AC8). |
 | `toolkit infra edge soak` | Say whether the uplink adapter has held 48 hours of this boot with no reset (B12). |
 | `toolkit infra edge status` | Say whether the edge's uplink is up, behind a portal, or dead. |
 | `toolkit infra headscale` | Headscale VPN ACL policy + mesh probe (ADR-041) |
@@ -213,6 +216,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit sync` | Sync generated files from SSOT (common.yaml, SOPS). |
 | `toolkit sync all` | Run all sync operations. |
 | `toolkit sync branding` | Sync IDP brand CSS from common.yaml SSOT. |
+| `toolkit sync edge-watcher-targets` | Render the edge watcher's targets from networking (NET-005 AC12). |
 | `toolkit sync images` | Sync K8s image tags from common.yaml to kustomization.yaml. |
 | `toolkit sync oidc` | Generate the OIDC client files from the SSOT and the stored SOPS digests (SSOT-017). |
 | `toolkit sync operators` | Refresh vendored cluster_bootstrap operator manifests from their SSOT version (ADR-047). |
@@ -228,6 +232,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit tools certs status` | Show certificate status for an environment. |
 | `toolkit tools cli-reference` | Keep the README's command table equal to the command tree it describes. |
 | `toolkit tools delivery-health` | Refuse a delivery workflow whose newest run never started. |
+| `toolkit tools deploy-merge` | Judge every open PR to the default branch: merge, close or skip (DELIVERY-004 AC6). |
 | `toolkit tools deploy-shape` | Judge whether a PR is a mechanical staging deploy (DELIVERY-004, #1619). |
 | `toolkit tools lessons-index` | Order each category's lesson rows newest first (by date, then by number within a date, #1912), after refusing a corpus a rewrite would hide. |
 | `toolkit tools mutate` | Run the test unmutated, apply one replacement, run it again, restore the file. |

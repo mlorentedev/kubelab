@@ -63,16 +63,24 @@ networking:
       # The AP's fixed 2.4 GHz channel, per site: picked at bring-up from a scan
       # of the site's spectrum. Must be one the regdomain allows.
       channel: 6
-      # Shaped slightly below the measured rate (AC8). Read from a laptop at the
-      # temporary site (3.3 and 1.5 Mbps); which one is the download is
-      # re-measured on the RPi4 at bring-up.
+      # The band the uplink associates on, per site: "5GHz", "2.4GHz", or "" for
+      # either. At the hotel site 2.4 GHz received at MCS 1 (13 Mbit/s) at -57 dBm,
+      # beside the lab AP's own 2.4 GHz channel, while its APs also serve 5 GHz.
+      band: "5GHz"
+      # Shaped at 90% of the lower of two measured rates (AC8), so the queue forms
+      # here. Measured 2026-10-31 03:20Z on the site's paid plan, 5 GHz, with the
+      # shaper lifted: the uplink adapter's own rx/tx counters over two 60 s runs of
+      # six parallel streams each way, 27070/26700 kbit/s down and 4041/4026 up. A
+      # second server read 14 Mbit/s down from the edge and the laptop alike, so that
+      # bound is the server's path, not the line. On 2.4 GHz the same plan read
+      # 4730/4939 down; the free plan read 3.3 and 1.5 Mbps.
       bandwidth:
-        down_kbit: 2970
-        up_kbit: 1350
+        down_kbit: 24000
+        up_kbit: 3600
         # The share of down_kbit an image pull gets, against which a pull is sized
         # (_includes/image-pull.yml). Open WebUI's 1.62 GB took 133.7 min on ace2,
         # against 72.7 at down_kbit, with the shaper binding (#2703, 2026-10-30).
-        # Re-measured with the site, like down_kbit.
+        # Measured on the free plan; not yet re-measured on the paid one.
         pull_goodput: 0.54
       # dockerd's attempts at each layer of a pull, for every daemon behind the edge
       # and for the bound on a pull's attempt (#2834). A pull's connections end in
@@ -688,6 +696,11 @@ argocd:
   # Pinned for the same reason one layer down: the GCP hub installs its own helm
   # at boot, and an unattended recreate must not pick up whatever is current.
   helm_version: "v3.18.4"
+  # The in-cluster delivery watcher (GITOPS-003 AC2, #2645): reads master HEAD's
+  # `argocd/kubelab-<env>` status from GitHub. Runs a stdlib-only script, so any
+  # interpreter release works; pinned so the CronJob never upgrades itself.
+  delivery_watcher:
+    image: python:3.13.16-alpine
   # Hub: clusters.hub -> networking.<provider>.tailscale_dns — MagicDNS (ADR-025).
   # Named via clusters.hub rather than a provider literal: this comment said
   # networking.aws until prod moved to gcp1, and a comment restating one side of
@@ -2071,9 +2084,9 @@ apps:
             cluster: hub
           open-webui:
             # A local account of nobody, the Grafana shape (#951). The login form
-            # stays on for it: `ENABLE_LOGIN_FORM=false` only hides the form, and
-            # `/api/v1/auths/signin` keeps taking passwords either way (v0.12.0,
-            # lesson-520). `WEBUI_ADMIN_EMAIL` seeds it on an empty database, before
+            # is hidden so the page redirects to Authelia (#2482); `path` shows it
+            # and stops the redirect. `/api/v1/auths/signin` takes passwords either
+            # way (v0.12.0, lesson-520). `WEBUI_ADMIN_EMAIL` seeds it on an empty database, before
             # the first request, so no visitor can sign up as the first admin. Open
             # WebUI signs in by email, which is why rotation uses it. The public
             # route refuses that endpoint (#2135), so the password works only on
@@ -2081,6 +2094,7 @@ apps:
             login: breakglass
             email: breakglass@kubelab.live
             secret: apps.services.ai.open_webui.admin_password
+            path: /auth?form=signin
           loki: {}
           uptime-kuma:
             # The private path only (#2483): the EndpointSlice address over the tailnet

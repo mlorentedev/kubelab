@@ -45,7 +45,12 @@ network:
 {% if gateway_uplink_kind == 'wifi_psk' %}
         {{ gateway_uplink_ssid | to_json }}:
           password: {{ gateway_uplink_psk | to_json }}
+{% elif gateway_uplink_band %}
+        {{ gateway_uplink_ssid | to_json }}:
 {% else %}
         {{ gateway_uplink_ssid | to_json }}: {}
+{% endif %}
+{% if gateway_uplink_band %}
+          band: "{{ gateway_uplink_band }}"
 {% endif %}
 {% endif %}

@@ -77,9 +77,12 @@ Partial results, kept apart from the `### B<n>-EVIDENCE` headings on purpose: `f
 - **B5.** The AP is provisioned and serving: the 2026-10-28 boot check reads hostapd active, the DHCP server listening and the lab Wi-Fi on `wlan0`. On 2026-10-30 dnsmasq's leases held rpi3 on its reservation (`10.0.0.157`, `b8:27:eb:3d:8e:54`) and saved devices back on the lab Wi-Fi (a phone, a tablet, a watch). Left: Kuma's route answering, observed.
 - **B6.** Both nodes' Tailscale prefs were compared read-only with their plays (lesson-629). rpi4 matched. rpi3 accepted routes its play declares off, which the role's `tailscale set` convergence then corrected (#2685). The 2026-10-28 boot check reads the subnet route primary on the tailnet. On 2026-10-30 `make headscale-rejoin NODE=rpi4` was a no-op over the LAN (`ok=23 changed=0`, no key minted), and rpi3's full provision at c737c74e, which carries the `tailscale` role, read `changed=0` on its second run. `NODE=rpi3` from the switch could not reach rpi3 (`10.0.0.157`, timed out before any task ran): it runs over the lab Wi-Fi address, so the controller has to be on the lab Wi-Fi (`docs/runbooks/lab-edge.md`). On 2026-10-30, with the controller on the lab Wi-Fi, `make headscale-rejoin NODE=rpi3` reached rpi3 through the bootstrap inventory and was a no-op (`ok=23 changed=0`, no key minted). Left: the Headscale expiry read, if either node rejoins for real.
 - **B11.** Completed 2026-10-30, see `### B11-EVIDENCE` below.
-- **B12.** The second provision (2026-10-28) reported `ok=182 changed=1 failed=0`. The one change is apt's cache refresh (`cache_valid_time: 3600`), which fires on time elapsed, not on drift. On 2026-10-29 the edge's provision at 973113b9 read `changed=0`, the configuration B14 ran on. Left: the 48-hour soak's rtw88 check. The journal holds only about 8 hours (19.7M against `SystemMaxUse=20M`, #2702), but rsyslog keeps every kernel line in `kern.log` for weeks, and `make edge-soak` (#2811) reads the soak from there. The boot that began 2026-10-29T21:50Z is the soak. At 4.5 h it read 0 resets and logged `firmware failed to leave lps state` twice in its first 3 hours, with no disconnect, lease change or liveness action in either minute, power save `on` and `disable_lps_deep` `N`. The operator chose to observe through the soak rather than change the role, which would restart it. #2807 tracks the LPS decision at the end of the soak.
+- **B12.** The second provision (2026-10-28) reported `ok=182 changed=1 failed=0`. The one change is apt's cache refresh (`cache_valid_time: 3600`), which fires on time elapsed, not on drift. On 2026-10-29 the edge's provision at 973113b9 read `changed=0`, the configuration B14 ran on. Left: the 48-hour soak's rtw88 check. The journal holds only about 8 hours (19.7M against `SystemMaxUse=20M`, #2702), but rsyslog keeps every kernel line in `kern.log` for weeks, and `make edge-soak` (#2811) reads the soak from there. The boot that began 2026-10-29T21:50Z is the soak. At 4.5 h it read 0 resets and logged `firmware failed to leave lps state` twice in its first 3 hours, with no disconnect, lease change or liveness action in either minute, power save `on` and `disable_lps_deep` `N`. The operator chose to observe through the soak rather than change the role, which would restart it. #2807 tracks the LPS decision at the end of the soak. Completed 2026-11-01, see `### B12-EVIDENCE` below.
 - **B14.** Done. Every case passed after B12's `changed=0` provision, and again on #2797's configuration once T3 had found #2794. The first check after T4's cable went back in could not tell a cable from none (#2800). Redone over the LAN with #2800's carrier line, it reads `eth0 has a carrier`, 28 of 28 `OK`. See `### B14-EVIDENCE` below.
-- **B7, B8, B9, B10, B13.** Not started.
+- **B7.** Completed 2026-11-01, see `### B7-EVIDENCE` below.
+- **B9.** Completed 2026-11-01, see `### B9-EVIDENCE` below.
+- **B10.** Completed 2026-11-01, see `### B10-EVIDENCE` below.
+- **B8, B13.** Not started.
 
 ### Hard-reset runs, 2026-10-29
 
@@ -329,12 +332,80 @@ OK   no failed unit
 
 Exit 0. `eth0 has a carrier` is the line the first check lacked. Of the files #2804 changes, the edge runs only `edge-boot-check.sh`, so it changes what the check reads, not what the edge does at boot, and T1 to T4 stand. T4 was judged by its case's own line, `eth0 present without a carrier`, which predates #2804. That the new line fails when a case that expects the cable finds none is `test_without_the_uplink_a_cable_that_is_out_still_fails`.
 
+### B9-EVIDENCE: a lab Wi-Fi client's connects under bulk load, 2026-11-01
+
+`make edge-shape-check`, 2026-11-01T01:52Z, from the switch. bee loaded the uplink with `make edge-measure`'s six streams for 30 s per window, while rpi3 on the lab Wi-Fi timed one TCP connect a second to `speed.cloudflare.com` over the uplink. The shaper was at 24000/3600 kbit (#2875).
+
+```text
+idle: uplink 0.4 down / 0.1 up Mbit/s; connect p50 27 ms, p95 36 ms, max 37 ms over 23, 0 failed
+download, shaped: uplink 19.3 down / 1.4 up Mbit/s, load answered 6 cut 0 refused 0; connect p50 28 ms, p95 64 ms, max 69 ms over 23, 0 failed
+upload, shaped: uplink 0.4 down / 3.3 up Mbit/s, load answered 0 cut 6 refused 0; connect p50 33 ms, p95 45 ms, max 52 ms over 23, 0 failed
+download, unshaped: uplink 23.3 down / 0.9 up Mbit/s, load answered 6 cut 0 refused 0; connect p50 85 ms, p95 106 ms, max 128 ms over 22, 0 failed
+upload, unshaped: uplink 0.3 down / 3.8 up Mbit/s, load answered 0 cut 6 refused 0; connect p50 491 ms, p95 527 ms, max 529 ms over 12, 0 failed
+shaper: restored, CAKE on the uplink
+verdict: measured; record the bound in verification.md
+```
+
+- **The bound: p95 connect at most 100 ms under either shaped load, with no failed connect** (`make edge-shape-check BOUND_MS=100`). Shaped, the client stays within 2x its idle p95 (36 ms): 64 ms under the download and 45 ms under the upload. A run 4 minutes earlier read 73 ms under the shaped download, the highest shaped p95 seen, so the bound has room above both. The bound is set from this unbounded run; no run with `BOUND_MS=100` is recorded here.
+- **Without the shaper** the upload is the one that starves the client: p50 491 ms, 15x its shaped value, and only 12 connects in 30 s against 23, because each took half a second. The download unshaped reads p95 106 ms; the earlier run's unshaped download had a 1103 ms maximum. This is why the upload is shaped, at 3600 kbit, below the 3.8 Mbit/s the uplink carried unshaped. The download cap, 24000 kbit, is above the 23.3 Mbit/s the uplink carried unshaped, so the shaped download window does not show the cap limiting the download; AC8's starvation case is the upload's. Whether a shaped window reached its cap is #2896.
+- **The uploads' `cut 6`.** Six 10 MB uploads cannot finish in 30 s at 3.3 Mbit/s, so every request is still running when the window ends and curl reports `000`, as `make edge-measure` reads it. The earlier run counted those as refused and could not tell; the counters' 3.3 up show the load crossed the uplink. Since the review of #2895 the check requires that: a load window whose direction the counters do not show at 1 Mbit/s or more is no reading, and every load window above clears it.
+- The shaper was read back as restored after both runs: `kubelab-edge-shaper.service` active and a CAKE root qdisc on the uplink.
+
+### B12-EVIDENCE: a second provision with no change, and the soak, 2026-11-01
+
+- **The soak.** `make edge-soak`, 2026-10-31T23:54Z, passed: 50.1 h on the boot of 2026-10-29T21:48Z, 0 adapter resets, the uplink up throughout. The LPS warnings (10 on 2.4 GHz, 0 on 5 GHz since #2875) came with no disconnect, lease change or liveness action, and the operator kept the defaults (#2807). The two readings' LPS counts differ, which #2889 tracks; both read 0 resets.
+- **The provisions**, from master at 11f282b2, after the soak:
+  - `make provision NODE=rpi4 ENV=prod TAGS=gateway` over the tailnet was refused by the D7 guard before any change (`ok=6 changed=0 failed=1`, "this run reaches the edge at its tailnet address, not at its LAN address"), as ADR-075 D7 requires.
+  - `make provision NODE=rpi4 ENV=prod BOOTSTRAP=1` over the LAN: `ok=217 changed=3 failed=0`. The three are apt's cache refresh, which fires on elapsed time, and the docker role's `daemon.json` with its restart handler: master's #2835 and #2855 had changed that file since the edge was last provisioned. This is the edge catching up with master, not a role that drifts.
+  - The same command again: `ok=216 changed=0 failed=0`.
+- `make edge-status` read `uplink: up` before and after both runs.
+
 ### B11-EVIDENCE: the homelab switch behind the edge, 2026-10-30
 
 - **Lease.** dnsmasq's journal holds a `DHCPACK(eth0)` for the operator's laptop on the switch, at `172.16.1.91`, through `make edge-lan-link`.
 - **Through the uplink.** On 2026-10-27 ace1, bee and ace2 each had a default route through the RPi4 and a 204 from the connectivity probe. On 2026-10-30 ace2's empty image store was refilled through the uplink: 3.42 GB at ace2's NIC over 4.1 hours, with `make provision NODE=ace2 ENV=prod TAGS=agent_stack` ending `failed=0` and a second run reading `changed=0` (#2703).
 - **e2e.** At 09:33Z, `make test-e2e ENV=staging` from master `fba90b14`, with the homelab powered: 68 passed, 21 skipped, 0 failed. Open WebUI has no staging route, so its tests skip there by declaration (`skip_in_envs`). Against prod, the same subset (`-k open_webui`) gave 8 passed.
 - **The 03:36Z run.** The same command at 03:36Z gave 68 passed, 19 skipped, 2 failed: `test_security_headers_present[open_webui]` and `test_hsts_header[open_webui]` in `tests/e2e/test_security_headers.py`, both refused on ace2's `100.64.0.5:3080`. On master those two tests call the probe before they read `skip_in_envs` (`test_security_headers.py:41` then `:44`, and `:75` then `:78`), and a refusal raises, so at 03:36Z ace2's empty image store failed them before the declaration was reached. At 09:33Z ace2 answered, the probe returned, and the declaration after it skipped them, which is how 2 failed and 19 skipped became 21 skipped with no code change between the runs. The failures were a test defect, not a staging regression, so the tick stands. #2846 reads the declaration first, after which a staging run no longer depends on ace2 for Open WebUI.
+
+### B10-EVIDENCE: a halted radio comes back with no human step, 2026-11-01
+
+`make edge-ap-halt` from the switch, at 2026-11-01T01:58:33Z. It reads the interface and driver from the deployed liveness unit, checks that the AP serves by the ladder's own test (the interface up and `hostapd_cli status` reading `state=ENABLED`), unloads the driver, reads that the interface is gone, and then reads the AP every 20 s:
+
+```text
+interface: wlan0, driver: brcmfmac
+before: up ENABLED
+unload alone: refused modprobe: FATAL: Module brcmfmac is in use.
+unload with holders: ok brcmfmac_wcc
+after the unload: absent
+ladder: 9 line(s)
+  2026-11-01T02:59:28+01:00 rpi4 systemd[1]: Starting kubelab-edge-liveness.service - Check the lab Wi-Fi and the uplink, and recover a halted radio...
+  2026-11-01T02:59:29+01:00 rpi4 kubelab-edge-liveness[338288]: lab Wi-Fi: wlan0 is not serving (1 of 3 misses before a driver reload)
+  2026-11-01T02:59:29+01:00 rpi4 systemd[1]: Finished kubelab-edge-liveness.service - Check the lab Wi-Fi and the uplink, and recover a halted radio.
+  2026-11-01T03:00:29+01:00 rpi4 systemd[1]: Starting kubelab-edge-liveness.service - Check the lab Wi-Fi and the uplink, and recover a halted radio...
+  2026-11-01T03:00:29+01:00 rpi4 kubelab-edge-liveness[338620]: lab Wi-Fi: wlan0 is not serving (2 of 3 misses before a driver reload)
+  2026-11-01T03:00:30+01:00 rpi4 systemd[1]: Finished kubelab-edge-liveness.service - Check the lab Wi-Fi and the uplink, and recover a halted radio.
+  2026-11-01T03:01:30+01:00 rpi4 systemd[1]: Starting kubelab-edge-liveness.service - Check the lab Wi-Fi and the uplink, and recover a halted radio...
+  2026-11-01T03:01:30+01:00 rpi4 kubelab-edge-liveness[338969]: lab Wi-Fi: wlan0 has not served for 3 checks; reloading brcmfmac and restarting hostapd
+  2026-11-01T03:01:31+01:00 rpi4 systemd[1]: Failed to start kubelab-edge-liveness.service - Check the lab Wi-Fi and the uplink, and recover a halted radio.
+edge rebooted: no
+verdict: recovered, the AP served again 178 s after the unload
+```
+
+- The ladder's first step was enough: the driver reload at the third miss brought the AP back, and the edge did not reboot. The run that reloaded exits non-zero on purpose, so it pages, and the next clean run closes the incident (`node_notify`).
+- A first run at 00:58:54Z gave the same result, 178 s and no reboot, but judged the AP by `systemctl is-active hostapd`, a weaker test than the ladder's, and did not yet read the interface after the unload. The run above is the command as merged.
+- `brcmfmac_wcc` holds `brcmfmac` on the serving edge as well, as read earlier with `wlan0` down. A bare `modprobe -r brcmfmac` is refused, which is why both the command and the ladder unload the holders with it.
+- After recovery from each run, `make edge-boot-check` read every check `OK` (28 after the second), including `wlan0 serves the lab Wi-Fi`, `DHCP server listening` and `no failed unit`.
+- `make watcher-run NAME=edge-watcher ENV=prod` read `rpi3 up=1` and `rpi4 up=1`: rpi3 was back on the lab Wi-Fi and reachable from prod over the tailnet.
+
+### B7-EVIDENCE: the radio honours two PSKs at once, 2026-11-01
+
+The `[OPEN]` risk that gates AC10 is closed: brcmfmac does not offload the AP's handshake on this edge, and `wpa_psk_file` holds two keys at once.
+
+- `make provision NODE=rpi4 ENV=prod BOOTSTRAP=1 TAGS=gateway EXTRA='edge_probe_psk=<throwaway>'` rendered two wildcard entries, `keyid=probe` first and `keyid=current` last, and reloaded them with `reload_wpa_psk` (`changed=2`: the file and its handler). hostapd was not restarted.
+- The operator's phone forgot the lab Wi-Fi and joined it with the probe PSK. `hostapd_cli all_sta` listed it on `keyid=probe`, and the five other stations, rpi3 among them (matched against `networking.nodes.rpi3.mac`), on `keyid=current`. The first entry works, so `brcmfmac.feature_disable` is not needed.
+- The same provision without the variable left one entry, `keyid=current`. The probe PSK was never written to SOPS or git.
+
+Task 34 therefore takes the two-entry rotation, not ADR-075 D8's fallback.
 
 ### B4-EVIDENCE: the portal login and a stable uplink MAC, 2026-10-30
 
@@ -371,7 +442,11 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 
   Both are replaced by the AC11 target and removed once it exists.
 - **The uplink is checked, never rebooted for (AC13), 2026-10-25.** Task 28 has the liveness check the uplink's lease, and AC13 recovers the edge "where a reboot can". A present adapter with no lease is the site (down, out of range, a changed passphrase), which a reboot cannot fix, and the reboot would cost rpi3 its Wi-Fi and the homelab its route. So the check reports it after the grace and does nothing else. An adapter that disappeared gets its driver reloaded once per incident; an unplugged one looks the same, so the edge does no more.
-- **The AP's `operstate` under hostapd (AC13), pending B10.** The check reads `up`, as task 28 words it; brcmfmac turns the carrier on when it starts the BSS. B10 reads it on the edge with the AP serving. A driver that reported anything else would escalate on a healthy AP: one driver reload, one reboot, another reload, then the latch holds and pages. B10 also shows whether the unload succeeds on the serving edge: `brcmfmac_wcc` holding `brcmfmac` was read with `wlan0` down and no hostapd, and the ladder stops hostapd before the unload.
+- **The AP's `operstate` under hostapd (AC13), read in B10.** On 2026-11-01, with the AP serving, the edge read `up` and hostapd `ENABLED` (`before: up ENABLED`, `### B10-EVIDENCE`), so the check does not escalate on a healthy AP. The unload alone was refused there too, with hostapd serving, and the ladder's holder-aware reload is what recovered the radio. The original note follows. The check reads `up`, as task 28 words it; brcmfmac turns the carrier on when it starts the BSS. B10 reads it on the edge with the AP serving. A driver that reported anything else would escalate on a healthy AP: one driver reload, one reboot, another reload, then the latch holds and pages. B10 also shows whether the unload succeeds on the serving edge: `brcmfmac_wcc` holding `brcmfmac` was read with `wlan0` down and no hostapd, and the ladder stops hostapd before the unload.
+- **The prod probe's alert bound (AC12), derived 2026-10-25, pending B8.** From the literals, not measured: the watcher runs every 5 minutes, the target rule takes the best result in 10 minutes and holds for 5, and its group evaluates every minute. A cut just after a probe answered goes Alerting about 16 minutes later; the root policy's `group_wait` adds 30 seconds before the page leaves. The silent rule's window is 15 minutes and it holds for 5, so it goes Alerting about 20 minutes after the last line. B8 measures both from a phone on cellular.
+- **No `page` label on the edge rules (AC12, task 25).** Task 25 asks for "the `page` routing label". No rule in `grafana-alerting/` carries one: the tier comes from each environment's root policy, `apprise-page` in prod and `apprise-log` in staging. A label nothing routes on would read as routing and do nothing, so the rules carry none and reach the page tier the way every other prod rule does.
+- **Repeat until acknowledged (AC12, task 26), read 2026-10-25.** Prod's root policy has `repeat_interval: 4h`: Grafana re-sends a firing alert every 4 hours until it resolves or is silenced, and a silence is Grafana's acknowledgement. The page tier is Apprise to Telegram, which has no acknowledgement of its own. So the page repeats until acknowledged, every 4 hours. Whether that is often enough for a phone that held back the first push is the operator's call. The options, in the PR: accept 4 hours; add a child route in `overlays/prod/grafana-alerting/policies.yaml` for the two edge alerts with a shorter `repeat_interval` (same receiver as the root, so no `continue` is needed); or repeat in n8n.
+- **The edge is offline from the tailnet today (2026-10-25).** `tailscale status` on the workstation lists rpi3 and rpi4 as offline: the RPi4 has no uplink until PR 4 is applied live (bring-up B3). Prod's target rule would fire on its first evaluation if it were deployed now, and correctly. Deploy it after B3, or with a silence until then. On 2026-11-01 `tailscale status` lists both online, after B4 and the paid uplink, so the PR merges with no silence. B3 can no longer precede the portal login at this site, so its reading is not the gate.
 -
 
 ## Promotion candidates

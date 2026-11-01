@@ -77,7 +77,16 @@ It also reports whether a public resolver and the lease's resolver answer, and w
    make provision NODE=rpi4 ENV=prod BOOTSTRAP=1
    ```
 
-5. **Prove the tailnet.** A site is accepted only once the edge's tailnet session is up through it (ADR-075 D7). If the edge is off the mesh, rejoin it:
+5. **Measure the line and set the shaper.** The bandwidth declared in step 1 is a guess until the uplink is up. Lift it well above the site's rate (`networking.edge.uplink.bandwidth`, by a PR), provision `TAGS=gateway`, then measure twice:
+
+   ```bash
+   make edge-measure
+   make edge-measure
+   ```
+
+   It counts on the uplink adapter, before the shaper. Exit 2 means the shaper bound the window, so the rate is only a lower bound and the shaper has to be lifted further. Set `down_kbit` and `up_kbit` to 90% of the lower reading in each direction, which the target prints, and provision `TAGS=gateway` again. Read the `link:` line first: a low receive rate at good signal is interference, and `networking.edge.uplink.band` can move the uplink to the other band (lesson-680).
+
+6. **Prove the tailnet.** A site is accepted only once the edge's tailnet session is up through it (ADR-075 D7). If the edge is off the mesh, rejoin it:
 
    ```bash
    make headscale-rejoin NODE=rpi4
@@ -145,6 +154,14 @@ The radio's firmware can halt, after a weak client or an eighth station, and onl
 
 Do not stop hostapd by hand while the liveness timer runs: the ladder reads a stopped hostapd as a halted radio, reloads the driver under you, and at the next miss reboots the edge. There is no target to pause it yet (#2683).
 
+To prove the ladder on the edge itself (NET-005 B10), halt the radio on purpose from the switch:
+
+```bash
+make edge-ap-halt
+```
+
+It reads the AP's interface and driver from the deployed liveness unit and refuses to inject anything unless the AP is serving. It then unloads the driver, first on its own and, when that is refused, with the modules that hold it, and reads the AP every 20 seconds until it serves again. The lab Wi-Fi, and rpi3 with it, drops for about three minutes, the grace before the reload, so expect rpi3's and the liveness unit's pages. If the reload does not bring the radio back, the next miss reboots the edge, and the command keeps reading through the reboot. It prints both unload results, the ladder's lines, whether the edge rebooted and how long the AP took to serve. `toolkit infra edge ap-halt` exits 0 when the AP serves again, 1 when it does not within 12 minutes, 3 when nothing was injected and 255 when SSH failed before the fault. Through make every non-zero code is 2, so read the `verdict:` line. Then run `make edge-boot-check` and record both outputs under `### B10-EVIDENCE`.
+
 ## Reaching the edge from the switch
 
 When the uplink is dead, behind a portal, or misconfigured, the tailnet is gone and the switch is the way in. The edge keeps `eth0` open to the homelab LAN for exactly this.
@@ -195,6 +212,67 @@ make edge-soak
 
 It reads the edge's `kern.log` over the LAN, because the journal there holds about 8 hours (#2807). It prints the boot's resets, its `failed to leave lps state` warnings and its other uplink lines, then a verdict. `toolkit infra edge soak` exits 0 when the soak passed, 1 on a reset, 2 while the boot holds but has not reached 48 hours, and 3 when the log cannot tell: no kernel banner in it, or an rsyslog that did not start with this boot. Through make every non-zero code is 2, so read the `verdict:` line. The LPS warnings are listed and not counted: the operator decides at the end of the soak whether they warrant turning the driver's power saving off, which starts a new soak. The boot's time can be hours early, since the RPi4 has no clock across a power cut (lesson-662); its length comes from the uptime. Record the output at the end under `### B12-EVIDENCE` in the spec's `verification.md`.
 
+## Shaper check
+
+The uplink is shaped both ways so that a homelab host's bulk transfer does not starve a lab Wi-Fi client (NET-005 AC8, B9). `make edge-shape-check` measures it: bee pulls and then pushes `make edge-measure`'s streams for 30 seconds each, while rpi3, a lab Wi-Fi client, times one TCP connect a second. It runs the shaped windows first, then stops `kubelab-edge-shaper.service` for the two unshaped ones, about a minute in which rpi3, Uptime Kuma and anyone on the lab Wi-Fi are slow. The shaper is started again on any error and on Ctrl-C, retried once, and read back (the unit active and CAKE on the uplink). A run killed outright (SIGTERM, SIGKILL, a closed terminal) leaves it stopped: `make edge-boot-check` reports the shaper, and `make provision NODE=rpi4 ENV=prod TAGS=gateway` or a reboot starts the unit again.
+
+```bash
+make edge-shape-check              # measure and print each window
+make edge-shape-check BOUND_MS=150 # also judge the shaped windows' p95 connect
+```
+
+Each window prints the uplink's rate in each direction from the adapter's counters, the load's answered and refused requests, and the client's connect p50, p95, max and failures. `toolkit infra edge shape-check` exits 0 when measured (and within the bound), 1 when a shaped window lost a connect or is over the bound, 3 when a window has no reading (a load whose direction the uplink counters do not show at 1 Mbit/s or more counts as none) or the shaper was not restored, and 255 when the edge did not answer. Through make every non-zero code is 2, so read the `verdict:` line. A `SHAPER NOT RESTORED` verdict names the provision that restores it. Record the output and the bound under `### B9-EVIDENCE` in the spec's `verification.md`.
+
 ## Edge alerts
 
-Prod's watcher probes the edge and every always-on node behind it over the tailnet, and pages when one stops answering or when the watcher itself goes silent (ADR-075 D6, AC12). Its alerts and their first steps are added to this section by the watcher's change (#2672).
+Prod's `edge-watcher` CronJob (`infra/k8s/base/services/edge-watcher.yaml`)
+makes one TCP connect every 5 minutes to each target in
+`infra/k8s/base/services/edge-watcher/targets.txt`: the edge, and every
+always-on node behind it. The list is generated from `networking` in
+`common.yaml` by `make sync-edge-watcher-targets`. Each run logs one line per
+target:
+
+```json
+{"metric":"edge_probe","namespace":"kubelab","node":"rpi4","up":1}
+```
+
+The edge cannot page about its own uplink while that uplink is down, so this
+probe runs where the edge's failure does not reach. The first step for either
+alert is the same: run the probe once now and read its lines.
+
+```bash
+make watcher-run NAME=edge-watcher ENV=prod
+```
+
+It prints one line per target and exits non-zero when the Job fails.
+
+### Edge target down
+
+`net005-edge-target-down` fires when a target has answered no probe for 10
+minutes. One answer clears it.
+
+- **Every target down**: the edge's uplink is the suspect, since the nodes
+  behind it reach the tailnet through it. The uplink adapter is unplugged, the
+  site's network is down, or a captive portal holds it (before the first login,
+  or after the access expired). From a client on the lab Wi-Fi, check whether
+  the site's portal page answers.
+- **One target down while the others answer**: that node is down or off the
+  tailnet. For rpi3, Uptime Kuma's own heartbeats stop too.
+- **No lines at all**: see [Edge watcher silent](#edge-watcher-silent). The
+  rule pages on no data as well.
+
+### Edge watcher silent
+
+`net005-edge-watcher-silent` fires when no `edge_probe` line arrived for 15
+minutes, three runs. The probe prints a line for every target on every run,
+so silence is the watcher, never the edge, and the edge's state is unknown.
+`make watcher-run` above tells the causes apart:
+
+- it cannot find the CronJob: it was never deployed;
+- the Job never starts: an image pull, or the namespace's quota;
+- the Job fails with no line: the probe found its targets file missing or
+  empty, and says so on stderr;
+- the Job prints its lines: the watcher works now, so the schedule is what
+  stopped, most likely a suspended CronJob (a Job cannot outlive its 2-minute
+  deadline, so none blocks the next). `make pods ENV=prod` shows when the last
+  `edge-watcher` pod ran.
