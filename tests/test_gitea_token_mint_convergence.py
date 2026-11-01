@@ -78,13 +78,56 @@ def test_the_admin_password_is_reasserted_before_the_revoke() -> None:
     )
 
 
-def test_the_revoke_only_touches_unrecorded_tokens() -> None:
+def _mint_gates() -> dict[str, tuple[str, str]]:
+    """Token name -> (SOPS variable gating its mint, account it is minted on)."""
+    tasks = _tasks()
+    gates = {}
+    for i, name in _mints().items():
+        script = " ".join(tasks[i]["command"]["argv"])
+        var = re.search(r"\bnot (gitea_\w+_token)\b", str(tasks[i]["when"])).group(1)
+        user = re.search(r"--username \{\{ (\w+) \}\}", script).group(1)
+        gates[name] = (var, user)
+    return gates
+
+
+def test_each_revoke_reads_the_same_sops_value_and_account_as_its_mint() -> None:
+    """A swapped variable would revoke one token on the evidence of another's key."""
     _, task = _revoke()
+    gates = _mint_gates()
     for item in task["loop"]:
-        assert "recorded" in item, f"{item['name']}: the revoke must know which SOPS value gates it"
-    assert "item.recorded" in str(task.get("when")), "a recorded token would be revoked from under its consumer"
+        var = re.fullmatch(r"\{\{ (gitea_\w+_token) \| length > 0 \}\}", item["recorded"]).group(1)
+        user = re.fullmatch(r"\{\{ (\w+) \}\}", item["user"]).group(1)
+        assert (var, user) == gates[item["name"]], f"{item['name']}: revoke reads {(var, user)}, mint {gates[item['name']]}"
+
+
+def test_the_revoke_skips_a_recorded_token() -> None:
+    """Inverted, the gate deletes every live credential and nothing re-mints it."""
+    _, task = _revoke()
+    assert "not item.recorded | bool" in str(task.get("when")), (
+        "a recorded token would be revoked from under its consumer"
+    )
 
 
 def test_the_controller_can_record_before_anything_is_minted() -> None:
     preflight = _index("Assert the controller can record a minted token")
     assert all(preflight < mint for mint in _mints()), "a token can be minted that the controller cannot record"
+
+
+def _records() -> list[dict]:
+    """Every controller-side task that writes a minted credential to SOPS."""
+    return [t for t in _tasks() if "toolkit secrets set" in str(t.get("command"))]
+
+
+def test_the_preflight_checks_the_tool_the_record_tasks_run() -> None:
+    checked = _tasks()[_index("Assert the controller can record a minted token")]["stat"]["path"]
+    assert len(_records()) >= len(_mints()), "the record tasks were not found; the scan no longer matches the role"
+    for task in _records():
+        assert task["command"].startswith(f"{checked} "),f"{task['name']}: runs a tool the preflight never checked"
+
+
+def test_the_preflight_runs_whenever_a_record_would() -> None:
+    """Tied to the record gates, so a converged host, which records nothing, still passes."""
+    when = str(_tasks()[_index("Assert the controller can record a minted token")].get("when"))
+    for task in _records():
+        var = re.search(r"\bnot (\w+_token)\b", str(task["when"])).group(1)
+        assert f"not {var}" in when, f"{task['name']} can run while the preflight is skipped"

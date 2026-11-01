@@ -433,12 +433,17 @@
 # a controller without an in-project `.venv` failed the issue-reader record (#2902).
 
 - name: Assert the controller can record a minted token
-  # The cause half: never mint what this controller cannot write down.
+  # The cause half: never mint what this controller cannot write down. Gated on
+  # the record tasks' own gates, so a converged host, which records nothing,
+  # passes on a controller without the tool.
   stat:
     path: "{{ playbook_dir }}/../../../.venv/bin/toolkit"
   register: _gitea_record_tool
   delegate_to: localhost
   become: false
+  when: >-
+    not gitea_bot_token or not gitea_reviewer_token or not gitea_review_notice_token
+    or not gitea_issue_reader_token or not gitea_admin_token or not act_runner_token
   failed_when: not _gitea_record_tool.stat.executable | default(false)
   tags: [gitea]
 
