@@ -41,7 +41,7 @@ created: "2026-08-27"
 
 - [x] ✓ 2026-11-01 [AC3] Write failing generator test: the web app's overlay emits a `PostSync` Job with `hook-delete-policy: HookSucceeded`, sending a malformed `POST /api/subscribe` to the app's host via `traefik.kube-system.svc` (`--connect-to`), failing unless `400` + `text/plain`
 - [x] ✓ 2026-11-01 [AC3] Extend `toolkit/features/generator_k8s.py` + `infra/k8s/templates/` so the test passes; regenerate both overlays (drift gate stays clean)
-- [ ] [AC3] Real run on staging recorded in `verification.md`: healthy → `Succeeded`, Job gone; forced failure (point the probe at `/`, which is nginx) → `Failed` + status `failure`
+- [x] ✓ 2026-11-01 [AC3] Real run on staging recorded in `verification.md`: healthy → `Succeeded`, Job gone; forced failure (point the probe at `/`, which is nginx) → `Failed` + status `failure`
 
 ### PR4 — operator path (AC4, AC7) — first, `feat/gitops-003-verify-staging`
 

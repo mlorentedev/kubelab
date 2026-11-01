@@ -11,7 +11,7 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 
 - [x] AC1 -> PR1 (#2594) and its amendment (#2613): live statuses below
 - [ ] AC2 -> PR2 (#2615): the `status` path and the red replay are live. PR6 (#2880, `ba9862a`): the in-cluster `delivery-watcher` bounds the no-status case (#2645 B); only its green path is seen live, in both envs. Open until a `healthy: 0` line and the alert firing are seen live. Header drift in `deploy-verify.yml`: #2881
-- [ ] AC3 -> PR3, after web#435 serves `commit` on staging
+- [x] AC3 -> PR3 (#2899): `tests/test_k8s_generator_route_probe.py`; healthy, forced-failure and revert runs live in staging below
 - [x] AC4 -> PR4 (#2579) and GITOPS-007 (#2584, `fix/gitops-007-superseded`): `tests/test_product_verify.py` (48 tests); live runs below
 - [x] AC5 -> #1276, `tests/test_argocd_notification_triggers.py`
 - [x] AC6 -> PR5: `tests/infra/test_argocd_status_token_live.py` proves the token still authenticates and has a future expiry; live run below. Not covered: the write grant (#2644)
@@ -49,6 +49,12 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
   - The first scheduled run is in Loki (`toolkit obs logs --env prod --service delivery-watcher`): `[06:30:04] {"metric": "argo_delivery", "argo_env": "prod", "sha": "f612c91…", "age_seconds": 325, "state": "success", "healthy": 1}`.
   - Runs at 06:40, 06:50, 07:00 and 07:10 printed the same `healthy: 1` line, each 10 minutes apart.
   - Grafana on `kubelab-vps` started evaluating `gitops003-argo-delivery` at 06:29:20Z (Loki responses), before the first line, so that first evaluation saw no data. At 07:18:16Z, `toolkit obs alerts --env prod` reports nothing firing or pending. With `noDataState: Alerting` and `for: 10m`, a rule that still read no data would be firing by then, so the rule reads the healthy series. That does not show it fires: the red path is still covered only by `tests/test_delivery_watcher.py`.
+
+- Live, 2026-11-01, AC3 (#2899) in staging, slot pointed at `feat/gitops-003-postsync-probe` from 16:51Z:
+  - Before: the hook's own request from the workstation, `POST /api/subscribe` with body `{`, answers `400 text/plain; charset=utf-8` on `mlorente.dev` and on `staging.mlorente.dev`. Prod gives the answer the probe requires before the probe ever runs there.
+  - Healthy, `41a80dc`: the operation reached `Succeeded` at 16:52:30Z, with hook `Job web-route-probe-api PostSync Succeeded` (`status.operationState.syncResult.resources`). The Job is gone afterwards (`NotFound`, `HookSucceeded`), and the commit carries `argocd/kubelab-staging success`.
+  - Forced failure, `01240c5` (probe path `/`): a commit that changes only the hook starts no operation and still gets `success "Synced at 01240c5"` (lesson-682, #2900). After `make sync-app`, the hook ended `Failed`. Loki: `route-probe: POST staging.mlorente.dev/ answered '405 text/html', expected '400 text/plain'`. The Application's `retry: {limit: 5}` re-ran the operation, and it ended `Failed` at 17:08:23Z. The commit then got `failure "one or more synchronization tasks completed unsuccessfully (retried 5 times)."` at 17:08:24Z.
+  - Revert, `3e9f244`, after `make sync-app`: `Succeeded` at 17:17:17Z, hook `Succeeded`, status `success`.
 
 ## Decisions made during implementation
 
