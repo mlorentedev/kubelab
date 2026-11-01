@@ -239,7 +239,9 @@ setup-local-dns:
 # In-project, not Poetry's default: that one puts the venv in its cache unless a
 # `.venv` already exists, and Ansible's controller-side tasks run `<repo>/.venv/bin/
 # toolkit`. A worktree set up the other way minted a token it could not record (#2902).
+# An activated venv wins over that setting, so VIRTUAL_ENV is emptied for the recipe.
 worktree-init: export POETRY_VIRTUALENVS_IN_PROJECT := true
+worktree-init: export VIRTUAL_ENV :=
 worktree-init:
 	@echo "=== Bootstrapping worktree: $$(pwd) ==="
 	@# No private package source exists, so Poetry has no credential to fetch.

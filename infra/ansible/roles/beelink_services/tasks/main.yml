@@ -442,8 +442,10 @@
   delegate_to: localhost
   become: false
   when: >-
-    not gitea_bot_token or not gitea_reviewer_token or not gitea_review_notice_token
-    or not gitea_issue_reader_token or not gitea_admin_token or not act_runner_token
+    not gitea_bot_token or not gitea_admin_token or not act_runner_token
+    or (gitea_reviewer_user | length > 0
+        and (not gitea_reviewer_token or not gitea_review_notice_token
+             or not gitea_issue_reader_token))
   failed_when: not _gitea_record_tool.stat.executable | default(false)
   tags: [gitea]
 

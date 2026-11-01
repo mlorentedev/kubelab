@@ -105,7 +105,7 @@ def test_the_venv_is_installed_in_the_worktree(tmp_path: pathlib.Path) -> None:
     log = tmp_path / "env.log"
     fake = tmp_path / "poetry"
     fake.write_text(
-        f'#!/bin/sh\ncase "$*" in "install"*) echo "$POETRY_VIRTUALENVS_IN_PROJECT" >> "{log}";; '
+        f'#!/bin/sh\ncase "$*" in "install"*) echo "$POETRY_VIRTUALENVS_IN_PROJECT:$VIRTUAL_ENV" >> "{log}";; '
         '"env info"*) exit 1;; esac\nexit 0\n',
         encoding="utf-8",
     )
@@ -116,10 +116,11 @@ def test_the_venv_is_installed_in_the_worktree(tmp_path: pathlib.Path) -> None:
         check=False,
         capture_output=True,
         text=True,
-        env={k: v for k, v in os.environ.items() if k != "POETRY_VIRTUALENVS_IN_PROJECT"},
+        # An activated venv elsewhere would take the install regardless of the setting.
+        env={**{k: v for k, v in os.environ.items() if k != "POETRY_VIRTUALENVS_IN_PROJECT"}, "VIRTUAL_ENV": "/elsewhere"},
     )
     assert done.returncode == 0, done.stderr
-    assert log.read_text(encoding="utf-8").split() == ["true"]
+    assert log.read_text(encoding="utf-8").split() == ["true:"]
 
 
 class TestRelocatedVenv:
