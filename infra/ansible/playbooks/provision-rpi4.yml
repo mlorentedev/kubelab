@@ -249,9 +249,13 @@
         gateway_ap_dhcp_range_end: "{{ config.networking.edge.lab_wifi.dhcp_range.end }}"
         gateway_ap_reservations: "{{ config.networking.edge.lab_wifi.reservations | map('extract', config.networking.nodes) | list }}"
         gateway_ap_ssid: "{{ secrets.networking.edge.lab_wifi.ssid | default('') }}"
-        gateway_ap_psks:
-          - keyid: current
-            psk: "{{ secrets.networking.edge.lab_wifi.psk | default('') }}"
+        # edge_probe_psk (EXTRA) puts a throwaway PSK ahead of the current one, for the
+        # on-device multi-PSK check (NET-005 B7). The current entry stays last, so a
+        # radio that honours only the last line keeps every saved device, rpi3 among
+        # them. A provision without it removes the probe entry.
+        gateway_ap_psks: >-
+          {{ ([{'keyid': 'probe', 'psk': edge_probe_psk}] if edge_probe_psk | default('') else [])
+             + [{'keyid': 'current', 'psk': secrets.networking.edge.lab_wifi.psk | default('')}] }}
         gateway_dhcp_reservations:
           - mac: "{{ config.networking.nodes.ace1.mac }}"
             hostname: "kubelab-ace1"

@@ -79,7 +79,8 @@ Partial results, kept apart from the `### B<n>-EVIDENCE` headings on purpose: `f
 - **B11.** Completed 2026-10-30, see `### B11-EVIDENCE` below.
 - **B12.** The second provision (2026-10-28) reported `ok=182 changed=1 failed=0`. The one change is apt's cache refresh (`cache_valid_time: 3600`), which fires on time elapsed, not on drift. On 2026-10-29 the edge's provision at 973113b9 read `changed=0`, the configuration B14 ran on. Left: the 48-hour soak's rtw88 check. The journal holds only about 8 hours (19.7M against `SystemMaxUse=20M`, #2702), but rsyslog keeps every kernel line in `kern.log` for weeks, and `make edge-soak` (#2811) reads the soak from there. The boot that began 2026-10-29T21:50Z is the soak. At 4.5 h it read 0 resets and logged `firmware failed to leave lps state` twice in its first 3 hours, with no disconnect, lease change or liveness action in either minute, power save `on` and `disable_lps_deep` `N`. The operator chose to observe through the soak rather than change the role, which would restart it. #2807 tracks the LPS decision at the end of the soak. Completed 2026-11-01, see `### B12-EVIDENCE` below.
 - **B14.** Done. Every case passed after B12's `changed=0` provision, and again on #2797's configuration once T3 had found #2794. The first check after T4's cable went back in could not tell a cable from none (#2800). Redone over the LAN with #2800's carrier line, it reads `eth0 has a carrier`, 28 of 28 `OK`. See `### B14-EVIDENCE` below.
-- **B7, B8, B9, B10, B13.** Not started.
+- **B7.** Completed 2026-11-01, see `### B7-EVIDENCE` below.
+- **B8, B9, B10, B13.** Not started.
 
 ### Hard-reset runs, 2026-10-29
 
@@ -363,6 +364,16 @@ verdict: measured; record the bound in verification.md
 - **Through the uplink.** On 2026-10-27 ace1, bee and ace2 each had a default route through the RPi4 and a 204 from the connectivity probe. On 2026-10-30 ace2's empty image store was refilled through the uplink: 3.42 GB at ace2's NIC over 4.1 hours, with `make provision NODE=ace2 ENV=prod TAGS=agent_stack` ending `failed=0` and a second run reading `changed=0` (#2703).
 - **e2e.** At 09:33Z, `make test-e2e ENV=staging` from master `fba90b14`, with the homelab powered: 68 passed, 21 skipped, 0 failed. Open WebUI has no staging route, so its tests skip there by declaration (`skip_in_envs`). Against prod, the same subset (`-k open_webui`) gave 8 passed.
 - **The 03:36Z run.** The same command at 03:36Z gave 68 passed, 19 skipped, 2 failed: `test_security_headers_present[open_webui]` and `test_hsts_header[open_webui]` in `tests/e2e/test_security_headers.py`, both refused on ace2's `100.64.0.5:3080`. On master those two tests call the probe before they read `skip_in_envs` (`test_security_headers.py:41` then `:44`, and `:75` then `:78`), and a refusal raises, so at 03:36Z ace2's empty image store failed them before the declaration was reached. At 09:33Z ace2 answered, the probe returned, and the declaration after it skipped them, which is how 2 failed and 19 skipped became 21 skipped with no code change between the runs. The failures were a test defect, not a staging regression, so the tick stands. #2846 reads the declaration first, after which a staging run no longer depends on ace2 for Open WebUI.
+
+### B7-EVIDENCE: the radio honours two PSKs at once, 2026-11-01
+
+The `[OPEN]` risk that gates AC10 is closed: brcmfmac does not offload the AP's handshake on this edge, and `wpa_psk_file` holds two keys at once.
+
+- `make provision NODE=rpi4 ENV=prod BOOTSTRAP=1 TAGS=gateway EXTRA='edge_probe_psk=<throwaway>'` rendered two wildcard entries, `keyid=probe` first and `keyid=current` last, and reloaded them with `reload_wpa_psk` (`changed=2`: the file and its handler). hostapd was not restarted.
+- The operator's phone forgot the lab Wi-Fi and joined it with the probe PSK. `hostapd_cli all_sta` listed it on `keyid=probe`, and the five other stations, rpi3 among them (matched against `networking.nodes.rpi3.mac`), on `keyid=current`. The first entry works, so `brcmfmac.feature_disable` is not needed.
+- The same provision without the variable left one entry, `keyid=current`. The probe PSK was never written to SOPS or git.
+
+Task 34 therefore takes the two-entry rotation, not ADR-075 D8's fallback.
 
 ### B4-EVIDENCE: the portal login and a stable uplink MAC, 2026-10-30
 
