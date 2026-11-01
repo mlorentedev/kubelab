@@ -74,7 +74,7 @@ def test_template_renders_routes_without_a_probe(tmp_path: pathlib.Path) -> None
     }
 
     assert create_renderer(REPO / "infra/k8s/templates").render_template("hooks.yaml.j2", out, context)
-    assert not [d for d in yaml.safe_load_all(out.read_text()) if d]
+    assert not [d for d in yaml.safe_load_all(out.read_text(encoding="utf-8")) if d]
 
 
 def _render(overlay: str) -> list[dict[str, Any]]:
@@ -152,11 +152,11 @@ def _run_script(tmp_path: pathlib.Path, answer: str) -> tuple[int, str, str]:
     (container,) = job["spec"]["template"]["spec"]["containers"]
     assert container["command"][:2] == ["/bin/sh", "-c"]
     stub = tmp_path / "curl"
-    stub.write_text(f'#!/bin/sh\nprintf \'%s\\n\' "$@" > "{tmp_path}/args"\nprintf \'%s\' \'{answer}\'\n')
+    stub.write_text(f'#!/bin/sh\nprintf \'%s\\n\' "$@" > "{tmp_path}/args"\nprintf \'%s\' \'{answer}\'\n', encoding="utf-8")
     stub.chmod(stub.stat().st_mode | stat.S_IEXEC)
     env = {**_env(job), "PATH": f"{tmp_path}:/usr/bin:/bin"}
     proc = subprocess.run(["/bin/sh", "-c", container["command"][2]], env=env, capture_output=True, text=True)
-    args = (tmp_path / "args").read_text() if (tmp_path / "args").exists() else ""
+    args = (tmp_path / "args").read_text(encoding="utf-8") if (tmp_path / "args").exists() else ""
     return proc.returncode, proc.stdout + proc.stderr, args
 
 
