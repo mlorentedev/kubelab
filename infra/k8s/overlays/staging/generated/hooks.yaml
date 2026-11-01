@@ -58,7 +58,7 @@ spec:
             - name: PROBE_METHOD
               value: "POST"
             - name: PROBE_PATH
-              value: "/api/subscribe"
+              value: "/"
             - name: PROBE_BODY
               value: '{'
             - name: EXPECT_STATUS

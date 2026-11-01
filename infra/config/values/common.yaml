@@ -1040,7 +1040,7 @@ apps:
         # it with 400 text/plain, the static site would answer 200/404 text/html.
         probe:
           method: POST
-          path: /api/subscribe
+          path: /
           body: "{"
           expect_status: 400
           expect_content_type: text/plain
