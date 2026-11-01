@@ -80,7 +80,8 @@ Partial results, kept apart from the `### B<n>-EVIDENCE` headings on purpose: `f
 - **B12.** The second provision (2026-10-28) reported `ok=182 changed=1 failed=0`. The one change is apt's cache refresh (`cache_valid_time: 3600`), which fires on time elapsed, not on drift. On 2026-10-29 the edge's provision at 973113b9 read `changed=0`, the configuration B14 ran on. Left: the 48-hour soak's rtw88 check. The journal holds only about 8 hours (19.7M against `SystemMaxUse=20M`, #2702), but rsyslog keeps every kernel line in `kern.log` for weeks, and `make edge-soak` (#2811) reads the soak from there. The boot that began 2026-10-29T21:50Z is the soak. At 4.5 h it read 0 resets and logged `firmware failed to leave lps state` twice in its first 3 hours, with no disconnect, lease change or liveness action in either minute, power save `on` and `disable_lps_deep` `N`. The operator chose to observe through the soak rather than change the role, which would restart it. #2807 tracks the LPS decision at the end of the soak. Completed 2026-11-01, see `### B12-EVIDENCE` below.
 - **B14.** Done. Every case passed after B12's `changed=0` provision, and again on #2797's configuration once T3 had found #2794. The first check after T4's cable went back in could not tell a cable from none (#2800). Redone over the LAN with #2800's carrier line, it reads `eth0 has a carrier`, 28 of 28 `OK`. See `### B14-EVIDENCE` below.
 - **B7.** Completed 2026-11-01, see `### B7-EVIDENCE` below.
-- **B8, B9, B10, B13.** Not started.
+- **B9.** Completed 2026-11-01, see `### B9-EVIDENCE` below.
+- **B8, B10, B13.** Not started.
 
 ### Hard-reset runs, 2026-10-29
 
