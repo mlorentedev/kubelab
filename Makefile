@@ -236,6 +236,10 @@ setup-local-dns:
 # Discovered as TOOL-010 after Wave 1 DT-010 PR hit `make sync-homepage`
 # failures in a fresh worktree (no .venv -> toolkit package not importable).
 .PHONY: worktree-init
+# In-project, not Poetry's default: that one puts the venv in its cache unless a
+# `.venv` already exists, and Ansible's controller-side tasks run `<repo>/.venv/bin/
+# toolkit`. A worktree set up the other way minted a token it could not record (#2902).
+worktree-init: export POETRY_VIRTUALENVS_IN_PROJECT := true
 worktree-init:
 	@echo "=== Bootstrapping worktree: $$(pwd) ==="
 	@# No private package source exists, so Poetry has no credential to fetch.

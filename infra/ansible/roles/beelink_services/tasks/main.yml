@@ -354,6 +354,121 @@
   notify: Restart gitea
   tags: [gitea]
 
+- name: Probe whether the recorded admin password still authenticates
+  # THE FLOOR OF THE RECOVERY CHAIN, and the reason it is a probe and not a
+  # blind reset.
+  #
+  # `GITEA_ADMIN_PASSWORD` is consumed by the container's first-boot setup ONLY
+  # (compose.yml.j2). Once the account exists the variable is inert, so a change
+  # in SOPS silently does not reach Gitea and the two drift apart with nothing
+  # reporting it. That drift is not cosmetic: every token operation below needs
+  # this password, because Gitea refuses bearer tokens on the token endpoints.
+  # A drifted password therefore takes down the whole rotation path, and the
+  # symptom is a 401 from an unrelated-looking command.
+  #
+  # Verify by consequence: ask the API whether the credential works. A 200 means
+  # SOPS and reality agree and there is nothing to do -- which is what keeps this
+  # pair `changed=0` on a converged host rather than resetting on every run.
+  # The node-local address, not the public domain, matching the health check
+  # above. A credential-recovery task must not depend on Traefik, DNS or a valid
+  # certificate being up: those are the things that break at the same time, and
+  # a probe that fails for a routing reason would trigger a password reset that
+  # was never needed.
+  uri:
+    url: "http://{{ tailscale_ip }}:{{ gitea_http_port }}/api/v1/user"
+    method: GET
+    url_username: "{{ gitea_admin_user }}"
+    url_password: "{{ gitea_admin_password }}"
+    force_basic_auth: true
+    status_code: [200, 401, 403]
+  register: _gitea_admin_probe
+  changed_when: false
+  failed_when: false
+  no_log: true
+  tags: [gitea]
+
+- name: Reassert the admin password from SOPS when it has drifted
+  # Runs ONLY when the probe failed, so SOPS is authoritative without this being
+  # a reset-on-every-run. The container CLI needs no authentication at all -- it
+  # has direct database access -- which is what makes SSH to the node the real
+  # root of trust and means a lost password never requires rebuilding Gitea.
+  #
+  # `--must-change-password=false` IS LOAD-BEARING, not tidiness. The flag
+  # DEFAULTS TO TRUE (verified against 1.25.5 on 2026-08-31, `gitea admin user
+  # change-password --help`), and a true value puts the account behind a forced
+  # interactive password change -- which would break the Basic Auth this task
+  # exists to restore. Without it, the repair bricks the credential it repairs.
+  #
+  # THE PASSWORD GOES THROUGH ARGV HERE, and the mint tasks below deliberately
+  # do not. Stated rather than quietly inconsistent: `change-password` offers no
+  # stdin form (`--password` is its only input), so the value is visible in `ps`
+  # and /proc on the Beelink for the duration of one exec. Accepted because the
+  # exposure is local to a node that already holds the Gitea database in plain
+  # files, it is bounded to a single short-lived process, and it only runs when
+  # the probe above found real drift -- never on a converged host. If Gitea ever
+  # grows a stdin form for this command, take it.
+  command:
+    argv:
+      - docker
+      - exec
+      - gitea
+      - su
+      - git
+      - -c
+      - >-
+        gitea admin user change-password
+        --username {{ gitea_admin_user }}
+        --password {{ gitea_admin_password }}
+        --must-change-password=false
+  when: _gitea_admin_probe.status is defined and _gitea_admin_probe.status != 200
+  changed_when: true
+  no_log: true
+  tags: [gitea]
+
+# --- Token convergence: before any mint ---------------------------------------
+# Every token below is two tasks, a mint in the container and a record in SOPS from
+# the controller, both gated on the SOPS key being empty. If the record fails after
+# the mint, the token exists in Gitea with its value lost, and the next run's mint
+# of the same name is refused: the role stops converging. Measured 2026-11-01, when
+# a controller without an in-project `.venv` failed the issue-reader record (#2902).
+
+- name: Assert the controller can record a minted token
+  # The cause half: never mint what this controller cannot write down.
+  stat:
+    path: "{{ playbook_dir }}/../../../.venv/bin/toolkit"
+  register: _gitea_record_tool
+  delegate_to: localhost
+  become: false
+  failed_when: not _gitea_record_tool.stat.executable | default(false)
+  tags: [gitea]
+
+- name: Revoke a named token that Gitea holds and SOPS does not
+  # The recovery half: a token whose key is empty in SOPS has no consumer, because
+  # nobody holds its value, so revoking it is safe, and it lets the mint below reuse
+  # the name. Gated per token on the SOPS key, so a recorded token is never touched.
+  # 204 revoked, 404 none to revoke. Basic Auth as the admin, the only form Gitea
+  # accepts on token endpoints, which is why the password is reasserted above.
+  uri:
+    url: "http://{{ tailscale_ip }}:{{ gitea_http_port }}/api/v1/users/{{ item.user }}/tokens/{{ item.name }}"
+    method: DELETE
+    url_username: "{{ gitea_admin_user }}"
+    url_password: "{{ gitea_admin_password }}"
+    force_basic_auth: true
+    status_code: [204, 404]
+  loop:
+    - {name: kubelab-provisioning, user: "{{ gitea_bot_user }}", recorded: "{{ gitea_bot_token | length > 0 }}"}
+    - {name: kubelab-reviewer, user: "{{ gitea_reviewer_user }}", recorded: "{{ gitea_reviewer_token | length > 0 }}"}
+    - {name: kubelab-review-notice, user: "{{ gitea_reviewer_user }}", recorded: "{{ gitea_review_notice_token | length > 0 }}"}
+    - {name: kubelab-issue-reader, user: "{{ gitea_reviewer_user }}", recorded: "{{ gitea_issue_reader_token | length > 0 }}"}
+    - {name: kubelab-reconciler, user: "{{ gitea_admin_user }}", recorded: "{{ gitea_admin_token | length > 0 }}"}
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.user | length > 0 and not item.recorded | bool
+  register: _gitea_stale_tokens
+  changed_when: _gitea_stale_tokens.status == 204
+  no_log: true
+  tags: [gitea]
+
 # --- Machine identity: the token (AUTH-004 C5, ADR-062 D1) --------------------
 # The ACCOUNT and its login block live in gitea-bootstrap.sh, next to the admin
 # user, for two reasons. The script is a real shell, so the quoting survives
@@ -615,77 +730,6 @@
   notify: Recreate act-runner
   no_log: true
   tags: [gitea, runner]
-
-- name: Probe whether the recorded admin password still authenticates
-  # THE FLOOR OF THE RECOVERY CHAIN, and the reason it is a probe and not a
-  # blind reset.
-  #
-  # `GITEA_ADMIN_PASSWORD` is consumed by the container's first-boot setup ONLY
-  # (compose.yml.j2). Once the account exists the variable is inert, so a change
-  # in SOPS silently does not reach Gitea and the two drift apart with nothing
-  # reporting it. That drift is not cosmetic: every token operation below needs
-  # this password, because Gitea refuses bearer tokens on the token endpoints.
-  # A drifted password therefore takes down the whole rotation path, and the
-  # symptom is a 401 from an unrelated-looking command.
-  #
-  # Verify by consequence: ask the API whether the credential works. A 200 means
-  # SOPS and reality agree and there is nothing to do -- which is what keeps this
-  # pair `changed=0` on a converged host rather than resetting on every run.
-  # The node-local address, not the public domain, matching the health check
-  # above. A credential-recovery task must not depend on Traefik, DNS or a valid
-  # certificate being up: those are the things that break at the same time, and
-  # a probe that fails for a routing reason would trigger a password reset that
-  # was never needed.
-  uri:
-    url: "http://{{ tailscale_ip }}:{{ gitea_http_port }}/api/v1/user"
-    method: GET
-    url_username: "{{ gitea_admin_user }}"
-    url_password: "{{ gitea_admin_password }}"
-    force_basic_auth: true
-    status_code: [200, 401, 403]
-  register: _gitea_admin_probe
-  changed_when: false
-  failed_when: false
-  no_log: true
-  tags: [gitea]
-
-- name: Reassert the admin password from SOPS when it has drifted
-  # Runs ONLY when the probe failed, so SOPS is authoritative without this being
-  # a reset-on-every-run. The container CLI needs no authentication at all -- it
-  # has direct database access -- which is what makes SSH to the node the real
-  # root of trust and means a lost password never requires rebuilding Gitea.
-  #
-  # `--must-change-password=false` IS LOAD-BEARING, not tidiness. The flag
-  # DEFAULTS TO TRUE (verified against 1.25.5 on 2026-08-31, `gitea admin user
-  # change-password --help`), and a true value puts the account behind a forced
-  # interactive password change -- which would break the Basic Auth this task
-  # exists to restore. Without it, the repair bricks the credential it repairs.
-  #
-  # THE PASSWORD GOES THROUGH ARGV HERE, and the mint tasks above deliberately
-  # do not. Stated rather than quietly inconsistent: `change-password` offers no
-  # stdin form (`--password` is its only input), so the value is visible in `ps`
-  # and /proc on the Beelink for the duration of one exec. Accepted because the
-  # exposure is local to a node that already holds the Gitea database in plain
-  # files, it is bounded to a single short-lived process, and it only runs when
-  # the probe above found real drift -- never on a converged host. If Gitea ever
-  # grows a stdin form for this command, take it.
-  command:
-    argv:
-      - docker
-      - exec
-      - gitea
-      - su
-      - git
-      - -c
-      - >-
-        gitea admin user change-password
-        --username {{ gitea_admin_user }}
-        --password {{ gitea_admin_password }}
-        --must-change-password=false
-  when: _gitea_admin_probe.status is defined and _gitea_admin_probe.status != 200
-  changed_when: true
-  no_log: true
-  tags: [gitea]
 
 - name: Mint the superadmin's scoped token
   # Same mechanism, same non-idempotence, same gate as the machine token above:
