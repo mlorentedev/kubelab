@@ -701,6 +701,10 @@ argocd:
   # interpreter release works; pinned so the CronJob never upgrades itself.
   delivery_watcher:
     image: python:3.13.16-alpine
+  # The route probe (GITOPS-003 AC3): a PostSync Job per `extra_routes` probe.
+  # Rendered into the generated overlay files, so the generator reads it here.
+  route_probe:
+    image: curlimages/curl:8.11.1
   # Hub: clusters.hub -> networking.<provider>.tailscale_dns — MagicDNS (ADR-025).
   # Named via clusters.hub rather than a provider literal: this comment said
   # networking.aws until prod moved to gcp1, and a comment restating one side of
@@ -1031,6 +1035,15 @@ apps:
       extra_routes:
       - path_prefix: /api
         service: api
+        # A PostSync hook sends this after every sync and fails it unless the API
+        # answers (GITOPS-003 AC3). A malformed body changes nothing: Gin rejects
+        # it with 400 text/plain, the static site would answer 200/404 text/html.
+        probe:
+          method: POST
+          path: /api/subscribe
+          body: "{"
+          expect_status: 400
+          expect_content_type: text/plain
       # Site Info
       site_title: "Manu Lorente"
       site_description: "Cloud Native Automation in Spanish"
