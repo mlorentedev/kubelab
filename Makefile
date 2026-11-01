@@ -1967,6 +1967,13 @@ edge-soak: ## Read the edge's uplink soak: 48 h of this boot with no adapter res
 edge-measure: ## Measure the edge uplink's line rate, before the shaper [SECONDS=60]
 	@$(TOOLKIT) infra edge measure $(if $(SECONDS),--seconds $(SECONDS))
 
+# Unload the lab Wi-Fi's driver on the edge, as a radio halt would, and watch the
+# liveness ladder bring the AP back with no human step (NET-005 B10, AC13). Runs
+# over the LAN; rpi3 and every lab Wi-Fi client drop until it serves again.
+.PHONY: edge-ap-halt
+edge-ap-halt: ## Halt the edge's lab Wi-Fi radio on purpose and watch it come back
+	@$(TOOLKIT) infra edge ap-halt
+
 # Join this laptop to the lab LAN, the edge's management path (NET-005 AC11).
 # ROUTE=1 makes the edge the default route, for the portal login with the
 # laptop's own Wi-Fi off; STATIC=1 holds a fixed address when the edge serves
