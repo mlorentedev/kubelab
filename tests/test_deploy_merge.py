@@ -191,3 +191,15 @@ class TestRequiredContexts:
     def test_an_undeclared_branch_is_an_error(self) -> None:
         with pytest.raises(KeyError):
             required_contexts(REPO_ROOT / "infra/config/values/common.yaml", REPO, "no-such-branch")
+
+
+class TestWorkflowTriggers:
+    def test_the_default_branch_guard_binds_only_dispatch(self) -> None:
+        """A schedule payload has no `repository`: a guard that reads it unscoped skips every sweep."""
+        import yaml
+
+        wf = yaml.safe_load((REPO_ROOT / ".github/workflows/deploy-merge.yml").read_text(encoding="utf-8"))
+        # Exact: an absent guard would let a dispatch on a branch judge with that branch's code.
+        assert wf["jobs"]["merge"].get("if") == (
+            "github.event_name != 'workflow_dispatch' || github.ref_name == github.event.repository.default_branch"
+        )

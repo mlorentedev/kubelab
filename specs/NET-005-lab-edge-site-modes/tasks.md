@@ -153,20 +153,24 @@ This PR loads the drops before any uplink exists. `iifname` matches a name, so r
 
 ### PR 7 — The prod probe
 
-22. [ ] [P] [AC12] Test first, `tests/test_edge_watcher_targets.py`: the committed `infra/k8s/base/services/edge-watcher/targets.txt` equals the render from the SSOT. It has one `<node> <tailscale_ip> <port>` line for each always-on node behind the edge (rpi4, rpi3). Implement the renderer next to `watcher_targets()` in `toolkit/features/backup_destination.py`, or in its own module, plus `make sync-edge-watcher-targets`. Green.
-23. [ ] [AC12] Test first, `tests/test_edge_watcher_probe.py`. Run `probe.sh` under `sh` with a fake `nc`. Every target yields exactly one `{"metric":"edge_probe","node":...,"up":0|1}` line, also on a timeout, a refused connection or a missing `nc`. The probe is never silent about a target. Watch it fail.
-24. [ ] [AC12] Implement:
+22. [x] [P] [AC12] Test first, `tests/test_edge_watcher_targets.py`: the committed `infra/k8s/base/services/edge-watcher/targets.txt` equals the render from the SSOT. It has one `<node> <tailscale_ip> <port>` line for each always-on node behind the edge (rpi4, rpi3). Implement the renderer next to `watcher_targets()` in `toolkit/features/backup_destination.py`, or in its own module, plus `make sync-edge-watcher-targets`. Green.
+23. [x] [AC12] Test first, `tests/test_edge_watcher_probe.py`. Run `probe.sh` under `sh` with a fake `nc`. Every target yields exactly one `{"metric":"edge_probe","node":...,"up":0|1}` line, also on a timeout, a refused connection or a missing `nc`. The probe is never silent about a target. Watch it fail.
+24. [x] [AC12] Implement:
     - `probe.sh`;
     - the CronJob `infra/k8s/base/services/edge-watcher.yaml`, every 5 minutes, with its image pinned through `IMAGE_SOURCES` in `toolkit/scripts/sync_k8s_images.py`, as the R2 watcher's is;
     - the ingress NetworkPolicy in `infra/k8s/base/governance/networkpolicies.yaml`.
 
     `tests/test_networkpolicy_coverage.py` and `tests/test_spoke_rbac_covers_manifests.py` stay green.
-25. [ ] [AC12] Test first, `tests/test_edge_alerting_rules.py`, for `grafana-alerting/edge-rules.yaml`:
+25. [x] [AC12] Test first, `tests/test_edge_alerting_rules.py`, for `grafana-alerting/edge-rules.yaml`:
     - a per-target rule alerts on `up` grouped by node, with `noDataState: Alerting`, `execErrState: Alerting` and the `page` routing label;
     - a second rule alerts when no `edge_probe` line arrives at all.
 
     `tests/test_alerting_no_data_is_not_health.py` stays green. Implement. Green.
+
+    Done without a `page` label: no rule carries one, and the tier comes from each environment's root policy (prod pages, staging archives). See `verification.md`.
 26. [ ] [AC12] Read the ADR-044 `page` route and check that it repeats until acknowledged. If it does not, extend it through git and `toolkit infra n8n import`, with a test beside the fabric's existing ones. Record which case held.
+
+    Read on 2026-10-25 and recorded in `verification.md`. The repeat interval is the operator's call, so this stays open.
 27. [ ] [AC12] Staging, following the validation flow in `CLAUDE.md`: repoint `targetRevision` after coordinating with the other lanes, run one Job, and read two lines with `up=1`. Revert. After the merge to prod, run one Job and confirm both rules are Normal.
 
 ### PR 8 — Self-recovery
@@ -254,7 +258,7 @@ A step gets that heading only once every part of its criterion is observed. Part
   Once `make edge-lan-link` has carried the session, undo the hand changes listed in `verification.md`: delete the `lab-bootstrap` profile and revert "Wired connection 1" (task 33).
 - [ ] B5. [AC2] Provision the AP (PR 5). Saved devices rejoin. rpi3 takes its reservation, and Kuma's route answers.
 - [ ] B6. [AC1] `make headscale-rejoin NODE=rpi4` and `NODE=rpi3` are each a no-op, or they rejoin. The RPi4 advertises `networking.lan_cidr`. rpi3's flags were set by hand before its play declared them (#2685), and `--reset` drops any flag a play does not declare: while rpi3 is still on the mesh, read its `RouteAll`, `CorpDNS` and `AdvertiseRoutes` from `tailscale debug prefs` and compare them with the play, since a difference is what its next rejoin changes. `make provision NODE=rpi3 ENV=prod TAGS=tailscale` on the Running node reports `changed=0` (#2685's second criterion). After any real rejoin, read the node's expiry in Headscale: it registers again with a fresh pre-auth key, and ADR-075 relies on rpi3's node key not expiring.
-- [ ] B7. [AC10] **On-device multi-PSK check.** Write two wildcard entries and connect a client with the first entry's PSK. Record which entry works and the `keyid` hostapd logs. If only the last works, try `brcmfmac.feature_disable` through `modprobe.d` and record the result. It decides task 34's path.
+- [x] (✓ 2026-11-01) B7. [AC10] **On-device multi-PSK check.** Write two wildcard entries and connect a client with the first entry's PSK. Record which entry works and the `keyid` hostapd logs. If only the last works, try `brcmfmac.feature_disable` through `modprobe.d` and record the result. It decides task 34's path.
 - [ ] B8. [AC3] [AC7] [AC9] [AC12] The uplink stand-in (the MSI's hotspot):
   - exposure scans over IPv4 and IPv6;
   - hostile DHCP with option 121 and its own DNS. The uplink does not request option 121 (`use-routes: false`), so the stand-in's server must send it unasked (dnsmasq `dhcp-option-force=121,...`), or the lease carries no route to check;
@@ -262,10 +266,12 @@ A step gets that heading only once every part of its criterion is observed. Part
   - a DNS-only block like a portal's, which must page with the phone on cellular;
   - the dongle unplugged, which must page;
   - rpi3 stopped while the RPi4 is up, which must page.
-- [ ] B9. [AC8] Connect-time bounds under a bulk upload and a bulk download, each with and without the shaper.
-- [ ] B10. [AC13] `modprobe -r brcmfmac` simulates a halt. The lab Wi-Fi returns with no human step.
+
+  Not run at the hotel site, and not tied to it: the stand-in forces every case itself, so B8 runs at any site where the uplink dongle can join a laptop's hotspot, after the 2026-11-18 move included. It runs in a session of its own, on the MSI (stored from 2026-11-01) or on the Mac, whose Internet Sharing must first be shown to send option 121 unasked. Either way it needs a `wifi_psk` site in SOPS and its first `SECRET_CATALOG` entry, as a PR of its own. The temporary site's `/23` made a real AC7 collision likely; elsewhere only the stand-in forces one, which is what AC7 asks for.
+- [x] B9. [AC8] Connect-time bounds under a bulk upload and a bulk download, each with and without the shaper. ✓ 2026-11-01 (`make edge-shape-check`; B9-EVIDENCE: p95 at most 100 ms shaped)
+- [x] (✓ 2026-11-01) B10. [AC13] `modprobe -r brcmfmac` simulates a halt. The lab Wi-Fi returns with no human step. Run with `make edge-ap-halt`, which unloads the driver's holders with it, since `brcmfmac_wcc` refuses the bare form.
 - [x] (✓ 2026-10-30) B11. [AC4] A host on the homelab switch gets a DHCP lease from the RPi4 (`DHCPACK(eth0)` in dnsmasq's journal), the homelab nodes reach the internet through the uplink, and `make test-e2e ENV=staging` passes with the homelab powered.
-- [ ] B12. [AC1] A second provisioning run reports `changed=0`. Over a 48-hour soak, the kernel log shows no rtw88 reset.
+- [x] (✓ 2026-11-01) B12. [AC1] A second provisioning run reports `changed=0`. Over a 48-hour soak, the kernel log shows no rtw88 reset.
 - [ ] B13. [AC1] At the next site: the Ethernet kind, live. The spec stays in `verifying` until then.
 - [x] (✓ 2026-10-29) B14. [AC13] [AC1] [AC3] The hard-reset test in `docs/runbooks/lab-edge.md`, after B12: a warm reboot, a power cut, a power cut without the uplink adapter and one without the switch cable, each checked by `make edge-boot-check`. Every boot has the ruleset active before systemd-networkd starts, so before the uplink can have an address, and every case passes (T4 found #2732, fixed by #2769; T3 found #2794, fixed by #2797). The check after T4's cable went back in reads `eth0`'s carrier since #2800, and passed over the LAN.
 

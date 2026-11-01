@@ -1786,6 +1786,12 @@ sync-terraform-backend: ## Render infra/terraform/backend.s3.tfbackend from terr
 sync-r2-watcher-targets:
 	@$(TOOLKIT) sync r2-watcher-targets
 
+# Regenerate the edge watcher's targets from networking (NET-005 AC12). Run after a
+# node joins or leaves the edge's networks or changes class; the test suite fails until you do.
+.PHONY: sync-edge-watcher-targets
+sync-edge-watcher-targets:
+	@$(TOOLKIT) sync edge-watcher-targets
+
 # BACKUP-044 AC1: does every declared node actually HAVE a backup, and how old
 # is it — asked from this workstation rather than from the nodes themselves.
 # Every other backup control runs on the node it checks, so it shares that
@@ -1960,6 +1966,20 @@ edge-soak: ## Read the edge's uplink soak: 48 h of this boot with no adapter res
 .PHONY: edge-measure
 edge-measure: ## Measure the edge uplink's line rate, before the shaper [SECONDS=60]
 	@$(TOOLKIT) infra edge measure $(if $(SECONDS),--seconds $(SECONDS))
+
+# Load the uplink from bee, a download then an upload, while rpi3 on the lab Wi-Fi
+# times a TCP connect every second, with and without the shaper (NET-005 B9, AC8).
+# The shaper is always restored and read back. Runs from the switch.
+.PHONY: edge-shape-check
+edge-shape-check: ## Time a lab Wi-Fi client's connects under bulk load, shaped and not [BOUND_MS=n]
+	@$(TOOLKIT) infra edge shape-check $(if $(BOUND_MS),--bound-ms $(BOUND_MS))
+
+# Unload the lab Wi-Fi's driver on the edge, as a radio halt would, and watch the
+# liveness ladder bring the AP back with no human step (NET-005 B10, AC13). Runs
+# over the LAN; rpi3 and every lab Wi-Fi client drop until it serves again.
+.PHONY: edge-ap-halt
+edge-ap-halt: ## Halt the edge's lab Wi-Fi radio on purpose and watch it come back
+	@$(TOOLKIT) infra edge ap-halt
 
 # Join this laptop to the lab LAN, the edge's management path (NET-005 AC11).
 # ROUTE=1 makes the edge the default route, for the portal login with the

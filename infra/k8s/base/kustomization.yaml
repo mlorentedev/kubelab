@@ -25,6 +25,7 @@ resources:
   - services/apprise.yaml
   - services/quota-watcher.yaml
   - services/r2-backup-watcher.yaml
+  - services/edge-watcher.yaml
   - services/disk-watcher.yaml
   - services/delivery-watcher.yaml
 
@@ -86,6 +87,13 @@ configMapGenerator:
     namespace: kubelab
     files:
       - services/delivery-watcher/watch.py
+  # The edge watcher's probe and targets (NET-005 AC12). Hash kept, as above.
+  # targets.txt is generated: `make sync-edge-watcher-targets`.
+  - name: edge-watcher-probe
+    namespace: kubelab
+    files:
+      - services/edge-watcher/probe.sh
+      - services/edge-watcher/targets.txt
 
   - name: authelia-assets
     namespace: kubelab
@@ -147,6 +155,7 @@ configMapGenerator:
       - services/grafana-alerting/disk-rules.yaml
       - services/grafana-alerting/slo-rules.yaml
       - services/grafana-alerting/delivery-rules.yaml
+      - services/grafana-alerting/edge-rules.yaml
       # Rules that are retired and must be actively DELETED from Grafana's
       # database. Dropping a file from this list does not remove the rule --
       # measured on both clusters, #1583. Whatever leaves this list gets a uid
