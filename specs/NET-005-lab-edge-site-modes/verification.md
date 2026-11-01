@@ -357,10 +357,15 @@ unload alone: refused modprobe: FATAL: Module brcmfmac is in use.
 unload with holders: ok brcmfmac_wcc
 after the unload: absent
 ladder: 9 line(s)
-  ...02:59:29+01:00 lab Wi-Fi: wlan0 is not serving (1 of 3 misses before a driver reload)
-  ...03:00:29+01:00 lab Wi-Fi: wlan0 is not serving (2 of 3 misses before a driver reload)
-  ...03:01:30+01:00 lab Wi-Fi: wlan0 has not served for 3 checks; reloading brcmfmac and restarting hostapd
-  ...03:01:31+01:00 Failed to start kubelab-edge-liveness.service
+  2026-11-01T02:59:28+01:00 rpi4 systemd[1]: Starting kubelab-edge-liveness.service - Check the lab Wi-Fi and the uplink, and recover a halted radio...
+  2026-11-01T02:59:29+01:00 rpi4 kubelab-edge-liveness[338288]: lab Wi-Fi: wlan0 is not serving (1 of 3 misses before a driver reload)
+  2026-11-01T02:59:29+01:00 rpi4 systemd[1]: Finished kubelab-edge-liveness.service - Check the lab Wi-Fi and the uplink, and recover a halted radio.
+  2026-11-01T03:00:29+01:00 rpi4 systemd[1]: Starting kubelab-edge-liveness.service - Check the lab Wi-Fi and the uplink, and recover a halted radio...
+  2026-11-01T03:00:29+01:00 rpi4 kubelab-edge-liveness[338620]: lab Wi-Fi: wlan0 is not serving (2 of 3 misses before a driver reload)
+  2026-11-01T03:00:30+01:00 rpi4 systemd[1]: Finished kubelab-edge-liveness.service - Check the lab Wi-Fi and the uplink, and recover a halted radio.
+  2026-11-01T03:01:30+01:00 rpi4 systemd[1]: Starting kubelab-edge-liveness.service - Check the lab Wi-Fi and the uplink, and recover a halted radio...
+  2026-11-01T03:01:30+01:00 rpi4 kubelab-edge-liveness[338969]: lab Wi-Fi: wlan0 has not served for 3 checks; reloading brcmfmac and restarting hostapd
+  2026-11-01T03:01:31+01:00 rpi4 systemd[1]: Failed to start kubelab-edge-liveness.service - Check the lab Wi-Fi and the uplink, and recover a halted radio.
 edge rebooted: no
 verdict: recovered, the AP served again 178 s after the unload
 ```
