@@ -4,7 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
-| 684 | [An Open WebUI feature toggle decides which tools the model gets](lesson-684-an-open-webui-feature-toggle-decides-which-tools-the-model-gets.md) | 2026-11-01 |
+| 687 | [An Open WebUI feature toggle decides which tools the model gets](lesson-687-an-open-webui-feature-toggle-decides-which-tools-the-model-gets.md) | 2026-11-01 |
 | 676 | [A rootless dockerd reads its own daemon.json, and only its reload event proves a reload](lesson-676-a-rootless-dockerd-reads-its-own-daemon-json-and-only-its-reload-event-proves-a-reload.md) | 2026-10-30 |
 | 671 | [An image is fetched by whatever needs it, not only by a pull](lesson-671-an-image-is-fetched-by-whatever-needs-it-not-only-by-a-pull.md) | 2026-10-30 |
 | 670 | [dockerd resumes a layer only within its own attempts, and a failed pull drops every layer](lesson-670-dockerd-resumes-a-layer-only-within-its-own-attempts-and-a-failed-pull-drops-every-layer.md) | 2026-10-30 |

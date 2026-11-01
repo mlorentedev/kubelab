@@ -1,5 +1,5 @@
 ---
-id: lesson-684-an-open-webui-feature-toggle-decides-which-tools-the-model-gets
+id: lesson-687-an-open-webui-feature-toggle-decides-which-tools-the-model-gets
 type: lesson
 status: active
 created: "2026-11-01"
