@@ -85,6 +85,14 @@ class TestMerge:
         decision = run(MergeApi(mergeable(checks={"Detect Changes": conclusion})), decl, products)
         assert decision.action == MERGE, decision.reason
 
+    def test_an_unstable_pr_with_every_required_context_green_merges(self, decl, products) -> None:
+        """`unstable` means a context branch protection does not require is not passing.
+
+        #2883 sat 6.5h on `add-to-project` hitting a rate limit; the merge button
+        accepts that state, and the required contexts are checked on their own."""
+        decision = run(MergeApi(mergeable(), state="unstable"), decl, products)
+        assert decision.action == MERGE, decision.reason
+
 
 class TestEachConditionRefusesAlone:
     def test_not_mechanical(self, decl, products) -> None:
@@ -123,14 +131,18 @@ class TestEachConditionRefusesAlone:
         routes = mergeable(statuses={"Tests": "failure"})
         assert run(MergeApi(routes), decl, products).action == SKIP
 
+    def test_unstable_does_not_excuse_a_red_required_context(self, decl, products) -> None:
+        routes = mergeable(checks={"Tests": "failure"})
+        assert run(MergeApi(routes, state="unstable"), decl, products).action == SKIP
+
     def test_the_latest_run_of_a_check_is_the_one_that_counts(self, decl, products) -> None:
         routes = mergeable()
         runs = routes[f"repos/{REPO}/commits/{HEAD}/check-runs?per_page=100"]["check_runs"]
         runs.append({"id": 99, "name": "Tests", "status": "completed", "conclusion": "failure"})
         assert run(MergeApi(routes), decl, products).action == SKIP
 
-    @pytest.mark.parametrize("state", ["blocked", "behind", "dirty", "unstable", "unknown", "draft"])
-    def test_a_merge_state_that_is_not_clean(self, decl, products, state: str) -> None:
+    @pytest.mark.parametrize("state", ["blocked", "behind", "dirty", "unknown", "draft", "has_hooks", None])
+    def test_a_merge_state_that_is_not_clean_or_unstable(self, decl, products, state: str | None) -> None:
         assert run(MergeApi(mergeable(), state=state), decl, products).action == SKIP
 
     def test_a_head_that_moves_after_the_verdict(self, decl, products) -> None:

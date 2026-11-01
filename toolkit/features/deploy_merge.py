@@ -9,7 +9,8 @@ A PR is merged only when all of these hold at one head sha:
 
     the verdict, recomputed here from master's code, is `mechanical`
     every context branch protection requires reports a passing state
-    GitHub reports the PR `clean`
+    GitHub reports the PR `clean`, or `unstable`: only a context that is not
+    required fails there, and the line above already checked every required one
     the head is still that sha at the end of the judging
 
 A PR is closed only when it has no changed files: there is nothing to merge,
@@ -40,6 +41,11 @@ SKIP = "skip"
 # A required context passes on these, as branch protection reads them.
 _STATUS_OK = frozenset({"success"})
 _CHECK_OK = frozenset({"success", "neutral", "skipped"})
+
+# GitHub's mergeable_state values the merge accepts, as the merge button does.
+# `unstable` came in after #2883 waited 6.5h on `add-to-project` hitting a rate
+# limit (#1619). tests/test_deploy_shape_widening.py pins this set.
+MERGE_STATES_OK = frozenset({"clean", "unstable"})
 
 
 @dataclass(frozen=True)
@@ -122,8 +128,9 @@ def judge(
         final = api.json(f"repos/{repo}/pulls/{number}")
         if final["head"]["sha"] != head:
             return Decision(number, SKIP, "the head moved while it was being judged", head)
-        if final.get("mergeable_state") != "clean":
-            return Decision(number, SKIP, f"merge state is {final.get('mergeable_state')!r}, not clean", head)
+        state = final.get("mergeable_state")
+        if state not in MERGE_STATES_OK:
+            return Decision(number, SKIP, f"merge state is {state!r}, not clean or unstable", head)
     except Exception as exc:  # noqa: BLE001 — a PR that cannot be read is not merged
         return Decision(number, SKIP, f"cannot judge: {exc!r}")
-    return Decision(number, MERGE, f"{shape.reason}; every required context passing; clean", head)
+    return Decision(number, MERGE, f"{shape.reason}; every required context passing; {state}", head)
