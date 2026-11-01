@@ -41,7 +41,12 @@ def _detector() -> ModuleType:
 
 
 def _fake_poetry(
-    tmp_path: pathlib.Path, *, lock_is_fresh: bool, venv: pathlib.Path | None = None, install_rc: int = 0
+    tmp_path: pathlib.Path,
+    *,
+    lock_is_fresh: bool,
+    venv: pathlib.Path | None = None,
+    install_rc: int = 0,
+    builds: bool = True,
 ) -> tuple[pathlib.Path, pathlib.Path]:
     log = tmp_path / "calls.log"
     script = tmp_path / "poetry"
@@ -49,7 +54,7 @@ def _fake_poetry(
     where = f'echo "{venv}"; exit 0' if venv else "exit 1"
     # A real install leaves the toolkit entry point where the recipe then checks for it.
     built = '[ -z "$WORKTREE_VENV" ] || { mkdir -p "$WORKTREE_VENV/bin"; : > "$WORKTREE_VENV/bin/toolkit"; chmod +x "$WORKTREE_VENV/bin/toolkit"; }; '
-    install = f"{built}exit 0" if install_rc == 0 else f"exit {install_rc}"
+    install = f"{built if builds else ''}exit 0" if install_rc == 0 else f"exit {install_rc}"
     script.write_text(
         f'#!/bin/sh\necho "$*" >> "{log}"\n'
         f'case "$*" in "check --lock"*) exit {check_rc};; "env info"*) {where};; "install"*) {install};; esac\n'
@@ -242,6 +247,22 @@ class TestRelocatedVenv:
         assert not cache.exists(), "a venv outside the worktree must be set aside so poetry builds .venv"
         assert (tmp_path / ".venv" / "bin" / "toolkit").exists(), "the rebuilt venv must be the worktree's"
         assert not (cache.parent / f"{cache.name}.relocated").exists(), "a successful rebuild discards the old copy"
+
+    def test_an_install_that_builds_elsewhere_restores_the_cache_venv(self, tmp_path: pathlib.Path) -> None:
+        """Poetry exiting 0 is not the install succeeding: no worktree toolkit is a failure too."""
+        cache = tmp_path / "cache" / "toolkit-AbC123-py3.13"
+        _venv(cache.parent / "x", shebang_dir=cache).rename(cache)
+        fake, _ = _fake_poetry(tmp_path, lock_is_fresh=True, venv=cache, builds=False)
+        done = subprocess.run(
+            ["make", "--no-print-directory", "worktree-init", f"POETRY={fake}", f"WORKTREE_VENV={tmp_path / '.venv'}"],
+            cwd=REPO,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert done.returncode != 0
+        assert (cache / "bin" / "pytest").exists(), "the venv set aside must come back when the check fails"
+        assert not (cache.parent / f"{cache.name}.relocated").exists()
 
     def test_worktree_init_leaves_a_healthy_venv_alone(self, tmp_path: pathlib.Path) -> None:
         venv = _venv(tmp_path, shebang_dir=tmp_path / ".venv")

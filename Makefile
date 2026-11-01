@@ -260,6 +260,9 @@ worktree-init:
 	@# Only the script's exit 1 means "moved"; a crash or a missing python3 (exit 2, 127)
 	@# must not condemn a healthy venv. A signal during the install restores it too: an
 	@# `else` branch is never reached by a shell that was killed.
+	@# The toolkit is checked after the install, not inferred: these steps rest on Poetry's env lookup,
+	@# which is exactly what failed here once. A missing one counts as a failed install,
+	@# so the previous venv comes back then too.
 	@venv=$$($(POETRY) env info --path 2>/dev/null || true); aside=""; moved=0; \
 	if [ -n "$$venv" ] && [ -d "$$venv" ]; then python3 -I scripts/venv_relocated.py "$$venv" || moved=$$?; \
 		if [ "$$moved" = 0 ] && ! [ "$$venv" -ef "$(WORKTREE_VENV)" ]; then moved=1; fi; \
@@ -269,15 +272,13 @@ worktree-init:
 		echo "venv moved aside to $$aside; rebuilding"; \
 		trap 'rm -rf "$$venv"; mv "$$aside" "$$venv"; echo "interrupted; previous venv restored"; exit 143' INT TERM; \
 	fi; \
-	if PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring $(POETRY) install --no-interaction; then \
+	if PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring $(POETRY) install --no-interaction \
+		&& { [ -x "$(WORKTREE_VENV)/bin/toolkit" ] || { echo "ERROR: no $(WORKTREE_VENV)/bin/toolkit after install; Poetry resolved: $$($(POETRY) env info --path 2>/dev/null)" >&2; false; }; }; then \
 		trap - INT TERM; [ -z "$$aside" ] || rm -rf "$$aside"; \
 	else \
 		[ -z "$$aside" ] || { rm -rf "$$venv"; mv "$$aside" "$$venv"; echo "install failed; previous venv restored"; }; \
 		exit 1; \
 	fi
-	@# Checked, not inferred from the steps above: they rest on Poetry's env lookup,
-	@# which is exactly what failed here once.
-	@test -x "$(WORKTREE_VENV)/bin/toolkit" || { echo "ERROR: no $(WORKTREE_VENV)/bin/toolkit after install; Poetry resolved: $$($(POETRY) env info --path 2>/dev/null)" >&2; exit 1; }
 	@hookspath=$$(git config --get core.hooksPath 2>/dev/null || echo ""); \
 	if [ -n "$$hookspath" ] && [ -x "$$hookspath/pre-commit" ]; then \
 		echo "✓ pre-commit hooks shared from $$hookspath (no re-install needed)"; \
