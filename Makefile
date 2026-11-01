@@ -305,6 +305,7 @@ config-generate:
 #   - infra/k8s/overlays/<env>/generated/ingress.yaml      (CI-GATE-002)
 #   - infra/ansible/generated/<env>/hosts.yml              (CI-GATE-002)
 #   - infra/k8s/overlays/<env>/generated/configmaps.yaml   (CI-GATE-003)
+#   - infra/k8s/overlays/<env>/generated/hooks.yaml        (GITOPS-003 AC3)
 #
 # These generators read EXCLUSIVELY from `common.yaml` + `<env>.yaml`
 # (post-SSOT-012, configmaps.yaml no longer pulls non-secret values from
@@ -405,6 +406,7 @@ config-check-drift:
 	done; \
 	_paths="infra/k8s/overlays/$(ENV)/generated/ingress.yaml \
 	        infra/k8s/overlays/$(ENV)/generated/configmaps.yaml \
+	        infra/k8s/overlays/$(ENV)/generated/hooks.yaml \
 	        infra/ansible/generated/$(ENV)/hosts.yml"; \
 	if [ $$_status -ne 0 ]; then \
 		echo "✗ A generator failed for $(ENV); nothing was compared"; \
