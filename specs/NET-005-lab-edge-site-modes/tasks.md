@@ -269,7 +269,7 @@ A step gets that heading only once every part of its criterion is observed. Part
 - [ ] B9. [AC8] Connect-time bounds under a bulk upload and a bulk download, each with and without the shaper.
 - [x] (✓ 2026-11-01) B10. [AC13] `modprobe -r brcmfmac` simulates a halt. The lab Wi-Fi returns with no human step. Run with `make edge-ap-halt`, which unloads the driver's holders with it, since `brcmfmac_wcc` refuses the bare form.
 - [x] (✓ 2026-10-30) B11. [AC4] A host on the homelab switch gets a DHCP lease from the RPi4 (`DHCPACK(eth0)` in dnsmasq's journal), the homelab nodes reach the internet through the uplink, and `make test-e2e ENV=staging` passes with the homelab powered.
-- [ ] B12. [AC1] A second provisioning run reports `changed=0`. Over a 48-hour soak, the kernel log shows no rtw88 reset.
+- [x] (✓ 2026-11-01) B12. [AC1] A second provisioning run reports `changed=0`. Over a 48-hour soak, the kernel log shows no rtw88 reset.
 - [ ] B13. [AC1] At the next site: the Ethernet kind, live. The spec stays in `verifying` until then.
 - [x] (✓ 2026-10-29) B14. [AC13] [AC1] [AC3] The hard-reset test in `docs/runbooks/lab-edge.md`, after B12: a warm reboot, a power cut, a power cut without the uplink adapter and one without the switch cable, each checked by `make edge-boot-check`. Every boot has the ruleset active before systemd-networkd starts, so before the uplink can have an address, and every case passes (T4 found #2732, fixed by #2769; T3 found #2794, fixed by #2797). The check after T4's cable went back in reads `eth0`'s carrier since #2800, and passed over the LAN.
 
