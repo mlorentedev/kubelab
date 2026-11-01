@@ -312,6 +312,10 @@
         # comment. Narrower than the one above, minted and gated the same way.
         gitea_review_notice_scopes: "{{ gitea_config.apps.services.core.gitea.token_scopes.review_notice }}"
         gitea_review_notice_token: "{{ gitea_secrets.apps.services.core.gitea.review_notice_token | default('') }}"
+        # CONSOLE-004 -- a third token on the reviewer's account, read-only, for the
+        # forge task view's API. Minted and gated the same way.
+        gitea_issue_reader_scopes: "{{ gitea_config.apps.services.core.gitea.token_scopes.issue_reader }}"
+        gitea_issue_reader_token: "{{ gitea_secrets.apps.services.core.gitea.issue_reader_token | default('') }}"
         # The superadmin's API token (TOOL-035). Minted by the same mechanism and
         # gated the same way. Two reasons it exists, and only the first is obvious:
         # Gitea puts the creating account in a new organization's `Owners` team, so
