@@ -1,5 +1,5 @@
 ---
-id: "lesson-684-a-credential-minted-in-one-system-and-recorded-in-another-needs-a-way-back-from-the-gap"
+id: lesson-684-a-credential-minted-in-one-system-and-recorded-in-another-needs-a-way-back-from-the-gap
 type: lesson
 status: active
 title: "A credential minted in one system and recorded in another needs a way back from the gap between them"
