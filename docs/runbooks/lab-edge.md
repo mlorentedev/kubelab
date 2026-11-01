@@ -212,6 +212,17 @@ make edge-soak
 
 It reads the edge's `kern.log` over the LAN, because the journal there holds about 8 hours (#2807). It prints the boot's resets, its `failed to leave lps state` warnings and its other uplink lines, then a verdict. `toolkit infra edge soak` exits 0 when the soak passed, 1 on a reset, 2 while the boot holds but has not reached 48 hours, and 3 when the log cannot tell: no kernel banner in it, or an rsyslog that did not start with this boot. Through make every non-zero code is 2, so read the `verdict:` line. The LPS warnings are listed and not counted: the operator decides at the end of the soak whether they warrant turning the driver's power saving off, which starts a new soak. The boot's time can be hours early, since the RPi4 has no clock across a power cut (lesson-662); its length comes from the uptime. Record the output at the end under `### B12-EVIDENCE` in the spec's `verification.md`.
 
+## Shaper check
+
+The uplink is shaped both ways so that a homelab host's bulk transfer does not starve a lab Wi-Fi client (NET-005 AC8, B9). `make edge-shape-check` measures it: bee pulls and then pushes `make edge-measure`'s streams for 30 seconds each, while rpi3, a lab Wi-Fi client, times one TCP connect a second. It runs the shaped windows first, then stops `kubelab-edge-shaper.service` for the two unshaped ones, about a minute in which rpi3, Uptime Kuma and anyone on the lab Wi-Fi are slow. The shaper is started again on any error and on Ctrl-C, retried once, and read back (the unit active and CAKE on the uplink). A run killed outright (SIGTERM, SIGKILL, a closed terminal) leaves it stopped: `make edge-boot-check` reports the shaper, and `make provision NODE=rpi4 ENV=prod TAGS=gateway` or a reboot starts the unit again.
+
+```bash
+make edge-shape-check              # measure and print each window
+make edge-shape-check BOUND_MS=150 # also judge the shaped windows' p95 connect
+```
+
+Each window prints the uplink's rate in each direction from the adapter's counters, the load's answered and refused requests, and the client's connect p50, p95, max and failures. `toolkit infra edge shape-check` exits 0 when measured (and within the bound), 1 when a shaped window lost a connect or is over the bound, 3 when a window has no reading (a load whose direction the uplink counters do not show at 1 Mbit/s or more counts as none) or the shaper was not restored, and 255 when the edge did not answer. Through make every non-zero code is 2, so read the `verdict:` line. A `SHAPER NOT RESTORED` verdict names the provision that restores it. Record the output and the bound under `### B9-EVIDENCE` in the spec's `verification.md`.
+
 ## Edge alerts
 
 Prod's `edge-watcher` CronJob (`infra/k8s/base/services/edge-watcher.yaml`)

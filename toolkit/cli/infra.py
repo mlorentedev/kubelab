@@ -311,6 +311,36 @@ def edge_measure(
     raise typer.Exit(code)
 
 
+@edge_app.command("shape-check")
+def edge_shape_check(
+    bound_ms: Annotated[
+        float | None, typer.Option("--bound-ms", help="Fail when a shaped window's p95 connect exceeds this")
+    ] = None,
+) -> None:
+    """Check that the shaper keeps a lab Wi-Fi client usable under bulk load (B9, AC8).
+
+    bee loads the uplink, a download then an upload, while rpi3 on the lab Wi-Fi
+    times a TCP connect every second; then again with the shaper lifted, which is
+    always restored and read back. Exits 0 measured (and within --bound-ms when
+    given), 1 a shaped window lost a connect or is over the bound, 3 cannot tell
+    or the shaper not restored, and 255 when the edge does not answer.
+    """
+    from toolkit.features.configuration import ConfigurationManager
+    from toolkit.features.edge_shape_check import run_shape_check
+    from toolkit.features.edge_status import EdgeNotDeclaredError
+
+    net = ConfigurationManager("prod", settings.project_root).get_plaintext_values()["networking"]
+    try:
+        _say_the_path(net, "lan")
+        code, lines = run_shape_check(net, bound_ms)
+    except EdgeNotDeclaredError as e:
+        logger.error(str(e))
+        raise typer.Exit(1) from e
+    for line in lines:
+        typer.echo(line)
+    raise typer.Exit(code)
+
+
 @edge_app.command("ap-halt")
 def edge_ap_halt() -> None:
     """Halt the lab Wi-Fi's radio on purpose and watch the edge bring it back (B10).

@@ -80,8 +80,9 @@ Partial results, kept apart from the `### B<n>-EVIDENCE` headings on purpose: `f
 - **B12.** The second provision (2026-10-28) reported `ok=182 changed=1 failed=0`. The one change is apt's cache refresh (`cache_valid_time: 3600`), which fires on time elapsed, not on drift. On 2026-10-29 the edge's provision at 973113b9 read `changed=0`, the configuration B14 ran on. Left: the 48-hour soak's rtw88 check. The journal holds only about 8 hours (19.7M against `SystemMaxUse=20M`, #2702), but rsyslog keeps every kernel line in `kern.log` for weeks, and `make edge-soak` (#2811) reads the soak from there. The boot that began 2026-10-29T21:50Z is the soak. At 4.5 h it read 0 resets and logged `firmware failed to leave lps state` twice in its first 3 hours, with no disconnect, lease change or liveness action in either minute, power save `on` and `disable_lps_deep` `N`. The operator chose to observe through the soak rather than change the role, which would restart it. #2807 tracks the LPS decision at the end of the soak. Completed 2026-11-01, see `### B12-EVIDENCE` below.
 - **B14.** Done. Every case passed after B12's `changed=0` provision, and again on #2797's configuration once T3 had found #2794. The first check after T4's cable went back in could not tell a cable from none (#2800). Redone over the LAN with #2800's carrier line, it reads `eth0 has a carrier`, 28 of 28 `OK`. See `### B14-EVIDENCE` below.
 - **B7.** Completed 2026-11-01, see `### B7-EVIDENCE` below.
+- **B9.** Completed 2026-11-01, see `### B9-EVIDENCE` below.
 - **B10.** Completed 2026-11-01, see `### B10-EVIDENCE` below.
-- **B8, B9, B13.** Not started.
+- **B8, B13.** Not started.
 
 ### Hard-reset runs, 2026-10-29
 
@@ -330,6 +331,25 @@ OK   no failed unit
 ```
 
 Exit 0. `eth0 has a carrier` is the line the first check lacked. Of the files #2804 changes, the edge runs only `edge-boot-check.sh`, so it changes what the check reads, not what the edge does at boot, and T1 to T4 stand. T4 was judged by its case's own line, `eth0 present without a carrier`, which predates #2804. That the new line fails when a case that expects the cable finds none is `test_without_the_uplink_a_cable_that_is_out_still_fails`.
+
+### B9-EVIDENCE: a lab Wi-Fi client's connects under bulk load, 2026-11-01
+
+`make edge-shape-check`, 2026-11-01T01:52Z, from the switch. bee loaded the uplink with `make edge-measure`'s six streams for 30 s per window, while rpi3 on the lab Wi-Fi timed one TCP connect a second to `speed.cloudflare.com` over the uplink. The shaper was at 24000/3600 kbit (#2875).
+
+```text
+idle: uplink 0.4 down / 0.1 up Mbit/s; connect p50 27 ms, p95 36 ms, max 37 ms over 23, 0 failed
+download, shaped: uplink 19.3 down / 1.4 up Mbit/s, load answered 6 cut 0 refused 0; connect p50 28 ms, p95 64 ms, max 69 ms over 23, 0 failed
+upload, shaped: uplink 0.4 down / 3.3 up Mbit/s, load answered 0 cut 6 refused 0; connect p50 33 ms, p95 45 ms, max 52 ms over 23, 0 failed
+download, unshaped: uplink 23.3 down / 0.9 up Mbit/s, load answered 6 cut 0 refused 0; connect p50 85 ms, p95 106 ms, max 128 ms over 22, 0 failed
+upload, unshaped: uplink 0.3 down / 3.8 up Mbit/s, load answered 0 cut 6 refused 0; connect p50 491 ms, p95 527 ms, max 529 ms over 12, 0 failed
+shaper: restored, CAKE on the uplink
+verdict: measured; record the bound in verification.md
+```
+
+- **The bound: p95 connect at most 100 ms under either shaped load, with no failed connect** (`make edge-shape-check BOUND_MS=100`). Shaped, the client stays within 2x its idle p95 (36 ms): 64 ms under the download and 45 ms under the upload. A run 4 minutes earlier read 73 ms under the shaped download, the highest shaped p95 seen, so the bound has room above both. The bound is set from this unbounded run; no run with `BOUND_MS=100` is recorded here.
+- **Without the shaper** the upload is the one that starves the client: p50 491 ms, 15x its shaped value, and only 12 connects in 30 s against 23, because each took half a second. The download unshaped reads p95 106 ms; the earlier run's unshaped download had a 1103 ms maximum. This is why the upload is shaped, at 3600 kbit, below the 3.8 Mbit/s the uplink carried unshaped. The download cap, 24000 kbit, is above the 23.3 Mbit/s the uplink carried unshaped, so the shaped download window does not show the cap limiting the download; AC8's starvation case is the upload's. Whether a shaped window reached its cap is #2896.
+- **The uploads' `cut 6`.** Six 10 MB uploads cannot finish in 30 s at 3.3 Mbit/s, so every request is still running when the window ends and curl reports `000`, as `make edge-measure` reads it. The earlier run counted those as refused and could not tell; the counters' 3.3 up show the load crossed the uplink. Since the review of #2895 the check requires that: a load window whose direction the counters do not show at 1 Mbit/s or more is no reading, and every load window above clears it.
+- The shaper was read back as restored after both runs: `kubelab-edge-shaper.service` active and a CAKE root qdisc on the uplink.
 
 ### B12-EVIDENCE: a second provision with no change, and the soak, 2026-11-01
 

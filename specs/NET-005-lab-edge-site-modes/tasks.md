@@ -266,7 +266,9 @@ A step gets that heading only once every part of its criterion is observed. Part
   - a DNS-only block like a portal's, which must page with the phone on cellular;
   - the dongle unplugged, which must page;
   - rpi3 stopped while the RPi4 is up, which must page.
-- [ ] B9. [AC8] Connect-time bounds under a bulk upload and a bulk download, each with and without the shaper.
+
+  Not run at the hotel site, and not tied to it: the stand-in forces every case itself, so B8 runs at any site where the uplink dongle can join a laptop's hotspot, after the 2026-11-18 move included. It runs in a session of its own, on the MSI (stored from 2026-11-01) or on the Mac, whose Internet Sharing must first be shown to send option 121 unasked. Either way it needs a `wifi_psk` site in SOPS and its first `SECRET_CATALOG` entry, as a PR of its own. The temporary site's `/23` made a real AC7 collision likely; elsewhere only the stand-in forces one, which is what AC7 asks for.
+- [x] B9. [AC8] Connect-time bounds under a bulk upload and a bulk download, each with and without the shaper. ✓ 2026-11-01 (`make edge-shape-check`; B9-EVIDENCE: p95 at most 100 ms shaped)
 - [x] (✓ 2026-11-01) B10. [AC13] `modprobe -r brcmfmac` simulates a halt. The lab Wi-Fi returns with no human step. Run with `make edge-ap-halt`, which unloads the driver's holders with it, since `brcmfmac_wcc` refuses the bare form.
 - [x] (✓ 2026-10-30) B11. [AC4] A host on the homelab switch gets a DHCP lease from the RPi4 (`DHCPACK(eth0)` in dnsmasq's journal), the homelab nodes reach the internet through the uplink, and `make test-e2e ENV=staging` passes with the homelab powered.
 - [x] (✓ 2026-11-01) B12. [AC1] A second provisioning run reports `changed=0`. Over a 48-hour soak, the kernel log shows no rtw88 reset.

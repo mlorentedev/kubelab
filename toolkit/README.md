@@ -108,6 +108,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit infra edge boot-check` | Say whether a boot brought back everything the edge serves (the hard-reset test). |
 | `toolkit infra edge lan-link` | Join this laptop to the lab LAN with a NetworkManager profile (NET-005 AC11). |
 | `toolkit infra edge measure` | Measure the uplink's line rate on the edge, one window per direction (AC8). |
+| `toolkit infra edge shape-check` | Check that the shaper keeps a lab Wi-Fi client usable under bulk load (B9, AC8). |
 | `toolkit infra edge soak` | Say whether the uplink adapter has held 48 hours of this boot with no reset (B12). |
 | `toolkit infra edge status` | Say whether the edge's uplink is up, behind a portal, or dead. |
 | `toolkit infra headscale` | Headscale VPN ACL policy + mesh probe (ADR-041) |
