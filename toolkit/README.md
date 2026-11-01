@@ -214,6 +214,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit sync` | Sync generated files from SSOT (common.yaml, SOPS). |
 | `toolkit sync all` | Run all sync operations. |
 | `toolkit sync branding` | Sync IDP brand CSS from common.yaml SSOT. |
+| `toolkit sync edge-watcher-targets` | Render the edge watcher's targets from networking (NET-005 AC12). |
 | `toolkit sync images` | Sync K8s image tags from common.yaml to kustomization.yaml. |
 | `toolkit sync oidc` | Generate the OIDC client files from the SSOT and the stored SOPS digests (SSOT-017). |
 | `toolkit sync operators` | Refresh vendored cluster_bootstrap operator manifests from their SSOT version (ADR-047). |

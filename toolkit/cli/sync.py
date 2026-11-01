@@ -18,7 +18,7 @@ import shutil
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 
@@ -305,30 +305,60 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def _sync_r2_watcher_targets(check: bool) -> bool:
-    """Render (or, with check, compare) the watcher's targets; True when current or written."""
+def _sync_rendered_from_common(
+    label: str,
+    path: str,
+    render: Callable[[dict[str, Any]], str],
+    write: Callable[[Path, dict[str, Any]], bool],
+    check: bool,
+) -> bool:
+    """Render (or, with check, compare) a file generated from common.yaml; True when current or written."""
     import yaml
 
+    root = _repo_root()
+    config = yaml.safe_load((root / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
+    if check:
+        current = root / path
+        if not current.exists() or current.read_text(encoding="utf-8") != render(config):
+            logger.error(f"{label}: {path} is stale; run `make sync-{label}`")
+            return False
+        logger.success(f"{label}: {path} is current")
+        return True
+    changed = write(root, config)
+    logger.success(f"{label}: {path} {'written' if changed else 'unchanged'}")
+    return True
+
+
+def _sync_r2_watcher_targets(check: bool) -> bool:
+    """Render (or, with check, compare) the watcher's targets; True when current or written."""
     from toolkit.features.backup_destination import (
         WATCHER_TARGETS_PATH,
         render_watcher_targets,
         write_watcher_targets,
     )
 
-    root = _repo_root()
     # common.yaml only: `backup.sources` and the node hostnames are not per-env,
     # and the file lives in base/, so both clusters read the same render.
-    config = yaml.safe_load((root / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
-    if check:
-        current = root / WATCHER_TARGETS_PATH
-        if not current.exists() or current.read_text(encoding="utf-8") != render_watcher_targets(config):
-            logger.error(f"r2-watcher-targets: {WATCHER_TARGETS_PATH} is stale; run `make sync-r2-watcher-targets`")
-            return False
-        logger.success(f"r2-watcher-targets: {WATCHER_TARGETS_PATH} is current")
-        return True
-    changed = write_watcher_targets(root, config)
-    logger.success(f"r2-watcher-targets: {WATCHER_TARGETS_PATH} {'written' if changed else 'unchanged'}")
-    return True
+    return _sync_rendered_from_common(
+        "r2-watcher-targets", WATCHER_TARGETS_PATH, render_watcher_targets, write_watcher_targets, check
+    )
+
+
+def _sync_edge_watcher_targets(check: bool) -> bool:
+    """Render (or, with check, compare) the edge watcher's targets (NET-005 AC12)."""
+    from toolkit.features.backup_destination import (
+        EDGE_WATCHER_TARGETS_PATH,
+        render_edge_watcher_targets,
+        write_edge_watcher_targets,
+    )
+
+    return _sync_rendered_from_common(
+        "edge-watcher-targets",
+        EDGE_WATCHER_TARGETS_PATH,
+        render_edge_watcher_targets,
+        write_edge_watcher_targets,
+        check,
+    )
 
 
 @app.command("r2-watcher-targets")
@@ -337,6 +367,15 @@ def r2_watcher_targets(
 ) -> None:
     """Render the R2 watcher's per-node targets from backup.sources (BACKUP-055)."""
     if not _sync_r2_watcher_targets(check=check):
+        raise typer.Exit(1)
+
+
+@app.command("edge-watcher-targets")
+def edge_watcher_targets(
+    check: Annotated[bool, typer.Option("--check", help="Fail if the committed file is stale")] = False,
+) -> None:
+    """Render the edge watcher's targets from networking (NET-005 AC12)."""
+    if not _sync_edge_watcher_targets(check=check):
         raise typer.Exit(1)
 
 
@@ -422,7 +461,8 @@ def sync_all(
 ) -> None:
     """Run all sync operations.
 
-    images, oidc, branding, platform-json, r2-watcher-targets, terraform-backend.
+    images, oidc, branding, platform-json, r2-watcher-targets, edge-watcher-targets,
+    terraform-backend.
     """
     failures: list[str] = []
 
@@ -500,6 +540,14 @@ def sync_all(
     except Exception as e:
         logger.error(f"r2-watcher-targets sync crashed: {e}")
         failures.append("r2-watcher-targets")
+
+    # NET-005 AC12: the edge watcher's targets
+    try:
+        if not _sync_edge_watcher_targets(check=check):
+            failures.append("edge-watcher-targets")
+    except Exception as e:
+        logger.error(f"edge-watcher-targets sync crashed: {e}")
+        failures.append("edge-watcher-targets")
 
     try:
         if not _sync_terraform_backend(check=check):
