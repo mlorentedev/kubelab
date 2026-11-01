@@ -96,6 +96,33 @@ def test_a_fresh_lock_is_left_alone(tmp_path: pathlib.Path) -> None:
     assert calls == ["check", "install"]
 
 
+def test_the_venv_is_installed_in_the_worktree(tmp_path: pathlib.Path) -> None:
+    """Ansible's record tasks run `<repo>/.venv/bin/toolkit`, so the venv must be there.
+
+    Poetry's own default puts it in its cache unless a `.venv` already exists, and a
+    worktree initialised that way failed a token record after the mint (#2902).
+    """
+    log = tmp_path / "env.log"
+    fake = tmp_path / "poetry"
+    fake.write_text(
+        f'#!/bin/sh\ncase "$*" in "install"*) echo "$POETRY_VIRTUALENVS_IN_PROJECT:$VIRTUAL_ENV" >> "{log}";; '
+        '"env info"*) exit 1;; esac\nexit 0\n',
+        encoding="utf-8",
+    )
+    fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+    done = subprocess.run(
+        ["make", "--no-print-directory", "worktree-init", f"POETRY={fake}"],
+        cwd=REPO,
+        check=False,
+        capture_output=True,
+        text=True,
+        # An activated venv elsewhere would take the install regardless of the setting.
+        env={**{k: v for k, v in os.environ.items() if k != "POETRY_VIRTUALENVS_IN_PROJECT"}, "VIRTUAL_ENV": "/elsewhere"},
+    )
+    assert done.returncode == 0, done.stderr
+    assert log.read_text(encoding="utf-8").split() == ["true:"]
+
+
 class TestRelocatedVenv:
     def test_a_venv_with_its_own_shebangs_is_ready(self, tmp_path: pathlib.Path) -> None:
         venv = _venv(tmp_path, shebang_dir=tmp_path / ".venv")

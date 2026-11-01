@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 684 | [A credential minted in one system and recorded in another needs a way back from the gap between them](lesson-684-a-credential-minted-in-one-system-and-recorded-in-another-needs-a-way-back-from-the-gap.md) | 2026-11-01 |
 | 599 | [A rotation command with its own client list drifts both ways, and the env it runs in stops scoping it](lesson-599-a-rotation-command-with-its-own-client-list-drifts-both-ways-and-the-env-it-runs-in-stops-scoping-it.md) | 2026-10-18 |
 | 591 | [Gitea skips its sign-in page only when passkeys are off too](lesson-591-gitea-skips-its-sign-in-page-only-when-passkeys-are-off-too.md) | 2026-10-17 |
 | 579 | [A replacement token that passes the new probe can have lost every old route](lesson-579-replacement-token-probe-every-route.md) | 2026-10-16 |
