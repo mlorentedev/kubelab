@@ -130,7 +130,7 @@ def judge(
             return Decision(number, SKIP, "the head moved while it was being judged", head)
         state = final.get("mergeable_state")
         if state not in MERGE_STATES_OK:
-            return Decision(number, SKIP, f"merge state is {state!r}, not clean or unstable", head)
+            return Decision(number, SKIP, f"merge state is {state!r}, not one of {sorted(MERGE_STATES_OK)}", head)
     except Exception as exc:  # noqa: BLE001 — a PR that cannot be read is not merged
         return Decision(number, SKIP, f"cannot judge: {exc!r}")
     return Decision(number, MERGE, f"{shape.reason}; every required context passing; {state}", head)

@@ -133,7 +133,8 @@ class TestEachConditionRefusesAlone:
 
     def test_unstable_does_not_excuse_a_red_required_context(self, decl, products) -> None:
         routes = mergeable(checks={"Tests": "failure"})
-        assert run(MergeApi(routes, state="unstable"), decl, products).action == SKIP
+        decision = run(MergeApi(routes, state="unstable"), decl, products)
+        assert decision.action == SKIP and "required contexts not passing" in decision.reason
 
     def test_the_latest_run_of_a_check_is_the_one_that_counts(self, decl, products) -> None:
         routes = mergeable()
