@@ -62,6 +62,7 @@ For the first two, follow the steps below.
 First read which red it is, from the run's error annotation:
 
 - **A failure description** (the `Argo CD status` job, or `wait-status` printing `failure`/`error`): the sync at that commit failed, and the text is Argo's `operationState.message`.
+- **A failure naming `web-route-probe-api`** (or any `<app>-route-probe-*`): the sync applied, then the `PostSync` route probe (GITOPS-003 AC3) got the wrong answer. Its log line reads `route-probe: POST <host>/api/subscribe answered '<code> <type>', expected '400 text/plain'`. `200`/`404 text/html` means the `/api` route reaches the static site; `502` means the API is down; `000` means nothing answered. Read it with `toolkit obs logs --env <env> --service route-probe`. The failed Job is kept until the next sync replaces it, or for a day at most.
 - **`no status arrived`** (the prod sweep, or a replay): master HEAD has been merged for over 10 minutes and Argo posted nothing for it. This is also what follows a failed sync: Argo withholds success while the last operation did not succeed, and a later commit that changes no manifest starts no new operation. So read the last operation first (step 1): a failure there, at an older commit, is the cause.
 
 Then:

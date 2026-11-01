@@ -37,10 +37,10 @@ created: "2026-08-27"
 - [x] ✓ 2026-10-21 [AC2] Add `.github/workflows/deploy-verify.yml`, one job per touched env, timeout N; failure message links the runbook section (AC7). **Trigger: NOT `on: push`.** Per Manu's decision on #1619 (2026-10-20) staging deploy PRs will be merged by a workflow, and a merge made with `GITHUB_TOKEN` starts no `on: push` workflow, so the check would silently never run after an unattended merge, the one case it is the compensating control for. Use `on: status` (the `argocd/kubelab-<env>` status Argo posts with its PAT does start workflows) plus a `schedule` sweep for the no-status case, or `workflow_run`; and a test asserting the trigger is not `push` alone. **Done as**: `status` (red on `failure`/`error` at once), a 30-min `schedule` sweep of master HEAD for **prod only** (staging is on-demand and repointable, so a missing staging status is not evidence; ADR-028), and `workflow_dispatch` replay; `tests/test_deploy_verify_workflow.py`. Merge after #2613 is live on the hub, or the first sweep is red on a no-op commit
 - [x] ✓ 2026-10-22 [AC2] Real runs recorded in `verification.md`: replay against `1489265` (red) and the next healthy merge (green)
 
-### PR3 — `PostSync` hook probes the route (AC3) — blocked on Setup/Risk 1
+### PR3 — `PostSync` hook probes the route (AC3)
 
-- [ ] [AC3] Write failing generator test: the web app's overlay emits a `PostSync` Job with `hook-delete-policy: HookSucceeded`, sending a malformed `POST /api/subscribe` to the app's host via `traefik.kube-system.svc` (`--connect-to`), failing unless `400` + `text/plain`
-- [ ] [AC3] Extend `toolkit/features/generator_k8s.py` + `infra/k8s/templates/` so the test passes; regenerate both overlays (drift gate stays clean)
+- [x] ✓ 2026-11-01 [AC3] Write failing generator test: the web app's overlay emits a `PostSync` Job with `hook-delete-policy: HookSucceeded`, sending a malformed `POST /api/subscribe` to the app's host via `traefik.kube-system.svc` (`--connect-to`), failing unless `400` + `text/plain`
+- [x] ✓ 2026-11-01 [AC3] Extend `toolkit/features/generator_k8s.py` + `infra/k8s/templates/` so the test passes; regenerate both overlays (drift gate stays clean)
 - [ ] [AC3] Real run on staging recorded in `verification.md`: healthy → `Succeeded`, Job gone; forced failure (point the probe at `/`, which is nginx) → `Failed` + status `failure`
 
 ### PR4 — operator path (AC4, AC7) — first, `feat/gitops-003-verify-staging`
