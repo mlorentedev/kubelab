@@ -171,7 +171,7 @@ def test_open_webui_reaches_the_vault_tool_by_service_name_with_the_key() -> Non
 
 
 def test_the_tool_is_granted_to_no_one_so_only_admins_see_it() -> None:
-    """v0.12.0 `has_connection_access`: no `access_grants` is admin-only, the
+    """v0.12.5 `has_connection_access`: no `access_grants` is admin-only, the
     posture already decided for the Hermes model (AC4)."""
     [connection] = _connections(**CONFIGURED)
     assert "access_grants" not in connection["config"]

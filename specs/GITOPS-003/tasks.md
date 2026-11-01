@@ -37,11 +37,11 @@ created: "2026-08-27"
 - [x] ✓ 2026-10-21 [AC2] Add `.github/workflows/deploy-verify.yml`, one job per touched env, timeout N; failure message links the runbook section (AC7). **Trigger: NOT `on: push`.** Per Manu's decision on #1619 (2026-10-20) staging deploy PRs will be merged by a workflow, and a merge made with `GITHUB_TOKEN` starts no `on: push` workflow, so the check would silently never run after an unattended merge, the one case it is the compensating control for. Use `on: status` (the `argocd/kubelab-<env>` status Argo posts with its PAT does start workflows) plus a `schedule` sweep for the no-status case, or `workflow_run`; and a test asserting the trigger is not `push` alone. **Done as**: `status` (red on `failure`/`error` at once), a 30-min `schedule` sweep of master HEAD for **prod only** (staging is on-demand and repointable, so a missing staging status is not evidence; ADR-028), and `workflow_dispatch` replay; `tests/test_deploy_verify_workflow.py`. Merge after #2613 is live on the hub, or the first sweep is red on a no-op commit
 - [x] ✓ 2026-10-22 [AC2] Real runs recorded in `verification.md`: replay against `1489265` (red) and the next healthy merge (green)
 
-### PR3 — `PostSync` hook probes the route (AC3) — blocked on Setup/Risk 1
+### PR3 — `PostSync` hook probes the route (AC3)
 
-- [ ] [AC3] Write failing generator test: the web app's overlay emits a `PostSync` Job with `hook-delete-policy: HookSucceeded`, sending a malformed `POST /api/subscribe` to the app's host via `traefik.kube-system.svc` (`--connect-to`), failing unless `400` + `text/plain`
-- [ ] [AC3] Extend `toolkit/features/generator_k8s.py` + `infra/k8s/templates/` so the test passes; regenerate both overlays (drift gate stays clean)
-- [ ] [AC3] Real run on staging recorded in `verification.md`: healthy → `Succeeded`, Job gone; forced failure (point the probe at `/`, which is nginx) → `Failed` + status `failure`
+- [x] ✓ 2026-11-01 [AC3] Write failing generator test: the web app's overlay emits a `PostSync` Job with `hook-delete-policy: HookSucceeded`, sending a malformed `POST /api/subscribe` to the app's host via `traefik.kube-system.svc` (`--connect-to`), failing unless `400` + `text/plain`
+- [x] ✓ 2026-11-01 [AC3] Extend `toolkit/features/generator_k8s.py` + `infra/k8s/templates/` so the test passes; regenerate both overlays (drift gate stays clean)
+- [x] ✓ 2026-11-01 [AC3] Real run on staging recorded in `verification.md`: healthy → `Succeeded`, Job gone; forced failure (point the probe at `/`, which is nginx) → `Failed` + status `failure`
 
 ### PR4 — operator path (AC4, AC7) — first, `feat/gitops-003-verify-staging`
 
@@ -62,7 +62,7 @@ created: "2026-08-27"
 - [x] ✓ 2026-10-31 [AC2] Implement `infra/k8s/base/services/delivery-watcher/watch.py` (stdlib only) and the CronJob (every 10 min, `backoffLimit: 0`, no token, non-root), its ingress-only NetworkPolicy, the image pin in `common.yaml`, and the prod patch of `ARGO_ENV`
 - [x] ✓ 2026-10-31 [AC2] Grafana rule `gitops003-argo-delivery` in `grafana-alerting/delivery-rules.yaml`: `last_over_time(... unwrap healthy [30m]) by (namespace) < 1`, `for: 10m`, `noDataState: Alerting`, runbook `#deploy-verify-is-red`
 - [x] ✓ 2026-10-31 [AC2] Validate in staging (Loki shows the line for master HEAD), then in prod after merge; record both in `verification.md`
-- [ ] [AC2] See the red path live: a `healthy: 0` line and `gitops003-argo-delivery` firing in staging (master HEAD with no staging status, e.g. the slot repointed for over 10 minutes); record it in `verification.md`, then tick AC2
+- [x] ✓ 2026-11-01 [AC2] See the red path live: a `healthy: 0` line and `gitops003-argo-delivery` firing in staging (master HEAD with no staging status, e.g. the slot repointed for over 10 minutes); record it in `verification.md`, then tick AC2
 - [x] ✓ 2026-10-31 [AC2] Lesson: a GitHub `schedule` here is a few-times-a-day signal, not a cron
 
 ## Closing

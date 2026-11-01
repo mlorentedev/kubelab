@@ -15,7 +15,7 @@ def _rag() -> dict:
 
 
 def test_embeddings_come_from_nan_so_no_local_model_loads() -> None:
-    """With the engine empty, v0.12.0 loads a sentence-transformers model into the
+    """With the engine empty, v0.12.5 loads a sentence-transformers model into the
     container at start (`get_ef`, routers/retrieval.py), and ace2 has 1.5 GB per service."""
     env = _env()
     assert env["RAG_EMBEDDING_ENGINE"] == "openai"
@@ -28,7 +28,7 @@ def test_embeddings_come_from_nan_so_no_local_model_loads() -> None:
 
 
 def test_the_reranker_is_nan_and_hybrid_search_is_on_so_it_runs() -> None:
-    """v0.12.0 calls the reranker only on the hybrid-search path (`query_collection`,
+    """v0.12.5 calls the reranker only on the hybrid-search path (`query_collection`,
     retrieval/utils.py): without `ENABLE_RAG_HYBRID_SEARCH` an external reranker is
     configured, and never called."""
     env = _env()

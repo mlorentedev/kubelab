@@ -195,7 +195,7 @@ class TestRequiredContexts:
 
 class TestWorkflowTriggers:
     def test_the_default_branch_guard_binds_only_dispatch(self) -> None:
-        """A schedule payload has no `repository`: a guard that reads it unscoped skips every sweep."""
+        """The guard binds only dispatch, the one event that can name another branch."""
         import yaml
 
         wf = yaml.safe_load((REPO_ROOT / ".github/workflows/deploy-merge.yml").read_text(encoding="utf-8"))
