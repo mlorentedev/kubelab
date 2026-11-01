@@ -18,7 +18,7 @@
   failed Job blocks that apply (a Job's spec is immutable) until its TTL.
 #}
 {% for app in apps %}
-{% for route in app.extra_routes if route.probe %}
+{% for route in app.extra_routes if route.get('probe') %}
 {% set probe = route.probe %}
 ---
 apiVersion: batch/v1
@@ -38,7 +38,8 @@ metadata:
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
 spec:
   backoffLimit: 0
-  activeDeadlineSeconds: 60
+  # Counts from creation, image pull included: a cold pull must not fail a sync.
+  activeDeadlineSeconds: 120
   ttlSecondsAfterFinished: 86400
   template:
     metadata:

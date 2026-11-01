@@ -16,7 +16,8 @@ metadata:
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
 spec:
   backoffLimit: 0
-  activeDeadlineSeconds: 60
+  # Counts from creation, image pull included: a cold pull must not fail a sync.
+  activeDeadlineSeconds: 120
   ttlSecondsAfterFinished: 86400
   template:
     metadata:

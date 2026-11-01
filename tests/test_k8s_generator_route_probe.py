@@ -62,6 +62,21 @@ class TestBuildExtraRoutesProbe:
             K8sGenerator()._build_extra_routes(env, "web")
 
 
+def test_template_renders_routes_without_a_probe(tmp_path: pathlib.Path) -> None:
+    """The renderer is StrictUndefined: a route lacking `probe` must render nothing, not raise."""
+    from toolkit.core.templating import create_renderer
+
+    out = tmp_path / "hooks.yaml"
+    context = {
+        "namespace": "kubelab",
+        "route_probe_image": "curlimages/curl:8.11.1",
+        "apps": [{"name": "web", "domain": "x", "extra_routes": [{"path_prefix": "/api", "service": "api"}]}],
+    }
+
+    assert create_renderer(REPO / "infra/k8s/templates").render_template("hooks.yaml.j2", out, context)
+    assert not [d for d in yaml.safe_load_all(out.read_text()) if d]
+
+
 def _render(overlay: str) -> list[dict[str, Any]]:
     if shutil.which("kubectl") is None:
         if os.environ.get("CI"):
