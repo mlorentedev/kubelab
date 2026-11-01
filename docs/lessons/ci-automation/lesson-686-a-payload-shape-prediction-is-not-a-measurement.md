@@ -1,5 +1,5 @@
 ---
-id: lesson-682-a-payload-shape-prediction-is-not-a-measurement
+id: lesson-686-a-payload-shape-prediction-is-not-a-measurement
 type: lesson
 status: active
 created: "2026-11-01"
