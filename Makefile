@@ -246,6 +246,7 @@ setup-local-dns:
 WORKTREE_VENV ?= $(CURDIR)/.venv
 worktree-init: export POETRY_VIRTUALENVS_IN_PROJECT := true
 worktree-init: export VIRTUAL_ENV :=
+worktree-init: export WORKTREE_VENV := $(WORKTREE_VENV)
 worktree-init:
 	@echo "=== Bootstrapping worktree: $$(pwd) ==="
 	@# No private package source exists, so Poetry has no credential to fetch.
@@ -274,6 +275,9 @@ worktree-init:
 		[ -z "$$aside" ] || { rm -rf "$$venv"; mv "$$aside" "$$venv"; echo "install failed; previous venv restored"; }; \
 		exit 1; \
 	fi
+	@# Checked, not inferred from the steps above: they rest on Poetry's env lookup,
+	@# which is exactly what failed here once.
+	@test -x "$(WORKTREE_VENV)/bin/toolkit" || { echo "ERROR: no $(WORKTREE_VENV)/bin/toolkit after install; Poetry resolved: $$($(POETRY) env info --path 2>/dev/null)" >&2; exit 1; }
 	@hookspath=$$(git config --get core.hooksPath 2>/dev/null || echo ""); \
 	if [ -n "$$hookspath" ] && [ -x "$$hookspath/pre-commit" ]; then \
 		echo "✓ pre-commit hooks shared from $$hookspath (no re-install needed)"; \
