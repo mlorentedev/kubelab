@@ -35,7 +35,13 @@ DEADLINE_S = 12 * 60
 POLL_S = 20
 SESSION_TIMEOUT_S = 60
 
-INJECTED, NOT_SERVING, UNLOAD_FAILED, NO_UNIT = "injected", "not-serving", "unload-failed", "no-unit"
+INJECTED, NOT_SERVING, UNLOAD_FAILED, NO_UNIT, NOT_HALTED = (
+    "injected",
+    "not-serving",
+    "unload-failed",
+    "no-unit",
+    "not-halted",
+)
 
 # `argv[]=/usr/local/sbin/kubelab-edge-liveness wlan0 brcmfmac uplink0 ;`
 _ARGV = r"s/.*argv\[\]=\([^;]*\);.*/\1/p"
@@ -63,6 +69,11 @@ def inject_script() -> str:
             + UNLOAD_FAILED
             + '"; exit 0; fi',
             "fi",
+            # The fault is observed, not assumed: an interface still up after the
+            # unload proves nothing about the ladder.
+            'after=$(cat "/sys/class/net/$ap/operstate" 2>/dev/null || echo absent)',
+            'printf "after %s\\n" "$after"',
+            '[ "$after" != up ] || { echo "result ' + NOT_HALTED + '"; exit 0; }',
             f'echo "result {INJECTED}"',
         ]
     )
@@ -105,7 +116,8 @@ class Outcome:
 
     @property
     def code(self) -> int:
-        """0 the AP serves again, 1 it did not by the deadline, 3 nothing injected, 255 SSH."""
+        """0 the AP serves again, 1 it did not by the deadline, 3 nothing injected or
+        the fault not observed, 255 SSH."""
         result = self.injected.get("result")
         if result != INJECTED:
             return 255 if result is None else 3
@@ -122,7 +134,12 @@ def report(outcome: Outcome) -> list[str]:
     i = outcome.injected
     result = i.get("result")
     if result is None:
-        return ["verdict: the edge did not answer, nothing was injected"]
+        # A session that dies after the unload prints no result either, so this
+        # cannot say that nothing was injected.
+        return [
+            "verdict: the edge did not answer, so whether the driver was unloaded is unknown; "
+            "run `make edge-boot-check`, and wait for the ladder if the lab Wi-Fi is down"
+        ]
     if result == NO_UNIT:
         return [f"verdict: {LIVENESS_UNIT} is not deployed, nothing was injected"]
     lines = [f"interface: {i.get('interface')}, driver: {i.get('driver')}", f"before: {i.get('before')}"]
@@ -133,6 +150,9 @@ def report(outcome: Outcome) -> list[str]:
         lines.append(f"unload with holders: {i['holder-unload']}")
     if result == UNLOAD_FAILED:
         return [*lines, "verdict: the driver would not unload, nothing was injected"]
+    lines.append(f"after the unload: {i.get('after')}")
+    if result == NOT_HALTED:
+        return [*lines, "verdict: cannot tell, the interface stayed up after the unload, so no halt was observed"]
     lines.append(f"ladder: {len(outcome.ladder)} line(s)")
     lines.extend(f"  {entry}" for entry in outcome.ladder)
     lines.append(f"edge rebooted: {'yes' if outcome.rebooted else 'no'}")

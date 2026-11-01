@@ -34,6 +34,7 @@ def _injected(result: str = h.INJECTED, **extra: str) -> str:
         "before": "up active",
         "bare-unload": "refused modprobe: FATAL: Module brcmfmac is in use.",
         "holder-unload": "ok brcmfmac_wcc",
+        "after": "absent",
         **extra,
     }
     return "\n".join(f"{k} {v}" for k, v in lines.items()) + f"\nresult {result}\n"
@@ -77,6 +78,7 @@ def test_the_unload_alone_is_recorded_before_the_holders_go_with_it() -> None:
     _, lines = _go(Edge((0, _injected()), [(0, _poll())]))
     assert "unload alone: refused modprobe: FATAL: Module brcmfmac is in use." in lines
     assert "unload with holders: ok brcmfmac_wcc" in lines
+    assert "after the unload: absent" in lines
 
 
 def test_a_reboot_with_polls_that_get_no_answer_still_passes_and_says_so() -> None:
@@ -105,6 +107,7 @@ def test_a_half_up_ap_is_not_serving() -> None:
         (h.NOT_SERVING, "verdict: the AP was not serving, so nothing was injected"),
         (h.UNLOAD_FAILED, "verdict: the driver would not unload, nothing was injected"),
         (h.NO_UNIT, f"verdict: {h.LIVENESS_UNIT} is not deployed, nothing was injected"),
+        (h.NOT_HALTED, "verdict: cannot tell, the interface stayed up after the unload, so no halt was observed"),
     ],
 )
 def test_nothing_injected_exits_3_and_never_polls(result: str, verdict: str) -> None:
@@ -117,7 +120,8 @@ def test_nothing_injected_exits_3_and_never_polls(result: str, verdict: str) -> 
 def test_no_answer_before_the_fault_exits_255() -> None:
     code, lines = _go(Edge((255, ""), []))
     assert code == 255
-    assert lines == ["verdict: the edge did not answer, nothing was injected"]
+    # The session may have died after the unload, so the verdict cannot claim nothing happened.
+    assert "whether the driver was unloaded is unknown" in lines[-1]
 
 
 def test_the_ladder_lines_survive_a_reboot_without_repeats() -> None:
