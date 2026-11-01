@@ -19,7 +19,8 @@ the guard false and skip every cron sweep. No scheduled run had fired yet, since
 late here (lesson-681). #2888 scoped the guard to `workflow_dispatch` and wrote the prediction into
 a code comment and a test docstring as fact. The first scheduled runs then landed on `8655ac26`,
 which still carried the unscoped guard: runs 41240094141 and 41253974014 both executed the job, all
-14 steps. The payload does carry `repository`, so the skip never existed.
+14 steps. So did the `workflow_run` runs under the same guard, for example 41224743030 on
+`f40e9304`. Both payloads carry `repository`, so the skip never existed.
 
 **Solution**: The scoped guard stays, because it is narrower and no worse. The comment and the
 docstring were corrected to the measured behaviour, and #1619 records the measurement.
