@@ -14,6 +14,17 @@ services:
     image: {{ gitea_image }}
     container_name: gitea
     restart: {{ restart_policy }}
+    # Public resolvers only, so every webhook target resolves to its public
+    # address. The host's resolver set includes the LAN gateway, whose prod zone
+    # answers with tailnet addresses, and Gitea's webhook filter refuses those
+    # (`deny pr-agent.kubelab.live(100.64.0.2:443)`, whenever systemd-resolved
+    # had switched to the gateway). Not MagicDNS: it forwards non-split names to
+    # the same host resolvers. Compose service names still resolve through
+    # Docker's embedded DNS, which `dns:` does not replace.
+    dns:
+{% for dns_ip in gitea_dns_servers %}
+      - {{ dns_ip }}
+{% endfor %}
     ports:
       # Bound to the Tailscale IP, never 0.0.0.0. A published port is governed by
       # its bind address and nothing else: Docker's DNAT is evaluated before ufw's

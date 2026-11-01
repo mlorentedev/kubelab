@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 682 | [A container that inherits a mixed resolver set gets the answer of whichever server is current](lesson-682-a-container-that-inherits-a-mixed-resolver-set-gets-the-answer-of-whichever-is-current.md) | 2026-10-31 |
 | 680 | [A Wi-Fi uplink is bounded by its receive MCS, not its signal](lesson-680-a-wifi-uplink-is-bounded-by-its-receive-mcs-not-its-signal.md) | 2026-10-31 |
 | 657 | [A missing Wi-Fi adapter holds network.target for systemd's 90-second device timeout](lesson-657-a-missing-wifi-adapter-holds-network-target-for-the-device-timeout.md) | 2026-10-29 |
 | 650 | [A renamed network device becomes active on its move event, not its add](lesson-650-a-renamed-network-device-becomes-active-on-its-move-event-not-its-add.md) | 2026-10-29 |
