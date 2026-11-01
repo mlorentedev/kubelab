@@ -66,7 +66,7 @@ def _run(
 ) -> tuple[list[str], subprocess.CompletedProcess[str]]:
     script, log = _fake_poetry(tmp_path, lock_is_fresh=lock_is_fresh, venv=venv, install_rc=install_rc)
     done = subprocess.run(
-        ["make", "--no-print-directory", "worktree-init", f"POETRY={script}"],
+        ["make", "--no-print-directory", "worktree-init", f"POETRY={script}", f"WORKTREE_VENV={tmp_path / '.venv'}"],
         cwd=REPO,
         check=False,
         capture_output=True,
@@ -161,7 +161,7 @@ class TestRelocatedVenv:
         script.chmod(script.stat().st_mode | stat.S_IEXEC)
         fake, _ = _fake_poetry(tmp_path, lock_is_fresh=True, venv=venv_dir)
         done = subprocess.run(
-            ["make", "--no-print-directory", "worktree-init", f"POETRY={fake}"],
+            ["make", "--no-print-directory", "worktree-init", f"POETRY={fake}", f"WORKTREE_VENV={venv_dir}"],
             cwd=REPO,
             check=False,
             capture_output=True,
@@ -204,6 +204,21 @@ class TestRelocatedVenv:
         assert calls == ["check", "install"]
         assert not venv.exists(), "the stale venv must be set aside so poetry builds a fresh one"
         assert not (tmp_path / ".venv.relocated").exists(), "a successful rebuild discards the old copy"
+
+    def test_a_cache_venv_is_replaced_by_one_in_the_worktree(self, tmp_path: pathlib.Path) -> None:
+        """Poetry reuses a cache venv it already has, whatever POETRY_VIRTUALENVS_IN_PROJECT says.
+
+        The setting governs only creation, so the env-var test above could not see this
+        half: a worktree with a cache venv kept it and had no `.venv/bin/toolkit`.
+        """
+        cache = tmp_path / "cache" / "toolkit-AbC123-py3.13"
+        cached = _venv(cache.parent / "x", shebang_dir=cache)
+        cached.rename(cache)
+        calls, done = _run(tmp_path, lock_is_fresh=True, venv=cache)
+        assert done.returncode == 0, done.stderr
+        assert calls == ["check", "install"]
+        assert not cache.exists(), "a venv outside the worktree must be set aside so poetry builds .venv"
+        assert not (cache.parent / f"{cache.name}.relocated").exists(), "a successful rebuild discards the old copy"
 
     def test_worktree_init_leaves_a_healthy_venv_alone(self, tmp_path: pathlib.Path) -> None:
         venv = _venv(tmp_path, shebang_dir=tmp_path / ".venv")

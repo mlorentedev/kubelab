@@ -240,6 +240,10 @@ setup-local-dns:
 # `.venv` already exists, and Ansible's controller-side tasks run `<repo>/.venv/bin/
 # toolkit`. A worktree set up the other way minted a token it could not record (#2902).
 # An activated venv wins over that setting, so VIRTUAL_ENV is emptied for the recipe.
+# The setting governs only creation: Poetry reuses a cache venv it already has for the
+# project, whatever the setting says, so one resolved anywhere but WORKTREE_VENV is set
+# aside and rebuilt like a relocated one (measured 2026-11-01 on a worktree with a cache venv).
+WORKTREE_VENV ?= $(CURDIR)/.venv
 worktree-init: export POETRY_VIRTUALENVS_IN_PROJECT := true
 worktree-init: export VIRTUAL_ENV :=
 worktree-init:
@@ -256,7 +260,9 @@ worktree-init:
 	@# must not condemn a healthy venv. A signal during the install restores it too: an
 	@# `else` branch is never reached by a shell that was killed.
 	@venv=$$($(POETRY) env info --path 2>/dev/null || true); aside=""; moved=0; \
-	if [ -n "$$venv" ] && [ -d "$$venv" ]; then python3 -I scripts/venv_relocated.py "$$venv" || moved=$$?; fi; \
+	if [ -n "$$venv" ] && [ -d "$$venv" ]; then python3 -I scripts/venv_relocated.py "$$venv" || moved=$$?; \
+		if [ "$$moved" = 0 ] && ! [ "$$venv" -ef "$(WORKTREE_VENV)" ]; then moved=1; fi; \
+	fi; \
 	if [ "$$moved" = 1 ]; then \
 		aside="$$venv.relocated"; rm -rf "$$aside"; mv "$$venv" "$$aside"; \
 		echo "venv moved aside to $$aside; rebuilding"; \
