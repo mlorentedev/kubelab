@@ -1967,6 +1967,13 @@ edge-soak: ## Read the edge's uplink soak: 48 h of this boot with no adapter res
 edge-measure: ## Measure the edge uplink's line rate, before the shaper [SECONDS=60]
 	@$(TOOLKIT) infra edge measure $(if $(SECONDS),--seconds $(SECONDS))
 
+# Load the uplink from bee, a download then an upload, while rpi3 on the lab Wi-Fi
+# times a TCP connect every second, with and without the shaper (NET-005 B9, AC8).
+# The shaper is always restored and read back. Runs from the switch.
+.PHONY: edge-shape-check
+edge-shape-check: ## Time a lab Wi-Fi client's connects under bulk load, shaped and not [BOUND_MS=n]
+	@$(TOOLKIT) infra edge shape-check $(if $(BOUND_MS),--bound-ms $(BOUND_MS))
+
 # Join this laptop to the lab LAN, the edge's management path (NET-005 AC11).
 # ROUTE=1 makes the edge the default route, for the portal login with the
 # laptop's own Wi-Fi off; STATIC=1 holds a fixed address when the edge serves
