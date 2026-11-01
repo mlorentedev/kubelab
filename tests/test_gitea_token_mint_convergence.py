@@ -19,6 +19,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import jinja2
 import yaml
 
 REPO = Path(__file__).resolve().parent.parent
@@ -103,9 +104,21 @@ def test_each_revoke_reads_the_same_sops_value_and_account_as_its_mint() -> None
 def test_the_revoke_skips_a_recorded_token() -> None:
     """Inverted, the gate deletes every live credential and nothing re-mints it."""
     _, task = _revoke()
-    assert "not item.recorded | bool" in str(task.get("when")), (
-        "a recorded token would be revoked from under its consumer"
-    )
+    env = jinja2.Environment()
+    env.filters["bool"] = lambda v: str(v).strip().lower() in {"true", "yes", "1", "on"}
+    when = task.get("when")
+    gate = env.compile_expression(" and ".join(f"({c})" for c in (when if isinstance(when, list) else [when])))
+    # `recorded` reaches the gate as the string the loop item's template rendered.
+    for user, recorded, revoke in [
+        ("kubelab-reviewer", "False", True),
+        ("kubelab-reviewer", "True", False),
+        ("", "False", False),
+        ("", "True", False),
+    ]:
+        assert bool(gate(item={"user": user, "recorded": recorded})) is revoke, (
+            f"user={user!r} recorded={recorded}: the gate answers {not revoke}, "
+            + ("revoking a live credential" if recorded == "True" or not user else "leaving the orphan in place")
+        )
 
 
 def test_the_controller_can_record_before_anything_is_minted() -> None:
