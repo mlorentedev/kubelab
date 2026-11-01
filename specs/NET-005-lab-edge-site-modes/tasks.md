@@ -266,7 +266,7 @@ A step gets that heading only once every part of its criterion is observed. Part
   - a DNS-only block like a portal's, which must page with the phone on cellular;
   - the dongle unplugged, which must page;
   - rpi3 stopped while the RPi4 is up, which must page.
-- [ ] B9. [AC8] Connect-time bounds under a bulk upload and a bulk download, each with and without the shaper.
+- [x] B9. [AC8] Connect-time bounds under a bulk upload and a bulk download, each with and without the shaper. ✓ 2026-11-01 (`make edge-shape-check`; B9-EVIDENCE: p95 at most 100 ms shaped)
 - [ ] B10. [AC13] `modprobe -r brcmfmac` simulates a halt. The lab Wi-Fi returns with no human step.
 - [x] (✓ 2026-10-30) B11. [AC4] A host on the homelab switch gets a DHCP lease from the RPi4 (`DHCPACK(eth0)` in dnsmasq's journal), the homelab nodes reach the internet through the uplink, and `make test-e2e ENV=staging` passes with the homelab powered.
 - [x] (✓ 2026-11-01) B12. [AC1] A second provisioning run reports `changed=0`. Over a 48-hour soak, the kernel log shows no rtw88 reset.

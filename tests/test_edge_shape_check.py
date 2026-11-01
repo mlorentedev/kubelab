@@ -120,7 +120,21 @@ def test_one_failed_restore_is_retried() -> None:
 def test_a_refused_load_is_no_reading() -> None:
     code, lines = _go(Hosts(refuse_load=True))
     assert code == 3
-    assert "the load got no answered request" in lines[1]
+    assert "the server refused every load request" in lines[1]
+
+
+def test_a_load_cut_by_the_window_s_end_is_a_reading() -> None:
+    # An upload larger than the window can carry ends as 000 in every stream.
+    hosts = Hosts()
+    original = hosts.run
+
+    def uploads_cut(command: list[str], script: str) -> tuple[int, str]:
+        code, out = original(command, script)
+        return (code, "code 000\n" * 6) if "seq" in script and "__up" in script else (code, out)
+
+    code, lines = s.run_shape_check(NETWORKING, None, run=uploads_cut, sleep=lambda _: None)
+    assert code == 0
+    assert "load answered 0 cut 6 refused 0" in lines[2]
 
 
 def test_a_probe_with_nothing_recorded_is_no_reading() -> None:

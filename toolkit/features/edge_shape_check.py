@@ -138,6 +138,7 @@ class Window:
     direction: str | None
     shaped: bool
     answered: int = 0
+    cut: int = 0
     refused: int = 0
     down_mbit: float | None = None
     up_mbit: float | None = None
@@ -153,7 +154,7 @@ class Window:
             if self.down_mbit is not None and self.up_mbit is not None
             else "uplink rate unread"
         )
-        load = f", load answered {self.answered} refused {self.refused}" if self.direction else ""
+        load = f", load answered {self.answered} cut {self.cut} refused {self.refused}" if self.direction else ""
         if not self.connects_ms:
             return f"{self.name}: {rates}{load}; no connect succeeded, {self.failures} failed"
         ordered = sorted(self.connects_ms)
@@ -186,10 +187,15 @@ def read_probe(output: str, window: Window) -> None:
 
 
 def read_load(output: str, window: Window) -> None:
+    """A 2xx was answered; 000 is a request still running when the window ended,
+    as `edge_measure` reads it; anything else the server refused."""
     for line in output.splitlines():
         if line.startswith("code "):
-            if line.removeprefix("code ").startswith("2"):
+            status = line.removeprefix("code ")
+            if status.startswith("2"):
                 window.answered += 1
+            elif status == "000":
+                window.cut += 1
             else:
                 window.refused += 1
 
@@ -246,8 +252,8 @@ def _window(
         span = end["t"] - start["t"]
         window.down_mbit = (end["rx"] - start["rx"]) * 8 / span / 1e6
         window.up_mbit = (end["tx"] - start["tx"]) * 8 / span / 1e6
-    if direction and window.answered == 0:
-        window.unreadable = f"the load got no answered request ({window.refused} refused)"
+    if direction and window.answered + window.cut == 0:
+        window.unreadable = f"the server refused every load request ({window.refused} refused)"
     elif not window.connects_ms and not window.failures:
         window.unreadable = "the probe on rpi3 recorded nothing"
     return window
