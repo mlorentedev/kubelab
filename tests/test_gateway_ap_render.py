@@ -450,7 +450,26 @@ def test_the_playbook_maps_the_lab_secrets_with_one_word_keyids() -> None:
     """Secrets default to empty so the role's check, not a Jinja error, names what is missing."""
     variables = _gateway_vars()
     assert variables["gateway_ap_ssid"] == "{{ secrets.networking.edge.lab_wifi.ssid | default('') }}"
-    assert [entry["psk"] for entry in variables["gateway_ap_psks"]] == [
-        "{{ secrets.networking.edge.lab_wifi.psk | default('') }}"
+    expression = variables["gateway_ap_psks"]
+    secrets = {"networking": {"edge": {"lab_wifi": {"psk": "the-current-psk"}}}}
+    # Without the variable, one entry; a missing secret renders empty for the role's check.
+    assert _psks(expression, secrets=secrets) == [{"keyid": "current", "psk": "the-current-psk"}]
+    assert _psks(expression, secrets={}) == [{"keyid": "current", "psk": ""}]
+    # The probe goes first and the current entry stays last (NET-005 B7).
+    assert _psks(expression, secrets=secrets, edge_probe_psk="a-probe-psk") == [
+        {"keyid": "probe", "psk": "a-probe-psk"},
+        {"keyid": "current", "psk": "the-current-psk"},
     ]
-    assert all(re.fullmatch(r"[A-Za-z0-9_-]+", entry["keyid"]) for entry in variables["gateway_ap_psks"])
+    entries = _psks(expression, secrets=secrets, edge_probe_psk="a-probe-psk")
+    assert all(re.fullmatch(r"[A-Za-z0-9_-]+", entry["keyid"]) for entry in entries)
+
+
+def _psks(expression: str, **context: Any) -> list[dict[str, str]]:
+    """Render the playbook's PSK expression as Ansible does: Jinja, then a literal."""
+    import ast
+
+    import jinja2
+
+    env = jinja2.Environment(undefined=jinja2.ChainableUndefined)
+    rendered = env.from_string(expression).render(**context)
+    return ast.literal_eval(rendered)
