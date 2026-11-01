@@ -1188,6 +1188,17 @@ apps:
           # about. It is a second token on the reviewer's account; `tests/
           # test_gitea_review_notice_token.py` ties it to `REVIEW_NOTICE_SCOPES`.
           review_notice: "write:issue"
+          # What the forge task view's API (CONSOLE-004) reads issues and pull
+          # requests with, pinned by EQUALITY: it is read-only by design, and
+          # writes go through a narrower identity of their own (AC3), never this
+          # token. Gitea serves `GET /repos/{o}/{r}/issues` (pull requests too,
+          # with `type=pulls`) to the issue scope, so no repository scope is
+          # asked for. That is read from Gitea's routing, not yet measured: the
+          # first live read is the measurement, and a 403 widens this on purpose.
+          # A third token on the reviewer's account, which already sits in each
+          # organization's read team; `tests/test_gitea_issue_reader_token.py`
+          # ties it to `ISSUE_READER_SCOPES`.
+          issue_reader: "read:issue"
         # Repository organization (ADR-065, TOOL-035 #1076). Reconciled by
         # `toolkit.features.gitea_repos`: declared-and-missing is created,
         # existing-and-undeclared is REPORTED and never removed.
