@@ -129,6 +129,63 @@ func (m ForgeModel) MarkUnreachable(ctx context.Context, src forge.Source, at ti
 	return err
 }
 
+// Pending returns deliveries not yet projected, oldest first.
+func (m ForgeModel) Pending(ctx context.Context, limit int) ([]forge.Event, error) {
+	db, err := Pool(m.Conf)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := db.Query(ctx, `SELECT forge, delivery_id, event_type, payload::text FROM forge_event
+		WHERE projected_at IS NULL ORDER BY received_at LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var events []forge.Event
+	for rows.Next() {
+		var e forge.Event
+		var payload string
+		if err := rows.Scan(&e.Forge, &e.DeliveryID, &e.Type, &payload); err != nil {
+			return nil, err
+		}
+		e.Payload = []byte(payload)
+		events = append(events, e)
+	}
+	return events, rows.Err()
+}
+
+// Project writes the item and marks the delivery in one transaction. The source row comes
+// first because of the foreign key, with no as_of: only a full read moves that. An older
+// delivery arriving late does not overwrite a newer read of the same item.
+func (m ForgeModel) Project(ctx context.Context, e forge.Event, item *forge.Item) error {
+	db, err := Pool(m.Conf)
+	if err != nil {
+		return err
+	}
+	return pgx.BeginFunc(ctx, db, func(tx pgx.Tx) error {
+		if item != nil {
+			src := item.Source
+			if _, err := tx.Exec(ctx, `INSERT INTO forge_source (forge, owner, repo) VALUES ($1, $2, $3)
+				ON CONFLICT (forge, owner, repo) DO NOTHING`, src.Forge, src.Owner, src.Repo); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(ctx, `INSERT INTO forge_item
+				(forge, owner, repo, number, kind, title, state, author, assignees, labels, url, updated_at)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+				ON CONFLICT (forge, owner, repo, number) DO UPDATE SET
+				kind = $5, title = $6, state = $7, author = $8, assignees = $9, labels = $10, url = $11, updated_at = $12
+				WHERE forge_item.updated_at <= $12`,
+				src.Forge, src.Owner, src.Repo, item.Number, string(item.Kind), item.Title, item.State, item.Author,
+				nonNil(item.Assignees), nonNil(item.Labels), item.URL, item.UpdatedAt); err != nil {
+				return err
+			}
+		}
+		_, err := tx.Exec(ctx, `UPDATE forge_event SET projected_at = now()
+			WHERE forge = $1 AND delivery_id = $2 AND projected_at IS NULL`, e.Forge, e.DeliveryID)
+		return err
+	})
+}
+
 func nonNil(s []string) []string {
 	if s == nil {
 		return []string{}

@@ -72,3 +72,50 @@ func TestReadModelRoundTrip(t *testing.T) {
 		t.Fatalf("as_of after a failure = %v, %v", got, err)
 	}
 }
+
+func TestSameDeliveryProjectsOnce(t *testing.T) {
+	port := os.Getenv("FORGE_TEST_POSTGRES_PORT")
+	if port == "" {
+		t.Skip("FORGE_TEST_POSTGRES_PORT is not set")
+	}
+	conf := config.Postgres{Host: "127.0.0.1", Port: port, Tenant: "api", Password: "fixture"}
+	ctx := context.Background()
+	model := store.ForgeModel{Conf: conf}
+	cleanup, err := pgx.Connect(ctx, conf.DSN())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup.Close(ctx)
+	if _, err := cleanup.Exec(ctx, `TRUNCATE forge_event, forge_item, forge_source`); err != nil {
+		t.Fatal(err)
+	}
+	payload := []byte(`{"repository":{"name":"p","owner":{"login":"o"}},"issue":{"number":3,"title":"new","state":"open",
+		"html_url":"u","updated_at":"2026-11-02T09:00:00Z","user":{"login":"a"}}}`)
+	stale := []byte(`{"repository":{"name":"p","owner":{"login":"o"}},"issue":{"number":3,"title":"old","state":"open",
+		"html_url":"u","updated_at":"2026-11-02T08:00:00Z","user":{"login":"a"}}}`)
+	if err := store.StoreEvent(ctx, conf, "gitea", "new", "issues", payload); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.StoreEvent(ctx, conf, "gitea", "new", "issues", payload); err != nil {
+		t.Fatal(err)
+	}
+	projector := forge.Projector{Log: model}
+	if err := projector.Once(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.StoreEvent(ctx, conf, "gitea", "old", "issues", stale); err != nil {
+		t.Fatal(err)
+	}
+	if err := projector.Once(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if left, err := model.Pending(ctx, 10); err != nil || len(left) != 0 {
+		t.Fatalf("pending = %v, %v", left, err)
+	}
+	var title string
+	var rows int
+	err = cleanup.QueryRow(ctx, `SELECT max(title), count(*) FROM forge_item WHERE repo = 'p'`).Scan(&title, &rows)
+	if err != nil || rows != 1 || title != "new" {
+		t.Fatalf("title = %q, rows = %d, err = %v", title, rows, err)
+	}
+}

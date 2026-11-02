@@ -39,4 +39,6 @@ func StartForgeReconcile(ctx context.Context, conf *config.Config) {
 		Model:   store.ForgeModel{Conf: conf.Postgres},
 	}
 	go r.Run(ctx, forge.ReconcilePeriod)
+	projector := &forge.Projector{Log: store.ForgeModel{Conf: conf.Postgres}}
+	go projector.Run(ctx, forge.ProjectPeriod)
 }
