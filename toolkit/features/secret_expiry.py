@@ -471,7 +471,6 @@ PROVIDER_CHECKS = {
     # 2026-08-28 against the live token rather than assumed from the docs, because
     # a checker that silently cannot read its own credential is the failure this
     # whole module exists to prevent.
-    "apps.services.core.gitea.github_migration_token": github_pat_expiry,
     # hermes-kubelab's vault token: fine-grained, Contents on the vault repository only.
     "apps.services.ai.hermes_kubelab.github_token": github_pat_expiry,
     # Argo CD's commit-status token (GITOPS-003): fine-grained, Commit statuses on kubelab only.
