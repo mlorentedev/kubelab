@@ -11,7 +11,7 @@
     "behavior": "deploy-verify.yml ends red on failure or on no status after N minutes, green only on success",
     "verification": "poetry run pytest tests/test_argo_wait_status.py tests/test_delivery_watcher.py tests/test_deploy_verify_workflow.py -q --no-cov",
     "state": "passing",
-    "evidence": "2026-11-01: this command, 37 passed. Not exercised by it: the live red path in staging (alert fired 18:14:35Z), recorded in verification.md"
+    "evidence": "2026-11-02: this command, 47 passed. Not exercised by it: the live red path in staging (alert fired 18:14:35Z), recorded in verification.md"
   },
   {
     "id": "GITOPS-003-f3",
