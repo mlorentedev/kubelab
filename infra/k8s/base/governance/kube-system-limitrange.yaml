@@ -12,12 +12,10 @@
 # the only tool that exists to bound it.
 #
 # defaultRequest is deliberately small (svclb-tier: ~2Mi observed real usage)
-# while default (the limit) is deliberately generous — 384Mi clears Traefik's
-# observed 149-170Mi at-rest footprint with real headroom. A LimitRange can't
-# be scoped per-workload, so Traefik inherits the same default as everything
-# else here; undersizing the limit would OOMKill the ingress under exactly
-# the traffic spike this spec exists to guard against. See
-# specs/OBS-009-kube-system-limitrange/proposal.md for the full derivation.
+# while default (the limit) is deliberately generous. Traefik does not take
+# this default: at 384Mi it OOMKilled under load, because its memory follows
+# open connections, so it declares its own in the k3s_server role (OBS-043).
+# See specs/OBS-009-kube-system-limitrange/proposal.md for the derivation.
 #
 # CRITICAL: do NOT register this in infra/k8s/base/kustomization.yaml. That
 # Kustomization carries `namespace: kubelab`, which rewrites metadata.namespace
