@@ -436,7 +436,9 @@ def _late_node(root: Path) -> Node:
     node.run(unit="node-backup-ship.service")
     node.curl_exit.write_text("0", encoding="utf-8")
     curl = node.root / "bin" / "curl"
-    curl.write_text(curl.read_text(encoding="utf-8").replace("#!/bin/bash\n", "#!/bin/bash\nsleep 2.2\n"), "utf-8")
+    curl.write_text(
+        curl.read_text(encoding="utf-8").replace("#!/bin/bash\n", "#!/bin/bash\nsleep 2.2\n"), encoding="utf-8"
+    )
     return node
 
 
