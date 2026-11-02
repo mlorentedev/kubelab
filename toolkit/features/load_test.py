@@ -9,7 +9,7 @@ declares, is refused; k6 connects to the staging node's LAN address whatever DNS
 answers; it follows no redirect; and constant-rate.js repeats the host check.
 
 The rate limiter (30/s per host) is not edited. A run applies
-infra/k8s/overlays/staging/load-test-route.yaml, a header-scoped route with the same
+infra/load-test/limiter-bypass-route.yaml, a header-scoped route with the same
 chain minus `rate-limit`, and deletes it in a `finally`. A 429 on that route means
 the bypass is not in force, so the step reads invalid rather than as capacity.
 """
@@ -48,7 +48,7 @@ EDGE_WAIT_SECONDS = 900
 BYPASS_HEADER = "X-Load-Test"
 BYPASS_VALUE = "ops-054"
 ROUTE_NAME = "load-test"
-ROUTE_MANIFEST = "infra/k8s/overlays/staging/load-test-route.yaml"
+ROUTE_MANIFEST = "infra/load-test/limiter-bypass-route.yaml"
 SCRIPT = "infra/load-test/constant-rate.js"
 STAGING_NAME = re.compile(r"(^|\.)staging\.[a-z0-9.-]+$")
 

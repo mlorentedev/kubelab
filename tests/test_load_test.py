@@ -74,7 +74,7 @@ class TestStaysInStaging:
             lab.assert_cluster()
 
     def test_the_script_pins_the_name_refuses_redirects_and_rechecks_the_host(self) -> None:
-        script = (REPO / lt.SCRIPT).read_text()
+        script = (REPO / lt.SCRIPT).read_text(encoding="utf-8")
         assert "hosts: { [LT_HOST]: LT_ADDRESS }" in script
         assert "maxRedirects: 0" in script
         assert lt.STAGING_NAME.pattern.replace("\\.", ".") in script.replace("\\.", ".")
@@ -91,12 +91,10 @@ class TestStaysInStaging:
 
 class TestBypassRoute:
     def _route(self) -> dict:
-        return yaml.safe_load(ROUTE.read_text())
+        return yaml.safe_load(ROUTE.read_text(encoding="utf-8"))
 
-    def test_it_never_reaches_a_kustomization(self) -> None:
-        for name in ("staging", "prod"):
-            text = (REPO / f"infra/k8s/overlays/{name}/kustomization.yaml").read_text()
-            assert "load-test-route" not in text
+    def test_it_stays_outside_everything_a_cluster_is_synced_from(self) -> None:
+        assert not ROUTE.is_relative_to(REPO / "infra/k8s")
 
     def test_every_rule_is_scoped_and_keeps_the_real_chain_minus_the_limiter(self) -> None:
         for rule in self._route()["spec"]["routes"]:

@@ -2,7 +2,9 @@
 # OPS-054: the only change `make load-test` makes to the cluster, and the way it
 # measures the platform instead of SEC-004's limiter (30/s, burst 150, per host).
 #
-# NOT in kustomization.yaml, deliberately: the run applies this file, measures, and
+# Outside infra/k8s, deliberately: no overlay can pick it up, and the blanket check
+# in tests/test_rate_limit_coverage.py covers what can reach a cluster through one.
+# The run applies this file, measures, and
 # deletes it, so between runs every route carries `rate-limit` and the invariant in
 # tests/infra/test_rate_limit.py holds with no exception. Argo CD never tracks it,
 # so master moving during a run does not touch it. The shared Middleware is not
