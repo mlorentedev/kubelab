@@ -29,6 +29,8 @@ Before it starts, avoid a staging deploy window: a pod replaced during a step ma
 4. Ramps each target at 50, 100, 200, 400, 800, 1000, 1200, 1400, 1600, 2000, 3200 and 6400 requests per second, 60 s a step, 15 s apart, and stops at the first unhealthy step. Three ramps.
 5. Deletes the route and the image, including when a step fails.
 
+Results are written after the baseline and after each ramp, so a run that stops early keeps what it measured. Such a report opens with an "Incomplete" line, and its JSON carries `"incomplete": true`.
+
 ## Reading a verdict
 
 Declared in `toolkit/features/load_test.py` before the first run:

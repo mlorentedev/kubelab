@@ -263,3 +263,93 @@ class TestResultsDirectory:
 
         assert _load_test_results_dir("docs/new", tmp_path) == tmp_path / "docs/new"
         assert (tmp_path / "docs/new").is_dir()
+
+
+class _DyingLab:
+    """Enough of a Lab for `run`: everything answers, and the second ramp dies."""
+
+    root = REPO
+    generator = "gen"
+    target_node = "node"
+
+    def __init__(self) -> None:
+        self.disarmed = False
+
+    def assert_cluster(self) -> None: ...
+    def arm(self) -> None: ...
+
+    def disarm(self) -> None:
+        self.disarmed = True
+
+    def ssh(self, *_args: object, **_kw: object) -> str:
+        return ""
+
+    def restarts(self, *_args: object) -> int:
+        return 0
+
+    def edge_state(self) -> tuple[str, int]:
+        return "a", 0
+
+    def edge_ready(self) -> bool:
+        return True
+
+
+class TestKeepsWhatItMeasured:
+    @staticmethod
+    def _run(monkeypatch: pytest.MonkeyPatch, lab: _DyingLab, seen: list[dict]) -> None:
+        calls = iter([_step(), _step(), RuntimeError("edge gone")])
+
+        def step(*_args: object, **_kw: object) -> dict:
+            got = next(calls)
+            if isinstance(got, Exception):
+                raise got
+            return {**got, "reasons": ["errors"]}
+
+        monkeypatch.setattr(lt, "run_step", step)
+        monkeypatch.setattr(lt, "_runtime_facts", lambda *_: {})
+        monkeypatch.setattr(lt, "wait_for_stable_edge", lambda *_: None)
+        monkeypatch.setattr("time.sleep", lambda _: None)
+        target = lt.Target("api", "api.example", "/health", "api")
+        lt.run(lab, "img", (target,), "1.2.3.4", 2, 1, 50, checkpoint=lambda r: seen.append(json.loads(json.dumps(r))))
+
+    def test_a_ramp_that_dies_leaves_the_earlier_ones_on_record(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        lab, seen = _DyingLab(), []
+        with pytest.raises(RuntimeError):
+            self._run(monkeypatch, lab, seen)
+        assert [len(r["ramps"]) for r in seen] == [0, 1]
+        assert all(r["incomplete"] for r in seen)
+        assert lab.disarmed
+
+    def test_a_report_of_a_partial_run_says_so(self) -> None:
+        assert lt.render({"baseline": [], "ramps": [], "incomplete": True}).startswith("**Incomplete")
+        assert "Incomplete" not in lt.render({"baseline": [], "ramps": []})
+
+
+class TestRefusesARunThatMeasuresNothing:
+    @pytest.mark.parametrize(("repeats", "seconds", "max_rate"), [(0, 60, 6400), (3, 0, 6400), (3, 60, 49)])
+    def test_refused(self, repeats: int, seconds: int, max_rate: int) -> None:
+        with pytest.raises(lt.LoadTestRefused):
+            lt.refuse_empty_run(repeats, seconds, max_rate)
+
+    def test_the_smallest_real_run_passes(self) -> None:
+        lt.refuse_empty_run(1, 1, lt.STEPS[0])
+
+
+class TestEdgeDownWhileWaiting:
+    def test_no_running_pod_is_not_ready_rather_than_a_refusal(self) -> None:
+        lab = lt.Lab.__new__(lt.Lab)
+        lab.kubectl = lambda *_args, **_kw: json.dumps({"items": []})
+        assert lab.edge_ready() is False
+
+    def test_a_failed_disarm_names_the_remedy(self) -> None:
+        class Lab:
+            generator = "gen"
+
+            def disarm(self) -> None:
+                raise OSError("kubectl missing")
+
+            def ssh(self, *_args: object) -> str:
+                return ""
+
+        with pytest.raises(lt.LoadTestRefused, match="load-test-clear"):
+            lt.cleanup(Lab(), "img")
