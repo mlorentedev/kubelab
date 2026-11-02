@@ -2,6 +2,8 @@ package forge_test
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/mlorentedev/kubelab/apps/api/internal/forge"
@@ -37,11 +39,15 @@ func TestItemFromEvent(t *testing.T) {
 type fakeLog struct {
 	pending   []forge.Event
 	projected map[string]*forge.Item
+	refuse    int
 }
 
 func (f *fakeLog) Pending(context.Context, int) ([]forge.Event, error) { return f.pending, nil }
 
 func (f *fakeLog) Project(_ context.Context, e forge.Event, item *forge.Item) error {
+	if item != nil && item.Number == f.refuse {
+		return errors.New("refused")
+	}
 	f.projected[e.DeliveryID] = item
 	f.pending = nil
 	return nil
@@ -61,5 +67,26 @@ func TestProjectorMarksEvenWhatItCannotRead(t *testing.T) {
 	}
 	if item, seen := l.projected["bad"]; !seen || item != nil {
 		t.Fatalf("unreadable delivery: seen=%v item=%v", seen, item)
+	}
+}
+
+func TestDeletedItemIsNotWrittenBack(t *testing.T) {
+	payload := strings.Replace(issuePayload, `"opened"`, `"deleted"`, 1)
+	item, err := forge.ItemFromEvent(forge.Event{Forge: "github", Type: "issues", Payload: []byte(payload)})
+	if err != nil || item != nil {
+		t.Fatalf("%+v, %v", item, err)
+	}
+}
+
+func TestRefusedDeliveryIsMarkedSoItCannotStarveTheBatch(t *testing.T) {
+	l := &fakeLog{projected: map[string]*forge.Item{}, refuse: 7, pending: []forge.Event{
+		{Forge: "gitea", DeliveryID: "poison", Type: "issues", Payload: []byte(issuePayload)},
+	}}
+	p := forge.Projector{Log: l}
+	if err := p.Once(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if item, seen := l.projected["poison"]; !seen || item != nil {
+		t.Fatalf("seen=%v item=%v", seen, item)
 	}
 }

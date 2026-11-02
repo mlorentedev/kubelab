@@ -21,6 +21,7 @@ type EventLog interface {
 }
 
 type webhookBody struct {
+	Action     string `json:"action"`
 	Repository struct {
 		Name  string `json:"name"`
 		Owner struct {
@@ -46,7 +47,8 @@ func ItemFromEvent(e Event) (*Item, error) {
 	case "pull_request":
 		raw, kind = body.PullRequest, KindPull
 	}
-	if raw == nil || body.Repository.Name == "" || body.Repository.Owner.Login == "" {
+	// A deleted item's delivery carries the full item; writing it would bring it back.
+	if raw == nil || body.Action == "deleted" || body.Repository.Name == "" || body.Repository.Owner.Login == "" {
 		return nil, nil
 	}
 	src := Source{Forge: e.Forge, Owner: body.Repository.Owner.Login, Repo: body.Repository.Name}
@@ -70,9 +72,14 @@ func (p *Projector) Once(ctx context.Context) error {
 		if err != nil {
 			log.Printf("forge projection: %s delivery %s unreadable: %v", e.Forge, e.DeliveryID, err)
 		}
-		// One delivery the store refuses must not hold back the ones behind it.
 		if err := p.Log.Project(ctx, e, item); err != nil {
 			log.Printf("forge projection: %s delivery %s: %v", e.Forge, e.DeliveryID, err)
+			// Pending is oldest first, so a delivery the store always refuses would end up
+			// filling every batch. Mark it without its item: the reconcile covers the item,
+			// and if the database is down this fails too and the delivery stays pending.
+			if err := p.Log.Project(ctx, e, nil); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

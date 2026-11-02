@@ -81,6 +81,14 @@ func TestSameDeliveryProjectsOnce(t *testing.T) {
 	conf := config.Postgres{Host: "127.0.0.1", Port: port, Tenant: "api", Password: "fixture"}
 	ctx := context.Background()
 	model := store.ForgeModel{Conf: conf}
+	cleanup, err := pgx.Connect(ctx, conf.DSN())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup.Close(ctx)
+	if _, err := cleanup.Exec(ctx, `TRUNCATE forge_event, forge_item, forge_source`); err != nil {
+		t.Fatal(err)
+	}
 	payload := []byte(`{"repository":{"name":"p","owner":{"login":"o"}},"issue":{"number":3,"title":"new","state":"open",
 		"html_url":"u","updated_at":"2026-11-02T09:00:00Z","user":{"login":"a"}}}`)
 	stale := []byte(`{"repository":{"name":"p","owner":{"login":"o"}},"issue":{"number":3,"title":"old","state":"open",
@@ -104,14 +112,9 @@ func TestSameDeliveryProjectsOnce(t *testing.T) {
 	if left, err := model.Pending(ctx, 10); err != nil || len(left) != 0 {
 		t.Fatalf("pending = %v, %v", left, err)
 	}
-	conn, err := pgx.Connect(ctx, conf.DSN())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer conn.Close(ctx)
 	var title string
 	var rows int
-	err = conn.QueryRow(ctx, `SELECT max(title), count(*) FROM forge_item WHERE repo = 'p'`).Scan(&title, &rows)
+	err = cleanup.QueryRow(ctx, `SELECT max(title), count(*) FROM forge_item WHERE repo = 'p'`).Scan(&title, &rows)
 	if err != nil || rows != 1 || title != "new" {
 		t.Fatalf("title = %q, rows = %d, err = %v", title, rows, err)
 	}
