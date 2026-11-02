@@ -20,7 +20,9 @@ import pytest
 from toolkit.features.secret_expiry import (
     Expiry,
     ExpiryUnavailableError,
+    KeyExpiry,
     headscale_apikeys,
+    is_unreferenced_expired,
     parse_headscale_apikeys,
 )
 from toolkit.features.secrets_manager import SECRET_CATALOG
@@ -361,3 +363,23 @@ class TestARejectedCredentialIsNotAnUnreachableIssuer:
         warnings = " ".join(str(c) for c in log.warning.call_args_list)
         assert key in errors
         assert key not in warnings
+
+
+class TestUnreferencedExpiredKey:
+    """#1485: an expired key nothing stores is hygiene; a stored one is an incident."""
+
+    PREFIX = "hskey-api-j4_9sZt5zTPr-***"
+    PAST = datetime(2026, 8, 23, tzinfo=timezone.utc)
+    FUTURE = datetime.now(timezone.utc) + timedelta(days=5)
+
+    def test_expired_and_held_by_nothing_is_hygiene(self) -> None:
+        key = KeyExpiry(self.PREFIX, self.PAST)
+        assert is_unreferenced_expired(key, ["hskey-api-zcJQKhYGg5SW-rest"]) is True
+
+    def test_expired_and_stored_stays_an_incident(self) -> None:
+        key = KeyExpiry(self.PREFIX, self.PAST)
+        assert is_unreferenced_expired(key, ["hskey-api-j4_9sZt5zTPr-rest"]) is False
+
+    def test_a_live_key_held_by_nothing_is_not_excused(self) -> None:
+        key = KeyExpiry(self.PREFIX, self.FUTURE)
+        assert is_unreferenced_expired(key, []) is False

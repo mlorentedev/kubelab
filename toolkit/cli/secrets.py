@@ -855,6 +855,7 @@ def check_expiry(
         Expiry,
         ExpiryUnavailableError,
         headscale_apikeys,
+        is_unreferenced_expired,
         resolve_expiry,
     )
     from toolkit.features.secrets_manager import SECRET_CATALOG
@@ -920,9 +921,18 @@ def check_expiry(
         logger.error(f"headscale  CANNOT CHECK: {exc}")
         raise typer.Exit(2) from exc
 
+    # Asked of the catalog: the keys the loop above skipped are the ones Headscale issued.
+    stored = [
+        value
+        for spec in SECRET_CATALOG
+        if resolve_expiry(spec) is Expiry.PROVIDER and spec.key_path not in PROVIDER_CHECKS
+        if (value := _dig(spec.key_path))
+    ]
     for key in sorted(keys, key=lambda k: k.expires_at):
         line = f"{key.prefix}  expires {key.expires_at:%Y-%m-%d}  ({key.days_left}d)"
-        if key.days_left < warn_days:
+        if is_unreferenced_expired(key, stored):
+            logger.warning(f"{line}: expired and held by nothing, safe to delete on the server")
+        elif key.days_left < warn_days:
             logger.error(line)
             expiring.append(key.prefix)
         else:

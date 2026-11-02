@@ -136,6 +136,16 @@ def parse_headscale_apikeys(output: str) -> list[KeyExpiry]:
     return keys
 
 
+def is_unreferenced_expired(key: KeyExpiry, stored: Iterable[str]) -> bool:
+    """An expired key no stored credential is, so it is hygiene, not an incident (#1485).
+
+    An expired key authenticates nothing, and if nothing holds it nothing can fail.
+    Reporting it as an error kept `check-expiry` red, which hid the real ones.
+    """
+    stem = key.prefix.rstrip("*-")
+    return key.days_left < 0 and not any(value.startswith(stem) for value in stored)
+
+
 def headscale_apikeys(ssh_target: str, container: str = "headscale") -> list[KeyExpiry]:
     """Ask the VPS what it will still accept, and when it will stop.
 
