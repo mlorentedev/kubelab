@@ -83,6 +83,9 @@ def test_the_rule_window_holds_more_than_one_run(rendered) -> None:
     _, cronjob = rendered
     period = re.fullmatch(r"\*/(\d+) \* \* \* \*", cronjob["spec"]["schedule"])
     assert period, cronjob["spec"]["schedule"]
-    window = re.search(r"\[(\d+)m\]", RULES.read_text(encoding="utf-8"))
-    assert window
+    rules = yaml.safe_load(RULES.read_text(encoding="utf-8"))
+    (rule,) = [r for g in rules["groups"] for r in g["rules"] if r["uid"] == "gitops003-argo-delivery"]
+    (query,) = [d for d in rule["data"] if d["datasourceUid"] == "loki"]
+    window = re.search(r"\[(\d+)m\]", query["model"]["expr"])
+    assert window, query["model"]["expr"]
     assert int(window.group(1)) >= 2 * int(period.group(1))
