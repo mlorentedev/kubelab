@@ -111,6 +111,15 @@ jobs:
           echo "::error::  make sync-k8s-images"
           echo "::error::Review the diff, then commit infra/k8s/base/kustomization.yaml."
 
+      # The vendored manifest must be the release `version` names. Renovate bumps
+      # only `version`, so without this a bump merges green with the old manifest
+      # still applied. #694.
+      - name: Check vendored operator manifests (#694)
+        if: matrix.env == 'prod'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: poetry run toolkit sync operators --check
+
       # Headscale ACL policy is prod-only (single control plane, ADR-015), so gate once.
       - name: Validate Headscale ACL policy (ADR-041 / VPN-ACL-002)
         if: matrix.env == 'prod'
