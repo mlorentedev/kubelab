@@ -59,7 +59,7 @@ Second review (nan/qwen3.8-flash, 931dcf5d, PASS WITH GAPS):
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/AI-025/` -> `specs/archive/AI-025/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/AI-025/` -> `specs/archive/AI-025/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] Promotions above executed (if any)
