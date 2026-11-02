@@ -50,6 +50,10 @@ MIN_LOAD_MBIT = 1.0
 # A probe that wrote fewer connects than a third of the window stopped early, and
 # a p95 over what is left says nothing. The starved unshaped upload wrote 12.
 MIN_SAMPLES = WINDOW_S // 3
+# A shaped window shows the shaper at work only if the load reached its cap. CAKE
+# carried 92% of the upload's cap at the hotel (3.3 of 3.6 Mbit/s), and 80% of a
+# download cap that sat above what the link delivers (19.3 of 24, #2896).
+REACHED_CAP_SHARE = 0.85
 
 # Run in this order: the shaped windows first, so the shaper is lifted for the
 # shortest time.
@@ -154,6 +158,12 @@ class Window:
     connects_ms: list[float] = field(default_factory=list)
     failures: int = 0
     unreadable: str = ""
+    cap_mbit: float | None = None
+
+    def below_cap(self) -> bool:
+        """A shaped load whose rate never reached the cap: the shaper limited nothing."""
+        carried = self.down_mbit if self.direction == "down" else self.up_mbit
+        return self.cap_mbit is not None and carried is not None and carried < REACHED_CAP_SHARE * self.cap_mbit
 
     def summary(self) -> str:
         if self.unreadable:
@@ -164,6 +174,8 @@ class Window:
             else "uplink rate unread"
         )
         load = f", load answered {self.answered} cut {self.cut} refused {self.refused}" if self.direction else ""
+        if self.below_cap():
+            load += f", below the {self.cap_mbit:.1f} Mbit/s cap"
         if not self.connects_ms:
             return f"{self.name}: {rates}{load}; no connect succeeded, {self.failures} failed"
         ordered = sorted(self.connects_ms)
@@ -238,9 +250,12 @@ def _window(
     spec: tuple[str, str | None, bool],
     run: Run,
     sleep: Callable[[float], None],
+    caps_mbit: dict[str, float] | None = None,
 ) -> Window:
     name, direction, shaped = spec
     window = Window(name, direction, shaped)
+    if shaped and direction and caps_mbit:
+        window.cap_mbit = caps_mbit[direction]
     _, before = run(hosts["edge"], counters_script(interface))
     code, out = run(hosts["client"], probe_start_script())
     if code != 0 or "started" not in out:
@@ -287,8 +302,11 @@ def run_shape_check(
     """Measure the client's connect times under each load, with and without the shaper.
 
     0 measured (and within `bound_ms` when given), 1 a shaped window over the bound,
-    3 cannot tell or the shaper not restored, 255 the edge did not answer."""
+    3 cannot tell (with a bound, a shaped load that never reached its cap is no proof
+    of the bound) or the shaper not restored, 255 the edge did not answer."""
     interface = networking["edge"]["uplink"]["interface"]
+    bandwidth = networking["edge"]["uplink"]["bandwidth"]
+    caps_mbit = {"down": bandwidth["down_kbit"] / 1000, "up": bandwidth["up_kbit"] / 1000}
     hosts = {
         "edge": _ssh(networking),
         "load": _host_ssh(networking, LOAD_HOST, "lan"),
@@ -307,7 +325,7 @@ def run_shape_check(
                 if stopped.get("cake") != "no":
                     check.unreachable = "the shaper did not come off, so the unshaped windows were not run"
                     break
-            check.windows.append(_window(hosts, interface, spec, run, sleep))
+            check.windows.append(_window(hosts, interface, spec, run, sleep, caps_mbit))
     finally:
         for _ in range(2):
             restored = _set_shaper(hosts, interface, "start", run)
@@ -344,6 +362,10 @@ def _verdict(check: Check, bound_ms: float | None) -> tuple[int, list[str]]:
         if over:
             lines.append(f"verdict: FAILED, over {bound_ms:.0f} ms at p95: {', '.join(over)}")
             return 1, lines
+        unproven = [w.name for w in shaped if w.below_cap()]
+        if unproven:
+            lines.append(f"verdict: cannot tell, the load stayed below the shaper's cap: {', '.join(unproven)}")
+            return 3, lines
         lines.append(f"verdict: within {bound_ms:.0f} ms at p95 under both shaped loads")
         return 0, lines
     lines.append("verdict: measured; record the bound in verification.md")
