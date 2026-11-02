@@ -2241,6 +2241,16 @@ apps:
           container_port: 8000
           memory_limit: 256m
           cpu_limit: "0.5"
+        # Web search (spec AI-025). v0.12.5 takes one engine and has no fallback,
+        # so the engine is SearXNG, which aggregates others itself. It runs on
+        # Open WebUI's network with no port, deployed by the agent_stack role.
+        web_search:
+          result_count: 5
+          searxng:
+            image: docker.io/searxng/searxng:2026.10.30-ffa88e3ba
+            container_port: 8080
+            memory_limit: 256m
+            cpu_limit: "0.5"
       hermes_kubelab:
         # The agent (ADR-068 D2). Its sessions, memory and vault clone live only
         # on ace2, and a second instance would fork them.

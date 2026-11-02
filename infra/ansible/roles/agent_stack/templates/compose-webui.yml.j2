@@ -58,6 +58,27 @@ services:
     cpus: {{ agent_stack_webui.mcp_bridge.cpu_limit }}
 {% endif %}
 
+  # Web search (spec AI-025). No port, like the bridge: Open WebUI reaches it by
+  # service name, and a published port would let any tailnet peer use it.
+  searxng:
+    image: {{ agent_stack_webui.web_search.searxng.image }}
+    container_name: searxng
+    restart: unless-stopped
+    env_file:
+      - {{ agent_stack_dir }}/searxng.env
+    volumes:
+      - {{ agent_stack_dir }}/searxng-settings.yml:/etc/searxng/settings.yml:ro
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: {{ agent_stack_webui.web_search.searxng.memory_limit }}
+    cpus: {{ agent_stack_webui.web_search.searxng.cpu_limit }}
+    dns:
+{% for server in agent_stack_docker_dns_servers %}
+      - {{ server }}
+{% endfor %}
+
 # Declared, not Compose's default: Hermes publishes its API on this bridge's
 # gateway, and ufw admits this subnet alone to it (spec AI-009 AC4).
 networks:

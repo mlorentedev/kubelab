@@ -17,6 +17,7 @@ import ipaddress
 import json
 import re
 import subprocess
+import textwrap
 from functools import cache
 from pathlib import Path
 
@@ -616,10 +617,15 @@ def test_a_play_that_sizes_a_pull_gathers_the_architecture_it_estimates_for():
 
 
 def test_open_webui_is_pulled_through_the_include():
+    """With SearXNG beside it (spec AI-025): both images of the project, one pull."""
     text = AGENT_STACK.read_text(encoding="utf-8")
     block = text[text.index("- name: Pull the Open WebUI image") :].split("\n\n")[0]
     assert "_includes/image-pull.yml" in block
-    assert 'image_pull_images: ["{{ agent_stack_webui.image }}"]' in block
+    task = yaml.safe_load(textwrap.dedent(" " * 4 + block))[0]
+    assert task["vars"]["image_pull_images"] == [
+        "{{ agent_stack_webui.image }}",
+        "{{ agent_stack_webui.web_search.searxng.image }}",
+    ]
     assert "compose-webui.yml pull" not in text, "a second, bare pull of the same stack"
 
 
