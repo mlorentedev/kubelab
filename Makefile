@@ -1752,19 +1752,6 @@ n8n-probe:
 	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make n8n-probe ENV=staging|prod" && exit 1)
 	@$(TOOLKIT) infra n8n probe --env $(ENV)
 
-# Prove the offsite backup destination (Cloudflare R2) is usable: that the token
-# is scoped to its own bucket, that the bucket is reachable, and that a
-# write/read/DELETE round-trip succeeds. Writes 1 KB under `_smoketest/` and
-# removes it, so it is safe against the live destination.
-#
-# The delete probe is the one that pays for itself: a token without delete lets
-# backups report healthy for weeks, and only fails when `restic forget` first
-# tries to reclaim space — with a full bucket and a retention policy that has
-# never actually retained anything (BACKUP-044).
-.PHONY: backup-verify-destination
-backup-verify-destination:
-	@$(TOOLKIT) backup verify-destination --env $(or $(filter staging prod,$(ENV)),prod)
-
 # Mints each backup.sources node its own R2 token (Object Read & Write on
 # kubelab-backup-<node> only) and restic password, straight into prod SOPS
 # (BACKUP-057 PR 3). NODE= limits it to one node, WATCHER=1 to the watcher's
@@ -1787,14 +1774,6 @@ backup-migrate:
 	@test "$(ENV)" = prod || (echo "backup-migrate needs ENV=prod, got '$(ENV)'" && exit 1)
 	@test -z "$(CHECK)" -o "$(CHECK)" = 1 || (echo "CHECK takes 1 or nothing, got '$(CHECK)'" && exit 1)
 	@$(TOOLKIT) backup migrate --node $(NODE) --env $(ENV) $(if $(CHECK),--check)
-
-# One level above backup-verify-destination: that one proves the BUCKET works,
-# this one proves RESTIC works in it. Runs the full lifecycle (init, backup,
-# snapshots, check) against a throwaway repository and removes it. They are
-# different claims and only the second is what backups depend on.
-.PHONY: backup-verify-restic
-backup-verify-restic:
-	@$(TOOLKIT) backup verify-restic --env $(or $(filter staging prod,$(ENV)),prod)
 
 .PHONY: sync-terraform-backend
 sync-terraform-backend: ## Render infra/terraform/backend.s3.tfbackend from terraform.state (TF-007)

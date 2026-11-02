@@ -84,7 +84,8 @@ node_notify_recovered_unit_name: "kubelab-notify-recovered@.service"
 # them later. `<spool unit>.timer` runs the script's `--flush` every `interval`,
 # which delivers the spool oldest first and stops at the first refusal, so a
 # notice never overtakes an older one. The flush's timeout holds the lock wait
-# and one refused delivery, as the notifiers' does, and room for the rest; a
+# and one refused delivery, as the notifiers' does, and room for the rest, and a
+# flush stops a lock wait short of it, leaving what remains to the next run; a
 # notice still undelivered after `max_age` is dropped, so one payload n8n
 # refuses for good cannot hold the others behind it forever.
 # tests/test_node_notify_dedup.py runs the spool end to end.

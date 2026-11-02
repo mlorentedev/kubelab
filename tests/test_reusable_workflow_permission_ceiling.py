@@ -31,6 +31,17 @@ blind to it. The fix was already in this repository, too: `release.yml` calls th
 same `ci-publish.yml` and grants `security-events: write`. It had been correct for
 months and never propagated, because nothing asserted the relation.
 
+## Chains
+
+A called workflow can itself call another, and GitHub caps permissions at every
+hop, so a leaf is bounded by the running minimum of every ceiling above it. The
+guard follows local `uses:` chains to their leaves and compares against that
+minimum (#1691). An intermediate that declares no `permissions:` INHERITS its
+caller's ceiling, as GitHub does for a called workflow. It does not reset to the
+repository default, which applies only to a run's top-level workflow. So only
+the top of a chain can be undeclared and skipped: below it, the ceiling is
+always known.
+
 ## What the guard deliberately does not check
 
 A caller that declares no `permissions:` at all inherits the repository's default
@@ -101,6 +112,23 @@ def _granted(ceiling: dict[str, int], scope: str) -> int:
     return ceiling.get(scope, 0)
 
 
+def _min_ceiling(above: dict[str, int], own: dict[str, int] | None) -> dict[str, int]:
+    """The ceiling a hop actually has: the lower of the inherited one and its own.
+
+    `own` is None when the hop declares nothing, and then it inherits `above`
+    unchanged. A blanket (`*`) survives only as the lower of the two blankets;
+    every scope either side names gets the lower of what the two grant for it.
+    """
+    if own is None:
+        return above
+    scopes = (above.keys() | own.keys()) - {"*"}
+    combined = {scope: min(_granted(above, scope), _granted(own, scope)) for scope in scopes}
+    blanket = min(above.get("*", 0), own.get("*", 0))
+    if blanket:
+        combined["*"] = blanket
+    return combined
+
+
 def _local_callee(uses: Any) -> pathlib.Path | None:
     """Resolve `uses: ./.github/workflows/x.yml` to a path.
 
@@ -117,11 +145,16 @@ def _violations_in(
     workflow: dict[str, Any],
     resolve: Any,
     label: str = "",
+    inherited: dict[str, int] | None = None,
+    seen: frozenset[str] = frozenset(),
 ) -> list[str]:
-    """Every nested request that exceeds its caller's ceiling.
+    """Every nested request that exceeds the ceiling above it, down every chain.
 
     `resolve` maps a job's `uses:` value to the called workflow dict (or None),
     so the synthetic table below can supply callees without touching the disk.
+    `inherited` is the running ceiling when `workflow` is itself a callee; None
+    means it is the top of a chain. `seen` holds the `uses:` values already on
+    this chain, so a cycle stops instead of recursing forever.
     """
     found: list[str] = []
     workflow_ceiling = _levels(workflow.get("permissions"))
@@ -129,17 +162,23 @@ def _violations_in(
     for job_name, job in (workflow.get("jobs") or {}).items():
         if not isinstance(job, dict) or "uses" not in job:
             continue
-        callee = resolve(job["uses"])
+        uses = job["uses"]
+        callee = resolve(uses) if uses not in seen else None
         if callee is None:
             continue
 
         # A job-level block overrides the workflow-level one entirely.
-        ceiling = _levels(job.get("permissions"))
-        if ceiling is None:
-            ceiling = workflow_ceiling
-        if ceiling is None:
-            # Undeclared: the repository default applies and is not in the tree.
+        own = _levels(job.get("permissions"))
+        if own is None:
+            own = workflow_ceiling
+        if inherited is not None:
+            ceiling = _min_ceiling(inherited, own)
+        elif own is None:
+            # Undeclared at the top of a chain: the repository default applies
+            # and is not in the tree.
             continue
+        else:
+            ceiling = own
 
         for callee_job_name, callee_job in (callee.get("jobs") or {}).items():
             if not isinstance(callee_job, dict):
@@ -172,6 +211,9 @@ def _violations_in(
             for scope, level in requested.items():
                 if level > _granted(ceiling, scope):
                     _report(scope, level, _granted(ceiling, scope))
+
+        # The callee's own workflow calls, bounded by this hop's ceiling.
+        found += _violations_in(callee, resolve, f"{label}{job_name} -> {uses} -> ", ceiling, seen | {uses})
     return found
 
 
@@ -229,15 +271,9 @@ def test_the_scan_finds_the_workflows_that_call_a_reusable_one():
 def test_no_nested_job_requests_more_than_its_caller_grants():
     """The guard proper. Red on `staging-deploy.yml` before #1666's fix.
 
-    **Covers one hop.** It weighs a callee's job requests against its immediate
-    caller. A callee job that is itself a `uses:` call declares no
-    `permissions:` of its own, so the chain stops there and a requirement two
-    levels down is never reached — `ci.yml` -> `ci-pipeline.yml` ->
-    `ci-publish.yml` is satisfied today only because `ci.yml` happens to grant
-    `security-events: write`. Remove that line and this test stays green while
-    the real run would fail to start. Measured, and tracked as #1691.
-
-    Green here therefore means "no one-hop violation", not "no violation".
+    It follows every chain to its leaves, so `ci.yml` -> `ci-pipeline.yml` ->
+    `ci-publish.yml` is weighed against `ci.yml`'s ceiling: removing
+    `security-events: write` from `ci.yml` turns this red (#1691).
     """
     offenders: list[str] = []
     for path, workflow in _callers():
@@ -253,8 +289,8 @@ def test_no_nested_job_requests_more_than_its_caller_grants():
         "nothing red:\n  " + "\n  ".join(offenders) + "\n\nA caller's "
         "`permissions:` block is a ceiling: every scope it does not name is "
         "`none`. Grant the scope in the caller (see release.yml), or stop "
-        "requesting it in the called workflow's job.\n\nNote this checks ONE "
-        "hop; a violation two levels down is not reached (#1691)."
+        "requesting it in the called workflow's job. Along a chain, every hop "
+        "caps the ones below it."
     )
 
 
@@ -422,6 +458,78 @@ def test_the_ceiling_semantics(name: str, caller: dict[str, Any], callee: dict[s
     from turning the safe rows green for the wrong reason.
     """
     found = _violations_in(caller, resolve=lambda _: callee)
+    assert len(found) == expected, f"{name}: expected {expected}, got {found}"
+
+
+# --- chains, pinned on synthetic trees -----------------------------------------
+# (name, top caller, {uses: callee}, expected violations). `mid` calls `leaf`.
+
+_MID = "./.github/workflows/mid.yml"
+_LEAF = "./.github/workflows/leaf.yml"
+_LEAF_ASKS = {"jobs": {"scan": {"permissions": {"security-events": "write"}}}}
+
+
+def _top(permissions: Any) -> dict[str, Any]:
+    top: dict[str, Any] = {"jobs": {"ci": {"uses": _MID}}}
+    if permissions is not None:
+        top["permissions"] = permissions
+    return top
+
+
+def _mid(job_permissions: Any = None) -> dict[str, Any]:
+    job: dict[str, Any] = {"uses": _LEAF}
+    if job_permissions is not None:
+        job["permissions"] = job_permissions
+    return {"jobs": {"publish": job}}
+
+
+_CHAINS: list[tuple[str, dict[str, Any], dict[str, Any], int]] = [
+    (
+        "the #1691 shape: the top omits the scope two levels down",
+        _top({"contents": "write"}),
+        {_MID: _mid(), _LEAF: _LEAF_ASKS},
+        1,
+    ),
+    (
+        "ci.yml's shape: the top grants it, the undeclared middle inherits",
+        _top({"contents": "write", "security-events": "write"}),
+        {_MID: _mid(), _LEAF: _LEAF_ASKS},
+        0,
+    ),
+    (
+        "a middle that narrows caps the leaf: the running minimum",
+        _top({"security-events": "write"}),
+        {_MID: _mid({"security-events": "read"}), _LEAF: _LEAF_ASKS},
+        1,
+    ),
+    (
+        "a middle cannot widen what the top withheld",
+        _top({"contents": "read"}),
+        {_MID: _mid("write-all"), _LEAF: _LEAF_ASKS},
+        # Two: the middle's `write-all` is itself a request the top refuses, and
+        # the leaf is still capped by the top rather than by the middle's ask.
+        2,
+    ),
+    (
+        "an undeclared top skips the whole chain, as for one hop",
+        _top(None),
+        {_MID: _mid(), _LEAF: _LEAF_ASKS},
+        0,
+    ),
+    (
+        "a cycle stops instead of recursing",
+        _top({"contents": "read"}),
+        {_MID: {"jobs": {"back": {"uses": _MID}}}},
+        0,
+    ),
+]
+
+
+@pytest.mark.parametrize("name,top,tree,expected", _CHAINS, ids=[r[0] for r in _CHAINS])
+def test_the_ceiling_is_the_running_minimum_down_a_chain(
+    name: str, top: dict[str, Any], tree: dict[str, Any], expected: int
+) -> None:
+    found = _violations_in(top, resolve=tree.get)
     assert len(found) == expected, f"{name}: expected {expected}, got {found}"
 
 

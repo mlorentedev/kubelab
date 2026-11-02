@@ -59,7 +59,10 @@ class Hosts:
             return 0, f"unit {'active' if self.cake else 'inactive'}\ncake {'yes' if self.cake else 'no'}\n"
         if "statistics" in script:
             self.rx += 1
-            return 0, f"rx={self.rx * self.per_window:.0f} tx={self.rx * self.per_window / 2:.0f} t={self.rx * 30:.1f}\n"
+            return (
+                0,
+                f"rx={self.rx * self.per_window:.0f} tx={self.rx * self.per_window / 2:.0f} t={self.rx * 30:.1f}\n",
+            )
         if "nohup" in script:
             self.log.append(f"probe {host}")
             return 0, "started\n"
@@ -171,9 +174,65 @@ def test_a_load_that_did_not_cross_the_uplink_is_no_reading() -> None:
     assert "the load did not cross the uplink" in lines[1]
 
 
+def _at_the_caps(probe: str) -> Hosts:
+    """Loads that reach the declared caps, 24 Mbit/s down and 12 up."""
+    hosts = Hosts(probe=probe)
+    hosts.per_window = 90e6
+    return hosts
+
+
 def test_a_bound_judges_the_shaped_windows_by_their_p95() -> None:
-    assert _go(Hosts(probe="0.040 200\n" * 20), bound=100)[0] == 0
-    assert _go(Hosts(probe="0.400 200\n" * 20), bound=100)[0] == 1
+    assert _go(_at_the_caps("0.040 200\n" * 20), bound=100)[0] == 0
+    assert _go(_at_the_caps("0.400 200\n" * 20), bound=100)[0] == 1
+
+
+def test_the_caps_are_read_from_the_declared_bandwidth() -> None:
+    """8 Mbit/s against the declared 24 is below it; the run and its verdict see that end to end."""
+    code, lines = _go(Hosts(), 1000)
+    assert code == 3 and "below the shaper's cap" in lines[-1]
+
+
+def _judged(down_mbit: float, up_mbit: float, p95_ms: float = 20.0) -> s.Check:
+    """Both shaped windows, each carrying the given rate, the hotel's caps declared."""
+
+    def shaped(name: str, direction: str, cap: float, carried: float) -> s.Window:
+        return s.Window(
+            name,
+            direction,
+            True,
+            answered=4,
+            cap_mbit=cap,
+            down_mbit=carried if direction == "down" else 0.5,
+            up_mbit=carried if direction == "up" else 0.5,
+            connects_ms=[p95_ms] * 20,
+        )
+
+    return s.Check(
+        windows=[shaped("download, shaped", "down", 24.0, down_mbit), shaped("upload, shaped", "up", 3.6, up_mbit)]
+    )
+
+
+def test_a_shaped_load_below_its_cap_proves_no_bound() -> None:
+    """The hotel's download: 19.3 Mbit/s under a 24 Mbit/s cap, so the shaper limited nothing (#2896)."""
+    code, lines = s._verdict(_judged(19.3, 3.3), 150)
+    assert code == 3
+    assert lines[-1] == "verdict: cannot tell, the load stayed below the shaper's cap: download, shaped"
+    assert "below the 24.0 Mbit/s cap" in lines[0]
+    assert "below the" not in lines[1], "the upload reached its cap"
+
+
+def test_loads_at_their_caps_are_judged_by_the_bound() -> None:
+    assert s._verdict(_judged(22.0, 3.3), 150)[0] == 0
+
+
+def test_a_load_below_its_cap_does_not_hide_a_window_over_the_bound() -> None:
+    assert s._verdict(_judged(19.3, 3.3, p95_ms=400.0), 150)[0] == 1
+
+
+def test_a_run_with_no_bound_reports_a_load_below_its_cap_and_still_records() -> None:
+    code, lines = s._verdict(_judged(19.3, 3.3), None)
+    assert code == 0
+    assert "below the 24.0 Mbit/s cap" in lines[0]
 
 
 def test_an_unshaped_uplink_before_the_run_is_refused() -> None:

@@ -5,8 +5,8 @@ time any recipe expands. `$(or $(ENV),prod)` therefore never sees an empty first
 argument and its `prod` branch is dead code: eight targets promised prod in their
 usage lines and ran against dev (#1644).
 
-The three that mattered were `backup-coverage`, `backup verify-restic` and
-`backup verify-destination` -- verifications answering for `dev` while being read
+The three that mattered were `backup-coverage` and the two commands #2917 later
+retired, which verified the destination -- verifications answering for `dev` while being read
 as statements about prod.
 
 **The repo already knew.** A comment on the `alerts` target spells out exactly
@@ -142,8 +142,6 @@ ENV_TARGETS: dict[str, tuple[str, str]] = {
     "gitea-drop-empty": ("--env", "prod"),
     "gitea-git": ("--env", "prod"),
     "backup": ("-e", "prod"),
-    "backup-verify-destination": ("--env", "prod"),
-    "backup-verify-restic": ("--env", "prod"),
     "backup-coverage": ("--env", "prod"),
     # Added with the target (BACKUP-057): the node passwords are prod SOPS.
     "backup-escrow-check": ("--env", "prod"),

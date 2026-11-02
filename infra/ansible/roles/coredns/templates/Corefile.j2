@@ -68,13 +68,13 @@
         {{ vps_public_ip }} {{ service_domains.vpn }}
         fallthrough
     }
-    forward . 1.1.1.1 8.8.8.8
+    forward . {{ coredns_forwarders }}
     log
     errors
 }
 
 . {
-    forward . 1.1.1.1 8.8.8.8
+    forward . {{ coredns_forwarders }}
     cache 30
     log
     errors
