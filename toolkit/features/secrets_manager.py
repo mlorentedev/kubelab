@@ -2513,6 +2513,7 @@ class SecretsManager:
             ["sops", "-d", str(sops_file)],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             env=age_key_env(),  # auto-discover SOPS_AGE_KEY_FILE (toolkit/core/sops.py)
         )
         if result.returncode != 0:
@@ -2558,6 +2559,7 @@ class SecretsManager:
             ["sops", "set", str(sops_file), sops_path, json.dumps(value)],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             env=age_key_env(),  # auto-discover SOPS_AGE_KEY_FILE (toolkit/core/sops.py)
         )
 
@@ -2588,6 +2590,7 @@ class SecretsManager:
             ["sops", "unset", str(sops_file), sops_path],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             env=age_key_env(),  # auto-discover SOPS_AGE_KEY_FILE (toolkit/core/sops.py)
         )
 
