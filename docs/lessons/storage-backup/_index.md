@@ -4,7 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
-| 687 | [A migration leaves the old store answering, so a stale restore step succeeds](lesson-687-a-migration-leaves-the-old-store-answering-so-a-stale-restore-step-succeeds.md) | 2026-11-01 |
+| 688 | [A migration leaves the old store answering, so a stale restore step succeeds](lesson-688-a-migration-leaves-the-old-store-answering-so-a-stale-restore-step-succeeds.md) | 2026-11-01 |
 | 628 | [A copied restic snapshot keeps its time, but a bucket lock ages it from the copy](lesson-628-a-copied-snapshot-keeps-its-time-but-a-bucket-lock-ages-it-from-the-copy.md) | 2026-10-26 |
 | 586 | [A failing check on the new version proves nothing until the old version fails it too](lesson-586-an-upgrade-probe-needs-the-same-run-on-the-deployed-version.md) | 2026-10-17 |
 | 566 | [Terraform does not keep a state's lineage across a migration](lesson-566-terraform-does-not-keep-a-states-lineage-across-a-migration.md) | 2026-10-13 |

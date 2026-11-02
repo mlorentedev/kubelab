@@ -1,5 +1,5 @@
 ---
-id: lesson-687-a-migration-leaves-the-old-store-answering-so-a-stale-restore-step-succeeds
+id: lesson-688-a-migration-leaves-the-old-store-answering-so-a-stale-restore-step-succeeds
 type: lesson
 status: active
 created: "2026-11-01"
