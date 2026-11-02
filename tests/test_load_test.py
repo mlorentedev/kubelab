@@ -255,3 +255,11 @@ class TestCleanup:
         with pytest.raises(RuntimeError):
             lt.cleanup(Lab(), "grafana/k6:x")
         assert calls and "docker image rm" in calls[0]
+
+
+class TestResultsDirectory:
+    def test_a_relative_directory_is_the_repos_and_gets_created(self, tmp_path: pathlib.Path) -> None:
+        from toolkit.cli.infra import _load_test_results_dir
+
+        assert _load_test_results_dir("docs/new", tmp_path) == tmp_path / "docs/new"
+        assert (tmp_path / "docs/new").is_dir()

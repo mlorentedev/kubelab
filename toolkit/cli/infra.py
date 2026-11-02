@@ -315,6 +315,13 @@ load_test_app = typer.Typer(help="Measure staging's capacity (OPS-054); never pr
 app.add_typer(load_test_app, name="load-test")
 
 
+def _load_test_results_dir(output: str, root: Path) -> Path:
+    """A relative directory means the repo's, and it exists before a two-hour run needs it."""
+    directory = root / output
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory
+
+
 def _load_test_lab(env: str) -> tuple[Any, dict[str, Any], dict[str, Any]]:
     """Refuses any env but staging before it reads a value or opens a connection."""
     from toolkit.features.configuration import ConfigurationManager
@@ -344,7 +351,6 @@ def load_test_run(
     import json
     import subprocess
     from datetime import datetime, timezone
-    from pathlib import Path
 
     from toolkit.features.load_test import LoadTestRefused, build_targets, render, resolve_nodes, run
 
@@ -360,12 +366,12 @@ def load_test_run(
             check=True,
         ).stdout.strip()
         result = run(lab, staging["load_test"]["image"], targets, address, repeats, seconds, max_rate)
-    except (LoadTestRefused, subprocess.SubprocessError) as e:
+    except (LoadTestRefused, subprocess.SubprocessError, OSError) as e:
         logger.error(str(e))
         raise typer.Exit(1) from e
     now = datetime.now(timezone.utc)
     result |= {"date": now.strftime("%Y-%m-%dT%H:%MZ"), "commit": commit}
-    base = Path(output) / f"{now:%Y-%m-%d}-{commit}"
+    base = _load_test_results_dir(output, settings.project_root) / f"{now:%Y-%m-%d}-{commit}"
     base.with_suffix(".json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     base.with_suffix(".md").write_text(render(result), encoding="utf-8")
     typer.echo(f"{base}.json")
@@ -374,13 +380,15 @@ def load_test_run(
 @load_test_app.command("clear")
 def load_test_clear(env: Annotated[str, typer.Option("--env")] = "staging") -> None:
     """Remove the route a run that died left behind. Idempotent."""
+    import subprocess
+
     from toolkit.features.load_test import LoadTestRefused
 
     try:
         lab, _, _ = _load_test_lab(env)
         lab.assert_cluster()
         lab.disarm()
-    except LoadTestRefused as e:
+    except (LoadTestRefused, subprocess.SubprocessError, OSError) as e:
         logger.error(str(e))
         raise typer.Exit(1) from e
 
