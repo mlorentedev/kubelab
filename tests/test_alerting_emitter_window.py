@@ -113,6 +113,10 @@ def test_the_scan_finds_the_rules_it_claims_to_guard() -> None:
     uids = {r["uid"] for _, r in _alerting_rules()}
     assert len(uids) >= 10, uids
     assert {"obs042-disk-watcher-silent", "obs015-r2-backup-health", "obs010-quota-requests"} <= uids
+    # Finding the rules is not measuring them: an emptied CRONJOB_CONTAINERS would
+    # resolve no emitter and leave every check below with nothing to compare.
+    measured = [r["uid"] for _, r in _alerting_rules() if r["uid"] not in EXEMPT and _samples(r) is not None]
+    assert len(measured) >= 9, measured  # 9 when written (2026-11-02)
 
 
 def test_the_cron_parser_reads_every_shape_in_use() -> None:
