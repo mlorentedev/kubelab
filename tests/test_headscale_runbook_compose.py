@@ -114,11 +114,14 @@ def _runbook_split_dns() -> dict[str, Any]:
 
 
 def test_the_runbook_shows_the_split_dns_the_role_renders() -> None:
-    assert _runbook_split_dns() == _rendered_split_dns()
+    rendered = _rendered_split_dns()
+    assert rendered, "no zone rendered, so this compares nothing"
+    assert _runbook_split_dns() == rendered
 
 
 def test_the_runbook_numbers_its_headings_once() -> None:
     """Two sections both numbered 1.6 left every reference to one of them ambiguous."""
     text = RUNBOOK.read_text(encoding="utf-8")
     numbers = re.findall(r"^### (\d+\.\d+) ", text, re.M)
+    assert numbers, "the pattern stopped matching the headings"
     assert len(numbers) == len(set(numbers)), f"repeated heading numbers: {sorted(n for n in set(numbers) if numbers.count(n) > 1)}"
