@@ -1,0 +1,62 @@
+# Arming envelope for one unattended run. The run reads the committed copy only.
+version: 1
+run_id: "ap-20261102-kubelab-auth"
+armed_by: manu
+armed_at: 2026-11-02T05:51:16Z
+expires_at: 2026-11-02T17:51:16Z
+objective: >-
+  Close AI-025 (land #2947, independent review, archive, close #2915), bring the
+  #2482 epic body in line with what landed, record the edge-perimeter doctrine in
+  ADR-062, and stop SEC-017's plaintext-by-default output (#1733).
+scope:
+  write_paths:
+    - "infra/ansible/roles/agent_stack/**"
+    - "infra/config/values/common.yaml"
+    - "infra/config/platform.json"
+    - "specs/AI-025/**"
+    - "specs/archive/**"
+    - "toolkit/features/credentials.py"
+    - "toolkit/cli/credentials.py"
+    - "tests/**"
+    - "docs/adr/adr-062-platform-identity-model.md"
+    - "docs/lessons/**"
+    - "docs/runbooks/**"
+    - ".agent/runs/**"
+  frozen_paths:
+    - ".github/**"
+    - "harness/**"
+    - "**/AGENTS.md"
+    - "**/CLAUDE.md"
+    - ".agent/unattended.yml"
+    - "infra/config/secrets/**"
+    - "infra/k8s/**"
+    - "toolkit/features/secrets_manager.py"
+    - "toolkit/features/oidc_clients.py"
+    - "toolkit/features/backup_*"
+  max_files: 16
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make, poetry, caffeinate]
+queue:
+  source: bitacora
+  filter: >-
+    In order: #2947 (triage and land); AI-025 closeout (independent reviewer
+    persona, /spec archive, confirm #2915 closed); #2482 body (tick Uptime Kuma
+    phase 1, closed by #2483); ADR-062 doctrine from #2482's acceptance (docs PR);
+    #1733 (merge under the grant, operator decision 2026-11-01).
+  max_items: 6
+budget:
+  max_iterations: 8
+  max_minutes_per_iteration: 60
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant
+  push: true
+  open_pr: true
+  advisor_tier: top
+# Operator decisions 2026-11-01: #1593 (Authelia password reset, prod config) is
+# out of this run. credentials.py PRs may merge under the grant. Out as well:
+# #2154 (needs an operator login), #1814 (upstream-blocked), Argo CD and Gitea
+# perimeters (parked, owner-gated deploy), Vikunja (being replaced), #1356 (needs
+# secrets_manager.py, which the backup lane's run holds tonight). No remote
+# writes: nothing in this queue provisions a node or deploys. Wake lock:
+# caffeinate held to expires_at.
