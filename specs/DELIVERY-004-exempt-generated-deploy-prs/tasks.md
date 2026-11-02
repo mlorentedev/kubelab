@@ -42,7 +42,9 @@ empty deploy PRs instead of merging them, and pin the merge to the judged head s
   - every context in `ci.branch_protection."mlorentedev/kubelab".master.required_contexts` (read
     from common.yaml) passes on that sha, every reporter of it (status and check-run alike, the
     latest run of a check) and none missing;
-  - `mergeable_state == clean`.
+  - `mergeable_state` is `clean` or `unstable` (amended 2026-11-01 on #1619: `unstable` means only a
+    context that is not required fails, and the line above checks every required one; #2883 waited
+    6.5h on `add-to-project` hitting a rate limit).
   The switch is `mechanical.merge`; only the boolean `true` is on, and `load_declaration` ignores
   the key, so a malformed switch never turns deploy-shape red. Deviation from the design: the
   command enumerates the open PRs itself (REST, not GraphQL) instead of taking `--pr N`, since every
