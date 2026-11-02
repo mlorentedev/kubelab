@@ -378,6 +378,19 @@ class TestEvaluate:
         api = FakeApi(routes_for("web", "mlorentedev/web"), heads=[HEAD, "d" * 40])
         assert evaluate(7, REPO, api, decl, products).verdict == "unknown"
 
+    def test_a_pr_against_another_branch_is_not_mechanical(self, decl, products) -> None:
+        """The judge also checks the base, but the published status must not lean on it."""
+
+        class OtherBase(FakeApi):
+            def json(self, path: str) -> Any:
+                value = super().json(path)
+                if path == f"repos/{REPO}/pulls/7":
+                    value = {**value, "base": {"ref": "release", "repo": {"default_branch": "master"}}}
+                return value
+
+        shape = evaluate(7, REPO, OtherBase(routes_for("web", "mlorentedev/web")), decl, products)
+        assert shape.verdict == "not-mechanical" and "release" in shape.reason, shape.reason
+
     def test_a_file_set_mismatch_reads_no_content(self, decl, products) -> None:
         """Human PRs are the common case: they cost one API call, not six."""
         routes = {f"repos/{REPO}/pulls/7/files?per_page=100": changes("README.md")}

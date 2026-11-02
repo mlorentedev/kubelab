@@ -63,9 +63,8 @@ help:
 	@echo ""
 	@echo "Monitoring (Uptime Kuma):"
 	@echo "  make monitoring-export   Export monitors to JSON (config-as-code)"
-	@echo "  make monitoring-import   Import monitors from JSON seed"
 	@echo "  make monitoring-apply     Apply monitors from seed JSON (CHECK=1 plan only, PRUNE=1 allow deletes)"
-	@echo "  make monitoring-bootstrap Bootstrap fresh Uptime Kuma (admin + import)"
+	@echo "  make monitoring-bootstrap Bootstrap fresh Uptime Kuma (admin + monitors)"
 	@echo "  make monitoring-status   Check Uptime Kuma status on RPi3"
 	@echo ""
 	@echo "Kubernetes:"
@@ -418,6 +417,7 @@ config-check-drift:
 	_paths="infra/k8s/overlays/$(ENV)/generated/ingress.yaml \
 	        infra/k8s/overlays/$(ENV)/generated/configmaps.yaml \
 	        infra/k8s/overlays/$(ENV)/generated/hooks.yaml \
+	        infra/k8s/overlays/$(ENV)/generated/migrations.yaml \
 	        infra/ansible/generated/$(ENV)/hosts.yml"; \
 	if [ $$_status -ne 0 ]; then \
 		echo "✗ A generator failed for $(ENV); nothing was compared"; \
@@ -524,10 +524,6 @@ secrets-copy-nan-key: ## Copy NAN_API_KEY from Bitwarden into prod SOPS for PR-A
 .PHONY: monitoring-export
 monitoring-export:
 	@$(TOOLKIT) monitoring export
-
-.PHONY: monitoring-import
-monitoring-import:
-	@$(TOOLKIT) monitoring import
 
 .PHONY: monitoring-apply
 monitoring-apply: ## Sync monitors from the seed (CHECK=1 prints the plan only, PRUNE=1 allows deletes)
