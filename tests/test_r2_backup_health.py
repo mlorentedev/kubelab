@@ -51,3 +51,14 @@ def test_r2_backup_health_no_notify(mock_cm: MagicMock) -> None:
         result = run_r2_backup_health_check(env="prod", notify=False)
         assert result is True
         mock_dispatch.assert_not_called()
+
+
+def test_r2_backup_health_failed_isolation_is_unhealthy(mock_cm: MagicMock) -> None:
+    with (
+        patch("toolkit.features.r2_backup_health.ConfigurationManager", return_value=mock_cm),
+        patch("toolkit.features.r2_backup_health.probe_fleet", return_value=False),
+        patch("toolkit.features.r2_backup_health.coverage", return_value=True),
+        patch("toolkit.features.r2_backup_health._dispatch_notification") as mock_dispatch,
+    ):
+        assert run_r2_backup_health_check(env="prod", notify=True) is False
+        mock_dispatch.assert_called_once_with(mock_cm, env="prod", is_healthy=False, isolation_ok=False, cov_ok=True)

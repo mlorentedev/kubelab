@@ -52,7 +52,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit backup drill-postgres` | Restore the newest Postgres dump from R2 into a scratch container and check it is complete. |
 | `toolkit backup escrow-check` | Compare each restic password in SOPS with its Bitwarden escrow entry (BACKUP-057). |
 | `toolkit backup generate-password` | Generate the restic repository password and store it in SOPS. |
-| `toolkit backup health-check` | Run full R2 destination verification + fleet coverage check and notify Slack. |
+| `toolkit backup health-check` | Run the isolation probe and the fleet coverage check, and notify Slack. |
 | `toolkit backup isolation-probe` | Fail on any R2 request a stolen node credential should be refused (BACKUP-057). |
 | `toolkit backup migrate` | Move one node's restic history into its own bucket (BACKUP-057 AC4). |
 | `toolkit backup mint-node-tokens` | Mint each node's own R2 token and restic password into SOPS (BACKUP-057). |
