@@ -43,6 +43,8 @@ created: "2026-11-01"
 - [ ] AC2 (runbook): `tests/test_alert_notice_contract.py::test_the_body_carries_the_runbook`, `test_every_rule_declares_a_runbook_and_a_summary`, and the delivered bodies above.
 - [ ] AC3: PR 2.
 - [ ] AC4: PR 3 (#2991). The split and the fleet guard (`tests/test_alerting_emitter_window.py`) are proven by `make mutate`: a 30m disk-watcher schedule and a grouped liveness query each turn a guard red. #1668's live measurements are pending.
+
+  Staging, 2026-11-02, slot on the PR 3 branch at `d4c38184`: `obs042-disk-watcher-silent` evaluates (Grafana log, 09:59:58Z) and stayed Normal throughout. `make drill-pvc-unbound ENV=staging` started 15:16Z after 20 quiet minutes on each side of the slot change and reported `FIRING after 44.1m (45 polls)`, so the PVC rule still fires with `noDataState: OK`. Two earlier runs that day (09:56Z, 12:47Z) fired in 3.0m and 1.0m, sooner than the rule's `for: 15m`; both were the previous instance reappearing after a Grafana restart and are not evidence (#2998).
 - [ ] AC5: PR 4.
 
 ## Test status
