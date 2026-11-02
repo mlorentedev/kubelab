@@ -63,9 +63,8 @@ help:
 	@echo ""
 	@echo "Monitoring (Uptime Kuma):"
 	@echo "  make monitoring-export   Export monitors to JSON (config-as-code)"
-	@echo "  make monitoring-import   Import monitors from JSON seed"
 	@echo "  make monitoring-apply     Apply monitors from seed JSON (CHECK=1 plan only, PRUNE=1 allow deletes)"
-	@echo "  make monitoring-bootstrap Bootstrap fresh Uptime Kuma (admin + import)"
+	@echo "  make monitoring-bootstrap Bootstrap fresh Uptime Kuma (admin + monitors)"
 	@echo "  make monitoring-status   Check Uptime Kuma status on RPi3"
 	@echo ""
 	@echo "Kubernetes:"
@@ -524,10 +523,6 @@ secrets-copy-nan-key: ## Copy NAN_API_KEY from Bitwarden into prod SOPS for PR-A
 .PHONY: monitoring-export
 monitoring-export:
 	@$(TOOLKIT) monitoring export
-
-.PHONY: monitoring-import
-monitoring-import:
-	@$(TOOLKIT) monitoring import
 
 .PHONY: monitoring-apply
 monitoring-apply: ## Sync monitors from the seed (CHECK=1 prints the plan only, PRUNE=1 allows deletes)
@@ -1677,9 +1672,9 @@ vikunja-audit-users: ## List Vikunja accounts, separating password signups from 
 	@$(TOOLKIT) services vikunja audit-users --env $(ENV)
 
 .PHONY: provision-postgres-tenant
-provision-postgres-tenant: ## Idempotently provision PostgreSQL tenant role and database
-	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make provision-postgres-tenant ENV=staging|prod TENANT=vikunja" && exit 1)
-	@$(TOOLKIT) infra k8s provision-postgres-tenant --env $(ENV) --tenant $(or $(TENANT),vikunja)
+provision-postgres-tenant: ## Idempotently provision PostgreSQL tenant roles and databases (TENANT=x for one)
+	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make provision-postgres-tenant ENV=staging|prod [TENANT=api]" && exit 1)
+	@$(TOOLKIT) infra k8s provision-postgres-tenant --env $(ENV) $(if $(TENANT),--tenant $(TENANT))
 
 .PHONY: validate-sync
 validate-sync:

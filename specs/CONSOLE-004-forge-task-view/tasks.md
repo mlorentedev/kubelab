@@ -37,19 +37,18 @@ created: "2026-10-21"
   - [x] ✓ 2026-10-22 Pin the request in the contract: path and query are asserted per forge, mutation-proven (PR-Agent finding on #2635)
   - [x] ✓ 2026-10-22 Forge-neutral contract: expected items and counts are parameters (PR-Agent finding on #2635)
 - [ ] [AC1] Atlas migration in the `infra.postgres` tenant: items, event table, per-source `as_of` and reachability
+  - [x] ✓ 2026-11-02 Migration (#2933); the API connects as its own `api` tenant (#2932), decided by the operator over ADR-051 D2's owner role
 - [ ] [AC1] Implement the Gitea and GitHub adapters to make the contract tests pass
   - [x] ✓ 2026-10-22 GitHub adapter: pagination, `since`, token only when set and never sent to another host (#2635)
   - [x] ✓ 2026-10-22 Gitea adapter: issues and pull requests are two listings, either failing fails the read
   - [x] ✓ 2026-11-01 A `read:issue` credential for the Gitea reader of its own: `issue_reader_token`, a third token on the reviewer's account (no new account), minted by `beelink_services` provisioning from `token_scopes.issue_reader`, catalogued, rotatable with `make gitea-rotate-token TOKEN=issue_reader`. No expiry is recorded because Gitea's token API has no expiry field (as `bot_token`). The token exists only after `make provision NODE=bee ENV=prod TAGS=gitea` runs
   - [x] ✓ 2026-11-01 [AC4] Deliver `issue_reader_token` to the API: `FORGE_GITEA_TOKEN` in `api-secrets` (optional, since staging has no Gitea token and the API starts without it), read by `config.Forge`, with `tests/test_forge_credentials_delivery.py` pinning that no credential lands in a ConfigMap. No NetworkPolicy is needed: NET-002 is ingress-only and the API is the caller, so egress is not restricted
   - [ ] [AC4] Measure the grant: the first live read of an issue list with `type=pulls` confirms `read:issue` alone suffices; a 403 widens `token_scopes.issue_reader` deliberately, with `ISSUE_READER_SCOPES`
-  - [ ] [AC4] The webhook receiver's host must pass Gitea's `ALLOWED_HOST_LIST`: Gitea 1.27.3 refuses to deliver to a host that resolves to a Tailscale address (100.64.0.2), as the PR-Agent hook found (lane `fix-gitea-webhook-allowed-host`). Decide the receiver's address against that list before the receiver is built
+  - [x] ✓ 2026-11-01 [AC4] The webhook receiver's host passes Gitea's `ALLOWED_HOST_LIST` without widening it: #2887 pinned Gitea's container to public resolvers (lesson-682), so the receiver needs a name that resolves to a public address. That also means Gitea cannot resolve `*.staging.kubelab.live`, so a Gitea webhook never reaches staging, and AC5's probe must account for it
 - [ ] [AC1] Regression test: a source that is down renders unreachable with its last read time, never empty
 - [ ] [P] [AC4] Webhook receiver: reject an invalid HMAC, store the event before projecting it
   - [x] ✓ 2026-10-22 Signature verification for both forges, GitHub `sha256=` prefix and Gitea bare hex (#2636)
-  - [x] ✓ 2026-11-02 Receiver endpoint and the event store: `POST /api/forge/webhooks/:forge`, HMAC before any write, a redelivery is a no-op. The two webhook secrets are not delivered yet, so every delivery is refused until they are
-  - [ ] Projection. It upserts the `forge_source` row first: `forge_item` holds a foreign key to it, and an event can arrive before that repository's first full read (PR-Agent finding on #2933)
-  - [ ] Deliver `FORGE_GITHUB_WEBHOOK_SECRET` and `FORGE_GITEA_WEBHOOK_SECRET` through SOPS and `SECRET_CATALOG`
+  - [ ] Receiver endpoint and the event store. Projection upserts the `forge_source` row first: `forge_item` holds a foreign key to it, and an event can arrive before that repository's first full read (PR-Agent finding on #2933)
 - [ ] [AC4] Test: the same delivery twice projects once
 - [ ] [AC4] Periodic reconcile per source every 10 minutes under the hourly call ceiling, with a guard test that counts calls
 - [ ] [AC1] Queue endpoint with the inbox reason (author, requested reviewer, failing CI, waiting on me)

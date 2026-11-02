@@ -126,7 +126,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit infra k8s deploy` | Deploy K8s manifests to the cluster. |
 | `toolkit infra k8s dry-run` | Generate manifests and validate with dry-run (no apply). |
 | `toolkit infra k8s fetch-kubeconfig` | Fetch a cluster's kubeconfig with a transport-agnostic server (ADR-052). |
-| `toolkit infra k8s provision-postgres-tenant` | Idempotently provision a tenant role and database in PostgreSQL (infra.postgres). |
+| `toolkit infra k8s provision-postgres-tenant` | Idempotently provision tenant roles and databases in PostgreSQL (infra.postgres). |
 | `toolkit infra k8s render-apply` | Render RESOLVE_* placeholders (MagicDNS) in a single manifest, then server-side apply. |
 | `toolkit infra k8s restart` | Restart any K8s deployment (rollout restart + wait) on the env's cluster. |
 | `toolkit infra k8s status` | Show K8s resource status for the kubelab namespace. |
@@ -150,9 +150,8 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit infra vps snapshot` | Snapshot the VPS through the Hetzner API: the rollback of last resort (PREP-002). |
 | `toolkit monitoring` | Uptime Kuma monitoring: status and config-as-code (backup is node_backup) |
 | `toolkit monitoring apply` | Declarative sync: apply monitors from seed JSON to Uptime Kuma. |
-| `toolkit monitoring bootstrap` | Full disaster recovery: create admin user + import monitors. |
+| `toolkit monitoring bootstrap` | Full disaster recovery: create admin user + apply monitors. |
 | `toolkit monitoring export` | Export monitors and notifications to JSON (config-as-code). |
-| `toolkit monitoring import` | Import monitors from JSON seed files into Uptime Kuma. |
 | `toolkit monitoring status` | Check Uptime Kuma connectivity and container status on RPi3. |
 | `toolkit obs` | Agentic Observability & SRE triage commands (Loki, Grafana, Slack). |
 | `toolkit obs alerts` | List active Grafana alerts and their firing states. |
