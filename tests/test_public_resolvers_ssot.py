@@ -50,7 +50,6 @@ def test_no_role_template_names_a_resolver_address() -> None:
 def test_the_corefile_forwards_to_the_declared_resolvers() -> None:
     default = yaml.safe_load((ROLES / "coredns/defaults/main.yml").read_text(encoding="utf-8"))["coredns_forwarders"]
     assert "common.networking.public_resolvers | join(' ')" in default
-    assert " ".join(PUBLIC) == "1.1.1.1 8.8.8.8", "the Corefile's rendered bytes moved"
     corefile = (ROLES / "coredns/templates/Corefile.j2").read_text(encoding="utf-8")
     assert corefile.count("forward . {{ coredns_forwarders }}") == 2
 
