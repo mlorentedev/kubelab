@@ -154,7 +154,9 @@ class TestEachConditionRefusesAlone:
     def test_a_verdict_about_another_sha_is_refused_before_contexts_are_read(self, decl, products) -> None:
         """The judge read head d; evaluate() then judged HEAD. That verdict says nothing about d.
 
-        Defence in depth: the final re-read would also catch it, later and under another reason."""
+        Defence in depth: the final re-read would also catch it, later and under another reason.
+        Contexts are routed for HEAD only, so reading them at d first would raise and answer
+        "cannot judge": the prefix asserts the order, not only the outcome."""
         api = MergeApi(mergeable(), heads=["d" * 40, HEAD, HEAD])
         decision = run(api, decl, products)
         assert decision.action == SKIP and decision.reason.startswith("mechanical:"), decision.reason

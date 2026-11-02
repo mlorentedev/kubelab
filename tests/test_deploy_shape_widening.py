@@ -180,4 +180,5 @@ class TestMergingActorDoesNotWiden:
             "checks": "read",
             "statuses": "read",
         }, f"deploy-merge.yml's token scope is {wf['permissions']}: {DECIDED}"
-        assert "permissions" not in wf["jobs"]["merge"], f"a job-level grant overrides the pinned one: {DECIDED}"
+        granted = sorted(name for name, job in wf["jobs"].items() if "permissions" in job)
+        assert not granted, f"jobs {granted} carry their own grant, which overrides the pinned one: {DECIDED}"
