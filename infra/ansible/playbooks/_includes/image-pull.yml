@@ -75,6 +75,10 @@
       attempts at a layer can add {{ ((_image_pull_pauses | int) / 60) | round(1) }} min.
   when: image_pull_down_kbit | default(0) | int > 0
 
+# The budget is transfer time, what a healthy link costs. dockerd's pauses are left
+# out: they are spent only when layers fail, and the async bound below grants them.
+# Counting them would refuse every pull at the edge, whose 3900 s of pauses at 40
+# attempts pass the 1800 s default even for an image already held (#2873).
 - name: Refuse a pull of {{ image_pull_name }} that outlasts its budget
   ansible.builtin.assert:
     that: >-

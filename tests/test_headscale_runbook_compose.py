@@ -11,6 +11,9 @@ The role's template is the source of truth, so this renders it from the values
 stay as `<placeholders>` in the runbook because they change without the file's
 shape changing (the image tag, the public IP); everything else is compared as
 rendered, so a renamed network or a new published port fails here.
+
+Section 6.1 quotes the split DNS block of `config.yaml.j2` and is held the same way,
+so a zone added to `networking.staging_zones` fails here until the runbook shows it.
 """
 
 from __future__ import annotations
@@ -24,7 +27,8 @@ import yaml
 from tests.ansible_jinja import ansible_env
 
 REPO = Path(__file__).resolve().parent.parent
-TEMPLATES = REPO / "infra/ansible/roles/headscale/templates"
+ROLE = REPO / "infra/ansible/roles/headscale"
+TEMPLATES = ROLE / "templates"
 VALUES = REPO / "infra/config/values"
 RUNBOOK = REPO / "docs/runbooks/headscale-setup.md"
 
@@ -78,3 +82,46 @@ def _runbook_compose() -> dict[str, Any]:
 
 def test_the_runbook_shows_the_compose_the_role_renders() -> None:
     assert _runbook_compose() == _rendered()
+
+
+def _rendered_split_dns() -> dict[str, Any]:
+    """`dns.nameservers.split` of `config.yaml.j2` as the VPS play renders it."""
+    config = _prod_config()
+    headscale = config["apps"]["services"]["core"]["headscale"]
+    rpi4 = config["networking"]["nodes"]["rpi4"]["tailscale_ip"]
+    variables = yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))
+    variables.update(
+        {
+            "headscale_domain": headscale["domain"],
+            "headscale_listen_port": headscale["default_port"],
+            "tailscale_cidr": config["networking"]["tailscale_cidr"],
+            # The "Build Headscale split DNS from staging zones" task in deploy-vps.yml.
+            "headscale_dns_split": {zone: [rpi4] for zone in config["networking"]["staging_zones"]},
+        }
+    )
+    env = ansible_env(str(TEMPLATES), trim_blocks=True)
+    return yaml.safe_load(env.get_template("config.yaml.j2").render(**variables))["dns"]["nameservers"]["split"]
+
+
+def _runbook_split_dns() -> dict[str, Any]:
+    """The first yaml block under the runbook's `### 6.1` heading."""
+    text = RUNBOOK.read_text(encoding="utf-8")
+    section = re.search(r"^### 6\.1 .*?(?=^### )", text, re.S | re.M)
+    assert section, "the runbook has no section 6.1"
+    block = re.search(r"```yaml\n(.*?)```", section.group(0), re.S)
+    assert block, "section 6.1 of the runbook shows no split DNS block"
+    return yaml.safe_load(block.group(1))["dns"]["nameservers"]["split"]
+
+
+def test_the_runbook_shows_the_split_dns_the_role_renders() -> None:
+    rendered = _rendered_split_dns()
+    assert rendered, "no zone rendered, so this compares nothing"
+    assert _runbook_split_dns() == rendered
+
+
+def test_the_runbook_numbers_its_headings_once() -> None:
+    """Two sections both numbered 1.6 left every reference to one of them ambiguous."""
+    text = RUNBOOK.read_text(encoding="utf-8")
+    numbers = re.findall(r"^### (\d+\.\d+) ", text, re.M)
+    assert numbers, "the pattern stopped matching the headings"
+    assert len(numbers) == len(set(numbers)), f"repeated heading numbers: {sorted(n for n in set(numbers) if numbers.count(n) > 1)}"

@@ -37,17 +37,12 @@ that exists.
 ## Before you trust any of it
 
 ```bash
-make backup-verify-destination ENV=prod   # the bucket works
-make backup-verify-restic ENV=prod        # restic works in the bucket
+make backup-isolation-probe ENV=prod          # each bucket refuses the others' pairs and locks its data
+make backup-drill-node NODE=<node> ENV=prod   # that node's data restores
 ```
 
-These are two different claims and the second is the one backups depend on. Both
-are safe against the live destination — they write a throwaway object under
-`_smoketest/` and remove it.
-
-**Both still probe the shared bucket every node left on 2026-10-08, not the node
-buckets (#2917).** Until that closes, what proves a node's own bucket is
-`make backup-isolation-probe ENV=prod` and `make backup-drill-node NODE=<node> ENV=prod`.
+These are two different claims, and the second is the one a restore depends on.
+The probe's deletes are meant to be refused, and it fails if one is accepted.
 
 ## Is everything actually backed up?
 

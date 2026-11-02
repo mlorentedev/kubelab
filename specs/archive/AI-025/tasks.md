@@ -27,19 +27,19 @@ PR 1 (web search):
 
 PR 2 (code interpreter and memory):
 
-- [ ] [AC3] [AC5] Failing test, then `code_interpreter` in `defaultFeatureIds`
-- [ ] [AC4] Failing test, then `ENABLE_MEMORY_BACKGROUND_REVIEW=true`
-- [ ] [AC3] [AC4] Provision, then the operator runs Python in a chat and sees a fact carried to a new chat
+- [x] [AC3] [AC5] Failing test, then `code_interpreter` in `defaultFeatureIds`
+- [x] [AC4] Failing test, then `ENABLE_MEMORY_BACKGROUND_REVIEW=true`, every 5 user turns
+- [x] [AC3] [AC4] Provision, then the operator runs Python in a chat and sees a fact carried to a new chat
 
 ## Closing
 
-- [ ] Every acceptance criterion from `proposal.md` is covered by at least one test
-- [ ] Every acceptance criterion has a matching entry in `features.json` (see below) with a non-vacuous verification command
-- [ ] Type checks pass
-- [ ] Lint passes
-- [ ] No unrelated changes in the diff (no scope creep)
-- [ ] `verification.md` filled in
-- [ ] PR opened referencing this spec folder
+- [x] Every acceptance criterion from `proposal.md` is covered by at least one test
+- [x] Every acceptance criterion has a matching entry in `features.json` (see below) with a non-vacuous verification command
+- [x] Type checks pass
+- [x] Lint passes
+- [x] No unrelated changes in the diff (no scope creep)
+- [x] `verification.md` filled in
+- [x] PR opened referencing this spec folder
 
 ## Machine-readable features
 

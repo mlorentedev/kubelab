@@ -264,6 +264,7 @@ def delete_retired_secrets(env: str, dry_run: bool = False, run: Callable[..., A
                 [*_kubectl_base(env, namespace), "delete", "secret", name, "--ignore-not-found"],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
                 check=True,
             )
             # `--ignore-not-found` prints nothing when there was nothing to delete.
@@ -283,6 +284,7 @@ def _preview_retired_secret(env: str, namespace: str, name: str, run: Callable[.
         [*_kubectl_base(env, namespace), "get", "secret", name, "--ignore-not-found", "-o", "name"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     if found.returncode != 0:
@@ -719,6 +721,7 @@ def _apply_single_secret(
             input=manifest,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=True,
         )
         verdict = _report_apply(mapping.name, list(data), apply_result, dry_run)
