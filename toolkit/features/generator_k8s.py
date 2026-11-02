@@ -1,5 +1,6 @@
 """Kubernetes manifest generator using Jinja2 templates."""
 
+import hashlib
 from typing import Any
 
 from toolkit.config.constants import PATH_STRUCTURES, VALIDATION_RULES
@@ -68,6 +69,7 @@ class K8sGenerator(BaseGenerator):
         ("deployments.yaml.j2", "deployments.yaml"),
         ("services.yaml.j2", "services.yaml"),
         ("configmaps.yaml.j2", "configmaps.yaml"),
+        ("migrations.yaml.j2", "migrations.yaml"),
         ("ingress.yaml.j2", "ingress.yaml"),
         ("hooks.yaml.j2", "hooks.yaml"),
     ]
@@ -296,6 +298,27 @@ class K8sGenerator(BaseGenerator):
             "apps": apps,
             "cert_resolver": cert_resolver,
             "route_probe_image": env_vars.get("ARGOCD_ROUTE_PROBE_IMAGE", ""),
+            "migrations": self._build_migrations(env_vars),
+        }
+
+    def _build_migrations(self, env_vars: dict[str, str]) -> dict[str, Any]:
+        """The API's Atlas migration directory, with a hash of its content (DATA-007)."""
+        files = {
+            path.name: path.read_text(encoding="utf-8")
+            for path in sorted((self.project_root / "apps" / "api" / "migrations").iterdir())
+            if path.is_file()
+        }
+        digest = hashlib.sha256()
+        for name, content in files.items():
+            digest.update(name.encode("utf-8"))
+            digest.update(content.encode("utf-8"))
+        return {
+            "files": files,
+            "hash": digest.hexdigest()[:10],
+            "image": env_vars["INFRA_POSTGRES_ATLAS_IMAGE"],
+            "tenant": env_vars["APPS_PLATFORM_API_POSTGRES_TENANT"],
+            "host": env_vars["INFRA_POSTGRES_HOST"],
+            "port": env_vars["INFRA_POSTGRES_PORT"],
         }
 
     @classmethod
