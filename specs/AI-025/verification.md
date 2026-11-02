@@ -39,6 +39,16 @@ First review (nan/deepseek-v4-flash, 690bd91c, FAIL):
 - **Minor, 95 vs 128 MiB**: explained under AC2 (two hosts).
 - **Minor, features.json entries still pending**: not changed. Only the harness may set `passing`.
 
+Second review (nan/qwen3.8-flash, 931dcf5d, PASS WITH GAPS):
+
+- **Major, `searxng.container_port` wired on the client side only**: ticketed on #2970. The fix needs a provision of ace2 to prove which variable the image's server reads.
+- **Major, no read of the instance's effective config**: ticketed on #2970, as a post-deploy check of `configs/export`.
+- **Major, no SearXNG probe**: #2970 (carried).
+- **Minor, web results can become memories**: #2971 (carried).
+- **Minor, features.json pending**: not changed. Only the harness may set `passing`.
+- **Minor, searxng.env change has no restart path**: accepted. The key is generated once on the node and never rotated in-band.
+- **Minor, #2947 had no triage comment yet**: it gets one before merge.
+
 ## Promotion candidates
 
 - [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/containers-docker/lesson-690-measure-the-model-before-tuning-open-webuis-background-calls.md

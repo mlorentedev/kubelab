@@ -1,107 +1,79 @@
 ---
 spec: "AI-025"
-verdict: "FAIL"
-reviewed_sha: "690bd91ca5bdb3a358873030f74dbaaeaf0fa133"
-reviewer: "nan/deepseek-v4-flash"
-date: "2026-11-01"
+verdict: "PASS-WITH-GAPS"
+reviewed_sha: "931dcf5da39ff44b7c2f2701ae5aafb3af67aa1b"
+reviewer: "nan/qwen3.8-flash"
+date: "2026-11-02"
 ---
 
 ## Adversarial review
 
-**Scope**: AI-025 — web search (SearXNG), default tools, memory review on ace2 (issue mlorentedev/kubelab#2915)
-**Sources**: `specs/AI-025/{proposal,tasks,verification,features}.md|json`, `infra/ansible/roles/agent_stack/{defaults,main.yml,templates/*}`,
-`infra/config/values/common.yaml`, `tests/test_open_webui_{web_search,code_and_memory,models}.py`, `tests/test_agent_stack_role.py`,
-`tests/test_image_pull_budget.py`, `docs/lessons/containers-docker/lesson-{687,690,692}-*.md`.
-Diff scope: `git diff 98b67498...HEAD` (113 files, +2423/−251). Contract digests from `dotf spec digest AI-025` match
-`review-request.json` exactly (features.json `b8fd4f55…`, proposal.md `6abbe38e…`, tasks.md `b8e92940…`) — the contract is fresh.
+**Scope**: AI-025 — Open WebUI as a daily assistant: SearXNG web search, default tools (image / web search / Pyodide code interpreter), memory background review on ace2 (issue mlorentedev/kubelab#2915). Round 2; round 1 (`nan/deepseek-v4-flash` @ `690bd91c`) returned FAIL on one Blocker.
+**Sources**: `specs/AI-025/{proposal,tasks,verification,features}.md|json`, `specs/AI-025/review-round1.md`, `infra/ansible/roles/agent_stack/{tasks/defaults,templates/{webui.env,compose-webui.yml,searxng-settings.yml,searxng.env}.j2}`, `infra/config/values/common.yaml`, `tests/test_open_webui_{web_search,code_and_memory,models}.py`, `tests/test_agent_stack_role.py`, `tests/test_image_pull_budget.py`, `docs/lessons/containers-docker/lesson-{687,690,692}-*`, `docs/lessons/identity-secrets/lesson-520-*`.
+**Diff scope**: `git diff 98b67498555d6423e651386896d19426595ca322...HEAD` (115 files, +2562/−251). **Contract is fresh**: `dotf spec digest AI-025` reproduces `review-request.json` exactly (features.json `b8fd4f55…`, proposal.md `6abbe38e…`, tasks.md `b8e92940…`). I changed no contract file.
 
-**Note on diff composition.** Only the first-parent chain is AI-025's own work (`d7973c62`, `362e6d5e`, `50fb2e5f`, `344ad4ed`,
-`31eb5210`, `ddfbbe69`, `bee62a06`, `c0e063d4`, `536392c5`, `a0191f60`, `690bd91c`). The rest of the 113-file diff arrived by
-merging `origin/master` (secrets/ACME, offsite backups, netplan, Renovate, forge credentials, `specs/archive/GITOPS-003`) and is
-not part of this change; I did not review it as AI-025's work.
+**Diff composition** (verified independently, not taken from round 1): `git log --first-parent` shows AI-025's own chain is 12 commits (`d7973c62`, `362e6d5e`, `50fb2e5f`, `344ad4ed`, `31eb5210`, `ddfbbe69`, `bee62a06`, `c0e063d4`, `536392c5`, `a0191f60`, `690bd91c`, `931dcf5d`), each confined to the `agent_stack` role, its templates, `common.yaml`/`platform.json`, the AI-025 tests, three lessons and the spec folder. The remaining ~100 files (netplan, secrets/ACME, offsite runbooks, Renovate, GITOPS-003 archive, BACKUP-057) arrived through the three `origin/master` merges and are not this change. `536392c5` (resolver keys kept across a merge) is the one own-chain commit that touches shared config; the tests that police it are green (finding below).
 
-**What I ran** (fresh, this session): `poetry run pytest -q --no-cov tests/test_open_webui_web_search.py
-tests/test_open_webui_code_and_memory.py tests/test_open_webui_models.py tests/test_agent_stack_role.py
-tests/test_image_pull_budget.py` → **83 passed**; plus `tests/test_renovate_image_coverage.py
-tests/test_public_resolvers_ssot.py tests/test_ansible_config_keys_resolve.py tests/test_spec_verifications_select_tests.py`
-→ **38 passed**. Every `features.json` command was run and its test count matches `verification.md` (6, 2, 1, 3, 74).
+**What I ran** (fresh, this session): every `features.json` command separately → **6 / 2 / 1 / 3 / 74 passed**, matching `verification.md`; union of the five files → **83 passed**; merge-integration neighbours (`test_public_resolvers_ssot.py`, `test_ansible_config_keys_resolve.py`, `test_renovate_image_coverage.py`, `test_spec_verifications_select_tests.py`, `test_agent_egress.py`, `test_sops_recipients.py`) → **56 passed**; `make lint` → ruff clean, 152 files formatted. Mutations, each reverted (`git checkout --`, tree confirmed clean): **M1** `apps…web_search.searxng.container_port: 8080 → 9999` → **39 passed, suite stayed green**; **M2** delete `ENABLE_MEMORY_BACKGROUND_REVIEW=true` → `test_memories_are_saved_without_being_asked` **red**; **M3** flip `ENABLE_PERSISTENT_CONFIG=false → true` → `test_the_env_file_is_the_configuration_of_record` **red**. One earlier f6 run showed "1 failed, 73 passed"; that was my own concurrent M1 edit polluting the tree while pytest read `common.yaml`, not a defect — re-run on a clean tree gave 74 passed. Tickets: `gh issue view 2970 2971` → both **OPEN**; `gh pr view 2947` → OPEN, not draft, `Tests` IN_PROGRESS, `review` PENDING, `Spec archive gate` FAILURE (consistent with review.md still holding round 1's FAIL).
+
+### Round 1's Blocker — disposition reviewed, and accepted
+
+Round 1 blocked on "`ENABLE_MEMORY_BACKGROUND_REVIEW` is inert because the DB row wins on an instance that booted first". The author **declined**, premise: the role sets `ENABLE_PERSISTENT_CONFIG=false`. I checked that refusal rather than trusting it, three ways:
+
+- the flag is **not** something this change introduced to suit itself — `git show 98b6749:…webui.env.j2` line 19 already carried it, so ace2's instance has been running under it;
+- it is guarded by a **named** test, `tests/test_agent_stack_role.py::test_the_env_file_is_the_configuration_of_record`, and **M3 makes it red**, so the guard is load-bearing, not decorative;
+- the rule is independently recorded in this repo predating the change: `docs/lessons/identity-secrets/lesson-520-*.md` ("with `ENABLE_PERSISTENT_CONFIG` on (the default), most env values are read once into the database, so a later Ansible edit … changes nothing"; "`ENABLE_PERSISTENT_CONFIG=false` makes the env file the configuration of record"), and `specs/AI-009-hermes-ace2/verification.md:169` records the same for the deployed instance.
+
+Round 1's own text conditioned the mechanism on "while `ENABLE_PERSISTENT_CONFIG` is the default true". That condition is false on this node, so the Blocker is a **false alarm** and the decline is evidence-backed, not a dodge. I re-recorded the deciding evidence in `verification.md` myself under AC4 — no contract edit needed. What still is not closed is the *observation* half: nobody has ever printed what the running instance reports. That is Major 2 below, not a Blocker.
 
 ### Spec and task alignment
 
-- All `tasks.md` boxes are ticked and every tick has diff evidence (SearXNG service/settings/env/role tasks, `defaultFeatureIds`,
-  memory env, tests). No `[AGENT-DRAFT]` / `[AGENT-SUGGESTION]` tags remain.
-- `features.json` carries one entry per AC except AC1 ("speed measured, no change" — correctly not a feature), and each
-  `verification` command is non-vacuous and passes. All five entries are still `state: pending` with empty `evidence`: the
-  harness never captured the runs, so `verification.md`'s "every features.json command passes" is the author's claim, not the
-  contract's. I confirmed the claim by hand (above); the empty states are a Minor, not a contradiction.
-- AC wording is *replaced* by issue references: `proposal.md` §Acceptance criteria is a ticked list of paraphrases of
-  #2915 AC1–AC6, so "done" for each AC is not decidable from the spec alone. That matters here — see Blocker 1, where the
-  distinction between "memory carries a fact" and "a memory is written by background review" is exactly what AC4 needs.
-- SearXNG hardening (proposal §Risks: "Whether the image starts that way is measured on ace2 before merge") is claimed met, but
-  the numbers disagree across artifacts: `verification.md` AC2 says **95 MiB**, `lesson-690` says **128 MiB** measured locally.
-  Minor, but it is the kind of discrepancy that makes a live claim unauditable.
+- AC1–AC6 in `proposal.md` are ticked; every tick has diff evidence. No agent placeholder tags remain in the contract files (grep for the `AGENT-` draft and suggestion markers: none).
+- AC wording is still *delegated* to #2915 ("The acceptance criteria are #2915 AC1-AC6"), so "done" is not fully decidable from the spec alone. It bit round 1 exactly here (AC4 "carries a fact" vs "written by background review"). The author has now closed that gap honestly in `verification.md`: "That chat asked the model to remember, so it proves the memory path, not the background review." I accept that as no longer misleading, and it is why Major 2 is a confidence gap rather than a false claim.
+- `verification.md` §Review dispositions answers all seven round-1 findings individually; two accepted and applied (the `< 10` bound, lesson-687 in the promotion list — both verified in `931dcf5d`), three accepted-as-limit/ticketed with real tickets, one declined with the argument above, one explained. That is the standard the skill asks for; it is met.
+- `tasks.md` closing boxes are ticked and true as far as this repo can show: the `features.json` commands are non-vacuous (they fail on M1-class edits — M2 proves it) and pass (6/2/1/3/74).
 
 ### Findings
 
 | Severity | Reality | Area | Finding | Evidence | Test (named, or UNTESTED) | Fix location (code / tests / spec / vault) |
 |----------|---------|------|---------|----------|---------------------------|---------------------------------------------|
-| Blocker | THEORETICAL | memory mechanism | **AC4's mechanism cannot work on ace2 as written, and the evidence cannot tell.** `ENABLE_MEMORY_BACKGROUND_REVIEW` is wired into Open WebUI's `DEFAULT_CONFIG`, seeded into the SQLite `config` table on **first boot**, and afterwards the DB value wins over the env var (`Config.seed_defaults()` skips existing keys; `Config.get()` reads the row while `ENABLE_PERSISTENT_CONFIG` is the default true). ace2's instance booted long before this change (AI-009, then the v0.12.5 upgrade, #2885), so the key was seeded `false` with the env var absent — the `true` this change adds is very likely ignored. Either branch is a defect: (a) inert → AC4 is false and `proposal.md` ticks it; (b) enabled by hand in the Admin UI → the DB, not the repo, is the source of truth for AC4, and a rebuilt node loses it silently. | upstream open-webui#29091 (repro steps, root cause, closed as a *docs* fix 2026-08-28 — behavior unchanged); `infra/ansible/roles/agent_stack/templates/webui.env.j2:158-161`; `verification.md` AC4 cites only a template assertion plus "a fact told in one chat was recalled in a new chat" — which is also what an explicit memory-tool call does, and the proposal's own Why says memories were saved when asked | UNTESTED — `tests/test_open_webui_code_and_memory.py::test_memories_are_saved_without_being_asked` asserts the template's own strings, never the instance's effective config | code (role must write the value through the API/`configs/import`, not the env) + tests (a post-deploy assertion) + verification.md (record the deciding evidence) |
-| Major | REAL (as a fact about the tests) / THEORETICAL (as a shipped failure) | verification design | **Four of the five ACs are "proved" by tests that assert the template against itself.** `test_memories_are_saved_without_being_asked`, `test_every_chat_starts_with_web_search_on`, `test_every_chat_starts_with_the_code_interpreter_on`, `test_every_chat_starts_with_the_image_tool_on` read `webui.env.j2` and compare it with `common.yaml`. They cannot fail because Open WebUI ignores, renames or persists-over a variable — which is exactly Blocker 1's failure mode, and it shipped green. Same shape for `test_open_webui_searches_through_searxng` (the name `SEARXNG_QUERY_URL`, `WEB_SEARCH_ENGINE` mapping is asserted, not exercised). | `tests/test_open_webui_web_search.py:78-85`, `tests/test_open_webui_code_and_memory.py:19-38`, `tests/test_open_webui_models.py:85-95`; all pass in a suite where nothing ever contacts Open WebUI | UNTESTED (no test observes an effective setting) | tests (one live assertion per AC on the node) + spec (say so in `verification.md`) |
-| Major | THEORETICAL | reliability | **SearXNG has no post-deploy probe, unlike the sibling no-port service.** The role probes the MCP bridge from inside Open WebUI's container and asserts its status, refuses an unauthenticated call, and re-runs until it answers (`tasks/mcp_bridge.yml:8-30`); SearXNG gets none of that. If SearXNG crash-loops — a settings key Renovate's next image bump renames, or `cap_drop: ALL` meeting an image that now needs a capability — the play reports `changed=0` success while web search is silently dead. | `infra/ansible/roles/agent_stack/tasks/main.yml:360-366` (restart only, `changed_when: true`, no probe); no `searxng` probe anywhere in `tasks/`; `image: docker.io/searxng/searxng:2026.10.30-ffa88e3ba` is in `common.yaml` and `tests/test_renovate_image_coverage.py::*` passes, so Renovate *will* bump it unattended | UNTESTED — `tests/test_open_webui_web_search.py` checks the compose service's keys, not that it answers | code (`tasks/main.yml` + a `searxng-probe` stdin script) + tests |
-| Minor | THEORETICAL | security | Web results are untrusted input, and background memory review turns them into persisted facts, so one poisoned result can survive the chat. Not in `proposal.md` §Risks, and no mitigation or acknowledgement. | `webui.env.j2` `ENABLE_WEB_SEARCH=true` + `ENABLE_MEMORY_BACKGROUND_REVIEW=true`, no prompt-injection note in proposal or lesson-690/692 | UNTESTED | spec (name the risk), vault (only if it generalizes) |
-| Minor | REAL | tests | `test_memories_are_saved_without_being_asked` closes with `assert 1 <= review_interval_turns <= 10` — a magic bound with no stated reason, so it passes for any plausible value and documents nothing. | `tests/test_open_webui_code_and_memory.py:37` | n/a (the test is the finding) | tests |
-| Minor | REAL | spec artifacts | `docs/lessons/containers-docker/lesson-687-*` was added in this change (image-tool toggle, the mechanism AC5 extends) and indexed, but `verification.md` §Promotion candidates lists only 690 and 692. | `git diff -- docs/lessons/containers-docker/_index.md`; `verification.md` §Promotion candidates | n/a | spec (`verification.md` — outside the contract set) |
+| Major | THEORETICAL (the breakage) — the vacuity itself is **demonstrated** | config wiring / tests | **`container_port` is a one-sided knob.** The only consumer of `…searxng.container_port` is the client URL `SEARXNG_QUERY_URL=http://searxng:{{…container_port}}/search`. Nothing tells SearXNG what to listen on: no `SEARXNG_PORT`, no `server.port` in `searxng-settings.yml.j2`, no `expose:` in the compose service. So the value is silently load-bearing in one direction only — a config edit, or an image bump that changes the image's default port, breaks web search while the suite stays green. This is round 1's Major 2 ("tests compare the template with itself") pinned to a specific, reproducible input. | **M1: set 8080 → 9999, `pytest tests/test_open_webui_web_search.py tests/test_agent_stack_role.py` → 39 passed**; `grep -rn "SEARXNG_PORT\|bind_address\|server.port\|expose:" infra/ansible/roles/agent_stack/` finds only the open-webui tailscale-bind comment; `#2970`'s own fix text hardcodes `http://searxng:8080/search`, so the ticket repeats the assumption instead of checking it | UNTESTED — no named test asserts the settings or env declare the port the URL uses; `test_open_webui_searches_through_searxng` reads the same key from both sides and so cannot fail | code (`agent_stack/templates/compose-webui.yml.j2` → `environment: SEARXNG_PORT={{ …container_port }}`, or `server.port` in the settings template) + tests (`tests/test_open_webui_web_search.py`: assert the port appears on both sides). Outside the contract set — applies without re-review |
+| Major | THEORETICAL | memory / verification | **No observation of the instance's effective config.** AC4's "without being asked", AC3's/AC5's tool defaults, and the *env var names themselves* (`ENABLE_MEMORY_BACKGROUND_REVIEW`, `MEMORIES_REVIEW_INTERVAL_TURNS`, `CODE_INTERPRETER_ENGINE` vs `CODE_EXECUTION_ENGINE`) rest on a code-path argument about v0.12.5 plus template assertions. If a name is wrong, v0.12.5 ignores it, keeps its own default (10 turns), and M1's mechanism keeps the suite green. The one command that settles all of it has never been run or ticketed: `GET /api/v1/configs/export` and a `created_by == "background_review"` probe of `/api/v1/memories/`. | Round 1's questions 1–3 are unanswered in any artifact; `verification.md` §Review dispositions declines the live-check half as "would need the admin token on the node" and tickets only "the SearXNG part is #2970"; nothing covers the config-export part | UNTESTED — `test_memories_are_saved_without_being_asked` reads the rendered env, never the instance | tests + `verification.md` (paste the export under AC4, or file the live assertion as a ticket with #2970's shape). Not the contract set |
+| Major | THEORETICAL (carried, tracked) | reliability | **SearXNG gets no post-deploy probe**, unlike the sibling no-port service; a crash-loop (settings key renamed by a Renovate bump, or an image that needs a capability `cap_drop: ALL` removes) provisions as `changed=0` success with search dead. | `tasks/main.yml` diff adds only `Restart SearXNG when its settings changed` (`changed_when: true`, gated on `_agent_stack_searxng_settings.changed`); no probe in `tasks/`; the image pin `docker.io/searxng/searxng:2026.10.30-ffa88e3ba` is Renovate-tracked (`tests/test_renovate_image_coverage.py` green) | UNTESTED — `tests/test_open_webui_web_search.py` checks the compose keys, not that anything answers | **Tracked: #2970 (AI-026) — verified OPEN via `gh issue view 2970`**, with root cause and fix shape. Out of this change |
+| Minor | REAL | contract artifacts | **All five `features.json` entries are still `state: "pending"` with `evidence: ""`** after two review rounds. The contract's own pass-state gate is therefore unmet on paper even though I reproduced every command green (6/2/1/3/74). Only the harness may write `passing`, so this is not the author's to fix by hand. | read of `specs/AI-025/features.json`; my five runs above; round 1 recorded the same and it is unchanged in `931dcf5d` | n/a (artifact, not behaviour) | harness/evidence capture at merge. **Do not edit `features.json` now** — it is in the contract set and would invalidate this verdict; disposition it in `verification.md` |
+| Minor | THEORETICAL | security | Untrusted web results become persisted memories through the background review, so one poisoned page can outlive the chat. Not in `proposal.md` §Risks. | `webui.env.j2` sets `ENABLE_WEB_SEARCH=true` and `ENABLE_MEMORY_BACKGROUND_REVIEW=true`; round 1 raised it, operator decision pending | UNTESTED | **Tracked: #2971 (SEC-041) — verified OPEN**, three options recorded, owner decides. Contract-set edit deliberately not requested under a passing verdict |
+| Minor | SPECULATIVE | reliability | A change to `searxng.env` has no restart/recreate path: the restart is keyed to the *settings* file only, and Compose's hash does not see bind-mounted content. Largely theoretical because the key is generated once (`creates:`) and never rotates in-band. | `tasks/main.yml` diff: `when: _agent_stack_searxng_settings.changed and not ansible_check_mode` | UNTESTED | surface only; do not gate |
+| Minor | REAL (absence verified) | process / PR | **#2947 has no `## Review triage` comment** while `CodeRabbit` reports NEUTRAL and `review`/`Tests` have not settled. Not yet *due* (CI still in flight), but DoD §4 and the pr-stewardship rule make it the exit condition for this PR: green checks are not the end of a review. | `gh pr view 2947 --json comments` filtered on `## Review triage` → empty; `gh pr checks 2947` → Tests IN_PROGRESS, review PENDING, Spec archive gate FAILURE | n/a | PR comment by the implementer before merge; `dotf pr triage-queue` clean is the evidence |
+| Question | — | spec | `features.json` ids start at `f2`; AC1 ("speed measured. No change") has no entry, which is defensible but is recorded only in prose, not in the contract. | read of `features.json`; `verification.md` §AC1 (lesson-690) | n/a | spec — **no action under this verdict**; carry into a follow-up if the numbering is ever made contiguous |
 
-**Questions for the author** (needs one command each on ace2, and they are what decide Blocker 1):
-
-1. `curl -s -H "Authorization: Bearer <admin-token>" http://<tailscale>:3000/api/v1/configs/export` — what is
-   `memories.background_review.enable` and `memories.review_interval_turns`? If `false`/`10`, the env vars are inert and AC4 is
-   `verification.md`-level false.
-2. `curl -s -H "Authorization: Bearer <admin-token>" http://<tailscale>:3000/api/v1/memories/` — is there any entry with
-   `meta.created_by == "background_review"`? An explicit model tool call produces `created_by: user`, so this distinguishes the
-   two paths that AC4 conflates.
-3. Same export, for `code_execution_engine` / `code_interpreter.enable` and the model metadata defaults: is AC5's
-   `defaultFeatureIds` read from the env at all, or from a persisted row?
+**Strengths that directly mitigate a documented risk** (not praise — these are why the round-1 Blocker and Major 3 do not repeat): `cap_drop: ALL` + `security_opt: no-new-privileges` + `:ro` settings mount + no published port + `mem_limit`/`cpus` on a service reachable only from Open WebUI's network; `ENABLE_RAG_LOCAL_WEB_FETCH` asserted absent as a regression guard, which is the SSRF-to-tailnet boundary; the key is node-local (`creates:` + `umask 077`), `0600`, `no_log`, and kept out of the compose file; both Pyodide engine spellings pinned "so an image that changes them cannot start running model-written code on the node"; and the aggregate 1.5 GB dev-node budget (`MAX_MEMORY_BYTES`) is still enforced with the new 256 MB service (`tests/test_agent_stack_role.py`, 33 passed).
 
 ### Evaluator rubric
 
 | Dimension | Grade (A-D) | Rationale (one line) |
 |-----------|-------------|----------------------|
-| Correctness        | C | AC2/AC6 hold; AC4's env mechanism is documented-inert on a booted instance and its live evidence cannot tell background review from an explicit memory call; AC5's default is asserted only at the template. |
-| Verification       | C | Evidence is 83 green tests that compare templates to `common.yaml`, plus live claims (`95 MiB`, `33 results`, operator chats) that are neither reproducible nor consistent across artifacts (95 vs 128 MiB). |
-| Scope              | B | AI-025's own commits are scoped to the role, `common.yaml` pin, tests, lessons and the spec; the other ~90 changed files arrived by merging `origin/master` and are documented above as out of this change. |
-| Reliability        | C | SearXNG gets no post-deploy probe (the MCP bridge has four), so a dead search engine deploys as success; memory config has no rollback or drift check either. |
-| Maintainability    | B | Env/template comments explain *why* (limiter needs Valkey, non-global fetch refused, Pyodide vs Jupyter); secrets are `0600`+`no_log`; one magic bound in a test. |
-| Handoff-readiness  | B | `verification.md` filled, two lessons promoted and indexed, lessons cited; `features.json` left `pending` with empty `evidence`, and lesson-687 missing from the promotion list. |
+| Correctness        | B | All six ACs hold on evidence I could check: env/template guards that mutation-provably fail (M2, M3), 83 green tests, operator live chats; the round-1 Blocker's premise is contradicted by pre-existing config. Residual gaps are the never-observed effective config and the one-sided port. |
+| Verification       | B | Every `features.json` command re-run green this session (6/2/1/3/74), three mutations to prove which guards bite, ruff clean. Live claims (95 MiB, 33 results, `ok=217 changed=0`) are not reproducible from here → **UNVERIFIED**, and the harness still holds no captured evidence. |
+| Scope              | B | Own chain confined to role/config/tests/lessons/spec (first-parent audit); ~100 files are documented master merges; `536392c5`'s shared-config reconciliation is policed by 56 green neighbour tests. |
+| Reliability        | C | A dead SearXNG provisions as success (no probe, #2970), and `container_port` breaks silently one way (M1 green). Idempotency otherwise sound: `creates:` for the key, restart gated on the template's own `.changed`. |
+| Maintainability    | B | Comments carry the WHY (limiter needs Valkey, non-global fetch refused, Pyodide vs Jupyter, bind-mount restart), no dead code, tests named as behaviours; the memory-interval bound now states its reason. |
+| Handoff-readiness  | B | Round-1 findings each dispositioned in `verification.md`, lessons 687/690/692 promoted and indexed, two tickets filed with root cause. `features.json` left `pending`, and the PR's review triage is not yet written. |
+
+**Aggregation**: no D, one C → floor is PASS WITH GAPS. No Blocker (round 1's is rebutted with evidence I verified), no REAL Major (the three Majors are THEORETICAL as shipped failure; the demonstrated part is test strength, which is what the tracked tickets exist to fix). The two paths agree: **PASS WITH GAPS**.
 
 ### Verdict
-FAIL
+PASS WITH GAPS
 
-One Blocker: AC4 is archived as met on evidence that cannot distinguish "the env var took effect" from "the DB already had it",
-and Open WebUI's documented persistence (`seed_defaults()` + `Config.get()`, upstream #29091) says the env value is ignored on an
-instance that booted before it was set — which ace2 did. A Blocker stops the archive regardless of the reality tag, and the two
-Cs in the rubric put the floor at PASS WITH GAPS on their own. The two Majors (template-only tests, missing SearXNG probe) are
-tracked and would not by themselves have blocked.
-`dotf spec archive AI-025` is **not** advisable in this state.
+`dotf spec archive AI-025` **is** advisable in this state: the frontmatter here is passing, the reviewer id matches `harness/reviewer-pool.json` (`nan/qwen3.8-flash`, line 141), `reviewed_sha` equals `git rev-parse HEAD`, and the contract digests are unchanged, so the staleness check and the verdict check both hold. That is the archive gate only. **Merging #2947 is a separate, supervised step** and is not advisable from this review alone: `Tests` was still IN_PROGRESS, `review` PENDING, and the PR carries no `## Review triage` comment (Minor, tracked above).
 
 ### Recommended next steps
 
-**Minimum to flip to PASS** (all outside the contract set, so no re-review of the contract is triggered by them):
-1. Run question 1 above on ace2 and paste the two values into `verification.md` §Evidence under AC4. If
-   `memories.background_review.enable: true`, the Blocker is closed as a false alarm — record the output and re-review.
-2. If it is `false` (likely): write the value through the API from the role instead of relying on the env (`POST
-   /api/v1/configs/import` with `memories.background_review.enable` / `memories.review_interval_turns`, keyed off
-   `common.yaml`), and record the same export as evidence. That is code + tests; the contract set stays untouched only if
-   AC6's "the role's env and templates hold all of it" is read as "the role puts it in place", which I would accept in
-   `verification.md`. If instead the AC is to be *narrowed* (env-only, DB drift accepted), that is a `proposal.md` edit —
-   fix, then re-review, per the contract-set rule.
-3. Add a named test that fails today: a `mcp_bridge.yml`-style probe (`docker exec open-webui` → `GET
-   http://searxng:8080/search?q=test&format=json`, assert 200 and one result) with `until`/`retries`, and, in the suite,
-   the assertion that every service the role brings up has one. Fixes Major 3 and gives AC2 a test that is not a template
-   comparison.
-4. Record in `verification.md` what the 95 MiB vs 128 MiB discrepancy actually is, and add lesson-687 to §Promotion candidates.
-   Both are `verification.md` edits — excluded from the staleness check on purpose.
+Under a passing verdict the contract set (`proposal.md`, `tasks.md`, `features.json`) is closed — nothing below asks for it. Each item is for the implementer to disposition in `verification.md` (applied / ticketed / declined-with-reason).
 
-**Ticketed, not blocking** (file on the bitácora with the root cause above): the prompt-injection-into-memory risk, and the
-`1 <= n <= 10` magic bound. Do not edit `proposal.md`/`tasks.md`/`features.json` to carry them — that invalidates this verdict
-the moment it is written; `verification.md` is the place to disposition them, and it is the file the archive reads for them.
+1. **Make the SearXNG port two-sided** (Major 1, code + tests): render `SEARXNG_PORT={{ agent_stack_webui.web_search.searxng.container_port }}` into the service (or `server.port` in the settings template), then add to `tests/test_open_webui_web_search.py` an assertion that the port appears on both the URL and the service. Cheap, removes the only silent-breakage path I could turn green on demand (M1). Fold into #2970's scope rather than opening a third ticket — its fix text already hardcodes `8080`.
+2. **Run round 1's two commands once on ace2, or ticket them** (Major 2): `GET /api/v1/configs/export` for `memories.*`, `code_execution_engine`, and the model metadata defaults, plus a `/api/v1/memories/` check for any `created_by == "background_review"` entry. Paste the output under AC4/AC5 in `verification.md`. This is the difference between "the env is what the instance reads, argued" and "observed"; it also settles the env-var-name question without any test in this repo being able to.
+3. **Keep #2970 (probe) and #2971 (memory poisoning) live** — both verified OPEN and correctly scoped; #2971 needs the owner's decision, not code.
+4. **Before merge, write the `## Review triage` comment on #2947** (CodeRabbit NEUTRAL + this round's findings), and get `dotf pr triage-queue` to exit 0. Do not treat `Spec archive gate` going green as the end of that window.
+5. `features.json` `state: pending` is the harness's to flip; record in `verification.md` that the five commands were independently re-run green (6/2/1/3/74) so the archive trail shows the evidence even if the harness capture never lands.
+
+**Residual risk after this review**: everything that only the node can prove — `cap_drop: ALL` actually starting that image, 95 MiB in use, 33 results, `ok=217 changed=0` on a rerun, and the effective config — is claimed in `verification.md` and **UNVERIFIED** from this workstation. None of it is contradicted by anything I could run; none of it is reproducible without a tailnet session to ace2.
