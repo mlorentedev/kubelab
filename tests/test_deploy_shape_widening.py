@@ -17,6 +17,7 @@ import re
 
 import pytest
 
+from toolkit.features.deploy_merge import MERGE_STATES_OK
 from toolkit.features.deploy_shape import load_declaration
 from toolkit.features.review_attestation import DEFAULT_REGISTRY
 
@@ -116,6 +117,11 @@ class TestMergingActorDoesNotWiden:
             f"workflows that merge pull requests: {found}; declared: {sorted(MERGERS)}. A new merger is "
             f"{DECIDED}."
         )
+
+    def test_the_merge_states_the_judge_accepts_are_the_approved_ones(self) -> None:
+        """`unstable` was added on #1619 (2026-11-01): only contexts that are not required fail
+        there, and the judge checks every required one itself. Anything else here is a widening."""
+        assert MERGE_STATES_OK == frozenset({"clean", "unstable"}), f"the judge accepts {set(MERGE_STATES_OK)}: {DECIDED}"
 
     @pytest.mark.parametrize("workflow", sorted(MERGERS))
     def test_each_merger_runs_exactly_its_declared_line(self, workflow: str) -> None:
