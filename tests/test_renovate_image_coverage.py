@@ -38,10 +38,12 @@ def _python_pattern() -> re.Pattern[str]:
 
     Converted for the test only — the file keeps the syntax Renovate parses.
     Rewriting the file to suit the test would be the test dictating the
-    production artifact.
+    production artifact. Renovate compiles the pattern without the multiline
+    flag, so none is added here: with `re.M` this test stayed green while
+    Renovate found no image at all (#2931).
     """
     raw = _config()["customManagers"][0]["matchStrings"][0]
-    return re.compile(re.sub(r"\(\?<([a-zA-Z]\w*)>", r"(?P<\1>", raw), re.M)
+    return re.compile(re.sub(r"\(\?<([a-zA-Z]\w*)>", r"(?P<\1>", raw))
 
 
 def _declared_images() -> list[str]:

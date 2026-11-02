@@ -26,7 +26,7 @@
         "/^infra/config/values/common\\.yaml$/"
       ],
       "matchStrings": [
-        "image:\\s+(?<depName>(?:[a-z0-9._\\-]+(?:\\.[a-z0-9._\\-]+)*/)*[a-z0-9._\\-]+):(?<currentValue>[A-Za-z0-9][A-Za-z0-9._\\-]*)\\s*$"
+        "(?m)image:\\s+(?<depName>(?:[a-z0-9._\\-]+(?:\\.[a-z0-9._\\-]+)*/)*[a-z0-9._\\-]+):(?<currentValue>[A-Za-z0-9][A-Za-z0-9._\\-]*)\\s*$"
       ],
       "datasourceTemplate": "docker"
     }
