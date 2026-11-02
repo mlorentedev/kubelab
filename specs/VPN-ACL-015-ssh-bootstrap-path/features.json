@@ -1,0 +1,37 @@
+[
+  {
+    "id": "VPN-ACL-015-ssh-bootstrap-path-f1",
+    "behavior": "AC1: the VPS's sshd_config forbids forwarding to every user except hs-bootstrap, whose only PermitOpen is vpn.kubelab.live:443; other nodes render their golden file",
+    "verification": "python -m pytest -o addopts= -p no:cacheprovider tests/test_ssh_hardening_bootstrap_forward.py tests/test_ssh_hardening_lan_jump.py -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "VPN-ACL-015-ssh-bootstrap-path-f2",
+    "behavior": "AC2: hs-bootstrap's authorized_keys is rendered only from SOPS, one restricted line per key, printed by no task",
+    "verification": "python -m pytest -o addopts= -p no:cacheprovider tests/test_headscale_bootstrap_ssh.py -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "VPN-ACL-015-ssh-bootstrap-path-f3",
+    "behavior": "AC3: live, a bootstrap key gets no shell, PTY or other forward, ts-bridge reaches READY through it, and a removed key stops working",
+    "verification": "manual: live checks recorded in verification.md",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "VPN-ACL-015-ssh-bootstrap-path-f4",
+    "behavior": "AC4: the live sshd -T drift is recorded before any change",
+    "verification": "grep -q 'permitopen any' specs/VPN-ACL-015-ssh-bootstrap-path/verification.md",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "VPN-ACL-015-ssh-bootstrap-path-f5",
+    "behavior": "AC5: deployer reports allowtcpforwarding no on the VPS after the clients moved, and a second run is changed=0",
+    "verification": "manual: live sshd -T and the converging recap recorded in verification.md",
+    "state": "pending",
+    "evidence": ""
+  }
+]
