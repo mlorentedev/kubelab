@@ -244,12 +244,6 @@ class Lab:
     def edge_ready(self) -> bool:
         return all(c["ready"] for c in self.pod(EDGE_WORKLOAD, EDGE_NAMESPACE)["status"]["containerStatuses"])
 
-    def edge_memory_peak_mb(self) -> float:
-        """Highest the edge's pod has reached since its cgroup began: a ramp only climbs."""
-        uid = self.pod(EDGE_WORKLOAD, EDGE_NAMESPACE)["metadata"]["uid"].replace("-", "_")
-        path = f"/sys/fs/cgroup/kubepods.slice/kubepods-*/kubepods-*-pod{uid}.slice/memory.peak"
-        return round(int(self.ssh(self.target_node, f"cat {path}").strip()) / 1048576, 1)
-
     def cpu_line(self, node: str) -> str:
         return self.ssh(node, "head -1 /proc/stat")
 
@@ -289,7 +283,6 @@ def run_step(
     step["pods_top"] = top
     step["throttled_ms"] = throttled_ms(stat_before, lab.cpu_stat(target.workload))
     step["edge_restarts"] = lab.restarts(EDGE_WORKLOAD, EDGE_NAMESPACE) - edge_before
-    step["edge_memory_peak_mb"] = lab.edge_memory_peak_mb()
     step["pod_replaced"] = lab.pod(target.workload)["metadata"]["uid"] != pod_before
     step["reasons"] = classify(step, rate, bypass)
     return step
@@ -414,9 +407,9 @@ def render(result: dict[str, Any]) -> str:
     """The raw figures as one Markdown table per ramp."""
     head = (
         "| rate/s | achieved/s | requests | p50 ms | p90 ms | p95 ms | p99 ms | max ms | errors | 429 | dropped | "
-        "peak VUs | in flight | edge mem peak MB | node CPU % | generator CPU % | node mem free MB | "
+        "peak VUs | in flight | node CPU % | generator CPU % | node mem free MB | "
         "throttled ms | pods | verdict |\n"
-        "|" + "---|" * 20
+        "|" + "---|" * 19
     )
 
     def row(s: dict[str, Any]) -> str:
@@ -425,7 +418,7 @@ def render(result: dict[str, Any]) -> str:
             s["rate"], f"{s['achieved_rps']:.1f}", int(s["requests"]), f"{s['p50_ms']:.2f}", f"{s['p90_ms']:.2f}",
             f"{s['p95_ms']:.2f}", f"{s['p99_ms']:.2f}", f"{s['max_ms']:.1f}", f"{s['error_rate']:.2%}",
             int(s["status_429"]), int(s["dropped"]), int(s["vus_peak"]),
-            f"{s['achieved_rps'] * s['avg_ms'] / 1000:.1f}", s.get("edge_memory_peak_mb", "n/a"),
+            f"{s['achieved_rps'] * s['avg_ms'] / 1000:.1f}",
             s["node_cpu"], s["generator_cpu"],
             s["node_mem_available_mb"], f"{s['throttled_ms']:.0f}", pods, ",".join(s["reasons"]) or "healthy",
         ]  # fmt: skip
