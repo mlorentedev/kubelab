@@ -228,6 +228,22 @@ Fix: the prune lists the repository first. While any snapshot carries `original`
 
 What this means for AC3: a run that waits exits 0, but it measures nothing about the prune under the lock. The window AC3 asks for is therefore read from the first real prune after the clearance: seven days from 2026-11-07 with no `node-backup-prune.service` failure on any node (`make backup-schedule NODE=all ENV=prod`), and at least one run on each migrated node that logs a `forget` rather than a wait.
 
+## AC5: the runbooks (close-out)
+
+2026-11-01. `tests/test_offsite_runbook_claims.py` ran red against the old runbooks first, 12 failed and 2 passed, then green after the edit.
+
+The stale text was worse than a wrong claim. "Restoring — normal case" read the shared pair and `kubelab-backups/<node>`, frozen since 2026-10-08, so following it would restore data weeks old and report success. The disaster case named an escrowed pair that no node uses.
+
+The new restore path was run read-only, with the commands the runbook gives and the pinned `restic/restic:0.19.1`, values passed by environment name: `rpi3` listed 170 snapshots (40 copies), `vps` 194 (39 copies), both rc 0, both with snapshots from 2026-11-02 UTC. The copy counts equal the migration table for vps and rpi3 (39, 40).
+
+Not measured: a whole disaster-case restore with a freshly created dashboard token, and whether the old shared pair can reach a node bucket (the probe was declined by the harness's permission check). The runbook depends on neither: it creates a new token and scopes it to the node's bucket.
+
+Found on the way: `backup-verify-destination` and `backup-verify-restic` still probe the shared bucket. Filed as #2917, named in the runbook, and it must close before `kubelab-backups` is deleted.
+
+## AC3 on 2026-11-01: not readable yet
+
+`make backup-schedule NODE=all ENV=prod` reported `failures in the last 7 days: 0` on all five nodes. **This is not AC3's evidence.** The four migrated nodes are in the wait, which exits 0 without calling `forget`, as the 170 and 194 snapshots above agree. The read belongs on or after 2026-11-14, as the section above says.
+
 ## The escrow check (AC5, ahead of PR 5)
 
 2026-10-07, run `make backup-escrow-check ENV=prod` with Bitwarden unlocked. Five of five matched: `KUBELAB_RESTIC_PASSWORD` and the four `KUBELAB_RESTIC_PASSWORD_<NODE>` entries against their SOPS values, by sha256[:12], printing no value. This repeats the hand comparison of 2026-10-03, now as a command. I ran five mutations of `backup_escrow.py`, and each turned a test red. One did so only after the test for a password missing from SOPS was made to assert that the escrow is never queried for it.
