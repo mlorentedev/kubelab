@@ -86,6 +86,7 @@ def restart_consumers(
             [*kubectl(namespace), "get", ",".join(WORKLOAD_KINDS), "-o", "json"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=False,
         )
         if listed.returncode != 0:
@@ -108,7 +109,13 @@ def restart_consumers(
 
 
 def _restart(target: str, namespace: str, kubectl: Kubectl, run: Run, timeout: int) -> bool:
-    restarted = run([*kubectl(namespace), "rollout", "restart", target], capture_output=True, text=True, check=False)
+    restarted = run(
+        [*kubectl(namespace), "rollout", "restart", target],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
     if restarted.returncode != 0:
         logger.error(f"  Restart of {namespace}/{target} failed: {restarted.stderr.strip()}")
         return False
@@ -116,6 +123,7 @@ def _restart(target: str, namespace: str, kubectl: Kubectl, run: Run, timeout: i
         [*kubectl(namespace), "rollout", "status", target, f"--timeout={timeout}s"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     if rolled.returncode != 0:

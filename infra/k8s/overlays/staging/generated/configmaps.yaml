@@ -22,6 +22,7 @@ data:
   INFRA_SMTP_PORT: "587"
   INFRA_SMTP_SECURE: "true"
   INFRA_SMTP_USER: "mlorentedev@gmail.com"
+  POSTGRES_TENANT: "api"
   SITE_DOMAIN: "staging.kubelab.live"
   SITE_TITLE: "mlorentedev"
   SITE_URL: "https://staging.kubelab.live"

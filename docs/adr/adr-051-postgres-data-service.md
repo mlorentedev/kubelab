@@ -95,3 +95,11 @@ The data-service tier is part of the ADR-042 blueprint ("state off compute nodes
 - [[adr-050-cross-context-command-center]] (D7 canonical state), [[adr-036-shared-infra-namespace]] (`infra.*`), [[adr-014-secrets-management-strategy]] / ADR-038 (secret delivery), [[adr-027-generated-code-drift-detection]] (generate + drift gate), [[adr-024-pvc-backup-strategy]] (PVC backup), [[adr-049-edge-object-storage-placement-doctrine]] (offsite), [[adr-042-reference-architecture]] (blueprint vs substrate)
 - Tickets: CONSOLE-002 (#711)
 - atlas: atlasgo.io (declarative schema migrations)
+
+## Amendments
+
+### 2026-11-02 — The API is a tenant, and lint is not free (DATA-007, #2652)
+
+D2 has consumers read the owner password. The API instead connects as its own `api` tenant (role and database), the shape Vikunja already uses, because the `kubelab` role can read every tenant's database. `INFRA_POSTGRES_DATABASE` and `_USERNAME` stay in ConfigMaps and the API does not read them; it reads `POSTGRES_TENANT`, and its password is `apps.platform.api.db_password`.
+
+D3's generate-and-lint flow is narrowed: `atlas migrate lint` and `migrate test` need a paid Atlas login, measured against Atlas 1.3.0. The free commands are `migrate hash`, `validate`, `diff` and `apply`, and they are what the repository uses.

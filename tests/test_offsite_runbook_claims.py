@@ -32,6 +32,7 @@ SHARED_BUCKET = "kubelab-backups"
 SHARED_SECRETS = ("backup.r2.access_key_id", "backup.r2.secret_access_key", "backup.restic_password")
 PATHS_SECTIONS = (
     "What exists",
+    "Before you trust any of it",
     "Backing up on demand",
     "Restoring — normal case",
     "Restoring — the disaster case",
@@ -165,3 +166,12 @@ def test_the_rebuild_runbook_points_at_the_node_buckets() -> None:
     assert "kubelab-backup-<node>" in text
     assert SHARED_BUCKET not in text
     assert "`backup.r2.*`" not in text, "that glob is the shared pair, which reads no node's bucket root"
+
+
+def test_the_commands_that_proved_the_shared_bucket_are_gone(offsite: str) -> None:
+    section = _section(offsite, "Before you trust any of it")
+    assert "backup-isolation-probe" in section and "backup-drill-node" in section
+    makefile = (REPO / "Makefile").read_text(encoding="utf-8")
+    for retired in ("backup-verify-destination", "backup-verify-restic"):
+        assert retired not in offsite
+        assert retired not in makefile

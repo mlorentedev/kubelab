@@ -52,13 +52,11 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit backup drill-postgres` | Restore the newest Postgres dump from R2 into a scratch container and check it is complete. |
 | `toolkit backup escrow-check` | Compare each restic password in SOPS with its Bitwarden escrow entry (BACKUP-057). |
 | `toolkit backup generate-password` | Generate the restic repository password and store it in SOPS. |
-| `toolkit backup health-check` | Run full R2 destination verification + fleet coverage check and notify Slack. |
+| `toolkit backup health-check` | Run the isolation probe and the fleet coverage check, and notify Slack. |
 | `toolkit backup isolation-probe` | Fail on any R2 request a stolen node credential should be refused (BACKUP-057). |
 | `toolkit backup migrate` | Move one node's restic history into its own bucket (BACKUP-057 AC4). |
 | `toolkit backup mint-node-tokens` | Mint each node's own R2 token and restic password into SOPS (BACKUP-057). |
 | `toolkit backup restore-window` | Pause an env's Argo CD auto-sync and stop one app, so its data can be replaced (BACKUP-070). |
-| `toolkit backup verify-destination` | Prove the R2 destination is usable: scope, reach, and a write/read/delete round-trip. |
-| `toolkit backup verify-restic` | Prove restic can create, use and verify a repository in R2. |
 | `toolkit board` | Bitácora board governance: keep the Stream field true to the registry. |
 | `toolkit board deps` | Report open issues named by a dependency keyword in another open issue's body (GOV-005 AC3 guard). |
 | `toolkit board ids` | Report (default) or check for open issues that share a ticket id. |
@@ -128,7 +126,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit infra k8s deploy` | Deploy K8s manifests to the cluster. |
 | `toolkit infra k8s dry-run` | Generate manifests and validate with dry-run (no apply). |
 | `toolkit infra k8s fetch-kubeconfig` | Fetch a cluster's kubeconfig with a transport-agnostic server (ADR-052). |
-| `toolkit infra k8s provision-postgres-tenant` | Idempotently provision a tenant role and database in PostgreSQL (infra.postgres). |
+| `toolkit infra k8s provision-postgres-tenant` | Idempotently provision tenant roles and databases in PostgreSQL (infra.postgres). |
 | `toolkit infra k8s render-apply` | Render RESOLVE_* placeholders (MagicDNS) in a single manifest, then server-side apply. |
 | `toolkit infra k8s restart` | Restart any K8s deployment (rollout restart + wait) on the env's cluster. |
 | `toolkit infra k8s status` | Show K8s resource status for the kubelab namespace. |

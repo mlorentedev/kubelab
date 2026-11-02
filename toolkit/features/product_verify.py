@@ -142,7 +142,9 @@ def pinned_tag(deployments_yaml: str, image_name: str) -> str:
 
 def git_show(rev: str, path: str) -> str:
     """A file as committed at ``rev``: the deploy is judged against master, never the worktree (lesson-479)."""
-    return subprocess.run(["git", "show", f"{rev}:{path}"], capture_output=True, text=True, check=True).stdout
+    return subprocess.run(
+        ["git", "show", f"{rev}:{path}"], capture_output=True, text=True, encoding="utf-8", check=True
+    ).stdout
 
 
 def descends_from(head: str, rev: str, fetch: bool = False) -> bool:
@@ -155,16 +157,26 @@ def descends_from(head: str, rev: str, fetch: bool = False) -> bool:
     if rev == head:
         return False
     if fetch:
-        subprocess.run(["git", "fetch", "--quiet", "origin", "master"], capture_output=True, text=True, check=False)
-    proc = subprocess.run(["git", "merge-base", "--is-ancestor", head, rev], capture_output=True, text=True)
+        subprocess.run(
+            ["git", "fetch", "--quiet", "origin", "master"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=False,
+        )
+    proc = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", head, rev], capture_output=True, text=True, encoding="utf-8"
+    )
     return proc.returncode == 0
 
 
 def origin_head() -> str:
     """Fetch, then the sha of origin/master: the commit Argo CD should be at."""
-    subprocess.run(["git", "fetch", "--quiet", "origin", "master"], capture_output=True, text=True, check=True)
+    subprocess.run(
+        ["git", "fetch", "--quiet", "origin", "master"], capture_output=True, text=True, encoding="utf-8", check=True
+    )
     return subprocess.run(
-        ["git", "rev-parse", "origin/master"], capture_output=True, text=True, check=True
+        ["git", "rev-parse", "origin/master"], capture_output=True, text=True, encoding="utf-8", check=True
     ).stdout.strip()
 
 
@@ -218,6 +230,7 @@ def read_application(app: str, kubeconfig: str) -> dict[str, Any]:
         ],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     if proc.returncode != 0:
