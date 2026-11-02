@@ -27,3 +27,9 @@ Paused 06:05Z-07:10Z by a usage limit; the wake-lock held.
 - #1320: the emitter-window floor is 2 samples; 3 (the R2 guard's bar) turns the disk, quota and edge rules red.
 - `obs015-disk-root-saturation` still alerts on two causes; splitting it like the PVC rule is a call to make.
 - #1710 severity routing; #1668 AC1/AC2/AC4 need daytime staging measurements; #2921 AC3 root cause needs a journal read on ace2.
+
+## Later in the run
+
+- #2991 out of draft at 10:27Z. pr-agent reviewed; the vacuous-guard finding applied (`d4c38184`, proven red by `make mutate`), three declined with reasons, live ACs deferred to #1668. Codex and CodeRabbit sent capacity notices.
+- Staging drill for #2991: the 09:56Z run reported `FIRING after 3.0m` from the 09:30Z instance, which the pre-check missed because staging Grafana had restarted at 09:54Z; filed as #2998 (OBS-044). The 12:44Z run refused correctly (a residue claim of unknown origin kept the rule firing; noted on #2998). A third run is scheduled once the instance resolves.
+- Staging slot: lent to the console lane 10:24Z-10:26Z on request, taken back, returned to master 12:45Z while the alert resolves.
