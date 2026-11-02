@@ -48,7 +48,7 @@ created: "2026-10-21"
 - [ ] [AC1] Regression test: a source that is down renders unreachable with its last read time, never empty
 - [ ] [P] [AC4] Webhook receiver: reject an invalid HMAC, store the event before projecting it
   - [x] ✓ 2026-10-22 Signature verification for both forges, GitHub `sha256=` prefix and Gitea bare hex (#2636)
-  - [ ] Receiver endpoint and the event store
+  - [ ] Receiver endpoint and the event store. Projection upserts the `forge_source` row first: `forge_item` holds a foreign key to it, and an event can arrive before that repository's first full read (PR-Agent finding on #2933)
 - [ ] [AC4] Test: the same delivery twice projects once
 - [ ] [AC4] Periodic reconcile per source every 10 minutes under the hourly call ceiling, with a guard test that counts calls
 - [ ] [AC1] Queue endpoint with the inbox reason (author, requested reviewer, failing CI, waiting on me)
