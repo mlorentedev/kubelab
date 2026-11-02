@@ -45,21 +45,6 @@
   ],
   "packageRules": [
     {
-      "description": "Vendored operators. A bump edits only `version`: run `make sync-operators` on the PR branch and commit the manifest, or CI stays red. Never grouped, because each operator's CRDs change on their own terms.",
-      "matchDatasources": [
-        "github-releases"
-      ],
-      "groupName": null,
-      "labels": [
-        "dependencies",
-        "renovate",
-        "needs-care"
-      ],
-      "prBodyNotes": [
-        "**Regenerate before merging.** Run `make sync-operators` on this branch and commit the manifest; the `Check vendored operator manifests` step stays red until you do. Read the CRD changes, then validate on staging with `make deploy-k8s ENV=staging`."
-      ]
-    },
-    {
       "description": "Default: group patch+minor into one weekly PR. Majors stay individual \u2014 the review question is different, and burying one in a group is how it merges unread.",
       "matchManagers": [
         "custom.regex"
@@ -143,6 +128,21 @@
       ],
       "prBodyNotes": [
         "**Re-verify the identity model.** Deploy to staging, sign in as a `users` member, then run `make auth-review ENV=staging` and `poetry run pytest tests/test_oauth_tokens_not_logged.py`; read lessons 457, 461 and 463 before merging."
+      ]
+    },
+    {
+      "description": "Vendored operators. A bump edits only `version`: run `make sync-operators` on the PR branch and commit the manifest, or CI stays red. Never grouped, because each operator's CRDs change on their own terms.",
+      "matchDatasources": [
+        "github-releases"
+      ],
+      "groupName": null,
+      "labels": [
+        "dependencies",
+        "renovate",
+        "needs-care"
+      ],
+      "prBodyNotes": [
+        "**Regenerate before merging.** Run `make sync-operators` on this branch and commit the manifest; the `Check vendored operator manifests` step stays red until you do. Read the CRD changes, then validate on staging with `make deploy-k8s ENV=staging`."
       ]
     }
   ],
