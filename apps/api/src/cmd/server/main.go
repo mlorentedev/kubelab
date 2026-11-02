@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/gin-gonic/gin"
 	"github.com/mlorentedev/kubelab/apps/api/internal/api"
@@ -30,7 +32,9 @@ func main() {
 
 	api.SetupRoutes(r)
 
-	api.StartForgeReconcile(context.Background(), conf)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	api.StartForgeReconcile(ctx, conf)
 
 	port := os.Getenv("PORT")
 	if port == "" {
