@@ -1,0 +1,54 @@
+# Arming envelope for one unattended run. The run reads the committed copy only.
+version: 1
+run_id: "ap-20261102-kubelab-backup"
+armed_by: manu
+armed_at: 2026-11-02T05:49:08Z
+expires_at: 2026-11-02T17:49:08Z
+objective: >-
+  Make the backup verification commands prove the per-node buckets (#2917), then
+  fix toolkit and test bugs on the queue that pass the 3 a.m. test and need no
+  operator and no remote write.
+scope:
+  write_paths:
+    - "toolkit/**"
+    - "tests/**"
+    - "Makefile"
+    - "infra/ansible/roles/node_backup/**"
+    - "infra/stacks/services/core/n8n/**"
+    - "docs/lessons/**"
+    - "docs/runbooks/**"
+    - "docs/adr/**"
+    - "specs/BACKUP-057/**"
+    - ".agent/runs/**"
+  frozen_paths:
+    - ".github/**"
+    - "harness/**"
+    - "**/AGENTS.md"
+    - "**/CLAUDE.md"
+    - "infra/config/secrets/**"
+    - "infra/config/values/**"
+    - "infra/k8s/**"
+    - "toolkit/features/credentials.py"
+    - "toolkit/features/oidc_clients.py"
+  max_files: 16
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make, poetry]
+queue:
+  source: bitacora
+  filter: >-
+    In order: #2917, #1222, #1908, #2955 with #1774, #2754, #1042, #942. A peer
+    claim on any of them drops it from this run.
+  max_items: 7
+budget:
+  max_iterations: 10
+  max_minutes_per_iteration: 60
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant
+  push: true
+  open_pr: true
+  advisor_tier: top
+# No remote write: no provision, deploy, apply, kubectl or ssh, and no R2 mutation.
+# Not authorized: deleting the SOPS_AGE_KEY Actions secret (awaits the owner),
+# deleting kubelab-backups, revoking any token, or the #1920 AC3 read and archive.
+# GraphQL secondary limit tripped at arming: use the REST fallbacks.
