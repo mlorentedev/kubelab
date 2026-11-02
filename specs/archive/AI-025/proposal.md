@@ -1,7 +1,7 @@
 ---
 id: "AI-025"
 type: spec
-status: implementing # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-11-01"
 issue: "mlorentedev/kubelab#2915"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
@@ -40,11 +40,11 @@ The operator wants Open WebUI on ace2 (#1933) to replace hosted assistants such 
 The acceptance criteria are #2915 AC1-AC6.
 
 - [x] AC1: speed measured. No change.
-- [ ] AC2: SearXNG answers Open WebUI's web search, with no port, memory-bounded.
-- [ ] AC3: Pyodide runs Python from a chat.
-- [ ] AC4: memory carries a fact to a new chat.
-- [ ] AC5: a new chat starts with image, web search and code interpreter on.
-- [ ] AC6: the role's env and templates hold all of it, tests cover it, and the rerun gives `changed=0`.
+- [x] AC2: SearXNG answers Open WebUI's web search, with no port, memory-bounded.
+- [x] AC3: Pyodide runs Python from a chat.
+- [x] AC4: memory carries a fact to a new chat.
+- [x] AC5: a new chat starts with image, web search and code interpreter on.
+- [x] AC6: the role's env and templates hold all of it, tests cover it, and the rerun gives `changed=0`.
 
 ## References
 
