@@ -195,9 +195,27 @@ spec:
         - podSelector:
             matchLabels:
               app.kubernetes.io/name: api
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: api-migrate
       ports:
         - protocol: TCP
           port: 5432
+---
+# The API's migration Job serves nothing, so nothing may reach it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-migrate-ingress
+  labels:
+    app.kubernetes.io/name: api-migrate
+    app.kubernetes.io/part-of: kubelab
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: api-migrate
+  policyTypes:
+    - Ingress
 ---
 # IngressRoute loki, the Grafana datasource, the Vector sink, and n8n's sre-auto-triage.
 apiVersion: networking.k8s.io/v1
