@@ -823,6 +823,18 @@ def catalog(
     logger.console.print(table)
 
 
+def _headscale_key_paths() -> list[str]:
+    """Stored keys Headscale issued: PROVIDER expiry, and no check that asks by value."""
+    from toolkit.features.secret_expiry import PROVIDER_CHECKS, Expiry, resolve_expiry
+    from toolkit.features.secrets_manager import SECRET_CATALOG
+
+    return [
+        spec.key_path
+        for spec in SECRET_CATALOG
+        if resolve_expiry(spec) is Expiry.PROVIDER and spec.key_path not in PROVIDER_CHECKS
+    ]
+
+
 @app.command("check-expiry")
 def check_expiry(
     warn_days: Annotated[
@@ -855,6 +867,7 @@ def check_expiry(
         Expiry,
         ExpiryUnavailableError,
         headscale_apikeys,
+        is_unreferenced_expired,
         resolve_expiry,
     )
     from toolkit.features.secrets_manager import SECRET_CATALOG
@@ -920,9 +933,12 @@ def check_expiry(
         logger.error(f"headscale  CANNOT CHECK: {exc}")
         raise typer.Exit(2) from exc
 
+    stored = [value for path in _headscale_key_paths() if (value := _dig(path))]
     for key in sorted(keys, key=lambda k: k.expires_at):
         line = f"{key.prefix}  expires {key.expires_at:%Y-%m-%d}  ({key.days_left}d)"
-        if key.days_left < warn_days:
+        if is_unreferenced_expired(key, stored):
+            logger.warning(f"{line}: expired and held by nothing, safe to delete on the server")
+        elif key.days_left < warn_days:
             logger.error(line)
             expiring.append(key.prefix)
         else:
