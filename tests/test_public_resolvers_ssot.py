@@ -34,6 +34,27 @@ def test_no_role_default_names_a_resolver_address() -> None:
     assert not literals
 
 
+def test_no_role_template_names_a_resolver_address() -> None:
+    """A template is rendered as it stands, so a literal there skips the SSOT as one in defaults does."""
+    literals = {
+        f"{p.relative_to(ROLES)}: {a}"
+        for p in ROLES.glob("*/templates/*")
+        for a in {*PUBLIC, *TAILNET_FIRST}
+        if a in _code(p)
+    }
+    # A different pair, 1.1.1.1 and 1.0.0.1, so moving it changes what clients resolve
+    # through and restarts the coordination server: an operator's decision (#2945).
+    assert literals == {"headscale/templates/config.yaml.j2: 1.1.1.1"}
+
+
+def test_the_corefile_forwards_to_the_declared_resolvers() -> None:
+    default = yaml.safe_load((ROLES / "coredns/defaults/main.yml").read_text(encoding="utf-8"))["coredns_forwarders"]
+    assert "common.networking.public_resolvers | join(' ')" in default
+    assert " ".join(PUBLIC) == "1.1.1.1 8.8.8.8", "the Corefile's rendered bytes moved"
+    corefile = (ROLES / "coredns/templates/Corefile.j2").read_text(encoding="utf-8")
+    assert corefile.count("forward . {{ coredns_forwarders }}") == 2
+
+
 def test_every_public_resolver_is_public() -> None:
     assert PUBLIC
     assert all(ipaddress.ip_address(address).is_global for address in PUBLIC), PUBLIC

@@ -55,7 +55,7 @@ def _role_vars() -> dict:
             return {k: render(v) for k, v in value.items()}
         return value
 
-    ctx = {k: render(defaults[k]) for k in ("base_domain", "node_ips", "service_domains", "vps_public_ip")}
+    ctx = {k: render(defaults[k]) for k in ("base_domain", "coredns_forwarders", "node_ips", "service_domains", "vps_public_ip")}
     ctx["coredns_public_records"] = json.loads(SERVICES_JSON.read_text(encoding="utf-8"))
     return ctx
 
