@@ -43,13 +43,14 @@ def test_api_configmap_names_the_tenant_and_holds_no_password(env: str) -> None:
     assert not any("PASSWORD" in key for key in data)
 
 
-@pytest.mark.parametrize("env", ["staging", "prod"])
-def test_postgres_admits_the_api(env: str) -> None:
+def test_postgres_admits_the_api() -> None:
     path = REPO_ROOT / "infra" / "k8s" / "base" / "governance" / "networkpolicies.yaml"
     policy = next(
         d for d in yaml.safe_load_all(path.read_text(encoding="utf-8")) if d["metadata"]["name"] == "postgres-ingress"
     )
-    sources = [peer["podSelector"]["matchLabels"]["app.kubernetes.io/name"] for peer in policy["spec"]["ingress"][0]["from"]]
+    sources = [
+        peer["podSelector"]["matchLabels"]["app.kubernetes.io/name"] for peer in policy["spec"]["ingress"][0]["from"]
+    ]
     assert "api" in sources
 
 
@@ -84,3 +85,27 @@ def test_a_missing_password_stops_the_provisioning(mocker) -> None:
     with pytest.raises(typer.Exit):
         infra.k8s_provision_postgres_tenant(env="staging", tenant="api", dry_run=False)
     run.assert_not_called()
+
+
+def test_declared_tenant_is_one_the_provisioner_knows() -> None:
+    common = yaml.safe_load((REPO_ROOT / "infra" / "config" / "values" / "common.yaml").read_text(encoding="utf-8"))
+    assert common["apps"]["platform"]["api"]["postgres_tenant"] in TENANT_PASSWORD_PATHS
+
+
+@pytest.mark.parametrize("env", ["staging", "prod"])
+def test_tenant_password_is_in_the_vault(env: str) -> None:
+    # SOPS leaves key names in clear, so this needs no decryption.
+    vault = yaml.safe_load((REPO_ROOT / "infra" / "config" / "secrets" / f"{env}.enc.yaml").read_text(encoding="utf-8"))
+    node = vault
+    for part in "apps.platform.api.db_password".split("."):
+        assert part in node, f"{part} missing from {env}.enc.yaml"
+        node = node[part]
+
+
+def test_a_psql_failure_never_logs_the_password(mocker) -> None:
+    _, run = _mock(mocker, returncode=1)
+    run.return_value.stderr = "LINE 1: CREATE ROLE api PASSWORD 'fixture'"
+    log = mocker.patch.object(infra.logger, "error")
+    with pytest.raises(typer.Exit):
+        infra.k8s_provision_postgres_tenant(env="staging", tenant="api", dry_run=False)
+    assert "fixture" not in log.call_args.args[0]

@@ -128,7 +128,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit infra k8s deploy` | Deploy K8s manifests to the cluster. |
 | `toolkit infra k8s dry-run` | Generate manifests and validate with dry-run (no apply). |
 | `toolkit infra k8s fetch-kubeconfig` | Fetch a cluster's kubeconfig with a transport-agnostic server (ADR-052). |
-| `toolkit infra k8s provision-postgres-tenant` | Idempotently provision a tenant role and database in PostgreSQL (infra.postgres). |
+| `toolkit infra k8s provision-postgres-tenant` | Idempotently provision tenant roles and databases in PostgreSQL (infra.postgres). |
 | `toolkit infra k8s render-apply` | Render RESOLVE_* placeholders (MagicDNS) in a single manifest, then server-side apply. |
 | `toolkit infra k8s restart` | Restart any K8s deployment (rollout restart + wait) on the env's cluster. |
 | `toolkit infra k8s status` | Show K8s resource status for the kubelab namespace. |

@@ -1379,7 +1379,9 @@ def k8s_apply_secrets(
 def k8s_provision_postgres_tenant(
     env: Annotated[str, typer.Option("--env", "-e", help="Target environment")] = "staging",
     tenant: Annotated[str | None, typer.Option("--tenant", "-t", help="One tenant; omit for all of them")] = None,
-    dry_run: Annotated[bool, typer.Option("--dry-run", help="Render SQL only")] = False,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Check tenant and secret resolve; apply nothing, show no SQL")
+    ] = False,
 ) -> None:
     """Idempotently provision tenant roles and databases in PostgreSQL (infra.postgres)."""
     import subprocess
@@ -1424,7 +1426,9 @@ def k8s_provision_postgres_tenant(
         ]
         res = subprocess.run(cmd, input=sql, text=True, capture_output=True)
         if res.returncode != 0:
-            logger.error(f"Provisioning failed for tenant {name} in postgres ({env}): {res.stderr}")
+            # psql echoes a statement it cannot parse, and these statements hold the password.
+            detail = res.stderr.replace(password, "***")
+            logger.error(f"Provisioning failed for tenant {name} in postgres ({env}): {detail}")
             raise typer.Exit(1)
         logger.success(f"PostgreSQL tenant {name} provisioned successfully.")
 
