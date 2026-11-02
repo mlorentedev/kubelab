@@ -252,7 +252,11 @@ class Lab:
         return pod["metadata"]["uid"], sum(c["restartCount"] for c in pod["status"]["containerStatuses"])
 
     def edge_ready(self) -> bool:
-        return all(c["ready"] for c in self.pod(EDGE_WORKLOAD, EDGE_NAMESPACE)["status"]["containerStatuses"])
+        try:
+            pod = self.pod(EDGE_WORKLOAD, EDGE_NAMESPACE)
+        except LoadTestRefused:
+            return False
+        return all(c["ready"] for c in pod["status"]["containerStatuses"])
 
     def cpu_line(self, node: str) -> str:
         return self.ssh(node, "head -1 /proc/stat")
@@ -314,18 +318,20 @@ def cleanup(lab: Lab, image: str) -> None:
     """Both halves always run: a route left armed still fails the command that left it."""
     try:
         lab.disarm()
+    except (subprocess.SubprocessError, OSError) as e:
+        raise LoadTestRefused("the route may still be armed: run make load-test-clear") from e
     finally:
         lab.ssh(lab.generator, f"docker image rm {image} >/dev/null 2>&1 || true")
 
 
-def wait_for_stable_edge(ready: Any, restarts: Any, sleep: Any, stable: int, limit: int, poll: int = 10) -> None:
-    """Return once the edge has been ready, without a restart, for `stable` seconds."""
-    calm, count = 0, restarts()
+def wait_for_stable_edge(ready: Any, state: Any, sleep: Any, stable: int, limit: int, poll: int = 10) -> None:
+    """Return once the edge has been ready, with an unchanged `state`, for `stable` seconds."""
+    calm, seen = 0, state()
     for _ in range(0, limit, poll):
         sleep(poll)
-        now = restarts()
-        calm = calm + poll if ready() and now == count else 0
-        count = now
+        now = state()
+        calm = calm + poll if ready() and now == seen else 0
+        seen = now
         if calm >= stable:
             return
     raise LoadTestRefused(f"the edge did not stay up for {stable}s within {limit}s")
@@ -367,12 +373,30 @@ def _runtime_facts(lab: Lab, image: str) -> dict[str, Any]:
     }
 
 
+def refuse_empty_run(repeats: int, seconds: int, max_rate: int) -> None:
+    """A run that would measure nothing must not write a report that looks like one."""
+    if repeats < 1 or seconds < 1 or max_rate < STEPS[0]:
+        raise LoadTestRefused(f"repeats and seconds must be at least 1, and max rate at least {STEPS[0]}")
+
+
 def run(
-    lab: Lab, image: str, targets: tuple[Target, ...], address: str, repeats: int, seconds: int, max_rate: int
+    lab: Lab,
+    image: str,
+    targets: tuple[Target, ...],
+    address: str,
+    repeats: int,
+    seconds: int,
+    max_rate: int,
+    checkpoint: Any = lambda _result: None,
 ) -> dict[str, Any]:
-    """Baseline under the limiter, then `repeats` ramps past it. Always removes the route."""
+    """Baseline under the limiter, then `repeats` ramps past it. Always removes the route.
+
+    `checkpoint` gets the result so far, marked incomplete, after the baseline and each
+    ramp, so a run that dies later keeps what it measured.
+    """
     import time
 
+    refuse_empty_run(repeats, seconds, max_rate)
     lab.assert_cluster()
     script = (lab.root / SCRIPT).read_text(encoding="utf-8")
     facts = _runtime_facts(lab, image)
@@ -383,7 +407,7 @@ def run(
     def stable_edge() -> None:
         wait_for_stable_edge(
             lab.edge_ready,
-            lambda: lab.restarts(EDGE_WORKLOAD, EDGE_NAMESPACE),
+            lab.edge_state,
             time.sleep,
             EDGE_STABLE_SECONDS,
             EDGE_WAIT_SECONDS,
@@ -392,21 +416,7 @@ def run(
     stable_edge()
     baselines = [run_step(lab, image, script, t, address, BASELINE_RATE, seconds, bypass=False) for t in targets]
     ramps: list[dict[str, Any]] = []
-    try:
-        lab.arm()
-        time.sleep(SETTLE_SECONDS)  # Traefik watches the CRD; give the router time to load
-        for repeat in range(1, repeats + 1):
-            for target in targets:
-
-                def one(rate: int, target: Target = target) -> dict[str, Any]:
-                    return run_step(lab, image, script, target, address, rate, seconds, bypass=True)
-
-                done = ramp(one, steps, lambda: time.sleep(SETTLE_SECONDS))
-                ramps.append({"target": target.name, "repeat": repeat, "steps": done, "knee": knee(done)})
-                stable_edge()
-    finally:
-        cleanup(lab, image)
-    return {
+    result: dict[str, Any] = {
         "facts": facts,
         "criteria": {
             "max_error_rate": MAX_ERROR_RATE,
@@ -418,11 +428,28 @@ def run(
         },
         "baseline": baselines,
         "ramps": ramps,
-        "restarts_during_run": {
-            **{w: lab.restarts(w) - before for w, before in restarts.items()},
-            EDGE_WORKLOAD: edge_restarts_between(edge_at_start, lab.edge_state()),
-        },
     }
+    checkpoint({**result, "incomplete": True})
+    try:
+        lab.arm()
+        time.sleep(SETTLE_SECONDS)  # Traefik watches the CRD; give the router time to load
+        for repeat in range(1, repeats + 1):
+            for target in targets:
+
+                def one(rate: int, target: Target = target) -> dict[str, Any]:
+                    return run_step(lab, image, script, target, address, rate, seconds, bypass=True)
+
+                done = ramp(one, steps, lambda: time.sleep(SETTLE_SECONDS))
+                ramps.append({"target": target.name, "repeat": repeat, "steps": done, "knee": knee(done)})
+                checkpoint({**result, "incomplete": True})
+                stable_edge()
+    finally:
+        cleanup(lab, image)
+    result["restarts_during_run"] = {
+        **{w: lab.restarts(w) - before for w, before in restarts.items()},
+        EDGE_WORKLOAD: edge_restarts_between(edge_at_start, lab.edge_state()),
+    }
+    return result
 
 
 def render(result: dict[str, Any]) -> str:
@@ -447,7 +474,8 @@ def render(result: dict[str, Any]) -> str:
         return "| " + " | ".join(str(c) for c in cells) + " |"
 
     meta = {k: result[k] for k in ("date", "commit", "facts", "criteria", "restarts_during_run") if k in result}
-    lines = ["```json", json.dumps(meta, indent=2), "```", "", "## Baseline under the limiter", "", head]
+    lines = ["**Incomplete: this run stopped before its last ramp.**", ""] if result.get("incomplete") else []
+    lines += ["```json", json.dumps(meta, indent=2), "```", "", "## Baseline under the limiter", "", head]
     lines += [row(s) for s in result["baseline"]]
     for r in result["ramps"]:
         lines += ["", f"## {r['target']}, ramp {r['repeat']}", "", f"Knee: `{json.dumps(r['knee'])}`", "", head]
