@@ -1,0 +1,20 @@
+# {{ ansible_managed }}
+# SearXNG for Open WebUI's web search (spec AI-025). Only Open WebUI asks it
+# anything, over that project's network; it publishes no port.
+use_default_settings: true
+
+general:
+  instance_name: kubelab
+
+server:
+  # The key comes from SEARXNG_SECRET (searxng.env), generated on this node.
+  # The limiter would need Valkey, and its only client is Open WebUI.
+  limiter: false
+  public_instance: false
+  image_proxy: false
+
+search:
+  # Open WebUI sends `format=json`; a format not listed here is answered 403.
+  formats:
+    - html
+    - json

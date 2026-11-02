@@ -30,6 +30,7 @@ UNIT = ROLE / "templates/agent-stack-egress.service.j2"
 
 UID = "998"
 RANGES = ["100.64.0.0/10", "fd7a:115c:a1e0::/48"]
+NETWORKING = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text(encoding="utf-8"))["networking"]
 PRIVATE = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "172.80.0.0/12"]
 
 
@@ -224,7 +225,8 @@ def test_the_agents_containers_resolve_outside_the_refused_ranges() -> None:
     """MagicDNS is 100.100.100.100, inside 100.64.0.0/10: listed, it is a resolver
     every query fails on before falling through, so it must not be listed."""
     defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))
-    servers = defaults["agent_stack_hermes_dns_servers"]
+    assert defaults["agent_stack_hermes_dns_servers"] == "{{ config.networking.public_resolvers }}"
+    servers = NETWORKING["public_resolvers"]
     assert servers
     for server in servers:
         address = ipaddress.ip_address(server)
