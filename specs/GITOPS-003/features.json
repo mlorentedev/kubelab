@@ -9,7 +9,7 @@
   {
     "id": "GITOPS-003-f2",
     "behavior": "deploy-verify.yml ends red on failure or on no status after N minutes, green only on success",
-    "verification": "poetry run pytest tests/test_argo_wait_status.py tests/test_delivery_watcher.py -q --no-cov",
+    "verification": "poetry run pytest tests/test_argo_wait_status.py tests/test_delivery_watcher.py tests/test_deploy_verify_workflow.py -q --no-cov",
     "state": "passing",
     "evidence": "2026-11-01: this command, 37 passed. Not exercised by it: the live red path in staging (alert fired 18:14:35Z), recorded in verification.md"
   },
@@ -22,7 +22,7 @@
   },
   {
     "id": "GITOPS-003-f4",
-    "behavior": "make verify-product APP=<app> ENV=<env> exits 0 only when kubelab-<env> is Synced at origin/master HEAD with operationState Succeeded and the contract host's /version.json serves the pinned tag; 1 on failure, 2 when it cannot check, 3 when commit is absent (not verifiable yet)",
+    "behavior": "make verify-product APP=<app> ENV=<env> exits 0 only when kubelab-<env> is Synced at origin/master HEAD with operationState Succeeded and the contract host's /version.json serves the pinned tag; 1 on failure, 2 when it cannot check, 3 when commit is absent (not verifiable yet); exit 4 when a later merge synced while waiting pins another tag (superseded).",
     "verification": "poetry run pytest tests/test_product_verify.py -q --no-cov && make verify-product APP=web ENV=staging",
     "state": "passing",
     "evidence": "2026-11-01: tests pass; make verify-product APP=web ENV=staging -> VERIFIED sha-a549dff at b9a2982"

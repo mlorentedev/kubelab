@@ -12,14 +12,14 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - [x] AC1 -> PR1 (#2594) and its amendment (#2613): live statuses below
 - [x] AC2 -> PR2 (#2615): the `status` path and the red replay are live. PR6 (#2880, `ba9862a`): the in-cluster `delivery-watcher` bounds the no-status case (#2645 B); green in both envs, and red, firing and resolving in staging, all live below. Header drift in `deploy-verify.yml`: #2881
 - [x] AC3 -> PR3 (#2899): `tests/test_k8s_generator_route_probe.py`; healthy, forced-failure and revert runs live in staging below
-- [x] AC4 -> PR4 (#2579) and GITOPS-007 (#2584, `fix/gitops-007-superseded`): `tests/test_product_verify.py` (48 tests); live runs below
+- [x] AC4 -> PR4 (#2579) and GITOPS-007 (#2584, `fix/gitops-007-superseded`): `tests/test_product_verify.py` (49 tests); live runs below
 - [x] AC5 -> #1276, `tests/test_argocd_notification_triggers.py`
 - [x] AC6 -> PR5: `tests/infra/test_argocd_status_token_live.py` proves the token still authenticates and has a future expiry; live run below. Not covered: the write grant (#2644)
 - [x] AC7 -> PR2 (#2615): runbook section `deploy-verify is red`, linked from lesson-407 and every failure annotation; seen live in the red replay below
 
 ## Test status
 
-- `poetry run pytest tests/test_product_verify.py -q --no-cov` → `48 passed`
+- `poetry run pytest tests/test_product_verify.py -q --no-cov` → `49 passed`
 - Mutation (`make mutate`): dropping `sync.revision == head` from the ready condition → 3 failed; treating a missing `commit` as present (`if False:`) → red. Both restored.
 - Live, 2026-10-20, master `ed5747f`, from the workstation on the mesh:
   - `make verify-product APP=web ENV=staging TIMEOUT=45` → exit 3: `sync=Synced at ed5747f (HEAD ed5747f); last operation Succeeded at 4ab3083`, `serves no commit (version '1.16.0'), expected '7ebd808'`. Correct today: web#435 has not shipped.
@@ -60,6 +60,22 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
   - At 18:14:35Z, `toolkit obs alerts --env staging` showed `[FIRING] Argo CD has not applied master HEAD`.
   - The slot went back to master at 18:14:46Z. At 18:20 the watcher printed `state: "success", healthy: 1` for `e23a080`, again at 18:30, and at 18:40 the alert was no longer listed.
   - From merge to alert: 18:14 at the latest, for a 17:41 commit, so under 35 minutes against the previous 3-6 h sweep.
+
+- Live, 2026-11-01, AC3 after #2899 merged (`2e84df1`): the first sync of each environment ran the hook. Prod: operation `Succeeded` at 19:39:37Z with `Job web-route-probe-api PostSync Succeeded`, and `argocd/kubelab-prod success "Synced at 2e84df1"`. Staging: `Succeeded` at 19:39:46Z, same hook result, `argocd/kubelab-staging success`.
+
+## Independent pre-review, 2026-11-01 (PASS-WITH-GAPS)
+
+A reviewer subagent that did not implement the spec read the contract and the PRs, ran every `features.json` command and 14 mutations (all red; the control stayed green), and read the hub. It found no Blocker. Dispositions:
+
+- Major, THEORETICAL: "What" §3 promised a commit comparison in the hook. **Applied:** the descope is now declared in §3 (the commit check is AC4's).
+- Major, THEORETICAL: AC6's test reads the SOPS copy of the token, not the one Argo holds. **Ticketed:** GITOPS-009 (#2918).
+- Minor: AC5's test checks the expression text rather than evaluating it. **Declined:** three mutations of the nil and `oncePer` guards turned it red, so it is not vacuous. An expr-lang evaluator in the suite is not worth a dependency.
+- Minor: `features.json` f2 omitted `tests/test_deploy_verify_workflow.py`, and f4 did not name exit 4. **Applied.** f1 reads only staging's `success` at run time. **Declined:** it is a live check by design.
+- Minor: 48 vs 49 tests, and f3's first-prod-sync evidence was missing here. **Applied** (above).
+- Minor, REAL: staging alerts route to the archive tier (`policies.yaml:19-21`), and the incidents behind this spec were staging ones. **Declined, by design:** ADR-028 makes prod plus Uptime Kuma the monitoring of record, never staging, and a staging delivery failure already turns `deploy-verify` red on the deploy PR (AC7), which is where it is acted on.
+- Minor: the runbook's `make verify-product APP=<app>` works only for contract products. **Applied:** the step now says `APP=web`.
+- Minor: AC2's "never as a broken deploy" read as "never alerts", but the rule alerts on no data. **Applied:** AC2 text.
+- Speculative: `fetch_statuses` does not paginate past 100. **Declined:** a master commit carries a handful of contexts.
 
 ## Decisions made during implementation
 
