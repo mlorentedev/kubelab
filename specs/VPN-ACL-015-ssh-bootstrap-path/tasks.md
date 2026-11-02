@@ -46,20 +46,20 @@ declaration is `networking.vps.ssh_bootstrap: {user: hs-bootstrap, permit_open:
   `AllowTcpForwarding no` is unchanged and each Match block carries its own complete
   set. Then a test that `sshd -t` accepts the render (skip where no `sshd`). Expected:
   FAIL, then PASS after ordering the blocks.
-- [ ] [P] [AC1] Test in `tests/test_ssh_hardening_bootstrap_forward.py` that the
+- [x] [P] [AC1] Test in `tests/test_ssh_hardening_bootstrap_forward.py` that the
   generated inventory hands `ssh_bootstrap_forward` to the VPS host and to no other
   host, read from `common.yaml`. Expected: FAIL. Implement in
   `toolkit/features/generator_ansible.py` and declare `networking.vps.ssh_bootstrap`
   in `common.yaml`; regenerate the inventory. Expected: PASS; the golden-file test
   for every other host still PASS.
-- [ ] [P] [AC2] In `tests/test_headscale_bootstrap_ssh.py`, test that the `headscale`
+- [x] [P] [AC2] In `tests/test_headscale_bootstrap_ssh.py`, test that the `headscale`
   role creates `hs-bootstrap` with shell `/usr/sbin/nologin`, no groups, and renders
   `authorized_keys` (`/home/hs-bootstrap/.ssh/authorized_keys`, file and directory
   owned by root so the account cannot rewrite them, which `StrictModes` accepts) with one
   `restrict,port-forwarding,permitopen="vpn.kubelab.live:443" <key>` line per SOPS
   entry, with `no_log: true` on the render. Evaluate the role's own Jinja as
   `test_headscale_segments.py` does. Expected: FAIL.
-- [ ] [AC2] Implement the tasks in `infra/ansible/roles/headscale/tasks/` and pass
+- [x] [AC2] Implement the tasks in `infra/ansible/roles/headscale/tasks/` and pass
   `secrets.apps.services.core.headscale.bootstrap_ssh_keys` from `deploy-vps.yml`.
   The account and file exist only when `ssh_bootstrap_forward` is declared; an empty
   mapping renders an empty file (every key revoked), never a missing one. Expected: PASS.
@@ -78,6 +78,12 @@ declaration is `networking.vps.ssh_bootstrap: {user: hs-bootstrap, permit_open:
   correct its claim that the segments live in `common.enc.yaml`: they are in
   `prod.enc.yaml`) and
   the CLAUDE.md RPi4-jump-host gotcha's sibling line for the VPS.
+
+Note (2026-11-02): the VPS host vars come from a `provision.yml` `set_fact` (the
+precedent of the firewall allow-list), not the generator, because the destination is
+derived from `apps.services.core.headscale.domain`, which the generator does not read.
+`narrow_ssh_user: true` stands for the transitional list, so no SSH user is repeated.
+134 tests pass (Windows); the `sshd -T` cases run in CI.
 
 ## Rollout (operator, in this order)
 

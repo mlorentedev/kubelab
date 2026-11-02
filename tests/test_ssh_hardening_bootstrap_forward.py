@@ -21,8 +21,10 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 
-from tests.test_ssh_hardening_lan_jump import GOLDEN, _render
+from tests.ansible_jinja import ansible_env, task_runs
+from tests.test_ssh_hardening_lan_jump import GOLDEN, ROLE, _render
 
 CONTROL_PLANE = "vpn.kubelab.live:443"
 FORWARD = {"user": "hs-bootstrap", "permit_open": CONTROL_PLANE, "transitional_users": []}
@@ -95,6 +97,56 @@ def test_both_blocks_render_each_closed_and_the_global_default_stays_no() -> Non
 
 def test_the_role_alone_still_renders_the_golden_file() -> None:
     assert _render({"ansible_user": "deployer", "ssh_bootstrap_forward": {}}) == GOLDEN.read_text(encoding="utf-8")
+
+
+# --- the role refuses a declaration sshd would read differently --------------------
+
+ROLE_TASKS = yaml.safe_load((ROLE / "tasks/main.yml").read_text(encoding="utf-8"))
+
+
+def _refusals(forward: dict[str, Any], ansible_user: str = "deployer") -> list[str]:
+    task = next(t for t in ROLE_TASKS if t.get("name") == "Refuse a malformed bootstrap forward")
+    assert task_runs(task, {"ssh_bootstrap_forward": forward})
+    env = ansible_env(str(ROLE / "templates"))
+    variables = {"ssh_bootstrap_forward": forward, "ansible_user": ansible_user}
+    for expr in task["assert"]["that"]:  # Ansible stops at the first false condition
+        if not env.compile_expression(expr)(**variables):
+            return [expr]
+    return []
+
+
+def test_a_well_formed_forward_passes() -> None:
+    assert not _refusals({**FORWARD, "transitional_users": ["deployer"]})
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"user": "deployer"},  # the Ansible account would lose its shell
+        {"user": "hs bootstrap"},
+        {"user": "hs-bootstrap\n"},
+        {"user": "Root"},
+        {"user": ""},
+        {"transitional_users": ["hs-bootstrap"]},
+        {"transitional_users": ["dep loyer"]},
+        {"transitional_users": "deployer"},
+        {"permit_open": "vpn.kubelab.live"},  # no port
+        {"permit_open": "vpn.kubelab.live:443 other:22"},  # a second destination
+        {"permit_open": "*:443"},
+        {"permit_open": "vpn.kubelab.live:any"},
+        {"permit_open": "vpn.kubelab.live:443\n"},
+    ],
+)
+def test_a_malformed_forward_is_refused(change: dict[str, Any]) -> None:
+    assert _refusals({**FORWARD, **change})
+
+
+def test_the_check_runs_before_the_template_and_not_without_a_forward() -> None:
+    names = [t.get("name") for t in ROLE_TASKS]
+    check = ROLE_TASKS[names.index("Refuse a malformed bootstrap forward")]
+
+    assert names.index("Refuse a malformed bootstrap forward") < names.index("Deploy hardened sshd_config")
+    assert not task_runs(check, {"ssh_bootstrap_forward": {}})
 
 
 @pytest.mark.allow_host_clients(reason="runs the local sshd in test mode (-T); it opens no socket and starts no daemon")

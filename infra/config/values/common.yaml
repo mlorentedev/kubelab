@@ -246,6 +246,17 @@ networking:
     hetzner_server_name: "mlorente-01"
     public_ip: "162.55.57.175"
     tailscale_ip: "100.64.0.2"
+    # VPN-ACL-015 (#2862): clients on networks that block or inspect the control
+    # plane reach Headscale through an SSH forward on this host
+    # (`ts-bridge connect --bootstrap-ssh <user>@<public_ip>`). This account may
+    # forward to apps.services.core.headscale.domain:<port> and nowhere else; its
+    # keys are in SOPS (apps.services.core.headscale.bootstrap_ssh_keys).
+    # narrow_ssh_user keeps the SSH user above forwarding to the same destination
+    # until its clients move, then is removed.
+    ssh_bootstrap:
+      user: "hs-bootstrap"
+      port: 443
+      narrow_ssh_user: true
     ansible_groups: ["vps", "docker_hosts"]  # prod.yaml adds k3s_servers
     docker_network: "kubelab"  # Migrated from "proxy" by traefik_vps role (ADR-020 Phase 2b)
     # The node's display name, read by platform_manifest. The rest of this block

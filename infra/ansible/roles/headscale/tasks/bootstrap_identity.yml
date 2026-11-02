@@ -1,0 +1,54 @@
+---
+# VPN-ACL-015 (#2862): the control-plane bootstrap account. Clients on a network
+# that blocks or inspects the control plane reach Headscale through an SSH forward
+# to it (`ts-bridge connect --bootstrap-ssh`). `ssh_hardening` limits the account to
+# that one destination; this file creates the account and renders its keys from
+# SOPS, each restricted to the same destination. The file is declared whole: a key
+# removed from SOPS is revoked by the next deploy.
+
+- name: Refuse a malformed bootstrap key
+  assert:
+    that:
+      - item.value is string
+      - item.value is regex(headscale_bootstrap_key_pattern, match_type='fullmatch')
+    fail_msg: "bootstrap_ssh_keys.{{ item.key }} is not a single public key line"
+    quiet: true
+  loop: "{{ headscale_bootstrap_ssh_keys | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when: headscale_bootstrap_ssh_user | length > 0
+
+- name: Create the bootstrap account
+  ansible.builtin.user:
+    name: "{{ headscale_bootstrap_ssh_user }}"
+    home: "/home/{{ headscale_bootstrap_ssh_user }}"
+    shell: /usr/sbin/nologin
+    password: "!"
+    system: true
+    create_home: true
+  become: true
+  when: headscale_bootstrap_ssh_user | length > 0
+
+# Root-owned, so the account cannot add a key or edit its own restrictions.
+- name: Create the bootstrap account's .ssh directory, owned by root
+  file:
+    path: "/home/{{ headscale_bootstrap_ssh_user }}/.ssh"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  when: headscale_bootstrap_ssh_user | length > 0
+
+# no_log: the content lists every enrolled machine's key and comment.
+- name: Render the bootstrap account's authorized_keys from SOPS
+  copy:
+    dest: "/home/{{ headscale_bootstrap_ssh_user }}/.ssh/authorized_keys"
+    content: "{% for entry in headscale_bootstrap_ssh_keys | dict2items | sort(attribute='key') %}\
+      restrict,port-forwarding,permitopen=\"{{ headscale_bootstrap_permit_open }}\" {{ entry.value }}\n{% endfor %}"
+    owner: root
+    group: root
+    mode: "0644"
+  no_log: true
+  become: true
+  when: headscale_bootstrap_ssh_user | length > 0
