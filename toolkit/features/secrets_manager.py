@@ -1314,7 +1314,8 @@ SECRET_CATALOG: list[SecretSpec] = [
         format_hint="an IPv4/IPv6 address or CIDR, or a comma-separated list of them",
         value_pattern=r"[0-9A-Fa-f:./]+(,[0-9A-Fa-f:./]+)*",
         # SEC-037 leaves it unset on purpose: the client's egress may rotate, and a
-        # stale pin would lock the audit out.
+        # stale pin would lock the audit out. Drop this flag once a pin exists, so that
+        # losing it reads as Missing.
         optional=True,
         rotate_note=(
             "Update common.enc.yaml, then `make deploy TARGET=vps ENV=prod` "
