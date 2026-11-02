@@ -67,10 +67,10 @@ created: "2026-08-27"
 
 ## Closing
 
-- [ ] Every acceptance criterion from `proposal.md` is covered by at least one test
-- [ ] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command
-- [ ] Type checks pass
-- [ ] Lint passes
-- [ ] No unrelated changes in the diff (no scope creep)
-- [ ] `verification.md` filled in
-- [ ] PRs opened referencing this spec folder; `adversarial-review` before `/spec archive`
+- [x] ✓ 2026-11-01 Every acceptance criterion from `proposal.md` is covered by at least one test
+- [x] ✓ 2026-11-01 Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command
+- [x] ✓ 2026-11-01 Type checks pass
+- [x] ✓ 2026-11-01 Lint passes
+- [x] ✓ 2026-11-01 No unrelated changes in the diff (no scope creep)
+- [x] ✓ 2026-11-01 `verification.md` filled in
+- [ ] PRs opened referencing this spec folder; `adversarial-review` before `/spec archive` (independent pre-review 2026-11-01: PASS-WITH-GAPS, dispositions in `verification.md`; the signed pool review is `dotf spec review GITOPS-003`)
